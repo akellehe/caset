@@ -1,0 +1,21 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.9",
+    "pybind11>=2.12",
+    "cmake>=3.22",
+    "ninja",                # optional but faster on CI
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "caset"
+version = "0.1.0"
+description = "C++/pybind11 extension for lattice spacetime experiments"
+authors = [{ name = "Canold, LLC", email = "andrew@canold.com" }]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[tool.scikit-build]
+# Let scikit-build-core pass build type flags sanely
+cmake.build-type = "Release"
