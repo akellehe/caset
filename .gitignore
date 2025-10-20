@@ -1,0 +1,4 @@
+.eggs
+build
+cmake-build-debug
+caset.cpython-313-darwin.so
