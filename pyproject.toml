@@ -11,11 +11,12 @@ build-backend = "scikit_build_core.build"
 name = "caset"
 version = "0.1.0"
 description = "C++/pybind11 extension for lattice spacetime experiments"
-authors = [{ name = "Canold, LLC", email = "andrew@canold.com" }]
+authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 
 [tool.scikit-build]
+
 # Let scikit-build-core pass build type flags sanely
 cmake.build-type = "Release"
