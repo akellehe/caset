@@ -31,9 +31,6 @@ mathjax3_config = {
     }
 }
 
-#breathe_projects = {"caset": str(DOXY_XML)}
-#breathe_default_project = "caset"
-
 breathe_projects = {"caset": str((pathlib.Path(__file__).parent.parent / "_doxygen" / "xml").resolve())}
 breathe_default_project = "caset"
 
@@ -41,4 +38,3 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 html_theme = "furo"
-html_static_path = ["_static"]

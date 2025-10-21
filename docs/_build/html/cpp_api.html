@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="Theory" href="theory.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="caset" href="index.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>C++ API - caset documentation</title>
@@ -191,8 +191,6 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
-<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">C++ API</a></li>
 </ul>
 
@@ -234,12 +232,22 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="c-api">
 <h1>C++ API<a class="headerlink" href="#c-api" title="Link to this heading">¶</a></h1>
-<section id="key-classes">
-<h2>Key classes<a class="headerlink" href="#key-classes" title="Link to this heading">¶</a></h2>
+<p>Below is the Doxygen index imported via Breathe.</p>
 <dl class="cpp class">
 <dt class="sig sig-object cpp" id="_CPPv4N5caset4EdgeE">
 <span id="_CPPv3N5caset4EdgeE"></span><span id="_CPPv2N5caset4EdgeE"></span><span id="caset::Edge"></span><span class="target" id="classcaset_1_1Edge"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><a class="headerlink" href="#_CPPv4N5caset4EdgeE" title="Link to this definition">¶</a><br /></dt>
-<dd><div class="breathe-sectiondef docutils container">
+<dd><div class="docutils container">
+<em>#include &lt;<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>&gt;</em></div>
+<section id="classcaset_1_1Edge_1autotoc_md0">
+<h2>Edge Class<a class="headerlink" href="#classcaset_1_1Edge_1autotoc_md0" title="Link to this heading">¶</a></h2>
+<p id="classcaset_1_1Edge_1autotoc_md0">An edge that links two points (vertices) in spacetime.</p>
+<p><ul class="simple">
+<li><p>Stores references to the source and target vertices.</p></li>
+</ul>
+</p>
+<p>The edge has length <span class="math notranslate nohighlight">\( l_{ij} \)</span>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </p>
+</section>
+<div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd">
@@ -253,12 +261,32 @@
 </dd></dl>
 
 </div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N5caset4Edge6sourceE">
+<span id="_CPPv3N5caset4Edge6sourceE"></span><span id="_CPPv2N5caset4Edge6sourceE"></span><span id="caset::Edge::source__std::shared_ptr:Vertex:"></span><span class="target" id="classcaset_1_1Edge_1a919659c7a751a179102daef6366fbfc6"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N5caset6VertexE" title="caset::Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">source</span></span></span><a class="headerlink" href="#_CPPv4N5caset4Edge6sourceE" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N5caset4Edge6targetE">
+<span id="_CPPv3N5caset4Edge6targetE"></span><span id="_CPPv2N5caset4Edge6targetE"></span><span id="caset::Edge::target__std::shared_ptr:Vertex:"></span><span class="target" id="classcaset_1_1Edge_1a5ebdb94fe9e344b84798ea51781a64a7"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N5caset6VertexE" title="caset::Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">target</span></span></span><a class="headerlink" href="#_CPPv4N5caset4Edge6targetE" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N5caset4Edge6lengthE">
+<span id="_CPPv3N5caset4Edge6lengthE"></span><span id="_CPPv2N5caset4Edge6lengthE"></span><span id="caset::Edge::length__double"></span><span class="target" id="classcaset_1_1Edge_1abc2edb8746c2996f3c59769a9e0d6c5c"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">length</span></span></span><a class="headerlink" href="#_CPPv4N5caset4Edge6lengthE" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+</div>
 </dd></dl>
 
 <dl class="cpp class">
 <dt class="sig sig-object cpp" id="_CPPv4N5caset6VertexE">
 <span id="_CPPv3N5caset6VertexE"></span><span id="_CPPv2N5caset6VertexE"></span><span id="caset::Vertex"></span><span class="target" id="classcaset_1_1Vertex"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><a class="headerlink" href="#_CPPv4N5caset6VertexE" title="Link to this definition">¶</a><br /></dt>
-<dd><div class="breathe-sectiondef docutils container">
+<dd><div class="docutils container">
+<em>#include &lt;<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>&gt;</em></div>
+<div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N5caset6Vertex6VertexEiRKNSt6vectorIdEE">
@@ -276,13 +304,115 @@
 <dd></dd></dl>
 
 </div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N5caset6Vertex2idE">
+<span id="_CPPv3N5caset6Vertex2idE"></span><span id="_CPPv2N5caset6Vertex2idE"></span><span id="caset::Vertex::id__i"></span><span class="target" id="classcaset_1_1Vertex_1a67125c52e39688a3c204ea0b55fb202b"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">id</span></span></span><a class="headerlink" href="#_CPPv4N5caset6Vertex2idE" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N5caset6Vertex11coordinatesE">
+<span id="_CPPv3N5caset6Vertex11coordinatesE"></span><span id="_CPPv2N5caset6Vertex11coordinatesE"></span><span id="caset::Vertex::coordinates__std::vector:double:"></span><span class="target" id="classcaset_1_1Vertex_1a8844ec2df9b7dbdba501239a8664920e"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">coordinates</span></span></span><a class="headerlink" href="#_CPPv4N5caset6Vertex11coordinatesE" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+</div>
 </dd></dl>
 
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>doxygenclass: Cannot find class “caset::Simplex” in doxygen xml output for project “caset” from directory: /home/andrew/caset/docs/_doxygen/xml</p>
+<dl class="cpp type">
+<dt class="sig sig-object cpp" id="_CPPv45caset">
+<span id="_CPPv35caset"></span><span id="_CPPv25caset"></span><span id="caset"></span><span class="target" id="namespacecaset"></span><span class="k"><span class="pre">namespace</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">caset</span></span></span><a class="headerlink" href="#_CPPv45caset" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="Edge_8h"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Edge.h</span></span></dt>
+<dd><div class="docutils container">
+<em>#include “<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>”</em></div>
+<div class="docutils container">
+<em>#include &lt;memory&gt;</em></div>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="Simplex_8h"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Simplex.h</span></span></dt>
+<dd><div class="docutils container">
+<em>#include &lt;memory&gt;</em></div>
+<div class="docutils container">
+<em>#include &lt;vector&gt;</em></div>
+<div class="docutils container">
+<em>#include “<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>”</em></div>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="Vertex_8h"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Vertex.h</span></span></dt>
+<dd><div class="docutils container">
+<em>#include &lt;vector&gt;</em></div>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="bindings_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">bindings.cpp</span></span></dt>
+<dd><div class="docutils container">
+<em>#include &lt;pybind11/pybind11.h&gt;</em></div>
+<div class="docutils container">
+<em>#include &lt;pybind11/stl.h&gt;</em></div>
+<div class="docutils container">
+<em>#include &lt;pybind11/complex.h&gt;</em></div>
+<div class="docutils container">
+<em>#include &lt;pybind11/functional.h&gt;</em></div>
+<div class="docutils container">
+<em>#include &lt;pybind11/chrono.h&gt;</em></div>
+<div class="docutils container">
+<em>#include “<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>”</em></div>
+<div class="docutils container">
+<em>#include “<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>”</em></div>
+<div class="docutils container">
+<em>#include “<a class="reference internal" href="#Simplex_8h"><span class="std std-ref">Simplex.h</span></a>”</em></div>
+<div class="docutils container">
+<em>#include &lt;vector&gt;</em></div>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv415PYBIND11_MODULE5caset1m">
+<span id="_CPPv315PYBIND11_MODULE5caset1m"></span><span id="_CPPv215PYBIND11_MODULE5caset1m"></span><span id="PYBIND11_MODULE__caset.m"></span><span class="target" id="bindings_8cpp_1a85c8a05ddab52352d8915b9058f2c322"></span><span class="sig-name descname"><span class="n"><span class="pre">PYBIND11_MODULE</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv45caset" title="caset"><span class="n"><span class="pre">caset</span></span></a>, <span class="n"><span class="pre">m</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv415PYBIND11_MODULE5caset1m" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
 </div>
-</section>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="Edge_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Edge.cpp</span></span></dt>
+<dd><div class="docutils container">
+<em>#include “<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>”</em></div>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="Simplex_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Simplex.cpp</span></span></dt>
+<dd><div class="docutils container">
+<em>#include “<a class="reference internal" href="#Simplex_8h"><span class="std std-ref">Simplex.h</span></a>”</em></div>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="Vertex_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Vertex.cpp</span></span></dt>
+<dd><div class="docutils container">
+<em>#include “<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>”</em></div>
+</dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="dir_d44c64559bbebec7f509842c48db8b23"></span><em><span class="pre">dir</span></em> <span class="sig-name descname"><span class="pre">/home/andrew/caset/include</span></span></dt>
+<dd></dd></dl>
+
+<dl>
+<dt class="sig sig-object cpp">
+<span class="target" id="dir_68267d1309a1af8e8297ef4c3efbcdba"></span><em><span class="pre">dir</span></em> <span class="sig-name descname"><span class="pre">/home/andrew/caset/src</span></span></dt>
+<dd></dd></dl>
+
 </section>
 
         </article>
@@ -291,14 +421,14 @@
         
         <div class="related-pages">
           
-          <a class="prev-page" href="theory.html">
+          <a class="prev-page" href="index.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Theory</div>
+                <div class="title">Home</div>
                 
               </div>
             </a>
@@ -333,20 +463,24 @@
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">C++ API</a><ul>
-<li><a class="reference internal" href="#key-classes">Key classes</a><ul>
 <li><a class="reference internal" href="#_CPPv4N5caset4EdgeE"><code class="docutils literal notranslate"><span class="pre">caset::Edge</span></code></a><ul>
 <li><a class="reference internal" href="#_CPPv4N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"><code class="docutils literal notranslate"><span class="pre">Edge()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK5caset4Edge9getLengthEv"><code class="docutils literal notranslate"><span class="pre">getLength()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N5caset4Edge6sourceE"><code class="docutils literal notranslate"><span class="pre">source</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N5caset4Edge6targetE"><code class="docutils literal notranslate"><span class="pre">target</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N5caset4Edge6lengthE"><code class="docutils literal notranslate"><span class="pre">length</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#_CPPv4N5caset6VertexE"><code class="docutils literal notranslate"><span class="pre">caset::Vertex</span></code></a><ul>
 <li><a class="reference internal" href="#_CPPv4N5caset6Vertex6VertexEiRKNSt6vectorIdEE"><code class="docutils literal notranslate"><span class="pre">Vertex()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK5caset6Vertex5getIdEv"><code class="docutils literal notranslate"><span class="pre">getId()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK5caset6Vertex14getCoordinatesEv"><code class="docutils literal notranslate"><span class="pre">getCoordinates()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N5caset6Vertex2idE"><code class="docutils literal notranslate"><span class="pre">id</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N5caset6Vertex11coordinatesE"><code class="docutils literal notranslate"><span class="pre">coordinates</span></code></a></li>
 </ul>
 </li>
-</ul>
-</li>
+<li><a class="reference internal" href="#_CPPv45caset"><code class="docutils literal notranslate"><span class="pre">caset</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv415PYBIND11_MODULE5caset1m"><code class="docutils literal notranslate"><span class="pre">PYBIND11_MODULE()</span></code></a></li>
 </ul>
 </li>
 </ul>

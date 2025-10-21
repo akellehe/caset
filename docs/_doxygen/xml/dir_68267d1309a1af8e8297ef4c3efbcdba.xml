@@ -4,6 +4,7 @@
     <compoundname>/home/andrew/caset/src</compoundname>
     <innerfile refid="bindings_8cpp">bindings.cpp</innerfile>
     <innerfile refid="Edge_8cpp">Edge.cpp</innerfile>
+    <innerfile refid="Simplex_8cpp">Simplex.cpp</innerfile>
     <innerfile refid="Vertex_8cpp">Vertex.cpp</innerfile>
     <briefdescription>
     </briefdescription>

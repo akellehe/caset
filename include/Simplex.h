@@ -10,6 +10,7 @@
 #include "Edge.h"
 
 namespace caset {
+
 /// Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
@@ -19,7 +20,7 @@ namespace caset {
 ///
 class Simplex {
   public:
-    Simplex(const std::vector<std::shared_ptr<Edge>> &edges_) : edges(edges_) {}
+    explicit Simplex(const std::vector<std::shared_ptr<Edge>> &edges_) : edges(edges_) {}
 
     /// Computes the volume of the simplex, \f$ V_s \f$
     ///

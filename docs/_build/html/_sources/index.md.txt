@@ -10,9 +10,7 @@ E = mc^2
 $$
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 3
 
-usage
-theory
 cpp_api
 ```

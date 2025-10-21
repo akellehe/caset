@@ -9,6 +9,7 @@
 
 #include <memory>
 
+namespace caset {
 /// # Edge Class
 /// An edge that links two points (vertices) in spacetime.
 ///
@@ -18,7 +19,6 @@
 /// properties depending on the context (e.g., distance, time interval, etc.).
 ///
 ///
-namespace caset {
 class Edge {
   public:
     Edge(

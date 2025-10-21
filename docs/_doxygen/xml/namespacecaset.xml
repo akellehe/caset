@@ -7,16 +7,7 @@
     <briefdescription>
     </briefdescription>
     <detaileddescription>
-<sect1 id="namespacecaset_1autotoc_md0">
-<title>Edge Class</title>
-<para>An edge that links two points (vertices) in spacetime.</para>
-<para><itemizedlist>
-<listitem><para>Stores references to the source and target vertices.</para>
-</listitem></itemizedlist>
-</para>
-<para>The edge has length <formula id="0">$ l_{ij} $</formula>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </para>
-</sect1>
     </detaileddescription>
-    <location file="/home/andrew/caset/include/Edge.h" line="21" column="1"/>
+    <location file="/home/andrew/caset/src/Simplex.cpp" line="7" column="1"/>
   </compounddef>
 </doxygen>

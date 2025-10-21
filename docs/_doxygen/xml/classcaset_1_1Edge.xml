@@ -93,6 +93,15 @@
     <briefdescription>
     </briefdescription>
     <detaileddescription>
+<sect1 id="classcaset_1_1Edge_1autotoc_md0">
+<title>Edge Class</title>
+<para>An edge that links two points (vertices) in spacetime.</para>
+<para><itemizedlist>
+<listitem><para>Stores references to the source and target vertices.</para>
+</listitem></itemizedlist>
+</para>
+<para>The edge has length <formula id="0">$ l_{ij} $</formula>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </para>
+</sect1>
     </detaileddescription>
     <location file="/home/andrew/caset/include/Edge.h" line="22" column="1" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="22" bodyend="42"/>
     <listofallmembers>

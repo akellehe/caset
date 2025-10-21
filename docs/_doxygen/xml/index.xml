@@ -27,6 +27,8 @@
   </compound>
   <compound refid="Edge_8cpp" kind="file"><name>Edge.cpp</name>
   </compound>
+  <compound refid="Simplex_8cpp" kind="file"><name>Simplex.cpp</name>
+  </compound>
   <compound refid="Vertex_8cpp" kind="file"><name>Vertex.cpp</name>
   </compound>
   <compound refid="dir_d44c64559bbebec7f509842c48db8b23" kind="dir"><name>/home/andrew/caset/include</name>
