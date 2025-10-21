@@ -9,6 +9,14 @@
 
 #include <memory>
 
+/// # Edge Class
+/// An edge that links two points (vertices) in spacetime.
+///
+/// - Stores references to the source and target vertices.
+///
+/// The edge has weight \f$ w_i \f$, which can represent various physical
+/// properties depending on the context (e.g., distance, time interval, etc.).
+///
 class Edge {
 
  public:
@@ -18,7 +26,9 @@ class Edge {
       double weight_)
       : source(source_), target(target_), weight(weight_) {}
 
-  double getWeight() const {
+    /// Returns the weight of the edge, \f$ w_i \f$
+    ///
+    double getWeight() const {
     return weight;
   }
 

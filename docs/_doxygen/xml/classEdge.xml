@@ -16,7 +16,7 @@
         </detaileddescription>
         <inbodydescription>
         </inbodydescription>
-        <location file="/home/andrew/caset/include/Edge.h" line="26" column="19" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="26" bodyend="-1"/>
+        <location file="/home/andrew/caset/include/Edge.h" line="36" column="19" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="36" bodyend="-1"/>
       </memberdef>
       <memberdef kind="variable" id="classEdge_1abbf79572656e0311d061bff455d10941" prot="private" static="no" mutable="no">
         <type>std::shared_ptr&lt; <ref refid="classVertex" kindref="compound">Vertex</ref> &gt;</type>
@@ -30,7 +30,7 @@
         </detaileddescription>
         <inbodydescription>
         </inbodydescription>
-        <location file="/home/andrew/caset/include/Edge.h" line="27" column="19" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="27" bodyend="-1"/>
+        <location file="/home/andrew/caset/include/Edge.h" line="37" column="19" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="37" bodyend="-1"/>
       </memberdef>
       <memberdef kind="variable" id="classEdge_1a6d0148402e635354c03a151c77fcbdd8" prot="private" static="no" mutable="no">
         <type>double</type>
@@ -44,7 +44,7 @@
         </detaileddescription>
         <inbodydescription>
         </inbodydescription>
-        <location file="/home/andrew/caset/include/Edge.h" line="29" column="10" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="29" bodyend="-1"/>
+        <location file="/home/andrew/caset/include/Edge.h" line="39" column="10" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="39" bodyend="-1"/>
       </memberdef>
     </sectiondef>
     <sectiondef kind="public-func">
@@ -72,7 +72,7 @@
         </detaileddescription>
         <inbodydescription>
         </inbodydescription>
-        <location file="/home/andrew/caset/include/Edge.h" line="15" column="3" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="15" bodyend="19"/>
+        <location file="/home/andrew/caset/include/Edge.h" line="23" column="3" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="23" bodyend="27"/>
       </memberdef>
       <memberdef kind="function" id="classEdge_1a1caaffca117bab3ff5b7387623a356f8" prot="public" static="no" const="yes" explicit="no" inline="yes" virt="non-virtual">
         <type>double</type>
@@ -81,19 +81,29 @@
         <name>getWeight</name>
         <qualifiedname>Edge::getWeight</qualifiedname>
         <briefdescription>
+<para>Returns the weight of the edge, <formula id="0">$ w_i $</formula>. </para>
         </briefdescription>
         <detaileddescription>
         </detaileddescription>
         <inbodydescription>
         </inbodydescription>
-        <location file="/home/andrew/caset/include/Edge.h" line="21" column="10" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="21" bodyend="23"/>
+        <location file="/home/andrew/caset/include/Edge.h" line="31" column="12" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="31" bodyend="33"/>
       </memberdef>
     </sectiondef>
     <briefdescription>
     </briefdescription>
     <detaileddescription>
+<sect1 id="classEdge_1autotoc_md0">
+<title>Edge Class</title>
+<para>An edge that links two points (vertices) in spacetime.</para>
+<para><itemizedlist>
+<listitem><para>Stores references to the source and target vertices.</para>
+</listitem></itemizedlist>
+</para>
+<para>The edge has weight <formula id="0">$ w_i $</formula>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </para>
+</sect1>
     </detaileddescription>
-    <location file="/home/andrew/caset/include/Edge.h" line="12" column="1" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="12" bodyend="30"/>
+    <location file="/home/andrew/caset/include/Edge.h" line="20" column="1" bodyfile="/home/andrew/caset/include/Edge.h" bodystart="20" bodyend="40"/>
     <listofallmembers>
       <member refid="classEdge_1a7941f3f8e06ce00ae51c921b860c8557" prot="public" virt="non-virtual"><scope>Edge</scope><name>Edge</name></member>
       <member refid="classEdge_1a1caaffca117bab3ff5b7387623a356f8" prot="public" virt="non-virtual"><scope>Edge</scope><name>getWeight</name></member>
