@@ -1,20 +1,24 @@
 <?xml version='1.0' encoding='UTF-8' standalone='no'?>
 <doxygenindex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="index.xsd" version="1.9.8" xml:lang="en-US">
-  <compound refid="classEdge" kind="class"><name>Edge</name>
-    <member refid="classEdge_1a9af0e2abf24da274f6e4afd92ddd0f16" kind="variable"><name>source</name></member>
-    <member refid="classEdge_1abbf79572656e0311d061bff455d10941" kind="variable"><name>target</name></member>
-    <member refid="classEdge_1a6d0148402e635354c03a151c77fcbdd8" kind="variable"><name>weight</name></member>
-    <member refid="classEdge_1a7941f3f8e06ce00ae51c921b860c8557" kind="function"><name>Edge</name></member>
-    <member refid="classEdge_1a1caaffca117bab3ff5b7387623a356f8" kind="function"><name>getWeight</name></member>
+  <compound refid="classcaset_1_1Edge" kind="class"><name>caset::Edge</name>
+    <member refid="classcaset_1_1Edge_1a919659c7a751a179102daef6366fbfc6" kind="variable"><name>source</name></member>
+    <member refid="classcaset_1_1Edge_1a5ebdb94fe9e344b84798ea51781a64a7" kind="variable"><name>target</name></member>
+    <member refid="classcaset_1_1Edge_1abc2edb8746c2996f3c59769a9e0d6c5c" kind="variable"><name>length</name></member>
+    <member refid="classcaset_1_1Edge_1a2e9426a02aeeeaa0da7d9d2fe89a44eb" kind="function"><name>Edge</name></member>
+    <member refid="classcaset_1_1Edge_1ab2a1b6f9e6f7111674ef3b48649c383e" kind="function"><name>getLength</name></member>
   </compound>
-  <compound refid="classVertex" kind="class"><name>Vertex</name>
-    <member refid="classVertex_1a2e69697726190f50c7fc040fb1ddac7a" kind="variable"><name>id</name></member>
-    <member refid="classVertex_1a5765801a001802e8d838afc081f59346" kind="variable"><name>coordinates</name></member>
-    <member refid="classVertex_1a947661f70f3753c8832978b1960f4501" kind="function"><name>Vertex</name></member>
-    <member refid="classVertex_1a75b6b4a4afc26affea59fdae48aa30b1" kind="function"><name>getId</name></member>
-    <member refid="classVertex_1a3112349cce3228d8d5701152cbdc5dcb" kind="function"><name>getCoordinates</name></member>
+  <compound refid="classcaset_1_1Vertex" kind="class"><name>caset::Vertex</name>
+    <member refid="classcaset_1_1Vertex_1a67125c52e39688a3c204ea0b55fb202b" kind="variable"><name>id</name></member>
+    <member refid="classcaset_1_1Vertex_1a8844ec2df9b7dbdba501239a8664920e" kind="variable"><name>coordinates</name></member>
+    <member refid="classcaset_1_1Vertex_1a797eddaec1b2dc4d1d5381534fa4aafd" kind="function"><name>Vertex</name></member>
+    <member refid="classcaset_1_1Vertex_1a4aa4d31f04acdbfc8f8a1ae5fa49d2d8" kind="function"><name>getId</name></member>
+    <member refid="classcaset_1_1Vertex_1aea00a22f3df74f9875d09d7dca8977d9" kind="function"><name>getCoordinates</name></member>
+  </compound>
+  <compound refid="namespacecaset" kind="namespace"><name>caset</name>
   </compound>
   <compound refid="Edge_8h" kind="file"><name>Edge.h</name>
+  </compound>
+  <compound refid="Simplex_8h" kind="file"><name>Simplex.h</name>
   </compound>
   <compound refid="Vertex_8h" kind="file"><name>Vertex.h</name>
   </compound>

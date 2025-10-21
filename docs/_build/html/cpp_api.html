@@ -234,215 +234,54 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="c-api">
 <h1>C++ API<a class="headerlink" href="#c-api" title="Link to this heading">¶</a></h1>
-<p>Below is the Doxygen index imported via Breathe.</p>
-<dl class="cpp class">
-<dt class="sig sig-object cpp" id="_CPPv44Edge">
-<span id="_CPPv34Edge"></span><span id="_CPPv24Edge"></span><span id="Edge"></span><span class="target" id="classEdge"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><a class="headerlink" href="#_CPPv44Edge" title="Link to this definition">¶</a><br /></dt>
-<dd><div class="docutils container">
-<em>#include &lt;<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>&gt;</em></div>
-<section id="classEdge_1autotoc_md0">
-<h2>Edge Class<a class="headerlink" href="#classEdge_1autotoc_md0" title="Link to this heading">¶</a></h2>
-<p id="classEdge_1autotoc_md0">An edge that links two points (vertices) in spacetime.</p>
-<p><ul class="simple">
-<li><p>Stores references to the source and target vertices.</p></li>
-</ul>
-</p>
-<p>The edge has weight <span class="math notranslate nohighlight">\( w_i \)</span>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </p>
-</section>
-<div class="breathe-sectiondef docutils container">
-<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd">
-<span id="_CPPv3N4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"></span><span id="_CPPv2N4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"></span><span id="Edge::Edge__std::shared_ptr:Vertex:.std::shared_ptr:Vertex:.double"></span><span class="target" id="classEdge_1a7941f3f8e06ce00ae51c921b860c8557"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv46Vertex" title="Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">source_</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv46Vertex" title="Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">target_</span></span>, <span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">weight_</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4NK4Edge9getWeightEv">
-<span id="_CPPv3NK4Edge9getWeightEv"></span><span id="_CPPv2NK4Edge9getWeightEv"></span><span id="Edge::getWeightC"></span><span class="target" id="classEdge_1a1caaffca117bab3ff5b7387623a356f8"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getWeight</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK4Edge9getWeightEv" title="Link to this definition">¶</a><br /></dt>
-<dd><p>Returns the weight of the edge, <span class="math notranslate nohighlight">\( w_i \)</span>. </p>
-</dd></dl>
-
-</div>
-<div class="breathe-sectiondef docutils container">
-<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N4Edge6sourceE">
-<span id="_CPPv3N4Edge6sourceE"></span><span id="_CPPv2N4Edge6sourceE"></span><span id="Edge::source__std::shared_ptr:Vertex:"></span><span class="target" id="classEdge_1a9af0e2abf24da274f6e4afd92ddd0f16"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv46Vertex" title="Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">source</span></span></span><a class="headerlink" href="#_CPPv4N4Edge6sourceE" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N4Edge6targetE">
-<span id="_CPPv3N4Edge6targetE"></span><span id="_CPPv2N4Edge6targetE"></span><span id="Edge::target__std::shared_ptr:Vertex:"></span><span class="target" id="classEdge_1abbf79572656e0311d061bff455d10941"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv46Vertex" title="Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">target</span></span></span><a class="headerlink" href="#_CPPv4N4Edge6targetE" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N4Edge6weightE">
-<span id="_CPPv3N4Edge6weightE"></span><span id="_CPPv2N4Edge6weightE"></span><span id="Edge::weight__double"></span><span class="target" id="classEdge_1a6d0148402e635354c03a151c77fcbdd8"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">weight</span></span></span><a class="headerlink" href="#_CPPv4N4Edge6weightE" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-</div>
-</dd></dl>
-
-<dl class="cpp class">
-<dt class="sig sig-object cpp" id="_CPPv46Vertex">
-<span id="_CPPv36Vertex"></span><span id="_CPPv26Vertex"></span><span id="Vertex"></span><span class="target" id="classVertex"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><a class="headerlink" href="#_CPPv46Vertex" title="Link to this definition">¶</a><br /></dt>
-<dd><div class="docutils container">
-<em>#include &lt;<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>&gt;</em></div>
-<div class="breathe-sectiondef docutils container">
-<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6Vertex6VertexEiRKNSt6vectorIdEE">
-<span id="_CPPv3N6Vertex6VertexEiRKNSt6vectorIdEE"></span><span id="_CPPv2N6Vertex6VertexEiRKNSt6vectorIdEE"></span><span id="Vertex::Vertex__i.std::vector:double:CR"></span><span class="target" id="classVertex_1a947661f70f3753c8832978b1960f4501"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">id_</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">coordinates_</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6Vertex6VertexEiRKNSt6vectorIdEE" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4NK6Vertex5getIdEv">
-<span id="_CPPv3NK6Vertex5getIdEv"></span><span id="_CPPv2NK6Vertex5getIdEv"></span><span id="Vertex::getIdC"></span><span class="target" id="classVertex_1a75b6b4a4afc26affea59fdae48aa30b1"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getId</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6Vertex5getIdEv" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4NK6Vertex14getCoordinatesEv">
-<span id="_CPPv3NK6Vertex14getCoordinatesEv"></span><span id="_CPPv2NK6Vertex14getCoordinatesEv"></span><span id="Vertex::getCoordinatesC"></span><span class="target" id="classVertex_1a3112349cce3228d8d5701152cbdc5dcb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">getCoordinates</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6Vertex14getCoordinatesEv" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-</div>
-<div class="breathe-sectiondef docutils container">
-<p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N6Vertex2idE">
-<span id="_CPPv3N6Vertex2idE"></span><span id="_CPPv2N6Vertex2idE"></span><span id="Vertex::id__i"></span><span class="target" id="classVertex_1a2e69697726190f50c7fc040fb1ddac7a"></span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">id</span></span></span><a class="headerlink" href="#_CPPv4N6Vertex2idE" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N6Vertex11coordinatesE">
-<span id="_CPPv3N6Vertex11coordinatesE"></span><span id="_CPPv2N6Vertex11coordinatesE"></span><span id="Vertex::coordinates__std::vector:double:"></span><span class="target" id="classVertex_1a5765801a001802e8d838afc081f59346"></span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">coordinates</span></span></span><a class="headerlink" href="#_CPPv4N6Vertex11coordinatesE" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-</div>
-</dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="Edge_8h"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Edge.h</span></span></dt>
-<dd><div class="docutils container">
-<em>#include “<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>”</em></div>
-<div class="docutils container">
-<em>#include &lt;memory&gt;</em></div>
-</dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="Vertex_8h"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Vertex.h</span></span></dt>
-<dd><div class="docutils container">
-<em>#include &lt;vector&gt;</em></div>
-</dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="bindings_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">bindings.cpp</span></span></dt>
-<dd><div class="docutils container">
-<em>#include &lt;pybind11/pybind11.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;pybind11/stl.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;pybind11/complex.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;pybind11/functional.h&gt;</em></div>
-<div class="docutils container">
-<em>#include &lt;pybind11/chrono.h&gt;</em></div>
-<div class="docutils container">
-<em>#include “<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">Vertex.h</span></a>”</em></div>
-<div class="docutils container">
-<em>#include “<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>”</em></div>
-<div class="docutils container">
-<em>#include &lt;vector&gt;</em></div>
-<div class="breathe-sectiondef docutils container">
-<p class="breathe-sectiondef-title rubric" id="breathe-section-title-functions">Functions</p>
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv415PYBIND11_MODULE5caset1m">
-<span id="_CPPv315PYBIND11_MODULE5caset1m"></span><span id="_CPPv215PYBIND11_MODULE5caset1m"></span><span id="PYBIND11_MODULE__caset.m"></span><span class="target" id="bindings_8cpp_1a85c8a05ddab52352d8915b9058f2c322"></span><span class="sig-name descname"><span class="n"><span class="pre">PYBIND11_MODULE</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">caset</span></span>, <span class="n"><span class="pre">m</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv415PYBIND11_MODULE5caset1m" title="Link to this definition">¶</a><br /></dt>
-<dd></dd></dl>
-
-</div>
-</dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="Edge_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Edge.cpp</span></span></dt>
-<dd><div class="docutils container">
-<em>#include “<a class="reference internal" href="#Edge_8h"><span class="std std-ref">Edge.h</span></a>”</em></div>
-</dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="Vertex_8cpp"></span><em><span class="pre">file</span></em> <span class="sig-name descname"><span class="pre">Vertex.cpp</span></span></dt>
-<dd><div class="docutils container">
-<em>#include “<a class="reference internal" href="#Vertex_8h"><span class="std std-ref">../include/Vertex.h</span></a>”</em></div>
-</dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="dir_d44c64559bbebec7f509842c48db8b23"></span><em><span class="pre">dir</span></em> <span class="sig-name descname"><span class="pre">/home/andrew/caset/include</span></span></dt>
-<dd></dd></dl>
-
-<dl>
-<dt class="sig sig-object cpp">
-<span class="target" id="dir_68267d1309a1af8e8297ef4c3efbcdba"></span><em><span class="pre">dir</span></em> <span class="sig-name descname"><span class="pre">/home/andrew/caset/src</span></span></dt>
-<dd></dd></dl>
-
 <section id="key-classes">
 <h2>Key classes<a class="headerlink" href="#key-classes" title="Link to this heading">¶</a></h2>
 <dl class="cpp class">
-<dt class="sig sig-object cpp">
-<span class="target" id="classVertex"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N5caset4EdgeE">
+<span id="_CPPv3N5caset4EdgeE"></span><span id="_CPPv2N5caset4EdgeE"></span><span id="caset::Edge"></span><span class="target" id="classcaset_1_1Edge"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><a class="headerlink" href="#_CPPv4N5caset4EdgeE" title="Link to this definition">¶</a><br /></dt>
 <dd><div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
-<dt class="sig sig-object cpp">
-<span class="target" id="classVertex_1a947661f70f3753c8832978b1960f4501"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">id_</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">coordinates_</span></span><span class="sig-paren">)</span><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd">
+<span id="_CPPv3N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"></span><span id="_CPPv2N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"></span><span id="caset::Edge::Edge__std::shared_ptr:Vertex:.std::shared_ptr:Vertex:.double"></span><span class="target" id="classcaset_1_1Edge_1a2e9426a02aeeeaa0da7d9d2fe89a44eb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N5caset6VertexE" title="caset::Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">source_</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N5caset6VertexE" title="caset::Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">target_</span></span>, <span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">length_</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd" title="Link to this definition">¶</a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
-<dt class="sig sig-object cpp">
-<span class="target" id="classVertex_1a75b6b4a4afc26affea59fdae48aa30b1"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getId</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><br /></dt>
-<dd></dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp">
-<span class="target" id="classVertex_1a3112349cce3228d8d5701152cbdc5dcb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">getCoordinates</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><br /></dt>
-<dd></dd></dl>
+<dt class="sig sig-object cpp" id="_CPPv4NK5caset4Edge9getLengthEv">
+<span id="_CPPv3NK5caset4Edge9getLengthEv"></span><span id="_CPPv2NK5caset4Edge9getLengthEv"></span><span id="caset::Edge::getLengthC"></span><span class="target" id="classcaset_1_1Edge_1ab2a1b6f9e6f7111674ef3b48649c383e"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getLength</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK5caset4Edge9getLengthEv" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Returns the length of the edge, <span class="math notranslate nohighlight">\( l_{ij} \)</span>. </p>
+</dd></dl>
 
 </div>
 </dd></dl>
 
 <dl class="cpp class">
-<dt class="sig sig-object cpp">
-<span class="target" id="classEdge"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><br /></dt>
-<dd><section id="classEdge_1autotoc_md0">
-<h3>Edge Class<a class="headerlink" href="#classEdge_1autotoc_md0" title="Link to this heading">¶</a></h3>
-<p id="classEdge_1autotoc_md0">An edge that links two points (vertices) in spacetime.</p>
-<p><ul class="simple">
-<li><p>Stores references to the source and target vertices.</p></li>
-</ul>
-</p>
-<p>The edge has weight <span class="math notranslate nohighlight">\( w_i \)</span>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </p>
-</section>
-<div class="breathe-sectiondef docutils container">
+<dt class="sig sig-object cpp" id="_CPPv4N5caset6VertexE">
+<span id="_CPPv3N5caset6VertexE"></span><span id="_CPPv2N5caset6VertexE"></span><span id="caset::Vertex"></span><span class="target" id="classcaset_1_1Vertex"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><a class="headerlink" href="#_CPPv4N5caset6VertexE" title="Link to this definition">¶</a><br /></dt>
+<dd><div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
-<dt class="sig sig-object cpp">
-<span class="target" id="classEdge_1a7941f3f8e06ce00ae51c921b860c8557"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Edge</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv46Vertex" title="Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">source_</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv46Vertex" title="Vertex"><span class="n"><span class="pre">Vertex</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">target_</span></span>, <span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">weight_</span></span><span class="sig-paren">)</span><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N5caset6Vertex6VertexEiRKNSt6vectorIdEE">
+<span id="_CPPv3N5caset6Vertex6VertexEiRKNSt6vectorIdEE"></span><span id="_CPPv2N5caset6Vertex6VertexEiRKNSt6vectorIdEE"></span><span id="caset::Vertex::Vertex__i.std::vector:double:CR"></span><span class="target" id="classcaset_1_1Vertex_1a797eddaec1b2dc4d1d5381534fa4aafd"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Vertex</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">id_</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">coordinates_</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N5caset6Vertex6VertexEiRKNSt6vectorIdEE" title="Link to this definition">¶</a><br /></dt>
 <dd></dd></dl>
 
 <dl class="cpp function">
-<dt class="sig sig-object cpp">
-<span class="target" id="classEdge_1a1caaffca117bab3ff5b7387623a356f8"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getWeight</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><br /></dt>
-<dd><p>Returns the weight of the edge, <span class="math notranslate nohighlight">\( w_i \)</span>. </p>
-</dd></dl>
+<dt class="sig sig-object cpp" id="_CPPv4NK5caset6Vertex5getIdEv">
+<span id="_CPPv3NK5caset6Vertex5getIdEv"></span><span id="_CPPv2NK5caset6Vertex5getIdEv"></span><span id="caset::Vertex::getIdC"></span><span class="target" id="classcaset_1_1Vertex_1a4aa4d31f04acdbfc8f8a1ae5fa49d2d8"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getId</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK5caset6Vertex5getIdEv" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK5caset6Vertex14getCoordinatesEv">
+<span id="_CPPv3NK5caset6Vertex14getCoordinatesEv"></span><span id="_CPPv2NK5caset6Vertex14getCoordinatesEv"></span><span id="caset::Vertex::getCoordinatesC"></span><span class="target" id="classcaset_1_1Vertex_1aea00a22f3df74f9875d09d7dca8977d9"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">double</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">getCoordinates</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK5caset6Vertex14getCoordinatesEv" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
 
 </div>
 </dd></dl>
 
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>doxygenclass: Cannot find class “caset::Simplex” in doxygen xml output for project “caset” from directory: /home/andrew/caset/docs/_doxygen/xml</p>
+</div>
 </section>
 </section>
 
@@ -494,24 +333,20 @@
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">C++ API</a><ul>
-<li><a class="reference internal" href="#_CPPv44Edge"><code class="docutils literal notranslate"><span class="pre">Edge</span></code></a><ul>
-<li><a class="reference internal" href="#_CPPv4N4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"><code class="docutils literal notranslate"><span class="pre">Edge()</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4NK4Edge9getWeightEv"><code class="docutils literal notranslate"><span class="pre">getWeight()</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4N4Edge6sourceE"><code class="docutils literal notranslate"><span class="pre">source</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4N4Edge6targetE"><code class="docutils literal notranslate"><span class="pre">target</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4N4Edge6weightE"><code class="docutils literal notranslate"><span class="pre">weight</span></code></a></li>
+<li><a class="reference internal" href="#key-classes">Key classes</a><ul>
+<li><a class="reference internal" href="#_CPPv4N5caset4EdgeE"><code class="docutils literal notranslate"><span class="pre">caset::Edge</span></code></a><ul>
+<li><a class="reference internal" href="#_CPPv4N5caset4Edge4EdgeENSt10shared_ptrI6VertexEENSt10shared_ptrI6VertexEEd"><code class="docutils literal notranslate"><span class="pre">Edge()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK5caset4Edge9getLengthEv"><code class="docutils literal notranslate"><span class="pre">getLength()</span></code></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#_CPPv46Vertex"><code class="docutils literal notranslate"><span class="pre">Vertex</span></code></a><ul>
-<li><a class="reference internal" href="#_CPPv4N6Vertex6VertexEiRKNSt6vectorIdEE"><code class="docutils literal notranslate"><span class="pre">Vertex()</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4NK6Vertex5getIdEv"><code class="docutils literal notranslate"><span class="pre">getId()</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4NK6Vertex14getCoordinatesEv"><code class="docutils literal notranslate"><span class="pre">getCoordinates()</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4N6Vertex2idE"><code class="docutils literal notranslate"><span class="pre">id</span></code></a></li>
-<li><a class="reference internal" href="#_CPPv4N6Vertex11coordinatesE"><code class="docutils literal notranslate"><span class="pre">coordinates</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N5caset6VertexE"><code class="docutils literal notranslate"><span class="pre">caset::Vertex</span></code></a><ul>
+<li><a class="reference internal" href="#_CPPv4N5caset6Vertex6VertexEiRKNSt6vectorIdEE"><code class="docutils literal notranslate"><span class="pre">Vertex()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK5caset6Vertex5getIdEv"><code class="docutils literal notranslate"><span class="pre">getId()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK5caset6Vertex14getCoordinatesEv"><code class="docutils literal notranslate"><span class="pre">getCoordinates()</span></code></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#_CPPv415PYBIND11_MODULE5caset1m"><code class="docutils literal notranslate"><span class="pre">PYBIND11_MODULE()</span></code></a></li>
-<li><a class="reference internal" href="#key-classes">Key classes</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>

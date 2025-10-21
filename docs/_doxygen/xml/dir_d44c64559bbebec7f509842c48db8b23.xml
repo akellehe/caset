@@ -3,6 +3,7 @@
   <compounddef id="dir_d44c64559bbebec7f509842c48db8b23" kind="dir">
     <compoundname>/home/andrew/caset/include</compoundname>
     <innerfile refid="Edge_8h">Edge.h</innerfile>
+    <innerfile refid="Simplex_8h">Simplex.h</innerfile>
     <innerfile refid="Vertex_8h">Vertex.h</innerfile>
     <briefdescription>
     </briefdescription>

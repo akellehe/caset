@@ -1,21 +1,22 @@
 # C++ API
 
-Below is the Doxygen index imported via Breathe.
-
-```{doxygenindex}
-:project: caset
-```
-
 ## Key classes
 
-```{doxygenclass} Vertex
+```{doxygenclass} caset::Edge
 :project: caset
 :members:
 :protected-members:
 :undoc-members:
 ```
 
-```{doxygenclass} Edge
+```{doxygenclass} caset::Vertex
+:project: caset
+:members:
+:protected-members:
+:undoc-members:
+```
+
+```{doxygenclass} caset::Simplex
 :project: caset
 :members:
 :protected-members:

@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.9.8" xml:lang="en-US">
+  <compounddef id="namespacecaset" kind="namespace" language="C++">
+    <compoundname>caset</compoundname>
+    <innerclass refid="classcaset_1_1Edge" prot="public">caset::Edge</innerclass>
+    <innerclass refid="classcaset_1_1Vertex" prot="public">caset::Vertex</innerclass>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+<sect1 id="namespacecaset_1autotoc_md0">
+<title>Edge Class</title>
+<para>An edge that links two points (vertices) in spacetime.</para>
+<para><itemizedlist>
+<listitem><para>Stores references to the source and target vertices.</para>
+</listitem></itemizedlist>
+</para>
+<para>The edge has length <formula id="0">$ l_{ij} $</formula>, which can represent various physical properties depending on the context (e.g., distance, time interval, etc.). </para>
+</sect1>
+    </detaileddescription>
+    <location file="/home/andrew/caset/include/Edge.h" line="21" column="1"/>
+  </compounddef>
+</doxygen>
