@@ -38,9 +38,3 @@ add_custom_command(
         TARGET caset POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Built module: $<TARGET_FILE:caset>"
         VERBATIM)
-
-# Make docs/ visible to CLion without building it
-add_custom_target(docs ALL
-        COMMAND ${CMAKE_COMMAND} -E echo "Docs folder is part of the project"
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/docs
-        COMMENT "Expose docs directory to CLion")
