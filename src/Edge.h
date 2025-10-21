@@ -13,9 +13,9 @@ class Edge {
 
  public:
   Edge(
-      std::shared_ptr<Vertex> &source_,
-      std::shared_ptr<Vertex> &target_,
-      double &weight_)
+      std::shared_ptr<Vertex> source_,
+      std::shared_ptr<Vertex> target_,
+      double weight_)
       : source(source_), target(target_), weight(weight_) {}
 
   double getWeight() const {

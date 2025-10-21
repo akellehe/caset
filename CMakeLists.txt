@@ -6,31 +6,34 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Use the modern FindPython + pybind11 config
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
+
+message(STATUS "Python executable:    ${Python_EXECUTABLE}")
+message(STATUS "Python version:       ${Python_VERSION}")
+message(STATUS "Python include dirs:  ${Python_INCLUDE_DIRS}")
+message(STATUS "Python libraries:     ${Python_LIBRARIES}")  # might be empty for Module-only
+message(STATUS "CMAKE_BINARY_DIR:     ${CMAKE_BINARY_DIR}")
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+
 find_package(pybind11 CONFIG REQUIRED)
 
 set(CASET_SOURCES
-        caset/src/bindings.cpp
-        caset/src/Vertex.cpp
-        caset/src/Edge.cpp
+        src/bindings.cpp
+        src/Vertex.cpp
+        src/Edge.cpp
         )
 
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
-
-target_include_directories(caset PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/caset/src)
-
-# This is all you need:
+target_include_directories(caset PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(caset PRIVATE pybind11::module)
-# DO NOT link Python::Python here.
-# If you insist on a Python target, use Python::Module (provided by Development.Module), e.g.:
-# target_link_libraries(caset PRIVATE Python::Module)
 
-if (WIN32)
-    set_target_properties(caset PROPERTIES SUFFIX ".pyd")
-endif()
+install(TARGETS caset
+        LIBRARY DESTINATION .
+        RUNTIME DESTINATION .
+        ARCHIVE DESTINATION .
+        BUNDLE DESTINATION .
+)
 
-if (MSVC)
-    target_compile_options(caset PRIVATE /EHsc /O2)
-else()
-    target_compile_options(caset PRIVATE -O3 -fvisibility=hidden)
-endif()
-
+add_custom_command(
+        TARGET caset POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Built module: $<TARGET_FILE:caset>"
+        VERBATIM)

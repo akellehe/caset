@@ -17,6 +17,6 @@ requires-python = ">=3.9"
 license = { text = "MIT" }
 
 [tool.scikit-build]
-
-# Let scikit-build-core pass build type flags sanely
 cmake.build-type = "Release"
+[tool.scikit-build.cmake.define]
+Python_EXECUTABLE = "${python.executable}"
