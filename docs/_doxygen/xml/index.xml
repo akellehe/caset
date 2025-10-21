@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygenindex xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="index.xsd" version="1.9.8" xml:lang="en-US">
+  <compound refid="classEdge" kind="class"><name>Edge</name>
+    <member refid="classEdge_1a9af0e2abf24da274f6e4afd92ddd0f16" kind="variable"><name>source</name></member>
+    <member refid="classEdge_1abbf79572656e0311d061bff455d10941" kind="variable"><name>target</name></member>
+    <member refid="classEdge_1a6d0148402e635354c03a151c77fcbdd8" kind="variable"><name>weight</name></member>
+    <member refid="classEdge_1a7941f3f8e06ce00ae51c921b860c8557" kind="function"><name>Edge</name></member>
+    <member refid="classEdge_1a1caaffca117bab3ff5b7387623a356f8" kind="function"><name>getWeight</name></member>
+  </compound>
+  <compound refid="classVertex" kind="class"><name>Vertex</name>
+    <member refid="classVertex_1a2e69697726190f50c7fc040fb1ddac7a" kind="variable"><name>id</name></member>
+    <member refid="classVertex_1a5765801a001802e8d838afc081f59346" kind="variable"><name>coordinates</name></member>
+    <member refid="classVertex_1a947661f70f3753c8832978b1960f4501" kind="function"><name>Vertex</name></member>
+    <member refid="classVertex_1a75b6b4a4afc26affea59fdae48aa30b1" kind="function"><name>getId</name></member>
+    <member refid="classVertex_1a3112349cce3228d8d5701152cbdc5dcb" kind="function"><name>getCoordinates</name></member>
+  </compound>
+  <compound refid="Edge_8h" kind="file"><name>Edge.h</name>
+  </compound>
+  <compound refid="Vertex_8h" kind="file"><name>Vertex.h</name>
+  </compound>
+  <compound refid="bindings_8cpp" kind="file"><name>bindings.cpp</name>
+    <member refid="bindings_8cpp_1a85c8a05ddab52352d8915b9058f2c322" kind="function"><name>PYBIND11_MODULE</name></member>
+  </compound>
+  <compound refid="Edge_8cpp" kind="file"><name>Edge.cpp</name>
+  </compound>
+  <compound refid="Vertex_8cpp" kind="file"><name>Vertex.cpp</name>
+  </compound>
+  <compound refid="dir_d44c64559bbebec7f509842c48db8b23" kind="dir"><name>/home/andrew/caset/include</name>
+  </compound>
+  <compound refid="dir_68267d1309a1af8e8297ef4c3efbcdba" kind="dir"><name>/home/andrew/caset/src</name>
+  </compound>
+</doxygenindex>

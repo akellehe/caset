@@ -1,0 +1,101 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.9.8" xml:lang="en-US">
+  <compounddef id="classVertex" kind="class" language="C++" prot="public">
+    <compoundname>Vertex</compoundname>
+    <includes refid="Vertex_8h" local="no">Vertex.h</includes>
+    <sectiondef kind="private-attrib">
+      <memberdef kind="variable" id="classVertex_1a2e69697726190f50c7fc040fb1ddac7a" prot="private" static="no" mutable="no">
+        <type>int</type>
+        <definition>int Vertex::id</definition>
+        <argsstring></argsstring>
+        <name>id</name>
+        <qualifiedname>Vertex::id</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/andrew/caset/include/Vertex.h" line="27" column="9" bodyfile="/home/andrew/caset/include/Vertex.h" bodystart="27" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classVertex_1a5765801a001802e8d838afc081f59346" prot="private" static="no" mutable="no">
+        <type>std::vector&lt; double &gt;</type>
+        <definition>std::vector&lt;double&gt; Vertex::coordinates</definition>
+        <argsstring></argsstring>
+        <name>coordinates</name>
+        <qualifiedname>Vertex::coordinates</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/andrew/caset/include/Vertex.h" line="28" column="17" bodyfile="/home/andrew/caset/include/Vertex.h" bodystart="28" bodyend="-1"/>
+      </memberdef>
+    </sectiondef>
+    <sectiondef kind="public-func">
+      <memberdef kind="function" id="classVertex_1a947661f70f3753c8832978b1960f4501" prot="public" static="no" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type></type>
+        <definition>Vertex::Vertex</definition>
+        <argsstring>(int id_, const std::vector&lt; double &gt; &amp;coordinates_)</argsstring>
+        <name>Vertex</name>
+        <qualifiedname>Vertex::Vertex</qualifiedname>
+        <param>
+          <type>int</type>
+          <declname>id_</declname>
+        </param>
+        <param>
+          <type>const std::vector&lt; double &gt; &amp;</type>
+          <declname>coordinates_</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/andrew/caset/include/Vertex.h" line="15" column="5" bodyfile="/home/andrew/caset/include/Vertex.h" bodystart="15" bodyend="16"/>
+      </memberdef>
+      <memberdef kind="function" id="classVertex_1a75b6b4a4afc26affea59fdae48aa30b1" prot="public" static="no" const="yes" explicit="no" inline="yes" virt="non-virtual">
+        <type>int</type>
+        <definition>int Vertex::getId</definition>
+        <argsstring>() const</argsstring>
+        <name>getId</name>
+        <qualifiedname>Vertex::getId</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/andrew/caset/include/Vertex.h" line="18" column="9" bodyfile="/home/andrew/caset/include/Vertex.h" bodystart="18" bodyend="20"/>
+      </memberdef>
+      <memberdef kind="function" id="classVertex_1a3112349cce3228d8d5701152cbdc5dcb" prot="public" static="no" const="yes" explicit="no" inline="yes" virt="non-virtual">
+        <type>const std::vector&lt; double &gt; &amp;</type>
+        <definition>const std::vector&lt; double &gt; &amp; Vertex::getCoordinates</definition>
+        <argsstring>() const</argsstring>
+        <name>getCoordinates</name>
+        <qualifiedname>Vertex::getCoordinates</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/andrew/caset/include/Vertex.h" line="22" column="23" bodyfile="/home/andrew/caset/include/Vertex.h" bodystart="22" bodyend="24"/>
+      </memberdef>
+    </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/andrew/caset/include/Vertex.h" line="11" column="1" bodyfile="/home/andrew/caset/include/Vertex.h" bodystart="11" bodyend="29"/>
+    <listofallmembers>
+      <member refid="classVertex_1a5765801a001802e8d838afc081f59346" prot="private" virt="non-virtual"><scope>Vertex</scope><name>coordinates</name></member>
+      <member refid="classVertex_1a3112349cce3228d8d5701152cbdc5dcb" prot="public" virt="non-virtual"><scope>Vertex</scope><name>getCoordinates</name></member>
+      <member refid="classVertex_1a75b6b4a4afc26affea59fdae48aa30b1" prot="public" virt="non-virtual"><scope>Vertex</scope><name>getId</name></member>
+      <member refid="classVertex_1a2e69697726190f50c7fc040fb1ddac7a" prot="private" virt="non-virtual"><scope>Vertex</scope><name>id</name></member>
+      <member refid="classVertex_1a947661f70f3753c8832978b1960f4501" prot="public" virt="non-virtual"><scope>Vertex</scope><name>Vertex</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

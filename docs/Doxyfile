@@ -1,0 +1,16 @@
+# Doxygen configuration for caset
+PROJECT_NAME           = "caset"
+OUTPUT_DIRECTORY       = _doxygen
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+GENERATE_HTML          = NO
+GENERATE_LATEX         = NO
+MARKDOWN_SUPPORT       = YES
+INPUT                  = ../src ../include
+FILE_PATTERNS          = *.h *.hpp *.hh *.cc *.cpp
+RECURSIVE              = YES
+WARN_IF_UNDOCUMENTED   = NO
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HAVE_DOT               = NO

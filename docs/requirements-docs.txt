@@ -1,0 +1,5 @@
+sphinx>=7
+furo
+breathe
+myst-parser
+sphinx-autobuild

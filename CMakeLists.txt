@@ -23,7 +23,7 @@ set(CASET_SOURCES
         )
 
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
-target_include_directories(caset PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(caset PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(caset PRIVATE pybind11::module)
 
 install(TARGETS caset
