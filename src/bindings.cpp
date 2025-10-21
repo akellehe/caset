@@ -11,6 +11,8 @@
 
 namespace py = pybind11;
 
+using namespace caset;
+
 PYBIND11_MODULE(caset, m) {
   py::class_<Vertex>(m, "Vertex")
       .def(py::init<int, std::vector<double> >())

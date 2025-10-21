@@ -17,26 +17,29 @@
 /// The edge has weight \f$ w_i \f$, which can represent various physical
 /// properties depending on the context (e.g., distance, time interval, etc.).
 ///
+///
+namespace caset {
 class Edge {
-
- public:
-  Edge(
+  public:
+    Edge(
       std::shared_ptr<Vertex> source_,
       std::shared_ptr<Vertex> target_,
       double weight_)
-      : source(source_), target(target_), weight(weight_) {}
+      : source(source_), target(target_), weight(weight_) {
+    }
 
     /// Returns the weight of the edge, \f$ w_i \f$
     ///
     double getWeight() const {
-    return weight;
-  }
+      return weight;
+    }
 
- private:
-  std::shared_ptr<Vertex> source;
-  std::shared_ptr<Vertex> target;
+  private:
+    std::shared_ptr<Vertex> source;
+    std::shared_ptr<Vertex> target;
 
-  double weight;
+    double weight;
 };
+}
 
 #endif //CASET_CASET_SRC_EDGE_H_

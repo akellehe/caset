@@ -7,25 +7,27 @@
 
 #include <vector>
 
-
+namespace caset {
 class Vertex {
 
- public:
+    public:
 
-    Vertex(int id_, const std::vector<double> &coordinates_)
-        : id(id_), coordinates(coordinates_) {}
+        Vertex(int id_, const std::vector<double> &coordinates_)
+            : id(id_), coordinates(coordinates_) {}
 
-    int getId() const {
-        return id;
-    }
+        int getId() const {
+            return id;
+        }
 
-    const std::vector<double> &getCoordinates() const {
-        return coordinates;
-    }
+        const std::vector<double> &getCoordinates() const {
+            return coordinates;
+        }
 
- private:
-    int id;
-    std::vector<double> coordinates;
+    private:
+        int id;
+        std::vector<double> coordinates;
 };
+}
 
 #endif //CASET_CASET_SRC_VERTEX_H_
+
