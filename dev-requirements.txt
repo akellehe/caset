@@ -1,0 +1,5 @@
+scikit-build-core>=0.9
+pybind11>=2.12
+cmake>=3.22
+ninja
+torch>=2.9.0
