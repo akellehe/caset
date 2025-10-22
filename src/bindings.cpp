@@ -15,20 +15,22 @@ namespace py = pybind11;
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
-    py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
-            .def(py::init<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>, double>())
-            .def("getLength", &Edge::getLength);
+  py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
+      .def(py::init<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>, double>())
+      .def("getLength", &Edge::getLength);
 
-    py::class_<Simplex>(m, "Simplex")
-            .def(py::init<std::vector<std::shared_ptr<Edge>> &>())
-            .def("getDeficitAngle", &Simplex::getDeficitAngle)
-            .def("getHinges", &Simplex::getHinges)
-            .def("getVolume", &Simplex::getVolume);
+  py::class_<Simplex>(m, "Simplex")
+      .def(py::init<std::vector<std::shared_ptr<Edge> > &>())
+      .def("getDeficitAngle", &Simplex::getDeficitAngle)
+      .def("getHinges", &Simplex::getHinges)
+      .def("getVolume", &Simplex::getVolume)
+      .def("getGramMatrix", &Simplex::getGramMatrix)
+      .def("getGramCofactor", &Simplex::getGramCofactor);
 
-    py::class_<Vertex>(m, "Vertex")
-            .def(py::init<int, std::vector<double> >())
-            .def("getCoordinates", &Vertex::getCoordinates)
-            .def("getId", &Vertex::getId);
+  py::class_<Vertex>(m, "Vertex")
+      .def(py::init<int, std::vector<double> >())
+      .def("getCoordinates", &Vertex::getCoordinates)
+      .def("getId", &Vertex::getId);
 
-    m.doc() = "A C++ library for simulating lattice spacetimes and causal sets";
+  m.doc() = "A C++ library for simulating lattice spacetimes and causal sets";
 }

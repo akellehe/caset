@@ -1,28 +1,26 @@
-//
-// Created by andrew on 10/21/25.
-//
-
 #ifndef CASET_SIMPLEX_H
 #define CASET_SIMPLEX_H
 #include <memory>
 #include <vector>
 
+#include <torch/torch.h>
 #include "Edge.h"
 
 namespace caset {
 
-/// Simplex Class
+/// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
 /// is defined by it's edges. Each edge connects two vertices in spacetime.
 ///
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
+///
 class Simplex {
   public:
     explicit Simplex(const std::vector<std::shared_ptr<Edge>> &edges_) : edges(edges_) {}
 
-    /// Computes the volume of the simplex, \f$ V_s \f$
+    /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
     ///
     double getVolume() const {
       return 0;
@@ -31,7 +29,7 @@ class Simplex {
     /// Returns the hinges of the simplex. A hinge is a simplex contained within a higher dimensional simplex. The hinge
     /// is one dimension lower than the "parent" simplex.
     /// For a 4-simplex, \f$ \sigma = {v_0, ..., v_4} \f$ there are 10 edges and 10 triangular hinges.
-    /// In this case a hinge is any triangle \f$ {v_i, v_j, v_k} \ff. There are \f$ \binom{5}{3} = 10 \f$ such
+    /// In this case a hinge is any triangle \f$ {v_i, v_j, v_k} \f$. There are \f$ \binom{5}{3} = 10 \f$ such
     /// triangles.
     ///
     /// The curvature at the hinge is the deficit angle.
@@ -39,14 +37,55 @@ class Simplex {
     const std::vector<std::shared_ptr<Simplex>> getHinges() const;
 
     /// Assuming the simplex is a hinge; returns the deficit angle associated with the hinge.
+    ///
     /// The deficit angle is given by:
+    ///
     /// \f[
     /// \epsilon = 2 \pi - \sum_{\sigma \supset h} \theta_h^{(\sigma)}
     /// \f]
-    /// or in english; the deficit angle is equal to \f$ 2 \pi \f$ minus the sum of the dihedral angles at the hinge.
-    /// When the hinge is exterior; the \f$ 2 \pi \f$ is replaced with \f$ \pi \f$.
+    ///
+    /// \f$ \theta_h^{(\sigma)} \f$ is the 4D dihedral angle between the two tetrahedral faces of simplex \f$ \sigma \f$
+    /// meeting along triangle (hinge) \f$ h \f$.
+    ///
+    /// Or in english; the deficit angle is equal to \f$ 2 \pi \f$ minus the sum of the 4D dihedral angle of each
+    /// simplex between the two tetrahedral faces meeting along triangle \f$ h \f$.
+    ///
+    /// When the hinge is exterior/on a boundary; the \f$ 2 \pi \f$ is replaced with \f$ \pi \f$.
     ///
     const double getDeficitAngle() const;
+
+    /// Compute dihedral angles from edge lengths.
+    /// ///
+    /// Let \f$ C \f$ be the cofactors of \f$ G \f$, \f$ C = cof(G) \f$ (a matrix of cofactors). Then the dihedral angle
+    /// between the two tetrahedral faces opposite vertices \f$ i \f$ and \f$ j \f$ is given by:
+    ///
+    /// \f[
+    /// cos(\theta_{ij}) = - \frac{C_{ij}}{\sqrt{C_{ii} C_{jj}}}, i \neq j, i, j \in {0, ..., n}
+    /// \f]
+    ///
+    /// Map \f$ (i, j) \f$ to the hinge (triangle for a 4-simplex) opposite that pair.
+    ///
+    const double computeDihedralAngles() const;
+
+    ///
+    /// Builds the Gram matrix \f$ G \f$ of edge vectors (this is Euclidean) using squared lengths.
+    ///
+    /// \f[
+    /// G_{ij} = \frac{1}{2} (l_{0i}^2 + l_{0j}^2 - l_{ij}^2), i, j \in {1, ..., n}
+    /// \f]
+    ///
+    /// where \f$ n \f$ is the dimension of the simplex (e.g., for a 4-simplex, \f$ n = 4 \f$) and \f$ l_{ij} \f$ is the
+    /// distance between vertices \f$ i \f$ and \f$ j \f$.
+    ///
+    /// We expect \f$ G_{ij} \f$ to be positive-definite for non-degenerate Euclidean 4-simplices (\f$ det(G_{ij}) > 0 \f$).
+    ///
+    torch::Tensor getGramMatrix() const;
+
+    ///
+    /// @param gramMatrix The Gram matrix constructed from the edge lengths of the simplex.
+    /// @returns The cofactor matrix of the Gram matrix.
+    ///
+    torch::Tensor getGramCofactor(const torch::Tensor &gramMatrix) const;
 
   private:
     std::vector<std::shared_ptr<Edge>> edges;
