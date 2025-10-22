@@ -2,12 +2,7 @@
 
 Discrete spacetime experiments with C++ core and Python bindings.
 
-This site is built with **Sphinx**, **MyST Markdown**, **MathJax** (for LaTeX),
-and **Breathe** (Doxygen XML → Sphinx).
-
-$$
-E = mc^2
-$$
+We use a Lorentzian signature throughout the package.
 
 ```{toctree}
 :maxdepth: 3
