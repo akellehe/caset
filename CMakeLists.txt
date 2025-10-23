@@ -35,8 +35,9 @@ endif()
 list(GET _TORCH_PARTS 0 TORCH_INCLUDE_DIR)
 list(GET _TORCH_PARTS 1 TORCH_LIB_DIR)
 
-if(NOT EXISTS "${TORCH_LIB_DIR}/libc10.so")
-    message(FATAL_ERROR "Torch lib dir '${TORCH_LIB_DIR}' does not contain libc10.so. You are probably mixing environments or have a broken install.")
+# On a mac it's libc10.dylib; on linux it's libc10.so
+if(NOT EXISTS "${TORCH_LIB_DIR}/libc10.dylib" AND NOT EXISTS "${TORCH_LIB_DIR}/libc10.so")
+    message(FATAL_ERROR "Torch lib dir '${TORCH_LIB_DIR}' does not contain libc10.dylib or libc10.so. You are probably mixing environments or have a broken install.")
 endif()
 
 message(STATUS "Torch include: ${TORCH_INCLUDE_DIR}")
