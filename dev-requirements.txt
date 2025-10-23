@@ -1,5 +1,9 @@
-scikit-build-core>=0.9
-pybind11>=2.12
+alabaster==1.0.0
+breathe==4.36.0
 cmake>=3.22
 ninja
+numpy==2.3.4
+pybind11>=2.12
+scikit-build-core>=0.9
+sphinx==8.2.3
 torch>=2.9.0
