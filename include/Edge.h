@@ -3,7 +3,6 @@
 
 #include "Vertex.h"
 #include "Signature.h"
-#include <cmath>
 
 #include <memory>
 
@@ -42,7 +41,6 @@ class Edge {
     /// Timelike edges will have negative squared lengths, spacelike edges positive squared lengths, and null/lightlike
     /// edges zero squared lengths.
     ///
-    /// @return
     const double getLength() const noexcept {
       double lengthSquared = 0.0;
       const auto &sourceCoords = source->getCoordinates();
