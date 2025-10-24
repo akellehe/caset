@@ -5,7 +5,8 @@ Discrete spacetime experiments with C++ core and Python bindings.
 We use a Lorentzian signature throughout the package.
 
 ```{toctree}
-:maxdepth: 3
+:maxdepth: 2
 
+theory
 cpp_api
 ```

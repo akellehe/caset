@@ -40,6 +40,10 @@ class Edge {
     /// Timelike edges will have negative squared lengths, spacelike edges positive squared lengths, and null/lightlike
     /// edges zero squared lengths.
     ///
+    /// Note that the CDT (Causal Dynamical Triangulations) approach typically uses fixed length spacelike edges to
+    /// build (and update) the triangulation while Regge Calculus allows for dynamically updated edge lengths. See
+    /// Quantum Gravity from Causal Dynamical Triangulations: A Review by R. Loll Section 4, p 11-12 for more details.
+    ///
     const double getLength() const noexcept {
       double lengthSquared = 0.0;
       const auto &sourceCoords = source->getCoordinates();
