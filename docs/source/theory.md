@@ -93,6 +93,14 @@ causally ordered simplices. In CDT, the path integral over geometries is approxi
 causal triangulations, ensuring that the causal structure of spacetime is preserved. This approach has shown promise in
 recovering classical spacetime at large scales while incorporating quantum effects at small scales.
 
+Note that CDT allows for imaginary edge lengths. This is handled by allowing for spacelike squared edge lengths to be 
+some constant $ a^2 $ and time like squared edge lengths to be $ -\alpha a^2 $ for some constant $ \alpha > 0 $. This 
+allows for a Wick rotation, mapping
+
+$$
+l_t^2 = -\alpha a^2 \rightarrow l_t^2 = +\alpha a^2
+$$
+
 ### Causal Sets
 
 Causal Set Theory posits that spacetime is fundamentally discrete, composed of a set of events with a partial order 
@@ -130,7 +138,9 @@ means the structure of spacetime is purely geometric. This gains the benefit of 
 Two triangulations that differ by the vertex labels are considered the same geometry in CDT. The path integral then 
 becomes a sum over inequivalent triangulations instead of an integral over $ g_{\mu\nu} $ modulo diffeomorphisms.
 
-So CDT's path integral is 
+### Path Integrals 
+
+So CDT's path integral is (not Wick rotated):
 
 $$
 Z = \sum_{T \in \text{Causal Triangulations}} \frac{1}{C(T)} e^{i S_{Regge}(T)}
@@ -153,8 +163,19 @@ $$
 
 where $\mu(l_{ij}) $ is a measure factor for the edge lengths.
 
+### Phase Transitions
+
 The big difference is that CDT fixes edge lengths and only sums over _causal_ triangulations, which are enforced via 
-foliation.
+foliation. They both implement a sum over possible geometries, but CDT restricts the geometries to those that preserve
+causality. In either case this provides a partition function in the statistical mechanics sense.
+
+Note that a phase transition occurs when changing a parameter (e.g. temperature, pressure) results in a qualitative 
+change in the system's structure or large scale behavior. In CDT, varying the coupling constants in the Regge action can 
+lead to different phases of spacetime geometry. For example, one phase may exhibit a well-defined four-dimensional 
+spacetime, while another phase may lead to a crumpled or degenerate geometry. Identifying and understanding these phase 
+transitions is crucial for exploring the continuum limit of quantum gravity theories.
+
+### Observables 
 
 In Regge Calculus curvature is calculated via deficit angle. In CDT observables are defined across the ensemble of
 triangulations. The spatial volume as a function of discrete proper time encodes the effective curvature radius of 
@@ -179,8 +200,13 @@ $$
 Another approach is with the spectral dimension $D_S(\sigma)$. A diffusion process on triangulated spacetime. A random 
 walk with diffusion time $\sigma$ returns a probability $P(\sigma)$ of returning to the starting point that decays with
 diffusion time. This is a measure of the effective dimension of spacetime at different scales. I think it also measures 
-the holonomy of the triangulation within that region. It is scale dependent.
+the holonomy of the triangulation within that region. It is scale dependent. Both of these are described in the 
+'Observables' section of ["Quantum Gravity from Causal Dynamical Triangulations: A Review" by R. Loll](http://arxiv.org/abs/1905.08669).
 
 Another approach is Geodesic distance distributions. You measure the volume of a geodesic ball.
 
+## Improvements
 
+ - We should consider how to represent light-like edges.
+ - We should decide if there's a more computationally efficient method for solving Regge Calculus
+ - We should consider how to represent topology change/gluing/rewriting/retriangulating rules.
