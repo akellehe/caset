@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "Spacetime.h"
+
 namespace caset {
 /// # Edge Class
 /// An edge that links two points (vertices) in spacetime.
@@ -15,13 +17,10 @@ class Edge {
   public:
     static_assert(N >= 1 && N <= 11, "Dimension N must be between 1 and 11");
 
-    using Sig = Signature<N>;
-
     Edge(
       std::shared_ptr<Vertex<N> > source_,
       std::shared_ptr<Vertex<N> > target_
-    ) : source(source_), target(target_) {
-    }
+    ) : source(source_), target(target_) {}
 
     /// This method computes the length of the edge between the source and target vertices. This uses the metric,
     /// \f$ g_{\mu \nu} \f$, to compute the distance between vertex \f$ i \f$ and vertex \f$ j \f$ as

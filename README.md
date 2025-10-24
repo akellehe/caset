@@ -4,7 +4,8 @@ Installation requires
 
   - Python 3.9 or higher. 
 
-[//]: # (  - `libtorch`, which you can download from [here]&#40;https://pytorch.org/get-started/locally/&#41;, unzip, and place in ./vendor &#40;so the path reads ./vendor/libtorch&#41;.)
+[//]: 
+  - `doxygen`, which you can install with either `brew install doxygen` on macOS or `sudo apt-get install doxygen` on Ubuntu.
   - `cmake`, which you can install via your package manager (e.g. `brew install cmake` on macOS).
   - `pybind11`, which you can install via pip: `pip install pybind11`.
   - `scikit-build-core`, which you can install via pip: `pip install scikit-build-core`.

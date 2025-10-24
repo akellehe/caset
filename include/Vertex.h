@@ -28,6 +28,16 @@ template <class T> class span {
 
 namespace caset {
 template<int N>
+///
+/// Vertexes in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
+/// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
+/// established the Gold Standard. The strong force is not actually observable. Observables are gauge variant. If you
+/// change your gauge then it changes what you observe. The EM vector potential is gauge invariant, so it cannot be
+/// observed.
+///
+/// Quantum chromodynamics have different and paradoxical coupling parameters at different energy scales. The leading
+/// theories about it are called "running coupling"
+///
 class Vertex final {
     public:
         static_assert(N >= 1 && N <= 11, "Dimension N must be between 1 and 11");
