@@ -69,9 +69,9 @@ S_{EH} = \frac{1}{16 \pi G} \int d^4x \sqrt{-g} (R - 2 \Lambda)
 $$
 
 This is the integral over all Lorentzian metrics under the equivalence class that they are different by a 
-diffeomorphism. Another common way of saying that which is pretty cryptic is "The integral over all Lorentzian geometries modulo 
-diffeomorphisms." This is Feynman's "sum over all spacetimes". It requires regularization or contour deformation to make
-sense of it, though.
+diffeomorphism. Another common way of saying that which is pretty cryptic is "The integral over all Lorentzian 
+geometries modulo diffeomorphisms." This is Feynman's "sum over all spacetimes". It requires regularization or contour 
+deformation to make sense of it, though.
 
 ## Lattice Gravity Approaches
 
@@ -89,9 +89,10 @@ hinges, leading to a discrete version of the gravitational action.
 ### CDT (Causal Dynamical Triangulations)
 
 Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from 
-causally ordered simplices. In CDT, the path integral over geometries is approximated by summing over all possible 
-causal triangulations, ensuring that the causal structure of spacetime is preserved. This approach has shown promise in
-recovering classical spacetime at large scales while incorporating quantum effects at small scales.
+causally ordered simplices. In CDT, the path integral over geometries is approximated by approximately summing over all 
+possible causal triangulations with a MCMC algorithm, ensuring that the causal structure of spacetime is preserved. This 
+approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at small 
+scales.
 
 Note that CDT allows for imaginary edge lengths. This is handled by allowing for spacelike squared edge lengths to be 
 some constant $ a^2 $ and time like squared edge lengths to be $ -\alpha a^2 $ for some constant $ \alpha > 0 $. This 
@@ -155,7 +156,8 @@ $$
 Z = \int_{Lor(M)/Diff(M)} \mathcal{D}[g_{\mu\nu}] e^{i S_{EH}[g_{\mu\nu}]\hbar}
 $$
 
-with the discrete analog integrating over edge lengths $ l_{ij} $ for all triangulations, $ \mathcal{T} $, of the manifold $ M $:
+with the discrete analog integrating over edge lengths $ l_{ij} $ for all triangulations, $ \mathcal{T} $, of the 
+manifold $ M $:
 
 $$
 Z = \sum_{T \in \mathcal{T}} \int_{l_{ij} > 0} \prod_{i < j \in T} dl_{ij} \mu(l_{ij}) e^{i S_{Regge}([T,l_{ij}])/\hbar}
@@ -166,8 +168,8 @@ where $\mu(l_{ij}) $ is a measure factor for the edge lengths.
 ### Phase Transitions
 
 The big difference is that CDT fixes edge lengths and only sums over _causal_ triangulations, which are enforced via 
-foliation. They both implement a sum over possible geometries, but CDT restricts the geometries to those that preserve
-causality. In either case this provides a partition function in the statistical mechanics sense.
+(time) foliation. They both implement a sum over possible geometries, but CDT restricts the geometries to those that 
+preserve causality. In either case this provides a partition function in the statistical mechanics sense.
 
 Note that a phase transition occurs when changing a parameter (e.g. temperature, pressure) results in a qualitative 
 change in the system's structure or large scale behavior. In CDT, varying the coupling constants in the Regge action can 
@@ -210,3 +212,5 @@ Another approach is Geodesic distance distributions. You measure the volume of a
  - We should consider how to represent light-like edges.
  - We should decide if there's a more computationally efficient method for solving Regge Calculus
  - We should consider how to represent topology change/gluing/rewriting/retriangulating rules.
+ - Implement Chain and Co-Chain definitions
+ - Optimize the CDT Markov Chain Monte Carlo algorithms

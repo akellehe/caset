@@ -44,8 +44,7 @@ python3 -m pip install -v -e . --no-build-isolation
 Once you've compiled the package; build documentation with
 
 ```bash
-cd docs
-make html
+cd docs && make html
 ```
 
 then open it with 

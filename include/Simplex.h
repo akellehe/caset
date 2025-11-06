@@ -1,10 +1,13 @@
 #ifndef CASET_SIMPLEX_H
 #define CASET_SIMPLEX_H
+
 #include <memory>
 #include <vector>
 
 #include <torch/torch.h>
+
 #include "Edge.h"
+#include "Spacetime.h"
 
 namespace caset {
 
@@ -18,10 +21,15 @@ namespace caset {
 ///
 template<int N>
 class Simplex {
-  public:
+
+ public:
     explicit Simplex(const std::vector<std::shared_ptr<Edge<N>>> &edges_) : edges(edges_) {}
 
-    /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
+    using Spacetime = caset::Spacetime<N>;
+
+    static inline Spacetime spacetime{};  // C++17 inline static data member
+
+  /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
     ///
     double getVolume() const {
       return 0;
@@ -89,12 +97,13 @@ class Simplex {
     torch::Tensor getGramMatrix() const {
       // Compute the Gram matrix G from the edge lengths.
       torch::Tensor gramMatrix;
-      for (int i = 0; i < edges.size(); i++) {
-        for (int j = 0; j < edges.size(); j++) {
+      EdgeList<N> edgeList = *(spacetime.getEdgeList());
+      for (int i = 0; i < edgeList.size(); i++) {
+        for (int j = 0; j < edgeList.size(); j++) {
           // G_ij = 1/2 (l_0i^2 + l_0j^2 - l_ij^2)
-          double l_0i = edges[i]->getLength();
-          double l_0j = edges[j]->getLength();
-          double l_ij = edges[std::abs(i - j)]->getLength(); // Placeholder; replace with actual edge lookup
+          double l_0i = spacetime.metric.getLength(edgeList[i]);
+          double l_0j = spacetime.metric.getLength(edgeList[j]);
+          double l_ij = spacetime.metric.getLength(edgeList[std::abs(i - j)]); // Placeholder; replace with actual edge lookup
           gramMatrix[i][j] = 0.5 * (l_0i * l_0i + l_0j * l_0j - l_ij * l_ij);
         }
       }

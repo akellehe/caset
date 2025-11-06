@@ -16,8 +16,7 @@ using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
         py::class_<Edge<4>, std::shared_ptr<Edge<4> > >(m, "Edge")
-                        .def(py::init<std::shared_ptr<Vertex<4> >, std::shared_ptr<Vertex<4> > >())
-                        .def("getLength", &Edge<4>::getLength);
+                        .def(py::init<std::shared_ptr<Vertex<4> >, std::shared_ptr<Vertex<4> > >());
 
         py::class_<Simplex<4> >(m, "Simplex")
                         .def(py::init<std::vector<std::shared_ptr<Edge<4> > > &>())

@@ -9,20 +9,26 @@
 
 #include "EdgeList.h"
 #include "VertexList.h"
+#include "Metric.h"
 
 namespace caset {
 template<int N>
 class Spacetime {
-  public:
-    std::shared_ptr<EdgeList<N>> getEdgeList() {
+ public:
+  using Metric = caset::Metric<N>;
+
+    static std::shared_ptr<EdgeList<N>> getEdgeList() {
       return edgeList;
     }
-    std::shared_ptr<VertexList<N>> getVertexList() {
+    static std::shared_ptr<VertexList<N>> getVertexList() {
       return vertexList;
     }
-  private:
-    std::shared_ptr<EdgeList<N>> edgeList;
-    std::shared_ptr<VertexList<N>> vertexList;
+
+  static inline Metric metric{};  // C++17 inline static data member
+
+ private:
+    static inline std::shared_ptr<EdgeList<N>> edgeList;
+    static inline std::shared_ptr<VertexList<N>> vertexList;
 
 };
 } // caset

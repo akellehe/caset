@@ -46,7 +46,6 @@ message(STATUS "_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI} (override with -DTORCH
 
 # ---- Sources ----
 set(CASET_SOURCES
-        src/bindings.cpp
         src/Edge.cpp
         src/EdgeList.cpp
         src/Metric.cpp
@@ -55,6 +54,7 @@ set(CASET_SOURCES
         src/Spacetime.cpp
         src/Vertex.cpp
         src/VertexList.cpp
+        src/bindings.cpp
 )
 
 # ---- Build module ----
