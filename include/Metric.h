@@ -11,10 +11,11 @@
 #include "Signature.h"
 
 namespace caset {
-template<int N>
+
+template<int N, SignatureType signatureType>
 class Metric {
   public:
-    using Sig = caset::Signature<N>;
+    using Sig = Signature<N, signatureType>;
 
   /// This method computes the length of the edge between the source and target vertices. This uses the metric,
   /// \f$ g_{\mu \nu} \f$, to compute the distance between vertex \f$ i \f$ and vertex \f$ j \f$ as
@@ -38,7 +39,7 @@ class Metric {
   /// build (and update) the triangulation while Regge Calculus allows for dynamically updated edge lengths. See
   /// Quantum Gravity from Causal Dynamical Triangulations: A Review by R. Loll Section 4, p 11-12 for more details.
   ///
-  const double getLength(const std::shared_ptr<caset::Edge<N>> &edge) const noexcept {
+  [[nodiscard]] double getSquaredLength(const std::shared_ptr<Edge<N>> &edge) const noexcept {
     double lengthSquared = 0.0;
     const auto &sourceCoords = edge->getSource()->getCoordinates();
     const auto &targetCoords = edge->getTarget()->getCoordinates();

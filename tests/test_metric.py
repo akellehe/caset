@@ -1,6 +1,6 @@
 import unittest
 
-from caset import Edge, Vertex
+from caset import Edge, Vertex, Metric
 
 
 class TestEdge(unittest.TestCase):
@@ -15,6 +15,8 @@ class TestEdge(unittest.TestCase):
         tgt = edge.getTarget()
         self.assertIs(src, v1)
         self.assertIs(tgt, v2)
+
+        metric = Metric()
 
 
 if __name__ == '__main__':

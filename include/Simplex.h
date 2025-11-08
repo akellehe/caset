@@ -19,13 +19,13 @@ namespace caset {
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
 ///
-template<int N>
+template<int N, SignatureType signatureType>
 class Simplex {
 
  public:
     explicit Simplex(const std::vector<std::shared_ptr<Edge<N>>> &edges_) : edges(edges_) {}
 
-    using Spacetime = caset::Spacetime<N>;
+    using Spacetime = Spacetime<N, signatureType>;
 
     static inline Spacetime spacetime{};  // C++17 inline static data member
 
@@ -43,7 +43,7 @@ class Simplex {
     ///
     /// The curvature at the hinge is the deficit angle.
     ///
-    const std::vector<std::shared_ptr<Simplex<N>> > getHinges() const {
+    const std::vector<std::shared_ptr<Simplex<N, signatureType>> > getHinges() const {
       return {};
     }
 
@@ -81,6 +81,9 @@ class Simplex {
     const double computeDihedralAngles() const {
       return 0.;
     };
+
+    ///
+    /// Builds the Cayley-Menger matrix using pairwise distances.
 
     ///
     /// Builds the Gram matrix \f$ G \f$ of edge vectors (this is Euclidean) using squared lengths.

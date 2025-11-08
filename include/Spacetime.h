@@ -12,10 +12,10 @@
 #include "Metric.h"
 
 namespace caset {
-template<int N>
+template<int N, SignatureType signatureType>
 class Spacetime {
  public:
-  using Metric = caset::Metric<N>;
+  using Metric = Metric<N, signatureType>;
 
     static std::shared_ptr<EdgeList<N>> getEdgeList() {
       return edgeList;

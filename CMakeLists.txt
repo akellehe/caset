@@ -60,6 +60,31 @@ set(CASET_SOURCES
 # ---- Build module ----
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
 
+set(DIMENSIONS 4 CACHE STRING "Spacetime dimensions")
+set(SIGNATURE_TYPE "Lorentzian" CACHE STRING "Signature type (Lorentzian|Euclidean)")
+set_property(CACHE SIGNATURE_TYPE PROPERTY STRINGS Lorentzian Euclidean)
+
+if(NOT SIGNATURE_TYPE STREQUAL "Lorentzian" AND NOT SIGNATURE_TYPE STREQUAL "Euclidean")
+    message(FATAL_ERROR "SIGNATURE_TYPE must be Lorentzian or Euclidean")
+endif()
+
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/caset_config.hpp.in
+        ${CMAKE_CURRENT_BINARY_DIR}/generated/caset_config.hpp
+        @ONLY
+)
+
+target_include_directories(caset PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+if(SIGNATURE_TYPE STREQUAL "Lorentzian")
+    target_compile_definitions(caset PRIVATE CASET_SIGNATURE_Lorentzian=1)
+else()
+    target_compile_definitions(caset PRIVATE CASET_SIGNATURE_Euclidean=1)
+endif()
+target_compile_definitions(caset PRIVATE CASET_DIMENSIONS=${DIMENSIONS})
+
+message(STATUS "Config: DIMENSIONS=${DIMENSIONS}, SIGNATURE_TYPE=${SIGNATURE_TYPE}")
+
+
 target_include_directories(caset
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src

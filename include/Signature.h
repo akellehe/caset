@@ -9,12 +9,17 @@
 
 namespace caset {
 
-template<int N>
+enum class SignatureType : uint8_t {
+  Lorentzian = 0,
+  Euclidean = 1
+};
+
+template<int N, SignatureType signatureType>
 struct Signature {
   static inline const double c = 1.;
   static inline std::array<int, N> diag = [] {
     std::array<int, N> d{};
-    if constexpr (N>0) d[0] = -1; // Time dimension
+    d[0] = signatureType == SignatureType::Euclidean ? 1 : (signatureType == SignatureType::Lorentzian ? -1 : -1); // Default to Lorentzian
     for (int i = 1; i < N; ++i) {
       d[i] = 1; // Spatial dimensions
     }

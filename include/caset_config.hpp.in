@@ -1,0 +1,11 @@
+#pragma once
+
+#define CASET_DIMENSIONS @DIMENSIONS@
+
+/* One of these will be defined to 1 by CMake */
+#ifndef CASET_SIGNATURE_Lorentzian
+#cmakedefine01 CASET_SIGNATURE_Lorentzian
+#endif
+#ifndef CASET_SIGNATURE_Euclidean
+#cmakedefine01 CASET_SIGNATURE_Euclidean
+#endif
