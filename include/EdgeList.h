@@ -11,11 +11,18 @@
 #include "Edge.h"
 
 namespace caset {
-template<int N>
 class EdgeList {
   public:
-    std::shared_ptr<caset::Edge<N>> operator[](int index) {
+    std::shared_ptr<Edge> operator[](int index) {
       return edgeList[index];
+    }
+
+    std::shared_ptr<Edge> get(int index) {
+      return edgeList[index];
+    }
+
+    void add(const std::shared_ptr<Edge> &edge) {
+      edgeList.push_back(edge);
     }
 
     std::size_t size() const {
@@ -23,7 +30,7 @@ class EdgeList {
     }
 
   private:
-    std::vector<std::shared_ptr<caset::Edge<N>>> edgeList;
+    std::vector<std::shared_ptr<Edge>> edgeList;
 };
 } // caset
 

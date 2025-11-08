@@ -5,7 +5,7 @@
 #ifndef CASET_SIGNATURE_H
 #define CASET_SIGNATURE_H
 
-#include <array>
+#include <vector>
 
 namespace caset {
 
@@ -14,18 +14,29 @@ enum class SignatureType : uint8_t {
   Euclidean = 1
 };
 
-template<int N, SignatureType signatureType>
-struct Signature {
-  static inline const double c = 1.;
-  static inline std::array<int, N> diag = [] {
-    std::array<int, N> d{};
-    d[0] = signatureType == SignatureType::Euclidean ? 1 : (signatureType == SignatureType::Lorentzian ? -1 : -1); // Default to Lorentzian
-    for (int i = 1; i < N; ++i) {
-      d[i] = 1; // Spatial dimensions
+class Signature {
+  public:
+    Signature(int dimensions_, SignatureType signatureType_) {
+      dimensions = dimensions_;
+      signatureType = signatureType_;
+      diag = std::vector<int>(dimensions_);
+      std::fill_n(diag.begin(), dimensions_, 1);
+      if (signatureType_ == SignatureType::Lorentzian) {
+        diag[0] = -1;
+      }
     }
-    return d;
-  }();
-  static void set(const std::array<int, N> &s) noexcept {diag = s;}
+
+    std::vector<int> getDiagonal() const noexcept {
+      return diag;
+    };
+
+  private:
+    std::vector<int> diag;
+    int dimensions;
+    SignatureType signatureType;
+
+  static inline const double c = 1.;
+
 };
 
 } // caset

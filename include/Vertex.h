@@ -6,28 +6,13 @@
 #define CASET_CASET_SRC_VERTEX_H_
 
 #include <array>
-#include <cstdint>
 
-#pragma once
-#if __cplusplus >= 202002L
-  #include <span>
-  using std::span;
-#else
-// Minimal span backport (read-only)
-template <class T> class span {
-    const T* p_; std::size_t n_;
-    public:
-        span(const T* p, std::size_t n) : p_(p), n_(n) {}
-        const T* data() const noexcept { return p_; }
-        std::size_t size() const noexcept { return n_; }
-        const T& operator[](std::size_t i) const noexcept { return p_[i]; }
-        const T* begin() const noexcept { return p_; }
-        const T* end()   const noexcept { return p_ + n_; }
-};
-#endif
+#include <vector>
+
 
 namespace caset {
-template<int N>
+class Edge;
+
 ///
 /// Vertexes in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
@@ -40,18 +25,34 @@ template<int N>
 ///
 class Vertex final {
     public:
-        static_assert(N >= 1 && N <= 11, "Dimension N must be between 1 and 11");
+        Vertex() noexcept {}
+        explicit Vertex(const std::vector<double> &coords) noexcept : coordinates(coords) {}
+        std::vector<double> getCoordinates() const {
+            if (coordinates.size() == 0) {
+                throw new std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
+            }
+            return coordinates;
+        }
 
-        Vertex() noexcept : coordinates{} {}
+        void addOutEdge(std::shared_ptr<Edge> edge) noexcept {
+            outEdges.push_back(edge);
+            edges.push_back(edge);
+        }
+        void addInEdge(std::shared_ptr<Edge> edge) noexcept {
+            inEdges.push_back(edge);
+            edges.push_back(edge);
+        }
 
-        explicit Vertex(const std::array<double, N> &coords) noexcept : coordinates(coords) {}
-
-        span<const double> getCoordinates() const noexcept { return {coordinates.data(), N}; }
-        const double *data() const noexcept {return coordinates.data();}
-        static constexpr int dimensions() noexcept { return N; }
-
+        std::vector<std::shared_ptr<Edge>> getEdges() const noexcept {return edges;}
+        std::vector<std::shared_ptr<Edge>> getInEdges() const noexcept {return inEdges;}
+        std::vector<std::shared_ptr<Edge>> getOutEdges() const noexcept {return outEdges;}
     private:
-        std::array<double, N> coordinates;
+        void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
+
+        std::vector<double> coordinates;
+        std::vector<std::shared_ptr<Edge> > outEdges;
+        std::vector<std::shared_ptr<Edge> > inEdges;
+        std::vector<std::shared_ptr<Edge>> edges;
 };
 }
 

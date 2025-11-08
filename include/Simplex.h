@@ -6,11 +6,10 @@
 
 #include <torch/torch.h>
 
-#include "Edge.h"
+#include "Vertex.h"
 #include "Spacetime.h"
 
 namespace caset {
-
 /// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
@@ -19,18 +18,23 @@ namespace caset {
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
 ///
-template<int N, SignatureType signatureType>
 class Simplex {
+  public:
+    Simplex(
+      std::shared_ptr<Spacetime> spacetime_,
+      const std::vector<std::shared_ptr<Vertex> > &vertices_,
+      TimeOrientation timeOrientation
+    ) : spacetime(spacetime_), vertices(vertices_), timeOrientation(timeOrientation) {
+    }
 
- public:
-    explicit Simplex(const std::vector<std::shared_ptr<Edge<N>>> &edges_) : edges(edges_) {}
+    Simplex(
+      std::shared_ptr<Spacetime> spacetime_,
+      const std::vector<std::shared_ptr<Vertex> > &vertices_
+    ) : spacetime(spacetime_), vertices(vertices_), timeOrientation(TimeOrientation::UNKNOWN) {
+    }
 
-    using Spacetime = Spacetime<N, signatureType>;
-
-    static inline Spacetime spacetime{};  // C++17 inline static data member
-
-  /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
-    ///
+    /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
+      ///
     double getVolume() const {
       return 0;
     }
@@ -43,7 +47,7 @@ class Simplex {
     ///
     /// The curvature at the hinge is the deficit angle.
     ///
-    const std::vector<std::shared_ptr<Simplex<N, signatureType>> > getHinges() const {
+    const std::vector<std::shared_ptr<Simplex> > getHinges() const {
       return {};
     }
 
@@ -100,13 +104,16 @@ class Simplex {
     torch::Tensor getGramMatrix() const {
       // Compute the Gram matrix G from the edge lengths.
       torch::Tensor gramMatrix;
-      EdgeList<N> edgeList = *(spacetime.getEdgeList());
-      for (int i = 0; i < edgeList.size(); i++) {
-        for (int j = 0; j < edgeList.size(); j++) {
+      auto edgeList = spacetime->getEdgeList();
+      auto nEdges = edgeList->size();
+      for (int i = 0; i < nEdges; i++) {
+        for (int j = 0; j < nEdges; j++) {
           // G_ij = 1/2 (l_0i^2 + l_0j^2 - l_ij^2)
-          double l_0i = spacetime.metric.getLength(edgeList[i]);
-          double l_0j = spacetime.metric.getLength(edgeList[j]);
-          double l_ij = spacetime.metric.getLength(edgeList[std::abs(i - j)]); // Placeholder; replace with actual edge lookup
+          double l_0i = spacetime->getMetric()->getSquaredLength(edgeList->get(i));
+          // TODO: Not sure if gram matrix works with squared lengths.
+          double l_0j = spacetime->getMetric()->getSquaredLength(edgeList->get(j));
+          double l_ij = spacetime->getMetric()->getSquaredLength(edgeList->get(std::abs(i - j)));
+          // Placeholder; replace with actual edge lookup
           gramMatrix[i][j] = 0.5 * (l_0i * l_0i + l_0j * l_0j - l_ij * l_ij);
         }
       }
@@ -142,7 +149,9 @@ class Simplex {
     }
 
   private:
-    std::vector<std::shared_ptr<Edge<N>>> edges;
+    std::vector<std::shared_ptr<Vertex> > vertices;
+    std::shared_ptr<Spacetime> spacetime;
+    TimeOrientation timeOrientation;
 };
 }
 

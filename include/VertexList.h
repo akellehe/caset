@@ -11,14 +11,16 @@
 #include "Vertex.h"
 
 namespace caset {
-template<int N>
 class VertexList {
   public:
-    std::shared_ptr<Vertex<N>> operator[](int index) {
+    std::shared_ptr<Vertex> operator[](int index) {
       return vertexList[index];
     }
+    void add(const std::shared_ptr<Vertex> &vertex) {
+      vertexList.push_back(vertex);
+    }
   private:
-    std::vector<std::shared_ptr<Vertex<N>>> vertexList;
+    std::vector<std::shared_ptr<Vertex>> vertexList;
 };
 } // caset
 

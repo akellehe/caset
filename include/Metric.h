@@ -11,44 +11,53 @@
 #include "Signature.h"
 
 namespace caset {
-
-template<int N, SignatureType signatureType>
 class Metric {
   public:
-    using Sig = Signature<N, signatureType>;
-
-  /// This method computes the length of the edge between the source and target vertices. This uses the metric,
-  /// \f$ g_{\mu \nu} \f$, to compute the distance between vertex \f$ i \f$ and vertex \f$ j \f$ as
-  ///
-  /// \f[
-  /// l_{ij}^2 = g_{\mu \nu} \Delta x^{\mu} \Delta x^{\nu}
-  /// \f]
-  ///
-  /// where
-  ///
-  /// \f[
-  /// \Delta x^{\mu} := x_i^{\mu} - x_j^{\mu}
-  /// \f]
-  ///
-  /// with signature (-,+,+,+).
-  ///
-  /// Timelike edges will have negative squared lengths, spacelike edges positive squared lengths, and null/lightlike
-  /// edges zero squared lengths.
-  ///
-  /// Note that the CDT (Causal Dynamical Triangulations) approach typically uses fixed length spacelike edges to
-  /// build (and update) the triangulation while Regge Calculus allows for dynamically updated edge lengths. See
-  /// Quantum Gravity from Causal Dynamical Triangulations: A Review by R. Loll Section 4, p 11-12 for more details.
-  ///
-  [[nodiscard]] double getSquaredLength(const std::shared_ptr<Edge<N>> &edge) const noexcept {
-    double lengthSquared = 0.0;
-    const auto &sourceCoords = edge->getSource()->getCoordinates();
-    const auto &targetCoords = edge->getTarget()->getCoordinates();
-    for (int i = 0; i < N; ++i) {
-      double delta = sourceCoords[i] - targetCoords[i];
-      lengthSquared += static_cast<double>(Sig::diag[i]) * delta * delta;
+    Metric(bool coordinateFree_, Signature &signature_) : signature(signature_), coordinateFree(coordinateFree_) {
     }
-    return lengthSquared;
-  }
+
+    ///
+    /// This method computes the length of the edge between the source and target vertices when we're using a coordinate
+    /// system/euclidean metric. This uses the metric, \f$ g_{\mu \nu} \f$, to compute the distance between vertex
+    /// \f$ i \f$ and vertex \f$ j \f$ as
+    ///
+    /// \f[
+    /// l_{ij}^2 = g_{\mu \nu} \Delta x^{\mu} \Delta x^{\nu}
+    /// \f]
+    ///
+    /// where
+    ///
+    /// \f[
+    /// \Delta x^{\mu} := x_i^{\mu} - x_j^{\mu}
+    /// \f]
+    ///
+    /// with signature (-,+,+,+).
+    ///
+    /// Timelike edges will have negative squared lengths, spacelike edges positive squared lengths, and null/lightlike
+    /// edges zero squared lengths.
+    ///
+    /// Note that the CDT (Causal Dynamical Triangulations) approach typically uses fixed length spacelike edges to
+    /// build (and update) the triangulation while Regge Calculus allows for dynamically updated edge lengths. See
+    /// Quantum Gravity from Causal Dynamical Triangulations: A Review by R. Loll Section 4, p 11-12 for more details.
+    ///
+    [[nodiscard]] double getSquaredLength(const std::shared_ptr<Edge> &edge) const noexcept {
+      if (coordinateFree) {
+        return edge->getSquaredLength();
+      }
+      auto diag = signature.getDiagonal();
+      double lengthSquared = 0.0;
+      const auto &sourceCoords = edge->getSource()->getCoordinates();
+      const auto &targetCoords = edge->getTarget()->getCoordinates();
+      for (int i = 0; i < diag.size(); ++i) {
+        double delta = sourceCoords[i] - targetCoords[i];
+        lengthSquared += static_cast<double>(diag[i]) * delta * delta;
+      }
+      return lengthSquared;
+    }
+
+  private:
+    Signature signature;
+    bool coordinateFree;
 };
 } // caset
 
