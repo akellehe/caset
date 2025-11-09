@@ -21,14 +21,14 @@ namespace caset {
 class Simplex {
   public:
     Simplex(
-      std::shared_ptr<Spacetime> spacetime_,
+      const std::shared_ptr<Spacetime> &spacetime_,
       const std::vector<std::shared_ptr<Vertex> > &vertices_,
       TimeOrientation timeOrientation
     ) : spacetime(spacetime_), vertices(vertices_), timeOrientation(timeOrientation) {
     }
 
     Simplex(
-      std::shared_ptr<Spacetime> spacetime_,
+      const std::shared_ptr<Spacetime> &spacetime_,
       const std::vector<std::shared_ptr<Vertex> > &vertices_
     ) : spacetime(spacetime_), vertices(vertices_), timeOrientation(TimeOrientation::UNKNOWN) {
     }

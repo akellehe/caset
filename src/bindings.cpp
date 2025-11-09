@@ -40,7 +40,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getTarget", &Edge::getTarget);
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
-      .def(py::init<std::shared_ptr<Spacetime>, std::vector<std::shared_ptr<Vertex> > &>(),
+      .def(py::init<const std::shared_ptr<Spacetime> &, std::vector<std::shared_ptr<Vertex> > &>(),
            py::arg("spacetime"),
            py::arg("vertices"))
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
