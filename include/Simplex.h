@@ -77,6 +77,11 @@ class Simplex {
 
     static constexpr std::size_t kMax = 64; // supports K <= 64
 
+    ///
+    /// Implementing: https://chatgpt.com/c/6910ce22-0e60-832c-9bdf-f64097c33f94 for fast hashing.
+    ///
+    /// @param spacetime_
+    /// @param vertices_
     Simplex(
       const std::shared_ptr<Spacetime> &spacetime_,
       const std::vector<std::shared_ptr<Vertex> > &vertices_
