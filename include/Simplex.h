@@ -7,9 +7,16 @@
 #include <torch/torch.h>
 
 #include "Vertex.h"
-#include "Spacetime.h"
+#include "spacetimes/Spacetime.h"
 
 namespace caset {
+
+enum class TimeOrientation : uint8_t{
+  UP = 0,
+  DOWN = 1,
+  UNKNOWN = 2
+};
+
 /// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex

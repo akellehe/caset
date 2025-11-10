@@ -7,20 +7,60 @@
 
 #include <memory>
 
-#include "EdgeList.h"
-#include "VertexList.h"
-#include "Metric.h"
+#include "../observables/Observable.h"
+#include "../EdgeList.h"
+#include "../VertexList.h"
+#include "../Metric.h"
+#include "../Simplex.h"
 
-enum class TimeOrientation : uint8_t{
-  UP = 0,
-  DOWN = 1,
-  UNKNOWN = 2
+enum class SpacetimeType : uint8_t {
+  CDT = 0,
+  REGGE = 1,
+  COSET = 2,
+  REGGE_PACHNER = 3,
+  GFT_SPIN_FOAM = 4,
+  RICCI_FLOW_DISCRETIZATION = 5
 };
 
 namespace caset {
 class Spacetime {
  public:
-    explicit Spacetime(std::shared_ptr<Metric> metric_) : metric(metric_) {}
+    Spacetime(std::shared_ptr<Metric> metric_, const SpacetimeType spacetimeType_) : metric(metric_), spacetimeType(spacetimeType_) {
+      alpha = 1.;
+    }
+    Spacetime(std::shared_ptr<Metric> metric_, const SpacetimeType spacetimeType_, double alpha_) : metric(metric_), spacetimeType(spacetimeType_), alpha(alpha_) {}
+
+    virtual ~Spacetime() = default;
+
+    ///
+    /// Builds an n-dimensional (depending on your metric) triangulation with edge lengths equal to alpha.
+    void build() {
+
+    }
+
+    ///
+    /// `tune` is the initial stage of building the spacetime. Some example are:
+    ///
+    /// The stage in CDT where we approach the desired cosmological constant by continuously adjusting it based on the
+    /// desired spacetime volume.
+    ///
+    /// In Regge calculus we build an initial triangulation of the Spacetime.
+    ///
+    virtual void tune();
+
+    ///
+    /// `thermalize` implements some kind of adjustment to the initial lattice.
+    ///
+    /// In the case of CST (Causal Set Theory) this amounts to executing a poisson "Sprinkling" of Vertexes to preserve
+    /// Lorentz invariance.
+    ///
+    /// For Regge calculus this can be a randomly applied variation in an initially fixed edge length triangulation.
+    ///
+    virtual void thermalize();
+
+    void addObservable(std::shared_ptr<Observable> &observable) {
+      observables.push_back(observable);
+    }
 
     static void addVertex(std::shared_ptr<Vertex> vertex) noexcept {
       vertexList->add(vertex);
@@ -28,6 +68,10 @@ class Spacetime {
 
     static void addEdge(std::shared_ptr<Edge> edge) noexcept {
       edgeList->add(edge);
+    }
+
+    SpacetimeType getSpacetimeType() const noexcept {
+      return spacetimeType;
     }
 
     ///
@@ -59,12 +103,13 @@ class Spacetime {
     }
 
     std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
-
-
  private:
     std::shared_ptr<Metric> metric;
     static inline std::shared_ptr<EdgeList> edgeList;
     static inline std::shared_ptr<VertexList> vertexList;
+    SpacetimeType spacetimeType;
+    std::vector<std::shared_ptr<Observable>> observables;
+    double alpha;
 
 };
 } // caset

@@ -51,7 +51,7 @@ set(CASET_SOURCES
         src/Metric.cpp
         src/Signature.cpp
         src/Simplex.cpp
-        src/Spacetime.cpp
+        src/spacetimes/Spacetime.cpp
         src/Vertex.cpp
         src/VertexList.cpp
         src/bindings.cpp

@@ -4,7 +4,7 @@
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
-#include "Spacetime.h"
+#include "../include/spacetimes/Spacetime.h"
 #include "Signature.h"
 #include "Vertex.h"
 #include "Edge.h"
