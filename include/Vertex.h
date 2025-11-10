@@ -25,10 +25,14 @@ class Edge;
 ///
 class Vertex final {
     public:
-        Vertex() noexcept {}
-
-        explicit Vertex(const std::vector<double> &coords) noexcept : coordinates(coords) {
+        Vertex() noexcept {
+            id = 0;
         }
+
+        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
+        }
+
+        std::uint64_t getId() noexcept {return id;}
 
         ///
         /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
@@ -85,6 +89,7 @@ class Vertex final {
         std::vector<std::shared_ptr<Edge> > outEdges;
         std::vector<std::shared_ptr<Edge> > inEdges;
         std::vector<std::shared_ptr<Edge>> edges;
+        std::uint64_t id;
 };
 }
 

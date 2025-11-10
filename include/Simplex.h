@@ -36,8 +36,10 @@ class SimplexShape {
     /// @param ti The number of vertices on the initial time slice.
     /// @param tf The number of vertices on the final time slice.
     ///
-    SimplexShape() : ti(0), tf(0) {}
-    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {}
+    SimplexShape() : ti(0), tf(0) {
+    }
+    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
+    }
 
     std::pair<uint8_t, uint8_t> getShape() {
       return {ti, tf};
@@ -71,11 +73,23 @@ class SimplexShape {
 ///
 class Simplex {
   public:
+    using VertId = std::uint64_t;
+
+    static constexpr std::size_t kMax = 64; // supports K <= 64
+
     Simplex(
       const std::shared_ptr<Spacetime> &spacetime_,
-      const std::vector<std::shared_ptr<Vertex> > &vertices_,
-      const std::vector<std::shared_ptr<Edge> > &edges_
-    ) : spacetime(spacetime_), shape(SimplexShape(0, 0)), vertices(vertices_), edges(edges_) {
+      const std::vector<std::shared_ptr<Vertex> > &vertices_
+    ) : spacetime(spacetime_), shape(SimplexShape(0, 0)), vertices(vertices_) {
+      if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
+      n_ = static_cast<std::uint8_t>(vertices_.size());
+      for (std::size_t i = 0; i < n_; ++i) {
+        ids_[i] = vertices_[i]->getId();
+      }
+      std::sort(ids_.begin(), ids_.begin() + n_);
+      auto it = std::unique(ids_.begin(), ids_.begin() + n_);
+      n_ = static_cast<std::uint8_t>(std::distance(ids_.begin(), it));
+      h_ = compute_fingerprint(ids_.data(), n_);
       this->setShape();
     }
 
@@ -160,73 +174,45 @@ class Simplex {
       return 0.;
     };
 
-    ///
-    /// Builds the Cayley-Menger matrix using pairwise distances.
-
-    ///
-    /// Builds the Gram matrix \f$ G \f$ of edge vectors (this is Euclidean) using squared lengths.
-    ///
-    /// \f[
-    /// G_{ij} = \frac{1}{2} (l_{0i}^2 + l_{0j}^2 - l_{ij}^2), i, j \in {1, ..., n}
-    /// \f]
-    ///
-    /// where \f$ n \f$ is the dimension of the simplex (e.g., for a 4-simplex, \f$ n = 4 \f$) and \f$ l_{ij} \f$ is the
-    /// distance between vertices \f$ i \f$ and \f$ j \f$.
-    ///
-    /// We expect \f$ G_{ij} \f$ to be positive-definite for non-degenerate Euclidean 4-simplices (\f$ det(G_{ij}) > 0 \f$).
-    ///
-    torch::Tensor getGramMatrix() const {
-      // Compute the Gram matrix G from the edge lengths.
-      torch::Tensor gramMatrix;
-      auto edgeList = spacetime->getEdgeList();
-      auto nEdges = edgeList->size();
-      for (int i = 0; i < nEdges; i++) {
-        for (int j = 0; j < nEdges; j++) {
-          // G_ij = 1/2 (l_0i^2 + l_0j^2 - l_ij^2)
-          double l_0i = spacetime->getMetric()->getSquaredLength(edgeList->get(i));
-          // TODO: Not sure if gram matrix works with squared lengths.
-          double l_0j = spacetime->getMetric()->getSquaredLength(edgeList->get(j));
-          double l_ij = spacetime->getMetric()->getSquaredLength(edgeList->get(std::abs(i - j)));
-          // Placeholder; replace with actual edge lookup
-          gramMatrix[i][j] = 0.5 * (l_0i * l_0i + l_0j * l_0j - l_ij * l_ij);
-        }
-      }
-      return gramMatrix;
+    bool operator==(const Simplex &o) const noexcept {
+      if (n_ != o.n_) return false;
+      if (h_ != o.h_) return false; // fast reject
+      return std::memcmp(ids_.data(), o.ids_.data(), n_ * sizeof(VertId)) == 0;
     }
+    bool operator!=(const Simplex &o) const noexcept { return !(*this == o); }
 
-    ///
-    /// @param gramMatrix The Gram matrix constructed from the edge lengths of the simplex.
-    /// @returns The cofactor matrix of the Gram matrix.
-    ///
-    torch::Tensor getGramCofactor(const torch::Tensor &gramMatrix) const {
-      TORCH_CHECK(gramMatrix.dim() >= 2, "G must be at least 2D");
-      auto n = gramMatrix.size(-1);
-      TORCH_CHECK(gramMatrix.size(-2) == n, "G must be square in the last two dims");
-      TORCH_CHECK(gramMatrix.dtype() == torch::kFloat || gramMatrix.dtype() == torch::kDouble,
-                  "G must be float/double");
-
-      // Cholesky factorization (lower-triangular L with G = L L^T)
-      // If your data might include near-singular simplices, catch exceptions and handle them.
-      auto L = torch::linalg_cholesky(gramMatrix);
-
-      // det(G) = (prod(diag(L)))^2 ; compute in log-space to avoid overflow
-      auto diagL = L.diagonal(0, -2, -1);
-      auto logdetG = 2.0 * diagL.abs().log().sum(/*dim=*/-1, /*keepdim=*/true);
-      auto detG = logdetG.exp(); // shape (..., 1)
-
-      // Inverse via Cholesky (much stabler than generic inverse for PD matrices)
-      auto Ginv = torch::cholesky_inverse(L); // (..., n, n)
-
-      // Cofactor = det(G) * (G^{-1})^T
-      auto cof = detG.unsqueeze(-1) * Ginv.transpose(-2, -1); // broadcast det
-      return cof;
-    }
+    std::uint64_t fingerprint() const noexcept { return h_; }
 
   private:
     std::vector<std::shared_ptr<Vertex> > vertices;
-    std::vector<std::shared_ptr<Edge> > edges;
     std::shared_ptr<Spacetime> spacetime;
+
+    std::array<VertId, kMax> ids_{};
+    std::uint8_t n_{0};
+    std::uint64_t h_{kSeed};
+    static constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
     SimplexShape shape;
+
+    static inline std::uint64_t mix64(VertId x) noexcept {
+      x += 0x9e3779b97f4a7c15ull;
+      x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+      x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+      return x ^ (x >> 31);
+    }
+
+    static std::uint64_t compute_fingerprint(
+      const VertId *ids,
+      std::uint8_t n
+    ) noexcept {
+      std::uint64_t h = 0xcbf29ce484222325ull ^ n;
+      for (std::uint8_t i = 0; i < n; ++i) {
+        h ^= mix64(ids[i] + 0x9e3779b97f4a7c15ull);
+        h *= 0x100000001b3ull; // FNV-ish step
+      }
+      return h;
+    }
+
+    friend struct std::hash<Simplex>;
 };
 }
 
