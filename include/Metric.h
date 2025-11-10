@@ -55,6 +55,41 @@ class Metric {
       return lengthSquared;
     }
 
+    ///
+    /// This method isn't perfect. But neither is the convention in existing implementations. Not all implementations
+    /// have a concept of imaginary edge lengths, and none of which I'm currently aware handle light-like edges.
+    ///
+    /// Passing an edge with \f$ ds^2 = 0 \f$ results in an out_of_range error.
+    ///
+    /// @param edge The edge for which you would like to understand it's disposition.
+    /// @return The disposition (space/time/light) of the edge.
+    EdgeDisposition getDisposition(const std::shared_ptr<Edge> &edge) const {
+      double sourceTime = edge->getSource()->getTime();
+      double targetTime = edge->getTarget()->getTime();
+      if (coordinateFree) {
+        if (sourceTime == targetTime) {
+          return EdgeDisposition::Timelike;
+        }
+        return EdgeDisposition::Spacelike;
+      }
+      double squaredLength = edge->getSquaredLength();
+      if (squaredLength == 0) {
+        throw std::out_of_range("light-like edges are not currently handled by Metric::getDisposition.");
+      }
+
+      auto diag = signature.getDiagonal();
+      if (diag[0] < 0) {
+        if (squaredLength < 0) {
+          return EdgeDisposition::Spacelike;
+        }
+        return EdgeDisposition::Timelike;
+      }
+      if (squaredLength < 0) {
+        return EdgeDisposition::Spacelike;
+      }
+      return EdgeDisposition::Timelike;
+    }
+
   private:
     Signature signature;
     bool coordinateFree;

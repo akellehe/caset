@@ -6,7 +6,7 @@
 #define CASET_SPACETIMEVOLUME_H
 
 #include "Observable.h"
-#include "../spacetimes/Spacetime.h"
+#include "../spacetime/Spacetime.h"
 
 namespace caset {
 class SpacetimeVolume : public Observable {

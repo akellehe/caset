@@ -6,21 +6,65 @@
 
 #include <torch/torch.h>
 
-#include "Vertex.h"
-#include "spacetimes/Spacetime.h"
+#include "Edge.h"
+#include "spacetime/Spacetime.h"
 
 namespace caset {
-
-enum class TimeOrientation : uint8_t{
-  UP = 0,
-  DOWN = 1,
+///
+///
+/// @param timeOrientation
+enum class TimeOrientation : uint8_t {
+  FUTURE = 0,
+  PRESENT = 1,
   UNKNOWN = 2
+};
+
+class SimplexShape {
+  public:
+    ///
+    /// The shape of a simplex is determined by how many vertices lie on the initial and final time slice for the
+    /// simplex. The shape is largely only relevant for Lorentzian/CDT complexes where causality is preserved. Those
+    /// complexes restrict to allowed shapes that ensure progression forward in time and "fit together" (so they share
+    /// faces without gaps in the complex).
+    ///
+    /// The convention was established in Ambjorn-Loll's "Causal Dynamical Triangulations" paper from 1998-2001. Every
+    /// d-simplex must have its vertices split across two adjacent time slices, t and t+1. That means every simplex has
+    /// a split
+    ///
+    /// \f$ (n, d + 1 - n) \f$
+    ///
+    /// @param ti The number of vertices on the initial time slice.
+    /// @param tf The number of vertices on the final time slice.
+    ///
+    SimplexShape() : ti(0), tf(0) {}
+    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {}
+
+    std::pair<uint8_t, uint8_t> getShape() {
+      return {ti, tf};
+    }
+
+    bool operator==(const SimplexShape &other) const {
+      return ti == other.ti && tf == other.tf;
+    }
+
+    TimeOrientation getOrientation() const {
+      if (ti == tf) return TimeOrientation::UNKNOWN;
+      if (ti > tf) return TimeOrientation::PRESENT;
+      return TimeOrientation::FUTURE;
+    }
+
+  private:
+    uint8_t ti;
+    uint8_t tf;
+
+    // Allow std::hash to access private members:
+    // friend struct std::hash<SimplexShape>;
 };
 
 /// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
-/// is defined by it's edges. Each edge connects two vertices in spacetime.
+/// is defined by it's vertices and edges. Each edge connects two vertices in spacetime.
 ///
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
@@ -30,14 +74,37 @@ class Simplex {
     Simplex(
       const std::shared_ptr<Spacetime> &spacetime_,
       const std::vector<std::shared_ptr<Vertex> > &vertices_,
-      TimeOrientation timeOrientation
-    ) : spacetime(spacetime_), vertices(vertices_), timeOrientation(timeOrientation) {
+      const std::vector<std::shared_ptr<Edge> > &edges_
+    ) : spacetime(spacetime_), shape(SimplexShape(0, 0)), vertices(vertices_), edges(edges_) {
+      this->setShape();
     }
 
-    Simplex(
-      const std::shared_ptr<Spacetime> &spacetime_,
-      const std::vector<std::shared_ptr<Vertex> > &vertices_
-    ) : spacetime(spacetime_), vertices(vertices_), timeOrientation(TimeOrientation::UNKNOWN) {
+    void setShape() {
+      uint8_t tiVertexes = 0;
+      uint8_t tfVertexes = 0;
+      double ti = std::numeric_limits<double>::max();
+      double tf = -1;
+      double initial = -1;
+      int unassigned = 0;
+      for (const auto vertex : vertices) {
+        double t = vertex->getTime();
+        ti = std::min(ti, t);
+        tf = std::max(tf, t);
+        if (ti == tf) {
+          initial = t;
+          unassigned++;
+        } else if (t == ti) {
+          tiVertexes++;
+        } else {
+          tfVertexes++;
+        }
+      }
+      if (initial == ti) {
+        tiVertexes += unassigned;
+      } else {
+        tfVertexes += unassigned;
+      }
+      shape = SimplexShape(tiVertexes, tfVertexes);
     }
 
     /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
@@ -157,8 +224,9 @@ class Simplex {
 
   private:
     std::vector<std::shared_ptr<Vertex> > vertices;
+    std::vector<std::shared_ptr<Edge> > edges;
     std::shared_ptr<Spacetime> spacetime;
-    TimeOrientation timeOrientation;
+    SimplexShape shape;
 };
 }
 

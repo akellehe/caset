@@ -4,7 +4,7 @@
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
-#include "../include/spacetimes/Spacetime.h"
+#include "../include/spacetime/Spacetime.h"
 #include "Signature.h"
 #include "Vertex.h"
 #include "Edge.h"
@@ -72,5 +72,5 @@ PYBIND11_MODULE(caset, m) {
   py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime")
     .def(py::init<std::shared_ptr<Metric>>(), py::arg("metric"));
 
-  m.doc() = "A C++ library for simulating lattice spacetimes and causal sets";
+  m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

@@ -45,16 +45,10 @@ message(STATUS "Torch lib:     ${TORCH_LIB_DIR}")
 message(STATUS "_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI} (override with -DTORCH_CXX11_ABI=0|1)")
 
 # ---- Sources ----
-set(CASET_SOURCES
-        src/Edge.cpp
-        src/EdgeList.cpp
-        src/Metric.cpp
-        src/Signature.cpp
-        src/Simplex.cpp
-        src/spacetimes/Spacetime.cpp
-        src/Vertex.cpp
-        src/VertexList.cpp
-        src/bindings.cpp
+file(GLOB_RECURSE CASET_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
 )
 
 # ---- Build module ----

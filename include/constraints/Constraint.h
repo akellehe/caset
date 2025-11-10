@@ -5,6 +5,8 @@
 #ifndef CASET_CONSTRAINT_H
 #define CASET_CONSTRAINT_H
 
+#include "spacetime/Spacetime.h"
+
 namespace caset {
 
 enum class ConstraintType : uint8_t {
@@ -16,6 +18,7 @@ class Constraint {
   public:
     virtual ~Constraint() = default;
 
+    virtual bool applies(Spacetime &spacetime, ConstraintType &type_);
 
 };
 } // caset

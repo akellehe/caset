@@ -8,7 +8,7 @@
 #include <array>
 
 #include <vector>
-
+#include <ATen/ops/abs.h>
 
 namespace caset {
 class Edge;
@@ -26,7 +26,39 @@ class Edge;
 class Vertex final {
     public:
         Vertex() noexcept {}
-        explicit Vertex(const std::vector<double> &coords) noexcept : coordinates(coords) {}
+
+        explicit Vertex(const std::vector<double> &coords) noexcept : coordinates(coords) {
+        }
+
+        ///
+        /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
+        /// good idea to require users to specify dimensionality at compile-time, but maybe that's asking a little too
+        /// much.
+        ///
+        /// Let's just call 'time' the Euclidean magnitude of the elements of the coordinate vector excluding the
+        /// spatial elements.
+        ///
+        /// By convention this will be \f$ \sqrt{\sum_{i=0}^{i=N-3}x_i^2} \f$ for all coordinate vectors of 4 or more
+        /// elements or just the absolute value of \f$ x_0 \f$ otherwise.
+        /// @return
+        double getTime() {
+            if (coordinates.empty()) {
+                return 0;
+            }
+            if (coordinates.size() == 1) {
+                return std::abs(coordinates[0]);
+            }
+            if (coordinates.size() >= 4) {
+                double sumOfSquares = 0;
+                for (int i = 0; i < coordinates.size(); i++) {
+                    sumOfSquares += coordinates[i] * coordinates[i];
+                }
+                return std::sqrt(sumOfSquares);
+            }
+            const std::string msg = "Invalid coordinate vector of length " + std::to_string(coordinates.size());
+            throw std::out_of_range(msg);
+        }
+
         std::vector<double> getCoordinates() const {
             if (coordinates.size() == 0) {
                 throw new std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
@@ -38,6 +70,7 @@ class Vertex final {
             outEdges.push_back(edge);
             edges.push_back(edge);
         }
+
         void addInEdge(std::shared_ptr<Edge> edge) noexcept {
             inEdges.push_back(edge);
             edges.push_back(edge);
@@ -48,7 +81,6 @@ class Vertex final {
         std::vector<std::shared_ptr<Edge>> getOutEdges() const noexcept {return outEdges;}
     private:
         void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
-
         std::vector<double> coordinates;
         std::vector<std::shared_ptr<Edge> > outEdges;
         std::vector<std::shared_ptr<Edge> > inEdges;
