@@ -6,8 +6,8 @@ from caset import Edge, Vertex, Metric, Signature, SignatureType
 class TestMetric(unittest.TestCase):
 
     def test_metric_instantiates(self):
-        v1 = Vertex([0, 0, 0, 0])
-        v2 = Vertex([0, 0, 0, 1])
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [0, 0, 0, 1])
         edge = Edge(v1, v2, 25)
 
         self.assertIsInstance(edge, Edge)
@@ -25,6 +25,7 @@ class TestMetric(unittest.TestCase):
         self.assertEqual(signature.getDiagonal(), [-1, 1, 1, 1])
         metric = Metric(False, signature)
         self.assertEqual(metric.getSquaredLength(edge), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,3 +7,4 @@ docs/_build
 docs/_doxygen
 vendor/libtorch*
 .DS_Store
+__pycache__

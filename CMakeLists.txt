@@ -47,37 +47,17 @@ message(STATUS "_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI} (override with -DTORCH
 # ---- Sources ----
 file(GLOB_RECURSE CASET_SOURCES
         CONFIGURE_DEPENDS
+#        "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp"
+#        "${CMAKE_CURRENT_SOURCE_DIR}/src/spacetime/topologies/Topology.cpp"
+#        "${CMAKE_CURRENT_SOURCE_DIR}/src/spacetime/topologies/Sphere.cpp"
+#        "${CMAKE_CURRENT_SOURCE_DIR}/include/spacetime/topologies/Topology.h"
+#        "${CMAKE_CURRENT_SOURCE_DIR}/include/spacetime/topologies/Sphere.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
 )
 
 # ---- Build module ----
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
-
-#set(DIMENSIONS 4 CACHE STRING "Spacetime dimensions")
-#set(SIGNATURE_TYPE "Lorentzian" CACHE STRING "Signature type (Lorentzian|Euclidean)")
-#set_property(CACHE SIGNATURE_TYPE PROPERTY STRINGS Lorentzian Euclidean)
-#
-#if(NOT SIGNATURE_TYPE STREQUAL "Lorentzian" AND NOT SIGNATURE_TYPE STREQUAL "Euclidean")
-#    message(FATAL_ERROR "SIGNATURE_TYPE must be Lorentzian or Euclidean")
-#endif()
-#
-#configure_file(
-#        ${CMAKE_CURRENT_SOURCE_DIR}/include/caset_config.hpp.in
-#        ${CMAKE_CURRENT_BINARY_DIR}/generated/caset_config.hpp
-#        @ONLY
-#)
-#
-#target_include_directories(caset PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-#if(SIGNATURE_TYPE STREQUAL "Lorentzian")
-#    target_compile_definitions(caset PRIVATE CASET_SIGNATURE_Lorentzian=1)
-#else()
-#    target_compile_definitions(caset PRIVATE CASET_SIGNATURE_Euclidean=1)
-#endif()
-#target_compile_definitions(caset PRIVATE CASET_DIMENSIONS=${DIMENSIONS})
-#
-#message(STATUS "Config: DIMENSIONS=${DIMENSIONS}, SIGNATURE_TYPE=${SIGNATURE_TYPE}")
-
 
 target_include_directories(caset
         PRIVATE
@@ -125,7 +105,7 @@ add_custom_command(
         TARGET caset POST_BUILD
         BYPRODUCTS "${STUB_OUT_DIR}/caset.pyi"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_OUT_DIR}"
-        # Make the just-built module importable:
+#         Make the just-built module importable:
         COMMAND ${CMAKE_COMMAND} -E env
         PYTHONPATH=$<TARGET_FILE_DIR:caset>
         ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"

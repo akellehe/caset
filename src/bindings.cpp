@@ -5,9 +5,10 @@
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
-#include "spacetime/Spacetime.h"
+#include "spacetime/topologies/Topology.h"
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
+#include "spacetime/Spacetime.h"
 #include "Signature.h"
 #include "Vertex.h"
 #include "Edge.h"
@@ -25,13 +26,13 @@ PYBIND11_MODULE(caset, m) {
 
   py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere")
     .def(py::init<>())
-    .def("build", &Sphere::build)
-    .def("getConstraints", &Sphere::getConstraints);
+    .def("build", &Sphere::build);
+    // .def("getConstraints", &Sphere::getConstraints);
 
   py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid")
     .def(py::init<>())
-    .def("build", &Toroid::build)
-    .def("getConstraints", &Toroid::getConstraints);
+    .def("build", &Toroid::build);
+    // .def("getConstraints", &Toroid::getConstraints);
 
   py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
       .def(

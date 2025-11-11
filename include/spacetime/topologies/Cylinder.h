@@ -14,12 +14,10 @@
 namespace caset {
 class Cylinder : public Topology {
   public:
-    std::vector<std::shared_ptr<Constraint>> getConstraints() override {
-      return std::vector<std::shared_ptr<Constraint>>();
-    }
-    void build(Spacetime *spacetime) override {
-      return;
-    };
+    // std::vector<std::shared_ptr<Constraint>> getConstraints() override {
+      // return std::vector<std::shared_ptr<Constraint>>();
+    // }
+    void build() override; // Spacetime *spacetime) override;
 };
 }
 

@@ -43,7 +43,7 @@ class Spacetime {
     /// Builds an n-dimensional (depending on your metric) triangulation/slice for t=0 with edge lengths equal to alpha
     /// matching the chosen topology.
     void build() {
-      return topology->build(this);
+      // return topology->build(this);
     }
 
     void addObservable(std::shared_ptr<Observable> &observable) {
