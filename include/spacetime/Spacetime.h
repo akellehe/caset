@@ -16,9 +16,7 @@
 #include "Simplex.h"
 #include "topologies/Toroid.h"
 
-
 namespace caset {
-
 enum class SpacetimeType : uint8_t {
   CDT = 0,
   REGGE = 1,
@@ -30,7 +28,7 @@ enum class SpacetimeType : uint8_t {
 
 class Spacetime {
   public:
-    using Bucket = std::unordered_set<Simplex, SimplexHash, SimplexEq>;
+    using Bucket = std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>;
 
     Spacetime() {
       Signature signature(4, SignatureType::Lorentzian);
@@ -60,29 +58,45 @@ class Spacetime {
       observables.push_back(observable);
     }
 
-    static void createVertex(const std::uint64_t id) noexcept {
-      vertexList->add(id);
+    static std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
+      return vertexList->add(id);
     }
 
-    static void createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
-      vertexList->add(id, coords);
+    static std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+      return vertexList->add(id, coords);
     }
 
-    static void createEdge(std::shared_ptr<Vertex> &src, std::shared_ptr<Vertex> &tgt) noexcept {
-      edgeList->add(src, tgt);
+    static std::shared_ptr<Edge> createEdge(
+      std::shared_ptr<Vertex> &src,
+      std::shared_ptr<Vertex> &tgt
+      ) noexcept {
+      std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
+      src->addOutEdge(edge);
+      tgt->addInEdge(edge);
+      return edge;
     }
 
-    static void createEdge(std::shared_ptr<Vertex> &src, std::shared_ptr<Vertex> &tgt, double squaredLength) noexcept {
-      edgeList->add(src, tgt, squaredLength);
+    static std::shared_ptr<Edge> createEdge(
+      std::shared_ptr<Vertex> &src,
+      std::shared_ptr<Vertex> &tgt,
+      double squaredLength
+      ) noexcept {
+      std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
+      src->addOutEdge(edge);
+      tgt->addInEdge(edge);
+      return edge;
     }
 
-    static void createSimplex(std::vector<std::shared_ptr<Vertex>> &vertices) noexcept {
+    static std::shared_ptr<Simplex> createSimplex(std::vector<std::shared_ptr<Vertex> > &vertices) noexcept {
       const SimplexShape shape = SimplexShape::shapeOf(vertices);
-      auto& bucket = simplicialComplex.try_emplace(shape /*key*/).first->second;   // creates empty set if missing
+      auto &bucket = simplicialComplex.try_emplace(shape /*key*/).first->second; // creates empty set if missing
       auto [fingerprint, n, ids] = Simplex::computeFingerprint(vertices);
       if (!bucket.contains(fingerprint)) {
-        bucket.emplace(vertices);
+        std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
+        bucket.insert(simplex);
+        return simplex;
       }
+      return *bucket.find(fingerprint);
     }
 
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept {
@@ -99,7 +113,7 @@ class Spacetime {
     [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
 
   private:
-    static inline std::shared_ptr<EdgeList>   edgeList   = std::make_shared<EdgeList>();
+    static inline std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     static inline std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
     static inline std::unordered_map<SimplexShape, Bucket> simplicialComplex{};
 

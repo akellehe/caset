@@ -120,7 +120,6 @@ class Simplex {
       return x ^ (x >> 31);
     }
 
-
     static std::tuple<std::uint8_t, std::uint64_t, std::array<VertId, kMax>> computeFingerprint(const std::vector<std::shared_ptr<Vertex>> &vertices_) {
       if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
       std::uint8_t n = static_cast<std::uint8_t>(vertices_.size());
@@ -236,6 +235,7 @@ class Simplex {
 struct SimplexHash {
   using is_transparent = void;                    // enables heterogeneous lookup
   size_t operator()(const Simplex& s) const noexcept { return size_t(s.fingerprint()); }
+  size_t operator()(const std::shared_ptr<Simplex>& s) const noexcept { return size_t(s->fingerprint()); }
   size_t operator()(uint64_t fp)      const noexcept { return size_t(fp); }
 };
 struct SimplexEq {
@@ -243,6 +243,10 @@ struct SimplexEq {
   bool operator()(const Simplex& a, const Simplex& b) const noexcept { return a == b; }
   bool operator()(const Simplex& a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
   bool operator()(uint64_t fp, const Simplex& a) const noexcept { return fp == a.fingerprint(); }
+
+  bool operator()(const std::shared_ptr<Simplex>& a, const std::shared_ptr<Simplex>& b) const noexcept { return a->fingerprint() == b->fingerprint(); }
+  bool operator()(const std::shared_ptr<Simplex>& a, uint64_t fp) const noexcept { return a->fingerprint() == fp; }
+  bool operator()(uint64_t fp, const std::shared_ptr<Simplex>& a) const noexcept { return fp == a->fingerprint(); }
 };
 }
 

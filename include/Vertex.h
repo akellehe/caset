@@ -81,10 +81,10 @@ class Vertex final {
 
     private:
         void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
-        std::vector<double> coordinates;
-        std::vector<std::shared_ptr<Edge> > outEdges;
-        std::vector<std::shared_ptr<Edge> > inEdges;
-        std::vector<std::shared_ptr<Edge> > edges;
+        std::vector<double> coordinates{};
+        std::vector<std::shared_ptr<Edge> > outEdges{};
+        std::vector<std::shared_ptr<Edge> > inEdges{};
+        std::vector<std::shared_ptr<Edge> > edges{};
         std::uint64_t id;
 };
 }
