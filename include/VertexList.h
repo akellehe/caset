@@ -16,11 +16,17 @@ class VertexList {
     std::shared_ptr<Vertex> operator[](int index) {
       return vertexList[index];
     }
-    void add(const std::shared_ptr<Vertex> &vertex) {
+    void add(const std::shared_ptr<Vertex> &vertex) noexcept {
       vertexList.push_back(vertex);
     }
+    void add(const std::size_t id, const std::vector<double> &coords) noexcept {
+      vertexList.emplace_back(std::make_shared<Vertex>(id, coords));
+    }
+    void add(const std::size_t id) noexcept {
+      vertexList.emplace_back(std::make_shared<Vertex>(id));
+    }
   private:
-    std::vector<std::shared_ptr<Vertex>> vertexList;
+    std::vector<std::shared_ptr<Vertex>> vertexList{};
 };
 } // caset
 

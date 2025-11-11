@@ -23,12 +23,9 @@ class Edge;
 ///
 class Vertex final {
     public:
-        Vertex() noexcept {
-            id = 0;
-        }
-
-        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
-        }
+        Vertex() noexcept {id = 0;}
+        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {}
+        Vertex(const std::uint64_t id_) noexcept : id(id_) {}
 
         std::uint64_t getId() noexcept { return id; }
 

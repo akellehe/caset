@@ -25,6 +25,14 @@ class EdgeList {
       edgeList.push_back(edge);
     }
 
+    void add(const std::shared_ptr<Vertex> &src, const std::shared_ptr<Vertex> &tgt) noexcept {
+      edgeList.emplace_back(std::make_shared<Edge>(src, tgt));
+    }
+
+    void add(const std::shared_ptr<Vertex> &src, const std::shared_ptr<Vertex> &tgt, double squaredLength) noexcept {
+      edgeList.emplace_back(std::make_shared<Edge>(src, tgt, squaredLength));
+    }
+
     std::size_t size() const {
       return edgeList.size();
     }

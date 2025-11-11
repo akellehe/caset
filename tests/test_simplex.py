@@ -9,7 +9,5 @@ class TestSimplex(unittest.TestCase):
         metric = Metric(True, signature)
         spacetime = Spacetime(metric)
 
-        spacetime.addSimplex()
-        raise RuntimeError("Not implemented")
 
 

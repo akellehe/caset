@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 project(caset LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- Python & pybind11 ----
@@ -99,18 +99,18 @@ install(TARGETS caset
 )
 
 # --- Generate Python stubs for caset (.pyi) ---
-set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
+#set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
 
-add_custom_command(
-        TARGET caset POST_BUILD
-        BYPRODUCTS "${STUB_OUT_DIR}/caset.pyi"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_OUT_DIR}"
+#add_custom_command(
+#        TARGET caset POST_BUILD
+#        BYPRODUCTS "${STUB_OUT_DIR}/caset.pyi"
+#        COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_OUT_DIR}"
 #         Make the just-built module importable:
-        COMMAND ${CMAKE_COMMAND} -E env
-        PYTHONPATH=$<TARGET_FILE_DIR:caset>
-        ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"
-        COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/caset.pyi"
-)
+#        COMMAND ${CMAKE_COMMAND} -E env
+#        PYTHONPATH=$<TARGET_FILE_DIR:caset>
+#        ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"
+#        COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/caset.pyi"
+#)
 
 # Install the stub next to the extension in the package
-install(FILES "${STUB_OUT_DIR}/caset.pyi" DESTINATION .)
+#install(FILES "${STUB_OUT_DIR}/caset.pyi" DESTINATION .)

@@ -8,3 +8,4 @@ docs/_doxygen
 vendor/libtorch*
 .DS_Store
 __pycache__
+cmake-build

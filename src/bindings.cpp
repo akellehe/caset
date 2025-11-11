@@ -9,6 +9,8 @@
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
 #include "spacetime/Spacetime.h"
+#include "VertexList.h"
+#include "EdgeList.h"
 #include "Signature.h"
 #include "Vertex.h"
 #include "Edge.h"
@@ -25,14 +27,12 @@ PYBIND11_MODULE(caset, m) {
   py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology");
 
   py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere")
-    .def(py::init<>())
-    .def("build", &Sphere::build);
-    // .def("getConstraints", &Sphere::getConstraints);
+      .def(py::init<>())
+      .def("build", &Sphere::build);
 
   py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid")
-    .def(py::init<>())
-    .def("build", &Toroid::build);
-    // .def("getConstraints", &Toroid::getConstraints);
+      .def(py::init<>())
+      .def("build", &Toroid::build);
 
   py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
       .def(
@@ -60,7 +60,8 @@ PYBIND11_MODULE(caset, m) {
            py::arg("vertices"))
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getHinges", &Simplex::getHinges)
-      .def("getVolume", &Simplex::getVolume);
+      .def("getVolume", &Simplex::getVolume)
+      .def("fingerprint", &Simplex::fingerprint);
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
       .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"))
@@ -73,7 +74,8 @@ PYBIND11_MODULE(caset, m) {
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")
       .def(py::init<bool, Signature &>(),
-        py::arg("coordinateFree"), py::arg("signature"))
+           py::arg("coordinateFree"),
+           py::arg("signature"))
       .def("getSquaredLength", &Metric::getSquaredLength);
 
   py::enum_<SignatureType>(m, "SignatureType")
@@ -86,17 +88,20 @@ PYBIND11_MODULE(caset, m) {
       .def("getDiagonal", &Signature::getDiagonal);
 
   py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime")
-    .def(py::init<
-      std::shared_ptr<Metric>,
-      const SpacetimeType,
-      std::optional<double>,
-      std::optional<std::shared_ptr<Topology>>
-      >(),
-      py::arg("metric"),
-      py::arg("spacetimeType"),
-      py::arg("alpha"),
-      py::arg("topology")
-      );
+      .def(py::init<
+             std::shared_ptr<Metric>,
+             const SpacetimeType,
+             std::optional<double>,
+             std::optional<std::shared_ptr<Topology> >
+           >(),
+           py::arg("metric"),
+           py::arg("spacetimeType"),
+           py::arg("alpha"),
+           py::arg("topology")
+      )
+      .def(py::init<>())
+      .def_static("createVertex", py::overload_cast<const std::uint64_t>(&Spacetime::createVertex), py::arg("id"))
+      .def_static("createVertex", py::overload_cast<const std::uint64_t, const std::vector<double> &>(&Spacetime::createVertex), py::arg("id"), py::arg("coordinates"));
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

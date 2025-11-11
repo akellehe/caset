@@ -53,6 +53,34 @@ class SimplexShape {
       return TimeOrientation::FUTURE;
     }
 
+    static SimplexShape shapeOf(const std::vector<std::shared_ptr<Vertex>> &vertices) {
+      uint8_t tiVertexes = 0;
+      uint8_t tfVertexes = 0;
+      double ti = std::numeric_limits<double>::max();
+      double tf = -1;
+      double initial = -1;
+      int unassigned = 0;
+      for (const auto vertex : vertices) {
+        double t = vertex->getTime();
+        ti = std::min(ti, t);
+        tf = std::max(tf, t);
+        if (ti == tf) {
+          initial = t;
+          unassigned++;
+        } else if (t == ti) {
+          tiVertexes++;
+        } else {
+          tfVertexes++;
+        }
+      }
+      if (initial == ti) {
+        tiVertexes += unassigned;
+      } else {
+        tfVertexes += unassigned;
+      }
+      return SimplexShape(tiVertexes, tfVertexes);
+    }
+
   private:
     uint8_t ti{0};
     uint8_t tf{0};
@@ -85,6 +113,32 @@ class Simplex {
 
     static constexpr std::size_t kMax = 64; // supports K <= 64
 
+    static inline std::uint64_t mix64(VertId x) noexcept {
+      x += 0x9e3779b97f4a7c15ull;
+      x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+      x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+      return x ^ (x >> 31);
+    }
+
+
+    static std::tuple<std::uint8_t, std::uint64_t, std::array<VertId, kMax>> computeFingerprint(const std::vector<std::shared_ptr<Vertex>> &vertices_) {
+      if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
+      std::uint8_t n = static_cast<std::uint8_t>(vertices_.size());
+      std::array<VertId, kMax> ids{};
+      for (std::size_t i = 0; i < n; ++i) {
+        ids[i] = vertices_[i]->getId();
+      }
+      std::sort(ids.begin(), ids.begin() + n);
+      auto it = std::unique(ids.begin(), ids.begin() + n);
+      n = static_cast<std::uint8_t>(std::distance(ids.begin(), it));
+      std::uint64_t h = 0xcbf29ce484222325ull ^ n;
+      for (std::uint8_t i = 0; i < n; ++i) {
+        h ^= mix64(ids[i] + 0x9e3779b97f4a7c15ull);
+        h *= 0x100000001b3ull; // FNV-ish step
+      }
+      return {h, n, ids};
+    }
+
     ///
     /// Implementing: https://chatgpt.com/c/6910ce22-0e60-832c-9bdf-f64097c33f94 for fast hashing.
     ///
@@ -92,44 +146,19 @@ class Simplex {
     Simplex(
       const std::vector<std::shared_ptr<Vertex> > &vertices_
     ) : shape(SimplexShape(0, 0)), vertices(vertices_) {
-      if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
-      n_ = static_cast<std::uint8_t>(vertices_.size());
-      for (std::size_t i = 0; i < n_; ++i) {
-        ids_[i] = vertices_[i]->getId();
-      }
-      std::sort(ids_.begin(), ids_.begin() + n_);
-      auto it = std::unique(ids_.begin(), ids_.begin() + n_);
-      n_ = static_cast<std::uint8_t>(std::distance(ids_.begin(), it));
-      h_ = compute_fingerprint(ids_.data(), n_);
-      this->setShape();
+      setFingerprint(vertices_);
+      shape = SimplexShape::shapeOf(vertices_);
     }
 
-    void setShape() {
-      uint8_t tiVertexes = 0;
-      uint8_t tfVertexes = 0;
-      double ti = std::numeric_limits<double>::max();
-      double tf = -1;
-      double initial = -1;
-      int unassigned = 0;
-      for (const auto vertex : vertices) {
-        double t = vertex->getTime();
-        ti = std::min(ti, t);
-        tf = std::max(tf, t);
-        if (ti == tf) {
-          initial = t;
-          unassigned++;
-        } else if (t == ti) {
-          tiVertexes++;
-        } else {
-          tfVertexes++;
-        }
-      }
-      if (initial == ti) {
-        tiVertexes += unassigned;
-      } else {
-        tfVertexes += unassigned;
-      }
-      shape = SimplexShape(tiVertexes, tfVertexes);
+    Simplex(
+      const std::vector<std::shared_ptr<Vertex> > &vertices_,
+      SimplexShape shape_
+    ) : shape(shape_), vertices(vertices_) {
+      setFingerprint(vertices_);
+    }
+
+    void setFingerprint(const std::vector<std::shared_ptr<Vertex>> &vertices_) {
+      std::tie(h_, n_, ids_) = Simplex::computeFingerprint(vertices_);
     }
 
     /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
@@ -202,25 +231,18 @@ class Simplex {
     std::uint64_t h_{kSeed};
     static constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
     SimplexShape shape;
+};
 
-    static inline std::uint64_t mix64(VertId x) noexcept {
-      x += 0x9e3779b97f4a7c15ull;
-      x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
-      x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
-      return x ^ (x >> 31);
-    }
-
-    static std::uint64_t compute_fingerprint(
-      const VertId *ids,
-      std::uint8_t n
-    ) noexcept {
-      std::uint64_t h = 0xcbf29ce484222325ull ^ n;
-      for (std::uint8_t i = 0; i < n; ++i) {
-        h ^= mix64(ids[i] + 0x9e3779b97f4a7c15ull);
-        h *= 0x100000001b3ull; // FNV-ish step
-      }
-      return h;
-    }
+struct SimplexHash {
+  using is_transparent = void;                    // enables heterogeneous lookup
+  size_t operator()(const Simplex& s) const noexcept { return size_t(s.fingerprint()); }
+  size_t operator()(uint64_t fp)      const noexcept { return size_t(fp); }
+};
+struct SimplexEq {
+  using is_transparent = void;
+  bool operator()(const Simplex& a, const Simplex& b) const noexcept { return a == b; }
+  bool operator()(const Simplex& a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
+  bool operator()(uint64_t fp, const Simplex& a) const noexcept { return fp == a.fingerprint(); }
 };
 }
 
