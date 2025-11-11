@@ -11,12 +11,8 @@
 namespace caset {
 class SpacetimeVolume : public Observable {
   public:
-    double update(Spacetime &spacetime) override {
-      return 1.;
-    }
-    double compute(Spacetime &spacetime) override {
-      return 1.;
-    }
+    double compute(std::shared_ptr<Spacetime> &spacetime) override;
+    double update(std::shared_ptr<Spacetime> &spacetime) override;
 };
 }
 

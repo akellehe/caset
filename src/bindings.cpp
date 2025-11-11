@@ -1,10 +1,13 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/options.h>
 #include <pybind11/complex.h>
 #include <pybind11/functional.h>
 #include <pybind11/chrono.h>
 
-#include "../include/spacetime/Spacetime.h"
+#include "spacetime/Spacetime.h"
+#include "spacetime/topologies/Sphere.h"
+#include "spacetime/topologies/Toroid.h"
 #include "Signature.h"
 #include "Vertex.h"
 #include "Edge.h"
@@ -18,6 +21,18 @@ namespace py = pybind11;
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
+  py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology");
+
+  py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere")
+    .def(py::init<>())
+    .def("build", &Sphere::build)
+    .def("getConstraints", &Sphere::getConstraints);
+
+  py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid")
+    .def(py::init<>())
+    .def("build", &Toroid::build)
+    .def("getConstraints", &Toroid::getConstraints);
+
   py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
       .def(
         py::init<
@@ -40,15 +55,14 @@ PYBIND11_MODULE(caset, m) {
       .def("getTarget", &Edge::getTarget);
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
-      .def(py::init<const std::shared_ptr<Spacetime> &, std::vector<std::shared_ptr<Vertex> > &>(),
-           py::arg("spacetime"),
+      .def(py::init<const std::vector<std::shared_ptr<Vertex> > &>(),
            py::arg("vertices"))
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getHinges", &Simplex::getHinges)
       .def("getVolume", &Simplex::getVolume);
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
-      .def(py::init<std::vector<double> &>(), py::arg("coordinates"))
+      .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"))
       .def("getCoordinates", &Vertex::getCoordinates)
       .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
       .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
@@ -57,7 +71,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getInEdges", &Vertex::getInEdges);
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")
-      .def(py::init<bool, Signature &>(), py::arg("coordinateFree"), py::arg("signature"))
+      .def(py::init<bool, Signature &>(),
+        py::arg("coordinateFree"), py::arg("signature"))
       .def("getSquaredLength", &Metric::getSquaredLength);
 
   py::enum_<SignatureType>(m, "SignatureType")
@@ -70,7 +85,17 @@ PYBIND11_MODULE(caset, m) {
       .def("getDiagonal", &Signature::getDiagonal);
 
   py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime")
-    .def(py::init<std::shared_ptr<Metric>>(), py::arg("metric"));
+    .def(py::init<
+      std::shared_ptr<Metric>,
+      const SpacetimeType,
+      std::optional<double>,
+      std::optional<std::shared_ptr<Topology>>
+      >(),
+      py::arg("metric"),
+      py::arg("spacetimeType"),
+      py::arg("alpha"),
+      py::arg("topology")
+      );
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

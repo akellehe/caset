@@ -89,7 +89,6 @@ target_include_directories(caset
 
 # Link ONLY against torch from site-packages
 target_link_directories(caset PRIVATE ${TORCH_LIB_DIR})
-target_link_libraries(caset PRIVATE torch torch_cpu c10)
 
 # Match PyTorch’s C++11 ABI (default 1; override if needed)
 target_compile_definitions(caset PRIVATE _GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI})
@@ -105,6 +104,11 @@ set_target_properties(caset PROPERTIES
 if(UNIX AND NOT APPLE)
     target_link_options(caset PRIVATE "-Wl,-rpath,${TORCH_LIB_DIR}")
 endif()
+
+set_target_properties(caset PROPERTIES
+        CXX_VISIBILITY_PRESET default
+        VISIBILITY_INLINES_HIDDEN OFF
+)
 
 # Install next to your package
 install(TARGETS caset

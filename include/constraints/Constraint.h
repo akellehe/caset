@@ -5,9 +5,11 @@
 #ifndef CASET_CONSTRAINT_H
 #define CASET_CONSTRAINT_H
 
-#include "spacetime/Spacetime.h"
+#include <memory>
 
 namespace caset {
+
+class Spacetime;
 
 enum class ConstraintType : uint8_t {
   PachnerMove = 0,
@@ -18,7 +20,7 @@ class Constraint {
   public:
     virtual ~Constraint() = default;
 
-    virtual bool applies(Spacetime &spacetime, ConstraintType &type_);
+    virtual bool applies(std::shared_ptr<Spacetime> &spacetime, ConstraintType &type_);
 
 };
 } // caset

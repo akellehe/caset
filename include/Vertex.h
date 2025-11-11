@@ -5,10 +5,8 @@
 #ifndef CASET_CASET_SRC_VERTEX_H_
 #define CASET_CASET_SRC_VERTEX_H_
 
-#include <array>
-
 #include <vector>
-#include <ATen/ops/abs.h>
+#include <memory>
 
 namespace caset {
 class Edge;
@@ -32,7 +30,7 @@ class Vertex final {
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
         }
 
-        std::uint64_t getId() noexcept {return id;}
+        std::uint64_t getId() noexcept { return id; }
 
         ///
         /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
@@ -45,7 +43,7 @@ class Vertex final {
         /// By convention this will be \f$ \sqrt{\sum_{i=0}^{i=N-3}x_i^2} \f$ for all coordinate vectors of 4 or more
         /// elements or just the absolute value of \f$ x_0 \f$ otherwise.
         /// @return
-        double getTime() {
+        [[nodiscard]] double getTime() const {
             if (coordinates.empty()) {
                 return 0;
             }
@@ -80,15 +78,16 @@ class Vertex final {
             edges.push_back(edge);
         }
 
-        std::vector<std::shared_ptr<Edge>> getEdges() const noexcept {return edges;}
-        std::vector<std::shared_ptr<Edge>> getInEdges() const noexcept {return inEdges;}
-        std::vector<std::shared_ptr<Edge>> getOutEdges() const noexcept {return outEdges;}
+        std::vector<std::shared_ptr<Edge> > getEdges() const noexcept { return edges; }
+        std::vector<std::shared_ptr<Edge> > getInEdges() const noexcept { return inEdges; }
+        std::vector<std::shared_ptr<Edge> > getOutEdges() const noexcept { return outEdges; }
+
     private:
         void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
         std::vector<double> coordinates;
         std::vector<std::shared_ptr<Edge> > outEdges;
         std::vector<std::shared_ptr<Edge> > inEdges;
-        std::vector<std::shared_ptr<Edge>> edges;
+        std::vector<std::shared_ptr<Edge> > edges;
         std::uint64_t id;
 };
 }

@@ -17,8 +17,7 @@ class Toroid : public Topology {
     std::vector<std::shared_ptr<Constraint>> getConstraints() override {
       return std::vector<std::shared_ptr<Constraint>>();
     }
-
-    void build(std::shared_ptr<Spacetime> spacetime) override {
+    void build(Spacetime *spacetime) override {
       return;
     }
 };

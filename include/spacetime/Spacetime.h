@@ -58,7 +58,7 @@ class Spacetime {
       edgeList->add(edge);
     }
 
-    SpacetimeType getSpacetimeType() const noexcept {
+    [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept {
       return spacetimeType;
     }
 
@@ -69,7 +69,7 @@ class Spacetime {
       return vertexList;
     }
 
-    std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
+    [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
 
   private:
     std::shared_ptr<Metric> metric;

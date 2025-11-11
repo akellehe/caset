@@ -17,6 +17,9 @@ class Cylinder : public Topology {
     std::vector<std::shared_ptr<Constraint>> getConstraints() override {
       return std::vector<std::shared_ptr<Constraint>>();
     }
+    void build(Spacetime *spacetime) override {
+      return;
+    };
 };
 }
 

@@ -3,11 +3,11 @@
 
 #include <memory>
 #include <vector>
+#include <functional>
 
 #include <torch/torch.h>
 
 #include "Edge.h"
-#include "spacetime/Spacetime.h"
 
 namespace caset {
 ///
@@ -36,33 +36,41 @@ class SimplexShape {
     /// @param ti The number of vertices on the initial time slice.
     /// @param tf The number of vertices on the final time slice.
     ///
-    SimplexShape() : ti(0), tf(0) {
-    }
-    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
-    }
+    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {}
+    constexpr SimplexShape() noexcept = default;
 
-    std::pair<uint8_t, uint8_t> getShape() {
+    [[nodiscard]] std::pair<uint8_t, uint8_t> getShape() const {
       return {ti, tf};
     }
 
-    bool operator==(const SimplexShape &other) const {
+    constexpr bool operator==(const SimplexShape &other) const noexcept {
       return ti == other.ti && tf == other.tf;
     }
 
-    TimeOrientation getOrientation() const {
+    [[nodiscard]] TimeOrientation getOrientation() const {
       if (ti == tf) return TimeOrientation::UNKNOWN;
       if (ti > tf) return TimeOrientation::PRESENT;
       return TimeOrientation::FUTURE;
     }
 
   private:
-    uint8_t ti;
-    uint8_t tf;
-
-    // Allow std::hash to access private members:
-    // friend struct std::hash<SimplexShape>;
+    uint8_t ti{0};
+    uint8_t tf{0};
 };
+}
 
+namespace std {
+template<>
+struct hash<caset::SimplexShape> {
+  size_t operator()(const caset::SimplexShape& s) const noexcept {
+    auto [ti, tf] = s.getShape();                 // OK now that getShape() is const
+    std::uint16_t packed = (std::uint16_t(ti) << 8) | std::uint16_t(tf);
+    return std::hash<std::uint16_t>{}(packed);    // perfect for all (ti, tf)
+  }
+};
+}
+
+namespace caset {
 /// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
@@ -80,12 +88,10 @@ class Simplex {
     ///
     /// Implementing: https://chatgpt.com/c/6910ce22-0e60-832c-9bdf-f64097c33f94 for fast hashing.
     ///
-    /// @param spacetime_
     /// @param vertices_
     Simplex(
-      const std::shared_ptr<Spacetime> &spacetime_,
       const std::vector<std::shared_ptr<Vertex> > &vertices_
-    ) : spacetime(spacetime_), shape(SimplexShape(0, 0)), vertices(vertices_) {
+    ) : shape(SimplexShape(0, 0)), vertices(vertices_) {
       if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
       n_ = static_cast<std::uint8_t>(vertices_.size());
       for (std::size_t i = 0; i < n_; ++i) {
@@ -190,7 +196,6 @@ class Simplex {
 
   private:
     std::vector<std::shared_ptr<Vertex> > vertices;
-    std::shared_ptr<Spacetime> spacetime;
 
     std::array<VertId, kMax> ids_{};
     std::uint8_t n_{0};
@@ -216,8 +221,15 @@ class Simplex {
       }
       return h;
     }
+};
+}
 
-    friend struct std::hash<Simplex>;
+namespace std {
+template<>
+struct hash<caset::Simplex> {
+  size_t operator()(const caset::Simplex& s) const noexcept {
+    return std::hash<std::uint64_t>{}(s.fingerprint());
+  }
 };
 }
 
