@@ -159,6 +159,7 @@ class Simplex {
       }
       std::cout << std::endl;
       orientation = SimplexOrientation::orientationOf(vertices_);
+      updateStar(vertices_);
     }
 
     Simplex(
@@ -167,6 +168,13 @@ class Simplex {
       SimplexOrientation orientation_
     ) : orientation(orientation_), vertices(vertices_), edges(edges_) {
       setFingerprint(vertices_);
+      updateStar(vertices_);
+    }
+
+    void updateStar(std::vector<std::shared_ptr<Vertex> > &vertices_) {
+      for (const auto &v : vertices_) {
+        v->addToStar(this);
+      }
     }
 
     void setFingerprint(const std::vector<std::shared_ptr<Vertex> > &vertices_) {

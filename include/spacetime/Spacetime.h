@@ -26,6 +26,17 @@ enum class SpacetimeType : uint8_t {
   RICCI_FLOW_DISCRETIZATION = 5
 };
 
+///
+/// # Spacetime
+///
+/// The Spacetime class provides static methods to create and manipulate the basic building blocks of a simplicial
+/// complex.
+///
+/// The Spacetime Topology is responsible for constructing Simplex(es) and the Topology (subclass) is responsible for
+/// building the complex to match that topology.
+///
+/// Any assertions or state needed by the Topology to build the complex should be implemented in the Simplex.
+///
 class Spacetime {
   public:
     using Bucket = std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>;
@@ -49,7 +60,7 @@ class Spacetime {
 
     ///
     /// Builds an n-dimensional (depending on your metric) triangulation/slice for t=0 with edge lengths equal to alpha
-    /// matching the chosen topology.
+    /// matching the chosen topology. The default Topology is Toroid.
     void build() {
       // return topology->build(this);
     }

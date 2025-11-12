@@ -7,6 +7,8 @@
 
 #include <vector>
 #include <memory>
+#include <unordered_set>
+#include "Simplex.h"
 
 namespace caset {
 class Edge;
@@ -83,12 +85,25 @@ class Vertex final {
             return std::to_string(id);
         }
 
+        void addToStar(const std::shared_ptr<Simplex> simplex) noexcept {
+            star.insert(simplex);
+        }
+
+        void removeFromStar(const std::shared_ptr<Simplex> simplex) noexcept {
+            star.erase(simplex);
+        }
+
+        std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> getStar() noexcept {
+            return star;
+        }
+
     private:
         void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
         std::vector<double> coordinates{};
         std::vector<std::shared_ptr<Edge> > outEdges{};
         std::vector<std::shared_ptr<Edge> > inEdges{};
         std::vector<std::shared_ptr<Edge> > edges{};
+        std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> star;
         std::uint64_t id;
 };
 }

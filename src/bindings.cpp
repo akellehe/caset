@@ -86,6 +86,7 @@ PYBIND11_MODULE(caset, m) {
       .def("__str__", &Vertex::toString)
       .def("__repr__", &Vertex::toString)
       .def("getInEdges", &Vertex::getInEdges)
+      .def("getStar", &Vertex::getStar)
       .def("getOutEdges", &Vertex::getOutEdges);
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")

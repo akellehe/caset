@@ -8,6 +8,10 @@ class TestSimplex(unittest.TestCase):
         st = Spacetime()
         st.manual = False
         simplex = st.createSimplex(5)
+        vertices = simplex.getVertices()
+        star = vertices[0].getStar()
+        breakpoint()
+        print(star)
 
 
 
