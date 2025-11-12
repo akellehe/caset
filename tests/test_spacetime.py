@@ -36,6 +36,52 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(e2.getSource(), v2)
         self.assertEqual(e2.getTarget(), v3)
 
+    def test_create_simplex(self):
+        st = Spacetime()
+        st.manual = False
+        simplex = st.createSimplex(5)
+        self.assertEqual(len(simplex.getVertices()), 5)
+        self.assertEqual(len(simplex.getEdges()), 10)
+
+        v1, v2, v3, v4, v5 = simplex.getVertices()
+        a, b, c, d = v1.getOutEdges()
+        self.assertEqual(a.getSource(), v1)
+        self.assertEqual(b.getSource(), v1)
+        self.assertEqual(c.getSource(), v1)
+        self.assertEqual(d.getSource(), v1)
+        self.assertEqual(len(v1.getEdges()), 4)
+
+        a, b, c = v2.getOutEdges()
+        self.assertEqual(a.getSource(), v2)
+        self.assertEqual(b.getSource(), v2)
+        self.assertEqual(c.getSource(), v2)
+        self.assertEqual(len(v2.getEdges()), 4)
+        a, = v2.getInEdges()
+        self.assertEqual(a.getTarget(), v2)
+
+        a, b = v3.getOutEdges()
+        c, d = v3.getInEdges()
+        self.assertEqual(a.getSource(), v3)
+        self.assertEqual(b.getSource(), v3)
+        self.assertEqual(c.getTarget(), v3)
+        self.assertEqual(d.getTarget(), v3)
+        self.assertEqual(len(v3.getEdges()), 4)
+
+        a, = v4.getOutEdges()
+        b, c, d = v4.getInEdges()
+        self.assertEqual(a.getSource(), v4)
+        self.assertEqual(b.getTarget(), v4)
+        self.assertEqual(c.getTarget(), v4)
+        self.assertEqual(d.getTarget(), v4)
+        self.assertEqual(len(v4.getEdges()), 4)
+
+        a, b, c, d = v5.getInEdges()
+        self.assertEqual(a.getTarget(), v5)
+        self.assertEqual(b.getTarget(), v5)
+        self.assertEqual(c.getTarget(), v5)
+        self.assertEqual(d.getTarget(), v5)
+        self.assertEqual(len(v5.getEdges()), 4)
+
 
 if __name__ == '__main__':
     unittest.main()

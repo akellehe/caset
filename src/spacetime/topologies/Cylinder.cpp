@@ -6,7 +6,7 @@
 #include <iostream>
 
 namespace caset {
-void Cylinder::build() { // Spacetime *spacetime) {
+void Cylinder::build(Spacetime *spacetime) {
   std::cout << "Building Cylinder" << std::endl;
 
 }

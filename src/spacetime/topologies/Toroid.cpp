@@ -2,7 +2,7 @@
 #include <iostream>
 
 namespace caset {
-void Toroid::build() { // Spacetime *spacetime) {
+void Toroid::build(Spacetime *spacetime) {
   std::cout << "Building toroid" << std::endl;
 
 }

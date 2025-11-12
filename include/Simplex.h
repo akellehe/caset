@@ -36,7 +36,8 @@ class SimplexShape {
     /// @param ti The number of vertices on the initial time slice.
     /// @param tf The number of vertices on the final time slice.
     ///
-    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {}
+    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
+    }
     constexpr SimplexShape() noexcept = default;
 
     [[nodiscard]] std::pair<uint8_t, uint8_t> getShape() const {
@@ -53,7 +54,7 @@ class SimplexShape {
       return TimeOrientation::FUTURE;
     }
 
-    static SimplexShape shapeOf(const std::vector<std::shared_ptr<Vertex>> &vertices) {
+    static SimplexShape shapeOf(const std::vector<std::shared_ptr<Vertex> > &vertices) {
       uint8_t tiVertexes = 0;
       uint8_t tfVertexes = 0;
       double ti = std::numeric_limits<double>::max();
@@ -90,10 +91,10 @@ class SimplexShape {
 namespace std {
 template<>
 struct hash<caset::SimplexShape> {
-  size_t operator()(const caset::SimplexShape& s) const noexcept {
-    auto [ti, tf] = s.getShape();                 // OK now that getShape() is const
+  size_t operator()(const caset::SimplexShape &s) const noexcept {
+    auto [ti, tf] = s.getShape(); // OK now that getShape() is const
     std::uint16_t packed = (std::uint16_t(ti) << 8) | std::uint16_t(tf);
-    return std::hash<std::uint16_t>{}(packed);    // perfect for all (ti, tf)
+    return std::hash<std::uint16_t>{}(packed); // perfect for all (ti, tf)
   }
 };
 }
@@ -120,7 +121,8 @@ class Simplex {
       return x ^ (x >> 31);
     }
 
-    static std::tuple<std::uint8_t, std::uint64_t, std::array<VertId, kMax>> computeFingerprint(const std::vector<std::shared_ptr<Vertex>> &vertices_) {
+    static std::tuple<std::uint8_t, std::uint64_t, std::array<VertId, kMax> > computeFingerprint(
+      const std::vector<std::shared_ptr<Vertex> > &vertices_) {
       if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
       std::uint8_t n = static_cast<std::uint8_t>(vertices_.size());
       std::array<VertId, kMax> ids{};
@@ -139,24 +141,29 @@ class Simplex {
     }
 
     ///
-    /// Implementing: https://chatgpt.com/c/6910ce22-0e60-832c-9bdf-f64097c33f94 for fast hashing.
-    ///
     /// @param vertices_
     Simplex(
-      const std::vector<std::shared_ptr<Vertex> > &vertices_
-    ) : shape(SimplexShape(0, 0)), vertices(vertices_) {
+      std::vector<std::shared_ptr<Vertex> > vertices_,
+      std::vector<std::shared_ptr<Edge> > edges_
+    ) : shape(SimplexShape(0, 0)), vertices(vertices_), edges(edges_) {
       setFingerprint(vertices_);
+      std::cout << "Vertices going into simplex: " << std::endl;
+      for (const auto &v : vertices) {
+        std::cout << "Vertex: " << v->getId() << std::endl;
+      }
+      std::cout << std::endl;
       shape = SimplexShape::shapeOf(vertices_);
     }
 
     Simplex(
-      const std::vector<std::shared_ptr<Vertex> > &vertices_,
+      std::vector<std::shared_ptr<Vertex> > vertices_,
+      std::vector<std::shared_ptr<Edge> > edges_,
       SimplexShape shape_
-    ) : shape(shape_), vertices(vertices_) {
+    ) : shape(shape_), vertices(vertices_), edges(edges_) {
       setFingerprint(vertices_);
     }
 
-    void setFingerprint(const std::vector<std::shared_ptr<Vertex>> &vertices_) {
+    void setFingerprint(const std::vector<std::shared_ptr<Vertex> > &vertices_) {
       std::tie(h_, n_, ids_) = Simplex::computeFingerprint(vertices_);
     }
 
@@ -222,8 +229,42 @@ class Simplex {
 
     std::uint64_t fingerprint() const noexcept { return h_; }
 
+    SimplexShape getShape() const noexcept {
+      return shape;
+    }
+
+    std::vector<std::shared_ptr<Vertex> > getVertices() const noexcept {
+      return vertices;
+    }
+
+    std::vector<std::shared_ptr<Edge> > getEdges() const noexcept {
+      return edges;
+    }
+
+    [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k) {
+      // k=0 -> 0
+      // k=1 -> 0
+      // k=2 -> 1
+      // k=3 -> 1 + 2 = 3
+      // k=4 -> 1 + 2 + 3 = 6
+      // k=5 -> 1 + 2 + 3 + 4 = 10
+      // k=6 -> 1 + 2 + 3 + 4 + 5 = 15
+      // k=7 -> 21
+      if (k == 4) return 6;
+      if (k == 3) return 3;
+      if (k == 2) return 1;
+      if (k == 0 || k == 1) return 0;
+
+      int n = 0;
+      for (int i = 0; i < k; i++) {
+        n = n + i;
+      }
+      return n;
+    }
+
   private:
     std::vector<std::shared_ptr<Vertex> > vertices;
+    std::vector<std::shared_ptr<Edge> > edges;
 
     std::array<VertId, kMax> ids_{};
     std::uint8_t n_{0};
@@ -233,27 +274,29 @@ class Simplex {
 };
 
 struct SimplexHash {
-  using is_transparent = void;                    // enables heterogeneous lookup
-  size_t operator()(const Simplex& s) const noexcept { return size_t(s.fingerprint()); }
-  size_t operator()(const std::shared_ptr<Simplex>& s) const noexcept { return size_t(s->fingerprint()); }
-  size_t operator()(uint64_t fp)      const noexcept { return size_t(fp); }
+  using is_transparent = void; // enables heterogeneous lookup
+  size_t operator()(const Simplex &s) const noexcept { return size_t(s.fingerprint()); }
+  size_t operator()(const std::shared_ptr<Simplex> &s) const noexcept { return size_t(s->fingerprint()); }
+  size_t operator()(uint64_t fp) const noexcept { return size_t(fp); }
 };
 struct SimplexEq {
   using is_transparent = void;
-  bool operator()(const Simplex& a, const Simplex& b) const noexcept { return a == b; }
-  bool operator()(const Simplex& a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
-  bool operator()(uint64_t fp, const Simplex& a) const noexcept { return fp == a.fingerprint(); }
+  bool operator()(const Simplex &a, const Simplex &b) const noexcept { return a == b; }
+  bool operator()(const Simplex &a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
+  bool operator()(uint64_t fp, const Simplex &a) const noexcept { return fp == a.fingerprint(); }
 
-  bool operator()(const std::shared_ptr<Simplex>& a, const std::shared_ptr<Simplex>& b) const noexcept { return a->fingerprint() == b->fingerprint(); }
-  bool operator()(const std::shared_ptr<Simplex>& a, uint64_t fp) const noexcept { return a->fingerprint() == fp; }
-  bool operator()(uint64_t fp, const std::shared_ptr<Simplex>& a) const noexcept { return fp == a->fingerprint(); }
+  bool operator()(const std::shared_ptr<Simplex> &a, const std::shared_ptr<Simplex> &b) const noexcept {
+    return a->fingerprint() == b->fingerprint();
+  }
+  bool operator()(const std::shared_ptr<Simplex> &a, uint64_t fp) const noexcept { return a->fingerprint() == fp; }
+  bool operator()(uint64_t fp, const std::shared_ptr<Simplex> &a) const noexcept { return fp == a->fingerprint(); }
 };
 }
 
 namespace std {
 template<>
 struct hash<caset::Simplex> {
-  size_t operator()(const caset::Simplex& s) const noexcept {
+  size_t operator()(const caset::Simplex &s) const noexcept {
     return std::hash<std::uint64_t>{}(s.fingerprint());
   }
 };

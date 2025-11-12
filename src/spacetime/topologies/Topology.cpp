@@ -6,7 +6,7 @@
 namespace caset {
 Topology::~Topology() = default;
 // std::vector<std::shared_ptr<Constraint> > Topology::getConstraints() {return {};}
-void Topology::build() {
+void Topology::build(Spacetime *spacetime) {
   std::cout << "Building Topology (base)" << std::endl;
-} // Spacetime *spacetime) {return;};
+}
 } // namespace caset

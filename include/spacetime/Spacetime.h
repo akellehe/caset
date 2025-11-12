@@ -59,10 +59,12 @@ class Spacetime {
     }
 
     static std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
+      manual = true;
       return vertexList->add(id);
     }
 
     static std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+      manual = true;
       return vertexList->add(id, coords);
     }
 
@@ -70,6 +72,7 @@ class Spacetime {
       std::shared_ptr<Vertex> &src,
       std::shared_ptr<Vertex> &tgt
       ) noexcept {
+      manual = true;
       std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
       src->addOutEdge(edge);
       tgt->addInEdge(edge);
@@ -81,22 +84,52 @@ class Spacetime {
       std::shared_ptr<Vertex> &tgt,
       double squaredLength
       ) noexcept {
+      manual = true;
       std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
       src->addOutEdge(edge);
       tgt->addInEdge(edge);
       return edge;
     }
 
-    static std::shared_ptr<Simplex> createSimplex(std::vector<std::shared_ptr<Vertex> > &vertices) noexcept {
+    static std::shared_ptr<Simplex> createSimplex(
+      std::vector<std::shared_ptr<Vertex>> &vertices,
+      std::vector<std::shared_ptr<Edge>> &edges
+      ) noexcept {
+      manual = true;
       const SimplexShape shape = SimplexShape::shapeOf(vertices);
       auto &bucket = simplicialComplex.try_emplace(shape /*key*/).first->second; // creates empty set if missing
       auto [fingerprint, n, ids] = Simplex::computeFingerprint(vertices);
       if (!bucket.contains(fingerprint)) {
-        std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
+        std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
         bucket.insert(simplex);
         return simplex;
       }
       return *bucket.find(fingerprint);
+    }
+
+    static std::shared_ptr<Simplex> createSimplex(std::size_t k) {
+      if (manual) {
+        throw new std::runtime_error("You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
+      }
+      std::vector<std::shared_ptr<Vertex> > vertices = {};
+      vertices.reserve(k);
+      std::vector<std::shared_ptr<Edge> > edges = {};
+      std::cout << "A " << k << "-simplex" << " has " << Simplex::computeNumberOfEdges(k) << " edges" << std::endl;
+      edges.reserve(Simplex::computeNumberOfEdges(k));
+      for (int i=0; i<k; i++) {
+        // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
+        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size());
+        for (auto existingVertex : vertices) {
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex, newVertex);
+          existingVertex->addOutEdge(edge);
+          newVertex->addInEdge(edge);
+          edges.push_back(edge);
+        }
+        vertices.push_back(newVertex);
+      }
+      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
+      simplicialComplex[simplex->getShape()].insert(simplex);
+      return simplex;
     }
 
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept {
@@ -112,6 +145,7 @@ class Spacetime {
 
     [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
 
+    static bool manual;
   private:
     static inline std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     static inline std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();

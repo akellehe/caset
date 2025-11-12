@@ -5,4 +5,5 @@
 #include "spacetime/Spacetime.h"
 
 namespace caset {
+bool Spacetime::manual = false;
 } // caset

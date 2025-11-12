@@ -69,6 +69,9 @@ class Edge {
       return squaredLength;
     }
 
+    std::string toString() const noexcept {
+      return std::to_string(source->getId()) + "->" + std::to_string(target->getId());
+    }
   private:
     std::shared_ptr<Vertex> source;
     std::shared_ptr<Vertex> target;

@@ -28,6 +28,10 @@ class VertexList {
       vertexList.emplace_back(std::make_shared<Vertex>(id));
       return vertexList.back();
     }
+
+    std::size_t size() noexcept {
+      return vertexList.size();
+    }
   private:
     std::vector<std::shared_ptr<Vertex>> vertexList{};
 };

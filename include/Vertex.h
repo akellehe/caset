@@ -79,6 +79,10 @@ class Vertex final {
         std::vector<std::shared_ptr<Edge> > getInEdges() const noexcept { return inEdges; }
         std::vector<std::shared_ptr<Edge> > getOutEdges() const noexcept { return outEdges; }
 
+        std::string toString() const noexcept {
+            return std::to_string(id);
+        }
+
     private:
         void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
         std::vector<double> coordinates{};
