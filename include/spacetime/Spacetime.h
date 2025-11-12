@@ -96,8 +96,8 @@ class Spacetime {
       std::vector<std::shared_ptr<Edge>> &edges
       ) noexcept {
       manual = true;
-      const SimplexOrientation shape = SimplexOrientation::orientationOf(vertices);
-      auto &bucket = simplicialComplex.try_emplace(shape /*key*/).first->second; // creates empty set if missing
+      const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
+      auto &bucket = simplicialComplex.try_emplace(orientation /*key*/).first->second; // creates empty set if missing
       auto [fingerprint, n, ids] = Simplex::computeFingerprint(vertices);
       if (!bucket.contains(fingerprint)) {
         std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
@@ -128,7 +128,7 @@ class Spacetime {
         vertices.push_back(newVertex);
       }
       std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
-      simplicialComplex[simplex->getShape()].insert(simplex);
+      simplicialComplex[simplex->getOrientation()].insert(simplex);
       return simplex;
     }
 

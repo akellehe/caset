@@ -40,7 +40,7 @@ class SimplexOrientation {
     }
     constexpr SimplexOrientation() noexcept = default;
 
-    [[nodiscard]] std::pair<uint8_t, uint8_t> getOrientation() const {
+    [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const {
       return {ti, tf};
     }
 
@@ -92,7 +92,7 @@ namespace std {
 template<>
 struct hash<caset::SimplexOrientation> {
   size_t operator()(const caset::SimplexOrientation &s) const noexcept {
-    auto [ti, tf] = s.getOrientation(); // OK now that getOrientation() is const
+    auto [ti, tf] = s.numeric(); // OK now that getOrientation() is const
     std::uint16_t packed = (std::uint16_t(ti) << 8) | std::uint16_t(tf);
     return std::hash<std::uint16_t>{}(packed); // perfect for all (ti, tf)
   }

@@ -59,7 +59,8 @@ PYBIND11_MODULE(caset, m) {
 
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
-      .def("getOrientation", &SimplexOrientation::getOrientation);
+      .def("getOrientation", &SimplexOrientation::getOrientation)
+      .def("numeric", &SimplexOrientation::numeric);
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
       .def(py::init<
