@@ -57,9 +57,9 @@ PYBIND11_MODULE(caset, m) {
       .def("getSource", &Edge::getSource)
       .def("getTarget", &Edge::getTarget);
 
-  py::class_<SimplexShape, std::shared_ptr<SimplexShape> >(m, "SimplexShape")
+  py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
-      .def("getShape", &SimplexShape::getShape);
+      .def("getOrientation", &SimplexOrientation::getOrientation);
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
       .def(py::init<
@@ -71,7 +71,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getHinges", &Simplex::getHinges)
       .def("getVolume", &Simplex::getVolume)
       .def("fingerprint", &Simplex::fingerprint)
-      .def("getShape", &Simplex::getShape)
+      .def("getOrientation", &Simplex::getOrientation)
       .def("getVertices", &Simplex::getVertices)
       .def("getEdges", &Simplex::getEdges);
 

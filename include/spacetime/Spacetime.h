@@ -96,7 +96,7 @@ class Spacetime {
       std::vector<std::shared_ptr<Edge>> &edges
       ) noexcept {
       manual = true;
-      const SimplexShape shape = SimplexShape::shapeOf(vertices);
+      const SimplexOrientation shape = SimplexOrientation::orientationOf(vertices);
       auto &bucket = simplicialComplex.try_emplace(shape /*key*/).first->second; // creates empty set if missing
       auto [fingerprint, n, ids] = Simplex::computeFingerprint(vertices);
       if (!bucket.contains(fingerprint)) {
@@ -149,7 +149,7 @@ class Spacetime {
   private:
     static inline std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     static inline std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
-    static inline std::unordered_map<SimplexShape, Bucket> simplicialComplex{};
+    static inline std::unordered_map<SimplexOrientation, Bucket> simplicialComplex{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 

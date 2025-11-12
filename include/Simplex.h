@@ -19,12 +19,12 @@ enum class TimeOrientation : uint8_t {
   UNKNOWN = 2
 };
 
-class SimplexShape {
+class SimplexOrientation {
   public:
     ///
-    /// The shape of a simplex is determined by how many vertices lie on the initial and final time slice for the
-    /// simplex. The shape is largely only relevant for Lorentzian/CDT complexes where causality is preserved. Those
-    /// complexes restrict to allowed shapes that ensure progression forward in time and "fit together" (so they share
+    /// The orientation of a simplex is determined by how many vertices lie on the initial and final time slice for the
+    /// simplex. The orientation is largely only relevant for Lorentzian/CDT complexes where causality is preserved. Those
+    /// complexes restrict to allowed orientations that ensure progression forward in time and "fit together" (so they share
     /// faces without gaps in the complex).
     ///
     /// The convention was established in Ambjorn-Loll's "Causal Dynamical Triangulations" paper from 1998-2001. Every
@@ -36,15 +36,15 @@ class SimplexShape {
     /// @param ti The number of vertices on the initial time slice.
     /// @param tf The number of vertices on the final time slice.
     ///
-    SimplexShape(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
+    SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
     }
-    constexpr SimplexShape() noexcept = default;
+    constexpr SimplexOrientation() noexcept = default;
 
-    [[nodiscard]] std::pair<uint8_t, uint8_t> getShape() const {
+    [[nodiscard]] std::pair<uint8_t, uint8_t> getOrientation() const {
       return {ti, tf};
     }
 
-    constexpr bool operator==(const SimplexShape &other) const noexcept {
+    constexpr bool operator==(const SimplexOrientation &other) const noexcept {
       return ti == other.ti && tf == other.tf;
     }
 
@@ -54,7 +54,7 @@ class SimplexShape {
       return TimeOrientation::FUTURE;
     }
 
-    static SimplexShape shapeOf(const std::vector<std::shared_ptr<Vertex> > &vertices) {
+    static SimplexOrientation orientationOf(const std::vector<std::shared_ptr<Vertex> > &vertices) {
       uint8_t tiVertexes = 0;
       uint8_t tfVertexes = 0;
       double ti = std::numeric_limits<double>::max();
@@ -79,7 +79,7 @@ class SimplexShape {
       } else {
         tfVertexes += unassigned;
       }
-      return SimplexShape(tiVertexes, tfVertexes);
+      return SimplexOrientation(tiVertexes, tfVertexes);
     }
 
   private:
@@ -90,9 +90,9 @@ class SimplexShape {
 
 namespace std {
 template<>
-struct hash<caset::SimplexShape> {
-  size_t operator()(const caset::SimplexShape &s) const noexcept {
-    auto [ti, tf] = s.getShape(); // OK now that getShape() is const
+struct hash<caset::SimplexOrientation> {
+  size_t operator()(const caset::SimplexOrientation &s) const noexcept {
+    auto [ti, tf] = s.getOrientation(); // OK now that getOrientation() is const
     std::uint16_t packed = (std::uint16_t(ti) << 8) | std::uint16_t(tf);
     return std::hash<std::uint16_t>{}(packed); // perfect for all (ti, tf)
   }
@@ -145,21 +145,21 @@ class Simplex {
     Simplex(
       std::vector<std::shared_ptr<Vertex> > vertices_,
       std::vector<std::shared_ptr<Edge> > edges_
-    ) : shape(SimplexShape(0, 0)), vertices(vertices_), edges(edges_) {
+    ) : orientation(SimplexOrientation(0, 0)), vertices(vertices_), edges(edges_) {
       setFingerprint(vertices_);
       std::cout << "Vertices going into simplex: " << std::endl;
       for (const auto &v : vertices) {
         std::cout << "Vertex: " << v->getId() << std::endl;
       }
       std::cout << std::endl;
-      shape = SimplexShape::shapeOf(vertices_);
+      orientation = SimplexOrientation::orientationOf(vertices_);
     }
 
     Simplex(
       std::vector<std::shared_ptr<Vertex> > vertices_,
       std::vector<std::shared_ptr<Edge> > edges_,
-      SimplexShape shape_
-    ) : shape(shape_), vertices(vertices_), edges(edges_) {
+      SimplexOrientation orientation_
+    ) : orientation(orientation_), vertices(vertices_), edges(edges_) {
       setFingerprint(vertices_);
     }
 
@@ -229,8 +229,8 @@ class Simplex {
 
     std::uint64_t fingerprint() const noexcept { return h_; }
 
-    SimplexShape getShape() const noexcept {
-      return shape;
+    SimplexOrientation getOrientation() const noexcept {
+      return orientation;
     }
 
     std::vector<std::shared_ptr<Vertex> > getVertices() const noexcept {
@@ -270,7 +270,7 @@ class Simplex {
     std::uint8_t n_{0};
     std::uint64_t h_{kSeed};
     static constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
-    SimplexShape shape;
+    SimplexOrientation orientation;
 };
 
 struct SimplexHash {
