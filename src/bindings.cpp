@@ -141,8 +141,10 @@ PYBIND11_MODULE(caset, m) {
                     std::vector<std::shared_ptr<Edge> > &>(&Spacetime::createSimplex),
                   py::arg("vertices"),
                   py::arg("edges"))
-      .def_static("createSimplex", py::overload_cast<std::size_t>(&Spacetime::createSimplex), py::arg("k"))
-      .def_readwrite_static("manual", &Spacetime::manual);
+      .def_static("createSimplex",
+                  py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
+                  py::arg("orientation"))
+      .def_static("setManual", &Spacetime::setManual);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

@@ -57,6 +57,13 @@ class Edge {
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
+    const EdgeDisposition getEdgeDisposition() const noexcept {
+      if (source->getTime() == target->getTime()) {
+        return EdgeDisposition::Timelike;
+      }
+      return EdgeDisposition::Spacelike;
+    }
+
     const std::shared_ptr<Vertex> getSource() const noexcept {
       return source;
     }

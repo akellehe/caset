@@ -37,6 +37,7 @@ class SimplexOrientation {
     /// @param tf The number of vertices on the final time slice.
     ///
     SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
+      k = ti_ + tf_;
     }
     constexpr SimplexOrientation() noexcept = default;
 
@@ -52,6 +53,10 @@ class SimplexOrientation {
       if (ti == tf) return TimeOrientation::UNKNOWN;
       if (ti > tf) return TimeOrientation::PRESENT;
       return TimeOrientation::FUTURE;
+    }
+
+    uint8_t getK() const {
+      return k;
     }
 
     static SimplexOrientation orientationOf(const std::vector<std::shared_ptr<Vertex> > &vertices) {
@@ -85,6 +90,7 @@ class SimplexOrientation {
   private:
     uint8_t ti{0};
     uint8_t tf{0};
+    uint8_t k{0};
 };
 }
 

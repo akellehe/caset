@@ -71,7 +71,7 @@ class Spacetime {
     static std::shared_ptr<Edge> createEdge(
       std::shared_ptr<Vertex> &src,
       std::shared_ptr<Vertex> &tgt
-      ) noexcept {
+    ) noexcept {
       manual = true;
       std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
       src->addOutEdge(edge);
@@ -83,7 +83,7 @@ class Spacetime {
       std::shared_ptr<Vertex> &src,
       std::shared_ptr<Vertex> &tgt,
       double squaredLength
-      ) noexcept {
+    ) noexcept {
       manual = true;
       std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
       src->addOutEdge(edge);
@@ -92,9 +92,9 @@ class Spacetime {
     }
 
     static std::shared_ptr<Simplex> createSimplex(
-      std::vector<std::shared_ptr<Vertex>> &vertices,
-      std::vector<std::shared_ptr<Edge>> &edges
-      ) noexcept {
+      std::vector<std::shared_ptr<Vertex> > &vertices,
+      std::vector<std::shared_ptr<Edge> > &edges
+    ) noexcept {
       manual = true;
       const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
       auto &bucket = simplicialComplex.try_emplace(orientation /*key*/).first->second; // creates empty set if missing
@@ -109,14 +109,15 @@ class Spacetime {
 
     static std::shared_ptr<Simplex> createSimplex(std::size_t k) {
       if (manual) {
-        throw new std::runtime_error("You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
+        throw new std::runtime_error(
+          "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
       }
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
       std::cout << "A " << k << "-simplex" << " has " << Simplex::computeNumberOfEdges(k) << " edges" << std::endl;
       edges.reserve(Simplex::computeNumberOfEdges(k));
-      for (int i=0; i<k; i++) {
+      for (int i = 0; i < k; i++) {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size());
         for (auto existingVertex : vertices) {
@@ -129,6 +130,51 @@ class Spacetime {
       }
       std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
       simplicialComplex[simplex->getOrientation()].insert(simplex);
+      return simplex;
+    }
+
+    static void setManual(bool manual_) noexcept {
+      manual = manual_;
+    }
+
+    static std::shared_ptr<Simplex> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+      if (manual) {
+        throw new std::runtime_error(
+          "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
+      }
+      SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
+      std::uint8_t k = orientation.getK();
+      auto [ti, tf] = orientation.numeric();
+      std::vector<std::shared_ptr<Vertex> > vertices = {};
+      vertices.reserve(k);
+      std::vector<std::shared_ptr<Edge> > edges = {};
+      std::cout << "A " << k << "-simplex" << " has " << Simplex::computeNumberOfEdges(k) << " edges" << std::endl;
+      edges.reserve(Simplex::computeNumberOfEdges(k));
+      for (int i = 0; i < ti; i++) {  // Create ti Timelike vertices
+        // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
+        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {currentTime});
+        for (auto existingVertex : vertices) {
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex, newVertex);
+          existingVertex->addOutEdge(edge);
+          newVertex->addInEdge(edge);
+          edges.push_back(edge);
+        }
+        vertices.push_back(newVertex);
+      }
+      incrementTime();
+      for (int i = 0; i < tf; i++) {  // Create ti Timelike vertices
+        // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
+        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {currentTime});
+        for (auto existingVertex : vertices) {
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex, newVertex);
+          existingVertex->addOutEdge(edge);
+          newVertex->addInEdge(edge);
+          edges.push_back(edge);
+        }
+        vertices.push_back(newVertex);
+      }
+      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges, orientation);
+      simplicialComplex[orientation].insert(simplex);
       return simplex;
     }
 
@@ -145,7 +191,15 @@ class Spacetime {
 
     [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
 
-    static bool manual;
+    [[nodiscard]] double getCurrentTime() const noexcept {
+      return currentTime;
+    }
+
+    static double incrementTime() noexcept {
+      currentTime++;
+      return currentTime;
+    }
+
   private:
     static inline std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     static inline std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
@@ -157,6 +211,8 @@ class Spacetime {
     SpacetimeType spacetimeType;
     std::shared_ptr<Topology> topology;
     double alpha = 1.;
+    static double currentTime;
+    static bool manual;
 };
 } // caset
 

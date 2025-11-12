@@ -38,8 +38,8 @@ class TestSpacetime(unittest.TestCase):
 
     def test_create_simplex(self):
         st = Spacetime()
-        st.manual = False
-        simplex = st.createSimplex(5)
+        st.setManual(False)
+        simplex = st.createSimplex((2, 3))
         self.assertEqual(len(simplex.getVertices()), 5)
         self.assertEqual(len(simplex.getEdges()), 10)
 
