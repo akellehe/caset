@@ -16,6 +16,7 @@
 #include "Edge.h"
 #include "Simplex.h"
 #include "Metric.h"
+#include "Coface.h"
 
 #include <vector>
 
@@ -71,7 +72,6 @@ PYBIND11_MODULE(caset, m) {
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getHinges", &Simplex::getHinges)
       .def("getVolume", &Simplex::getVolume)
-      .def("fingerprint", &Simplex::fingerprint)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertices", &Simplex::getVertices)
       .def("getEdges", &Simplex::getEdges);
@@ -86,7 +86,6 @@ PYBIND11_MODULE(caset, m) {
       .def("__str__", &Vertex::toString)
       .def("__repr__", &Vertex::toString)
       .def("getInEdges", &Vertex::getInEdges)
-      .def("getStar", &Vertex::getStar)
       .def("getOutEdges", &Vertex::getOutEdges);
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")
@@ -117,6 +116,7 @@ PYBIND11_MODULE(caset, m) {
            py::arg("topology")
       )
       .def(py::init<>())
+      .def_static("getSimplexes", &Spacetime::getSimplexes)
       .def_static("createVertex",
                   py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
                   py::arg("id"))
@@ -146,6 +146,15 @@ PYBIND11_MODULE(caset, m) {
                   py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
                   py::arg("orientation"))
       .def_static("setManual", &Spacetime::setManual);
+
+  py::class_<Coface, std::shared_ptr<Coface> >(m, "Coface")
+      .def(py::init<
+        const std::shared_ptr<Simplex> &,
+        const std::shared_ptr<Simplex> &,
+        const std::vector<std::shared_ptr<Vertex> > &>())
+      .def("getFirst", &Coface::getFirst)
+      .def("getSecond", &Coface::getSecond)
+      .def("getFace", &Coface::getFace);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

@@ -8,6 +8,9 @@
 #include <torch/torch.h>
 
 #include "Edge.h"
+#include "Coface.h"
+#include "Face.h"
+#include "Fingerprint.h"
 
 namespace caset {
 ///
@@ -116,69 +119,32 @@ namespace caset {
 ///
 class Simplex {
   public:
-    using VertId = std::uint64_t;
-
-    static constexpr std::size_t kMax = 64; // supports K <= 64
-
-    static inline std::uint64_t mix64(VertId x) noexcept {
-      x += 0x9e3779b97f4a7c15ull;
-      x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
-      x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
-      return x ^ (x >> 31);
-    }
-
-    static std::tuple<std::uint8_t, std::uint64_t, std::array<VertId, kMax> > computeFingerprint(
-      const std::vector<std::shared_ptr<Vertex> > &vertices_) {
-      if (vertices_.size() > kMax) throw std::length_error("Simplex: too many vertices");
-      std::uint8_t n = static_cast<std::uint8_t>(vertices_.size());
-      std::array<VertId, kMax> ids{};
-      for (std::size_t i = 0; i < n; ++i) {
-        ids[i] = vertices_[i]->getId();
-      }
-      std::sort(ids.begin(), ids.begin() + n);
-      auto it = std::unique(ids.begin(), ids.begin() + n);
-      n = static_cast<std::uint8_t>(std::distance(ids.begin(), it));
-      std::uint64_t h = 0xcbf29ce484222325ull ^ n;
-      for (std::uint8_t i = 0; i < n; ++i) {
-        h ^= mix64(ids[i] + 0x9e3779b97f4a7c15ull);
-        h *= 0x100000001b3ull; // FNV-ish step
-      }
-      return {h, n, ids};
-    }
-
     ///
     /// @param vertices_
     Simplex(
       std::vector<std::shared_ptr<Vertex> > vertices_,
       std::vector<std::shared_ptr<Edge> > edges_
-    ) : orientation(SimplexOrientation(0, 0)), vertices(vertices_), edges(edges_) {
-      setFingerprint(vertices_);
-      std::cout << "Vertices going into simplex: " << std::endl;
-      for (const auto &v : vertices) {
-        std::cout << "Vertex: " << v->getId() << std::endl;
-      }
-      std::cout << std::endl;
+    ) : orientation(SimplexOrientation(0, 0)), vertices(vertices_), edges(edges_), fingerprint({}) {
       orientation = SimplexOrientation::orientationOf(vertices_);
-      updateStar(vertices_);
+      std::vector<IdType> ids = {};
+      ids.reserve(vertices_.size());
+      for (const auto &vertex : vertices_) {
+        ids.push_back(vertex->getId());
+      }
+      fingerprint = Fingerprint(ids);
     }
 
     Simplex(
       std::vector<std::shared_ptr<Vertex> > vertices_,
       std::vector<std::shared_ptr<Edge> > edges_,
       SimplexOrientation orientation_
-    ) : orientation(orientation_), vertices(vertices_), edges(edges_) {
-      setFingerprint(vertices_);
-      updateStar(vertices_);
-    }
-
-    void updateStar(std::vector<std::shared_ptr<Vertex> > &vertices_) {
-      for (const auto &v : vertices_) {
-        v->addToStar(this);
+    ) : orientation(orientation_), vertices(vertices_), edges(edges_), fingerprint({}){
+      std::vector<IdType> ids = {};
+      ids.reserve(vertices_.size());
+      for (const auto &vertex : vertices_) {
+        ids.push_back(vertex->getId());
       }
-    }
-
-    void setFingerprint(const std::vector<std::shared_ptr<Vertex> > &vertices_) {
-      std::tie(h_, n_, ids_) = Simplex::computeFingerprint(vertices_);
+      fingerprint = Fingerprint(ids);
     }
 
     /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
@@ -234,15 +200,6 @@ class Simplex {
       return 0.;
     };
 
-    bool operator==(const Simplex &o) const noexcept {
-      if (n_ != o.n_) return false;
-      if (h_ != o.h_) return false; // fast reject
-      return std::memcmp(ids_.data(), o.ids_.data(), n_ * sizeof(VertId)) == 0;
-    }
-    bool operator!=(const Simplex &o) const noexcept { return !(*this == o); }
-
-    std::uint64_t fingerprint() const noexcept { return h_; }
-
     SimplexOrientation getOrientation() const noexcept {
       return orientation;
     }
@@ -276,42 +233,47 @@ class Simplex {
       return n;
     }
 
+    ///
+    /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
+    /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
+    /// \f$ \sigma^{k-1}_{newFace} \f$ represented by a Coface instance indicating their adjacency in the simplicial
+    /// complex while preserving the orientation of their immediate parent Simplex (es).
+    ///
+    ///   1. First it checks to ensure `myFace` and `yourFace` are not already attached to another Simplex Face,
+    ///   1. then it creates a new set of Vertex (es) to match the dimensionality of `myFace` and `yourFace`.
+    ///   1. Next, it maps Vertex (es) \f$ \mathcal{V}_{myFace} \f$ and \f$ \mathcal{V}_{yourFace} \f$ of `myFace` and `yourFace` 1:1 respectively (2:1 in all) to the new vertices based on their TimeOrientation
+    ///   1. Next, it validates the resulting Edge (es) are of compatible length within an Epsilon value.
+    ///   1. Next, it maps Edges (es) \f$ \mathcal{E}_{myFace} \f$ and \f$ \mathcal{E}_{yourFace} \f$ of `myFace` and `yourFace` 1:1 respectively (2:1 in all) to the new Edges based on their shared Vertex (es).
+    ///   1. Next, it removes the replaced Edge (s) and Vertex (es) from the Spacetime (simplicial complex).
+    ///
+    /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
+    /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
+    /// @return
+    std::shared_ptr<Coface> attachFaces(std::shared_ptr<Face> &myFace, std::shared_ptr<Face> &yourFace) {
+      cofaces.insert(coface);
+    }
+
+    Fingerprint fingerprint;
+
   private:
     std::vector<std::shared_ptr<Vertex> > vertices;
     std::vector<std::shared_ptr<Edge> > edges;
 
-    std::array<VertId, kMax> ids_{};
-    std::uint8_t n_{0};
-    std::uint64_t h_{kSeed};
-    static constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
     SimplexOrientation orientation;
+
+    std::unordered_set<std::shared_ptr<Coface>, CofaceHash, CofaceEq> cofaces;
 };
 
-struct SimplexHash {
-  using is_transparent = void; // enables heterogeneous lookup
-  size_t operator()(const Simplex &s) const noexcept { return size_t(s.fingerprint()); }
-  size_t operator()(const std::shared_ptr<Simplex> &s) const noexcept { return size_t(s->fingerprint()); }
-  size_t operator()(uint64_t fp) const noexcept { return size_t(fp); }
-};
-struct SimplexEq {
-  using is_transparent = void;
-  bool operator()(const Simplex &a, const Simplex &b) const noexcept { return a == b; }
-  bool operator()(const Simplex &a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
-  bool operator()(uint64_t fp, const Simplex &a) const noexcept { return fp == a.fingerprint(); }
+using SimplexHash = VertexFingerprintHash<Simplex>;
+using SimplexEq = VertexFingerprintEq<Simplex>;
 
-  bool operator()(const std::shared_ptr<Simplex> &a, const std::shared_ptr<Simplex> &b) const noexcept {
-    return a->fingerprint() == b->fingerprint();
-  }
-  bool operator()(const std::shared_ptr<Simplex> &a, uint64_t fp) const noexcept { return a->fingerprint() == fp; }
-  bool operator()(uint64_t fp, const std::shared_ptr<Simplex> &a) const noexcept { return fp == a->fingerprint(); }
-};
 }
 
 namespace std {
 template<>
 struct hash<caset::Simplex> {
   size_t operator()(const caset::Simplex &s) const noexcept {
-    return std::hash<std::uint64_t>{}(s.fingerprint());
+    return std::hash<std::uint64_t>{}(s.fingerprint.fingerprint());
   }
 };
 }

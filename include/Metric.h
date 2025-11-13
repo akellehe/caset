@@ -11,6 +11,8 @@
 #include "Signature.h"
 
 namespace caset {
+/// # The Metric
+///
 class Metric {
   public:
     Metric(bool coordinateFree_, Signature &signature_) : signature(signature_), coordinateFree(coordinateFree_) {

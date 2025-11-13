@@ -108,8 +108,13 @@ class Spacetime {
     ) noexcept {
       manual = true;
       const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
-      auto &bucket = simplicialComplex.try_emplace(orientation /*key*/).first->second; // creates empty set if missing
-      auto [fingerprint, n, ids] = Simplex::computeFingerprint(vertices);
+      auto &bucket = simplicialComplex.try_emplace(orientation /*key*/).first->second;
+      std::vector<IdType> _ids = {};
+      _ids.reserve(vertices.size());
+      for (const auto &vertex : vertices) {
+        _ids.push_back(vertex->getId());
+      }
+      auto [fingerprint, n, ids] = Fingerprint::computeFingerprint(_ids);
       if (!bucket.contains(fingerprint)) {
         std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
         bucket.insert(simplex);
@@ -209,6 +214,16 @@ class Spacetime {
     static double incrementTime() noexcept {
       currentTime++;
       return currentTime;
+    }
+
+    static std::vector<std::shared_ptr<Simplex>> getSimplexes() noexcept {
+      std::vector<std::shared_ptr<Simplex>> simplexes;
+      for (const auto &[key, bucket] : simplicialComplex) {
+        for (const auto &simplex : bucket) {
+          simplexes.push_back(simplex);
+        }
+      }
+      return simplexes;
     }
 
   private:

@@ -1,21 +1,35 @@
 # Doxygen configuration for caset
 
 AUTOLINK_SUPPORT       = YES
-EXTRACT_ALL            = YES
+EXCLUDE_SYMBOLS = \
+  PYBIND11_MODULE \
+  SimplexEq \
+  SimplexHash \
+  std
+EXTRACT_ALL            = NO
 EXTRACT_PRIVATE        = NO
 EXTRACT_STATIC         = YES
 FILE_PATTERNS          = *.h *.hpp *.hh *.cc *.cpp
 GENERATE_HTML          = NO
 GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
 GENERATE_XML           = YES
-HAVE_DOT               = NO
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+HAVE_DOT               = YES
+HTML_DYNAMIC_MENUS     = YES
+INLINE_SOURCES         = YES
 INPUT                  = ../src ../include
+INTERNAL_DOCS          = NO
 JAVADOC_AUTOBRIEF      = YES
 MARKDOWN_SUPPORT       = YES
 OUTPUT_DIRECTORY       = _doxygen
 PROJECT_NAME           = "caset"
 RECURSIVE              = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+SOURCE_BROWSE          = YES
+TYPEDEF_HIDES_STRUCT   = NO
 USE_MATHJAX = YES
 WARN_IF_UNDOCUMENTED   = NO
 XML_OUTPUT             = xml
-
