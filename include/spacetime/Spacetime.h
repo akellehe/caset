@@ -15,6 +15,7 @@
 #include "Metric.h"
 #include "Simplex.h"
 #include "topologies/Toroid.h"
+#include "Face.h"
 
 namespace caset {
 enum class SpacetimeType : uint8_t {
@@ -29,7 +30,7 @@ enum class SpacetimeType : uint8_t {
 ///
 /// # Spacetime
 ///
-/// The Spacetime class provides static methods to create and manipulate the basic building blocks of a simplicial
+/// The Spacetime class provides methods to create and manipulate the basic building blocks of a simplicial
 /// complex.
 ///
 /// The Spacetime Topology is responsible for constructing Simplex(es) and the Topology (subclass) is responsible for
@@ -69,17 +70,17 @@ class Spacetime {
       observables.push_back(observable);
     }
 
-    static std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
+    std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
       manual = true;
       return vertexList->add(id);
     }
 
-    static std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+    std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
       manual = true;
       return vertexList->add(id, coords);
     }
 
-    static std::shared_ptr<Edge> createEdge(
+    std::shared_ptr<Edge> createEdge(
       std::shared_ptr<Vertex> &src,
       std::shared_ptr<Vertex> &tgt
     ) noexcept {
@@ -90,7 +91,7 @@ class Spacetime {
       return edge;
     }
 
-    static std::shared_ptr<Edge> createEdge(
+    std::shared_ptr<Edge> createEdge(
       std::shared_ptr<Vertex> &src,
       std::shared_ptr<Vertex> &tgt,
       double squaredLength
@@ -102,7 +103,7 @@ class Spacetime {
       return edge;
     }
 
-    static std::shared_ptr<Simplex> createSimplex(
+    std::shared_ptr<Simplex> createSimplex(
       std::vector<std::shared_ptr<Vertex> > &vertices,
       std::vector<std::shared_ptr<Edge> > &edges
     ) noexcept {
@@ -123,7 +124,7 @@ class Spacetime {
       return *bucket.find(fingerprint);
     }
 
-    static std::shared_ptr<Simplex> createSimplex(std::size_t k) {
+    std::shared_ptr<Simplex> createSimplex(std::size_t k) {
       if (manual) {
         throw new std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
@@ -149,11 +150,11 @@ class Spacetime {
       return simplex;
     }
 
-    static void setManual(bool manual_) noexcept {
+    void setManual(bool manual_) noexcept {
       manual = manual_;
     }
 
-    static std::shared_ptr<Simplex> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+    std::shared_ptr<Simplex> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
       if (manual) {
         throw new std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
@@ -198,10 +199,10 @@ class Spacetime {
       return spacetimeType;
     }
 
-    [[nodiscard]] static std::shared_ptr<EdgeList> getEdgeList() noexcept {
+    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() noexcept {
       return edgeList;
     }
-    [[nodiscard]] static std::shared_ptr<VertexList> getVertexList() noexcept {
+    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() noexcept {
       return vertexList;
     }
 
@@ -211,12 +212,78 @@ class Spacetime {
       return currentTime;
     }
 
-    static double incrementTime() noexcept {
+    double incrementTime() noexcept {
       currentTime++;
       return currentTime;
     }
 
-    static std::vector<std::shared_ptr<Simplex>> getSimplexes() noexcept {
+    ///
+    /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
+    /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
+    /// \f$ \sigma^{k-1}_{newFace} \f$ indicating their adjacency in the simplicial complex while preserving the
+    /// orientation of both their cofaces.
+    ///
+    /// This method runs within the context of an n-dimensional simplicial manifold; each (n-1) simplex (where faces are
+    /// codimension-1) is incident to exactly 2 n-simplices for interior faces and exactly 1 n-simplex for faces along
+    /// the boundary.
+    ///
+    /// Because this method is (causal) orientation-aware; it's intended only to be used when we're building causal
+    /// simplicial complexes.
+    ///
+    /// If any face is shared by 3 or more n-simplices; then the neighborhood of some point becomes interior and is no
+    /// longer homeomorphic to \f$ \mathcal{R}^n \f$ or a half-space
+    /// \f$ \mathcal{R}^{n-1} \multiply [0, \inf] \f$, (the boundary points) so the spacetime effectively branches.
+    ///
+    /// To avoid these problems this method takes the following steps:
+    ///
+    ///   1. First it checks to ensure `myFace` and `yourFace` are not already attached to another Simplex Face,
+    ///   1. then it creates a new set of Vertex (es) to match the dimensionality of `myFace` and `yourFace`.
+    ///   1. Next, it maps Vertex (es) \f$ \mathcal{V}_{myFace} \f$ and \f$ \mathcal{V}_{yourFace} \f$ of `myFace`
+    ///     and `yourFace` 1:1 respectively (2:1 in all) to the new vertices based on their TimeOrientation
+    ///   1. Next, it validates the resulting Edge (es) are of compatible length within an Epsilon value.
+    ///   1. Next, it maps Edges (es) \f$ \mathcal{E}_{myFace} \f$ and \f$ \mathcal{E}_{yourFace} \f$ of `myFace` and
+    ///     `yourFace` 1:1 respectively (2:1 in all) to the new Edges based on their shared Vertex (es).
+    ///   1. Next, it removes the replaced Edge (s) and Vertex (es) from the Spacetime (simplicial complex).
+    ///
+    /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
+    /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
+    /// @return A new Face representing the shared face of both simplexes.
+    std::shared_ptr<Face> attachFaces(std::shared_ptr<Face> &myFace, std::shared_ptr<Face> &yourFace) {
+      if (!myFace->isAvailable() || !yourFace->isAvailable()) {
+        throw new std::runtime_error("You attempted to attach faces that are not available to attach.");
+      }
+      std::vector<std::shared_ptr<Vertex>> vertices = {};
+      vertices.reserve(myFace->size());
+      std::vector<std::shared_ptr<Edge>> edges = {};
+      edges.reserve(myFace->size());
+
+      // Two vertexes are compatible to attach iff they share the same time value.
+      std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>>> vertexPairs= {};
+      vertexPairs.reserve(myFace->size());
+
+      auto myVertices = myFace->getVertices();
+      auto yourVertices = yourFace->getVertices();
+      for (auto v1 = myVertices.begin(); v1 != myVertices.end(); ++v1) {
+        for (auto v2 = yourVertices.begin(); v2 != yourVertices.end(); ++v2) {
+          if ((*v1)->getTime() == (*v2)->getTime()) {  // Compatible if the neighbors are.
+            // We should probably be iterating over edges instead of vertices, and assign a convention to the
+            // orientation of an edge. A simplex/chain/wedge product has an orientation defined by the order of
+            // traversal of its nodes. Probably the least abrasive way to do this would just be to encode those rules
+            // and then describe the orientation as either "out" or "in" and "up" or "down" where we call time
+            // increasing the "up" direction and decreasing "down" and clockwise "in" and counterclockwise "out" or
+            // whatever happens to be the prevailing convention in the literature.
+
+            // I think for two faces to join they have to be "out" and "in" respectively, and both have to have the same
+            // causal orientation. What about e.g. entirely timelike or entirely spacelike faces? The preceding idea
+            // applies to spacelike faces, for timelike faces i think the attachment might be arbitrary. We can get the
+            // ordering of the vertices on the face by traversing their edges.
+
+          }
+        }
+      }
+    }
+
+    std::vector<std::shared_ptr<Simplex>> getSimplexes() noexcept {
       std::vector<std::shared_ptr<Simplex>> simplexes;
       for (const auto &[key, bucket] : simplicialComplex) {
         for (const auto &simplex : bucket) {
@@ -227,9 +294,9 @@ class Spacetime {
     }
 
   private:
-    static inline std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
-    static inline std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
-    static inline std::unordered_map<SimplexOrientation, Bucket> simplicialComplex{};
+    std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
+    std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
+    std::unordered_map<SimplexOrientation, Bucket> simplicialComplex{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 
@@ -237,8 +304,8 @@ class Spacetime {
     SpacetimeType spacetimeType;
     std::shared_ptr<Topology> topology;
     double alpha = 1.;
-    static double currentTime;
-    static bool manual;
+    std::uint64_t currentTime = 0;
+    bool manual = false;
 };
 } // caset
 

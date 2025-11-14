@@ -8,9 +8,9 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
+#include "Edge.h"
 
 namespace caset {
-class Edge;
 
 ///
 /// Vertexes in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
@@ -22,7 +22,7 @@ class Edge;
 /// Quantum chromodynamics have different and paradoxical coupling parameters at different energy scales. The leading
 /// theories about it are called "running coupling"
 ///
-class Vertex final {
+class Vertex : public std::enable_shared_from_this<Vertex> {
     public:
         Vertex() noexcept {id = 0;}
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {}
@@ -66,19 +66,36 @@ class Vertex final {
             return coordinates;
         }
 
+        [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex>> moveTo(const std::shared_ptr<Vertex> &vertex) {
+            if (outEdges.empty()) {
+                throw new std::runtime_error("Cannot execute move; outEdges is empty!");
+            }
+            std::shared_ptr<Edge> edge = std::make_shared<Edge>(shared_from_this(), vertex);
+            if (!outEdges.contains(edge)) {
+                throw new std::runtime_error("No edge to this vertex exists.");
+            }
+            return std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex>>({
+                *outEdges.find(edge), vertex
+            });
+        }
+
         void addOutEdge(std::shared_ptr<Edge> edge) noexcept {
-            outEdges.push_back(edge);
+            outEdges.insert(edge);
             edges.push_back(edge);
         }
 
         void addInEdge(std::shared_ptr<Edge> edge) noexcept {
-            inEdges.push_back(edge);
+            inEdges.insert(edge);
             edges.push_back(edge);
         }
 
         std::vector<std::shared_ptr<Edge> > getEdges() const noexcept { return edges; }
-        std::vector<std::shared_ptr<Edge> > getInEdges() const noexcept { return inEdges; }
-        std::vector<std::shared_ptr<Edge> > getOutEdges() const noexcept { return outEdges; }
+
+        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+        getInEdges() const noexcept { return inEdges; }
+
+        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+        getOutEdges() const noexcept { return outEdges; }
 
         std::string toString() const noexcept {
             return std::to_string(id);
@@ -87,9 +104,9 @@ class Vertex final {
     private:
         void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
         std::vector<double> coordinates{};
-        std::vector<std::shared_ptr<Edge> > outEdges{};
-        std::vector<std::shared_ptr<Edge> > inEdges{};
-        std::vector<std::shared_ptr<Edge> > edges{};
+        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> outEdges{};
+        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
+        std::vector<std::shared_ptr<Edge>> edges{};
         std::uint64_t id;
 };
 }

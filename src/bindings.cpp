@@ -16,7 +16,7 @@
 #include "Edge.h"
 #include "Simplex.h"
 #include "Metric.h"
-#include "Coface.h"
+#include "Face.h"
 
 #include <vector>
 
@@ -58,6 +58,16 @@ PYBIND11_MODULE(caset, m) {
       .def("getSource", &Edge::getSource)
       .def("getTarget", &Edge::getTarget);
 
+  py::class_<Face, std::shared_ptr<Face> >(m, "Face")
+      .def(py::init<
+        std::vector<std::shared_ptr<const Simplex> >,
+        std::vector<std::shared_ptr<Vertex> > >())
+      .def("__str__", &Face::toString)
+      .def("__repr__", &Face::toString)
+      .def("addCoface", &Face::addCoface)
+      .def("getCofaces", &Face::getCofaces)
+      .def("getVertices", &Face::getVertices);
+
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
       .def("getOrientation", &SimplexOrientation::getOrientation)
@@ -74,6 +84,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getVolume", &Simplex::getVolume)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertices", &Simplex::getVertices)
+      .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
+      .def("getFacets", &Simplex::getFacets)
       .def("getEdges", &Simplex::getEdges);
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
@@ -82,6 +94,7 @@ PYBIND11_MODULE(caset, m) {
       .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
       .def("getCoordinates", &Vertex::getCoordinates)
       .def("getEdges", &Vertex::getEdges)
+      .def("moveTo", &Vertex::moveTo)
       .def("getId", &Vertex::getId)
       .def("__str__", &Vertex::toString)
       .def("__repr__", &Vertex::toString)
@@ -116,45 +129,36 @@ PYBIND11_MODULE(caset, m) {
            py::arg("topology")
       )
       .def(py::init<>())
-      .def_static("getSimplexes", &Spacetime::getSimplexes)
-      .def_static("createVertex",
+      .def("getSimplexes", &Spacetime::getSimplexes)
+      .def("createVertex",
                   py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
                   py::arg("id"))
-      .def_static("createVertex",
+      .def("createVertex",
                   py::overload_cast<const std::uint64_t, const std::vector<double> &>(
                     &Spacetime::createVertex),
                   py::arg("id"),
                   py::arg("coordinates"))
-      .def_static("createEdge",
+      .def("createEdge",
                   py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &>(
                     &Spacetime::createEdge),
                   py::arg("source"),
                   py::arg("target"))
-      .def_static("createEdge",
+      .def("createEdge",
                   py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &,
                                     double>(&Spacetime::createEdge),
                   py::arg("source"),
                   py::arg("target"),
                   py::arg("squaredLength"))
-      .def_static("createSimplex",
+      .def("createSimplex",
                   py::overload_cast<
                     std::vector<std::shared_ptr<Vertex> > &,
                     std::vector<std::shared_ptr<Edge> > &>(&Spacetime::createSimplex),
                   py::arg("vertices"),
                   py::arg("edges"))
-      .def_static("createSimplex",
+      .def("createSimplex",
                   py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
                   py::arg("orientation"))
-      .def_static("setManual", &Spacetime::setManual);
-
-  py::class_<Coface, std::shared_ptr<Coface> >(m, "Coface")
-      .def(py::init<
-        const std::shared_ptr<Simplex> &,
-        const std::shared_ptr<Simplex> &,
-        const std::vector<std::shared_ptr<Vertex> > &>())
-      .def("getFirst", &Coface::getFirst)
-      .def("getSecond", &Coface::getSecond)
-      .def("getFace", &Coface::getFace);
+      .def("setManual", &Spacetime::setManual);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

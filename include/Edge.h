@@ -1,7 +1,7 @@
 #ifndef CASET_CASET_SRC_EDGE_H_
 #define CASET_CASET_SRC_EDGE_H_
 
-#include "Vertex.h"
+#include "Fingerprint.h"
 
 #include <random>
 #include <memory>
@@ -14,6 +14,8 @@ inline double random_uniform(double min = -1.0, double max = 1.0) {
 }
 
 namespace caset {
+
+class Vertex;
 
 /// # Edge Disposition
 ///
@@ -46,13 +48,13 @@ class Edge {
       std::shared_ptr<Vertex> source_,
       std::shared_ptr<Vertex> target_,
       double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_) {
+    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target->getId()}) {
     }
 
     Edge(
       std::shared_ptr<Vertex> source_,
       std::shared_ptr<Vertex> target_
-    ) : source(source_), target(target_) {
+    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
       // Set squaredLength to a random value between -1 and 1
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
@@ -79,11 +81,17 @@ class Edge {
     std::string toString() const noexcept {
       return std::to_string(source->getId()) + "->" + std::to_string(target->getId());
     }
+
+    Fingerprint fingerprint;
   private:
     std::shared_ptr<Vertex> source;
     std::shared_ptr<Vertex> target;
     double squaredLength;
 };
+
+using EdgeHash = FingerprintHash<Edge>;
+using EdgeEq = FingerprintEq<Edge>;
+
 }
 
 #endif //CASET_CASET_SRC_EDGE_H_

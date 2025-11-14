@@ -4,11 +4,12 @@
 #include <memory>
 #include <vector>
 #include <functional>
+#include <cstdint>
+#include <algorithm>
 
 #include <torch/torch.h>
 
 #include "Edge.h"
-#include "Coface.h"
 #include "Face.h"
 #include "Fingerprint.h"
 
@@ -117,7 +118,7 @@ namespace caset {
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
 ///
-class Simplex {
+class Simplex : public std::enable_shared_from_this<Simplex> {
   public:
     ///
     /// @param vertices_
@@ -200,15 +201,15 @@ class Simplex {
       return 0.;
     };
 
-    SimplexOrientation getOrientation() const noexcept {
+    [[nodiscard]] SimplexOrientation getOrientation() const noexcept {
       return orientation;
     }
 
-    std::vector<std::shared_ptr<Vertex> > getVertices() const noexcept {
+    [[nodiscard]] std::vector<std::shared_ptr<Vertex> > getVertices() const noexcept {
       return vertices;
     }
 
-    std::vector<std::shared_ptr<Edge> > getEdges() const noexcept {
+    [[nodiscard]] std::vector<std::shared_ptr<Edge> > getEdges() const noexcept {
       return edges;
     }
 
@@ -233,24 +234,68 @@ class Simplex {
       return n;
     }
 
+    template<typename T>
+    T binomial(unsigned n, unsigned k) {
+      if (k > n) return 0;
+      k = std::min(k, n-k);
+
+      T result = 1;
+      for (unsigned i = 1; i<= k; ++i) {
+        result = result * (n - (k - i));
+        result /= i;
+      }
+
+      return result;
+    }
+
     ///
-    /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
-    /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
-    /// \f$ \sigma^{k-1}_{newFace} \f$ represented by a Coface instance indicating their adjacency in the simplicial
-    /// complex while preserving the orientation of their immediate parent Simplex (es).
+    /// A k-simplex is the convex hull of k + 1 affinely independent points. Each has faces of all dimensions from 0 up
+    /// to k–1. A k-1 simplex is called a Facet.
     ///
-    ///   1. First it checks to ensure `myFace` and `yourFace` are not already attached to another Simplex Face,
-    ///   1. then it creates a new set of Vertex (es) to match the dimensionality of `myFace` and `yourFace`.
-    ///   1. Next, it maps Vertex (es) \f$ \mathcal{V}_{myFace} \f$ and \f$ \mathcal{V}_{yourFace} \f$ of `myFace` and `yourFace` 1:1 respectively (2:1 in all) to the new vertices based on their TimeOrientation
-    ///   1. Next, it validates the resulting Edge (es) are of compatible length within an Epsilon value.
-    ///   1. Next, it maps Edges (es) \f$ \mathcal{E}_{myFace} \f$ and \f$ \mathcal{E}_{yourFace} \f$ of `myFace` and `yourFace` 1:1 respectively (2:1 in all) to the new Edges based on their shared Vertex (es).
-    ///   1. Next, it removes the replaced Edge (s) and Vertex (es) from the Spacetime (simplicial complex).
+    /// A j-face is a j-simplex incorporating a subset (of size j) of the k-simplex vertices.
     ///
-    /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
-    /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
-    /// @return
-    std::shared_ptr<Coface> attachFaces(std::shared_ptr<Face> &myFace, std::shared_ptr<Face> &yourFace) {
-      cofaces.insert(coface);
+    /// The number of j-faces ( \f$ \sigma^j \f$ ) of a k-simplex \f$ \sigma^k \f$ is given by
+    ///
+    /// \f[
+    /// \binom{k+1}{j+1}
+    /// \f]
+    ///
+    /// And the total number of faces of all dimensions is
+    /// \sum_{j=0}^{k-1} \binom{k+1}{j+1} = 2^{k+1} - 2
+    ///
+    std::size_t getNumberOfFaces(std::size_t j) {
+      auto k = getOrientation().getK();
+
+      return binomial<std::size_t>(k + 1, j + 1);
+    }
+    ///
+    /// The Facets are the \f$ \sigma^{k-1} \subset \sigma^{k} \f$ faces on which we'll most commonly join two simplexes
+    /// to form a simplicial complex \f$ K \f$.
+    ///
+    /// @return /// all k-1 simplexes contained within this k-simplex.
+    [[nodiscard]] std::vector<std::shared_ptr<Face> > getFacets() noexcept {
+      if (facets.size() > 0) {
+        return facets;
+      }
+      auto verts = getVertices();
+      facets.reserve(verts.size());
+      std::vector<std::shared_ptr<const Simplex>> cofaces = {shared_from_this()};
+      for (int skip=0; skip<verts.size(); skip++) {
+        std::vector<std::shared_ptr<Vertex>> faceVertices;
+        faceVertices.reserve(verts.size());
+        faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
+        faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
+        std::shared_ptr<Face> facet = std::make_shared<Face>(cofaces, faceVertices);
+        if (facetRegistry.contains(facet->fingerprint.fingerprint())) {
+          auto found = *facetRegistry.find(facet->fingerprint.fingerprint());
+          found->addCoface(shared_from_this());
+          facets.push_back(found);
+        } else {
+          facetRegistry.insert(facet);
+          facets.push_back(facet);
+        }
+      }
+      return facets;
     }
 
     Fingerprint fingerprint;
@@ -261,11 +306,12 @@ class Simplex {
 
     SimplexOrientation orientation;
 
-    std::unordered_set<std::shared_ptr<Coface>, CofaceHash, CofaceEq> cofaces;
+    std::vector<std::shared_ptr<Face>> facets{};
+    static std::unordered_set<std::shared_ptr<Face>, FaceHash, FaceEq> facetRegistry;
 };
 
-using SimplexHash = VertexFingerprintHash<Simplex>;
-using SimplexEq = VertexFingerprintEq<Simplex>;
+using SimplexHash = FingerprintHash<Simplex>;
+using SimplexEq = FingerprintEq<Simplex>;
 
 }
 

@@ -18,7 +18,7 @@ inline constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
 
 ///
 /// ## Fingerprint
-/// Any category of the equivalence class defined by a unique set of (e.g. vertex) IDs can be hashed or equated by the
+/// Any category of the equivalence class defined by a unique set of (e.g. vertex) IDs can be enforced by the
 /// Fingerprint class.
 ///
 /// To implement this, you should include an instance of the Fingerprint class at the `fingerprint` public member of
@@ -103,7 +103,7 @@ class Fingerprint {
 };
 
 template<typename T>
-struct VertexFingerprintHash {
+struct FingerprintHash {
   using is_transparent = void; // enables heterogeneous lookup
   size_t operator()(const T &s) const noexcept { return static_cast<size_t>(s.fingerprint.fingerprint()); }
   size_t operator()(const std::shared_ptr<T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
@@ -111,7 +111,7 @@ struct VertexFingerprintHash {
 };
 
 template<typename T>
-struct VertexFingerprintEq {
+struct FingerprintEq {
   using is_transparent = void;
   bool operator()(const T &a, const T &b) const noexcept { return a == b; }
   bool operator()(const T &a, uint64_t fp) const noexcept { return a.fingerprint.fingerprint() == fp; }

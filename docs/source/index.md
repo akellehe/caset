@@ -1,8 +1,8 @@
 # caset
 
-Caset is a package for experimenting with CAusal SETs in C++ with libtorch for GPU and hardware acceleration. It 
-provides a highly parallelizable interface to execute methods against a causally oriented simplicial Lorentzian 
-(or Euclidean) manifold.
+Caset is a package for experimenting with CAusal SETs and simplicial manifolds in C++ with libtorch for GPU and hardware 
+acceleration. It provides a highly parallelizable interface to execute methods against a causally oriented simplicial 
+Lorentzian(or Euclidean) manifold.
 
 The intention is to calculate things like holonomies and observables as co-chains over chain complexes within several of
 the most mature theories of discretized causal spacetime.
