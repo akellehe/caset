@@ -11,9 +11,6 @@ class TestFace(unittest.TestCase):
         simplex41 = self.spacetime.createSimplex((4, 1))
         f1, f2, f3, f4, f5 = simplex41.getFacets()
 
-        # simplex32 = self.spacetime.createSimplex((3, 2))
-        # facets32 = simplex32.getFacets()
-
         self.assertEqual(len(f1.getVertices()), 4)
 
         # Disjoint faces have pairty flag=0
