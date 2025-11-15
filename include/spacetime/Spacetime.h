@@ -261,6 +261,9 @@ class Spacetime {
       std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>>> vertexPairs= {};
       vertexPairs.reserve(myFace->size());
 
+      if (myFace->checkPairty(yourFace) != -1) {
+
+      }
       auto myVertices = myFace->getVertices();
       auto yourVertices = yourFace->getVertices();
       for (auto v1 = myVertices.begin(); v1 != myVertices.end(); ++v1) {

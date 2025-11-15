@@ -214,14 +214,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k) {
-      // k=0 -> 0
-      // k=1 -> 0
-      // k=2 -> 1
-      // k=3 -> 1 + 2 = 3
-      // k=4 -> 1 + 2 + 3 = 6
-      // k=5 -> 1 + 2 + 3 + 4 = 10
-      // k=6 -> 1 + 2 + 3 + 4 + 5 = 15
-      // k=7 -> 21
       if (k == 4) return 6;
       if (k == 3) return 3;
       if (k == 2) return 1;
@@ -265,7 +257,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     std::size_t getNumberOfFaces(std::size_t j) {
       auto k = getOrientation().getK();
-
       return binomial<std::size_t>(k + 1, j + 1);
     }
     ///
