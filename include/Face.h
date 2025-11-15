@@ -69,11 +69,9 @@ class Face {
 
       std::vector<int> perm{};
       perm.reserve(K);
-      std::cout << "Reserving " << K << " elements for perm" << std::endl;
       for (int i = 0; i < K; ++i) {
         IdType otherId = otherIds[i];
         if (!positionByVertexIdInA.contains(otherId)) return 0;
-        std::cout << "Setting position " << i << " to " << positionByVertexIdInA[otherId] << std::endl;
         perm[i] = positionByVertexIdInA[otherId];
       }
 
@@ -92,11 +90,6 @@ class Face {
           visited[j] = true;
           j = perm[j];
         }
-      }
-
-      std::cout << "Perms: " << std::endl;
-      for (int i = 0; i < K; ++i) {
-        std::cout << perm[i] << std::endl;
       }
 
       int N = K;

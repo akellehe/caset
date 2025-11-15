@@ -17,30 +17,21 @@ class TestFace(unittest.TestCase):
         self.assertEqual(len(f1.getVertices()), 4)
 
         # Disjoint faces have pairty flag=0
-        # self.assertEqual(f1.checkPairty(f2), 0)
+        self.assertEqual(f1.checkPairty(f2), 0)
 
         v1, v2, v3, v4 = f1.getVertices()
 
-        # The same face has pairty flag=1
-        # clone = Face([], [v1, v2, v3, v4])
-        # self.assertEqual(f1.checkPairty(clone), 1)
+        #The same face has pairty flag=1
+        clone = Face([], [v1, v2, v3, v4])
+        self.assertEqual(f1.checkPairty(clone), 1)
 
         # A single vertex swap has pairty flag=-1
-        # oneSwap = Face([], [v2, v1, v3, v4])
-        # self.assertEqual(f1.checkPairty(oneSwap), -1)
+        oneSwap = Face([], [v2, v1, v3, v4])
+        self.assertEqual(f1.checkPairty(oneSwap), -1)
 
         # Two swaps has pairty flag=1
-        # twoSwaps = Face([], [v2, v1, v4, v3])
-        # self.assertEqual(f1.checkPairty(twoSwaps), 1)
-
-        # Reversing has flag=-1
-        reverse = Face([], [v4, v3, v2, v1])
-        self.assertEqual(f1.checkPairty(reverse), -1)
-
-        breakpoint()
-        print(f1)
-
-
+        twoSwaps = Face([], [v2, v1, v4, v3])
+        self.assertEqual(f1.checkPairty(twoSwaps), 1)
 
 
 if __name__ == '__main__':
