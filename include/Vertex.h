@@ -28,7 +28,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {}
         Vertex(const std::uint64_t id_) noexcept : id(id_) {}
 
-        std::uint64_t getId() noexcept { return id; }
+        const std::uint64_t getId() const noexcept { return id; }
 
         ///
         /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
@@ -70,7 +70,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             if (outEdges.empty()) {
                 throw new std::runtime_error("Cannot execute move; outEdges is empty!");
             }
-            std::shared_ptr<Edge> edge = std::make_shared<Edge>(shared_from_this(), vertex);
+            std::shared_ptr<Edge> edge = std::make_shared<Edge>(getId(), vertex->getId());
             if (!outEdges.contains(edge)) {
                 throw new std::runtime_error("No edge to this vertex exists.");
             }
@@ -98,7 +98,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         getOutEdges() const noexcept { return outEdges; }
 
         std::string toString() const noexcept {
-            return std::to_string(id);
+            return "<V" + std::to_string(id) + ">";
         }
 
     private:
@@ -111,5 +111,20 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 };
 }
 
+namespace std {
+template<>
+struct hash<caset::Vertex> {
+    size_t operator()(const caset::Vertex &vertex) const noexcept {
+        return std::hash<std::uint64_t>{}(vertex.getId());
+    }
+};
+
+template<>
+struct hash<std::shared_ptr<caset::Vertex>> {
+    size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
+        return std::hash<std::uint64_t>{}(vertex->getId());
+    }
+};
+}
 #endif //CASET_CASET_SRC_VERTEX_H_
 

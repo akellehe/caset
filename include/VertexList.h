@@ -7,33 +7,49 @@
 
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 #include "Vertex.h"
 
 namespace caset {
 class VertexList {
   public:
-    std::shared_ptr<Vertex> operator[](int index) {
-      return vertexList[index];
+    std::shared_ptr<Vertex> operator[](const std::uint64_t vertexId) {
+      return vertexList[vertexId];
     }
+
+    std::shared_ptr<Vertex> get(std::uint64_t id) {
+      return vertexList[id];
+    }
+
     std::shared_ptr<Vertex> add(const std::shared_ptr<Vertex> &vertex) noexcept {
-      vertexList.push_back(vertex);
+      vertexList.insert_or_assign(vertex->getId(), vertex);
       return vertex;
     }
-    std::shared_ptr<Vertex> add(const std::size_t id, const std::vector<double> &coords) noexcept {
-      vertexList.emplace_back(std::make_shared<Vertex>(id, coords));
-      return vertexList.back();
+
+    std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+      if (vertexList.contains(id)) {
+        return vertexList.at(id);
+      }
+      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
+      vertexList.insert_or_assign(id, vertex);
+      return vertex;
     }
-    std::shared_ptr<Vertex> add(const std::size_t id) noexcept {
-      vertexList.emplace_back(std::make_shared<Vertex>(id));
-      return vertexList.back();
+
+    std::shared_ptr<Vertex> add(const std::uint64_t id) noexcept {
+      if (vertexList.contains(id)) {
+        return vertexList.at(id);
+      }
+      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
+      vertexList.insert_or_assign(id, vertex);
+      return vertex;
     }
 
     std::size_t size() noexcept {
       return vertexList.size();
     }
   private:
-    std::vector<std::shared_ptr<Vertex>> vertexList{};
+    std::unordered_map<std::uint64_t, std::shared_ptr<Vertex>> vertexList{};
 };
 } // caset
 

@@ -26,17 +26,17 @@ class EdgeList {
       return edge;
     }
 
-    std::shared_ptr<Edge> add(const std::shared_ptr<Vertex> &src, const std::shared_ptr<Vertex> &tgt) noexcept {
+    std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt) noexcept {
       edgeList.emplace_back(std::make_shared<Edge>(src, tgt));
       return edgeList.back();
     }
 
-    std::shared_ptr<Edge> add(const std::shared_ptr<Vertex> &src, const std::shared_ptr<Vertex> &tgt, double squaredLength) noexcept {
+    std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt, double squaredLength) noexcept {
       edgeList.emplace_back(std::make_shared<Edge>(src, tgt, squaredLength));
       return edgeList.back();
     }
 
-    std::size_t size() const {
+    [[nodiscard]] std::size_t size() const {
       return edgeList.size();
     }
 

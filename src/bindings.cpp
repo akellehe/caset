@@ -38,16 +38,16 @@ PYBIND11_MODULE(caset, m) {
   py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
       .def(
         py::init<
-          std::shared_ptr<Vertex>,
-          std::shared_ptr<Vertex>
+          std::uint64_t,
+          std::uint64_t
         >(),
         py::arg("source"),
         py::arg("target")
       )
       .def(
         py::init<
-          std::shared_ptr<Vertex>,
-          std::shared_ptr<Vertex>,
+          std::uint64_t,
+          std::uint64_t,
           double>(),
         py::arg("source"),
         py::arg("target"),
@@ -55,8 +55,8 @@ PYBIND11_MODULE(caset, m) {
       )
       .def("__str__", &Edge::toString)
       .def("__repr__", &Edge::toString)
-      .def("getSource", &Edge::getSource)
-      .def("getTarget", &Edge::getTarget);
+      .def("getSourceId", &Edge::getSourceId)
+      .def("getTargetId", &Edge::getTargetId);
 
   py::class_<Face, std::shared_ptr<Face> >(m, "Face")
       .def(py::init<
@@ -140,13 +140,17 @@ PYBIND11_MODULE(caset, m) {
            py::arg("id"),
            py::arg("coordinates"))
       .def("createEdge",
-           py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &>(
+           py::overload_cast<
+             const std::uint64_t,
+             const std::uint64_t>(
              &Spacetime::createEdge),
            py::arg("source"),
            py::arg("target"))
       .def("createEdge",
-           py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &,
-                             double>(&Spacetime::createEdge),
+           py::overload_cast<
+             const std::uint64_t,
+             const std::uint64_t,
+             double>(&Spacetime::createEdge),
            py::arg("source"),
            py::arg("target"),
            py::arg("squaredLength"))

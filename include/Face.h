@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <iostream>
 
 #include "Fingerprint.h"
 #include "Vertex.h"
@@ -59,8 +60,6 @@ class Face {
         positionByVertexIdInA[vertices[i]->getId()] = i;
       }
 
-      std::vector<int> perm{};
-      perm.reserve(K);
       std::vector<std::shared_ptr<Vertex> > otherVertexes = other->getVertices();
       std::vector<IdType> otherIds{};
       otherIds.reserve(K);
@@ -68,12 +67,14 @@ class Face {
         otherIds[i] = otherVertexes[i]->getId();
       }
 
+      std::vector<int> perm{};
+      perm.reserve(K);
+      std::cout << "Reserving " << K << " elements for perm" << std::endl;
       for (int i = 0; i < K; ++i) {
-        int idx = positionByVertexIdInA[otherIds[i]];
-        if (idx < 0) {
-          return 0;
-        }
-        perm[i] = idx;
+        IdType otherId = otherIds[i];
+        if (!positionByVertexIdInA.contains(otherId)) return 0;
+        std::cout << "Setting position " << i << " to " << positionByVertexIdInA[otherId] << std::endl;
+        perm[i] = positionByVertexIdInA[otherId];
       }
 
       // Count cycles of perm on {0..K-1}
@@ -91,6 +92,11 @@ class Face {
           visited[j] = true;
           j = perm[j];
         }
+      }
+
+      std::cout << "Perms: " << std::endl;
+      for (int i = 0; i < K; ++i) {
+        std::cout << perm[i] << std::endl;
       }
 
       int N = K;

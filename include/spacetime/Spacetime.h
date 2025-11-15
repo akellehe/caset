@@ -72,34 +72,34 @@ class Spacetime {
 
     std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
       manual = true;
-      return vertexList->add(id);
+      return vertexList.add(id);
     }
 
     std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
       manual = true;
-      return vertexList->add(id, coords);
+      return vertexList.add(id, coords);
     }
 
     std::shared_ptr<Edge> createEdge(
-      std::shared_ptr<Vertex> &src,
-      std::shared_ptr<Vertex> &tgt
-    ) noexcept {
+      const std::uint64_t src,
+      const std::uint64_t tgt
+    ) {
       manual = true;
-      std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
-      src->addOutEdge(edge);
-      tgt->addInEdge(edge);
+      std::shared_ptr<Edge> edge = edgeList.add(src, tgt);
+      vertexList[src]->addOutEdge(edge);
+      vertexList[tgt]->addInEdge(edge);
       return edge;
     }
 
     std::shared_ptr<Edge> createEdge(
-      std::shared_ptr<Vertex> &src,
-      std::shared_ptr<Vertex> &tgt,
+      const std::uint64_t src,
+      const std::uint64_t tgt,
       double squaredLength
     ) noexcept {
       manual = true;
-      std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
-      src->addOutEdge(edge);
-      tgt->addInEdge(edge);
+      std::shared_ptr<Edge> edge = edgeList.add(src, tgt, squaredLength);
+      vertexList[src]->addOutEdge(edge);
+      vertexList[tgt]->addInEdge(edge);
       return edge;
     }
 
@@ -136,9 +136,9 @@ class Spacetime {
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < k; i++) {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size());
+        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size());
         for (auto existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex, newVertex);
+          std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -169,9 +169,9 @@ class Spacetime {
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < ti; i++) {  // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {currentTime});
+        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime)});
         for (auto existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex, newVertex);
+          std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -181,9 +181,9 @@ class Spacetime {
       incrementTime();
       for (int i = 0; i < tf; i++) {  // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {currentTime});
+        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime)});
         for (auto existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex, newVertex);
+          std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -199,10 +199,10 @@ class Spacetime {
       return spacetimeType;
     }
 
-    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() noexcept {
+    [[nodiscard]] EdgeList getEdgeList() noexcept {
       return edgeList;
     }
-    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() noexcept {
+    [[nodiscard]] VertexList getVertexList() noexcept {
       return vertexList;
     }
 
@@ -294,8 +294,8 @@ class Spacetime {
     }
 
   private:
-    std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
-    std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
+    EdgeList edgeList = EdgeList{};
+    VertexList vertexList = VertexList{};
     std::unordered_map<SimplexOrientation, Bucket> simplicialComplex{};
 
     std::vector<std::shared_ptr<Observable> > observables{};

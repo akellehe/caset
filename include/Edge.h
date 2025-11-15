@@ -15,8 +15,6 @@ inline double random_uniform(double min = -1.0, double max = 1.0) {
 
 namespace caset {
 
-class Vertex;
-
 /// # Edge Disposition
 ///
 /// There are two things that determine the disposition (spacelike, timelike, light/null-like). The first is the squared
@@ -45,47 +43,40 @@ enum class EdgeDisposition : uint8_t {
 class Edge {
   public:
     Edge(
-      std::shared_ptr<Vertex> source_,
-      std::shared_ptr<Vertex> target_,
+      std::uint64_t sourceId_,
+      std::uint64_t targetId_,
       double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target->getId()}) {
+    ) : sourceId(sourceId_), targetId(targetId_), squaredLength(squaredLength_), fingerprint({sourceId_, targetId_}) {
     }
 
     Edge(
-      std::shared_ptr<Vertex> source_,
-      std::shared_ptr<Vertex> target_
-    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
+      std::uint64_t sourceId_,
+      std::uint64_t targetId_
+    ) : sourceId(sourceId_), targetId(targetId_), fingerprint({sourceId_, targetId_}) {
       // Set squaredLength to a random value between -1 and 1
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
-    const EdgeDisposition getEdgeDisposition() const noexcept {
-      if (source->getTime() == target->getTime()) {
-        return EdgeDisposition::Timelike;
-      }
-      return EdgeDisposition::Spacelike;
+    std::uint64_t getSourceId() const noexcept {
+      return sourceId;
     }
 
-    const std::shared_ptr<Vertex> getSource() const noexcept {
-      return source;
-    }
-
-    const std::shared_ptr<Vertex> getTarget() const noexcept {
-      return target;
+    std::uint64_t getTargetId() const noexcept {
+      return targetId;
     }
 
     const double getSquaredLength() const noexcept {
       return squaredLength;
     }
 
-    std::string toString() const noexcept {
-      return std::to_string(source->getId()) + "->" + std::to_string(target->getId());
+    [[nodiscard]] std::string toString() const noexcept {
+      return std::to_string(sourceId) + "->" + std::to_string(targetId);
     }
 
     Fingerprint fingerprint;
   private:
-    std::shared_ptr<Vertex> source;
-    std::shared_ptr<Vertex> target;
+    std::uint64_t sourceId;
+    std::uint64_t targetId;
     double squaredLength;
 };
 
