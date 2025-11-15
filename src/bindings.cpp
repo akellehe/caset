@@ -66,7 +66,8 @@ PYBIND11_MODULE(caset, m) {
       .def("__repr__", &Face::toString)
       .def("addCoface", &Face::addCoface)
       .def("getCofaces", &Face::getCofaces)
-      .def("getVertices", &Face::getVertices);
+      .def("getVertices", &Face::getVertices)
+      .def("checkPairty", &Face::checkPairty);
 
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
@@ -131,33 +132,33 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<>())
       .def("getSimplexes", &Spacetime::getSimplexes)
       .def("createVertex",
-                  py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
-                  py::arg("id"))
+           py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
+           py::arg("id"))
       .def("createVertex",
-                  py::overload_cast<const std::uint64_t, const std::vector<double> &>(
-                    &Spacetime::createVertex),
-                  py::arg("id"),
-                  py::arg("coordinates"))
+           py::overload_cast<const std::uint64_t, const std::vector<double> &>(
+             &Spacetime::createVertex),
+           py::arg("id"),
+           py::arg("coordinates"))
       .def("createEdge",
-                  py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &>(
-                    &Spacetime::createEdge),
-                  py::arg("source"),
-                  py::arg("target"))
+           py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &>(
+             &Spacetime::createEdge),
+           py::arg("source"),
+           py::arg("target"))
       .def("createEdge",
-                  py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &,
-                                    double>(&Spacetime::createEdge),
-                  py::arg("source"),
-                  py::arg("target"),
-                  py::arg("squaredLength"))
+           py::overload_cast<std::shared_ptr<Vertex> &, std::shared_ptr<Vertex> &,
+                             double>(&Spacetime::createEdge),
+           py::arg("source"),
+           py::arg("target"),
+           py::arg("squaredLength"))
       .def("createSimplex",
-                  py::overload_cast<
-                    std::vector<std::shared_ptr<Vertex> > &,
-                    std::vector<std::shared_ptr<Edge> > &>(&Spacetime::createSimplex),
-                  py::arg("vertices"),
-                  py::arg("edges"))
+           py::overload_cast<
+             std::vector<std::shared_ptr<Vertex> > &,
+             std::vector<std::shared_ptr<Edge> > &>(&Spacetime::createSimplex),
+           py::arg("vertices"),
+           py::arg("edges"))
       .def("createSimplex",
-                  py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
-                  py::arg("orientation"))
+           py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
+           py::arg("orientation"))
       .def("setManual", &Spacetime::setManual);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";

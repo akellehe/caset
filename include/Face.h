@@ -13,7 +13,6 @@
 #include "Vertex.h"
 
 namespace caset {
-
 class Simplex;
 
 ///
@@ -27,7 +26,8 @@ class Simplex;
 /// attach it
 class Face {
   public:
-    Face(std::vector<std::shared_ptr<const Simplex>> cofaces_, std::vector<std::shared_ptr<Vertex>> vertices_) : cofaces(cofaces_), vertices(vertices_), fingerprint({}) {
+    Face(std::vector<std::shared_ptr<const Simplex> > cofaces_,
+         std::vector<std::shared_ptr<Vertex> > vertices_) : cofaces(cofaces_), vertices(vertices_), fingerprint({}) {
       std::vector<IdType> ids{};
       ids.reserve(vertices_.size());
       for (const auto &v : vertices_) {
@@ -48,9 +48,54 @@ class Face {
     ///
     /// Because Simplices are constructed via coning; the ordering of the Simplex `vertices` is a little tricky, but
     /// follows a predictable ordering.
-    void getOrientation() {
+    int8_t checkPairty(std::shared_ptr<Face> &other) {
+      std::size_t K = vertices.size();
 
+      // Build vertex -> position map for 'a'
+      // For small K (≤4,5) you could linear search; this is generic.
+      std::unordered_map<IdType, int> positionByVertexIdInA{};
+      positionByVertexIdInA.reserve(K);
+      for (int i = 0; i < K; ++i) {
+        positionByVertexIdInA[vertices[i]->getId()] = i;
+      }
 
+      std::vector<int> perm{};
+      perm.reserve(K);
+      std::vector<std::shared_ptr<Vertex> > otherVertexes = other->getVertices();
+      std::vector<IdType> otherIds{};
+      otherIds.reserve(K);
+      for (int i = 0; i < K; ++i) {
+        otherIds[i] = otherVertexes[i]->getId();
+      }
+
+      for (int i = 0; i < K; ++i) {
+        int idx = positionByVertexIdInA[otherIds[i]];
+        if (idx < 0) {
+          return 0;
+        }
+        perm[i] = idx;
+      }
+
+      // Count cycles of perm on {0..K-1}
+      std::vector<bool> visited{};
+      visited.reserve(K);
+      for (int i = 0; i < K; i++) {
+        visited[i] = false;
+      }
+      int cycles = 0;
+      for (int i = 0; i < K; ++i) {
+        if (visited[i]) continue;
+        ++cycles;
+        int j = i;
+        while (!visited[j]) {
+          visited[j] = true;
+          j = perm[j];
+        }
+      }
+
+      int N = K;
+      int transpositionsMod2 = (N - cycles) & 1;
+      return transpositionsMod2 ? -1 : +1;
     }
 
     [[nodiscard]] std::size_t size() const noexcept {
@@ -72,7 +117,8 @@ class Face {
     /// codimension-1) is incident to exactly 2 n-simplices for interior faces and exactly 1 n-simplex for faces along
     /// the boundary.
     [[nodiscard]] bool isAvailable() const {
-      if (cofaces.size() < 2) {  // For an interior simplex.
+      if (cofaces.size() < 2) {
+        // For an interior simplex.
         return true;
       }
       return false;
@@ -97,23 +143,23 @@ class Face {
     /// \f]
     ///
     /// @return The set of k-simplexes that share this face.
-    [[nodiscard]] std::vector<std::shared_ptr<const Simplex>> getCofaces() const noexcept { return cofaces; }
-    [[nodiscard]] std::vector<std::shared_ptr<Vertex>> getVertices() const noexcept {return vertices;};
+    [[nodiscard]] std::vector<std::shared_ptr<const Simplex> > getCofaces() const noexcept { return cofaces; }
+    [[nodiscard]] std::vector<std::shared_ptr<Vertex> > getVertices() const noexcept { return vertices; };
     Fingerprint fingerprint;
+
   private:
-    std::vector<std::shared_ptr<Vertex>> vertices;
-    std::vector<std::shared_ptr<const Simplex>> cofaces;
+    std::vector<std::shared_ptr<Vertex> > vertices;
+    std::vector<std::shared_ptr<const Simplex> > cofaces;
 };
 
 using FaceHash = FingerprintHash<Face>;
 using FaceEq = FingerprintEq<Face>;
-
 } // caset
 
 namespace std {
 template<>
 struct hash<caset::Face> {
-  size_t operator()(const caset::Face& face) const noexcept {
+  size_t operator()(const caset::Face &face) const noexcept {
     return std::hash<std::uint64_t>{}(face.fingerprint.fingerprint());
   }
 };
