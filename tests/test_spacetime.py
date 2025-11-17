@@ -105,6 +105,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertTrue(succeeded)
         breakpoint()
         print(updated)
+        # TODO: Verify the edges going into the joined face from both simplexes are correct.
 
 if __name__ == '__main__':
     unittest.main()
