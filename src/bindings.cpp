@@ -67,7 +67,8 @@ PYBIND11_MODULE(caset, m) {
       .def("addCoface", &Face::addCoface)
       .def("getCofaces", &Face::getCofaces)
       .def("getVertices", &Face::getVertices)
-      .def("checkPairty", &Face::checkPairty);
+      .def("checkPairty", &Face::checkPairty)
+      .def("getEdges", &Face::getEdges);
 
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())

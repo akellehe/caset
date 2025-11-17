@@ -29,17 +29,26 @@ class Face {
   public:
     Face(std::vector<std::shared_ptr<const Simplex> > cofaces_,
          std::vector<std::shared_ptr<Vertex> > vertices_) : cofaces(cofaces_), vertices(vertices_), fingerprint({}) {
+      idLookup.reserve(vertices_.size());
       std::vector<IdType> ids{};
       ids.reserve(vertices_.size());
-      for (const auto &v : vertices_) {
-        ids.push_back(v->getId());
+      for (int i = 0; i < vertices.size(); i++) {
+        ids.push_back(vertices[i]->getId());
+        idLookup.insert({vertices[i]->getId(), vertices[i]});
+      }
+      std::cout << "Lookup: " << std::endl;
+      for (const auto [k, v] : idLookup) {
+        std::cout << "k=" << k << " v=" << v->getId() << std::endl;
       }
       fingerprint = Fingerprint(ids);
     }
 
     ///
-    /// Simplexes have an orientation which is given by the ordering of its Vertex (es). For a k-simplex, \f$ \sigma^k = [v_0, v_1, ..., v_k] \f$
-    /// even permutations have the _same_ orientation. Odd permutations have _opposite_ orientation.
+    /// Simplexes have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
+    /// \f$ \sigma^k = [v_0, v_1, ..., v_k] \f$ even permutations have the _same_ orientation. Odd permutations have
+    /// _opposite_ orientation.
+    ///
+    /// In order to glue two simplexes they must have opposite orientation.
     ///
     /// For Face (s); orientation is inherited from the parent Simplex.
     ///
@@ -47,8 +56,11 @@ class Face {
     /// \partial\sigma^k = \partial[v_0, v_1, ..., v_k] = \sum_{i=0}^k (-1)^i [v_0, v_1, ..., v_k]
     /// \f]
     ///
-    /// Because Simplices are constructed via coning; the ordering of the Simplex `vertices` is a little tricky, but
-    /// follows a predictable ordering.
+    /// This method counts the number of cycles that result from mapping one set of vertex IDs to another set. That
+    /// number reflects the number of "swaps" of vertices required to get from one configuration to another. Each of
+    /// those swaps changes the sign of the orientation once. An odd number of swaps gives an opposite orientation; an
+    /// even number gives the same orientation.
+    ///
     int8_t checkPairty(std::shared_ptr<Face> &other) {
       std::size_t K = vertices.size();
 
@@ -133,6 +145,41 @@ class Face {
       return ss.str();
     }
 
+    [[nodiscard]] bool hasVertex(const IdType vertexId) const {
+      return idLookup.contains(vertexId);
+    }
+
+    [[nodiscard]] bool hasVertex(const std::shared_ptr<Vertex> &vertex) const {
+      return idLookup.contains(vertex->getId());
+    }
+
+    /// This method returns Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
+    /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
+    /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
+    [[nodiscard]] std::vector<const std::shared_ptr<Edge>> getEdges() {
+      if (!edges.empty()) return edges;
+      std::shared_ptr<Vertex> origin = nullptr;
+
+      // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
+      // the vertexes in the correct order
+      for (int currentIndex = 0; currentIndex < vertices.size(); ++currentIndex) {
+        const std::shared_ptr<Vertex> cursor = vertices[currentIndex];
+        for (const auto &e : cursor->getEdges()) {
+          IdType cursorId = cursor->getId();
+          IdType sourceId = e->getSourceId();
+          IdType targetId = e->getTargetId();
+          if (sourceId == cursorId || targetId == cursorId) {
+            const std::shared_ptr<Vertex> &next = vertices[(currentIndex + 1) % vertices.size()];
+            const IdType nextId = next->getId();
+            if (nextId == sourceId || nextId == targetId) {
+              edges.push_back(e);
+            }
+          }
+        }
+      }
+      return edges;
+    }
+
     ///
     /// Co-faces are maintained as state rather than computed on the fly. This means any time a Simplex is attached to
     /// another Simplex; it must be added to the face at which it's attached as a co-face. If a Simplex, Edge, or Vertex
@@ -143,12 +190,18 @@ class Face {
     ///
     /// @return The set of k-simplexes that share this face.
     [[nodiscard]] std::vector<std::shared_ptr<const Simplex> > getCofaces() const noexcept { return cofaces; }
+
+    ///
+    /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
     [[nodiscard]] std::vector<std::shared_ptr<Vertex> > getVertices() const noexcept { return vertices; };
+
     Fingerprint fingerprint;
 
   private:
     std::vector<std::shared_ptr<Vertex> > vertices;
     std::vector<std::shared_ptr<const Simplex> > cofaces;
+    std::vector<const std::shared_ptr<Edge>> edges;
+    std::unordered_map<IdType, std::shared_ptr<Vertex> > idLookup{};
 };
 
 using FaceHash = FingerprintHash<Face>;

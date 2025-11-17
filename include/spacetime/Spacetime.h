@@ -248,7 +248,7 @@ class Spacetime {
     /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return A new Face representing the shared face of both simplexes.
-    std::shared_ptr<Face> attachFaces(std::shared_ptr<Face> &myFace, std::shared_ptr<Face> &yourFace) {
+    std::tuple<std::shared_ptr<Face>, bool> causallyAttachFaces(std::shared_ptr<Face> &myFace, std::shared_ptr<Face> &yourFace) {
       if (!myFace->isAvailable() || !yourFace->isAvailable()) {
         throw new std::runtime_error("You attempted to attach faces that are not available to attach.");
       }
@@ -262,13 +262,30 @@ class Spacetime {
       vertexPairs.reserve(myFace->size());
 
       if (myFace->checkPairty(yourFace) != -1) {
-
+        return {nullptr, false};
       }
+
+      // These are in order of traversal, you can iterate them to walk the Face:
       auto myVertices = myFace->getVertices();
       auto yourVertices = yourFace->getVertices();
-      for (auto v1 = myVertices.begin(); v1 != myVertices.end(); ++v1) {
-        for (auto v2 = yourVertices.begin(); v2 != yourVertices.end(); ++v2) {
-          if ((*v1)->getTime() == (*v2)->getTime()) {  // Compatible if the neighbors are.
+      auto newVertices = std::vector<std::tuple<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>> >();
+      newVertices.reserve(myVertices.size());
+
+      for (auto i=0; i<myFace->size(); i++) {
+        auto v1 = myVertices[i];
+        auto v2 = yourVertices[i];
+        if (v1->getTime() != v2->getTime()) {  // The two vertices were not in the expected causal disposition.
+          return {nullptr, false};
+        }
+        /// Create a new vertex, v3 with all the edges of v1 and v2 combined, but exclude those edges of v2 that lie on
+        /// `yourFace` since they are being replaced by those corresponding edges on `myFace`.
+        auto v3 = std::make_shared<Vertex>(vertexList.size(), v1->getCoordinates());
+        newVertices.emplace_back(v1, v3);
+
+
+      }
+
+
             // We should probably be iterating over edges instead of vertices, and assign a convention to the
             // orientation of an edge. A simplex/chain/wedge product has an orientation defined by the order of
             // traversal of its nodes. Probably the least abrasive way to do this would just be to encode those rules
@@ -281,9 +298,6 @@ class Spacetime {
             // applies to spacelike faces, for timelike faces i think the attachment might be arbitrary. We can get the
             // ordering of the vertices on the face by traversing their edges.
 
-          }
-        }
-      }
     }
 
     std::vector<std::shared_ptr<Simplex>> getSimplexes() noexcept {
