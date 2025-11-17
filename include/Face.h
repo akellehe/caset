@@ -12,6 +12,7 @@
 
 #include "Fingerprint.h"
 #include "Vertex.h"
+#include "Logger.h"
 
 namespace caset {
 class Simplex;
@@ -29,16 +30,12 @@ class Face {
   public:
     Face(std::vector<std::shared_ptr<const Simplex> > cofaces_,
          std::vector<std::shared_ptr<Vertex> > vertices_) : cofaces(cofaces_), vertices(vertices_), fingerprint({}) {
-      idLookup.reserve(vertices_.size());
+      vertexIdLookup.reserve(vertices_.size());
       std::vector<IdType> ids{};
       ids.reserve(vertices_.size());
       for (int i = 0; i < vertices.size(); i++) {
         ids.push_back(vertices[i]->getId());
-        idLookup.insert({vertices[i]->getId(), vertices[i]});
-      }
-      std::cout << "Lookup: " << std::endl;
-      for (const auto [k, v] : idLookup) {
-        std::cout << "k=" << k << " v=" << v->getId() << std::endl;
+        vertexIdLookup.insert({vertices[i]->getId(), vertices[i]});
       }
       fingerprint = Fingerprint(ids);
     }
@@ -83,7 +80,16 @@ class Face {
       perm.reserve(K);
       for (int i = 0; i < K; ++i) {
         IdType otherId = otherIds[i];
-        if (!positionByVertexIdInA.contains(otherId)) return 0;
+        if (!positionByVertexIdInA.contains(otherId)) {
+          LOG(WARN_LEVEL, "Other face contains ", otherId, " but this face does not!");
+          for (auto &v : otherIds) {
+            LOG(WARN_LEVEL, "Other face contains ", otherId);
+          }
+          for (auto &v : vertices) {
+            LOG(WARN_LEVEL, "This face contains ", v->getId());
+          }
+          return 0;
+        }
         perm[i] = positionByVertexIdInA[otherId];
       }
 
@@ -146,11 +152,33 @@ class Face {
     }
 
     [[nodiscard]] bool hasVertex(const IdType vertexId) const {
-      return idLookup.contains(vertexId);
+      return vertexIdLookup.contains(vertexId);
+    }
+
+    /// TODO: This method needs some optimization. We should build an edge lookup, but I'm having a little trouble doing
+    /// that at the moment.
+    ///
+    /// @param vertexAId
+    /// @param vertexBId
+    /// @return
+    [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId) {
+      if (!hasVertex(vertexAId) || !hasVertex(vertexBId)) {
+        return false;
+      }
+      for (const auto &edge : getEdges()) {
+        IdType sid = edge->getSourceId();
+        IdType tid = edge->getTargetId();
+        if (vertexAId == sid || vertexAId == tid) {
+          if (vertexBId == sid || vertexBId == tid) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
 
     [[nodiscard]] bool hasVertex(const std::shared_ptr<Vertex> &vertex) const {
-      return idLookup.contains(vertex->getId());
+      return vertexIdLookup.contains(vertex->getId());
     }
 
     /// This method returns Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
@@ -164,7 +192,19 @@ class Face {
       // the vertexes in the correct order
       for (int currentIndex = 0; currentIndex < vertices.size(); ++currentIndex) {
         const std::shared_ptr<Vertex> cursor = vertices[currentIndex];
-        for (const auto &e : cursor->getEdges()) {
+        for (const auto &e : cursor->getInEdges()) {
+          IdType cursorId = cursor->getId();
+          IdType sourceId = e->getSourceId();
+          IdType targetId = e->getTargetId();
+          if (sourceId == cursorId || targetId == cursorId) {
+            const std::shared_ptr<Vertex> &next = vertices[(currentIndex + 1) % vertices.size()];
+            const IdType nextId = next->getId();
+            if (nextId == sourceId || nextId == targetId) {
+              edges.push_back(e);
+            }
+          }
+        }
+        for (const auto &e : cursor->getOutEdges()) {
           IdType cursorId = cursor->getId();
           IdType sourceId = e->getSourceId();
           IdType targetId = e->getTargetId();
@@ -178,6 +218,16 @@ class Face {
         }
       }
       return edges;
+    }
+
+    [[nodiscard]] bool isTimelike() const {
+      double lower = std::numeric_limits<double>::infinity();
+      double upper = -std::numeric_limits<double>::infinity();
+      for (const auto &vertex : vertices) {
+        lower = std::min(lower, vertex->getTime());
+        upper = std::max(upper, vertex->getTime());
+      }
+      return lower < upper;
     }
 
     ///
@@ -201,7 +251,7 @@ class Face {
     std::vector<std::shared_ptr<Vertex> > vertices;
     std::vector<std::shared_ptr<const Simplex> > cofaces;
     std::vector<const std::shared_ptr<Edge>> edges;
-    std::unordered_map<IdType, std::shared_ptr<Vertex> > idLookup{};
+    std::unordered_map<IdType, std::shared_ptr<Vertex> > vertexIdLookup{};
 };
 
 using FaceHash = FingerprintHash<Face>;

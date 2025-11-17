@@ -83,5 +83,28 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(v5.getEdges()), 4)
 
 
+    def test_attaching_faces(self):
+        st = Spacetime()
+        simplex14 = st.createSimplex((1, 4))
+        simplex23 = st.createSimplex((2, 3))
+
+        left, right = None, None
+        facets14 = simplex14.getFacets()
+        for facet in facets14:
+            if facet.isTimelike():
+                left = facet
+                break
+
+        facets23 = simplex23.getFacets()
+        for face in facets23:
+            if face.isTimelike():
+                right = face
+                break
+
+        updated, succeeded = st.causallyAttachFaces(left, right)
+        self.assertTrue(succeeded)
+        breakpoint()
+        print(updated)
+
 if __name__ == '__main__':
     unittest.main()

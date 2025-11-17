@@ -11,7 +11,6 @@
 #include "Edge.h"
 
 namespace caset {
-
 ///
 /// Vertexes in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
@@ -24,9 +23,11 @@ namespace caset {
 ///
 class Vertex : public std::enable_shared_from_this<Vertex> {
     public:
-        Vertex() noexcept {id = 0;}
-        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {}
-        Vertex(const std::uint64_t id_) noexcept : id(id_) {}
+        Vertex() noexcept { id = 0; }
+        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
+        }
+        Vertex(const std::uint64_t id_) noexcept : id(id_) {
+        }
 
         const std::uint64_t getId() const noexcept { return id; }
 
@@ -59,6 +60,14 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             throw std::out_of_range(msg);
         }
 
+        bool operator==(const Vertex &vertex) const noexcept {
+            return vertex.getId() == id;
+        }
+
+        bool operator==(const std::shared_ptr<Vertex> &vertex) {
+            return vertex->getId() == id;
+        }
+
         std::vector<double> getCoordinates() const {
             if (coordinates.size() == 0) {
                 throw new std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
@@ -66,7 +75,8 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             return coordinates;
         }
 
-        [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex>> moveTo(const std::shared_ptr<Vertex> &vertex) {
+        [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> > moveTo(
+            const std::shared_ptr<Vertex> &vertex) {
             if (outEdges.empty()) {
                 throw new std::runtime_error("Cannot execute move; outEdges is empty!");
             }
@@ -74,22 +84,15 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             if (!outEdges.contains(edge)) {
                 throw new std::runtime_error("No edge to this vertex exists.");
             }
-            return std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex>>({
+            return std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> >({
                 *outEdges.find(edge), vertex
             });
         }
 
-        void addOutEdge(std::shared_ptr<Edge> edge) noexcept {
-            outEdges.insert(edge);
-            edges.push_back(edge);
-        }
-
-        void addInEdge(std::shared_ptr<Edge> edge) noexcept {
-            inEdges.insert(edge);
-            edges.push_back(edge);
-        }
-
-        std::vector<std::shared_ptr<Edge> > getEdges() const noexcept { return edges; }
+        void addInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.insert(edge); }
+        void addOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.insert(edge); }
+        void removeInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.erase(edge); }
+        void removeOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.erase(edge); }
 
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
         getInEdges() const noexcept { return inEdges; }
@@ -102,11 +105,9 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         }
 
     private:
-        void addEdge(std::shared_ptr<Edge> edge) noexcept { edges.push_back(edge); }
         std::vector<double> coordinates{};
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> outEdges{};
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
-        std::vector<std::shared_ptr<Edge>> edges{};
         std::uint64_t id;
 };
 }
@@ -120,7 +121,7 @@ struct hash<caset::Vertex> {
 };
 
 template<>
-struct hash<std::shared_ptr<caset::Vertex>> {
+struct hash<std::shared_ptr<caset::Vertex> > {
     size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex->getId());
     }

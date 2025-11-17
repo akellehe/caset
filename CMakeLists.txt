@@ -59,6 +59,10 @@ file(GLOB_RECURSE CASET_SOURCES
 # ---- Build module ----
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
 
+set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}" VERBOSE=True)
+add_definitions(-DSOURCES_ROOT="${SOURCES_ROOT}" -DVERBOSE=True)
+
 target_include_directories(caset
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src

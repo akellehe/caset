@@ -57,20 +57,34 @@ class Edge {
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
-    std::uint64_t getSourceId() const noexcept {
+    [[nodiscard]] std::uint64_t getSourceId() const noexcept {
       return sourceId;
     }
 
-    std::uint64_t getTargetId() const noexcept {
+    [[nodiscard]] std::uint64_t getTargetId() const noexcept {
       return targetId;
     }
 
-    const double getSquaredLength() const noexcept {
+    [[nodiscard]] double getSquaredLength() const noexcept {
       return squaredLength;
     }
 
     [[nodiscard]] std::string toString() const noexcept {
       return std::to_string(sourceId) + "->" + std::to_string(targetId);
+    }
+
+    void refreshFingerprint() noexcept {
+      fingerprint = Fingerprint({sourceId, targetId});
+    }
+
+    void replaceSourceVertex(std::uint64_t sourceId_) {
+      sourceId = sourceId_;
+      refreshFingerprint();
+    }
+
+    void replaceTargetVertex(std::uint64_t targetId_) {
+      targetId = targetId_;
+      refreshFingerprint();
     }
 
     Fingerprint fingerprint;

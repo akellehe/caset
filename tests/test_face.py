@@ -49,6 +49,23 @@ class TestFace(unittest.TestCase):
         self.assertTrue(e4.getSourceId() == v4.getId() or e4.getTargetId() == v4.getId())
         self.assertTrue(e4.getSourceId() == v1.getId() or e4.getTargetId() == v1.getId())
 
+    def test_replace_vertex(self):
+        simplex41 = self.spacetime.createSimplex((4, 1))
+        f1, f2, f3, f4, f5 = simplex41.getFacets()
+
+        v1, v2, v3, v4 = f1.getVertices()
+        v5, v6, v7, v8 = f5.getVertices()
+
+        expected = [v.getId() for v in f1.getVertices() + f2.getVertices()]
+
+        self.assertNotEqual(v1.getId(), v5.getId())
+
+        f1.replaceVertex(v1, v5)
+
+        expected[0] = v5.getId()
+
+        self.assertEqual(expected, [v.getId() for v in f1.getVertices() + f2.getVertices()])
+
 
 if __name__ == '__main__':
     unittest.main()

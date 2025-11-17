@@ -16,6 +16,7 @@
 #include "Simplex.h"
 #include "topologies/Toroid.h"
 #include "Face.h"
+#include "Logger.h"
 
 namespace caset {
 enum class SpacetimeType : uint8_t {
@@ -167,7 +168,8 @@ class Spacetime {
       std::vector<std::shared_ptr<Edge> > edges = {};
       std::cout << "A " << k << "-simplex" << " has " << Simplex::computeNumberOfEdges(k) << " edges" << std::endl;
       edges.reserve(Simplex::computeNumberOfEdges(k));
-      for (int i = 0; i < ti; i++) {  // Create ti Timelike vertices
+      for (int i = 0; i < ti; i++) {
+        // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime)});
         for (auto existingVertex : vertices) {
@@ -178,10 +180,11 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      incrementTime();
-      for (int i = 0; i < tf; i++) {  // Create ti Timelike vertices
+      // incrementTime();
+      for (int i = 0; i < tf; i++) {
+        // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime)});
+        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime + 1)});
         for (auto existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
@@ -217,6 +220,22 @@ class Spacetime {
       return currentTime;
     }
 
+    void replaceVertex(std::shared_ptr<Vertex> &toRemove, std::shared_ptr<Vertex> &toAdd) {
+      for (auto &edge : toRemove->getInEdges()) {
+        edgeList.remove(edge);
+        toRemove->removeInEdge(edge);
+        edge->replaceTargetVertex(toAdd->getId());
+        toAdd->addInEdge(edgeList.add(edge));
+      }
+      for (auto &edge : toRemove->getOutEdges()) {
+        edgeList.remove(edge);
+        toRemove->removeOutEdge(edge);
+        edge->replaceSourceVertex(toAdd->getId());
+        toAdd->addOutEdge(edgeList.add(edge));
+      }
+      vertexList.replace(toRemove, toAdd);
+    }
+
     ///
     /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
     /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
@@ -247,61 +266,91 @@ class Spacetime {
     ///
     /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
-    /// @return A new Face representing the shared face of both simplexes.
-    std::tuple<std::shared_ptr<Face>, bool> causallyAttachFaces(std::shared_ptr<Face> &myFace, std::shared_ptr<Face> &yourFace) {
+    /// @return myFace, updated with the second simplex glued.
+    std::tuple<std::shared_ptr<Face>, bool> causallyAttachFaces(std::shared_ptr<Face> &myFace,
+                                                                std::shared_ptr<Face> &yourFace) {
       if (!myFace->isAvailable() || !yourFace->isAvailable()) {
         throw new std::runtime_error("You attempted to attach faces that are not available to attach.");
       }
-      std::vector<std::shared_ptr<Vertex>> vertices = {};
+      std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());
-      std::vector<std::shared_ptr<Edge>> edges = {};
+      std::vector<std::shared_ptr<Edge> > edges = {};
       edges.reserve(myFace->size());
 
       // Two vertexes are compatible to attach iff they share the same time value.
-      std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>>> vertexPairs= {};
+      std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex> > > vertexPairs = {};
       vertexPairs.reserve(myFace->size());
 
-      if (myFace->checkPairty(yourFace) != -1) {
-        return {nullptr, false};
-      }
+      // if (myFace->checkPairty(yourFace) != -1) {
+      // LOG(WARN_LEVEL, "Pairty check failed. myFace and yourFace do not have opposite pairty.");
+      // return {nullptr, false};
+      // }
 
       // These are in order of traversal, you can iterate them to walk the Face:
-      auto myVertices = myFace->getVertices();
-      auto yourVertices = yourFace->getVertices();
-      auto newVertices = std::vector<std::tuple<std::shared_ptr<Vertex>, std::shared_ptr<Vertex>> >();
-      newVertices.reserve(myVertices.size());
+      const auto &myVertices = myFace->getVertices();
+      const auto &yourVertices = yourFace->getVertices();
 
-      for (auto i=0; i<myFace->size(); i++) {
-        auto v1 = myVertices[i];
-        auto v2 = yourVertices[i];
-        if (v1->getTime() != v2->getTime()) {  // The two vertices were not in the expected causal disposition.
-          return {nullptr, false};
-        }
-        /// Create a new vertex, v3 with all the edges of v1 and v2 combined, but exclude those edges of v2 that lie on
-        /// `yourFace` since they are being replaced by those corresponding edges on `myFace`.
-        auto v3 = std::make_shared<Vertex>(vertexList.size(), v1->getCoordinates());
-        newVertices.emplace_back(v1, v3);
+      // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
+      // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
 
-
+      std::deque<int> myVertexIdxs{};
+      for (auto i = 0; i < myVertices.size(); i++) {
+        myVertexIdxs.push_back(i);
       }
 
+      int attempts = 0;
+      while (attempts < myVertexIdxs.size()) {
+        for (auto i : myVertexIdxs) {
+          int j = i - attempts;
 
-            // We should probably be iterating over edges instead of vertices, and assign a convention to the
-            // orientation of an edge. A simplex/chain/wedge product has an orientation defined by the order of
-            // traversal of its nodes. Probably the least abrasive way to do this would just be to encode those rules
-            // and then describe the orientation as either "out" or "in" and "up" or "down" where we call time
-            // increasing the "up" direction and decreasing "down" and clockwise "in" and counterclockwise "out" or
-            // whatever happens to be the prevailing convention in the literature.
+          const auto &v1 = myVertices[i];
+          const auto &v2 = yourVertices[j];
 
-            // I think for two faces to join they have to be "out" and "in" respectively, and both have to have the same
-            // causal orientation. What about e.g. entirely timelike or entirely spacelike faces? The preceding idea
-            // applies to spacelike faces, for timelike faces i think the attachment might be arbitrary. We can get the
-            // ordering of the vertices on the face by traversing their edges.
-
+          if (v1->getTime() != v2->getTime()) {
+            // The two vertices were not in the expected causal disposition.
+            LOG(WARN_LEVEL,
+                "Vertex ",
+                v1->toString(),
+                " and ",
+                v2->toString(),
+                " do not have the same causal disposition! ",
+                v1->toString(),
+                " has t=",
+                v1->getTime(),
+                " ",
+                v2->toString(),
+                " has t=",
+                v2->getTime());
+            int front = myVertexIdxs.front();
+            myVertexIdxs.pop_front();
+            myVertexIdxs.push_back(front);
+            attempts++;
+            continue;
+          }
+          /// Create a new vertex, v3 with all the edges of v1 and v2 combined, but exclude those edges of v2 that lie on
+          /// `yourFace` since they are being replaced by those corresponding edges on `myFace`.
+          for (const auto &edge : v2->getInEdges()) {
+            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
+            edgeList.remove(edge);
+            edge->replaceTargetVertex(v1->getId());
+            edgeList.add(edge);
+            v1->addInEdge(edge);
+          }
+          for (const auto &edge : v2->getOutEdges()) {
+            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
+            edgeList.remove(edge);
+            edge->replaceSourceVertex(v1->getId());
+            edgeList.add(edge);
+            v1->addOutEdge(edge);
+          }
+          vertexList.replace(v2, v1);
+        }
+        return {myFace, true};
+      }
     }
 
-    std::vector<std::shared_ptr<Simplex>> getSimplexes() noexcept {
-      std::vector<std::shared_ptr<Simplex>> simplexes;
+    std::vector<std::shared_ptr<Simplex> > getSimplexes() noexcept {
+      std::vector<std::shared_ptr<Simplex> > simplexes;
       for (const auto &[key, bucket] : simplicialComplex) {
         for (const auto &simplex : bucket) {
           simplexes.push_back(simplex);

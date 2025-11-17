@@ -62,13 +62,14 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<
         std::vector<std::shared_ptr<const Simplex> >,
         std::vector<std::shared_ptr<Vertex> > >())
-      .def("__str__", &Face::toString)
       .def("__repr__", &Face::toString)
+      .def("__str__", &Face::toString)
       .def("addCoface", &Face::addCoface)
-      .def("getCofaces", &Face::getCofaces)
-      .def("getVertices", &Face::getVertices)
       .def("checkPairty", &Face::checkPairty)
-      .def("getEdges", &Face::getEdges);
+      .def("getCofaces", &Face::getCofaces)
+      .def("getEdges", &Face::getEdges)
+      .def("getVertices", &Face::getVertices)
+      .def("isTimelike", &Face::isTimelike);
 
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
@@ -95,7 +96,6 @@ PYBIND11_MODULE(caset, m) {
       .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
       .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
       .def("getCoordinates", &Vertex::getCoordinates)
-      .def("getEdges", &Vertex::getEdges)
       .def("moveTo", &Vertex::moveTo)
       .def("getId", &Vertex::getId)
       .def("__str__", &Vertex::toString)
@@ -164,6 +164,7 @@ PYBIND11_MODULE(caset, m) {
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
+      .def("causallyAttachFaces", &Spacetime::causallyAttachFaces)
       .def("setManual", &Spacetime::setManual);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
