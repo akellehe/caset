@@ -36,6 +36,15 @@ PYBIND11_MODULE(caset, m) {
       .def("size", &VertexList::size)
       .def("toVector", &VertexList::toVector);
 
+  py::class_<EdgeList, std::shared_ptr<EdgeList> >(m, "EdgeList")
+      .def(py::init<>())
+      .def("add", py::overload_cast<const std::shared_ptr<Edge> &>(&EdgeList::add))
+      .def("add", py::overload_cast<const std::uint64_t, const std::uint64_t, double>(&EdgeList::add))
+      .def("add", py::overload_cast<const std::uint64_t, const std::uint64_t>(&EdgeList::add))
+      .def("remove", &EdgeList::remove)
+      .def("size", &EdgeList::size)
+      .def("toVector", &EdgeList::toVector);
+
   py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology");
 
   py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere")
@@ -146,6 +155,8 @@ PYBIND11_MODULE(caset, m) {
            py::arg("topology")
       )
       .def(py::init<>())
+      .def("getVertexList", &Spacetime::getVertexList)
+      .def("getEdgeList", &Spacetime::getEdgeList)
       .def("embedEuclidean", &Spacetime::embedEuclidean)
       .def("getSimplexes", &Spacetime::getSimplexes)
       .def("createVertex",

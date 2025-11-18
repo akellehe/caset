@@ -9,6 +9,13 @@ requires = [
 ]
 build-backend = "scikit_build_core.build"
 
+dependencies = [
+    "matplotlib==3.10.7",
+    "numpy==2.3.4",
+    "pybind11>=2.12",
+    "torch>=2.9",
+]
+
 [project]
 name = "caset"
 version = "0.1.0"

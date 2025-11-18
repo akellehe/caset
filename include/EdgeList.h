@@ -10,6 +10,7 @@
 #include <unordered_set>
 
 #include "Edge.h"
+#include "Logger.h"
 
 namespace caset {
 class EdgeList {
@@ -41,6 +42,10 @@ class EdgeList {
     }
 
     void remove(const std::shared_ptr<Edge> &edge) noexcept {
+      if (!edgeList.contains(edge)) {
+        CASET_LOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
+        return;
+      }
       edgeList.erase(edge);
     }
 

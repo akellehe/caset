@@ -39,13 +39,13 @@ To install `caset`, you can use pip. If you're in a virtual environment, make su
 root then run:
 
 ```bash
-pip install -e .
+pip install -v -e .
 ```
 
 And you'll have an "editable" install of `caset` in your environment. You can test it out by running
 
 ```bash
-python3 -c "import caset; print(caset.__version__)"
+python3 -c "import caset; print(caset.__file__)"
 ```
 
 ## Building Documentation
@@ -53,7 +53,8 @@ python3 -c "import caset; print(caset.__version__)"
 To build documentation you'll have to install `doxygen` with your package manager; 
 
 On MacOS, use Homebrew:
-```asm
+
+```bash
 brew install doxygen
 ```
 

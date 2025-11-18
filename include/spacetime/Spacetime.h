@@ -133,12 +133,11 @@ class Spacetime {
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
-      std::cout << "A " << k << "-simplex" << " has " << Simplex::computeNumberOfEdges(k) << " edges" << std::endl;
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < k; i++) {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size());
-        for (auto existingVertex : vertices) {
+        for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
@@ -331,6 +330,7 @@ class Spacetime {
           /// `yourFace` since they are being replaced by those corresponding edges on `myFace`.
           for (const auto &edge : v2->getInEdges()) {
             if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
+            v2->removeInEdge(edge);
             edgeList.remove(edge);
             edge->replaceTargetVertex(v1->getId());
             edgeList.add(edge);
@@ -338,6 +338,7 @@ class Spacetime {
           }
           for (const auto &edge : v2->getOutEdges()) {
             if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
+            v2->removeOutEdge(edge);
             edgeList.remove(edge);
             edge->replaceSourceVertex(v1->getId());
             edgeList.add(edge);
