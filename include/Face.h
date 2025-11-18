@@ -81,12 +81,12 @@ class Face {
       for (int i = 0; i < K; ++i) {
         IdType otherId = otherIds[i];
         if (!positionByVertexIdInA.contains(otherId)) {
-          LOG(WARN_LEVEL, "Other face contains ", otherId, " but this face does not!");
+          CASET_LOG(WARN_LEVEL, "Other face contains ", otherId, " but this face does not!");
           for (auto &v : otherIds) {
-            LOG(WARN_LEVEL, "Other face contains ", otherId);
+            CASET_LOG(WARN_LEVEL, "Other face contains ", otherId);
           }
           for (auto &v : vertices) {
-            LOG(WARN_LEVEL, "This face contains ", v->getId());
+            CASET_LOG(WARN_LEVEL, "This face contains ", v->getId());
           }
           return 0;
         }

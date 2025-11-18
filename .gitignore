@@ -1,4 +1,5 @@
 .eggs
+.idea/copilot*
 build
 cmake-build-debug
 caset.cpython-313-darwin.so

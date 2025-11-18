@@ -1,13 +1,56 @@
 # caset
 
+# Installation
+
+## Setting up a Python Environment
+
+We recommend using a virtual environment for Python development. `torch` currently has known compatibility issues with 
+Python 3.12, so we recommend using Python 3.11. You can create a Python environment pretty easily on a Mac with
+
+```bash
+pyenv install 3.11.9
+```
+
+Then running your virtual environment command. If you're using virtualenvwrapper that goes like:
+
+```bash
+mkvirtualenv caset --python=python3.11
+```
+
+## Installing Build Dependencies
+
+To build you'll need to install `scikit-build-core`.
+
+```bash
+pip install scikit-build-core
+```
+
 Installation requires 
 
   - Python 3.9 or higher. 
   - A C++17 compatible compiler (e.g. gcc 7+, clang 5+, MSVC 2017+).
   - doxygen (for building documentation).
   - torch (PyTorch) 2.9.0 or higher.
+  - scikit-build-core
 
-You'll have to install `doxygen` with your package manager; 
+## Installing caset
+
+To install `caset`, you can use pip. If you're in a virtual environment, make sure it's activated. `cd` to the project 
+root then run:
+
+```bash
+pip install -e .
+```
+
+And you'll have an "editable" install of `caset` in your environment. You can test it out by running
+
+```bash
+python3 -c "import caset; print(caset.__version__)"
+```
+
+## Building Documentation
+
+To build documentation you'll have to install `doxygen` with your package manager; 
 
 On MacOS, use Homebrew:
 ```asm

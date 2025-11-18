@@ -49,6 +49,15 @@ class EdgeList {
       edgeList.insert(toAdd);
     }
 
+    [[nodiscard]] std::vector<std::shared_ptr<Edge>> toVector() const noexcept {
+      std::vector<std::shared_ptr<Edge>> result;
+      result.reserve(edgeList.size());
+      for (auto &edge : edgeList) {
+        result.push_back(edge);
+      }
+      return result;
+    }
+
     [[nodiscard]] std::size_t size() const {
       return edgeList.size();
     }

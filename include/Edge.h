@@ -87,6 +87,14 @@ class Edge {
       refreshFingerprint();
     }
 
+    bool operator==(const Edge &other) {
+      return sourceId == other.getSourceId() && targetId == other.getTargetId();
+    }
+
+    std::uint64_t toHash() const {
+      return fingerprint.fingerprint();
+    }
+
     Fingerprint fingerprint;
   private:
     std::uint64_t sourceId;

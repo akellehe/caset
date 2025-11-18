@@ -1,6 +1,6 @@
 import unittest
 
-from caset import Spacetime
+from caset import Spacetime, Edge, Vertex
 
 class TestSpacetime(unittest.TestCase):
 
@@ -82,6 +82,14 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(d.getTarget(), v5)
         self.assertEqual(len(v5.getEdges()), 4)
 
+    def test_euclidean_embedding(self):
+        st = Spacetime()
+        simplex14 = st.createSimplex((1, 4))
+        simplex23 = st.createSimplex((2, 3))
+        st.embedEuclidean(4, 0.0001, 1000)
+        vertices = st.getVertexList().toVector()
+        breakpoint()
+
 
     def test_attaching_faces(self):
         st = Spacetime()
@@ -103,6 +111,51 @@ class TestSpacetime(unittest.TestCase):
 
         updated, succeeded = st.causallyAttachFaces(left, right)
         self.assertTrue(succeeded)
+
+        v1, v2, v3, v4 = updated.getVertices()
+
+        # (Pdb) updated.getVertices()[0].getInEdges()
+        # {5->0}
+        edges = v1.getEdges()
+        breakpoint()
+        self.assertEqual(e1.getSource(), 5)
+        self.assertEqual(e1.getTarget(), 0)
+
+        # (Pdb) updated.getVertices()[1].getInEdges()
+        # {0->2, 5->2, 1->2}
+        e1, e2, e3 = v2.getInEdges()
+        self.assertEqual(e1.getSource(), 0)
+        self.assertEqual(e1.getTarget(), 2)
+        self.assertEqual(e2.getSource(), 5)
+        self.assertEqual(e2.getTarget(), 2)
+        self.assertEqual(e3.getSource(), )
+        self.assertEqual(e3.getTarget(), )
+
+        # (Pdb) updated.getVertices()[2].getInEdges()
+        # {2->3, 0->3, 5->3, 1->3}
+        e1, e2, e3, e4 = v3.getInEdges()
+        self.assertEqual(e1.getSource(), 2)
+        self.assertEqual(e1.getTarget(), 3)
+        self.assertEqual(e2.getSource(), 0)
+        self.assertEqual(e2.getTarget(), 3)
+        self.assertEqual(e3.getSource(), 5)
+        self.assertEqual(e3.getTarget(), 3)
+        self.assertEqual(e4.getSource(), 1)
+        self.assertEqual(e4.getTarget(), 3)
+
+        # (Pdb) updated.getVertices()[3].getInEdges()
+        # {3->4, 0->4, 2->4, 5->4}
+        e1, e2, e3, e4 = v3.getInEdges()
+        self.assertEqual(e1.getSource(), 3)
+        self.assertEqual(e1.getTarget(), 4)
+        self.assertEqual(e2.getSource(), 0)
+        self.assertEqual(e2.getTarget(), 4)
+        self.assertEqual(e3.getSource(), 2)
+        self.assertEqual(e3.getTarget(), 4)
+        self.assertEqual(e4.getSource(), 5)
+        self.assertEqual(e4.getTarget(), 4)
+
+
         breakpoint()
         print(updated)
         # TODO: Verify the edges going into the joined face from both simplexes are correct.

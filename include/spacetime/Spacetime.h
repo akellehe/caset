@@ -282,7 +282,7 @@ class Spacetime {
       vertexPairs.reserve(myFace->size());
 
       // if (myFace->checkPairty(yourFace) != -1) {
-      // LOG(WARN_LEVEL, "Pairty check failed. myFace and yourFace do not have opposite pairty.");
+      // CASET_LOG(WARN_LEVEL, "Pairty check failed. myFace and yourFace do not have opposite pairty.");
       // return {nullptr, false};
       // }
 
@@ -308,7 +308,7 @@ class Spacetime {
 
           if (v1->getTime() != v2->getTime()) {
             // The two vertices were not in the expected causal disposition.
-            LOG(WARN_LEVEL,
+            CASET_LOG(WARN_LEVEL,
                 "Vertex ",
                 v1->toString(),
                 " and ",
@@ -347,6 +347,7 @@ class Spacetime {
         }
         return {myFace, true};
       }
+      return {nullptr, false};
     }
 
     std::vector<std::shared_ptr<Simplex> > getSimplexes() noexcept {
@@ -358,6 +359,8 @@ class Spacetime {
       }
       return simplexes;
     }
+
+    void embedEuclidean(int dim, double lr, int numIters);
 
   private:
     EdgeList edgeList = EdgeList{};

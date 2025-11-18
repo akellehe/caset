@@ -64,16 +64,14 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             return vertex.getId() == id;
         }
 
-        bool operator==(const std::shared_ptr<Vertex> &vertex) {
-            return vertex->getId() == id;
-        }
-
         std::vector<double> getCoordinates() const {
-            if (coordinates.size() == 0) {
+            if (coordinates.empty()) {
                 throw new std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
             }
             return coordinates;
         }
+
+        void setCoordinates(const std::vector<double> &coords) noexcept { coordinates = coords; }
 
         [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> > moveTo(
             const std::shared_ptr<Vertex> &vertex) {
@@ -99,6 +97,15 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
         getOutEdges() const noexcept { return outEdges; }
+
+        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+        getEdges() const noexcept {
+            std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edges;
+            edges.reserve(inEdges.size() + outEdges.size());
+            edges.insert(inEdges.begin(), inEdges.end());
+            edges.insert(outEdges.begin(), outEdges.end());
+            return edges;
+        }
 
         std::string toString() const noexcept {
             return "<V" + std::to_string(id) + ">";

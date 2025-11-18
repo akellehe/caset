@@ -1,9 +1,10 @@
 [build-system]
 requires = [
-    "scikit-build-core>=0.9",
+#    "cmake>=3.22",
+#    "ninja",                # optional but faster on CI
     "pybind11>=2.12",
-    "cmake>=3.22",
-    "ninja",                # optional but faster on CI
+    "scikit-build-core>=0.9",
+    "torch>=2.9",
 ]
 build-backend = "scikit_build_core.build"
 

@@ -53,6 +53,15 @@ class VertexList {
     std::size_t size() noexcept {
       return vertexList.size();
     }
+
+    std::vector<std::shared_ptr<Vertex>> toVector() const noexcept {
+      std::vector<std::shared_ptr<Vertex>> result;
+      result.reserve(vertexList.size());
+      for (const auto &[key, vertex] : vertexList) {
+        result.push_back(vertex);
+      }
+      return result;
+    }
   private:
     std::unordered_map<std::uint64_t, std::shared_ptr<Vertex>> vertexList{};
 };

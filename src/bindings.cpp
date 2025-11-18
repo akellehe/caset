@@ -25,6 +25,17 @@ namespace py = pybind11;
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
+  py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")
+      .def(py::init<>())
+      .def("__getitem__", &VertexList::operator[])
+      .def("get", &VertexList::get)
+      .def("add", py::overload_cast<const std::shared_ptr<Vertex> &>(&VertexList::add))
+      .def("add", py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList::add))
+      .def("add", py::overload_cast<const std::uint64_t>(&VertexList::add))
+      .def("replace", &VertexList::replace)
+      .def("size", &VertexList::size)
+      .def("toVector", &VertexList::toVector);
+
   py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology");
 
   py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere")
@@ -55,6 +66,8 @@ PYBIND11_MODULE(caset, m) {
       )
       .def("__str__", &Edge::toString)
       .def("__repr__", &Edge::toString)
+      .def("__eq__", &Edge::operator==)
+      .def("__hash__", &Edge::toHash)
       .def("getSourceId", &Edge::getSourceId)
       .def("getTargetId", &Edge::getTargetId);
 
@@ -95,11 +108,13 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"))
       .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
       .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
+      .def("getEdges", &Vertex::getEdges)
       .def("getCoordinates", &Vertex::getCoordinates)
       .def("moveTo", &Vertex::moveTo)
       .def("getId", &Vertex::getId)
       .def("__str__", &Vertex::toString)
       .def("__repr__", &Vertex::toString)
+      .def("__eq__", &Vertex::operator==)
       .def("getInEdges", &Vertex::getInEdges)
       .def("getOutEdges", &Vertex::getOutEdges);
 
@@ -131,6 +146,7 @@ PYBIND11_MODULE(caset, m) {
            py::arg("topology")
       )
       .def(py::init<>())
+      .def("embedEuclidean", &Spacetime::embedEuclidean)
       .def("getSimplexes", &Spacetime::getSimplexes)
       .def("createVertex",
            py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
