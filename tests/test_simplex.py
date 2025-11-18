@@ -12,19 +12,19 @@ class TestSimplex(unittest.TestCase):
         s1 = self.spacetime.createSimplex((4, 1))
         s2 = self.spacetime.createSimplex((3, 2))
         expected = [
-            "<Face (1→2→3→4→1)>",
-            "<Face (0→2→3→4→0)>",
-            "<Face (0→1→3→4→0)>",
-            "<Face (0→1→2→4→0)>",
-            "<Face (0→1→2→3→0)>"
+            "<Face (<V1>→<V2>→<V3>→<V4>→<V1>)>",
+            "<Face (<V0>→<V2>→<V3>→<V4>→<V0>)>",
+            "<Face (<V0>→<V1>→<V3>→<V4>→<V0>)>",
+            "<Face (<V0>→<V1>→<V2>→<V4>→<V0>)>",
+            "<Face (<V0>→<V1>→<V2>→<V3>→<V0>)>"
         ]
         self.assertEqual([str(f) for f in s1.getFacets()], expected)
         expected = [
-            "<Face (6→7→8→9→6)>",
-            "<Face (5→7→8→9→5)>",
-            "<Face (5→6→8→9→5)>",
-            "<Face (5→6→7→9→5)>",
-            "<Face (5→6→7→8→5)>"
+            "<Face (<V6>→<V7>→<V8>→<V9>→<V6>)>",
+            "<Face (<V5>→<V7>→<V8>→<V9>→<V5>)>",
+            "<Face (<V5>→<V6>→<V8>→<V9>→<V5>)>",
+            "<Face (<V5>→<V6>→<V7>→<V9>→<V5>)>",
+            "<Face (<V5>→<V6>→<V7>→<V8>→<V5>)>"
         ]
         self.assertEqual([str(f) for f in s2.getFacets()], expected)
 
@@ -32,19 +32,19 @@ class TestSimplex(unittest.TestCase):
         s1 = self.spacetime.createSimplex((4, 1))
         s2 = self.spacetime.createSimplex((3, 2))
         expected = [
-            "<Face (1→2→3→4→1)>",
-            "<Face (0→2→3→4→0)>",
-            "<Face (0→1→3→4→0)>",
-            "<Face (0→1→2→4→0)>",
-            "<Face (0→1→2→3→0)>"
+            "<Face (<V1>→<V2>→<V3>→<V4>→<V1>)>",
+            "<Face (<V0>→<V2>→<V3>→<V4>→<V0>)>",
+            "<Face (<V0>→<V1>→<V3>→<V4>→<V0>)>",
+            "<Face (<V0>→<V1>→<V2>→<V4>→<V0>)>",
+            "<Face (<V0>→<V1>→<V2>→<V3>→<V0>)>"
         ]
         self.assertEqual([str(f) for f in s1.getFacets()], expected)
         expected = [
-            "<Face (6→7→8→9→6)>",
-            "<Face (5→7→8→9→5)>",
-            "<Face (5→6→8→9→5)>",
-            "<Face (5→6→7→9→5)>",
-            "<Face (5→6→7→8→5)>"
+            "<Face (<V6>→<V7>→<V8>→<V9>→<V6>)>",
+            "<Face (<V5>→<V7>→<V8>→<V9>→<V5>)>",
+            "<Face (<V5>→<V6>→<V8>→<V9>→<V5>)>",
+            "<Face (<V5>→<V6>→<V7>→<V9>→<V5>)>",
+            "<Face (<V5>→<V6>→<V7>→<V8>→<V5>)>"
         ]
         self.assertEqual([str(f) for f in s2.getFacets()], expected)
 

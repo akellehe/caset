@@ -127,7 +127,7 @@ class Spacetime {
 
     std::shared_ptr<Simplex> createSimplex(std::size_t k) {
       if (manual) {
-        throw new std::runtime_error(
+        throw std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
       }
       std::vector<std::shared_ptr<Vertex> > vertices = {};
@@ -156,7 +156,7 @@ class Spacetime {
 
     std::shared_ptr<Simplex> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
       if (manual) {
-        throw new std::runtime_error(
+        throw std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
       }
       SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
@@ -269,7 +269,7 @@ class Spacetime {
     std::tuple<std::shared_ptr<Face>, bool> causallyAttachFaces(std::shared_ptr<Face> &myFace,
                                                                 std::shared_ptr<Face> &yourFace) {
       if (!myFace->isAvailable() || !yourFace->isAvailable()) {
-        throw new std::runtime_error("You attempted to attach faces that are not available to attach.");
+        throw std::runtime_error("You attempted to attach faces that are not available to attach.");
       }
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());

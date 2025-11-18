@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "Edge.h"
 #include "Signature.h"
+#include "Logger.h"
 
 namespace caset {
 /// # The Metric
@@ -48,7 +48,8 @@ class Metric {
       ) const {
 
       if (coordinateFree) {
-        throw new std::runtime_error("You asked a coordinate free metric to compute the squared length of an edge. That data should be store directly on the edge already.");
+        CASET_LOG(ERROR_LEVEL, "You asked a coordinate free metric to compute the squared length of an edge. That data should be store directly on the edge already.");
+        throw std::runtime_error("You asked a coordinate free metric to compute the squared length of an edge. That data should be store directly on the edge already.");
       }
 
       auto diag = signature.getDiagonal();
