@@ -3,29 +3,40 @@
 //
 
 #include <torch/torch.h>
+#include "Logger.h"
 #include "spacetime/Spacetime.h"
 
 
 namespace caset {
 
-void Spacetime::embedEuclidean(int dim, double lr, int numIters) {
-  if (vertexList.size() == 0) return;
-  if (edgeList.size() == 0) return;
+void Spacetime::embedEuclidean(int dimensions, double epsilon) {
+  if (vertexList->size() == 0) return;
+  if (edgeList->size() == 0) return;
 
-  const int N = vertexList.size();
-  const int E = edgeList.size();
+  const int N = vertexList->size();
+  const int E = edgeList->size();
+  double lr = 10e-3;
 
-  std::vector<std::shared_ptr<Edge>> edgeVector = edgeList.toVector();
-  std::vector<std::shared_ptr<Vertex>> vertexVector = vertexList.toVector();
+  std::vector<std::shared_ptr<Edge>> edgeVector = edgeList->toVector();
+  std::vector<std::shared_ptr<Vertex>> vertexVector = vertexList->toVector();
 
   std::unordered_map<std::uint64_t, int> id2idx;
   id2idx.reserve(vertexVector.size());
+  if (vertexVector.empty()) {
+    CASET_LOG(WARN_LEVEL, "No vertices to embed!");
+    return;
+  }
+  if (edgeVector.empty()) {
+    CASET_LOG(WARN_LEVEL, "No edges to embed!");
+    return;
+  }
 
+  CASET_LOG(INFO_LEVEL, "Embedding a ", dimensions, "-d Euclidean space with ", N, " vertices and ", E, " edges.");
   for (int i = 0; i < static_cast<int>(vertexVector.size()); ++i) {
     id2idx[vertexVector[i]->getId()] = i;
   }
 
-  torch::Tensor positions = torch::randn({N, dim}, torch::TensorOptions().dtype(torch::kDouble)).set_requires_grad(true);
+  torch::Tensor positions = torch::randn({N, dimensions}, torch::TensorOptions().dtype(torch::kDouble)).set_requires_grad(true);
   std::vector<int64_t> src_idx_vec(E);
   std::vector<int64_t> tgt_idx_vec(E);
   std::vector<double>  target_sq_vec(E);
@@ -49,10 +60,16 @@ void Spacetime::embedEuclidean(int dim, double lr, int numIters) {
   auto src_idx = torch::from_blob(src_idx_vec.data(), {E}, torch::TensorOptions().dtype(torch::kLong)).clone();
   auto tgt_idx = torch::from_blob(tgt_idx_vec.data(), {E}, torch::TensorOptions().dtype(torch::kLong)).clone();
   auto target_sq = torch::from_blob(target_sq_vec.data(), {E}, torch::TensorOptions().dtype(torch::kDouble)).clone();
+
   // 4. Set up optimizer (Adam is simple and robust)
   torch::optim::Adam optimizer({positions}, torch::optim::AdamOptions(lr));
 
-  for (int iter = 0; iter < numIters; ++iter) {
+  auto previousLoss = torch::tensor({0});
+  auto loss = torch::tensor({0});
+  auto iter = 0;
+  auto epsilonTensor = torch::tensor({epsilon}, torch::TensorOptions().dtype(torch::kDouble));
+  while (iter == 0 || ((loss - previousLoss).abs() > epsilonTensor).item<bool>()) {
+    iter++;
     optimizer.zero_grad();
 
     // 5. Compute predicted squared distances for all edges
@@ -63,7 +80,8 @@ void Spacetime::embedEuclidean(int dim, double lr, int numIters) {
 
     // 6. Loss: match squared distances
     auto residual = sqdist - target_sq;
-    auto loss = residual.pow(2).mean();
+    previousLoss = loss;
+    loss = residual.pow(2).mean();
 
     loss.backward();
     optimizer.step();
@@ -80,15 +98,15 @@ void Spacetime::embedEuclidean(int dim, double lr, int numIters) {
   auto pos_accessor = pos_cpu.accessor<double, 2>();
 
   for (int i = 0; i < N; ++i) {
-    std::vector<double> coords(dim);
-    for (int d = 0; d < dim; ++d) {
+    std::vector<double> coords(dimensions);
+    for (int d = 0; d < dimensions; ++d) {
       coords[d] = pos_accessor[i][d];
     }
     // You don't have a setter now; add one:
     // void Vertex::setCoordinates(const std::vector<double>& coords);
     vertexVector[i]->setCoordinates(coords);
   }
-
+  CASET_LOG(INFO_LEVEL, "Iteration: ", iter, " Loss: ", loss.item<double>(), " Previous Loss: ", previousLoss.item<double>());
 }
 
 } // caset

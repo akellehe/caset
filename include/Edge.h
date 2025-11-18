@@ -87,7 +87,7 @@ class Edge {
       refreshFingerprint();
     }
 
-    bool operator==(const Edge &other) {
+    bool operator==(const Edge &other) const {
       return sourceId == other.getSourceId() && targetId == other.getTargetId();
     }
 

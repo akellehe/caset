@@ -2,20 +2,7 @@ from caset import Spacetime, Simplex
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
-
-fig = plt.figure()
-ax = fig.add_subplot(111, projection="3d")
-
-# Two points
-# x1, y1, z1 = 0, 0, 0
-# x2, y2, z2 = 1, 2, 3
-
-# Plot the line segment between them
-# ax.plot([x1, x2], [y1, y2], [z1, z2])
-
-# Optional: scatter the endpoints
-# ax.scatter([x1, x2], [y1, y2], [z1, z2])
-
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 st = Spacetime()
 simplex14 = st.createSimplex((1, 4))
@@ -36,16 +23,38 @@ for face in facets23:
 
 updated, succeeded = st.causallyAttachFaces(left, right)
 
-st.embedEuclidean(4, 0.0001, 10000)
+st.embedEuclidean()
 vlist = st.getVertexList()
+edges = []
+xmin, xmax = float("inf"), float("-inf")
+ymin, ymax = float("inf"), float("-inf")
+zmin, zmax = float("inf"), float("-inf")
 for edge in (st.getEdgeList().toVector()):
     source = vlist.get(edge.getSourceId())
     target = vlist.get(edge.getTargetId())
+
     t1, x1, y1, z1 = source.getCoordinates()
     t2, x2, y2, z2 = target.getCoordinates()
 
-ax.plot([x1, x2], [y1, y2], [z1, z2])
+    xmin = min(xmin, x1, x2)
+    xmax = max(xmax, x1, x2)
+    ymin = min(ymin, y1, y2)
+    ymax = max(ymax, y1, y2)
+    zmin = min(zmin, z1, z2)
+    zmax = max(zmax, z1, z2)
+
+    edges.append([(x1, y1, z1), (x2, y2, z2)])
+
+fig = plt.figure(figsize=(8, 8))
+ax = fig.add_subplot(111, projection="3d")
+lc = Line3DCollection(edges, linewidths=.5, colors="blue")
+ax.add_collection(lc)
+
+ax.set_xlim(xmin - 1, xmax + 1)
+ax.set_ylim(ymin - 1, ymax + 1)
+ax.set_zlim(zmin - 1, zmax + 1)
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
+
 plt.show()

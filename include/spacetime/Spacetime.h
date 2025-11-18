@@ -73,12 +73,12 @@ class Spacetime {
 
     std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
       manual = true;
-      return vertexList.add(id);
+      return vertexList->add(id);
     }
 
     std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
       manual = true;
-      return vertexList.add(id, coords);
+      return vertexList->add(id, coords);
     }
 
     std::shared_ptr<Edge> createEdge(
@@ -86,9 +86,9 @@ class Spacetime {
       const std::uint64_t tgt
     ) {
       manual = true;
-      std::shared_ptr<Edge> edge = edgeList.add(src, tgt);
-      vertexList[src]->addOutEdge(edge);
-      vertexList[tgt]->addInEdge(edge);
+      std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
+      vertexList->get(src)->addOutEdge(edge);
+      vertexList->get(tgt)->addInEdge(edge);
       return edge;
     }
 
@@ -98,9 +98,9 @@ class Spacetime {
       double squaredLength
     ) noexcept {
       manual = true;
-      std::shared_ptr<Edge> edge = edgeList.add(src, tgt, squaredLength);
-      vertexList[src]->addOutEdge(edge);
-      vertexList[tgt]->addInEdge(edge);
+      std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
+      vertexList->get(src)->addOutEdge(edge);
+      vertexList->get(tgt)->addInEdge(edge);
       return edge;
     }
 
@@ -136,9 +136,9 @@ class Spacetime {
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < k; i++) {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size());
+        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size());
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -161,6 +161,7 @@ class Spacetime {
       }
       SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
       std::uint8_t k = orientation.getK();
+      CASET_LOG(INFO_LEVEL, "creating a ", std::to_string(k), "-simplex from a numeric orientation (", std::to_string(std::get<0>(numericOrientation)), ", ", std::to_string(std::get<1>(numericOrientation)), ")");
       auto [ti, tf] = orientation.numeric();
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
@@ -169,22 +170,25 @@ class Spacetime {
       for (int i = 0; i < ti; i++) {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime)});
+        CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
+        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime)});
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId());
+          CASET_LOG(INFO_LEVEL, "Creating a new edge from ", existingVertex->getId(), "->", newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
         }
         vertices.push_back(newVertex);
       }
-      // incrementTime();
       for (int i = 0; i < tf; i++) {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime + 1)});
+        CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
+        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
+          CASET_LOG(INFO_LEVEL, "Creating a new edge from ", existingVertex->getId(), "->", newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -200,10 +204,10 @@ class Spacetime {
       return spacetimeType;
     }
 
-    [[nodiscard]] EdgeList getEdgeList() noexcept {
+    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() noexcept {
       return edgeList;
     }
-    [[nodiscard]] VertexList getVertexList() noexcept {
+    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() noexcept {
       return vertexList;
     }
 
@@ -220,18 +224,18 @@ class Spacetime {
 
     void replaceVertex(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
       for (auto &edge : toRemove->getInEdges()) {
-        edgeList.remove(edge);
+        edgeList->remove(edge);
         toRemove->removeInEdge(edge);
         edge->replaceTargetVertex(toAdd->getId());
-        toAdd->addInEdge(edgeList.add(edge));
+        toAdd->addInEdge(edgeList->add(edge));
       }
       for (auto &edge : toRemove->getOutEdges()) {
-        edgeList.remove(edge);
+        edgeList->remove(edge);
         toRemove->removeOutEdge(edge);
         edge->replaceSourceVertex(toAdd->getId());
-        toAdd->addOutEdge(edgeList.add(edge));
+        toAdd->addOutEdge(edgeList->add(edge));
       }
-      vertexList.replace(toRemove, toAdd);
+      vertexList->replace(toRemove, toAdd);
     }
 
     ///
@@ -314,24 +318,24 @@ class Spacetime {
         for (auto i : myVertexIdxs) {
           int j = i - attempts;
 
-          const auto &v1 = myVertices[i];
-          const auto &v2 = yourVertices[j];
+          const auto &myVertex = myVertices[i];
+          const auto &yourVertex = yourVertices[j];
 
-          if (v1->getTime() != v2->getTime()) {
+          if (myVertex->getTime() != yourVertex->getTime()) {
             // The two vertices were not in the expected causal disposition.
             CASET_LOG(WARN_LEVEL,
                 "Vertex ",
-                v1->toString(),
+                myVertex->toString(),
                 " and ",
-                v2->toString(),
+                yourVertex->toString(),
                 " do not have the same causal disposition! ",
-                v1->toString(),
+                myVertex->toString(),
                 " has t=",
-                v1->getTime(),
+                myVertex->getTime(),
                 " ",
-                v2->toString(),
+                yourVertex->toString(),
                 " has t=",
-                v2->getTime());
+                yourVertex->getTime());
             int front = myVertexIdxs.front();
             myVertexIdxs.pop_front();
             myVertexIdxs.push_back(front);
@@ -340,23 +344,26 @@ class Spacetime {
           }
           /// Create a new vertex, v3 with all the edges of v1 and v2 combined, but exclude those edges of v2 that lie on
           /// `yourFace` since they are being replaced by those corresponding edges on `myFace`.
-          for (const auto &edge : v2->getInEdges()) {
-            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
-            v2->removeInEdge(edge);
-            edgeList.remove(edge);
-            edge->replaceTargetVertex(v1->getId());
-            edgeList.add(edge);
-            v1->addInEdge(edge);
+          for (const auto &edge : yourVertex->getInEdges()) {
+            // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
+            // Edges aren't part of `yourFace`.
+            if (yourFace->hasEdge(
+              edge->getSourceId(),
+              edge->getTargetId()
+              )) continue;
+            yourVertex->removeInEdge(edge);
+            edgeList->remove(edge);
+            edge->replaceTargetVertex(myVertex->getId());
+            myVertex->addInEdge(edgeList->add(edge));
           }
-          for (const auto &edge : v2->getOutEdges()) {
+          for (const auto &edge : yourVertex->getOutEdges()) {
             if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
-            v2->removeOutEdge(edge);
-            edgeList.remove(edge);
-            edge->replaceSourceVertex(v1->getId());
-            edgeList.add(edge);
-            v1->addOutEdge(edge);
+            yourVertex->removeOutEdge(edge);
+            edgeList->remove(edge);
+            edge->replaceSourceVertex(myVertex->getId());
+            myVertex->addOutEdge(edgeList->add(edge));
           }
-          vertexList.replace(v2, v1);
+          if (yourVertex->degree() == 0) vertexList->replace(yourVertex, myVertex);
         }
         return {myFace, true};
       }
@@ -373,11 +380,11 @@ class Spacetime {
       return simplexes;
     }
 
-    void embedEuclidean(int dim, double lr, int numIters);
+    void embedEuclidean(int dimensions, double epsilon);
 
   private:
-    EdgeList edgeList = EdgeList{};
-    VertexList vertexList = VertexList{};
+    std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
+    std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
     std::unordered_map<SimplexOrientation, Bucket> simplicialComplex{};
 
     std::vector<std::shared_ptr<Observable> > observables{};

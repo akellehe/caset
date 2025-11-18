@@ -16,29 +16,18 @@ namespace caset {
 class EdgeList {
   public:
     std::shared_ptr<Edge> add(const std::shared_ptr<Edge> &edge) {
-      if (edgeList.contains(edge)) {
-        return *edgeList.find(edge);
-      }
-      edgeList.insert(edge);
-      return edge;
+      return getOrInsert(edge);
     }
 
-    std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt) noexcept {
+
+    std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt) {
       auto edge = std::make_shared<Edge>(src, tgt);
-      if (edgeList.contains(edge)) {
-        return *edgeList.find(edge);
-      }
-      edgeList.insert(edge);
-      return edge;
+      return getOrInsert(edge);
     }
 
     std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt, double squaredLength) noexcept {
       auto edge = std::make_shared<Edge>(src, tgt, squaredLength);
-      if (edgeList.contains(edge)) {
-        return *edgeList.find(edge);
-      }
-      edgeList.insert(edge);
-      return edge;
+      return getOrInsert(edge);
     }
 
     void remove(const std::shared_ptr<Edge> &edge) noexcept {
@@ -54,8 +43,8 @@ class EdgeList {
       edgeList.insert(toAdd);
     }
 
-    [[nodiscard]] std::vector<std::shared_ptr<Edge>> toVector() const noexcept {
-      std::vector<std::shared_ptr<Edge>> result;
+    [[nodiscard]] std::vector<std::shared_ptr<Edge> > toVector() const noexcept {
+      std::vector<std::shared_ptr<Edge> > result;
       result.reserve(edgeList.size());
       for (auto &edge : edgeList) {
         result.push_back(edge);
@@ -69,6 +58,19 @@ class EdgeList {
 
   private:
     std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edgeList{};
+
+    std::shared_ptr<Edge> getOrInsert(const std::shared_ptr<Edge> &edge) {
+      if (edgeList.contains(edge)) {
+        auto found = *edgeList.find(edge);
+        if (found->getSourceId() != edge->getSourceId() || found->getTargetId() != edge->getTargetId()) {
+          throw std::runtime_error("Fingerprint collision between edges: " + edge->toString() + " and " + found->toString());
+        }
+        return found;
+      }
+      CASET_LOG(INFO_LEVEL, "Adding edge: ", edge->toString());
+      edgeList.insert(edge);
+      return edge;
+    }
 };
 } // caset
 

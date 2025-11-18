@@ -8,6 +8,8 @@
 #include <tuple>
 #include <array>
 #include <vector>
+#include <string>
+#include <sstream>
 
 namespace caset {
 
@@ -64,7 +66,7 @@ class Fingerprint {
       return x ^ (x >> 31);
     }
 
-    static std::tuple<std::uint8_t, std::uint64_t, IdArray> computeFingerprint(
+    static std::tuple<std::uint64_t, std::uint8_t, IdArray> computeFingerprint(
       const std::vector<IdType> &ids__) {
       if (ids__.size() > kMax) throw std::length_error("VertexFingerprint: Too many ids");
       std::uint8_t n = static_cast<std::uint8_t>(ids__.size());
@@ -81,6 +83,17 @@ class Fingerprint {
         h *= 0x100000001b3ull; // FNV-ish step
       }
       return {h, n, ids};
+    }
+
+    std::string toString() {
+      std::stringstream ss;
+      ss << "<Fingerprint: " << h_ << " (";
+      for (std::size_t i = 0; i < n_; ++i) {
+        ss << ids_[i];
+        if (i < n_ - 1) ss << ", ";
+      }
+      ss << ")>";
+      return ss.str();
     }
 
     std::uint64_t fingerprint() const noexcept { return h_; }

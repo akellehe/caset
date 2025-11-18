@@ -92,6 +92,8 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         void removeInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.erase(edge); }
         void removeOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.erase(edge); }
 
+        std::size_t degree() const noexcept { return inEdges.size() + outEdges.size(); }
+
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
         getInEdges() const noexcept { return inEdges; }
 

@@ -136,8 +136,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     Simplex(
-      std::vector<std::shared_ptr<Vertex> > vertices_,
-      std::vector<std::shared_ptr<Edge> > edges_,
+      std::vector<std::shared_ptr<Vertex>> vertices_,
+      std::vector<std::shared_ptr<Edge>> edges_,
       SimplexOrientation orientation_
     ) : orientation(orientation_), vertices(vertices_), edges(edges_), fingerprint({}){
       std::vector<IdType> ids = {};
@@ -281,10 +281,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     Fingerprint fingerprint;
 
   private:
-    std::vector<std::shared_ptr<Vertex> > vertices;
-    std::vector<std::shared_ptr<Edge> > edges;
+    std::vector<std::shared_ptr<Vertex> > vertices{};
+    std::vector<std::shared_ptr<Edge> > edges{};
 
-    SimplexOrientation orientation;
+    SimplexOrientation orientation{};
 
     std::vector<std::shared_ptr<Face>> facets{};
     static std::unordered_set<std::shared_ptr<Face>, FaceHash, FaceEq> facetRegistry;

@@ -9,6 +9,14 @@ requires = [
 ]
 build-backend = "scikit_build_core.build"
 
+[project]
+name = "caset"
+version = "0.1.0"
+description = "C++/pybind11 extension for lattice spacetime experiments"
+authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
 dependencies = [
     "pybind11-stubgen==2.5.5",
     "matplotlib==3.10.7",
@@ -16,9 +24,7 @@ dependencies = [
     "pybind11>=2.12",
     "torch>=2.9",
 ]
-
-[project.optional-dependencies]
-dev = [
+optional-dependencies.dev = [
     "numpy>=2.3.5",
     "pytest",
     "scikit-build-core>=0.9",
@@ -44,15 +50,6 @@ dev = [
     "sphinx==8.2.3",
     "torch>=2.9.0",
 ]
-
-[project]
-name = "caset"
-version = "0.1.0"
-description = "C++/pybind11 extension for lattice spacetime experiments"
-authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
-readme = "README.md"
-requires-python = ">=3.9"
-license = { text = "MIT" }
 
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"

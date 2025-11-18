@@ -86,15 +86,49 @@ class TestSpacetime(unittest.TestCase):
         st = Spacetime()
         simplex14 = st.createSimplex((1, 4))
         simplex23 = st.createSimplex((2, 3))
-        st.embedEuclidean(4, 0.0001, 100000)
+        st.embedEuclidean()
         vertices = st.getVertexList().toVector()
         breakpoint()
 
-
     def test_attaching_faces(self):
         st = Spacetime()
+
+        firstVertexList = st.getVertexList()
+        firstEdgeList = st.getEdgeList()
+
         simplex14 = st.createSimplex((1, 4))
         simplex23 = st.createSimplex((2, 3))
+
+        self.assertEqual(len(simplex14.getVertices()), 5)
+        self.assertEqual(len(simplex14.getEdges()), 10)
+
+        self.assertEqual(len(simplex23.getVertices()), 5)
+        self.assertEqual(len(simplex23.getEdges()), 10)
+
+        allVertices = [v.getId() for v in simplex14.getVertices() + simplex23.getVertices()]
+        self.assertEqual(len(allVertices), len(set(allVertices)))
+
+        allEdges = [(e.getSourceId(), e.getTargetId()) for e in simplex14.getEdges() + simplex23.getEdges()]
+        self.assertEqual(len(simplex14.getEdges()), len(set(simplex14.getEdges())))
+        self.assertEqual(len(simplex23.getEdges()), len(set(simplex23.getEdges())))
+
+        edges23 = {(e.getSourceId(), e.getTargetId()) for e in simplex23.getEdges()}
+        edges14 = {(e.getSourceId(), e.getTargetId()) for e in simplex14.getEdges()}
+
+        self.assertTrue(edges23.isdisjoint(edges14))
+        self.assertEqual(len(allEdges), len(set(allEdges)))
+
+        totalVerticesBefore = len(st.getVertexList().toVector())
+        self.assertEqual(totalVerticesBefore, 10)
+
+        totalEdgesBefore = len(st.getEdgeList().toVector())
+        self.assertEqual(totalEdgesBefore, 20)
+
+        for edge in firstEdgeList.toVector():
+            source = firstVertexList.get(edge.getSourceId())
+            target = firstVertexList.get(edge.getTargetId())
+            self.assertIsNotNone(source)
+            self.assertIsNotNone(target)
 
         left, right = None, None
         facets14 = simplex14.getFacets()
@@ -109,56 +143,38 @@ class TestSpacetime(unittest.TestCase):
                 right = face
                 break
 
+        totalVerticesBefore = len(st.getVertexList().toVector())
+        totalEdgesBefore = len(st.getEdgeList().toVector())
+        self.assertEqual(totalVerticesBefore, 10)
+        self.assertEqual(totalEdgesBefore, 20)
+
+        rightVertexesBefore = [v.getId() for v in right.getVertices()]
+        self.assertEqual(len(rightVertexesBefore), 4)
+        rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        self.assertEqual(len(rightEdgesBefore), 4)
+
         updated, succeeded = st.causallyAttachFaces(left, right)
         self.assertTrue(succeeded)
 
         v1, v2, v3, v4 = updated.getVertices()
 
-        # (Pdb) updated.getVertices()[0].getInEdges()
-        # {5->0}
-        # edges = v1.getEdges()
-        # breakpoint()
-        # self.assertEqual(e1.getSourceId(), 5)
-        # self.assertEqual(e1.getTargetId(), 0)
+        secondVertexList = st.getVertexList()
+        secondEdgeList = st.getEdgeList()
+        self.assertIs(firstVertexList, secondVertexList)
+        self.assertIs(firstEdgeList, secondEdgeList)
+        for edge in secondEdgeList.toVector():
+            source = secondVertexList.get(edge.getSourceId())
+            target = secondVertexList.get(edge.getTargetId())
+            self.assertIsNotNone(source)
+            self.assertIsNotNone(target)
 
-        # (Pdb) updated.getVertices()[1].getInEdges()
-        # {0->2, 5->2, 1->2}
-        # e1, e2, e3 = v2.getInEdges()
-        # self.assertEqual(e1.getSourceId(), 0)
-        # self.assertEqual(e1.getTargetId(), 2)
-        # self.assertEqual(e2.getSourceId(), 5)
-        # self.assertEqual(e2.getTargetId(), 2)
-        # self.assertEqual(e3.getSourceId(), )
-        # self.assertEqual(e3.getTargetId(), )
+        rightVertexesAfter = [v.getId() for v in right.getVertices()]
+        rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        totalVerticesAfter = len(st.getVertexList().toVector())
+        totalEdgesAfter = len(st.getEdgeList().toVector())
 
-        # (Pdb) updated.getVertices()[2].getInEdges()
-        # {2->3, 0->3, 5->3, 1->3}
-        # e1, e2, e3, e4 = v3.getInEdges()
-        # self.assertEqual(e1.getSourceId(), 2)
-        # self.assertEqual(e1.getTargetId(), 3)
-        # self.assertEqual(e2.getSourceId(), 0)
-        # self.assertEqual(e2.getTargetId(), 3)
-        # self.assertEqual(e3.getSourceId(), 5)
-        # self.assertEqual(e3.getTargetId(), 3)
-        # self.assertEqual(e4.getSourceId(), 1)
-        # self.assertEqual(e4.getTargetId(), 3)
-
-        # (Pdb) updated.getVertices()[3].getInEdges()
-        # {3->4, 0->4, 2->4, 5->4}
-        # e1, e2, e3, e4 = v3.getInEdges()
-        # self.assertEqual(e1.getSourceId(), 3)
-        # self.assertEqual(e1.getTargetId(), 4)
-        # self.assertEqual(e2.getSourceId(), 0)
-        # self.assertEqual(e2.getTargetId(), 4)
-        # self.assertEqual(e3.getSourceId(), 2)
-        # self.assertEqual(e3.getTargetId(), 4)
-        # self.assertEqual(e4.getSourceId(), 5)
-        # self.assertEqual(e4.getTargetId(), 4)
-
-
-        # breakpoint()
-        # print(updated)
-        # TODO: Verify the edges going into the joined face from both simplexes are correct.
+        breakpoint()
+        print('foo')
 
 if __name__ == '__main__':
     unittest.main()
