@@ -19,15 +19,15 @@ class TestFace(unittest.TestCase):
         v1, v2, v3, v4 = f1.getVertices()
 
         #The same face has pairty flag=1
-        clone = Face([], [v1, v2, v3, v4])
+        clone = Face(set(), [v1, v2, v3, v4])
         self.assertEqual(f1.checkPairty(clone), 1)
 
         # A single vertex swap has pairty flag=-1
-        oneSwap = Face([], [v2, v1, v3, v4])
+        oneSwap = Face(set(), [v2, v1, v3, v4])
         self.assertEqual(f1.checkPairty(oneSwap), -1)
 
         # Two swaps has pairty flag=1
-        twoSwaps = Face([], [v2, v1, v4, v3])
+        twoSwaps = Face(set(), [v2, v1, v4, v3])
         self.assertEqual(f1.checkPairty(twoSwaps), 1)
 
     def test_get_edges(self):

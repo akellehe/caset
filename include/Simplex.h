@@ -6,11 +6,11 @@
 #include <functional>
 #include <cstdint>
 #include <algorithm>
+#include <sstream>
 
 #include <torch/torch.h>
 
 #include "Edge.h"
-#include "Face.h"
 #include "Fingerprint.h"
 
 namespace caset {
@@ -148,6 +148,18 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       fingerprint = Fingerprint(ids);
     }
 
+    std::string toString() const {
+      std::stringstream ss;
+      ss << "<";
+      ss << getOrientation().getK();
+      ss << "-Simplex (";
+      for (const auto &v : vertices) {
+        ss << v->toString() << "→";
+      }
+      ss << vertices[0]->toString() << ")>";
+      return ss.str();
+    }
+
     /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
       ///
     double getVolume() const {
@@ -264,30 +276,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplexes contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Face> > getFacets() noexcept {
-      if (facets.size() > 0) {
-        return facets;
-      }
-      auto verts = getVertices();
-      facets.reserve(verts.size());
-      std::vector<std::shared_ptr<const Simplex>> cofaces = {shared_from_this()};
-      for (int skip=0; skip<verts.size(); skip++) {
-        std::vector<std::shared_ptr<Vertex>> faceVertices;
-        faceVertices.reserve(verts.size());
-        faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
-        faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
-        std::shared_ptr<Face> facet = std::make_shared<Face>(cofaces, faceVertices);
-        if (facetRegistry.contains(facet->fingerprint.fingerprint())) {
-          auto found = *facetRegistry.find(facet->fingerprint.fingerprint());
-          found->addCoface(shared_from_this());
-          facets.push_back(found);
-        } else {
-          facetRegistry.insert(facet);
-          facets.push_back(facet);
-        }
-      }
-      return facets;
-    }
+    [[nodiscard]] std::vector<std::shared_ptr<Face> > getFacets() noexcept;
 
     Fingerprint fingerprint;
 
@@ -300,9 +289,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     std::vector<std::shared_ptr<Face>> facets{};
     static std::unordered_set<std::shared_ptr<Face>, FaceHash, FaceEq> facetRegistry;
 };
-
-using SimplexHash = FingerprintHash<Simplex>;
-using SimplexEq = FingerprintEq<Simplex>;
 
 }
 

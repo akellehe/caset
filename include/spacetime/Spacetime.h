@@ -67,7 +67,7 @@ class Spacetime {
       // return topology->build(this);
     }
 
-    void addObservable(std::shared_ptr<Observable> &observable) {
+    void addObservable(const std::shared_ptr<Observable> &observable) {
       observables.push_back(observable);
     }
 
@@ -165,13 +165,12 @@ class Spacetime {
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
-      std::cout << "A " << k << "-simplex" << " has " << Simplex::computeNumberOfEdges(k) << " edges" << std::endl;
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < ti; i++) {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime)});
-        for (auto existingVertex : vertices) {
+        for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
@@ -184,7 +183,7 @@ class Spacetime {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         std::shared_ptr<Vertex> newVertex = vertexList.add(vertexList.size(), {static_cast<double>(currentTime + 1)});
-        for (auto existingVertex : vertices) {
+        for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList.add(existingVertex->getId(), newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
@@ -211,15 +210,15 @@ class Spacetime {
     [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
 
     [[nodiscard]] double getCurrentTime() const noexcept {
-      return currentTime;
+      return static_cast<double>(currentTime);
     }
 
     double incrementTime() noexcept {
       currentTime++;
-      return currentTime;
+      return static_cast<double>(currentTime);
     }
 
-    void replaceVertex(std::shared_ptr<Vertex> &toRemove, std::shared_ptr<Vertex> &toAdd) {
+    void replaceVertex(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
       for (auto &edge : toRemove->getInEdges()) {
         edgeList.remove(edge);
         toRemove->removeInEdge(edge);
@@ -267,9 +266,22 @@ class Spacetime {
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return myFace, updated with the second simplex glued.
     std::tuple<std::shared_ptr<Face>, bool> causallyAttachFaces(std::shared_ptr<Face> &myFace,
-                                                                std::shared_ptr<Face> &yourFace) {
-      if (!myFace->isAvailable() || !yourFace->isAvailable()) {
-        throw std::runtime_error("You attempted to attach faces that are not available to attach.");
+                                                                const std::shared_ptr<Face> &yourFace) {
+      if (!myFace->isAvailable()) {
+        CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
+        CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
+        for (const auto &coface : myFace->getCofaces()) {
+          CASET_LOG(ERROR_LEVEL, coface->toString());
+        }
+        throw std::runtime_error("(myFace) You attempted to attach faces that are not available to attach.");
+      }
+      if (!yourFace->isAvailable()) {
+        CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
+        CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
+        for (const auto &coface : yourFace->getCofaces()) {
+          CASET_LOG(ERROR_LEVEL, coface->toString());
+        }
+        throw std::runtime_error("(yourFace) You attempted to attach faces that are not available to attach.");
       }
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());

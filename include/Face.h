@@ -13,9 +13,9 @@
 #include "Fingerprint.h"
 #include "Vertex.h"
 #include "Logger.h"
+#include "Simplex.h"
 
 namespace caset {
-class Simplex;
 
 ///
 /// # Face
@@ -28,8 +28,9 @@ class Simplex;
 /// attach it
 class Face {
   public:
-    Face(std::vector<std::shared_ptr<const Simplex> > cofaces_,
-         std::vector<std::shared_ptr<Vertex> > vertices_) : cofaces(cofaces_), vertices(vertices_), fingerprint({}) {
+    Face(
+      std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces_,
+      std::vector<std::shared_ptr<Vertex> > vertices_) : cofaces(cofaces_), vertices(vertices_), fingerprint({}) {
       vertexIdLookup.reserve(vertices_.size());
       std::vector<IdType> ids{};
       ids.reserve(vertices_.size());
@@ -125,17 +126,19 @@ class Face {
     ///
     /// We define a face as a set of shared vertices. The face of any given k-simplex \f$ \sigma^k \f$ is a k-1 simplex,
     /// \f$ \sigma^{k-1} \f$ such that \f$ \sigma^{k-1} \subset \sigma^k \f$.
-    void addCoface(const std::shared_ptr<const Simplex> &simplex) {
-      cofaces.push_back(simplex);
+    void addCoface(const std::shared_ptr<Simplex> &simplex) {
+      cofaces.insert(simplex);
     };
 
     ///
     /// This method runs within the context of an n-dimensional simplicial manifold; each (n-1) simplex (where faces are
     /// codimension-1) is incident to exactly 2 n-simplices for interior faces and exactly 1 n-simplex for faces along
-    /// the boundary.
+    /// the boundary. At the moment we don't have any constraints regarding which Simplices are along the boundary, so
+    /// if a face has less than 2 co-faces; it's available to be attached to another simplex.
+    ///
+    /// When 2-cofaces are attached; the face becomes internal.
     [[nodiscard]] bool isAvailable() const {
-      if (cofaces.size() < 2) {
-        // For an interior simplex.
+      if (cofaces.size() < 2) {  // For an interior simplex.
         return true;
       }
       return false;
@@ -239,7 +242,7 @@ class Face {
     /// \f]
     ///
     /// @return The set of k-simplexes that share this face.
-    [[nodiscard]] std::vector<std::shared_ptr<const Simplex> > getCofaces() const noexcept { return cofaces; }
+    [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> getCofaces() const noexcept { return cofaces; }
 
     ///
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
@@ -248,14 +251,12 @@ class Face {
     Fingerprint fingerprint;
 
   private:
-    std::vector<std::shared_ptr<Vertex> > vertices;
-    std::vector<std::shared_ptr<const Simplex> > cofaces;
-    std::vector<const std::shared_ptr<Edge>> edges;
+    std::vector<std::shared_ptr<Vertex> > vertices{};
+    std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
+    std::vector<const std::shared_ptr<Edge>> edges{};
     std::unordered_map<IdType, std::shared_ptr<Vertex> > vertexIdLookup{};
 };
 
-using FaceHash = FingerprintHash<Face>;
-using FaceEq = FingerprintEq<Face>;
 } // caset
 
 namespace std {

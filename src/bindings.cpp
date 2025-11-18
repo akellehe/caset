@@ -25,6 +25,45 @@ namespace py = pybind11;
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
+  py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
+      .def(
+        py::init<
+          std::uint64_t,
+          std::uint64_t
+        >(),
+        py::arg("source"),
+        py::arg("target")
+      )
+      .def(
+        py::init<
+          std::uint64_t,
+          std::uint64_t,
+          double>(),
+        py::arg("source"),
+        py::arg("target"),
+        py::arg("squaredLength")
+      )
+      .def("__str__", &Edge::toString)
+      .def("__repr__", &Edge::toString)
+      .def("__eq__", &Edge::operator==)
+      .def("__hash__", &Edge::toHash)
+      .def("getSourceId", &Edge::getSourceId)
+      .def("getTargetId", &Edge::getTargetId);
+
+  py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
+      .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"))
+      .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
+      .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
+      .def("getEdges", &Vertex::getEdges)
+      .def("getCoordinates", &Vertex::getCoordinates)
+      .def("moveTo", &Vertex::moveTo)
+      .def("getId", &Vertex::getId)
+      .def("__str__", &Vertex::toString)
+      .def("__repr__", &Vertex::toString)
+      .def("__eq__", &Vertex::operator==)
+      .def("getInEdges", &Vertex::getInEdges)
+      .def("getOutEdges", &Vertex::getOutEdges);
+
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")
       .def(py::init<>())
       .def("__getitem__", &VertexList::operator[])
@@ -55,34 +94,9 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<>())
       .def("build", &Toroid::build);
 
-  py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
-      .def(
-        py::init<
-          std::uint64_t,
-          std::uint64_t
-        >(),
-        py::arg("source"),
-        py::arg("target")
-      )
-      .def(
-        py::init<
-          std::uint64_t,
-          std::uint64_t,
-          double>(),
-        py::arg("source"),
-        py::arg("target"),
-        py::arg("squaredLength")
-      )
-      .def("__str__", &Edge::toString)
-      .def("__repr__", &Edge::toString)
-      .def("__eq__", &Edge::operator==)
-      .def("__hash__", &Edge::toHash)
-      .def("getSourceId", &Edge::getSourceId)
-      .def("getTargetId", &Edge::getTargetId);
-
   py::class_<Face, std::shared_ptr<Face> >(m, "Face")
       .def(py::init<
-        std::vector<std::shared_ptr<const Simplex> >,
+        std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>,
         std::vector<std::shared_ptr<Vertex> > >())
       .def("__repr__", &Face::toString)
       .def("__str__", &Face::toString)
@@ -111,21 +125,9 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertices", &Simplex::getVertices)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getFacets", &Simplex::getFacets)
+      .def("__str__", &Simplex::toString)
+      .def("__repr__", &Simplex::toString)
       .def("getEdges", &Simplex::getEdges);
-
-  py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
-      .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"))
-      .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
-      .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
-      .def("getEdges", &Vertex::getEdges)
-      .def("getCoordinates", &Vertex::getCoordinates)
-      .def("moveTo", &Vertex::moveTo)
-      .def("getId", &Vertex::getId)
-      .def("__str__", &Vertex::toString)
-      .def("__repr__", &Vertex::toString)
-      .def("__eq__", &Vertex::operator==)
-      .def("getInEdges", &Vertex::getInEdges)
-      .def("getOutEdges", &Vertex::getOutEdges);
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")
       .def(py::init<bool, Signature &>(),
