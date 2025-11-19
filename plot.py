@@ -4,24 +4,26 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
+def choose_facet(simplex):
+    for facet in simplex.getFacets():
+        if not facet.isTimelike():
+            return facet
+    return None
+
 st = Spacetime()
-simplex14 = st.createSimplex((1, 4))
-simplex23 = st.createSimplex((2, 3))
+print("Creating simplexes...")
+leftSimplex = st.createSimplex((1, 4))
+middleSimplex = st.createSimplex((2, 3))
+rightSimplex = st.createSimplex((1, 4))
 
-left, right = None, None
-facets14 = simplex14.getFacets()
-for facet in facets14:
-    if facet.isTimelike():
-        left = facet
-        break
+print("Choosing facets...")
+left, middle, right = choose_facet(leftSimplex), choose_facet(middleSimplex), choose_facet(rightSimplex)
 
-facets23 = simplex23.getFacets()
-for face in facets23:
-    if face.isTimelike():
-        right = face
-        break
+print("Attaching left and middle")
+updated, succeeded = st.causallyAttachFaces(left, middle)
 
-updated, succeeded = st.causallyAttachFaces(left, right)
+print("Attaching updated and right")
+updated, succeeded = st.causallyAttachFaces(updated, right)
 
 def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
     # Normalize so alpha^2 + beta^2 ~= 1 if you care:
@@ -33,6 +35,7 @@ def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
     z_p = alpha * z + beta * t
     return x_p, y_p, z_p
 
+print("Embedding...")
 st.embedEuclidean()
 vlist = st.getVertexList()
 timeEdges = []
@@ -40,6 +43,7 @@ spaceEdges = []
 xmin, xmax = float("inf"), float("-inf")
 ymin, ymax = float("inf"), float("-inf")
 zmin, zmax = float("inf"), float("-inf")
+
 for edge in (st.getEdgeList().toVector()):
     source = vlist.get(edge.getSourceId())
     target = vlist.get(edge.getTargetId())

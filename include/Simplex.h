@@ -278,6 +278,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @return /// all k-1 simplexes contained within this k-simplex.
     [[nodiscard]] std::vector<std::shared_ptr<Face> > getFacets() noexcept;
 
+    ///
+    /// TODO: when we attach another simplex to this simplex; we need to update the (numeric) orientation of the
+    ///   co-faces/Simplex (es).
+    ///  void updateCofaceOrientation(std::shared_ptr<Simplex> &newlyAttachedSimplex);
+
     Fingerprint fingerprint;
 
   private:
