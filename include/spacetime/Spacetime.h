@@ -130,6 +130,7 @@ class Spacetime {
         throw std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
       }
+      double squaredLength = alpha;
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
@@ -138,7 +139,7 @@ class Spacetime {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size());
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -159,6 +160,8 @@ class Spacetime {
         throw std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
       }
+      double squaredLength = alpha;
+      double timelikeSquaredLength = alpha;
       SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
       std::uint8_t k = orientation.getK();
       CASET_LOG(INFO_LEVEL, "creating a ", std::to_string(k), "-simplex from a numeric orientation (", std::to_string(std::get<0>(numericOrientation)), ", ", std::to_string(std::get<1>(numericOrientation)), ")");
@@ -172,8 +175,11 @@ class Spacetime {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime)});
+        if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
+          timelikeSquaredLength = -alpha;
+        }
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           CASET_LOG(INFO_LEVEL, "Creating a new edge from ", existingVertex->getId(), "->", newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
@@ -182,13 +188,18 @@ class Spacetime {
         vertices.push_back(newVertex);
       }
       for (int i = 0; i < tf; i++) {
-        // Create ti Timelike vertices
+        // Create ti Spacelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
         CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
         for (const auto &existingVertex : vertices) {
           CASET_LOG(INFO_LEVEL, "Creating a new edge from ", existingVertex->getId(), "->", newVertex->getId());
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId());
+          std::shared_ptr<Edge> edge;
+          if (existingVertex->getTime() < newVertex->getTime()) {
+            edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+          } else {
+            edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+          }
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);

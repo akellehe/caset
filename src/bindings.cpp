@@ -48,6 +48,7 @@ PYBIND11_MODULE(caset, m) {
       .def("__eq__", &Edge::operator==)
       .def("__hash__", &Edge::toHash)
       .def("getSourceId", &Edge::getSourceId)
+      .def("getSquaredLength", &Edge::getSquaredLength)
       .def("getTargetId", &Edge::getTargetId);
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")

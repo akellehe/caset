@@ -54,7 +54,9 @@ void Spacetime::embedEuclidean(int dimensions, double epsilon) {
 
     double L = edge->getSquaredLength();
     // If you have Minkowski lengths and want magnitude-only, use std::abs(L).
-    target_sq_vec[e] = L;
+    target_sq_vec[e] = std::abs(L)
+      ? std::abs(L)
+      : epsilon; // Avoid zero target distances which can cause issues in optimization;
   }
 
   auto src_idx = torch::from_blob(src_idx_vec.data(), {E}, torch::TensorOptions().dtype(torch::kLong)).clone();

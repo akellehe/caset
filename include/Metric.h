@@ -15,7 +15,7 @@ namespace caset {
 ///
 class Metric {
   public:
-    Metric(bool coordinateFree_, Signature &signature_) : signature(signature_), coordinateFree(coordinateFree_) {
+    Metric(bool coordinateFree_, Signature &signature_) : signature(std::make_shared<Signature>(signature_)), coordinateFree(coordinateFree_) {
     }
 
     ///
@@ -52,7 +52,7 @@ class Metric {
         throw std::runtime_error("You asked a coordinate free metric to compute the squared length of an edge. That data should be store directly on the edge already.");
       }
 
-      auto diag = signature.getDiagonal();
+      auto diag = signature->getDiagonal();
       double lengthSquared = 0.0;
       for (int i = 0; i < diag.size(); ++i) {
         double delta = sourceCoords[i] - targetCoords[i];
@@ -61,8 +61,12 @@ class Metric {
       return lengthSquared;
     }
 
+    [[nodiscard]] std::shared_ptr<Signature> getSignature() const noexcept {
+      return signature;
+    }
+
   private:
-    Signature signature;
+    std::shared_ptr<Signature> signature;
     bool coordinateFree;
 };
 } // caset

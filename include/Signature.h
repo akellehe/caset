@@ -26,9 +26,17 @@ class Signature {
       }
     }
 
-    std::vector<int> getDiagonal() const noexcept {
+    [[nodiscard]] std::vector<int> getDiagonal() const noexcept {
       return diag;
     };
+
+    [[nodiscard]] int getDimensions() const noexcept {
+      return dimensions;
+    }
+
+    [[nodiscard]] SignatureType getSignatureType() const noexcept {
+      return signatureType;
+    }
 
   private:
     std::vector<int> diag;

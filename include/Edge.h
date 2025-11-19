@@ -91,11 +91,12 @@ class Edge {
       return sourceId == other.getSourceId() && targetId == other.getTargetId();
     }
 
-    std::uint64_t toHash() const {
+    [[nodiscard]] std::uint64_t toHash() const {
       return fingerprint.fingerprint();
     }
 
     Fingerprint fingerprint;
+
   private:
     std::uint64_t sourceId;
     std::uint64_t targetId;
