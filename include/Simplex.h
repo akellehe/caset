@@ -14,6 +14,7 @@
 #include "Edge.h"
 #include "Fingerprint.h"
 #include "Vertex.h"
+#include "Logger.h"
 
 namespace caset {
 ///
@@ -133,7 +134,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       vertexIdLookup.reserve(vertices_.size());
       for (int i=0; i<vertices_.size(); i++) {
         ids.push_back(vertices_[i]->getId());
-        vertexIdLookup.insert({vertices[i]->getId(), vertices[i]});
+        vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
       }
       fingerprint = Fingerprint(ids);
     }
@@ -144,8 +145,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ) : orientation(orientation_), vertices(vertices_), fingerprint({}){
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
-      for (const auto &vertex : vertices_) {
-        ids.push_back(vertex->getId());
+      vertexIdLookup.reserve(vertices_.size());
+      for (int i=0; i<vertices_.size(); i++) {
+        ids.push_back(vertices_[i]->getId());
+        vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
       }
       fingerprint = Fingerprint(ids);
     }
@@ -332,14 +335,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       // the vertexes in the correct order
       for (const auto &cursor : getVertices()) {
         for (const auto &e : cursor->getInEdges()) {
-          if (hasVertex(e->getSourceId() && hasVertex(e->getTargetId()))) {
-            edges.push_back(e);
-          } else {
-            CASET_LOG()
-          }
-        }
-        for (const auto &e : cursor->getOutEdges()) {
-          if (hasVertex(e->getSourceId() && hasVertex(e->getTargetId()))) {
+          if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
             edges.push_back(e);
           }
         }

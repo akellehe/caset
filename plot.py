@@ -1,4 +1,5 @@
 from caset import Spacetime, Simplex
+import collections
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
@@ -12,18 +13,23 @@ def choose_facet(simplex):
 
 st = Spacetime()
 print("Creating simplexes...")
-leftSimplex = st.createSimplex((1, 4))
-middleSimplex = st.createSimplex((2, 3))
-rightSimplex = st.createSimplex((1, 4))
 
-print("Choosing facets...")
-left, middle, right = choose_facet(leftSimplex), choose_facet(middleSimplex), choose_facet(rightSimplex)
+orientations = collections.deque([(1, 4), (2, 3)])
+complex = st.createSimplex((2, 3))
+for i in range(50):
+    print("Joining simplex ", i)
+    orientation = orientations.popleft()
+    right = st.createSimplex(orientation)
+    left = None
+    if orientation == (1, 4):
+        # TODO: choose a random simplex of the orientation passed.
+        left = complex.chooseSimplex((2, 3))
+    elif orientation == (2, 3):
+        left = complex.chooseSimplex((1, 4))
 
-print("Attaching left and middle")
-updated, succeeded = st.causallyAttachFaces(left, middle)
-
-print("Attaching updated and right")
-updated, succeeded = st.causallyAttachFaces(updated, right)
+    complexFacet, simplexFacet = st.getGluablePair(left, right)
+    complex, succeeded = st.causallyAttachFaces(complexFacet, simplexFacet)
+    orientations.append(orientation)
 
 def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
     # Normalize so alpha^2 + beta^2 ~= 1 if you care:

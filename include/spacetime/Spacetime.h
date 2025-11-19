@@ -268,7 +268,7 @@ class Spacetime {
       vertexList->replace(toRemove, toAdd);
     }
 
-    [[nodiscard]] std::optional<std::pair<std::shared_ptr<Simplex>, std::shared_ptr<Simplex>>>
+    [[nodiscard]] static std::optional<std::pair<std::shared_ptr<Simplex>, std::shared_ptr<Simplex>>>
     getGluablePair(const std::shared_ptr<Simplex> &sA, const std::shared_ptr<Simplex> &sB) {
       auto facetsA = sA->getFacets(); // vector<shared_ptr<Simplex>>
       auto facetsB = sB->getFacets();
@@ -283,11 +283,11 @@ class Spacetime {
 
           // Now check orientation on the shared face:
           // checkPairty should be -1 for opposite orientation.
-          int8_t parity = fA->checkPairty(fB);
-          if (parity != -1) {
+          // int8_t parity = fA->checkPairty(fB);
+          // if (parity != -1) {
             // Either same orientation (+1) or they don’t match at all (0).
-            continue;
-          }
+            // continue;
+          // }
 
           // (Optionally) check edge lengths match within epsilon
           // to enforce metric consistency...
