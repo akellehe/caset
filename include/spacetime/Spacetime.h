@@ -15,7 +15,6 @@
 #include "Metric.h"
 #include "Simplex.h"
 #include "topologies/Toroid.h"
-#include "Face.h"
 #include "Logger.h"
 
 namespace caset {
@@ -105,8 +104,7 @@ class Spacetime {
     }
 
     std::shared_ptr<Simplex> createSimplex(
-      std::vector<std::shared_ptr<Vertex> > &vertices,
-      std::vector<std::shared_ptr<Edge> > &edges
+      std::vector<std::shared_ptr<Vertex> > &vertices
     ) noexcept {
       manual = true;
       const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
@@ -118,7 +116,7 @@ class Spacetime {
       }
       auto [fingerprint, n, ids] = Fingerprint::computeFingerprint(_ids);
       if (!bucket.contains(fingerprint)) {
-        std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
+        std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
         bucket.insert(simplex);
         return simplex;
       }
@@ -146,7 +144,7 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges);
+      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
       simplicialComplex[simplex->getOrientation()].insert(simplex);
       return simplex;
     }
@@ -227,7 +225,7 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, edges, orientation);
+      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, orientation);
       simplicialComplex[orientation].insert(simplex);
       return simplex;
     }
@@ -270,6 +268,36 @@ class Spacetime {
       vertexList->replace(toRemove, toAdd);
     }
 
+    [[nodiscard]] std::optional<std::pair<std::shared_ptr<Simplex>, std::shared_ptr<Simplex>>>
+    getGluablePair(const std::shared_ptr<Simplex> &sA, const std::shared_ptr<Simplex> &sB) {
+      auto facetsA = sA->getFacets(); // vector<shared_ptr<Simplex>>
+      auto facetsB = sB->getFacets();
+
+      for (auto &fA : facetsA) {
+        auto [pA, qA] = fA->getOrientation().numeric();
+        if (pA + qA != 4) continue; // just to be explicit it's a tetrahedron
+
+        for (auto &fB : facetsB) {
+          auto [pB, qB] = fB->getOrientation().numeric();
+          if (pB != pA || qB != qA) continue;  // requires same (1,3) type
+
+          // Now check orientation on the shared face:
+          // checkPairty should be -1 for opposite orientation.
+          int8_t parity = fA->checkPairty(fB);
+          if (parity != -1) {
+            // Either same orientation (+1) or they don’t match at all (0).
+            continue;
+          }
+
+          // (Optionally) check edge lengths match within epsilon
+          // to enforce metric consistency...
+          return std::make_optional(std::make_pair(fA, fB));
+        }
+      }
+
+      return std::nullopt;
+    }
+
     ///
     /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
     /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
@@ -287,45 +315,73 @@ class Spacetime {
     /// longer homeomorphic to \f$ \mathcal{R}^n \f$ or a half-space
     /// \f$ \mathcal{R}^{n-1} \multiply [0, \inf] \f$, (the boundary points) so the spacetime effectively branches.
     ///
-    /// To avoid these problems this method takes the following steps:
+    /// The building blocks of a 4D causal simplicial complex are (4, 1) and (3, 2) simplices. The (4, 1) simplex has 4
+    /// vertices on t=t and 1 on t=t + 1. The (3, 2) simplex has 3 vertices on t=t and 2 on t=t + 1. We build out the
+    /// complex by gluing these simplices together along their faces.
     ///
-    ///   1. First it checks to ensure `myFace` and `yourFace` are not already attached to another Simplex Face,
-    ///   1. then it creates a new set of Vertex (es) to match the dimensionality of `myFace` and `yourFace`.
-    ///   1. Next, it maps Vertex (es) \f$ \mathcal{V}_{myFace} \f$ and \f$ \mathcal{V}_{yourFace} \f$ of `myFace`
-    ///     and `yourFace` 1:1 respectively (2:1 in all) to the new vertices based on their TimeOrientation
-    ///   1. Next, it validates the resulting Edge (es) are of compatible length within an Epsilon value.
-    ///   1. Next, it maps Edges (es) \f$ \mathcal{E}_{myFace} \f$ and \f$ \mathcal{E}_{yourFace} \f$ of `myFace` and
-    ///     `yourFace` 1:1 respectively (2:1 in all) to the new Edges based on their shared Vertex (es).
-    ///   1. Next, it removes the replaced Edge (s) and Vertex (es) from the Spacetime (simplicial complex).
+    /// The Face (s) or Facets of the simplex are all sets of vertices of cardinality k-1. So for a 4-simplex
+    /// \f$ \sigma^{(1, 4)}_{ab} \f$ we have vertices \f$ \{a_0, a_1, a_2, a_3, b_0\} \f$ and the
+    /// 4-faces are the (ordered) combinations of the 4 vertices, where \f$ a \f$ vertices are at \f$ t=t \f$ and \f$ b \f$
+    /// vertices are at \f$ t=t+1 \f$.
+    ///
+    /// \f[
+    /// \sigma^{(4, 0)}_0 = \{a_1, a_2, a_3, b_0\}
+    /// \sigma^{(3, 1)}_1 = \{a_0, a_2, a_3, b_0\}
+    /// \sigma^{(3, 1)}_2 = \{a_0, a_1, a_3, b_0\}
+    /// \sigma^{(3, 1)}_3 = \{a_0, a_1, a_2, b_0\}
+    /// \sigma^{(3, 1)}_4 = \{a_0, a_1, a_2, a_3\}
+    /// \f]
+    ///
+    /// When a face has vertices from both sets \f$ {a_i \in A} \f$ and \f$ {b_i \in B} \f$; the face is spacelike. When
+    /// it has only vertices from one or the other; it's timelike.
+    ///
+    /// Let \f$ \sigma^{(3, 2)}_{cd} \f$ have vertices \f$ \{c_i \in C | i \in [0, 4]\} \f$ and \f$ \{d_i \in D | i \in [0, 4]\} \f$
+    /// where vertices of \f$ C \f$ have \f$ t=t \f$ and in \f$ D \f$ they have \f$ t = t+1 \f$. Then \f$ \sigma^{(3, 2)}_{cd} \f$ has
+    /// faces,
+    ///
+    /// \f[
+    /// \{\sigma^{(2, 2)}_0, \sigma^{(2, 2)}_1, \sigma^{(2, 2)}_2, \sigma{(3, 1)}_3, \sigma{(3, 1)_4\} \memberof \sigma^{(3, 1)}_{cd}
+    /// \f]
+    ///
+    /// We can only join faces of the same shape, e.g. (3, 1) in this case.
+    ///
+    /// For a detailed picture; see "Quantum Gravity from Causal Dynamical Triangulations: A Review", R. Loll, 2019.
+    /// Figure 1.
     ///
     /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return myFace, updated with the second simplex glued.
-    std::tuple<std::shared_ptr<Face>, bool> causallyAttachFaces(std::shared_ptr<Face> &myFace,
-                                                                const std::shared_ptr<Face> &yourFace) {
-      if (!myFace->isAvailable()) {
-        CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
-        CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
-        for (const auto &coface : myFace->getCofaces()) {
-          CASET_LOG(ERROR_LEVEL, coface->toString());
-        }
-        throw std::runtime_error("(myFace) You attempted to attach faces that are not available to attach.");
-      }
-      if (!yourFace->isAvailable()) {
-        CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
-        CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
-        for (const auto &coface : yourFace->getCofaces()) {
-          CASET_LOG(ERROR_LEVEL, coface->toString());
-        }
-        throw std::runtime_error("(yourFace) You attempted to attach faces that are not available to attach.");
-      }
+    std::tuple<std::shared_ptr<Simplex>, bool> causallyAttachFaces(std::shared_ptr<Simplex> &myFace,
+                                                                const std::shared_ptr<Simplex> &yourFace) {
+      // if (!myFace->isAvailable()) {
+        // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
+        // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
+        // for (const auto &coface : myFace->getCofaces()) {
+          // CASET_LOG(ERROR_LEVEL, coface->toString());
+        // }
+        // throw std::runtime_error("(myFace) You attempted to attach faces that are not available to attach.");
+      // }
+      // if (!yourFace->isAvailable()) {
+        // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
+        // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
+        // for (const auto &coface : yourFace->getCofaces()) {
+          // CASET_LOG(ERROR_LEVEL, coface->toString());
+        // }
+        // throw std::runtime_error("(yourFace) You attempted to attach faces that are not available to attach.");
+      // }
+      // bool myFaceIsTimelike = myFace->isTimelike();
+      // bool yourFaceIsTimelike = yourFace->isTimelike();
+      // if (myFaceIsTimelike != yourFaceIsTimelike) {
+        // CASET_LOG(ERROR_LEVEL, "To glue a face; they must either both be spacelike or both be timelike!");
+        // throw std::runtime_error("You attempted to attach faces that are not compatible to attach.");
+      // }
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
       edges.reserve(myFace->size());
 
       // Two vertexes are compatible to attach iff they share the same time value.
-      std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex> > > vertexPairs = {};
+      std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex> > > vertexPairs{};
       vertexPairs.reserve(myFace->size());
 
       // if (myFace->checkPairty(yourFace) != -1) {

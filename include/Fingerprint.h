@@ -144,10 +144,6 @@ class Simplex;
 using SimplexHash = FingerprintHash<Simplex>;
 using SimplexEq = FingerprintEq<Simplex>;
 
-class Face;
-using FaceHash = FingerprintHash<Face>;
-using FaceEq = FingerprintEq<Face>;
-
 }
 
 #endif //CASET_VERTEXFINGERPRINT_H

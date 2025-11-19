@@ -41,6 +41,7 @@ class TestSpacetime(unittest.TestCase):
         st.setManual(False)
         simplex = st.createSimplex((2, 3))
         self.assertEqual(len(simplex.getVertices()), 5)
+        breakpoint()
         self.assertEqual(len(simplex.getEdges()), 10)
 
         v1, v2, v3, v4, v5 = simplex.getVertices()

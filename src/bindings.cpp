@@ -16,7 +16,6 @@
 #include "Edge.h"
 #include "Simplex.h"
 #include "Metric.h"
-#include "Face.h"
 
 #include <vector>
 
@@ -96,18 +95,6 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<>())
       .def("build", &Toroid::build);
 
-  py::class_<Face, std::shared_ptr<Face> >(m, "Face")
-      .def(py::init<
-        std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>,
-        std::vector<std::shared_ptr<Vertex> > >())
-      .def("__repr__", &Face::toString)
-      .def("__str__", &Face::toString)
-      .def("addCoface", &Face::addCoface)
-      .def("checkPairty", &Face::checkPairty)
-      .def("getCofaces", &Face::getCofaces)
-      .def("getEdges", &Face::getEdges)
-      .def("getVertices", &Face::getVertices)
-      .def("isTimelike", &Face::isTimelike);
 
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
@@ -115,21 +102,19 @@ PYBIND11_MODULE(caset, m) {
       .def("numeric", &SimplexOrientation::numeric);
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
-      .def(py::init<
-             const std::vector<std::shared_ptr<Vertex> >,
-             const std::vector<std::shared_ptr<Edge> >>(),
-           py::arg("vertices"),
-           py::arg("edges"))
+      .def(py::init<const std::vector<std::shared_ptr<Vertex>>>(),
+           py::arg("vertices"))
+      .def("checkPairty", &Simplex::checkPairty)
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getHinges", &Simplex::getHinges)
+      .def("getEdges", &Simplex::getEdges)
       .def("getVolume", &Simplex::getVolume)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertices", &Simplex::getVertices)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getFacets", &Simplex::getFacets)
       .def("__str__", &Simplex::toString)
-      .def("__repr__", &Simplex::toString)
-      .def("getEdges", &Simplex::getEdges);
+      .def("__repr__", &Simplex::toString);
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")
       .def(py::init<bool, Signature &>(),
@@ -187,11 +172,8 @@ PYBIND11_MODULE(caset, m) {
            py::arg("target"),
            py::arg("squaredLength"))
       .def("createSimplex",
-           py::overload_cast<
-             std::vector<std::shared_ptr<Vertex> > &,
-             std::vector<std::shared_ptr<Edge> > &>(&Spacetime::createSimplex),
-           py::arg("vertices"),
-           py::arg("edges"))
+           py::overload_cast<std::vector<std::shared_ptr<Vertex>> &>(&Spacetime::createSimplex),
+           py::arg("vertices"))
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
