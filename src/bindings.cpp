@@ -63,6 +63,7 @@ PYBIND11_MODULE(caset, m) {
       .def("__repr__", &Vertex::toString)
       .def("__eq__", &Vertex::operator==)
       .def("getInEdges", &Vertex::getInEdges)
+      .def("getTime", &Vertex::getTime)
       .def("getOutEdges", &Vertex::getOutEdges);
 
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")

@@ -179,8 +179,8 @@ class Spacetime {
           timelikeSquaredLength = -alpha;
         }
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
-          CASET_LOG(INFO_LEVEL, "Creating a new edge from ", existingVertex->getId(), "->", newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+          CASET_LOG(INFO_LEVEL, "Creating a new timelike edge from ", existingVertex->getId(), "->", newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -193,11 +193,12 @@ class Spacetime {
         CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
         for (const auto &existingVertex : vertices) {
-          CASET_LOG(INFO_LEVEL, "Creating a new edge from ", existingVertex->getId(), "->", newVertex->getId());
           std::shared_ptr<Edge> edge;
           if (existingVertex->getTime() < newVertex->getTime()) {
+            CASET_LOG(INFO_LEVEL, "Creating a new spacelike edge (L^2 = \\alpha) from ", existingVertex->getId(), "->", newVertex->getId());
             edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           } else {
+            CASET_LOG(INFO_LEVEL, "Creating a new timelike edge (L^2 = -\\alpha) from ", existingVertex->getId(), "->", newVertex->getId());
             edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
           }
           existingVertex->addOutEdge(edge);

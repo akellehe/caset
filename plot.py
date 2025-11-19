@@ -62,8 +62,8 @@ for edge in (st.getEdgeList().toVector()):
 
 fig = plt.figure(figsize=(8, 8))
 ax = fig.add_subplot(111, projection="3d")
-timelike_lc = Line3DCollection(timeEdges, linewidths=.5, colors="blue")
-spacelike_lc = Line3DCollection(spaceEdges, linewidths=.5, colors="red")
+timelike_lc = Line3DCollection(timeEdges, linewidths=.7, colors="blue")
+spacelike_lc = Line3DCollection(spaceEdges, linewidths=.7, colors="red")
 ax.add_collection(timelike_lc)
 ax.add_collection(spacelike_lc)
 

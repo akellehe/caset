@@ -40,10 +40,16 @@ class TestSimplex(unittest.TestCase):
         ]
         self.assertEqual([str(f) for f in s1.getFacets()], expected)
         oti, otf = (0, 0)
-        for edge in s1.getEdges():
-            if edge.getSquaredLength() < 0:
+        seen = set()
+        initialTime = 0
+        finalTime = 0
+        for vertex in s1.getVertices():
+            initialTime = min(initialTime, vertex.getTime())
+            finalTime = max(finalTime, vertex.getTime())
+        for vertex in s1.getVertices():
+            if vertex.getTime() == initialTime:
                 oti += 1
-            else:
+            elif vertex.getTime() == finalTime:
                 otf += 1
         self.assertEqual(oti, ti)
         self.assertEqual(otf, tf)
