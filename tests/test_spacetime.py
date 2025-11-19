@@ -170,8 +170,21 @@ class TestSpacetime(unittest.TestCase):
 
         rightVertexesAfter = [v.getId() for v in right.getVertices()]
         rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
-        totalVerticesAfter = len(st.getVertexList().toVector())
-        totalEdgesAfter = len(st.getEdgeList().toVector())
+        leftVertexesAfter = [v.getId() for v in left.getVertices()]
+        leftEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+
+        totalVertexesAfter = [v.getId() for v in secondVertexList.toVector()]
+        totalEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()]
+
+        nTotalVerticesAfterAsList = len(totalVertexesAfter)
+        nTotalEdgesAfterAsList = len(totalEdgesAfter)
+        nTotalVerticesAfterAsSet = len(set(totalVertexesAfter))
+        nTotalEdgesAfterAsSet = len(set(totalEdgesAfter))
+
+        breakpoint()
+
+        breakpoint()
+        self.assertEqual(totalVerticesAfter, 10)
 
         breakpoint()
         print('foo')

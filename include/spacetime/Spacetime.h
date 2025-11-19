@@ -164,7 +164,14 @@ class Spacetime {
       double timelikeSquaredLength = alpha;
       SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
       std::uint8_t k = orientation.getK();
-      CASET_LOG(INFO_LEVEL, "creating a ", std::to_string(k), "-simplex from a numeric orientation (", std::to_string(std::get<0>(numericOrientation)), ", ", std::to_string(std::get<1>(numericOrientation)), ")");
+      CASET_LOG(INFO_LEVEL,
+                "creating a ",
+                std::to_string(k),
+                "-simplex from a numeric orientation (",
+                std::to_string(std::get<0>(numericOrientation)),
+                ", ",
+                std::to_string(std::get<1>(numericOrientation)),
+                ")");
       auto [ti, tf] = orientation.numeric();
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
@@ -179,8 +186,13 @@ class Spacetime {
           timelikeSquaredLength = -alpha;
         }
         for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
-          CASET_LOG(INFO_LEVEL, "Creating a new timelike edge from ", existingVertex->getId(), "->", newVertex->getId());
+          std::shared_ptr<Edge> edge = edgeList->
+              add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+          CASET_LOG(INFO_LEVEL,
+                    "Creating a new timelike edge from ",
+                    existingVertex->getId(),
+                    "->",
+                    newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -195,10 +207,18 @@ class Spacetime {
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge;
           if (existingVertex->getTime() < newVertex->getTime()) {
-            CASET_LOG(INFO_LEVEL, "Creating a new spacelike edge (L^2 = \\alpha) from ", existingVertex->getId(), "->", newVertex->getId());
+            CASET_LOG(INFO_LEVEL,
+                      "Creating a new spacelike edge (L^2 = \\alpha) from ",
+                      existingVertex->getId(),
+                      "->",
+                      newVertex->getId());
             edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           } else {
-            CASET_LOG(INFO_LEVEL, "Creating a new timelike edge (L^2 = -\\alpha) from ", existingVertex->getId(), "->", newVertex->getId());
+            CASET_LOG(INFO_LEVEL,
+                      "Creating a new timelike edge (L^2 = -\\alpha) from ",
+                      existingVertex->getId(),
+                      "->",
+                      newVertex->getId());
             edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
           }
           existingVertex->addOutEdge(edge);
@@ -336,18 +356,18 @@ class Spacetime {
           if (myVertex->getTime() != yourVertex->getTime()) {
             // The two vertices were not in the expected causal disposition.
             CASET_LOG(WARN_LEVEL,
-                "Vertex ",
-                myVertex->toString(),
-                " and ",
-                yourVertex->toString(),
-                " do not have the same causal disposition! ",
-                myVertex->toString(),
-                " has t=",
-                myVertex->getTime(),
-                " ",
-                yourVertex->toString(),
-                " has t=",
-                yourVertex->getTime());
+                      "Vertex ",
+                      myVertex->toString(),
+                      " and ",
+                      yourVertex->toString(),
+                      " do not have the same causal disposition! ",
+                      myVertex->toString(),
+                      " has t=",
+                      myVertex->getTime(),
+                      " ",
+                      yourVertex->toString(),
+                      " has t=",
+                      yourVertex->getTime());
             int front = myVertexIdxs.front();
             myVertexIdxs.pop_front();
             myVertexIdxs.push_back(front);
@@ -359,17 +379,20 @@ class Spacetime {
           for (const auto &edge : yourVertex->getInEdges()) {
             // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
             // Edges aren't part of `yourFace`.
-            if (yourFace->hasEdge(
-              edge->getSourceId(),
-              edge->getTargetId()
-              )) continue;
+            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+              edgeList->remove(edge);
+              continue;
+            }
             yourVertex->removeInEdge(edge);
             edgeList->remove(edge);
             edge->replaceTargetVertex(myVertex->getId());
             myVertex->addInEdge(edgeList->add(edge));
           }
           for (const auto &edge : yourVertex->getOutEdges()) {
-            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) continue;
+            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+              edgeList->remove(edge);
+              continue;
+            }
             yourVertex->removeOutEdge(edge);
             edgeList->remove(edge);
             edge->replaceSourceVertex(myVertex->getId());
