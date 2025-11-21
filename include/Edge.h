@@ -3,6 +3,9 @@
 
 #include "Fingerprint.h"
 
+#include <unordered_set>
+#include <unordered_map>
+#include <vector>
 #include <random>
 #include <memory>
 
@@ -31,6 +34,25 @@ enum class EdgeDisposition : uint8_t {
   Timelike = 1,
   Lightlike = 2
 };
+
+struct EdgeKeyHash {
+  std::size_t operator()(const std::pair<std::uint64_t, std::uint64_t>& p) const noexcept {
+    // Standard-ish hash combine
+    std::size_t h1 = std::hash<std::uint64_t>{}(p.first);
+    std::size_t h2 = std::hash<std::uint64_t>{}(p.second);
+    // from boost::hash_combine
+    return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+  }
+};
+
+// Optional: custom equality if you ever need something non-trivial
+struct EdgeKeyEqual {
+  bool operator()(const std::pair<std::uint64_t, std::uint64_t>& a,
+                  const std::pair<std::uint64_t, std::uint64_t>& b) const noexcept {
+    return a.first == b.first && a.second == b.second;
+  }
+};
+
 
 /// # Edge Class
 ///
@@ -105,6 +127,12 @@ class Edge {
 
 using EdgeHash = FingerprintHash<Edge>;
 using EdgeEq = FingerprintEq<Edge>;
+using EdgePtr = std::shared_ptr<Edge>;
+using Edges = std::vector<EdgePtr>;
+using EdgeKey = std::pair<IdType, IdType>;
+using EdgeMap = std::unordered_map<EdgeKey, EdgePtr, EdgeKeyHash, EdgeKeyEqual>;
+using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
+using EdgeIndexMap = std::unordered_map<EdgeKey, std::size_t, EdgeKeyHash, EdgeKeyEqual>;
 
 }
 

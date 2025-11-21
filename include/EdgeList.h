@@ -33,6 +33,9 @@ class EdgeList {
     void remove(const std::shared_ptr<Edge> &edge) noexcept {
       if (!edgeList.contains(edge)) {
         CASET_LOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
+        for (const auto &e : edgeList) {
+          CASET_LOG(WARN_LEVEL, "    - ", e->toString());
+        }
         return;
       }
       edgeList.erase(edge);

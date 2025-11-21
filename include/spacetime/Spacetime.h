@@ -281,6 +281,18 @@ class Spacetime {
       return std::nullopt;
     }
 
+    void moveVertex(const VertexPtr &from, const VertexPtr &to) {
+      for (const auto &edge : from->getInEdges()) {
+        from->removeInEdge(edge);
+        edgeList->remove(edge);
+        edge->replaceTargetVertex(to->getId());
+        to->addInEdge(edgeList->add(edge));
+        if (from->degree() == 0) {
+          vertexList->remove(from);
+        }
+      }
+    }
+
     ///
     /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
     /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
@@ -336,23 +348,6 @@ class Spacetime {
     /// @return myFace, updated with the second simplex glued.
     std::tuple<std::shared_ptr<Simplex>, bool> causallyAttachFaces(std::shared_ptr<Simplex> &myFace,
                                                                    const std::shared_ptr<Simplex> &yourFace) {
-      // if (!myFace->isAvailable()) {
-      // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
-      // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
-      // for (const auto &coface : myFace->getCofaces()) {
-      // CASET_LOG(ERROR_LEVEL, coface->toString());
-      // }
-      // throw std::runtime_error("(myFace) You attempted to attach faces that are not available to attach.");
-      // }
-      // if (!yourFace->isAvailable()) {
-      // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
-      // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
-      // for (const auto &coface : yourFace->getCofaces()) {
-      // CASET_LOG(ERROR_LEVEL, coface->toString());
-      // }
-      // throw std::runtime_error("(yourFace) You attempted to attach faces that are not available to attach.");
-      // }
-
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
@@ -381,43 +376,60 @@ class Spacetime {
         const auto &myVertex = myOrderedVertices[i];
         const auto &yourVertex = yourVertices[i];
 
+        CASET_LOG(INFO_LEVEL, "-----------------------------------------------------------------------");
         // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
-        // Edges aren't part of `yourFace`, since yourFace is going away completely.
+        // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
+        // from myFace, but deleted entirely.
         for (const auto &edge : yourVertex->getInEdges()) {
           if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+            const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
+            const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
+            sourceVertex->removeOutEdge(edge);
+            targetVertex->removeInEdge(edge);
             edgeList->remove(edge);
+            if (sourceVertex->degree() == 0) {
+              vertexList->remove(sourceVertex);
+            }
+            if (targetVertex->degree() == 0) {
+              vertexList->remove(targetVertex);
+            }
             continue;
           }
-          yourVertex->removeInEdge(edge);
-          edgeList->remove(edge);
-          edge->replaceTargetVertex(myVertex->getId());
-          myVertex->addInEdge(edgeList->add(edge));
+          moveVertex(yourVertex, myVertex);
           yourFace->replaceVertex(yourVertex, myVertex);
           for (const auto &coface : yourFace->getCofaces()) {
             coface->replaceVertex(yourVertex, myVertex);
           }
         }
 
-        yourFace->replaceVertex(yourVertex, myVertex);
+        // yourFace->replaceVertex(yourVertex, myVertex);
 
         // Move the out-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
-        // Edges aren't part of `yourFace`, since yourFace is going away completely.
+        // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
+        // from myFace, but deleted entirely.
         for (const auto &edge : yourVertex->getOutEdges()) {
           if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+            const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
+            const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
+            sourceVertex->removeOutEdge(edge);
+            targetVertex->removeInEdge(edge);
             edgeList->remove(edge);
+            if (sourceVertex->degree() == 0) {
+              vertexList->remove(sourceVertex);
+            }
+            if (targetVertex->degree() == 0) {
+              vertexList->remove(targetVertex);
+            }
             continue;
           }
-          yourVertex->removeOutEdge(edge);
-          edgeList->remove(edge);
-          edge->replaceSourceVertex(myVertex->getId());
-          myVertex->addOutEdge(edgeList->add(edge));
+          moveVertex(yourVertex, myVertex);
           yourFace->replaceVertex(yourVertex, myVertex);
           for (const auto &coface : yourFace->getCofaces()) {
             coface->replaceVertex(yourVertex, myVertex);
           }
         }
 
-        yourFace->replaceVertex(yourVertex, myVertex);
+        // yourFace->replaceVertex(yourVertex, myVertex);
 
         // Now if yourFace's vertex is empty; remove it from the vertexList.
         if (yourVertex->degree() == 0) vertexList->remove(yourVertex);

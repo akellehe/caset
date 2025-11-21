@@ -123,6 +123,11 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
         std::uint64_t id;
 };
+
+using VertexPtr = std::shared_ptr<Vertex>;
+using Vertices = std::vector<VertexPtr>;
+using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
+using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
 }
 
 namespace std {
