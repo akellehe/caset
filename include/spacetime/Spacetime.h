@@ -287,9 +287,42 @@ class Spacetime {
         edgeList->remove(edge);
         edge->replaceTargetVertex(to->getId());
         to->addInEdge(edgeList->add(edge));
-        if (from->degree() == 0) {
-          vertexList->remove(from);
+        removeIfIsolated(from);
+      }
+    }
+
+    void removeIfIsolated(const VertexPtr &vertex) {
+      if (vertex->degree() == 0) {
+        vertexList->remove(vertex);
+      }
+    }
+
+    void moveEdges(
+      const VertexPtr &fromVertex,
+      const std::shared_ptr<Simplex> &fromSimplex,
+      const VertexPtr &toVertex,
+      const std::shared_ptr<Simplex> &toSimplex,
+      bool moveInEdges
+      ) {
+      const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
+      for (const auto &edge : edges) {
+        if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+          const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
+          const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
+          sourceVertex->removeOutEdge(edge);
+          targetVertex->removeInEdge(edge);
+          edgeList->remove(edge);
+          removeIfIsolated(sourceVertex);
+          removeIfIsolated(targetVertex);
+          continue;
         }
+
+        moveVertex(fromVertex, toVertex);
+        fromSimplex->replaceVertex(fromVertex, toVertex);
+        // TODO: Move stuff from cofaces.
+        // for (const auto &coface : yourFace->getCofaces()) {
+        // coface->replaceVertex(yourVertex, myVertex);
+        // }
       }
     }
 
@@ -375,64 +408,13 @@ class Spacetime {
       for (auto i = 0; i < myOrderedVertices.size(); i++) {
         const auto &myVertex = myOrderedVertices[i];
         const auto &yourVertex = yourVertices[i];
-
         CASET_LOG(INFO_LEVEL, "-----------------------------------------------------------------------");
         // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
         // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
         // from myFace, but deleted entirely.
-        for (const auto &edge : yourVertex->getInEdges()) {
-          if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
-            const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
-            const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
-            sourceVertex->removeOutEdge(edge);
-            targetVertex->removeInEdge(edge);
-            edgeList->remove(edge);
-            if (sourceVertex->degree() == 0) {
-              vertexList->remove(sourceVertex);
-            }
-            if (targetVertex->degree() == 0) {
-              vertexList->remove(targetVertex);
-            }
-            continue;
-          }
-          moveVertex(yourVertex, myVertex);
-          yourFace->replaceVertex(yourVertex, myVertex);
-          for (const auto &coface : yourFace->getCofaces()) {
-            coface->replaceVertex(yourVertex, myVertex);
-          }
-        }
-
-        // yourFace->replaceVertex(yourVertex, myVertex);
-
-        // Move the out-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
-        // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
-        // from myFace, but deleted entirely.
-        for (const auto &edge : yourVertex->getOutEdges()) {
-          if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
-            const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
-            const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
-            sourceVertex->removeOutEdge(edge);
-            targetVertex->removeInEdge(edge);
-            edgeList->remove(edge);
-            if (sourceVertex->degree() == 0) {
-              vertexList->remove(sourceVertex);
-            }
-            if (targetVertex->degree() == 0) {
-              vertexList->remove(targetVertex);
-            }
-            continue;
-          }
-          moveVertex(yourVertex, myVertex);
-          yourFace->replaceVertex(yourVertex, myVertex);
-          for (const auto &coface : yourFace->getCofaces()) {
-            coface->replaceVertex(yourVertex, myVertex);
-          }
-        }
-
-        // yourFace->replaceVertex(yourVertex, myVertex);
-
-        // Now if yourFace's vertex is empty; remove it from the vertexList.
-        if (yourVertex->degree() == 0) vertexList->remove(yourVertex);
+        moveEdges(yourVertex, yourFace, myVertex, myFace, true);
+        moveEdges(yourVertex, yourFace, myVertex, myFace, false);
+        removeIfIsolated(yourVertex);
       }
       auto newCoface = *(yourFace->getCofaces().begin());
       myFace->addCoface(newCoface);
