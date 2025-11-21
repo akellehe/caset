@@ -134,13 +134,18 @@ class TestSpacetime(unittest.TestCase):
 
         left, right = None, None
         facets14 = simplex14.getFacets()
-        ntime = 0
+        ntime, nspace = 0, 0
         for facet in facets14:
             if facet.isTimelike():
                 ntime += 1
             else:
+                nspace += 1
+            if facet.getOrientation().numeric() == (1, 3):
                 left = facet
+
         self.assertEqual(ntime, 1)
+        self.assertEqual(nspace, 4)
+        self.assertIsNotNone(left)
 
         facets23 = simplex23.getFacets()
         nspace = 0
@@ -149,8 +154,9 @@ class TestSpacetime(unittest.TestCase):
             if face.isTimelike():
                 ntime += 1
             else:
-                right = face
                 nspace += 1
+            if face.getOrientation().numeric() == (1, 3):
+                right = face
 
         self.assertEqual(nspace, 5)
         self.assertEqual(ntime, 0)
@@ -158,11 +164,16 @@ class TestSpacetime(unittest.TestCase):
         self.assertIsNotNone(left)
         self.assertIsNotNone(right)
 
-        totalVerticesBefore = len(st.getVertexList().toVector())
-        totalEdgesBefore = len(st.getEdgeList().toVector())
+        totalVerticesBefore = st.getVertexList().toVector()
+        totalEdgesBefore = st.getEdgeList().toVector()
 
-        self.assertEqual(totalVerticesBefore, 10)
-        self.assertEqual(totalEdgesBefore, 20)
+        self.assertEqual(len(totalVerticesBefore), 10)
+        self.assertEqual(len(totalEdgesBefore), 20)
+
+        leftVerticesBefore = [v.getId() for v in left.getVertices()]
+        self.assertEqual(len(leftVerticesBefore), 4)
+        leftEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        self.assertEqual(len(leftEdgesBefore), 6)
 
         rightVerticesBefore = [v.getId() for v in right.getVertices()]
         self.assertEqual(len(rightVerticesBefore), 4)
@@ -184,21 +195,28 @@ class TestSpacetime(unittest.TestCase):
             self.assertIsNotNone(source)
             self.assertIsNotNone(target)
 
-        rightVerticesAfter = [v.getId() for v in right.getVertices()]
-        rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
-
         leftVerticesAfter = [v.getId() for v in left.getVertices()]
+        self.assertEqual(len(leftVerticesAfter), 4)
         leftEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        self.assertEqual(len(leftEdgesAfter), 6)
 
+        rightVerticesAfter = [v.getId() for v in right.getVertices()]
+        self.assertEqual(len(rightVerticesAfter), 4)
+        rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        self.assertEqual(len(rightEdgesAfter), 6)
+
+        shared = {v for v in leftVerticesAfter} & {v for v in rightVerticesAfter}
+        self.assertEqual(len(shared), 4)
         self.assertEqual(len(leftVerticesAfter), len(leftVerticesBefore))
 
-        totalVerticesAfter = [v.getId() for v in secondVertexList.toVector()]
-        totalEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()]
+        totalVerticesAfter = set([v.getId() for v in secondVertexList.toVector()])
+        totalEdgesAfter = set([(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()])
 
-        nTotalVerticesAfterAsList = len(totalVerticesAfter)
-        nTotalEdgesAfterAsList = len(totalEdgesAfter)
-        nTotalVerticesAfterAsSet = len(set(totalVerticesAfter))
-        nTotalEdgesAfterAsSet = len(set(totalEdgesAfter))
+        breakpoint()
+        print("Total vertices after: ", totalVerticesAfter)
+        print("Total vertices before: ", totalVerticesBefore)
+        self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 4)
+        self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 6)
 
         print('foo')
 

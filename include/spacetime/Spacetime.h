@@ -252,23 +252,7 @@ class Spacetime {
       return static_cast<double>(currentTime);
     }
 
-    void replaceVertex(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
-      for (auto &edge : toRemove->getInEdges()) {
-        edgeList->remove(edge);
-        toRemove->removeInEdge(edge);
-        edge->replaceTargetVertex(toAdd->getId());
-        toAdd->addInEdge(edgeList->add(edge));
-      }
-      for (auto &edge : toRemove->getOutEdges()) {
-        edgeList->remove(edge);
-        toRemove->removeOutEdge(edge);
-        edge->replaceSourceVertex(toAdd->getId());
-        toAdd->addOutEdge(edgeList->add(edge));
-      }
-      vertexList->replace(toRemove, toAdd);
-    }
-
-    [[nodiscard]] static std::optional<std::pair<std::shared_ptr<Simplex>, std::shared_ptr<Simplex>>>
+    [[nodiscard]] static std::optional<std::pair<std::shared_ptr<Simplex>, std::shared_ptr<Simplex> > >
     getGluablePair(const std::shared_ptr<Simplex> &sA, const std::shared_ptr<Simplex> &sB) {
       auto facetsA = sA->getFacets(); // vector<shared_ptr<Simplex>>
       auto facetsB = sB->getFacets();
@@ -279,14 +263,14 @@ class Spacetime {
 
         for (auto &fB : facetsB) {
           auto [pB, qB] = fB->getOrientation().numeric();
-          if (pB != pA || qB != qA) continue;  // requires same (1,3) type
+          if (pB != pA || qB != qA) continue; // requires same (1,3) type
 
           // Now check orientation on the shared face:
           // checkPairty should be -1 for opposite orientation.
           // int8_t parity = fA->checkPairty(fB);
           // if (parity != -1) {
-            // Either same orientation (+1) or they don’t match at all (0).
-            // continue;
+          // Either same orientation (+1) or they don’t match at all (0).
+          // continue;
 
           // (Optionally) check edge lengths match within epsilon
           // to enforce metric consistency...
@@ -351,29 +335,24 @@ class Spacetime {
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return myFace, updated with the second simplex glued.
     std::tuple<std::shared_ptr<Simplex>, bool> causallyAttachFaces(std::shared_ptr<Simplex> &myFace,
-                                                                const std::shared_ptr<Simplex> &yourFace) {
+                                                                   const std::shared_ptr<Simplex> &yourFace) {
       // if (!myFace->isAvailable()) {
-        // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
-        // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
-        // for (const auto &coface : myFace->getCofaces()) {
-          // CASET_LOG(ERROR_LEVEL, coface->toString());
-        // }
-        // throw std::runtime_error("(myFace) You attempted to attach faces that are not available to attach.");
+      // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
+      // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
+      // for (const auto &coface : myFace->getCofaces()) {
+      // CASET_LOG(ERROR_LEVEL, coface->toString());
+      // }
+      // throw std::runtime_error("(myFace) You attempted to attach faces that are not available to attach.");
       // }
       // if (!yourFace->isAvailable()) {
-        // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
-        // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
-        // for (const auto &coface : yourFace->getCofaces()) {
-          // CASET_LOG(ERROR_LEVEL, coface->toString());
-        // }
-        // throw std::runtime_error("(yourFace) You attempted to attach faces that are not available to attach.");
+      // CASET_LOG(ERROR_LEVEL, "You're attempting to attach a Face that has two or more co-Faces!");
+      // CASET_LOG(ERROR_LEVEL, "The cofaces are: ");
+      // for (const auto &coface : yourFace->getCofaces()) {
+      // CASET_LOG(ERROR_LEVEL, coface->toString());
       // }
-      // bool myFaceIsTimelike = myFace->isTimelike();
-      // bool yourFaceIsTimelike = yourFace->isTimelike();
-      // if (myFaceIsTimelike != yourFaceIsTimelike) {
-        // CASET_LOG(ERROR_LEVEL, "To glue a face; they must either both be spacelike or both be timelike!");
-        // throw std::runtime_error("You attempted to attach faces that are not compatible to attach.");
+      // throw std::runtime_error("(yourFace) You attempted to attach faces that are not available to attach.");
       // }
+
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
@@ -383,83 +362,69 @@ class Spacetime {
       std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex> > > vertexPairs{};
       vertexPairs.reserve(myFace->size());
 
-      // if (myFace->checkPairty(yourFace) != -1) {
-      // CASET_LOG(WARN_LEVEL, "Pairty check failed. myFace and yourFace do not have opposite pairty.");
-      // return {nullptr, false};
-      // }
-
       // These are in order of traversal, you can iterate them to walk the Face:
-      const auto &myVertices = myFace->getVertices();
       const auto &yourVertices = yourFace->getVertices();
 
       // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
       // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
+      const std::optional<std::vector<std::shared_ptr<Vertex> > > myOrderedVerticesOptional = myFace->
+          getVerticesWithParityTo(yourFace);
 
-      std::deque<int> myVertexIdxs{};
-      for (auto i = 0; i < myVertices.size(); i++) {
-        myVertexIdxs.push_back(i);
+      if (!myOrderedVerticesOptional.has_value()) {
+        CASET_LOG(WARN_LEVEL, "No compatible vertex order found for myFace and yourFace.");
+        return {nullptr, false};
       }
 
-      int attempts = 0;
-      while (attempts < myVertexIdxs.size()) {
-        for (auto i : myVertexIdxs) {
-          int j = i - attempts;
+      const std::vector<std::shared_ptr<Vertex> > &myOrderedVertices = myOrderedVerticesOptional.value();
 
-          const auto &myVertex = myVertices[i];
-          const auto &yourVertex = yourVertices[j];
+      for (auto i = 0; i < myOrderedVertices.size(); i++) {
+        const auto &myVertex = myOrderedVertices[i];
+        const auto &yourVertex = yourVertices[i];
 
-          if (myVertex->getTime() != yourVertex->getTime()) {
-            // The two vertices were not in the expected causal disposition.
-            CASET_LOG(WARN_LEVEL,
-                      "Vertex ",
-                      myVertex->toString(),
-                      " and ",
-                      yourVertex->toString(),
-                      " do not have the same causal disposition! ",
-                      myVertex->toString(),
-                      " has t=",
-                      myVertex->getTime(),
-                      " ",
-                      yourVertex->toString(),
-                      " has t=",
-                      yourVertex->getTime());
-            int front = myVertexIdxs.front();
-            myVertexIdxs.pop_front();
-            myVertexIdxs.push_back(front);
-            attempts++;
+        // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
+        // Edges aren't part of `yourFace`, since yourFace is going away completely.
+        for (const auto &edge : yourVertex->getInEdges()) {
+          if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+            edgeList->remove(edge);
             continue;
           }
-          /// Create a new vertex, v3 with all the edges of v1 and v2 combined, but exclude those edges of v2 that lie on
-          /// `yourFace` since they are being replaced by those corresponding edges on `myFace`.
-          for (const auto &edge : yourVertex->getInEdges()) {
-            // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
-            // Edges aren't part of `yourFace`.
-            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
-              edgeList->remove(edge);
-              continue;
-            }
-            yourVertex->removeInEdge(edge);
-            edgeList->remove(edge);
-            edge->replaceTargetVertex(myVertex->getId());
-            myVertex->addInEdge(edgeList->add(edge));
+          yourVertex->removeInEdge(edge);
+          edgeList->remove(edge);
+          edge->replaceTargetVertex(myVertex->getId());
+          myVertex->addInEdge(edgeList->add(edge));
+          yourFace->replaceVertex(yourVertex, myVertex);
+          for (const auto &coface : yourFace->getCofaces()) {
+            coface->replaceVertex(yourVertex, myVertex);
           }
-          for (const auto &edge : yourVertex->getOutEdges()) {
-            if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
-              edgeList->remove(edge);
-              continue;
-            }
-            yourVertex->removeOutEdge(edge);
-            edgeList->remove(edge);
-            edge->replaceSourceVertex(myVertex->getId());
-            myVertex->addOutEdge(edgeList->add(edge));
-          }
-          if (yourVertex->degree() == 0) vertexList->replace(yourVertex, myVertex);
         }
-        auto newCoface = *(yourFace->getCofaces().begin());
-        myFace->addCoface(newCoface);
-        return {myFace, true};
+
+        yourFace->replaceVertex(yourVertex, myVertex);
+
+        // Move the out-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
+        // Edges aren't part of `yourFace`, since yourFace is going away completely.
+        for (const auto &edge : yourVertex->getOutEdges()) {
+          if (yourFace->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+            edgeList->remove(edge);
+            continue;
+          }
+          yourVertex->removeOutEdge(edge);
+          edgeList->remove(edge);
+          edge->replaceSourceVertex(myVertex->getId());
+          myVertex->addOutEdge(edgeList->add(edge));
+          yourFace->replaceVertex(yourVertex, myVertex);
+          for (const auto &coface : yourFace->getCofaces()) {
+            coface->replaceVertex(yourVertex, myVertex);
+          }
+        }
+
+        yourFace->replaceVertex(yourVertex, myVertex);
+
+        // Now if yourFace's vertex is empty; remove it from the vertexList.
+        if (yourVertex->degree() == 0) vertexList->remove(yourVertex);
       }
-      return {nullptr, false};
+      auto newCoface = *(yourFace->getCofaces().begin());
+      myFace->addCoface(newCoface);
+      return {myFace, true};
     }
 
     ///

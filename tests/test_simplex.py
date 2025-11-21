@@ -39,6 +39,28 @@ class TestSimplex(unittest.TestCase):
 
         self.assertEqual(nTimelike, 1)
 
+    def test_get_vertices_with_pairty_to(self):
+        s1 = self.spacetime.createSimplex((4, 1))
+        facets41 = s1.getFacets()
+        self.assertEqual(len(facets41), 5)
+        s2 = self.spacetime.createSimplex((3, 2))
+        facets32 = s2.getFacets()
+        self.assertEqual(len(facets32), 5)
+
+        left, right = None, None
+        print("41 Facets ------------------------------------")
+        for face41 in facets41:
+            if face41.getOrientation().numeric() == (3, 1):
+                left = face41
+            print(face41, face41.getOrientation().numeric())
+        print("32 Facets ------------------------------------")
+        for face32 in facets32:
+            if face32.getOrientation().numeric() == (3, 1):
+                right = face32
+            print(face32, face32.getOrientation().numeric())
+
+        vertices = left.getVerticesWithPairtyTo(right)
+        self.assertEqual(len(vertices), 3)
 
     def test_creating_oriented_simplexes(self):
         ti, tf = (4, 1)

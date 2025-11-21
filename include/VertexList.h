@@ -46,8 +46,12 @@ class VertexList {
     }
 
     void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) noexcept {
-      vertexList.erase(toRemove->getId());
+      remove(toRemove);
       add(toAdd);
+    }
+
+    void remove(const std::shared_ptr<Vertex> &vertex) noexcept {
+      vertexList.erase(vertex->getId());
     }
 
     std::size_t size() noexcept {

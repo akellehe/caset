@@ -133,7 +133,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
       vertexIdLookup.reserve(vertices_.size());
-      for (int i=0; i<vertices_.size(); i++) {
+      for (int i = 0; i < vertices_.size(); i++) {
         ids.push_back(vertices_[i]->getId());
         vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
       }
@@ -141,13 +141,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     Simplex(
-      std::vector<std::shared_ptr<Vertex>> vertices_,
+      std::vector<std::shared_ptr<Vertex> > vertices_,
       SimplexOrientation orientation_
-    ) : orientation(orientation_), vertices(vertices_), fingerprint({}){
+    ) : orientation(orientation_), vertices(vertices_), fingerprint({}) {
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
       vertexIdLookup.reserve(vertices_.size());
-      for (int i=0; i<vertices_.size(); i++) {
+      for (int i = 0; i < vertices_.size(); i++) {
         ids.push_back(vertices_[i]->getId());
         vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
       }
@@ -167,7 +167,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
-      ///
+    ///
     double getVolume() const {
       return 0;
     }
@@ -258,10 +258,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     template<typename T>
     T binomial(unsigned n, unsigned k) {
       if (k > n) return 0;
-      k = std::min(k, n-k);
+      k = std::min(k, n - k);
 
       T result = 1;
-      for (unsigned i = 1; i<= k; ++i) {
+      for (unsigned i = 1; i <= k; ++i) {
         result = result * (n - (k - i));
         result /= i;
       }
@@ -326,8 +326,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return vertexIdLookup.contains(vertexId);
     }
 
-
-
     [[nodiscard]] std::vector<const std::shared_ptr<Edge>> getEdges() {
       if (!edges.empty()) {
         return edges;
@@ -336,6 +334,85 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return edges;
     }
 
+    /// TODO: Optimize
+    /// @param edge
+    bool removeEdge(const std::shared_ptr<Edge> &edge) {
+      auto it = std::find(edges.begin(), edges.end(), edge);
+      if (it == edges.end()) return false;
+
+      edges.erase(it);  // linear-time shift
+      return true;
+    }
+
+    [[nodiscard]]
+    std::optional<std::vector<std::shared_ptr<Vertex> > >
+    getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) {
+      const auto &mine = vertices;
+      const auto &theirs = other->getVertices();
+
+      const std::size_t n = mine.size();
+      if (n != theirs.size()) {
+        throw std::runtime_error("You can only compare simplexes of the same size!");
+      }
+      if (n == 0) {
+        return std::vector<std::shared_ptr<Vertex> >{}; // or std::nullopt, your call
+      }
+      if (n == 1) {
+        if (mine[0]->getTime() != theirs[0]->getTime()) {
+          return std::nullopt;
+        }
+        return mine; // already aligned
+      }
+
+      auto try_alignment =
+          [&](std::size_t start,
+              bool reversed)
+        -> std::optional<std::vector<std::shared_ptr<Vertex> > > {
+        std::vector<std::shared_ptr<Vertex> > result;
+        result.reserve(n);
+
+        for (std::size_t k = 0; k < n; ++k) {
+          std::size_t idx;
+          if (!reversed) {
+            // orientation-preserving: walk forward
+            idx = (start + k) % n;
+          } else {
+            // orientation-reversing: walk backward
+            // k = 0 -> idx = start
+            // k = 1 -> idx = start - 1 (mod n)
+            idx = (start + n - k) % n;
+          }
+
+          if (mine[idx]->getTime() != theirs[k]->getTime()) {
+            return std::nullopt; // mismatch, this alignment fails
+          }
+
+          result.push_back(mine[idx]);
+        }
+
+        return result; // success
+      };
+
+      // Try all starting positions where times match theirs[0]
+      for (std::size_t i = 0; i < n; ++i) {
+        if (mine[i]->getTime() != theirs[0]->getTime()) {
+          continue;
+        }
+
+        // 1. Try same orientation
+        if (auto aligned = try_alignment(i, /*reversed=*/false)) {
+          return aligned;
+        }
+
+        // 2. Try reversed orientation
+        if (auto aligned_rev = try_alignment(i, /*reversed=*/true)) {
+          return aligned_rev;
+        }
+      }
+
+      // No alignment found
+      return std::nullopt;
+    }
 
     /// This method returns Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
@@ -469,18 +546,42 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplexes that share this face.
-    [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> getCofaces() const noexcept { return cofaces; }
+    [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> getCofaces() const noexcept {
+      return cofaces;
+    }
+
+    /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
+    /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
+    /// squaredLength data could be lost.
+    ///
+    void replaceVertex(const std::shared_ptr<Vertex> &oldVertex, const std::shared_ptr<Vertex> &newVertex) {
+      if (!hasVertex(oldVertex) || hasVertex(newVertex)) {
+        return;
+      }
+      std::vector<IdType> vertexIds = {};
+      vertexIds.reserve(vertices.size());
+      for (int i = 0; i < vertices.size(); i++) {
+        if (vertices[i]->getId() == oldVertex->getId()) {
+          vertices[i] = newVertex;
+          vertexIdLookup.erase(oldVertex->getId());
+          vertexIdLookup.insert({newVertex->getId(), newVertex});
+          vertexIds.push_back(oldVertex->getId());
+          fingerprint = Fingerprint(vertexIds);
+          return;
+        }
+      }
+      throw std::runtime_error("This simplex does not contain the vertex you're trying to replace!");
+    }
 
   private:
     std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
     std::vector<std::shared_ptr<Vertex> > vertices{};
     SimplexOrientation orientation{};
-    std::vector<std::shared_ptr<Simplex>> facets{};
+    std::vector<std::shared_ptr<Simplex> > facets{};
     static std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> facetRegistry;
     std::unordered_map<IdType, std::shared_ptr<Vertex> > vertexIdLookup{};
     std::vector<const std::shared_ptr<Edge>> edges{};
 };
-
 }
 
 namespace std {

@@ -56,7 +56,7 @@ class Fingerprint {
   public:
 
     explicit Fingerprint(const std::vector<IdType> &ids_) : ids_({})  {
-      setFingerprint(ids_);
+      refreshFingerprint(ids_);
     }
 
     static inline std::uint64_t mix64(IdType x) noexcept {
@@ -98,7 +98,7 @@ class Fingerprint {
 
     std::uint64_t fingerprint() const noexcept { return h_; }
 
-    void setFingerprint(const std::vector<IdType> &ids__) {
+    void refreshFingerprint(const std::vector<IdType> &ids__) {
       std::tie(h_, n_, ids_) = Fingerprint::computeFingerprint(ids__);
     }
 

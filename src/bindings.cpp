@@ -52,18 +52,21 @@ PYBIND11_MODULE(caset, m) {
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
       .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"))
+      .def("__eq__", &Vertex::operator==)
+      .def("__repr__", &Vertex::toString)
+      .def("__str__", &Vertex::toString)
       .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
       .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
-      .def("getEdges", &Vertex::getEdges)
+      .def("degree", &Vertex::degree)
       .def("getCoordinates", &Vertex::getCoordinates)
-      .def("moveTo", &Vertex::moveTo)
+      .def("getEdges", &Vertex::getEdges)
       .def("getId", &Vertex::getId)
-      .def("__str__", &Vertex::toString)
-      .def("__repr__", &Vertex::toString)
-      .def("__eq__", &Vertex::operator==)
       .def("getInEdges", &Vertex::getInEdges)
+      .def("getOutEdges", &Vertex::getOutEdges)
+      .def("removeInEdge", &Vertex::removeInEdge)
+      .def("removeOutEdge", &Vertex::removeOutEdge)
       .def("getTime", &Vertex::getTime)
-      .def("getOutEdges", &Vertex::getOutEdges);
+      .def("moveTo", &Vertex::moveTo);
 
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")
       .def(py::init<>())
@@ -114,6 +117,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertices", &Simplex::getVertices)
+      .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
       .def("getVertices", &Simplex::getVertices)
       .def("getVolume", &Simplex::getVolume)
       .def("isTimelike", &Simplex::isTimelike);
