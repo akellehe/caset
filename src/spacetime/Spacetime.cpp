@@ -117,17 +117,15 @@ void Spacetime::embedEuclidean(int dimensions, double epsilon) {
   }
 
   // 7. Write back into Vertex coordinates
-  auto pos_cpu = positions.detach().cpu();
-  auto pos_accessor = pos_cpu.accessor<double, 2>();
+  auto posCpu = positions.detach().cpu();
+  auto posAccessor = posCpu.accessor<double, 2>();
 
   for (int i = 0; i < N; ++i) {
     std::vector<double> coords(dimensions);
     coords[0] = vertexVector[i]->getTime();
     for (int d = 1; d < dimensions; ++d) {
-      coords[d] = pos_accessor[i][d];
+      coords[d] = posAccessor[i][d];
     }
-    // You don't have a setter now; add one:
-    // void Vertex::setCoordinates(const std::vector<double>& coords);
     vertexVector[i]->setCoordinates(coords);
   }
   CASET_LOG(INFO_LEVEL, "Iteration: ", iter, " Loss: ", loss.item<double>(), " Previous Loss: ", previousLoss.item<double>());

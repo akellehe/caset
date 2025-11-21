@@ -287,7 +287,6 @@ class Spacetime {
           // if (parity != -1) {
             // Either same orientation (+1) or they don’t match at all (0).
             // continue;
-          // }
 
           // (Optionally) check edge lengths match within epsilon
           // to enforce metric consistency...

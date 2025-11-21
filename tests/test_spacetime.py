@@ -134,26 +134,40 @@ class TestSpacetime(unittest.TestCase):
 
         left, right = None, None
         facets14 = simplex14.getFacets()
+        ntime = 0
         for facet in facets14:
             if facet.isTimelike():
+                ntime += 1
+            else:
                 left = facet
-                break
+        self.assertEqual(ntime, 1)
 
         facets23 = simplex23.getFacets()
+        nspace = 0
+        ntime = 0
         for face in facets23:
             if face.isTimelike():
+                ntime += 1
+            else:
                 right = face
-                break
+                nspace += 1
+
+        self.assertEqual(nspace, 5)
+        self.assertEqual(ntime, 0)
+
+        self.assertIsNotNone(left)
+        self.assertIsNotNone(right)
 
         totalVerticesBefore = len(st.getVertexList().toVector())
         totalEdgesBefore = len(st.getEdgeList().toVector())
+
         self.assertEqual(totalVerticesBefore, 10)
         self.assertEqual(totalEdgesBefore, 20)
 
         rightVertexesBefore = [v.getId() for v in right.getVertices()]
         self.assertEqual(len(rightVertexesBefore), 4)
         rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
-        self.assertEqual(len(rightEdgesBefore), 4)
+        self.assertEqual(len(rightEdgesBefore), 6)
 
         updated, succeeded = st.causallyAttachFaces(left, right)
         self.assertTrue(succeeded)
@@ -183,12 +197,6 @@ class TestSpacetime(unittest.TestCase):
         nTotalVerticesAfterAsSet = len(set(totalVertexesAfter))
         nTotalEdgesAfterAsSet = len(set(totalEdgesAfter))
 
-        breakpoint()
-
-        breakpoint()
-        self.assertEqual(totalVerticesAfter, 10)
-
-        breakpoint()
         print('foo')
 
 if __name__ == '__main__':

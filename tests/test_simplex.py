@@ -10,59 +10,72 @@ class TestSimplex(unittest.TestCase):
 
     def test_get_faces(self):
         s1 = self.spacetime.createSimplex((4, 1))
-        s2 = self.spacetime.createSimplex((3, 2))
-        expected = [
-            "<4-Simplex (<V1>→<V2>→<V3>→<V4>→<V1>)>",
-            "<4-Simplex (<V0>→<V2>→<V3>→<V4>→<V0>)>",
-            "<4-Simplex (<V0>→<V1>→<V3>→<V4>→<V0>)>",
-            "<4-Simplex (<V0>→<V1>→<V2>→<V4>→<V0>)>",
-            "<4-Simplex (<V0>→<V1>→<V2>→<V3>→<V0>)>"
-        ]
-        self.assertEqual([str(f) for f in s1.getFacets()], expected)
-        expected = [
-            "<4-Simplex (<V6>→<V7>→<V8>→<V9>→<V6>)>",
-            "<4-Simplex (<V5>→<V7>→<V8>→<V9>→<V5>)>",
-            "<4-Simplex (<V5>→<V6>→<V8>→<V9>→<V5>)>",
-            "<4-Simplex (<V5>→<V6>→<V7>→<V9>→<V5>)>",
-            "<4-Simplex (<V5>→<V6>→<V7>→<V8>→<V5>)>"
-        ]
-        self.assertEqual([str(f) for f in s2.getFacets()], expected)
+        facets = s1.getFacets()
+        self.assertEqual(len(facets), 5)
+        tio, tfo = (0, 0)
+        for vertex in s1.getVertices():
+            if vertex.getTime() == 0:
+                tio += 1
+            elif vertex.getTime() > 0:
+                tfo += 1
+
+        self.assertEqual(tio, 4)
+        self.assertEqual(tfo, 1)
+
+        nTimelike = 0
+        for face in s1.getFacets():
+            self.assertEqual(len(face.getVertices()), 4)
+            self.assertEqual(len(face.getEdges()), 6)
+            self.assertEqual(len(set([(e.getSourceId(), e.getTargetId()) for e in face.getEdges()])), 6)
+            self.assertEqual(len(face.getCofaces()), 1)
+            if face.isTimelike():
+                nTimelike += 1
+                for timelikeFace in face.getFacets():
+                    self.assertTrue(timelikeFace.isTimelike())
+                    self.assertEqual(len(timelikeFace.getVertices()), 3)
+                    self.assertEqual(len(timelikeFace.getEdges()), 3)
+                    self.assertEqual(len(set([(e.getSourceId(), e.getTargetId()) for e in timelikeFace.getEdges()])), 3)
+                    self.assertEqual(len(timelikeFace.getCofaces()), 1)
+
+        self.assertEqual(nTimelike, 1)
+
 
     def test_creating_oriented_simplexes(self):
         ti, tf = (4, 1)
         s1 = self.spacetime.createSimplex((ti, tf))
-        expected = [
-            "<4-Simplex (<V1>→<V2>→<V3>→<V4>→<V1>)>",
-            "<4-Simplex (<V0>→<V2>→<V3>→<V4>→<V0>)>",
-            "<4-Simplex (<V0>→<V1>→<V3>→<V4>→<V0>)>",
-            "<4-Simplex (<V0>→<V1>→<V2>→<V4>→<V0>)>",
-            "<4-Simplex (<V0>→<V1>→<V2>→<V3>→<V0>)>"
-        ]
-        self.assertEqual([str(f) for f in s1.getFacets()], expected)
         oti, otf = (0, 0)
-        seen = set()
         initialTime = 0
         finalTime = 0
         for vertex in s1.getVertices():
             initialTime = min(initialTime, vertex.getTime())
             finalTime = max(finalTime, vertex.getTime())
+
         for vertex in s1.getVertices():
             if vertex.getTime() == initialTime:
                 oti += 1
             elif vertex.getTime() == finalTime:
                 otf += 1
+
         self.assertEqual(oti, ti)
         self.assertEqual(otf, tf)
 
-        s2 = self.spacetime.createSimplex((3, 2))
-        expected = [
-            "<4-Simplex (<V6>→<V7>→<V8>→<V9>→<V6>)>",
-            "<4-Simplex (<V5>→<V7>→<V8>→<V9>→<V5>)>",
-            "<4-Simplex (<V5>→<V6>→<V8>→<V9>→<V5>)>",
-            "<4-Simplex (<V5>→<V6>→<V7>→<V9>→<V5>)>",
-            "<4-Simplex (<V5>→<V6>→<V7>→<V8>→<V5>)>"
-        ]
-        self.assertEqual([str(f) for f in s2.getFacets()], expected)
+        ti, tf = (3, 2)
+        s2 = self.spacetime.createSimplex((ti, tf))
+        oti, otf = (0, 0)
+        initialTime = 0
+        finalTime = 0
+        for vertex in s2.getVertices():
+            initialTime = min(initialTime, vertex.getTime())
+            finalTime = max(finalTime, vertex.getTime())
+
+        for vertex in s2.getVertices():
+            if vertex.getTime() == initialTime:
+                oti += 1
+            elif vertex.getTime() == finalTime:
+                otf += 1
+
+        self.assertEqual(oti, ti)
+        self.assertEqual(otf, tf)
 
     def setUp(self):
         self.spacetime = Spacetime()

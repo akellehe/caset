@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <sstream>
+#include <coroutine>
 
 #include <torch/torch.h>
 
@@ -231,13 +232,14 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     [[nodiscard]] bool isTimelike() const {
-      double lower = std::numeric_limits<double>::infinity();
-      double upper = -std::numeric_limits<double>::infinity();
-      for (const auto &vertex : vertices) {
-        lower = std::min(lower, vertex->getTime());
-        upper = std::max(upper, vertex->getTime());
+      for (const auto &edge : computeEdges()) {
+        const auto &src = vertexIdLookup.find(edge->getSourceId())->second;
+        const auto &tgt = vertexIdLookup.find(edge->getTargetId())->second;
+        if (src->getTime() != tgt->getTime()) {
+          return false;
+        }
       }
-      return lower == upper;
+      return true;
     }
 
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k) {
@@ -324,11 +326,24 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return vertexIdLookup.contains(vertexId);
     }
 
+
+
+    [[nodiscard]] std::vector<const std::shared_ptr<Edge>> getEdges() {
+      if (!edges.empty()) {
+        return edges;
+      }
+      edges = computeEdges();
+      return edges;
+    }
+
+
     /// This method returns Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
-    [[nodiscard]] std::vector<const std::shared_ptr<Edge>> getEdges() {
-      // if (!edges.empty()) return edges;
+    [[nodiscard]] std::vector<const std::shared_ptr<Edge>> computeEdges() const {
+      std::vector<const std::shared_ptr<Edge>> edges_ = {};
+      edges_.reserve(Simplex::computeNumberOfEdges(getOrientation().getK()));
+      CASET_LOG(INFO_LEVEL, "Getting edges for simplex ", toString());
       std::shared_ptr<Vertex> origin = nullptr;
 
       // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
@@ -336,11 +351,12 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       for (const auto &cursor : getVertices()) {
         for (const auto &e : cursor->getInEdges()) {
           if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
-            edges.push_back(e);
+            CASET_LOG(INFO_LEVEL, "For vertex", cursor->toString(), " found in-edge ", e->toString());
+            edges_.push_back(e);
           }
         }
       }
-      return edges;
+      return edges_;
     }
 
     /// TODO: This method needs some optimization. We should build an edge lookup, but I'm having a little trouble doing

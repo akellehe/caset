@@ -110,7 +110,11 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         }
 
         std::string toString() const noexcept {
-            return "<V" + std::to_string(id) + ">";
+            std::stringstream ss;
+            ss << "<V" << std::to_string(id) << " ";
+            ss << "(d=" << std::to_string(degree()) << ", ";
+            ss << "t=" << std::to_string(getTime()) << ")>";
+            return ss.str();
         }
 
     private:
