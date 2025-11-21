@@ -150,7 +150,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getEdgeList", &Spacetime::getEdgeList)
       .def_static("getGluablePair", &Spacetime::getGluablePair)
       .def("embedEuclidean", &Spacetime::embedEuclidean, py::arg("dimensions") = 4, py::arg("epsilon") = 1e-8)
-      .def("getSimplexes", &Spacetime::getSimplexes)
+      .def("getSimplexes", &Spacetime::getExternalSimplexes)
       .def("createVertex",
            py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
            py::arg("id"))

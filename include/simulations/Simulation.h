@@ -24,7 +24,7 @@ class Simulation {
     ///
     /// `thermalize` implements some kind of adjustment to the initial lattice.
     ///
-    /// In the case of CST (Causal Set Theory) this amounts to executing a poisson "Sprinkling" of Vertexes to preserve
+    /// In the case of CST (Causal Set Theory) this amounts to executing a poisson "Sprinkling" of Vertices to preserve
     /// Lorentz invariance.
     ///
     /// For Regge calculus this can be a randomly applied variation in an initially fixed edge length triangulation.

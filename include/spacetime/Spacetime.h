@@ -108,7 +108,7 @@ class Spacetime {
     ) noexcept {
       manual = true;
       const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
-      auto &bucket = simplicialComplex.try_emplace(orientation /*key*/).first->second;
+      auto &bucket = externalSimplexes.try_emplace(orientation /*key*/).first->second;
       std::vector<IdType> _ids = {};
       _ids.reserve(vertices.size());
       for (const auto &vertex : vertices) {
@@ -145,7 +145,7 @@ class Spacetime {
         vertices.push_back(newVertex);
       }
       std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
-      simplicialComplex[simplex->getOrientation()].insert(simplex);
+      externalSimplexes[simplex->getOrientation()].insert(simplex);
       return simplex;
     }
 
@@ -226,7 +226,7 @@ class Spacetime {
         vertices.push_back(newVertex);
       }
       std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, orientation);
-      simplicialComplex[orientation].insert(simplex);
+      externalSimplexes[orientation].insert(simplex);
       return simplex;
     }
 
@@ -379,7 +379,7 @@ class Spacetime {
       std::vector<std::shared_ptr<Edge> > edges = {};
       edges.reserve(myFace->size());
 
-      // Two vertexes are compatible to attach iff they share the same time value.
+      // Two vertices are compatible to attach iff they share the same time value.
       std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex> > > vertexPairs{};
       vertexPairs.reserve(myFace->size());
 
@@ -455,14 +455,23 @@ class Spacetime {
           }
           if (yourVertex->degree() == 0) vertexList->replace(yourVertex, myVertex);
         }
+        auto newCoface = *(yourFace->getCofaces().begin());
+        myFace->addCoface(newCoface);
         return {myFace, true};
       }
       return {nullptr, false};
     }
 
-    std::vector<std::shared_ptr<Simplex> > getSimplexes() noexcept {
+    ///
+    /// @return Simplexes around the boundary of the simplicial complex to which they belong. These simplexes have at
+    /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note
+    /// that this method does not return 2-simplexes as you might expect, but 5-simplexes since those are the standard
+    /// building blocks. You can get the 2-simplexes by calling `getFacets()` on the 5-simplexes and their facets until
+    /// \f$ k=2 \f$.
+    [[nodiscard]]
+    std::vector<std::shared_ptr<Simplex> > getExternalSimplexes() noexcept {
       std::vector<std::shared_ptr<Simplex> > simplexes;
-      for (const auto &[key, bucket] : simplicialComplex) {
+      for (const auto &[key, bucket] : externalSimplexes) {
         for (const auto &simplex : bucket) {
           simplexes.push_back(simplex);
         }
@@ -475,7 +484,8 @@ class Spacetime {
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
-    std::unordered_map<SimplexOrientation, Bucket> simplicialComplex{};
+    std::unordered_map<SimplexOrientation, Bucket> externalSimplexes{};
+    std::unordered_map<SimplexOrientation, Bucket> internalSimplexes{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 

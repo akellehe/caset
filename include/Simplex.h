@@ -68,8 +68,8 @@ class SimplexOrientation {
     }
 
     static SimplexOrientation orientationOf(const std::vector<std::shared_ptr<Vertex> > &vertices) {
-      uint8_t tiVertexes = 0;
-      uint8_t tfVertexes = 0;
+      uint8_t tiVertices = 0;
+      uint8_t tfVertices = 0;
       double ti = std::numeric_limits<double>::max();
       double tf = -1;
       double initial = -1;
@@ -82,17 +82,17 @@ class SimplexOrientation {
           initial = t;
           unassigned++;
         } else if (t == ti) {
-          tiVertexes++;
+          tiVertices++;
         } else {
-          tfVertexes++;
+          tfVertices++;
         }
       }
       if (initial == ti) {
-        tiVertexes += unassigned;
+        tiVertices += unassigned;
       } else {
-        tfVertexes += unassigned;
+        tfVertices += unassigned;
       }
-      return SimplexOrientation(tiVertexes, tfVertexes);
+      return SimplexOrientation(tiVertices, tfVertices);
     }
 
   private:
@@ -347,7 +347,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       std::shared_ptr<Vertex> origin = nullptr;
 
       // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
-      // the vertexes in the correct order
+      // the vertices in the correct order
       for (const auto &cursor : getVertices()) {
         for (const auto &e : cursor->getInEdges()) {
           if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
@@ -414,11 +414,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
         positionByVertexIdInA[vertices[i]->getId()] = i;
       }
 
-      std::vector<std::shared_ptr<Vertex> > otherVertexes = other->getVertices();
+      std::vector<std::shared_ptr<Vertex> > otherVertices = other->getVertices();
       std::vector<IdType> otherIds{};
       otherIds.reserve(K);
       for (int i = 0; i < K; ++i) {
-        otherIds[i] = otherVertexes[i]->getId();
+        otherIds[i] = otherVertices[i]->getId();
       }
 
       std::vector<int> perm{};

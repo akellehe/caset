@@ -12,7 +12,7 @@
 
 namespace caset {
 ///
-/// Vertexes in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
+/// Vertices in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
 /// established the Gold Standard. The strong force is not actually observable. Observables are gauge variant. If you
 /// change your gauge then it changes what you observe. The EM vector potential is gauge invariant, so it cannot be

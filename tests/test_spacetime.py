@@ -164,8 +164,8 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(totalVerticesBefore, 10)
         self.assertEqual(totalEdgesBefore, 20)
 
-        rightVertexesBefore = [v.getId() for v in right.getVertices()]
-        self.assertEqual(len(rightVertexesBefore), 4)
+        rightVerticesBefore = [v.getId() for v in right.getVertices()]
+        self.assertEqual(len(rightVerticesBefore), 4)
         rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
         self.assertEqual(len(rightEdgesBefore), 6)
 
@@ -184,17 +184,20 @@ class TestSpacetime(unittest.TestCase):
             self.assertIsNotNone(source)
             self.assertIsNotNone(target)
 
-        rightVertexesAfter = [v.getId() for v in right.getVertices()]
+        rightVerticesAfter = [v.getId() for v in right.getVertices()]
         rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
-        leftVertexesAfter = [v.getId() for v in left.getVertices()]
+
+        leftVerticesAfter = [v.getId() for v in left.getVertices()]
         leftEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
 
-        totalVertexesAfter = [v.getId() for v in secondVertexList.toVector()]
+        self.assertEqual(len(leftVerticesAfter), len(leftVerticesBefore))
+
+        totalVerticesAfter = [v.getId() for v in secondVertexList.toVector()]
         totalEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()]
 
-        nTotalVerticesAfterAsList = len(totalVertexesAfter)
+        nTotalVerticesAfterAsList = len(totalVerticesAfter)
         nTotalEdgesAfterAsList = len(totalEdgesAfter)
-        nTotalVerticesAfterAsSet = len(set(totalVertexesAfter))
+        nTotalVerticesAfterAsSet = len(set(totalVerticesAfter))
         nTotalEdgesAfterAsSet = len(set(totalEdgesAfter))
 
         print('foo')
