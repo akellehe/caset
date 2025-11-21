@@ -404,7 +404,6 @@ class Spacetime {
       }
 
       const std::vector<std::shared_ptr<Vertex> > &myOrderedVertices = myOrderedVerticesOptional.value();
-
       for (auto i = 0; i < myOrderedVertices.size(); i++) {
         const auto &myVertex = myOrderedVertices[i];
         const auto &yourVertex = yourVertices[i];
