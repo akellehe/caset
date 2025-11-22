@@ -162,14 +162,6 @@ class Spacetime {
       double timelikeSquaredLength = alpha;
       SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
       std::uint8_t k = orientation.getK();
-      CASET_LOG(INFO_LEVEL,
-                "creating a ",
-                std::to_string(k),
-                "-simplex from a numeric orientation (",
-                std::to_string(std::get<0>(numericOrientation)),
-                ", ",
-                std::to_string(std::get<1>(numericOrientation)),
-                ")");
       auto [ti, tf] = orientation.numeric();
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
@@ -178,7 +170,6 @@ class Spacetime {
       for (int i = 0; i < ti; i++) {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime)});
         if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
           timelikeSquaredLength = -alpha;
@@ -186,11 +177,6 @@ class Spacetime {
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList->
               add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
-          CASET_LOG(INFO_LEVEL,
-                    "Creating a new timelike edge from ",
-                    existingVertex->getId(),
-                    "->",
-                    newVertex->getId());
           existingVertex->addOutEdge(edge);
           newVertex->addInEdge(edge);
           edges.push_back(edge);
@@ -200,23 +186,12 @@ class Spacetime {
       for (int i = 0; i < tf; i++) {
         // Create ti Spacelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        CASET_LOG(INFO_LEVEL, "Creating a new vertex with ID=", vertexList->size());
         std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge;
           if (existingVertex->getTime() < newVertex->getTime()) {
-            CASET_LOG(INFO_LEVEL,
-                      "Creating a new spacelike edge (L^2 = \\alpha) from ",
-                      existingVertex->getId(),
-                      "->",
-                      newVertex->getId());
             edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           } else {
-            CASET_LOG(INFO_LEVEL,
-                      "Creating a new timelike edge (L^2 = -\\alpha) from ",
-                      existingVertex->getId(),
-                      "->",
-                      newVertex->getId());
             edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
           }
           existingVertex->addOutEdge(edge);
@@ -281,12 +256,32 @@ class Spacetime {
       return std::nullopt;
     }
 
-    void moveVertex(const VertexPtr &from, const VertexPtr &to) {
+    void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
       for (const auto &edge : from->getInEdges()) {
+        const VertexPtr originalSource = vertexList->get(edge->getSourceId());
+        const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
+        originalSource->removeOutEdge(edge);
         from->removeInEdge(edge);
         edgeList->remove(edge);
         edge->replaceTargetVertex(to->getId());
-        to->addInEdge(edgeList->add(edge));
+        const EdgePtr newEdge = edgeList->add(edge);
+        to->addInEdge(newEdge);
+        originalSource->addInEdge(newEdge);
+        removeIfIsolated(from);
+      }
+    }
+
+    void moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
+      for (const auto &edge : from->getOutEdges()) {
+        const VertexPtr originalSource = vertexList->get(edge->getSourceId());
+        const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
+        originalTarget->removeInEdge(edge);
+        from->removeOutEdge(edge);
+        edgeList->remove(edge);
+        edge->replaceSourceVertex(to->getId());
+        const EdgePtr newEdge = edgeList->add(edge);
+        to->addOutEdge(newEdge);
+        originalTarget->addInEdge(newEdge);
         removeIfIsolated(from);
       }
     }
@@ -304,6 +299,7 @@ class Spacetime {
       const std::shared_ptr<Simplex> &toSimplex,
       bool moveInEdges
       ) {
+      CASET_LOG(INFO_LEVEL, "Moving ", std::to_string(fromVertex->getInEdges().size()), " in-edges and ", std::to_string(fromVertex->getOutEdges().size()), " out-edges from vertex ", fromVertex->toString(), " to vertex ", toVertex->toString());
       const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
       for (const auto &edge : edges) {
         if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())) {
@@ -317,7 +313,8 @@ class Spacetime {
           continue;
         }
 
-        moveVertex(fromVertex, toVertex);
+        moveInEdgesFromVertex(fromVertex, toVertex);
+        moveOutEdgesFromVertex(fromVertex, toVertex);
         fromSimplex->replaceVertex(fromVertex, toVertex);
         // TODO: Move stuff from cofaces.
         // for (const auto &coface : yourFace->getCofaces()) {

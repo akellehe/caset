@@ -5,12 +5,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-def choose_facet(simplex):
-    for facet in simplex.getFacets():
-        if not facet.isTimelike():
-            return facet
-    return None
-
 st = Spacetime()
 print("Creating simplexes...")
 
