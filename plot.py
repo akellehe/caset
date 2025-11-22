@@ -9,20 +9,12 @@ st = Spacetime()
 print("Creating simplices...")
 
 orientations = collections.deque([(1, 4), (2, 3)])
-complex = st.createSimplex((2, 3))
-for i in range(50):
-    print("Joining simplex ", i)
+st.createSimplex((2, 3))
+for i in range(100000):
     orientation = orientations.popleft()
-    right = st.createSimplex(orientation)
-    left = None
-    if orientation == (1, 4):
-        # TODO: choose a random simplex of the orientation passed.
-        left = complex.chooseSimplex((2, 3))
-    elif orientation == (2, 3):
-        left = complex.chooseSimplex((1, 4))
-
-    complexFacet, simplexFacet = st.getGluablePair(left, right)
-    complex, succeeded = st.causallyAttachFaces(complexFacet, simplexFacet)
+    rightSimplex = st.createSimplex(orientation)
+    leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
+    complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
     orientations.append(orientation)
 
 def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):

@@ -227,6 +227,16 @@ class Spacetime {
       return static_cast<double>(currentTime);
     }
 
+    ///
+    /// This method identifies a pair of faces (one from each simplex) that can be glued together while preserving the
+    /// orientation of the simplices. The method checks for matching orientations and edge lengths to ensure
+    /// compatibility.
+    ///
+    /// TODO: There's a pairty check in here, but I don't think it makes sense to run until the simplices are attached.
+    ///
+    /// @param sA The first simplex you would like to glue to the second simplex.
+    /// @param sB The second Simplex to be glued to the first (`sA`).
+    /// @return
     [[nodiscard]] static OptionalSimplexPair
     getGluableFaces(const SimplexPtr &sA, const SimplexPtr &sB) {
       auto facetsA = sA->getFacets(); // vector<shared_ptr<Simplex>>
@@ -247,8 +257,6 @@ class Spacetime {
           // Either same orientation (+1) or they don’t match at all (0).
           // continue;
 
-          // (Optionally) check edge lengths match within epsilon
-          // to enforce metric consistency...
           return std::make_optional(std::make_pair(fA, fB));
         }
       }
@@ -436,19 +444,19 @@ class Spacetime {
 
     void embedEuclidean(int dimensions, double epsilon);
 
-    SimplexPtr chooseSimplexToGlue(const SimplexPtr &mySimplex) {
+    OptionalSimplexPair chooseSimplexToGlueTo(const SimplexPtr &mySimplex) {
       const auto orientation = mySimplex->getOrientation();
       const auto &bucket = externalSimplices[orientation];
-      if (bucket.empty()) return nullptr;
+      if (bucket.empty()) return std::nullopt;
 
       auto it = bucket.begin();
       for (auto i=0; i<bucket.size(); i++) {
         OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
         if (gluablePair.has_value()) {
-          return gluablePair->second;
+          return gluablePair;
         }
       }
-
+      return std::nullopt;
     }
 
 
