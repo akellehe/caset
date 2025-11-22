@@ -40,7 +40,7 @@ enum class SpacetimeType : uint8_t {
 ///
 class Spacetime {
   public:
-    using Bucket = std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>;
+    using Bucket = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
 
     Spacetime() {
       Signature signature(4, SignatureType::Lorentzian);
@@ -103,12 +103,12 @@ class Spacetime {
       return edge;
     }
 
-    std::shared_ptr<Simplex> createSimplex(
+    SimplexPtr createSimplex(
       std::vector<std::shared_ptr<Vertex> > &vertices
     ) noexcept {
       manual = true;
       const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
-      auto &bucket = externalSimplexes.try_emplace(orientation /*key*/).first->second;
+      auto &bucket = externalSimplices.try_emplace(orientation /*key*/).first->second;
       std::vector<IdType> _ids = {};
       _ids.reserve(vertices.size());
       for (const auto &vertex : vertices) {
@@ -116,14 +116,14 @@ class Spacetime {
       }
       auto [fingerprint, n, ids] = Fingerprint::computeFingerprint(_ids);
       if (!bucket.contains(fingerprint)) {
-        std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
+        SimplexPtr simplex = std::make_shared<Simplex>(vertices);
         bucket.insert(simplex);
         return simplex;
       }
       return *bucket.find(fingerprint);
     }
 
-    std::shared_ptr<Simplex> createSimplex(std::size_t k) {
+    SimplexPtr createSimplex(std::size_t k) {
       if (manual) {
         throw std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
@@ -144,8 +144,8 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices);
-      externalSimplexes[simplex->getOrientation()].insert(simplex);
+      SimplexPtr simplex = std::make_shared<Simplex>(vertices);
+      externalSimplices[simplex->getOrientation()].insert(simplex);
       return simplex;
     }
 
@@ -153,7 +153,7 @@ class Spacetime {
       manual = manual_;
     }
 
-    std::shared_ptr<Simplex> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+    SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
       if (manual) {
         throw std::runtime_error(
           "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
@@ -200,8 +200,8 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      std::shared_ptr<Simplex> simplex = std::make_shared<Simplex>(vertices, orientation);
-      externalSimplexes[orientation].insert(simplex);
+      SimplexPtr simplex = std::make_shared<Simplex>(vertices, orientation);
+      externalSimplices[orientation].insert(simplex);
       return simplex;
     }
 
@@ -227,8 +227,8 @@ class Spacetime {
       return static_cast<double>(currentTime);
     }
 
-    [[nodiscard]] static std::optional<std::pair<std::shared_ptr<Simplex>, std::shared_ptr<Simplex> > >
-    getGluablePair(const std::shared_ptr<Simplex> &sA, const std::shared_ptr<Simplex> &sB) {
+    [[nodiscard]] static OptionalSimplexPair
+    getGluableFaces(const SimplexPtr &sA, const SimplexPtr &sB) {
       auto facetsA = sA->getFacets(); // vector<shared_ptr<Simplex>>
       auto facetsB = sB->getFacets();
 
@@ -294,9 +294,9 @@ class Spacetime {
 
     void moveEdges(
       const VertexPtr &fromVertex,
-      const std::shared_ptr<Simplex> &fromSimplex,
+      const SimplexPtr &fromSimplex,
       const VertexPtr &toVertex,
-      const std::shared_ptr<Simplex> &toSimplex,
+      const SimplexPtr &toSimplex,
       bool moveInEdges
       ) {
       CASET_LOG(INFO_LEVEL, "Moving ", std::to_string(fromVertex->getInEdges().size()), " in-edges and ", std::to_string(fromVertex->getOutEdges().size()), " out-edges from vertex ", fromVertex->toString(), " to vertex ", toVertex->toString());
@@ -376,8 +376,8 @@ class Spacetime {
     /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return myFace, updated with the second simplex glued.
-    std::tuple<std::shared_ptr<Simplex>, bool> causallyAttachFaces(std::shared_ptr<Simplex> &myFace,
-                                                                   const std::shared_ptr<Simplex> &yourFace) {
+    std::tuple<SimplexPtr, bool> causallyAttachFaces(SimplexPtr &myFace,
+                                                                   const SimplexPtr &yourFace) {
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
@@ -418,29 +418,45 @@ class Spacetime {
     }
 
     ///
-    /// @return Simplexes around the boundary of the simplicial complex to which they belong. These simplexes have at
+    /// @return Simplices around the boundary of the simplicial complex to which they belong. These simplices have at
     /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note
-    /// that this method does not return 2-simplexes as you might expect, but 5-simplexes since those are the standard
-    /// building blocks. You can get the 2-simplexes by calling `getFacets()` on the 5-simplexes and their facets until
+    /// that this method does not return 2-simplices as you might expect, but 5-simplices since those are the standard
+    /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
     [[nodiscard]]
-    std::vector<std::shared_ptr<Simplex> > getExternalSimplexes() noexcept {
-      std::vector<std::shared_ptr<Simplex> > simplexes;
-      for (const auto &[key, bucket] : externalSimplexes) {
+    Simplices getExternalSimplices() noexcept {
+      Simplices simplices;
+      for (const auto &[key, bucket] : externalSimplices) {
         for (const auto &simplex : bucket) {
-          simplexes.push_back(simplex);
+          simplices.push_back(simplex);
         }
       }
-      return simplexes;
+      return simplices;
     }
 
     void embedEuclidean(int dimensions, double epsilon);
 
+    SimplexPtr chooseSimplexToGlue(const SimplexPtr &mySimplex) {
+      const auto orientation = mySimplex->getOrientation();
+      const auto &bucket = externalSimplices[orientation];
+      if (bucket.empty()) return nullptr;
+
+      auto it = bucket.begin();
+      for (auto i=0; i<bucket.size(); i++) {
+        OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
+        if (gluablePair.has_value()) {
+          return gluablePair->second;
+        }
+      }
+
+    }
+
+
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
-    std::unordered_map<SimplexOrientation, Bucket> externalSimplexes{};
-    std::unordered_map<SimplexOrientation, Bucket> internalSimplexes{};
+    std::unordered_map<SimplexOrientation, Bucket> externalSimplices{};
+    std::unordered_map<SimplexOrientation, Bucket> internalSimplices{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 

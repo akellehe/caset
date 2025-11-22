@@ -301,10 +301,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// by the orientation of those respective `Simplex`es.
     /// attach it
     ///
-    /// The Facets are the \f$ \sigma^{k-1} \subset \sigma^{k} \f$ faces on which we'll most commonly join two simplexes
+    /// The Facets are the \f$ \sigma^{k-1} \subset \sigma^{k} \f$ faces on which we'll most commonly join two simplices
     /// to form a simplicial complex \f$ K \f$.
     ///
-    /// @return /// all k-1 simplexes contained within this k-simplex.
+    /// @return /// all k-1 simplices contained within this k-simplex.
     [[nodiscard]] std::vector<std::shared_ptr<Simplex>> getFacets() noexcept;
 
     ///
@@ -365,7 +365,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
       const std::size_t n = mine.size();
       if (n != theirs.size()) {
-        throw std::runtime_error("You can only compare simplexes of the same size!");
+        throw std::runtime_error("You can only compare simplices of the same size!");
       }
       if (n == 0) {
         return Vertices{}; // or std::nullopt, your call
@@ -471,11 +471,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     ///
-    /// Simplexes have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
+    /// Simplices have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
     /// \f$ \sigma^k = [v_0, v_1, ..., v_k] \f$ even permutations have the _same_ orientation. Odd permutations have
     /// _opposite_ orientation.
     ///
-    /// In order to glue two simplexes they must have opposite orientation.
+    /// In order to glue two simplices they must have opposite orientation.
     ///
     /// For Face (s); orientation is inherited from the parent Simplex.
     ///
@@ -553,7 +553,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// Vertex \subset Edge \subset Simplex \subset Spacetime
     /// \f]
     ///
-    /// @return The set of k-simplexes that share this face.
+    /// @return The set of k-simplices that share this face.
     [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> getCofaces() const noexcept {
       return cofaces;
     }
@@ -594,6 +594,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     static std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> facetRegistry;
     std::unordered_map<IdType, VertexPtr> vertexIdLookup{};
 };
+
+using SimplexPtr = std::shared_ptr<Simplex>;
+using SimplexPair = std::pair<SimplexPtr, SimplexPtr>;
+using OptionalSimplexPair = std::optional<SimplexPair>;
+using Simplices = std::vector<SimplexPtr>;
 }
 
 namespace std {

@@ -62,7 +62,7 @@ class TestSimplex(unittest.TestCase):
         vertices = left.getVerticesWithPairtyTo(right)
         self.assertEqual(len(vertices), 4)
 
-    def test_creating_oriented_simplexes(self):
+    def test_creating_oriented_simplices(self):
         ti, tf = (4, 1)
         s1 = self.spacetime.createSimplex((ti, tf))
         oti, otf = (0, 0)

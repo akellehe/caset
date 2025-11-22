@@ -17,6 +17,6 @@ constructing your initial spacetime as a lattice of `Edge`s and `Vertex`(s).
 Once you've done that you can use the `Simplex` interface to interact with the `Spacetime` lattice. For example
 
 ```python
-simplexes = spacetime.getSimplexes()
-simplexes[0].getVolume()
+simplices = spacetime.getSimplices()
+simplices[0].getVolume()
 ```

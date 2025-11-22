@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 st = Spacetime()
-print("Creating simplexes...")
+print("Creating simplices...")
 
 orientations = collections.deque([(1, 4), (2, 3)])
 complex = st.createSimplex((2, 3))
