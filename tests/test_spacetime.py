@@ -92,7 +92,7 @@ class TestSpacetime(unittest.TestCase):
         vertices = st.getVertexList().toVector()
         breakpoint()
 
-    def test_attaching_faces(self):
+    def test_attaching_faces4D(self):
         st = Spacetime()
 
         firstVertexList = st.getVertexList()
@@ -212,13 +212,136 @@ class TestSpacetime(unittest.TestCase):
         totalVerticesAfter = set([v.getId() for v in secondVertexList.toVector()])
         totalEdgesAfter = set([(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()])
 
-        breakpoint()
-        print("Total vertices after: ", totalVerticesAfter)
-        print("Total vertices before: ", totalVerticesBefore)
         self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 4)
         self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 6)
 
+
+    def test_attaching_faces2D(self):
+        st = Spacetime()
+
+        firstVertexList = st.getVertexList()
+        firstEdgeList = st.getEdgeList()
+
+        simplex21 = st.createSimplex((2, 1))
+        simplex12 = st.createSimplex((1, 2))
+
+        self.assertEqual(len(simplex21.getVertices()), 3)
+        self.assertEqual(len(simplex21.getEdges()), 3)
+
+        self.assertEqual(len(simplex12.getVertices()), 3)
+        self.assertEqual(len(simplex12.getEdges()), 3)
+
+        allVertices = [v.getId() for v in simplex12.getVertices() + simplex21.getVertices()]
+        self.assertEqual(len(allVertices), len(set(allVertices)))
+
+        allEdges = [(e.getSourceId(), e.getTargetId()) for e in simplex12.getEdges() + simplex21.getEdges()]
+        self.assertEqual(len(simplex12.getEdges()), len(set(simplex21.getEdges())))
+        self.assertEqual(len(simplex12.getEdges()), len(set(simplex21.getEdges())))
+
+        edges12 = {(e.getSourceId(), e.getTargetId()) for e in simplex12.getEdges()}
+        edges21 = {(e.getSourceId(), e.getTargetId()) for e in simplex21.getEdges()}
+
+        self.assertTrue(edges21.isdisjoint(edges12))
+        self.assertEqual(len(allEdges), len(set(allEdges)))
+
+        totalVerticesBefore = len(st.getVertexList().toVector())
+        self.assertEqual(totalVerticesBefore, 6)
+
+        totalEdgesBefore = len(st.getEdgeList().toVector())
+        self.assertEqual(totalEdgesBefore, 6)
+
+        for edge in firstEdgeList.toVector():
+            source = firstVertexList.get(edge.getSourceId())
+            target = firstVertexList.get(edge.getTargetId())
+            self.assertIsNotNone(source)
+            self.assertIsNotNone(target)
+
+        left, right = None, None
+        facets12 = simplex12.getFacets()
+        ntime, nspace = 0, 0
+        for facet in facets12:
+            if facet.isTimelike():
+                ntime += 1
+            else:
+                nspace += 1
+            if facet.getOrientation().numeric() == (1, 1):
+                left = facet
+
+        self.assertEqual(ntime, 1)
+        self.assertEqual(nspace, 2)
+        self.assertIsNotNone(left)
+
+        facets23 = simplex21.getFacets()
+        nspace = 0
+        ntime = 0
+        for face in facets23:
+            if face.isTimelike():
+                ntime += 1
+            else:
+                nspace += 1
+            if face.getOrientation().numeric() == (1, 1):
+                right = face
+
+        self.assertEqual(nspace, 2)
+        self.assertEqual(ntime, 1)
+
+        self.assertIsNotNone(left)
+        self.assertIsNotNone(right)
+
+        totalVerticesBefore = st.getVertexList().toVector()
+        totalEdgesBefore = st.getEdgeList().toVector()
+
+        self.assertEqual(len(totalVerticesBefore), 6)
+        self.assertEqual(len(totalEdgesBefore), 6)
+
+        leftVerticesBefore = [v.getId() for v in left.getVertices()]
+        self.assertEqual(len(leftVerticesBefore), 2)
+        leftEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        self.assertEqual(len(leftEdgesBefore), 1)
+
+        rightVerticesBefore = [v.getId() for v in right.getVertices()]
+        self.assertEqual(len(rightVerticesBefore), 2)
+        rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        self.assertEqual(len(rightEdgesBefore), 1)
+
+        updated, succeeded = st.causallyAttachFaces(left, right)
+        self.assertTrue(succeeded)
+
+        v1, v2 = updated.getVertices()
+
+        secondVertexList = st.getVertexList()
+        secondEdgeList = st.getEdgeList()
+        self.assertIs(firstVertexList, secondVertexList)
+        self.assertIs(firstEdgeList, secondEdgeList)
+        for edge in secondEdgeList.toVector():
+            source = secondVertexList.get(edge.getSourceId())
+            target = secondVertexList.get(edge.getTargetId())
+            self.assertIsNotNone(source)
+            self.assertIsNotNone(target)
+
+        leftVerticesAfter = [v.getId() for v in left.getVertices()]
+        self.assertEqual(len(leftVerticesAfter), 2)
+        leftEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        self.assertEqual(len(leftEdgesAfter), 1)
+
+        rightVerticesAfter = [v.getId() for v in right.getVertices()]
+        self.assertEqual(len(rightVerticesAfter), 2)
+        rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        self.assertEqual(len(rightEdgesAfter), 1)
+
+        shared = {v for v in leftVerticesAfter} & {v for v in rightVerticesAfter}
+        self.assertEqual(len(shared), 2)
+        self.assertEqual(len(leftVerticesAfter), len(leftVerticesBefore))
+
+        totalVerticesAfter = set([v.getId() for v in secondVertexList.toVector()])
+        totalEdgesAfter = set([(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()])
+
+        self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 2)
+        self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 1)
+
+        breakpoint()
         print('foo')
+
 
 if __name__ == '__main__':
     unittest.main()

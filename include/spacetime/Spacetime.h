@@ -63,7 +63,19 @@ class Spacetime {
     /// Builds an n-dimensional (depending on your metric) triangulation/slice for t=0 with edge lengths equal to alpha
     /// matching the chosen topology. The default Topology is Toroid.
     void build() {
+      // TODO: Implement topologies instead of the default.
       // return topology->build(this);
+      std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 4}, {2, 3}};
+      createSimplex(orientations[1]);
+      for (int i = 0; i < 100000; i++) {
+        SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
+        OptionalSimplexPair leftFaceRightFace = chooseSimplexToGlueTo(rightSimplex);
+        if (!leftFaceRightFace.has_value()) {
+          return;
+        }
+        auto [leftFace, rightFace] = leftFaceRightFace.value();
+        auto [left, succeeded] = causallyAttachFaces(leftFace, rightFace);
+      }
     }
 
     void addObservable(const std::shared_ptr<Observable> &observable) {
@@ -304,10 +316,17 @@ class Spacetime {
       const VertexPtr &fromVertex,
       const SimplexPtr &fromSimplex,
       const VertexPtr &toVertex,
-      const SimplexPtr &toSimplex,
       bool moveInEdges
-      ) {
-      CASET_LOG(INFO_LEVEL, "Moving ", std::to_string(fromVertex->getInEdges().size()), " in-edges and ", std::to_string(fromVertex->getOutEdges().size()), " out-edges from vertex ", fromVertex->toString(), " to vertex ", toVertex->toString());
+    ) {
+      CASET_LOG(INFO_LEVEL,
+                "Moving ",
+                std::to_string(fromVertex->getInEdges().size()),
+                " in-edges and ",
+                std::to_string(fromVertex->getOutEdges().size()),
+                " out-edges from vertex ",
+                fromVertex->toString(),
+                " to vertex ",
+                toVertex->toString());
       const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
       for (const auto &edge : edges) {
         if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())) {
@@ -325,9 +344,9 @@ class Spacetime {
         moveOutEdgesFromVertex(fromVertex, toVertex);
         fromSimplex->replaceVertex(fromVertex, toVertex);
         // TODO: Move stuff from cofaces.
-        // for (const auto &coface : yourFace->getCofaces()) {
-        // coface->replaceVertex(yourVertex, myVertex);
-        // }
+        for (const auto &coface : fromSimplex->getCofaces()) {
+          coface->replaceVertex(fromVertex, toVertex);
+        }
       }
     }
 
@@ -385,7 +404,25 @@ class Spacetime {
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return myFace, updated with the second simplex glued.
     std::tuple<SimplexPtr, bool> causallyAttachFaces(SimplexPtr &myFace,
-                                                                   const SimplexPtr &yourFace) {
+                                                     const SimplexPtr &yourFace) {
+#if defined(CASET_DEBUG)
+      if (myFace->fingerprint.fingerprint() == yourFace->fingerprint.fingerprint()) {
+        CASET_LOG(ERROR_LEVEL, "Faces are already attached!");
+        return {myFace, false};
+      }
+      if (myFace->getOrientation() != yourFace->getOrientation()) {
+        CASET_LOG(ERROR_LEVEL, "Faces have different orientations!");
+        return {myFace, false};
+      }
+      for (const auto &myCoface : myFace->getCofaces()) {
+        for (const auto &yourCoFace : yourFace->getCofaces()) {
+          if (myCoface->fingerprint.fingerprint() == yourCoFace->fingerprint.fingerprint()) {
+            CASET_LOG(ERROR_LEVEL, "Faces share a coface!");
+            return {myFace, false};
+          }
+        }
+      }
+#endif
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(myFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
@@ -416,8 +453,8 @@ class Spacetime {
         // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
         // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
         // from myFace, but deleted entirely.
-        moveEdges(yourVertex, yourFace, myVertex, myFace, true);
-        moveEdges(yourVertex, yourFace, myVertex, myFace, false);
+        moveEdges(yourVertex, yourFace, myVertex, true);
+        moveEdges(yourVertex, yourFace, myVertex, false);
         removeIfIsolated(yourVertex);
       }
       auto newCoface = *(yourFace->getCofaces().begin());
@@ -450,7 +487,11 @@ class Spacetime {
       if (bucket.empty()) return std::nullopt;
 
       auto it = bucket.begin();
-      for (auto i=0; i<bucket.size(); i++) {
+      for (auto i = 0; i < bucket.size(); i++) {
+        if ((*it)->fingerprint.fingerprint() == mySimplex->fingerprint.fingerprint() && it != bucket.end()) {
+          ++it;
+          continue;
+        }
         OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
         if (gluablePair.has_value()) {
           return gluablePair;
@@ -458,7 +499,6 @@ class Spacetime {
       }
       return std::nullopt;
     }
-
 
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();

@@ -53,9 +53,10 @@ optional-dependencies.dev = [
 
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"
+#cmake.build-type = "Debug"
 cmake.build-type = "Debug"
 
 [tool.scikit-build.cmake.define]
-CMAKE_CXX_FLAGS_DEBUG = "-O0 -g3 -gdwarf-5 -fstandalone-debug -fno-omit-frame-pointer"
-CMAKE_INTERPROCEDURAL_OPTIMIZATION = "OFF"
+#CMAKE_CXX_FLAGS_DEBUG = "-O3 -g3 -gdwarf-5 -fstandalone-debug -fno-omit-frame-pointer"
+#CMAKE_INTERPROCEDURAL_OPTIMIZATION = "OFF"
 Python_EXECUTABLE = "${python.executable}"

@@ -1,31 +1,32 @@
 from caset import Spacetime, Simplex
 import collections
+import timeit
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
+from caset import Spacetime, Simplex
 st = Spacetime()
-print("Creating simplices...")
-
-orientations = collections.deque([(1, 4), (2, 3)])
+orientations = [(1, 4), (2, 3)]
 st.createSimplex((2, 3))
-for i in range(100000):
-    orientation = orientations.popleft()
-    rightSimplex = st.createSimplex(orientation)
-    leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
-    complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
-    orientations.append(orientation)
+rightSimplex = st.createSimplex((1, 4))
+leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
+# for i in range(0):
+#     rightSimplex = st.createSimplex(orientations[i % 2])
+#     leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
+#     complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+
 
 def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
-    # Normalize so alpha^2 + beta^2 ~= 1 if you care:
-    norm = (alpha**2 + beta**2) ** 0.5
-    alpha /= norm
-    beta  /= norm
-    x_p = x
-    y_p = y
-    z_p = alpha * z + beta * t
-    return x_p, y_p, z_p
+   # Normalize so alpha^2 + beta^2 ~= 1 if you care:
+   norm = (alpha**2 + beta**2) ** 0.5
+   alpha /= norm
+   beta  /= norm
+   x_p = x
+   y_p = y
+   z_p = alpha * z + beta * t
+   return x_p, y_p, z_p
 
 print("Embedding...")
 st.embedEuclidean()
@@ -37,24 +38,24 @@ ymin, ymax = float("inf"), float("-inf")
 zmin, zmax = float("inf"), float("-inf")
 
 for edge in (st.getEdgeList().toVector()):
-    source = vlist.get(edge.getSourceId())
-    target = vlist.get(edge.getTargetId())
+   source = vlist.get(edge.getSourceId())
+   target = vlist.get(edge.getTargetId())
 
-    x1, y1, z1 = project4_to_3(*source.getCoordinates())
-    x2, y2, z2 = project4_to_3(*target.getCoordinates())
+   x1, y1, z1 = project4_to_3(*source.getCoordinates())
+   x2, y2, z2 = project4_to_3(*target.getCoordinates())
 
-    xmin = min(xmin, x1, x2)
-    xmax = max(xmax, x1, x2)
-    ymin = min(ymin, y1, y2)
-    ymax = max(ymax, y1, y2)
-    zmin = min(zmin, z1, z2)
-    zmax = max(zmax, z1, z2)
+   xmin = min(xmin, x1, x2)
+   xmax = max(xmax, x1, x2)
+   ymin = min(ymin, y1, y2)
+   ymax = max(ymax, y1, y2)
+   zmin = min(zmin, z1, z2)
+   zmax = max(zmax, z1, z2)
 
-    print("Squared length: ", edge.getSquaredLength())
-    if edge.getSquaredLength() < 0:
-        timeEdges.append([(x1, y1, z1), (x2, y2, z2)])
-    else:
-        spaceEdges.append([(x1, y1, z1), (x2, y2, z2)])
+   print("Squared length: ", edge.getSquaredLength())
+   if edge.getSquaredLength() < 0:
+       timeEdges.append([(x1, y1, z1), (x2, y2, z2)])
+   else:
+       spaceEdges.append([(x1, y1, z1), (x2, y2, z2)])
 
 fig = plt.figure(figsize=(8, 8))
 ax = fig.add_subplot(111, projection="3d")

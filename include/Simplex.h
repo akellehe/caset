@@ -182,7 +182,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// The curvature at the hinge is the deficit angle.
     ///
-    const std::vector<std::shared_ptr<Simplex>> getHinges() const {
+    const std::vector<std::shared_ptr<Simplex> > getHinges() const {
       return {};
     }
 
@@ -305,12 +305,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex>> getFacets() noexcept;
-
-    ///
-    /// TODO: when we attach another simplex to this simplex; we need to update the (numeric) orientation of the
-    ///   co-faces/Simplex (es).
-    ///  void updateCofaceOrientation(std::shared_ptr<Simplex> &newlyAttachedSimplex);
+    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets() noexcept;
 
     Fingerprint fingerprint;
 
@@ -381,6 +376,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
           [&](std::size_t start,
               bool reversed)
         -> std::optional<Vertices> {
+        CASET_LOG(INFO_LEVEL, "Trying alignment...");
         Vertices result;
         result.reserve(n);
 
@@ -397,12 +393,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
           }
 
           if (mine[idx]->getTime() != theirs[k]->getTime()) {
+            CASET_LOG(INFO_LEVEL, "Alignment failed.");
             return std::nullopt; // mismatch, this alignment fails
           }
 
           result.push_back(mine[idx]);
         }
-
+        CASET_LOG(INFO_LEVEL, "Alignment finished.");
         return result; // success
       };
 
@@ -558,6 +555,14 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return cofaces;
     }
 
+    constexpr bool operator==(const Simplex &other) const noexcept {
+      return fingerprint.fingerprint() == other.fingerprint.fingerprint();
+    }
+
+    constexpr bool operator==(const std::shared_ptr<Simplex> &other) const noexcept {
+      return fingerprint.fingerprint() == other->fingerprint.fingerprint();
+    }
+
     /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
     /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
     /// squaredLength data could be lost.
@@ -569,7 +574,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       std::vector<IdType> vertexIds = {};
       vertexIds.reserve(vertices.size());
       for (int i = 0; i < vertices.size(); i++) {
-        const auto vertexIndex = vertexIdLookup.find(oldVertex->getId());
         if (vertices[i]->getId() == oldVertex->getId()) {
           vertices[i] = newVertex;
           vertexIdLookup.erase(oldVertex->getId());
@@ -583,13 +587,15 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
   private:
+    // TODO: I think we can get rid of the vertexIndexLookup, the only place we appear to use it is removeVertex, which
+    //  appears to be unused.
     VertexIndexMap vertexIndexLookup{};
     Vertices vertices{};
     SimplexOrientation orientation{};
     EdgeIndexMap edgeIndexMap{};
     Edges edges{};
 
-    std::vector<std::shared_ptr<Simplex>> facets{};
+    std::vector<std::shared_ptr<Simplex> > facets{};
     std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
     static std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> facetRegistry;
     std::unordered_map<IdType, VertexPtr> vertexIdLookup{};
