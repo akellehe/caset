@@ -19,7 +19,6 @@ class EdgeList {
       return getOrInsert(edge);
     }
 
-
     std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt) {
       auto edge = std::make_shared<Edge>(src, tgt);
       return getOrInsert(edge);
@@ -63,6 +62,9 @@ class EdgeList {
     std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edgeList{};
 
     std::shared_ptr<Edge> getOrInsert(const std::shared_ptr<Edge> &edge) {
+      if (edge->getSourceId() == edge->getTargetId()) {
+        throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());
+      }
       if (edgeList.contains(edge)) {
         auto found = *edgeList.find(edge);
         if (found->getSourceId() != edge->getSourceId() || found->getTargetId() != edge->getTargetId()) {
@@ -70,7 +72,7 @@ class EdgeList {
         }
         return found;
       }
-      CASET_LOG(INFO_LEVEL, "Adding edge: ", edge->toString());
+      CASET_LOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
       edgeList.insert(edge);
       return edge;
     }

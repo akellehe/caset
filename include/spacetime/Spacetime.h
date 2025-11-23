@@ -233,23 +233,25 @@ class Spacetime {
     /// a (3, 2) or a (2, 3). There's a pairty building method, `Simplex::getVerticesWithParityTo(yourFace)`, that finds
     /// the right order to use when attaching the Simplex to the Simplicial complex.
     ///
-    /// @param sA The first simplex you would like to glue to the second simplex.
-    /// @param sB The second Simplex to be glued to the first (`sA`).
-    /// @return
-    [[nodiscard]] static OptionalSimplexPair
-    getGluableFaces(const SimplexPtr &sA, const SimplexPtr &sB) {
-      auto facetsA = sA->getFacets(); // vector<shared_ptr<Simplex>>
-      auto facetsB = sB->getFacets();
+    /// @param unattachedSimplex A simplex not yet attached to the simplicial complex.
+    /// @param attachedSimplex An attached simplex to which you would like to glue the first. Orientation is based on
+    ///   this simplex.
+    ///
+    /// @return {unattached, attached} faces that can be glued together.
+    [[nodiscard]] OptionalSimplexPair
+    getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
+      auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
+      auto attachedFacets = attachedSimplex->getFacets();
 
-      for (auto &fA : facetsA) {
-        const auto [tia, tfa] = fA->getOrientation()->numeric();
-        for (auto &fB : facetsB) {
-          const auto [tib, tfb] = fB->getOrientation()->numeric();
+      for (auto &unattachedFace : unattachedFacets) {
+        const auto [tia, tfa] = unattachedFace->getOrientation()->numeric();
+        for (auto &attachedFace : attachedFacets) {
+          const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
           if (tia == tfb && tfa == tib) {
-            return std::make_optional(std::make_pair(fA, fB));
+            return std::make_optional(std::make_pair(unattachedFace, attachedFace));
           }
           if (tia == tib && tfa == tfb) {
-            return std::make_optional(std::make_pair(fA, fB));
+            return std::make_optional(std::make_pair(unattachedFace, attachedFace));
           }
         }
       }
@@ -299,7 +301,8 @@ class Spacetime {
       const VertexPtr &toVertex,
       bool moveInEdges
     ) {
-      CASET_LOG(INFO_LEVEL,
+      /// TODO: This method is not discriminating between in and out edgtes during the actual move.
+      CASET_LOG(DEBUG_LEVEL,
                 "Moving ",
                 std::to_string(fromVertex->getInEdges().size()),
                 " in-edges and ",
@@ -321,12 +324,10 @@ class Spacetime {
           continue;
         }
 
-        moveInEdgesFromVertex(fromVertex, toVertex);
-        moveOutEdgesFromVertex(fromVertex, toVertex);
-        fromSimplex->replaceVertex(fromVertex, toVertex);
-        // TODO: Move stuff from cofaces.
-        for (const auto &coface : fromSimplex->getCofaces()) {
-          coface->replaceVertex(fromVertex, toVertex);
+        if (moveInEdges) {
+          moveInEdgesFromVertex(fromVertex, toVertex);
+        } else {
+          moveOutEdgesFromVertex(fromVertex, toVertex);
         }
       }
     }
@@ -434,12 +435,20 @@ class Spacetime {
       for (auto i = 0; i < myOrderedVertices.size(); i++) {
         const auto &myVertex = myOrderedVertices[i];
         const auto &yourVertex = yourVertices[i];
-        CASET_LOG(INFO_LEVEL, "-----------------------------------------------------------------------");
+        CASET_LOG(DEBUG_LEVEL, "-----------------------------------------------------------------------");
+
         // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
         // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
         // from myFace, but deleted entirely.
-        moveEdges(yourVertex, yourFace, myVertex, true);
-        moveEdges(yourVertex, yourFace, myVertex, false);
+        if (yourVertex->getInEdges().size() > 0) moveEdges(yourVertex, yourFace, myVertex, true);
+        if (yourVertex->getOutEdges().size() > 0) moveEdges(yourVertex, yourFace, myVertex, false);
+
+        yourFace->replaceVertex(yourVertex, myVertex);
+
+        // TODO: Move stuff from cofaces. Don't know that this covers all cases.
+        for (const auto &coface : yourFace->getCofaces()) {
+          coface->replaceVertex(yourVertex, myVertex);
+        }
         removeIfIsolated(yourVertex);
       }
 
@@ -480,9 +489,9 @@ class Spacetime {
     /// If you want something truly random, though, you should probably implement that.
     ///
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
-    OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &mySimplex) {
+    OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
       CASET_LOG(DEBUG_LEVEL, "------------------------------------------------------------------------");
-      for (const auto &facialOrientation : mySimplex->getGluableFaceOrientations()) {
+      for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
         const auto &bucket = externalSimplices[facialOrientation];
         if (bucket.empty()) continue;
         CASET_LOG(DEBUG_LEVEL,
@@ -490,25 +499,25 @@ class Spacetime {
                   std::to_string(bucket.size()),
                   " simplices in bucket for facial orientation ",
                   facialOrientation->toString());
-        for (auto it = bucket.begin(); it != bucket.end(); ++it) {
-          if ((*it)->fingerprint.fingerprint() == mySimplex->fingerprint.fingerprint()) {
-            CASET_LOG(DEBUG_LEVEL, "Skipping simplex ", (*it)->toString(), " because it's the same as mySimplex");
+        for (auto attachedSimplexIt = bucket.begin(); attachedSimplexIt != bucket.end(); ++attachedSimplexIt) {
+          if ((*attachedSimplexIt)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) {
+            CASET_LOG(DEBUG_LEVEL, "Skipping simplex ", (*attachedSimplexIt)->toString(), " because it's the same as mySimplex");
             continue;
           }
-          OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
+          OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedSimplexIt);
           if (gluablePair.has_value()) {
-            CASET_LOG(DEBUG_LEVEL,
-                      "Found gluable faces for simplex ",
-                      (*it)->toString(),
-                      " and mySimplex ",
-                      mySimplex->toString());
+            CASET_LOG(INFO_LEVEL,
+                      "Found gluable faces for simplex \n",
+                      (*attachedSimplexIt)->toString(),
+                      " \nand mySimplex \n",
+                      unattachedSimplex->toString(), "\n---\n", std::get<0>(gluablePair.value())->toString(), "\nAND\n", std::get<1>(gluablePair.value())->toString());
             return gluablePair;
           }
           CASET_LOG(DEBUG_LEVEL,
                     "No gluable faces found to attach simplex ",
-                    (*it)->toString(),
+                    (*attachedSimplexIt)->toString(),
                     " to ",
-                    mySimplex->toString());
+                    unattachedSimplex->toString());
         }
       }
       return std::nullopt;

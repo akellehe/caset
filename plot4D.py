@@ -10,11 +10,12 @@ from caset import Spacetime, Simplex
 
 st = Spacetime()
 orientations = [(1, 4), (2, 3)]
-for i in range(5):
-   rightSimplex = st.createSimplex(orientations[i % 2])
+for i in range(3):
+   newSimplex = st.createSimplex(orientations[i % 2])
    try:
-      leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
+      leftFace, rightFace = st.chooseSimplexToGlueTo(newSimplex)
    except TypeError:
+      print("Failed to choose gluable simplex.")
       continue
 
    complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)

@@ -166,7 +166,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertexList", &Spacetime::getVertexList)
       .def("getSimplicesWithOrientation", &Spacetime::getSimplicesWithOrientation, py::arg("orientation"))
       .def("getEdgeList", &Spacetime::getEdgeList)
-      .def_static("getGluablePair", &Spacetime::getGluableFaces)
+      .def("getGluablePair", &Spacetime::getGluableFaces)
       .def("embedEuclidean", &Spacetime::embedEuclidean, py::arg("dimensions") = 4, py::arg("epsilon") = 1e-8)
       .def("build", &Spacetime::build)
       .def("getSimplices", &Spacetime::getExternalSimplices)

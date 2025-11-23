@@ -216,6 +216,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
         ids.push_back(vertices_[i]->getId());
         vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
       }
+      if (vertexIdLookup.size() != vertices_.size()) {
+        throw std::invalid_argument("Duplicate vertex IDs detected in simplex construction.");
+      }
       fingerprint = Fingerprint(ids);
       computeEdges();
     }
@@ -455,7 +458,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
           [&](std::size_t start,
               bool reversed)
         -> std::optional<Vertices> {
-        CASET_LOG(INFO_LEVEL, "Trying alignment...");
+        CASET_LOG(DEBUG_LEVEL, "Trying alignment...");
         Vertices result;
         result.reserve(n);
 
@@ -472,13 +475,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
           }
 
           if (mine[idx]->getTime() != theirs[k]->getTime()) {
-            CASET_LOG(INFO_LEVEL, "Alignment failed.");
+            CASET_LOG(DEBUG_LEVEL, "Alignment failed.");
             return std::nullopt; // mismatch, this alignment fails
           }
 
           result.push_back(mine[idx]);
         }
-        CASET_LOG(INFO_LEVEL, "Alignment finished.");
+        CASET_LOG(DEBUG_LEVEL, "Alignment finished.");
         return result; // success
       };
 
@@ -517,7 +520,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       edges.reserve(nEdges);
       edgeIndexMap.reserve(nEdges);
 
-      CASET_LOG(INFO_LEVEL, "Getting edges for simplex ", toString());
+      CASET_LOG(DEBUG_LEVEL, "Getting edges for simplex ", toString());
       VertexPtr origin = nullptr;
 
       // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
@@ -525,7 +528,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       for (const auto &cursor : getVertices()) {
         for (const auto &e : cursor->getInEdges()) {
           if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
-            CASET_LOG(INFO_LEVEL, "For vertex", cursor->toString(), " found in-edge ", e->toString());
+            CASET_LOG(DEBUG_LEVEL, "For vertex", cursor->toString(), " found in-edge ", e->toString());
             EdgeKey edgeKey{e->getSourceId(), e->getTargetId()};
             edgeIndexMap.insert_or_assign(edgeKey, edges.size());
             edges.push_back(e);
@@ -731,7 +734,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     std::vector<std::shared_ptr<Simplex> > facets{};
     std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
-    static std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> facetRegistry;
     std::unordered_map<IdType, VertexPtr> vertexIdLookup{};
 };
 
