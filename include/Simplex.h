@@ -27,6 +27,9 @@ enum class TimeOrientation : uint8_t {
   UNKNOWN = 2
 };
 
+class SimplexOrientation;
+using SimplexOrientationPtr = std::shared_ptr<SimplexOrientation>;
+
 class SimplexOrientation {
   public:
     ///
@@ -54,16 +57,20 @@ class SimplexOrientation {
     }
 
     [[nodiscard]]
-    SimplexOrientation decTi() const {
+    SimplexOrientationPtr decTi() const {
       uint8_t newTi = static_cast<uint8_t>(ti - 1);
       // constructor recomputes k automatically
-      return SimplexOrientation(newTi, tf);
+      return std::make_shared<SimplexOrientation>(newTi, tf);
     }
 
     [[nodiscard]]
-    SimplexOrientation decTf() const {
+    SimplexOrientationPtr decTf() const {
       uint8_t newTf = static_cast<uint8_t>(tf - 1);
-      return SimplexOrientation(ti, newTf);
+      return std::make_shared<SimplexOrientation>(ti, newTf);
+    }
+
+    [[nodiscard]] std::string toString() const noexcept {
+      return "<SimplexOrientation: (" + std::to_string(ti) + ", " + std::to_string(tf) + ")>";
     }
 
     constexpr bool operator==(const SimplexOrientation &other) const noexcept {
@@ -76,11 +83,23 @@ class SimplexOrientation {
       return TimeOrientation::FUTURE;
     }
 
+    [[nodiscard]] std::vector<SimplexOrientationPtr> getFacialOrientations() const {
+      if (ti + tf == 0) return {};
+      if (ti == 0) return {decTf()};
+      if (tf == 0) return {decTi()};
+      std::vector<SimplexOrientationPtr> orientations;
+      orientations.reserve(2);
+      orientations.push_back(decTi());
+      orientations.push_back(decTf());
+      return orientations;
+
+    }
+
     uint8_t getK() const {
       return k;
     }
 
-    static SimplexOrientation orientationOf(const Vertices &vertices) {
+    static SimplexOrientationPtr orientationOf(const Vertices &vertices) {
       uint8_t tiVertices = 0;
       uint8_t tfVertices = 0;
       double ti = std::numeric_limits<double>::max();
@@ -105,7 +124,7 @@ class SimplexOrientation {
       } else {
         tfVertices += unassigned;
       }
-      return SimplexOrientation(tiVertices, tfVertices);
+      return std::make_shared<SimplexOrientation>(tiVertices, tfVertices);
     }
 
   private:
@@ -113,6 +132,14 @@ class SimplexOrientation {
     uint8_t tf{0};
     uint8_t k{0};
 };
+
+inline bool operator==(const SimplexOrientationPtr& a,
+                const SimplexOrientationPtr& b)
+{
+  if (!a || !b) return !a && !b;
+  return *a == *b;   // compare underlying objects
+}
+
 }
 
 namespace std {
@@ -124,6 +151,7 @@ struct hash<caset::SimplexOrientation> {
     return std::hash<std::uint16_t>{}(packed); // perfect for all (ti, tf)
   }
 };
+
 }
 
 namespace caset {
@@ -141,7 +169,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param vertices_
     Simplex(
       Vertices vertices_
-    ) : orientation(SimplexOrientation(0, 0)), vertices(vertices_), fingerprint({}) {
+    ) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), fingerprint({}) {
       orientation = SimplexOrientation::orientationOf(vertices_);
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
@@ -156,8 +184,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     Simplex(
       Vertices vertices_,
-      SimplexOrientation orientation_
-    ) : orientation(orientation_), vertices(vertices_), fingerprint({}) {
+      SimplexOrientationPtr orientation_
+    ) : orientation(std::move(orientation_)), vertices(vertices_), fingerprint({}) {
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
       vertexIdLookup.reserve(vertices_.size());
@@ -172,7 +200,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     std::string toString() const {
       std::stringstream ss;
       ss << "<";
-      ss << std::to_string(getOrientation().getK());
+      ss << std::to_string(getOrientation()->getK());
       ss << "-Simplex (";
       for (const auto &v : vertices) {
         ss << v->toString() << "→";
@@ -234,7 +262,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return 0.;
     };
 
-    [[nodiscard]] SimplexOrientation getOrientation() const noexcept {
+    [[nodiscard]] SimplexOrientationPtr getOrientation() const noexcept {
       return orientation;
     }
 
@@ -271,7 +299,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     template<typename T>
-    T binomial(unsigned n, unsigned k) {
+    T binomial(unsigned n, unsigned k) const {
       if (k > n) return 0;
       k = std::min(k, n - k);
 
@@ -299,8 +327,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// And the total number of faces of all dimensions is
     /// \sum_{j=0}^{k-1} \binom{k+1}{j+1} = 2^{k+1} - 2
     ///
-    std::size_t getNumberOfFaces(std::size_t j) {
-      auto k = getOrientation().getK();
+    std::size_t getNumberOfFaces(std::size_t j) const {
+      auto k = getOrientation()->getK();
       return binomial<std::size_t>(k + 1, j + 1);
     }
 
@@ -318,7 +346,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets() const noexcept;
+    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets() noexcept;
 
     Fingerprint fingerprint;
 
@@ -441,7 +469,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
     void computeEdges() {
-      auto nEdges = computeNumberOfEdges(getOrientation().getK());
+      auto nEdges = computeNumberOfEdges(getOrientation()->getK());
 
       if (!edges.empty()) {
         edges = Edges{};
@@ -574,11 +602,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     ///
     /// This method iterates over all faces of this Simplex; and counts the number of co-faces for each face. If a face
-    /// has fewer than 2 co-faces; it's available to glue.
+    /// has fewer than 2 co-faces; it's available to glue. We limit to 2 co-faces because we want to preserve
+    /// manifoldness. There's nothing wrong with internal simplicies from the perspective of simplicial algebra, but
+    /// there is from the perspective of relativity.
     ///
     /// @return Whether or not this Simplex is available to glue. A face is only available when it has less than 2
-    ///   co-faces.
-    bool isAvailable () const noexcept {
+    /// co-faces.
+    bool isCausallyAvailable () noexcept {
       for (const auto &face : getFacets()) {
         if (face->getCofaces().size() < 2) {
           return true;
@@ -587,25 +617,41 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return false;
     }
 
+    /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
+    /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
+    /// hence violate causality. If that's your goal then you want to use `isCausallyAvailable`
     ///
-    /// @return A set of orientations for Simplexes that can be glued to this Simplex. We look at it's available faces,
-    /// and then add 1 to each of t_i and t_f to get the orientation of the co-face that can be glued to that face. Those
-    /// are the ones we look up in the Spacetime Simplex registry by orientation.
+    /// For a given k-simplex \f$ \sigma^k \f$, a co-face is defined as an m-simplex, \f$ \sigma^m \f$ such that \f$ m > k \f$
+    /// and \f$ \sigma^k \subset \sigma^m \f$. The maximum number of co-faces that can be joined to a k-simplex is in
+    /// general unbounded, but for our purposes we set it to the number of faces of the simplex, so we impose the
+    /// constraint that the coface no be _generally_ \f$ m > k \f$, but exactly \f$ k + 1 \f$, so \f$ m = k + 1 \f$.
     ///
-    /// TODO: We should make the registry of Simplexs in Spacetime a map of Face orientation -> Simplex so we only grab
-    /// those simplices with available faces of the correct orientation. Then this method should return the set of face
-    /// orientations, not simplex orientations that we need to glue to this simplex.
-    std::unordered_set<std::shared_ptr<SimplexOrientation>> getGluableOrientations() const {
-      // const auto &[ti, tf] = getOrientation().numeric();
-      auto allowedOrientations = std::unordered_set<std::shared_ptr<SimplexOrientation>>{};
+    /// This can be confusing because for the purpose of causally gluing simplices we look at a face, \f$ \sigma^k \f$
+    /// of the (k+1)-simplex, \f$ \sigma{k+1} \f$ where to that (k-) face we want to glue another (k+1)-simplex on one
+    /// of it's k-faces. So the maximum number of co-faces that can be joined to a k-simplex is the number of faces of
+    /// that simplex.
+    ///
+    /// @return
+    std::size_t maxKPlusOneCofaces() const {
+      return getNumberOfFaces(getOrientation()->getK());
+    }
+
+    ///
+    /// @return A set of orientations for faces that can be glued to this Simplex. We look at it's available faces, and
+    ///   create a unique set of the orientations. That set can be used to look up a corresponding Simplex in the
+    ///   `externalSimplices` of the Spacetime.
+    ///
+    std::unordered_set<SimplexOrientationPtr> getGluableFaceOrientations() {
+      auto allowedOrientations = std::unordered_set<SimplexOrientationPtr>{};
       for (const auto &face : getFacets()) {
         if (face->getCofaces().size() < 2) {
-          auto faceOrientation = face->getOrientation().numeric();
-          auto coFaceOrientation1 = {std::get<0>(faceOrientation) + 1, std::get<1>(faceOrientation)};
-          auto coFaceOrientation2 = {std::get<0>(faceOrientation) + 1, std::get<1>(faceOrientation)};
-          allowedOrientations.insert(std::make_shared<SimplexOrientation>(face->getOrientation()));
+          CASET_LOG(DEBUG_LEVEL, "Face ", face->toString(), " IS causally available.");
+          allowedOrientations.insert(face->getOrientation());
+        } else {
+          CASET_LOG(DEBUG_LEVEL, "Face ", face->toString(), " is NOT causally available.");
         }
       }
+      CASET_LOG(DEBUG_LEVEL, "Found ", std::to_string(allowedOrientations.size()), " allowed orientations for simplex ", toString());
       return allowedOrientations;
     }
 
@@ -641,7 +687,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     //  appears to be unused.
     VertexIndexMap vertexIndexLookup{};
     Vertices vertices{};
-    SimplexOrientation orientation{};
+    SimplexOrientationPtr orientation{};
     EdgeIndexMap edgeIndexMap{};
     Edges edges{};
 
@@ -655,6 +701,7 @@ using SimplexPtr = std::shared_ptr<Simplex>;
 using SimplexPair = std::pair<SimplexPtr, SimplexPtr>;
 using OptionalSimplexPair = std::optional<SimplexPair>;
 using Simplices = std::vector<SimplexPtr>;
+using SimplexSet = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
 }
 
 namespace std {

@@ -49,7 +49,7 @@ target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}")
 add_definitions(-DSOURCES_ROOT="${SOURCES_ROOT}")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(caset PRIVATE CASET_DEBUG=1)
+    target_compile_definitions(caset PRIVATE CASET_DEBUG=1 VERBOSE=1)
     add_definitions(-DSOURCES_ROOT="${SOURCES_ROOT}")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(caset PRIVATE -O3)

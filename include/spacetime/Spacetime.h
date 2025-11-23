@@ -83,12 +83,10 @@ class Spacetime {
     }
 
     std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
-      manual = true;
       return vertexList->add(id);
     }
 
     std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
-      manual = true;
       return vertexList->add(id, coords);
     }
 
@@ -96,7 +94,6 @@ class Spacetime {
       const std::uint64_t src,
       const std::uint64_t tgt
     ) {
-      manual = true;
       std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
       vertexList->get(src)->addOutEdge(edge);
       vertexList->get(tgt)->addInEdge(edge);
@@ -108,7 +105,6 @@ class Spacetime {
       const std::uint64_t tgt,
       double squaredLength
     ) noexcept {
-      manual = true;
       std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
       vertexList->get(src)->addOutEdge(edge);
       vertexList->get(tgt)->addInEdge(edge);
@@ -118,8 +114,7 @@ class Spacetime {
     SimplexPtr createSimplex(
       std::vector<std::shared_ptr<Vertex> > &vertices
     ) noexcept {
-      manual = true;
-      const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
+      const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
       auto &bucket = externalSimplices.try_emplace(orientation /*key*/).first->second;
       std::vector<IdType> _ids = {};
       _ids.reserve(vertices.size());
@@ -132,14 +127,14 @@ class Spacetime {
         bucket.insert(simplex);
         return simplex;
       }
-      return *bucket.find(fingerprint);
+      SimplexPtr simplex = *bucket.find(fingerprint);
+      for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
+        externalSimplices[o].insert(simplex);
+      }
+      return simplex;
     }
 
     SimplexPtr createSimplex(std::size_t k) {
-      if (manual) {
-        throw std::runtime_error(
-          "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
-      }
       double squaredLength = alpha;
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
@@ -156,25 +151,15 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      SimplexPtr simplex = std::make_shared<Simplex>(vertices);
-      externalSimplices[simplex->getOrientation()].insert(simplex);
-      return simplex;
-    }
-
-    void setManual(bool manual_) noexcept {
-      manual = manual_;
+      return createSimplex(vertices);
     }
 
     SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-      if (manual) {
-        throw std::runtime_error(
-          "You can't mix user-defined vertex/edge/simplex definitions with internal definitions. This happens when you call createSimplex(k) after you've called createVertex/createEdge/createSimplex(vertices)");
-      }
       double squaredLength = alpha;
       double timelikeSquaredLength = alpha;
-      SimplexOrientation orientation(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
-      std::uint8_t k = orientation.getK();
-      auto [ti, tf] = orientation.numeric();
+      SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
+      std::uint8_t k = orientation->getK();
+      auto [ti, tf] = orientation->numeric();
       std::vector<std::shared_ptr<Vertex> > vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
@@ -212,9 +197,7 @@ class Spacetime {
         }
         vertices.push_back(newVertex);
       }
-      SimplexPtr simplex = std::make_shared<Simplex>(vertices, orientation);
-      externalSimplices[orientation].insert(simplex);
-      return simplex;
+      return createSimplex(vertices);
     }
 
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept {
@@ -255,11 +238,11 @@ class Spacetime {
       auto facetsB = sB->getFacets();
 
       for (auto &fA : facetsA) {
-        auto [pA, qA] = fA->getOrientation().numeric();
+        auto [pA, qA] = fA->getOrientation()->numeric();
         if (pA + qA != 4) continue; // just to be explicit it's a tetrahedron
 
         for (auto &fB : facetsB) {
-          auto [pB, qB] = fB->getOrientation().numeric();
+          auto [pB, qB] = fB->getOrientation()->numeric();
           if (pB != pA || qB != qA) continue; // requires same (1,3) type
 
           // Now check orientation on the shared face:
@@ -403,7 +386,7 @@ class Spacetime {
     /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
     /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
     /// @return myFace, updated with the second simplex glued.
-    std::tuple<SimplexPtr, bool> causallyAttachFaces(SimplexPtr &myFace,
+    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &myFace,
                                                      const SimplexPtr &yourFace) {
 #if defined(CASET_DEBUG)
       if (myFace->fingerprint.fingerprint() == yourFace->fingerprint.fingerprint()) {
@@ -411,7 +394,7 @@ class Spacetime {
         return {myFace, false};
       }
       if (myFace->getOrientation() != yourFace->getOrientation()) {
-        CASET_LOG(ERROR_LEVEL, "Faces have different orientations!");
+        CASET_LOG(ERROR_LEVEL, "Faces have different orientations: ", myFace->getOrientation()->toString(), " vs ", yourFace->getOrientation()->toString());
         return {myFace, false};
       }
       for (const auto &myCoface : myFace->getCofaces()) {
@@ -457,8 +440,15 @@ class Spacetime {
         moveEdges(yourVertex, yourFace, myVertex, false);
         removeIfIsolated(yourVertex);
       }
+
       auto newCoface = *(yourFace->getCofaces().begin());
       myFace->addCoface(newCoface);
+      if (!yourFace->isCausallyAvailable()) {
+        for (const auto &facialOrientation : yourFace->getOrientation()->getFacialOrientations()) {
+          externalSimplices[facialOrientation].erase(yourFace);
+        }
+        internalSimplices[yourFace->getOrientation()].insert(yourFace);
+      }
       return {myFace, true};
     }
 
@@ -469,11 +459,11 @@ class Spacetime {
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
     [[nodiscard]]
-    Simplices getExternalSimplices() noexcept {
-      Simplices simplices;
-      for (const auto &[key, bucket] : externalSimplices) {
+    SimplexSet getExternalSimplices() noexcept {
+      SimplexSet simplices;
+      for (const auto &[facialOrientation, bucket] : externalSimplices) {
         for (const auto &simplex : bucket) {
-          simplices.push_back(simplex);
+          simplices.insert(simplex);
         }
       }
       return simplices;
@@ -482,10 +472,9 @@ class Spacetime {
     void embedEuclidean(int dimensions, double epsilon);
 
     OptionalSimplexPair chooseSimplexToGlueTo(const SimplexPtr &mySimplex) {
-      const auto orientation = mySimplex->getOrientation();
-      const auto orientations = mySimplex->getGluableOrientations();
-      for (const auto &o : orientations) {
-        const auto &bucket = externalSimplices[orientation];
+      for (const auto &facialOrientation : mySimplex->getGluableFaceOrientations()) {
+        const auto &bucket = externalSimplices[facialOrientation];
+        CASET_LOG(DEBUG_LEVEL, "Found ", std::to_string(bucket.size()), " simplices in bucket for facial orientation ", facialOrientation->toString());
         if (bucket.empty()) continue;
         auto it = bucket.begin();
         for (auto i = 0; i < bucket.size(); i++) {
@@ -503,6 +492,7 @@ class Spacetime {
                       mySimplex->toString());
             return gluablePair;
           }
+          it++;
           CASET_LOG(DEBUG_LEVEL,
                     "No gluable faces found to attach simplex ",
                     (*it)->toString(),
@@ -516,8 +506,26 @@ class Spacetime {
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
-    std::unordered_map<SimplexOrientation, Bucket> externalSimplices{};
-    std::unordered_map<SimplexOrientation, Bucket> internalSimplices{};
+
+    ///
+    /// These are simplices on the boundary of a simplicial complex. They have at least one external face, and hence can
+    /// be glued to other simplices. The externalSimplices are organized by the orientation of their available faces. If
+    /// a face is available; the orientation of that face can be found as a key corresponding to a SimplexSet containing
+    /// the Simplex to which that Face belongs.
+    ///
+    /// This makes for fast lookups when gluing simplices together to form a complex.
+    std::unordered_map<SimplexOrientationPtr, SimplexSet> externalSimplices{};
+
+    ///
+    /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
+    /// cannot be glued to other simplices.
+    ///
+    /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
+    /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
+    /// orientation of the Simplex itself.
+    ///
+    /// TODO: I don't think SimplexOrientationPtr is correctly hashing!!
+    std::unordered_map<SimplexOrientationPtr, SimplexSet> internalSimplices{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 
@@ -526,7 +534,6 @@ class Spacetime {
     std::shared_ptr<Topology> topology;
     double alpha = 1.;
     std::uint64_t currentTime = 0;
-    bool manual = false;
 };
 } // caset
 

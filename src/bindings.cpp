@@ -186,8 +186,7 @@ PYBIND11_MODULE(caset, m) {
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
-      .def("causallyAttachFaces", &Spacetime::causallyAttachFaces)
-      .def("setManual", &Spacetime::setManual);
+      .def("causallyAttachFaces", &Spacetime::causallyAttachFaces);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }
