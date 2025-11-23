@@ -56,6 +56,14 @@ class SimplexOrientation {
       return {ti, tf};
     }
 
+    [[nodiscard]] uint16_t fingerprint() const {
+      return (static_cast<uint16_t>(ti) << 8) | static_cast<uint16_t>(tf);
+    }
+
+    [[nodiscard]] SimplexOrientationPtr flip() const {
+      return std::make_shared<SimplexOrientation>(tf, ti);
+    }
+
     [[nodiscard]]
     SimplexOrientationPtr decTi() const {
       uint8_t newTi = static_cast<uint8_t>(ti - 1);
@@ -133,12 +141,42 @@ class SimplexOrientation {
     uint8_t k{0};
 };
 
-inline bool operator==(const SimplexOrientationPtr& a,
-                const SimplexOrientationPtr& b)
+struct SimplexOrientationHash {
+  using is_transparent = void; // enables heterogeneous lookup
+  size_t operator()(const SimplexOrientation &o) const noexcept {
+    return std::hash<std::uint16_t>{}(o.fingerprint());
+  }
+  size_t operator()(const std::shared_ptr<SimplexOrientation> &o) const noexcept {
+    return std::hash<std::uint16_t>{}(o->fingerprint());
+  }
+  size_t operator()(const std::shared_ptr<const SimplexOrientation> &o) const noexcept {
+    return std::hash<std::uint16_t>{}(o->fingerprint());
+  }
+  size_t operator()(uint64_t fp) const noexcept { return std::hash<std::uint16_t>{}(fp); }
+};
+
+struct SimplexOrientationEq {
+  using is_transparent = void;
+  bool operator()(const SimplexOrientation &a, const SimplexOrientation &b) const noexcept { return a.fingerprint() == b.fingerprint(); }
+  bool operator()(const SimplexOrientation &a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
+  bool operator()(uint64_t fp, const SimplexOrientation &a) const noexcept { return fp == a.fingerprint(); }
+
+  bool operator()(const std::shared_ptr<SimplexOrientation> &a, const std::shared_ptr<SimplexOrientation> &b) const noexcept {return a->fingerprint() == b->fingerprint();}
+  bool operator()(const std::shared_ptr<SimplexOrientation> &a, uint64_t fp) const noexcept { return a->fingerprint() == fp; }
+  bool operator()(uint64_t fp, const std::shared_ptr<SimplexOrientation> &a) const noexcept { return fp == a->fingerprint(); }
+
+  bool operator()(const std::shared_ptr<const SimplexOrientation> &a, const std::shared_ptr<const SimplexOrientation> &b) const noexcept {return a->fingerprint() == b->fingerprint();}
+  bool operator()(const std::shared_ptr<const SimplexOrientation> &a, uint64_t fp) const noexcept { return a->fingerprint() == fp; }
+  bool operator()(uint64_t fp, const std::shared_ptr<const SimplexOrientation> &a) const noexcept { return fp == a->fingerprint(); }
+};
+
+inline bool operator==(const SimplexOrientationPtr& a, const SimplexOrientationPtr& b)
 {
   if (!a || !b) return !a && !b;
   return *a == *b;   // compare underlying objects
 }
+
+
 
 }
 

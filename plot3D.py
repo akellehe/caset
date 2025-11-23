@@ -8,6 +8,7 @@ st.createSimplex((1, 2))
 rightSimplex = st.createSimplex((2, 1))
 
 leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
+breakpoint()
 
 print("Embedding...")
 st.embedEuclidean()

@@ -98,10 +98,18 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<>())
       .def("build", &Toroid::build);
 
+
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
       .def("getOrientation", &SimplexOrientation::getOrientation)
+      .def("__hash__", &SimplexOrientation::fingerprint)
+      .def("__eq__", &SimplexOrientation::operator==)
       .def("numeric", &SimplexOrientation::numeric);
+
+  py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash>>(m, "SimplexOrientationHash")
+    .def(py::init<>());
+  py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq>>(m, "SimplexOrientationEq")
+    .def(py::init<>());
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
       .def(py::init<const std::vector<std::shared_ptr<Vertex> >>(),
@@ -121,6 +129,11 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertices", &Simplex::getVertices)
       .def("getVolume", &Simplex::getVolume)
       .def("isTimelike", &Simplex::isTimelike);
+
+  py::class_<SimplexHash, std::shared_ptr<SimplexHash>>(m, "SimplexHash")
+    .def(py::init<>());
+  py::class_<SimplexEq, std::shared_ptr<SimplexEq>>(m, "SimplexEq")
+    .def(py::init<>());
 
   py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric")
       .def(py::init<bool, Signature &>(),
@@ -151,12 +164,13 @@ PYBIND11_MODULE(caset, m) {
       )
       .def(py::init<>())
       .def("getVertexList", &Spacetime::getVertexList)
+      .def("getSimplicesWithOrientation", &Spacetime::getSimplicesWithOrientation, py::arg("orientation"))
       .def("getEdgeList", &Spacetime::getEdgeList)
       .def_static("getGluablePair", &Spacetime::getGluableFaces)
       .def("embedEuclidean", &Spacetime::embedEuclidean, py::arg("dimensions") = 4, py::arg("epsilon") = 1e-8)
       .def("build", &Spacetime::build)
       .def("getSimplices", &Spacetime::getExternalSimplices)
-      .def("chooseSimplexToGlueTo", &Spacetime::chooseSimplexToGlueTo, py::arg("simplex"))
+      .def("chooseSimplexToGlueTo", &Spacetime::chooseSimplexFacesToGlue, py::arg("simplex"))
       .def("createVertex",
            py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
            py::arg("id"))

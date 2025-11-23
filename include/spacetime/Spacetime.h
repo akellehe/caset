@@ -1,6 +1,6 @@
 //
 // Created by andrew on 10/23/25.
-//
+/**/ //
 
 #ifndef CASET_SPACETIME_H
 #define CASET_SPACETIME_H
@@ -69,7 +69,7 @@ class Spacetime {
       createSimplex(orientations[1]);
       for (int i = 0; i < 100000; i++) {
         SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
-        OptionalSimplexPair leftFaceRightFace = chooseSimplexToGlueTo(rightSimplex);
+        OptionalSimplexPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
         if (!leftFaceRightFace.has_value()) {
           return;
         }
@@ -82,11 +82,11 @@ class Spacetime {
       observables.push_back(observable);
     }
 
-    std::shared_ptr<Vertex> createVertex(const std::uint64_t id) noexcept {
+    VertexPtr createVertex(const std::uint64_t id) noexcept {
       return vertexList->add(id);
     }
 
-    std::shared_ptr<Vertex> createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+    VertexPtr createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
       return vertexList->add(id, coords);
     }
 
@@ -112,7 +112,7 @@ class Spacetime {
     }
 
     SimplexPtr createSimplex(
-      std::vector<std::shared_ptr<Vertex> > &vertices
+      Vertices &vertices
     ) noexcept {
       const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
       auto &bucket = externalSimplices.try_emplace(orientation /*key*/).first->second;
@@ -121,28 +121,28 @@ class Spacetime {
       for (const auto &vertex : vertices) {
         _ids.push_back(vertex->getId());
       }
+
       auto [fingerprint, n, ids] = Fingerprint::computeFingerprint(_ids);
       if (!bucket.contains(fingerprint)) {
         SimplexPtr simplex = std::make_shared<Simplex>(vertices);
         bucket.insert(simplex);
+        for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
+          externalSimplices[o].insert(simplex);
+        }
         return simplex;
       }
-      SimplexPtr simplex = *bucket.find(fingerprint);
-      for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
-        externalSimplices[o].insert(simplex);
-      }
-      return simplex;
+      return *bucket.find(fingerprint);
     }
 
     SimplexPtr createSimplex(std::size_t k) {
       double squaredLength = alpha;
-      std::vector<std::shared_ptr<Vertex> > vertices = {};
+      Vertices vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < k; i++) {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size());
+        VertexPtr newVertex = vertexList->add(vertexList->size());
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           existingVertex->addOutEdge(edge);
@@ -157,17 +157,19 @@ class Spacetime {
     SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
       double squaredLength = alpha;
       double timelikeSquaredLength = alpha;
-      SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(std::get<0>(numericOrientation), std::get<1>(numericOrientation));
+      SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
+        std::get<0>(numericOrientation),
+        std::get<1>(numericOrientation));
       std::uint8_t k = orientation->getK();
       auto [ti, tf] = orientation->numeric();
-      std::vector<std::shared_ptr<Vertex> > vertices = {};
+      Vertices vertices = {};
       vertices.reserve(k);
       std::vector<std::shared_ptr<Edge> > edges = {};
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < ti; i++) {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime)});
+        VertexPtr newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime)});
         if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
           timelikeSquaredLength = -alpha;
         }
@@ -183,7 +185,7 @@ class Spacetime {
       for (int i = 0; i < tf; i++) {
         // Create ti Spacelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        std::shared_ptr<Vertex> newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
+        VertexPtr newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge;
           if (existingVertex->getTime() < newVertex->getTime()) {
@@ -238,13 +240,15 @@ class Spacetime {
       auto facetsB = sB->getFacets();
 
       for (auto &fA : facetsA) {
-        auto [pA, qA] = fA->getOrientation()->numeric();
-        if (pA + qA != 4) continue; // just to be explicit it's a tetrahedron
-
+        const auto [tia, tfa] = fA->getOrientation()->numeric();
         for (auto &fB : facetsB) {
-          auto [pB, qB] = fB->getOrientation()->numeric();
-          if (pB != pA || qB != qA) continue; // requires same (1,3) type
-
+          const auto [tib, tfb] = fB->getOrientation()->numeric();
+          if (tia == tfb && tfa == tib) {
+            return std::make_optional(std::make_pair(fA, fB));
+          }
+          if (tia == tib && tfa == tfb) {
+            return std::make_optional(std::make_pair(fA, fB));
+          }
           // Now check orientation on the shared face:
           // checkPairty should be -1 for opposite orientation.
           // int8_t parity = fA->checkPairty(fB);
@@ -252,7 +256,6 @@ class Spacetime {
           // Either same orientation (+1) or they don’t match at all (0).
           // continue;
 
-          return std::make_optional(std::make_pair(fA, fB));
         }
       }
 
@@ -394,7 +397,11 @@ class Spacetime {
         return {myFace, false};
       }
       if (myFace->getOrientation() != yourFace->getOrientation()) {
-        CASET_LOG(ERROR_LEVEL, "Faces have different orientations: ", myFace->getOrientation()->toString(), " vs ", yourFace->getOrientation()->toString());
+        CASET_LOG(ERROR_LEVEL,
+                  "Faces have different orientations: ",
+                  myFace->getOrientation()->toString(),
+                  " vs ",
+                  yourFace->getOrientation()->toString());
         return {myFace, false};
       }
       for (const auto &myCoface : myFace->getCofaces()) {
@@ -406,13 +413,13 @@ class Spacetime {
         }
       }
 #endif
-      std::vector<std::shared_ptr<Vertex> > vertices = {};
+      Vertices vertices = {};
       vertices.reserve(myFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
       edges.reserve(myFace->size());
 
       // Two vertices are compatible to attach iff they share the same time value.
-      std::vector<std::pair<std::shared_ptr<Vertex>, std::shared_ptr<Vertex> > > vertexPairs{};
+      std::vector<std::pair<VertexPtr, VertexPtr> > vertexPairs{};
       vertexPairs.reserve(myFace->size());
 
       // These are in order of traversal, you can iterate them to walk the Face:
@@ -420,7 +427,7 @@ class Spacetime {
 
       // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
       // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
-      const std::optional<std::vector<std::shared_ptr<Vertex> > > myOrderedVerticesOptional = myFace->
+      const std::optional<Vertices> myOrderedVerticesOptional = myFace->
           getVerticesWithParityTo(yourFace);
 
       if (!myOrderedVerticesOptional.has_value()) {
@@ -428,7 +435,7 @@ class Spacetime {
         return {nullptr, false};
       }
 
-      const std::vector<std::shared_ptr<Vertex> > &myOrderedVertices = myOrderedVerticesOptional.value();
+      const Vertices &myOrderedVertices = myOrderedVerticesOptional.value();
       for (auto i = 0; i < myOrderedVertices.size(); i++) {
         const auto &myVertex = myOrderedVertices[i];
         const auto &yourVertex = yourVertices[i];
@@ -471,16 +478,26 @@ class Spacetime {
 
     void embedEuclidean(int dimensions, double epsilon);
 
-    OptionalSimplexPair chooseSimplexToGlueTo(const SimplexPtr &mySimplex) {
+    /// This method chooses a simplex from the boundary of the simplicial complex to which `mySimplex` can be glued. It
+    /// does this by iterating through the `externalSimplices` and checking for compatible orientations and edge lengths.
+    ///
+    /// To the extent the hashing function for vertex fingerprinting is good; this should be pretty well pseudo-random.
+    /// If you want something truly random, though, you should probably implement that.
+    ///
+    /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
+    OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &mySimplex) {
+      CASET_LOG(DEBUG_LEVEL, "------------------------------------------------------------------------");
       for (const auto &facialOrientation : mySimplex->getGluableFaceOrientations()) {
         const auto &bucket = externalSimplices[facialOrientation];
-        CASET_LOG(DEBUG_LEVEL, "Found ", std::to_string(bucket.size()), " simplices in bucket for facial orientation ", facialOrientation->toString());
         if (bucket.empty()) continue;
-        auto it = bucket.begin();
-        for (auto i = 0; i < bucket.size(); i++) {
-          if ((*it)->fingerprint.fingerprint() == mySimplex->fingerprint.fingerprint() && it != bucket.end()) {
+        CASET_LOG(DEBUG_LEVEL,
+                  "Found ",
+                  std::to_string(bucket.size()),
+                  " simplices in bucket for facial orientation ",
+                  facialOrientation->toString());
+        for (auto it = bucket.begin(); it != bucket.end(); ++it) {
+          if ((*it)->fingerprint.fingerprint() == mySimplex->fingerprint.fingerprint()) {
             CASET_LOG(DEBUG_LEVEL, "Skipping simplex ", (*it)->toString(), " because it's the same as mySimplex");
-            ++it;
             continue;
           }
           OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
@@ -492,7 +509,6 @@ class Spacetime {
                       mySimplex->toString());
             return gluablePair;
           }
-          it++;
           CASET_LOG(DEBUG_LEVEL,
                     "No gluable faces found to attach simplex ",
                     (*it)->toString(),
@@ -501,6 +517,18 @@ class Spacetime {
         }
       }
       return std::nullopt;
+    }
+
+    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+      SimplexOrientationPtr o = std::make_shared<
+        SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
+      if (externalSimplices.contains(o)) {
+        return externalSimplices[o];
+      }
+      if (internalSimplices.contains(o)) {
+        return internalSimplices[o];
+      }
+      return {};
     }
 
   private:
@@ -514,7 +542,8 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet> externalSimplices{};
+    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq>
+    externalSimplices{};
 
     ///
     /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
@@ -525,7 +554,8 @@ class Spacetime {
     /// orientation of the Simplex itself.
     ///
     /// TODO: I don't think SimplexOrientationPtr is correctly hashing!!
-    std::unordered_map<SimplexOrientationPtr, SimplexSet> internalSimplices{};
+    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq>
+    internalSimplices{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 

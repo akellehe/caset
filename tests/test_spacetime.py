@@ -38,11 +38,9 @@ class TestSpacetime(unittest.TestCase):
 
     def test_create_simplex(self):
         st = Spacetime()
-        st.setManual(False)
         simplex = st.createSimplex((2, 3))
         self.assertEqual(len(simplex.getVertices()), 5)
         edges = simplex.getEdges()
-        breakpoint()
         self.assertEqual(len(edges), 10)
 
         v1, v2, v3, v4, v5 = simplex.getVertices()
@@ -83,6 +81,13 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(c.getTargetId(), v5.getId())
         self.assertEqual(d.getTargetId(), v5.getId())
         self.assertEqual(len(v5.getEdges()), 4)
+
+        self.assertEqual(len(st.getSimplicesWithOrientation((2, 3))), 1)
+        self.assertEqual(len(st.getSimplicesWithOrientation((1, 1))), 0)
+
+        simplex2 = st.createSimplex((2, 3))
+        self.assertEqual(len(st.getSimplicesWithOrientation((2, 3))), 2)
+        self.assertEqual(len(st.getSimplicesWithOrientation((1, 1))), 0)
 
     def test_euclidean_embedding(self):
         st = Spacetime()
