@@ -7,15 +7,17 @@ from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 from caset import Spacetime, Simplex
+
 st = Spacetime()
 orientations = [(1, 4), (2, 3)]
-st.createSimplex((2, 3))
-rightSimplex = st.createSimplex((1, 4))
-leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
-# for i in range(0):
-#     rightSimplex = st.createSimplex(orientations[i % 2])
-#     leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
-#     complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+for i in range(5):
+   rightSimplex = st.createSimplex(orientations[i % 2])
+   try:
+      leftFace, rightFace = st.chooseSimplexToGlueTo(rightSimplex)
+   except TypeError:
+      continue
+
+   complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
 
 
 def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):

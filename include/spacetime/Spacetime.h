@@ -229,7 +229,9 @@ class Spacetime {
     /// orientation of the simplices. The method checks for matching orientations and edge lengths to ensure
     /// compatibility.
     ///
-    /// TODO: There's a pairty check in here, but I don't think it makes sense to run until the simplices are attached.
+    /// Before simplices are glued into the complex we consider them 'detached', so it doesn't matter if we're attaching
+    /// a (3, 2) or a (2, 3). There's a pairty building method, `Simplex::getVerticesWithParityTo(yourFace)`, that finds
+    /// the right order to use when attaching the Simplex to the Simplicial complex.
     ///
     /// @param sA The first simplex you would like to glue to the second simplex.
     /// @param sB The second Simplex to be glued to the first (`sA`).
@@ -249,13 +251,6 @@ class Spacetime {
           if (tia == tib && tfa == tfb) {
             return std::make_optional(std::make_pair(fA, fB));
           }
-          // Now check orientation on the shared face:
-          // checkPairty should be -1 for opposite orientation.
-          // int8_t parity = fA->checkPairty(fB);
-          // if (parity != -1) {
-          // Either same orientation (+1) or they don’t match at all (0).
-          // continue;
-
         }
       }
 
