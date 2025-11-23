@@ -483,18 +483,31 @@ class Spacetime {
 
     OptionalSimplexPair chooseSimplexToGlueTo(const SimplexPtr &mySimplex) {
       const auto orientation = mySimplex->getOrientation();
-      const auto &bucket = externalSimplices[orientation];
-      if (bucket.empty()) return std::nullopt;
-
-      auto it = bucket.begin();
-      for (auto i = 0; i < bucket.size(); i++) {
-        if ((*it)->fingerprint.fingerprint() == mySimplex->fingerprint.fingerprint() && it != bucket.end()) {
-          ++it;
-          continue;
-        }
-        OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
-        if (gluablePair.has_value()) {
-          return gluablePair;
+      const auto orientations = mySimplex->getGluableOrientations();
+      for (const auto &o : orientations) {
+        const auto &bucket = externalSimplices[orientation];
+        if (bucket.empty()) continue;
+        auto it = bucket.begin();
+        for (auto i = 0; i < bucket.size(); i++) {
+          if ((*it)->fingerprint.fingerprint() == mySimplex->fingerprint.fingerprint() && it != bucket.end()) {
+            CASET_LOG(DEBUG_LEVEL, "Skipping simplex ", (*it)->toString(), " because it's the same as mySimplex");
+            ++it;
+            continue;
+          }
+          OptionalSimplexPair gluablePair = getGluableFaces(mySimplex, *it);
+          if (gluablePair.has_value()) {
+            CASET_LOG(DEBUG_LEVEL,
+                      "Found gluable faces for simplex ",
+                      (*it)->toString(),
+                      " and mySimplex ",
+                      mySimplex->toString());
+            return gluablePair;
+          }
+          CASET_LOG(DEBUG_LEVEL,
+                    "No gluable faces found to attach simplex ",
+                    (*it)->toString(),
+                    " to ",
+                    mySimplex->toString());
         }
       }
       return std::nullopt;

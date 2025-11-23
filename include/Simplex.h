@@ -47,10 +47,23 @@ class SimplexOrientation {
     SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
       k = ti_ + tf_;
     }
-    constexpr SimplexOrientation() noexcept = default;
+    SimplexOrientation() noexcept = default;
 
     [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const {
       return {ti, tf};
+    }
+
+    [[nodiscard]]
+    SimplexOrientation decTi() const {
+      uint8_t newTi = static_cast<uint8_t>(ti - 1);
+      // constructor recomputes k automatically
+      return SimplexOrientation(newTi, tf);
+    }
+
+    [[nodiscard]]
+    SimplexOrientation decTf() const {
+      uint8_t newTf = static_cast<uint8_t>(tf - 1);
+      return SimplexOrientation(ti, newTf);
     }
 
     constexpr bool operator==(const SimplexOrientation &other) const noexcept {
@@ -305,7 +318,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets() noexcept;
+    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets() const noexcept;
 
     Fingerprint fingerprint;
 
@@ -557,6 +570,43 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     constexpr bool operator==(const Simplex &other) const noexcept {
       return fingerprint.fingerprint() == other.fingerprint.fingerprint();
+    }
+
+    ///
+    /// This method iterates over all faces of this Simplex; and counts the number of co-faces for each face. If a face
+    /// has fewer than 2 co-faces; it's available to glue.
+    ///
+    /// @return Whether or not this Simplex is available to glue. A face is only available when it has less than 2
+    ///   co-faces.
+    bool isAvailable () const noexcept {
+      for (const auto &face : getFacets()) {
+        if (face->getCofaces().size() < 2) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    ///
+    /// @return A set of orientations for Simplexes that can be glued to this Simplex. We look at it's available faces,
+    /// and then add 1 to each of t_i and t_f to get the orientation of the co-face that can be glued to that face. Those
+    /// are the ones we look up in the Spacetime Simplex registry by orientation.
+    ///
+    /// TODO: We should make the registry of Simplexs in Spacetime a map of Face orientation -> Simplex so we only grab
+    /// those simplices with available faces of the correct orientation. Then this method should return the set of face
+    /// orientations, not simplex orientations that we need to glue to this simplex.
+    std::unordered_set<std::shared_ptr<SimplexOrientation>> getGluableOrientations() const {
+      // const auto &[ti, tf] = getOrientation().numeric();
+      auto allowedOrientations = std::unordered_set<std::shared_ptr<SimplexOrientation>>{};
+      for (const auto &face : getFacets()) {
+        if (face->getCofaces().size() < 2) {
+          auto faceOrientation = face->getOrientation().numeric();
+          auto coFaceOrientation1 = {std::get<0>(faceOrientation) + 1, std::get<1>(faceOrientation)};
+          auto coFaceOrientation2 = {std::get<0>(faceOrientation) + 1, std::get<1>(faceOrientation)};
+          allowedOrientations.insert(std::make_shared<SimplexOrientation>(face->getOrientation()));
+        }
+      }
+      return allowedOrientations;
     }
 
     constexpr bool operator==(const std::shared_ptr<Simplex> &other) const noexcept {
