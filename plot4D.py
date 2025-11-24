@@ -10,7 +10,7 @@ from caset import Spacetime, Simplex
 
 st = Spacetime()
 orientations = [(1, 3), (2, 2)]
-for i in range(3):
+for i in range(2):
    newSimplex = st.createSimplex(orientations[i % 2])
    try:
       leftFace, rightFace = st.chooseSimplexToGlueTo(newSimplex)
@@ -32,13 +32,66 @@ def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
    return x_p, y_p, z_p
 
 print("Embedding...")
-st.embedEuclidean()
+st.embedEuclidean(dimensions=4, epsilon=10e-10)
 vlist = st.getVertexList()
 timeEdges = []
 spaceEdges = []
 xmin, xmax = float("inf"), float("-inf")
 ymin, ymax = float("inf"), float("-inf")
 zmin, zmax = float("inf"), float("-inf")
+
+# Label Vertices:
+def label_vertices():
+   vertex_positions = {}  # id -> (x, y, z)
+   for vertex in st.getVertexList().toVector():
+      x, y, z = project4_to_3(*vertex.getCoordinates())
+      vertex_positions[vertex.getId()] = (x, y, z)
+   for vid, (x, y, z) in vertex_positions.items():
+      ax.text(
+         x, y, z,
+         f"{vid}",        # label
+         color="black",
+         fontsize=9,
+         ha="center",
+         va="center"
+      )
+
+def label_edges():
+   vertex_positions = {}  # id -> (x, y, z)
+   vlist = st.getVertexList().toVector()
+   vertexById = {v.getId(): v for v in vlist}
+   for vertex in vlist:
+      x, y, z = project4_to_3(*vertex.getCoordinates())
+      vertex_positions[vertex.getId()] = (x, y, z)
+
+   for edge in st.getEdgeList().toVector():
+      src = vertex_positions[edge.getSourceId()]
+      tgt = vertex_positions[edge.getTargetId()]
+
+      srcVertex = vertexById[edge.getSourceId()]
+      tgtVertex = vertexById[edge.getTargetId()]
+
+      # Midpoint
+      mx = 0.5 * (src[0] + tgt[0])
+      my = 0.5 * (src[1] + tgt[1])
+      mz = 0.5 * (src[2] + tgt[2])
+
+      # Optional small offset so text isn’t exactly on the line
+      ox, oy, oz = 0.02, 0.02, 0.02
+      mx += ox; my += oy; mz += oz
+
+      if srcVertex.getTime() == tgtVertex.getTime():
+            label = f"(t={srcVertex.getTime():.1f})"
+      else:
+            label = f"(t=[{srcVertex.getTime():.1f}, {tgtVertex.getTime():.1f}])"
+
+      ax.text(
+         mx, my, mz,
+         label,
+         color="gray",
+         fontsize=7
+      )
+
 
 for edge in (st.getEdgeList().toVector()):
    source = vlist.get(edge.getSourceId())
@@ -73,5 +126,8 @@ ax.set_zlim(zmin - 1, zmax + 1)
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
+
+label_vertices()
+label_edges()
 
 plt.show()

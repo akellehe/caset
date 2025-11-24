@@ -9,7 +9,7 @@
 
 namespace caset {
 
-void Spacetime::embedEuclidean(int dimensions, double epsilon) {
+void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
   if (vertexList->size() == 0) return;
   if (edgeList->size() == 0) return;
 
@@ -32,7 +32,7 @@ void Spacetime::embedEuclidean(int dimensions, double epsilon) {
   CASET_LOG(INFO_LEVEL, "Embedding a ", dimensions, "-d Euclidean space with ", N, " vertices and ", E, " edges.");
   std::unordered_map<std::uint64_t, int> vertexIdToIndex;
   vertexIdToIndex.reserve(vertexVector.size());
-  std::unordered_map<std::uint64_t, int> vertexIdToTime;
+  std::unordered_map<std::uint64_t, double> vertexIdToTime;
   vertexIdToTime.reserve(vertexVector.size());
   for (int i = 0; i < static_cast<int>(vertexVector.size()); ++i) {
     vertexIdToIndex[vertexVector[i]->getId()] = i;
