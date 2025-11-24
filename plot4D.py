@@ -9,7 +9,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from caset import Spacetime, Simplex
 
 st = Spacetime()
-orientations = [(1, 4), (2, 3)]
+orientations = [(1, 3), (2, 2)]
 for i in range(3):
    newSimplex = st.createSimplex(orientations[i % 2])
    try:

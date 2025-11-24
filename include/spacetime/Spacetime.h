@@ -142,7 +142,7 @@ class Spacetime {
       edges.reserve(Simplex::computeNumberOfEdges(k));
       for (int i = 0; i < k; i++) {
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        VertexPtr newVertex = vertexList->add(vertexList->size());
+        VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
           existingVertex->addOutEdge(edge);
@@ -169,7 +169,7 @@ class Spacetime {
       for (int i = 0; i < ti; i++) {
         // Create ti Timelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        VertexPtr newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime)});
+        VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
         if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
           timelikeSquaredLength = -alpha;
         }
@@ -185,7 +185,9 @@ class Spacetime {
       for (int i = 0; i < tf; i++) {
         // Create ti Spacelike vertices
         // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        VertexPtr newVertex = vertexList->add(vertexList->size(), {static_cast<double>(currentTime + 1)});
+        /// We can't just use the vertexList .size() here, because some vertices can be removed. We need to keep a
+        /// counter:
+        VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
         for (const auto &existingVertex : vertices) {
           std::shared_ptr<Edge> edge;
           if (existingVertex->getTime() < newVertex->getTime()) {
@@ -262,21 +264,18 @@ class Spacetime {
     void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
       for (const auto &edge : from->getInEdges()) {
         const VertexPtr originalSource = vertexList->get(edge->getSourceId());
-        const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
         originalSource->removeOutEdge(edge);
         from->removeInEdge(edge);
         edgeList->remove(edge);
         edge->replaceTargetVertex(to->getId());
         const EdgePtr newEdge = edgeList->add(edge);
         to->addInEdge(newEdge);
-        originalSource->addInEdge(newEdge);
-        removeIfIsolated(from);
+        originalSource->addOutEdge(newEdge);
       }
     }
 
     void moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
       for (const auto &edge : from->getOutEdges()) {
-        const VertexPtr originalSource = vertexList->get(edge->getSourceId());
         const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
         originalTarget->removeInEdge(edge);
         from->removeOutEdge(edge);
@@ -285,7 +284,6 @@ class Spacetime {
         const EdgePtr newEdge = edgeList->add(edge);
         to->addOutEdge(newEdge);
         originalTarget->addInEdge(newEdge);
-        removeIfIsolated(from);
       }
     }
 
@@ -313,7 +311,7 @@ class Spacetime {
                 toVertex->toString());
       const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
       for (const auto &edge : edges) {
-        if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())) {
+        if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())|| fromSimplex->hasEdge(edge->getTargetId(), edge->getSourceId())) {
           const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
           const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
           sourceVertex->removeOutEdge(edge);
@@ -568,6 +566,7 @@ class Spacetime {
     std::shared_ptr<Topology> topology;
     double alpha = 1.;
     std::uint64_t currentTime = 0;
+    IdType vertexIdCounter = 0;
 };
 } // caset
 

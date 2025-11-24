@@ -1,7 +1,7 @@
 [build-system]
 requires = [
 #    "cmake>=3.22",
-    "ninja",                # optional but faster on CI
+#    "ninja",                # optional but faster on CI
     "pybind11>=2.12",
     "scikit-build-core>=0.9",
     "torch>=2.9",
