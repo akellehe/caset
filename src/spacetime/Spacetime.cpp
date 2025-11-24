@@ -2,6 +2,7 @@
 // Created by andrew on 10/23/25.
 //
 
+#include <pybind11/pybind11.h>
 #include <torch/torch.h>
 #include "Logger.h"
 #include "spacetime/Spacetime.h"
@@ -10,6 +11,7 @@
 namespace caset {
 
 void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
+  pybind11::gil_scoped_release no_gil;
   if (vertexList->size() == 0) return;
   if (edgeList->size() == 0) return;
 

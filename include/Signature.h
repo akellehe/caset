@@ -6,6 +6,7 @@
 #define CASET_SIGNATURE_H
 
 #include <vector>
+#include <cstdint>
 
 namespace caset {
 

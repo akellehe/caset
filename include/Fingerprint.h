@@ -10,6 +10,10 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <cstdint>
+#include <algorithm>
+#include <memory>
+#include <cstring>
 
 namespace caset {
 

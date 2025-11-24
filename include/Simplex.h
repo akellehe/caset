@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <sstream>
 #include <coroutine>
+#include <cstdint>
 
 #include <torch/torch.h>
 
@@ -81,7 +82,7 @@ class SimplexOrientation {
       return "<SimplexOrientation: (" + std::to_string(ti) + ", " + std::to_string(tf) + ")>";
     }
 
-    constexpr bool operator==(const SimplexOrientation &other) const noexcept {
+    bool operator==(const SimplexOrientation &other) const noexcept {
       return ti == other.ti && tf == other.tf;
     }
 
@@ -637,7 +638,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return cofaces;
     }
 
-    constexpr bool operator==(const Simplex &other) const noexcept {
+    bool operator==(const Simplex &other) const noexcept {
       return fingerprint.fingerprint() == other.fingerprint.fingerprint();
     }
 
@@ -696,7 +697,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return allowedOrientations;
     }
 
-    constexpr bool operator==(const std::shared_ptr<Simplex> &other) const noexcept {
+    bool operator==(const std::shared_ptr<Simplex> &other) const noexcept {
       return fingerprint.fingerprint() == other->fingerprint.fingerprint();
     }
 

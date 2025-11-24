@@ -1,3 +1,4 @@
+import torch
 from caset import Spacetime, Simplex
 import collections
 import timeit
