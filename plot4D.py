@@ -11,7 +11,7 @@ from caset import Spacetime, Simplex
 
 st = Spacetime()
 orientations = [(1, 3), (2, 2)]
-for i in range(3):
+for i in range(20):
    newSimplex = st.createSimplex(orientations[i % 2])
    try:
       leftFace, rightFace = st.chooseSimplexToGlueTo(newSimplex)

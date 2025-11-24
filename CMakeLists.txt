@@ -11,7 +11,7 @@ find_package(pybind11 CONFIG REQUIRED)
 
 # ---- <Locate Python's torch package WITHOUT importing it> ----
 # Option to override ABI if needed
-set(TORCH_CXX11_ABI "1" CACHE STRING "_GLIBCXX_USE_CXX11_ABI value for building against torch (default 1)")
+#set(TORCH_CXX11_ABI "1" CACHE STRING "_GLIBCXX_USE_CXX11_ABI value for building against torch (default 1)")
 
 execute_process(
         COMMAND "${Python_EXECUTABLE}" -c
@@ -64,7 +64,7 @@ target_include_directories(caset
 
 # Link ONLY against torch from site-packages
 target_link_directories(caset PRIVATE ${TORCH_LIB_DIR})
-target_link_libraries(caset PRIVATE ${TORCH_LIBRARIES})
+target_link_libraries(caset PRIVATE  ${TORCH_LIBRARIES})
 
 # Match PyTorch’s C++11 ABI (default 1; override if needed)
 target_compile_definitions(caset PRIVATE _GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI})
