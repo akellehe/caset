@@ -44,8 +44,8 @@ class SimplexOrientation {
     ///
     /// \f$ (n, d + 1 - n) \f$
     ///
-    /// @param ti The number of vertices on the initial time slice.
-    /// @param tf The number of vertices on the final time slice.
+    /// @param ti_ The number of vertices on the initial time slice.
+    /// @param tf_ The number of vertices on the final time slice.
     ///
     SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
       k = ti_ + tf_;
@@ -366,7 +366,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// And the total number of faces of all dimensions is
-    /// \sum_{j=0}^{k-1} \binom{k+1}{j+1} = 2^{k+1} - 2
+    /// \f$ \sum_{j=0}^{k-1} \binom{k+1}{j+1} = 2^{k+1} - 2 \f$
     ///
     std::size_t getNumberOfFaces(std::size_t j) const {
       auto k = getOrientation()->getK();

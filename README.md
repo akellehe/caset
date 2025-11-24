@@ -85,10 +85,10 @@ Build with
 python3 -m pip install -v -e . --no-build-isolation
 ```
 
-Once you've compiled the package; build documentation with
+Once you've compiled the package; you can install dependencies for documentation and build the documentation with
 
 ```bash
-cd docs && make html
+cd docs && python3 -m pip install -r requirements-docs.txt && make html
 ```
 
 then open it with 
