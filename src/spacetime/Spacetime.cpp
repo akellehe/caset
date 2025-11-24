@@ -76,10 +76,10 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
 
 
   // 4. Set up optimizer (Adam is simple and robust)
-  torch::Tensor positions = torch::randn({N, dimensions - 1}, torch::TensorOptions().dtype(torch::kDouble)).set_requires_grad(true);
-  torch::Tensor times = torch::zeros({N}, torch::TensorOptions().dtype(torch::kDouble));
+  torch::Tensor positions = torch::randn({N, dimensions}, torch::TensorOptions().dtype(torch::kDouble)).set_requires_grad(true);
+  torch::Tensor timesSourceOfTruth = torch::zeros({N}, torch::TensorOptions().dtype(torch::kDouble));
   for (int i = 0; i < N; ++i) {
-    times[i] = vertexVector[i]->getTime();
+    timesSourceOfTruth[i] = vertexVector[i]->getTime();
   }
   torch::optim::Adam optimizer({positions}, torch::optim::AdamOptions(lr));
 
@@ -94,9 +94,8 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     // 5. Compute predicted squared distances for all edges
     auto src = positions.index_select(0, edgeIdxToSourceIdxTensor);
     auto tgt = positions.index_select(0, edgeIdxToTargetIdxTensor);
-    auto srcTime = times.index_select(0, edgeIdxToSourceIdxTensor);
-    auto tgtTime = times.index_select(0, edgeIdxToTargetIdxTensor);
-    auto timeDiff = srcTime - tgtTime;
+    auto times = timesSourceOfTruth.index_select(0, edgeIdxToSourceIdxTensor);
+    auto timeDiff = times - edgeIdxToTargetTimeTensor; // (E,)
     auto spaceDiff = src - tgt;                        // (E, dim - 1)
     auto concatenated = torch::cat({timeDiff.unsqueeze(1), spaceDiff}, 1); // (E, dim)
     auto sqdist = concatenated.pow(2).sum(-1);            // (E,)

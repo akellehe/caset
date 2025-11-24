@@ -10,7 +10,7 @@ from caset import Spacetime, Simplex
 
 st = Spacetime()
 orientations = [(1, 3), (2, 2)]
-for i in range(2):
+for i in range(3):
    newSimplex = st.createSimplex(orientations[i % 2])
    try:
       leftFace, rightFace = st.chooseSimplexToGlueTo(newSimplex)
@@ -51,7 +51,7 @@ def label_vertices():
          x, y, z,
          f"{vid}",        # label
          color="black",
-         fontsize=9,
+         fontsize=10,
          ha="center",
          va="center"
       )
@@ -81,9 +81,9 @@ def label_edges():
       mx += ox; my += oy; mz += oz
 
       if srcVertex.getTime() == tgtVertex.getTime():
-            label = f"(t={srcVertex.getTime():.1f})"
+            label = f"t={srcVertex.getTime():.1f},\nl={edge.getSquaredLength():.1f}"
       else:
-            label = f"(t=[{srcVertex.getTime():.1f}, {tgtVertex.getTime():.1f}])"
+            label = f"(t=[{srcVertex.getTime():.1f}, {tgtVertex.getTime():.1f}],\nl={edge.getSquaredLength():.1f})"
 
       ax.text(
          mx, my, mz,
