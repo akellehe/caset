@@ -343,6 +343,59 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 2)
         self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 1)
 
+    def test_we_get_connected_components_when_constructing_from_primitives(self):
+        st = Spacetime()
+
+        vertices = []
+        for i in range(10):
+            vertices.append(st.createVertex(i))
+
+        edges = []
+        for i in range(0, 9, 2):
+            edges.append(st.createEdge(vertices[i].getId(), vertices[i+1].getId()))
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 5)
+
+    def test_we_get_connected_components_when_constructing_from_simplexes(self):
+        st = Spacetime()
+
+        st.createSimplex((1, 4))
+        st.createSimplex((2, 3))
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 2)
+
+    def test_components_connect_once_glued(self):
+        st = Spacetime()
+
+        s14 = st.createSimplex((1, 4))
+        s23 = st.createSimplex((2, 3))
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 2)
+
+        leftFace, rightFace = st.chooseSimplexToGlueTo(s14)
+        updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+        self.assertTrue(succeeded)
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 1)
+
+    def test_lots_of_components_connect_once_glued(self):
+        st = Spacetime()
+
+        orientations = [(1, 4), (2, 3)]
+        for i in range(10):
+            s = st.createSimplex(orientations[i % 2])
+            if i == 0: continue
+            leftFace, rightFace = st.chooseSimplexToGlueTo(s)
+            updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+            self.assertTrue(succeeded)
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

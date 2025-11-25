@@ -536,6 +536,41 @@ class Spacetime {
       return {};
     }
 
+    std::vector<Vertices> getConnectedComponents() const {
+      VertexSet seen{};
+      std::vector<Vertices> components{};
+      for (const auto &vertex : vertexList->toVector()) {
+        if (seen.contains(vertex)) {
+          continue;
+        }
+        Vertices component{};
+        Vertices stack{vertex};
+        while (!stack.empty()) {
+          VertexPtr current = stack.back();
+          stack.pop_back();
+          if (seen.contains(current)) {
+            continue;
+          }
+          seen.insert(current);
+          component.push_back(current);
+          for (const auto &edge : current->getOutEdges()) {
+            VertexPtr neighbor = vertexList->get(edge->getTargetId());
+            if (!seen.contains(neighbor)) {
+              stack.push_back(neighbor);
+            }
+          }
+          for (const auto &edge : current->getInEdges()) {
+            VertexPtr neighbor = vertexList->get(edge->getSourceId());
+            if (!seen.contains(neighbor)) {
+              stack.push_back(neighbor);
+            }
+          }
+        }
+        components.push_back(component);
+      }
+      return components;
+    }
+
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();

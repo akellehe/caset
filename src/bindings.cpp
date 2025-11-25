@@ -168,6 +168,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getEdgeList", &Spacetime::getEdgeList)
       .def("getGluablePair", &Spacetime::getGluableFaces)
       .def("embedEuclidean", &Spacetime::embedEuclidean, py::arg("dimensions") = 4, py::arg("epsilon") = 1e-8)
+      .def("getConnectedComponents", &Spacetime::getConnectedComponents)
       .def("build", &Spacetime::build)
       .def("getSimplices", &Spacetime::getExternalSimplices)
       .def("chooseSimplexToGlueTo", &Spacetime::chooseSimplexFacesToGlue, py::arg("simplex"))

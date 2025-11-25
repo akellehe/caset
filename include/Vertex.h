@@ -8,6 +8,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
+#include <unordered_map>
 #include "Edge.h"
 
 namespace caset {
@@ -128,6 +129,7 @@ using VertexPtr = std::shared_ptr<Vertex>;
 using Vertices = std::vector<VertexPtr>;
 using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
 using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
+using VertexSet = std::unordered_set<VertexPtr, std::hash<VertexPtr>, std::equal_to<VertexPtr>>;
 }
 
 namespace std {
@@ -142,6 +144,20 @@ template<>
 struct hash<std::shared_ptr<caset::Vertex> > {
     size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex->getId());
+    }
+};
+
+template<>
+struct equal_to<caset::Vertex> {
+    size_t operator()(const caset::Vertex &a, const caset::Vertex &b) const noexcept {
+        return a.getId() == b.getId();
+    }
+};
+
+template<>
+struct equal_to<std::shared_ptr<caset::Vertex> > {
+    size_t operator()(const caset::VertexPtr &a, const caset::VertexPtr &b) const noexcept {
+        return a->getId() == b->getId();
     }
 };
 }
