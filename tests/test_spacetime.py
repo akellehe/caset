@@ -95,7 +95,6 @@ class TestSpacetime(unittest.TestCase):
         simplex23 = st.createSimplex((2, 3))
         st.embedEuclidean()
         vertices = st.getVertexList().toVector()
-        breakpoint()
 
     def test_attaching_faces4D(self):
         st = Spacetime()
@@ -343,9 +342,6 @@ class TestSpacetime(unittest.TestCase):
 
         self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 2)
         self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 1)
-
-        breakpoint()
-        print('foo')
 
 
 if __name__ == '__main__':

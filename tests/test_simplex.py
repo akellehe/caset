@@ -130,20 +130,33 @@ class TestSimplex(unittest.TestCase):
 
         f1, f2, f3, f4, f5 = simplex41.getFacets()
         v1, v2, v3, v4 = f1.getVertices()
-        edges = f1.getEdges()
+
         e1, e2, e3, e4, e5, e6 = f1.getEdges()
 
+        # 1>2
         self.assertTrue(e1.getSourceId() == v1.getId() or e1.getTargetId() == v1.getId())
         self.assertTrue(e1.getSourceId() == v2.getId() or e1.getTargetId() == v2.getId())
 
+        # 2>3
         self.assertTrue(e2.getSourceId() == v2.getId() or e2.getTargetId() == v2.getId())
         self.assertTrue(e2.getSourceId() == v3.getId() or e2.getTargetId() == v3.getId())
 
+        #1>3
         self.assertTrue(e3.getSourceId() == v3.getId() or e3.getTargetId() == v3.getId())
-        # self.assertTrue(e3.getSourceId() == v4.getId() or e3.getTargetId() == v4.getId())
+        self.assertTrue(e3.getSourceId() == v1.getId() or e3.getTargetId() == v1.getId())
 
+        #3>4
+        self.assertTrue(e4.getSourceId() == v3.getId() or e4.getTargetId() == v3.getId())
         self.assertTrue(e4.getSourceId() == v4.getId() or e4.getTargetId() == v4.getId())
-        self.assertTrue(e4.getSourceId() == v1.getId() or e4.getTargetId() == v1.getId())
+
+        #2>4
+        self.assertTrue(e5.getSourceId() == v2.getId() or e5.getTargetId() == v2.getId())
+        self.assertTrue(e5.getSourceId() == v4.getId() or e5.getTargetId() == v4.getId())
+
+        #1>4
+        self.assertTrue(e6.getSourceId() == v1.getId() or e6.getTargetId() == v1.getId())
+        self.assertTrue(e6.getSourceId() == v4.getId() or e6.getTargetId() == v4.getId())
+
 
 if __name__ == '__main__':
     unittest.main()
