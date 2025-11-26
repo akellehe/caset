@@ -375,26 +375,67 @@ class TestSpacetime(unittest.TestCase):
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 2)
 
-        leftFace, rightFace = st.chooseSimplexToGlueTo(s14)
+        leftFace, rightFace = st.chooseSimplexFacesToGlue(s14)
         updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
         self.assertTrue(succeeded)
 
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 1)
 
-    def test_lots_of_components_connect_once_glued(self):
+    def test_lots_of_components_connect_once_glued4D(self):
         st = Spacetime()
 
         orientations = [(1, 4), (2, 3)]
         for i in range(10):
             s = st.createSimplex(orientations[i % 2])
             if i == 0: continue
-            leftFace, rightFace = st.chooseSimplexToGlueTo(s)
+            leftFace, rightFace = st.chooseSimplexFacesToGlue(s)
             updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
             self.assertTrue(succeeded)
 
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 1)
+
+    def test_lots_of_components_connect_once_glued2D(self):
+        st = Spacetime()
+
+        orientations = [(1, 2), (2, 1)]
+        for i in range(10):
+            unattached = st.createSimplex(orientations[i % 2])
+            if i == 0: continue
+            leftFace, rightFace = st.chooseSimplexFacesToGlue(unattached)
+
+            leftCofaces = leftFace.getCofaces()
+            rightCofaces = rightFace.getCofaces()
+
+            self.assertEqual(len(leftCofaces), 1)
+            self.assertEqual(len(rightCofaces), 1)
+
+            updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+
+            if not succeeded:
+                breakpoint()
+                print('failed')
+            self.assertTrue(succeeded)
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 1)
+
+    def test_get_gluable_faces(self):
+        st = Spacetime()
+
+        s12 = st.createSimplex((1, 2))
+        s21 = st.createSimplex((2, 1))
+
+        gluableFaces = st.getGluableFaces(s12, s21)
+
+        self.assertEqual(len(gluableFaces), 2)
+
+        self.assertNotEqual(gluableFaces[0].getOrientation().numeric(), (2, 0))
+        self.assertNotEqual(gluableFaces[0].getOrientation().numeric(), (0, 2))
+
+        self.assertNotEqual(gluableFaces[1].getOrientation().numeric(), (2, 0))
+        self.assertNotEqual(gluableFaces[1].getOrientation().numeric(), (0, 2))
 
 
 if __name__ == '__main__':

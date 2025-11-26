@@ -68,14 +68,12 @@ class Spacetime {
     void build() {
       // TODO: Implement topologies instead of the default.
       // return topology->build(this);
-      std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 4}, {2, 3}};
+      std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
       createSimplex(orientations[1]);
-      for (int i = 0; i < 100000; i++) {
+      for (int i = 0; i < 3; i++) {
         SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
         OptionalSimplexPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
-        if (!leftFaceRightFace.has_value()) {
-          return;
-        }
+        if (!leftFaceRightFace.has_value()) return;
         auto [leftFace, rightFace] = leftFaceRightFace.value();
         auto [left, succeeded] = causallyAttachFaces(leftFace, rightFace);
       }
@@ -116,25 +114,33 @@ class Spacetime {
 
     SimplexPtr createSimplex(
       Vertices &vertices
-    ) noexcept {
+    ) {
       const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
-      auto &bucket = externalSimplices.try_emplace(orientation /*key*/).first->second;
+
+      // if (!externalSimplices.contains(orientation)) {
+        // externalSimplices.try_emplace(orientation);
+        // externalSimplices.try_emplace(orientation->flip());
+      // }
+
+      // auto &bucket = externalSimplices[orientation /*key*/];
+      // auto &reverseBucket = externalSimplices[orientation->flip() /*key*/];
+
       std::vector<IdType> _ids = {};
       _ids.reserve(vertices.size());
       for (const auto &vertex : vertices) {
         _ids.push_back(vertex->getId());
       }
 
-      auto [fingerprint, n, ids] = Fingerprint::computeFingerprint(_ids);
-      if (!bucket.contains(fingerprint)) {
-        SimplexPtr simplex = std::make_shared<Simplex>(vertices);
-        bucket.insert(simplex);
-        for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
-          externalSimplices[o].insert(simplex);
-        }
-        return simplex;
+      SimplexPtr simplex = std::make_shared<Simplex>(vertices);
+      if (simplices.contains(simplex)) {
+        throw std::runtime_error("Simplex already exists");
       }
-      return *bucket.find(fingerprint);
+      simplices.insert(simplex);
+      for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
+        externalSimplices[o].insert(simplex);
+        externalSimplices[o->flip()].insert(simplex);  // TODO: Remove the flipped orientation once attached.
+      }
+      return simplex;
     }
 
     SimplexPtr createSimplex(std::size_t k) {
@@ -250,8 +256,14 @@ class Spacetime {
 
       for (auto &unattachedFace : unattachedFacets) {
         const auto [tia, tfa] = unattachedFace->getOrientation()->numeric();
+        if (tia == 0 || tfa == 0) {
+          continue; // Skip degenerate faces
+        }
         for (auto &attachedFace : attachedFacets) {
           const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
+          if (tib == 0 || tfb == 0) {
+            continue; // Skip degenerate faces
+          }
           if (tia == tfb && tfa == tib) {
             return std::make_optional(std::make_pair(unattachedFace, attachedFace));
           }
@@ -260,7 +272,6 @@ class Spacetime {
           }
         }
       }
-
       return std::nullopt;
     }
 
@@ -348,7 +359,8 @@ class Spacetime {
     ///
     /// If any face is shared by 3 or more n-simplices; then the neighborhood of some point becomes interior and is no
     /// longer homeomorphic to \f$ \mathcal{R}^n \f$ or a half-space
-    /// \f$ \mathcal{R}^{n-1} \multiply [0, \inf] \f$, (the boundary points) so the spacetime effectively branches.
+    /// \f$ \mathcal{R}^{n-1} \multiply [0, \inf] \f$, (the boundary points) so the spacetime effectively branches,
+    /// causing it to lose it's manifold properties.
     ///
     /// The building blocks of a 4D causal simplicial complex are (4, 1) and (3, 2) simplices. The (4, 1) simplex has 4
     /// vertices on t=t and 1 on t=t + 1. The (3, 2) simplex has 3 vertices on t=t and 2 on t=t + 1. We build out the
@@ -383,85 +395,85 @@ class Spacetime {
     /// For a detailed picture; see "Quantum Gravity from Causal Dynamical Triangulations: A Review", R. Loll, 2019.
     /// Figure 1.
     ///
-    /// @param myFace The Face of this Simplex to attach to `yourFace` of the other Simplex
-    /// @param yourFace The Face of the other Simplex to attach to `myFace` of this Simplex.
-    /// @return myFace, updated with the second simplex glued.
-    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &myFace,
-                                                     const SimplexPtr &yourFace) {
-#if defined(CASET_DEBUG)
-      if (myFace->fingerprint.fingerprint() == yourFace->fingerprint.fingerprint()) {
+    /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
+    /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
+    /// @returns {attachedFace, succeeded} The `attachedFace` after attachment and whether the attachment succeeded.
+    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &attachedFace,
+                                                     const SimplexPtr &unattachedFace) {
+      if (attachedFace->fingerprint.fingerprint() == unattachedFace->fingerprint.fingerprint()) {
         CASET_LOG(ERROR_LEVEL, "Faces are already attached!");
-        return {myFace, false};
+        return {attachedFace, false};
       }
-      if (myFace->getOrientation() != yourFace->getOrientation()) {
+      if (attachedFace->getOrientation() != unattachedFace->getOrientation()) {
         CASET_LOG(ERROR_LEVEL,
                   "Faces have different orientations: ",
-                  myFace->getOrientation()->toString(),
+                  attachedFace->getOrientation()->toString(),
                   " vs ",
-                  yourFace->getOrientation()->toString());
-        return {myFace, false};
+                  unattachedFace->getOrientation()->toString());
+        return {attachedFace, false};
       }
-      for (const auto &myCoface : myFace->getCofaces()) {
-        for (const auto &yourCoFace : yourFace->getCofaces()) {
-          if (myCoface->fingerprint.fingerprint() == yourCoFace->fingerprint.fingerprint()) {
+      for (const auto &attachedCoface : attachedFace->getCofaces()) {
+        for (const auto &unattachedCoface : unattachedFace->getCofaces()) {
+          if (attachedCoface->fingerprint.fingerprint() == unattachedCoface->fingerprint.fingerprint()) {
             CASET_LOG(ERROR_LEVEL, "Faces share a coface!");
-            return {myFace, false};
+            return {attachedFace, false};
           }
         }
       }
-#endif
+
       Vertices vertices = {};
-      vertices.reserve(myFace->size());
+      vertices.reserve(attachedFace->size());
       std::vector<std::shared_ptr<Edge> > edges = {};
-      edges.reserve(myFace->size());
+      edges.reserve(attachedFace->size());
 
       // Two vertices are compatible to attach iff they share the same time value.
       std::vector<std::pair<VertexPtr, VertexPtr> > vertexPairs{};
-      vertexPairs.reserve(myFace->size());
+      vertexPairs.reserve(attachedFace->size());
 
       // These are in order of traversal, you can iterate them to walk the Face:
-      const auto &yourVertices = yourFace->getVertices();
+      const auto &unattachedVertices = unattachedFace->getVertices();
 
       // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
       // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
-      const std::optional<Vertices> myOrderedVerticesOptional = myFace->
-          getVerticesWithParityTo(yourFace);
+      const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->
+          getVerticesWithParityTo(unattachedFace);
 
-      if (!myOrderedVerticesOptional.has_value()) {
-        CASET_LOG(WARN_LEVEL, "No compatible vertex order found for myFace and yourFace.");
+      if (!attachedOrderedVerticesOptional.has_value()) {
+        CASET_LOG(WARN_LEVEL, "No compatible vertex order found for myFace and yourFace.\n",
+          attachedFace->toString(), "\n", unattachedFace->toString());
         return {nullptr, false};
       }
 
-      const Vertices &myOrderedVertices = myOrderedVerticesOptional.value();
-      for (auto i = 0; i < myOrderedVertices.size(); i++) {
-        const auto &myVertex = myOrderedVertices[i];
-        const auto &yourVertex = yourVertices[i];
+      const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
+      for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
+        const auto &attachedVertex = attachedOrderedVertices[i];
+        const auto &unattachedVertex = unattachedVertices[i];
         CASET_LOG(DEBUG_LEVEL, "-----------------------------------------------------------------------");
 
         // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
         // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
         // from myFace, but deleted entirely.
-        if (yourVertex->getInEdges().size() > 0) moveEdges(yourVertex, yourFace, myVertex, true);
-        if (yourVertex->getOutEdges().size() > 0) moveEdges(yourVertex, yourFace, myVertex, false);
+        if (unattachedVertex->getInEdges().size() > 0) moveEdges(unattachedVertex, unattachedFace, attachedVertex, true);
+        if (unattachedVertex->getOutEdges().size() > 0) moveEdges(unattachedVertex, unattachedFace, attachedVertex, false);
 
-        yourFace->replaceVertex(yourVertex, myVertex);
+        unattachedFace->replaceVertex(unattachedVertex, attachedVertex);
 
         // TODO: Move stuff from cofaces. Don't know that this covers all cases.
-        for (const auto &coface : yourFace->getCofaces()) {
-          coface->replaceVertex(yourVertex, myVertex);
+        for (const auto &coface : unattachedFace->getCofaces()) {
+          coface->replaceVertex(unattachedVertex, attachedVertex);
         }
-        removeIfIsolated(yourVertex);
+        removeIfIsolated(unattachedVertex);
       }
 
-      auto newCoface = *(yourFace->getCofaces().begin());
-      myFace->addCoface(newCoface);
-      if (!yourFace->isCausallyAvailable()) {
-        for (const auto &facialOrientation : yourFace->getOrientation()->getFacialOrientations()) {
-          externalSimplices[facialOrientation].erase(yourFace);
+      auto newCoface = *(unattachedFace->getCofaces().begin());
+      attachedFace->addCoface(newCoface);
+      if (!attachedFace->isCausallyAvailable()) {
+        for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
+          externalSimplices[facialOrientation].erase(attachedFace);
         }
-        internalSimplices[yourFace->getOrientation()].insert(yourFace);
+        internalSimplices[attachedFace->getOrientation()].insert(attachedFace);
       }
-      return {myFace, true};
+      return {attachedFace, true};
     }
 
     ///
@@ -491,49 +503,32 @@ class Spacetime {
     ///
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
     OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
-      CASET_LOG(DEBUG_LEVEL, "------------------------------------------------------------------------");
       for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
-        const auto &bucket = externalSimplices[facialOrientation];
-        if (bucket.empty()) continue;
-        CASET_LOG(DEBUG_LEVEL,
-                  "Found ",
-                  std::to_string(bucket.size()),
-                  " simplices in bucket for facial orientation ",
-                  facialOrientation->toString());
-        for (auto attachedSimplexIt = bucket.begin(); attachedSimplexIt != bucket.end(); ++attachedSimplexIt) {
-          if ((*attachedSimplexIt)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) {
-            CASET_LOG(DEBUG_LEVEL, "Skipping simplex ", (*attachedSimplexIt)->toString(), " because it's the same as mySimplex");
-            continue;
-          }
-          OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedSimplexIt);
-          if (gluablePair.has_value()) {
-            CASET_LOG(INFO_LEVEL,
-                      "Found gluable faces for simplex \n",
-                      (*attachedSimplexIt)->toString(),
-                      " \nand mySimplex \n",
-                      unattachedSimplex->toString(), "\n---\n", std::get<0>(gluablePair.value())->toString(), "\nAND\n", std::get<1>(gluablePair.value())->toString());
-            return gluablePair;
-          }
-          CASET_LOG(DEBUG_LEVEL,
-                    "No gluable faces found to attach simplex ",
-                    (*attachedSimplexIt)->toString(),
-                    " to ",
-                    unattachedSimplex->toString());
+        const auto &prospectiveCofaces = externalSimplices[facialOrientation];
+        if (prospectiveCofaces.empty()) continue;
+        for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++attachedCofaceId) {
+          if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
+          // getGluable faces expects a coface, not a face.
+          OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
+          if (gluablePair.has_value()) return gluablePair;
         }
       }
       return std::nullopt;
     }
 
+    /// This method is for testing only, very poor runtime performance.
     SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
       SimplexOrientationPtr o = std::make_shared<
         SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
-      if (externalSimplices.contains(o)) {
-        return externalSimplices[o];
+      SimplexSet result{};
+      for (const auto &[facialOrientation, bucket] : externalSimplices) {
+          for (const auto &simplex : bucket) {
+            for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
+              if (simplex->getOrientation() == o) result.insert(simplex);
+            }
+          }
       }
-      if (internalSimplices.contains(o)) {
-        return internalSimplices[o];
-      }
-      return {};
+      return result;
     }
 
     std::vector<Vertices> getConnectedComponents() const {
@@ -596,6 +591,8 @@ class Spacetime {
     /// TODO: I don't think SimplexOrientationPtr is correctly hashing!!
     std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq>
     internalSimplices{};
+
+    SimplexSet simplices{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 

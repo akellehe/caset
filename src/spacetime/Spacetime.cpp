@@ -76,13 +76,19 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
 
   auto edgeIdxToAbsoluteSquaredLengthTensor = torch::from_blob(edgeIdxToAbsoluteSquaredLength.data(), {E}, torch::TensorOptions().dtype(torch::kDouble)).clone();
 
-
   // 4. Set up optimizer (Adam is simple and robust)
-  torch::Tensor positions = torch::randn({N, dimensions}, torch::TensorOptions().dtype(torch::kDouble)).set_requires_grad(true);
-  torch::Tensor timesSourceOfTruth = torch::zeros({N}, torch::TensorOptions().dtype(torch::kDouble));
+  torch::Tensor positions = torch::randn({N, dimensions}, torch::TensorOptions()
+    .dtype(torch::kDouble))
+    .set_requires_grad(true);
+
+  torch::Tensor vertexTimesTensor = torch::zeros(
+    {N},
+    torch::TensorOptions().dtype(torch::kDouble)
+    );
   for (int i = 0; i < N; ++i) {
-    timesSourceOfTruth[i] = vertexVector[i]->getTime();
+    vertexTimesTensor[i] = vertexVector[i]->getTime();
   }
+
   torch::optim::Adam optimizer({positions}, torch::optim::AdamOptions(lr));
 
   auto previousLoss = torch::tensor({0});
@@ -94,16 +100,25 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     optimizer.zero_grad();
 
     // 5. Compute predicted squared distances for all edges
-    auto src = positions.index_select(0, edgeIdxToSourceIdxTensor);
-    auto tgt = positions.index_select(0, edgeIdxToTargetIdxTensor);
-    auto times = timesSourceOfTruth.index_select(0, edgeIdxToSourceIdxTensor);
-    auto timeDiff = times - edgeIdxToTargetTimeTensor; // (E,)
-    auto spaceDiff = src - tgt;                        // (E, dim - 1)
-    auto concatenated = torch::cat({timeDiff.unsqueeze(1), spaceDiff}, 1); // (E, dim)
-    auto sqdist = concatenated.pow(2).sum(-1);            // (E,)
+    auto srcPositions = positions.index_select(0, edgeIdxToSourceIdxTensor);  // (E, dim)
+    auto tgtPositions = positions.index_select(0, edgeIdxToTargetIdxTensor);  // (E, dim)
+
+    auto expectedSrcTimes = vertexTimesTensor.index_select(0, edgeIdxToSourceIdxTensor);
+    auto expectedTgtTimes = vertexTimesTensor.index_select(0, edgeIdxToTargetIdxTensor);
+    auto expectedTimes = (expectedSrcTimes + expectedTgtTimes) / 2.;                             // (E,)
+    auto observedLengths = srcPositions - tgtPositions;                        // (E, dim - 1)
+
+    auto sqdist = observedLengths.pow(2).sum(-1);            // (E,)
+
+    // The observed time is the 0th element of the coordinate vector
+    auto observedSrcTimes = srcPositions.index({torch::arange(0, E), 0});
+    auto observedTgtTimes = tgtPositions.index({torch::arange(0, E), 0});
+    auto observedTimes = (observedSrcTimes + observedTgtTimes) / 2.;                             // (E,)
+
+    auto sqtime = (observedTimes - expectedTimes).pow(2);                     // (E,)
 
     // 6. Loss: match squared distances
-    auto residual = sqdist - edgeIdxToAbsoluteSquaredLengthTensor;
+    auto residual = sqdist - edgeIdxToAbsoluteSquaredLengthTensor + (sqtime * dimensions);
     previousLoss = loss;
     loss = residual.pow(2).mean();
 

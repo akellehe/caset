@@ -402,6 +402,15 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       cofaces.insert(simplex);
     }
 
+    [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const {
+      for (const auto &s : cofaces) {
+        if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     [[nodiscard]] bool hasVertex(const IdType vertexId) const {
       return vertexIdLookup.contains(vertexId);
     }
@@ -444,6 +453,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       const std::size_t n = mine.size();
       if (n != theirs.size()) {
         throw std::runtime_error("You can only compare simplices of the same size!");
+      }
+      if (isTimelike() && !other->isTimelike() || !isTimelike() && other->isTimelike()) {
+        throw std::runtime_error("Can't establish parity when one face is timelike and the other is not!");
       }
       if (n == 0) {
         return Vertices{}; // or std::nullopt, your call
@@ -568,7 +580,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// those swaps changes the sign of the orientation once. An odd number of swaps gives an opposite orientation; an
     /// even number gives the same orientation.
     ///
-    int8_t checkPairty(std::shared_ptr<Simplex> &other) {
+    int8_t checkParity(std::shared_ptr<Simplex> &other) {
       std::size_t K = vertices.size();
 
       // Build vertex -> position map for 'a'

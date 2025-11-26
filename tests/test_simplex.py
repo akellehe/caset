@@ -157,6 +157,106 @@ class TestSimplex(unittest.TestCase):
         self.assertTrue(e6.getSourceId() == v1.getId() or e6.getTargetId() == v1.getId())
         self.assertTrue(e6.getSourceId() == v4.getId() or e6.getTargetId() == v4.getId())
 
+    def test_get_verticies_with_pairty_to4D(self):
+        simplex41 = self.spacetime.createSimplex((4, 1))
+        simplex32 = self.spacetime.createSimplex((3, 2))
+
+        f41_1, f41_2, f41_3, f41_4, f41_5 = simplex41.getFacets()
+        f32_1, f32_2, f32_3, f32_4, f32_5 = simplex32.getFacets()
+
+        left = None
+        right = None
+
+        for face41 in simplex41.getFacets():
+            if face41.getOrientation().numeric() == (3, 1):
+                left = face41
+
+        for face32 in simplex32.getFacets():
+            if face32.getOrientation().numeric() == (3, 1):
+                right = face32
+
+        vertices = left.getVerticesWithPairtyTo(right)
+        self.assertEqual(len(vertices), 4)
+
+    def test_get_verticies_with_pairty_to2D(self):
+        simplex21 = self.spacetime.createSimplex((2, 1))
+        simplex12 = self.spacetime.createSimplex((1, 2))
+
+        f21_1, f21_2, f21_3 = simplex21.getFacets()
+        f12_1, f12_2, f12_3 = simplex12.getFacets()
+
+        left = None
+        right = None
+
+        for face21 in simplex21.getFacets():
+            if face21.getOrientation().numeric() == (1, 1):
+                left = face21
+
+        for face12 in simplex12.getFacets():
+            if face12.getOrientation().numeric() == (1, 1):
+                right = face12
+
+        vertices = left.getVerticesWithPairtyTo(right)
+        self.assertEqual(len(vertices), 2)
+
+    def test_get_verticies_with_pairty_to2D(self):
+        st = Spacetime()
+        vertices = []
+        for i in range(6):
+            vertices.append(st.createVertex(i, [i % 2]))
+
+        st.createEdge(vertices[0].getId(), vertices[1].getId())
+        st.createEdge(vertices[1].getId(), vertices[2].getId())
+        st.createEdge(vertices[2].getId(), vertices[0].getId())
+
+        st.createEdge(vertices[3].getId(), vertices[4].getId())
+        st.createEdge(vertices[4].getId(), vertices[5].getId())
+        st.createEdge(vertices[5].getId(), vertices[3].getId())
+
+        simplex12 = Simplex(vertices[0:3])
+        simplex21 = Simplex(vertices[3:6])
+
+        facets12 = simplex12.getFacets()
+        facets21 = simplex21.getFacets()
+
+        vertices12 = facets12[0].getVerticesWithPairtyTo(facets21[0])
+        self.assertEqual(len(vertices12), 2)
+        vertices21 = facets21[0].getVerticesWithPairtyTo(facets12[0])
+        self.assertEqual(len(vertices21), 2)
+
+        for i, f12 in enumerate(facets12):
+            for j, f21 in enumerate(facets21):
+                if f12.isTimelike() or f21.isTimelike():
+                    continue
+                v = f12.getVerticesWithPairtyTo(f21)
+                if not v:
+                    breakpoint()
+                    print(i, j)
+                self.assertEqual(len(v), 2)
+
+        for f12 in reversed(facets12):
+            for f21 in facets21:
+                if f12.isTimelike() or f21.isTimelike():
+                    continue
+                v = f12.getVerticesWithPairtyTo(f21)
+                self.assertEqual(len(v), 2)
+
+        for f12 in facets12:
+            for f21 in reversed(facets21):
+                if f12.isTimelike() or f21.isTimelike():
+                    continue
+                v = f12.getVerticesWithPairtyTo(f21)
+                self.assertEqual(len(v), 2)
+
+        for f12 in reversed(facets12):
+            for f21 in reversed(facets21):
+                if f12.isTimelike() or f21.isTimelike():
+                    continue
+                v = f12.getVerticesWithPairtyTo(f21)
+                self.assertEqual(len(v), 2)
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
