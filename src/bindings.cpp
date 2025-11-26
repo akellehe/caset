@@ -125,11 +125,15 @@ PYBIND11_MODULE(caset, m) {
       .def("getHinges", &Simplex::getHinges)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
+      .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
+      .def("getVertexIndexLookup", &Simplex::getVertexIndexLookup)
+      .def("getVertices", &Simplex::getVertices)
       .def("getVertices", &Simplex::getVertices)
       .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
-      .def("getVertices", &Simplex::getVertices)
       .def("getVolume", &Simplex::getVolume)
-      .def("isTimelike", &Simplex::isTimelike);
+      .def("isTimelike", &Simplex::isTimelike)
+      .def("removeEdge", &Simplex::removeEdge)
+      .def("removeVertex", &Simplex::removeVertex);
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash>>(m, "SimplexHash")
     .def(py::init<>());

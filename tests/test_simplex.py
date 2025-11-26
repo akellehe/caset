@@ -255,7 +255,27 @@ class TestSimplex(unittest.TestCase):
                 v = f12.getVerticesWithPairtyTo(f21)
                 self.assertEqual(len(v), 2)
 
+    def test_remove_vertex(self):
+        st = Spacetime()
+        v1 = st.createVertex(0, [0])
+        v2 = st.createVertex(1, [1])
+        v3 = st.createVertex(2, [2])
 
+        e1 = st.createEdge(v1.getId(), v2.getId())
+        e2 = st.createEdge(v2.getId(), v3.getId())
+        e3 = st.createEdge(v3.getId(), v1.getId())
+
+        simplex = Simplex([v1, v2, v3])
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        simplex.removeVertex(v2)
+        simplex.removeEdge(e1)
+        simplex.removeEdge(e2)
+
+        self.assertEqual(len(simplex.getVertices()), 2)
+        self.assertEqual(len(simplex.getEdges()), 1)
 
 
 if __name__ == '__main__':

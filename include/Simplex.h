@@ -213,9 +213,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
       vertexIdLookup.reserve(vertices_.size());
+      vertexIndexLookup.reserve(vertices_.size());
       for (int i = 0; i < vertices_.size(); i++) {
         ids.push_back(vertices_[i]->getId());
         vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
+        vertexIndexLookup.insert({vertices_[i]->getId(), i});
       }
       if (vertexIdLookup.size() != vertices_.size()) {
         throw std::invalid_argument("Duplicate vertex IDs detected in simplex construction.");
@@ -231,9 +233,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
       vertexIdLookup.reserve(vertices_.size());
+      vertexIndexLookup.reserve(vertices_.size());
       for (int i = 0; i < vertices_.size(); i++) {
         ids.push_back(vertices_[i]->getId());
         vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
+        vertexIndexLookup.insert({vertices_[i]->getId(), i});
       }
       fingerprint = Fingerprint(ids);
       computeEdges();
@@ -318,11 +322,17 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     [[nodiscard]] bool isTimelike() const {
       for (const auto &edge : edges) {
+        if (!vertexIdLookup.contains(edge->getSourceId())) {
+          CASET_LOG(ERROR_LEVEL, "vertexIdLookup was missing source ID ", edge->toString(), " in simplex ", toString(), ". edges should all be internal");
+          throw std::runtime_error("vertexIdLookup was missing source ID");
+        }
+        if (!vertexIdLookup.contains(edge->getTargetId())) {
+          CASET_LOG(ERROR_LEVEL, "vertexIdLookup was missing target ID ", edge->toString(), " in simplex ", toString(), ". edges should all be internal");
+          throw std::runtime_error("vertexIdLookup was missing target ID");
+        }
         const auto &src = vertexIdLookup.find(edge->getSourceId())->second;
         const auto &tgt = vertexIdLookup.find(edge->getTargetId())->second;
-        if (src->getTime() != tgt->getTime()) {
-          return false;
-        }
+        if (src->getTime() != tgt->getTime()) return false;
       }
       return true;
     }
@@ -430,13 +440,31 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     }
 
     bool removeVertex(const VertexPtr &vertex) {
+#ifdef CASET_DEBUG
+      if (!vertexIdLookup.contains(vertex->getId())) {
+        CASET_LOG(ERROR_LEVEL, "vertexIdLookup was missing source ID ", vertex->getId(), " cannot delete.");
+        throw std::runtime_error("vertexIdLookup was missing source ID (removeVertex)");
+      }
+      if (!vertexIndexLookup.contains(vertex->getId())) {
+        CASET_LOG(ERROR_LEVEL, "vertexIndexLookup was missing source ID ", vertex->getId(), " cannot delete.");
+        throw std::runtime_error("vertexIndexLookup was missing source ID (removeVertex)");
+      }
+#endif
       const long vertexIndex = vertexIndexLookup.find(vertex->getId())->second;
       if (vertexIndex > vertices.size()) return false;
+#ifdef CASET_DEBUG
+      if (vertices.size() < vertexIndex + 1) {
+        CASET_LOG(ERROR_LEVEL, "vertexIndex ", vertexIndex, " out of bounds for vertices of size ", vertices.size());
+        throw std::runtime_error("vertexIndex out of bounds for vertices (removeVertex)");
+      }
+#endif
       std::vector<IdType> vertexIds{};
       vertexIds.reserve(vertices.size() - 1);
+
       vertices.erase(vertices.begin() + vertexIndex);
       vertexIdLookup.erase(vertex->getId());
       vertexIndexLookup.erase(vertex->getId());
+
       for (const auto &v : vertices) {
         vertexIds.push_back(v->getId());
       }
@@ -446,7 +474,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     [[nodiscard]]
     std::optional<Vertices>
-    getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) {
+    getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const {
       const auto &mine = vertices;
       const auto &theirs = other->getVertices();
 
@@ -454,16 +482,14 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       if (n != theirs.size()) {
         throw std::runtime_error("You can only compare simplices of the same size!");
       }
+      CASET_LOG(DEBUG_LEVEL, "isTimelike");
       if (isTimelike() && !other->isTimelike() || !isTimelike() && other->isTimelike()) {
         throw std::runtime_error("Can't establish parity when one face is timelike and the other is not!");
       }
-      if (n == 0) {
-        return Vertices{}; // or std::nullopt, your call
-      }
+      if (n == 0) return std::nullopt;
+      CASET_LOG(DEBUG_LEVEL, "isTimelike");
       if (n == 1) {
-        if (mine[0]->getTime() != theirs[0]->getTime()) {
-          return std::nullopt;
-        }
+        if (mine[0]->getTime() != theirs[0]->getTime()) return std::nullopt;
         return mine; // already aligned
       }
 
@@ -472,7 +498,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
               bool reversed)
         -> std::optional<Vertices> {
         CASET_LOG(DEBUG_LEVEL, "Trying alignment...");
-        Vertices result;
+        Vertices result{};
         result.reserve(n);
 
         for (std::size_t k = 0; k < n; ++k) {
@@ -492,6 +518,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
             return std::nullopt; // mismatch, this alignment fails
           }
 
+          CASET_LOG(DEBUG_LEVEL, "result.push_back()...");
           result.push_back(mine[idx]);
         }
         CASET_LOG(DEBUG_LEVEL, "Alignment finished.");
@@ -499,23 +526,21 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       };
 
       // Try all starting positions where times match theirs[0]
+      CASET_LOG(DEBUG_LEVEL, "comparing times...");
       for (std::size_t i = 0; i < n; ++i) {
-        if (mine[i]->getTime() != theirs[0]->getTime()) {
-          continue;
-        }
+        if (mine[i]->getTime() != theirs[0]->getTime()) continue;
 
         // 1. Try same orientation
-        if (auto aligned = try_alignment(i, /*reversed=*/false)) {
-          return aligned;
-        }
+        CASET_LOG(DEBUG_LEVEL, "Trying alignment");
+        if (auto aligned = try_alignment(i, /*reversed=*/false)) return aligned;
 
         // 2. Try reversed orientation
-        if (auto aligned_rev = try_alignment(i, /*reversed=*/true)) {
-          return aligned_rev;
-        }
+        CASET_LOG(DEBUG_LEVEL, "Trying reversed alignment");
+        if (auto aligned_rev = try_alignment(i, /*reversed=*/true)) return aligned_rev;
       }
 
       // No alignment found
+      CASET_LOG(DEBUG_LEVEL, "Alignment finished.");
       return std::nullopt;
     }
 
@@ -538,10 +563,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
       // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
       // the vertices in the correct order
-      for (const auto &cursor : getVertices()) {
-        for (const auto &e : cursor->getInEdges()) {
+      for (const auto &v : getVertices()) {
+        for (const auto &e : v->getInEdges()) {
           if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
-            CASET_LOG(DEBUG_LEVEL, "For vertex", cursor->toString(), " found in-edge ", e->toString());
+            CASET_LOG(DEBUG_LEVEL, "For vertex", v->toString(), " found in-edge ", e->toString());
             EdgeKey edgeKey{e->getSourceId(), e->getTargetId()};
             edgeIndexMap.insert_or_assign(edgeKey, edges.size());
             edges.push_back(e);
@@ -664,11 +689,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// co-faces.
     bool isCausallyAvailable () noexcept {
       for (const auto &face : getFacets()) {
-        if (face->getCofaces().size() < 2) {
-          return true;
-        }
+        if (face->getCofaces().size() < 2) return true;
       }
       return false;
+    }
+
+    bool isInternal() const noexcept {
+      return getCofaces().size() == 2;
     }
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
@@ -726,9 +753,15 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       for (int i = 0; i < vertices.size(); i++) {
         if (vertices[i]->getId() == oldVertex->getId()) {
           vertices[i] = newVertex;
+
           vertexIdLookup.erase(oldVertex->getId());
           vertexIdLookup.insert({newVertex->getId(), newVertex});
+
+          vertexIndexLookup.erase(oldVertex->getId());
+          vertexIndexLookup.insert({newVertex->getId(), i});
+
           vertexIds.push_back(oldVertex->getId());
+
           fingerprint.refreshFingerprint(vertexIds);
           return;
         }
@@ -736,18 +769,24 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       throw std::runtime_error("This simplex does not contain the vertex you're trying to replace!");
     }
 
+    VertexIndexMap getVertexIndexLookup() const noexcept {
+      return vertexIndexLookup;
+    }
+
+    VertexIdMap getVertexIdLookup() const noexcept {
+      return vertexIdLookup;
+    }
+
   private:
-    // TODO: I think we can get rid of the vertexIndexLookup, the only place we appear to use it is removeVertex, which
-    //  appears to be unused.
-    VertexIndexMap vertexIndexLookup{};
-    Vertices vertices{};
-    SimplexOrientationPtr orientation{};
     EdgeIndexMap edgeIndexMap{};
     Edges edges{};
+    SimplexOrientationPtr orientation{};
+    VertexIdMap vertexIdLookup{};
+    VertexIndexMap vertexIndexLookup{};
+    Vertices vertices{};
 
     std::vector<std::shared_ptr<Simplex> > facets{};
     std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
-    std::unordered_map<IdType, VertexPtr> vertexIdLookup{};
 };
 
 using SimplexPtr = std::shared_ptr<Simplex>;

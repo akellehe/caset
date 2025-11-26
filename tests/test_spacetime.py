@@ -390,6 +390,8 @@ class TestSpacetime(unittest.TestCase):
             s = st.createSimplex(orientations[i % 2])
             if i == 0: continue
             leftFace, rightFace = st.chooseSimplexFacesToGlue(s)
+            if leftFace.isTimelike() != rightFace.isTimelike():
+                continue
             updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
             self.assertTrue(succeeded)
 
@@ -401,24 +403,35 @@ class TestSpacetime(unittest.TestCase):
 
         orientations = [(1, 2), (2, 1)]
         for i in range(10):
+            print('1')
             unattached = st.createSimplex(orientations[i % 2])
+            print('2')
             if i == 0: continue
+            print('3')
             leftFace, rightFace = st.chooseSimplexFacesToGlue(unattached)
 
+            print('4')
             leftCofaces = leftFace.getCofaces()
+            print('5')
             rightCofaces = rightFace.getCofaces()
+            print('6')
 
             self.assertEqual(len(leftCofaces), 1)
             self.assertEqual(len(rightCofaces), 1)
 
+            print('7')
+
             updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+            print('8')
 
             if not succeeded:
                 breakpoint()
                 print('failed')
             self.assertTrue(succeeded)
 
+        print('9')
         components = st.getConnectedComponents()
+        print('10')
         self.assertEqual(len(components), 1)
 
     def test_get_gluable_faces(self):

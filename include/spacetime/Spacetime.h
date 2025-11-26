@@ -259,11 +259,14 @@ class Spacetime {
         if (tia == 0 || tfa == 0) {
           continue; // Skip degenerate faces
         }
+        if (unattachedFace->isInternal()) continue;
         for (auto &attachedFace : attachedFacets) {
+          if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue; // Skip faces that don't match in timelikeness
           const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
           if (tib == 0 || tfb == 0) {
             continue; // Skip degenerate faces
           }
+          if (attachedFace->isInternal()) continue;
           if (tia == tfb && tfa == tib) {
             return std::make_optional(std::make_pair(unattachedFace, attachedFace));
           }
@@ -330,6 +333,8 @@ class Spacetime {
           const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
           sourceVertex->removeOutEdge(edge);
           targetVertex->removeInEdge(edge);
+          fromSimplex->removeEdge(edge);
+          fromSimplex->removeVertex(sourceVertex);
           edgeList->remove(edge);
           removeIfIsolated(sourceVertex);
           removeIfIsolated(targetVertex);
@@ -421,9 +426,10 @@ class Spacetime {
         }
       }
 
-      Vertices vertices = {};
+      CASET_LOG(INFO_LEVEL, "a");
+      Vertices vertices{};
       vertices.reserve(attachedFace->size());
-      std::vector<std::shared_ptr<Edge> > edges = {};
+      std::vector<std::shared_ptr<Edge> > edges{};
       edges.reserve(attachedFace->size());
 
       // Two vertices are compatible to attach iff they share the same time value.
@@ -431,10 +437,12 @@ class Spacetime {
       vertexPairs.reserve(attachedFace->size());
 
       // These are in order of traversal, you can iterate them to walk the Face:
+      CASET_LOG(INFO_LEVEL, "getVertices()");
       const auto &unattachedVertices = unattachedFace->getVertices();
 
       // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
       // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
+      CASET_LOG(INFO_LEVEL, "getVerticesWithPairtyTo()");
       const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->
           getVerticesWithParityTo(unattachedFace);
 
@@ -444,6 +452,7 @@ class Spacetime {
         return {nullptr, false};
       }
 
+      CASET_LOG(INFO_LEVEL, "attachedOrderedVertices()");
       const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
       for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
         const auto &attachedVertex = attachedOrderedVertices[i];
@@ -453,20 +462,28 @@ class Spacetime {
         // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
         // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
         // from myFace, but deleted entirely.
+        CASET_LOG(DEBUG_LEVEL, "moving edges...");
         if (unattachedVertex->getInEdges().size() > 0) moveEdges(unattachedVertex, unattachedFace, attachedVertex, true);
+        CASET_LOG(DEBUG_LEVEL, "moving edges...");
         if (unattachedVertex->getOutEdges().size() > 0) moveEdges(unattachedVertex, unattachedFace, attachedVertex, false);
 
+        CASET_LOG(DEBUG_LEVEL, "replacing vertex");
         unattachedFace->replaceVertex(unattachedVertex, attachedVertex);
 
         // TODO: Move stuff from cofaces. Don't know that this covers all cases.
+        CASET_LOG(DEBUG_LEVEL, "updating cofaces");
         for (const auto &coface : unattachedFace->getCofaces()) {
+          CASET_LOG(DEBUG_LEVEL, "replacing vertex");
           coface->replaceVertex(unattachedVertex, attachedVertex);
         }
+        CASET_LOG(DEBUG_LEVEL, "removing isolated vertex");
         removeIfIsolated(unattachedVertex);
       }
 
-      auto newCoface = *(unattachedFace->getCofaces().begin());
-      attachedFace->addCoface(newCoface);
+      if (!unattachedFace->getCofaces().empty()) {
+        auto newCoface = *(unattachedFace->getCofaces().begin());
+        attachedFace->addCoface(newCoface);
+      }
       if (!attachedFace->isCausallyAvailable()) {
         for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
           externalSimplices[facialOrientation].erase(attachedFace);
@@ -508,9 +525,14 @@ class Spacetime {
         if (prospectiveCofaces.empty()) continue;
         for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++attachedCofaceId) {
           if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
-          // getGluable faces expects a coface, not a face.
+          if (!unattachedSimplex->isCausallyAvailable() || !(*attachedCofaceId)->isCausallyAvailable()) {
+            continue;
+          }
           OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
-          if (gluablePair.has_value()) return gluablePair;
+          if (gluablePair.has_value()) {
+            const auto &[unattachedFace, attachedFace] = gluablePair.value();
+            return gluablePair;
+          }
         }
       }
       return std::nullopt;
