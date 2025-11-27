@@ -280,6 +280,7 @@ class Spacetime {
 
     void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
       for (const auto &edge : from->getInEdges()) {
+        // The source is external to the face/simplex, the `from` node is going to be going away.
         const VertexPtr originalSource = vertexList->get(edge->getSourceId());
         originalSource->removeOutEdge(edge);
         from->removeInEdge(edge);
@@ -304,16 +305,19 @@ class Spacetime {
       }
     }
 
-    void removeIfIsolated(const VertexPtr &vertex) {
+    bool removeIfIsolated(const VertexPtr &vertex) {
       if (vertex->degree() == 0) {
         vertexList->remove(vertex);
+        return true;
       }
+      return false;
     }
 
     void moveEdges(
       const VertexPtr &fromVertex,
       const SimplexPtr &fromSimplex,
       const VertexPtr &toVertex,
+      const SimplexPtr &toSimplex,
       bool moveInEdges
     ) {
       /// TODO: This method is not discriminating between in and out edgtes during the actual move.
@@ -336,23 +340,32 @@ class Spacetime {
       }
       const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
       for (const auto &edge : edges) {
-        if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())|| fromSimplex->hasEdge(edge->getTargetId(), edge->getSourceId())) {
-          const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
-          const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
+        const bool hasForward = fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId());
+        const bool hasBackward = fromSimplex->hasEdge(edge->getTargetId(), edge->getSourceId());
+        const bool edgeIsInternal = hasForward || hasBackward;
+
+        // TODO: Where do we call replaceVertex into the simplex.
+        const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
+        const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
+        if (edgeIsInternal) { // Edge is internal to the face, both nodes will be going away.
           sourceVertex->removeOutEdge(edge);
           targetVertex->removeInEdge(edge);
           fromSimplex->removeEdge(edge);
+          fromSimplex->removeVertex(sourceVertex);
+          fromSimplex->removeVertex(targetVertex);
           edgeList->remove(edge);
-          removeIfIsolated(sourceVertex);
-          removeIfIsolated(targetVertex);
-          continue;
+        } else { // Edge is external, only one node will be going away.
+          if (moveInEdges) {
+            moveInEdgesFromVertex(fromVertex, toVertex);
+          } else {
+            moveOutEdgesFromVertex(fromVertex, toVertex);
+          }
+          fromSimplex->removeEdge(edge);
+          toSimplex->addEdge(edge);
         }
-
-        if (moveInEdges) {
-          moveInEdgesFromVertex(fromVertex, toVertex);
-        } else {
-          moveOutEdgesFromVertex(fromVertex, toVertex);
-        }
+        // TODO: This is a little lazy, we can probably tell when the degree is zero without checking multiple times.
+        removeIfIsolated(sourceVertex);
+        removeIfIsolated(targetVertex);
       }
     }
 
@@ -406,6 +419,17 @@ class Spacetime {
     ///
     /// For a detailed picture; see "Quantum Gravity from Causal Dynamical Triangulations: A Review", R. Loll, 2019.
     /// Figure 1.
+    ///
+    ///
+    /// The process of attaching faces amounts to moving external in-edges and out-edges from the vertices of the
+    /// unattachedFace to the analogous (parity matches) vertices of the attachedFace.
+    ///
+    /// This means we identify the vertices that match, in order. There are two classes of edges now. Those internal to
+    /// the unattachedFace, and those that have a vertex outside the unattachedFace. The internal edges have analogous
+    /// edges in the attachedFace, so we can delete those edges, replacing them with their analogous counterparts in the
+    /// attachedFace. The external edges need to be moved from the unattachedFace vertex to the attachedFace vertex.
+    ///
+    ///
     ///
     /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
     /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
@@ -461,33 +485,30 @@ class Spacetime {
 
       CASET_LOG(INFO_LEVEL, "attachedOrderedVertices()");
       const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
+
+      // Remove internal edges from unattachedFace, they will be replaced by those in attachedFace.
+      for (const auto &edge : unattachedFace->getEdges()) {
+        edgeList->remove(edge);
+        unattachedFace->removeEdge(edge);
+      }
+
+      // Now move external edges (one vertex outside the face/simplex) from unattachedFace's vertices to attachedFace's
+      // vertices.
       for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
         const auto &attachedVertex = attachedOrderedVertices[i];
         const auto &unattachedVertex = unattachedVertices[i];
-        CASET_LOG(DEBUG_LEVEL, "-----------------------------------------------------------------------");
 
-        // Move the in-edges from the vertices on yourFace to the corresponding vertex on myFace, but only if those
-        // Edges aren't part of `yourFace`, since yourFace is going away completely. The edge does not need to be moved
-        // from myFace, but deleted entirely.
-        CASET_LOG(DEBUG_LEVEL, "moving edges...");
-        if (unattachedVertex->getInEdges().size() > 0) moveEdges(unattachedVertex, unattachedFace, attachedVertex, true);
-        CASET_LOG(DEBUG_LEVEL, "moving edges...");
-        if (unattachedVertex->getOutEdges().size() > 0) moveEdges(unattachedVertex, unattachedFace, attachedVertex, false);
+        moveInEdgesFromVertex(unattachedVertex, attachedVertex);
+        moveOutEdgesFromVertex(unattachedVertex, attachedVertex);
 
-        CASET_LOG(DEBUG_LEVEL, "replacing vertex");
         unattachedFace->replaceVertex(unattachedVertex, attachedVertex);
-        // if (fromSimplex->hasVertex(sourceVertex)) {
-          // fromSimplex->removeVertex(sourceVertex);
-        // }
 
-        // TODO: Move stuff from cofaces. Don't know that this covers all cases.
-        CASET_LOG(DEBUG_LEVEL, "updating cofaces");
         for (const auto &coface : unattachedFace->getCofaces()) {
-          CASET_LOG(DEBUG_LEVEL, "replacing vertex");
           coface->replaceVertex(unattachedVertex, attachedVertex);
         }
-        CASET_LOG(DEBUG_LEVEL, "removing isolated vertex");
-        removeIfIsolated(unattachedVertex);
+        for (const auto &facet : unattachedFace->getFacets()) {
+          facet->replaceVertex(unattachedVertex, attachedVertex);
+        }
       }
 
       if (!unattachedFace->getCofaces().empty()) {

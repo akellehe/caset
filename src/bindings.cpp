@@ -134,7 +134,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getVolume", &Simplex::getVolume)
       .def("isTimelike", &Simplex::isTimelike)
       .def("removeEdge", &Simplex::removeEdge)
-      .def("removeVertex", &Simplex::removeVertex);
+      .def("removeVertex", &Simplex::removeVertex)
+      .def("replaceVertex", &Simplex::replaceVertex);
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash>>(m, "SimplexHash")
     .def(py::init<>());
@@ -207,7 +208,9 @@ PYBIND11_MODULE(caset, m) {
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
-      .def("moveEdges", &Spacetime::moveEdges, py::arg("fromVertex"), py::arg("fromSimplex"), py::arg("toVertex"), py::arg("moveInEdges") = true)
+      .def("moveEdges", &Spacetime::moveEdges, py::arg("fromVertex"), py::arg("fromSimplex"), py::arg("toVertex"), py::arg("toSimplex"), py::arg("moveInEdges") = true)
+      .def("moveInEdgesFromVertex", &Spacetime::moveInEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
+      .def("moveOutEdgesFromVertex", &Spacetime::moveOutEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
       .def("causallyAttachFaces", &Spacetime::causallyAttachFaces);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";

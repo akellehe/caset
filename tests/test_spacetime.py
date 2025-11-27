@@ -382,6 +382,56 @@ class TestSpacetime(unittest.TestCase):
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 1)
 
+    def test_move_in_edges_from_vertex(self):
+        st = Spacetime()
+
+        toSimplex = st.createSimplex((1, 4))
+        fromSimplex = st.createSimplex((2, 3))
+
+        fromSimplexFace, toSimplexFace = st.chooseSimplexFacesToGlue(fromSimplex)
+
+        fromVertex = fromSimplexFace.getVertices()[0]
+        toVertex = toSimplexFace.getVertices()[0]
+
+        orig_in_edges_before = [e for e in fromVertex.getInEdges()]
+        dest_in_edges_before = [e for e in toVertex.getInEdges()]
+
+        st.moveInEdgesFromVertex(fromVertex, toVertex)
+
+        orig_in_edges_after = [e for e in fromVertex.getInEdges()]
+        dest_in_edges_after = [e for e in toVertex.getInEdges()]
+
+        self.assertEqual(orig_in_edges_before, dest_in_edges_after)
+        self.assertEqual(orig_in_edges_after, dest_in_edges_before)
+
+    def test_move_out_edges_from_vertex(self):
+        st = Spacetime()
+
+        toSimplex = st.createSimplex((1, 4))
+        fromSimplex = st.createSimplex((2, 3))
+
+        fromSimplexFace, toSimplexFace = st.chooseSimplexFacesToGlue(fromSimplex)
+
+        fromVertex = fromSimplexFace.getVertices()[0]
+        toVertex = toSimplexFace.getVertices()[0]
+
+        orig_out_edges_before = [e for e in fromVertex.getOutEdges()]
+        dest_out_edges_before = [e for e in toVertex.getOutEdges()]
+
+        st.moveOutEdgesFromVertex(fromVertex, toVertex)
+
+        orig_out_edges_after = [e for e in fromVertex.getOutEdges()]
+        dest_out_edges_after = [e for e in toVertex.getOutEdges()]
+
+        self.assertEqual(len(orig_out_edges_before), 3)
+        self.assertEqual(len(orig_out_edges_after), 0)
+
+        self.assertEqual(len(dest_out_edges_before), 4)
+        self.assertEqual(len(dest_out_edges_after), 7)
+
+        for edge in orig_out_edges_after:
+            self.assertNotIn(edge, fromVertex.getEdges())
+
     def test_move_edges(self):
         st = Spacetime()
 
@@ -392,8 +442,10 @@ class TestSpacetime(unittest.TestCase):
         fromVertex = fromSimplexFace.getVertices()[0]
         toVertex = toSimplexFace.getVertices()[0]
 
-        st.moveEdges(fromVertex, fromSimplexFace, toVertex, True)
-        st.moveEdges(fromVertex, fromSimplexFace, toVertex, False)
+        edges_to_move = fromVertex.getEdges()
+
+        st.moveEdges(fromVertex, fromSimplexFace, toVertex, toSimplexFace, True)
+        st.moveEdges(fromVertex, fromSimplexFace, toVertex, toSimplexFace, False)
 
         """
 (Pdb) fromSimplex
@@ -412,10 +464,31 @@ class TestSpacetime(unittest.TestCase):
         """
 
         # 1. fromVertex (V6) is not being removed from fromSimplex OR fromSimplexFace, even though the degree=0
+        self.assertEqual(fromVertex.degree(), 0)
+        self.assertNotIn(fromVertex, fromSimplex.getVertices())
+        self.assertNotIn(fromVertex, fromSimplexFace.getVertices())
+
         # 2. toVertex (V0) is not gaining enough new edges from fromVertex (V6)
+        self.assertEqual(toVertex.degree(), 8)
+        self.assertIn(toVertex, toSimplex.getVertices())
+        self.assertIn(toVertex, toSimplexFace.getVertices())
+
         # 3. overall edge count is wrong after the moves (17): len(toSimplex.getEdges()) is 10, so is len(fromSimplex.getEdges())
+        totalEdges = len(toSimplex.getEdges()) + len(fromSimplex.getEdges())
+        self.assertEqual(totalEdges, 17)
+        self.assertEqual(totalEdges, len(st.getEdgeList().toVector()))
+
         # 4. fromSimplex still has edges containing fromVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).
+        for edge in fromSimplex.getEdges():
+            self.assertNotEqual(edge.getSourceId(), fromVertex.getId())
+            self.assertNotEqual(edge.getTargetId(), fromVertex.getId())
+
         # 5. toSimplex is missing edges that should have been added; there are none with vertices in fromSimplex.
+        for edge in edges_to_move:
+            if edge.getSourceId() != fromVertex.getId() and edge.getTargetId() != fromVertex.getId():
+                self.assertIn(edge, toSimplex.getEdges())
+            else:
+                self.assertNotIn(edge, st.getEdgeList().toVector())
 
         breakpoint()
         print('foo')

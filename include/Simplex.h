@@ -421,7 +421,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return edges;
     }
 
-    // TODO: Do we want to remove the vertex here as well? I don't think so, the method is just called removeEdge
+    void addEdge(const EdgePtr &edge) {
+      edges.push_back(edge);
+      edgeIndexMap.insert({{edge->getSourceId(), edge->getTargetId()}, edges.size() - 1});
+    }
+
     bool removeEdge(const EdgePtr &edge) {
       auto index = edgeIndexMap.find({edge->getSourceId(), edge->getTargetId()});
       if (index == edgeIndexMap.end()) return false;
@@ -440,34 +444,51 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 #ifdef CASET_DEBUG
       if (!vertexIdLookup.contains(vertex->getId())) {
         CASET_LOG(ERROR_LEVEL, "vertexIdLookup was missing source ID ", vertex->getId(), " cannot delete.");
-        throw std::runtime_error("vertexIdLookup was missing source ID (removeVertex)");
+        return false;
+        // throw std::runtime_error("vertexIdLookup was missing source ID (removeVertex)");
       }
       if (!vertexIndexLookup.contains(vertex->getId())) {
         CASET_LOG(ERROR_LEVEL, "vertexIndexLookup was missing source ID ", vertex->getId(), " cannot delete.");
-        throw std::runtime_error("vertexIndexLookup was missing source ID (removeVertex)");
+        return false;
+        // throw std::runtime_error("vertexIndexLookup was missing source ID (removeVertex)");
       }
 #endif
-      const long vertexIndex = vertexIndexLookup.find(vertex->getId())->second;
-      if (vertexIndex > vertices.size()) return false;
+      const auto vertexIndexIt = vertexIndexLookup.find(vertex->getId());
+      if (vertexIndexIt == vertexIndexLookup.end()) {
+        CASET_LOG(ERROR_LEVEL, "Vertex index not found for vertex ", vertex->toString(), " in simplex ", toString());
+        return false;
+      }
+      const auto vertexIndex = vertexIndexIt->second;
 #ifdef CASET_DEBUG
-      if (vertices.size() < vertexIndex + 1) {
+      if (vertices.size() <= vertexIndex) {
         CASET_LOG(ERROR_LEVEL, "vertexIndex ", vertexIndex, " out of bounds for vertices of size ", vertices.size());
-        throw std::runtime_error("vertexIndex out of bounds for vertices (removeVertex)");
+        for (auto i=0; i<vertices.size(); i++) {
+          CASET_LOG(ERROR_LEVEL, " - vertex: ", std::to_string(i), ": ", vertices[i]->toString());
+        }
+        for (const auto &[vid, vtx] : vertexIdLookup) {
+          CASET_LOG(ERROR_LEVEL, " - vertexIdLookup: ", vid, ": ", vtx->toString());
+        }
+        for (const auto &[vid, idx] : vertexIndexLookup) {
+          CASET_LOG(ERROR_LEVEL, " - vertexIndexLookup: ", vid, ": ", idx);
+        }
+        return false;
+        // throw std::runtime_error("vertexIndex out of bounds for vertices (removeVertex)");
       }
 #endif
+      if (vertexIndex >= vertices.size()) return false;
       std::vector<IdType> vertexIds{};
-      vertexIds.reserve(vertices.size() - 1);
+      vertexIds.reserve(vertices.size());
 
-      vertices.erase(vertices.begin() + vertexIndex);
 #ifdef CASET_DEBUG
       CASET_LOG(DEBUG_LEVEL, "Removing vertex ", vertex->toString(), " at index ", vertexIndex, " from simplex ", toString());
       const auto &v = vertexIdLookup.find(vertex->getId());
       CASET_LOG(DEBUG_LEVEL, "Removing element ", v->second->toString(), " from vertexIdLookup");
       const auto &vi = vertexIndexLookup.find(vertex->getId());
-      CASET_LOG(DEBUG_LEVEL, "Removing element with index ", vi->second, " from vertexIndexLookup");
+      CASET_LOG(DEBUG_LEVEL, "Removing element with id", std::to_string(vi->first), " at index ", std::to_string(vi->second), " from vertexIndexLookup");
 #endif
       vertexIdLookup.erase(vertex->getId());
       vertexIndexLookup.erase(vertex->getId());
+      vertices.erase(vertices.begin() + vertexIndex);
 
       for (const auto &v : vertices) {
         vertexIds.push_back(v->getId());
@@ -739,6 +760,31 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return fingerprint.fingerprint() == other->fingerprint.fingerprint();
     }
 
+    /// This method replaces an edge with an analogous edge. Used when we glue simplices together.
+    ///
+    void replaceEdge(const EdgePtr &oldEdge, const EdgePtr &newEdge) {
+      const bool missingForward = !hasEdge(oldEdge->getSourceId(), oldEdge->getTargetId());
+      const bool missingBackward = !hasEdge(oldEdge->getTargetId(), oldEdge->getSourceId());
+      if (missingForward && missingBackward) {
+        return;
+      }
+      const auto edgeIndexIt = edgeIndexMap.find({oldEdge->getSourceId(), oldEdge->getTargetId()});
+      if (edgeIndexIt == edgeIndexMap.end()) {
+        throw std::runtime_error("This simplex does not contain the edge you're trying to replace!");
+      }
+      const auto edgeIndex = edgeIndexIt->second;
+      edges[edgeIndex] = newEdge;
+      edgeIndexMap.erase({oldEdge->getSourceId(), oldEdge->getTargetId()});
+      edgeIndexMap.insert({{newEdge->getSourceId(), newEdge->getTargetId()}, edgeIndex});
+
+      for (const auto &coface : cofaces) {
+        coface->replaceEdge(oldEdge, newEdge);
+      }
+      for (const auto &face : facets) {
+        face->replaceEdge(oldEdge, newEdge);
+      }
+    }
+
     /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
     /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
     /// squaredLength data could be lost.
@@ -762,6 +808,12 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
           vertexIds.push_back(oldVertex->getId());
 
           fingerprint.refreshFingerprint(vertexIds);
+          for (const auto &coface : cofaces) {
+            coface->replaceVertex(oldVertex, newVertex);
+          }
+          for (const auto &face : facets) {
+            face->replaceVertex(oldVertex, newVertex);
+          }
           return;
         }
       }

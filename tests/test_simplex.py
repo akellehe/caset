@@ -304,6 +304,34 @@ class TestSimplex(unittest.TestCase):
         self.assertIn(0, simplex.getVertexIdLookup())
         self.assertIn(0, simplex.getVertexIndexLookup())
 
+    def test_replace_vertex(self):
+        st = Spacetime()
+        v1 = st.createVertex(0, [0])
+        v2 = st.createVertex(1, [1])
+        v3 = st.createVertex(2, [2])
+        v4 = st.createVertex(3, [3])
+
+        e1 = st.createEdge(v1.getId(), v2.getId())
+        e2 = st.createEdge(v2.getId(), v3.getId())
+        e3 = st.createEdge(v3.getId(), v1.getId())
+
+        simplex = Simplex([v1, v2, v3])
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        simplex.replaceVertex(v2, v4)
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        self.assertNotIn(v2, simplex.getVertices())
+        self.assertNotIn(1, simplex.getVertexIdLookup())
+        self.assertNotIn(1, simplex.getVertexIndexLookup())
+
+        self.assertIn(v4, simplex.getVertices())
+        self.assertIn(3, simplex.getVertexIdLookup())
+        self.assertIn(3, simplex.getVertexIndexLookup())
 
 
 if __name__ == '__main__':
