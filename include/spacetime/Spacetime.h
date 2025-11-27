@@ -317,15 +317,23 @@ class Spacetime {
       bool moveInEdges
     ) {
       /// TODO: This method is not discriminating between in and out edgtes during the actual move.
-      CASET_LOG(DEBUG_LEVEL,
-                "Moving ",
-                std::to_string(fromVertex->getInEdges().size()),
-                " in-edges and ",
-                std::to_string(fromVertex->getOutEdges().size()),
-                " out-edges from vertex ",
-                fromVertex->toString(),
-                " to vertex ",
-                toVertex->toString());
+      if (moveInEdges) {
+        CASET_LOG(DEBUG_LEVEL,
+                  "Moving ",
+                  std::to_string(fromVertex->getInEdges().size()),
+                  " in-edges ",
+                  fromVertex->toString(),
+                  " to vertex ",
+                  toVertex->toString());
+      } else {
+        CASET_LOG(DEBUG_LEVEL,
+                  "Moving ",
+                  std::to_string(fromVertex->getOutEdges().size()),
+                  " out-edges from vertex ",
+                  fromVertex->toString(),
+                  " to vertex ",
+                  toVertex->toString());
+      }
       const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
       for (const auto &edge : edges) {
         if (fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId())|| fromSimplex->hasEdge(edge->getTargetId(), edge->getSourceId())) {
@@ -334,7 +342,6 @@ class Spacetime {
           sourceVertex->removeOutEdge(edge);
           targetVertex->removeInEdge(edge);
           fromSimplex->removeEdge(edge);
-          fromSimplex->removeVertex(sourceVertex);
           edgeList->remove(edge);
           removeIfIsolated(sourceVertex);
           removeIfIsolated(targetVertex);
@@ -469,6 +476,9 @@ class Spacetime {
 
         CASET_LOG(DEBUG_LEVEL, "replacing vertex");
         unattachedFace->replaceVertex(unattachedVertex, attachedVertex);
+        // if (fromSimplex->hasVertex(sourceVertex)) {
+          // fromSimplex->removeVertex(sourceVertex);
+        // }
 
         // TODO: Move stuff from cofaces. Don't know that this covers all cases.
         CASET_LOG(DEBUG_LEVEL, "updating cofaces");

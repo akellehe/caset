@@ -210,26 +210,17 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       Vertices vertices_
     ) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), fingerprint({}) {
       orientation = SimplexOrientation::orientationOf(vertices_);
-      std::vector<IdType> ids = {};
-      ids.reserve(vertices_.size());
-      vertexIdLookup.reserve(vertices_.size());
-      vertexIndexLookup.reserve(vertices_.size());
-      for (int i = 0; i < vertices_.size(); i++) {
-        ids.push_back(vertices_[i]->getId());
-        vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
-        vertexIndexLookup.insert({vertices_[i]->getId(), i});
-      }
-      if (vertexIdLookup.size() != vertices_.size()) {
-        throw std::invalid_argument("Duplicate vertex IDs detected in simplex construction.");
-      }
-      fingerprint = Fingerprint(ids);
-      computeEdges();
+      initialize(vertices_);
     }
 
     Simplex(
       Vertices vertices_,
       SimplexOrientationPtr orientation_
     ) : orientation(std::move(orientation_)), vertices(vertices_), fingerprint({}) {
+      initialize(vertices_);
+    }
+
+    void initialize(Vertices &vertices_) {
       std::vector<IdType> ids = {};
       ids.reserve(vertices_.size());
       vertexIdLookup.reserve(vertices_.size());
@@ -439,6 +430,12 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       return true;
     }
 
+    EdgeIndexMap getEdgeLookup() const noexcept {
+      return edgeIndexMap;
+    }
+
+    /// This method removes a vertex from the simplex only. It doesn't mutate the vertex itself. Make sure you only
+    /// call this method once all edges within the simplex to/from that vertex have been removed.
     bool removeVertex(const VertexPtr &vertex) {
 #ifdef CASET_DEBUG
       if (!vertexIdLookup.contains(vertex->getId())) {
@@ -462,6 +459,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       vertexIds.reserve(vertices.size() - 1);
 
       vertices.erase(vertices.begin() + vertexIndex);
+#ifdef CASET_DEBUG
+      CASET_LOG(DEBUG_LEVEL, "Removing vertex ", vertex->toString(), " at index ", vertexIndex, " from simplex ", toString());
+      const auto &v = vertexIdLookup.find(vertex->getId());
+      CASET_LOG(DEBUG_LEVEL, "Removing element ", v->second->toString(), " from vertexIdLookup");
+      const auto &vi = vertexIndexLookup.find(vertex->getId());
+      CASET_LOG(DEBUG_LEVEL, "Removing element with index ", vi->second, " from vertexIndexLookup");
+#endif
       vertexIdLookup.erase(vertex->getId());
       vertexIndexLookup.erase(vertex->getId());
 
@@ -558,7 +562,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       edges.reserve(nEdges);
       edgeIndexMap.reserve(nEdges);
 
-      CASET_LOG(DEBUG_LEVEL, "Getting edges for simplex ", toString());
       VertexPtr origin = nullptr;
 
       // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
@@ -566,7 +569,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       for (const auto &v : getVertices()) {
         for (const auto &e : v->getInEdges()) {
           if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
-            CASET_LOG(DEBUG_LEVEL, "For vertex", v->toString(), " found in-edge ", e->toString());
             EdgeKey edgeKey{e->getSourceId(), e->getTargetId()};
             edgeIndexMap.insert_or_assign(edgeKey, edges.size());
             edges.push_back(e);
@@ -726,10 +728,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       auto allowedOrientations = std::unordered_set<SimplexOrientationPtr>{};
       for (const auto &face : getFacets()) {
         if (face->getCofaces().size() < 2) {
-          CASET_LOG(DEBUG_LEVEL, "Face ", face->toString(), " IS causally available.");
           allowedOrientations.insert(face->getOrientation());
-        } else {
-          CASET_LOG(DEBUG_LEVEL, "Face ", face->toString(), " is NOT causally available.");
         }
       }
       CASET_LOG(DEBUG_LEVEL, "Found ", std::to_string(allowedOrientations.size()), " allowed orientations for simplex ", toString());

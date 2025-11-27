@@ -121,6 +121,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getCofaces", &Simplex::getCofaces)
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getEdges", &Simplex::getEdges)
+      .def("getEdgeLookup", &Simplex::getEdgeLookup)
       .def("getFacets", &Simplex::getFacets)
       .def("getHinges", &Simplex::getHinges)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
@@ -206,6 +207,7 @@ PYBIND11_MODULE(caset, m) {
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
+      .def("moveEdges", &Spacetime::moveEdges, py::arg("fromVertex"), py::arg("fromSimplex"), py::arg("toVertex"), py::arg("moveInEdges") = true)
       .def("causallyAttachFaces", &Spacetime::causallyAttachFaces);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";

@@ -382,6 +382,46 @@ class TestSpacetime(unittest.TestCase):
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 1)
 
+    def test_move_edges(self):
+        st = Spacetime()
+
+        toSimplex = st.createSimplex((1, 4))
+        fromSimplex = st.createSimplex((2, 3))  # Unattached
+
+        fromSimplexFace, toSimplexFace = st.chooseSimplexFacesToGlue(fromSimplex)
+        fromVertex = fromSimplexFace.getVertices()[0]
+        toVertex = toSimplexFace.getVertices()[0]
+
+        st.moveEdges(fromVertex, fromSimplexFace, toVertex, True)
+        st.moveEdges(fromVertex, fromSimplexFace, toVertex, False)
+
+        """
+(Pdb) fromSimplex
+<5-Simplex (<V5 (d=4, t=0.000000)>→<V6 (d=0, t=0.000000)>→<V7 (d=3, t=1.000000)>→<V8 (d=3, t=1.000000)>→<V9 (d=3, t=1.000000)>→<V5 (d=4, t=0.000000)>)>
+(Pdb) fromSimplexFace
+<4-Simplex (<V6 (d=0, t=0.000000)>→<V7 (d=3, t=1.000000)>→<V8 (d=3, t=1.000000)>→<V9 (d=3, t=1.000000)>→<V6 (d=0, t=0.000000)>)>
+(Pdb) fromVertex
+<V6 (d=0, t=0.000000)>
+
+(Pdb) toSimplex
+<5-Simplex (<V0 (d=5, t=0.000000)>→<V1 (d=4, t=1.000000)>→<V2 (d=4, t=1.000000)>→<V3 (d=4, t=1.000000)>→<V4 (d=4, t=1.000000)>→<V0 (d=5, t=0.000000)>)>
+(Pdb) toSimplexFace
+<4-Simplex (<V0 (d=5, t=0.000000)>→<V2 (d=4, t=1.000000)>→<V3 (d=4, t=1.000000)>→<V4 (d=4, t=1.000000)>→<V0 (d=5, t=0.000000)>)>
+(Pdb) toVertex
+<V0 (d=5, t=0.000000)>
+        """
+
+        # 1. fromVertex (V6) is not being removed from fromSimplex OR fromSimplexFace, even though the degree=0
+        # 2. toVertex (V0) is not gaining enough new edges from fromVertex (V6)
+        # 3. overall edge count is wrong after the moves (17): len(toSimplex.getEdges()) is 10, so is len(fromSimplex.getEdges())
+        # 4. fromSimplex still has edges containing fromVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).
+        # 5. toSimplex is missing edges that should have been added; there are none with vertices in fromSimplex.
+
+        breakpoint()
+        print('foo')
+
+
+
     def test_lots_of_components_connect_once_glued4D(self):
         st = Spacetime()
 

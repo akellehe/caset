@@ -270,12 +270,40 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(simplex.getVertices()), 3)
         self.assertEqual(len(simplex.getEdges()), 3)
 
+        self.assertEqual(v1.getId(), 0)
+        self.assertEqual(v2.getId(), 1)
+        self.assertEqual(v3.getId(), 2)
+
+        self.assertEqual(e1.getSourceId(), 0)
+        self.assertEqual(e1.getTargetId(), 1)
+
+        self.assertEqual(e2.getSourceId(), 1)
+        self.assertEqual(e2.getTargetId(), 2)
+
+        self.assertEqual(e3.getSourceId(), 2)
+        self.assertEqual(e3.getTargetId(), 0)
+
         simplex.removeVertex(v2)
         simplex.removeEdge(e1)
         simplex.removeEdge(e2)
 
         self.assertEqual(len(simplex.getVertices()), 2)
         self.assertEqual(len(simplex.getEdges()), 1)
+
+        self.assertEqual(simplex.getEdgeLookup(), {(2, 0): 0})
+
+        self.assertNotIn(v2, simplex.getVertices())
+        self.assertNotIn(1, simplex.getVertexIdLookup())
+        self.assertNotIn(1, simplex.getVertexIndexLookup())
+
+        self.assertIn(v3, simplex.getVertices())
+        self.assertIn(2, simplex.getVertexIdLookup())
+        self.assertIn(2, simplex.getVertexIndexLookup())
+
+        self.assertIn(v1, simplex.getVertices())
+        self.assertIn(0, simplex.getVertexIdLookup())
+        self.assertIn(0, simplex.getVertexIndexLookup())
+
 
 
 if __name__ == '__main__':
