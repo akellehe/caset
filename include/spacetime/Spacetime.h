@@ -1,6 +1,3 @@
-//
-// Created by andrew on 10/23/25.
-/**/ //
 
 #ifndef CASET_SPACETIME_H
 #define CASET_SPACETIME_H
