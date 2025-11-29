@@ -350,6 +350,8 @@ class Spacetime {
         // External edges need to be redirected to toVertex:
         CLOG(DEBUG_LEVEL, "====================================================================");
         auto [oldEdges, newEdges] = unattachedVertex->moveEdgesTo(attachedVertex, edgeList);
+
+        // Iterate by i, replace old edge with new edge like below
         for (const auto edgeKey : *oldEdges) {
           unattached->removeEdge(edgeKey);
           CLOG(DEBUG_LEVEL, "Removing edgeKey ", std::to_string(std::get<0>(edgeKey)), "->", std::to_string(std::get<1>(edgeKey)));
@@ -358,10 +360,14 @@ class Spacetime {
         for (const auto edgeKey : *newEdges) {
           CLOG(DEBUG_LEVEL, "Adding edgeKey ", std::to_string(std::get<0>(edgeKey)), "->", std::to_string(std::get<1>(edgeKey)));
           const std::shared_ptr<Edge> &newEdge = edgeList->add(attachedVertex->getEdge(edgeKey));
+          const auto &source = vertexList->get(newEdge->getSourceId());
+          const auto &target = vertexList->get(newEdge->getTargetId());
           attached->addEdge(newEdge, true);
           unattached->addEdge(newEdge);
         }
         CLOG(DEBUG_LEVEL, "====================================================================");
+        // unattached->replaceVertex(source);
+        // unattached->replaceVertex(target);
         unattached->replaceVertex(unattachedVertex, attachedVertex);
 
         // get lists of old and new edges; remove old edges and add new edges to edgeList. Check to make sure they're

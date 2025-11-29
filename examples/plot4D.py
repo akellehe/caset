@@ -326,8 +326,11 @@ def build(args):
                 if retries > 3:
                     print("Giving up on simplex after 3 retries: ", newSimplex)
                     continue
-                leftFace, rightFace = st.chooseSimplexFacesToGlue(newSimplex)
-                complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+                try:
+                    leftFace, rightFace = st.chooseSimplexFacesToGlue(newSimplex)
+                    complex, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+                except RuntimeError:
+                    continue
                 if not succeeded:
                     unglued.append((newSimplex, retries + 1))
                     print("Gluing from unglued queue failed.")

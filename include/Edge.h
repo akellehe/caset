@@ -145,6 +145,7 @@ using Edges = std::vector<EdgePtr>;
 using EdgeKey = std::pair<IdType, IdType>;
 using EdgeMap = std::unordered_map<EdgeKey, EdgePtr, EdgeKeyHash, EdgeKeyEqual>;
 using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
+using EdgeIds = std::vector<EdgeKey>;
 using EdgeIndexMap = std::unordered_map<EdgeKey, std::size_t, EdgeKeyHash, EdgeKeyEqual>;
 
 }
