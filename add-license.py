@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+import pathlib
+
+license_cpp = b"""\
 // MIT License
 // Copyright (c) 2025 Andrew Kelleher
 //
@@ -19,4 +23,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "Edge.h"
+"""
+
+license_py = license_cpp.replace(b"//", b"#", 1).replace(b"\n//", b"\n#")
+
+EXTS_CPP = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
+EXTS_PY = {".py"}
+
+def prepend_license(path: pathlib.Path):
+    if 'add-license' in str(path):
+        return
+
+    with open(str(path), 'rb') as fp:
+        text = fp.read()
+
+    if b"MIT License" in text.split(b"\n", 5)[0:5]:
+        print(str(path), "already has a license")
+        return  # already has a license header
+
+    if path.suffix in EXTS_CPP:
+        header = license_cpp
+    elif path.suffix in EXTS_PY:
+        header = license_py
+    else:
+        return
+
+    print(f"Adding license to {path}")
+    with open(str(path), 'wb') as fp:
+        fp.write(header + text)
+    print(f"Added license to {path}")
+
+if __name__ == "__main__":
+    for p in pathlib.Path(".").rglob("*"):
+        if p.is_file():
+            prepend_license(p)
