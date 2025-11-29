@@ -829,10 +829,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
       if (!hasVertex(oldVertex) || hasVertex(newVertex)) {
         return false;
       }
-      if (oldVertex->degree() > 0) {
-        CLOG(WARN_LEVEL, "You attempted to replace a vertex of degree > 0: ", oldVertex->toString(), " refusing.");
-        return false;
-      }
       std::vector<IdType> vertexIds = {};
       vertexIds.reserve(vertices.size());
       for (int i = 0; i < vertices.size(); i++) {
