@@ -62,7 +62,7 @@ struct EdgeKeyEqual {
 /// @param target_
 /// @param squaredLength_ The squared length of the edge according to whatever spacetime metric is being used.
 ///
-class Edge {
+class Edge : public std::enable_shared_from_this<Edge> {
   public:
     Edge(
       std::uint64_t sourceId_,
@@ -109,8 +109,17 @@ class Edge {
       refreshFingerprint();
     }
 
+    void redirect(std::uint64_t from, std::uint64_t to) {
+      if (getSourceId() == from) {
+        replaceSourceVertex(to);
+      }
+      if (getTargetId() == from) {
+        replaceTargetVertex(to);
+      }
+    }
+
     bool operator==(const Edge &other) const {
-      return sourceId == other.getSourceId() && targetId == other.getTargetId();
+      return fingerprint.fingerprint() == other.fingerprint.fingerprint();
     }
 
     [[nodiscard]] std::uint64_t toHash() const {
@@ -118,6 +127,10 @@ class Edge {
     }
 
     Fingerprint fingerprint;
+
+    std::pair<IdType, IdType> getKey() const noexcept{
+      return {sourceId, targetId};
+    }
 
   private:
     std::uint64_t sourceId;

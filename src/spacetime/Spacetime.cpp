@@ -23,15 +23,15 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
   std::vector<std::shared_ptr<Vertex>> vertexVector = vertexList->toVector();
 
   if (vertexVector.empty()) {
-    CASET_LOG(WARN_LEVEL, "No vertices to embed!");
+    CLOG(WARN_LEVEL, "No vertices to embed!");
     return;
   }
   if (edgeVector.empty()) {
-    CASET_LOG(WARN_LEVEL, "No edges to embed!");
+    CLOG(WARN_LEVEL, "No edges to embed!");
     return;
   }
 
-  CASET_LOG(INFO_LEVEL, "Embedding a ", dimensions, "-d Euclidean space with ", N, " vertices and ", E, " edges.");
+  CLOG(INFO_LEVEL, "Embedding a ", dimensions, "-d Euclidean space with ", N, " vertices and ", E, " edges.");
   std::unordered_map<std::uint64_t, int> vertexIdToIndex;
   vertexIdToIndex.reserve(vertexVector.size());
   std::unordered_map<std::uint64_t, double> vertexIdToTime;
@@ -144,7 +144,7 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     }
     vertexVector[i]->setCoordinates(coords);
   }
-  CASET_LOG(INFO_LEVEL, "Iteration: ", iter, " Loss: ", loss.item<double>(), " Previous Loss: ", previousLoss.item<double>());
+  CLOG(INFO_LEVEL, "Iteration: ", iter, " Loss: ", loss.item<double>(), " Previous Loss: ", previousLoss.item<double>());
 }
 
 } // caset

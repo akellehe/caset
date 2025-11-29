@@ -27,6 +27,10 @@ class VertexList {
       return vertex;
     }
 
+    bool contains(const std::uint64_t id) const noexcept {
+      return vertexList.contains(id);
+    }
+
     std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) noexcept {
       if (vertexList.contains(id)) {
         return vertexList.at(id);

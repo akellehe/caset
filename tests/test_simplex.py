@@ -287,22 +287,16 @@ class TestSimplex(unittest.TestCase):
         simplex.removeEdge(e1)
         simplex.removeEdge(e2)
 
+        self.assertFalse(simplex.hasEdge(e1))
+        self.assertFalse(simplex.hasEdge(e2))
+        self.assertTrue(simplex.hasEdge(e3))
+
         self.assertEqual(len(simplex.getVertices()), 2)
         self.assertEqual(len(simplex.getEdges()), 1)
 
-        self.assertEqual(simplex.getEdgeLookup(), {(2, 0): 0})
-
         self.assertNotIn(v2, simplex.getVertices())
-        self.assertNotIn(1, simplex.getVertexIdLookup())
-        self.assertNotIn(1, simplex.getVertexIndexLookup())
-
         self.assertIn(v3, simplex.getVertices())
-        self.assertIn(2, simplex.getVertexIdLookup())
-        self.assertIn(2, simplex.getVertexIndexLookup())
-
         self.assertIn(v1, simplex.getVertices())
-        self.assertIn(0, simplex.getVertexIdLookup())
-        self.assertIn(0, simplex.getVertexIndexLookup())
 
     def test_replace_vertex(self):
         st = Spacetime()
@@ -327,12 +321,85 @@ class TestSimplex(unittest.TestCase):
 
         self.assertNotIn(v2, simplex.getVertices())
         self.assertNotIn(1, simplex.getVertexIdLookup())
-        self.assertNotIn(1, simplex.getVertexIndexLookup())
 
         self.assertIn(v4, simplex.getVertices())
         self.assertIn(3, simplex.getVertexIdLookup())
-        self.assertIn(3, simplex.getVertexIndexLookup())
 
+    def test_replace_vertex_on_a_face_replaces_it_on_the_coface(self):
+        st = Spacetime()
+        v1 = st.createVertex(0, [0])
+        v2 = st.createVertex(1, [1])
+        v3 = st.createVertex(2, [2])
+        v4 = st.createVertex(3, [3])
+
+        e1 = st.createEdge(v1.getId(), v2.getId())
+        e2 = st.createEdge(v2.getId(), v3.getId())
+        e3 = st.createEdge(v3.getId(), v1.getId())
+
+        simplex = Simplex([v1, v2, v3])
+
+        facet = simplex.getFacets()[0]
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        self.assertEqual(len(facet.getVertices()), 2)
+        self.assertEqual(len(facet.getEdges()), 1)
+
+        facet.replaceVertex(v2, v4)
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        self.assertNotIn(v2, facet.getVertices())
+        self.assertNotIn(1, facet.getVertexIdLookup())
+
+        self.assertIn(v4, facet.getVertices())
+        self.assertIn(3, facet.getVertexIdLookup())
+
+        self.assertNotIn(v2, simplex.getVertices())
+        self.assertNotIn(1, simplex.getVertexIdLookup())
+
+        self.assertIn(v4, simplex.getVertices())
+        self.assertIn(3, simplex.getVertexIdLookup())
+
+    def test_replace_vertex_on_a_coface_replaces_it_on_the_facets(self):
+        st = Spacetime()
+        v1 = st.createVertex(0, [0])
+        v2 = st.createVertex(1, [1])
+        v3 = st.createVertex(2, [2])
+        v4 = st.createVertex(3, [3])
+
+        e1 = st.createEdge(v1.getId(), v2.getId())
+        e2 = st.createEdge(v2.getId(), v3.getId())
+        e3 = st.createEdge(v3.getId(), v1.getId())
+
+        simplex = Simplex([v1, v2, v3])
+
+        facet = simplex.getFacets()[0]
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        self.assertEqual(len(facet.getVertices()), 2)
+        self.assertEqual(len(facet.getEdges()), 1)
+
+        simplex.replaceVertex(v2, v4)
+
+        self.assertEqual(len(simplex.getVertices()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)
+
+        self.assertNotIn(v2, facet.getVertices())
+        self.assertNotIn(1, facet.getVertexIdLookup())
+
+        self.assertIn(v4, facet.getVertices())
+        self.assertIn(3, facet.getVertexIdLookup())
+
+        self.assertNotIn(v2, simplex.getVertices())
+        self.assertNotIn(1, simplex.getVertexIdLookup())
+
+        self.assertIn(v4, simplex.getVertices())
+        self.assertIn(3, simplex.getVertexIdLookup())
 
 if __name__ == '__main__':
     unittest.main()

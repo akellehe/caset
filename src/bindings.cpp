@@ -48,6 +48,7 @@ PYBIND11_MODULE(caset, m) {
       .def("__hash__", &Edge::toHash)
       .def("getSourceId", &Edge::getSourceId)
       .def("getSquaredLength", &Edge::getSquaredLength)
+      .def("redirect", &Edge::redirect)
       .def("getTargetId", &Edge::getTargetId);
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
@@ -85,7 +86,8 @@ PYBIND11_MODULE(caset, m) {
       .def("add", py::overload_cast<const std::shared_ptr<Edge> &>(&EdgeList::add))
       .def("add", py::overload_cast<const std::uint64_t, const std::uint64_t, double>(&EdgeList::add))
       .def("add", py::overload_cast<const std::uint64_t, const std::uint64_t>(&EdgeList::add))
-      .def("remove", &EdgeList::remove)
+      .def("remove", py::overload_cast<const EdgeKey &>(&EdgeList::remove), py::arg("edgeKey"))
+      .def("remove", py::overload_cast<const EdgePtr &>(&EdgeList::remove), py::arg("edge"))
       .def("size", &EdgeList::size)
       .def("toVector", &EdgeList::toVector);
 
@@ -121,19 +123,19 @@ PYBIND11_MODULE(caset, m) {
       .def("getCofaces", &Simplex::getCofaces)
       .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getEdges", &Simplex::getEdges)
-      .def("getEdgeLookup", &Simplex::getEdgeLookup)
       .def("getFacets", &Simplex::getFacets)
       .def("getHinges", &Simplex::getHinges)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
-      .def("getVertexIndexLookup", &Simplex::getVertexIndexLookup)
-      .def("getVertices", &Simplex::getVertices)
       .def("getVertices", &Simplex::getVertices)
       .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
       .def("getVolume", &Simplex::getVolume)
+      .def("hasEdge", py::overload_cast<const EdgePtr &>(&Simplex::hasEdge), py::arg("edge"))
+      .def("hasEdge", py::overload_cast<const IdType, const IdType>(&Simplex::hasEdge), py::arg("source"), py::arg("target"))
       .def("isTimelike", &Simplex::isTimelike)
-      .def("removeEdge", &Simplex::removeEdge)
+      .def("removeEdge", py::overload_cast<const EdgeKey &>(&Simplex::removeEdge), py::arg("edgeKey"))
+      .def("removeEdge", py::overload_cast<const EdgePtr &>(&Simplex::removeEdge), py::arg("edge"))
       .def("removeVertex", &Simplex::removeVertex)
       .def("replaceVertex", &Simplex::replaceVertex);
 
@@ -208,7 +210,7 @@ PYBIND11_MODULE(caset, m) {
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
-      .def("moveEdges", &Spacetime::moveEdges, py::arg("fromVertex"), py::arg("fromSimplex"), py::arg("toVertex"), py::arg("toSimplex"), py::arg("moveInEdges") = true)
+      .def("attachAtVertices", &Spacetime::attachAtVertices, py::arg("simplex"), py::arg("vertexA"), py::arg("vertexB"))
       .def("moveInEdgesFromVertex", &Spacetime::moveInEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
       .def("moveOutEdgesFromVertex", &Spacetime::moveOutEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
       .def("causallyAttachFaces", &Spacetime::causallyAttachFaces);

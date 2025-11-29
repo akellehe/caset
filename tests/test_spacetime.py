@@ -383,6 +383,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(components), 1)
 
     def test_move_in_edges_from_vertex(self):
+        # This only moves edges within the vertex state. The edges themselves remain attached to the same simplices.
         st = Spacetime()
 
         toSimplex = st.createSimplex((1, 4))
@@ -432,67 +433,47 @@ class TestSpacetime(unittest.TestCase):
         for edge in orig_out_edges_after:
             self.assertNotIn(edge, fromVertex.getEdges())
 
-    def test_move_edges(self):
+    def test_attach_at_vertices(self):
         st = Spacetime()
 
-        toSimplex = st.createSimplex((1, 4))
-        fromSimplex = st.createSimplex((2, 3))  # Unattached
+        attachedSimplex = st.createSimplex((1, 4))
+        unattachedSimplex = st.createSimplex((2, 3))  # Unattached
 
-        fromSimplexFace, toSimplexFace = st.chooseSimplexFacesToGlue(fromSimplex)
-        fromVertex = fromSimplexFace.getVertices()[0]
-        toVertex = toSimplexFace.getVertices()[0]
+        unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
+        unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
+        attachedVertices = [v for v in attachedSimplexFace.getVertices()]
 
-        edges_to_move = fromVertex.getEdges()
+        st.attachAtVertices(unattachedSimplexFace, attachedSimplexFace, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
 
-        st.moveEdges(fromVertex, fromSimplexFace, toVertex, toSimplexFace, True)
-        st.moveEdges(fromVertex, fromSimplexFace, toVertex, toSimplexFace, False)
+        unattachedVertex = unattachedVertices[0]  # V6
+        attachedVertex = attachedVertices[0]      # V0
 
-        """
-(Pdb) fromSimplex
-<5-Simplex (<V5 (d=4, t=0.000000)>→<V6 (d=0, t=0.000000)>→<V7 (d=3, t=1.000000)>→<V8 (d=3, t=1.000000)>→<V9 (d=3, t=1.000000)>→<V5 (d=4, t=0.000000)>)>
-(Pdb) fromSimplexFace
-<4-Simplex (<V6 (d=0, t=0.000000)>→<V7 (d=3, t=1.000000)>→<V8 (d=3, t=1.000000)>→<V9 (d=3, t=1.000000)>→<V6 (d=0, t=0.000000)>)>
-(Pdb) fromVertex
-<V6 (d=0, t=0.000000)>
+        # 1. unattachedVertex (V6) is not being removed unattached unattachedSimplex OR unattachedSimplexFace, even though the degree=0
+        self.assertEqual(unattachedVertex.degree(), 0)
+        self.assertNotIn(unattachedVertex, unattachedSimplexFace.getVertices())
+        self.assertNotIn(unattachedVertex, unattachedSimplex.getVertices())
 
-(Pdb) toSimplex
-<5-Simplex (<V0 (d=5, t=0.000000)>→<V1 (d=4, t=1.000000)>→<V2 (d=4, t=1.000000)>→<V3 (d=4, t=1.000000)>→<V4 (d=4, t=1.000000)>→<V0 (d=5, t=0.000000)>)>
-(Pdb) toSimplexFace
-<4-Simplex (<V0 (d=5, t=0.000000)>→<V2 (d=4, t=1.000000)>→<V3 (d=4, t=1.000000)>→<V4 (d=4, t=1.000000)>→<V0 (d=5, t=0.000000)>)>
-(Pdb) toVertex
-<V0 (d=5, t=0.000000)>
-        """
+        # 2. attachedVertex (V0) is not gaining enough new edges unattached unattachedVertex (V6)
+        self.assertEqual(attachedVertex.degree(), 5)
+        self.assertIn(attachedVertex, attachedSimplexFace.getVertices())
+        self.assertIn(attachedVertex, attachedSimplex.getVertices())
 
-        # 1. fromVertex (V6) is not being removed from fromSimplex OR fromSimplexFace, even though the degree=0
-        self.assertEqual(fromVertex.degree(), 0)
-        self.assertNotIn(fromVertex, fromSimplex.getVertices())
-        self.assertNotIn(fromVertex, fromSimplexFace.getVertices())
-
-        # 2. toVertex (V0) is not gaining enough new edges from fromVertex (V6)
-        self.assertEqual(toVertex.degree(), 8)
-        self.assertIn(toVertex, toSimplex.getVertices())
-        self.assertIn(toVertex, toSimplexFace.getVertices())
-
-        # 3. overall edge count is wrong after the moves (17): len(toSimplex.getEdges()) is 10, so is len(fromSimplex.getEdges())
-        totalEdges = len(toSimplex.getEdges()) + len(fromSimplex.getEdges())
-        self.assertEqual(totalEdges, 17)
-        self.assertEqual(totalEdges, len(st.getEdgeList().toVector()))
-
-        # 4. fromSimplex still has edges containing fromVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).
-        for edge in fromSimplex.getEdges():
-            self.assertNotEqual(edge.getSourceId(), fromVertex.getId())
-            self.assertNotEqual(edge.getTargetId(), fromVertex.getId())
-
-        # 5. toSimplex is missing edges that should have been added; there are none with vertices in fromSimplex.
-        for edge in edges_to_move:
-            if edge.getSourceId() != fromVertex.getId() and edge.getTargetId() != fromVertex.getId():
-                self.assertIn(edge, toSimplex.getEdges())
-            else:
-                self.assertNotIn(edge, st.getEdgeList().toVector())
-
+        # 3. overall edge count is wrong after the moves (17): len(attachedSimplex.getEdges()) is 10, so is len(unattachedSimplex.getEdges())
+        total_edges = attachedSimplex.getEdges() + unattachedSimplex.getEdges()
+        shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
+        self.assertEqual(len(total_edges), 18)  # 4 shared/doubled.
+        self.assertEqual(len(set(total_edges)), 14)
+        shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
+        self.assertEqual(len(shared_edges), 4)
         breakpoint()
-        print('foo')
+        self.assertEqual(len(set(total_edges)), len(st.getEdgeList().toVector()))
 
+        # 4. unattachedSimplex still has edges containing unattachedVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).
+        for edge in unattachedSimplex.getEdges():
+            self.assertNotEqual(edge.getSourceId(), unattachedVertex.getId())
+            self.assertNotEqual(edge.getTargetId(), unattachedVertex.getId())
+
+        # 5. attachedSimplex is missing edges that should have been added; there are none with vertices in unattachedSimplex.
 
 
     def test_lots_of_components_connect_once_glued4D(self):

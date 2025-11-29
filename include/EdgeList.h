@@ -29,11 +29,26 @@ class EdgeList {
       return getOrInsert(edge);
     }
 
-    void remove(const std::shared_ptr<Edge> &edge) noexcept {
-      if (!edgeList.contains(edge)) {
-        CASET_LOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
+    void remove(const EdgeKey &edgeKey) noexcept {
+      const auto &[srcId, tgtId] = edgeKey;
+      auto tempEdge = std::make_shared<Edge>(srcId, tgtId);
+      if (edgeList.contains(tempEdge)) {
+        remove(*edgeList.find(tempEdge));
+      } else {
+        CLOG(WARN_LEVEL, "-----------------------------------------------");
+        CLOG(WARN_LEVEL, "Edge: ", tempEdge->toString(), " not found in: ");
         for (const auto &e : edgeList) {
-          CASET_LOG(WARN_LEVEL, "    - ", e->toString());
+          CLOG(WARN_LEVEL, "    - ", e->toString());
+        }
+        CLOG(WARN_LEVEL, "----------------------------------------------");
+      }
+    }
+
+    void remove(const EdgePtr &edge) noexcept {
+      if (!edgeList.contains(edge)) {
+        CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
+        for (const auto &e : edgeList) {
+          CLOG(WARN_LEVEL, "    - ", e->toString());
         }
         return;
       }
@@ -46,7 +61,7 @@ class EdgeList {
     }
 
     [[nodiscard]] std::vector<std::shared_ptr<Edge> > toVector() const noexcept {
-      std::vector<std::shared_ptr<Edge> > result;
+      std::vector<std::shared_ptr<Edge>> result;
       result.reserve(edgeList.size());
       for (auto &edge : edgeList) {
         result.push_back(edge);
@@ -56,6 +71,16 @@ class EdgeList {
 
     [[nodiscard]] std::size_t size() const {
       return edgeList.size();
+    }
+
+    std::shared_ptr<Edge> get(const EdgeKey &edgeKey) const {
+      const auto &[srcId, tgtId] = edgeKey;
+      auto tempEdge = std::make_shared<Edge>(srcId, tgtId);
+      if (!edgeList.contains(tempEdge)) {
+        CLOG(WARN_LEVEL, tempEdge->toString(), " not found! Returning nullptr.");
+        return nullptr;
+      }
+      return *edgeList.find(tempEdge);
     }
 
   private:
@@ -72,7 +97,7 @@ class EdgeList {
         }
         return found;
       }
-      CASET_LOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
+      CLOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
       edgeList.insert(edge);
       return edge;
     }

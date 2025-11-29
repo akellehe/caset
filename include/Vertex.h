@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include "Edge.h"
+#include "EdgeList.h"
 
 namespace caset {
 ///
@@ -108,6 +109,71 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             edges.insert(inEdges.begin(), inEdges.end());
             edges.insert(outEdges.begin(), outEdges.end());
             return edges;
+        }
+
+        // TODO: It might be the case that we're mincing hashes between getKey and FingerprintHash<Edge>. Look into this.
+        std::shared_ptr<Edge> getEdge(const EdgeKey &key) {
+            const auto testEdge = std::make_shared<Edge>(key.first, key.second);
+            if (inEdges.contains(testEdge)) return *inEdges.find(testEdge);
+            if (outEdges.contains(testEdge)) return *outEdges.find(testEdge);
+            return nullptr;
+        }
+
+        std::shared_ptr<Edge> getEdge(const EdgePtr &edge) {
+            if (inEdges.contains(edge)) return *inEdges.find(edge);
+            if (outEdges.contains(edge)) return *outEdges.find(edge);
+            return nullptr;
+        }
+
+        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+        moveInEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList) {
+            std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
+            std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
+            for (const auto &edge : inEdges) {
+                oldEdges->insert(edge->getKey());
+                edgeList->remove(edge);
+                if (edge->getSourceId() == getId()) {
+                    edge->replaceSourceVertex(vertex->getId());
+                } else if (edge->getTargetId() == getId()) {
+                    edge->replaceTargetVertex(vertex->getId());
+                }
+                newEdges->insert(edge->getKey());
+                vertex->addInEdge(edgeList->add(edge));
+            }
+            inEdges.clear();
+            return {oldEdges, newEdges};
+        }
+
+        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+        moveEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList) {
+            std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
+            std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
+            const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, edgeList);
+            const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, edgeList);
+            oldEdges->insert(oldInEdges->begin(), oldInEdges->end());
+            oldEdges->insert(oldOutEdges->begin(), oldOutEdges->end());
+            newEdges->insert(newInEdges->begin(), newInEdges->end());
+            newEdges->insert(newOutEdges->begin(), newOutEdges->end());
+            return {oldEdges, newEdges};
+        }
+
+        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+        moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList) {
+            std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
+            std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
+            for (const auto &edge : outEdges) {
+                edgeList->remove(edge);
+                oldEdges->insert(edge->getKey());
+                if (edge->getSourceId() == getId()) {
+                    edge->replaceSourceVertex(vertex->getId());
+                } else if (edge->getTargetId() == getId()) {
+                    edge->replaceTargetVertex(vertex->getId());
+                }
+                newEdges->insert(edge->getKey());
+                vertex->addOutEdge(edgeList->add(edge));
+            }
+            outEdges.clear();
+            return {oldEdges, newEdges};
         }
 
         std::string toString() const noexcept {

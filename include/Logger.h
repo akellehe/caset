@@ -42,8 +42,8 @@ class Logger {
 };
 
 #ifdef VERBOSE
-#define CASET_LOG(level, ...) Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define CLOG(level, ...) Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__)
 #else
-#define CASET_LOG(level, ...) if (level == CRITICAL_LEVEL || level == ERROR_LEVEL) { Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__); }
+#define CLOG(level, ...) if (level == CRITICAL_LEVEL || level == ERROR_LEVEL) { Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__); }
 #endif
 #endif

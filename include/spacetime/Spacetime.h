@@ -118,8 +118,8 @@ class Spacetime {
       const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
 
       // if (!externalSimplices.contains(orientation)) {
-        // externalSimplices.try_emplace(orientation);
-        // externalSimplices.try_emplace(orientation->flip());
+      // externalSimplices.try_emplace(orientation);
+      // externalSimplices.try_emplace(orientation->flip());
       // }
 
       // auto &bucket = externalSimplices[orientation /*key*/];
@@ -138,7 +138,7 @@ class Spacetime {
       simplices.insert(simplex);
       for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
         externalSimplices[o].insert(simplex);
-        externalSimplices[o->flip()].insert(simplex);  // TODO: Remove the flipped orientation once attached.
+        externalSimplices[o->flip()].insert(simplex); // TODO: Remove the flipped orientation once attached.
       }
       return simplex;
     }
@@ -261,7 +261,8 @@ class Spacetime {
         }
         if (unattachedFace->isInternal()) continue;
         for (auto &attachedFace : attachedFacets) {
-          if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue; // Skip faces that don't match in timelikeness
+          if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue;
+          // Skip faces that don't match in timelikeness
           const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
           if (tib == 0 || tfb == 0) {
             continue; // Skip degenerate faces
@@ -313,59 +314,60 @@ class Spacetime {
       return false;
     }
 
-    void moveEdges(
-      const VertexPtr &fromVertex,
-      const SimplexPtr &fromSimplex,
-      const VertexPtr &toVertex,
-      const SimplexPtr &toSimplex,
-      bool moveInEdges
+    void attachAtVertices(
+      const SimplexPtr &unattached,
+      const SimplexPtr &attached,
+      const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
     ) {
-      /// TODO: This method is not discriminating between in and out edgtes during the actual move.
-      if (moveInEdges) {
-        CASET_LOG(DEBUG_LEVEL,
-                  "Moving ",
-                  std::to_string(fromVertex->getInEdges().size()),
-                  " in-edges ",
-                  fromVertex->toString(),
-                  " to vertex ",
-                  toVertex->toString());
-      } else {
-        CASET_LOG(DEBUG_LEVEL,
-                  "Moving ",
-                  std::to_string(fromVertex->getOutEdges().size()),
-                  " out-edges from vertex ",
-                  fromVertex->toString(),
-                  " to vertex ",
-                  toVertex->toString());
+      // Vertices internal to from will be replaced by corresponding vertices in to.
+      // Edges internal to from will be removed.
+      // Edges external to from will be moved to to, updating source/target as needed
+      // Vertices that become isolated will be removed from the spacetime.
+      // Edges that become invalid will be removed from the spacetime.
+      //
+      CLOG(DEBUG_LEVEL, "Removing internal edges from unattached simplex ", unattached->toString());
+      for (const auto &internalEdge : unattached->getEdges()) {
+        const auto &sourceVertex = vertexList->get(internalEdge->getSourceId());
+        const auto &targetVertex = vertexList->get(internalEdge->getTargetId());
+        CLOG(DEBUG_LEVEL, "Source: ", sourceVertex->toString());
+        CLOG(DEBUG_LEVEL, "Target: ", targetVertex->toString());
+        CLOG(DEBUG_LEVEL, "Removing out edge (source)");
+        sourceVertex->removeOutEdge(internalEdge);
+        CLOG(DEBUG_LEVEL, "Removing in edge (target)");
+        targetVertex->removeInEdge(internalEdge);
+        CLOG(DEBUG_LEVEL, "Removing internal edge from edgelist...");
+        edgeList->remove(internalEdge);
+        CLOG(DEBUG_LEVEL, "Removing internal edge from (unattached) simplex");
+        unattached->removeEdge(internalEdge);
       }
-      const auto edges = moveInEdges ? fromVertex->getInEdges() : fromVertex->getOutEdges();
-      for (const auto &edge : edges) {
-        const bool hasForward = fromSimplex->hasEdge(edge->getSourceId(), edge->getTargetId());
-        const bool hasBackward = fromSimplex->hasEdge(edge->getTargetId(), edge->getSourceId());
-        const bool edgeIsInternal = hasForward || hasBackward;
+      CLOG(DEBUG_LEVEL, "Redirecting external edges from unattached simplex ", unattached->toString(),
+                " to attached simplex ", attached->toString());
+      for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
+        CLOG(DEBUG_LEVEL, "Handling vertices ", unattachedVertex->toString(), " -> ",
+                  attachedVertex->toString());
 
-        // TODO: Where do we call replaceVertex into the simplex.
-        const VertexPtr &sourceVertex = vertexList->get(edge->getSourceId());
-        const VertexPtr &targetVertex = vertexList->get(edge->getTargetId());
-        if (edgeIsInternal) { // Edge is internal to the face, both nodes will be going away.
-          sourceVertex->removeOutEdge(edge);
-          targetVertex->removeInEdge(edge);
-          fromSimplex->removeEdge(edge);
-          fromSimplex->removeVertex(sourceVertex);
-          fromSimplex->removeVertex(targetVertex);
-          edgeList->remove(edge);
-        } else { // Edge is external, only one node will be going away.
-          if (moveInEdges) {
-            moveInEdgesFromVertex(fromVertex, toVertex);
-          } else {
-            moveOutEdgesFromVertex(fromVertex, toVertex);
-          }
-          fromSimplex->removeEdge(edge);
-          toSimplex->addEdge(edge);
+        // After removing internal edges above; all that is left is the external edges. Redirect those to toVertex:
+        // External edges need to be redirected to toVertex:
+        CLOG(DEBUG_LEVEL, "====================================================================");
+        auto [oldEdges, newEdges] = unattachedVertex->moveEdgesTo(attachedVertex, edgeList);
+        for (const auto edgeKey : *oldEdges) {
+          unattached->removeEdge(edgeKey);
+          CLOG(DEBUG_LEVEL, "Removing edgeKey ", std::to_string(std::get<0>(edgeKey)), "->", std::to_string(std::get<1>(edgeKey)));
+          edgeList->remove(edgeKey);
         }
-        // TODO: This is a little lazy, we can probably tell when the degree is zero without checking multiple times.
-        removeIfIsolated(sourceVertex);
-        removeIfIsolated(targetVertex);
+        for (const auto edgeKey : *newEdges) {
+          CLOG(DEBUG_LEVEL, "Adding edgeKey ", std::to_string(std::get<0>(edgeKey)), "->", std::to_string(std::get<1>(edgeKey)));
+          const std::shared_ptr<Edge> &newEdge = edgeList->add(attachedVertex->getEdge(edgeKey));
+          attached->addEdge(newEdge, true);
+          unattached->addEdge(newEdge);
+        }
+        CLOG(DEBUG_LEVEL, "====================================================================");
+        unattached->replaceVertex(unattachedVertex, attachedVertex);
+
+        // get lists of old and new edges; remove old edges and add new edges to edgeList. Check to make sure they're
+        // not updated and searchable without calling .insert and .erase. i.e. is the order/hash in that structure
+        // changed automatically when the underlying state is updated? I DON'T THINK SO!
+        // }
       }
     }
 
@@ -437,11 +439,11 @@ class Spacetime {
     std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &attachedFace,
                                                      const SimplexPtr &unattachedFace) {
       if (attachedFace->fingerprint.fingerprint() == unattachedFace->fingerprint.fingerprint()) {
-        CASET_LOG(ERROR_LEVEL, "Faces are already attached!");
+        CLOG(ERROR_LEVEL, "Faces are already attached!");
         return {attachedFace, false};
       }
       if (attachedFace->getOrientation() != unattachedFace->getOrientation()) {
-        CASET_LOG(ERROR_LEVEL,
+        CLOG(ERROR_LEVEL,
                   "Faces have different orientations: ",
                   attachedFace->getOrientation()->toString(),
                   " vs ",
@@ -451,13 +453,12 @@ class Spacetime {
       for (const auto &attachedCoface : attachedFace->getCofaces()) {
         for (const auto &unattachedCoface : unattachedFace->getCofaces()) {
           if (attachedCoface->fingerprint.fingerprint() == unattachedCoface->fingerprint.fingerprint()) {
-            CASET_LOG(ERROR_LEVEL, "Faces share a coface!");
+            CLOG(ERROR_LEVEL, "Faces share a coface!");
             return {attachedFace, false};
           }
         }
       }
 
-      CASET_LOG(INFO_LEVEL, "a");
       Vertices vertices{};
       vertices.reserve(attachedFace->size());
       std::vector<std::shared_ptr<Edge> > edges{};
@@ -468,48 +469,31 @@ class Spacetime {
       vertexPairs.reserve(attachedFace->size());
 
       // These are in order of traversal, you can iterate them to walk the Face:
-      CASET_LOG(INFO_LEVEL, "getVertices()");
       const auto &unattachedVertices = unattachedFace->getVertices();
 
       // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
       // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
-      CASET_LOG(INFO_LEVEL, "getVerticesWithPairtyTo()");
       const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->
           getVerticesWithParityTo(unattachedFace);
 
       if (!attachedOrderedVerticesOptional.has_value()) {
-        CASET_LOG(WARN_LEVEL, "No compatible vertex order found for myFace and yourFace.\n",
-          attachedFace->toString(), "\n", unattachedFace->toString());
+        CLOG(WARN_LEVEL,
+                  "No compatible vertex order found for myFace and yourFace.\n",
+                  attachedFace->toString(),
+                  "\n",
+                  unattachedFace->toString());
         return {nullptr, false};
       }
 
-      CASET_LOG(INFO_LEVEL, "attachedOrderedVertices()");
       const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
-
-      // Remove internal edges from unattachedFace, they will be replaced by those in attachedFace.
-      for (const auto &edge : unattachedFace->getEdges()) {
-        edgeList->remove(edge);
-        unattachedFace->removeEdge(edge);
-      }
-
-      // Now move external edges (one vertex outside the face/simplex) from unattachedFace's vertices to attachedFace's
-      // vertices.
       for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
-        const auto &attachedVertex = attachedOrderedVertices[i];
-        const auto &unattachedVertex = unattachedVertices[i];
-
-        moveInEdgesFromVertex(unattachedVertex, attachedVertex);
-        moveOutEdgesFromVertex(unattachedVertex, attachedVertex);
-
-        unattachedFace->replaceVertex(unattachedVertex, attachedVertex);
-
-        for (const auto &coface : unattachedFace->getCofaces()) {
-          coface->replaceVertex(unattachedVertex, attachedVertex);
-        }
-        for (const auto &facet : unattachedFace->getFacets()) {
-          facet->replaceVertex(unattachedVertex, attachedVertex);
-        }
+        std::pair<VertexPtr, VertexPtr> vp = std::make_pair(
+          attachedOrderedVertices[i],
+          unattachedVertices[i]);
+        vertexPairs.push_back(vp);
       }
+
+      attachAtVertices(unattachedFace, attachedFace, vertexPairs);
 
       if (!unattachedFace->getCofaces().empty()) {
         auto newCoface = *(unattachedFace->getCofaces().begin());
@@ -554,7 +538,8 @@ class Spacetime {
       for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
         const auto &prospectiveCofaces = externalSimplices[facialOrientation];
         if (prospectiveCofaces.empty()) continue;
-        for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++attachedCofaceId) {
+        for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++
+             attachedCofaceId) {
           if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
           if (!unattachedSimplex->isCausallyAvailable() || !(*attachedCofaceId)->isCausallyAvailable()) {
             continue;
@@ -575,11 +560,11 @@ class Spacetime {
         SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
       SimplexSet result{};
       for (const auto &[facialOrientation, bucket] : externalSimplices) {
-          for (const auto &simplex : bucket) {
-            for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
-              if (simplex->getOrientation() == o) result.insert(simplex);
-            }
+        for (const auto &simplex : bucket) {
+          for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
+            if (simplex->getOrientation() == o) result.insert(simplex);
           }
+        }
       }
       return result;
     }
