@@ -390,6 +390,25 @@ class TestSpacetime(unittest.TestCase):
     def test_components_connect_once_glued(self):
         st = Spacetime()
 
+        unattachedSimplex = st.createSimplex((1, 4))
+        s23 = st.createSimplex((2, 3))
+
+        components = st.getConnectedComponents()
+        self.assertEqual(len(components), 2)
+
+        unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
+        unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
+        attachedVertices = [v for v in attachedSimplexFace.getVertices()]
+
+        st.attachAtVertices(unattachedSimplexFace, s23, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+
+        components = st.getConnectedComponents()
+
+        self.assertEqual(len(components), 1)
+
+    def test_components_connect_once_causally_glued(self):
+        st = Spacetime()
+
         s14 = st.createSimplex((1, 4))
         s23 = st.createSimplex((2, 3))
 
@@ -401,6 +420,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertTrue(succeeded)
 
         components = st.getConnectedComponents()
+
         self.assertEqual(len(components), 1)
 
     def test_move_in_edges_from_vertex(self):
@@ -471,8 +491,8 @@ class TestSpacetime(unittest.TestCase):
 
         # 1. unattachedVertex (V6) is not being removed unattached unattachedSimplex OR unattachedSimplexFace, even though the degree=0
         self.assertEqual(unattachedVertex.degree(), 0)
-        self.assertNotIn(unattachedVertex, unattachedSimplexFace.getVertices())
         self.assertNotIn(unattachedVertex, unattachedSimplex.getVertices())
+        self.assertNotIn(unattachedVertex, unattachedSimplexFace.getVertices())
 
         # 2. attachedVertex (V0) is not gaining enough new edges unattached unattachedVertex (V6)
         self.assertEqual(attachedVertex.degree(), 5)
@@ -486,7 +506,6 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(set(total_edges)), 14)
         shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
         self.assertEqual(len(shared_edges), 4)
-        breakpoint()
         self.assertEqual(len(set(total_edges)), len(st.getEdgeList().toVector()))
 
         # 4. unattachedSimplex still has edges containing unattachedVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).

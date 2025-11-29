@@ -55,22 +55,22 @@ class EdgeList {
       auto tempEdge = std::make_shared<Edge>(srcId, tgtId);
       if (edgeList.contains(tempEdge)) {
         remove(*edgeList.find(tempEdge));
-      } else {
-        CLOG(WARN_LEVEL, "-----------------------------------------------");
-        CLOG(WARN_LEVEL, "Edge: ", tempEdge->toString(), " not found in: ");
-        for (const auto &e : edgeList) {
-          CLOG(WARN_LEVEL, "    - ", e->toString());
-        }
-        CLOG(WARN_LEVEL, "----------------------------------------------");
+      // } else {
+        // CLOG(WARN_LEVEL, "-----------------------------------------------");
+        // CLOG(WARN_LEVEL, "Edge: ", tempEdge->toString(), " not found in: ");
+        // for (const auto &e : edgeList) {
+          // CLOG(WARN_LEVEL, "    - ", e->toString());
+        // }
+        // CLOG(WARN_LEVEL, "----------------------------------------------");
       }
     }
 
     void remove(const EdgePtr &edge) noexcept {
       if (!edgeList.contains(edge)) {
-        CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
-        for (const auto &e : edgeList) {
-          CLOG(WARN_LEVEL, "    - ", e->toString());
-        }
+        // CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
+        // for (const auto &e : edgeList) {
+          // CLOG(WARN_LEVEL, "    - ", e->toString());
+        // }
         return;
       }
       edgeList.erase(edge);
@@ -118,7 +118,7 @@ class EdgeList {
         }
         return found;
       }
-      CLOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
+      // CLOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
       edgeList.insert(edge);
       return edge;
     }

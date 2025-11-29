@@ -26,18 +26,12 @@
 #ifndef CASET_CYLINDER_H
 #define CASET_CYLINDER_H
 
-#include <vector>
-#include <memory>
-
 #include "Topology.h"
-#include "constraints/Constraint.h"
 
 namespace caset {
+class Spacetime;
 class Cylinder : public Topology {
   public:
-    // std::vector<std::shared_ptr<Constraint>> getConstraints() override {
-      // return std::vector<std::shared_ptr<Constraint>>();
-    // }
     void build(Spacetime *spacetime) override;
 };
 }

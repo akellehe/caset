@@ -26,10 +26,11 @@
 #ifndef CASET_SPACETIMEVOLUME_H
 #define CASET_SPACETIMEVOLUME_H
 
+#include <memory>
 #include "Observable.h"
-#include "../spacetime/Spacetime.h"
 
 namespace caset {
+class Spacetime;
 class SpacetimeVolume : public Observable {
   public:
     double compute(std::shared_ptr<Spacetime> &spacetime) override;

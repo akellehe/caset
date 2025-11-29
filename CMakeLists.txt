@@ -80,6 +80,10 @@ set_target_properties(caset PROPERTIES
 if(UNIX AND NOT APPLE)
     target_link_options(caset PRIVATE "-Wl,-rpath,${TORCH_LIB_DIR}")
 endif()
+#if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options("-ftime-report")
+add_compile_options("-ftime-trace")
+#endif()
 
 set_target_properties(caset PROPERTIES
         CXX_VISIBILITY_PRESET default
