@@ -25,13 +25,14 @@
 #include <memory>
 #include <vector>
 #include <functional>
-// #include <cstdint>
 #include <algorithm>
 #include <coroutine>
 #include <deque>
 
 #include "Logger.h"
 #include "Edge.h"
+#include "EdgeList.h"
+#include "VertexList.h"
 #include "Fingerprint.h"
 #include "Vertex.h"
 
@@ -66,7 +67,7 @@ class SimplexOrientation {
     /// @param tf_ The number of vertices on the final time slice.
     ///
     SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
-      k = ti_ + tf_;
+      k = ti_ + tf_ - 1;
     }
     SimplexOrientation() noexcept = default;
 
@@ -84,14 +85,14 @@ class SimplexOrientation {
 
     [[nodiscard]]
     SimplexOrientationPtr decTi() const {
-      uint8_t newTi = static_cast<uint8_t>(ti - 1);
+      auto newTi = static_cast<uint8_t>(ti - 1);
       // constructor recomputes k automatically
       return std::make_shared<SimplexOrientation>(newTi, tf);
     }
 
     [[nodiscard]]
     SimplexOrientationPtr decTf() const {
-      uint8_t newTf = static_cast<uint8_t>(tf - 1);
+      auto newTf = static_cast<uint8_t>(tf - 1);
       return std::make_shared<SimplexOrientation>(ti, newTf);
     }
 
@@ -120,7 +121,8 @@ class SimplexOrientation {
       return orientations;
     }
 
-    uint8_t getK() const {
+    /// A k-simplex has \f$ k+1 \f$ vertices.
+    [[nodiscard]] uint8_t getK() const {
       return k;
     }
 
@@ -131,7 +133,7 @@ class SimplexOrientation {
       double tf = -1;
       double initial = -1;
       int unassigned = 0;
-      for (const auto vertex : vertices) {
+      for (const auto &vertex : vertices) {
         double t = vertex->getTime();
         ti = std::min(ti, t);
         tf = std::max(tf, t);
@@ -209,16 +211,14 @@ inline bool operator==(const SimplexOrientationPtr &a, const SimplexOrientationP
 }
 }
 
-namespace std {
 template<>
-struct hash<caset::SimplexOrientation> {
+struct std::hash<caset::SimplexOrientation> {
   size_t operator()(const caset::SimplexOrientation &s) const noexcept {
     auto [ti, tf] = s.numeric(); // OK now that getOrientation() is const
-    std::uint16_t packed = (std::uint16_t(ti) << 8) | std::uint16_t(tf);
+    std::uint16_t packed = (static_cast<std::uint16_t>(ti) << 8) | static_cast<std::uint16_t>(tf);
     return std::hash<std::uint16_t>{}(packed); // perfect for all (ti, tf)
   }
 };
-}
 
 namespace caset {
 /// # Simplex Class
@@ -233,17 +233,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
   public:
     ///
     /// @param vertices_
-    Simplex(Vertices vertices_);
+    explicit Simplex(const Vertices &vertices_, Edges edges_);
 
-    Simplex(Vertices vertices_, SimplexOrientationPtr orientation_);
+    Simplex(const Vertices &vertices_, Edges edges_ ,const SimplexOrientationPtr &orientation_);
 
-    void initialize(Vertices &vertices_);
+    void initialize(const std::shared_ptr<Simplex> &simplex);
 
     std::string toString() const;
-
-    /// Computes the volume of the simplex, \f$ V_{\sigma} \f$
-    ///
-    double getVolume() const;
 
     /// Returns the hinges of the simplex. A hinge is a simplex contained within a higher dimensional simplex. The hinge
     /// is one dimension lower than the "parent" simplex.
@@ -253,7 +249,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// The curvature at the hinge is the deficit angle.
     ///
-    const std::vector<std::shared_ptr<Simplex> > getHinges() const;
+    // const std::vector<std::shared_ptr<Simplex> > getHinges() const;
 
     /// Assuming the simplex is a hinge; returns the deficit angle associated with the hinge.
     ///
@@ -271,7 +267,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// When the hinge is exterior/on a boundary; the \f$ 2 \pi \f$ is replaced with \f$ \pi \f$.
     ///
-    const double getDeficitAngle() const;
+    // const double getDeficitAngle() const;
 
     /// Compute dihedral angles from edge lengths.
     /// ///
@@ -284,7 +280,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// Map \f$ (i, j) \f$ to the hinge (triangle for a 4-simplex) opposite that pair.
     ///
-    const double computeDihedralAngles() const;
+    // const double computeDihedralAngles() const;
 
     [[nodiscard]] SimplexOrientationPtr getOrientation() const noexcept;
 
@@ -332,7 +328,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets() noexcept;
+    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets();
+
+    std::size_t getNumberOfEdges() const;
 
     Fingerprint fingerprint;
 
@@ -346,28 +344,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;
 
-    [[nodiscard]] bool hasVertex(const IdType vertexId) const;
 
     /// @returns Edges in traversal order (the order of input vertices).
     [[nodiscard]] Edges getEdges() const;
-
-    std::vector<std::tuple<IdType, IdType> > moveEdges(const VertexPtr &from, const VertexPtr &to);
-
-    void addEdge(const EdgePtr &edge, bool addToCofaces = false);
-
-    // using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
-
-    bool removeEdge(const EdgeKey &key);
-    bool removeEdge(const EdgePtr &edge);
-
-    /// A given Simplex will only list edges _internal_ to that Simplex when getEdges() is called. This method returns
-    /// _external_ edges for a given vertex. Useful for redirecting those edges when merging simplices.
-    EdgeIdSet getEdgesExternalTo(const VertexPtr &vertex);
-
-    /// This method removes a vertex from the simplex and cascades to related simplices. It doesn't mutate the vertex
-    /// itself. Make sure you only call this method once all edges within the simplex to/from that vertex have been
-    /// removed.
-    bool removeVertex(const VertexPtr &vertex);
 
     [[nodiscard]]
     std::optional<Vertices>
@@ -376,17 +355,17 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
-    void computeEdges();
+    // void computeEdges();
 
-    [[nodiscard]] bool hasEdge(const EdgePtr &edge);
+    [[nodiscard]] bool hasEdge(const EdgePtr &edge) const;
+    [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId) const;
+    // [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId);
 
-    ///
-    /// @param vertexAId
-    /// @param vertexBId
-    /// @return
-    [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId);
+    [[nodiscard]] bool hasVertex(IdType vertexId) const;
 
-    [[nodiscard]] bool hasVertex(const VertexPtr &vertex) const;
+    void validate() const;
+
+    [[nodiscard]] bool hasEdgeContaining(IdType vertexId) const;
 
     ///
     /// Simplices have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
@@ -406,7 +385,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// those swaps changes the sign of the orientation once. An odd number of swaps gives an opposite orientation; an
     /// even number gives the same orientation.
     ///
-    int8_t checkParity(std::shared_ptr<Simplex> &other);
+    int8_t checkParity(const std::shared_ptr<Simplex> &other) const;
 
     ///
     /// Co-faces are maintained as state rather than computed on the fly. This means any time a Simplex is attached to
@@ -421,6 +400,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     bool operator==(const Simplex &other) const noexcept;
 
+    /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
+    bool isCausallyAvailable() const noexcept;
+
     ///
     /// This method iterates over all faces of this Simplex; and counts the number of co-faces for each face. If a face
     /// has fewer than 2 co-faces; it's available to glue. We limit to 2 co-faces because we want to preserve
@@ -429,9 +411,12 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// @return Whether or not this Simplex is available to glue. A face is only available when it has less than 2
     /// co-faces.
-    bool isCausallyAvailable() noexcept;
+    bool hasCausallyAvailableFacet();
 
     bool isInternal() const noexcept;
+
+    static std::shared_ptr<Simplex> create(const Vertices &vertices_, const Edges &edges_);
+    static std::shared_ptr<Simplex> create(const Vertices &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_);
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -459,29 +444,26 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     bool operator==(const std::shared_ptr<Simplex> &other) const noexcept;
 
-    /// This method replaces an edge with an analogous edge. Used when we glue simplices together.
-    ///
-    bool replaceEdge(const EdgePtr &oldEdge, const EdgePtr &newEdge);
-
-    /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
-    /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
-    /// squaredLength data could be lost.
-    ///
-    bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
-
     VertexIdMap getVertexIdLookup() const noexcept;
 
+    void attach(const VertexPtr &unattached, const VertexPtr &attached, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList);
+
   private:
-    Edges edges{};
     SimplexOrientationPtr orientation{};
     VertexIdMap vertexIdLookup{};
     Vertices vertices{};
+    Edges edges{};
 
     std::vector<std::shared_ptr<Simplex> > facets{};
     std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
 
+    /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
+    /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
+    /// squaredLength data could be lost.
+    bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
+
     template<typename Method, typename... Args>
-    bool cascade(Method method, bool shallow, Args &&... args);
+    bool cascade(Method method, bool up, bool down, Args &&... args);
 };
 
 using SimplexPtr = std::shared_ptr<Simplex>;
@@ -491,13 +473,11 @@ using Simplices = std::vector<SimplexPtr>;
 using SimplexSet = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
 }
 
-namespace std {
 template<>
-struct hash<caset::Simplex> {
+struct std::hash<caset::Simplex> {
   size_t operator()(const caset::Simplex &s) const noexcept {
     return std::hash<std::uint64_t>{}(s.fingerprint.fingerprint());
   }
 };
-}
 
 #endif //CASET_SIMPLEX_H

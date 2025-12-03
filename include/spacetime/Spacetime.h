@@ -78,7 +78,7 @@ class Spacetime {
       topology = topology_.value_or(std::make_shared<Toroid>());
     }
 
-    SimplexPtr createSimplex(Vertices &vertices);
+    SimplexPtr createSimplex(const Vertices &vertices, const Edges &edges);
     SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
     SimplexPtr createSimplex(std::size_t k);
     VertexPtr createVertex(const std::uint64_t id) noexcept;
@@ -99,7 +99,7 @@ class Spacetime {
     ///
     /// Builds an n-dimensional (depending on your metric) triangulation/slice for t=0 with edge lengths equal to alpha
     /// matching the chosen topology. The default Topology is Toroid.
-    void build();
+    void build(int numSimplices=3);
 
     ///
     /// This method identifies a pair of faces (one from each simplex) that can be glued together while preserving the
@@ -203,8 +203,7 @@ class Spacetime {
     /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
     /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
     /// @returns {attachedFace, succeeded} The `attachedFace` after attachment and whether the attachment succeeded.
-    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &attachedFace,
-                                                     const SimplexPtr &unattachedFace);
+    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &attachedFace, const SimplexPtr &unattachedFace);
 
     ///
     /// @return Simplices around the boundary of the simplicial complex to which they belong. These simplices have at
@@ -214,7 +213,7 @@ class Spacetime {
     /// \f$ k=2 \f$.
     [[nodiscard]]
     SimplexSet getExternalSimplices() noexcept {
-      SimplexSet simplices;
+      SimplexSet simplices{};
       for (const auto &[facialOrientation, bucket] : externalSimplices) {
         for (const auto &simplex : bucket) {
           simplices.insert(simplex);
@@ -225,8 +224,9 @@ class Spacetime {
 
     void embedEuclidean(int dimensions, double epsilon);
 
-    /// This method chooses a simplex from the boundary of the simplicial complex to which `mySimplex` can be glued. It
-    /// does this by iterating through the `externalSimplices` and checking for compatible orientations and edge lengths.
+    /// This method chooses a simplex from the boundary of the simplicial complex to which `unattachedSimplex` can be
+    /// glued. It does this by iterating through the `externalSimplices` and checking for compatible orientations and
+    /// edge lengths.
     ///
     /// To the extent the hashing function for vertex fingerprinting is good; this should be pretty well pseudo-random.
     /// If you want something truly random, though, you should probably implement that.
@@ -251,6 +251,8 @@ class Spacetime {
 
     std::vector<Vertices> getConnectedComponents() const;
 
+    void mergeVertices(const VertexPtr &into, const VertexPtr &from);
+
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
@@ -258,7 +260,6 @@ class Spacetime {
 
 
     IdType vertexIdCounter = 0;
-    SimplexSet simplices{};
     SpacetimeType spacetimeType;
     double alpha = 1.;
     std::shared_ptr<Metric> metric;

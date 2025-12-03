@@ -88,6 +88,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getOutEdges", &Vertex::getOutEdges)
       .def("removeInEdge", &Vertex::removeInEdge)
       .def("removeOutEdge", &Vertex::removeOutEdge)
+      .def("moveEdgesTo", &Vertex::moveEdgesTo)
       .def("getTime", &Vertex::getTime)
       .def("moveTo", &Vertex::moveTo);
 
@@ -128,6 +129,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getOrientation", &SimplexOrientation::getOrientation)
       .def("__hash__", &SimplexOrientation::fingerprint)
       .def("__eq__", &SimplexOrientation::operator==)
+      .def("__str__", &SimplexOrientation::toString)
+      .def("__repr__", &SimplexOrientation::toString)
       .def("numeric", &SimplexOrientation::numeric);
 
   py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash>>(m, "SimplexOrientationHash")
@@ -136,29 +139,25 @@ PYBIND11_MODULE(caset, m) {
     .def(py::init<>());
 
   py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
-      .def(py::init<const std::vector<std::shared_ptr<Vertex> >>(),
-           py::arg("vertices"))
+      .def(py::init<const std::vector<std::shared_ptr<Vertex>>, std::vector<std::shared_ptr<Edge>>>(),
+           py::arg("vertices"), py::arg("edges"))
       .def("__repr__", &Simplex::toString)
       .def("__str__", &Simplex::toString)
       .def("checkPairty", &Simplex::checkParity)
       .def("getCofaces", &Simplex::getCofaces)
-      .def("getDeficitAngle", &Simplex::getDeficitAngle)
       .def("getEdges", &Simplex::getEdges)
       .def("getFacets", &Simplex::getFacets)
-      .def("getHinges", &Simplex::getHinges)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
       .def("getVertices", &Simplex::getVertices)
       .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
-      .def("getVolume", &Simplex::getVolume)
-      .def("hasEdge", py::overload_cast<const EdgePtr &>(&Simplex::hasEdge), py::arg("edge"))
-      .def("hasEdge", py::overload_cast<const IdType, const IdType>(&Simplex::hasEdge), py::arg("source"), py::arg("target"))
+      // .def("hasEdge", py::overload_cast<const EdgePtr &>(&Simplex::hasEdge), py::arg("edge"))
+      // .def("hasEdge", py::overload_cast<const IdType, const IdType>(&Simplex::hasEdge), py::arg("source"), py::arg("target"))
+      .def("hasVertex", &Simplex::hasVertex)
       .def("isTimelike", &Simplex::isTimelike)
-      .def("removeEdge", py::overload_cast<const EdgeKey &>(&Simplex::removeEdge), py::arg("edgeKey"))
-      .def("removeEdge", py::overload_cast<const EdgePtr &>(&Simplex::removeEdge), py::arg("edge"))
-      .def("removeVertex", &Simplex::removeVertex)
-      .def("replaceVertex", &Simplex::replaceVertex);
+      .def("attach", &Simplex::attach, py::arg("unattachedVertex"), py::arg("unattachedVertex"), py::arg("edgeList"), py::arg("vertexList"))
+      .def("validate", &Simplex::validate);
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash>>(m, "SimplexHash")
     .def(py::init<>());
@@ -226,8 +225,8 @@ PYBIND11_MODULE(caset, m) {
            py::arg("target"),
            py::arg("squaredLength"))
       .def("createSimplex",
-           py::overload_cast<std::vector<std::shared_ptr<Vertex> > &>(&Spacetime::createSimplex),
-           py::arg("vertices"))
+           py::overload_cast<const std::vector<std::shared_ptr<Vertex> > &, const std::vector<std::shared_ptr<Edge>> &>(&Spacetime::createSimplex),
+           py::arg("vertices"), py::arg("edges"))
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))

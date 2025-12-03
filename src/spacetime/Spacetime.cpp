@@ -26,12 +26,11 @@
 #include <pybind11/pybind11.h>
 #include <torch/torch.h>
 #include "Logger.h"
+#include <memory>
 #include "spacetime/Spacetime.h"
 
-
 namespace caset {
-
-void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
+void Spacetime::embedEuclidean(int dimensions = 4, double epsilon = 1e-8) {
   pybind11::gil_scoped_release no_gil;
   if (vertexList->size() == 0) return;
   if (edgeList->size() == 0) return;
@@ -40,8 +39,8 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
   const int E = edgeList->size();
   double lr = 10e-3;
 
-  std::vector<std::shared_ptr<Edge>> edgeVector = edgeList->toVector();
-  std::vector<std::shared_ptr<Vertex>> vertexVector = vertexList->toVector();
+  Edges edgeVector = edgeList->toVector();
+  std::vector<std::shared_ptr<Vertex> > vertexVector = vertexList->toVector();
 
   if (vertexVector.empty()) {
     CLOG(WARN_LEVEL, "No vertices to embed!");
@@ -66,10 +65,10 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
   std::vector<int64_t> edgeIdxToTargetIndex(E);
   std::vector<double> edgeIdxToSourceTime(E);
   std::vector<double> edgeIdxToTargetTime(E);
-  std::vector<double>  edgeIdxToAbsoluteSquaredLength(E);
+  std::vector<double> edgeIdxToAbsoluteSquaredLength(E);
 
   for (int e = 0; e < E; ++e) {
-    const auto& edge = edgeVector[e];
+    const auto &edge = edgeVector[e];
     auto sourceIndexIterator = vertexIdToIndex.find(edge->getSourceId());
     auto targetIndexIterator = vertexIdToIndex.find(edge->getTargetId());
     if (sourceIndexIterator == vertexIdToIndex.end() || targetIndexIterator == vertexIdToIndex.end()) {
@@ -86,26 +85,38 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     double L = edge->getSquaredLength();
     // If you have Minkowski lengths and want magnitude-only, use std::abs(L).
     edgeIdxToAbsoluteSquaredLength[e] = std::abs(L)
-      ? std::abs(L)
-      : epsilon; // Avoid zero target distances which can cause issues in optimization;
+                                          ? std::abs(L)
+                                          : epsilon;
+    // Avoid zero target distances which can cause issues in optimization;
   }
 
-  auto edgeIdxToSourceIdxTensor = torch::from_blob(edgeIdxToSourceIndex.data(), {E}, torch::TensorOptions().dtype(torch::kLong)).clone();
-  auto edgeIdxToTargetIdxTensor = torch::from_blob(edgeIdxToTargetIndex.data(), {E}, torch::TensorOptions().dtype(torch::kLong)).clone();
-  auto edgeIdxToSourceTimeTensor = torch::from_blob(edgeIdxToSourceTime.data(), {E}, torch::TensorOptions().dtype(torch::kDouble)).clone();
-  auto edgeIdxToTargetTimeTensor = torch::from_blob(edgeIdxToTargetTime.data(), {E}, torch::TensorOptions().dtype(torch::kDouble)).clone();
+  auto edgeIdxToSourceIdxTensor = torch::from_blob(edgeIdxToSourceIndex.data(),
+                                                   {E},
+                                                   torch::TensorOptions().dtype(torch::kLong)).clone();
+  auto edgeIdxToTargetIdxTensor = torch::from_blob(edgeIdxToTargetIndex.data(),
+                                                   {E},
+                                                   torch::TensorOptions().dtype(torch::kLong)).clone();
+  auto edgeIdxToSourceTimeTensor = torch::from_blob(edgeIdxToSourceTime.data(),
+                                                    {E},
+                                                    torch::TensorOptions().dtype(torch::kDouble)).clone();
+  auto edgeIdxToTargetTimeTensor = torch::from_blob(edgeIdxToTargetTime.data(),
+                                                    {E},
+                                                    torch::TensorOptions().dtype(torch::kDouble)).clone();
 
-  auto edgeIdxToAbsoluteSquaredLengthTensor = torch::from_blob(edgeIdxToAbsoluteSquaredLength.data(), {E}, torch::TensorOptions().dtype(torch::kDouble)).clone();
+  auto edgeIdxToAbsoluteSquaredLengthTensor = torch::from_blob(edgeIdxToAbsoluteSquaredLength.data(),
+                                                               {E},
+                                                               torch::TensorOptions().dtype(torch::kDouble)).clone();
 
   // 4. Set up optimizer (Adam is simple and robust)
-  torch::Tensor positions = torch::randn({N, dimensions}, torch::TensorOptions()
-    .dtype(torch::kDouble))
-    .set_requires_grad(true);
+  torch::Tensor positions = torch::randn({N, dimensions},
+                                         torch::TensorOptions()
+                                         .dtype(torch::kDouble))
+      .set_requires_grad(true);
 
   torch::Tensor vertexTimesTensor = torch::zeros(
     {N},
     torch::TensorOptions().dtype(torch::kDouble)
-    );
+  );
   for (int i = 0; i < N; ++i) {
     vertexTimesTensor[i] = vertexVector[i]->getTime();
   }
@@ -121,22 +132,22 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     optimizer.zero_grad();
 
     // 5. Compute predicted squared distances for all edges
-    auto srcPositions = positions.index_select(0, edgeIdxToSourceIdxTensor);  // (E, dim)
-    auto tgtPositions = positions.index_select(0, edgeIdxToTargetIdxTensor);  // (E, dim)
+    auto srcPositions = positions.index_select(0, edgeIdxToSourceIdxTensor); // (E, dim)
+    auto tgtPositions = positions.index_select(0, edgeIdxToTargetIdxTensor); // (E, dim)
 
     auto expectedSrcTimes = vertexTimesTensor.index_select(0, edgeIdxToSourceIdxTensor);
     auto expectedTgtTimes = vertexTimesTensor.index_select(0, edgeIdxToTargetIdxTensor);
-    auto expectedTimes = (expectedSrcTimes + expectedTgtTimes) / 2.;                             // (E,)
-    auto observedLengths = srcPositions - tgtPositions;                        // (E, dim - 1)
+    auto expectedTimes = (expectedSrcTimes + expectedTgtTimes) / 2.; // (E,)
+    auto observedLengths = srcPositions - tgtPositions; // (E, dim - 1)
 
-    auto sqdist = observedLengths.pow(2).sum(-1);            // (E,)
+    auto sqdist = observedLengths.pow(2).sum(-1); // (E,)
 
     // The observed time is the 0th element of the coordinate vector
     auto observedSrcTimes = srcPositions.index({torch::arange(0, E), 0});
     auto observedTgtTimes = tgtPositions.index({torch::arange(0, E), 0});
-    auto observedTimes = (observedSrcTimes + observedTgtTimes) / 2.;                             // (E,)
+    auto observedTimes = (observedSrcTimes + observedTgtTimes) / 2.; // (E,)
 
-    auto sqtime = (observedTimes - expectedTimes).pow(2);                     // (E,)
+    auto sqtime = (observedTimes - expectedTimes).pow(2); // (E,)
 
     // 6. Loss: match squared distances
     auto residual = sqdist - edgeIdxToAbsoluteSquaredLengthTensor + (sqtime * dimensions);
@@ -147,9 +158,9 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     optimizer.step();
 
     // Optional: early stopping / logging
-    if (iter % 100 == 0) {
+    if (iter % 200 == 0) {
       std::cout << "[embedEuclidean] iter " << iter
-                << " loss = " << loss.item<double>() << std::endl;
+          << " loss = " << loss.item<double>() << std::endl;
     }
   }
 
@@ -165,15 +176,21 @@ void Spacetime::embedEuclidean(int dimensions=4, double epsilon=1e-8) {
     }
     vertexVector[i]->setCoordinates(coords);
   }
-  CLOG(INFO_LEVEL, "Iteration: ", iter, " Loss: ", loss.item<double>(), " Previous Loss: ", previousLoss.item<double>());
+  CLOG(INFO_LEVEL,
+       "Iteration: ",
+       iter,
+       " Loss: ",
+       loss.item<double>(),
+       " Previous Loss: ",
+       previousLoss.item<double>());
 }
 
-void Spacetime::build() {
+void Spacetime::build(int numSimplices) {
   // TODO: Implement topologies instead of the default.
   // return topology->build(this);
   std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
   createSimplex(orientations[1]);
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < numSimplices; i++) {
     SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
     OptionalSimplexPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
     if (!leftFaceRightFace.has_value()) return;
@@ -182,44 +199,33 @@ void Spacetime::build() {
   }
 }
 
-std::shared_ptr<Edge> Spacetime::createEdge(
+EdgePtr Spacetime::createEdge(
   const std::uint64_t src,
   const std::uint64_t tgt
 ) {
-  std::shared_ptr<Edge> edge = edgeList->add(src, tgt);
+  EdgePtr edge = edgeList->add(src, tgt);
   vertexList->get(src)->addOutEdge(edge);
   vertexList->get(tgt)->addInEdge(edge);
   return edge;
 }
 
-
-std::shared_ptr<Edge> Spacetime::createEdge(
+EdgePtr Spacetime::createEdge(
   const std::uint64_t src,
   const std::uint64_t tgt,
   double squaredLength
 ) noexcept {
-  std::shared_ptr<Edge> edge = edgeList->add(src, tgt, squaredLength);
+  EdgePtr edge = edgeList->add(src, tgt, squaredLength);
   vertexList->get(src)->addOutEdge(edge);
   vertexList->get(tgt)->addInEdge(edge);
   return edge;
 }
 
 SimplexPtr Spacetime::createSimplex(
-    Vertices &vertices
-  ) {
+  const Vertices &vertices, const Edges &edges
+) {
   const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
 
-  std::vector<IdType> _ids = {};
-  _ids.reserve(vertices.size());
-  for (const auto &vertex : vertices) {
-    _ids.push_back(vertex->getId());
-  }
-
-  SimplexPtr simplex = std::make_shared<Simplex>(vertices);
-  if (simplices.contains(simplex)) {
-    throw std::runtime_error("Simplex already exists");
-  }
-  simplices.insert(simplex);
+  SimplexPtr simplex = Simplex::create(vertices, edges);
   for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
     externalSimplices[o].insert(simplex);
     externalSimplices[o->flip()].insert(simplex); // TODO: Remove the flipped orientation once attached.
@@ -227,102 +233,113 @@ SimplexPtr Spacetime::createSimplex(
   return simplex;
 }
 
-
 SimplexPtr Spacetime::createSimplex(std::size_t k) {
   double squaredLength = alpha;
   Vertices vertices = {};
   vertices.reserve(k);
-  std::vector<std::shared_ptr<Edge> > edges = {};
+  Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
   for (int i = 0; i < k; i++) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
-      std::shared_ptr<Edge> edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+      EdgePtr edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
     }
     vertices.push_back(newVertex);
   }
-  return createSimplex(vertices);
+  return createSimplex(vertices, edges);
 }
 
 SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-      double squaredLength = alpha;
-      double timelikeSquaredLength = alpha;
-      SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
-        std::get<0>(numericOrientation),
-        std::get<1>(numericOrientation));
-      std::uint8_t k = orientation->getK();
-      auto [ti, tf] = orientation->numeric();
-      Vertices vertices = {};
-      vertices.reserve(k);
-      std::vector<std::shared_ptr<Edge> > edges = {};
-      edges.reserve(Simplex::computeNumberOfEdges(k));
-      for (int i = 0; i < ti; i++) {
-        // Create ti Timelike vertices
-        // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
-        if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
-          timelikeSquaredLength = -alpha;
-        }
-        for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge = edgeList->
-              add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
-          existingVertex->addOutEdge(edge);
-          newVertex->addInEdge(edge);
-          edges.push_back(edge);
-        }
-        vertices.push_back(newVertex);
-      }
-      for (int i = 0; i < tf; i++) {
-        // Create ti Spacelike vertices
-        // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-        /// We can't just use the vertexList .size() here, because some vertices can be removed. We need to keep a
-        /// counter:
-        VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
-        for (const auto &existingVertex : vertices) {
-          std::shared_ptr<Edge> edge;
-          if (existingVertex->getTime() < newVertex->getTime()) {
-            edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
-          } else {
-            edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
-          }
-          existingVertex->addOutEdge(edge);
-          newVertex->addInEdge(edge);
-          edges.push_back(edge);
-        }
-        vertices.push_back(newVertex);
-      }
-      return createSimplex(vertices);
+  double squaredLength = alpha;
+  double timelikeSquaredLength = alpha;
+  SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
+    std::get<0>(numericOrientation),
+    std::get<1>(numericOrientation));
+  std::uint8_t k = orientation->getK();
+  auto [ti, tf] = orientation->numeric();
+  Vertices vertices = {};
+  vertices.reserve(k);
+  Edges edges = {};
+  edges.reserve(Simplex::computeNumberOfEdges(k));
+  for (int i = 0; i < ti; i++) {
+    // Create ti Timelike vertices
+    // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
+    VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
+    if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
+      timelikeSquaredLength = -alpha;
     }
+    for (const auto &existingVertex : vertices) {
+      EdgePtr edge = edgeList->
+          add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+      existingVertex->addOutEdge(edge);
+      newVertex->addInEdge(edge);
+      edges.push_back(edge);
+    }
+    vertices.push_back(newVertex);
+  }
+  for (int i = 0; i < tf; i++) {
+    // Create ti Spacelike vertices
+    // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
+    /// We can't just use the vertexList .size() here, because some vertices can be removed. We need to keep a
+    /// counter:
+    VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
+    for (const auto &existingVertex : vertices) {
+      EdgePtr edge;
+      if (existingVertex->getTime() < newVertex->getTime()) {
+        edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+      } else {
+        edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+      }
+      existingVertex->addOutEdge(edge);
+      newVertex->addInEdge(edge);
+      edges.push_back(edge);
+    }
+    vertices.push_back(newVertex);
+  }
+  return createSimplex(vertices, edges);
+}
 
 [[nodiscard]] OptionalSimplexPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
+  CLOG(DEBUG_LEVEL, "Getting facets for unattached simplex...");
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
+  CLOG(DEBUG_LEVEL, "Getting facets for attached simplex...");
   auto attachedFacets = attachedSimplex->getFacets();
+  CLOG(DEBUG_LEVEL, "Validating both...");
+#if CASET_DEBUG
+  for (const auto &f : unattachedFacets) {
+    CLOG(DEBUG_LEVEL, "Validating unattached facet...");
+    f->validate();
+    CLOG(DEBUG_LEVEL, "Validated.");
+  }
+  for (const auto &f : attachedFacets) {
+    CLOG(DEBUG_LEVEL, "Validating attached facet...");
+    f->validate();
+    CLOG(DEBUG_LEVEL, "Validated.");
+  }
+#endif
 
   for (auto &unattachedFace : unattachedFacets) {
     const auto [tia, tfa] = unattachedFace->getOrientation()->numeric();
-    if (tia == 0 || tfa == 0) {
-      continue; // Skip degenerate faces
-    }
-    if (unattachedFace->isInternal()) continue;
+    if (tia == 0 || tfa == 0) continue; // Skip degenerate faces
+    if (!unattachedFace->isCausallyAvailable()) continue;
     for (auto &attachedFace : attachedFacets) {
       if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue;
       // Skip faces that don't match in timelikeness
       const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
-      if (tib == 0 || tfb == 0) {
-        continue; // Skip degenerate faces
-      }
+      if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
       if (attachedFace->isInternal()) continue;
-      if (tia == tfb && tfa == tib) {
-        return std::make_optional(std::make_pair(unattachedFace, attachedFace));
-      }
-      if (tia == tib && tfa == tfb) {
-        return std::make_optional(std::make_pair(unattachedFace, attachedFace));
-      }
+#if CASET_DEBUG
+      CLOG(DEBUG_LEVEL, "Validating in getGluableFaces...");
+      attachedFace->validate();
+      unattachedFace->validate();
+#endif
+      if (tia == tfb && tfa == tib) return std::make_optional(std::make_pair(unattachedFace, attachedFace));
+      if (tia == tib && tfa == tfb) return std::make_optional(std::make_pair(unattachedFace, attachedFace));
     }
   }
   return std::nullopt;
@@ -355,120 +372,138 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
   }
 }
 
+void Spacetime::mergeVertices(const VertexPtr &into, const VertexPtr &from) {
+  for (const auto &edge : from->getInEdges()) {
+    edge->replaceTargetVertex(into->getId());
+  }
+  for (const auto &edge : from->getOutEdges()) {
+    edge->replaceSourceVertex(into->getId());
+  }
+}
+
+/// When we attach two simplices; the "attached" one is assumed to be part of a simplicial complex. The "unattached" one
+/// is assumed to be part of another simplicial complex, but usually by itself. The "attached" simplex replaces
+/// corresponding vertices in the "unattached" simplex with it's own vertices. Same goes for the _internal_ edges. Any
+/// external edges in "unattached" are redirected from those vertices on "unattached" to the corresponding vertex in
+/// "attached".
 void Spacetime::attachAtVertices(
-      const SimplexPtr &unattached,
-      const SimplexPtr &attached,
-      const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
-    ) {
-      // Vertices internal to from will be replaced by corresponding vertices in to.
-      // Edges internal to from will be removed.
-      // Edges external to from will be moved to to, updating source/target as needed
-      // Vertices that become isolated will be removed from the spacetime.
-      // Edges that become invalid will be removed from the spacetime.
-      //
-      for (const auto &internalEdge : unattached->getEdges()) {
-        const auto &sourceVertex = vertexList->get(internalEdge->getSourceId());
-        const auto &targetVertex = vertexList->get(internalEdge->getTargetId());
-        sourceVertex->removeOutEdge(internalEdge);
-        targetVertex->removeInEdge(internalEdge);
-        edgeList->remove(internalEdge);
-        unattached->removeEdge(internalEdge);
-      }
-      for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
-        // After removing internal edges above; all that is left is the external edges. Redirect those to toVertex:
-        // External edges need to be redirected to toVertex:
-        // CLOG(DEBUG_LEVEL, "====================================================================");
-        auto [oldEdges, newEdges] = unattachedVertex->moveEdgesTo(attachedVertex, edgeList);
+  const SimplexPtr &unattached,
+  const SimplexPtr &attached,
+  const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
+) {
+  CLOG(INFO_LEVEL, "attachAtVertices called. Pre-validating.");
+  // Bone density in Regge calculus can be calculated as the size of the Simplex list on the Edge.
+  unattached->validate();
+  attached->validate();
+  CLOG(INFO_LEVEL, "Pre-validated.");
+  // Move external edges from unattached vertices to attached vertices.
+  CLOG(INFO_LEVEL, "Attaching vertices...");
+  for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
+    CLOG(INFO_LEVEL, "Attaching un: ", unattachedVertex->toString(), " to at: ", attachedVertex->toString());
+    unattached->attach(unattachedVertex, attachedVertex, edgeList, vertexList);
+    CLOG(INFO_LEVEL, "Done attaching ", std::to_string(unattachedVertex->getId()), " and ", std::to_string(attachedVertex->getId()));
+  }
+  CLOG(INFO_LEVEL, "Done attaching vertices. Post-validating...");
 
-        // Iterate by i, replace old edge with new edge like below
-        for (const auto edgeKey : *oldEdges) {
-          unattached->removeEdge(edgeKey);
-          edgeList->remove(edgeKey);
-        }
-        for (const auto edgeKey : *newEdges) {
-          const std::shared_ptr<Edge> &newEdge = edgeList->add(attachedVertex->getEdge(edgeKey));
-          const auto &source = vertexList->get(newEdge->getSourceId());
-          const auto &target = vertexList->get(newEdge->getTargetId());
-          attached->addEdge(newEdge, true);
-          unattached->addEdge(newEdge);
-          unattached->replaceVertex(unattachedVertex, attachedVertex);
-        }
-        // CLOG(DEBUG_LEVEL, "====================================================================");
-        removeIfIsolated(unattachedVertex);
-      }
-    }
+  unattached->validate();
+  attached->validate();
 
-std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(const SimplexPtr &attachedFace,
-                                                     const SimplexPtr &unattachedFace) {
-      if (attachedFace->fingerprint.fingerprint() == unattachedFace->fingerprint.fingerprint()) {
-        CLOG(ERROR_LEVEL, "Faces are already attached!");
+  CLOG(INFO_LEVEL, "Validated.");
+
+  // Vertices internal to from will be replaced by corresponding vertices in to.
+  // Edges internal to from will be removed.
+  // Edges external to from will be moved to to, updating source/target as needed
+  // Vertices that become isolated will be removed from the spacetime.
+  // Edges that become invalid will be removed from the spacetime.
+  //
+
+  // O(n log(n)) to construct vertex lookup
+  // O(n)        to remove internal edges
+  // O(n^2)      to not do the lookup, so we'll build the lookup:
+}
+
+std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
+  const SimplexPtr &attachedFace,
+  const SimplexPtr &unattachedFace
+) {
+  if (!attachedFace->isCausallyAvailable() || !unattachedFace->isCausallyAvailable()) {
+    CLOG(ERROR_LEVEL, "One or more of attachedFace and unattachedFace was not causally available!\n", attachedFace->toString(), "\n", unattachedFace->toString());
+    return {attachedFace, false};
+  }
+  if (attachedFace->fingerprint.fingerprint() == unattachedFace->fingerprint.fingerprint()) {
+    CLOG(ERROR_LEVEL, "Faces are already attached!");
+    return {attachedFace, false};
+  }
+  if (attachedFace->getOrientation() != unattachedFace->getOrientation()) {
+    CLOG(ERROR_LEVEL,
+         "Faces have different orientations: ",
+         attachedFace->getOrientation()->toString(),
+         " vs ",
+         unattachedFace->getOrientation()->toString());
+    return {attachedFace, false};
+  }
+  for (const auto &attachedCoface : attachedFace->getCofaces()) {
+    for (const auto &unattachedCoface : unattachedFace->getCofaces()) {
+      if (attachedCoface->fingerprint.fingerprint() == unattachedCoface->fingerprint.fingerprint()) {
+        CLOG(ERROR_LEVEL, "Faces share a coface! (they are already attached.)");
         return {attachedFace, false};
       }
-      if (attachedFace->getOrientation() != unattachedFace->getOrientation()) {
-        CLOG(ERROR_LEVEL,
-                  "Faces have different orientations: ",
-                  attachedFace->getOrientation()->toString(),
-                  " vs ",
-                  unattachedFace->getOrientation()->toString());
-        return {attachedFace, false};
-      }
-      for (const auto &attachedCoface : attachedFace->getCofaces()) {
-        for (const auto &unattachedCoface : unattachedFace->getCofaces()) {
-          if (attachedCoface->fingerprint.fingerprint() == unattachedCoface->fingerprint.fingerprint()) {
-            CLOG(ERROR_LEVEL, "Faces share a coface!");
-            return {attachedFace, false};
-          }
-        }
-      }
-
-      Vertices vertices{};
-      vertices.reserve(attachedFace->size());
-      std::vector<std::shared_ptr<Edge> > edges{};
-      edges.reserve(attachedFace->size());
-
-      // Two vertices are compatible to attach iff they share the same time value.
-      std::vector<std::pair<VertexPtr, VertexPtr> > vertexPairs{};
-      vertexPairs.reserve(attachedFace->size());
-
-      // These are in order of traversal, you can iterate them to walk the Face:
-      const auto &unattachedVertices = unattachedFace->getVertices();
-
-      // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
-      // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
-      const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->
-          getVerticesWithParityTo(unattachedFace);
-
-      if (!attachedOrderedVerticesOptional.has_value()) {
-        CLOG(WARN_LEVEL,
-                  "No compatible vertex order found for myFace and yourFace.\n",
-                  attachedFace->toString(),
-                  "\n",
-                  unattachedFace->toString());
-        return {nullptr, false};
-      }
-
-      const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
-      for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
-        std::pair<VertexPtr, VertexPtr> vp = std::make_pair(
-          attachedOrderedVertices[i],
-          unattachedVertices[i]);
-        vertexPairs.push_back(vp);
-      }
-
-      attachAtVertices(unattachedFace, attachedFace, vertexPairs);
-
-      if (!unattachedFace->getCofaces().empty()) {
-        auto newCoface = *(unattachedFace->getCofaces().begin());
-        attachedFace->addCoface(newCoface);
-      }
-      if (!attachedFace->isCausallyAvailable()) {
-        for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
-          externalSimplices[facialOrientation].erase(attachedFace);
-        }
-        internalSimplices[attachedFace->getOrientation()].insert(attachedFace);
-      }
-      return {attachedFace, true};
     }
+  }
+
+  Vertices vertices{};
+  vertices.reserve(attachedFace->size());
+  Edges edges{};
+  edges.reserve(attachedFace->size());
+
+  // Two vertices are compatible to attach iff they share the same time value.
+  std::vector<std::pair<VertexPtr, VertexPtr> > vertexPairs{};
+  vertexPairs.reserve(attachedFace->size());
+
+  // These are in order of traversal, you can iterate them to walk the Face:
+  const auto &unattachedVertices = unattachedFace->getVertices();
+
+  // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
+  // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
+  const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->getVerticesWithParityTo(unattachedFace);
+
+  if (!attachedOrderedVerticesOptional.has_value()) {
+    CLOG(WARN_LEVEL,
+         "No compatible vertex order found for myFace and yourFace.\n",
+         attachedFace->toString(),
+         "\n",
+         unattachedFace->toString());
+    return {nullptr, false};
+  }
+
+  const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
+  for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
+    std::pair<VertexPtr, VertexPtr> vp = std::make_pair(unattachedVertices[i], attachedOrderedVertices[i]);
+    vertexPairs.push_back(vp);
+  }
+
+  for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
+    externalSimplices[facialOrientation].erase(attachedFace);
+    externalSimplices[facialOrientation->flip()].erase(attachedFace);
+  }
+
+  CLOG(DEBUG_LEVEL, "Attaching at vertices...");
+  attachAtVertices(unattachedFace, attachedFace, vertexPairs);
+  CLOG(DEBUG_LEVEL, "Done attaching at vertices...");
+
+  if (!unattachedFace->getCofaces().empty()) {
+    for (const auto &newCoface : unattachedFace->getCofaces()) {
+      attachedFace->addCoface(newCoface);
+    }
+  }
+
+  if (!attachedFace->isCausallyAvailable()) {
+    internalSimplices[attachedFace->getOrientation()].insert(attachedFace);
+    internalSimplices[attachedFace->getOrientation()->flip()].insert(attachedFace);
+  }
+
+  return {attachedFace, true};
+}
 
 OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
@@ -477,15 +512,16 @@ OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unatta
     for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++
          attachedCofaceId) {
       if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
-      if (!unattachedSimplex->isCausallyAvailable() || !(*attachedCofaceId)->isCausallyAvailable()) {
-        continue;
-      }
+      if (!unattachedSimplex->hasCausallyAvailableFacet() || !(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
+      CLOG(DEBUG_LEVEL, "Getting a gluable pair...");
+      CLOG(DEBUG_LEVEL, "Validating attachedCoface...");
+      (*attachedCofaceId)->validate();
       OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
       if (gluablePair.has_value()) {
         const auto &[unattachedFace, attachedFace] = gluablePair.value();
         return gluablePair;
       }
-         }
+    }
   }
   return std::nullopt;
 }
@@ -509,13 +545,13 @@ std::vector<Vertices> Spacetime::getConnectedComponents() const {
       component.push_back(current);
       for (const auto &edge : current->getOutEdges()) {
         VertexPtr neighbor = vertexList->get(edge->getTargetId());
-        if (!seen.contains(neighbor)) {
+        if (neighbor != nullptr && !seen.contains(neighbor)) {
           stack.push_back(neighbor);
         }
       }
       for (const auto &edge : current->getInEdges()) {
         VertexPtr neighbor = vertexList->get(edge->getSourceId());
-        if (!seen.contains(neighbor)) {
+        if (neighbor != nullptr && !seen.contains(neighbor)) {
           stack.push_back(neighbor);
         }
       }
@@ -532,5 +568,4 @@ VertexPtr Spacetime::createVertex(const std::uint64_t id) noexcept {
 VertexPtr Spacetime::createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
   return vertexList->add(id, coords);
 }
-
 } // caset
