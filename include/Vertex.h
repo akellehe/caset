@@ -30,12 +30,16 @@
 #include <memory>
 #include <unordered_set>
 #include <unordered_map>
+#include "Logger.h"
 #include "Edge.h"
-#include "EdgeList.h"
+
 
 namespace caset {
+class VertexList;
+class EdgeList;
+class Simplex;
 ///
-/// Vertices in modern lattic gauge theory have different coupling parameters. We have to add them in for strong vs
+/// Vertices in modern lattice gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
 /// established the Gold Standard. The strong force is not actually observable. Observables are gauge variant. If you
 /// change your gauge then it changes what you observe. The EM vector potential is gauge invariant, so it cannot be
@@ -49,10 +53,10 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         Vertex() noexcept { id = 0; }
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
         }
-        Vertex(const std::uint64_t id_) noexcept : id(id_) {
+        explicit Vertex(const std::uint64_t id_) noexcept : id(id_) {
         }
 
-        const std::uint64_t getId() const noexcept { return id; }
+        std::uint64_t getId() const noexcept { return id; }
 
         ///
         /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
@@ -65,55 +69,27 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// By convention this will be \f$ \sqrt{\sum_{i=0}^{i=N-3}x_i^2} \f$ for all coordinate vectors of 4 or more
         /// elements or just the absolute value of \f$ x_0 \f$ otherwise.
         /// @return
-        [[nodiscard]] double getTime() const {
-            if (coordinates.empty()) {
-                return 0;
-            }
-            if (coordinates.size() == 1) {
-                return std::abs(coordinates[0]);
-            }
-            if (coordinates.size() >= 4) {
-                double sumOfSquares = 0;
-                for (int i = 0; i < coordinates.size(); i++) {
-                    sumOfSquares += coordinates[i] * coordinates[i];
-                }
-                return std::sqrt(sumOfSquares);
-            }
-            const std::string msg = "Invalid coordinate vector of length " + std::to_string(coordinates.size());
-            throw std::out_of_range(msg);
-        }
+        [[nodiscard]] double getTime() const;
 
-        bool operator==(const Vertex &vertex) const noexcept {
-            return vertex.getId() == id;
-        }
+        bool operator==(const Vertex &vertex) const noexcept;
 
-        std::vector<double> getCoordinates() const {
-            if (coordinates.empty()) {
-                throw new std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
-            }
-            return coordinates;
-        }
+        std::vector<double> getCoordinates() const;
 
-        void setCoordinates(const std::vector<double> &coords) noexcept { coordinates = coords; }
+        void setCoordinates(const std::vector<double> &coords) noexcept;
 
         [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> > moveTo(
-            const std::shared_ptr<Vertex> &vertex) {
-            if (outEdges.empty()) {
-                throw new std::runtime_error("Cannot execute move; outEdges is empty!");
-            }
-            std::shared_ptr<Edge> edge = std::make_shared<Edge>(getId(), vertex->getId());
-            if (!outEdges.contains(edge)) {
-                throw new std::runtime_error("No edge to this vertex exists.");
-            }
-            return std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> >({
-                *outEdges.find(edge), vertex
-            });
-        }
+            const std::shared_ptr<Vertex> &vertex);
 
         void addInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.insert(edge); }
         void addOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.insert(edge); }
-        void removeInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.erase(edge); }
-        void removeOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.erase(edge); }
+        void removeInEdge(const std::shared_ptr<Edge> &edge) noexcept {
+            if (!inEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+            inEdges.erase(edge);
+        }
+        void removeOutEdge(const std::shared_ptr<Edge> &edge) noexcept {
+            if (!outEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+            outEdges.erase(edge);
+        }
 
         std::size_t degree() const noexcept { return inEdges.size() + outEdges.size(); }
 
@@ -124,99 +100,53 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         getOutEdges() const noexcept { return outEdges; }
 
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
-        getEdges() const noexcept {
-            std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edges;
-            edges.reserve(inEdges.size() + outEdges.size());
-            edges.insert(inEdges.begin(), inEdges.end());
-            edges.insert(outEdges.begin(), outEdges.end());
-            return edges;
-        }
+        getEdges() const noexcept;
 
         // TODO: It might be the case that we're mincing hashes between getKey and FingerprintHash<Edge>. Look into this.
-        std::shared_ptr<Edge> getEdge(const EdgeKey &key) {
-            const auto testEdge = std::make_shared<Edge>(key.first, key.second);
-            if (inEdges.contains(testEdge)) return *inEdges.find(testEdge);
-            if (outEdges.contains(testEdge)) return *outEdges.find(testEdge);
-            return nullptr;
-        }
+        std::shared_ptr<Edge>
+        getEdge(const EdgeKey &key);
 
-        std::shared_ptr<Edge> getEdge(const EdgePtr &edge) {
-            if (inEdges.contains(edge)) return *inEdges.find(edge);
-            if (outEdges.contains(edge)) return *outEdges.find(edge);
-            return nullptr;
-        }
+        std::shared_ptr<Edge> getEdge(const EdgePtr &edge);
 
         std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-        moveInEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList) {
-            std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-            std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-            for (const auto &edge : inEdges) {
-                oldEdges->insert(edge->getKey());
-                edgeList->remove(edge);
-                if (edge->getSourceId() == getId()) {
-                    edge->replaceSourceVertex(vertex->getId());
-                } else if (edge->getTargetId() == getId()) {
-                    edge->replaceTargetVertex(vertex->getId());
-                }
-                newEdges->insert(edge->getKey());
-                vertex->addInEdge(edgeList->add(edge));
-            }
-            inEdges.clear();
-            return {oldEdges, newEdges};
-        }
+        moveInEdgesTo(
+            const std::shared_ptr<Vertex> &vertex,
+            const std::shared_ptr<EdgeList> &edgeList,
+            const std::shared_ptr<VertexList> &vertexList);
+
+        std::pair<EdgeIdSet, EdgeIdSet>
+        moveEdgesTo(
+            const std::shared_ptr<Vertex> &vertex,
+            const std::shared_ptr<EdgeList> &edgeList,
+            const std::shared_ptr<VertexList> &vertexList);
 
         std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-        moveEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList) {
-            std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-            std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-            const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, edgeList);
-            const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, edgeList);
-            oldEdges->insert(oldInEdges->begin(), oldInEdges->end());
-            oldEdges->insert(oldOutEdges->begin(), oldOutEdges->end());
-            newEdges->insert(newInEdges->begin(), newInEdges->end());
-            newEdges->insert(newOutEdges->begin(), newOutEdges->end());
-            return {oldEdges, newEdges};
-        }
+        moveOutEdgesTo(
+            const std::shared_ptr<Vertex> &vertex,
+            const std::shared_ptr<EdgeList> &edgeList,
+            const std::shared_ptr<VertexList> &vertexList
+            );
 
-        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-        moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList) {
-            std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-            std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-            for (const auto &edge : outEdges) {
-                edgeList->remove(edge);
-                oldEdges->insert(edge->getKey());
-                if (edge->getSourceId() == getId()) {
-                    edge->replaceSourceVertex(vertex->getId());
-                } else if (edge->getTargetId() == getId()) {
-                    edge->replaceTargetVertex(vertex->getId());
-                }
-                newEdges->insert(edge->getKey());
-                vertex->addOutEdge(edgeList->add(edge));
-            }
-            outEdges.clear();
-            return {oldEdges, newEdges};
-        }
+        std::string toString() const noexcept;
 
-        std::string toString() const noexcept {
-            std::stringstream ss;
-            ss << "<V" << std::to_string(id) << " ";
-            ss << "(d=" << std::to_string(degree()) << ", ";
-            ss << "t=" << std::to_string(getTime()) << ")>";
-            return ss.str();
-        }
+        std::vector<std::shared_ptr<Simplex>> getSimplices() const noexcept;
+
+        void addSimplex(const std::shared_ptr<Simplex> &simplex);
+        void removeSimplex(const std::shared_ptr<Simplex> &simplex);
 
     private:
-        std::vector<double> coordinates{};
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> outEdges{};
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
+        std::vector<std::shared_ptr<Simplex>> simplices{};
         std::uint64_t id;
+        std::vector<double> coordinates{};
 };
 
 using VertexPtr = std::shared_ptr<Vertex>;
 using Vertices = std::vector<VertexPtr>;
 using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
 using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
-using VertexSet = std::unordered_set<VertexPtr, std::hash<VertexPtr>, std::equal_to<VertexPtr>>;
+using VertexSet = std::unordered_set<VertexPtr>;
 }
 
 namespace std {

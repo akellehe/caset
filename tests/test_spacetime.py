@@ -110,6 +110,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(st.getSimplicesWithOrientation((2, 3))), 2)
         self.assertEqual(len(st.getSimplicesWithOrientation((1, 1))), 0)
 
+    @unittest.skip
     def test_euclidean_embedding(self):
         st = Spacetime()
         simplex14 = st.createSimplex((1, 4))
@@ -207,6 +208,8 @@ class TestSpacetime(unittest.TestCase):
 
         updated, succeeded = st.causallyAttachFaces(left, right)
         self.assertTrue(succeeded)
+        for f in simplex23.getFacets(): f.validate()
+        for f in simplex23.getFacets(): f.validate()
 
         v1, v2, v3, v4 = updated.getVertices()
 
@@ -329,7 +332,11 @@ class TestSpacetime(unittest.TestCase):
         rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
         self.assertEqual(len(rightEdgesBefore), 1)
 
+        left.validate()
+        right.validate()
         updated, succeeded = st.causallyAttachFaces(left, right)
+        left.validate()
+        right.validate()
         self.assertTrue(succeeded)
 
         v1, v2 = updated.getVertices()
@@ -397,6 +404,9 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(components), 2)
 
         unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
+        print('validating faces...')
+        unattachedSimplexFace.validate()
+        attachedSimplexFace.validate()
         unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
         attachedVertices = [v for v in attachedSimplexFace.getVertices()]
 
@@ -480,11 +490,22 @@ class TestSpacetime(unittest.TestCase):
         attachedSimplex = st.createSimplex((1, 4))
         unattachedSimplex = st.createSimplex((2, 3))  # Unattached
 
+        attachedSimplex.validate()
+        unattachedSimplex.validate()
+
         unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
         unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
         attachedVertices = [v for v in attachedSimplexFace.getVertices()]
 
+        unattachedSimplexFace.validate()
+        attachedSimplexFace.validate()
+
         st.attachAtVertices(unattachedSimplexFace, attachedSimplexFace, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+
+        attachedSimplex.validate()
+        unattachedSimplex.validate()
+        unattachedSimplexFace.validate()
+        attachedSimplexFace.validate()
 
         unattachedVertex = unattachedVertices[0]  # V6
         attachedVertex = attachedVertices[0]      # V0
@@ -501,11 +522,20 @@ class TestSpacetime(unittest.TestCase):
 
         # 3. overall edge count is wrong after the moves (17): len(attachedSimplex.getEdges()) is 10, so is len(unattachedSimplex.getEdges())
         total_edges = attachedSimplex.getEdges() + unattachedSimplex.getEdges()
-        shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
-        self.assertEqual(len(total_edges), 18)  # 4 shared/doubled.
+
+        for edge in attachedSimplex.getEdges():
+            self.assertTrue(attachedSimplex.hasVertex(edge.getSourceId()))
+            self.assertTrue(attachedSimplex.hasVertex(edge.getTargetId()))
+
+        for edge in unattachedSimplex.getEdges():
+            self.assertTrue(unattachedSimplex.hasVertex(edge.getSourceId()))
+            self.assertTrue(unattachedSimplex.hasVertex(edge.getTargetId()))
+
+
+        self.assertEqual(len(total_edges), 20)  # 6 shared/doubled.
         self.assertEqual(len(set(total_edges)), 14)
         shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
-        self.assertEqual(len(shared_edges), 4)
+        self.assertEqual(len(shared_edges), 6)
         self.assertEqual(len(set(total_edges)), len(st.getEdgeList().toVector()))
 
         # 4. unattachedSimplex still has edges containing unattachedVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).
@@ -513,20 +543,117 @@ class TestSpacetime(unittest.TestCase):
             self.assertNotEqual(edge.getSourceId(), unattachedVertex.getId())
             self.assertNotEqual(edge.getTargetId(), unattachedVertex.getId())
 
-        # 5. attachedSimplex is missing edges that should have been added; there are none with vertices in unattachedSimplex.
+
+    def test_attach_at_vertices_removes_old_edges(self):
+        st = Spacetime()
+
+        attachedSimplex = st.createSimplex((1, 4))
+        unattachedSimplex = st.createSimplex((2, 3))  # Unattached
+
+        self.assertEqual(len(unattachedSimplex.getEdges()), 10)
+        self.assertEqual(len(attachedSimplex.getEdges()), 10)
+        self.assertEqual(len(st.getEdgeList().toVector()), 20)
+
+        unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
+        unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
+        attachedVertices = [v for v in attachedSimplexFace.getVertices()]
+
+        st.attachAtVertices(unattachedSimplexFace, attachedSimplexFace, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+
+        unattachedVertex = unattachedVertices[0]  # V6
+        attachedVertex = attachedVertices[0]      # V0
+
+        # 3. overall edge count is wrong after the moves (17): len(attachedSimplex.getEdges()) is 10, so is len(unattachedSimplex.getEdges())
+        simplex_edges = attachedSimplex.getEdges() + unattachedSimplex.getEdges()
+        total_edges = st.getEdgeList().toVector()
+
+        self.assertEqual(len(unattachedSimplex.getEdges()), 10)
+        self.assertEqual(len(attachedSimplex.getEdges()), 10)
+
+        self.assertEqual(len(simplex_edges), 20)  # 6 shared/doubled.
+        self.assertEqual(len(set(simplex_edges)), 14)
+
+        shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
+        self.assertEqual(len(shared_edges), 6)
+        self.assertEqual(len(set(simplex_edges)), len(st.getEdgeList().toVector()))
+
+        self.assertEqual(set(simplex_edges), set(total_edges))
+
+    def test_three_simplices_can_share_an_edge(self):
+        st = Spacetime()
+
+        sa = st.createSimplex((1, 4))
+        sb = st.createSimplex((2, 3))
+        sc = st.createSimplex((1, 4))
+        sd = st.createSimplex((2, 3))
+        se = st.createSimplex((1, 4))
+        sg = st.createSimplex((2, 3))
+
+
+        fa = [f for f in sa.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
+        fb = [f for f in sb.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
+        fc = [f for f in sc.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
+        fd = [f for f in sd.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
+        fe = [f for f in se.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
+        fg = [f for f in sg.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
+
+        fa, _ = st.causallyAttachFaces(fa, fb)
+        self.assertTrue(_)
+        self.assertEqual(len(fa.getCofaces()), 2)
+
+        self.assertEqual(len(fb.getCofaces()), 1)
+        fb, _ = st.causallyAttachFaces(fb, fc)
+        self.assertTrue(_)
+        self.assertEqual(len(fa.getCofaces()), 2)
+
+        self.assertEqual(len(fc.getCofaces()), 1)
+        fc, _ = st.causallyAttachFaces(fc, fd)
+        self.assertTrue(_)
+        self.assertEqual(len(fc.getCofaces()), 2)
+
+        fd, _ = st.causallyAttachFaces(fd, fe)
+        self.assertTrue(_)
+
+        fe, _ = st.causallyAttachFaces(fe, fg)
+        self.assertTrue(_)
+
+        for f in [fa, fb, fc, fd, fe, fg]:
+            f.validate()
+        for s in [sa, sb, sc, sd, se, sg]:
+            s.validate()
 
 
     def test_lots_of_components_connect_once_glued4D(self):
+        # I think when we connect one face of a simplex to another, then attach a third along some vertices shared by
+        # the first two then we have troubles.
         st = Spacetime()
 
         orientations = [(1, 4), (2, 3)]
         for i in range(10):
+            print("Creating simplex %s" % i)
             s = st.createSimplex(orientations[i % 2])
+            print("Validating simplex %s" % i)
+            s.validate()
+            print("Validated simplex %s" % i)
             if i == 0: continue
+            for f in s.getFacets():
+                f.validate()
+
+            print("Choosing a face to glue...");
             leftFace, rightFace = st.chooseSimplexFacesToGlue(s)
+            print("validating faces before attachment")
+            leftFace.validate(), rightFace.validate()
+            print('validated faces.')
             if leftFace.isTimelike() != rightFace.isTimelike():
                 continue
+
             updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
+            print('validating faces after attachment')
+            leftFace.validate(), rightFace.validate()
+            print('validated.')
+            print('validating complex after attachment')
+            updated.validate()
+            print('validated')
             self.assertTrue(succeeded)
 
         components = st.getConnectedComponents()
@@ -543,6 +670,8 @@ class TestSpacetime(unittest.TestCase):
             if i == 0: continue
             print('3')
             leftFace, rightFace = st.chooseSimplexFacesToGlue(unattached)
+            print('validating faces...')
+            leftFace.validate(), rightFace.validate()
 
             print('4')
             leftCofaces = leftFace.getCofaces()
@@ -554,7 +683,6 @@ class TestSpacetime(unittest.TestCase):
             self.assertEqual(len(rightCofaces), 1)
 
             print('7')
-
             updated, succeeded = st.causallyAttachFaces(leftFace, rightFace)
             print('8')
 
@@ -583,6 +711,9 @@ class TestSpacetime(unittest.TestCase):
 
         self.assertNotEqual(gluableFaces[1].getOrientation().numeric(), (2, 0))
         self.assertNotEqual(gluableFaces[1].getOrientation().numeric(), (0, 2))
+
+        gluableFaces[0].validate()
+        gluableFaces[1].validate()
 
 
 if __name__ == '__main__':

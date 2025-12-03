@@ -38,7 +38,6 @@ inline double random_uniform(double min = -1.0, double max = 1.0) {
 }
 
 namespace caset {
-
 /// # Edge Disposition
 ///
 /// There are two things that determine the disposition (spacelike, timelike, light/null-like). The first is the squared
@@ -57,7 +56,7 @@ enum class EdgeDisposition : uint8_t {
 };
 
 struct EdgeKeyHash {
-  std::size_t operator()(const std::pair<std::uint64_t, std::uint64_t>& p) const noexcept {
+  std::size_t operator()(const std::pair<std::uint64_t, std::uint64_t> &p) const noexcept {
     // Standard-ish hash combine
     std::size_t h1 = std::hash<std::uint64_t>{}(p.first);
     std::size_t h2 = std::hash<std::uint64_t>{}(p.second);
@@ -68,12 +67,13 @@ struct EdgeKeyHash {
 
 // Optional: custom equality if you ever need something non-trivial
 struct EdgeKeyEqual {
-  bool operator()(const std::pair<std::uint64_t, std::uint64_t>& a,
-                  const std::pair<std::uint64_t, std::uint64_t>& b) const noexcept {
+  bool operator()(const std::pair<std::uint64_t, std::uint64_t> &a,
+                  const std::pair<std::uint64_t, std::uint64_t> &b) const noexcept {
     return a.first == b.first && a.second == b.second;
   }
 };
 
+class Simplex;
 
 /// # Edge Class
 ///
@@ -130,6 +130,11 @@ class Edge : public std::enable_shared_from_this<Edge> {
       refreshFingerprint();
     }
 
+    bool hasVertex(std::uint64_t vertexId) {
+      if (getSourceId() == vertexId || getTargetId() == vertexId) return true;
+      return false;
+    }
+
     void redirect(std::uint64_t from, std::uint64_t to) {
       if (getSourceId() == from) {
         replaceSourceVertex(to);
@@ -149,13 +154,19 @@ class Edge : public std::enable_shared_from_this<Edge> {
 
     Fingerprint fingerprint;
 
-    std::pair<IdType, IdType> getKey() const noexcept{
+    std::pair<IdType, IdType> getKey() const noexcept {
       return {sourceId, targetId};
     }
+
+    std::vector<std::shared_ptr<Simplex> > getSimplices() const noexcept { return simplices; }
+
+    void addSimplex(const std::shared_ptr<Simplex> &simplex) noexcept { simplices.push_back(simplex); }
 
   private:
     std::uint64_t sourceId;
     std::uint64_t targetId;
+    std::vector<std::shared_ptr<Simplex> > simplices;
+
     double squaredLength;
 };
 
@@ -163,12 +174,10 @@ using EdgeHash = FingerprintHash<Edge>;
 using EdgeEq = FingerprintEq<Edge>;
 using EdgePtr = std::shared_ptr<Edge>;
 using Edges = std::vector<EdgePtr>;
+
 using EdgeKey = std::pair<IdType, IdType>;
-using EdgeMap = std::unordered_map<EdgeKey, EdgePtr, EdgeKeyHash, EdgeKeyEqual>;
 using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
 using EdgeIds = std::vector<EdgeKey>;
-using EdgeIndexMap = std::unordered_map<EdgeKey, std::size_t, EdgeKeyHash, EdgeKeyEqual>;
-
 }
 
 #endif //CASET_CASET_SRC_EDGE_H_

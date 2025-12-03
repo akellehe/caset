@@ -62,15 +62,18 @@ class VertexList {
     }
 
     std::shared_ptr<Vertex> add(const std::uint64_t id) noexcept {
-      if (vertexList.contains(id)) {
-        return vertexList.at(id);
-      }
+      if (vertexList.contains(id)) return vertexList.at(id);
       std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
       vertexList.insert_or_assign(id, vertex);
       return vertex;
     }
 
-    void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) noexcept {
+    void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
+#if CASET_DEBUG
+      if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
+      if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
+#endif
+
       remove(toRemove);
       add(toAdd);
     }
@@ -84,7 +87,7 @@ class VertexList {
     }
 
     std::vector<std::shared_ptr<Vertex>> toVector() const noexcept {
-      std::vector<std::shared_ptr<Vertex>> result;
+      std::vector<std::shared_ptr<Vertex>> result{};
       result.reserve(vertexList.size());
       for (const auto &[key, vertex] : vertexList) {
         result.push_back(vertex);

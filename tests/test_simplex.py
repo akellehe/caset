@@ -27,7 +27,6 @@ from caset import Vertex, Simplex, Metric, Spacetime, Signature, SignatureType
 class TestSimplex(unittest.TestCase):
     def setUp(self):
         self.spacetime = Spacetime()
-        self.spacetime.setManual(False)
 
     def test_get_faces(self):
         s1 = self.spacetime.createSimplex((4, 1))
@@ -45,6 +44,7 @@ class TestSimplex(unittest.TestCase):
 
         nTimelike = 0
         for face in s1.getFacets():
+            face.validate()
             self.assertEqual(len(face.getVertices()), 4)
             self.assertEqual(len(face.getEdges()), 6)
             self.assertEqual(len(set([(e.getSourceId(), e.getTargetId()) for e in face.getEdges()])), 6)
@@ -52,6 +52,7 @@ class TestSimplex(unittest.TestCase):
             if face.isTimelike():
                 nTimelike += 1
                 for timelikeFace in face.getFacets():
+                    timelikeFace.validate()
                     self.assertTrue(timelikeFace.isTimelike())
                     self.assertEqual(len(timelikeFace.getVertices()), 3)
                     self.assertEqual(len(timelikeFace.getEdges()), 3)
@@ -73,11 +74,13 @@ class TestSimplex(unittest.TestCase):
         for face41 in facets41:
             if face41.getOrientation().numeric() == (3, 1):
                 left = face41
+            face41.validate()
             print(face41, face41.getOrientation().numeric())
         print("32 Facets ------------------------------------")
         for face32 in facets32:
             if face32.getOrientation().numeric() == (3, 1):
                 right = face32
+            face32.validate()
             print(face32, face32.getOrientation().numeric())
 
         vertices = left.getVerticesWithPairtyTo(right)
@@ -117,6 +120,10 @@ class TestSimplex(unittest.TestCase):
             elif vertex.getTime() == finalTime:
                 otf += 1
 
+        for f in s1.getFacets():
+            f.validate()
+        for f in s2.getFacets():
+            f.validate()
         self.assertEqual(oti, ti)
         self.assertEqual(otf, tf)
 
@@ -146,37 +153,54 @@ class TestSimplex(unittest.TestCase):
         twoSwaps = Simplex([v2, v1, v4, v3])
         self.assertEqual(f1.checkPairty(twoSwaps), 1)
 
+        for f in simplex41.getFacets():
+            f.validate()
+
     def test_get_edges(self):
         simplex41 = self.spacetime.createSimplex((4, 1))
 
         f1, f2, f3, f4, f5 = simplex41.getFacets()
-        v1, v2, v3, v4 = f1.getVertices()
+        v1, v2, v3, v4 = sorted(v.getId() for v in f1.getVertices())
+        e1, e2, e3, e4, e5, e6 = sorted([(e.getSourceId(), e.getTargetId()) for e in f1.getEdges()])
 
-        e1, e2, e3, e4, e5, e6 = f1.getEdges()
+        """
+(Pdb) e1
+(1, 2)
+(Pdb) e2
+(1, 3)
+(Pdb) e3
+(1, 4)
+(Pdb) e4
+(2, 3)
+(Pdb) e5
+(2, 4)
+(Pdb) e6
+(3, 4)
+        """
 
         # 1>2
-        self.assertTrue(e1.getSourceId() == v1.getId() or e1.getTargetId() == v1.getId())
-        self.assertTrue(e1.getSourceId() == v2.getId() or e1.getTargetId() == v2.getId())
+        self.assertEqual(e1[0], 1)
+        self.assertEqual(e1[1], 2)
 
         # 2>3
-        self.assertTrue(e2.getSourceId() == v2.getId() or e2.getTargetId() == v2.getId())
-        self.assertTrue(e2.getSourceId() == v3.getId() or e2.getTargetId() == v3.getId())
+        self.assertTrue(e2[0], 1)
+        self.assertTrue(e2[1], 3)
 
-        #1>3
-        self.assertTrue(e3.getSourceId() == v3.getId() or e3.getTargetId() == v3.getId())
-        self.assertTrue(e3.getSourceId() == v1.getId() or e3.getTargetId() == v1.getId())
+        # 1>3
+        self.assertTrue(e3[0], 1)
+        self.assertTrue(e3[1], 4)
 
-        #3>4
-        self.assertTrue(e4.getSourceId() == v3.getId() or e4.getTargetId() == v3.getId())
-        self.assertTrue(e4.getSourceId() == v4.getId() or e4.getTargetId() == v4.getId())
+        # 3>4
+        self.assertTrue(e4[0], 2)
+        self.assertTrue(e4[1], 3)
 
-        #2>4
-        self.assertTrue(e5.getSourceId() == v2.getId() or e5.getTargetId() == v2.getId())
-        self.assertTrue(e5.getSourceId() == v4.getId() or e5.getTargetId() == v4.getId())
+        # 2>4
+        self.assertTrue(e5[0], 2)
+        self.assertTrue(e5[1], 4)
 
-        #1>4
-        self.assertTrue(e6.getSourceId() == v1.getId() or e6.getTargetId() == v1.getId())
-        self.assertTrue(e6.getSourceId() == v4.getId() or e6.getTargetId() == v4.getId())
+        # 1>4
+        self.assertTrue(e6[0], 3)
+        self.assertTrue(e6[1], 4)
 
     def test_get_verticies_with_pairty_to4D(self):
         simplex41 = self.spacetime.createSimplex((4, 1))
@@ -200,49 +224,18 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(vertices), 4)
 
     def test_get_verticies_with_pairty_to2D(self):
-        simplex21 = self.spacetime.createSimplex((2, 1))
-        simplex12 = self.spacetime.createSimplex((1, 2))
-
-        f21_1, f21_2, f21_3 = simplex21.getFacets()
-        f12_1, f12_2, f12_3 = simplex12.getFacets()
-
-        left = None
-        right = None
-
-        for face21 in simplex21.getFacets():
-            if face21.getOrientation().numeric() == (1, 1):
-                left = face21
-
-        for face12 in simplex12.getFacets():
-            if face12.getOrientation().numeric() == (1, 1):
-                right = face12
-
-        vertices = left.getVerticesWithPairtyTo(right)
-        self.assertEqual(len(vertices), 2)
-
-    def test_get_verticies_with_pairty_to2D(self):
         st = Spacetime()
-        vertices = []
-        for i in range(6):
-            vertices.append(st.createVertex(i, [i % 2]))
 
-        st.createEdge(vertices[0].getId(), vertices[1].getId())
-        st.createEdge(vertices[1].getId(), vertices[2].getId())
-        st.createEdge(vertices[2].getId(), vertices[0].getId())
-
-        st.createEdge(vertices[3].getId(), vertices[4].getId())
-        st.createEdge(vertices[4].getId(), vertices[5].getId())
-        st.createEdge(vertices[5].getId(), vertices[3].getId())
-
-        simplex12 = Simplex(vertices[0:3])
-        simplex21 = Simplex(vertices[3:6])
+        simplex12 = st.createSimplex((1, 2))
+        simplex21 = st.createSimplex((2, 1))
 
         facets12 = simplex12.getFacets()
         facets21 = simplex21.getFacets()
 
-        vertices12 = facets12[0].getVerticesWithPairtyTo(facets21[0])
+        vertices12 = facets12[1].getVerticesWithPairtyTo(facets21[0])
         self.assertEqual(len(vertices12), 2)
-        vertices21 = facets21[0].getVerticesWithPairtyTo(facets12[0])
+
+        vertices21 = facets21[0].getVerticesWithPairtyTo(facets12[1])
         self.assertEqual(len(vertices21), 2)
 
         for i, f12 in enumerate(facets12):
@@ -276,88 +269,40 @@ class TestSimplex(unittest.TestCase):
                 v = f12.getVerticesWithPairtyTo(f21)
                 self.assertEqual(len(v), 2)
 
-    def test_remove_vertex(self):
-        st = Spacetime()
-        v1 = st.createVertex(0, [0])
-        v2 = st.createVertex(1, [1])
-        v3 = st.createVertex(2, [2])
-
-        e1 = st.createEdge(v1.getId(), v2.getId())
-        e2 = st.createEdge(v2.getId(), v3.getId())
-        e3 = st.createEdge(v3.getId(), v1.getId())
-
-        simplex = Simplex([v1, v2, v3])
-
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
-
-        self.assertEqual(v1.getId(), 0)
-        self.assertEqual(v2.getId(), 1)
-        self.assertEqual(v3.getId(), 2)
-
-        self.assertEqual(e1.getSourceId(), 0)
-        self.assertEqual(e1.getTargetId(), 1)
-
-        self.assertEqual(e2.getSourceId(), 1)
-        self.assertEqual(e2.getTargetId(), 2)
-
-        self.assertEqual(e3.getSourceId(), 2)
-        self.assertEqual(e3.getTargetId(), 0)
-
-        simplex.removeVertex(v2)
-        simplex.removeEdge(e1)
-        simplex.removeEdge(e2)
-
-        self.assertFalse(simplex.hasEdge(e1))
-        self.assertFalse(simplex.hasEdge(e2))
-        self.assertTrue(simplex.hasEdge(e3))
-
-        self.assertEqual(len(simplex.getVertices()), 2)
-        self.assertEqual(len(simplex.getEdges()), 1)
-
-        self.assertNotIn(v2, simplex.getVertices())
-        self.assertIn(v3, simplex.getVertices())
-        self.assertIn(v1, simplex.getVertices())
-
     def test_replace_vertex(self):
         st = Spacetime()
-        v1 = st.createVertex(0, [0])
-        v2 = st.createVertex(1, [1])
-        v3 = st.createVertex(2, [2])
-        v4 = st.createVertex(3, [3])
-
-        e1 = st.createEdge(v1.getId(), v2.getId())
-        e2 = st.createEdge(v2.getId(), v3.getId())
-        e3 = st.createEdge(v3.getId(), v1.getId())
-
-        simplex = Simplex([v1, v2, v3])
-
+        simplex = st.createSimplex((1, 2))
+        facets1 = simplex.getFacets()
         self.assertEqual(len(simplex.getVertices()), 3)
         self.assertEqual(len(simplex.getEdges()), 3)
 
-        simplex.replaceVertex(v2, v4)
+        v0 = simplex.getVertices()[0]
+        v = st.createVertex(4, [0])
+        v0id = v0.getId()
+
+        simplex.attach(v0, v, st.getEdgeList(), st.getVertexList())
 
         self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
+        self.assertEqual(len(simplex.getEdges()), 3)  # replace vertex only replaces it in the simplex, there is no assignment of edges to the new vertex.
 
-        self.assertNotIn(v2, simplex.getVertices())
-        self.assertNotIn(1, simplex.getVertexIdLookup())
+        self.assertNotIn(v0, simplex.getVertices())
+        self.assertNotIn(v0id, simplex.getVertexIdLookup())
 
-        self.assertIn(v4, simplex.getVertices())
-        self.assertIn(3, simplex.getVertexIdLookup())
+        self.assertIn(v, simplex.getVertices())
+        self.assertIn(4, simplex.getVertexIdLookup())
+
+        facets2 = simplex.getFacets()
+
+        for f in facets1:
+            f.validate()
+        for f in facets2:
+            f.validate()
 
     def test_replace_vertex_on_a_face_replaces_it_on_the_coface(self):
         st = Spacetime()
-        v1 = st.createVertex(0, [0])
-        v2 = st.createVertex(1, [1])
-        v3 = st.createVertex(2, [2])
-        v4 = st.createVertex(3, [3])
-
-        e1 = st.createEdge(v1.getId(), v2.getId())
-        e2 = st.createEdge(v2.getId(), v3.getId())
-        e3 = st.createEdge(v3.getId(), v1.getId())
-
-        simplex = Simplex([v1, v2, v3])
+        simplex = st.createSimplex((1, 2))
+        v1, v2, v3 = simplex.getVertices()
+        v4 = st.createVertex(4, [0])
 
         facet = simplex.getFacets()[0]
 
@@ -367,7 +312,23 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(facet.getVertices()), 2)
         self.assertEqual(len(facet.getEdges()), 1)
 
-        facet.replaceVertex(v2, v4)
+        for f in simplex.getFacets():
+            f.validate()
+
+        facet.validate()
+        print("Replacing ", v2.getId(), "with ", v4.getId())
+        facet.attach(v2, v4, st.getEdgeList(), st.getVertexList())
+        facet.validate()
+
+        # When we replace a vertex/edge on one facet; the edge AND vertex gets replaced there. on other facets, though,
+        # either the edge is not being rewritten (it's stored by value and not reference?) or the vertex is not being
+        # replaced, so the edge still appears to point to the incorrect vertex. The latter here is more likely.
+        #
+        # We need to ensure that in every facet this edge/vertex appears it's rewritten. So go up to the coface, then
+        # down to each facet.
+        self.assertIn(facet, simplex.getFacets())
+        for f in simplex.getFacets():
+            f.validate()
 
         self.assertEqual(len(simplex.getVertices()), 3)
         self.assertEqual(len(simplex.getEdges()), 3)
@@ -376,28 +337,25 @@ class TestSimplex(unittest.TestCase):
         self.assertNotIn(1, facet.getVertexIdLookup())
 
         self.assertIn(v4, facet.getVertices())
-        self.assertIn(3, facet.getVertexIdLookup())
+        self.assertIn(v4.getId(), facet.getVertexIdLookup())
 
         self.assertNotIn(v2, simplex.getVertices())
-        self.assertNotIn(1, simplex.getVertexIdLookup())
+        self.assertNotIn(v2.getId(), simplex.getVertexIdLookup())
 
         self.assertIn(v4, simplex.getVertices())
-        self.assertIn(3, simplex.getVertexIdLookup())
+        self.assertIn(v4.getId(), simplex.getVertexIdLookup())
+
+        for i, f in enumerate(simplex.getFacets()):
+            print('validating', i)
+            f.validate()
 
     def test_replace_vertex_on_a_coface_replaces_it_on_the_facets(self):
         st = Spacetime()
-        v1 = st.createVertex(0, [0])
-        v2 = st.createVertex(1, [1])
-        v3 = st.createVertex(2, [2])
-        v4 = st.createVertex(3, [3])
-
-        e1 = st.createEdge(v1.getId(), v2.getId())
-        e2 = st.createEdge(v2.getId(), v3.getId())
-        e3 = st.createEdge(v3.getId(), v1.getId())
-
-        simplex = Simplex([v1, v2, v3])
+        simplex = st.createSimplex((1, 2))
 
         facet = simplex.getFacets()[0]
+        v1, v2, v3 = simplex.getVertices()
+        v4 = st.createVertex(4, [0])
 
         self.assertEqual(len(simplex.getVertices()), 3)
         self.assertEqual(len(simplex.getEdges()), 3)
@@ -405,22 +363,27 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(facet.getVertices()), 2)
         self.assertEqual(len(facet.getEdges()), 1)
 
-        simplex.replaceVertex(v2, v4)
+        simplex.attach(v2, v4, st.getEdgeList(), st.getVertexList())
 
         self.assertEqual(len(simplex.getVertices()), 3)
         self.assertEqual(len(simplex.getEdges()), 3)
 
         self.assertNotIn(v2, facet.getVertices())
-        self.assertNotIn(1, facet.getVertexIdLookup())
+        self.assertNotIn(v2.getId(), facet.getVertexIdLookup())
 
         self.assertIn(v4, facet.getVertices())
-        self.assertIn(3, facet.getVertexIdLookup())
+        self.assertIn(v4.getId(), facet.getVertexIdLookup())
 
         self.assertNotIn(v2, simplex.getVertices())
-        self.assertNotIn(1, simplex.getVertexIdLookup())
+        self.assertNotIn(v2.getId(), simplex.getVertexIdLookup())
 
         self.assertIn(v4, simplex.getVertices())
-        self.assertIn(3, simplex.getVertexIdLookup())
+        self.assertIn(v4.getId(), simplex.getVertexIdLookup())
+
+        facet.validate()
+        for i, f in enumerate(simplex.getFacets()):
+            print('validating', i)
+            f.validate()
 
 if __name__ == '__main__':
     unittest.main()

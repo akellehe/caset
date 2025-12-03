@@ -19,51 +19,104 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "Vertex.h"
 #include "Simplex.h"
 
+#include <ATen/core/interned_strings.h>
+#include <c10/util/ThreadLocalDebugInfo.h>
+
 namespace caset {
-std::vector<std::shared_ptr<Simplex> > Simplex::getFacets() noexcept {
+std::vector<SimplexPtr > Simplex::getFacets() {
+#if CASET_DEBUG
+  if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
+#endif
+  if (getVertices().size() == 1) {
+#if CASET_DEBUG
+    validate();
+#endif
+    return {};
+  }
   if (!facets.empty()) return facets;
   auto verts = getVertices();
-  facets.reserve(verts.size());
+  // facets.reserve(verts.size());
   for (int skip = 0; skip < verts.size(); skip++) {
-    std::vector<std::shared_ptr<Vertex> > faceVertices;
+    const auto &skipVertex = verts[skip]->getId();
+    Vertices faceVertices{};
+    Edges faceEdges{};
+    faceEdges.reserve(verts.size());
     faceVertices.reserve(verts.size());
     faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
     faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
-    std::shared_ptr<Simplex> facet = std::make_shared<Simplex>(faceVertices);
+    for (const auto &e : getEdges()) {
+      if (!e->hasVertex(skipVertex)) faceEdges.push_back(e);
+    }
+    SimplexPtr facet = Simplex::create(faceVertices, faceEdges);
     facet->addCoface(shared_from_this());
     facets.push_back(facet);
   }
+#if CASET_DEBUG
+  validate();
+#endif
   return facets;
 }
 
 ///
 /// @param vertices_
 Simplex::Simplex(
-  Vertices vertices_
-) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), fingerprint({}) {
+  const Vertices &vertices_, Edges edges_
+) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
+#if CASET_DEBUG
+  if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
+#endif
+
   orientation = SimplexOrientation::orientationOf(vertices_);
-  initialize(vertices_);
 }
 
 Simplex::Simplex(
-  Vertices vertices_,
-  SimplexOrientationPtr orientation_
-) : orientation(std::move(orientation_)), vertices(vertices_), fingerprint({}) {
-  initialize(vertices_);
+  const Vertices &vertices_, Edges edges_,
+  const SimplexOrientationPtr &orientation_
+) : orientation(orientation_), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
+#if CASET_DEBUG
+  if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
+#endif
 }
 
-void Simplex::initialize(Vertices &vertices_) {
+SimplexPtr Simplex::create(const Vertices &vertices_, const Edges &edges_) {
+#if CASET_DEBUG
+  if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
+#endif
+  SimplexPtr simplex = std::make_shared<Simplex>(vertices_, edges_);
+  simplex->initialize(simplex);
+
+  return simplex;
+}
+
+SimplexPtr Simplex::create(const Vertices &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_) {
+#if CASET_DEBUG
+  if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
+#endif
+  SimplexPtr simplex = std::make_shared<Simplex>(vertices_, edges_, orientation_);
+  simplex->initialize(simplex);
+  return simplex;
+}
+
+void Simplex::initialize(const SimplexPtr &simplex) {
   std::vector<IdType> ids = {};
-  ids.reserve(vertices_.size());
-  vertexIdLookup.reserve(vertices_.size());
-  for (int i = 0; i < vertices_.size(); i++) {
-    ids.push_back(vertices_[i]->getId());
-    vertexIdLookup.insert({vertices_[i]->getId(), vertices_[i]});
+  ids.reserve(vertices.size());
+  vertexIdLookup.reserve(vertices.size());
+  for (const auto &v : vertices) {
+    ids.push_back(v->getId());
+    vertexIdLookup.insert({v->getId(), v});
+    v->addSimplex(simplex);
   }
   fingerprint = Fingerprint(ids);
-  computeEdges();
+#if CASET_DEBUG
+  if (getVertexIdLookup().empty()) throw std::runtime_error("Simplex is empty");
+#endif
+
+#if CASET_DEBUG
+  validate();
+#endif
 }
 
 std::string Simplex::toString() const {
@@ -74,27 +127,13 @@ std::string Simplex::toString() const {
   for (const auto &v : vertices) {
     ss << v->toString() << "→";
   }
-  ss << vertices[0]->toString() << ")>";
+  if (!vertices.empty()) {
+    ss << vertices[0]->toString() << ")>";
+  } else {
+    ss << ")>";
+  }
   return ss.str();
 }
-
-/// Computes the volume of the simplex, \f$ V_{\sigma} \f$
-///
-double Simplex::getVolume() const {
-  return 0;
-}
-
-const std::vector<std::shared_ptr<Simplex> > Simplex::getHinges() const {
-  return {};
-}
-
-const double Simplex::getDeficitAngle() const {
-  return 0;
-}
-
-const double Simplex::computeDihedralAngles() const {
-  return 0.;
-};
 
 [[nodiscard]] SimplexOrientationPtr Simplex::getOrientation() const noexcept {
   return orientation;
@@ -107,7 +146,7 @@ const double Simplex::computeDihedralAngles() const {
 }
 
 [[nodiscard]] bool Simplex::isTimelike() const {
-  for (const auto &edge : edges) {
+  for (const auto &edge : getEdges()) {
     if (!vertexIdLookup.contains(edge->getSourceId())) {
       CLOG(ERROR_LEVEL,
            "vertexIdLookup was missing source ID ",
@@ -165,11 +204,20 @@ std::size_t Simplex::getNumberOfFaces(std::size_t j) const {
   return binomial<std::size_t>(k + 1, j + 1);
 }
 
-void Simplex::addCoface(const std::shared_ptr<Simplex> &simplex) {
-  cofaces.insert(simplex);
+std::size_t Simplex::getNumberOfEdges() const {
+  auto k = getOrientation()->getK();
+  return (k + 1) * k / 2;
 }
 
-[[nodiscard]] bool Simplex::hasCoface(const std::shared_ptr<Simplex> &simplex) const {
+void Simplex::addCoface(const SimplexPtr &simplex) {
+  cofaces.insert(simplex);
+#if CASET_DEBUG
+  simplex->validate();
+  validate();
+#endif
+}
+
+[[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &simplex) const {
   for (const auto &s : cofaces) {
     if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
       return true;
@@ -182,86 +230,86 @@ void Simplex::addCoface(const std::shared_ptr<Simplex> &simplex) {
   return vertexIdLookup.contains(vertexId);
 }
 
-/// @returns Edges in traversal order (the order of input vertices).
-[[nodiscard]] Edges Simplex::getEdges() const {
-  return edges;
-}
-
-std::vector<std::tuple<IdType, IdType> > Simplex::moveEdges(const VertexPtr &from, const VertexPtr &to) {
-  std::vector<std::tuple<IdType, IdType> > oldEdges = {};
-  oldEdges.reserve(edges.size());
-  for (const auto &edge : edges) {
-    if (edge->getSourceId() == from->getId()) {
-      oldEdges.push_back({edge->getSourceId(), edge->getTargetId()});
-      edge->replaceSourceVertex(to->getId());
-    }
-    if (edge->getTargetId() == from->getId()) {
-      oldEdges.push_back({edge->getSourceId(), edge->getTargetId()});
-      edge->replaceTargetVertex(to->getId());
-    }
-  }
-  return oldEdges;
-}
-
-void Simplex::addEdge(const EdgePtr &edge, bool addToCofaces) {
-  edges.push_back(edge);
-  if (addToCofaces) {
-    for (const auto &coface : cofaces) {
-      coface->addEdge(edge);
-    }
-  }
-}
-
-using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
-
-bool Simplex::removeEdge(const EdgeKey &key) {
-  const auto tempEdge = std::make_shared<Edge>(key.first, key.second);
-  return removeEdge(tempEdge);
-}
-
-bool Simplex::removeEdge(const EdgePtr &edge) {
-  for (int i = 0; i < edges.size(); ++i) {
-    if (edges[i] == edge) {
-      edges.erase(edges.begin() + i);
-      CLOG(DEBUG_LEVEL, "Cascading removeEdge(", edge->toString(), ")");
-      return cascade(static_cast<RemoveEdgeByPtr>(&Simplex::removeEdge), true, edge);
-    }
+[[nodiscard]] bool Simplex::hasEdgeContaining(const IdType vertexId) const {
+  for (const auto &e : getEdges()) {
+    if (e->getSourceId() == vertexId) return true;
+    if (e->getTargetId() == vertexId) return true;
   }
   return false;
 }
 
-EdgeIdSet Simplex::getEdgesExternalTo(const VertexPtr &vertex) {
-  EdgeIdSet externalEdges{};
-  for (const auto &edge : vertex->getEdges()) {
-    if (!vertexIdLookup.contains(edge->getSourceId()) ||
-      !vertexIdLookup.contains(edge->getTargetId())) {
-      externalEdges.insert(edge->getKey());
+void Simplex::validate() const {
+  for (const auto &e : getEdges()) {
+    if (!hasVertex(e->getSourceId())) {
+      CLOG(ERROR_LEVEL, "Missing source for one of its edges: ", e->toString());
+      throw std::runtime_error("Missing source for one of its edges.");
+    }
+    if (!hasVertex(e->getTargetId())) {
+      CLOG(ERROR_LEVEL, "Missing target for one of it's edges: ", e->toString());
+      for (const auto &v : getVertices()) {
+        CLOG(DEBUG_LEVEL, "    - ", v->toString());
+      }
+      throw std::runtime_error("Missing target for one of its edges.");
+    }
+    if (getVertices().size() == 1) return; // A 0-simplex will have no edges.
+    for (const auto &v : getVertices()) {
+      if (!hasEdgeContaining(v->getId())) {
+        CLOG(ERROR_LEVEL, "Missing an edge for vertex: ", v->toString(), " on simplex ", toString(), " with edges:");
+        for (const auto &e2 : getEdges()) {
+          CLOG(ERROR_LEVEL, "    - ", e2->toString());
+        }
+        throw std::runtime_error("Missing an edge for a vertex.");
+      }
     }
   }
-  return externalEdges;
 }
 
-bool Simplex::removeVertex(const VertexPtr &vertex) {
-  std::vector<IdType> vertexIds{};
-  vertexIds.reserve(vertices.size() - 1);
-  bool erased = false;
-  for (int i = 0; i < vertices.size(); ++i) {
-    if (vertices[i] == vertex) {
-      vertices.erase(vertices.begin() + i);
-      erased = true;
-    } else {
-      vertexIds.push_back(vertices[i]->getId());
-    }
-  }
-  if (!erased) return false;
-  fingerprint.refreshFingerprint(vertexIds);
-  CLOG(DEBUG_LEVEL, "Cascading removeVertex(", vertex->toString(), ")");
-  return cascade(&Simplex::removeVertex, false, vertex);
+/// @returns Edges in traversal order (the order of input vertices).
+[[nodiscard]] Edges Simplex::getEdges() const {
+  return edges;
+  // Edges edges{};
+  // edges.reserve(getNumberOfEdges());
+// #if CASET_DEBUG
+  // if (vertexIdLookup.empty() && !vertices.empty()) {
+    // throw std::runtime_error("vertexIdLookup was empty but there are vertices in the simplex.");
+  // }
+  // if (vertexIdLookup.size() != vertices.size()) {
+    // CLOG(INFO_LEVEL,
+         // "vertexIdLookup had size ",
+         // std::to_string(vertexIdLookup.size()),
+         // " and vertices has size ",
+         // std::to_string(vertices.size()));
+    // throw std::runtime_error("vertexIdLookup did not match vertices size.");
+  // }
+// #endif
+  // EdgeIdSet seen{};
+  // seen.reserve(getNumberOfEdges());
+  // for (const auto &v : getVertices()) {
+    // for (const auto &e : v->getInEdges()) {
+      // if (hasVertex(e->getSourceId())) {
+        // if (seen.contains(e->getKey())) continue;
+        // seen.insert(e->getKey());
+        // edges.push_back(e);
+      // }
+    // }
+  // }
+  // for (const auto &v : getVertices()) {
+    // for (const auto &e : v->getOutEdges()) {
+      // if (hasVertex(e->getTargetId())) {
+        // if (seen.contains(e->getKey())) continue;
+        // seen.insert(e->getKey());
+        // edges.push_back(e);
+      // }
+    // }
+  // }
+  // return edges;
 }
+
+using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
 
 [[nodiscard]]
 std::optional<Vertices>
-Simplex::getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const {
+Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
   const auto &mine = vertices;
   const auto &theirs = other->getVertices();
 
@@ -269,12 +317,10 @@ Simplex::getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const {
   if (n != theirs.size()) {
     throw std::runtime_error("You can only compare simplices of the same size!");
   }
-  CLOG(DEBUG_LEVEL, "isTimelike");
   if (isTimelike() && !other->isTimelike() || !isTimelike() && other->isTimelike()) {
     throw std::runtime_error("Can't establish parity when one face is timelike and the other is not!");
   }
   if (n == 0) return std::nullopt;
-  CLOG(DEBUG_LEVEL, "isTimelike");
   if (n == 1) {
     if (mine[0]->getTime() != theirs[0]->getTime()) return std::nullopt;
     return mine; // already aligned
@@ -284,7 +330,6 @@ Simplex::getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const {
       [&](std::size_t start,
           bool reversed)
     -> std::optional<Vertices> {
-    CLOG(DEBUG_LEVEL, "Trying alignment...");
     Vertices result{};
     result.reserve(n);
 
@@ -301,79 +346,50 @@ Simplex::getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const {
       }
 
       if (mine[idx]->getTime() != theirs[k]->getTime()) {
-        CLOG(DEBUG_LEVEL, "Alignment failed.");
         return std::nullopt; // mismatch, this alignment fails
       }
 
-      CLOG(DEBUG_LEVEL, "result.push_back()...");
       result.push_back(mine[idx]);
     }
-    CLOG(DEBUG_LEVEL, "Alignment finished.");
     return result; // success
   };
 
   // Try all starting positions where times match theirs[0]
-  CLOG(DEBUG_LEVEL, "comparing times...");
   for (std::size_t i = 0; i < n; ++i) {
     if (mine[i]->getTime() != theirs[0]->getTime()) continue;
 
     // 1. Try same orientation
-    CLOG(DEBUG_LEVEL, "Trying alignment");
     if (auto aligned = try_alignment(i, /*reversed=*/false)) return aligned;
 
     // 2. Try reversed orientation
-    CLOG(DEBUG_LEVEL, "Trying reversed alignment");
     if (auto aligned_rev = try_alignment(i, /*reversed=*/true)) return aligned_rev;
   }
 
   // No alignment found
-  CLOG(DEBUG_LEVEL, "Alignment finished.");
   return std::nullopt;
 }
 
-void Simplex::computeEdges() {
-  auto nEdges = computeNumberOfEdges(getOrientation()->getK());
-
-  if (!edges.empty()) {
-    edges = Edges{};
+[[nodiscard]] bool Simplex::hasEdge(const EdgePtr &edge) const {
+  if (!hasVertex(edge->getSourceId())) {
+    return false;
   }
-
-  edges.reserve(nEdges);
-
-  VertexPtr origin = nullptr;
-
-  // The direction of the edges can be either way; source -> target or target -> source. Just ensure we move across
-  // the vertices in the correct order
-  for (const auto &v : getVertices()) {
-    for (const auto &e : v->getInEdges()) {
-      if (hasVertex(e->getSourceId()) && hasVertex(e->getTargetId())) {
-        edges.push_back(e);
-      }
-    }
+  if (!hasVertex(edge->getTargetId())) {
+    return false;
   }
-}
-
-[[nodiscard]] bool Simplex::hasEdge(const EdgePtr &edge) {
-  return hasEdge(edge->getSourceId(), edge->getTargetId());
-}
-
-[[nodiscard]] bool Simplex::hasEdge(const IdType vertexAId, const IdType vertexBId) {
-  for (const auto &edge : edges) {
-    if (edge->getSourceId() == vertexAId && edge->getTargetId() == vertexBId) {
-      return true;
-    }
-    if (edge->getTargetId() == vertexAId && edge->getSourceId() == vertexBId) {
+  for (const auto &e : getEdges()) {
+    if (e->getSourceId() == edge->getSourceId() && e->getTargetId() == edge->getTargetId()) {
       return true;
     }
   }
   return false;
 }
 
-[[nodiscard]] bool Simplex::hasVertex(const VertexPtr &vertex) const {
-  return vertexIdLookup.contains(vertex->getId());
+[[nodiscard]] bool Simplex::hasEdge(const IdType vertexAId, const IdType vertexBId) const {
+  const EdgePtr edge = std::make_shared<Edge>(vertexAId, vertexBId);
+  return hasEdge(edge);
 }
 
-int8_t Simplex::checkParity(std::shared_ptr<Simplex> &other) {
+int8_t Simplex::checkParity(const SimplexPtr &other) const {
   std::size_t K = vertices.size();
 
   // Build vertex -> position map for 'a'
@@ -396,13 +412,6 @@ int8_t Simplex::checkParity(std::shared_ptr<Simplex> &other) {
   for (int i = 0; i < K; ++i) {
     IdType otherId = otherIds[i];
     if (!positionByVertexIdInA.contains(otherId)) {
-      CLOG(WARN_LEVEL, "Other face contains ", otherId, " but this face does not!");
-      for (auto &v : otherIds) {
-        CLOG(WARN_LEVEL, "Other face contains ", otherId);
-      }
-      for (auto &v : vertices) {
-        CLOG(WARN_LEVEL, "This face contains ", v->getId());
-      }
       return 0;
     }
     perm[i] = positionByVertexIdInA[otherId];
@@ -425,12 +434,13 @@ int8_t Simplex::checkParity(std::shared_ptr<Simplex> &other) {
     }
   }
 
+  // This might be wrong now that we fixed the k+1 vs k bug
   int N = K;
   int transpositionsMod2 = (N - cycles) & 1;
   return transpositionsMod2 ? -1 : +1;
 }
 
-[[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>
+[[nodiscard]] SimplexSet
 Simplex::getCofaces() const noexcept {
   return cofaces;
 }
@@ -439,10 +449,15 @@ bool Simplex::operator==(const Simplex &other) const noexcept {
   return fingerprint.fingerprint() == other.fingerprint.fingerprint();
 }
 
-bool Simplex::isCausallyAvailable() noexcept {
+bool Simplex::isCausallyAvailable() const noexcept {
+  return getCofaces().size() < 2;
+}
+
+bool Simplex::hasCausallyAvailableFacet() {
   for (const auto &face : getFacets()) {
     if (face->getCofaces().size() < 2) return true;
   }
+
   return false;
 }
 
@@ -461,36 +476,43 @@ std::unordered_set<SimplexOrientationPtr> Simplex::getGluableFaceOrientations() 
       allowedOrientations.insert(face->getOrientation());
     }
   }
-  CLOG(DEBUG_LEVEL,
-       "Found ",
-       std::to_string(allowedOrientations.size()),
-       " allowed orientations for simplex ",
-       toString());
   return allowedOrientations;
 }
 
-bool Simplex::operator==(const std::shared_ptr<Simplex> &other) const noexcept {
+bool Simplex::operator==(const SimplexPtr &other) const noexcept {
   return fingerprint.fingerprint() == other->fingerprint.fingerprint();
 }
 
-bool Simplex::replaceEdge(const EdgePtr &oldEdge, const EdgePtr &newEdge) {
-  for (int i = 0; i < edges.size(); ++i) {
-    if (edges[i] == oldEdge) {
-      edges[i] = newEdge;
-      CLOG(DEBUG_LEVEL, "Cascading replaceEdge");
-      return cascade(&Simplex::replaceEdge, true, oldEdge, newEdge);
-    }
+/// This simplex is the unattached simplex.
+void Simplex::attach(const VertexPtr &unattached, const VertexPtr &attached, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
+  CLOG(INFO_LEVEL, "Moving edges...");
+  const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, edgeList, vertexList);
+  CLOG(INFO_LEVEL, "Moved. Replacing vertex...");
+  for (const auto &simplex : unattached->getSimplices()) {
+    simplex->replaceVertex(unattached, attached);
   }
-  return false;
+  // replaceVertex(unattached, attached);
+  CLOG(INFO_LEVEL, "Replaced. Adding simplex to edges...");
+  for (const auto &edgeKey : newEdges) {
+    edgeList->get(edgeKey)->addSimplex(shared_from_this()); // TODO: Remove the old simplex!
+  }
+  CLOG(INFO_LEVEL, "Added. Removing if orphaned...");
+  if (unattached->degree() == 0) vertexList->remove(unattached);
+#if CASET_DEBUG
+  CLOG(INFO_LEVEL, "Done attaching. Validating.");
+  validate();
+  CLOG(INFO_LEVEL, "Validated.");
+#endif
 }
 
 bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
-  if (!hasVertex(oldVertex)) {
-    CLOG(WARN_LEVEL, "Not replacing ", oldVertex->getId(), " with ", newVertex->getId(), " because the simplex does not have the old vertex!");
+  if (!hasVertex(oldVertex->getId())) {
     return false;
   }
-  if (hasVertex(newVertex)) {
-    CLOG(WARN_LEVEL, "Not replacing ", oldVertex->getId(), " with ", newVertex->getId(), " because the simplex already has the new vertex!");
+  if (hasVertex(newVertex->getId())) {
+#if CASET_DEBUG
+    validate();
+#endif
     return false;
   }
   std::vector<IdType> vertexIds = {};
@@ -503,10 +525,22 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
     }
     vertexIds.push_back(vertices[i]->getId());
   }
+  oldVertex->removeSimplex(shared_from_this());
+  newVertex->addSimplex(shared_from_this());
   fingerprint.refreshFingerprint(vertexIds);
-  CLOG(DEBUG_LEVEL, "Cascading replaceVertex(", std::to_string(oldVertex->getId()), ", ", std::to_string(newVertex->getId()), ")");
-  return cascade(&Simplex::replaceVertex, false, oldVertex, newVertex);
-  throw std::runtime_error("This simplex does not contain the vertex you're trying to replace!");
+  for (const auto &e : getEdges()) {
+    if (e->hasVertex(oldVertex->getId())) {
+      if (e->getSourceId() == oldVertex->getId()) {
+        e->replaceSourceVertex(newVertex->getId());
+      } else {
+        e->replaceTargetVertex(newVertex->getId());
+      }
+    }
+  }
+#if CASET_DEBUG
+  validate();
+#endif
+  return true;
 }
 
 VertexIdMap Simplex::getVertexIdLookup() const noexcept {
@@ -514,18 +548,23 @@ VertexIdMap Simplex::getVertexIdLookup() const noexcept {
 }
 
 template<typename Method, typename... Args>
-bool Simplex::cascade(Method method, bool shallow, Args &&... args) {
-  std::deque<std::shared_ptr<Simplex> > simplicesToUpdate;
-  std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> seen;
-
-  auto enqueue_if_new = [&](const std::shared_ptr<Simplex> &s) {
-    if (!seen.contains(s)) {
-      simplicesToUpdate.push_back(s);
-    }
+bool Simplex::cascade(Method method, bool up, bool down, Args &&... args) {
+  std::deque<SimplexPtr> simplicesToUpdate;
+  SimplexSet seen;
+  auto enqueueIfNew = [&](const SimplexPtr &s) {
+    if (!seen.contains(s)) simplicesToUpdate.push_back(s);
   };
 
+  // --- Cascade to siblings --- //
+  for (const auto &coface : getCofaces()) {
+    for (const auto &sibling : coface->getFacets()) {
+      if (sibling->fingerprint.fingerprint() == fingerprint.fingerprint()) continue;
+      (sibling.get()->*method)(std::forward<Args>(args)...);
+    }
+  }
+
   // --- Cascading to cofaces ---
-  if (!cofaces.empty()) {
+  if (up && !cofaces.empty()) {
     simplicesToUpdate.insert(simplicesToUpdate.end(),
                              cofaces.begin(),
                              cofaces.end());
@@ -533,13 +572,14 @@ bool Simplex::cascade(Method method, bool shallow, Args &&... args) {
       const auto coface = simplicesToUpdate.front(); // copy the shared_ptr
       simplicesToUpdate.pop_front();
 
-      if (!seen.insert(coface).second) continue;
+      if (!seen.insert(coface).second) {
+        continue;
+      }
 
       // Call the member function on this coface
       if ((coface.get()->*method)(std::forward<Args>(args)...)) {
         for (const auto &nextCoface : coface->getCofaces()) {
-          // TODO: need exclusively local methods, this is recursing.
-          if (!shallow) enqueue_if_new(nextCoface);
+          enqueueIfNew(nextCoface);
         }
       }
     }
@@ -547,7 +587,7 @@ bool Simplex::cascade(Method method, bool shallow, Args &&... args) {
 
   // --- Cascading to facets ---
   auto facets_ = getFacets();
-  if (!facets_.empty()) {
+  if (down && !facets_.empty()) {
     simplicesToUpdate.clear();
     simplicesToUpdate.insert(simplicesToUpdate.end(),
                              facets_.begin(),
@@ -558,10 +598,9 @@ bool Simplex::cascade(Method method, bool shallow, Args &&... args) {
 
       if (!seen.insert(facet).second) continue;
 
-      // TODO: need exclusively local methods, this is recursing.
       if ((facet.get()->*method)(std::forward<Args>(args)...)) {
         for (const auto &nextFacet : facet->getFacets()) {
-          if (!shallow) enqueue_if_new(nextFacet);
+          enqueueIfNew(nextFacet);
         }
       }
     }

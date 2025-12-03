@@ -37,6 +37,37 @@ class TestEdge(unittest.TestCase):
         self.assertIs(src, v1.getId())
         self.assertIs(tgt, v2.getId())
 
+    def test_sets_of_edges(self):
+        edges = [Edge(i, i+1) for i in range(51)]
+        self.assertEqual(len(set(edges)), len(edges))
+
+        e1 = Edge(0, 1)
+        e2 = Edge(0, 1)
+        e3 = Edge(1, 0)
+        edges = set()
+        edges.add(e1)
+        edges.add(e2)
+        edges.add(e3)
+        self.assertEqual(len(edges), 1)
+
+    def test_maps_of_edges(self):
+        edges = [Edge(i, i+1) for i in range(51)]
+        edge_dict = {Edge(i, i+1): i for i in range(51)}
+        for i, e in enumerate(edges):
+            self.assertEqual(e, edges[i])
+            self.assertEqual(edge_dict.get(e), i)
+
+        self.assertEqual(len(set(edges)), len(edges))
+
+    def test_equality(self):
+        e1 = Edge(0, 1)
+        e2 = Edge(1, 0)
+        self.assertEqual(e1, e2)
+        e3 = Edge(0, 1)
+        self.assertEqual(e1, e3)
+        e4 = Edge(1, 2)
+        self.assertNotEqual(e1, e4)
+
 
 if __name__ == '__main__':
     unittest.main()

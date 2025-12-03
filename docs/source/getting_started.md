@@ -8,6 +8,13 @@ from caset import Spacetime
 spacetime = Spacetime()
 ```
 
+You can see an example of how the spacetime is constructed and embedded into a 3D euclidean space with the example 
+script, examples/plot4D.py.
+
+```bash
+python3 plot4D.py --n-simplices 10
+```
+
 You can adjust the behavior of that `Spacetime` by defining a `Metric` with a `Signature` as well as setting an 
 `alpha` value to use as the default edge length.
 
