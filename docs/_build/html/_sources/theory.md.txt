@@ -99,7 +99,7 @@ scales.
 
 Note that CDT allows for imaginary edge lengths. This is handled by allowing for spacelike squared edge lengths to be 
 some constant $ a^2 $ and time like squared edge lengths to be $ -\alpha a^2 $ for some constant $ \alpha > 0 $. This 
-allows for a Wick rotation, mapping
+allows for a Wick rotation, mapping [[1]](resources/1905.08669v1.pdf)
 
 $$
 l_t^2 = -\alpha a^2 \rightarrow l_t^2 = +\alpha a^2
