@@ -96,3 +96,4 @@ then open it with
 ```bash
 open _build/html/index.html
 ```
+
