@@ -1,0 +1,555 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="The Caset C++ API" href="cpp_api.html"><link rel="prev" title="Getting Started" href="getting_started.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
+        <title>Theory - caset documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">caset  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">caset  documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="_sources/theory.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section class="tex2jax_ignore mathjax_ignore" id="theory">
+<h1>Theory<a class="headerlink" href="#theory" title="Link to this heading">¶</a></h1>
+<section id="why-the-lorentzian-metric-is-important">
+<h2>Why the Lorentzian Metric is Important<a class="headerlink" href="#why-the-lorentzian-metric-is-important" title="Link to this heading">¶</a></h2>
+<p>Euclidean path integrals are easier, but they obscure the causal structure of spacetime.</p>
+<ul class="simple">
+<li><p>Causality only exists in Lorentzian spacetimes. In Euclidean spacetimes, all points are spacelike separated.</p></li>
+<li><p>Unitarity/probability conservation is tied to the Lorentzian structure.</p></li>
+</ul>
+</section>
+<section id="path-integrals-and-wick-rotations">
+<h2>Path Integrals and Wick Rotations<a class="headerlink" href="#path-integrals-and-wick-rotations" title="Link to this heading">¶</a></h2>
+<p>The path integral formulation of quantum mechanics, introduced by Richard Feynman, lets us compute the probability
+amplitude for a particle to transition from one state to another. It’s calculated by summing over all possible paths the
+particle can take, weighted by the exponential of the action (in units of <span class="math notranslate nohighlight">\( \hbar \)</span>). The path integral is the
+foundation for lattice gauge theory as well as quantum chromodynamics.</p>
+<p>Mathematically, this is expressed as:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+\langle x_f, t_f | x_i, t_i \rangle = \int \mathcal{D}[x(t)] e^{\frac{i}{\hbar} S[x(t)]} 
+\]</div>
+</div>
+<p>which can be thought of as the “sum over all possible histories”.</p>
+<p>In field theory the <span class="math notranslate nohighlight">\( x(t) \)</span> becomes a field <span class="math notranslate nohighlight">\( \phi(x) \)</span> and the action <span class="math notranslate nohighlight">\( S[x(t)] \)</span> becomes the action functional
+<span class="math notranslate nohighlight">\( S[\phi] \)</span>, leading to</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+Z = \int \mathcal{D}[\phi] e^{\frac{i}{\hbar} S[\phi]}
+\]</div>
+</div>
+<p>where <span class="math notranslate nohighlight">\( Z \)</span> is the partition function, encoding all the dynamics of the quantum field theory.</p>
+<p>This is the Lorentzian path integral, because <span class="math notranslate nohighlight">\( S[\phi] \)</span> is computed with the Lorentzian metric, <span class="math notranslate nohighlight">\( g_{\mu\nu} \)</span>.</p>
+<p>The exponential term in the integral oscillates rapidly for large actions. It’s not typically convergent. To make sense
+of this integral, people use a Wick rotation to go from Lorentzian to Euclidean signature:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+t \rightarrow -i \tau
+\]</div>
+</div>
+<p>which makes the term</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+e^{iS} \rightarrow e^{-S_E}
+\]</div>
+</div>
+<p>where <span class="math notranslate nohighlight">\( S_E \)</span> is the Euclidean action. Now it acts like a statistical partition function that converges. This new form is
+no longer timelike, though. It is a mathematical trick to make the integral manageable, but it obscures the causal
+structure of spacetime.</p>
+<p>There is no known general mapping to go to and from Euclidean and Lorentzian metrics, or even equivalence classes of
+diffeomorphic metrics.</p>
+</section>
+<section id="quantum-gravity">
+<h2>Quantum Gravity<a class="headerlink" href="#quantum-gravity" title="Link to this heading">¶</a></h2>
+<p>The Lorentzian path integral is particularly important in quantum gravity, where the goal is to quantize the
+gravitational field. In this context, the path integral takes the form:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+Z = \int \frac{\mathcal{D}[g_{\mu\nu}]}{Diff(M)} e^{\frac{i}{\hbar} S_{EH}[g_{\mu\nu}]}
+\]</div>
+</div>
+<p>Where <span class="math notranslate nohighlight">\( S_{EH} \)</span> is the Einstein-Hilbert action, given by</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+S_{EH} = \frac{1}{16 \pi G} \int d^4x \sqrt{-g} (R - 2 \Lambda)
+\]</div>
+</div>
+<p>This is the integral over all Lorentzian metrics under the equivalence class that they are different by a
+diffeomorphism. Another common way of saying that which is pretty cryptic is “The integral over all Lorentzian
+geometries modulo diffeomorphisms.” This is Feynman’s “sum over all spacetimes”. It requires regularization or contour
+deformation to make sense of it, though.</p>
+</section>
+<section id="lattice-gravity-approaches">
+<h2>Lattice Gravity Approaches<a class="headerlink" href="#lattice-gravity-approaches" title="Link to this heading">¶</a></h2>
+<section id="lorentzian-spin-foams">
+<h3>Lorentzian Spin Foams<a class="headerlink" href="#lorentzian-spin-foams" title="Link to this heading">¶</a></h3>
+</section>
+<section id="picard-lefschetz-theory">
+<h3>Picard-Lefschetz Theory<a class="headerlink" href="#picard-lefschetz-theory" title="Link to this heading">¶</a></h3>
+</section>
+<section id="regge-calculus">
+<h3>Regge Calculus<a class="headerlink" href="#regge-calculus" title="Link to this heading">¶</a></h3>
+<p>Regge Calculus allows for edge lengths to vary, providing a discrete approximation to General Relativity. In this
+framework, spacetime is represented as a simplicial complex, where curvature is concentrated on the hinges (the
+(D-2)-dimensional simplices). The Einstein-Hilbert action can be expressed in terms of the deficit angles around these
+hinges, leading to a discrete version of the gravitational action.</p>
+</section>
+<section id="cdt-causal-dynamical-triangulations">
+<h3>CDT (Causal Dynamical Triangulations)<a class="headerlink" href="#cdt-causal-dynamical-triangulations" title="Link to this heading">¶</a></h3>
+<p>Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from
+causally ordered simplices. In CDT, the path integral over geometries is approximated by approximately summing over all
+possible causal triangulations with a MCMC algorithm, ensuring that the causal structure of spacetime is preserved. This
+approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at small
+scales.</p>
+<p>Note that CDT allows for imaginary edge lengths. This is handled by allowing for spacelike squared edge lengths to be
+some constant <span class="math notranslate nohighlight">\( a^2 \)</span> and time like squared edge lengths to be <span class="math notranslate nohighlight">\( -\alpha a^2 \)</span> for some constant <span class="math notranslate nohighlight">\( \alpha &gt; 0 \)</span>. This
+allows for a Wick rotation, mapping</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+l_t^2 = -\alpha a^2 \rightarrow l_t^2 = +\alpha a^2
+\]</div>
+</div>
+</section>
+<section id="causal-sets">
+<h3>Causal Sets<a class="headerlink" href="#causal-sets" title="Link to this heading">¶</a></h3>
+<p>Causal Set Theory posits that spacetime is fundamentally discrete, composed of a set of events with a partial order
+representing causal relationships. In this framework, the geometry of spacetime emerges from the underlying causal
+structure. Causal sets are locally finite, meaning that between any two events, there are a finite number of
+intermediate events. This discreteness leads to a natural ultraviolet cutoff, potentially resolving issues in quantum
+gravity.</p>
+</section>
+</section>
+<section id="connections-between-theories">
+<h2>Connections Between Theories<a class="headerlink" href="#connections-between-theories" title="Link to this heading">¶</a></h2>
+<p>These three approaches to quantum gravity share a common theme of discretizing spacetime, albeit in different ways.</p>
+<ul class="simple">
+<li><p>Regge Calculus focuses on varying edge lengths in a simplicial complex, capturing curvature through deficit angles.</p></li>
+<li><p>CDT emphasizes the causal structure of spacetime by constructing it from causally ordered simplices.</p></li>
+<li><p>Causal Set Theory abstracts spacetime to a set of events with causal relationships, highlighting the fundamental discreteness of spacetime.</p></li>
+</ul>
+</section>
+<section id="incompatibilities">
+<h2>Incompatibilities<a class="headerlink" href="#incompatibilities" title="Link to this heading">¶</a></h2>
+<p>While these theories share the goal of discretizing spacetime, they differ in their foundational assumptions and
+methodologies. Regge Calculus and CDT both utilize simplicial complexes, but CDT imposes a strict causal structure,
+which is not a requirement in Regge Calculus.</p>
+<p>Regge Calculus allows for continuously defined edge lengths, while CDT fixes them.
+Regge Calculus allows for arbitrary triangulations, whereas CDT restricts to those that preserve causality.
+CDT allows for re-drawing of triangulation by a set of defined rules that preserve causality, while Regge Calculus does
+not have such freedom.</p>
+<p>Causal Set Theory, on the other hand, does not rely on a simplicial complex representation, instead focusing on the
+causal relationships between discrete events. These differences lead to distinct mathematical frameworks and physical
+interpretations, making direct comparisons and integrations between the theories challenging.</p>
+<p>Regge Calculus and CDT both sidestep coordinates by discretizing spacetime geometrically instead of analytically. That
+means the structure of spacetime is purely geometric. This gains the benefit of removing diffeomorphism redundancy.</p>
+<p>Two triangulations that differ by the vertex labels are considered the same geometry in CDT. The path integral then
+becomes a sum over inequivalent triangulations instead of an integral over <span class="math notranslate nohighlight">\( g_{\mu\nu} \)</span> modulo diffeomorphisms.</p>
+<section id="path-integrals">
+<h3>Path Integrals<a class="headerlink" href="#path-integrals" title="Link to this heading">¶</a></h3>
+<p>So CDT’s path integral is (not Wick rotated):</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+Z = \sum_{T \in \text{Causal Triangulations}} \frac{1}{C(T)} e^{i S_{Regge}(T)}
+\]</div>
+</div>
+<p>where <span class="math notranslate nohighlight">\( C(T) \)</span> is a symmetry factor for the triangulation <span class="math notranslate nohighlight">\( T \)</span>, and <span class="math notranslate nohighlight">\( S_{Regge}(T) \)</span> is the Regge action, the discrete
+version of the Einstein-Hilbert action.</p>
+<p>In Quantum Regge Calculus; you replace the continuum gravitational path integral</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+Z = \int_{Lor(M)/Diff(M)} \mathcal{D}[g_{\mu\nu}] e^{i S_{EH}[g_{\mu\nu}]\hbar}
+\]</div>
+</div>
+<p>with the discrete analog integrating over edge lengths <span class="math notranslate nohighlight">\( l_{ij} \)</span> for all triangulations, <span class="math notranslate nohighlight">\( \mathcal{T} \)</span>, of the
+manifold <span class="math notranslate nohighlight">\( M \)</span>:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+Z = \sum_{T \in \mathcal{T}} \int_{l_{ij} &gt; 0} \prod_{i &lt; j \in T} dl_{ij} \mu(l_{ij}) e^{i S_{Regge}([T,l_{ij}])/\hbar}
+\]</div>
+</div>
+<p>where <span class="math notranslate nohighlight">\(\mu(l_{ij}) \)</span> is a measure factor for the edge lengths.</p>
+</section>
+<section id="phase-transitions">
+<h3>Phase Transitions<a class="headerlink" href="#phase-transitions" title="Link to this heading">¶</a></h3>
+<p>The big difference is that CDT fixes edge lengths and only sums over <em>causal</em> triangulations, which are enforced via
+(time) foliation. They both implement a sum over possible geometries, but CDT restricts the geometries to those that
+preserve causality. In either case this provides a partition function in the statistical mechanics sense.</p>
+<p>Note that a phase transition occurs when changing a parameter (e.g. temperature, pressure) results in a qualitative
+change in the system’s structure or large scale behavior. In CDT, varying the coupling constants in the Regge action can
+lead to different phases of spacetime geometry. For example, one phase may exhibit a well-defined four-dimensional
+spacetime, while another phase may lead to a crumpled or degenerate geometry. Identifying and understanding these phase
+transitions is crucial for exploring the continuum limit of quantum gravity theories.</p>
+</section>
+<section id="observables">
+<h3>Observables<a class="headerlink" href="#observables" title="Link to this heading">¶</a></h3>
+<p>In Regge Calculus curvature is calculated via deficit angle. In CDT observables are defined across the ensemble of
+triangulations. The spatial volume as a function of discrete proper time encodes the effective curvature radius of
+spacetime.</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+V_3(t) = the number of 3 simplices in time slice t
+\]</div>
+</div>
+<p>the ensemble average is</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+\braket{V_3(t)} = \frac{1}{Z} \sum_{T \in \text{Causal Triangulations}} V_3(t)_T e^{i S_{Regge}(T) / \hbar}
+\]</div>
+</div>
+<p>which fits the classical Euclidean de Sitter solution in 4D:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+V_3(t) \propto \cos^3\left(\frac{t}{R}\right)
+\]</div>
+</div>
+<p>Another approach is with the spectral dimension <span class="math notranslate nohighlight">\(D_S(\sigma)\)</span>. A diffusion process on triangulated spacetime. A random
+walk with diffusion time <span class="math notranslate nohighlight">\(\sigma\)</span> returns a probability <span class="math notranslate nohighlight">\(P(\sigma)\)</span> of returning to the starting point that decays with
+diffusion time. This is a measure of the effective dimension of spacetime at different scales. I think it also measures
+the holonomy of the triangulation within that region. It is scale dependent. Both of these are described in the
+‘Observables’ section of <a class="reference external" href="http://arxiv.org/abs/1905.08669">“Quantum Gravity from Causal Dynamical Triangulations: A Review” by R. Loll</a>.</p>
+<p>Another approach is Geodesic distance distributions. You measure the volume of a geodesic ball.</p>
+</section>
+</section>
+<section id="improvements">
+<h2>Improvements<a class="headerlink" href="#improvements" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>We should consider how to represent light-like edges.</p></li>
+<li><p>We should decide if there’s a more computationally efficient method for solving Regge Calculus</p></li>
+<li><p>We should consider how to represent topology change/gluing/rewriting/retriangulating rules.</p></li>
+<li><p>Implement Chain and Co-Chain definitions</p></li>
+<li><p>Optimize the CDT Markov Chain Monte Carlo algorithms</p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="cpp_api.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">The Caset C++ API</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="getting_started.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Getting Started</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Theory</a><ul>
+<li><a class="reference internal" href="#why-the-lorentzian-metric-is-important">Why the Lorentzian Metric is Important</a></li>
+<li><a class="reference internal" href="#path-integrals-and-wick-rotations">Path Integrals and Wick Rotations</a></li>
+<li><a class="reference internal" href="#quantum-gravity">Quantum Gravity</a></li>
+<li><a class="reference internal" href="#lattice-gravity-approaches">Lattice Gravity Approaches</a><ul>
+<li><a class="reference internal" href="#lorentzian-spin-foams">Lorentzian Spin Foams</a></li>
+<li><a class="reference internal" href="#picard-lefschetz-theory">Picard-Lefschetz Theory</a></li>
+<li><a class="reference internal" href="#regge-calculus">Regge Calculus</a></li>
+<li><a class="reference internal" href="#cdt-causal-dynamical-triangulations">CDT (Causal Dynamical Triangulations)</a></li>
+<li><a class="reference internal" href="#causal-sets">Causal Sets</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#connections-between-theories">Connections Between Theories</a></li>
+<li><a class="reference internal" href="#incompatibilities">Incompatibilities</a><ul>
+<li><a class="reference internal" href="#path-integrals">Path Integrals</a></li>
+<li><a class="reference internal" href="#phase-transitions">Phase Transitions</a></li>
+<li><a class="reference internal" href="#observables">Observables</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#improvements">Improvements</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>

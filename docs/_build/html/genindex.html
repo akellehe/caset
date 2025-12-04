@@ -1,0 +1,973 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="#"><link rel="search" title="Search" href="search.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 --><title>Index - caset documentation</title>
+<link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">caset  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">caset  documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          
+<section class="genindex-section">
+  <h1 id="index">Index</h1>
+  <div class="genindex-jumpbox"><a href="#C"><strong>C</strong></a> | <a href="#D"><strong>D</strong></a> | <a href="#E"><strong>E</strong></a> | <a href="#I"><strong>I</strong></a> | <a href="#L"><strong>L</strong></a> | <a href="#P"><strong>P</strong></a> | <a href="#R"><strong>R</strong></a> | <a href="#S"><strong>S</strong></a> | <a href="#W"><strong>W</strong></a></div>
+</section>
+<section id="C" class="genindex-section">
+  <h2>C</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv45caset">caset (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDTE">caset::CDT (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDT3addEv">caset::CDT::add (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDT4flipEv">caset::CDT::flip (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDT6ishiftEv">caset::CDT::ishift (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDT5shiftEv">caset::CDT::shift (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDT10thermalizeEv">caset::CDT::thermalize (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset3CDT4tuneEv">caset::CDT::tune (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10ConstraintE">caset::Constraint (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10Constraint7appliesERNSt10shared_ptrI9SpacetimeEER14ConstraintType">caset::Constraint::applies (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10ConstraintD0Ev">caset::Constraint::~Constraint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset14ConstraintTypeE">caset::ConstraintType (C++ enum)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset14ConstraintType3AllE">caset::ConstraintType::All (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset14ConstraintType11PachnerMoveE">caset::ConstraintType::PachnerMove (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8CylinderE">caset::Cylinder (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8Cylinder5buildEP9Spacetime">caset::Cylinder::build (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4EdgeE">caset::Edge (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge10addSimplexERKNSt10shared_ptrI7SimplexEE">caset::Edge::addSimplex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge4EdgeENSt8uint64_tENSt8uint64_tE">caset::Edge::Edge (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset4Edge4EdgeENSt8uint64_tENSt8uint64_tEd">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge11fingerprintE">caset::Edge::fingerprint (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge6getKeyEv">caset::Edge::getKey (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge12getSimplicesEv">caset::Edge::getSimplices (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge11getSourceIdEv">caset::Edge::getSourceId (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge16getSquaredLengthEv">caset::Edge::getSquaredLength (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge11getTargetIdEv">caset::Edge::getTargetId (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge9hasVertexENSt8uint64_tE">caset::Edge::hasVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4EdgeeqERK4Edge">caset::Edge::operator== (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge8redirectENSt8uint64_tENSt8uint64_tE">caset::Edge::redirect (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge18refreshFingerprintEv">caset::Edge::refreshFingerprint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge19replaceSourceVertexENSt8uint64_tE">caset::Edge::replaceSourceVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge19replaceTargetVertexENSt8uint64_tE">caset::Edge::replaceTargetVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge9simplicesE">caset::Edge::simplices (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge8sourceIdE">caset::Edge::sourceId (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge13squaredLengthE">caset::Edge::squaredLength (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4Edge8targetIdE">caset::Edge::targetId (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge6toHashEv">caset::Edge::toHash (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset4Edge8toStringEv">caset::Edge::toString (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15EdgeDispositionE">caset::EdgeDisposition (C++ enum)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15EdgeDisposition9LightlikeE">caset::EdgeDisposition::Lightlike (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15EdgeDisposition9SpacelikeE">caset::EdgeDisposition::Spacelike (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15EdgeDisposition8TimelikeE">caset::EdgeDisposition::Timelike (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6EdgeEqE">caset::EdgeEq (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeHashE">caset::EdgeHash (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7EdgeIdsE">caset::EdgeIds (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9EdgeIdSetE">caset::EdgeIdSet (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7EdgeKeyE">caset::EdgeKey (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset12EdgeKeyEqualE">caset::EdgeKeyEqual (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset12EdgeKeyEqualclERKNSt4pairINSt8uint64_tENSt8uint64_tEEERKNSt4pairINSt8uint64_tENSt8uint64_tEEE">caset::EdgeKeyEqual::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11EdgeKeyHashE">caset::EdgeKeyHash (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset11EdgeKeyHashclERKNSt4pairINSt8uint64_tENSt8uint64_tEEE">caset::EdgeKeyHash::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeListE">caset::EdgeList (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeList3addENSt8uint64_tENSt8uint64_tE">caset::EdgeList::add (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset8EdgeList3addENSt8uint64_tENSt8uint64_tEd">[1]</a>, <a href="cpp_api.html#_CPPv4N5caset8EdgeList3addERKNSt10shared_ptrI4EdgeEE">[2]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeList8edgeListE">caset::EdgeList::edgeList (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset8EdgeList3getERK7EdgeKey">caset::EdgeList::get (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeList11getOrInsertERKNSt10shared_ptrI4EdgeEE">caset::EdgeList::getOrInsert (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeList6removeERK7EdgeKey">caset::EdgeList::remove (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset8EdgeList6removeERK7EdgePtr">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8EdgeList7replaceERNSt10shared_ptrI4EdgeEERNSt10shared_ptrI4EdgeEE">caset::EdgeList::replace (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset8EdgeList4sizeEv">caset::EdgeList::size (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset8EdgeList8toVectorEv">caset::EdgeList::toVector (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7EdgePtrE">caset::EdgePtr (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset5EdgesE">caset::Edges (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11FingerprintE">caset::Fingerprint (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint18computeFingerprintERKNSt6vectorI6IdTypeEE">caset::Fingerprint::computeFingerprint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint11FingerprintERKNSt6vectorI6IdTypeEE">caset::Fingerprint::Fingerprint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset11Fingerprint11fingerprintEv">caset::Fingerprint::fingerprint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint2h_E">caset::Fingerprint::h_ (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint4ids_E">caset::Fingerprint::ids_ (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint5mix64E6IdType">caset::Fingerprint::mix64 (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint2n_E">caset::Fingerprint::n_ (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset11FingerprintneERK11Fingerprint">caset::Fingerprint::operator!= (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset11FingerprinteqERK11Fingerprint">caset::Fingerprint::operator== (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint18refreshFingerprintERKNSt6vectorI6IdTypeEE">caset::Fingerprint::refreshFingerprint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11Fingerprint8toStringEv">caset::Fingerprint::toString (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4I0EN5caset13FingerprintEqE">caset::FingerprintEq (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13FingerprintEq14is_transparentE">caset::FingerprintEq::is_transparent (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclE8uint64_tRK1T">caset::FingerprintEq::operator() (C++ function)</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclE8uint64_tRKNSt10shared_ptrI1TEE">[1]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclE8uint64_tRKNSt10shared_ptrIK1TEE">[2]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclERK1T8uint64_t">[3]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclERK1TRK1T">[4]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclERKNSt10shared_ptrI1TEE8uint64_t">[5]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclERKNSt10shared_ptrI1TEERKNSt10shared_ptrI1TEE">[6]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclERKNSt10shared_ptrIK1TEE8uint64_t">[7]</a>, <a href="cpp_api.html#_CPPv4NK5caset13FingerprintEqclERKNSt10shared_ptrIK1TEERKNSt10shared_ptrIK1TEE">[8]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4I0EN5caset15FingerprintHashE">caset::FingerprintHash (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15FingerprintHash14is_transparentE">caset::FingerprintHash::is_transparent (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset15FingerprintHashclE8uint64_t">caset::FingerprintHash::operator() (C++ function)</a>, <a href="cpp_api.html#_CPPv4NK5caset15FingerprintHashclERK1T">[1]</a>, <a href="cpp_api.html#_CPPv4NK5caset15FingerprintHashclERKNSt10shared_ptrI1TEE">[2]</a>, <a href="cpp_api.html#_CPPv4NK5caset15FingerprintHashclERKNSt10shared_ptrIK1TEE">[3]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7IdArrayE">caset::IdArray (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6IdTypeE">caset::IdType (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset4kMaxE">caset::kMax (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset5kSeedE">caset::kSeed (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6MetricE">caset::Metric (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Metric14coordinateFreeE">caset::Metric::coordinateFree (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Metric12getSignatureEv">caset::Metric::getSignature (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Metric16getSquaredLengthERKNSt6vectorIdEERKNSt6vectorIdEE">caset::Metric::getSquaredLength (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Metric6MetricEbR9Signature">caset::Metric::Metric (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Metric9signatureE">caset::Metric::signature (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10ObservableE">caset::Observable (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10Observable7computeERNSt10shared_ptrI9SpacetimeEE">caset::Observable::compute (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10Observable6updateERNSt10shared_ptrI9SpacetimeEE">caset::Observable::update (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10ObservableD0Ev">caset::Observable::~Observable (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caseteqERK21SimplexOrientationPtrRK21SimplexOrientationPtr">caset::operator== (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset19OptionalSimplexPairE">caset::OptionalSimplexPair (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15RemoveEdgeByPtrE">caset::RemoveEdgeByPtr (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9SignatureE">caset::Signature (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Signature1cE">caset::Signature::c (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Signature4diagE">caset::Signature::diag (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Signature10dimensionsE">caset::Signature::dimensions (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Signature11getDiagonalEv">caset::Signature::getDiagonal (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Signature13getDimensionsEv">caset::Signature::getDimensions (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Signature16getSignatureTypeEv">caset::Signature::getSignatureType (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Signature9SignatureEi13SignatureType">caset::Signature::Signature (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Signature13signatureTypeE">caset::Signature::signatureType (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SignatureTypeE">caset::SignatureType (C++ enum)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SignatureType9EuclideanE">caset::SignatureType::Euclidean (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SignatureType10LorentzianE">caset::SignatureType::Lorentzian (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7SimplexE">caset::Simplex (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex9addCofaceERKNSt10shared_ptrI7SimplexEE">caset::Simplex::addCoface (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex6attachERK9VertexPtrRK9VertexPtrRKNSt10shared_ptrI8EdgeListEERKNSt10shared_ptrI10VertexListEE">caset::Simplex::attach (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4I0ENK5caset7Simplex8binomialE1Tjj">caset::Simplex::binomial (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4I0DpEN5caset7Simplex7cascadeEb6MethodbbDpRR4Args">caset::Simplex::cascade (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex11checkParityERKNSt10shared_ptrI7SimplexEE">caset::Simplex::checkParity (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex7cofacesE">caset::Simplex::cofaces (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex20computeNumberOfEdgesENSt6size_tE">caset::Simplex::computeNumberOfEdges (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex6createERK8VerticesRK5Edges">caset::Simplex::create (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset7Simplex6createERK8VerticesRK5EdgesRK21SimplexOrientationPtr">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex5edgesE">caset::Simplex::edges (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex6facetsE">caset::Simplex::facets (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex11fingerprintE">caset::Simplex::fingerprint (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex10getCofacesEv">caset::Simplex::getCofaces (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex8getEdgesEv">caset::Simplex::getEdges (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex9getFacetsEv">caset::Simplex::getFacets (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex26getGluableFaceOrientationsEv">caset::Simplex::getGluableFaceOrientations (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex16getNumberOfEdgesEv">caset::Simplex::getNumberOfEdges (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex16getNumberOfFacesENSt6size_tE">caset::Simplex::getNumberOfFaces (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex14getOrientationEv">caset::Simplex::getOrientation (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex17getVertexIdLookupEv">caset::Simplex::getVertexIdLookup (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex11getVerticesEv">caset::Simplex::getVertices (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex23getVerticesWithParityToERKNSt10shared_ptrI7SimplexEE">caset::Simplex::getVerticesWithParityTo (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex25hasCausallyAvailableFacetEv">caset::Simplex::hasCausallyAvailableFacet (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex9hasCofaceERKNSt10shared_ptrI7SimplexEE">caset::Simplex::hasCoface (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex7hasEdgeEK6IdTypeK6IdType">caset::Simplex::hasEdge (C++ function)</a>, <a href="cpp_api.html#_CPPv4NK5caset7Simplex7hasEdgeERK7EdgePtr">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex17hasEdgeContainingE6IdType">caset::Simplex::hasEdgeContaining (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex9hasVertexE6IdType">caset::Simplex::hasVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex10initializeERKNSt10shared_ptrI7SimplexEE">caset::Simplex::initialize (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex19isCausallyAvailableEv">caset::Simplex::isCausallyAvailable (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex10isInternalEv">caset::Simplex::isInternal (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex10isTimelikeEv">caset::Simplex::isTimelike (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex18maxKPlusOneCofacesEv">caset::Simplex::maxKPlusOneCofaces (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7SimplexeqERK7Simplex">caset::Simplex::operator== (C++ function)</a>, <a href="cpp_api.html#_CPPv4NK5caset7SimplexeqERKNSt10shared_ptrI7SimplexEE">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex11orientationE">caset::Simplex::orientation (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex13replaceVertexERK9VertexPtrRK9VertexPtr">caset::Simplex::replaceVertex (C++ function)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex7SimplexERK8Vertices5Edges">caset::Simplex::Simplex (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset7Simplex7SimplexERK8Vertices5EdgesRK21SimplexOrientationPtr">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex4sizeEv">caset::Simplex::size (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex8toStringEv">caset::Simplex::toString (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset7Simplex8validateEv">caset::Simplex::validate (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex14vertexIdLookupE">caset::Simplex::vertexIdLookup (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset7Simplex8verticesE">caset::Simplex::vertices (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9SimplexEqE">caset::SimplexEq (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11SimplexHashE">caset::SimplexHash (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset18SimplexOrientationE">caset::SimplexOrientation (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation5decTfEv">caset::SimplexOrientation::decTf (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation5decTiEv">caset::SimplexOrientation::decTi (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation11fingerprintEv">caset::SimplexOrientation::fingerprint (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation4flipEv">caset::SimplexOrientation::flip (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation21getFacialOrientationsEv">caset::SimplexOrientation::getFacialOrientations (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation4getKEv">caset::SimplexOrientation::getK (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation14getOrientationEv">caset::SimplexOrientation::getOrientation (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset18SimplexOrientation1kE">caset::SimplexOrientation::k (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation7numericEv">caset::SimplexOrientation::numeric (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientationeqERK18SimplexOrientation">caset::SimplexOrientation::operator== (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset18SimplexOrientation13orientationOfERK8Vertices">caset::SimplexOrientation::orientationOf (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset18SimplexOrientation18SimplexOrientationE7uint8_t7uint8_t">caset::SimplexOrientation::SimplexOrientation (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset18SimplexOrientation18SimplexOrientationEv">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset18SimplexOrientation2tfE">caset::SimplexOrientation::tf (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset18SimplexOrientation2tiE">caset::SimplexOrientation::ti (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset18SimplexOrientation8toStringEv">caset::SimplexOrientation::toString (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset20SimplexOrientationEqE">caset::SimplexOrientationEq (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset20SimplexOrientationEq14is_transparentE">caset::SimplexOrientationEq::is_transparent (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclE8uint64_tRK18SimplexOrientation">caset::SimplexOrientationEq::operator() (C++ function)</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclE8uint64_tRKNSt10shared_ptrI18SimplexOrientationEE">[1]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclE8uint64_tRKNSt10shared_ptrIK18SimplexOrientationEE">[2]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclERK18SimplexOrientation8uint64_t">[3]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclERK18SimplexOrientationRK18SimplexOrientation">[4]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclERKNSt10shared_ptrI18SimplexOrientationEE8uint64_t">[5]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclERKNSt10shared_ptrI18SimplexOrientationEERKNSt10shared_ptrI18SimplexOrientationEE">[6]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclERKNSt10shared_ptrIK18SimplexOrientationEE8uint64_t">[7]</a>, <a href="cpp_api.html#_CPPv4NK5caset20SimplexOrientationEqclERKNSt10shared_ptrIK18SimplexOrientationEERKNSt10shared_ptrIK18SimplexOrientationEE">[8]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset22SimplexOrientationHashE">caset::SimplexOrientationHash (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset22SimplexOrientationHash14is_transparentE">caset::SimplexOrientationHash::is_transparent (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset22SimplexOrientationHashclE8uint64_t">caset::SimplexOrientationHash::operator() (C++ function)</a>, <a href="cpp_api.html#_CPPv4NK5caset22SimplexOrientationHashclERK18SimplexOrientation">[1]</a>, <a href="cpp_api.html#_CPPv4NK5caset22SimplexOrientationHashclERKNSt10shared_ptrI18SimplexOrientationEE">[2]</a>, <a href="cpp_api.html#_CPPv4NK5caset22SimplexOrientationHashclERKNSt10shared_ptrIK18SimplexOrientationEE">[3]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset21SimplexOrientationPtrE">caset::SimplexOrientationPtr (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11SimplexPairE">caset::SimplexPair (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10SimplexPtrE">caset::SimplexPtr (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10SimplexSetE">caset::SimplexSet (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9SimplicesE">caset::Simplices (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10SimulationE">caset::Simulation (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10Simulation10thermalizeEv">caset::Simulation::thermalize (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10Simulation4tuneEv">caset::Simulation::tune (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10SimulationD0Ev">caset::Simulation::~Simulation (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9SpacetimeE">caset::Spacetime (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime13addObservableERKNSt10shared_ptrI10ObservableEE">caset::Spacetime::addObservable (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime5alphaE">caset::Spacetime::alpha (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime16attachAtVerticesERK10SimplexPtrRK10SimplexPtrRKNSt6vectorINSt4pairI9VertexPtr9VertexPtrEEEE">caset::Spacetime::attachAtVertices (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime6BucketE">caset::Spacetime::Bucket (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime5buildEi">caset::Spacetime::build (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime19causallyAttachFacesERK10SimplexPtrRK10SimplexPtr">caset::Spacetime::causallyAttachFaces (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime24chooseSimplexFacesToGlueERK10SimplexPtr">caset::Spacetime::chooseSimplexFacesToGlue (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime10createEdgeEKNSt8uint64_tEKNSt8uint64_tE">caset::Spacetime::createEdge (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset9Spacetime10createEdgeEKNSt8uint64_tEKNSt8uint64_tEd">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime13createSimplexENSt6size_tE">caset::Spacetime::createSimplex (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset9Spacetime13createSimplexERK8VerticesRK5Edges">[1]</a>, <a href="cpp_api.html#_CPPv4N5caset9Spacetime13createSimplexERKNSt5tupleI7uint8_t7uint8_tEE">[2]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime12createVertexEKNSt8uint64_tE">caset::Spacetime::createVertex (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset9Spacetime12createVertexEKNSt8uint64_tERKNSt6vectorIdEE">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime11currentTimeE">caset::Spacetime::currentTime (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime8edgeListE">caset::Spacetime::edgeList (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime14embedEuclideanEid">caset::Spacetime::embedEuclidean (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime17externalSimplicesE">caset::Spacetime::externalSimplices (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Spacetime22getConnectedComponentsEv">caset::Spacetime::getConnectedComponents (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Spacetime14getCurrentTimeEv">caset::Spacetime::getCurrentTime (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime11getEdgeListEv">caset::Spacetime::getEdgeList (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime20getExternalSimplicesEv">caset::Spacetime::getExternalSimplices (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime15getGluableFacesERK10SimplexPtrRK10SimplexPtr">caset::Spacetime::getGluableFaces (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Spacetime9getMetricEv">caset::Spacetime::getMetric (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime27getSimplicesWithOrientationENSt5tupleI7uint8_t7uint8_tEE">caset::Spacetime::getSimplicesWithOrientation (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset9Spacetime16getSpacetimeTypeEv">caset::Spacetime::getSpacetimeType (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime13getVertexListEv">caset::Spacetime::getVertexList (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime13incrementTimeEv">caset::Spacetime::incrementTime (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime17internalSimplicesE">caset::Spacetime::internalSimplices (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime13mergeVerticesERK9VertexPtrRK9VertexPtr">caset::Spacetime::mergeVertices (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime6metricE">caset::Spacetime::metric (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime21moveInEdgesFromVertexERK9VertexPtrRK9VertexPtr">caset::Spacetime::moveInEdgesFromVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime22moveOutEdgesFromVertexERK9VertexPtrRK9VertexPtr">caset::Spacetime::moveOutEdgesFromVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime11observablesE">caset::Spacetime::observables (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime16removeIfIsolatedERK9VertexPtr">caset::Spacetime::removeIfIsolated (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime9SpacetimeENSt10shared_ptrI6MetricEEK13SpacetimeTypeNSt8optionalIdEENSt8optionalINSt10shared_ptrI8TopologyEEEE">caset::Spacetime::Spacetime (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset9Spacetime9SpacetimeEv">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime13spacetimeTypeE">caset::Spacetime::spacetimeType (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime8topologyE">caset::Spacetime::topology (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime15vertexIdCounterE">caset::Spacetime::vertexIdCounter (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9Spacetime10vertexListE">caset::Spacetime::vertexList (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeTypeE">caset::SpacetimeType (C++ enum)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeType3CDTE">caset::SpacetimeType::CDT (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeType5COSETE">caset::SpacetimeType::COSET (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeType13GFT_SPIN_FOAME">caset::SpacetimeType::GFT_SPIN_FOAM (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeType5REGGEE">caset::SpacetimeType::REGGE (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeType13REGGE_PACHNERE">caset::SpacetimeType::REGGE_PACHNER (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset13SpacetimeType25RICCI_FLOW_DISCRETIZATIONE">caset::SpacetimeType::RICCI_FLOW_DISCRETIZATION (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15SpacetimeVolumeE">caset::SpacetimeVolume (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15SpacetimeVolume7computeERNSt10shared_ptrI9SpacetimeEE">caset::SpacetimeVolume::compute (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15SpacetimeVolume6updateERNSt10shared_ptrI9SpacetimeEE">caset::SpacetimeVolume::update (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6SphereE">caset::Sphere (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Sphere5buildEP9Spacetime">caset::Sphere::build (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15TimeOrientationE">caset::TimeOrientation (C++ enum)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15TimeOrientation6FUTUREE">caset::TimeOrientation::FUTURE (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15TimeOrientation7PRESENTE">caset::TimeOrientation::PRESENT (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset15TimeOrientation7UNKNOWNE">caset::TimeOrientation::UNKNOWN (C++ enumerator)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8TopologyE">caset::Topology (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8Topology5buildEP9Spacetime">caset::Topology::build (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8TopologyD0Ev">caset::Topology::~Topology (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6ToroidE">caset::Toroid (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Toroid5buildEP9Spacetime">caset::Toroid::build (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6VertexE">caset::Vertex (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex9addInEdgeERKNSt10shared_ptrI4EdgeEE">caset::Vertex::addInEdge (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex10addOutEdgeERKNSt10shared_ptrI4EdgeEE">caset::Vertex::addOutEdge (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex10addSimplexERKNSt10shared_ptrI7SimplexEE">caset::Vertex::addSimplex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex11coordinatesE">caset::Vertex::coordinates (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex6degreeEv">caset::Vertex::degree (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex14getCoordinatesEv">caset::Vertex::getCoordinates (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex7getEdgeERK7EdgeKey">caset::Vertex::getEdge (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset6Vertex7getEdgeERK7EdgePtr">[1]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex8getEdgesEv">caset::Vertex::getEdges (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex5getIdEv">caset::Vertex::getId (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex10getInEdgesEv">caset::Vertex::getInEdges (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex11getOutEdgesEv">caset::Vertex::getOutEdges (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex12getSimplicesEv">caset::Vertex::getSimplices (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex7getTimeEv">caset::Vertex::getTime (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex2idE">caset::Vertex::id (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex7inEdgesE">caset::Vertex::inEdges (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex11moveEdgesToERKNSt10shared_ptrI6VertexEERKNSt10shared_ptrI8EdgeListEERKNSt10shared_ptrI10VertexListEE">caset::Vertex::moveEdgesTo (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex13moveInEdgesToERKNSt10shared_ptrI6VertexEERKNSt10shared_ptrI8EdgeListEERKNSt10shared_ptrI10VertexListEE">caset::Vertex::moveInEdgesTo (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex14moveOutEdgesToERKNSt10shared_ptrI6VertexEERKNSt10shared_ptrI8EdgeListEERKNSt10shared_ptrI10VertexListEE">caset::Vertex::moveOutEdgesTo (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex6moveToERKNSt10shared_ptrI6VertexEE">caset::Vertex::moveTo (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6VertexeqERK6Vertex">caset::Vertex::operator== (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex8outEdgesE">caset::Vertex::outEdges (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex12removeInEdgeERKNSt10shared_ptrI4EdgeEE">caset::Vertex::removeInEdge (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex13removeOutEdgeERKNSt10shared_ptrI4EdgeEE">caset::Vertex::removeOutEdge (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex13removeSimplexERKNSt10shared_ptrI7SimplexEE">caset::Vertex::removeSimplex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex14setCoordinatesERKNSt6vectorIdEE">caset::Vertex::setCoordinates (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex9simplicesE">caset::Vertex::simplices (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset6Vertex8toStringEv">caset::Vertex::toString (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset6Vertex6VertexEKNSt8uint64_tE">caset::Vertex::Vertex (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset6Vertex6VertexEKNSt8uint64_tERKNSt6vectorIdEE">[1]</a>, <a href="cpp_api.html#_CPPv4N5caset6Vertex6VertexEv">[2]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset11VertexIdMapE">caset::VertexIdMap (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset14VertexIndexMapE">caset::VertexIndexMap (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexListE">caset::VertexList (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexList3addEKNSt8uint64_tE">caset::VertexList::add (C++ function)</a>, <a href="cpp_api.html#_CPPv4N5caset10VertexList3addEKNSt8uint64_tERKNSt6vectorIdEE">[1]</a>, <a href="cpp_api.html#_CPPv4N5caset10VertexList3addERKNSt10shared_ptrI6VertexEE">[2]</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset10VertexList8containsEKNSt8uint64_tE">caset::VertexList::contains (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexList3getENSt8uint64_tE">caset::VertexList::get (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexListixEKNSt8uint64_tE">caset::VertexList::operator[] (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexList6removeERKNSt10shared_ptrI6VertexEE">caset::VertexList::remove (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexList7replaceERKNSt10shared_ptrI6VertexEERKNSt10shared_ptrI6VertexEE">caset::VertexList::replace (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexList4sizeEv">caset::VertexList::size (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK5caset10VertexList8toVectorEv">caset::VertexList::toVector (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset10VertexList10vertexListE">caset::VertexList::vertexList (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9VertexPtrE">caset::VertexPtr (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset9VertexSetE">caset::VertexSet (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N5caset8VerticesE">caset::Vertices (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#c.CLOG">CLOG (C macro)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv414CRITICAL_LEVEL">CRITICAL_LEVEL (C++ member)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="D" class="genindex-section">
+  <h2>D</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv411DEBUG_LEVEL">DEBUG_LEVEL (C++ member)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="E" class="genindex-section">
+  <h2>E</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv411ERROR_LEVEL">ERROR_LEVEL (C++ member)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="I" class="genindex-section">
+  <h2>I</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv410INFO_LEVEL">INFO_LEVEL (C++ member)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="L" class="genindex-section">
+  <h2>L</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv46Logger">Logger (C++ class)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N6Logger4emitEsRKNSt6stringENSt6stringEKiRNSt6stringE">Logger::emit (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N6Logger8getLevelEv">Logger::getLevel (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N6Logger7getTimeEv">Logger::getTime (C++ function)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv4N6Logger5LEVELE">Logger::LEVEL (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IDpEN6Logger3logEvKsRKNSt6stringENSt6stringEiDpRR4Args">Logger::log (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N6Logger12makeRelativeERKNSt6stringERKNSt6stringE">Logger::makeRelative (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N6Logger9nameLevelEs">Logger::nameLevel (C++ function)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="P" class="genindex-section">
+  <h2>P</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv415PYBIND11_MODULE5caset1m">PYBIND11_MODULE (C++ function)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="R" class="genindex-section">
+  <h2>R</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv414random_uniformdd">random_uniform (C++ function)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="S" class="genindex-section">
+  <h2>S</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv4St">std (C++ type)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IENSt8equal_toIN5caset6VertexEEE">std::equal_to&lt;caset::Vertex&gt; (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NKSt8equal_toIN5caset6VertexEEclERKN5caset6VertexERKN5caset6VertexE">std::equal_to&lt;caset::Vertex&gt;::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IENSt8equal_toINSt10shared_ptrIN5caset6VertexEEEEE">std::equal_to&lt;std::shared_ptr&lt;caset::Vertex&gt;&gt; (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NKSt8equal_toINSt10shared_ptrIN5caset6VertexEEEEclERKN5caset9VertexPtrERKN5caset9VertexPtrE">std::equal_to&lt;std::shared_ptr&lt;caset::Vertex&gt;&gt;::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IENSt4hashIN5caset7SimplexEEE">std::hash&lt;caset::Simplex&gt; (C++ struct)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv4NKSt4hashIN5caset7SimplexEEclERKN5caset7SimplexE">std::hash&lt;caset::Simplex&gt;::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IENSt4hashIN5caset18SimplexOrientationEEE">std::hash&lt;caset::SimplexOrientation&gt; (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NKSt4hashIN5caset18SimplexOrientationEEclERKN5caset18SimplexOrientationE">std::hash&lt;caset::SimplexOrientation&gt;::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IENSt4hashIN5caset6VertexEEE">std::hash&lt;caset::Vertex&gt; (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NKSt4hashIN5caset6VertexEEclERKN5caset6VertexE">std::hash&lt;caset::Vertex&gt;::operator() (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4IENSt4hashINSt10shared_ptrIN5caset6VertexEEEEE">std::hash&lt;std::shared_ptr&lt;caset::Vertex&gt;&gt; (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NKSt4hashINSt10shared_ptrIN5caset6VertexEEEEclERKNSt10shared_ptrIN5caset6VertexEEE">std::hash&lt;std::shared_ptr&lt;caset::Vertex&gt;&gt;::operator() (C++ function)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="W" class="genindex-section">
+  <h2>W</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="cpp_api.html#_CPPv410WARN_LEVEL">WARN_LEVEL (C++ member)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>

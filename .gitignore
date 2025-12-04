@@ -4,7 +4,6 @@ build
 cmake-build-debug
 caset.cpython-313-darwin.so
 dist
-docs/_build
 docs/_doxygen
 vendor/libtorch*
 .DS_Store
