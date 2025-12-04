@@ -236,18 +236,17 @@
 <h1>Theory<a class="headerlink" href="#theory" title="Link to this heading">¶</a></h1>
 <section id="why-the-lorentzian-metric-is-important">
 <h2>Why the Lorentzian Metric is Important<a class="headerlink" href="#why-the-lorentzian-metric-is-important" title="Link to this heading">¶</a></h2>
-<p>Euclidean path integrals are easier, but they obscure the causal structure of spacetime.</p>
-<ul class="simple">
-<li><p>Causality only exists in Lorentzian spacetimes. In Euclidean spacetimes, all points are spacelike separated.</p></li>
-<li><p>Unitarity/probability conservation is tied to the Lorentzian structure.</p></li>
-</ul>
+<p>Lorentzian path integrals tend to integrate over an infinite domain, so they tend to “blow up”. Euclidean path integrals
+are easier to solve, but they obscure the causal structure of spacetime.</p>
+<p>In Euclidean spacetimes, all points are effectively spacelike separated. Unitarity/probability conservation is tied to
+the Lorentzian structure.</p>
 </section>
 <section id="path-integrals-and-wick-rotations">
 <h2>Path Integrals and Wick Rotations<a class="headerlink" href="#path-integrals-and-wick-rotations" title="Link to this heading">¶</a></h2>
 <p>The path integral formulation of quantum mechanics, introduced by Richard Feynman, lets us compute the probability
-amplitude for a particle to transition from one state to another. It’s calculated by summing over all possible paths the
-particle can take, weighted by the exponential of the action (in units of <span class="math notranslate nohighlight">\( \hbar \)</span>). The path integral is the
-foundation for lattice gauge theory as well as quantum chromodynamics.</p>
+amplitude for a system to transition from one state to another. It’s calculated by summing over all paths the system can
+take, weighted by the exponential of the action (in units of <span class="math notranslate nohighlight">\( \hbar \)</span>). The path integral is the foundation for lattice
+gauge theory as well as quantum chromodynamics.</p>
 <p>Mathematically, this is expressed as:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -304,15 +303,18 @@ Z = \int \frac{\mathcal{D}[g_{\mu\nu}]}{Diff(M)} e^{\frac{i}{\hbar} S_{EH}[g_{\m
 S_{EH} = \frac{1}{16 \pi G} \int d^4x \sqrt{-g} (R - 2 \Lambda)
 \]</div>
 </div>
-<p>This is the integral over all Lorentzian metrics under the equivalence class that they are different by a
-diffeomorphism. Another common way of saying that which is pretty cryptic is “The integral over all Lorentzian
-geometries modulo diffeomorphisms.” This is Feynman’s “sum over all spacetimes”. It requires regularization or contour
-deformation to make sense of it, though.</p>
+<p>This is the integral over all Lorentzian metrics under the equivalence class that differ by a
+diffeomorphism i.e. they are frame independent (since diffeomorphisms allow us to switch between frames). Another common
+way of saying that which is pretty cryptic is “The integral over all Lorentzian geometries modulo diffeomorphisms.” This
+is Feynman’s “sum over all spacetimes”. It requires regularization or contour deformation to make sense of it, though.</p>
 </section>
 <section id="lattice-gravity-approaches">
 <h2>Lattice Gravity Approaches<a class="headerlink" href="#lattice-gravity-approaches" title="Link to this heading">¶</a></h2>
 <section id="lorentzian-spin-foams">
 <h3>Lorentzian Spin Foams<a class="headerlink" href="#lorentzian-spin-foams" title="Link to this heading">¶</a></h3>
+</section>
+<section id="loop-quantum-gravity-on-graphs">
+<h3>Loop Quantum Gravity on Graphs<a class="headerlink" href="#loop-quantum-gravity-on-graphs" title="Link to this heading">¶</a></h3>
 </section>
 <section id="picard-lefschetz-theory">
 <h3>Picard-Lefschetz Theory<a class="headerlink" href="#picard-lefschetz-theory" title="Link to this heading">¶</a></h3>
@@ -520,6 +522,7 @@ the holonomy of the triangulation within that region. It is scale dependent. Bot
 <li><a class="reference internal" href="#quantum-gravity">Quantum Gravity</a></li>
 <li><a class="reference internal" href="#lattice-gravity-approaches">Lattice Gravity Approaches</a><ul>
 <li><a class="reference internal" href="#lorentzian-spin-foams">Lorentzian Spin Foams</a></li>
+<li><a class="reference internal" href="#loop-quantum-gravity-on-graphs">Loop Quantum Gravity on Graphs</a></li>
 <li><a class="reference internal" href="#picard-lefschetz-theory">Picard-Lefschetz Theory</a></li>
 <li><a class="reference internal" href="#regge-calculus">Regge Calculus</a></li>
 <li><a class="reference internal" href="#cdt-causal-dynamical-triangulations">CDT (Causal Dynamical Triangulations)</a></li>

@@ -2,17 +2,18 @@
 
 ## Why the Lorentzian Metric is Important
 
-Euclidean path integrals are easier, but they obscure the causal structure of spacetime.
+Lorentzian path integrals tend to integrate over an infinite domain, so they tend to "blow up". Euclidean path integrals 
+are easier to solve, but they obscure the causal structure of spacetime.
 
- - Causality only exists in Lorentzian spacetimes. In Euclidean spacetimes, all points are spacelike separated.
- - Unitarity/probability conservation is tied to the Lorentzian structure. 
+In Euclidean spacetimes, all points are effectively spacelike separated. Unitarity/probability conservation is tied to 
+the Lorentzian structure. 
 
 ## Path Integrals and Wick Rotations
 
 The path integral formulation of quantum mechanics, introduced by Richard Feynman, lets us compute the probability 
-amplitude for a particle to transition from one state to another. It's calculated by summing over all possible paths the 
-particle can take, weighted by the exponential of the action (in units of $ \hbar $). The path integral is the 
-foundation for lattice gauge theory as well as quantum chromodynamics.
+amplitude for a system to transition from one state to another. It's calculated by summing over all paths the system can 
+take, weighted by the exponential of the action (in units of $ \hbar $). The path integral is the foundation for lattice 
+gauge theory as well as quantum chromodynamics.
 
 Mathematically, this is expressed as:
 
@@ -68,14 +69,16 @@ $$
 S_{EH} = \frac{1}{16 \pi G} \int d^4x \sqrt{-g} (R - 2 \Lambda)
 $$
 
-This is the integral over all Lorentzian metrics under the equivalence class that they are different by a 
-diffeomorphism. Another common way of saying that which is pretty cryptic is "The integral over all Lorentzian 
-geometries modulo diffeomorphisms." This is Feynman's "sum over all spacetimes". It requires regularization or contour 
-deformation to make sense of it, though.
+This is the integral over all Lorentzian metrics under the equivalence class that differ by a 
+diffeomorphism i.e. they are frame independent (since diffeomorphisms allow us to switch between frames). Another common 
+way of saying that which is pretty cryptic is "The integral over all Lorentzian geometries modulo diffeomorphisms." This 
+is Feynman's "sum over all spacetimes". It requires regularization or contour deformation to make sense of it, though.
 
 ## Lattice Gravity Approaches
 
 ### Lorentzian Spin Foams
+
+### Loop Quantum Gravity on Graphs
 
 ### Picard-Lefschetz Theory
 
