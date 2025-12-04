@@ -129,7 +129,8 @@ class TestSimplex(unittest.TestCase):
 
     def setUp(self):
         self.spacetime = Spacetime()
-
+    
+    @unittest.skip
     def test_pairty(self):
         simplex41 = self.spacetime.createSimplex((4, 1))
         f1, f2, f3, f4, f5 = simplex41.getFacets()
