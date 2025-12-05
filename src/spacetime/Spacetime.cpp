@@ -305,21 +305,14 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
 
 [[nodiscard]] OptionalSimplexPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
-  CLOG(DEBUG_LEVEL, "Getting facets for unattached simplex...");
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
-  CLOG(DEBUG_LEVEL, "Getting facets for attached simplex...");
   auto attachedFacets = attachedSimplex->getFacets();
-  CLOG(DEBUG_LEVEL, "Validating both...");
 #if CASET_DEBUG
   for (const auto &f : unattachedFacets) {
-    CLOG(DEBUG_LEVEL, "Validating unattached facet...");
     f->validate();
-    CLOG(DEBUG_LEVEL, "Validated.");
   }
   for (const auto &f : attachedFacets) {
-    CLOG(DEBUG_LEVEL, "Validating attached facet...");
     f->validate();
-    CLOG(DEBUG_LEVEL, "Validated.");
   }
 #endif
 
@@ -334,7 +327,6 @@ Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr
       if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
       if (attachedFace->isInternal()) continue;
 #if CASET_DEBUG
-      CLOG(DEBUG_LEVEL, "Validating in getGluableFaces...");
       attachedFace->validate();
       unattachedFace->validate();
 #endif
@@ -393,33 +385,18 @@ void Spacetime::attachAtVertices(
 ) {
   CLOG(INFO_LEVEL, "attachAtVertices called. Pre-validating.");
   // Bone density in Regge calculus can be calculated as the size of the Simplex list on the Edge.
+#if CASET_DEBUG
   unattached->validate();
   attached->validate();
-  CLOG(INFO_LEVEL, "Pre-validated.");
+#endif
   // Move external edges from unattached vertices to attached vertices.
-  CLOG(INFO_LEVEL, "Attaching vertices...");
   for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
-    CLOG(INFO_LEVEL, "Attaching un: ", unattachedVertex->toString(), " to at: ", attachedVertex->toString());
     unattached->attach(unattachedVertex, attachedVertex, edgeList, vertexList);
-    CLOG(INFO_LEVEL, "Done attaching ", std::to_string(unattachedVertex->getId()), " and ", std::to_string(attachedVertex->getId()));
   }
-  CLOG(INFO_LEVEL, "Done attaching vertices. Post-validating...");
-
+#if CASET_DEBUG
   unattached->validate();
   attached->validate();
-
-  CLOG(INFO_LEVEL, "Validated.");
-
-  // Vertices internal to from will be replaced by corresponding vertices in to.
-  // Edges internal to from will be removed.
-  // Edges external to from will be moved to to, updating source/target as needed
-  // Vertices that become isolated will be removed from the spacetime.
-  // Edges that become invalid will be removed from the spacetime.
-  //
-
-  // O(n log(n)) to construct vertex lookup
-  // O(n)        to remove internal edges
-  // O(n^2)      to not do the lookup, so we'll build the lookup:
+#endif
 }
 
 std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
@@ -487,9 +464,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
     externalSimplices[facialOrientation->flip()].erase(attachedFace);
   }
 
-  CLOG(DEBUG_LEVEL, "Attaching at vertices...");
   attachAtVertices(unattachedFace, attachedFace, vertexPairs);
-  CLOG(DEBUG_LEVEL, "Done attaching at vertices...");
 
   if (!unattachedFace->getCofaces().empty()) {
     for (const auto &newCoface : unattachedFace->getCofaces()) {
@@ -513,9 +488,9 @@ OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unatta
          attachedCofaceId) {
       if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
       if (!unattachedSimplex->hasCausallyAvailableFacet() || !(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
-      CLOG(DEBUG_LEVEL, "Getting a gluable pair...");
-      CLOG(DEBUG_LEVEL, "Validating attachedCoface...");
+#if CASET_DEBUG
       (*attachedCofaceId)->validate();
+#endif
       OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
       if (gluablePair.has_value()) {
         const auto &[unattachedFace, attachedFace] = gluablePair.value();

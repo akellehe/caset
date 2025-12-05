@@ -359,7 +359,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     [[nodiscard]] bool hasEdge(const EdgePtr &edge) const;
     [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId) const;
-    // [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId);
 
     [[nodiscard]] bool hasVertex(IdType vertexId) const;
 

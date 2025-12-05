@@ -246,9 +246,6 @@ void Simplex::validate() const {
     }
     if (!hasVertex(e->getTargetId())) {
       CLOG(ERROR_LEVEL, "Missing target for one of it's edges: ", e->toString());
-      for (const auto &v : getVertices()) {
-        CLOG(DEBUG_LEVEL, "    - ", v->toString());
-      }
       throw std::runtime_error("Missing target for one of its edges.");
     }
     if (getVertices().size() == 1) return; // A 0-simplex will have no edges.
@@ -267,42 +264,6 @@ void Simplex::validate() const {
 /// @returns Edges in traversal order (the order of input vertices).
 [[nodiscard]] Edges Simplex::getEdges() const {
   return edges;
-  // Edges edges{};
-  // edges.reserve(getNumberOfEdges());
-// #if CASET_DEBUG
-  // if (vertexIdLookup.empty() && !vertices.empty()) {
-    // throw std::runtime_error("vertexIdLookup was empty but there are vertices in the simplex.");
-  // }
-  // if (vertexIdLookup.size() != vertices.size()) {
-    // CLOG(INFO_LEVEL,
-         // "vertexIdLookup had size ",
-         // std::to_string(vertexIdLookup.size()),
-         // " and vertices has size ",
-         // std::to_string(vertices.size()));
-    // throw std::runtime_error("vertexIdLookup did not match vertices size.");
-  // }
-// #endif
-  // EdgeIdSet seen{};
-  // seen.reserve(getNumberOfEdges());
-  // for (const auto &v : getVertices()) {
-    // for (const auto &e : v->getInEdges()) {
-      // if (hasVertex(e->getSourceId())) {
-        // if (seen.contains(e->getKey())) continue;
-        // seen.insert(e->getKey());
-        // edges.push_back(e);
-      // }
-    // }
-  // }
-  // for (const auto &v : getVertices()) {
-    // for (const auto &e : v->getOutEdges()) {
-      // if (hasVertex(e->getTargetId())) {
-        // if (seen.contains(e->getKey())) continue;
-        // seen.insert(e->getKey());
-        // edges.push_back(e);
-      // }
-    // }
-  // }
-  // return edges;
 }
 
 using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
@@ -485,23 +446,16 @@ bool Simplex::operator==(const SimplexPtr &other) const noexcept {
 
 /// This simplex is the unattached simplex.
 void Simplex::attach(const VertexPtr &unattached, const VertexPtr &attached, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  CLOG(INFO_LEVEL, "Moving edges...");
   const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, edgeList, vertexList);
-  CLOG(INFO_LEVEL, "Moved. Replacing vertex...");
   for (const auto &simplex : unattached->getSimplices()) {
     simplex->replaceVertex(unattached, attached);
   }
-  // replaceVertex(unattached, attached);
-  CLOG(INFO_LEVEL, "Replaced. Adding simplex to edges...");
   for (const auto &edgeKey : newEdges) {
     edgeList->get(edgeKey)->addSimplex(shared_from_this()); // TODO: Remove the old simplex!
   }
-  CLOG(INFO_LEVEL, "Added. Removing if orphaned...");
   if (unattached->degree() == 0) vertexList->remove(unattached);
 #if CASET_DEBUG
-  CLOG(INFO_LEVEL, "Done attaching. Validating.");
   validate();
-  CLOG(INFO_LEVEL, "Validated.");
 #endif
 }
 

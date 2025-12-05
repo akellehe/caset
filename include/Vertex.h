@@ -102,7 +102,6 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
         getEdges() const noexcept;
 
-        // TODO: It might be the case that we're mincing hashes between getKey and FingerprintHash<Edge>. Look into this.
         std::shared_ptr<Edge>
         getEdge(const EdgeKey &key);
 

@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -198,8 +199,6 @@ class Spacetime {
     /// edges in the attachedFace, so we can delete those edges, replacing them with their analogous counterparts in the
     /// attachedFace. The external edges need to be moved from the unattachedFace vertex to the attachedFace vertex.
     ///
-    ///
-    ///
     /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
     /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
     /// @returns {attachedFace, succeeded} The `attachedFace` after attachment and whether the attachment succeeded.
@@ -239,7 +238,7 @@ class Spacetime {
       SimplexOrientationPtr o = std::make_shared<
         SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
       SimplexSet result{};
-      for (const auto &[facialOrientation, bucket] : externalSimplices) {
+      for (const auto &bucket : externalSimplices | std::views::values) {
         for (const auto &simplex : bucket) {
           for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
             if (simplex->getOrientation() == o) result.insert(simplex);
@@ -249,15 +248,13 @@ class Spacetime {
       return result;
     }
 
-    std::vector<Vertices> getConnectedComponents() const;
+    [[nodiscard]] std::vector<Vertices> getConnectedComponents() const;
 
     void mergeVertices(const VertexPtr &into, const VertexPtr &from);
 
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
-
-
 
     IdType vertexIdCounter = 0;
     SpacetimeType spacetimeType;
@@ -282,8 +279,6 @@ class Spacetime {
     /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
     /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
     /// orientation of the Simplex itself.
-    ///
-    /// TODO: I don't think SimplexOrientationPtr is correctly hashing!!
     std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
     std::vector<std::shared_ptr<Observable> > observables{};
 };
