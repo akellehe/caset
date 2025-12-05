@@ -364,14 +364,21 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
   }
 }
 
-void Spacetime::mergeVertices(const VertexPtr &into, const VertexPtr &from) {
-  for (const auto &edge : from->getInEdges()) {
-    edge->replaceTargetVertex(into->getId());
+
+SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+  SimplexOrientationPtr o = std::make_shared<
+    SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
+  SimplexSet result{};
+  for (const auto &bucket : externalSimplices | std::views::values) {
+    for (const auto &simplex : bucket) {
+      for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
+        if (simplex->getOrientation() == o) result.insert(simplex);
+      }
+    }
   }
-  for (const auto &edge : from->getOutEdges()) {
-    edge->replaceSourceVertex(into->getId());
-  }
+  return result;
 }
+
 
 /// When we attach two simplices; the "attached" one is assumed to be part of a simplicial complex. The "unattached" one
 /// is assumed to be part of another simplicial complex, but usually by itself. The "attached" simplex replaces
@@ -501,6 +508,16 @@ OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unatta
   return std::nullopt;
 }
 
+SimplexSet Spacetime::getExternalSimplices() noexcept {
+  SimplexSet simplices{};
+  for (const auto &[facialOrientation, bucket] : externalSimplices) {
+    for (const auto &simplex : bucket) {
+      simplices.insert(simplex);
+    }
+  }
+  return simplices;
+}
+
 std::vector<Vertices> Spacetime::getConnectedComponents() const {
   VertexSet seen{};
   std::vector<Vertices> components{};
@@ -542,5 +559,15 @@ VertexPtr Spacetime::createVertex(const std::uint64_t id) noexcept {
 
 VertexPtr Spacetime::createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
   return vertexList->add(id, coords);
+}
+
+bool Spacetime::removeIfIsolated(const VertexPtr &vertex) {
+  if (vertex->degree() == 0) {
+    CLOG(DEBUG_LEVEL, "Removing vertex: ", vertex->toString());
+    vertexList->remove(vertex);
+    return true;
+  }
+  CLOG(DEBUG_LEVEL, "NOT Removing vertex: ", vertex->toString());
+  return false;
 }
 } // caset

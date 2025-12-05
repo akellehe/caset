@@ -79,9 +79,12 @@ class Simplex;
 ///
 /// An edge that links two points (vertices) in spacetime.
 ///
-/// @param source_
-/// @param target_
-/// @param squaredLength_ The squared length of the edge according to whatever spacetime metric is being used.
+/// @param source_If this Edge represents a directed Edge; then this is the Vertex from which the Edge originates. For
+///   undirected edges; it's just one of two Vertices that define the Edge.
+/// @param target_If this Edge represents a directed Edge; then this is the Vertex at which the Edge terminates. For
+///   undirected edges; it's just one of two Vertices that define the Edge.
+/// @param squaredLength_ The squared length of the edge according to whatever spacetime metric is being used. We work
+///   in squared lengths to allow the use of imaginary Edge lengths (they have negative values).
 ///
 class Edge : public std::enable_shared_from_this<Edge> {
   public:
@@ -116,25 +119,33 @@ class Edge : public std::enable_shared_from_this<Edge> {
       return std::to_string(sourceId) + "->" + std::to_string(targetId);
     }
 
-    void refreshFingerprint() noexcept {
-      fingerprint = Fingerprint({sourceId, targetId});
-    }
-
+    /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
+    /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
+    /// ensure consistent hashing/lookup.
     void replaceSourceVertex(std::uint64_t sourceId_) {
       sourceId = sourceId_;
       refreshFingerprint();
     }
 
+    /// This method changes the target Vertex in-place. Note that if this edge is registered elsewhere (e.g. in a
+    /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
+    /// ensure consistent hashing/lookup.
     void replaceTargetVertex(std::uint64_t targetId_) {
       targetId = targetId_;
       refreshFingerprint();
     }
 
+    ///
+    /// @param vertexId The ID of a Vertex for which ownership should be checked.
+    /// @return true if the Vertex exists as an endpoint of this edge
     bool hasVertex(std::uint64_t vertexId) {
       if (getSourceId() == vertexId || getTargetId() == vertexId) return true;
       return false;
     }
 
+    ///
+    /// @param from the ID of a vertex to or from which this Edge should no longer point.
+    /// @param to the ID of a source or target vertex to which this Edge should now point.
     void redirect(std::uint64_t from, std::uint64_t to) {
       if (getSourceId() == from) {
         replaceSourceVertex(to);
@@ -166,6 +177,12 @@ class Edge : public std::enable_shared_from_this<Edge> {
     std::uint64_t sourceId;
     std::uint64_t targetId;
     std::vector<std::shared_ptr<Simplex> > simplices;
+
+    /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
+    /// fingerprint for this Edge after replacing a source or target vertex in-place.
+    void refreshFingerprint() noexcept {
+      fingerprint = Fingerprint({sourceId, targetId});
+    }
 
     double squaredLength;
 };

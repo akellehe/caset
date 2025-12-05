@@ -60,8 +60,6 @@ enum class SpacetimeType : uint8_t {
 ///
 class Spacetime {
   public:
-    using Bucket = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
-
     Spacetime() {
       Signature signature(4, SignatureType::Lorentzian);
       metric = std::make_shared<Metric>(true, signature);
@@ -93,8 +91,8 @@ class Spacetime {
       currentTime++;
       return static_cast<double>(currentTime);
     }
-    std::shared_ptr<Edge> createEdge(const std::uint64_t src, const std::uint64_t tgt);
-    std::shared_ptr<Edge> createEdge(const std::uint64_t src, const std::uint64_t tgt, double squaredLength) noexcept;
+    EdgePtr createEdge(const std::uint64_t src, const std::uint64_t tgt);
+    EdgePtr createEdge(const std::uint64_t src, const std::uint64_t tgt, double squaredLength) noexcept;
     void addObservable(const std::shared_ptr<Observable> &observable) { observables.push_back(observable); }
 
     ///
@@ -123,15 +121,7 @@ class Spacetime {
 
     void moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
 
-    bool removeIfIsolated(const VertexPtr &vertex) {
-      if (vertex->degree() == 0) {
-        CLOG(DEBUG_LEVEL, "Removing vertex: ", vertex->toString());
-        vertexList->remove(vertex);
-        return true;
-      }
-      CLOG(DEBUG_LEVEL, "NOT Removing vertex: ", vertex->toString());
-      return false;
-    }
+    bool removeIfIsolated(const VertexPtr &vertex);
 
     void attachAtVertices(
       const SimplexPtr &unattached,
@@ -211,15 +201,8 @@ class Spacetime {
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
     [[nodiscard]]
-    SimplexSet getExternalSimplices() noexcept {
-      SimplexSet simplices{};
-      for (const auto &[facialOrientation, bucket] : externalSimplices) {
-        for (const auto &simplex : bucket) {
-          simplices.insert(simplex);
-        }
-      }
-      return simplices;
-    }
+    SimplexSet getExternalSimplices()
+    noexcept;
 
     void embedEuclidean(int dimensions, double epsilon);
 
@@ -234,23 +217,9 @@ class Spacetime {
     OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
 
     /// This method is for testing only, very poor runtime performance.
-    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
-      SimplexOrientationPtr o = std::make_shared<
-        SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
-      SimplexSet result{};
-      for (const auto &bucket : externalSimplices | std::views::values) {
-        for (const auto &simplex : bucket) {
-          for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
-            if (simplex->getOrientation() == o) result.insert(simplex);
-          }
-        }
-      }
-      return result;
-    }
+    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
 
     [[nodiscard]] std::vector<Vertices> getConnectedComponents() const;
-
-    void mergeVertices(const VertexPtr &into, const VertexPtr &from);
 
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
