@@ -53,7 +53,7 @@ optional-dependencies.dev = [
 
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"
-cmake.build-type = "Debug" # "Release"
+cmake.build-type = "Release" # "Release"
 
 [tool.scikit-build.cmake.define]
 Python_EXECUTABLE = "${python.executable}"

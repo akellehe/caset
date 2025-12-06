@@ -154,6 +154,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertices", &Simplex::getVertices)
       .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
       .def("getAvailableFacetsByOrientation", &Simplex::getAvailableFacetsByOrientation)
+      .def("hasCausallyAvailableFacet", &Simplex::hasCausallyAvailableFacet)
       .def("markAsUnavailable", &Simplex::markAsUnavailable)
       .def("markFacetAsUnavailable", &Simplex::markFacetAsUnavailable, py::arg("facet"))
       .def("hasVertex", &Simplex::hasVertex)

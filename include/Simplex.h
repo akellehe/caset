@@ -340,7 +340,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets();
+    std::vector<std::shared_ptr<Simplex> > getFacets();
 
     std::size_t getNumberOfEdges() const;
 
@@ -360,6 +360,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @returns Edges in traversal order (the order of input vertices).
     [[nodiscard]] Edges getEdges() const;
 
+    /// When we talk about pairty it's in the context of the orientation of a simplex's vertices within _the same time
+    /// slice_. So a 2-simplex with 3 vertices at t=0 does NOT have the same orientation as a 2-simplex with it's
+    /// vertices at t=1.
     [[nodiscard]]
     std::optional<Vertices>
     getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const;

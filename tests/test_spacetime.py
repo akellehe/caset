@@ -493,6 +493,9 @@ class TestSpacetime(unittest.TestCase):
         attachedSimplex.validate()
         unattachedSimplex.validate()
 
+        self.assertTrue(unattachedSimplex.hasCausallyAvailableFacet())
+        self.assertTrue(unattachedSimplex.hasCausallyAvailableFacet())
+
         unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
         unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
         attachedVertices = [v for v in attachedSimplexFace.getVertices()]
@@ -659,6 +662,7 @@ class TestSpacetime(unittest.TestCase):
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 1)
 
+
     def test_lots_of_components_connect_once_glued2D(self):
         st = Spacetime()
 
@@ -687,7 +691,6 @@ class TestSpacetime(unittest.TestCase):
             print('8')
 
             if not succeeded:
-                breakpoint()
                 print('failed')
             self.assertTrue(succeeded)
 

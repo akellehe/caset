@@ -220,7 +220,6 @@ SimplexPtr Spacetime::createSimplex(
   SimplexPtr simplex = Simplex::create(vertices, edges);
   for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
     externalSimplices[o].insert(simplex);
-    externalSimplices[o->flip()].insert(simplex); // TODO: Remove the flipped orientation once attached.
   }
   return simplex;
 }
@@ -297,10 +296,14 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
 
 [[nodiscard]] OptionalSimplexPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
+  CLOG(DEBUG_LEVEL, "Unattached simplex: ", unattachedSimplex->toString(), "\nAttached Simplex: ", attachedSimplex->toString());
   const auto orientations = unattachedSimplex->getGluableFaceOrientations();
+  CLOG(DEBUG_LEVEL, "Got ", std::to_string(orientations.size()), " non-degenerate orientations");
   for (const auto &orientation : orientations) {
+    CLOG(DEBUG_LEVEL, " Orientation ", orientation->toString());
     auto unattachedFacets = unattachedSimplex->getAvailableFacetsByOrientation(orientation);
     auto attachedFacets = attachedSimplex->getAvailableFacetsByOrientation(orientation);
+    CLOG(INFO_LEVEL, "Got ", unattachedFacets.size(), " unattached facets and ", attachedFacets.size(), " attached facets.");
 
 #if CASET_DEBUG
     for (const auto &f : unattachedFacets) {
@@ -460,7 +463,6 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
 
   for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
     externalSimplices[facialOrientation].erase(attachedFace);
-    externalSimplices[facialOrientation->flip()].erase(attachedFace);
   }
 
   attachAtVertices(unattachedFace, attachedFace, vertexPairs);
@@ -473,41 +475,62 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
 
   if (!attachedFace->isCausallyAvailable()) {
     internalSimplices[attachedFace->getOrientation()].insert(attachedFace);
-    internalSimplices[attachedFace->getOrientation()->flip()].insert(attachedFace);
+    attachedFace->markAsUnavailable();
+  }
+  if (!unattachedFace->isCausallyAvailable()) {
+    unattachedFace->markAsUnavailable();
   }
 
   // TODO: Mark facet as unavailable on it's cofaces. I think this applies for a single causal attachment. Does a single causal attachment make it unavailable?
   //  Simplex tracks available facets now, see Simplex::availableFacetsByOrientation
   //  call Simplex::markAsUnavailable on the coface, not the facet. Maybe we should actually call that on the Facet, it's
   //  a bit more idiomatic.
-  //
+
 
   return {attachedFace, true};
 }
 
 OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
 #if CASET_DEBUG
-  if (unattachedSimplex->hasCausallyAvailableFacet()) {
+  if (!unattachedSimplex->hasCausallyAvailableFacet()) {
+    CLOG(WARN_LEVEL, "Unattached simplex had no causally available facets.");
     return std::nullopt;
   }
+  auto numOrientation = unattachedSimplex->getGluableFaceOrientations();
+  CLOG(INFO_LEVEL, "Found ", std::to_string(numOrientation.size()), " gluable facial orientations");
 #endif
+
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
     const auto &prospectiveCofaces = externalSimplices[facialOrientation];
+    CLOG(INFO_LEVEL, "Found ", prospectiveCofaces.size(), " prospective cofaces");
     if (prospectiveCofaces.empty()) continue;
-    for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++
-         attachedCofaceId) {
-      if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
-      if (!(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
+    for (
+      auto attachedCofaceId = prospectiveCofaces.begin();
+      attachedCofaceId != prospectiveCofaces.end();
+      ++attachedCofaceId
+      ) {
+      if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) {
+        CLOG(INFO_LEVEL, "Unattached matched attach3d. Continuing.");
+        continue;
+      }
+      if (!(*attachedCofaceId)->hasCausallyAvailableFacet()) {
+        CLOG(INFO_LEVEL, "Attached coface had no causally available facets!");
+        continue;
+      }
 #if CASET_DEBUG
       (*attachedCofaceId)->validate();
 #endif
       OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
       if (gluablePair.has_value()) {
+        CLOG(INFO_LEVEL, "Found a gluable pair.");
         const auto &[unattachedFace, attachedFace] = gluablePair.value();
         return gluablePair;
+      } else {
+        CLOG(INFO_LEVEL, "No gluable pair found");
       }
     }
   }
+  CLOG(INFO_LEVEL, "Returning None");
   return std::nullopt;
 }
 

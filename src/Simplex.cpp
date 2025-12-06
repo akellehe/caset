@@ -54,6 +54,7 @@ std::vector<SimplexPtr > Simplex::getFacets() {
     SimplexPtr facet = Simplex::create(faceVertices, faceEdges);
     facet->addCoface(shared_from_this());
     facets.push_back(facet);
+    if (!facet->getOrientation()->isDegenerate()) availableFacetsByOrientation[facet->getOrientation()].insert(facet);
   }
 #if CASET_DEBUG
   validate();
@@ -123,7 +124,9 @@ void Simplex::initialize(const SimplexPtr &simplex) {
 std::string Simplex::toString() const {
   std::stringstream ss;
   ss << "<";
-  ss << std::to_string(getOrientation()->getK());
+  ss << "(" << std::to_string(std::get<0>(getOrientation()->numeric()));
+  ss << ", " << std::to_string(std::get<1>(getOrientation()->numeric()));
+  ss << ")-" << std::to_string(getOrientation()->getK());
   ss << "-Simplex (";
   for (const auto &v : vertices) {
     ss << v->toString() << "→";
@@ -272,14 +275,16 @@ using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
 [[nodiscard]]
 std::optional<Vertices>
 Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
+  CLOG(DEBUG_LEVEL, "Simplex::getVerticesWithParityTo. Simplex 1: ", toString(), "\nSimplex 2: ", other->toString());
   const auto &mine = vertices;
   const auto &theirs = other->getVertices();
 
   const std::size_t n = mine.size();
+  CLOG(INFO_LEVEL, "Attempting to align ", std::to_string(n), " vertices.");
   if (n != theirs.size()) {
     throw std::runtime_error("You can only compare simplices of the same size!");
   }
-  if (isTimelike() && !other->isTimelike() || !isTimelike() && other->isTimelike()) {
+  if (isTimelike() != other->isTimelike()) {
     throw std::runtime_error("Can't establish parity when one face is timelike and the other is not!");
   }
   if (n == 0) return std::nullopt;
@@ -318,8 +323,6 @@ Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
 
   // Try all starting positions where times match theirs[0]
   for (std::size_t i = 0; i < n; ++i) {
-    if (mine[i]->getTime() != theirs[0]->getTime()) continue;
-
     // 1. Try same orientation
     if (auto aligned = try_alignment(i, /*reversed=*/false)) return aligned;
 
@@ -433,6 +436,11 @@ std::size_t Simplex::maxKPlusOneCofaces() const {
 
 SimplexOrientations Simplex::getGluableFaceOrientations() {
   SimplexOrientations allowedOrientations{};
+  if (facets.empty()) {
+    CLOG(WARN_LEVEL, "Simplex::getGluableFaceOrientations(): facets empty" );
+    getFacets();
+    CLOG(WARN_LEVEL, "No we have ", facets.size(), " facets and ", availableFacetsByOrientation.size(), " orientations ");
+  }
   for (const auto &o : availableFacetsByOrientation | std::views::keys) {
     allowedOrientations.push_back(o);
   }
@@ -443,7 +451,8 @@ SimplexSet Simplex::getAvailableFacetsByOrientation(const SimplexOrientationPtr 
   if (facets.empty()) {
     for (const auto &facet : getFacets()) {
       // Facets that have never been computed are always causally available, no need to check here.
-      if (facet->getOrientation()->isDegenerate()) continue;
+      // if (facet->getOrientation()->isDegenerate()) continue;
+      if (facet->isTimelike()) continue; // TODO: At some point I think we want to connect the next time slot, but not sure.
       availableFacetsByOrientation[facet->getOrientation()].insert(facet);
     }
   }
