@@ -227,8 +227,8 @@ def build(args):
     end = time.time() * 1000.
     print("Elapsed time: ", end - start)
 
+    return
     # Embed:
-
     print("---------------Embedding Euclidean------------")
     start = time.time() * 1000.
     embed_euclidean(st, dimensions=4, epsilon=10e-10)

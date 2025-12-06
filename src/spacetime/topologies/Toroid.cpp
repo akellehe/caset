@@ -20,11 +20,23 @@
 // SOFTWARE.
 
 #include "spacetime/topologies/Toroid.h"
+#include "spacetime/Spacetime.h"
 #include <iostream>
 
 namespace caset {
-void Toroid::build(Spacetime *spacetime) {
-  std::cout << "Building toroid" << std::endl;
+void Toroid::build(Spacetime *spacetime, int numSimplices) {
+  if (numSimplices % 2 != 0) {
+    throw std::invalid_argument("numSimplices must be an even number");
+  }
 
+  std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
+  spacetime->createSimplex(orientations[1]);
+  for (int i = 0; i < numSimplices; i++) {
+    SimplexPtr rightSimplex = spacetime->createSimplex(orientations[i % 2]);
+    OptionalSimplexPair leftFaceRightFace = spacetime->chooseSimplexFacesToGlue(rightSimplex);
+    if (!leftFaceRightFace.has_value()) return;
+    auto [leftFace, rightFace] = leftFaceRightFace.value();
+    auto [left, succeeded] = spacetime->causallyAttachFaces(leftFace, rightFace);
+  }
 }
 }

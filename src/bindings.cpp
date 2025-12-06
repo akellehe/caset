@@ -131,6 +131,7 @@ PYBIND11_MODULE(caset, m) {
       .def("__eq__", &SimplexOrientation::operator==)
       .def("__str__", &SimplexOrientation::toString)
       .def("__repr__", &SimplexOrientation::toString)
+      .def("isDegenerate", &SimplexOrientation::isDegenerate)
       .def("numeric", &SimplexOrientation::numeric);
 
   py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash>>(m, "SimplexOrientationHash")
@@ -152,8 +153,9 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
       .def("getVertices", &Simplex::getVertices)
       .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
-      // .def("hasEdge", py::overload_cast<const EdgePtr &>(&Simplex::hasEdge), py::arg("edge"))
-      // .def("hasEdge", py::overload_cast<const IdType, const IdType>(&Simplex::hasEdge), py::arg("source"), py::arg("target"))
+      .def("getAvailableFacetsByOrientation", &Simplex::getAvailableFacetsByOrientation)
+      .def("markAsUnavailable", &Simplex::markAsUnavailable)
+      .def("markFacetAsUnavailable", &Simplex::markFacetAsUnavailable, py::arg("facet"))
       .def("hasVertex", &Simplex::hasVertex)
       .def("isTimelike", &Simplex::isTimelike)
       .def("attach", &Simplex::attach, py::arg("unattachedVertex"), py::arg("unattachedVertex"), py::arg("edgeList"), py::arg("vertexList"))

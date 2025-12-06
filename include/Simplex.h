@@ -48,6 +48,7 @@ enum class TimeOrientation : uint8_t {
 
 class SimplexOrientation;
 using SimplexOrientationPtr = std::shared_ptr<SimplexOrientation>;
+using SimplexOrientations = std::vector<SimplexOrientationPtr>;
 
 class SimplexOrientation {
   public:
@@ -73,6 +74,10 @@ class SimplexOrientation {
 
     [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const {
       return {ti, tf};
+    }
+
+    bool isDegenerate() const {
+      return ti == 0 || tf == 0;
     }
 
     [[nodiscard]] uint16_t fingerprint() const {
@@ -105,6 +110,7 @@ class SimplexOrientation {
     }
 
     [[nodiscard]] TimeOrientation getOrientation() const {
+      if (ti == 0 || tf == 0) return TimeOrientation::UNKNOWN;
       if (ti == tf) return TimeOrientation::UNKNOWN;
       if (ti > tf) return TimeOrientation::PRESENT;
       return TimeOrientation::FUTURE;
@@ -230,6 +236,12 @@ namespace caset {
 ///
 ///
 class Simplex : public std::enable_shared_from_this<Simplex> {
+  using SimplexPtr = std::shared_ptr<Simplex>;
+  using SimplexPair = std::pair<SimplexPtr, SimplexPtr>;
+  using OptionalSimplexPair = std::optional<SimplexPair>;
+  using Simplices = std::vector<SimplexPtr>;
+  using SimplexSet = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
+
   public:
     ///
     /// @param vertices_
@@ -439,13 +451,23 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///   create a unique set of the orientations. That set can be used to look up a corresponding Simplex in the
     ///   `externalSimplices` of the Spacetime.
     ///
-    std::unordered_set<SimplexOrientationPtr> getGluableFaceOrientations();
+    SimplexOrientations getGluableFaceOrientations();
 
     bool operator==(const std::shared_ptr<Simplex> &other) const noexcept;
 
     VertexIdMap getVertexIdLookup() const noexcept;
 
     void attach(const VertexPtr &unattached, const VertexPtr &attached, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList);
+
+    SimplexSet getAvailableFacetsByOrientation(const SimplexOrientationPtr &orientation);
+
+    /// Marks a facet as un(causally)available on it's cofaces by orientation. This way when we request available
+    /// facets by orientation this facet won't be returned.
+    void markAsUnavailable();
+
+    void markFacetAsUnavailable(const SimplexPtr &facet) {
+      availableFacetsByOrientation[facet->getOrientation()].erase(facet);
+    }
 
   private:
     SimplexOrientationPtr orientation{};
@@ -454,6 +476,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     Edges edges{};
 
     std::vector<std::shared_ptr<Simplex> > facets{};
+    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> availableFacetsByOrientation{};
     std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
 
     /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
@@ -463,6 +486,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     template<typename Method, typename... Args>
     bool cascade(Method method, bool up, bool down, Args &&... args);
+
 };
 
 using SimplexPtr = std::shared_ptr<Simplex>;

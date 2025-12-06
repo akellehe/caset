@@ -22,6 +22,7 @@
 #include "Vertex.h"
 #include "Simplex.h"
 
+#include <ranges>
 #include <ATen/core/interned_strings.h>
 #include <c10/util/ThreadLocalDebugInfo.h>
 
@@ -38,7 +39,7 @@ std::vector<SimplexPtr > Simplex::getFacets() {
   }
   if (!facets.empty()) return facets;
   auto verts = getVertices();
-  // facets.reserve(verts.size());
+  facets.reserve(verts.size());
   for (int skip = 0; skip < verts.size(); skip++) {
     const auto &skipVertex = verts[skip]->getId();
     Vertices faceVertices{};
@@ -291,28 +292,28 @@ Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
       [&](std::size_t start,
           bool reversed)
     -> std::optional<Vertices> {
-    Vertices result{};
-    result.reserve(n);
+        Vertices result{};
+        result.reserve(n);
 
-    for (std::size_t k = 0; k < n; ++k) {
-      std::size_t idx;
-      if (!reversed) {
-        // orientation-preserving: walk forward
-        idx = (start + k) % n;
-      } else {
-        // orientation-reversing: walk backward
-        // k = 0 -> idx = start
-        // k = 1 -> idx = start - 1 (mod n)
-        idx = (start + n - k) % n;
-      }
+        for (std::size_t k = 0; k < n; ++k) {
+          std::size_t idx;
+          if (!reversed) {
+            // orientation-preserving: walk forward
+            idx = (start + k) % n;
+          } else {
+            // orientation-reversing: walk backward
+            // k = 0 -> idx = start
+            // k = 1 -> idx = start - 1 (mod n)
+            idx = (start + n - k) % n;
+          }
 
-      if (mine[idx]->getTime() != theirs[k]->getTime()) {
-        return std::nullopt; // mismatch, this alignment fails
-      }
+          if (mine[idx]->getTime() != theirs[k]->getTime()) {
+            return std::nullopt; // mismatch, this alignment fails
+          }
 
-      result.push_back(mine[idx]);
-    }
-    return result; // success
+          result.push_back(mine[idx]);
+        }
+        return result; // success
   };
 
   // Try all starting positions where times match theirs[0]
@@ -430,14 +431,26 @@ std::size_t Simplex::maxKPlusOneCofaces() const {
   return getNumberOfFaces(getOrientation()->getK());
 }
 
-std::unordered_set<SimplexOrientationPtr> Simplex::getGluableFaceOrientations() {
-  auto allowedOrientations = std::unordered_set<SimplexOrientationPtr>{};
-  for (const auto &face : getFacets()) {
-    if (face->getCofaces().size() < 2) {
-      allowedOrientations.insert(face->getOrientation());
-    }
+SimplexOrientations Simplex::getGluableFaceOrientations() {
+  SimplexOrientations allowedOrientations{};
+  for (const auto &o : availableFacetsByOrientation | std::views::keys) {
+    allowedOrientations.push_back(o);
   }
   return allowedOrientations;
+}
+
+SimplexSet Simplex::getAvailableFacetsByOrientation(const SimplexOrientationPtr &orientation) {
+  if (facets.empty()) {
+    for (const auto &facet : getFacets()) {
+      // Facets that have never been computed are always causally available, no need to check here.
+      if (facet->getOrientation()->isDegenerate()) continue;
+      availableFacetsByOrientation[facet->getOrientation()].insert(facet);
+    }
+  }
+  if (availableFacetsByOrientation.contains(orientation)) {
+    return availableFacetsByOrientation.at(orientation);
+  }
+  return {};
 }
 
 bool Simplex::operator==(const SimplexPtr &other) const noexcept {
@@ -457,6 +470,15 @@ void Simplex::attach(const VertexPtr &unattached, const VertexPtr &attached, con
 #if CASET_DEBUG
   validate();
 #endif
+}
+
+void Simplex::markAsUnavailable() {
+#if CASET_DEBUG
+  if (isCausallyAvailable()) CLOG(ERROR_LEVEL, "Facet is still available!");
+#endif
+  for (const auto &coface : getCofaces()) {
+    coface->markFacetAsUnavailable(shared_from_this());
+  }
 }
 
 bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {

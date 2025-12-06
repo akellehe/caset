@@ -187,16 +187,7 @@ void Spacetime::embedEuclidean(int dimensions = 4, double epsilon = 1e-8) {
 
 void Spacetime::build(int numSimplices) {
   // TODO: Implement topologies instead of the default.
-  // return topology->build(this);
-  std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
-  createSimplex(orientations[1]);
-  for (int i = 0; i < numSimplices; i++) {
-    SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
-    OptionalSimplexPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
-    if (!leftFaceRightFace.has_value()) return;
-    auto [leftFace, rightFace] = leftFaceRightFace.value();
-    auto [left, succeeded] = causallyAttachFaces(leftFace, rightFace);
-  }
+  return topology->build(this, numSimplices);
 }
 
 EdgePtr Spacetime::createEdge(
@@ -221,7 +212,8 @@ EdgePtr Spacetime::createEdge(
 }
 
 SimplexPtr Spacetime::createSimplex(
-  const Vertices &vertices, const Edges &edges
+  const Vertices &vertices,
+  const Edges &edges
 ) {
   const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
 
@@ -305,34 +297,25 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
 
 [[nodiscard]] OptionalSimplexPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
-  auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
-  auto attachedFacets = attachedSimplex->getFacets();
+  const auto orientations = unattachedSimplex->getGluableFaceOrientations();
+  for (const auto &orientation : orientations) {
+    auto unattachedFacets = unattachedSimplex->getAvailableFacetsByOrientation(orientation);
+    auto attachedFacets = attachedSimplex->getAvailableFacetsByOrientation(orientation);
+
 #if CASET_DEBUG
-  for (const auto &f : unattachedFacets) {
-    f->validate();
-  }
-  for (const auto &f : attachedFacets) {
-    f->validate();
-  }
+    for (const auto &f : unattachedFacets) {
+      f->validate();
+      if (!f->isCausallyAvailable()) throw std::runtime_error("Facet wasn't causally available");
+    }
+    for (const auto &f : attachedFacets) {
+      f->validate();
+      if (!f->isCausallyAvailable()) throw std::runtime_error("Facet wasn't causally available");
+    }
 #endif
 
-  for (auto &unattachedFace : unattachedFacets) {
-    const auto [tia, tfa] = unattachedFace->getOrientation()->numeric();
-    if (tia == 0 || tfa == 0) continue; // Skip degenerate faces
-    if (!unattachedFace->isCausallyAvailable()) continue;
-    for (auto &attachedFace : attachedFacets) {
-      if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue;
-      // Skip faces that don't match in timelikeness
-      const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
-      if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
-      if (attachedFace->isInternal()) continue;
-#if CASET_DEBUG
-      attachedFace->validate();
-      unattachedFace->validate();
-#endif
-      if (tia == tfb && tfa == tib) return std::make_optional(std::make_pair(unattachedFace, attachedFace));
-      if (tia == tib && tfa == tfb) return std::make_optional(std::make_pair(unattachedFace, attachedFace));
-    }
+    if (unattachedFacets.empty() || attachedFacets.empty()) continue;
+
+    return std::make_optional(std::make_pair(*unattachedFacets.begin(), *attachedFacets.begin()));
   }
   return std::nullopt;
 }
@@ -364,7 +347,6 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
   }
 }
 
-
 SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
   SimplexOrientationPtr o = std::make_shared<
     SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
@@ -378,7 +360,6 @@ SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> o
   }
   return result;
 }
-
 
 /// When we attach two simplices; the "attached" one is assumed to be part of a simplicial complex. The "unattached" one
 /// is assumed to be part of another simplicial complex, but usually by itself. The "attached" simplex replaces
@@ -406,12 +387,20 @@ void Spacetime::attachAtVertices(
 #endif
 }
 
+/// When this method is called it's assumed that faces are causally available and of the correct orientation, and do
+/// not share a coface. When these things are true there should also exist a compatible vertex order, so we do not
+/// check that unless CASET_DEBUG is set.
 std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   const SimplexPtr &attachedFace,
   const SimplexPtr &unattachedFace
 ) {
+#if CASET_DEBUG
   if (!attachedFace->isCausallyAvailable() || !unattachedFace->isCausallyAvailable()) {
-    CLOG(ERROR_LEVEL, "One or more of attachedFace and unattachedFace was not causally available!\n", attachedFace->toString(), "\n", unattachedFace->toString());
+    CLOG(ERROR_LEVEL,
+         "One or more of attachedFace and unattachedFace was not causally available!\n",
+         attachedFace->toString(),
+         "\n",
+         unattachedFace->toString());
     return {attachedFace, false};
   }
   if (attachedFace->fingerprint.fingerprint() == unattachedFace->fingerprint.fingerprint()) {
@@ -434,6 +423,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
       }
     }
   }
+#endif
 
   Vertices vertices{};
   vertices.reserve(attachedFace->size());
@@ -451,6 +441,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
   const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->getVerticesWithParityTo(unattachedFace);
 
+#if CASET_DEBUG
   if (!attachedOrderedVerticesOptional.has_value()) {
     CLOG(WARN_LEVEL,
          "No compatible vertex order found for myFace and yourFace.\n",
@@ -459,6 +450,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
          unattachedFace->toString());
     return {nullptr, false};
   }
+#endif
 
   const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
   for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
@@ -484,17 +476,28 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
     internalSimplices[attachedFace->getOrientation()->flip()].insert(attachedFace);
   }
 
+  // TODO: Mark facet as unavailable on it's cofaces. I think this applies for a single causal attachment. Does a single causal attachment make it unavailable?
+  //  Simplex tracks available facets now, see Simplex::availableFacetsByOrientation
+  //  call Simplex::markAsUnavailable on the coface, not the facet. Maybe we should actually call that on the Facet, it's
+  //  a bit more idiomatic.
+  //
+
   return {attachedFace, true};
 }
 
 OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
+#if CASET_DEBUG
+  if (unattachedSimplex->hasCausallyAvailableFacet()) {
+    return std::nullopt;
+  }
+#endif
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
     const auto &prospectiveCofaces = externalSimplices[facialOrientation];
     if (prospectiveCofaces.empty()) continue;
     for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++
          attachedCofaceId) {
       if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
-      if (!unattachedSimplex->hasCausallyAvailableFacet() || !(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
+      if (!(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
 #if CASET_DEBUG
       (*attachedCofaceId)->validate();
 #endif

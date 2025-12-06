@@ -21,7 +21,7 @@
 
 import unittest
 
-from caset import Vertex, Simplex, Metric, Spacetime, Signature, SignatureType
+from caset import Vertex, Simplex, Metric, Spacetime, Signature, SignatureType, SimplexOrientation
 
 
 class TestSimplex(unittest.TestCase):
@@ -317,7 +317,6 @@ class TestSimplex(unittest.TestCase):
             f.validate()
 
         facet.validate()
-        print("Replacing ", v2.getId(), "with ", v4.getId())
         facet.attach(v2, v4, st.getEdgeList(), st.getVertexList())
         facet.validate()
 
@@ -385,6 +384,41 @@ class TestSimplex(unittest.TestCase):
         for i, f in enumerate(simplex.getFacets()):
             print('validating', i)
             f.validate()
+
+    def test_get_available_facets_by_orientation(self):
+        st = Spacetime()
+        simplex = st.createSimplex((1, 2))
+        o1 = SimplexOrientation(0, 2)
+        o2 = SimplexOrientation(1, 1)
+        o3 = SimplexOrientation(1, 2)
+
+        self.assertEqual(
+            len(simplex.getAvailableFacetsByOrientation(o1)),
+            0 # Because the orientation is degenerate
+        )
+        self.assertEqual(
+            len(simplex.getAvailableFacetsByOrientation(o2)),
+            2
+        )
+        self.assertEqual(
+            len(simplex.getAvailableFacetsByOrientation(o3)),
+            0, # Because that's the orientation of the coface itself.
+        )
+
+    def test_marking_a_facet_as_unavailable_marks_it_on_the_cofaces(self):
+        st = Spacetime()
+        simplex = st.createSimplex((1, 2))
+        o2 = SimplexOrientation(1, 1)
+
+        f1, f2 = simplex.getAvailableFacetsByOrientation(o2)
+
+        f1.markAsUnavailable()
+
+        observed = [f for f in simplex.getAvailableFacetsByOrientation(o2)][0]
+        self.assertEqual(observed, f2)
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
