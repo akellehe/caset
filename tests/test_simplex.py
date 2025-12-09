@@ -272,27 +272,31 @@ class TestSimplex(unittest.TestCase):
 
     def test_replace_vertex(self):
         st = Spacetime()
-        simplex = st.createSimplex((1, 2))
-        facets1 = simplex.getFacets()
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
+        unattached = st.createSimplex((1, 2))
+        attached = st.createSimplex((2, 1))
 
-        v0 = simplex.getVertices()[0]
-        v = st.createVertex(4, [0])
-        v0id = v0.getId()
+        facets1 = unattached.getFacets()
+        self.assertEqual(len(unattached.getVertices()), 3)
+        self.assertEqual(len(unattached.getEdges()), 3)
 
-        simplex.attach(v0, v, st.getEdgeList(), st.getVertexList())
+        unattachedVertex = unattached.getVertices()[0]
+        for vertex in attached.getVertices():
+            if (vertex.getTime() == unattachedVertex.getTime()):
+                attachedVertex = vertex
+                break
 
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)  # replace vertex only replaces it in the simplex, there is no assignment of edges to the new vertex.
+        st.attachAtVertex(unattached, attached, unattachedVertex, attachedVertex)
 
-        self.assertNotIn(v0, simplex.getVertices())
-        self.assertNotIn(v0id, simplex.getVertexIdLookup())
+        self.assertEqual(len(unattached.getVertices()), 3)
+        self.assertEqual(len(unattached.getEdges()), 3)  # replace vertex only replaces it in the unattached, there is no assignment of edges to the new vertex.
 
-        self.assertIn(v, simplex.getVertices())
-        self.assertIn(4, simplex.getVertexIdLookup())
+        self.assertNotIn(unattachedVertex, unattached.getVertices())
+        self.assertNotIn(unattachedVertex.getId(), unattached.getVertexIdLookup())
 
-        facets2 = simplex.getFacets()
+        self.assertIn(attachedVertex, unattached.getVertices())
+        self.assertIn(attachedVertex.getId(), unattached.getVertexIdLookup())
+
+        facets2 = unattached.getFacets()
 
         for f in facets1:
             f.validate()
@@ -301,88 +305,79 @@ class TestSimplex(unittest.TestCase):
 
     def test_replace_vertex_on_a_face_replaces_it_on_the_coface(self):
         st = Spacetime()
-        simplex = st.createSimplex((1, 2))
-        v1, v2, v3 = simplex.getVertices()
-        v4 = st.createVertex(4, [0])
+        unattached = st.createSimplex((1, 2))
+        attached = st.createSimplex((2, 1))
 
-        facet = simplex.getFacets()[0]
+        facet = unattached.getFacets()[0]
+        unattachedVertex = facet.getVertices()[0]
+        for vertex in attached.getVertices():
+            if (vertex.getTime() == unattachedVertex.getTime()):
+                attachedVertex = vertex
 
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
+        self.assertEqual(len(unattached.getVertices()), 3)
+        self.assertEqual(len(unattached.getEdges()), 3)
 
         self.assertEqual(len(facet.getVertices()), 2)
         self.assertEqual(len(facet.getEdges()), 1)
 
-        for f in simplex.getFacets():
-            f.validate()
+        st.attachAtVertex(unattached, attached, unattachedVertex, attachedVertex)
+
+        self.assertEqual(len(unattached.getVertices()), 3)
+        self.assertEqual(len(unattached.getEdges()), 3)
+
+        self.assertNotIn(unattachedVertex, unattached.getVertices())
+        self.assertNotIn(unattachedVertex.getId(), unattached.getVertexIdLookup())
+
+        self.assertIn(attachedVertex, unattached.getVertices())
+        self.assertIn(attachedVertex.getId(), unattached.getVertexIdLookup())
+
+        self.assertNotIn(unattachedVertex, unattached.getVertices())
+        self.assertNotIn(unattachedVertex.getId(), unattached.getVertexIdLookup())
+
+        self.assertIn(attachedVertex, unattached.getVertices())
+        self.assertIn(attachedVertex.getId(), unattached.getVertexIdLookup())
 
         facet.validate()
-        print("Replacing ", v2.getId(), "with ", v4.getId())
-        facet.attach(v2, v4, st.getEdgeList(), st.getVertexList())
-        facet.validate()
-
-        # When we replace a vertex/edge on one facet; the edge AND vertex gets replaced there. on other facets, though,
-        # either the edge is not being rewritten (it's stored by value and not reference?) or the vertex is not being
-        # replaced, so the edge still appears to point to the incorrect vertex. The latter here is more likely.
-        #
-        # We need to ensure that in every facet this edge/vertex appears it's rewritten. So go up to the coface, then
-        # down to each facet.
-        self.assertIn(facet, simplex.getFacets())
-        for f in simplex.getFacets():
-            f.validate()
-
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
-
-        self.assertNotIn(v2, facet.getVertices())
-        self.assertNotIn(1, facet.getVertexIdLookup())
-
-        self.assertIn(v4, facet.getVertices())
-        self.assertIn(v4.getId(), facet.getVertexIdLookup())
-
-        self.assertNotIn(v2, simplex.getVertices())
-        self.assertNotIn(v2.getId(), simplex.getVertexIdLookup())
-
-        self.assertIn(v4, simplex.getVertices())
-        self.assertIn(v4.getId(), simplex.getVertexIdLookup())
-
-        for i, f in enumerate(simplex.getFacets()):
+        for i, f in enumerate(unattached.getFacets()):
             print('validating', i)
             f.validate()
 
     def test_replace_vertex_on_a_coface_replaces_it_on_the_facets(self):
         st = Spacetime()
-        simplex = st.createSimplex((1, 2))
+        unattached = st.createSimplex((1, 2))
+        attached = st.createSimplex((2, 1))
 
-        facet = simplex.getFacets()[0]
-        v1, v2, v3 = simplex.getVertices()
-        v4 = st.createVertex(4, [0])
+        facet = unattached.getFacets()[0]
+        unattachedVertex = facet.getVertices()[0]
+        for vertex in attached.getVertices():
+            if (vertex.getTime() == unattachedVertex.getTime()):
+                attachedVertex = vertex
 
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
+        self.assertEqual(len(unattached.getVertices()), 3)
+        self.assertEqual(len(unattached.getEdges()), 3)
 
         self.assertEqual(len(facet.getVertices()), 2)
         self.assertEqual(len(facet.getEdges()), 1)
 
-        simplex.attach(v2, v4, st.getEdgeList(), st.getVertexList())
+        st.attachAtVertex(unattached, attached, unattachedVertex, attachedVertex)
 
-        self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)
+        self.assertEqual(len(unattached.getVertices()), 3)
+        self.assertEqual(len(unattached.getEdges()), 3)
 
-        self.assertNotIn(v2, facet.getVertices())
-        self.assertNotIn(v2.getId(), facet.getVertexIdLookup())
+        self.assertNotIn(unattachedVertex, facet.getVertices())
+        self.assertNotIn(unattachedVertex.getId(), facet.getVertexIdLookup())
 
-        self.assertIn(v4, facet.getVertices())
-        self.assertIn(v4.getId(), facet.getVertexIdLookup())
+        self.assertIn(attachedVertex, facet.getVertices())
+        self.assertIn(attachedVertex.getId(), facet.getVertexIdLookup())
 
-        self.assertNotIn(v2, simplex.getVertices())
-        self.assertNotIn(v2.getId(), simplex.getVertexIdLookup())
+        self.assertNotIn(unattachedVertex, unattached.getVertices())
+        self.assertNotIn(unattachedVertex.getId(), unattached.getVertexIdLookup())
 
-        self.assertIn(v4, simplex.getVertices())
-        self.assertIn(v4.getId(), simplex.getVertexIdLookup())
+        self.assertIn(attachedVertex, unattached.getVertices())
+        self.assertIn(attachedVertex.getId(), unattached.getVertexIdLookup())
 
         facet.validate()
-        for i, f in enumerate(simplex.getFacets()):
+        for i, f in enumerate(unattached.getFacets()):
             print('validating', i)
             f.validate()
 

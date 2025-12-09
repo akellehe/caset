@@ -142,10 +142,10 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 };
 
 using VertexPtr = std::shared_ptr<Vertex>;
-using Vertices = std::vector<VertexPtr>;
+using VertexPtrs = std::vector<VertexPtr>;
 using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
 using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
-using VertexSet = std::unordered_set<VertexPtr>;
+using VertexPtrSet = std::unordered_set<VertexPtr>;
 }
 
 namespace std {

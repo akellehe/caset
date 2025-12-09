@@ -41,7 +41,7 @@ std::vector<SimplexPtr > Simplex::getFacets() {
   // facets.reserve(verts.size());
   for (int skip = 0; skip < verts.size(); skip++) {
     const auto &skipVertex = verts[skip]->getId();
-    Vertices faceVertices{};
+    VertexPtrs faceVertices{};
     Edges faceEdges{};
     faceEdges.reserve(verts.size());
     faceVertices.reserve(verts.size());
@@ -63,7 +63,7 @@ std::vector<SimplexPtr > Simplex::getFacets() {
 ///
 /// @param vertices_
 Simplex::Simplex(
-  const Vertices &vertices_, Edges edges_
+  const VertexPtrs &vertices_, Edges edges_
 ) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
@@ -73,7 +73,7 @@ Simplex::Simplex(
 }
 
 Simplex::Simplex(
-  const Vertices &vertices_, Edges edges_,
+  const VertexPtrs &vertices_, Edges edges_,
   const SimplexOrientationPtr &orientation_
 ) : orientation(orientation_), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
 #if CASET_DEBUG
@@ -81,7 +81,7 @@ Simplex::Simplex(
 #endif
 }
 
-SimplexPtr Simplex::create(const Vertices &vertices_, const Edges &edges_) {
+SimplexPtr Simplex::create(const VertexPtrs &vertices_, const Edges &edges_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -91,7 +91,7 @@ SimplexPtr Simplex::create(const Vertices &vertices_, const Edges &edges_) {
   return simplex;
 }
 
-SimplexPtr Simplex::create(const Vertices &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_) {
+SimplexPtr Simplex::create(const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -139,7 +139,7 @@ std::string Simplex::toString() const {
   return orientation;
 }
 
-[[nodiscard]] Vertices Simplex::getVertices() const noexcept { return vertices; };
+[[nodiscard]] VertexPtrs Simplex::getVertices() const noexcept { return vertices; };
 
 [[nodiscard]] std::size_t Simplex::size() const noexcept {
   return vertices.size();
@@ -269,7 +269,7 @@ void Simplex::validate() const {
 using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
 
 [[nodiscard]]
-std::optional<Vertices>
+std::optional<VertexPtrs>
 Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
   const auto &mine = vertices;
   const auto &theirs = other->getVertices();
@@ -290,8 +290,8 @@ Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
   auto try_alignment =
       [&](std::size_t start,
           bool reversed)
-    -> std::optional<Vertices> {
-    Vertices result{};
+    -> std::optional<VertexPtrs> {
+    VertexPtrs result{};
     result.reserve(n);
 
     for (std::size_t k = 0; k < n; ++k) {
@@ -361,7 +361,7 @@ int8_t Simplex::checkParity(const SimplexPtr &other) const {
     positionByVertexIdInA[vertices[i]->getId()] = i;
   }
 
-  Vertices otherVertices = other->getVertices();
+  VertexPtrs otherVertices = other->getVertices();
   std::vector<IdType> otherIds{};
   otherIds.reserve(K);
   for (int i = 0; i < K; ++i) {
@@ -401,7 +401,7 @@ int8_t Simplex::checkParity(const SimplexPtr &other) const {
   return transpositionsMod2 ? -1 : +1;
 }
 
-[[nodiscard]] SimplexSet
+[[nodiscard]] SimplexPtrSet
 Simplex::getCofaces() const noexcept {
   return cofaces;
 }
@@ -442,21 +442,6 @@ std::unordered_set<SimplexOrientationPtr> Simplex::getGluableFaceOrientations() 
 
 bool Simplex::operator==(const SimplexPtr &other) const noexcept {
   return fingerprint.fingerprint() == other->fingerprint.fingerprint();
-}
-
-/// This simplex is the unattached simplex.
-void Simplex::attach(const VertexPtr &unattached, const VertexPtr &attached, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, edgeList, vertexList);
-  for (const auto &simplex : unattached->getSimplices()) {
-    simplex->replaceVertex(unattached, attached);
-  }
-  for (const auto &edgeKey : newEdges) {
-    edgeList->get(edgeKey)->addSimplex(shared_from_this()); // TODO: Remove the old simplex!
-  }
-  if (unattached->degree() == 0) vertexList->remove(unattached);
-#if CASET_DEBUG
-  validate();
-#endif
 }
 
 bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
@@ -504,7 +489,7 @@ VertexIdMap Simplex::getVertexIdLookup() const noexcept {
 template<typename Method, typename... Args>
 bool Simplex::cascade(Method method, bool up, bool down, Args &&... args) {
   std::deque<SimplexPtr> simplicesToUpdate;
-  SimplexSet seen;
+  SimplexPtrSet seen;
   auto enqueueIfNew = [&](const SimplexPtr &s) {
     if (!seen.contains(s)) simplicesToUpdate.push_back(s);
   };

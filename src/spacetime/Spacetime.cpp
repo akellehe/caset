@@ -192,7 +192,7 @@ void Spacetime::build(int numSimplices) {
   createSimplex(orientations[1]);
   for (int i = 0; i < numSimplices; i++) {
     SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
-    OptionalSimplexPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
+    OptionalSimplexPtrPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
     if (!leftFaceRightFace.has_value()) return;
     auto [leftFace, rightFace] = leftFaceRightFace.value();
     auto [left, succeeded] = causallyAttachFaces(leftFace, rightFace);
@@ -221,21 +221,20 @@ EdgePtr Spacetime::createEdge(
 }
 
 SimplexPtr Spacetime::createSimplex(
-  const Vertices &vertices, const Edges &edges
+  const VertexPtrs &vertices, const Edges &edges
 ) {
   const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
 
   SimplexPtr simplex = Simplex::create(vertices, edges);
   for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
     externalSimplices[o].insert(simplex);
-    externalSimplices[o->flip()].insert(simplex); // TODO: Remove the flipped orientation once attached.
   }
   return simplex;
 }
 
 SimplexPtr Spacetime::createSimplex(std::size_t k) {
   double squaredLength = alpha;
-  Vertices vertices = {};
+  VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
@@ -261,7 +260,7 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
     std::get<1>(numericOrientation));
   std::uint8_t k = orientation->getK();
   auto [ti, tf] = orientation->numeric();
-  Vertices vertices = {};
+  VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
@@ -303,7 +302,7 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
   return createSimplex(vertices, edges);
 }
 
-[[nodiscard]] OptionalSimplexPair
+[[nodiscard]] OptionalSimplexPtrPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
   auto attachedFacets = attachedSimplex->getFacets();
@@ -365,10 +364,10 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
 }
 
 
-SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
   SimplexOrientationPtr o = std::make_shared<
     SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
-  SimplexSet result{};
+  SimplexPtrSet result{};
   for (const auto &bucket : externalSimplices | std::views::values) {
     for (const auto &simplex : bucket) {
       for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
@@ -398,12 +397,28 @@ void Spacetime::attachAtVertices(
 #endif
   // Move external edges from unattached vertices to attached vertices.
   for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
-    unattached->attach(unattachedVertex, attachedVertex, edgeList, vertexList);
+    attachAtVertex(unattached, attached, unattachedVertex, attachedVertex);
   }
 #if CASET_DEBUG
   unattached->validate();
   attached->validate();
 #endif
+}
+
+void Spacetime::attachAtVertex(const std::shared_ptr<Simplex> &unattachedSimplex, const std::shared_ptr<Simplex> &attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
+  const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, edgeList, vertexList);
+  for (const auto &simplex : unattached->getSimplices()) {
+    simplex->replaceVertex(unattached, attached);
+  }
+  for (const auto &edgeKey : newEdges) {
+    edgeList->get(edgeKey)->addSimplex(unattachedSimplex); // TODO: Remove the old simplex!
+  }
+  if (unattached->degree() == 0) vertexList->remove(unattached);
+#if CASET_DEBUG
+  unattachedSimplex->validate();
+  attachedSimplex->validate();
+#endif
+
 }
 
 std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
@@ -435,7 +450,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
     }
   }
 
-  Vertices vertices{};
+  VertexPtrs vertices{};
   vertices.reserve(attachedFace->size());
   Edges edges{};
   edges.reserve(attachedFace->size());
@@ -449,7 +464,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
 
   // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
   // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
-  const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->getVerticesWithParityTo(unattachedFace);
+  const std::optional<VertexPtrs> attachedOrderedVerticesOptional = attachedFace->getVerticesWithParityTo(unattachedFace);
 
   if (!attachedOrderedVerticesOptional.has_value()) {
     CLOG(WARN_LEVEL,
@@ -460,7 +475,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
     return {nullptr, false};
   }
 
-  const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
+  const VertexPtrs &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
   for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
     std::pair<VertexPtr, VertexPtr> vp = std::make_pair(unattachedVertices[i], attachedOrderedVertices[i]);
     vertexPairs.push_back(vp);
@@ -468,7 +483,6 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
 
   for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
     externalSimplices[facialOrientation].erase(attachedFace);
-    externalSimplices[facialOrientation->flip()].erase(attachedFace);
   }
 
   attachAtVertices(unattachedFace, attachedFace, vertexPairs);
@@ -481,13 +495,12 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
 
   if (!attachedFace->isCausallyAvailable()) {
     internalSimplices[attachedFace->getOrientation()].insert(attachedFace);
-    internalSimplices[attachedFace->getOrientation()->flip()].insert(attachedFace);
   }
 
   return {attachedFace, true};
 }
 
-OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
+OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
     const auto &prospectiveCofaces = externalSimplices[facialOrientation];
     if (prospectiveCofaces.empty()) continue;
@@ -498,7 +511,7 @@ OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unatta
 #if CASET_DEBUG
       (*attachedCofaceId)->validate();
 #endif
-      OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
+      OptionalSimplexPtrPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
       if (gluablePair.has_value()) {
         const auto &[unattachedFace, attachedFace] = gluablePair.value();
         return gluablePair;
@@ -508,8 +521,8 @@ OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unatta
   return std::nullopt;
 }
 
-SimplexSet Spacetime::getExternalSimplices() noexcept {
-  SimplexSet simplices{};
+SimplexPtrSet Spacetime::getExternalSimplices() noexcept {
+  SimplexPtrSet simplices{};
   for (const auto &[facialOrientation, bucket] : externalSimplices) {
     for (const auto &simplex : bucket) {
       simplices.insert(simplex);
@@ -518,15 +531,15 @@ SimplexSet Spacetime::getExternalSimplices() noexcept {
   return simplices;
 }
 
-std::vector<Vertices> Spacetime::getConnectedComponents() const {
-  VertexSet seen{};
-  std::vector<Vertices> components{};
+std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
+  VertexPtrSet seen{};
+  std::vector<VertexPtrs> components{};
   for (const auto &vertex : vertexList->toVector()) {
     if (seen.contains(vertex)) {
       continue;
     }
-    Vertices component{};
-    Vertices stack{vertex};
+    VertexPtrs component{};
+    VertexPtrs stack{vertex};
     while (!stack.empty()) {
       VertexPtr current = stack.back();
       stack.pop_back();

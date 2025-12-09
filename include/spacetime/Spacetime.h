@@ -77,7 +77,7 @@ class Spacetime {
       topology = topology_.value_or(std::make_shared<Toroid>());
     }
 
-    SimplexPtr createSimplex(const Vertices &vertices, const Edges &edges);
+    SimplexPtr createSimplex(const VertexPtrs &vertices, const Edges &edges);
     SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
     SimplexPtr createSimplex(std::size_t k);
     VertexPtr createVertex(const std::uint64_t id) noexcept;
@@ -114,7 +114,7 @@ class Spacetime {
     ///   this simplex.
     ///
     /// @return {unattached, attached} faces that can be glued together.
-    [[nodiscard]] OptionalSimplexPair
+    [[nodiscard]] OptionalSimplexPtrPair
     getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex);
 
     void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
@@ -128,6 +128,13 @@ class Spacetime {
       const SimplexPtr &attached,
       const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
     );
+
+    void attachAtVertex(
+      const SimplexPtr &unattachedSimplex,
+      const SimplexPtr &attachedSimplex,
+      const VertexPtr &unattached,
+      const VertexPtr &attached
+      );
 
     ///
     /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
@@ -201,7 +208,7 @@ class Spacetime {
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
     [[nodiscard]]
-    SimplexSet getExternalSimplices()
+    SimplexPtrSet getExternalSimplices()
     noexcept;
 
     void embedEuclidean(int dimensions, double epsilon);
@@ -214,12 +221,12 @@ class Spacetime {
     /// If you want something truly random, though, you should probably implement that.
     ///
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
-    OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
+    OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
 
     /// This method is for testing only, very poor runtime performance.
-    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
+    SimplexPtrSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
 
-    [[nodiscard]] std::vector<Vertices> getConnectedComponents() const;
+    [[nodiscard]] std::vector<VertexPtrs> getConnectedComponents() const;
 
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
@@ -239,7 +246,7 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplices{};
+    std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplices{};
 
     ///
     /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
@@ -248,7 +255,7 @@ class Spacetime {
     /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
     /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
     /// orientation of the Simplex itself.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
+    std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
     std::vector<std::shared_ptr<Observable> > observables{};
 };
 } // caset

@@ -156,7 +156,6 @@ PYBIND11_MODULE(caset, m) {
       // .def("hasEdge", py::overload_cast<const IdType, const IdType>(&Simplex::hasEdge), py::arg("source"), py::arg("target"))
       .def("hasVertex", &Simplex::hasVertex)
       .def("isTimelike", &Simplex::isTimelike)
-      .def("attach", &Simplex::attach, py::arg("unattachedVertex"), py::arg("unattachedVertex"), py::arg("edgeList"), py::arg("vertexList"))
       .def("validate", &Simplex::validate);
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash>>(m, "SimplexHash")
@@ -231,6 +230,7 @@ PYBIND11_MODULE(caset, m) {
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"))
       .def("attachAtVertices", &Spacetime::attachAtVertices, py::arg("simplex"), py::arg("vertexA"), py::arg("vertexB"))
+      .def("attachAtVertex", &Spacetime::attachAtVertex, py::arg("unattachedSimplex"), py::arg("attachedSimplex"), py::arg("unattachedVertex"), py::arg("attachedVertex"))
       .def("moveInEdgesFromVertex", &Spacetime::moveInEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
       .def("moveOutEdgesFromVertex", &Spacetime::moveOutEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
       .def("causallyAttachFaces", &Spacetime::causallyAttachFaces);

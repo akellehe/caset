@@ -126,7 +126,7 @@ class SimplexOrientation {
       return k;
     }
 
-    static SimplexOrientationPtr orientationOf(const Vertices &vertices) {
+    static SimplexOrientationPtr orientationOf(const VertexPtrs &vertices) {
       uint8_t tiVertices = 0;
       uint8_t tfVertices = 0;
       double ti = std::numeric_limits<double>::max();
@@ -233,9 +233,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
   public:
     ///
     /// @param vertices_
-    explicit Simplex(const Vertices &vertices_, Edges edges_);
+    explicit Simplex(const VertexPtrs &vertices_, Edges edges_);
 
-    Simplex(const Vertices &vertices_, Edges edges_ ,const SimplexOrientationPtr &orientation_);
+    Simplex(const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientationPtr &orientation_);
 
     void initialize(const std::shared_ptr<Simplex> &simplex);
 
@@ -286,7 +286,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     ///
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
-    [[nodiscard]] Vertices getVertices() const noexcept;
+    [[nodiscard]] VertexPtrs getVertices() const noexcept;
 
     [[nodiscard]] std::size_t size() const noexcept;
 
@@ -349,7 +349,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     [[nodiscard]] Edges getEdges() const;
 
     [[nodiscard]]
-    std::optional<Vertices>
+    std::optional<VertexPtrs>
     getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const;
 
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
@@ -395,7 +395,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplices that share this face.
-    [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> getCofaces() const noexcept;
+    [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>> getCofaces() const noexcept;
 
     bool operator==(const Simplex &other) const noexcept;
 
@@ -414,8 +414,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     bool isInternal() const noexcept;
 
-    static std::shared_ptr<Simplex> create(const Vertices &vertices_, const Edges &edges_);
-    static std::shared_ptr<Simplex> create(const Vertices &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_);
+    static std::shared_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_);
+    static std::shared_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_);
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -445,31 +445,31 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     VertexIdMap getVertexIdLookup() const noexcept;
 
-    void attach(const VertexPtr &unattached, const VertexPtr &attached, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList);
-
-  private:
-    SimplexOrientationPtr orientation{};
-    VertexIdMap vertexIdLookup{};
-    Vertices vertices{};
-    Edges edges{};
-
-    std::vector<std::shared_ptr<Simplex> > facets{};
-    std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq> cofaces{};
-
     /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
     /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
     /// squaredLength data could be lost.
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
+
+  private:
+    SimplexOrientationPtr orientation{};
+    VertexIdMap vertexIdLookup{};
+    VertexPtrs vertices{};
+    Edges edges{};
+
+    std::vector<std::shared_ptr<Simplex> > facets{};
+    std::unordered_set<std::shared_ptr<Simplex>> cofaces{};
+
 
     template<typename Method, typename... Args>
     bool cascade(Method method, bool up, bool down, Args &&... args);
 };
 
 using SimplexPtr = std::shared_ptr<Simplex>;
-using SimplexPair = std::pair<SimplexPtr, SimplexPtr>;
-using OptionalSimplexPair = std::optional<SimplexPair>;
-using Simplices = std::vector<SimplexPtr>;
-using SimplexSet = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
+using SimplexPtrPair = std::pair<SimplexPtr, SimplexPtr>;
+using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
+using SimplexPtrs = std::vector<SimplexPtr>;
+using SimplexPtrSet = std::unordered_set<SimplexPtr>;
+using SimplexSet = std::unordered_set<Simplex>;
 }
 
 template<>
