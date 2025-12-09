@@ -169,22 +169,17 @@ void Vertex::addSimplex(const std::shared_ptr<Simplex> &simplex) {
     }
   }
 #endif
-  simplices.push_back(simplex);
+  simplices.insert(simplex);
 }
 
 void Vertex::removeSimplex(const std::shared_ptr<Simplex> &simplex) {
-  for (auto i=0; i<simplices.size(); i++) {
-    if (simplex == simplices[i]) {
-      simplices.erase(simplices.begin() + i);
-      return;
-    }
-  }
-#if CASET_DEBUG
-  throw std::runtime_error("You tried to remove a simplex that the Vertex does not contain!");
-#endif
+  simplices.erase(simplex);
+// #if CASET_DEBUG
+  // throw std::runtime_error("You tried to remove a simplex that the Vertex does not contain!");
+// #endif
 }
 
-std::vector<std::shared_ptr<Simplex>>
+std::unordered_set<std::shared_ptr<Simplex>>
 Vertex::getSimplices() const noexcept
 {
   return simplices;

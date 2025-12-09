@@ -128,7 +128,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         std::string toString() const noexcept;
 
-        std::vector<std::shared_ptr<Simplex>> getSimplices() const noexcept;
+        std::unordered_set<std::shared_ptr<Simplex>> getSimplices() const noexcept;
 
         void addSimplex(const std::shared_ptr<Simplex> &simplex);
         void removeSimplex(const std::shared_ptr<Simplex> &simplex);
@@ -136,7 +136,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
     private:
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> outEdges{};
         std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
-        std::vector<std::shared_ptr<Simplex>> simplices{};
+        std::unordered_set<std::shared_ptr<Simplex>> simplices{};
         std::uint64_t id;
         std::vector<double> coordinates{};
 };
