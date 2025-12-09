@@ -225,16 +225,17 @@ def build(args):
     start = time.time() * 1000.
     st.build(args.n_simplices)
     end = time.time() * 1000.
-    print("Elapsed time: ", end - start)
+    print(f"Elapsed time: {end - start:.1f} ms")
+    return
 
     # Embed:
 
-    print("---------------Embedding Euclidean------------")
-    start = time.time() * 1000.
-    embed_euclidean(st, dimensions=4, epsilon=10e-10)
-    end = time.time() * 1000.
-    print("Elapsed time: ", end - start)
-    print("----------------------------------------------")
+    # print("---------------Embedding Euclidean------------")
+    # start = time.time() * 1000.
+    # embed_euclidean(st, dimensions=4, epsilon=10e-10)
+    # end = time.time() * 1000.
+    # print("Elapsed time: ", end - start)
+    # print("----------------------------------------------")
 
     # Plot:
     fig = plt.figure(figsize=(8, 8))

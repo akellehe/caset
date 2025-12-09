@@ -357,9 +357,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
     // void computeEdges();
 
-    [[nodiscard]] bool hasEdge(const EdgePtr &edge) const;
-    [[nodiscard]] bool hasEdge(const IdType vertexAId, const IdType vertexBId) const;
-
     [[nodiscard]] bool hasVertex(IdType vertexId) const;
 
     void validate() const;

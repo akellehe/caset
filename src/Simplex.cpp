@@ -146,7 +146,13 @@ std::string Simplex::toString() const {
 }
 
 [[nodiscard]] bool Simplex::isTimelike() const {
-  for (const auto &edge : getEdges()) {
+  const auto startTime = vertices[0]->getTime();
+  for (const auto &v : vertices) {
+    if (v->getTime() != startTime) return false;
+  }
+  return true;
+  // for (const auto &edge : getEdges()) {
+#ifdef CASET_DEBUG
     if (!vertexIdLookup.contains(edge->getSourceId())) {
       CLOG(ERROR_LEVEL,
            "vertexIdLookup was missing source ID ",
@@ -165,11 +171,12 @@ std::string Simplex::toString() const {
            ". edges should all be internal");
       throw std::runtime_error("vertexIdLookup was missing target ID");
     }
-    const auto &src = vertexIdLookup.find(edge->getSourceId())->second;
-    const auto &tgt = vertexIdLookup.find(edge->getTargetId())->second;
-    if (src->getTime() != tgt->getTime()) return false;
-  }
-  return true;
+#endif
+    // const auto &src = vertexIdLookup.find(edge->getSourceId())->second;
+    // const auto &tgt = vertexIdLookup.find(edge->getTargetId())->second;
+    // if (src->getTime() != tgt->getTime()) return false;
+  // }
+  // return true;
 }
 
 [[nodiscard]] std::size_t Simplex::computeNumberOfEdges(std::size_t k) {
@@ -330,26 +337,6 @@ Simplex::getVerticesWithParityTo(const SimplexPtr &other) const {
   return std::nullopt;
 }
 
-[[nodiscard]] bool Simplex::hasEdge(const EdgePtr &edge) const {
-  if (!hasVertex(edge->getSourceId())) {
-    return false;
-  }
-  if (!hasVertex(edge->getTargetId())) {
-    return false;
-  }
-  for (const auto &e : getEdges()) {
-    if (e->getSourceId() == edge->getSourceId() && e->getTargetId() == edge->getTargetId()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-[[nodiscard]] bool Simplex::hasEdge(const IdType vertexAId, const IdType vertexBId) const {
-  const EdgePtr edge = std::make_shared<Edge>(vertexAId, vertexBId);
-  return hasEdge(edge);
-}
-
 int8_t Simplex::checkParity(const SimplexPtr &other) const {
   std::size_t K = vertices.size();
 
@@ -449,9 +436,6 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
     return false;
   }
   if (hasVertex(newVertex->getId())) {
-#if CASET_DEBUG
-    validate();
-#endif
     return false;
   }
   std::vector<IdType> vertexIds = {};
