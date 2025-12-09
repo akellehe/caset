@@ -61,44 +61,13 @@ Vertex::setCoordinates(const std::vector<double> &coords) noexcept
   coordinates = coords;
 }
 
-[[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> >
-Vertex::moveTo(const std::shared_ptr<Vertex> &vertex)
-{
-  if (outEdges.empty()) {
-    throw std::runtime_error("Cannot execute move; outEdges is empty!");
-  }
-  std::shared_ptr<Edge> edge = std::make_shared<Edge>(getId(), vertex->getId());
-  if (!outEdges.contains(edge)) {
-    throw std::runtime_error("No edge to this vertex exists.");
-  }
-  return std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> >({
-      *outEdges.find(edge), vertex
-  });
-}
-
-std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+std::unordered_set<Edge *>
 Vertex::getEdges() const noexcept {
-  std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edges;
+  std::unordered_set<Edge *> edges{};
   edges.reserve(inEdges.size() + outEdges.size());
   edges.insert(inEdges.begin(), inEdges.end());
   edges.insert(outEdges.begin(), outEdges.end());
   return edges;
-}
-
-std::shared_ptr<Edge>
-Vertex::getEdge(const EdgeKey &key)
-{
-  const auto testEdge = std::make_shared<Edge>(key.first, key.second);
-  if (inEdges.contains(testEdge)) return *inEdges.find(testEdge);
-  if (outEdges.contains(testEdge)) return *outEdges.find(testEdge);
-  return nullptr;
-}
-
-std::shared_ptr<Edge> Vertex::getEdge(const EdgePtr &edge)
-{
-  if (inEdges.contains(edge)) return *inEdges.find(edge);
-  if (outEdges.contains(edge)) return *outEdges.find(edge);
-  return nullptr;
 }
 
 std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
@@ -109,17 +78,18 @@ Vertex::moveInEdgesTo(
   ) {
   std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
   std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-  for (const auto &edge : inEdges) {
+  for (auto edge_ : inEdges) {
+    auto edge = edgeList->remove(edge_->getKey());
     CLOG(DEBUG_LEVEL, "Moving in-edge ", edge->toString(), " to ", vertex->toString());
     oldEdges->insert(edge->getKey());
-    edgeList->remove(edge);
     const auto sourceVertex = vertexList->get(edge->getSourceId());
-    sourceVertex->removeOutEdge(edge);
+    sourceVertex->removeOutEdge(edge.get());
     CLOG(DEBUG_LEVEL, "Changing target vertex from ", std::to_string(edge->getTargetId()), " to ", std::to_string(vertex->getId()));
     edge->replaceTargetVertex(vertex->getId());
     newEdges->insert(edge->getKey());
-    vertex->addInEdge(edgeList->add(edge));
+    // TODO: If there are issues with the edge pointer chanigng value; we may need to address it by extracting and storing via some other method here.
     sourceVertex->addOutEdge(edgeList->get(edge->getKey()));
+    vertex->addInEdge(edgeList->add(std::move(edge)));
   }
   inEdges.clear();
   return {oldEdges, newEdges};
@@ -142,24 +112,24 @@ std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
 Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
   std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
   std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-  std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> newOutEdges{};
-  for (const auto &edge : outEdges) {
+  std::unordered_set<Edge *> newOutEdges{};
+  for (auto edge_ : outEdges) {
+    auto edge = edgeList->remove(edge_);
     CLOG(DEBUG_LEVEL, "Moving out-edge ", edge->toString(), " to ", vertex->toString());
     oldEdges->insert(edge->getKey());
-    edgeList->remove(edge);
     const auto targetVertex = vertexList->get(edge->getTargetId());
-    targetVertex->removeInEdge(edge);
+    targetVertex->removeInEdge(edge.get());
     CLOG(DEBUG_LEVEL, "Changing source vertex from ", std::to_string(edge->getSourceId()), " to ", std::to_string(vertex->getId()));
     edge->replaceSourceVertex(vertex->getId());
     newEdges->insert(edge->getKey());
-    vertex->addOutEdge(edgeList->add(edge));
     targetVertex->addInEdge(edgeList->get(edge->getKey()));
+    vertex->addOutEdge(edgeList->add(std::move(edge)));
   }
   outEdges.clear();
   return {oldEdges, newEdges};
 }
 
-void Vertex::addSimplex(const std::shared_ptr<Simplex> &simplex) {
+void Vertex::addSimplex(Simplex *simplex) {
   CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
 #if CASET_DEBUG
   for (const auto &simp : simplices) {
@@ -172,14 +142,14 @@ void Vertex::addSimplex(const std::shared_ptr<Simplex> &simplex) {
   simplices.insert(simplex);
 }
 
-void Vertex::removeSimplex(const std::shared_ptr<Simplex> &simplex) {
+void Vertex::removeSimplex(Simplex *simplex) {
   simplices.erase(simplex);
 // #if CASET_DEBUG
   // throw std::runtime_error("You tried to remove a simplex that the Vertex does not contain!");
 // #endif
 }
 
-std::unordered_set<std::shared_ptr<Simplex>>
+std::unordered_set<Simplex *>
 Vertex::getSimplices() const noexcept
 {
   return simplices;

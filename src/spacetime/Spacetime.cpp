@@ -191,7 +191,7 @@ void Spacetime::build(int numSimplices) {
   std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
   createSimplex(orientations[1]);
   for (int i = 0; i < numSimplices; i++) {
-    SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
+    SimplexRawPtr rightSimplex = createSimplex(orientations[i % 2]);
     OptionalSimplexPtrPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
     if (!leftFaceRightFace.has_value()) return;
     auto [leftFace, rightFace] = leftFaceRightFace.value();
@@ -199,40 +199,40 @@ void Spacetime::build(int numSimplices) {
   }
 }
 
-EdgePtr Spacetime::createEdge(
+EdgeRawPtr Spacetime::createEdge(
   const std::uint64_t src,
   const std::uint64_t tgt
 ) {
-  EdgePtr edge = edgeList->add(src, tgt);
+  EdgeRawPtr edge = edgeList->add(src, tgt);
   vertexList->get(src)->addOutEdge(edge);
   vertexList->get(tgt)->addInEdge(edge);
   return edge;
 }
 
-EdgePtr Spacetime::createEdge(
+EdgeRawPtr Spacetime::createEdge(
   const std::uint64_t src,
   const std::uint64_t tgt,
   double squaredLength
 ) noexcept {
-  EdgePtr edge = edgeList->add(src, tgt, squaredLength);
+  EdgeRawPtr edge = edgeList->add(src, tgt, squaredLength);
   vertexList->get(src)->addOutEdge(edge);
   vertexList->get(tgt)->addInEdge(edge);
   return edge;
 }
 
-SimplexPtr Spacetime::createSimplex(
+SimplexRawPtr Spacetime::createSimplex(
   const VertexPtrs &vertices, const Edges &edges
 ) {
   const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
 
-  SimplexPtr simplex = Simplex::create(vertices, edges);
+  SimplexRawPtr simplex = Simplex::create(vertices, edges);
   for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
     externalSimplices[o].insert(simplex);
   }
   return simplex;
 }
 
-SimplexPtr Spacetime::createSimplex(std::size_t k) {
+SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
   double squaredLength = alpha;
   VertexPtrs vertices = {};
   vertices.reserve(k);
@@ -242,7 +242,7 @@ SimplexPtr Spacetime::createSimplex(std::size_t k) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
-      EdgePtr edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+      EdgeRawPtr edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -252,7 +252,7 @@ SimplexPtr Spacetime::createSimplex(std::size_t k) {
   return createSimplex(vertices, edges);
 }
 
-SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
   double squaredLength = alpha;
   double timelikeSquaredLength = alpha;
   SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
@@ -272,7 +272,7 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
       timelikeSquaredLength = -alpha;
     }
     for (const auto &existingVertex : vertices) {
-      EdgePtr edge = edgeList->
+      EdgeRawPtr edge = edgeList->
           add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -287,7 +287,7 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
     /// counter:
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
     for (const auto &existingVertex : vertices) {
-      EdgePtr edge;
+      EdgeRawPtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
         edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
       } else {
@@ -303,7 +303,7 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
 }
 
 [[nodiscard]] OptionalSimplexPtrPair
-Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
+Spacetime::getGluableFaces(const SimplexRawPtr &unattachedSimplex, const SimplexRawPtr &attachedSimplex) {
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
   auto attachedFacets = attachedSimplex->getFacets();
 #if CASET_DEBUG
@@ -342,11 +342,11 @@ void Spacetime::moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to
     const VertexPtr originalSource = vertexList->get(edge->getSourceId());
     originalSource->removeOutEdge(edge);
     from->removeInEdge(edge);
-    edgeList->remove(edge);
-    edge->replaceTargetVertex(to->getId());
-    const EdgePtr newEdge = edgeList->add(edge);
-    to->addInEdge(newEdge);
-    originalSource->addOutEdge(newEdge);
+    auto canonicalEdge = edgeList->remove(edge);
+    canonicalEdge->replaceTargetVertex(to->getId());
+    to->addInEdge(canonicalEdge.get());
+    originalSource->addOutEdge(canonicalEdge.get());
+    edgeList->add(std::move(canonicalEdge));
   }
 }
 
@@ -355,11 +355,11 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
     const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
     originalTarget->removeInEdge(edge);
     from->removeOutEdge(edge);
-    edgeList->remove(edge);
-    edge->replaceSourceVertex(to->getId());
-    const EdgePtr newEdge = edgeList->add(edge);
-    to->addOutEdge(newEdge);
-    originalTarget->addInEdge(newEdge);
+    auto canonicalEdge = edgeList->remove(edge);
+    canonicalEdge->replaceSourceVertex(to->getId());
+    to->addOutEdge(canonicalEdge.get());
+    originalTarget->addInEdge(canonicalEdge.get());
+    edgeList->add(std::move(canonicalEdge));
   }
 }
 
@@ -385,8 +385,8 @@ SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t
 /// external edges in "unattached" are redirected from those vertices on "unattached" to the corresponding vertex in
 /// "attached".
 void Spacetime::attachAtVertices(
-  const SimplexPtr &unattached,
-  const SimplexPtr &attached,
+  const SimplexRawPtr &unattached,
+  const SimplexRawPtr &attached,
   const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
 ) {
   CLOG(INFO_LEVEL, "attachAtVertices called. Pre-validating.");
@@ -421,9 +421,9 @@ void Spacetime::attachAtVertex(const std::shared_ptr<Simplex> &unattachedSimplex
 
 }
 
-std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
-  const SimplexPtr &attachedFace,
-  const SimplexPtr &unattachedFace
+std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(
+  const SimplexRawPtr &attachedFace,
+  const SimplexRawPtr &unattachedFace
 ) {
   if (!attachedFace->isCausallyAvailable() || !unattachedFace->isCausallyAvailable()) {
     CLOG(ERROR_LEVEL, "One or more of attachedFace and unattachedFace was not causally available!\n", attachedFace->toString(), "\n", unattachedFace->toString());
@@ -500,7 +500,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   return {attachedFace, true};
 }
 
-OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
+OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexRawPtr &unattachedSimplex) {
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
     const auto &prospectiveCofaces = externalSimplices[facialOrientation];
     if (prospectiveCofaces.empty()) continue;

@@ -77,9 +77,9 @@ class Spacetime {
       topology = topology_.value_or(std::make_shared<Toroid>());
     }
 
-    SimplexPtr createSimplex(const VertexPtrs &vertices, const Edges &edges);
-    SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
-    SimplexPtr createSimplex(std::size_t k);
+    SimplexRawPtr createSimplex(const VertexPtrs &vertices, const Edges &edges);
+    SimplexRawPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
+    SimplexRawPtr createSimplex(std::size_t k);
     VertexPtr createVertex(const std::uint64_t id) noexcept;
     VertexPtr createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept;
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept { return spacetimeType; }
@@ -91,8 +91,8 @@ class Spacetime {
       currentTime++;
       return static_cast<double>(currentTime);
     }
-    EdgePtr createEdge(const std::uint64_t src, const std::uint64_t tgt);
-    EdgePtr createEdge(const std::uint64_t src, const std::uint64_t tgt, double squaredLength) noexcept;
+    EdgeRawPtr createEdge(const std::uint64_t src, const std::uint64_t tgt);
+    EdgeRawPtr createEdge(const std::uint64_t src, const std::uint64_t tgt, double squaredLength) noexcept;
     void addObservable(const std::shared_ptr<Observable> &observable) { observables.push_back(observable); }
 
     ///
@@ -115,7 +115,7 @@ class Spacetime {
     ///
     /// @return {unattached, attached} faces that can be glued together.
     [[nodiscard]] OptionalSimplexPtrPair
-    getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex);
+    getGluableFaces(const SimplexRawPtr &unattachedSimplex, const SimplexRawPtr &attachedSimplex);
 
     void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
 
@@ -124,14 +124,14 @@ class Spacetime {
     bool removeIfIsolated(const VertexPtr &vertex);
 
     void attachAtVertices(
-      const SimplexPtr &unattached,
-      const SimplexPtr &attached,
+      const SimplexRawPtr &unattached,
+      const SimplexRawPtr &attached,
       const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
     );
 
     void attachAtVertex(
-      const SimplexPtr &unattachedSimplex,
-      const SimplexPtr &attachedSimplex,
+      const SimplexRawPtr &unattachedSimplex,
+      const SimplexRawPtr &attachedSimplex,
       const VertexPtr &unattached,
       const VertexPtr &attached
       );
@@ -199,7 +199,7 @@ class Spacetime {
     /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
     /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
     /// @returns {attachedFace, succeeded} The `attachedFace` after attachment and whether the attachment succeeded.
-    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &attachedFace, const SimplexPtr &unattachedFace);
+    std::tuple<SimplexRawPtr, bool> causallyAttachFaces(const SimplexRawPtr &attachedFace, const SimplexRawPtr &unattachedFace);
 
     ///
     /// @return Simplices around the boundary of the simplicial complex to which they belong. These simplices have at
@@ -221,7 +221,7 @@ class Spacetime {
     /// If you want something truly random, though, you should probably implement that.
     ///
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
-    OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
+    OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexRawPtr &unattachedSimplex);
 
     /// This method is for testing only, very poor runtime performance.
     SimplexPtrSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);

@@ -340,7 +340,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// We define a face as a set of shared vertices. The face of any given k-simplex \f$ \sigma^k \f$ is a k-1 simplex,
     /// \f$ \sigma^{k-1} \f$ such that \f$ \sigma^{k-1} \subset \sigma^k \f$.
-    void addCoface(const std::shared_ptr<Simplex> &simplex);
+    void addCoface(Simplex *simplex);
 
     [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;
 
@@ -392,7 +392,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplices that share this face.
-    [[nodiscard]] std::unordered_set<std::shared_ptr<Simplex>> getCofaces() const noexcept;
+    [[nodiscard]] std::unordered_set<Simplex *> getCofaces() const noexcept;
 
     bool operator==(const Simplex &other) const noexcept;
 
@@ -454,20 +454,22 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     Edges edges{};
 
     std::vector<std::shared_ptr<Simplex> > facets{};
-    std::unordered_set<std::shared_ptr<Simplex>> cofaces{};
+    std::unordered_set<Simplex *> cofaces{};
 
 
     template<typename Method, typename... Args>
     bool cascade(Method method, bool up, bool down, Args &&... args);
 };
 
-using SimplexPtr = std::shared_ptr<Simplex>;
-using SimplexPtrPair = std::pair<SimplexPtr, SimplexPtr>;
+
+using SimplexRawPtr = std::shared_ptr<Simplex>;
+using SimplexPtrPair = std::pair<SimplexRawPtr, SimplexRawPtr>;
 using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
-using SimplexPtrs = std::vector<SimplexPtr>;
-using SimplexPtrSet = std::unordered_set<SimplexPtr>;
+using SimplexPtrs = std::vector<SimplexRawPtr>;
+using SimplexPtrSet = std::unordered_set<SimplexRawPtr>;
 using SimplexSet = std::unordered_set<Simplex>;
 }
+
 
 template<>
 struct std::hash<caset::Simplex> {
@@ -475,5 +477,6 @@ struct std::hash<caset::Simplex> {
     return std::hash<std::uint64_t>{}(s.fingerprint.fingerprint());
   }
 };
+
 
 #endif //CASET_SIMPLEX_H

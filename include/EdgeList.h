@@ -27,6 +27,7 @@
 #define CASET_EDGELIST_H
 
 #include <memory>
+#include <ranges>
 #include <vector>
 #include <unordered_set>
 
@@ -36,56 +37,49 @@
 namespace caset {
 class EdgeList {
   public:
-    std::shared_ptr<Edge> add(const std::shared_ptr<Edge> &edge) {
-      return getOrInsert(edge);
+    Edge *add(std::unique_ptr<Edge> edge) noexcept {
+      edgeList.insert_or_assign(edge->getKey(), std::move(edge));
+      return edgeList[edge->getKey()].get();
+    }
+    Edge *add(std::uint64_t src, std::uint64_t tgt) {
+      auto edge = std::make_unique<Edge>(src, tgt);
+      return getOrInsert(std::move(edge));
     }
 
-    std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt) {
-      auto edge = std::make_shared<Edge>(src, tgt);
-      return getOrInsert(edge);
+    Edge *add(std::uint64_t src, std::uint64_t tgt, double squaredLength) noexcept {
+      auto edge = std::make_unique<Edge>(src, tgt, squaredLength);
+      return getOrInsert(std::move(edge));
     }
 
-    std::shared_ptr<Edge> add(std::uint64_t src, std::uint64_t tgt, double squaredLength) noexcept {
-      auto edge = std::make_shared<Edge>(src, tgt, squaredLength);
-      return getOrInsert(edge);
-    }
-
-    void remove(const EdgeKey &edgeKey) noexcept {
-      const auto &[srcId, tgtId] = edgeKey;
-      auto tempEdge = std::make_shared<Edge>(srcId, tgtId);
-      if (edgeList.contains(tempEdge)) {
-        remove(*edgeList.find(tempEdge));
-      // } else {
-        // CLOG(WARN_LEVEL, "-----------------------------------------------");
-        // CLOG(WARN_LEVEL, "Edge: ", tempEdge->toString(), " not found in: ");
-        // for (const auto &e : edgeList) {
-          // CLOG(WARN_LEVEL, "    - ", e->toString());
-        // }
-        // CLOG(WARN_LEVEL, "----------------------------------------------");
+    std::unique_ptr<Edge> remove(const EdgeKey &edgeKey) noexcept {
+      auto found = edgeList.find(edgeKey);
+      if (found == edgeList.end()) {
+        return nullptr;
       }
+      edgeList.erase(found);
+      return std::move(found->second);
     }
 
-    void remove(const EdgePtr &edge) noexcept {
-      if (!edgeList.contains(edge)) {
-        // CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
-        // for (const auto &e : edgeList) {
-          // CLOG(WARN_LEVEL, "    - ", e->toString());
-        // }
-        return;
+    std::unique_ptr<Edge> remove(Edge *edge) noexcept {
+#ifdef CASET_DEBUG
+      if (!edgeList.contains(edge->getKey())) {
+        CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
+        for (const auto &[k, e] : edgeList) {
+          CLOG(WARN_LEVEL, "    - ", e->toString());
+        }
+        return nullptr;
       }
-      edgeList.erase(edge);
+#endif
+      auto e = std::move(edgeList[edge->getKey()]);
+      edgeList.erase(edge->getKey());
+      return e;
     }
 
-    void replace(std::shared_ptr<Edge> &toRemove, std::shared_ptr<Edge> &toAdd) noexcept {
-      edgeList.erase(toRemove);
-      edgeList.insert(toAdd);
-    }
-
-    [[nodiscard]] std::vector<std::shared_ptr<Edge> > toVector() const noexcept {
-      std::vector<std::shared_ptr<Edge>> result;
+    [[nodiscard]] std::vector<Edge *> toVector() const noexcept {
+      std::vector<Edge *> result;
       result.reserve(edgeList.size());
-      for (auto &edge : edgeList) {
-        result.push_back(edge);
+      for (const auto &edge : edgeList | std::views::values) {
+        result.push_back(edge.get());
       }
       return result;
     }
@@ -94,33 +88,36 @@ class EdgeList {
       return edgeList.size();
     }
 
-    std::shared_ptr<Edge> get(const EdgeKey &edgeKey) const {
-      const auto &[srcId, tgtId] = edgeKey;
-      auto tempEdge = std::make_shared<Edge>(srcId, tgtId);
-      if (!edgeList.contains(tempEdge)) {
-        CLOG(WARN_LEVEL, tempEdge->toString(), " not found! Returning nullptr.");
+    Edge *get(const EdgeKey &edgeKey) {
+      if (!edgeList.contains(edgeKey)) {
+        CLOG(WARN_LEVEL, std::to_string(std::get<0>(edgeKey)), "->", std::to_string(std::get<1>(edgeKey)), " not found! Returning nullptr.");
         return nullptr;
       }
-      return *edgeList.find(tempEdge);
+      return edgeList[edgeKey].get();
     }
 
   private:
-    std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edgeList{};
+    std::unordered_map<EdgeKey, std::unique_ptr<Edge>, EdgeKeyHash, EdgeKeyEqual> edgeList{};
 
-    std::shared_ptr<Edge> getOrInsert(const std::shared_ptr<Edge> &edge) {
+    Edge *getOrInsert(std::unique_ptr<Edge> edge) {
+#ifdef CASET_DEBUG
       if (edge->getSourceId() == edge->getTargetId()) {
         throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());
       }
-      if (edgeList.contains(edge)) {
-        auto found = *edgeList.find(edge);
+#endif
+      const auto edgeKey = edge->getKey();
+      if (edgeList.contains(edgeKey)) {
+        auto found = edgeList.find(edgeKey)->second.get();
+#ifdef CASET_DEBUG
         if (found->getSourceId() != edge->getSourceId() || found->getTargetId() != edge->getTargetId()) {
           throw std::runtime_error("Fingerprint collision between edges: " + edge->toString() + " and " + found->toString());
         }
+#endif
         return found;
       }
       // CLOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
-      edgeList.insert(edge);
-      return edge;
+      edgeList.insert_or_assign(edge->getKey(), std::move(edge));
+      return edgeList[edgeKey].get();
     }
 };
 } // caset

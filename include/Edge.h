@@ -86,7 +86,7 @@ class Simplex;
 /// @param squaredLength_ The squared length of the edge according to whatever spacetime metric is being used. We work
 ///   in squared lengths to allow the use of imaginary Edge lengths (they have negative values).
 ///
-class Edge : public std::enable_shared_from_this<Edge> {
+class Edge {
   public:
     Edge(
       std::uint64_t sourceId_,
@@ -138,7 +138,7 @@ class Edge : public std::enable_shared_from_this<Edge> {
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
-    bool hasVertex(std::uint64_t vertexId) {
+    bool hasVertex(std::uint64_t vertexId) const {
       if (getSourceId() == vertexId || getTargetId() == vertexId) return true;
       return false;
     }
@@ -165,11 +165,11 @@ class Edge : public std::enable_shared_from_this<Edge> {
 
     Fingerprint fingerprint;
 
-    std::pair<IdType, IdType> getKey() const noexcept {
+    [[nodiscard]] std::pair<IdType, IdType> getKey() const noexcept {
       return {sourceId, targetId};
     }
 
-    std::vector<std::shared_ptr<Simplex> > getSimplices() const noexcept { return simplices; }
+    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getSimplices() const noexcept { return simplices; }
 
     void addSimplex(const std::shared_ptr<Simplex> &simplex) noexcept { simplices.push_back(simplex); }
 
@@ -190,7 +190,8 @@ class Edge : public std::enable_shared_from_this<Edge> {
 using EdgeHash = FingerprintHash<Edge>;
 using EdgeEq = FingerprintEq<Edge>;
 using EdgePtr = std::shared_ptr<Edge>;
-using Edges = std::vector<EdgePtr>;
+using EdgeRawPtr = Edge *;
+using Edges = std::vector<EdgeRawPtr>;
 
 using EdgeKey = std::pair<IdType, IdType>;
 using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;

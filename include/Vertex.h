@@ -77,35 +77,27 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         void setCoordinates(const std::vector<double> &coords) noexcept;
 
-        [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> > moveTo(
-            const std::shared_ptr<Vertex> &vertex);
-
-        void addInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.insert(edge); }
-        void addOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.insert(edge); }
-        void removeInEdge(const std::shared_ptr<Edge> &edge) noexcept {
+        void addInEdge(Edge *edge) noexcept { inEdges.insert(edge); }
+        void addOutEdge(Edge *edge) noexcept { outEdges.insert(edge); }
+        void removeInEdge(Edge *edge) noexcept {
             if (!inEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
             inEdges.erase(edge);
         }
-        void removeOutEdge(const std::shared_ptr<Edge> &edge) noexcept {
+        void removeOutEdge(Edge *edge) noexcept {
             if (!outEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
             outEdges.erase(edge);
         }
 
         std::size_t degree() const noexcept { return inEdges.size() + outEdges.size(); }
 
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+        std::unordered_set<Edge *>
         getInEdges() const noexcept { return inEdges; }
 
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+        std::unordered_set<Edge *>
         getOutEdges() const noexcept { return outEdges; }
 
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+        std::unordered_set<Edge *>
         getEdges() const noexcept;
-
-        std::shared_ptr<Edge>
-        getEdge(const EdgeKey &key);
-
-        std::shared_ptr<Edge> getEdge(const EdgePtr &edge);
 
         std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
         moveInEdgesTo(
@@ -128,15 +120,15 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         std::string toString() const noexcept;
 
-        std::unordered_set<std::shared_ptr<Simplex>> getSimplices() const noexcept;
+        std::unordered_set<Simplex *> getSimplices() const noexcept;
 
-        void addSimplex(const std::shared_ptr<Simplex> &simplex);
-        void removeSimplex(const std::shared_ptr<Simplex> &simplex);
+        void addSimplex(Simplex *simplex);
+        void removeSimplex(Simplex *simplex);
 
     private:
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> outEdges{};
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
-        std::unordered_set<std::shared_ptr<Simplex>> simplices{};
+        std::unordered_set<Edge *> outEdges{};
+        std::unordered_set<Edge *> inEdges{};
+        std::unordered_set<Simplex *> simplices{};
         std::uint64_t id;
         std::vector<double> coordinates{};
 };
