@@ -441,6 +441,7 @@ void Spacetime::attachAtVertices(
   unattached->validate();
   attached->validate();
 #endif
+  CLOG(INFO_LEVEL, "Validated.");
 }
 
 void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
