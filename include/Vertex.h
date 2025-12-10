@@ -99,24 +99,38 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::unordered_set<Edge *>
         getEdges() const noexcept;
 
-        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
         moveInEdgesTo(
             const std::shared_ptr<Vertex> &vertex,
             const std::shared_ptr<EdgeList> &edgeList,
             const std::shared_ptr<VertexList> &vertexList);
 
-        std::pair<EdgeIdSet, EdgeIdSet>
-        moveEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList);
-
-        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
         moveOutEdgesTo(
             const std::shared_ptr<Vertex> &vertex,
             const std::shared_ptr<EdgeList> &edgeList,
             const std::shared_ptr<VertexList> &vertexList
             );
+
+        std::pair<EdgeKeySet, EdgeKeySet>
+        moveInEdgesToForPython(
+            const std::shared_ptr<Vertex> &vertex,
+            const std::shared_ptr<EdgeList> &edgeList,
+            const std::shared_ptr<VertexList> &vertexList);
+
+        std::pair<EdgeKeySet, EdgeKeySet>
+        moveOutEdgesToForPython(
+            const std::shared_ptr<Vertex> &vertex,
+            const std::shared_ptr<EdgeList> &edgeList,
+            const std::shared_ptr<VertexList> &vertexList
+            );
+
+        std::pair<EdgeKeySet, EdgeKeySet>
+        moveEdgesTo(
+            const std::shared_ptr<Vertex> &vertex,
+            const std::shared_ptr<EdgeList> &edgeList,
+            const std::shared_ptr<VertexList> &vertexList);
+
 
         std::string toString() const noexcept;
 

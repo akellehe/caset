@@ -92,7 +92,7 @@ class EdgeList {
 
     Edge *get(const EdgeKey &edgeKey) {
       if (!edgeList.contains(edgeKey)) {
-        CLOG(WARN_LEVEL, std::to_string(std::get<0>(edgeKey)), "->", std::to_string(std::get<1>(edgeKey)), " not found! Returning nullptr.");
+        CLOG(WARN_LEVEL, std::to_string(edgeKey.first), "->", std::to_string(edgeKey.second), " not found! Returning nullptr.");
         return nullptr;
       }
       return edgeList[edgeKey].get();

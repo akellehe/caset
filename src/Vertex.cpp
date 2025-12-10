@@ -70,18 +70,19 @@ Vertex::getEdges() const noexcept {
   return edges;
 }
 
-std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
 Vertex::moveInEdgesTo(
   const std::shared_ptr<Vertex> &vertex,
   const std::shared_ptr<EdgeList> &edgeList,
   const std::shared_ptr<VertexList> &vertexList
   ) {
-  std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-  std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
+  std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>();
+  std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>();
+
   for (auto edge_ : inEdges) {
     if (edge_ == nullptr) {
-      CLOG(ERROR_LEVEL, "Found a nullptr edge in vertex ", toString());
-      throw std::runtime_error("Found a nullptr edge in vertex.");
+      CLOG(ERROR_LEVEL, "Found a nullptr (in) edge in vertex ", toString());
+      throw std::runtime_error("Found a nullptr (in) edge in vertex.");
     }
     auto oldKey = edge_->getKey();
     auto edge = edgeList->remove(oldKey);
@@ -103,37 +104,65 @@ Vertex::moveInEdgesTo(
   return {oldEdges, newEdges};
 }
 
-std::pair<EdgeIdSet, EdgeIdSet>
+std::pair<EdgeKeySet, EdgeKeySet>
+Vertex::moveInEdgesToForPython(
+    const std::shared_ptr<Vertex> &vertex,
+    const std::shared_ptr<EdgeList> &edgeList,
+    const std::shared_ptr<VertexList> &vertexList) {
+  auto [old, new_] = moveInEdgesTo(vertex, edgeList, vertexList);
+  return {*old, *new_};
+}
+
+std::pair<EdgeKeySet, EdgeKeySet>
+Vertex::moveOutEdgesToForPython(
+    const std::shared_ptr<Vertex> &vertex,
+    const std::shared_ptr<EdgeList> &edgeList,
+    const std::shared_ptr<VertexList> &vertexList
+    ) {
+  auto [old, new_] = moveOutEdgesTo(vertex, edgeList, vertexList);
+  return {*old, *new_};
+}
+
+
+std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
+  std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>();
+  std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>();
+  std::unordered_set<Edge *> newOutEdges{};
+  for (auto edge_ : outEdges) {
+    if (edge_ == nullptr) {
+      CLOG(ERROR_LEVEL, "Found a nullptr (out) edge in vertex ", toString());
+      throw std::runtime_error("Found a nullptr (out) edge in vertex.");
+    }
+    auto oldKey = edge_->getKey();
+    auto edge = edgeList->remove(oldKey);
+    auto raw = edge.get();
+    CLOG(DEBUG_LEVEL, "Moving out-edge ", raw->toString(), " to ", vertex->toString());
+    oldEdges->insert(oldKey);
+    const auto targetVertex = vertexList->get(raw->getTargetId());
+    targetVertex->removeInEdge(raw);
+    CLOG(DEBUG_LEVEL, "Changing source vertex from ", std::to_string(raw->getSourceId()), " to ", std::to_string(vertex->getId()));
+    raw->replaceSourceVertex(vertex->getId());
+    auto newKey = raw->getKey();
+    newEdges->insert(newKey);
+    vertex->addOutEdge(raw);
+    targetVertex->addInEdge(raw);
+    edgeList->add(std::move(edge));
+  }
+  outEdges.clear();
+  return {oldEdges, newEdges};
+}
+
+std::pair<EdgeKeySet, EdgeKeySet>
 Vertex::moveEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  EdgeIdSet oldEdges = EdgeIdSet{};
-  EdgeIdSet newEdges = EdgeIdSet{};
+  EdgeKeySet oldEdges = EdgeKeySet{};
+  EdgeKeySet newEdges = EdgeKeySet{};
   const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, edgeList, vertexList);
   const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, edgeList, vertexList);
   oldEdges.insert(oldInEdges->begin(), oldInEdges->end());
   oldEdges.insert(oldOutEdges->begin(), oldOutEdges->end());
   newEdges.insert(newInEdges->begin(), newInEdges->end());
   newEdges.insert(newOutEdges->begin(), newOutEdges->end());
-  return {oldEdges, newEdges};
-}
-
-std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-  std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-  std::unordered_set<Edge *> newOutEdges{};
-  for (auto edge_ : outEdges) {
-    auto edge = edgeList->remove(edge_);
-    CLOG(DEBUG_LEVEL, "Moving out-edge ", edge->toString(), " to ", vertex->toString());
-    oldEdges->insert(edge->getKey());
-    const auto targetVertex = vertexList->get(edge->getTargetId());
-    targetVertex->removeInEdge(edge.get());
-    CLOG(DEBUG_LEVEL, "Changing source vertex from ", std::to_string(edge->getSourceId()), " to ", std::to_string(vertex->getId()));
-    edge->replaceSourceVertex(vertex->getId());
-    newEdges->insert(edge->getKey());
-    targetVertex->addInEdge(edgeList->get(edge->getKey()));
-    vertex->addOutEdge(edgeList->add(std::move(edge)));
-  }
-  outEdges.clear();
   return {oldEdges, newEdges};
 }
 

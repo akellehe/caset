@@ -43,3 +43,71 @@ class TestVertex(unittest.TestCase):
         v1.removeOutEdge(edge)
         self.assertEqual(len(v1.getOutEdges()), 0)
 
+    def test_move_in_edges_to(self):
+        st = Spacetime()
+        v1 = st.createVertex(1, [1, 2, 3, 4])
+        v2 = st.createVertex(2, [5, 6, 7, 8])
+        e12 = st.createEdge(v1.getId(), v2.getId())
+
+        v3 = st.createVertex(3, [9, 10, 11, 12])
+        v4 = st.createVertex(4, [13, 14, 15, 16])
+        e34 = st.createEdge(v3.getId(), v4.getId())
+
+        self.assertEqual(len(v2.getInEdges()), 1)
+        self.assertEqual(len(v4.getInEdges()), 1)
+
+        self.assertEqual(e12.getSourceId(), 1)
+        self.assertEqual(e12.getTargetId(), 2)
+        self.assertEqual(e34.getSourceId(), 3)
+        self.assertEqual(e34.getTargetId(), 4)
+
+        old, new = v2.moveInEdgesTo(v4, st.getEdgeList(), st.getVertexList())
+        old = [o for o in old][0]
+        new = [n for n in new][0]
+        self.assertEqual(old.source, 1)
+        self.assertEqual(old.target, 2)
+        self.assertEqual(new.source, 1)
+        self.assertEqual(new.target, 4)
+
+        self.assertEqual(len(v2.getInEdges()), 0)
+        self.assertEqual(len(v4.getInEdges()), 2)
+
+        self.assertEqual(e12.getSourceId(), 1)
+        self.assertEqual(e12.getTargetId(), 4)
+        self.assertEqual(e34.getSourceId(), 3)
+        self.assertEqual(e34.getTargetId(), 4)
+
+    def test_move_out_edges_to(self):
+        st = Spacetime()
+        v1 = st.createVertex(1, [1, 2, 3, 4])
+        v2 = st.createVertex(2, [5, 6, 7, 8])
+        e12 = st.createEdge(v1.getId(), v2.getId())
+
+        v3 = st.createVertex(3, [9, 10, 11, 12])
+        v4 = st.createVertex(4, [13, 14, 15, 16])
+        e34 = st.createEdge(v3.getId(), v4.getId())
+
+        self.assertEqual(e12.getSourceId(), 1)
+        self.assertEqual(e12.getTargetId(), 2)
+        self.assertEqual(e34.getSourceId(), 3)
+        self.assertEqual(e34.getTargetId(), 4)
+
+        self.assertEqual(len(v2.getInEdges()), 1)
+        self.assertEqual(len(v4.getInEdges()), 1)
+
+        old, new = v1.moveOutEdgesTo(v3, st.getEdgeList(), st.getVertexList())
+        old = [o for o in old][0]
+        new = [n for n in new][0]
+        self.assertEqual(old.source, 1)
+        self.assertEqual(old.target, 2)
+        self.assertEqual(new.source, 3)
+        self.assertEqual(new.target, 2)
+
+        self.assertEqual(len(v1.getOutEdges()), 0)
+        self.assertEqual(len(v3.getOutEdges()), 2)
+
+        self.assertEqual(e12.getSourceId(), 3)
+        self.assertEqual(e12.getTargetId(), 2)
+        self.assertEqual(e34.getSourceId(), 3)
+        self.assertEqual(e34.getTargetId(), 4)
+

@@ -38,6 +38,41 @@ inline double random_uniform(double min = -1.0, double max = 1.0) {
 }
 
 namespace caset {
+
+class EdgeKey {
+  public:
+    IdType first;
+    IdType second;
+
+    EdgeKey(IdType sourceId_, IdType targetId_) : first(sourceId_), second(targetId_) {}
+
+    bool operator==(const EdgeKey &other) const {
+      return first == other.first && second == other.second;
+    }
+
+    [[nodiscard]] std::uint64_t hash() const {
+      std::size_t h1 = std::hash<IdType>{}(first);
+      std::size_t h2 = std::hash<IdType>{}(second);
+      return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+    }
+};
+
+struct EdgeKeyHash {
+  std::uint64_t operator()(const EdgeKey &p) const noexcept {
+    return p.hash();
+  }
+};
+
+// Optional: custom equality if you ever need something non-trivial
+struct EdgeKeyEqual {
+  bool operator()(const EdgeKey &a,
+                  const EdgeKey &b) const noexcept {
+    return a.first == b.first && a.second == b.second;
+  }
+};
+
+
+
 /// # Edge Disposition
 ///
 /// There are two things that determine the disposition (spacelike, timelike, light/null-like). The first is the squared
@@ -53,24 +88,6 @@ enum class EdgeDisposition : uint8_t {
   Spacelike = 0,
   Timelike = 1,
   Lightlike = 2
-};
-
-struct EdgeKeyHash {
-  std::size_t operator()(const std::pair<std::uint64_t, std::uint64_t> &p) const noexcept {
-    // Standard-ish hash combine
-    std::size_t h1 = std::hash<std::uint64_t>{}(p.first);
-    std::size_t h2 = std::hash<std::uint64_t>{}(p.second);
-    // from boost::hash_combine
-    return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
-  }
-};
-
-// Optional: custom equality if you ever need something non-trivial
-struct EdgeKeyEqual {
-  bool operator()(const std::pair<std::uint64_t, std::uint64_t> &a,
-                  const std::pair<std::uint64_t, std::uint64_t> &b) const noexcept {
-    return a.first == b.first && a.second == b.second;
-  }
 };
 
 class Simplex;
@@ -165,7 +182,7 @@ class Edge {
 
     Fingerprint fingerprint;
 
-    [[nodiscard]] std::pair<IdType, IdType> getKey() const noexcept {
+    [[nodiscard]] EdgeKey getKey() const noexcept {
       return {sourceId, targetId};
     }
 
@@ -193,9 +210,8 @@ using EdgePtr = std::shared_ptr<Edge>;
 using EdgeRawPtr = Edge *;
 using Edges = std::vector<EdgeRawPtr>;
 
-using EdgeKey = std::pair<IdType, IdType>;
-using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
-using EdgeIds = std::vector<EdgeKey>;
+using EdgeKeySet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
+using EdgeKeys = std::vector<EdgeKey>;
 }
 
 #endif //CASET_CASET_SRC_EDGE_H_

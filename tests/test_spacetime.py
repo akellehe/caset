@@ -56,6 +56,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(e1.getTargetId(), v2.getId())
         self.assertEqual(e2.getSourceId(), v2.getId())
         self.assertEqual(e2.getTargetId(), v3.getId())
+        print('done')
 
     def test_create_simplex(self):
         st = Spacetime()
