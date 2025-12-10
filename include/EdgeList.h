@@ -37,16 +37,17 @@
 namespace caset {
 class EdgeList {
   public:
-    Edge *add(std::unique_ptr<Edge> edge) noexcept {
-      edgeList.insert_or_assign(edge->getKey(), std::move(edge));
-      return edgeList[edge->getKey()].get();
+    Edge *add(std::unique_ptr<Edge> edge) {
+      auto key = edge->getKey();
+      edgeList.insert_or_assign(key, std::move(edge));
+      return edgeList[key].get();
     }
     Edge *add(std::uint64_t src, std::uint64_t tgt) {
       auto edge = std::make_unique<Edge>(src, tgt);
       return getOrInsert(std::move(edge));
     }
 
-    Edge *add(std::uint64_t src, std::uint64_t tgt, double squaredLength) noexcept {
+    Edge *add(std::uint64_t src, std::uint64_t tgt, double squaredLength) {
       auto edge = std::make_unique<Edge>(src, tgt, squaredLength);
       return getOrInsert(std::move(edge));
     }
@@ -56,8 +57,9 @@ class EdgeList {
       if (found == edgeList.end()) {
         return nullptr;
       }
+      auto result = std::move(found->second);
       edgeList.erase(found);
-      return std::move(found->second);
+      return result;
     }
 
     std::unique_ptr<Edge> remove(Edge *edge) noexcept {

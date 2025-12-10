@@ -77,11 +77,17 @@ class Spacetime {
       topology = topology_.value_or(std::make_shared<Toroid>());
     }
 
-    SimplexRawPtr createSimplex(const VertexPtrs &vertices, const Edges &edges);
-    SimplexRawPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
-    SimplexRawPtr createSimplex(std::size_t k);
+    Simplex *createSimplex(const VertexPtrs &vertices, const Edges &edges);
+    Simplex *createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
+    Simplex *createSimplex(std::size_t k);
+
+    py::object createSimplexForPython(const VertexPtrs &vertices, const Edges &edges);
+    py::object createSimplexForPython(const std::tuple<uint8_t, uint8_t> &numericOrientation);
+    py::object createSimplexForPython(std::size_t k);
+
     VertexPtr createVertex(const std::uint64_t id) noexcept;
     VertexPtr createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept;
+
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept { return spacetimeType; }
     [[nodiscard]] double getCurrentTime() const noexcept { return static_cast<double>(currentTime); }
     [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() noexcept { return edgeList; }
@@ -115,7 +121,11 @@ class Spacetime {
     ///
     /// @return {unattached, attached} faces that can be glued together.
     [[nodiscard]] OptionalSimplexPtrPair
-    getGluableFaces(const SimplexRawPtr &unattachedSimplex, const SimplexRawPtr &attachedSimplex);
+    getGluableFaces(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex);
+
+    [[nodiscard]]
+    py::tuple
+    getGluableFacesForPython(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex);
 
     void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
 
@@ -130,8 +140,8 @@ class Spacetime {
     );
 
     void attachAtVertex(
-      const SimplexRawPtr &unattachedSimplex,
-      const SimplexRawPtr &attachedSimplex,
+      Simplex *unattachedSimplex,
+      Simplex *attachedSimplex,
       const VertexPtr &unattached,
       const VertexPtr &attached
       );
@@ -199,7 +209,8 @@ class Spacetime {
     /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
     /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
     /// @returns {attachedFace, succeeded} The `attachedFace` after attachment and whether the attachment succeeded.
-    std::tuple<SimplexRawPtr, bool> causallyAttachFaces(const SimplexRawPtr &attachedFace, const SimplexRawPtr &unattachedFace);
+    std::tuple<SimplexRawPtr, bool> causallyAttachFaces(SimplexRawPtr attachedFace, SimplexRawPtr unattachedFace);
+    std::tuple<py::object, bool> causallyAttachFacesForPython(SimplexRawPtr attachedFace, SimplexRawPtr unattachedFace);
 
     ///
     /// @return Simplices around the boundary of the simplicial complex to which they belong. These simplices have at
@@ -207,9 +218,9 @@ class Spacetime {
     /// that this method does not return 2-simplices as you might expect, but 5-simplices since those are the standard
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
-    [[nodiscard]]
-    SimplexPtrSet getExternalSimplices()
-    noexcept;
+    [[nodiscard]] SimplexPtrSet getExternalSimplices() noexcept;
+    py::list getExternalSimplicesForPython() noexcept;
+
 
     void embedEuclidean(int dimensions, double epsilon);
 
@@ -221,10 +232,12 @@ class Spacetime {
     /// If you want something truly random, though, you should probably implement that.
     ///
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
-    OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexRawPtr &unattachedSimplex);
+    OptionalSimplexPtrPair chooseSimplexFacesToGlue(SimplexRawPtr unattachedSimplex);
+    py::tuple chooseSimplexFacesToGlueForPython(SimplexRawPtr unattachedSimplex);
 
     /// This method is for testing only, very poor runtime performance.
     SimplexPtrSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
+    py::list getSimplicesWithOrientationForPython(std::tuple<uint8_t, uint8_t> orientation);
 
     [[nodiscard]] std::vector<VertexPtrs> getConnectedComponents() const;
 
@@ -257,6 +270,10 @@ class Spacetime {
     /// orientation of the Simplex itself.
     std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
     std::vector<std::shared_ptr<Observable> > observables{};
+
+    /// This is the highest level of ownership for simplices. Facets/faces are owned by their cofaces, those cofaces go
+    /// here.
+    std::unordered_set<std::unique_ptr<Simplex>> simplices{};
 };
 } // caset
 

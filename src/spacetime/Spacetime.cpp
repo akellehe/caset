@@ -26,6 +26,7 @@
 #include <pybind11/pybind11.h>
 #include <torch/torch.h>
 #include "Logger.h"
+#include "utils.h"
 #include <memory>
 #include "spacetime/Spacetime.h"
 
@@ -224,12 +225,25 @@ SimplexRawPtr Spacetime::createSimplex(
   const VertexPtrs &vertices, const Edges &edges
 ) {
   const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
-
-  SimplexRawPtr simplex = Simplex::create(vertices, edges);
-  for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
-    externalSimplices[o].insert(simplex);
+  std::unique_ptr<Simplex> simplex = Simplex::create(vertices, edges);
+  auto raw = simplex.get();
+  for (const auto &o : raw->getOrientation()->getFacialOrientations()) {
+    externalSimplices[o].insert(raw);
   }
-  return simplex;
+  simplices.insert(std::move(simplex));
+  return raw;
+}
+
+py::object Spacetime::createSimplexForPython(const VertexPtrs &vertices, const Edges &edges) {
+  return wrap_non_owning(createSimplex(vertices, edges));
+}
+
+py::object Spacetime::createSimplexForPython(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+  return wrap_non_owning(createSimplex(numericOrientation));
+}
+
+py::object Spacetime::createSimplexForPython(std::size_t k) {
+  return wrap_non_owning(createSimplex(k));
 }
 
 SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
@@ -302,8 +316,23 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
   return createSimplex(vertices, edges);
 }
 
+[[nodiscard]] py::tuple
+Spacetime::getGluableFacesForPython(
+  SimplexRawPtr unattachedSimplex,
+  SimplexRawPtr attachedSimplex
+  ) {
+  auto result = getGluableFaces(unattachedSimplex, attachedSimplex);
+  if (!result.has_value()) return py::make_tuple();
+  auto [first, second] = result.value();
+  return py::make_tuple(wrap_non_owning(first), wrap_non_owning(second));
+}
+
 [[nodiscard]] OptionalSimplexPtrPair
-Spacetime::getGluableFaces(const SimplexRawPtr &unattachedSimplex, const SimplexRawPtr &attachedSimplex) {
+Spacetime::getGluableFaces(
+  SimplexRawPtr unattachedSimplex,
+  SimplexRawPtr attachedSimplex
+  )
+{
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
   auto attachedFacets = attachedSimplex->getFacets();
 #if CASET_DEBUG
@@ -378,6 +407,15 @@ SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t
   return result;
 }
 
+py::list Spacetime::getSimplicesWithOrientationForPython(std::tuple<uint8_t, uint8_t> orientation) {
+  SimplexPtrSet simplices_ = getSimplicesWithOrientation(orientation);
+  py::list result{};
+  for (auto simplex : simplices_) {
+    result.append(wrap_non_owning(simplex));
+  }
+  return result;
+}
+
 
 /// When we attach two simplices; the "attached" one is assumed to be part of a simplicial complex. The "unattached" one
 /// is assumed to be part of another simplicial complex, but usually by itself. The "attached" simplex replaces
@@ -405,7 +443,7 @@ void Spacetime::attachAtVertices(
 #endif
 }
 
-void Spacetime::attachAtVertex(const std::shared_ptr<Simplex> &unattachedSimplex, const std::shared_ptr<Simplex> &attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
+void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
   const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, edgeList, vertexList);
   for (const auto &simplex : unattached->getSimplices()) {
     simplex->replaceVertex(unattached, attached);
@@ -422,8 +460,8 @@ void Spacetime::attachAtVertex(const std::shared_ptr<Simplex> &unattachedSimplex
 }
 
 std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(
-  const SimplexRawPtr &attachedFace,
-  const SimplexRawPtr &unattachedFace
+  SimplexRawPtr attachedFace,
+  SimplexRawPtr unattachedFace
 ) {
   if (!attachedFace->isCausallyAvailable() || !unattachedFace->isCausallyAvailable()) {
     CLOG(ERROR_LEVEL, "One or more of attachedFace and unattachedFace was not causally available!\n", attachedFace->toString(), "\n", unattachedFace->toString());
@@ -500,7 +538,12 @@ std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(
   return {attachedFace, true};
 }
 
-OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexRawPtr &unattachedSimplex) {
+std::tuple<py::object, bool> Spacetime::causallyAttachFacesForPython(SimplexRawPtr attachedFace, SimplexRawPtr unattachedFace) {
+  auto [simplex, success] = causallyAttachFaces(attachedFace, unattachedFace);
+  return {wrap_non_owning(simplex), success};
+}
+
+OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(SimplexRawPtr unattachedSimplex) {
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
     const auto &prospectiveCofaces = externalSimplices[facialOrientation];
     if (prospectiveCofaces.empty()) continue;
@@ -521,6 +564,15 @@ OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexRawPtr &
   return std::nullopt;
 }
 
+py::tuple Spacetime::chooseSimplexFacesToGlueForPython(
+  SimplexRawPtr unattachedSimplex
+  ) {
+  auto chosen = chooseSimplexFacesToGlue(unattachedSimplex);
+  if (!chosen.has_value()) return py::make_tuple();
+  auto [first, second] = chosen.value();
+  return py::make_tuple(wrap_non_owning(first), wrap_non_owning(second));
+}
+
 SimplexPtrSet Spacetime::getExternalSimplices() noexcept {
   SimplexPtrSet simplices{};
   for (const auto &[facialOrientation, bucket] : externalSimplices) {
@@ -529,6 +581,16 @@ SimplexPtrSet Spacetime::getExternalSimplices() noexcept {
     }
   }
   return simplices;
+}
+
+py::list Spacetime::getExternalSimplicesForPython() noexcept {
+  py::list result{};
+  for (const auto &[facialOrientation, bucket] : externalSimplices) {
+    for (const auto &simplex : bucket) {
+      result.append(wrap_non_owning(simplex));
+    }
+  }
+  return result;
 }
 
 std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {

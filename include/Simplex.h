@@ -22,6 +22,10 @@
 #ifndef CASET_SIMPLEX_H
 #define CASET_SIMPLEX_H
 
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/chrono.h>
+
 #include <memory>
 #include <vector>
 #include <functional>
@@ -35,6 +39,8 @@
 #include "VertexList.h"
 #include "Fingerprint.h"
 #include "Vertex.h"
+
+namespace py = pybind11;
 
 namespace caset {
 ///
@@ -221,6 +227,15 @@ struct std::hash<caset::SimplexOrientation> {
 };
 
 namespace caset {
+
+class Simplex;
+using SimplexRawPtr = Simplex *;
+using SimplexPtrPair = std::pair<SimplexRawPtr, SimplexRawPtr>;
+using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
+using SimplexPtrs = std::vector<SimplexRawPtr>;
+using SimplexPtrSet = std::unordered_set<SimplexRawPtr>;
+using SimplexSet = std::unordered_set<Simplex>;
+
 /// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
@@ -229,7 +244,7 @@ namespace caset {
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
 ///
-class Simplex : public std::enable_shared_from_this<Simplex> {
+class Simplex {
   public:
     ///
     /// @param vertices_
@@ -237,7 +252,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     Simplex(const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientationPtr &orientation_);
 
-    void initialize(const std::shared_ptr<Simplex> &simplex);
+    void initialize(SimplexRawPtr simplex);
 
     std::string toString() const;
 
@@ -249,7 +264,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// The curvature at the hinge is the deficit angle.
     ///
-    // const std::vector<std::shared_ptr<Simplex> > getHinges() const;
+    // const std::vector<std::shared_ptr<Simplex>> getHinges() const;
 
     /// Assuming the simplex is a hinge; returns the deficit angle associated with the hinge.
     ///
@@ -328,7 +343,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return /// all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getFacets();
+    [[nodiscard]] std::vector<SimplexRawPtr> getFacets();
+    [[nodiscard]] py::list getFacetsForPython();
 
     std::size_t getNumberOfEdges() const;
 
@@ -340,9 +356,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     /// We define a face as a set of shared vertices. The face of any given k-simplex \f$ \sigma^k \f$ is a k-1 simplex,
     /// \f$ \sigma^{k-1} \f$ such that \f$ \sigma^{k-1} \subset \sigma^k \f$.
-    void addCoface(Simplex *simplex);
+    void addCoface(SimplexRawPtr simplex);
 
-    [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;
+    [[nodiscard]] bool hasCoface(SimplexRawPtr simplex) const;
 
 
     /// @returns Edges in traversal order (the order of input vertices).
@@ -350,7 +366,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     [[nodiscard]]
     std::optional<VertexPtrs>
-    getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const;
+    getVerticesWithParityTo(SimplexRawPtr other) const;
 
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
@@ -381,7 +397,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// those swaps changes the sign of the orientation once. An odd number of swaps gives an opposite orientation; an
     /// even number gives the same orientation.
     ///
-    int8_t checkParity(const std::shared_ptr<Simplex> &other) const;
+    int8_t checkParity(SimplexRawPtr other) const;
 
     ///
     /// Co-faces are maintained as state rather than computed on the fly. This means any time a Simplex is attached to
@@ -392,7 +408,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplices that share this face.
-    [[nodiscard]] std::unordered_set<Simplex *> getCofaces() const noexcept;
+    [[nodiscard]] std::unordered_set<SimplexRawPtr> getCofaces() const noexcept;
+    [[nodiscard]] py::list getCofacesForPython();
 
     bool operator==(const Simplex &other) const noexcept;
 
@@ -411,8 +428,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     bool isInternal() const noexcept;
 
-    static std::shared_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_);
-    static std::shared_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_);
+    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_);
+    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_);
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -438,7 +455,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     std::unordered_set<SimplexOrientationPtr> getGluableFaceOrientations();
 
-    bool operator==(const std::shared_ptr<Simplex> &other) const noexcept;
+    bool operator==(SimplexRawPtr other) const noexcept;
 
     VertexIdMap getVertexIdLookup() const noexcept;
 
@@ -453,21 +470,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     VertexPtrs vertices{};
     Edges edges{};
 
-    std::vector<std::shared_ptr<Simplex> > facets{};
-    std::unordered_set<Simplex *> cofaces{};
-
-
-    template<typename Method, typename... Args>
-    bool cascade(Method method, bool up, bool down, Args &&... args);
+    std::vector<std::unique_ptr<Simplex>> facets{};
+    std::unordered_set<SimplexRawPtr> cofaces{};
 };
 
 
-using SimplexRawPtr = std::shared_ptr<Simplex>;
-using SimplexPtrPair = std::pair<SimplexRawPtr, SimplexRawPtr>;
-using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
-using SimplexPtrs = std::vector<SimplexRawPtr>;
-using SimplexPtrSet = std::unordered_set<SimplexRawPtr>;
-using SimplexSet = std::unordered_set<Simplex>;
 }
 
 

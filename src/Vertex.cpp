@@ -79,17 +79,25 @@ Vertex::moveInEdgesTo(
   std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
   std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
   for (auto edge_ : inEdges) {
-    auto edge = edgeList->remove(edge_->getKey());
-    CLOG(DEBUG_LEVEL, "Moving in-edge ", edge->toString(), " to ", vertex->toString());
-    oldEdges->insert(edge->getKey());
-    const auto sourceVertex = vertexList->get(edge->getSourceId());
-    sourceVertex->removeOutEdge(edge.get());
-    CLOG(DEBUG_LEVEL, "Changing target vertex from ", std::to_string(edge->getTargetId()), " to ", std::to_string(vertex->getId()));
-    edge->replaceTargetVertex(vertex->getId());
-    newEdges->insert(edge->getKey());
+    if (edge_ == nullptr) {
+      CLOG(ERROR_LEVEL, "Found a nullptr edge in vertex ", toString());
+      throw std::runtime_error("Found a nullptr edge in vertex.");
+    }
+    auto oldKey = edge_->getKey();
+    auto edge = edgeList->remove(oldKey);
+    auto raw = edge.get();
+    CLOG(DEBUG_LEVEL, "Moving in-edge ", raw->toString(), " to ", vertex->toString());
+    oldEdges->insert(oldKey);
+    const auto sourceVertex = vertexList->get(raw->getSourceId());
+    sourceVertex->removeOutEdge(raw);
+    CLOG(DEBUG_LEVEL, "Changing target vertex from ", std::to_string(raw->getTargetId()), " to ", std::to_string(vertex->getId()));
+    raw->replaceTargetVertex(vertex->getId());
+    auto newKey = raw->getKey();
+    newEdges->insert(newKey);
     // TODO: If there are issues with the edge pointer chanigng value; we may need to address it by extracting and storing via some other method here.
-    sourceVertex->addOutEdge(edgeList->get(edge->getKey()));
-    vertex->addInEdge(edgeList->add(std::move(edge)));
+    vertex->addInEdge(raw);
+    sourceVertex->addOutEdge(raw);
+    edgeList->add(std::move(edge));
   }
   inEdges.clear();
   return {oldEdges, newEdges};

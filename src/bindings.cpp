@@ -45,7 +45,7 @@ namespace py = pybind11;
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
-  py::class_<Edge, std::unique_ptr<Edge>>(m, "Edge")
+  py::class_<Edge, std::shared_ptr<Edge>>(m, "Edge")
       .def(
         py::init<
           std::uint64_t,
@@ -150,14 +150,12 @@ PYBIND11_MODULE(caset, m) {
     .def(py::init<>());
 
   py::class_<Simplex, std::shared_ptr<Simplex>>(m, "Simplex")
-      .def(py::init<const std::vector<std::shared_ptr<Vertex>>, std::vector<Edge *>>(),
-           py::arg("vertices"), py::arg("edges"))
       .def("__repr__", &Simplex::toString)
       .def("__str__", &Simplex::toString)
-      .def("checkPairty", &Simplex::checkParity)
-      .def("getCofaces", &Simplex::getCofaces)
+      .def("checkParity", &Simplex::checkParity)
       .def("getEdges", &Simplex::getEdges, py::return_value_policy::reference_internal)
-      .def("getFacets", &Simplex::getFacets)
+      .def("getFacets", &Simplex::getFacetsForPython, py::return_value_policy::reference_internal)
+      .def("getCofaces", &Simplex::getCofacesForPython, py::return_value_policy::reference_internal)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
@@ -203,14 +201,14 @@ PYBIND11_MODULE(caset, m) {
       )
       .def(py::init<>())
       .def("getVertexList", &Spacetime::getVertexList)
-      .def("getSimplicesWithOrientation", &Spacetime::getSimplicesWithOrientation, py::arg("orientation"))
+      .def("getSimplicesWithOrientation", &Spacetime::getSimplicesWithOrientationForPython, py::arg("orientation"))
       .def("getEdgeList", &Spacetime::getEdgeList)
-      .def("getGluableFaces", &Spacetime::getGluableFaces)
+      .def("getGluableFaces", &Spacetime::getGluableFacesForPython)
       .def("embedEuclidean", &Spacetime::embedEuclidean, py::arg("dimensions") = 4, py::arg("epsilon") = 1e-8)
       .def("getConnectedComponents", &Spacetime::getConnectedComponents)
       .def("build", &Spacetime::build)
-      .def("getSimplices", &Spacetime::getExternalSimplices)
-      .def("chooseSimplexFacesToGlue", &Spacetime::chooseSimplexFacesToGlue, py::arg("simplex"))
+      .def("getSimplices", &Spacetime::getExternalSimplicesForPython)
+      .def("chooseSimplexFacesToGlue", &Spacetime::chooseSimplexFacesToGlueForPython, py::arg("simplex"))
       .def("createVertex",
            py::overload_cast<const std::uint64_t>(&Spacetime::createVertex),
            py::arg("id"))
@@ -235,16 +233,19 @@ PYBIND11_MODULE(caset, m) {
            py::arg("target"),
            py::arg("squaredLength"))
       .def("createSimplex",
-           py::overload_cast<const std::vector<std::shared_ptr<Vertex> > &, const std::vector<Edge *> &>(&Spacetime::createSimplex),
-           py::arg("vertices"), py::arg("edges"))
+           py::overload_cast<
+           const std::vector<std::shared_ptr<Vertex> > &,
+           const std::vector<Edge *> &>(&Spacetime::createSimplexForPython),
+           py::arg("vertices"), py::arg("edges")
+           )
       .def("createSimplex",
-           py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
+           py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplexForPython),
            py::arg("orientation"))
       .def("attachAtVertices", &Spacetime::attachAtVertices, py::arg("simplex"), py::arg("vertexA"), py::arg("vertexB"))
       .def("attachAtVertex", &Spacetime::attachAtVertex, py::arg("unattachedSimplex"), py::arg("attachedSimplex"), py::arg("unattachedVertex"), py::arg("attachedVertex"))
       .def("moveInEdgesFromVertex", &Spacetime::moveInEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
       .def("moveOutEdgesFromVertex", &Spacetime::moveOutEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
-      .def("causallyAttachFaces", &Spacetime::causallyAttachFaces);
+      .def("causallyAttachFaces", &Spacetime::causallyAttachFacesForPython);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

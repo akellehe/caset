@@ -21,12 +21,13 @@
 
 #include "Vertex.h"
 #include "Simplex.h"
+#include "utils.h"
 
 #include <ATen/core/interned_strings.h>
 #include <c10/util/ThreadLocalDebugInfo.h>
 
 namespace caset {
-std::vector<SimplexRawPtr > Simplex::getFacets() {
+std::vector<SimplexRawPtr> Simplex::getFacets() {
 #if CASET_DEBUG
   if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -36,35 +37,44 @@ std::vector<SimplexRawPtr > Simplex::getFacets() {
 #endif
     return {};
   }
-  if (!facets.empty()) return facets;
-  auto verts = getVertices();
-  // facets.reserve(verts.size());
-  for (int skip = 0; skip < verts.size(); skip++) {
-    const auto &skipVertex = verts[skip]->getId();
-    VertexPtrs faceVertices{};
-    Edges faceEdges{};
-    faceEdges.reserve(verts.size());
-    faceVertices.reserve(verts.size());
-    faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
-    faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
-    for (const auto &e : getEdges()) {
-      if (!e->hasVertex(skipVertex)) faceEdges.push_back(e);
+  if (facets.empty()) {
+    auto verts = getVertices();
+    facets.reserve(verts.size());
+    for (int skip = 0; skip < verts.size(); skip++) {
+      const auto &skipVertex = verts[skip]->getId();
+      VertexPtrs faceVertices{};
+      Edges faceEdges{};
+      faceEdges.reserve(verts.size());
+      faceVertices.reserve(verts.size());
+      faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
+      faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
+      for (const auto &e : getEdges()) {
+        if (!e->hasVertex(skipVertex)) faceEdges.push_back(e);
+      }
+      // TODO: Simplex::create should probably only be called by Spacetime, which holds canonical simplices.
+      std::unique_ptr<Simplex> facet = Simplex::create(faceVertices, faceEdges);
+      facet->addCoface(this);
+      facets.push_back(std::move(facet));
     }
-    SimplexRawPtr facet = Simplex::create(faceVertices, faceEdges);
-    facet->addCoface(this);
-    facets.push_back(facet);
-  }
 #if CASET_DEBUG
-  validate();
+    validate();
 #endif
-  return facets;
+  }
+  std::vector<SimplexRawPtr> rawFacets{};
+  rawFacets.reserve(getVertices().size());
+  for (const auto &f : facets) {
+    rawFacets.push_back(f.get());
+  }
+  return rawFacets;
 }
 
 ///
 /// @param vertices_
 Simplex::Simplex(
-  const VertexPtrs &vertices_, Edges edges_
-) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
+  const VertexPtrs &vertices_,
+  Edges edges_
+) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(std::move(edges_)),
+    fingerprint({}) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -73,7 +83,8 @@ Simplex::Simplex(
 }
 
 Simplex::Simplex(
-  const VertexPtrs &vertices_, Edges edges_,
+  const VertexPtrs &vertices_,
+  Edges edges_,
   const SimplexOrientationPtr &orientation_
 ) : orientation(orientation_), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
 #if CASET_DEBUG
@@ -81,31 +92,32 @@ Simplex::Simplex(
 #endif
 }
 
-SimplexRawPtr Simplex::create(const VertexPtrs &vertices_, const Edges &edges_) {
+std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, const Edges &edges_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  SimplexRawPtr simplex = std::make_shared<Simplex>(vertices_, edges_);
-  simplex->initialize(simplex);
-
+  std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(vertices_, edges_);
+  simplex->initialize(simplex.get());
   return simplex;
 }
 
-SimplexRawPtr Simplex::create(const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_) {
+std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_,
+                                         const Edges &edges_,
+                                         const SimplexOrientationPtr &orientation_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  SimplexRawPtr simplex = std::make_shared<Simplex>(vertices_, edges_, orientation_);
-  simplex->initialize(simplex);
+  std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(vertices_, edges_, orientation_);
+  simplex->initialize(simplex.get());
   return simplex;
 }
 
-void Simplex::initialize(const SimplexRawPtr &simplex) {
+void Simplex::initialize(SimplexRawPtr simplex) {
   std::vector<IdType> ids = {};
   ids.reserve(vertices.size());
   for (const auto &v : vertices) {
     ids.push_back(v->getId());
-    v->addSimplex(simplex.get());
+    v->addSimplex(simplex);
   }
   fingerprint = Fingerprint(ids);
 #if CASET_DEBUG
@@ -188,7 +200,7 @@ std::size_t Simplex::getNumberOfEdges() const {
   return (k + 1) * k / 2;
 }
 
-void Simplex::addCoface(Simplex *simplex) {
+void Simplex::addCoface(SimplexRawPtr simplex) {
   cofaces.insert(simplex);
 #if CASET_DEBUG
   simplex->validate();
@@ -196,7 +208,7 @@ void Simplex::addCoface(Simplex *simplex) {
 #endif
 }
 
-[[nodiscard]] bool Simplex::hasCoface(const SimplexRawPtr &simplex) const {
+[[nodiscard]] bool Simplex::hasCoface(SimplexRawPtr simplex) const {
   for (const auto &s : cofaces) {
     if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
       return true;
@@ -252,7 +264,7 @@ using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
 
 [[nodiscard]]
 std::optional<VertexPtrs>
-Simplex::getVerticesWithParityTo(const SimplexRawPtr &other) const {
+Simplex::getVerticesWithParityTo(SimplexRawPtr other) const {
   const auto &mine = vertices;
   const auto &theirs = other->getVertices();
 
@@ -312,7 +324,7 @@ Simplex::getVerticesWithParityTo(const SimplexRawPtr &other) const {
   return std::nullopt;
 }
 
-int8_t Simplex::checkParity(const SimplexRawPtr &other) const {
+int8_t Simplex::checkParity(SimplexRawPtr other) const {
   std::size_t K = vertices.size();
 
   // Build vertex -> position map for 'a'
@@ -363,14 +375,34 @@ int8_t Simplex::checkParity(const SimplexRawPtr &other) const {
   return transpositionsMod2 ? -1 : +1;
 }
 
-[[nodiscard]] std::unordered_set<Simplex *>
+[[nodiscard]] std::unordered_set<SimplexRawPtr>
 Simplex::getCofaces() const noexcept {
   return cofaces;
 }
 
+
+[[nodiscard]] py::list
+Simplex::getCofacesForPython() {
+  py::list cofacesForPython{};
+  for (auto cof : getCofaces()) {
+    cofacesForPython.append(wrap_non_owning(cof));
+  }
+  return cofacesForPython;
+}
+
+[[nodiscard]]
+py::list
+Simplex::getFacetsForPython() {
+  py::list facetsForPython{};
+  for (auto facet : getFacets()) {
+    facetsForPython.append(wrap_non_owning(facet));
+  }
+  return facetsForPython;
+}
+
 bool Simplex::operator==(const Simplex &other) const noexcept {
   if (vertices.size() != other.vertices.size()) return false;
-  for (int i=0; i<vertices.size(); ++i) {
+  for (int i = 0; i < vertices.size(); ++i) {
     if (vertices[i] != other.vertices[i]) return false;
   }
   return true;
@@ -406,7 +438,7 @@ std::unordered_set<SimplexOrientationPtr> Simplex::getGluableFaceOrientations() 
   return allowedOrientations;
 }
 
-bool Simplex::operator==(const SimplexRawPtr &other) const noexcept {
+bool Simplex::operator==(SimplexRawPtr other) const noexcept {
   return fingerprint.fingerprint() == other->fingerprint.fingerprint();
 }
 
@@ -446,66 +478,5 @@ VertexIdMap Simplex::getVertexIdLookup() const noexcept {
     vertexIdMap.insert({v->getId(), v});
   }
   return vertexIdMap;
-}
-
-template<typename Method, typename... Args>
-bool Simplex::cascade(Method method, bool up, bool down, Args &&... args) {
-  std::deque<SimplexRawPtr> simplicesToUpdate;
-  SimplexPtrSet seen;
-  auto enqueueIfNew = [&](const SimplexRawPtr &s) {
-    if (!seen.contains(s)) simplicesToUpdate.push_back(s);
-  };
-
-  // --- Cascade to siblings --- //
-  for (const auto &coface : getCofaces()) {
-    for (const auto &sibling : coface->getFacets()) {
-      if (sibling->fingerprint.fingerprint() == fingerprint.fingerprint()) continue;
-      (sibling.get()->*method)(std::forward<Args>(args)...);
-    }
-  }
-
-  // --- Cascading to cofaces ---
-  if (up && !cofaces.empty()) {
-    simplicesToUpdate.insert(simplicesToUpdate.end(),
-                             cofaces.begin(),
-                             cofaces.end());
-    while (!simplicesToUpdate.empty()) {
-      const auto coface = simplicesToUpdate.front(); // copy the shared_ptr
-      simplicesToUpdate.pop_front();
-
-      if (!seen.insert(coface).second) {
-        continue;
-      }
-
-      // Call the member function on this coface
-      if ((coface.get()->*method)(std::forward<Args>(args)...)) {
-        for (const auto &nextCoface : coface->getCofaces()) {
-          enqueueIfNew(nextCoface);
-        }
-      }
-    }
-  }
-
-  // --- Cascading to facets ---
-  auto facets_ = getFacets();
-  if (down && !facets_.empty()) {
-    simplicesToUpdate.clear();
-    simplicesToUpdate.insert(simplicesToUpdate.end(),
-                             facets_.begin(),
-                             facets_.end());
-    while (!simplicesToUpdate.empty()) {
-      const auto facet = simplicesToUpdate.front(); // copy, NOT reference
-      simplicesToUpdate.pop_front();
-
-      if (!seen.insert(facet).second) continue;
-
-      if ((facet.get()->*method)(std::forward<Args>(args)...)) {
-        for (const auto &nextFacet : facet->getFacets()) {
-          enqueueIfNew(nextFacet);
-        }
-      }
-    }
-  }
-  return true;
 }
 }

@@ -169,14 +169,14 @@ class Edge {
       return {sourceId, targetId};
     }
 
-    [[nodiscard]] std::vector<std::shared_ptr<Simplex> > getSimplices() const noexcept { return simplices; }
+    [[nodiscard]] std::vector<Simplex *> getSimplices() const noexcept { return simplices; }
 
-    void addSimplex(const std::shared_ptr<Simplex> &simplex) noexcept { simplices.push_back(simplex); }
+    void addSimplex(Simplex *simplex) noexcept { simplices.push_back(simplex); }
 
   private:
     std::uint64_t sourceId;
     std::uint64_t targetId;
-    std::vector<std::shared_ptr<Simplex> > simplices;
+    std::vector<Simplex *> simplices;
 
     /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
     /// fingerprint for this Edge after replacing a source or target vertex in-place.
