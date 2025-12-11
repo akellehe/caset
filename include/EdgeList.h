@@ -39,17 +39,17 @@ class EdgeList {
   public:
     Edge *add(std::shared_ptr<Edge> edge) {
       auto key = edge->getKey();
-      edgeList.insert_or_assign(key, std::move(edge));
+      edgeList.insert_or_assign(key, edge);
       return edgeList[key].get();
     }
     Edge *add(std::uint64_t src, std::uint64_t tgt) {
-      auto edge = std::make_unique<Edge>(src, tgt);
-      return getOrInsert(std::move(edge));
+      auto edge = std::make_shared<Edge>(src, tgt);
+      return getOrInsert(edge);
     }
 
     Edge *add(std::uint64_t src, std::uint64_t tgt, double squaredLength) {
-      auto edge = std::make_unique<Edge>(src, tgt, squaredLength);
-      return getOrInsert(std::move(edge));
+      auto edge = std::make_shared<Edge>(src, tgt, squaredLength);
+      return getOrInsert(edge);
     }
 
     std::shared_ptr<Edge> remove(const EdgeKey &edgeKey) noexcept {
@@ -57,7 +57,7 @@ class EdgeList {
       if (found == edgeList.end()) {
         return nullptr;
       }
-      auto result = std::move(found->second);
+      auto result = found->second;
       edgeList.erase(found);
       return result;
     }
@@ -72,7 +72,7 @@ class EdgeList {
         return nullptr;
       }
 #endif
-      auto e = std::move(edgeList[edge->getKey()]);
+      auto e = edgeList[edge->getKey()];
       edgeList.erase(edge->getKey());
       return e;
     }
@@ -118,7 +118,7 @@ class EdgeList {
         return found;
       }
       // CLOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
-      edgeList.insert_or_assign(edge->getKey(), std::move(edge));
+      edgeList.insert_or_assign(edge->getKey(), edge);
       return edgeList[edgeKey].get();
     }
 };

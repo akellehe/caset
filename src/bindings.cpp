@@ -95,8 +95,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getCoordinates", &Vertex::getCoordinates)
       .def("getEdges", &Vertex::getEdges, py::return_value_policy::reference_internal)
       .def("getId", &Vertex::getId)
-      .def("getInEdges", &Vertex::getInEdges)
-      .def("getOutEdges", &Vertex::getOutEdges)
+      .def("getInEdges", &Vertex::getInEdges, py::return_value_policy::reference_internal)
+      .def("getOutEdges", &Vertex::getOutEdges, py::return_value_policy::reference_internal)
       .def("getTime", &Vertex::getTime)
       .def("moveEdgesTo", &Vertex::moveEdgesTo)
       .def("moveInEdgesTo", &Vertex::moveInEdgesToForPython)
@@ -173,9 +173,10 @@ PYBIND11_MODULE(caset, m) {
       .def("getOrientation", &Simplex::getOrientation)
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
       .def("getVertices", &Simplex::getVertices)
-      .def("getVerticesWithPairtyTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
+      .def("getVerticesWithParityTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
       .def("hasVertex", &Simplex::hasVertex)
       .def("isTimelike", &Simplex::isTimelike)
+      .def("nestedGetEdges", &Simplex::nestedGetEdges, py::return_value_policy::reference_internal)
       .def("validate", &Simplex::validate);
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
@@ -211,15 +212,15 @@ PYBIND11_MODULE(caset, m) {
            py::arg("topology")
       )
       .def(py::init<>())
-      .def("getVertexList", &Spacetime::getVertexList)
+      .def("getVertexList", &Spacetime::getVertexList, py::return_value_policy::reference_internal)
       .def("getSimplicesWithOrientation",
         &Spacetime::getSimplicesWithOrientationForPython,
         py::return_value_policy::reference_internal,
         py::arg("orientation"))
-      .def("getEdgeList", &Spacetime::getEdgeList)
-      .def("getGluableFaces", &Spacetime::getGluableFacesForPython)
+      .def("getEdgeList", &Spacetime::getEdgeList, py::return_value_policy::reference_internal)
+      .def("getGluableFaces", &Spacetime::getGluableFacesForPython, py::return_value_policy::reference_internal)
       .def("embedEuclidean", &Spacetime::embedEuclidean, py::arg("dimensions") = 4, py::arg("epsilon") = 1e-8)
-      .def("getConnectedComponents", &Spacetime::getConnectedComponents)
+      .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference_internal)
       .def("build", &Spacetime::build)
       .def("getSimplices", &Spacetime::getExternalSimplicesForPython)
       .def("chooseSimplexFacesToGlue", &Spacetime::chooseSimplexFacesToGlueForPython, py::arg("simplex"))
