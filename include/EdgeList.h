@@ -37,7 +37,7 @@
 namespace caset {
 class EdgeList {
   public:
-    Edge *add(std::unique_ptr<Edge> edge) {
+    Edge *add(std::shared_ptr<Edge> edge) {
       auto key = edge->getKey();
       edgeList.insert_or_assign(key, std::move(edge));
       return edgeList[key].get();
@@ -52,7 +52,7 @@ class EdgeList {
       return getOrInsert(std::move(edge));
     }
 
-    std::unique_ptr<Edge> remove(const EdgeKey &edgeKey) noexcept {
+    std::shared_ptr<Edge> remove(const EdgeKey &edgeKey) noexcept {
       auto found = edgeList.find(edgeKey);
       if (found == edgeList.end()) {
         return nullptr;
@@ -62,7 +62,7 @@ class EdgeList {
       return result;
     }
 
-    std::unique_ptr<Edge> remove(Edge *edge) noexcept {
+    std::shared_ptr<Edge> remove(Edge *edge) noexcept {
 #ifdef CASET_DEBUG
       if (!edgeList.contains(edge->getKey())) {
         CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
@@ -99,9 +99,9 @@ class EdgeList {
     }
 
   private:
-    std::unordered_map<EdgeKey, std::unique_ptr<Edge>, EdgeKeyHash, EdgeKeyEqual> edgeList{};
+    std::unordered_map<EdgeKey, std::shared_ptr<Edge>, EdgeKeyHash, EdgeKeyEqual> edgeList{};
 
-    Edge *getOrInsert(std::unique_ptr<Edge> edge) {
+    Edge *getOrInsert(std::shared_ptr<Edge> edge) {
 #ifdef CASET_DEBUG
       if (edge->getSourceId() == edge->getTargetId()) {
         throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());

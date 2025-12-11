@@ -25,7 +25,6 @@
 #include "Fingerprint.h"
 
 #include <unordered_set>
-#include <unordered_map>
 #include <vector>
 #include <random>
 #include <memory>
@@ -44,7 +43,11 @@ class EdgeKey {
     IdType first;
     IdType second;
 
-    EdgeKey(IdType sourceId_, IdType targetId_) : first(sourceId_), second(targetId_) {}
+    EdgeKey(IdType sourceId_, IdType targetId_) : first(sourceId_), second(targetId_) {
+#if CASET_DEBUG
+      if (sourceId_ == targetId_) throw std::runtime_error("You can't create a self-reference.");
+#endif
+    }
 
     bool operator==(const EdgeKey &other) const {
       return first == other.first && second == other.second;
@@ -63,7 +66,6 @@ struct EdgeKeyHash {
   }
 };
 
-// Optional: custom equality if you ever need something non-trivial
 struct EdgeKeyEqual {
   bool operator()(const EdgeKey &a,
                   const EdgeKey &b) const noexcept {
@@ -110,6 +112,9 @@ class Edge {
       std::uint64_t targetId_,
       double squaredLength_
     ) : sourceId(sourceId_), targetId(targetId_), squaredLength(squaredLength_), fingerprint({sourceId_, targetId_}) {
+#if CASET_DEBUG
+      if (sourceId_ == targetId_) throw std::runtime_error("You can't create self-referential edges.");
+#endif
     }
 
     Edge(
@@ -117,6 +122,9 @@ class Edge {
       std::uint64_t targetId_
     ) : sourceId(sourceId_), targetId(targetId_), fingerprint({sourceId_, targetId_}) {
       // Set squaredLength to a random value between -1 and 1
+#if CASET_DEBUG
+      if (sourceId_ == targetId_) throw std::runtime_error("You can't create self-referential edges.");
+#endif
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
@@ -140,6 +148,9 @@ class Edge {
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
     void replaceSourceVertex(std::uint64_t sourceId_) {
+#if CASET_DEBUG
+      if (sourceId_ == targetId) throw std::runtime_error("You can't replace a source vertex with the same as the target since that would create a self-reference.");
+#endif
       sourceId = sourceId_;
       refreshFingerprint();
     }
@@ -148,6 +159,9 @@ class Edge {
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
     void replaceTargetVertex(std::uint64_t targetId_) {
+#if CASET_DEBUG
+      if (targetId_ == sourceId) throw std::runtime_error("You can't replace a target vertex with the same as the source since that would create a self-reference.");
+#endif
       targetId = targetId_;
       refreshFingerprint();
     }
@@ -164,6 +178,9 @@ class Edge {
     /// @param from the ID of a vertex to or from which this Edge should no longer point.
     /// @param to the ID of a source or target vertex to which this Edge should now point.
     void redirect(std::uint64_t from, std::uint64_t to) {
+#if CASET_DEBUG
+      if (from == to) throw std::runtime_error("You attempted to redirect an edge from a vertex to the same vertex.");
+#endif
       if (getSourceId() == from) {
         replaceSourceVertex(to);
       }

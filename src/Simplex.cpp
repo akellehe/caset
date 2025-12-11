@@ -48,7 +48,7 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
       faceVertices.reserve(verts.size());
       faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
       faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
-      for (const auto &e : getEdges()) {
+      for (const auto e : getEdges()) {
         if (!e->hasVertex(skipVertex)) faceEdges.push_back(e);
       }
       // TODO: Simplex::create should probably only be called by Spacetime, which holds canonical simplices.
@@ -209,7 +209,7 @@ void Simplex::addCoface(SimplexRawPtr simplex) {
 }
 
 [[nodiscard]] bool Simplex::hasCoface(SimplexRawPtr simplex) const {
-  for (const auto &s : cofaces) {
+  for (const auto s : cofaces) {
     if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
       return true;
     }
@@ -225,7 +225,7 @@ void Simplex::addCoface(SimplexRawPtr simplex) {
 }
 
 [[nodiscard]] bool Simplex::hasEdgeContaining(const IdType vertexId) const {
-  for (const auto &e : getEdges()) {
+  for (auto e : edges) {
     if (e->getSourceId() == vertexId) return true;
     if (e->getTargetId() == vertexId) return true;
   }
@@ -233,7 +233,8 @@ void Simplex::addCoface(SimplexRawPtr simplex) {
 }
 
 void Simplex::validate() const {
-  for (const auto &e : getEdges()) {
+  for (auto e : getEdges()) {
+    CLOG(INFO_LEVEL, "Validating edge ", e->toString());
     if (!hasVertex(e->getSourceId())) {
       CLOG(ERROR_LEVEL, "Missing source for one of its edges: ", e->toString());
       throw std::runtime_error("Missing source for one of its edges.");
@@ -243,24 +244,40 @@ void Simplex::validate() const {
       throw std::runtime_error("Missing target for one of its edges.");
     }
     if (getVertices().size() == 1) return; // A 0-simplex will have no edges.
-    for (const auto &v : getVertices()) {
-      if (!hasEdgeContaining(v->getId())) {
-        CLOG(ERROR_LEVEL, "Missing an edge for vertex: ", v->toString(), " on simplex ", toString(), " with edges:");
-        for (const auto &e2 : getEdges()) {
-          CLOG(ERROR_LEVEL, "    - ", e2->toString());
-        }
-        throw std::runtime_error("Missing an edge for a vertex.");
+  }
+  for (const auto &v : getVertices()) {
+    if (!hasEdgeContaining(v->getId())) {
+      CLOG(ERROR_LEVEL,
+           "There was no edge containing ",
+           v->getId(),
+           " for vertex: ",
+           v->toString(),
+           " on simplex ",
+           toString(),
+           ". Existing edges are:");
+      for (auto e2 : getEdges()) {
+        CLOG(ERROR_LEVEL, "    - ", e2->toString());
       }
+      throw std::runtime_error("Missing an edge for a vertex.");
     }
   }
 }
 
 /// @returns Edges in traversal order (the order of input vertices).
-[[nodiscard]] Edges Simplex::getEdges() const {
+[[nodiscard]] const Edges &Simplex::getEdges() const noexcept {
   return edges;
 }
 
-using RemoveEdgeByPtr = bool (Simplex::*)(const EdgePtr &);
+[[nodiscard]] Edges Simplex::nestedGetEdges() const {
+  Edges result{};
+  for (const auto e1 : getEdges()) {
+    for (const auto e2 : getEdges()) {
+      result.push_back(e1);
+      result.push_back(e2);
+    }
+  }
+  return result;
+};
 
 [[nodiscard]]
 std::optional<VertexPtrs>
@@ -380,7 +397,6 @@ Simplex::getCofaces() const noexcept {
   return cofaces;
 }
 
-
 [[nodiscard]] py::list
 Simplex::getCofacesForPython() {
   py::list cofacesForPython{};
@@ -413,7 +429,7 @@ bool Simplex::isCausallyAvailable() const noexcept {
 }
 
 bool Simplex::hasCausallyAvailableFacet() {
-  for (const auto &face : getFacets()) {
+  for (const auto face : getFacets()) {
     if (face->getCofaces().size() < 2) return true;
   }
 
@@ -428,9 +444,10 @@ std::size_t Simplex::maxKPlusOneCofaces() const {
   return getNumberOfFaces(getOrientation()->getK());
 }
 
-std::unordered_set<SimplexOrientationPtr> Simplex::getGluableFaceOrientations() {
+std::unordered_set<SimplexOrientationPtr>
+Simplex::getGluableFaceOrientations() {
   auto allowedOrientations = std::unordered_set<SimplexOrientationPtr>{};
-  for (const auto &face : getFacets()) {
+  for (const auto face : getFacets()) {
     if (face->getCofaces().size() < 2) {
       allowedOrientations.insert(face->getOrientation());
     }
@@ -442,7 +459,8 @@ bool Simplex::operator==(SimplexRawPtr other) const noexcept {
   return fingerprint.fingerprint() == other->fingerprint.fingerprint();
 }
 
-bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
+bool
+Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
   bool replaced = false;
   std::vector<IdType> vertexIds = {};
   vertexIds.reserve(vertices.size());
@@ -457,7 +475,7 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
   oldVertex->removeSimplex(this);
   newVertex->addSimplex(this);
   fingerprint.refreshFingerprint(vertexIds);
-  for (const auto &e : getEdges()) {
+  for (auto e : getEdges()) {
     if (e->hasVertex(oldVertex->getId())) {
       if (e->getSourceId() == oldVertex->getId()) {
         e->replaceSourceVertex(newVertex->getId());
@@ -472,7 +490,8 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
   return true;
 }
 
-VertexIdMap Simplex::getVertexIdLookup() const noexcept {
+VertexIdMap
+Simplex::getVertexIdLookup() const noexcept {
   VertexIdMap vertexIdMap{};
   for (const auto &v : vertices) {
     vertexIdMap.insert({v->getId(), v});

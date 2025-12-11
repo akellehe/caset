@@ -532,7 +532,6 @@ class TestSpacetime(unittest.TestCase):
             self.assertTrue(unattachedSimplex.hasVertex(edge.getSourceId()))
             self.assertTrue(unattachedSimplex.hasVertex(edge.getTargetId()))
 
-
         self.assertEqual(len(total_edges), 20)  # 6 shared/doubled.
         self.assertEqual(len(set(total_edges)), 14)
         shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())

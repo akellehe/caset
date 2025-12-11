@@ -270,7 +270,7 @@ class TestSimplex(unittest.TestCase):
                 v = f12.getVerticesWithPairtyTo(f21)
                 self.assertEqual(len(v), 2)
 
-    def test_replace_vertex(self):
+    def test_attach_at_vertex(self):
         st = Spacetime()
         unattached = st.createSimplex((1, 2))
         attached = st.createSimplex((2, 1))
@@ -303,7 +303,7 @@ class TestSimplex(unittest.TestCase):
         for f in facets2:
             f.validate()
 
-    def test_replace_vertex_on_a_face_replaces_it_on_the_coface(self):
+    def test_attaching_vertex_on_a_face_replaces_it_on_the_coface(self):
         st = Spacetime()
         unattached = st.createSimplex((1, 2))
         attached = st.createSimplex((2, 1))
@@ -380,6 +380,16 @@ class TestSimplex(unittest.TestCase):
         for i, f in enumerate(unattached.getFacets()):
             print('validating', i)
             f.validate()
+
+    def test_nested_get_edges(self):
+        st = Spacetime()
+        unattached = st.createSimplex((1, 2))
+        for e1 in unattached.getEdges():
+            for e2 in unattached.getEdges():
+                print(e1, e2)
+
+        for e1 in unattached.nestedGetEdges():
+            print(e1)
 
 if __name__ == '__main__':
     unittest.main()

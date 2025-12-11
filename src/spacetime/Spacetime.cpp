@@ -430,16 +430,25 @@ void Spacetime::attachAtVertices(
   CLOG(INFO_LEVEL, "attachAtVertices called. Pre-validating.");
   // Bone density in Regge calculus can be calculated as the size of the Simplex list on the Edge.
 #if CASET_DEBUG
+  CLOG(INFO_LEVEL, "Validating unattached simplex...");
   unattached->validate();
+  CLOG(INFO_LEVEL, "Validated unattached simplex.");
+  CLOG(INFO_LEVEL, "Validating attached simplex...");
   attached->validate();
+  CLOG(INFO_LEVEL, "Validated attached simplex.");
 #endif
   // Move external edges from unattached vertices to attached vertices.
   for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
+    CLOG(INFO_LEVEL, "Attaching at vertices ", unattachedVertex->toString() , "<>", attachedVertex->toString());
     attachAtVertex(unattached, attached, unattachedVertex, attachedVertex);
   }
 #if CASET_DEBUG
+  CLOG(INFO_LEVEL, "Validating unattached simplex...");
   unattached->validate();
+  CLOG(INFO_LEVEL, "Validated unattached simplex.");
+  CLOG(INFO_LEVEL, "Validating attached simplex...");
   attached->validate();
+  CLOG(INFO_LEVEL, "Validated attached simplex.");
 #endif
   CLOG(INFO_LEVEL, "Validated.");
 }
