@@ -245,7 +245,7 @@ class Spacetime {
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
 
-    IdType vertexIdCounter = 0;
+    IdType vertexIdCounter = 1;
     SpacetimeType spacetimeType;
     double alpha = 1.;
     std::shared_ptr<Metric> metric;

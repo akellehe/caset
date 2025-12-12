@@ -430,8 +430,8 @@ class Simplex {
 
     bool isInternal() const noexcept;
 
-    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_);
-    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientationPtr &orientation_);
+    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_);
+    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_, const SimplexOrientationPtr &orientation_);
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and

@@ -83,7 +83,7 @@ class TestSimplex(unittest.TestCase):
             face32.validate()
             print(face32, face32.getOrientation().numeric())
 
-        vertices = left.getVerticesWithPairtyTo(right)
+        vertices = left.getVerticesWithParityTo(right)
         self.assertEqual(len(vertices), 4)
 
     def test_creating_oriented_simplices(self):
@@ -138,21 +138,21 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(f1.getVertices()), 4)
 
         # Disjoint faces have pairty flag=0
-        self.assertEqual(f1.checkPairty(f2), 0)
+        self.assertEqual(f1.checkParity(f2), 0)
 
         v1, v2, v3, v4 = f1.getVertices()
 
         #The same face has pairty flag=1
         clone = Simplex([v1, v2, v3, v4])
-        self.assertEqual(f1.checkPairty(clone), 1)
+        self.assertEqual(f1.checkParity(clone), 1)
 
         # A single vertex swap has pairty flag=-1
         oneSwap = Simplex([v2, v1, v3, v4])
-        self.assertEqual(f1.checkPairty(oneSwap), -1)
+        self.assertEqual(f1.checkParity(oneSwap), -1)
 
         # Two swaps has pairty flag=1
         twoSwaps = Simplex([v2, v1, v4, v3])
-        self.assertEqual(f1.checkPairty(twoSwaps), 1)
+        self.assertEqual(f1.checkParity(twoSwaps), 1)
 
         for f in simplex41.getFacets():
             f.validate()
@@ -221,7 +221,7 @@ class TestSimplex(unittest.TestCase):
             if face32.getOrientation().numeric() == (3, 1):
                 right = face32
 
-        vertices = left.getVerticesWithPairtyTo(right)
+        vertices = left.getVerticesWithParityTo(right)
         self.assertEqual(len(vertices), 4)
 
     def test_get_verticies_with_pairty_to2D(self):
@@ -233,17 +233,17 @@ class TestSimplex(unittest.TestCase):
         facets12 = simplex12.getFacets()
         facets21 = simplex21.getFacets()
 
-        vertices12 = facets12[1].getVerticesWithPairtyTo(facets21[0])
+        vertices12 = facets12[1].getVerticesWithParityTo(facets21[0])
         self.assertEqual(len(vertices12), 2)
 
-        vertices21 = facets21[0].getVerticesWithPairtyTo(facets12[1])
+        vertices21 = facets21[0].getVerticesWithParityTo(facets12[1])
         self.assertEqual(len(vertices21), 2)
 
         for i, f12 in enumerate(facets12):
             for j, f21 in enumerate(facets21):
                 if f12.isTimelike() or f21.isTimelike():
                     continue
-                v = f12.getVerticesWithPairtyTo(f21)
+                v = f12.getVerticesWithParityTo(f21)
                 if not v:
                     breakpoint()
                     print(i, j)
@@ -253,21 +253,21 @@ class TestSimplex(unittest.TestCase):
             for f21 in facets21:
                 if f12.isTimelike() or f21.isTimelike():
                     continue
-                v = f12.getVerticesWithPairtyTo(f21)
+                v = f12.getVerticesWithParityTo(f21)
                 self.assertEqual(len(v), 2)
 
         for f12 in facets12:
             for f21 in reversed(facets21):
                 if f12.isTimelike() or f21.isTimelike():
                     continue
-                v = f12.getVerticesWithPairtyTo(f21)
+                v = f12.getVerticesWithParityTo(f21)
                 self.assertEqual(len(v), 2)
 
         for f12 in reversed(facets12):
             for f21 in reversed(facets21):
                 if f12.isTimelike() or f21.isTimelike():
                     continue
-                v = f12.getVerticesWithPairtyTo(f21)
+                v = f12.getVerticesWithParityTo(f21)
                 self.assertEqual(len(v), 2)
 
     def test_attach_at_vertex(self):

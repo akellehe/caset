@@ -52,20 +52,32 @@ class VertexList {
       return vertexList.contains(id);
     }
 
-    std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+    std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) {
+#ifdef CASET_DEBUG
+if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
+#endif
       if (vertexList.contains(id)) {
         return vertexList.at(id);
       }
       std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
       vertexList.insert_or_assign(id, vertex);
+#ifdef CASET_DEBUG
+      if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
+#endif
       return vertex;
     }
 
-    std::shared_ptr<Vertex> add(const std::uint64_t id) noexcept {
+    std::shared_ptr<Vertex> add(const std::uint64_t id) {
+#ifdef CASET_DEBUG
+      if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
+#endif
       if (vertexList.contains(id)) return vertexList.at(id);
       std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
-      vertexList.insert_or_assign(id, vertex);
-      return vertex;
+      auto [it, _] = vertexList.insert_or_assign(id, vertex);
+#ifdef CASET_DEBUG
+      if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
+#endif
+      return it->second;
     }
 
     void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {

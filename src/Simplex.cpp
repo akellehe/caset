@@ -73,7 +73,7 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
 Simplex::Simplex(
   const VertexPtrs &vertices_,
   Edges edges_
-) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(std::move(edges_)),
+) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(edges_),
     fingerprint({}) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
@@ -86,13 +86,13 @@ Simplex::Simplex(
   const VertexPtrs &vertices_,
   Edges edges_,
   const SimplexOrientationPtr &orientation_
-) : orientation(orientation_), vertices(vertices_), edges(std::move(edges_)), fingerprint({}) {
+) : orientation(orientation_), vertices(vertices_), edges(edges_), fingerprint({}) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
 }
 
-std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, const Edges &edges_) {
+std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, Edges edges_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -102,7 +102,7 @@ std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, const Edge
 }
 
 std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_,
-                                         const Edges &edges_,
+                                         Edges edges_,
                                          const SimplexOrientationPtr &orientation_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");

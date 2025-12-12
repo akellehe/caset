@@ -62,9 +62,9 @@ class Logger {
   }
 };
 
-#ifdef VERBOSE
+// #ifdef VERBOSE
 #define CLOG(level, ...) Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#else
-#define CLOG(level, ...)
-#endif
+// #else
+// #define CLOG(level, ...)
+// #endif
 #endif

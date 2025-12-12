@@ -50,13 +50,22 @@ class Simplex;
 ///
 class Vertex : public std::enable_shared_from_this<Vertex> {
     public:
-        Vertex() noexcept { id = 0; }
+        Vertex() noexcept {
+            id = 1;
+            CLOG(INFO_LEVEL, "Vertex was default-constructed.");
+        }
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
         }
         explicit Vertex(const std::uint64_t id_) noexcept : id(id_) {
         }
 
-        std::uint64_t getId() const noexcept { return id; }
+        std::uint64_t getId() const {
+#if CASET_DEBUG
+        if (id == 0) throw std::runtime_error("Vertex had a 0 ID.");
+#endif
+
+            return id;
+        }
 
         ///
         /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a

@@ -224,14 +224,17 @@ EdgeRawPtr Spacetime::createEdge(
 SimplexRawPtr Spacetime::createSimplex(
   const VertexPtrs &vertices, const Edges &edges
 ) {
+  CLOG(INFO_LEVEL, "Creating Orientation...");
   const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
+  CLOG(INFO_LEVEL, "Creating simplex...");
   std::unique_ptr<Simplex> simplex = Simplex::create(vertices, edges);
+  CLOG(INFO_LEVEL, "Getting raw pointer....");
   auto raw = simplex.get();
   for (const auto &o : raw->getOrientation()->getFacialOrientations()) {
     externalSimplices[o].insert(raw);
   }
-  simplices.insert(std::move(simplex));
-  return raw;
+  auto [it, _] = simplices.insert(std::move(simplex));
+  return it->get();
 }
 
 py::object Spacetime::createSimplexForPython(const VertexPtrs &vertices, const Edges &edges) {
@@ -267,11 +270,13 @@ SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
 }
 
 SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+  CLOG(INFO_LEVEL, "Creating Orientation...");
   double squaredLength = alpha;
   double timelikeSquaredLength = alpha;
   SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation));
+  CLOG(INFO_LEVEL, "Created.");
   std::uint8_t k = orientation->getK();
   auto [ti, tf] = orientation->numeric();
   VertexPtrs vertices = {};
@@ -286,12 +291,15 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
       timelikeSquaredLength = -alpha;
     }
     for (const auto &existingVertex : vertices) {
+      CLOG(INFO_LEVEL, "Creating edge...");
       EdgeRawPtr edge = edgeList->
           add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+      CLOG(INFO_LEVEL, "Registering edges...");
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
     }
+    CLOG(INFO_LEVEL, "Storing vertex...");
     vertices.push_back(newVertex);
   }
   for (int i = 0; i < tf; i++) {
@@ -303,16 +311,22 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
     for (const auto &existingVertex : vertices) {
       EdgeRawPtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
+        CLOG(INFO_LEVEL, "Creating tf edge with ", existingVertex->getId(), " and ", newVertex->getId());
         edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+        CLOG(INFO_LEVEL, "Created...");
       } else {
+        CLOG(INFO_LEVEL, "Creating tf edge...");
         edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+        CLOG(INFO_LEVEL, "Created...");
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
+      CLOG(INFO_LEVEL, "Registering edge...");
       edges.push_back(edge);
     }
     vertices.push_back(newVertex);
   }
+  CLOG(INFO_LEVEL, "Handing off vertices and edges...");
   return createSimplex(vertices, edges);
 }
 

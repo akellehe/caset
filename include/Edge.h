@@ -128,11 +128,17 @@ class Edge {
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
-    [[nodiscard]] std::uint64_t getSourceId() const noexcept {
+    [[nodiscard]] std::uint64_t getSourceId() const {
+#if CASET_DEBUG
+      if (sourceId != 0) throw std::runtime_error("You attempted to get an edge with a 0 source vertex.");
+#endif
       return sourceId;
     }
 
-    [[nodiscard]] std::uint64_t getTargetId() const noexcept {
+    [[nodiscard]] std::uint64_t getTargetId() const {
+#if CASET_DEBUG
+      if (targetId != 0) throw std::runtime_error("You attempted to get an edge with a 0 target vertex.");
+#endif
       return targetId;
     }
 
