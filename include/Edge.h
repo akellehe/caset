@@ -77,6 +77,8 @@ class Edge {
 
     void copyInPlaceTo(Edge *other);
 
+    void replaceOnReferents(EdgeRawPtr replacement);
+
     /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.

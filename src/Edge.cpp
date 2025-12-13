@@ -23,6 +23,7 @@
 #include "Vertex.h"
 #include "Fingerprint.h"
 #include "EdgeKey.h"
+#include "Simplex.h"
 
 #include <vector>
 #include <random>
@@ -128,6 +129,19 @@ class Simplex;
       if (getTarget() == from) {
         replaceTargetVertex(to);
       }
+    }
+
+    void Edge::replaceOnReferents(EdgeRawPtr replacement) {
+      for (const auto &simplex : getSimplices()) {
+        simplex->removeEdge(this);
+        simplex->addEdge(replacement);
+      }
+
+      source->removeOutEdge(this);
+      source->addOutEdge(replacement);
+
+      target->removeInEdge(this);
+      target->addInEdge(replacement);
     }
 
     bool Edge::operator==(const Edge &other) const {

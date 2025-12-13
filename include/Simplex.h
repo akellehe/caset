@@ -380,8 +380,8 @@ class Simplex {
 
     [[nodiscard]] bool hasEdgeContaining(IdType vertexId) const;
 
-    void removeEdge(Edge *edge);
-    void addEdge(Edge *edge);
+    bool removeEdge(Edge *edge);
+    std::pair<Edge *, bool> addEdge(Edge *edge);
 
     [[nodiscard]] std::vector<std::shared_ptr<Edge>> getEdgesForPython() const noexcept;
 

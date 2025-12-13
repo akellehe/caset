@@ -521,7 +521,8 @@ class TestSpacetime(unittest.TestCase):
         self.assertNotIn(unattachedVertex, unattachedSimplex.getVertices())
         self.assertNotIn(unattachedVertex, unattachedSimplexFace.getVertices())
 
-        self.assertEqual(attachedVertex.degree(), edgeCount)
+        # Some edges will be removed/replaced because they are now superseded by edges on attachedSimplexFace.
+        self.assertEqual(attachedVertex.degree(), 5)
         self.assertIn(attachedVertex, attachedSimplexFace.getVertices())
         self.assertIn(attachedVertex, attachedSimplex.getVertices())
 
@@ -532,7 +533,6 @@ class TestSpacetime(unittest.TestCase):
             self.assertTrue(attachedSimplex.hasVertex(edge.getTarget().getId()))
 
         for edge in unattachedSimplex.getEdges():
-            breakpoint()
             self.assertTrue(unattachedSimplex.hasVertex(edge.getSource().getId()))
             self.assertTrue(unattachedSimplex.hasVertex(edge.getTarget().getId()))
 

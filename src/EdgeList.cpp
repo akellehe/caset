@@ -33,6 +33,7 @@
 #include "Vertex.h"
 #include "Edge.h"
 #include "Logger.h"
+#include "Simplex.h"
 
 namespace caset {
     Edge *EdgeList::add(std::unique_ptr<Edge> edge) {
@@ -111,11 +112,9 @@ namespace caset {
         // Check if an edge with the new key already exists
         auto existing = edgeList.find(newKey);
         if (existing != edgeList.end()) {
-          // Edge with new key already exists - merge with existing edge
-          // The old edge (in the node) will be destroyed when node goes out of scope
-          CLOG(CRITICAL_LEVEL, "Edge with key ", newKey.toString(), " already exists during updateKey. Merging.");
-          // Return the existing edge so caller can update vertex pointers
-          throw std::runtime_error("New key already existed.");
+          CLOG(CRITICAL_LEVEL, "Edge with (new) key ", newKey.toString(), " already exists during updateKey for old key ", oldKey.toString(), ".");
+          CLOG(CRITICAL_LEVEL, "This means there already existed a canonical edge at the time a would-be canonical edge was redirected. We need to replace the non-canonical edge with the canonical one.");
+          node.mapped()->replaceOnReferents(existing->second.get());
           return existing->second.get();
         }
 
@@ -127,8 +126,8 @@ namespace caset {
           throw std::runtime_error("Failed to reinsert edge with updated key: " +
             newKey.toString());
         }
-        CLOG(DEBUG_LEVEL, "Updated key from ", oldKey.toString(), " to ", newKey.toString());
 #endif
+        CLOG(DEBUG_LEVEL, "Updated key from ", oldKey.toString(), " to ", newKey.toString());
         return it->second.get();
       }
       CLOG(DEBUG_LEVEL, "Old edge was not found!");

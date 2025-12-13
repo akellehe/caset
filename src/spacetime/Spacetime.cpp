@@ -70,16 +70,15 @@ EdgeRawPtr Spacetime::createEdge(
 SimplexRawPtr Spacetime::createSimplex(
   const VertexPtrs &vertices, const Edges &edges
 ) {
-  CLOG(INFO_LEVEL, "Creating Orientation...");
-  const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
   CLOG(INFO_LEVEL, "Creating simplex...");
+  const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
   std::unique_ptr<Simplex> simplex = Simplex::create(vertices, edges);
-  CLOG(INFO_LEVEL, "Getting raw pointer....");
   auto raw = simplex.get();
   for (const auto &o : raw->getOrientation()->getFacialOrientations()) {
     externalSimplices[o].insert(raw);
   }
   auto [it, _] = simplices.insert(std::move(simplex));
+  CLOG(INFO_LEVEL, "Created.");
   return it->get();
 }
 
@@ -104,7 +103,6 @@ SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
   for (int i = 0; i < k; i++) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
-    CLOG(INFO_LEVEL, "Made vertex id=", newVertex->getId(), " (counter now ", vertexIdCounter, ")");
     for (const auto &existingVertex : vertices) {
       EdgeRawPtr edge = edgeList->add(existingVertex, newVertex, squaredLength);
       existingVertex->addOutEdge(edge);
@@ -117,41 +115,34 @@ SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
 }
 
 SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-  CLOG(INFO_LEVEL, "Creating Orientation...");
   double squaredLength = alpha;
   double timelikeSquaredLength = alpha;
   SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation));
-  CLOG(INFO_LEVEL, "Created.");
   std::uint8_t k = orientation->getK();
   auto [ti, tf] = orientation->numeric();
   VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
-  CLOG(INFO_LEVEL, "vertexIdCounter: ", std::to_string(vertexIdCounter));
   for (int i = 0; i < ti; i++) {
     // Create ti Timelike vertices
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
-    CLOG(INFO_LEVEL, "Made vertex id=", newVertex->getId(), " (counter now ", vertexIdCounter, ")");
     if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
       timelikeSquaredLength = -alpha;
     }
     for (const auto &existingVertex : vertices) {
-      CLOG(INFO_LEVEL, "Creating edge...");
       EdgeRawPtr edge = edgeList->add(
         existingVertex,
         newVertex,
         timelikeSquaredLength
         );
-      CLOG(INFO_LEVEL, "Registering edges...");
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
     }
-    CLOG(INFO_LEVEL, "Storing vertex...");
     vertices.push_back(newVertex);
   }
   for (int i = 0; i < tf; i++) {
@@ -160,26 +151,19 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
     /// We can't just use the vertexList .size() here, because some vertices can be removed. We need to keep a
     /// counter:
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
-    CLOG(INFO_LEVEL, "Made vertex id=", newVertex->getId(), " (counter now ", vertexIdCounter, ")");
     for (const auto &existingVertex : vertices) {
       EdgeRawPtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
-        CLOG(INFO_LEVEL, "Creating tf edge with ", existingVertex->getId(), " and ", newVertex->getId());
         edge = edgeList->add(existingVertex, newVertex, squaredLength);
-        CLOG(INFO_LEVEL, "Created...");
       } else {
-        CLOG(INFO_LEVEL, "Creating tf edge...");
         edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
-        CLOG(INFO_LEVEL, "Created...");
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
-      CLOG(INFO_LEVEL, "Registering edge...");
       edges.push_back(edge);
     }
     vertices.push_back(newVertex);
   }
-  CLOG(INFO_LEVEL, "Handing off vertices and edges...");
   return createSimplex(vertices, edges);
 }
 
@@ -296,15 +280,10 @@ void Spacetime::attachAtVertices(
   const SimplexRawPtr &attached,
   const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
 ) {
-  CLOG(INFO_LEVEL, "attachAtVertices called. Pre-validating.");
   // Bone density in Regge calculus can be calculated as the size of the Simplex list on the Edge.
 #if CASET_DEBUG
-  CLOG(INFO_LEVEL, "Validating unattached simplex...");
   unattached->validate();
-  CLOG(INFO_LEVEL, "Validated unattached simplex.");
-  CLOG(INFO_LEVEL, "Validating attached simplex...");
   attached->validate();
-  CLOG(INFO_LEVEL, "Validated attached simplex.");
 #endif
   // Move external edges from unattached vertices to attached vertices.
   for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
@@ -317,21 +296,16 @@ void Spacetime::attachAtVertices(
       );
   }
 #if CASET_DEBUG
-  CLOG(INFO_LEVEL, "Validating unattached simplex...");
   unattached->validate();
-  CLOG(INFO_LEVEL, "Validated unattached simplex.");
-  CLOG(INFO_LEVEL, "Validating attached simplex...");
   attached->validate();
-  CLOG(INFO_LEVEL, "Validated attached simplex.");
 #endif
-  CLOG(INFO_LEVEL, "Validated.");
 }
 
 void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
   // After this; attached (a Vertex) will have some new edges and unattached (also a Vertex) will have zero edges. That
   // means any Simplex/Vertex containing one of unattached's old edges would need that edge removed if we weren't
   // updating the Edge in place. But we do, so other references to that Edge (by pointer) should remain consistent.
-  const auto [oldEdges, newEdges] = unattached->absorbInto(attached);
+  const auto [updateKeys, deleteKeys] = unattached->absorbInto(attached);
 
   for (const auto &simplex : unattached->getSimplices()) {
     // Replacing the vertex handles updating the state associated with the Simplex on the Vertex, but not the state
@@ -341,26 +315,36 @@ void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr at
     // To finish updating state; we need to remove defunct edges from the simplex.
     for (const auto &e : simplex->getEdges()) {
       if (!simplex->hasVertex(e->getSource()->getId())) {
-        CLOG(DEBUG_LEVEL, "Simplex was missing source vertex for an edge: ", e->toString(), " source: ", e->getSource());
-
+        CLOG(DEBUG_LEVEL, "Simplex was missing source vertex for an edge: ", e->toString(), " source: ", e->getSource()->toString());
+      }
+      if (!simplex->hasVertex(e->getTarget()->getId())) {
+        CLOG(DEBUG_LEVEL, "Simplex was missing target vertex for an edge: ", e->toString(), " target: ", e->getTarget()->toString());
       }
     }
   }
 
+  // We'll definitely have a scenario where we e.g. replace vertex A on edge \f$ e_1 = \{A \rightarrow C\} \f$ with
+  // \f$ D \f$, then replace vertex \f$ C \f$ on edge \f$ e_1 \f$ with \f$ F \f$. This will result in two sets of
+  // updates for edgeList; an updateKey for edge \f$ e_1 \f$ updated from \f$ \{A \rightarrow C\} \f$ to
+  // \f$ \{D \rightarrow C\} \f$ and a second update to go from \f$ e_1 = \{D \rightarrow C\} \f$ to
+  // \f$ e_1 = \{D \rightarrow F\} \f$. Updating \f$ e_1 \f$ the first time will result in a canonical edge. The second
+  // time, there will already exist a canonical edge \f$ \{D \rightarrow F\} \f$. The first update will update canonical
+  // edge \f$ e_1 \f$, the second will _delete_ \f$ e_1 \f$ in favor of \f$ \{D \rightarrow F\} \f$. In the latter case;
+  // when the edge is successfully inserted into its Vertex; it will appear to be canonical. Only when it already exists
+  // upon updateKey in edgeList will we know that it is not.
+
   // Now we need to re-key the oldEdges to their keys match newEdges.
-  for (const auto &oldKey : *oldEdges) {
-    const auto &newEdge = edgeList->updateKey(oldKey);
-    newEdge->addSimplex(unattachedSimplex);
-    unattachedSimplex->addEdge(newEdge);
+  for (const auto &updateKey : *updateKeys) {
+    // How can a key to which we're updating from an old key already exist in the edgeList?
+    // Is it possible to have an undetected duplicate?
+    edgeList->updateKey(updateKey);
   }
 
-  for (const auto &edge : unattachedSimplex->getEdges()) {
-    CLOG(DEBUG_LEVEL, "unattachedSimplex has edge: ", edge->toString());
+  if (!deleteKeys->empty()) CLOG(INFO_LEVEL, "Deleting edge with keys: ");
+  for (const auto &deleteKey : *deleteKeys) {
+    CLOG(INFO_LEVEL, "    - ", deleteKey.toString());
+    edgeList->remove(deleteKey);
   }
-
-  // for (const auto &edgeKey : oldEdges) {
-    // throw std::runtime_error("We need to ensure we update the edges in each simplex. Python can keep them around longer than it should. I think getEdges() is still returning the same pointers. Who is responsible for updating the edges on the simplex itself? I think it should be the Simplex. In the tests; we get edges from the simplex, and i think the edges that are invalidated are being returned there.");
-  // }
 
   if (unattached->degree() == 0) vertexList->remove(unattached);
 #if CASET_DEBUG

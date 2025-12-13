@@ -63,8 +63,8 @@ def get_configure_command(build_dir):
 def pytest_sessionstart(session):
     build_dir = get_scikit_build_dir()
     env = clean_build_env()
-    if not build_dir.exists():
-        print("build dir does not exist (", str(build_dir), ") configuring.")
+    if not build_dir.parent.exists():
+        print("build dir does not exist (", str(build_dir.parent), ") configuring.")
         subprocess.run(get_configure_command(build_dir), check=True, env=env)
     subprocess.run(get_build_command(build_dir), check=True, env=env)
     sys.path.insert(0, str(build_dir.parent))

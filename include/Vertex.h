@@ -38,6 +38,12 @@
 namespace py = pybind11;
 
 namespace caset {
+
+enum class EdgeDirection {
+    In,
+    Out
+};
+
 ///
 /// Vertices in modern lattice gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
@@ -139,6 +145,11 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::unordered_set<Simplex *> simplices{};
         std::uint64_t id;
         std::vector<double> coordinates{};
+
+        /// Helper method for moving edges in either direction. Returns toUpdate, toDelete listing which EdgeKey (s)
+        /// should be re-keyed or deleted in the EdgeList maintaining ownership for the Edge (s).
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+        moveEdgesToImpl(const std::shared_ptr<Vertex> &recipient, EdgeDirection direction);
 };
 
 // VertexPtr, VertexPtrs, VertexPtrSet are now defined in ForwardDeclarations.h

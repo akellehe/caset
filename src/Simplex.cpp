@@ -282,12 +282,13 @@ void Simplex::validate() const {
   return result;
 }
 
-void Simplex::removeEdge(Edge *edge) {
-  edges.erase(edge);
+bool Simplex::removeEdge(Edge *edge) {
+  return edges.erase(edge) > 0;
 }
 
-void Simplex::addEdge(Edge *edge) {
-  edges.insert(edge);
+std::pair<Edge *, bool> Simplex::addEdge(Edge *edge) {
+  auto [it, inserted] = edges.insert(edge);
+  return {*it, inserted};
 }
 
 [[nodiscard]]

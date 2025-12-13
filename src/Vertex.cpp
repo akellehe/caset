@@ -89,92 +89,90 @@ Vertex::moveOutEdgesToForPython(
 }
 
 std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
-Vertex::moveInEdgesTo(
-  const std::shared_ptr<Vertex> &recipient // Recipient is the new target for the donated in-edges
+Vertex::moveEdgesToImpl(
+  const std::shared_ptr<Vertex> &recipient,
+  EdgeDirection direction
 ) {
-  std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>();
-  std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>();
+  std::shared_ptr<EdgeKeySet> toDelete = std::make_shared<EdgeKeySet>();
+  std::shared_ptr<EdgeKeySet> toUpdate = std::make_shared<EdgeKeySet>();
 
-  for (auto donorInEdge : inEdges) {
-    if (donorInEdge == nullptr) {
-      CLOG(ERROR_LEVEL, "Found a nullptr (in) edge in vertex ", toString());
-      throw std::runtime_error("Found a nullptr (in) edge in vertex.");
+  // Select which edge set to operate on
+  auto &edges = (direction == EdgeDirection::In) ? inEdges : outEdges;
+
+  for (auto donorEdge : edges) {
+    if (donorEdge == nullptr) {
+      CLOG(ERROR_LEVEL, "Found a nullptr edge in vertex ", toString());
+      throw std::runtime_error("Found a nullptr edge in vertex.");
     }
 
-    donorInEdge->replaceTargetVertex(recipient);
-    // The source node can be external to a Simplex that owns this Vertex. The `target` of donorInEdge is this Vertex.
-    auto source = donorInEdge->getSource(); // Should already have out-edge, which is modified in-place.
+    EdgeKey oldKey = donorEdge->getKey();
 
-    // The in-edge is a duplicate! Duplicate edges are edges shared by both Simplices in the context of attachment.
-    // The duplicate Edge on the Vertex being absorbed will be removed from that Vertex, but it still needs to be
-    // removed from the Simplex that owns the Vertex. Remove duplicate edges below, replace them with the canonical
-    // edge:
-    auto oldKey = donorInEdge->getKey();
-    const auto &[canonicalEdge, wasCanonical] = recipient->addInEdge(donorInEdge);
+    // Get the other vertex and replace the appropriate endpoint
+    direction == EdgeDirection::In
+      ? donorEdge->replaceTargetVertex(recipient)
+      : donorEdge->replaceSourceVertex(recipient);
+
+    // Try to add the edge to the recipient
+    const auto &[canonicalEdge, wasCanonical] =
+        (direction == EdgeDirection::In)
+          ? recipient->addInEdge(donorEdge)
+          : recipient->addOutEdge(donorEdge);
+#ifdef CASET_DEBUG
+    if (wasCanonical && canonicalEdge != donorEdge) throw std::runtime_error("Canonical lies!");
+    if (!wasCanonical && canonicalEdge == donorEdge) throw std::runtime_error("Canonical lies (2)!");
+#endif
+
     if (!wasCanonical) {
-      // donorInEdge is a duplicate and should be replaced.
+      // donorEdge is a duplicate and should be replaced in all simplices
+      toDelete->insert(oldKey);
       for (const auto &simplex : recipient->getSimplices()) {
-        simplex->removeEdge(donorInEdge);
-        simplex->addEdge(canonicalEdge);
+        if (simplex->removeEdge(donorEdge)) {
+          donorEdge->removeSimplex(simplex);
+          simplex->addEdge(canonicalEdge);
+          canonicalEdge->addSimplex(simplex);
+        }
       }
     } else {
-      // donorInEdge is a new canonical edge that needs it's key updated in EdgeList.
-      // Keys are only returned for those that need to have their keys updated in the EdgeList class.
-      oldEdges->insert(oldKey);
-      EdgeKey newKey(source->getId(), recipient->getId());
-      newEdges->insert(newKey);
+      // donorEdge is a new canonical edge that needs its key updated or to be replaced by its existing newKey's
+      // (pre-existing) corresponding Edge in EdgeList. In other words. donorEdge either needs to be added to EdgeList
+      // at newKey or it needs to be _replaced_ by what is already sitting at newKey.
+#ifdef CASET_DEBUG
+      if (oldKey == donorEdge->getKey()) {
+        throw std::runtime_error("We expected donorEdge to be a new canonical Edge, but it had the same key as the old edge. Key is by reference?");
+      }
+#endif
+      toUpdate->insert(oldKey);
     }
   }
-  inEdges.clear();
-  return {oldEdges, newEdges};
+
+  direction == EdgeDirection::In ? inEdges.clear() : outEdges.clear();
+
+  return {toUpdate, toDelete};
+}
+
+std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
+Vertex::moveInEdgesTo(const std::shared_ptr<Vertex> &recipient) {
+  return moveEdgesToImpl(recipient, EdgeDirection::In);
 }
 
 std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
 Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &recipient) {
-  std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>();
-  std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>();
-  std::unordered_set<Edge *> newOutEdges{};
-  for (auto donorOutEdge : outEdges) {
-    if (donorOutEdge == nullptr) {
-      CLOG(ERROR_LEVEL, "Found a nullptr (out) edge in vertex ", toString());
-      throw std::runtime_error("Found a nullptr (out) edge in vertex.");
-    }
-    auto target = donorOutEdge->getTarget(); // Should already have in-edge, which is modified in-place.
-    donorOutEdge->replaceSourceVertex(recipient);
-
-    // The out-edge is a duplicate! Duplicate out-edges are edges shared by both Simplices in the context of attachment.
-    // The duplicate Edge on the Vertex being absorbed will be removed from that Vertex, but it still needs to be
-    // removed from the Simplex that owns the Vertex. Remove duplicate edges below:
-    auto oldKey = donorOutEdge->getKey();
-    const auto &[canonicalEdge, wasCanonical] = recipient->addOutEdge(donorOutEdge);
-    if (!wasCanonical) {
-      for (const auto &simplex : recipient->getSimplices()) {
-        simplex->removeEdge(donorOutEdge);
-        simplex->addEdge(canonicalEdge);
-      }
-    } else {
-      oldEdges->insert(oldKey);
-      EdgeKey newKey(recipient->getId(), target->getId());
-      newEdges->insert(newKey);
-    }
-  }
-  outEdges.clear();
-  return {oldEdges, newEdges};
+  return moveEdgesToImpl(recipient, EdgeDirection::Out);
 }
 
 std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
 Vertex::absorbInto(const std::shared_ptr<Vertex> &vertex) {
-  EdgeKeySet oldEdgesSet = EdgeKeySet{};
-  EdgeKeySet newEdgesSet = EdgeKeySet{};
-  std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>(oldEdgesSet);
-  std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>(newEdgesSet);
-  const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex);
-  const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex);
-  oldEdges->insert(oldInEdges->begin(), oldInEdges->end());
-  oldEdges->insert(oldOutEdges->begin(), oldOutEdges->end());
-  newEdges->insert(newInEdges->begin(), newInEdges->end());
-  newEdges->insert(newOutEdges->begin(), newOutEdges->end());
-  return {oldEdges, newEdges};
+  EdgeKeySet toUpdateSet = EdgeKeySet{};
+  EdgeKeySet toDeleteSet = EdgeKeySet{};
+  std::shared_ptr<EdgeKeySet> toUpdate = std::make_shared<EdgeKeySet>(toUpdateSet);
+  std::shared_ptr<EdgeKeySet> toDelete = std::make_shared<EdgeKeySet>(toDeleteSet);
+  const auto &[updateInEdges, deleteInEdges] = moveInEdgesTo(vertex);
+  const auto &[updateOutEdges, deleteOutEdges] = moveOutEdgesTo(vertex);
+  toUpdate->insert(updateInEdges->begin(), updateInEdges->end());
+  toUpdate->insert(updateOutEdges->begin(), updateOutEdges->end());
+  toDelete->insert(deleteInEdges->begin(), deleteInEdges->end());
+  toDelete->insert(deleteOutEdges->begin(), deleteOutEdges->end());
+  return {toUpdate, toDelete};
 }
 
 py::object
@@ -185,7 +183,6 @@ Vertex::moveEdgesToForPython(const std::shared_ptr<Vertex> &vertex) {
 }
 
 void Vertex::addSimplex(Simplex *simplex) {
-  CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
 #if CASET_DEBUG
   for (const auto &simp : simplices) {
     if (simp == simplex) {
