@@ -289,6 +289,8 @@ py::list Spacetime::getSimplicesWithOrientationForPython(std::tuple<uint8_t, uin
 /// corresponding vertices in the "unattached" simplex with it's own vertices. Same goes for the _internal_ edges. Any
 /// external edges in "unattached" are redirected from those vertices on "unattached" to the corresponding vertex in
 /// "attached".
+///
+/// An easy way to remember this is "attached simplices absorb unattached simplices".
 void Spacetime::attachAtVertices(
   const SimplexRawPtr &unattached,
   const SimplexRawPtr &attached,
@@ -307,7 +309,12 @@ void Spacetime::attachAtVertices(
   // Move external edges from unattached vertices to attached vertices.
   for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
     CLOG(INFO_LEVEL, "Attaching at vertices ", unattachedVertex->toString() , "<>", attachedVertex->toString());
-    attachAtVertex(unattached, attached, unattachedVertex, attachedVertex);
+    attachAtVertex(
+      unattached,
+      attached,
+      unattachedVertex,
+      attachedVertex
+      );
   }
 #if CASET_DEBUG
   CLOG(INFO_LEVEL, "Validating unattached simplex...");
@@ -321,22 +328,36 @@ void Spacetime::attachAtVertices(
 }
 
 void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
-  // After this; attached will have some new edges and unattached will have zero edges. That means any simplex
-  // containing one of unattached's old edges will need that edge removed.
-  const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached);
+  // After this; attached (a Vertex) will have some new edges and unattached (also a Vertex) will have zero edges. That
+  // means any Simplex/Vertex containing one of unattached's old edges would need that edge removed if we weren't
+  // updating the Edge in place. But we do, so other references to that Edge (by pointer) should remain consistent.
+  const auto [oldEdges, newEdges] = unattached->absorbInto(attached);
 
   for (const auto &simplex : unattached->getSimplices()) {
     // Replacing the vertex handles updating the state associated with the Simplex on the Vertex, but not the state
     // associated with the Vertex on the Simplex.
     simplex->replaceVertex(unattached, attached);
-    // To finish updating state; we need to remove defunct edges from the simplex?
+
+    // To finish updating state; we need to remove defunct edges from the simplex.
+    for (const auto &e : simplex->getEdges()) {
+      if (!simplex->hasVertex(e->getSource()->getId())) {
+        CLOG(DEBUG_LEVEL, "Simplex was missing source vertex for an edge: ", e->toString(), " source: ", e->getSource());
+
+      }
+    }
   }
 
   // Now we need to re-key the oldEdges to their keys match newEdges.
   for (const auto &oldKey : *oldEdges) {
-    const auto &canonicalEdge = edgeList->updateKey(oldKey);
-    canonicalEdge->removeSimplex(unattachedSimplex);
+    const auto &newEdge = edgeList->updateKey(oldKey);
+    newEdge->addSimplex(unattachedSimplex);
+    unattachedSimplex->addEdge(newEdge);
   }
+
+  for (const auto &edge : unattachedSimplex->getEdges()) {
+    CLOG(DEBUG_LEVEL, "unattachedSimplex has edge: ", edge->toString());
+  }
+
   // for (const auto &edgeKey : oldEdges) {
     // throw std::runtime_error("We need to ensure we update the edges in each simplex. Python can keep them around longer than it should. I think getEdges() is still returning the same pointers. Who is responsible for updating the edges on the simplex itself? I think it should be the Simplex. In the tests; we get edges from the simplex, and i think the edges that are invalidated are being returned there.");
   // }

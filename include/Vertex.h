@@ -92,8 +92,8 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         void setCoordinates(const std::vector<double> &coords) noexcept;
 
-        void addOutEdge(Edge *edge) noexcept;
-        void addInEdge(Edge *edge) noexcept;
+        std::pair<EdgeRawPtr, bool> addOutEdge(Edge *edge) noexcept;
+        std::pair<EdgeRawPtr, bool> addInEdge(Edge *edge) noexcept;
         void removeInEdge(Edge *edge) noexcept;
         void removeOutEdge(Edge *edge) noexcept;
 
@@ -121,7 +121,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         moveOutEdgesToForPython(const std::shared_ptr<Vertex> &vertex);
 
         std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
-        moveEdgesTo(const std::shared_ptr<Vertex> &vertex);
+        absorbInto(const std::shared_ptr<Vertex> &vertex);
 
         py::object
         moveEdgesToForPython(const std::shared_ptr<Vertex> &vertex);

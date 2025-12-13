@@ -139,6 +139,34 @@ class Spacetime {
       const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
     );
 
+    /// This method replaces `unattached` with `attached` on the `unattachedSimplex`, representing its absorption into
+    /// `attachedSimplex`. It updates `unattached` by removing `unattachedSimplex` from it, as well as redirecting all
+    /// of its Edge (s) to `attached` by rewriting the source or target of those Edge (s) as appropriate. It removes
+    /// `unattachedSimplex` from the Edge (s) of `unattached`. It adds the `attachedSimplex` to those same edges.
+    ///
+    /// When we absorb e.g. a \f$ (2, 1) \f$ simplex, \f$ \sigma_{(2, 1)} = \{A, B, C\} \f$ into a \f$ (1, 2) \f$
+    /// simplex, \f$ \sigma_{(1, 2)} = \{D, E, F\} \f$, and we assume \f$ A \f$ has the same value of time as \f$ D \f$
+    /// and \f$ E \f$ and we assume \f$ B \f$ and \f$ C \f$ have the same time as \f$ F \f$; then absorbing
+    /// \f$ \sigma_{(1, 2)} \f$  means rewriting it \f$ \sigma_{(2, 1)} = \{A, B, C\} \f$ and
+    /// \f$ \sigma_{(1, 2)} = \{A, E, C\} \f$.
+    ///
+    /// It's very important to note that now we will have a duplicate edge, C->A, which is shared by both simplices.
+    /// That means it's not sufficient to just update the edges on \f$ \sigma_{(1, 2)} \f$, but we have to actually
+    /// merge or discard the shared Edge. This method, therefore, detects when re-writing an edge in
+    /// \f$ \sigma_{(1, 2)} \f$ duplicates it in \f$ \sigma_{(2, 1)} \f$. If so; it replaces that edge in
+    /// \f$ \sigma_{(2, 1)} \f$ in-place, discarding the raw pointer for that Edge in `unattachedSimplex` and replacing
+    /// it with the pointer for that Edge in `attachedSimplex`.
+    ///
+    /// When an Edge is replaced on a Vertex; it leaves some work to be done since there are other objects that
+    /// reference that Edge. The Simplex (-cies) to which that Vertex belongs will hold a cached version of the Edge.
+    /// Replacing the Vertex in-place is not sufficient to update these since there will now be technically two
+    /// references to that Edge. So this method also ensures those Edges are replaced on the Simplices that own the
+    /// Vertex.
+    ///
+    /// @param unattachedSimplex A simplex that is not currently part of the simplicial complex that will be partially absorbed into `attachedSimplex`
+    /// @param attachedSimplex A simplex that is part of the complex that will replace `unattached`, a Vertex, with `attached`, rewriting Edge s appropriately to point to `attached` instead of `unattached`.
+    /// @param unattached A vertex that will be orphaned after this method is called (degree=0) because it's Edge (s) have been redirected to and from `attached`.
+    /// @param attached A vertex that will replace `unattached` on `unattachedSimplex`, representing it's absorption into the complex.
     void attachAtVertex(
       Simplex *unattachedSimplex,
       Simplex *attachedSimplex,

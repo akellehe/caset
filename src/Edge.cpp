@@ -110,7 +110,8 @@ class Simplex;
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
     bool Edge::hasVertex(VertexPtr vertex) const {
-      if (getSource() == vertex || getTarget() == vertex) return true;
+      auto vid = vertex->getId();
+      if (getSource()->getId() == vid || getTarget()->getId() == vid) return true;
       return false;
     }
 

@@ -501,44 +501,50 @@ class TestSpacetime(unittest.TestCase):
         unattachedSimplexFace.validate()
         attachedSimplexFace.validate()
 
-        st.attachAtVertices(unattachedSimplexFace, attachedSimplexFace, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+        unattachedVertex = unattachedVertices[0]  # V6
+        attachedVertex = attachedVertices[0]      # V0
+
+        edgeCount = unattachedVertex.degree() + attachedVertex.degree()
+
+        st.attachAtVertices(
+            unattachedSimplexFace,
+            attachedSimplexFace,
+            [(u, a) for u, a in zip(unattachedVertices, attachedVertices)]
+        )
 
         attachedSimplex.validate()
         unattachedSimplex.validate()
         unattachedSimplexFace.validate()
         attachedSimplexFace.validate()
 
-        unattachedVertex = unattachedVertices[0]  # V6
-        attachedVertex = attachedVertices[0]      # V0
-
         self.assertEqual(unattachedVertex.degree(), 0)
         self.assertNotIn(unattachedVertex, unattachedSimplex.getVertices())
         self.assertNotIn(unattachedVertex, unattachedSimplexFace.getVertices())
 
-        self.assertEqual(attachedVertex.degree(), 5)
+        self.assertEqual(attachedVertex.degree(), edgeCount)
         self.assertIn(attachedVertex, attachedSimplexFace.getVertices())
         self.assertIn(attachedVertex, attachedSimplex.getVertices())
 
-        # total_edges = attachedSimplex.getEdges() + unattachedSimplex.getEdges()
-        #
-        # for edge in attachedSimplex.getEdges():
-        #     self.assertTrue(attachedSimplex.hasVertex(edge.getSourceId()))
-        #     self.assertTrue(attachedSimplex.hasVertex(edge.getTargetId()))
-        #
-        # for edge in unattachedSimplex.getEdges():
-        #     self.assertTrue(unattachedSimplex.hasVertex(edge.getSourceId()))
-        #     self.assertTrue(unattachedSimplex.hasVertex(edge.getTargetId()))
-        #
-        # self.assertEqual(len(total_edges), 20)  # 6 shared/doubled.
-        # self.assertEqual(len(set(total_edges)), 14)
-        # shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
-        # self.assertEqual(len(shared_edges), 6)
-        # self.assertEqual(len(set(total_edges)), len(st.getEdgeList().toVector()))
+        total_edges = attachedSimplex.getEdges() + unattachedSimplex.getEdges()
 
-        # 4. unattachedSimplex still has edges containing unattachedVertex (V6) even though it should have been removed (6>7, 6>8, 6>9).
-        # for edge in unattachedSimplex.getEdges():
-        #     self.assertNotEqual(edge.getSourceId(), unattachedVertex.getId())
-        #     self.assertNotEqual(edge.getTargetId(), unattachedVertex.getId())
+        for edge in attachedSimplex.getEdges():
+            self.assertTrue(attachedSimplex.hasVertex(edge.getSource().getId()))
+            self.assertTrue(attachedSimplex.hasVertex(edge.getTarget().getId()))
+
+        for edge in unattachedSimplex.getEdges():
+            breakpoint()
+            self.assertTrue(unattachedSimplex.hasVertex(edge.getSource().getId()))
+            self.assertTrue(unattachedSimplex.hasVertex(edge.getTarget().getId()))
+
+        self.assertEqual(len(total_edges), 20)  # 6 shared/doubled.
+        self.assertEqual(len(set(total_edges)), 14)
+        shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
+        self.assertEqual(len(shared_edges), 6)
+        self.assertEqual(len(set(total_edges)), len(st.getEdgeList().toVector()))
+
+        for edge in unattachedSimplex.getEdges():
+            self.assertNotEqual(edge.getSource().getId(), unattachedVertex.getId())
+            self.assertNotEqual(edge.getTarget().getId(), unattachedVertex.getId())
 
 
     def test_attach_at_vertices_removes_old_edges(self):

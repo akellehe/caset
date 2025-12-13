@@ -373,7 +373,8 @@ class Simplex {
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
     // void computeEdges();
 
-    [[nodiscard]] bool hasVertex(IdType vertexId) const;
+    [[nodiscard]] bool hasVertex(const IdType vertexId);
+    [[nodiscard]] bool hasVertex(VertexPtr vertex);
 
     void validate() const;
 

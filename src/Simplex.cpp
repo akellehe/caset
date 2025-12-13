@@ -217,10 +217,16 @@ void Simplex::addCoface(SimplexRawPtr simplex) {
   return false;
 }
 
-[[nodiscard]] bool Simplex::hasVertex(const IdType vertexId) const {
+[[nodiscard]] bool Simplex::hasVertex(const IdType vertexId) {
   for (const auto &v : vertices) {
     if (v->getId() == vertexId) return true;
   }
+  return false;
+}
+
+[[nodiscard]] bool Simplex::hasVertex(VertexPtr vertex) {
+  for (const auto &v : vertices)
+    if (v == vertex) return true;
   return false;
 }
 
