@@ -26,18 +26,18 @@
 #ifndef CASET_CASET_SRC_VERTEX_H_
 #define CASET_CASET_SRC_VERTEX_H_
 
+#include <pybind11/pybind11.h>
 #include <vector>
 #include <memory>
 #include <unordered_set>
 #include <unordered_map>
 #include "Logger.h"
-#include "Edge.h"
+#include "EdgeKey.h"
+#include "ForwardDeclarations.h"
 
+namespace py = pybind11;
 
 namespace caset {
-class VertexList;
-class EdgeList;
-class Simplex;
 ///
 /// Vertices in modern lattice gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
@@ -54,9 +54,15 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             id = 1;
             CLOG(INFO_LEVEL, "Vertex was default-constructed.");
         }
-        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
+        Vertex(const std::uint64_t id_, const std::vector<double> &coords) : id(id_), coordinates(coords) {
+#ifdef CASET_DEBUG
+            if (id_ == 0) throw std::runtime_error("Vertex had a 0 ID.");
+#endif
         }
-        explicit Vertex(const std::uint64_t id_) noexcept : id(id_) {
+        explicit Vertex(const std::uint64_t id_) : id(id_) {
+#ifdef CASET_DEBUG
+            if (id_ == 0) throw std::runtime_error("Vertex had a 0 ID.");
+#endif
         }
 
         std::uint64_t getId() const {
@@ -86,60 +92,39 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         void setCoordinates(const std::vector<double> &coords) noexcept;
 
-        void addInEdge(Edge *edge) noexcept { inEdges.insert(edge); }
-        void addOutEdge(Edge *edge) noexcept { outEdges.insert(edge); }
-        void removeInEdge(Edge *edge) noexcept {
-            if (!inEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
-            inEdges.erase(edge);
-        }
-        void removeOutEdge(Edge *edge) noexcept {
-            if (!outEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
-            outEdges.erase(edge);
-        }
+        void addOutEdge(Edge *edge) noexcept;
+        void addInEdge(Edge *edge) noexcept;
+        void removeInEdge(Edge *edge) noexcept;
+        void removeOutEdge(Edge *edge) noexcept;
 
-        std::size_t degree() const noexcept { return inEdges.size() + outEdges.size(); }
+        std::size_t degree() const noexcept;
 
         std::unordered_set<Edge *>
-        getInEdges() const noexcept { return inEdges; }
+        getInEdges() const noexcept;
 
         std::unordered_set<Edge *>
-        getOutEdges() const noexcept { return outEdges; }
+        getOutEdges() const noexcept;
 
         std::unordered_set<Edge *>
         getEdges() const noexcept;
 
         std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
-        moveInEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList);
+        moveInEdgesTo(const std::shared_ptr<Vertex> &recipient);
 
         std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
-        moveOutEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList
-            );
+        moveOutEdgesTo(const std::shared_ptr<Vertex> &recipient);
 
-        std::pair<EdgeKeySet, EdgeKeySet>
-        moveInEdgesToForPython(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList);
+        py::object
+        moveInEdgesToForPython(const std::shared_ptr<Vertex> &vertex);
 
-        std::pair<EdgeKeySet, EdgeKeySet>
-        moveOutEdgesToForPython(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList
-            );
+        py::object
+        moveOutEdgesToForPython(const std::shared_ptr<Vertex> &vertex);
 
-        std::pair<EdgeKeySet, EdgeKeySet>
-        moveEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList);
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+        moveEdgesTo(const std::shared_ptr<Vertex> &vertex);
 
+        py::object
+        moveEdgesToForPython(const std::shared_ptr<Vertex> &vertex);
 
         std::string toString() const noexcept;
 
@@ -156,11 +141,9 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::vector<double> coordinates{};
 };
 
-using VertexPtr = std::shared_ptr<Vertex>;
-using VertexPtrs = std::vector<VertexPtr>;
+// VertexPtr, VertexPtrs, VertexPtrSet are now defined in ForwardDeclarations.h
 using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
 using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
-using VertexPtrSet = std::unordered_set<VertexPtr>;
 }
 
 namespace std {

@@ -362,9 +362,7 @@ class Simplex {
 
 
     /// @returns Edges in traversal order (the order of input vertices).
-    [[nodiscard]] const Edges &getEdges() const noexcept;
-
-    [[nodiscard]] Edges nestedGetEdges() const;
+    [[nodiscard]] const EdgeSet &getEdges() const noexcept;
 
     [[nodiscard]]
     std::optional<VertexPtrs>
@@ -380,6 +378,11 @@ class Simplex {
     void validate() const;
 
     [[nodiscard]] bool hasEdgeContaining(IdType vertexId) const;
+
+    void removeEdge(Edge *edge);
+    void addEdge(Edge *edge);
+
+    [[nodiscard]] std::vector<std::shared_ptr<Edge>> getEdgesForPython() const noexcept;
 
     ///
     /// Simplices have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
@@ -463,14 +466,15 @@ class Simplex {
 
     /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
     /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
-    /// squaredLength data could be lost.
+    /// squaredLength data could be lost. This method JUST replaces the Vertex in the state of the Simplex. It does
+    /// not update any other attributes (e.g. rewriting edges)
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
 
   private:
     SimplexOrientationPtr orientation{};
     VertexIdMap vertexIdLookup{};
     VertexPtrs vertices{};
-    Edges edges{};
+    EdgeSet edges{};
 
     std::vector<std::unique_ptr<Simplex>> facets{};
     std::unordered_set<SimplexRawPtr> cofaces{};

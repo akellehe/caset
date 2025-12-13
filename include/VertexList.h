@@ -35,77 +35,15 @@
 namespace caset {
 class VertexList {
   public:
-    std::shared_ptr<Vertex> operator[](const std::uint64_t vertexId) {
-      return vertexList[vertexId];
-    }
-
-    std::shared_ptr<Vertex> get(std::uint64_t id) {
-      return vertexList[id];
-    }
-
-    std::shared_ptr<Vertex> add(const std::shared_ptr<Vertex> &vertex) noexcept {
-      vertexList.insert_or_assign(vertex->getId(), vertex);
-      return vertex;
-    }
-
-    bool contains(const std::uint64_t id) const noexcept {
-      return vertexList.contains(id);
-    }
-
-    std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) {
-#ifdef CASET_DEBUG
-if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
-#endif
-      if (vertexList.contains(id)) {
-        return vertexList.at(id);
-      }
-      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
-      vertexList.insert_or_assign(id, vertex);
-#ifdef CASET_DEBUG
-      if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
-#endif
-      return vertex;
-    }
-
-    std::shared_ptr<Vertex> add(const std::uint64_t id) {
-#ifdef CASET_DEBUG
-      if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
-#endif
-      if (vertexList.contains(id)) return vertexList.at(id);
-      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
-      auto [it, _] = vertexList.insert_or_assign(id, vertex);
-#ifdef CASET_DEBUG
-      if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
-#endif
-      return it->second;
-    }
-
-    void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
-#if CASET_DEBUG
-      if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
-      if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
-#endif
-
-      remove(toRemove);
-      add(toAdd);
-    }
-
-    void remove(const std::shared_ptr<Vertex> &vertex) noexcept {
-      vertexList.erase(vertex->getId());
-    }
-
-    std::size_t size() noexcept {
-      return vertexList.size();
-    }
-
-    std::vector<std::shared_ptr<Vertex>> toVector() const noexcept {
-      std::vector<std::shared_ptr<Vertex>> result{};
-      result.reserve(vertexList.size());
-      for (const auto &[key, vertex] : vertexList) {
-        result.push_back(vertex);
-      }
-      return result;
-    }
+    bool contains(const IdType id) const noexcept;
+    std::shared_ptr<Vertex> add(const IdType id);
+    std::shared_ptr<Vertex> add(const IdType id, const std::vector<double> &coords);
+    std::shared_ptr<Vertex> add(const std::shared_ptr<Vertex> &vertex);
+    std::shared_ptr<Vertex> get(IdType id);
+    std::size_t size() noexcept;
+    std::vector<std::shared_ptr<Vertex>> toVector() const noexcept;
+    void remove(const std::shared_ptr<Vertex> &vertex) noexcept;
+    void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd);
   private:
     std::unordered_map<std::uint64_t, std::shared_ptr<Vertex>> vertexList{};
 };

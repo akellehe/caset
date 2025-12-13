@@ -19,9 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "EdgeKey.h"
 #include "Vertex.h"
+#include "Edge.h"
 #include "EdgeList.h"
-#include "VertexList.h"
+#include "ForwardDeclarations.h"
 
 namespace caset {
 [[nodiscard]] double Vertex::getTime() const {
@@ -70,100 +72,102 @@ Vertex::getEdges() const noexcept {
   return edges;
 }
 
+py::object
+Vertex::moveInEdgesToForPython(
+    const std::shared_ptr<Vertex> &vertex) {
+  auto [old, new_] = moveInEdgesTo(vertex);
+  py::object returnValue = py::make_tuple(py::cast(old), py::cast(new_));
+  return returnValue;
+}
+
+py::object
+Vertex::moveOutEdgesToForPython(
+    const std::shared_ptr<Vertex> &vertex
+    ) {
+  auto [old, new_] = moveOutEdgesTo(vertex);
+  py::object returnValue = py::make_tuple(py::cast(old), py::cast(new_));
+  return returnValue;
+}
+
+
 std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
 Vertex::moveInEdgesTo(
-  const std::shared_ptr<Vertex> &vertex,
-  const std::shared_ptr<EdgeList> &edgeList,
-  const std::shared_ptr<VertexList> &vertexList
+  const std::shared_ptr<Vertex> &recipient // Recipient is the new target for the donated in-edges
   ) {
   std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>();
   std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>();
 
-  for (auto edge_ : inEdges) {
-    if (edge_ == nullptr) {
+  for (auto donorInEdge: inEdges) {
+    if (donorInEdge == nullptr) {
       CLOG(ERROR_LEVEL, "Found a nullptr (in) edge in vertex ", toString());
       throw std::runtime_error("Found a nullptr (in) edge in vertex.");
     }
-    auto oldKey = edge_->getKey();
-    auto edge = edgeList->remove(oldKey);
-    auto raw = edge.get();
-    CLOG(DEBUG_LEVEL, "Moving in-edge ", raw->toString(), " to ", vertex->toString());
+    auto oldKey = donorInEdge->getKey();
+    auto source = donorInEdge->getSource();
     oldEdges->insert(oldKey);
-    const auto sourceVertex = vertexList->get(raw->getSourceId());
-    sourceVertex->removeOutEdge(raw);
-    CLOG(DEBUG_LEVEL, "Changing target vertex from ", std::to_string(raw->getTargetId()), " to ", std::to_string(vertex->getId()));
-    raw->replaceTargetVertex(vertex->getId());
-    auto newKey = raw->getKey();
+
+    // Don't modify donorInEdge! Let updateKey handle it to avoid use-after-free
+    // updateKey returns the canonical edge (either the updated edge or an existing merged edge)
+    // Edge *canonicalEdge = edgeList->get(oldKey);
+    EdgeKey newKey(source->getId(), recipient->getId());
+
+    // Add canonical edge to both source and recipient
+    recipient->addInEdge(donorInEdge);
+
     newEdges->insert(newKey);
-    // TODO: If there are issues with the edge pointer chanigng value; we may need to address it by extracting and storing via some other method here.
-    vertex->addInEdge(raw);
-    sourceVertex->addOutEdge(raw);
-    edgeList->add(std::move(edge));
   }
   inEdges.clear();
   return {oldEdges, newEdges};
 }
 
-std::pair<EdgeKeySet, EdgeKeySet>
-Vertex::moveInEdgesToForPython(
-    const std::shared_ptr<Vertex> &vertex,
-    const std::shared_ptr<EdgeList> &edgeList,
-    const std::shared_ptr<VertexList> &vertexList) {
-  auto [old, new_] = moveInEdgesTo(vertex, edgeList, vertexList);
-  return {*old, *new_};
-}
-
-std::pair<EdgeKeySet, EdgeKeySet>
-Vertex::moveOutEdgesToForPython(
-    const std::shared_ptr<Vertex> &vertex,
-    const std::shared_ptr<EdgeList> &edgeList,
-    const std::shared_ptr<VertexList> &vertexList
-    ) {
-  auto [old, new_] = moveOutEdgesTo(vertex, edgeList, vertexList);
-  return {*old, *new_};
-}
-
-
 std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
-Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
+Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &recipient) {
   std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>();
   std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>();
   std::unordered_set<Edge *> newOutEdges{};
-  for (auto edge_ : outEdges) {
-    if (edge_ == nullptr) {
+  for (auto donorOutEdge : outEdges) {
+    if (donorOutEdge == nullptr) {
       CLOG(ERROR_LEVEL, "Found a nullptr (out) edge in vertex ", toString());
       throw std::runtime_error("Found a nullptr (out) edge in vertex.");
     }
-    auto oldKey = edge_->getKey();
-    auto edge = edgeList->remove(oldKey);
-    auto raw = edge.get();
-    CLOG(DEBUG_LEVEL, "Moving out-edge ", raw->toString(), " to ", vertex->toString());
+    auto oldKey = donorOutEdge->getKey();
+    auto target = donorOutEdge->getTarget();
     oldEdges->insert(oldKey);
-    const auto targetVertex = vertexList->get(raw->getTargetId());
-    targetVertex->removeInEdge(raw);
-    CLOG(DEBUG_LEVEL, "Changing source vertex from ", std::to_string(raw->getSourceId()), " to ", std::to_string(vertex->getId()));
-    raw->replaceSourceVertex(vertex->getId());
-    auto newKey = raw->getKey();
+
+    // Don't modify donorOutEdge! Let updateKey handle it to avoid use-after-free
+    // updateKey returns the canonical edge (either the updated edge or an existing merged edge)
+    // Edge* canonicalEdge = edgeList->updateKey(oldKey, recipient->getId(), targetId);
+    EdgeKey newKey(recipient->getId(), target->getId());
+
+    // Add canonical edge to both target and recipient
+    recipient->addOutEdge(donorOutEdge);
+
     newEdges->insert(newKey);
-    vertex->addOutEdge(raw);
-    targetVertex->addInEdge(raw);
-    edgeList->add(std::move(edge));
   }
   outEdges.clear();
   return {oldEdges, newEdges};
 }
 
-std::pair<EdgeKeySet, EdgeKeySet>
-Vertex::moveEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  EdgeKeySet oldEdges = EdgeKeySet{};
-  EdgeKeySet newEdges = EdgeKeySet{};
-  const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, edgeList, vertexList);
-  const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, edgeList, vertexList);
-  oldEdges.insert(oldInEdges->begin(), oldInEdges->end());
-  oldEdges.insert(oldOutEdges->begin(), oldOutEdges->end());
-  newEdges.insert(newInEdges->begin(), newInEdges->end());
-  newEdges.insert(newOutEdges->begin(), newOutEdges->end());
+std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+Vertex::moveEdgesTo(const std::shared_ptr<Vertex> &vertex) {
+  EdgeKeySet oldEdgesSet = EdgeKeySet{};
+  EdgeKeySet newEdgesSet = EdgeKeySet{};
+  std::shared_ptr<EdgeKeySet> oldEdges = std::make_shared<EdgeKeySet>(oldEdgesSet);
+  std::shared_ptr<EdgeKeySet> newEdges = std::make_shared<EdgeKeySet>(newEdgesSet);
+  const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex);
+  const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex);
+  oldEdges->insert(oldInEdges->begin(), oldInEdges->end());
+  oldEdges->insert(oldOutEdges->begin(), oldOutEdges->end());
+  newEdges->insert(newInEdges->begin(), newInEdges->end());
+  newEdges->insert(newOutEdges->begin(), newOutEdges->end());
   return {oldEdges, newEdges};
+}
+
+py::object
+Vertex::moveEdgesToForPython(const std::shared_ptr<Vertex> &vertex) {
+  auto [old, new_] = moveEdgesTo(vertex);
+  py::object returnValue = py::make_tuple(py::cast(old), py::cast(new_));
+  return returnValue;
 }
 
 void Vertex::addSimplex(Simplex *simplex) {
@@ -200,4 +204,22 @@ std::string Vertex::toString() const noexcept {
   ss << ", t=" << std::to_string(getTime()) << ")>";
   return ss.str();
 }
+
+void Vertex::removeOutEdge(Edge *edge) noexcept {
+  if (!outEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+  outEdges.erase(edge);
+}
+void Vertex::addInEdge(Edge *edge) noexcept { inEdges.insert(edge); }
+void Vertex::addOutEdge(Edge *edge) noexcept { outEdges.insert(edge); }
+void Vertex::removeInEdge(Edge *edge) noexcept {
+  if (!inEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+  inEdges.erase(edge);
+}
+std::size_t Vertex::degree() const noexcept { return inEdges.size() + outEdges.size(); }
+
+std::unordered_set<Edge *>
+Vertex::getInEdges() const noexcept { return inEdges; }
+
+std::unordered_set<Edge *>
+Vertex::getOutEdges() const noexcept { return outEdges; }
 };

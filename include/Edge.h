@@ -23,8 +23,9 @@
 #define CASET_CASET_SRC_EDGE_H_
 
 #include "Fingerprint.h"
+#include "EdgeKey.h"
+#include "ForwardDeclarations.h"
 
-#include <unordered_set>
 #include <vector>
 #include <random>
 #include <memory>
@@ -37,45 +38,13 @@ inline double random_uniform(double min = -1.0, double max = 1.0) {
 }
 
 namespace caset {
+class Simplex;
 
-class EdgeKey {
-  public:
-    IdType first;
-    IdType second;
-
-    EdgeKey(IdType sourceId_, IdType targetId_) : first(sourceId_), second(targetId_) {
-#if CASET_DEBUG
-      if (sourceId_ == targetId_) throw std::runtime_error("You can't create a self-reference.");
-#endif
-    }
-
-    bool operator==(const EdgeKey &other) const {
-      return first == other.first && second == other.second;
-    }
-
-    [[nodiscard]] std::uint64_t hash() const {
-      std::size_t h1 = std::hash<IdType>{}(first);
-      std::size_t h2 = std::hash<IdType>{}(second);
-      return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
-    }
-};
-
-struct EdgeKeyHash {
-  std::uint64_t operator()(const EdgeKey &p) const noexcept {
-    return p.hash();
-  }
-};
-
-struct EdgeKeyEqual {
-  bool operator()(const EdgeKey &a,
-                  const EdgeKey &b) const noexcept {
-    return a.first == b.first && a.second == b.second;
-  }
-};
-
-
-
-/// # Edge Disposition
+/// # Edge Class
+///
+/// An edge that links two points (vertices) in spacetime.
+///
+/// ## Edge Disposition
 ///
 /// There are two things that determine the disposition (spacelike, timelike, light/null-like). The first is the squared
 /// edge length. If the squared length is negative in a (-, +, +, +) signature it's timelike. A negative edge length in
@@ -86,17 +55,6 @@ struct EdgeKeyEqual {
 /// Triangulations: A Review" by R. Loll, 2019. Figure 1. There's no discussion of lightlike edges since CDT does not
 /// treat that case. I'm making that up to fill in the gaps. If there's some existing discussion around this in the
 /// literature I'm not aware at the time of this writing.
-enum class EdgeDisposition : uint8_t {
-  Spacelike = 0,
-  Timelike = 1,
-  Lightlike = 2
-};
-
-class Simplex;
-
-/// # Edge Class
-///
-/// An edge that links two points (vertices) in spacetime.
 ///
 /// @param source_If this Edge represents a directed Edge; then this is the Vertex from which the Edge originates. For
 ///   undirected edges; it's just one of two Vertices that define the Edge.
@@ -107,122 +65,58 @@ class Simplex;
 ///
 class Edge {
   public:
-    Edge(
-      std::uint64_t sourceId_,
-      std::uint64_t targetId_,
-      double squaredLength_
-    ) : sourceId(sourceId_), targetId(targetId_), squaredLength(squaredLength_), fingerprint({sourceId_, targetId_}) {
-#if CASET_DEBUG
-      if (sourceId_ == targetId_) throw std::runtime_error("You can't create self-referential edges.");
-#endif
-    }
+    Fingerprint fingerprint;
 
-    Edge(
-      std::uint64_t sourceId_,
-      std::uint64_t targetId_
-    ) : sourceId(sourceId_), targetId(targetId_), fingerprint({sourceId_, targetId_}) {
-      // Set squaredLength to a random value between -1 and 1
-#if CASET_DEBUG
-      if (sourceId_ == targetId_) throw std::runtime_error("You can't create self-referential edges.");
-#endif
-      squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
-    }
+    Edge(VertexPtr source_, VertexPtr target_, double squaredLength_);
+    Edge(VertexPtr source_, VertexPtr target_);
 
-    [[nodiscard]] std::uint64_t getSourceId() const {
-#if CASET_DEBUG
-      if (sourceId != 0) throw std::runtime_error("You attempted to get an edge with a 0 source vertex.");
-#endif
-      return sourceId;
-    }
+    [[nodiscard]] VertexPtr getSource() const;
+    [[nodiscard]] VertexPtr getTarget() const;
+    [[nodiscard]] double getSquaredLength() const noexcept;
+    [[nodiscard]] std::string toString() const noexcept;
 
-    [[nodiscard]] std::uint64_t getTargetId() const {
-#if CASET_DEBUG
-      if (targetId != 0) throw std::runtime_error("You attempted to get an edge with a 0 target vertex.");
-#endif
-      return targetId;
-    }
-
-    [[nodiscard]] double getSquaredLength() const noexcept {
-      return squaredLength;
-    }
-
-    [[nodiscard]] std::string toString() const noexcept {
-      return std::to_string(sourceId) + "->" + std::to_string(targetId);
-    }
+    void copyInPlaceTo(Edge *other);
 
     /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
-    void replaceSourceVertex(std::uint64_t sourceId_) {
-#if CASET_DEBUG
-      if (sourceId_ == targetId) throw std::runtime_error("You can't replace a source vertex with the same as the target since that would create a self-reference.");
-#endif
-      sourceId = sourceId_;
-      refreshFingerprint();
-    }
+    void replaceSourceVertex(VertexPtr source_);
 
     /// This method changes the target Vertex in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
-    void replaceTargetVertex(std::uint64_t targetId_) {
-#if CASET_DEBUG
-      if (targetId_ == sourceId) throw std::runtime_error("You can't replace a target vertex with the same as the source since that would create a self-reference.");
-#endif
-      targetId = targetId_;
-      refreshFingerprint();
-    }
+    void replaceTargetVertex(VertexPtr target_);
 
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
-    bool hasVertex(std::uint64_t vertexId) const {
-      if (getSourceId() == vertexId || getTargetId() == vertexId) return true;
-      return false;
-    }
+    bool hasVertex(VertexPtr vertexId) const;
 
     ///
     /// @param from the ID of a vertex to or from which this Edge should no longer point.
     /// @param to the ID of a source or target vertex to which this Edge should now point.
-    void redirect(std::uint64_t from, std::uint64_t to) {
-#if CASET_DEBUG
-      if (from == to) throw std::runtime_error("You attempted to redirect an edge from a vertex to the same vertex.");
-#endif
-      if (getSourceId() == from) {
-        replaceSourceVertex(to);
-      }
-      if (getTargetId() == from) {
-        replaceTargetVertex(to);
-      }
-    }
+    void redirect(VertexPtr from, VertexPtr to);
 
-    bool operator==(const Edge &other) const {
-      return fingerprint.fingerprint() == other.fingerprint.fingerprint();
-    }
+    bool operator==(const Edge &other) const;
 
-    [[nodiscard]] std::uint64_t toHash() const {
-      return fingerprint.fingerprint();
-    }
+    [[nodiscard]] std::uint64_t toHash() const;
 
-    Fingerprint fingerprint;
+    [[nodiscard]] EdgeKey getKey() const noexcept;
 
-    [[nodiscard]] EdgeKey getKey() const noexcept {
-      return {sourceId, targetId};
-    }
+    [[nodiscard]] std::vector<Simplex *> getSimplices() const noexcept;
 
-    [[nodiscard]] std::vector<Simplex *> getSimplices() const noexcept { return simplices; }
+    void addSimplex(Simplex *simplex) noexcept;
 
-    void addSimplex(Simplex *simplex) noexcept { simplices.push_back(simplex); }
+    void removeSimplex(Simplex *simplex) noexcept;
 
   private:
-    std::uint64_t sourceId;
-    std::uint64_t targetId;
+    VertexPtr source;
+    VertexPtr target;
     std::vector<Simplex *> simplices;
 
     /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
     /// fingerprint for this Edge after replacing a source or target vertex in-place.
-    void refreshFingerprint() noexcept {
-      fingerprint = Fingerprint({sourceId, targetId});
-    }
+    void refreshFingerprint() noexcept;
 
     double squaredLength;
 };
@@ -232,9 +126,7 @@ using EdgeEq = FingerprintEq<Edge>;
 using EdgePtr = std::shared_ptr<Edge>;
 using EdgeRawPtr = Edge *;
 using Edges = std::vector<EdgeRawPtr>;
-
-using EdgeKeySet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
-using EdgeKeys = std::vector<EdgeKey>;
+using EdgeSet = std::unordered_set<EdgeRawPtr>;
 }
 
 #endif //CASET_CASET_SRC_EDGE_H_

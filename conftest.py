@@ -20,12 +20,16 @@
 # SOFTWARE.
 
 from pathlib import Path
-import sys
-import subprocess
-import tomllib
-import sysconfig
 import importlib
+import os
+import subprocess
+import sys
+import tomllib
+import platform
 
+
+CASET_ASAN = os.environ.get("CASET_ASAN")
+LD_PRELOAD = os.environ.get("LD_PRELOAD")
 
 def get_scikit_build_dir() -> Path:
     root = Path(__file__).resolve().parent
@@ -40,9 +44,29 @@ def get_scikit_build_dir() -> Path:
 
     return (root / template.format(wheel_tag=wheel_tag)).resolve()
 
+def clean_build_env():
+    env = os.environ.copy()
+    env.pop("LD_PRELOAD", None)
+    env.pop("ASAN_OPTIONS", None)
+    env.pop("UBSAN_OPTIONS", None)
+    return env
+
+def get_build_command(build_dir):
+    return ["cmake", "--build", str(build_dir.parent)]
+
+def get_configure_command(build_dir):
+    cmd = ["cmake", "-S", ".", "-B", str(build_dir.parent), "-DCMAKE_BUILD_TYPE=Debug"]
+    if CASET_ASAN:
+        cmd.append("-DCASET_ASAN=ON")
+    return cmd
+
 def pytest_sessionstart(session):
     build_dir = get_scikit_build_dir()
-    subprocess.run(["cmake", "--build", str(build_dir.parent)], check=True)
+    env = clean_build_env()
+    if not build_dir.exists():
+        print("build dir does not exist (", str(build_dir), ") configuring.")
+        subprocess.run(get_configure_command(build_dir), check=True, env=env)
+    subprocess.run(get_build_command(build_dir), check=True, env=env)
     sys.path.insert(0, str(build_dir.parent))
 
     # refuse to import caset from site-packages by accident:

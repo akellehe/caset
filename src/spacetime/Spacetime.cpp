@@ -31,160 +31,6 @@
 #include "spacetime/Spacetime.h"
 
 namespace caset {
-void Spacetime::embedEuclidean(int dimensions = 4, double epsilon = 1e-8) {
-  pybind11::gil_scoped_release no_gil;
-  if (vertexList->size() == 0) return;
-  if (edgeList->size() == 0) return;
-
-  const int N = vertexList->size();
-  const int E = edgeList->size();
-  double lr = 10e-3;
-
-  Edges edgeVector = edgeList->toVector();
-  std::vector<std::shared_ptr<Vertex> > vertexVector = vertexList->toVector();
-
-  if (vertexVector.empty()) {
-    CLOG(WARN_LEVEL, "No vertices to embed!");
-    return;
-  }
-  if (edgeVector.empty()) {
-    CLOG(WARN_LEVEL, "No edges to embed!");
-    return;
-  }
-
-  CLOG(INFO_LEVEL, "Embedding a ", dimensions, "-d Euclidean space with ", N, " vertices and ", E, " edges.");
-  std::unordered_map<std::uint64_t, int> vertexIdToIndex;
-  vertexIdToIndex.reserve(vertexVector.size());
-  std::unordered_map<std::uint64_t, double> vertexIdToTime;
-  vertexIdToTime.reserve(vertexVector.size());
-  for (int i = 0; i < static_cast<int>(vertexVector.size()); ++i) {
-    vertexIdToIndex[vertexVector[i]->getId()] = i;
-    vertexIdToTime[vertexVector[i]->getId()] = vertexVector[i]->getTime();
-  }
-
-  std::vector<int64_t> edgeIdxToSourceIndex(E);
-  std::vector<int64_t> edgeIdxToTargetIndex(E);
-  std::vector<double> edgeIdxToSourceTime(E);
-  std::vector<double> edgeIdxToTargetTime(E);
-  std::vector<double> edgeIdxToAbsoluteSquaredLength(E);
-
-  for (int e = 0; e < E; ++e) {
-    const auto &edge = edgeVector[e];
-    auto sourceIndexIterator = vertexIdToIndex.find(edge->getSourceId());
-    auto targetIndexIterator = vertexIdToIndex.find(edge->getTargetId());
-    if (sourceIndexIterator == vertexIdToIndex.end() || targetIndexIterator == vertexIdToIndex.end()) {
-      throw std::runtime_error("Edge refers to unknown vertex id");
-    }
-    auto sourceTimeIterator = vertexIdToTime.find(edge->getSourceId());
-    auto targetTimeIterator = vertexIdToTime.find(edge->getTargetId());
-
-    edgeIdxToSourceIndex[e] = sourceIndexIterator->second;
-    edgeIdxToTargetIndex[e] = targetIndexIterator->second;
-    edgeIdxToSourceTime[e] = sourceTimeIterator->second;
-    edgeIdxToTargetTime[e] = targetTimeIterator->second;
-
-    double L = edge->getSquaredLength();
-    // If you have Minkowski lengths and want magnitude-only, use std::abs(L).
-    edgeIdxToAbsoluteSquaredLength[e] = std::abs(L)
-                                          ? std::abs(L)
-                                          : epsilon;
-    // Avoid zero target distances which can cause issues in optimization;
-  }
-
-  auto edgeIdxToSourceIdxTensor = torch::from_blob(edgeIdxToSourceIndex.data(),
-                                                   {E},
-                                                   torch::TensorOptions().dtype(torch::kLong)).clone();
-  auto edgeIdxToTargetIdxTensor = torch::from_blob(edgeIdxToTargetIndex.data(),
-                                                   {E},
-                                                   torch::TensorOptions().dtype(torch::kLong)).clone();
-  auto edgeIdxToSourceTimeTensor = torch::from_blob(edgeIdxToSourceTime.data(),
-                                                    {E},
-                                                    torch::TensorOptions().dtype(torch::kDouble)).clone();
-  auto edgeIdxToTargetTimeTensor = torch::from_blob(edgeIdxToTargetTime.data(),
-                                                    {E},
-                                                    torch::TensorOptions().dtype(torch::kDouble)).clone();
-
-  auto edgeIdxToAbsoluteSquaredLengthTensor = torch::from_blob(edgeIdxToAbsoluteSquaredLength.data(),
-                                                               {E},
-                                                               torch::TensorOptions().dtype(torch::kDouble)).clone();
-
-  // 4. Set up optimizer (Adam is simple and robust)
-  torch::Tensor positions = torch::randn({N, dimensions},
-                                         torch::TensorOptions()
-                                         .dtype(torch::kDouble))
-      .set_requires_grad(true);
-
-  torch::Tensor vertexTimesTensor = torch::zeros(
-    {N},
-    torch::TensorOptions().dtype(torch::kDouble)
-  );
-  for (int i = 0; i < N; ++i) {
-    vertexTimesTensor[i] = vertexVector[i]->getTime();
-  }
-
-  torch::optim::Adam optimizer({positions}, torch::optim::AdamOptions(lr));
-
-  auto previousLoss = torch::tensor({0});
-  auto loss = torch::tensor({0});
-  auto iter = 0;
-  auto epsilonTensor = torch::tensor({epsilon}, torch::TensorOptions().dtype(torch::kDouble));
-  while (iter == 0 || ((loss - previousLoss).abs() > epsilonTensor).item<bool>()) {
-    iter++;
-    optimizer.zero_grad();
-
-    // 5. Compute predicted squared distances for all edges
-    auto srcPositions = positions.index_select(0, edgeIdxToSourceIdxTensor); // (E, dim)
-    auto tgtPositions = positions.index_select(0, edgeIdxToTargetIdxTensor); // (E, dim)
-
-    auto expectedSrcTimes = vertexTimesTensor.index_select(0, edgeIdxToSourceIdxTensor);
-    auto expectedTgtTimes = vertexTimesTensor.index_select(0, edgeIdxToTargetIdxTensor);
-    auto expectedTimes = (expectedSrcTimes + expectedTgtTimes) / 2.; // (E,)
-    auto observedLengths = srcPositions - tgtPositions; // (E, dim - 1)
-
-    auto sqdist = observedLengths.pow(2).sum(-1); // (E,)
-
-    // The observed time is the 0th element of the coordinate vector
-    auto observedSrcTimes = srcPositions.index({torch::arange(0, E), 0});
-    auto observedTgtTimes = tgtPositions.index({torch::arange(0, E), 0});
-    auto observedTimes = (observedSrcTimes + observedTgtTimes) / 2.; // (E,)
-
-    auto sqtime = (observedTimes - expectedTimes).pow(2); // (E,)
-
-    // 6. Loss: match squared distances
-    auto residual = sqdist - edgeIdxToAbsoluteSquaredLengthTensor + (sqtime * dimensions);
-    previousLoss = loss;
-    loss = residual.pow(2).mean();
-
-    loss.backward();
-    optimizer.step();
-
-    // Optional: early stopping / logging
-    if (iter % 200 == 0) {
-      std::cout << "[embedEuclidean] iter " << iter
-          << " loss = " << loss.item<double>() << std::endl;
-    }
-  }
-
-  // 7. Write back into Vertex coordinates
-  auto posCpu = positions.detach().cpu();
-  auto posAccessor = posCpu.accessor<double, 2>();
-
-  for (int i = 0; i < N; ++i) {
-    std::vector<double> coords(dimensions);
-    coords[0] = vertexVector[i]->getTime();
-    for (int d = 1; d < dimensions; ++d) {
-      coords[d] = posAccessor[i][d];
-    }
-    vertexVector[i]->setCoordinates(coords);
-  }
-  CLOG(INFO_LEVEL,
-       "Iteration: ",
-       iter,
-       " Loss: ",
-       loss.item<double>(),
-       " Previous Loss: ",
-       previousLoss.item<double>());
-}
 
 void Spacetime::build(int numSimplices) {
   // TODO: Implement topologies instead of the default.
@@ -201,23 +47,23 @@ void Spacetime::build(int numSimplices) {
 }
 
 EdgeRawPtr Spacetime::createEdge(
-  const std::uint64_t src,
-  const std::uint64_t tgt
+  VertexPtr src,
+  VertexPtr tgt
 ) {
   EdgeRawPtr edge = edgeList->add(src, tgt);
-  vertexList->get(src)->addOutEdge(edge);
-  vertexList->get(tgt)->addInEdge(edge);
+  src->addOutEdge(edge);
+  tgt->addInEdge(edge);
   return edge;
 }
 
 EdgeRawPtr Spacetime::createEdge(
-  const std::uint64_t src,
-  const std::uint64_t tgt,
+  VertexPtr src,
+  VertexPtr tgt,
   double squaredLength
 ) noexcept {
   EdgeRawPtr edge = edgeList->add(src, tgt, squaredLength);
-  vertexList->get(src)->addOutEdge(edge);
-  vertexList->get(tgt)->addInEdge(edge);
+  src->addOutEdge(edge);
+  tgt->addInEdge(edge);
   return edge;
 }
 
@@ -258,8 +104,9 @@ SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
   for (int i = 0; i < k; i++) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
+    CLOG(INFO_LEVEL, "Made vertex id=", newVertex->getId(), " (counter now ", vertexIdCounter, ")");
     for (const auto &existingVertex : vertices) {
-      EdgeRawPtr edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+      EdgeRawPtr edge = edgeList->add(existingVertex, newVertex, squaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -283,17 +130,22 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
   vertices.reserve(k);
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
+  CLOG(INFO_LEVEL, "vertexIdCounter: ", std::to_string(vertexIdCounter));
   for (int i = 0; i < ti; i++) {
     // Create ti Timelike vertices
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
+    CLOG(INFO_LEVEL, "Made vertex id=", newVertex->getId(), " (counter now ", vertexIdCounter, ")");
     if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
       timelikeSquaredLength = -alpha;
     }
     for (const auto &existingVertex : vertices) {
       CLOG(INFO_LEVEL, "Creating edge...");
-      EdgeRawPtr edge = edgeList->
-          add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+      EdgeRawPtr edge = edgeList->add(
+        existingVertex,
+        newVertex,
+        timelikeSquaredLength
+        );
       CLOG(INFO_LEVEL, "Registering edges...");
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -308,15 +160,16 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
     /// We can't just use the vertexList .size() here, because some vertices can be removed. We need to keep a
     /// counter:
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
+    CLOG(INFO_LEVEL, "Made vertex id=", newVertex->getId(), " (counter now ", vertexIdCounter, ")");
     for (const auto &existingVertex : vertices) {
       EdgeRawPtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
         CLOG(INFO_LEVEL, "Creating tf edge with ", existingVertex->getId(), " and ", newVertex->getId());
-        edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+        edge = edgeList->add(existingVertex, newVertex, squaredLength);
         CLOG(INFO_LEVEL, "Created...");
       } else {
         CLOG(INFO_LEVEL, "Creating tf edge...");
-        edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+        edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
         CLOG(INFO_LEVEL, "Created...");
       }
       existingVertex->addOutEdge(edge);
@@ -382,11 +235,11 @@ Spacetime::getGluableFaces(
 void Spacetime::moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
   for (const auto &edge : from->getInEdges()) {
     // The source is external to the face/simplex, the `from` node is going to be going away.
-    const VertexPtr originalSource = vertexList->get(edge->getSourceId());
+    const VertexPtr originalSource = edge->getSource();
     originalSource->removeOutEdge(edge);
     from->removeInEdge(edge);
     auto canonicalEdge = edgeList->remove(edge);
-    canonicalEdge->replaceTargetVertex(to->getId());
+    canonicalEdge->replaceTargetVertex(to);
     to->addInEdge(canonicalEdge.get());
     originalSource->addOutEdge(canonicalEdge.get());
     edgeList->add(std::move(canonicalEdge));
@@ -395,11 +248,11 @@ void Spacetime::moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to
 
 void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
   for (const auto &edge : from->getOutEdges()) {
-    const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
+    const VertexPtr originalTarget = edge->getTarget();
     originalTarget->removeInEdge(edge);
     from->removeOutEdge(edge);
     auto canonicalEdge = edgeList->remove(edge);
-    canonicalEdge->replaceSourceVertex(to->getId());
+    canonicalEdge->replaceSourceVertex(to);
     to->addOutEdge(canonicalEdge.get());
     originalTarget->addInEdge(canonicalEdge.get());
     edgeList->add(std::move(canonicalEdge));
@@ -468,19 +321,31 @@ void Spacetime::attachAtVertices(
 }
 
 void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr attachedSimplex, const VertexPtr &unattached, const VertexPtr &attached) {
-  const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, edgeList, vertexList);
+  // After this; attached will have some new edges and unattached will have zero edges. That means any simplex
+  // containing one of unattached's old edges will need that edge removed.
+  const auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached);
+
   for (const auto &simplex : unattached->getSimplices()) {
+    // Replacing the vertex handles updating the state associated with the Simplex on the Vertex, but not the state
+    // associated with the Vertex on the Simplex.
     simplex->replaceVertex(unattached, attached);
+    // To finish updating state; we need to remove defunct edges from the simplex?
   }
-  for (const auto &edgeKey : newEdges) {
-    edgeList->get(edgeKey)->addSimplex(unattachedSimplex); // TODO: Remove the old simplex!
+
+  // Now we need to re-key the oldEdges to their keys match newEdges.
+  for (const auto &oldKey : *oldEdges) {
+    const auto &canonicalEdge = edgeList->updateKey(oldKey);
+    canonicalEdge->removeSimplex(unattachedSimplex);
   }
+  // for (const auto &edgeKey : oldEdges) {
+    // throw std::runtime_error("We need to ensure we update the edges in each simplex. Python can keep them around longer than it should. I think getEdges() is still returning the same pointers. Who is responsible for updating the edges on the simplex itself? I think it should be the Simplex. In the tests; we get edges from the simplex, and i think the edges that are invalidated are being returned there.");
+  // }
+
   if (unattached->degree() == 0) vertexList->remove(unattached);
 #if CASET_DEBUG
   unattachedSimplex->validate();
   attachedSimplex->validate();
 #endif
-
 }
 
 std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(
@@ -635,13 +500,13 @@ std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
       seen.insert(current);
       component.push_back(current);
       for (const auto &edge : current->getOutEdges()) {
-        VertexPtr neighbor = vertexList->get(edge->getTargetId());
+        VertexPtr neighbor = edge->getTarget();
         if (neighbor != nullptr && !seen.contains(neighbor)) {
           stack.push_back(neighbor);
         }
       }
       for (const auto &edge : current->getInEdges()) {
-        VertexPtr neighbor = vertexList->get(edge->getSourceId());
+        VertexPtr neighbor = edge->getSource();
         if (neighbor != nullptr && !seen.contains(neighbor)) {
           stack.push_back(neighbor);
         }
@@ -652,11 +517,14 @@ std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
   return components;
 }
 
-VertexPtr Spacetime::createVertex(const std::uint64_t id) noexcept {
+VertexPtr Spacetime::createVertex(const IdType id) {
+#ifdef CASET_DEBUG
+  if (id == 0) throw std::runtime_error("Invalid vertex ID: 0");
+#endif
   return vertexList->add(id);
 }
 
-VertexPtr Spacetime::createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+VertexPtr Spacetime::createVertex(const IdType id, const std::vector<double> &coords) {
   return vertexList->add(id, coords);
 }
 
@@ -669,4 +537,5 @@ bool Spacetime::removeIfIsolated(const VertexPtr &vertex) {
   CLOG(DEBUG_LEVEL, "NOT Removing vertex: ", vertex->toString());
   return false;
 }
+
 } // caset

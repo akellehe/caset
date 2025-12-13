@@ -180,28 +180,28 @@ class TestSimplex(unittest.TestCase):
         """
 
         # 1>2
-        self.assertEqual(e1[0], 1)
-        self.assertEqual(e1[1], 2)
+        self.assertEqual(e1[0], 2)
+        self.assertEqual(e1[1], 3)
 
         # 2>3
-        self.assertTrue(e2[0], 1)
-        self.assertTrue(e2[1], 3)
+        self.assertTrue(e2[0], 2)
+        self.assertTrue(e2[1], 4)
 
         # 1>3
-        self.assertTrue(e3[0], 1)
-        self.assertTrue(e3[1], 4)
+        self.assertTrue(e3[0], 2)
+        self.assertTrue(e3[1], 5)
 
         # 3>4
-        self.assertTrue(e4[0], 2)
-        self.assertTrue(e4[1], 3)
+        self.assertTrue(e4[0], 3)
+        self.assertTrue(e4[1], 4)
 
         # 2>4
-        self.assertTrue(e5[0], 2)
-        self.assertTrue(e5[1], 4)
+        self.assertTrue(e5[0], 3)
+        self.assertTrue(e5[1], 5)
 
         # 1>4
-        self.assertTrue(e6[0], 3)
-        self.assertTrue(e6[1], 4)
+        self.assertTrue(e6[0], 4)
+        self.assertTrue(e6[1], 5)
 
     def test_get_verticies_with_pairty_to4D(self):
         simplex41 = self.spacetime.createSimplex((4, 1))
@@ -390,6 +390,21 @@ class TestSimplex(unittest.TestCase):
 
         for e1 in unattached.nestedGetEdges():
             print(e1)
+
+    def test_replace_vertex(self):
+        """
+        This method does not change edge assignments!
+        """
+        st = Spacetime()
+        s12 = st.createSimplex((1, 2))
+        s21 = st.createSimplex((2, 1))
+
+        v12 = s12.getVertices()[0]
+        v21 = s21.getVertices()[0]
+        s12.replaceVertex(v12, v21, st.getEdgeList())
+
+        self.assertEqual(s21.getVertices()[0], s12.getVertices()[0])
+
 
 if __name__ == '__main__':
     unittest.main()

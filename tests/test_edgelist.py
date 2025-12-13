@@ -54,8 +54,6 @@ class TestEdgeList(unittest.TestCase):
         e2 = el.add(2, 5)
         e3 = el.add(3, 4)
 
-        el.remove(e1.getKey())
         e1.redirect(1, 3)
-        el.add(1, 2)
 
         self.assertEqual(el.size(), 3)

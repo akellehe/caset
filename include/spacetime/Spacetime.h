@@ -85,8 +85,8 @@ class Spacetime {
     py::object createSimplexForPython(const std::tuple<uint8_t, uint8_t> &numericOrientation);
     py::object createSimplexForPython(std::size_t k);
 
-    VertexPtr createVertex(const std::uint64_t id) noexcept;
-    VertexPtr createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept;
+    VertexPtr createVertex(const IdType id);
+    VertexPtr createVertex(const IdType id, const std::vector<double> &coords);
 
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept { return spacetimeType; }
     [[nodiscard]] double getCurrentTime() const noexcept { return static_cast<double>(currentTime); }
@@ -97,8 +97,8 @@ class Spacetime {
       currentTime++;
       return static_cast<double>(currentTime);
     }
-    EdgeRawPtr createEdge(const std::uint64_t src, const std::uint64_t tgt);
-    EdgeRawPtr createEdge(const std::uint64_t src, const std::uint64_t tgt, double squaredLength) noexcept;
+    EdgeRawPtr createEdge(VertexPtr src, VertexPtr tgt);
+    EdgeRawPtr createEdge(VertexPtr src, VertexPtr tgt, double squaredLength) noexcept;
     void addObservable(const std::shared_ptr<Observable> &observable) { observables.push_back(observable); }
 
     ///
@@ -222,7 +222,7 @@ class Spacetime {
     py::list getExternalSimplicesForPython() noexcept;
 
 
-    void embedEuclidean(int dimensions, double epsilon);
+    // void embedEuclidean(int dimensions, double epsilon);
 
     /// This method chooses a simplex from the boundary of the simplicial complex to which `unattachedSimplex` can be
     /// glued. It does this by iterating through the `externalSimplices` and checking for compatible orientations and

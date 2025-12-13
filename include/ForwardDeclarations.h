@@ -19,37 +19,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by andrew on 10/23/25.
-//
-
-#ifndef CASET_EDGELIST_H
-#define CASET_EDGELIST_H
+#ifndef CASET_FORWARD_DECLARATIONS_H
+#define CASET_FORWARD_DECLARATIONS_H
 
 #include <memory>
 #include <vector>
-#include <unordered_map>
-
-#include "ForwardDeclarations.h"
-#include "Edge.h"
-#include "Logger.h"
+#include <unordered_set>
+#include <cstdint>
 
 namespace caset {
-class EdgeList {
-  public:
-    Edge *add(VertexPtr src, VertexPtr tgt);
-    Edge *add(VertexPtr src, VertexPtr tgt, double squaredLength);
-    Edge *add(std::unique_ptr<Edge> edge);
-    Edge *get(const EdgeKey &edgeKey);
-    Edge* updateKey(const EdgeKey &oldKey);
-    [[nodiscard]] std::size_t size() const;
-    [[nodiscard]] std::vector<Edge *> toVector() const noexcept;
-    std::unique_ptr<Edge> remove(Edge *edge) noexcept;
-    std::unique_ptr<Edge> remove(const EdgeKey &edgeKey) noexcept;
-  private:
-    std::unordered_map<EdgeKey, std::unique_ptr<Edge>, EdgeKeyHash, EdgeKeyEqual> edgeList{};
-    Edge *getOrInsert(std::unique_ptr<Edge> edge);
-};
-} // caset
 
-#endif //CASET_EDGELIST_H
+// Basic types
+using IdType = std::uint64_t;
+
+// Forward declarations
+class Vertex;
+class Edge;
+class Simplex;
+class EdgeList;
+class VertexList;
+class EdgeKey;
+
+// Type aliases
+using VertexPtr = std::shared_ptr<Vertex>;
+using VertexPtrs = std::vector<VertexPtr>;
+using VertexPtrSet = std::unordered_set<VertexPtr>;
+
+using EdgeRawPtr = Edge *;
+using Edges = std::vector<EdgeRawPtr>;
+
+} // namespace caset
+
+#endif // CASET_FORWARD_DECLARATIONS_H

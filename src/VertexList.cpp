@@ -23,7 +23,96 @@
 // Created by andrew on 10/23/25.
 //
 
+
+#include <memory>
+#include <vector>
+#include <unordered_map>
+
+#include "Vertex.h"
 #include "VertexList.h"
 
 namespace caset {
+    std::shared_ptr<Vertex> VertexList::get(IdType id) {
+      auto found = vertexList.find(id);
+      if (found == vertexList.end()) {
+        CLOG(WARN_LEVEL, "You searched for a vertex that did not exist.");
+        return nullptr;
+      }
+      return found->second;
+    }
+
+    std::shared_ptr<Vertex> VertexList::add(const std::shared_ptr<Vertex> &vertex) {
+      if (vertexList.contains(vertex->getId())) {
+        return vertexList.at(vertex->getId());
+      }
+      auto [it, inserted] = vertexList.emplace(vertex->getId(), vertex);
+#ifdef CASET_DEBUG
+      if (!inserted) {
+        throw std::runtime_error("You attempted to overwrite a vertex! (multi-threading issue?)");
+      }
+#endif
+      return it->second;
+    }
+
+    bool VertexList::contains(const IdType id) const noexcept {
+      return vertexList.contains(id);
+    }
+
+    std::shared_ptr<Vertex> VertexList::add(const IdType id, const std::vector<double> &coords) {
+#ifdef CASET_DEBUG
+if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
+#endif
+      if (vertexList.contains(id)) {
+        return vertexList.at(id);
+      }
+      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
+      auto [it, inserted] = vertexList.emplace(id, vertex);
+#ifdef CASET_DEBUG
+      if (!inserted) throw std::runtime_error("Failed to emplace a vertex!");
+      if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
+#endif
+      return it->second;
+    }
+
+    std::shared_ptr<Vertex> VertexList::add(const IdType id) {
+#ifdef CASET_DEBUG
+      if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
+#endif
+      if (vertexList.contains(id)) return vertexList.at(id);
+      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
+      auto [it, inserted] = vertexList.emplace(id, vertex);
+#ifdef CASET_DEBUG
+      if (!inserted) throw std::runtime_error("Failed to add a vertex!");
+      if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
+#endif
+      return it->second;
+    }
+
+    void VertexList::replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
+#if CASET_DEBUG
+      if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
+      if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
+#endif
+
+      remove(toRemove);
+      add(toAdd);
+    }
+
+    void VertexList::remove(const std::shared_ptr<Vertex> &vertex) noexcept {
+      CLOG(INFO_LEVEL, "Erasing vertex: ", std::to_string(vertex->getId()));
+      vertexList.erase(vertex->getId());
+    }
+
+    std::size_t VertexList::size() noexcept {
+      return vertexList.size();
+    }
+
+    std::vector<std::shared_ptr<Vertex>> VertexList::toVector() const noexcept {
+      std::vector<std::shared_ptr<Vertex>> result{};
+      result.reserve(vertexList.size());
+      for (const auto &[key, vertex] : vertexList) {
+        result.push_back(vertex);
+      }
+      return result;
+    }
 } // caset
