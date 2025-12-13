@@ -124,14 +124,9 @@ Vertex::moveEdgesToImpl(
 
     if (!wasCanonical) {
       // donorEdge is a duplicate and should be replaced in all simplices
+      CLOG(WARN_LEVEL, "WILL MARK ", oldKey.toString(), " FOR DELETION");
       toDelete->insert(oldKey);
-      for (const auto &simplex : recipient->getSimplices()) {
-        if (simplex->removeEdge(donorEdge)) {
-          donorEdge->removeSimplex(simplex);
-          simplex->addEdge(canonicalEdge);
-          canonicalEdge->addSimplex(simplex);
-        }
-      }
+      donorEdge->replaceOnReferents(canonicalEdge);
     } else {
       // donorEdge is a new canonical edge that needs its key updated or to be replaced by its existing newKey's
       // (pre-existing) corresponding Edge in EdgeList. In other words. donorEdge either needs to be added to EdgeList

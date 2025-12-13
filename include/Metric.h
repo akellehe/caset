@@ -29,15 +29,13 @@
 #include <memory>
 
 #include "Signature.h"
-#include "Logger.h"
 
 namespace caset {
 /// # The Metric
 ///
 class Metric {
   public:
-    Metric(bool coordinateFree_, Signature &signature_) : signature(std::make_shared<Signature>(signature_)), coordinateFree(coordinateFree_) {
-    }
+    Metric(bool coordinateFree_, Signature &signature_);
 
     ///
     /// This method computes the length of the edge between the source and target vertices when we're using a coordinate
@@ -63,28 +61,13 @@ class Metric {
     /// build (and update) the triangulation while Regge Calculus allows for dynamically updated edge lengths. See
     /// Quantum Gravity from Causal Dynamical Triangulations: A Review by R. Loll Section 4, p 11-12 for more details.
     ///
-    [[nodiscard]] double getSquaredLength(
-      const std::vector<double> &sourceCoords,
-      const std::vector<double> &targetCoords
-      ) const {
+    [[nodiscard]] double
+    getSquaredLength(const std::vector<double> &sourceCoords, const std::vector<double> &targetCoords)
+    const;
 
-      if (coordinateFree) {
-        CLOG(ERROR_LEVEL, "You asked a coordinate free metric to compute the squared length of an edge. That data should be store directly on the edge already.");
-        throw std::runtime_error("You asked a coordinate free metric to compute the squared length of an edge. That data should be store directly on the edge already.");
-      }
 
-      auto diag = signature->getDiagonal();
-      double lengthSquared = 0.0;
-      for (int i = 0; i < diag.size(); ++i) {
-        double delta = sourceCoords[i] - targetCoords[i];
-        lengthSquared += static_cast<double>(diag[i]) * delta * delta;
-      }
-      return lengthSquared;
-    }
-
-    [[nodiscard]] std::shared_ptr<Signature> getSignature() const noexcept {
-      return signature;
-    }
+    [[nodiscard]] std::shared_ptr<Signature>
+    getSignature() const noexcept;
 
   private:
     std::shared_ptr<Signature> signature;

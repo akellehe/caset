@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export CASET_ASAN=ON
 export CC=gcc
 export CXX=g++
 export ASAN="$(gcc -print-file-name=libasan.so)"

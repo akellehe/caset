@@ -375,8 +375,6 @@ class TestSpacetime(unittest.TestCase):
         for i in range(0, len(vertices) - 1, 2):
             edges.append(st.createEdge(vertices[i], vertices[i+1]))
 
-        breakpoint()
-
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 5)
 
