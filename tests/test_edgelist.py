@@ -20,40 +20,40 @@
 # SOFTWARE.
 
 import unittest
-from caset import Edge, EdgeList
+from caset import Edge, EdgeList, Vertex
 
 class TestEdgeList(unittest.TestCase):
 
     def test_adding_and_removing_unique_edges(self):
-        print("Creating edgelist...")
         el = EdgeList()
+        v1 = Vertex(1, [])
+        v2 = Vertex(2, [])
         self.assertEqual(el.size(), 0)
         self.assertEqual(len(el.toVector()), 0)
-        print("Adding edge...")
-        edge = el.add(1, 2)
-        print("Added.")
-        print("Edge: ", edge)
-        self.assertEqual(el.size(), 1)
-        print("to vector...")
-        self.assertEqual(len(el.toVector()), 1)
-        el.add(1, 2)
+        edge = el.add(v1, v2)
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
-        # Uncomment if you compiled with CASET_DEBUG
-        # with self.assertRaisesRegex(RuntimeError, "Fingerprint collision"):
-        #     el.add(2, 1)
+        el.add(v1, v2)
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
-        el.add(1, 2, 3.)
+        self.assertEqual(el.size(), 1)
+        self.assertEqual(len(el.toVector()), 1)
+        el.add(v1, v2, 3.)
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
 
     def test_uniqueness_after_redirecting_edges(self):
         el = EdgeList()
-        e1 = el.add(1, 2)
-        e2 = el.add(2, 5)
-        e3 = el.add(3, 4)
+        v1 = Vertex(1, [])
+        v2 = Vertex(2, [])
+        v3 = Vertex(3, [])
+        v4 = Vertex(4, [])
+        v5 = Vertex(5, [])
 
-        e1.redirect(1, 3)
+        e1 = el.add(v1, v2)
+        e2 = el.add(v2, v5)
+        e3 = el.add(v3, v4)
+
+        e1.redirect(v1, v3)
 
         self.assertEqual(el.size(), 3)

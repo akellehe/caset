@@ -47,7 +47,7 @@ class TestSimplex(unittest.TestCase):
             face.validate()
             self.assertEqual(len(face.getVertices()), 4)
             self.assertEqual(len(face.getEdges()), 6)
-            self.assertEqual(len(set([(e.getSourceId(), e.getTargetId()) for e in face.getEdges()])), 6)
+            self.assertEqual(len(set([(e.getSource().getId(), e.getTarget().getId()) for e in face.getEdges()])), 6)
             self.assertEqual(len(face.getCofaces()), 1)
             if face.isTimelike():
                 nTimelike += 1
@@ -56,7 +56,7 @@ class TestSimplex(unittest.TestCase):
                     self.assertTrue(timelikeFace.isTimelike())
                     self.assertEqual(len(timelikeFace.getVertices()), 3)
                     self.assertEqual(len(timelikeFace.getEdges()), 3)
-                    self.assertEqual(len(set([(e.getSourceId(), e.getTargetId()) for e in timelikeFace.getEdges()])), 3)
+                    self.assertEqual(len(set([(e.getSource().getId(), e.getTarget().getId()) for e in timelikeFace.getEdges()])), 3)
                     self.assertEqual(len(timelikeFace.getCofaces()), 1)
 
         self.assertEqual(nTimelike, 1)
@@ -162,7 +162,7 @@ class TestSimplex(unittest.TestCase):
 
         f1, f2, f3, f4, f5 = simplex41.getFacets()
         v1, v2, v3, v4 = sorted(v.getId() for v in f1.getVertices())
-        e1, e2, e3, e4, e5, e6 = sorted([(e.getSourceId(), e.getTargetId()) for e in f1.getEdges()])
+        e1, e2, e3, e4, e5, e6 = sorted([(e.getSource().getId(), e.getTarget().getId()) for e in f1.getEdges()])
 
         """
 (Pdb) e1
@@ -381,16 +381,6 @@ class TestSimplex(unittest.TestCase):
             print('validating', i)
             f.validate()
 
-    def test_nested_get_edges(self):
-        st = Spacetime()
-        unattached = st.createSimplex((1, 2))
-        for e1 in unattached.getEdges():
-            for e2 in unattached.getEdges():
-                print(e1, e2)
-
-        for e1 in unattached.nestedGetEdges():
-            print(e1)
-
     def test_replace_vertex(self):
         """
         This method does not change edge assignments!
@@ -401,7 +391,7 @@ class TestSimplex(unittest.TestCase):
 
         v12 = s12.getVertices()[0]
         v21 = s21.getVertices()[0]
-        s12.replaceVertex(v12, v21, st.getEdgeList())
+        s12.replaceVertex(v12, v21)
 
         self.assertEqual(s21.getVertices()[0], s12.getVertices()[0])
 
