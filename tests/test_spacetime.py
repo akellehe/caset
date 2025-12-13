@@ -45,17 +45,17 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(v2.getId(), 2)
         self.assertEqual(v3.getId(), 3)
 
-        e1 = st.createEdge(v1.getId(), v2.getId())
-        e2 = st.createEdge(v2.getId(), v3.getId())
+        e1 = st.createEdge(v1, v2)
+        e2 = st.createEdge(v2, v3)
 
         self.assertNotEqual(v1, v2)
         self.assertNotEqual(v2, v3)
         self.assertNotEqual(e1, e2)
 
-        self.assertEqual(e1.getSourceId(), v1.getId())
-        self.assertEqual(e1.getTargetId(), v2.getId())
-        self.assertEqual(e2.getSourceId(), v2.getId())
-        self.assertEqual(e2.getTargetId(), v3.getId())
+        self.assertEqual(e1.getSource().getId(), v1.getId())
+        self.assertEqual(e1.getTarget().getId(), v2.getId())
+        self.assertEqual(e2.getSource().getId(), v2.getId())
+        self.assertEqual(e2.getTarget().getId(), v3.getId())
         print('done')
 
     def test_create_simplex(self):
@@ -67,41 +67,41 @@ class TestSpacetime(unittest.TestCase):
 
         v1, v2, v3, v4, v5 = simplex.getVertices()
         a, b, c, d = v1.getOutEdges()
-        self.assertEqual(a.getSourceId(), v1.getId())
-        self.assertEqual(b.getSourceId(), v1.getId())
-        self.assertEqual(c.getSourceId(), v1.getId())
-        self.assertEqual(d.getSourceId(), v1.getId())
+        self.assertEqual(a.getSource().getId(), v1.getId())
+        self.assertEqual(b.getSource().getId(), v1.getId())
+        self.assertEqual(c.getSource().getId(), v1.getId())
+        self.assertEqual(d.getSource().getId(), v1.getId())
         self.assertEqual(len(v1.getEdges()), 4)
 
         a, b, c = v2.getOutEdges()
-        self.assertEqual(a.getSourceId(), v2.getId())
-        self.assertEqual(b.getSourceId(), v2.getId())
-        self.assertEqual(c.getSourceId(), v2.getId())
+        self.assertEqual(a.getSource().getId(), v2.getId())
+        self.assertEqual(b.getSource().getId(), v2.getId())
+        self.assertEqual(c.getSource().getId(), v2.getId())
         self.assertEqual(len(v2.getEdges()), 4)
         a, = v2.getInEdges()
-        self.assertEqual(a.getTargetId(), v2.getId())
+        self.assertEqual(a.getTarget().getId(), v2.getId())
 
         a, b = v3.getOutEdges()
         c, d = v3.getInEdges()
-        self.assertEqual(a.getSourceId(), v3.getId())
-        self.assertEqual(b.getSourceId(), v3.getId())
-        self.assertEqual(c.getTargetId(), v3.getId())
-        self.assertEqual(d.getTargetId(), v3.getId())
+        self.assertEqual(a.getSource().getId(), v3.getId())
+        self.assertEqual(b.getSource().getId(), v3.getId())
+        self.assertEqual(c.getTarget().getId(), v3.getId())
+        self.assertEqual(d.getTarget().getId(), v3.getId())
         self.assertEqual(len(v3.getEdges()), 4)
 
         a, = v4.getOutEdges()
         b, c, d = v4.getInEdges()
-        self.assertEqual(a.getSourceId(), v4.getId())
-        self.assertEqual(b.getTargetId(), v4.getId())
-        self.assertEqual(c.getTargetId(), v4.getId())
-        self.assertEqual(d.getTargetId(), v4.getId())
+        self.assertEqual(a.getSource().getId(), v4.getId())
+        self.assertEqual(b.getTarget().getId(), v4.getId())
+        self.assertEqual(c.getTarget().getId(), v4.getId())
+        self.assertEqual(d.getTarget().getId(), v4.getId())
         self.assertEqual(len(v4.getEdges()), 4)
 
         a, b, c, d = v5.getInEdges()
-        self.assertEqual(a.getTargetId(), v5.getId())
-        self.assertEqual(b.getTargetId(), v5.getId())
-        self.assertEqual(c.getTargetId(), v5.getId())
-        self.assertEqual(d.getTargetId(), v5.getId())
+        self.assertEqual(a.getTarget().getId(), v5.getId())
+        self.assertEqual(b.getTarget().getId(), v5.getId())
+        self.assertEqual(c.getTarget().getId(), v5.getId())
+        self.assertEqual(d.getTarget().getId(), v5.getId())
         self.assertEqual(len(v5.getEdges()), 4)
 
         self.assertEqual(len(st.getSimplicesWithOrientation((2, 3))), 1)
@@ -110,14 +110,6 @@ class TestSpacetime(unittest.TestCase):
         simplex2 = st.createSimplex((2, 3))
         self.assertEqual(len(st.getSimplicesWithOrientation((2, 3))), 2)
         self.assertEqual(len(st.getSimplicesWithOrientation((1, 1))), 0)
-
-    @unittest.skip
-    def test_euclidean_embedding(self):
-        st = Spacetime()
-        simplex14 = st.createSimplex((1, 4))
-        simplex23 = st.createSimplex((2, 3))
-        st.embedEuclidean()
-        vertices = st.getVertexList().toVector()
 
     def test_attaching_faces4D(self):
         st = Spacetime()
@@ -137,12 +129,12 @@ class TestSpacetime(unittest.TestCase):
         allVertices = [v.getId() for v in simplex14.getVertices() + simplex23.getVertices()]
         self.assertEqual(len(allVertices), len(set(allVertices)))
 
-        allEdges = [(e.getSourceId(), e.getTargetId()) for e in simplex14.getEdges() + simplex23.getEdges()]
+        allEdges = [(e.getSource().getId(), e.getTarget().getId()) for e in simplex14.getEdges() + simplex23.getEdges()]
         self.assertEqual(len(simplex14.getEdges()), len(set(simplex14.getEdges())))
         self.assertEqual(len(simplex23.getEdges()), len(set(simplex23.getEdges())))
 
-        edges23 = {(e.getSourceId(), e.getTargetId()) for e in simplex23.getEdges()}
-        edges14 = {(e.getSourceId(), e.getTargetId()) for e in simplex14.getEdges()}
+        edges23 = {(e.getSource().getId(), e.getTarget().getId()) for e in simplex23.getEdges()}
+        edges14 = {(e.getSource().getId(), e.getTarget().getId()) for e in simplex14.getEdges()}
 
         self.assertTrue(edges23.isdisjoint(edges14))
         self.assertEqual(len(allEdges), len(set(allEdges)))
@@ -154,8 +146,8 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(totalEdgesBefore, 20)
 
         for edge in firstEdgeList.toVector():
-            source = firstVertexList.get(edge.getSourceId())
-            target = firstVertexList.get(edge.getTargetId())
+            source = firstVertexList.get(edge.getSource().getId())
+            target = firstVertexList.get(edge.getTarget().getId())
             self.assertIsNotNone(source)
             self.assertIsNotNone(target)
 
@@ -199,12 +191,12 @@ class TestSpacetime(unittest.TestCase):
 
         leftVerticesBefore = [v.getId() for v in left.getVertices()]
         self.assertEqual(len(leftVerticesBefore), 4)
-        leftEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        leftEdgesBefore = [(e.getSource().getId(), e.getTarget().getId()) for e in left.getEdges()]
         self.assertEqual(len(leftEdgesBefore), 6)
 
         rightVerticesBefore = [v.getId() for v in right.getVertices()]
         self.assertEqual(len(rightVerticesBefore), 4)
-        rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        rightEdgesBefore = [(e.getSource().getId(), e.getTarget().getId()) for e in right.getEdges()]
         self.assertEqual(len(rightEdgesBefore), 6)
 
         updated, succeeded = st.causallyAttachFaces(left, right)
@@ -219,19 +211,19 @@ class TestSpacetime(unittest.TestCase):
         self.assertIs(firstVertexList, secondVertexList)
         self.assertIs(firstEdgeList, secondEdgeList)
         for edge in secondEdgeList.toVector():
-            source = secondVertexList.get(edge.getSourceId())
-            target = secondVertexList.get(edge.getTargetId())
+            source = secondVertexList.get(edge.getSource().getId())
+            target = secondVertexList.get(edge.getTarget().getId())
             self.assertIsNotNone(source)
             self.assertIsNotNone(target)
 
         leftVerticesAfter = [v.getId() for v in left.getVertices()]
         self.assertEqual(len(leftVerticesAfter), 4)
-        leftEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        leftEdgesAfter = [(e.getSource().getId(), e.getTarget().getId()) for e in left.getEdges()]
         self.assertEqual(len(leftEdgesAfter), 6)
 
         rightVerticesAfter = [v.getId() for v in right.getVertices()]
         self.assertEqual(len(rightVerticesAfter), 4)
-        rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        rightEdgesAfter = [(e.getSource().getId(), e.getTarget().getId()) for e in right.getEdges()]
         self.assertEqual(len(rightEdgesAfter), 6)
 
         shared = {v for v in leftVerticesAfter} & {v for v in rightVerticesAfter}
@@ -239,7 +231,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(leftVerticesAfter), len(leftVerticesBefore))
 
         totalVerticesAfter = set([v.getId() for v in secondVertexList.toVector()])
-        totalEdgesAfter = set([(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()])
+        totalEdgesAfter = set([(e.getSource().getId(), e.getTarget().getId()) for e in secondEdgeList.toVector()])
 
         self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 4)
         self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 6)
@@ -263,12 +255,12 @@ class TestSpacetime(unittest.TestCase):
         allVertices = [v.getId() for v in simplex12.getVertices() + simplex21.getVertices()]
         self.assertEqual(len(allVertices), len(set(allVertices)))
 
-        allEdges = [(e.getSourceId(), e.getTargetId()) for e in simplex12.getEdges() + simplex21.getEdges()]
+        allEdges = [(e.getSource().getId(), e.getTarget().getId()) for e in simplex12.getEdges() + simplex21.getEdges()]
         self.assertEqual(len(simplex12.getEdges()), len(set(simplex21.getEdges())))
         self.assertEqual(len(simplex12.getEdges()), len(set(simplex21.getEdges())))
 
-        edges12 = {(e.getSourceId(), e.getTargetId()) for e in simplex12.getEdges()}
-        edges21 = {(e.getSourceId(), e.getTargetId()) for e in simplex21.getEdges()}
+        edges12 = {(e.getSource().getId(), e.getTarget().getId()) for e in simplex12.getEdges()}
+        edges21 = {(e.getSource().getId(), e.getTarget().getId()) for e in simplex21.getEdges()}
 
         self.assertTrue(edges21.isdisjoint(edges12))
         self.assertEqual(len(allEdges), len(set(allEdges)))
@@ -280,8 +272,8 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(totalEdgesBefore, 6)
 
         for edge in firstEdgeList.toVector():
-            source = firstVertexList.get(edge.getSourceId())
-            target = firstVertexList.get(edge.getTargetId())
+            source = firstVertexList.get(edge.getSource().getId())
+            target = firstVertexList.get(edge.getTarget().getId())
             self.assertIsNotNone(source)
             self.assertIsNotNone(target)
 
@@ -325,12 +317,12 @@ class TestSpacetime(unittest.TestCase):
 
         leftVerticesBefore = [v.getId() for v in left.getVertices()]
         self.assertEqual(len(leftVerticesBefore), 2)
-        leftEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        leftEdgesBefore = [(e.getSource().getId(), e.getTarget().getId()) for e in left.getEdges()]
         self.assertEqual(len(leftEdgesBefore), 1)
 
         rightVerticesBefore = [v.getId() for v in right.getVertices()]
         self.assertEqual(len(rightVerticesBefore), 2)
-        rightEdgesBefore = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        rightEdgesBefore = [(e.getSource().getId(), e.getTarget().getId()) for e in right.getEdges()]
         self.assertEqual(len(rightEdgesBefore), 1)
 
         left.validate()
@@ -347,19 +339,19 @@ class TestSpacetime(unittest.TestCase):
         self.assertIs(firstVertexList, secondVertexList)
         self.assertIs(firstEdgeList, secondEdgeList)
         for edge in secondEdgeList.toVector():
-            source = secondVertexList.get(edge.getSourceId())
-            target = secondVertexList.get(edge.getTargetId())
+            source = secondVertexList.get(edge.getSource().getId())
+            target = secondVertexList.get(edge.getTarget().getId())
             self.assertIsNotNone(source)
             self.assertIsNotNone(target)
 
         leftVerticesAfter = [v.getId() for v in left.getVertices()]
         self.assertEqual(len(leftVerticesAfter), 2)
-        leftEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in left.getEdges()]
+        leftEdgesAfter = [(e.getSource().getId(), e.getTarget().getId()) for e in left.getEdges()]
         self.assertEqual(len(leftEdgesAfter), 1)
 
         rightVerticesAfter = [v.getId() for v in right.getVertices()]
         self.assertEqual(len(rightVerticesAfter), 2)
-        rightEdgesAfter = [(e.getSourceId(), e.getTargetId()) for e in right.getEdges()]
+        rightEdgesAfter = [(e.getSource().getId(), e.getTarget().getId()) for e in right.getEdges()]
         self.assertEqual(len(rightEdgesAfter), 1)
 
         shared = {v for v in leftVerticesAfter} & {v for v in rightVerticesAfter}
@@ -367,7 +359,7 @@ class TestSpacetime(unittest.TestCase):
         self.assertEqual(len(leftVerticesAfter), len(leftVerticesBefore))
 
         totalVerticesAfter = set([v.getId() for v in secondVertexList.toVector()])
-        totalEdgesAfter = set([(e.getSourceId(), e.getTargetId()) for e in secondEdgeList.toVector()])
+        totalEdgesAfter = set([(e.getSource().getId(), e.getTarget().getId()) for e in secondEdgeList.toVector()])
 
         self.assertEqual(len(totalVerticesAfter), len(totalVerticesBefore) - 2)
         self.assertEqual(len(totalEdgesAfter), len(totalEdgesBefore) - 1)
@@ -376,12 +368,14 @@ class TestSpacetime(unittest.TestCase):
         st = Spacetime()
 
         vertices = []
-        for i in range(10):
+        for i in range(1, 11):
             vertices.append(st.createVertex(i))
 
         edges = []
-        for i in range(0, 9, 2):
-            edges.append(st.createEdge(vertices[i].getId(), vertices[i+1].getId()))
+        for i in range(0, len(vertices) - 1, 2):
+            edges.append(st.createEdge(vertices[i], vertices[i+1]))
+
+        breakpoint()
 
         components = st.getConnectedComponents()
         self.assertEqual(len(components), 5)

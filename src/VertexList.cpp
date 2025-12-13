@@ -30,6 +30,7 @@
 
 #include "Vertex.h"
 #include "VertexList.h"
+#include "Simplex.h"
 
 namespace caset {
     std::shared_ptr<Vertex> VertexList::get(IdType id) {
@@ -98,8 +99,25 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
       add(toAdd);
     }
 
-    void VertexList::remove(const std::shared_ptr<Vertex> &vertex) noexcept {
+    void VertexList::remove(const std::shared_ptr<Vertex> &vertex) {
+#ifdef CASET_DEBUG
       CLOG(INFO_LEVEL, "Erasing vertex: ", std::to_string(vertex->getId()));
+      for (const auto &simplex : vertex->getSimplices()) {
+        for (const auto &e : simplex->getEdges()) {
+          if (e->hasVertex(vertex)) {
+            throw std::runtime_error("Cannot remove a vertex from the VertexList that still has referents: " + simplex->toString() + " at edge " + e->toString());
+          }
+        }
+        if (simplex->hasVertex(vertex)) {
+          throw std::runtime_error("Cannot remove a vertex from the VertexList that still has referents: " + simplex->toString());
+        }
+      }
+      for (const auto &e : vertex->getEdges()) {
+        if (e->hasVertex(vertex)) {
+          throw std::runtime_error("Cannot remove a vertex from the VertexList that still has referents: " + e->toString());
+        }
+      }
+#endif
       vertexList.erase(vertex->getId());
     }
 

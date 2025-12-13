@@ -134,11 +134,13 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
       timelikeSquaredLength = -alpha;
     }
     for (const auto &existingVertex : vertices) {
+      CLOG(DEBUG_LEVEL, "Adding edge to edgelist...");
       EdgeRawPtr edge = edgeList->add(
         existingVertex,
         newVertex,
         timelikeSquaredLength
         );
+        CLOG(DEBUG_LEVEL, "done...");
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -154,9 +156,13 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
     for (const auto &existingVertex : vertices) {
       EdgeRawPtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
+        CLOG(DEBUG_LEVEL, "Adding edge to edgelist (2)...");
         edge = edgeList->add(existingVertex, newVertex, squaredLength);
+        CLOG(DEBUG_LEVEL, "done...");
       } else {
+        CLOG(DEBUG_LEVEL, "Adding edge to edgelist (3)...");
         edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
+        CLOG(DEBUG_LEVEL, "done...");
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -313,14 +319,14 @@ void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr at
     simplex->replaceVertex(unattached, attached);
 
     // To finish updating state; we need to remove defunct edges from the simplex.
-    for (const auto &e : simplex->getEdges()) {
-      if (!simplex->hasVertex(e->getSource()->getId())) {
-        CLOG(DEBUG_LEVEL, "Simplex was missing source vertex for an edge: ", e->toString(), " source: ", e->getSource()->toString());
-      }
-      if (!simplex->hasVertex(e->getTarget()->getId())) {
-        CLOG(DEBUG_LEVEL, "Simplex was missing target vertex for an edge: ", e->toString(), " target: ", e->getTarget()->toString());
-      }
-    }
+    // for (const auto &e : simplex->getEdges()) {
+      // if (!simplex->hasVertex(e->getSource())) {
+        // CLOG(DEBUG_LEVEL, "Simplex was missing source vertex for an edge: ", e->toString(), " source: ", e->getSource()->toString());
+      // }
+      // if (!simplex->hasVertex(e->getTarget())) {
+        // CLOG(DEBUG_LEVEL, "Simplex was missing target vertex for an edge: ", e->toString(), " target: ", e->getTarget()->toString());
+      // }
+    // }
   }
 
   // We'll definitely have a scenario where we e.g. replace vertex A on edge \f$ e_1 = \{A \rightarrow C\} \f$ with
@@ -347,10 +353,6 @@ void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr at
   }
 
   if (unattached->degree() == 0) vertexList->remove(unattached);
-#if CASET_DEBUG
-  unattachedSimplex->validate();
-  attachedSimplex->validate();
-#endif
 }
 
 std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(

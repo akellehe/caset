@@ -42,7 +42,7 @@ class VertexList {
     std::shared_ptr<Vertex> get(IdType id);
     std::size_t size() noexcept;
     std::vector<std::shared_ptr<Vertex>> toVector() const noexcept;
-    void remove(const std::shared_ptr<Vertex> &vertex) noexcept;
+    void remove(const std::shared_ptr<Vertex> &vertex);
     void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd);
   private:
     std::unordered_map<std::uint64_t, std::shared_ptr<Vertex>> vertexList{};
