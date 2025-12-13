@@ -110,10 +110,24 @@ class Simplex;
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
-    bool Edge::hasVertex(VertexPtr vertex) const {
+    bool Edge::hasVertex(const Vertex *vertex) const {
       auto vid = vertex->getId();
       if (getSource()->getId() == vid || getTarget()->getId() == vid) return true;
       return false;
+    }
+
+    void Edge::assertUnused() const {
+      for (const auto &simplex : getSimplices()) {
+        if (simplex->hasEdge(this)) {
+          throw std::runtime_error("Edge is currently in use by a simplex.");
+        }
+      }
+      if (source->hasEdge(this)) {
+        throw std::runtime_error("Edge is in use by it's source vertex");
+      }
+      if (target->hasEdge(this)) {
+        throw std::runtime_error("Edge is in use by it's target vertex");
+      }
     }
 
     ///

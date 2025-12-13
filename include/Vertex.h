@@ -139,6 +139,9 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         void addSimplex(Simplex *simplex);
         void removeSimplex(Simplex *simplex);
 
+        void assertUnused() const;
+        [[nodiscard]] bool const hasEdge(const Edge *edge) const;
+
     private:
         std::unordered_set<Edge *> outEdges{};
         std::unordered_set<Edge *> inEdges{};

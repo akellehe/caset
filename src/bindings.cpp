@@ -176,7 +176,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
       .def("getVertices", &Simplex::getVertices)
       .def("getVerticesWithParityTo", &Simplex::getVerticesWithParityTo, py::arg("other"))
-      .def("hasVertex", py::overload_cast<VertexPtr>(&Simplex::hasVertex), py::arg("vertex"))
+      .def("hasVertex", py::overload_cast<const Vertex *>(&Simplex::hasVertex), py::arg("vertex"))
       .def("hasVertex", py::overload_cast<const IdType>(&Simplex::hasVertex), py::arg("vertexId"))
       .def("isTimelike", &Simplex::isTimelike)
       .def("replaceVertex", &Simplex::replaceVertex, py::arg("oldVertex"), py::arg("newVertex"))

@@ -317,16 +317,6 @@ void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr at
     // Replacing the vertex handles updating the state associated with the Simplex on the Vertex, but not the state
     // associated with the Vertex on the Simplex.
     simplex->replaceVertex(unattached, attached);
-
-    // To finish updating state; we need to remove defunct edges from the simplex.
-    // for (const auto &e : simplex->getEdges()) {
-      // if (!simplex->hasVertex(e->getSource())) {
-        // CLOG(DEBUG_LEVEL, "Simplex was missing source vertex for an edge: ", e->toString(), " source: ", e->getSource()->toString());
-      // }
-      // if (!simplex->hasVertex(e->getTarget())) {
-        // CLOG(DEBUG_LEVEL, "Simplex was missing target vertex for an edge: ", e->toString(), " target: ", e->getTarget()->toString());
-      // }
-    // }
   }
 
   // We'll definitely have a scenario where we e.g. replace vertex A on edge \f$ e_1 = \{A \rightarrow C\} \f$ with
@@ -341,8 +331,6 @@ void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr at
 
   // Now we need to re-key the oldEdges to their keys match newEdges.
   for (const auto &updateKey : *updateKeys) {
-    // How can a key to which we're updating from an old key already exist in the edgeList?
-    // Is it possible to have an undetected duplicate?
     edgeList->updateKey(updateKey);
   }
 

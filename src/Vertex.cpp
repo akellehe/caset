@@ -177,6 +177,28 @@ Vertex::moveEdgesToForPython(const std::shared_ptr<Vertex> &vertex) {
   return returnValue;
 }
 
+bool const Vertex::hasEdge(const Edge *edge) const {
+  for (const auto &inEdge : inEdges) {
+    if (edge == inEdge) return true;
+  }
+  for (const auto &outEdge : outEdges) {
+    if (outEdge == edge) return true;
+  }
+  return false;
+}
+
+void Vertex::assertUnused() const {
+  for (const auto &simplex : getSimplices()) {
+    for (const auto &edge : simplex->getEdges()) {
+      assert(!edge->hasVertex(this));
+    }
+    assert(!simplex->hasVertex(this));
+  }
+  for (const auto &edge : getEdges()) {
+    assert(!edge->hasVertex(this));
+  }
+}
+
 void Vertex::addSimplex(Simplex *simplex) {
 #if CASET_DEBUG
   for (const auto &simp : simplices) {

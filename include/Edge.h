@@ -75,6 +75,8 @@ class Edge {
     [[nodiscard]] double getSquaredLength() const noexcept;
     [[nodiscard]] std::string toString() const noexcept;
 
+    void assertUnused() const;
+
     void copyInPlaceTo(Edge *other);
 
     void replaceOnReferents(EdgeRawPtr replacement);
@@ -92,7 +94,7 @@ class Edge {
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
-    bool hasVertex(VertexPtr vertex) const;
+    bool hasVertex(const Vertex *vertex) const;
 
     ///
     /// @param from the ID of a vertex to or from which this Edge should no longer point.

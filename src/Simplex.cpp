@@ -49,7 +49,7 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
       faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
       faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
       for (const auto e : getEdges()) {
-        if (!e->hasVertex(skipVertex)) faceEdges.push_back(e);
+        if (!e->hasVertex(skipVertex.get())) faceEdges.push_back(e);
       }
       // TODO: Simplex::create should probably only be called by Spacetime, which holds canonical simplices.
       std::unique_ptr<Simplex> facet = Simplex::create(faceVertices, faceEdges);
@@ -224,9 +224,16 @@ void Simplex::addCoface(SimplexRawPtr simplex) {
   return false;
 }
 
-[[nodiscard]] bool Simplex::hasVertex(VertexPtr vertex) {
+[[nodiscard]] bool Simplex::hasVertex(const Vertex *vertex) {
   for (const auto &v : vertices)
-    if (v == vertex) return true;
+    if (v.get() == vertex) return true;
+  return false;
+}
+
+[[nodiscard]] bool Simplex::hasEdge(const Edge *edge) const {
+  for (const auto &e : edges) {
+    if (e == edge) return true;
+  }
   return false;
 }
 

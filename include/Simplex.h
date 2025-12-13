@@ -374,7 +374,8 @@ class Simplex {
     // void computeEdges();
 
     [[nodiscard]] bool hasVertex(const IdType vertexId);
-    [[nodiscard]] bool hasVertex(VertexPtr vertex);
+    [[nodiscard]] bool hasVertex(const Vertex *vertex);
+    [[nodiscard]] bool hasEdge(const Edge *edge) const;
 
     void validate() const;
 

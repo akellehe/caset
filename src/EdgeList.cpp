@@ -99,6 +99,9 @@ namespace caset {
     std::unique_ptr<Edge> EdgeList::remove(const EdgeKey &edgeKey) noexcept {
       auto it = edgeList.find(edgeKey);
       if (it == edgeList.end()) return nullptr;
+#ifdef CASET_DEBUG
+      it->second->assertUnused();
+#endif
       std::unique_ptr<Edge> removed = std::move(it->second);
       edgeList.erase(it);
       return removed;
