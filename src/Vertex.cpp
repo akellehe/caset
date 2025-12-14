@@ -22,8 +22,26 @@
 #include "Vertex.h"
 #include "EdgeList.h"
 #include "VertexList.h"
+#include "EdgeKey.h"
+#include "Edge.h"
+#include "ForwardDeclarations.h"
+#include "Simplex.h"
+#include "Fingerprint.h"
+#include "spacetime/Spacetime.h"
+#include "utils.h"
+#include <iomanip>
+#include <sstream>
 
 namespace caset {
+Vertex::Vertex() noexcept { id = 0; }
+Vertex::Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords),
+  fingerprint({id_}) {
+}
+Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) {
+}
+
+std::uint64_t Vertex::getId() const noexcept { return id; }
+
 [[nodiscard]] double Vertex::getTime() const {
   if (coordinates.empty()) {
     return 0;
@@ -47,8 +65,7 @@ bool Vertex::operator==(const Vertex &vertex) const noexcept {
 }
 
 std::vector<double>
-Vertex::getCoordinates() const
-{
+Vertex::getCoordinates() const {
   if (coordinates.empty()) {
     throw std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
   }
@@ -56,146 +73,220 @@ Vertex::getCoordinates() const
 }
 
 void
-Vertex::setCoordinates(const std::vector<double> &coords) noexcept
-{
+Vertex::setCoordinates(const std::vector<double> &coords) noexcept {
   coordinates = coords;
 }
 
-[[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> >
-Vertex::moveTo(const std::shared_ptr<Vertex> &vertex)
-{
-  if (outEdges.empty()) {
-    throw std::runtime_error("Cannot execute move; outEdges is empty!");
-  }
-  std::shared_ptr<Edge> edge = std::make_shared<Edge>(getId(), vertex->getId());
-  if (!outEdges.contains(edge)) {
-    throw std::runtime_error("No edge to this vertex exists.");
-  }
-  return std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> >({
-      *outEdges.find(edge), vertex
-  });
-}
-
-std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
+EdgePtrSet
 Vertex::getEdges() const noexcept {
-  std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> edges;
+  EdgePtrSet edges;
   edges.reserve(inEdges.size() + outEdges.size());
   edges.insert(inEdges.begin(), inEdges.end());
   edges.insert(outEdges.begin(), outEdges.end());
   return edges;
 }
 
-std::shared_ptr<Edge>
-Vertex::getEdge(const EdgeKey &key)
-{
-  const auto testEdge = std::make_shared<Edge>(key.first, key.second);
-  if (inEdges.contains(testEdge)) return *inEdges.find(testEdge);
-  if (outEdges.contains(testEdge)) return *outEdges.find(testEdge);
+EdgePtr Vertex::getEdge(const EdgePtr &edge) {
+  auto foundIn = inEdges.find(edge);
+  if (foundIn != inEdges.end()) {
+    return *foundIn;
+  }
+  auto foundOut = outEdges.find(edge);
+  if (foundOut != outEdges.end()) {
+    return *foundOut;
+  }
   return nullptr;
 }
 
-std::shared_ptr<Edge> Vertex::getEdge(const EdgePtr &edge)
-{
-  if (inEdges.contains(edge)) return *inEdges.find(edge);
-  if (outEdges.contains(edge)) return *outEdges.find(edge);
-  return nullptr;
+std::pair<EdgePtrSet, EdgePtrSet>
+Vertex::moveEdgesToImpl(
+  const VertexPtr &recipient,
+  Spacetime *spacetime,
+  EdgeDirection direction
+) {
+#ifdef CASET_ASSERTIONS
+  if (spacetime == nullptr) {
+    throw std::runtime_error("Spacetime was null in vertex.cpp");
+  }
+#endif
+  EdgePtrSet oldEdges{};
+  EdgePtrSet newEdges{};
+
+  EdgePtrSet &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
+  const char *directionStr = (direction == EdgeDirection::In) ? "in-edge" : "out-edge";
+
+  for (auto oldEdge : edgesToMove) {
+
+    const auto &targetVertex = oldEdge->getTarget();
+    const auto &sourceVertex = oldEdge->getSource();
+
+    if (direction == EdgeDirection::In) {
+#ifdef CASET_ASSERTIONS
+      if (sourceVertex.get() == this) throw std::runtime_error("sourceVertex was this");
+#endif
+      const SimplexPtrSet &outEdgeOwners = sourceVertex->removeOutEdge(oldEdge);
+    } else if (direction == EdgeDirection::Out) {
+#ifdef CASET_ASSERTIONS
+      if (targetVertex.get() == this) throw std::runtime_error("targetVertex was this");
+#endif
+      const SimplexPtrSet &inEdgeOwners = targetVertex->removeInEdge(oldEdge);
+    }
+
+    spacetime->getEdgeList()->remove(oldEdge);
+
+    // For inEdges: redirect edge to point TO the new vertex (new source = vertex)
+    // For outEdges: redirect edge to point FROM the new vertex (new target = vertex)
+    const auto &newEdge = (direction == EdgeDirection::In)
+                            ? spacetime->createEdge(sourceVertex, recipient, oldEdge->getSquaredLength())
+                            : spacetime->createEdge(recipient, targetVertex, oldEdge->getSquaredLength());
+
+    newEdges.insert(newEdge);
+  }
+  edgesToMove.clear();
+  return {oldEdges, newEdges};
 }
 
-std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
+std::pair<EdgePtrSet, EdgePtrSet>
 Vertex::moveInEdgesTo(
-  const std::shared_ptr<Vertex> &vertex,
-  const std::shared_ptr<EdgeList> &edgeList,
-  const std::shared_ptr<VertexList> &vertexList
-  ) {
-  std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-  std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-  for (const auto &edge : inEdges) {
-    CLOG(DEBUG_LEVEL, "Moving in-edge ", edge->toString(), " to ", vertex->toString());
-    oldEdges->insert(edge->getKey());
-    edgeList->remove(edge);
-    const auto sourceVertex = vertexList->get(edge->getSourceId());
-    sourceVertex->removeOutEdge(edge);
-    CLOG(DEBUG_LEVEL, "Changing target vertex from ", std::to_string(edge->getTargetId()), " to ", std::to_string(vertex->getId()));
-    edge->replaceTargetVertex(vertex->getId());
-    newEdges->insert(edge->getKey());
-    vertex->addInEdge(edgeList->add(edge));
-    sourceVertex->addOutEdge(edgeList->get(edge->getKey()));
+  const VertexPtr &vertex,
+  Spacetime *spacetime
+) {
+  return moveEdgesToImpl(vertex, spacetime, EdgeDirection::In);
+}
+
+std::pair<EdgePtrSet, EdgePtrSet>
+Vertex::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
+#ifdef CASET_ASSERTIONS
+  if (spacetime == nullptr) {
+    throw std::runtime_error("Spacetime was null in vertex.cpp (2)");
   }
-  inEdges.clear();
+#endif
+  EdgePtrSet oldEdges{};
+  EdgePtrSet newEdges{};
+  const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, spacetime);
+  const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, spacetime);
+  oldEdges.insert(oldInEdges.begin(), oldInEdges.end());
+  oldEdges.insert(oldOutEdges.begin(), oldOutEdges.end());
+  newEdges.insert(newInEdges.begin(), newInEdges.end());
+  newEdges.insert(newOutEdges.begin(), newOutEdges.end());
   return {oldEdges, newEdges};
 }
 
-std::pair<EdgeIdSet, EdgeIdSet>
-Vertex::moveEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  EdgeIdSet oldEdges = EdgeIdSet{};
-  EdgeIdSet newEdges = EdgeIdSet{};
-  const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, edgeList, vertexList);
-  const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, edgeList, vertexList);
-  oldEdges.insert(oldInEdges->begin(), oldInEdges->end());
-  oldEdges.insert(oldOutEdges->begin(), oldOutEdges->end());
-  newEdges.insert(newInEdges->begin(), newInEdges->end());
-  newEdges.insert(newOutEdges->begin(), newOutEdges->end());
-  return {oldEdges, newEdges};
+std::pair<EdgePtrSet, EdgePtrSet>
+Vertex::moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
+  return moveEdgesToImpl(vertex, spacetime, EdgeDirection::Out);
 }
 
-std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-Vertex::moveOutEdgesTo(const std::shared_ptr<Vertex> &vertex, const std::shared_ptr<EdgeList> &edgeList, const std::shared_ptr<VertexList> &vertexList) {
-  std::shared_ptr<EdgeIdSet> oldEdges = std::make_shared<EdgeIdSet>();
-  std::shared_ptr<EdgeIdSet> newEdges = std::make_shared<EdgeIdSet>();
-  std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> newOutEdges{};
-  for (const auto &edge : outEdges) {
-    CLOG(DEBUG_LEVEL, "Moving out-edge ", edge->toString(), " to ", vertex->toString());
-    oldEdges->insert(edge->getKey());
-    edgeList->remove(edge);
-    const auto targetVertex = vertexList->get(edge->getTargetId());
-    targetVertex->removeInEdge(edge);
-    CLOG(DEBUG_LEVEL, "Changing source vertex from ", std::to_string(edge->getSourceId()), " to ", std::to_string(vertex->getId()));
-    edge->replaceSourceVertex(vertex->getId());
-    newEdges->insert(edge->getKey());
-    vertex->addOutEdge(edgeList->add(edge));
-    targetVertex->addInEdge(edgeList->get(edge->getKey()));
-  }
-  outEdges.clear();
-  return {oldEdges, newEdges};
-}
-
-void Vertex::addSimplex(const std::shared_ptr<Simplex> &simplex) {
-  CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
-#if CASET_DEBUG
+void Vertex::checkDuplicates(std::string msg) const {
+  std::unordered_set<std::uint64_t> seen{};
   for (const auto &simp : simplices) {
-    if (simp == simplex) {
-      CLOG(ERROR_LEVEL, "You tried to add a simplex more than once!");
-      throw std::runtime_error("you tried to add a simplex more than once.");
+    if (seen.contains(simp->fingerprint.fingerprint())) {
+      CLOG(CRITICAL_LEVEL, "Simplex was duplicated for vertex!!!! " + msg);
+      throw std::runtime_error(msg);
     }
+    seen.insert(simp->fingerprint.fingerprint());
   }
-#endif
-  simplices.push_back(simplex);
 }
 
-void Vertex::removeSimplex(const std::shared_ptr<Simplex> &simplex) {
-  for (auto i=0; i<simplices.size(); i++) {
-    if (simplex == simplices[i]) {
-      simplices.erase(simplices.begin() + i);
-      return;
-    }
+bool Vertex::addSimplex(const SimplexPtr &simplex) {
+  // CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
+#if CASET_ASSERTIONS
+  if (simplex == nullptr || simplex.get() == nullptr) {
+    CLOG(CRITICAL_LEVEL, "You passed a null simplex!");
+    throw std::runtime_error("You passed a null simplex!");
   }
-#if CASET_DEBUG
-  throw std::runtime_error("You tried to remove a simplex that the Vertex does not contain!");
+  if (this == nullptr) {
+    CLOG(CRITICAL_LEVEL, "vertex is null!");
+    throw std::runtime_error("vertex is null!");
+  }
+  checkDuplicates("Duplicated before emplacing a new simplex.");
 #endif
+  const auto [it, inserted] = simplices.emplace(simplex);
+#ifdef CASET_ASSERTIONS
+  checkDuplicates("Duplicated after emplacing a new simplex.");
+#endif
+  return inserted;
 }
 
-std::vector<std::shared_ptr<Simplex>>
-Vertex::getSimplices() const noexcept
-{
+bool Vertex::removeSimplex(const SimplexPtr &simplex) {
+// #if CASET_ASSERTIONS
+  // if (!simplices.contains(simplex)) {
+    // throw std::runtime_error("You attempted to remove a simplex that did not exist");
+  // }
+// #endif
+  CLOG(INFO_LEVEL, "Removing simplex: ", simplex->toString(), " from ", toString());
+  return simplices.erase(simplex) > 0;
+}
+
+SimplexPtrSet
+Vertex::getSimplices() const noexcept {
   return simplices;
 }
 
 std::string Vertex::toString() const noexcept {
   std::stringstream ss;
-  ss << "<V" << std::to_string(id) << " ";
-  ss << "(in=" << std::to_string(inEdges.size());
-  ss << ", out=" << std::to_string(outEdges.size());
-  ss << ", t=" << std::to_string(getTime()) << ")>";
-  return ss.str();
+  ss << "<V" << "_{" << std::to_string(getId()) << "}";
+  ss << "^{in=" << std::to_string(inEdges.size()) << "}";
+  ss << "_{out=" << std::to_string(outEdges.size()) << "}";
+  ss << " (t=" << std::fixed << std::setprecision(1) << getTime() << ")>";
+  return latexToUtf8(ss.str());
 }
+
+void Vertex::addInEdge(const EdgePtr &edge) noexcept {
+  inEdges.insert(edge);
+}
+
+void Vertex::addOutEdge(const EdgePtr &edge) noexcept {
+  outEdges.insert(edge);
+}
+
+SimplexPtrSet Vertex::removeInEdge(const EdgePtr &edge) noexcept {
+#ifdef CASET_ASSERTIONS
+  if (edge == nullptr) {
+    CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
+    std::abort();
+  }
+  if (!inEdges.contains(edge)) {
+    CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+    std::abort();
+  }
+#endif
+  SimplexPtrSet owners{};
+  for (const auto &simplex : simplices) {
+    if (simplex->removeEdge(edge)) {
+      owners.insert(simplex);
+    }
+  }
+  inEdges.erase(edge);
+  return owners;
+}
+
+SimplexPtrSet Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
+#ifdef CASET_ASSERTIONS
+  if (edge == nullptr) {
+    CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
+    std::abort();
+  }
+  if (!outEdges.contains(edge)) {
+    CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+    std::abort();
+  }
+#endif
+  SimplexPtrSet owners{};
+  for (const auto &simplex : simplices) {
+    if (simplex->removeEdge(edge)) {
+      owners.insert(simplex);
+    }
+  }
+  outEdges.erase(edge);
+  return owners;
+}
+
+std::size_t Vertex::degree() const noexcept { return inEdges.size() + outEdges.size(); }
+
+EdgePtrSet
+Vertex::getInEdges() const noexcept { return inEdges; }
+
+EdgePtrSet
+Vertex::getOutEdges() const noexcept { return outEdges; }
 };

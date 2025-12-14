@@ -29,15 +29,10 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
-#include <unordered_map>
-#include "Logger.h"
-#include "Edge.h"
-
+#include "ForwardDeclarations.h"
+#include "Fingerprint.h"
 
 namespace caset {
-class VertexList;
-class EdgeList;
-class Simplex;
 ///
 /// Vertices in modern lattice gauge theory have different coupling parameters. We have to add them in for strong vs
 /// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
@@ -50,13 +45,11 @@ class Simplex;
 ///
 class Vertex : public std::enable_shared_from_this<Vertex> {
     public:
-        Vertex() noexcept { id = 0; }
-        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords) {
-        }
-        explicit Vertex(const std::uint64_t id_) noexcept : id(id_) {
-        }
+        Vertex() noexcept;
+        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept;
+        explicit Vertex(const std::uint64_t id_) noexcept;
 
-        std::uint64_t getId() const noexcept { return id; }
+        std::uint64_t getId() const noexcept;
 
         ///
         /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
@@ -71,81 +64,46 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// @return
         [[nodiscard]] double getTime() const;
 
+        void checkDuplicates(std::string msg) const;
+        EdgePtr getEdge(const EdgePtr &edge);
+        EdgePtrSet getEdges() const noexcept;
+        EdgePtrSet getInEdges() const noexcept;
+        EdgePtrSet getOutEdges() const noexcept;
+        SimplexPtrSet getSimplices() const noexcept;
+        SimplexPtrSet removeInEdge(const EdgePtr &edge) noexcept;
+        SimplexPtrSet removeOutEdge(const EdgePtr &edge) noexcept;
+        bool addSimplex(const SimplexPtr &simplex);
         bool operator==(const Vertex &vertex) const noexcept;
-
+        bool removeSimplex(const SimplexPtr &simplex);
+        std::pair<EdgePtrSet, EdgePtrSet> moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        std::pair<EdgePtrSet, EdgePtrSet> moveInEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        std::pair<EdgePtrSet, EdgePtrSet> moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        std::size_t degree() const noexcept;
+        std::string toString() const noexcept;
         std::vector<double> getCoordinates() const;
-
+        void addInEdge(const EdgePtr &edge) noexcept;
+        void addOutEdge(const EdgePtr &edge) noexcept;
         void setCoordinates(const std::vector<double> &coords) noexcept;
 
-        [[nodiscard]] std::pair<std::shared_ptr<Edge>, std::shared_ptr<Vertex> > moveTo(
-            const std::shared_ptr<Vertex> &vertex);
-
-        void addInEdge(const std::shared_ptr<Edge> &edge) noexcept { inEdges.insert(edge); }
-        void addOutEdge(const std::shared_ptr<Edge> &edge) noexcept { outEdges.insert(edge); }
-        void removeInEdge(const std::shared_ptr<Edge> &edge) noexcept {
-            if (!inEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
-            inEdges.erase(edge);
-        }
-        void removeOutEdge(const std::shared_ptr<Edge> &edge) noexcept {
-            if (!outEdges.contains(edge)) CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
-            outEdges.erase(edge);
-        }
-
-        std::size_t degree() const noexcept { return inEdges.size() + outEdges.size(); }
-
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
-        getInEdges() const noexcept { return inEdges; }
-
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
-        getOutEdges() const noexcept { return outEdges; }
-
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq>
-        getEdges() const noexcept;
-
-        std::shared_ptr<Edge>
-        getEdge(const EdgeKey &key);
-
-        std::shared_ptr<Edge> getEdge(const EdgePtr &edge);
-
-        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-        moveInEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList);
-
-        std::pair<EdgeIdSet, EdgeIdSet>
-        moveEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList);
-
-        std::pair<std::shared_ptr<EdgeIdSet>, std::shared_ptr<EdgeIdSet>>
-        moveOutEdgesTo(
-            const std::shared_ptr<Vertex> &vertex,
-            const std::shared_ptr<EdgeList> &edgeList,
-            const std::shared_ptr<VertexList> &vertexList
-            );
-
-        std::string toString() const noexcept;
-
-        std::vector<std::shared_ptr<Simplex>> getSimplices() const noexcept;
-
-        void addSimplex(const std::shared_ptr<Simplex> &simplex);
-        void removeSimplex(const std::shared_ptr<Simplex> &simplex);
+        Fingerprint fingerprint;
 
     private:
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> outEdges{};
-        std::unordered_set<std::shared_ptr<Edge>, EdgeHash, EdgeEq> inEdges{};
-        std::vector<std::shared_ptr<Simplex>> simplices{};
+        enum class EdgeDirection { In, Out };
+
+        std::pair<EdgePtrSet, EdgePtrSet>
+        moveEdgesToImpl(const VertexPtr &recipient, Spacetime *spacetime, EdgeDirection direction);
+
+        EdgePtrSet outEdges{};
+        EdgePtrSet inEdges{};
+        SimplexPtrSet simplices{};
         std::uint64_t id;
         std::vector<double> coordinates{};
 };
 
-using VertexPtr = std::shared_ptr<Vertex>;
-using Vertices = std::vector<VertexPtr>;
-using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
-using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
-using VertexSet = std::unordered_set<VertexPtr>;
+// using VertexPtr = VertexPtr;
+// using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
+// using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
+// using VertexSet = std::unordered_set<VertexPtr>;
 }
 
 namespace std {

@@ -20,12 +20,19 @@
 # SOFTWARE.
 
 from pathlib import Path
-import sys
-import subprocess
-import tomllib
-import sysconfig
 import importlib
+import os
+import subprocess
+import sys
+import tomllib
+import platform
 
+
+CASET_ASSERTIONS = os.environ.get("CASET_ASSERTIONS")
+CASET_VERBOSE = os.environ.get("CASET_VERBOSE")
+CASET_ASAN = os.environ.get("CASET_ASAN")
+LD_PRELOAD = os.environ.get("LD_PRELOAD")
+CMAKE_BUILD_TYPE = os.environ.get("CMAKE_BUILD_TYPE", "Debug")
 
 def get_scikit_build_dir() -> Path:
     root = Path(__file__).resolve().parent
@@ -40,9 +47,35 @@ def get_scikit_build_dir() -> Path:
 
     return (root / template.format(wheel_tag=wheel_tag)).resolve()
 
+def clean_build_env():
+    env = os.environ.copy()
+    env.pop("LD_PRELOAD", None)
+    env.pop("ASAN_OPTIONS", None)
+    env.pop("UBSAN_OPTIONS", None)
+    return env
+
+def get_build_command(build_dir):
+    return ["cmake", "--build", str(build_dir.parent), "--parallel"]
+
+def get_configure_command(build_dir):
+    cmd = ["cmake", "-S", ".", "-B", str(build_dir.parent), "-G", "Ninja"]
+    if CMAKE_BUILD_TYPE:
+        cmd.append(f"-DCMAKE_BUILD_TYPE={CMAKE_BUILD_TYPE}")
+    if CASET_ASAN:
+        cmd.append("-DCASET_ASAN=ON")
+    if CASET_VERBOSE:
+        cmd.append("-DCASET_VERBOSE=ON")
+    if CASET_ASSERTIONS:
+        cmd.append("-DCASET_ASSERTIONS=ON")
+    return cmd
+
 def pytest_sessionstart(session):
     build_dir = get_scikit_build_dir()
-    subprocess.run(["cmake", "--build", str(build_dir.parent)], check=True)
+    env = clean_build_env()
+    if not build_dir.parent.exists():
+        print("build dir does not exist (", str(build_dir.parent), ") configuring.")
+        subprocess.run(get_configure_command(build_dir), check=True, env=env)
+    subprocess.run(get_build_command(build_dir), check=True, env=env)
     sys.path.insert(0, str(build_dir.parent))
 
     # refuse to import caset from site-packages by accident:

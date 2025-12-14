@@ -29,11 +29,11 @@ class TestMetric(unittest.TestCase):
     def test_metric_instantiates(self):
         v1 = Vertex(1, [0, 0, 0, 0])
         v2 = Vertex(2, [0, 0, 0, 1])
-        edge = Edge(v1.getId(), v2.getId(), 25)
+        edge = Edge(v1, v2, 25)
 
         self.assertIsInstance(edge, Edge)
-        src = edge.getSourceId()
-        tgt = edge.getTargetId()
+        src = edge.getSource().getId()
+        tgt = edge.getTarget().getId()
         self.assertIs(src, v1.getId())
         self.assertIs(tgt, v2.getId())
 

@@ -80,25 +80,6 @@ std::string Logger::nameLevel(short int level) {
 
 }
 
-void Logger::emit(short int level,
-                  const std::string &filename,
-                  std::string func,
-                  const int lineno,
-                  std::string &message) {
-  std::cout
-      << Logger::getTime()
-      << " - "
-      << Logger::nameLevel(level)
-      << " - "
-      << Logger::makeRelative(filename, SOURCES_ROOT)
-      << ":L"
-      << lineno
-      << ":" << func << "()"
-      << ": "
-      << message
-      << std::endl;
-}
-
 std::string Logger::makeRelative(const std::string &absolute, const std::string &root) {
   size_t pos = absolute.find(root);
   if (pos != std::string::npos) {

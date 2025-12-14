@@ -27,23 +27,27 @@ from caset import Edge, Vertex, Spacetime
 class TestEdge(unittest.TestCase):
 
     def test_edge_instantiates(self):
-        v1 = Vertex(0, [0, 0, 0, 0])
-        v2 = Vertex(1, [1, 1, 1, 1])
-        edge = Edge(v1.getId(), v2.getId())
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [1, 1, 1, 1])
+        edge = Edge(v1, v2)
 
         self.assertIsInstance(edge, Edge)
-        src = edge.getSourceId()
-        tgt = edge.getTargetId()
+        src = edge.getSource().getId()
+        tgt = edge.getTarget().getId()
         self.assertIs(src, v1.getId())
         self.assertIs(tgt, v2.getId())
 
     def test_sets_of_edges(self):
-        edges = [Edge(i, i+1) for i in range(51)]
+        vertices = [Vertex(i, []) for i in range(1, 52)]
+        edges = [Edge(vertices[i], vertices[i+1]) for i in range(50)]
         self.assertEqual(len(set(edges)), len(edges))
 
-        e1 = Edge(0, 1)
-        e2 = Edge(0, 1)
-        e3 = Edge(1, 0)
+        v1 = vertices[0]
+        v2 = vertices[1]
+
+        e1 = Edge(v1, v2)
+        e2 = Edge(v1, v2)
+        e3 = Edge(v2, v1)
         edges = set()
         edges.add(e1)
         edges.add(e2)
@@ -51,8 +55,9 @@ class TestEdge(unittest.TestCase):
         self.assertEqual(len(edges), 1)
 
     def test_maps_of_edges(self):
-        edges = [Edge(i, i+1) for i in range(51)]
-        edge_dict = {Edge(i, i+1): i for i in range(51)}
+        vertices = [Vertex(i+1, []) for i in range(51)]
+        edges = [Edge(vertices[i], vertices[i+1]) for i in range(50)]
+        edge_dict = {Edge(vertices[i], vertices[i+1]): i for i in range(50)}
         for i, e in enumerate(edges):
             self.assertEqual(e, edges[i])
             self.assertEqual(edge_dict.get(e), i)
@@ -60,12 +65,15 @@ class TestEdge(unittest.TestCase):
         self.assertEqual(len(set(edges)), len(edges))
 
     def test_equality(self):
-        e1 = Edge(0, 1)
-        e2 = Edge(1, 0)
+        v1 = Vertex(1, [])
+        v2 = Vertex(2, [])
+        v3 = Vertex(3, [])
+        e1 = Edge(v1, v2)
+        e2 = Edge(v2, v1)
         self.assertEqual(e1, e2)
-        e3 = Edge(0, 1)
+        e3 = Edge(v1, v2)
         self.assertEqual(e1, e3)
-        e4 = Edge(1, 2)
+        e4 = Edge(v2, v3)
         self.assertNotEqual(e1, e4)
 
 

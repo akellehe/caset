@@ -44,7 +44,15 @@ class VertexList {
     }
 
     std::shared_ptr<Vertex> add(const std::shared_ptr<Vertex> &vertex) noexcept {
-      vertexList.insert_or_assign(vertex->getId(), vertex);
+      auto found = vertexList.find(vertex->getId());
+      if (found != vertexList.end()) {
+        CLOG(INFO_LEVEL, "Vertex ", std::to_string(vertex->getId()), " already exists!");
+      }
+      const auto &[it, inserted] = vertexList.insert_or_assign(vertex->getId(), vertex);
+      if (!inserted) {
+        CLOG(INFO_LEVEL, "Vertex ", std::to_string(vertex->getId()), " already exists!");
+        return it->second;
+      }
       return vertex;
     }
 
@@ -53,23 +61,26 @@ class VertexList {
     }
 
     std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) noexcept {
-      if (vertexList.contains(id)) {
-        return vertexList.at(id);
+      auto found = vertexList.find(id);
+      if (found != vertexList.end()) {
+        CLOG(INFO_LEVEL, "Vertex ", std::to_string(id), " already exists!");
+        return found->second;
       }
       std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
-      vertexList.insert_or_assign(id, vertex);
+      const auto &[it, inserted] = vertexList.insert_or_assign(id, vertex);
+      if (!inserted) {
+        CLOG(INFO_LEVEL, "Vertex ", std::to_string(id), " already exists!");
+        return it->second;
+      }
       return vertex;
     }
 
     std::shared_ptr<Vertex> add(const std::uint64_t id) noexcept {
-      if (vertexList.contains(id)) return vertexList.at(id);
-      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
-      vertexList.insert_or_assign(id, vertex);
-      return vertex;
+      return add(id, std::vector<double>{});
     }
 
     void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
       if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
 #endif

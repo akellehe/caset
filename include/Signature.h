@@ -30,7 +30,6 @@
 #include <cstdint>
 
 namespace caset {
-
 enum class SignatureType : uint8_t {
   Lorentzian = 0,
   Euclidean = 1
@@ -38,37 +37,21 @@ enum class SignatureType : uint8_t {
 
 class Signature {
   public:
-    Signature(int dimensions_, SignatureType signatureType_) {
-      dimensions = dimensions_;
-      signatureType = signatureType_;
-      diag = std::vector<int>(dimensions_);
-      std::fill_n(diag.begin(), dimensions_, 1);
-      if (signatureType_ == SignatureType::Lorentzian) {
-        diag[0] = -1;
-      }
-    }
+    Signature(int dimensions_, SignatureType signatureType_);
 
-    [[nodiscard]] std::vector<int> getDiagonal() const noexcept {
-      return diag;
-    };
+    [[nodiscard]] std::vector<int> getDiagonal() const noexcept;
 
-    [[nodiscard]] int getDimensions() const noexcept {
-      return dimensions;
-    }
+    [[nodiscard]] int getDimensions() const noexcept;
 
-    [[nodiscard]] SignatureType getSignatureType() const noexcept {
-      return signatureType;
-    }
+    [[nodiscard]] SignatureType getSignatureType() const noexcept;
 
   private:
     std::vector<int> diag;
     int dimensions;
     SignatureType signatureType;
 
-  static inline const double c = 1.;
-
+    static inline const double c = 1.;
 };
-
 } // caset
 
 #endif //CASET_SIGNATURE_H
