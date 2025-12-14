@@ -72,10 +72,10 @@ SimplexRawPtr Spacetime::createSimplex(
   const VertexPtrs &vertices, const Edges &edges
 ) {
   CLOG(INFO_LEVEL, "Creating simplex...");
-  const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
+  const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
   std::unique_ptr<Simplex> simplex = Simplex::create(vertices, edges);
   auto raw = simplex.get();
-  for (const auto &o : raw->getOrientation()->getFacialOrientations()) {
+  for (const auto &o : raw->getOrientation().getFacialOrientations()) {
     externalSimplices[o].insert(raw);
   }
   auto [it, _] = simplices.insert(std::move(simplex));
@@ -118,11 +118,9 @@ SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
 SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
   double squaredLength = alpha;
   double timelikeSquaredLength = alpha;
-  SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
-    std::get<0>(numericOrientation),
-    std::get<1>(numericOrientation));
-  std::uint8_t k = orientation->getK();
-  auto [ti, tf] = orientation->numeric();
+  SimplexOrientation orientation{std::get<0>(numericOrientation), std::get<1>(numericOrientation)};
+  std::uint8_t k = orientation.getK();
+  auto [ti, tf] = orientation.numeric();
   VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
@@ -203,13 +201,13 @@ Spacetime::getGluableFaces(
 #endif
 
   for (auto &unattachedFace : unattachedFacets) {
-    const auto [tia, tfa] = unattachedFace->getOrientation()->numeric();
+    const auto [tia, tfa] = unattachedFace->getOrientation().numeric();
     if (tia == 0 || tfa == 0) continue; // Skip degenerate faces
     if (!unattachedFace->isCausallyAvailable()) continue;
     for (auto &attachedFace : attachedFacets) {
       if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue;
       // Skip faces that don't match in timelikeness
-      const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
+      const auto [tib, tfb] = attachedFace->getOrientation().numeric();
       if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
       if (attachedFace->isInternal()) continue;
 #if CASET_DEBUG
@@ -252,15 +250,10 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
 
 
 SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
-  SimplexOrientationPtr o = std::make_shared<
-    SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
+  SimplexOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
   SimplexPtrSet result{};
-  for (const auto &bucket : externalSimplices | std::views::values) {
-    for (const auto &simplex : bucket) {
-      for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
-        if (simplex->getOrientation() == o) result.insert(simplex);
-      }
-    }
+  for (const auto &s : simplices) {
+    if (s->getOrientation() == o) result.insert(s.get());
   }
   return result;
 }
@@ -359,9 +352,9 @@ std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(
   if (attachedFace->getOrientation() != unattachedFace->getOrientation()) {
     CLOG(ERROR_LEVEL,
          "Faces have different orientations: ",
-         attachedFace->getOrientation()->toString(),
+         attachedFace->getOrientation().toString(),
          " vs ",
-         unattachedFace->getOrientation()->toString());
+         unattachedFace->getOrientation().toString());
     return {attachedFace, false};
   }
   for (const auto &attachedCoface : attachedFace->getCofaces()) {
@@ -404,7 +397,7 @@ std::tuple<SimplexRawPtr, bool> Spacetime::causallyAttachFaces(
     vertexPairs.push_back(vp);
   }
 
-  for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
+  for (const auto &facialOrientation : attachedFace->getOrientation().getFacialOrientations()) {
     externalSimplices[facialOrientation].erase(attachedFace);
   }
 

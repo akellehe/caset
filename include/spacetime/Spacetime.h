@@ -287,7 +287,7 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationPtrHash, SimplexOrientationPtrEq> externalSimplices{};
+    std::unordered_map<SimplexOrientation, SimplexPtrSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplices{};
 
     ///
     /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
@@ -296,7 +296,7 @@ class Spacetime {
     /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
     /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
     /// orientation of the Simplex itself.
-    std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationPtrHash, SimplexOrientationPtrEq> internalSimplices{};
+    std::unordered_map<SimplexOrientation, SimplexPtrSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
     std::vector<std::shared_ptr<Observable> > observables{};
 
     /// This is the highest level of ownership for simplices. Facets/faces are owned by their cofaces, those cofaces go

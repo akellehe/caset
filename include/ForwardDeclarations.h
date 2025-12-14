@@ -95,6 +95,7 @@ using SimplexOrientationPtrHash = FingerprintPtrHash<SimplexOrientationPtr>;
 using SimplexOrientationPtrEq = FingerprintPtrEq<SimplexOrientationPtr>;
 using SimplexOrientationHash = FingerprintHash<SimplexOrientation>;
 using SimplexOrientationEq = FingerprintEq<SimplexOrientation>;
+using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrientationHash, SimplexOrientationEq>;
 } // namespace caset
 
 #endif // CASET_FORWARD_DECLARATIONS_H

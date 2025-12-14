@@ -31,6 +31,7 @@
 
 #include "Fingerprint.h"
 #include "ForwardDeclarations.h"
+#include "SimplexOrientation.h"
 
 namespace py = pybind11;
 
@@ -50,7 +51,7 @@ class Simplex {
     ///
     /// @param vertices_
     Simplex(const VertexPtrs &vertices_, const Edges &edges_);
-    Simplex(const VertexPtrs &vertices_, const Edges &edges_ ,const SimplexOrientationPtr &orientation_);
+    Simplex(const VertexPtrs &vertices_, const Edges &edges_ ,const SimplexOrientation &orientation_);
 
     void initialize(SimplexRawPtr simplex);
 
@@ -97,7 +98,7 @@ class Simplex {
     ///
     // const double computeDihedralAngles() const;
 
-    [[nodiscard]] SimplexOrientationPtr getOrientation() const noexcept;
+    [[nodiscard]] SimplexOrientation getOrientation() const noexcept;
 
     ///
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
@@ -238,7 +239,7 @@ class Simplex {
     bool isInternal() const noexcept;
 
     static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_);
-    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_, const SimplexOrientationPtr &orientation_);
+    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_, const SimplexOrientation &orientation_);
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -262,7 +263,7 @@ class Simplex {
     ///   create a unique set of the orientations. That set can be used to look up a corresponding Simplex in the
     ///   `externalSimplices` of the Spacetime.
     ///
-    std::unordered_set<SimplexOrientationPtr> getGluableFaceOrientations();
+    SimplexOrientationSet getGluableFaceOrientations();
 
     bool operator==(SimplexRawPtr other) const noexcept;
 
@@ -275,7 +276,7 @@ class Simplex {
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
 
   private:
-    SimplexOrientationPtr orientation{};
+    SimplexOrientation orientation{0, 0};
     VertexIdMap vertexIdLookup{};
     VertexPtrs vertices{};
     EdgePtrSet edges{};

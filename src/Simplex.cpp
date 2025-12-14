@@ -71,7 +71,7 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
 Simplex::Simplex(
   const VertexPtrs &vertices_,
   const Edges &edges_
-) : orientation(std::make_shared<SimplexOrientation>(0, 0)),
+) : orientation({0, 0}),
     vertices(vertices_),
     edges(edges_.begin(), edges_.end()),
     fingerprint({}) {
@@ -84,7 +84,7 @@ Simplex::Simplex(
 Simplex::Simplex(
   const VertexPtrs &vertices_,
   const Edges &edges_,
-  const SimplexOrientationPtr &orientation_
+  const SimplexOrientation &orientation_
 ) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint({}) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
@@ -102,7 +102,7 @@ std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, Edges edge
 
 std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_,
                                          Edges edges_,
-                                         const SimplexOrientationPtr &orientation_) {
+                                         const SimplexOrientation &orientation_) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -131,7 +131,7 @@ void Simplex::initialize(SimplexRawPtr simplex) {
 std::string Simplex::toString() const {
   std::stringstream ss;
   ss << "<";
-  ss << std::to_string(getOrientation()->getK());
+  ss << std::to_string(getOrientation().getK());
   ss << "-Simplex (";
   for (const auto &v : vertices) {
     ss << v->toString() << "→";
@@ -144,7 +144,7 @@ std::string Simplex::toString() const {
   return ss.str();
 }
 
-[[nodiscard]] SimplexOrientationPtr Simplex::getOrientation() const noexcept {
+[[nodiscard]] SimplexOrientation Simplex::getOrientation() const noexcept {
   return orientation;
 }
 
@@ -190,12 +190,12 @@ T Simplex::binomial(unsigned n, unsigned k) const {
 }
 
 std::size_t Simplex::getNumberOfFaces(std::size_t j) const {
-  auto k = getOrientation()->getK();
+  auto k = getOrientation().getK();
   return binomial<std::size_t>(k + 1, j + 1);
 }
 
 std::size_t Simplex::getNumberOfEdges() const {
-  auto k = getOrientation()->getK();
+  auto k = getOrientation().getK();
   return (k + 1) * k / 2;
 }
 
@@ -464,12 +464,12 @@ bool Simplex::isInternal() const noexcept {
 }
 
 std::size_t Simplex::maxKPlusOneCofaces() const {
-  return getNumberOfFaces(getOrientation()->getK());
+  return getNumberOfFaces(getOrientation().getK());
 }
 
-std::unordered_set<SimplexOrientationPtr>
+SimplexOrientationSet
 Simplex::getGluableFaceOrientations() {
-  auto allowedOrientations = std::unordered_set<SimplexOrientationPtr>{};
+  SimplexOrientationSet allowedOrientations{};
   for (const auto face : getFacets()) {
     if (face->getCofaces().size() < 2) {
       allowedOrientations.insert(face->getOrientation());

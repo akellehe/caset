@@ -42,19 +42,19 @@ class SimplexOrientation {
     /// @param tf_ The number of vertices on the final time slice.
     ///
     SimplexOrientation(uint8_t ti_, uint8_t tf_);
-    SimplexOrientation() noexcept = default;
+    SimplexOrientation();
 
-    [[nodiscard]] SimplexOrientationPtr decTf() const;
-    [[nodiscard]] SimplexOrientationPtr decTi() const;
-    [[nodiscard]] SimplexOrientationPtr flip() const;
+    [[nodiscard]] SimplexOrientation decTf() const;
+    [[nodiscard]] SimplexOrientation decTi() const;
+    [[nodiscard]] SimplexOrientation flip() const;
     [[nodiscard]] TimeOrientation getOrientation() const;
     [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const;
     [[nodiscard]] std::string toString() const noexcept;
-    [[nodiscard]] std::vector<SimplexOrientationPtr> getFacialOrientations() const;
+    [[nodiscard]] std::vector<SimplexOrientation> getFacialOrientations() const;
     [[nodiscard]] uint8_t getK() const; /// A k-simplex has \f$ k+1 \f$ vertices.
     [[nodiscard]] size_t hash() const;
     bool operator==(const SimplexOrientation &other) const noexcept;
-    static SimplexOrientationPtr orientationOf(const VertexPtrs &vertices);
+    static SimplexOrientation orientationOf(const VertexPtrs &vertices);
     Fingerprint fingerprint;
 
   private:

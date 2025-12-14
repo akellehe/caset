@@ -20,6 +20,13 @@ SimplexOrientation::SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(t
   fingerprint = Fingerprint({ti_, tf_}); // TODO: Does this initialize twice?
 }
 
+SimplexOrientation::SimplexOrientation() : ti(0), tf(0), fingerprint({0, 0}) {
+  ti = 0;
+  tf = 0;
+  k = 0;
+  fingerprint = Fingerprint({ti, tf});
+}
+
 [[nodiscard]] std::pair<uint8_t, uint8_t> SimplexOrientation::numeric() const {
   return {ti, tf};
 }
@@ -29,21 +36,24 @@ SimplexOrientation::SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(t
 }
 
 
-[[nodiscard]] SimplexOrientationPtr SimplexOrientation::flip() const {
-  return std::make_shared<SimplexOrientation>(tf, ti);
+[[nodiscard]] SimplexOrientation SimplexOrientation::flip() const {
+  SimplexOrientation o{tf, ti};
+  return o;
 }
 
 [[nodiscard]]
-SimplexOrientationPtr SimplexOrientation::decTi() const {
+SimplexOrientation SimplexOrientation::decTi() const {
   auto newTi = static_cast<uint8_t>(ti - 1);
   // constructor recomputes k automatically
-  return std::make_shared<SimplexOrientation>(newTi, tf);
+  SimplexOrientation o{newTi, tf};
+  return o;
 }
 
 [[nodiscard]]
-SimplexOrientationPtr SimplexOrientation::decTf() const {
+SimplexOrientation SimplexOrientation::decTf() const {
   auto newTf = static_cast<uint8_t>(tf - 1);
-  return std::make_shared<SimplexOrientation>(ti, newTf);
+  SimplexOrientation o{ti, newTf};
+  return o;
 }
 
 [[nodiscard]] std::string SimplexOrientation::toString() const noexcept {
@@ -60,11 +70,11 @@ bool SimplexOrientation::operator==(const SimplexOrientation &other) const noexc
   return TimeOrientation::FUTURE;
 }
 
-[[nodiscard]] std::vector<SimplexOrientationPtr> SimplexOrientation::getFacialOrientations() const {
+[[nodiscard]] std::vector<SimplexOrientation> SimplexOrientation::getFacialOrientations() const {
   if (ti + tf == 0) return {};
   if (ti == 0) return {decTf()};
   if (tf == 0) return {decTi()};
-  std::vector<SimplexOrientationPtr> orientations;
+  std::vector<SimplexOrientation> orientations;
   orientations.reserve(2);
   orientations.push_back(decTi());
   orientations.push_back(decTf());
@@ -76,7 +86,7 @@ bool SimplexOrientation::operator==(const SimplexOrientation &other) const noexc
   return k;
 }
 
-SimplexOrientationPtr SimplexOrientation::orientationOf(const VertexPtrs &vertices) {
+SimplexOrientation SimplexOrientation::orientationOf(const VertexPtrs &vertices) {
   uint8_t tiVertices = 0;
   uint8_t tfVertices = 0;
   double ti = std::numeric_limits<double>::max();
@@ -101,6 +111,7 @@ SimplexOrientationPtr SimplexOrientation::orientationOf(const VertexPtrs &vertic
   } else {
     tfVertices += unassigned;
   }
-  return std::make_shared<SimplexOrientation>(tiVertices, tfVertices);
+  SimplexOrientation o{tiVertices, tfVertices};
+  return o;
 }
 }
