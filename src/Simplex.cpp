@@ -280,10 +280,10 @@ void Simplex::validate() const {
   return edges;
 }
 
-[[nodiscard]] std::vector<std::shared_ptr<Edge>> Simplex::getEdgesForPython() const noexcept {
-  std::vector<std::shared_ptr<Edge>> result{};
+[[nodiscard]] std::vector<py::object> Simplex::getEdgesForPython() const noexcept {
+  std::vector<py::object> result{};
   for (const auto e : getEdges()) {
-    result.push_back(std::make_shared<Edge>(e->getSource(), e->getTarget(), e->getSquaredLength()));
+    result.push_back(wrap_non_owning(e));
   }
   return result;
 }

@@ -185,7 +185,7 @@ class Simplex {
     bool removeEdge(Edge *edge);
     std::pair<Edge *, bool> addEdge(Edge *edge);
 
-    [[nodiscard]] std::vector<std::shared_ptr<Edge>> getEdgesForPython() const noexcept;
+    [[nodiscard]] std::vector<py::object> getEdgesForPython() const noexcept;
 
     ///
     /// Simplices have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
