@@ -1,0 +1,68 @@
+//
+// Created by andrew on 12/14/25.
+//
+
+#ifndef CASET_SIMPLEXORIENTATION_H
+#define CASET_SIMPLEXORIENTATION_H
+
+#include <pybind11/pybind11.h>
+
+#include <algorithm>
+#include <memory>
+#include <vector>
+
+#include "ForwardDeclarations.h"
+
+namespace caset {
+
+///
+///
+/// @param timeOrientation
+enum class TimeOrientation : uint8_t {
+  FUTURE = 0,
+  PRESENT = 1,
+  UNKNOWN = 2
+};
+
+class SimplexOrientation {
+  public:
+    ///
+    /// The orientation of a simplex is determined by how many vertices lie on the initial and final time slice for the
+    /// simplex. The orientation is largely only relevant for Lorentzian/CDT complexes where causality is preserved. Those
+    /// complexes restrict to allowed orientations that ensure progression forward in time and "fit together" (so they share
+    /// faces without gaps in the complex).
+    ///
+    /// The convention was established in Ambjorn-Loll's "Causal Dynamical Triangulations" paper from 1998-2001. Every
+    /// d-simplex must have its vertices split across two adjacent time slices, t and t+1. That means every simplex has
+    /// a split
+    ///
+    /// \f$ (n, d + 1 - n) \f$
+    ///
+    /// @param ti_ The number of vertices on the initial time slice.
+    /// @param tf_ The number of vertices on the final time slice.
+    ///
+    SimplexOrientation(uint8_t ti_, uint8_t tf_);
+    SimplexOrientation() noexcept = default;
+
+    [[nodiscard]] SimplexOrientationPtr decTf() const;
+    [[nodiscard]] SimplexOrientationPtr decTi() const;
+    [[nodiscard]] SimplexOrientationPtr flip() const;
+    [[nodiscard]] TimeOrientation getOrientation() const;
+    [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const;
+    [[nodiscard]] std::string toString() const noexcept;
+    [[nodiscard]] std::vector<SimplexOrientationPtr> getFacialOrientations() const;
+    [[nodiscard]] uint8_t getK() const; /// A k-simplex has \f$ k+1 \f$ vertices.
+    [[nodiscard]] size_t hash() const;
+    bool operator==(const SimplexOrientation &other) const noexcept;
+    static SimplexOrientationPtr orientationOf(const VertexPtrs &vertices);
+    Fingerprint fingerprint;
+
+  private:
+    uint8_t ti{0};
+    uint8_t tf{0};
+    uint8_t k{0};
+};
+
+}
+
+#endif //CASET_SIMPLEXORIENTATION_H

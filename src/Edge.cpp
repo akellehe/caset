@@ -26,7 +26,6 @@
 #include "Simplex.h"
 
 #include <vector>
-#include <random>
 #include <memory>
 
 namespace caset {
@@ -169,11 +168,11 @@ class Simplex;
     }
 
 
-    [[nodiscard]] EdgeKey Edge::getKey() const noexcept {
+    [[nodiscard]] const EdgeKey Edge::getKey() const noexcept {
       return {source->getId(), target->getId()};
     }
 
-    [[nodiscard]] SimplexSet Edge::getSimplices() const noexcept { return simplices; }
+    [[nodiscard]] SimplexPtrSet Edge::getSimplices() const noexcept { return simplices; }
 
     void Edge::addSimplex(Simplex *simplex) noexcept { simplices.insert(simplex); }
 

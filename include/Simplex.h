@@ -26,210 +26,16 @@
 #include <pybind11/stl.h>
 #include <pybind11/chrono.h>
 
-#include <algorithm>
-#include <coroutine>
-#include <functional>
 #include <memory>
 #include <vector>
 
-// #include "Edge.h"
 #include "Fingerprint.h"
-// #include "ForwardDeclarations.h"
-// #include "Vertex.h"
+#include "ForwardDeclarations.h"
 
 namespace py = pybind11;
 
 namespace caset {
-///
-///
-/// @param timeOrientation
-enum class TimeOrientation : uint8_t {
-  FUTURE = 0,
-  PRESENT = 1,
-  UNKNOWN = 2
-};
 
-class SimplexOrientation;
-using SimplexOrientationPtr = std::shared_ptr<SimplexOrientation>;
-
-class SimplexOrientation {
-  public:
-    ///
-    /// The orientation of a simplex is determined by how many vertices lie on the initial and final time slice for the
-    /// simplex. The orientation is largely only relevant for Lorentzian/CDT complexes where causality is preserved. Those
-    /// complexes restrict to allowed orientations that ensure progression forward in time and "fit together" (so they share
-    /// faces without gaps in the complex).
-    ///
-    /// The convention was established in Ambjorn-Loll's "Causal Dynamical Triangulations" paper from 1998-2001. Every
-    /// d-simplex must have its vertices split across two adjacent time slices, t and t+1. That means every simplex has
-    /// a split
-    ///
-    /// \f$ (n, d + 1 - n) \f$
-    ///
-    /// @param ti_ The number of vertices on the initial time slice.
-    /// @param tf_ The number of vertices on the final time slice.
-    ///
-    SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_) {
-      k = ti_ + tf_ - 1;
-    }
-    SimplexOrientation() noexcept = default;
-
-    [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const {
-      return {ti, tf};
-    }
-
-    [[nodiscard]] uint16_t fingerprint() const {
-      return (static_cast<uint16_t>(ti) << 8) | static_cast<uint16_t>(tf);
-    }
-
-    [[nodiscard]] SimplexOrientationPtr flip() const {
-      return std::make_shared<SimplexOrientation>(tf, ti);
-    }
-
-    [[nodiscard]]
-    SimplexOrientationPtr decTi() const {
-      auto newTi = static_cast<uint8_t>(ti - 1);
-      // constructor recomputes k automatically
-      return std::make_shared<SimplexOrientation>(newTi, tf);
-    }
-
-    [[nodiscard]]
-    SimplexOrientationPtr decTf() const {
-      auto newTf = static_cast<uint8_t>(tf - 1);
-      return std::make_shared<SimplexOrientation>(ti, newTf);
-    }
-
-    [[nodiscard]] std::string toString() const noexcept {
-      return "<SimplexOrientation: (" + std::to_string(ti) + ", " + std::to_string(tf) + ")>";
-    }
-
-    bool operator==(const SimplexOrientation &other) const noexcept {
-      return ti == other.ti && tf == other.tf;
-    }
-
-    [[nodiscard]] TimeOrientation getOrientation() const {
-      if (ti == tf) return TimeOrientation::UNKNOWN;
-      if (ti > tf) return TimeOrientation::PRESENT;
-      return TimeOrientation::FUTURE;
-    }
-
-    [[nodiscard]] std::vector<SimplexOrientationPtr> getFacialOrientations() const {
-      if (ti + tf == 0) return {};
-      if (ti == 0) return {decTf()};
-      if (tf == 0) return {decTi()};
-      std::vector<SimplexOrientationPtr> orientations;
-      orientations.reserve(2);
-      orientations.push_back(decTi());
-      orientations.push_back(decTf());
-      return orientations;
-    }
-
-    /// A k-simplex has \f$ k+1 \f$ vertices.
-    [[nodiscard]] uint8_t getK() const {
-      return k;
-    }
-
-    static SimplexOrientationPtr orientationOf(const VertexPtrs &vertices) {
-      uint8_t tiVertices = 0;
-      uint8_t tfVertices = 0;
-      double ti = std::numeric_limits<double>::max();
-      double tf = -1;
-      double initial = -1;
-      int unassigned = 0;
-      for (const auto &vertex : vertices) {
-        double t = vertex->getTime();
-        ti = std::min(ti, t);
-        tf = std::max(tf, t);
-        if (ti == tf) {
-          initial = t;
-          unassigned++;
-        } else if (t == ti) {
-          tiVertices++;
-        } else {
-          tfVertices++;
-        }
-      }
-      if (initial == ti) {
-        tiVertices += unassigned;
-      } else {
-        tfVertices += unassigned;
-      }
-      return std::make_shared<SimplexOrientation>(tiVertices, tfVertices);
-    }
-
-  private:
-    uint8_t ti{0};
-    uint8_t tf{0};
-    uint8_t k{0};
-};
-
-struct SimplexOrientationHash {
-  using is_transparent = void; // enables heterogeneous lookup
-  size_t operator()(const SimplexOrientation &o) const noexcept {
-    return std::hash<std::uint16_t>{}(o.fingerprint());
-  }
-  size_t operator()(const std::shared_ptr<SimplexOrientation> &o) const noexcept {
-    return std::hash<std::uint16_t>{}(o->fingerprint());
-  }
-  size_t operator()(const std::shared_ptr<const SimplexOrientation> &o) const noexcept {
-    return std::hash<std::uint16_t>{}(o->fingerprint());
-  }
-  size_t operator()(uint64_t fp) const noexcept { return std::hash<std::uint16_t>{}(fp); }
-};
-
-struct SimplexOrientationEq {
-  using is_transparent = void;
-  bool operator()(const SimplexOrientation &a, const SimplexOrientation &b) const noexcept {
-    return a.fingerprint() == b.fingerprint();
-  }
-  bool operator()(const SimplexOrientation &a, uint64_t fp) const noexcept { return a.fingerprint() == fp; }
-  bool operator()(uint64_t fp, const SimplexOrientation &a) const noexcept { return fp == a.fingerprint(); }
-
-  bool operator()(const std::shared_ptr<SimplexOrientation> &a,
-                  const std::shared_ptr<SimplexOrientation> &b) const noexcept {
-    return a->fingerprint() == b->fingerprint();
-  }
-  bool operator()(const std::shared_ptr<SimplexOrientation> &a, uint64_t fp) const noexcept {
-    return a->fingerprint() == fp;
-  }
-  bool operator()(uint64_t fp, const std::shared_ptr<SimplexOrientation> &a) const noexcept {
-    return fp == a->fingerprint();
-  }
-
-  bool operator()(const std::shared_ptr<const SimplexOrientation> &a,
-                  const std::shared_ptr<const SimplexOrientation> &b) const noexcept {
-    return a->fingerprint() == b->fingerprint();
-  }
-  bool operator()(const std::shared_ptr<const SimplexOrientation> &a, uint64_t fp) const noexcept {
-    return a->fingerprint() == fp;
-  }
-  bool operator()(uint64_t fp, const std::shared_ptr<const SimplexOrientation> &a) const noexcept {
-    return fp == a->fingerprint();
-  }
-};
-
-inline bool operator==(const SimplexOrientationPtr &a, const SimplexOrientationPtr &b) {
-  if (!a || !b) return !a && !b;
-  return *a == *b; // compare underlying objects
-}
-}
-
-template<>
-struct std::hash<caset::SimplexOrientation> {
-  size_t operator()(const caset::SimplexOrientation &s) const noexcept {
-    auto [ti, tf] = s.numeric(); // OK now that getOrientation() is const
-    std::uint16_t packed = (static_cast<std::uint16_t>(ti) << 8) | static_cast<std::uint16_t>(tf);
-    return std::hash<std::uint16_t>{}(packed); // perfect for all (ti, tf)
-  }
-};
-
-namespace caset {
-
-class Simplex;
-using SimplexRawPtr = Simplex *;
-using SimplexPtrPair = std::pair<SimplexRawPtr, SimplexRawPtr>;
-using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
-using SimplexPtrs = std::vector<SimplexRawPtr>;
 
 /// # Simplex Class
 ///
@@ -243,9 +49,8 @@ class Simplex {
   public:
     ///
     /// @param vertices_
-    explicit Simplex(const VertexPtrs &vertices_, Edges edges_);
-
-    Simplex(const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientationPtr &orientation_);
+    Simplex(const VertexPtrs &vertices_, const Edges &edges_);
+    Simplex(const VertexPtrs &vertices_, const Edges &edges_ ,const SimplexOrientationPtr &orientation_);
 
     void initialize(SimplexRawPtr simplex);
 
@@ -357,7 +162,7 @@ class Simplex {
 
 
     /// @returns Edges in traversal order (the order of input vertices).
-    [[nodiscard]] const EdgeSet &getEdges() const noexcept;
+    [[nodiscard]] const EdgePtrSet &getEdges() const noexcept;
 
     [[nodiscard]]
     std::optional<VertexPtrs>
@@ -473,7 +278,7 @@ class Simplex {
     SimplexOrientationPtr orientation{};
     VertexIdMap vertexIdLookup{};
     VertexPtrs vertices{};
-    EdgeSet edges{};
+    EdgePtrSet edges{};
 
     std::vector<std::unique_ptr<Simplex>> facets{};
     std::unordered_set<SimplexRawPtr> cofaces{};

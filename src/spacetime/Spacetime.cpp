@@ -29,6 +29,7 @@
 #include "utils.h"
 #include <memory>
 #include "spacetime/Spacetime.h"
+#include "SimplexOrientation.h"
 
 namespace caset {
 
@@ -250,10 +251,10 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
 }
 
 
-SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
   SimplexOrientationPtr o = std::make_shared<
     SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
-  SimplexSet result{};
+  SimplexPtrSet result{};
   for (const auto &bucket : externalSimplices | std::views::values) {
     for (const auto &simplex : bucket) {
       for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
@@ -265,7 +266,7 @@ SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> o
 }
 
 py::list Spacetime::getSimplicesWithOrientationForPython(std::tuple<uint8_t, uint8_t> orientation) {
-  SimplexSet simplices_ = getSimplicesWithOrientation(orientation);
+  SimplexPtrSet simplices_ = getSimplicesWithOrientation(orientation);
   py::list result{};
   for (auto simplex : simplices_) {
     result.append(wrap_non_owning(simplex));
@@ -457,8 +458,8 @@ py::tuple Spacetime::chooseSimplexFacesToGlueForPython(
   return py::make_tuple(wrap_non_owning(first), wrap_non_owning(second));
 }
 
-SimplexSet Spacetime::getExternalSimplices() noexcept {
-  SimplexSet simplices{};
+SimplexPtrSet Spacetime::getExternalSimplices() noexcept {
+  SimplexPtrSet simplices{};
   for (const auto &[facialOrientation, bucket] : externalSimplices) {
     for (const auto &simplex : bucket) {
       simplices.insert(simplex);

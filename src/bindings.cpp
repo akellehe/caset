@@ -30,6 +30,7 @@
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
 #include "spacetime/Spacetime.h"
+#include "SimplexOrientation.h"
 #include "VertexList.h"
 #include "EdgeList.h"
 #include "Signature.h"
@@ -37,6 +38,7 @@
 #include "Edge.h"
 #include "Simplex.h"
 #include "Metric.h"
+#include "EdgeKey.h"
 
 #include <vector>
 
@@ -79,11 +81,11 @@ PYBIND11_MODULE(caset, m) {
       .def("__hash__", &EdgeKey::hash)
       .def("__eq__", &EdgeKey::operator==);
 
-  py::class_<EdgeKeyHash, std::shared_ptr<EdgeKeyHash> >(m, "EdgeKeyHash")
-      .def("__call__", &EdgeKeyHash::operator());
+  // py::class_<EdgeKeyHash, std::shared_ptr<EdgeKeyHash> >(m, "EdgeKeyHash")
+      // .def("__call__", &EdgeKeyHash::operator());
 
-  py::class_<EdgeKeyEqual, std::shared_ptr<EdgeKeyEqual> >(m, "EdgeKeyEqual")
-      .def("__call__", &EdgeKeyEqual::operator());
+  // py::class_<EdgeKeyEq, std::shared_ptr<EdgeKeyEq> >(m, "EdgeKeyEqual")
+      // .def("__call__", &EdgeKeyEq::operator());
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
       .def("__eq__", &Vertex::operator==)
@@ -154,7 +156,7 @@ PYBIND11_MODULE(caset, m) {
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
       .def("getOrientation", &SimplexOrientation::getOrientation)
-      .def("__hash__", &SimplexOrientation::fingerprint)
+      .def("__hash__", &SimplexOrientation::hash)
       .def("__eq__", &SimplexOrientation::operator==)
       .def("__str__", &SimplexOrientation::toString)
       .def("__repr__", &SimplexOrientation::toString)

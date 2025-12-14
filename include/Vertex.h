@@ -30,15 +30,12 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
-#include <unordered_map>
 #include "Logger.h"
-#include "EdgeKey.h"
 #include "ForwardDeclarations.h"
 
 namespace py = pybind11;
 
 namespace caset {
-
 enum class EdgeDirection {
     In,
     Out
@@ -73,7 +70,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         std::uint64_t getId() const {
 #if CASET_DEBUG
-        if (id == 0) throw std::runtime_error("Vertex had a 0 ID.");
+            if (id == 0) throw std::runtime_error("Vertex had a 0 ID.");
 #endif
 
             return id;
@@ -102,24 +99,19 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::pair<EdgeRawPtr, bool> addInEdge(Edge *edge) noexcept;
         void removeInEdge(Edge *edge) noexcept;
         void removeOutEdge(Edge *edge) noexcept;
-
         std::size_t degree() const noexcept;
+        std::vector<std::shared_ptr<Simplex> > getSimplicesForPython() const;
 
-        std::vector<std::shared_ptr<Simplex>> getSimplicesForPython() const;
+        std::unordered_set<Edge *> getInEdges() const noexcept;
 
-        std::unordered_set<Edge *>
-        getInEdges() const noexcept;
+        std::unordered_set<Edge *> getOutEdges() const noexcept;
 
-        std::unordered_set<Edge *>
-        getOutEdges() const noexcept;
+        std::unordered_set<Edge *> getEdges() const noexcept;
 
-        std::unordered_set<Edge *>
-        getEdges() const noexcept;
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> > moveInEdgesTo(
+            const std::shared_ptr<Vertex> &recipient);
 
-        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
-        moveInEdgesTo(const std::shared_ptr<Vertex> &recipient);
-
-        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
         moveOutEdgesTo(const std::shared_ptr<Vertex> &recipient);
 
         py::object
@@ -128,7 +120,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         py::object
         moveOutEdgesToForPython(const std::shared_ptr<Vertex> &vertex);
 
-        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
         absorbInto(const std::shared_ptr<Vertex> &vertex);
 
         py::object
@@ -153,43 +145,9 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         /// Helper method for moving edges in either direction. Returns toUpdate, toDelete listing which EdgeKey (s)
         /// should be re-keyed or deleted in the EdgeList maintaining ownership for the Edge (s).
-        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet>>
+        std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
         moveEdgesToImpl(const std::shared_ptr<Vertex> &recipient, EdgeDirection direction);
 };
-
-// VertexPtr, VertexPtrs, VertexPtrSet are now defined in ForwardDeclarations.h
-using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
-using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
-}
-
-namespace std {
-template<>
-struct hash<caset::Vertex> {
-    size_t operator()(const caset::Vertex &vertex) const noexcept {
-        return std::hash<std::uint64_t>{}(vertex.getId());
-    }
-};
-
-template<>
-struct hash<std::shared_ptr<caset::Vertex> > {
-    size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
-        return std::hash<std::uint64_t>{}(vertex->getId());
-    }
-};
-
-template<>
-struct equal_to<caset::Vertex> {
-    size_t operator()(const caset::Vertex &a, const caset::Vertex &b) const noexcept {
-        return a.getId() == b.getId();
-    }
-};
-
-template<>
-struct equal_to<std::shared_ptr<caset::Vertex> > {
-    size_t operator()(const caset::VertexPtr &a, const caset::VertexPtr &b) const noexcept {
-        return a->getId() == b->getId();
-    }
-};
-}
+} // namespace caset
 #endif //CASET_CASET_SRC_VERTEX_H_
 

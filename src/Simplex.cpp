@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "Vertex.h"
+#include "ForwardDeclarations.h"
+#include "SimplexOrientation.h"
 #include "Simplex.h"
-#include "utils.h"
-#include "Fingerprint.h"
+#include "Vertex.h"
 #include "Edge.h"
-
+#include "utils.h"
 
 namespace caset {
 std::vector<SimplexRawPtr> Simplex::getFacets() {
@@ -68,23 +68,22 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
   return rawFacets;
 }
 
-///
-/// @param vertices_
 Simplex::Simplex(
   const VertexPtrs &vertices_,
-  Edges edges_
-) : orientation(std::make_shared<SimplexOrientation>(0, 0)), vertices(vertices_), edges(edges_.begin(), edges_.end()),
+  const Edges &edges_
+) : orientation(std::make_shared<SimplexOrientation>(0, 0)),
+    vertices(vertices_),
+    edges(edges_.begin(), edges_.end()),
     fingerprint({}) {
 #if CASET_DEBUG
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-
   orientation = SimplexOrientation::orientationOf(vertices_);
 }
 
 Simplex::Simplex(
   const VertexPtrs &vertices_,
-  Edges edges_,
+  const Edges &edges_,
   const SimplexOrientationPtr &orientation_
 ) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint({}) {
 #if CASET_DEBUG
@@ -277,7 +276,7 @@ void Simplex::validate() const {
 }
 
 /// @returns Edges in traversal order (the order of input vertices).
-[[nodiscard]] const EdgeSet &Simplex::getEdges() const noexcept {
+[[nodiscard]] const EdgePtrSet &Simplex::getEdges() const noexcept {
   return edges;
 }
 

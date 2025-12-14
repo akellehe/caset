@@ -24,11 +24,11 @@
 
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "ForwardDeclarations.h"
 #include "topologies/Topology.h"
 #include "observables/Observable.h"
 #include "EdgeList.h"
@@ -246,7 +246,7 @@ class Spacetime {
     /// that this method does not return 2-simplices as you might expect, but 5-simplices since those are the standard
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
-    [[nodiscard]] SimplexSet getExternalSimplices() noexcept;
+    [[nodiscard]] SimplexPtrSet getExternalSimplices() noexcept;
     py::list getExternalSimplicesForPython() noexcept;
 
 
@@ -264,7 +264,7 @@ class Spacetime {
     py::tuple chooseSimplexFacesToGlueForPython(SimplexRawPtr unattachedSimplex);
 
     /// This method is for testing only, very poor runtime performance.
-    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
+    SimplexPtrSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
     py::list getSimplicesWithOrientationForPython(std::tuple<uint8_t, uint8_t> orientation);
 
     [[nodiscard]] std::vector<VertexPtrs> getConnectedComponents() const;
@@ -283,11 +283,11 @@ class Spacetime {
     ///
     /// These are simplices on the boundary of a simplicial complex. They have at least one external face, and hence can
     /// be glued to other simplices. The externalSimplices are organized by the orientation of their available faces. If
-    /// a face is available; the orientation of that face can be found as a key corresponding to a SimplexSet containing
+    /// a face is available; the orientation of that face can be found as a key corresponding to a SimplexPtrSet containing
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplices{};
+    std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationPtrHash, SimplexOrientationPtrEq> externalSimplices{};
 
     ///
     /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
@@ -296,12 +296,12 @@ class Spacetime {
     /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
     /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
     /// orientation of the Simplex itself.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
+    std::unordered_map<SimplexOrientationPtr, SimplexPtrSet, SimplexOrientationPtrHash, SimplexOrientationPtrEq> internalSimplices{};
     std::vector<std::shared_ptr<Observable> > observables{};
 
     /// This is the highest level of ownership for simplices. Facets/faces are owned by their cofaces, those cofaces go
     /// here.
-    std::unordered_set<std::unique_ptr<Simplex>> simplices{};
+    SimplexUniquePtrSet simplices{};
 };
 } // caset
 

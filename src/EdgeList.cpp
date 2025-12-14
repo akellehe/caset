@@ -29,11 +29,13 @@
 #include <vector>
 #include <unordered_map>
 
+#include "ForwardDeclarations.h"
 #include "EdgeList.h"
 #include "Vertex.h"
 #include "Edge.h"
 #include "Logger.h"
 #include "Simplex.h"
+#include "EdgeKey.h"
 
 namespace caset {
     Edge *EdgeList::add(std::unique_ptr<Edge> edge) {
@@ -154,7 +156,9 @@ namespace caset {
 
     Edge *EdgeList::get(const EdgeKey &edgeKey) {
       auto found = edgeList.find(edgeKey);
-      if (found == edgeList.end()) return nullptr;
+      if (found == edgeList.end()) {
+        return nullptr;
+      }
       return found->second.get();
     }
 

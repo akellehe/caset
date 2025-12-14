@@ -32,7 +32,9 @@
 
 #include "ForwardDeclarations.h"
 #include "Edge.h"
+#include "EdgeKey.h"
 #include "Logger.h"
+
 
 namespace caset {
 class EdgeList {
@@ -47,7 +49,7 @@ class EdgeList {
     std::unique_ptr<Edge> remove(Edge *edge) noexcept;
     std::unique_ptr<Edge> remove(const EdgeKey &edgeKey) noexcept;
   private:
-    std::unordered_map<EdgeKey, std::unique_ptr<Edge>, EdgeKeyHash, EdgeKeyEqual> edgeList{};
+    std::unordered_map<EdgeKey, std::unique_ptr<Edge>, EdgeKeyHash, EdgeKeyEq> edgeList{};
     Edge *getOrInsert(std::unique_ptr<Edge> edge);
 };
 } // caset

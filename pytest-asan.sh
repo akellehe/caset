@@ -13,5 +13,5 @@ export LD_PRELOAD="$ASAN":"$LIBSTDCXX"
 echo "Preloading libraries: $LD_PRELOAD"
 echo $1
 
-gdb --args python -m pytest -q $1 -s
+python -m pytest -q $1 -s
  
