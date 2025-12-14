@@ -37,7 +37,7 @@ class Simplex;
       VertexPtr target_,
       double squaredLength_
     ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (source_ == target_) throw std::runtime_error("You can't create self-referential edges.");
 #endif
     }
@@ -47,21 +47,21 @@ class Simplex;
       VertexPtr target_
     ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
       // Set squaredLength to a random value between -1 and 1
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (source_ == target_) throw std::runtime_error("You can't create self-referential edges.");
 #endif
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
     [[nodiscard]] VertexPtr Edge::getSource() const {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (source == 0) throw std::runtime_error("You attempted to get an edge with a 0 source vertex.");
 #endif
       return source;
     }
 
     [[nodiscard]] VertexPtr Edge::getTarget() const {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (target == 0) throw std::runtime_error("You attempted to get an edge with a 0 target vertex.");
 #endif
       return target;
@@ -86,7 +86,7 @@ class Simplex;
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
     void Edge::replaceSourceVertex(VertexPtr source_) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (source_ == target) throw std::runtime_error(
         "You can't replace a source vertex with the same as the target since that would create a self-reference.");
 #endif
@@ -98,7 +98,7 @@ class Simplex;
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
     void Edge::replaceTargetVertex(VertexPtr target_) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (target_ == source) throw std::runtime_error(
         "You can't replace a target vertex with the same as the source since that would create a self-reference.");
 #endif
@@ -133,7 +133,7 @@ class Simplex;
     /// @param from the ID of a vertex to or from which this Edge should no longer point.
     /// @param to the ID of a source or target vertex to which this Edge should now point.
     void Edge::redirect(VertexPtr from, VertexPtr to) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (from == to) throw std::runtime_error("You attempted to redirect an edge from a vertex to the same vertex.");
 #endif
       if (getSource() == from) {

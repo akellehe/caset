@@ -43,14 +43,14 @@ namespace caset {
       const auto found = edgeList.find(key);
       if (found == edgeList.end()) {
         auto [it, inserted] = edgeList.emplace(key, std::move(edge));
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
         if (!inserted)
           throw std::runtime_error("You attempted to overwrite an edge even though it didn't appear to exist!");
 #endif
         return it->second.get();
       }
 
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       CLOG(CRITICAL_LEVEL, "---------------------------------------------------------------------------------------------------");
       CLOG(CRITICAL_LEVEL, "You attempted to insert an edge, ", edge->toString(), " that already exists!");
       CLOG(CRITICAL_LEVEL, "The existing edge was ", found->second->toString(), " the key to insert it at was ", key.toString());
@@ -66,7 +66,7 @@ namespace caset {
     }
 
     Edge *EdgeList::add(VertexPtr src, VertexPtr tgt) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (src->getId() == 0 || tgt->getId() == 0) {
         throw std::runtime_error("Invalid src and target ids!");
       }
@@ -83,7 +83,7 @@ namespace caset {
     }
 
     Edge *EdgeList::add(VertexPtr src, VertexPtr tgt, double squaredLength) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (src->getId() == 0 || tgt->getId() == 0) {
         throw std::runtime_error("Invalid src and target ids!");
       }
@@ -102,7 +102,7 @@ namespace caset {
     std::unique_ptr<Edge> EdgeList::remove(const EdgeKey &edgeKey) noexcept {
       auto it = edgeList.find(edgeKey);
       if (it == edgeList.end()) return nullptr;
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       it->second->assertUnused();
 #endif
       std::unique_ptr<Edge> removed = std::move(it->second);
@@ -127,7 +127,7 @@ namespace caset {
         // No conflict - modify the edge, update the key and reinsert
         node.key() = newKey;
         auto [it, inserted, _] = edgeList.insert(std::move(node));
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
         if (!inserted) {
           throw std::runtime_error("Failed to reinsert edge with updated key: " +
             newKey.toString());
@@ -167,14 +167,14 @@ namespace caset {
 
 
     Edge *EdgeList::getOrInsert(std::unique_ptr<Edge> edge) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (edge->getSource() == edge->getTarget()) {
         throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());
       }
 #endif
       const auto found = edgeList.find(edge->getKey());
       if (found != edgeList.end()) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
         if (found->second == nullptr) {
           throw std::runtime_error("Found a key, but the corresponding edge was a nullptr.");
         }
@@ -187,7 +187,7 @@ namespace caset {
       }
 
       auto [it, inserted] = edgeList.emplace(edge->getKey(), std::move(edge));
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (!inserted) {
         throw std::runtime_error("You attempted to overwrite an edge!");
       }

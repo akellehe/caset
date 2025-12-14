@@ -47,7 +47,7 @@ namespace caset {
         return vertexList.at(vertex->getId());
       }
       auto [it, inserted] = vertexList.emplace(vertex->getId(), vertex);
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (!inserted) {
         throw std::runtime_error("You attempted to overwrite a vertex! (multi-threading issue?)");
       }
@@ -60,7 +60,7 @@ namespace caset {
     }
 
     std::shared_ptr<Vertex> VertexList::add(const IdType id, const std::vector<double> &coords) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
 if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
 #endif
       if (vertexList.contains(id)) {
@@ -68,7 +68,7 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
       }
       std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
       auto [it, inserted] = vertexList.emplace(id, vertex);
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (!inserted) throw std::runtime_error("Failed to emplace a vertex!");
       if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
 #endif
@@ -76,13 +76,13 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
     }
 
     std::shared_ptr<Vertex> VertexList::add(const IdType id) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
 #endif
       if (vertexList.contains(id)) return vertexList.at(id);
       std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
       auto [it, inserted] = vertexList.emplace(id, vertex);
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (!inserted) throw std::runtime_error("Failed to add a vertex!");
       if (vertex->getId() == 0) throw std::invalid_argument("You passed a non-zero ID but the vertex ended up having a 0-id.");
 #endif
@@ -90,7 +90,7 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
     }
 
     void VertexList::replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
-#if CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
       if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
 #endif
@@ -100,7 +100,7 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
     }
 
     void VertexList::remove(const std::shared_ptr<Vertex> &vertex) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       CLOG(INFO_LEVEL, "Erasing vertex: ", std::to_string(vertex->getId()));
       vertex->assertUnused();
 #endif

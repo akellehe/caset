@@ -118,7 +118,7 @@ Vertex::moveEdgesToImpl(
           ? recipient->addInEdge(donorEdge)
           : recipient->addOutEdge(donorEdge);
 
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
     if (wasCanonical && canonicalEdge != donorEdge) throw std::runtime_error("Canonical lies!");
     if (!wasCanonical && canonicalEdge == donorEdge) throw std::runtime_error("Canonical lies (2)!");
 #endif
@@ -132,7 +132,7 @@ Vertex::moveEdgesToImpl(
       // donorEdge is a new canonical edge that needs its key updated or to be replaced by its existing newKey's
       // (pre-existing) corresponding Edge in EdgeList. In other words. donorEdge either needs to be added to EdgeList
       // at newKey or it needs to be _replaced_ by what is already sitting at newKey.
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
       if (oldKey == donorEdge->getKey()) {
         throw std::runtime_error("We expected donorEdge to be a new canonical Edge, but it had the same key as the old edge. Key is by reference?");
       }
@@ -149,7 +149,7 @@ Vertex::moveEdgesToImpl(
     outEdges = {};
   }
 
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
   for (const auto &k : *toUpdate) {
     if (toDelete->contains(k)) {
       throw std::runtime_error("You attempted to update and delete a key at the same time.");
@@ -220,7 +220,7 @@ void Vertex::assertUnused() const {
 }
 
 void Vertex::addSimplex(Simplex *simplex) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   for (const auto &simp : simplices) {
     if (simp == simplex) {
       CLOG(ERROR_LEVEL, "You tried to add a simplex more than once!");

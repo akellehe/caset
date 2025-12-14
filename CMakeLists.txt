@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.18)
 project(caset LANGUAGES CXX)
 
 option(CASET_ASAN "Build caset with AddressSanitizer/UBSan" OFF)
-option(CASET_VERBOSE, "Build caset with C++ level logging" OFF)
+option(CASET_VERBOSE "Build caset with C++ level logging" OFF)
+option(CASET_ASSERTIONS "Build with assertions all over the place to encourage early failures." OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -67,8 +68,7 @@ set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(STATUS "Compiling for DEBUGGING (-O1, assertions on)")
-    target_compile_definitions(caset PRIVATE CASET_DEBUG=1)
+    message(STATUS "Compiling for DEBUGGING (-O1, -g3)")
     target_compile_options(caset PRIVATE -O1 -g3)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Compiling for RELEASE (-O3)")
@@ -80,6 +80,13 @@ if (CASET_VERBOSE)
     target_compile_definitions(caset PRIVATE CASET_VERBOSE=1)
 else()
     message(STATUS "Compiling with logging turned OFF.")
+endif()
+
+if (CASET_ASSERTIONS)
+    message(STATUS "Compiling with assertions turned ON.")
+    target_compile_definitions(caset PRIVATE CASET_ASSERTIONS=1)
+else()
+    message(STATUS "Compiling with assertions turned OFF.")
 endif()
 
 target_include_directories(caset

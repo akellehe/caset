@@ -142,52 +142,33 @@ class Fingerprint {
 
 template<typename T>
 struct FingerprintHash {
-  // using is_transparent = void; // enables heterogeneous lookup
-
+  using is_transparent = void; // enables heterogeneous lookup
   size_t operator()(const T &s) const noexcept { return static_cast<size_t>(s.fingerprint.fingerprint()); }
   size_t operator()(const std::shared_ptr<T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
   size_t operator()(const std::shared_ptr<const T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(std::shared_ptr<const T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(const T *s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(T *s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
   size_t operator()(uint64_t fp) const noexcept { return static_cast<size_t>(fp); }
 };
 
 template<typename T>
 struct FingerprintEq {
+  using is_transparent = void;
   bool operator()(const T &a, const T &b) const noexcept { return a == b; }
-  bool operator()(const T *a, const T *b) const noexcept {return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();}
-  bool operator()(T &a, T &b) const noexcept { return a == b; }
-  bool operator()(T *a, T *b) const noexcept {return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();}
-  bool operator()(T* const &a, T* const &b) const noexcept { return a->fingerprint.fingerprint() == b->fingerprint.fingerprint(); }
-  bool operator()(T* &a, T* &b) const noexcept { return a->fingerprint.fingerprint() == b->fingerprint.fingerprint(); }
+  bool operator()(const T &a, uint64_t fp) const noexcept { return a.fingerprint.fingerprint() == fp; }
+  bool operator()(uint64_t fp, const T &a) const noexcept { return fp == a.fingerprint.fingerprint(); }
+
+  bool operator()(const std::shared_ptr<T> &a, const std::shared_ptr<T> &b) const noexcept {return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();}
+  bool operator()(const std::shared_ptr<T> &a, uint64_t fp) const noexcept { return a->fingerprint.fingerprint() == fp; }
+  bool operator()(uint64_t fp, const std::shared_ptr<T> &a) const noexcept { return fp == a->fingerprint.fingerprint(); }
+
+  bool operator()(const std::shared_ptr<const T> &a, const std::shared_ptr<const T> &b) const noexcept {return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();}
+  bool operator()(const std::shared_ptr<const T> &a, uint64_t fp) const noexcept { return a->fingerprint.fingerprint() == fp; }
+  bool operator()(uint64_t fp, const std::shared_ptr<const T> &a) const noexcept { return fp == a->fingerprint.fingerprint(); }
 };
 
-/// These classes are for when T is a pointer
-template<typename T>
-struct FingerprintPtrHash {
-  size_t operator()(const T &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(const std::shared_ptr<T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(const std::shared_ptr<const T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(std::shared_ptr<const T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(const std::unique_ptr<T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(const std::unique_ptr<const T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(std::unique_ptr<const T> &s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(const T *s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(T *s) const noexcept { return static_cast<size_t>(s->fingerprint.fingerprint()); }
-  size_t operator()(uint64_t fp) const noexcept { return static_cast<size_t>(fp); }
-};
+class Simplex;
+using SimplexHash = FingerprintHash<Simplex>;
+using SimplexEq = FingerprintEq<Simplex>;
 
-template<typename T>
-struct FingerprintPtrEq {
-  bool operator()(const T &a, const T &b) const noexcept { return a->fingerprint.fingerprint() == b->fingerprint.fingerprint(); }
-  bool operator()(const T *a, const T *b) const noexcept {return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();}
-  bool operator()(T &a, T &b) const noexcept { return a->fingerprint.fingerprint() == b->fingerprint.fingerprint(); }
-  bool operator()(T *a, T *b) const noexcept {return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();}
-  bool operator()(T* const &a, T* const &b) const noexcept { return a->fingerprint.fingerprint() == b->fingerprint.fingerprint(); }
-  bool operator()(T* &a, T* &b) const noexcept { return a->fingerprint.fingerprint() == b->fingerprint.fingerprint(); }
-};
-
-} // namespace caset
+}
 
 #endif //CASET_VERTEXFINGERPRINT_H

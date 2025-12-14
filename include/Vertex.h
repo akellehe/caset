@@ -58,18 +58,18 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             CLOG(INFO_LEVEL, "Vertex was default-constructed.");
         }
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) : id(id_), coordinates(coords) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
             if (id_ == 0) throw std::runtime_error("Vertex had a 0 ID.");
 #endif
         }
         explicit Vertex(const std::uint64_t id_) : id(id_) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
             if (id_ == 0) throw std::runtime_error("Vertex had a 0 ID.");
 #endif
         }
 
         std::uint64_t getId() const {
-#if CASET_DEBUG
+#ifdef CASET_ASSERTIONS
             if (id == 0) throw std::runtime_error("Vertex had a 0 ID.");
 #endif
 

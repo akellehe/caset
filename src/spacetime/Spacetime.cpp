@@ -191,7 +191,7 @@ Spacetime::getGluableFaces(
 {
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
   auto attachedFacets = attachedSimplex->getFacets();
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   for (const auto &f : unattachedFacets) {
     f->validate();
   }
@@ -210,7 +210,7 @@ Spacetime::getGluableFaces(
       const auto [tib, tfb] = attachedFace->getOrientation().numeric();
       if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
       if (attachedFace->isInternal()) continue;
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       attachedFace->validate();
       unattachedFace->validate();
 #endif
@@ -281,7 +281,7 @@ void Spacetime::attachAtVertices(
   const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs // {unattached, attached}
 ) {
   // Bone density in Regge calculus can be calculated as the size of the Simplex list on the Edge.
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   unattached->validate();
   attached->validate();
 #endif
@@ -295,7 +295,7 @@ void Spacetime::attachAtVertices(
       attachedVertex
       );
   }
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   unattached->validate();
   attached->validate();
 #endif
@@ -429,7 +429,7 @@ OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(SimplexRawPtr unattac
          attachedCofaceId) {
       if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
       if (!unattachedSimplex->hasCausallyAvailableFacet() || !(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       (*attachedCofaceId)->validate();
 #endif
       OptionalSimplexPtrPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
@@ -507,7 +507,7 @@ std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
 }
 
 VertexPtr Spacetime::createVertex(const IdType id) {
-#ifdef CASET_DEBUG
+#ifdef CASET_ASSERTIONS
   if (id == 0) throw std::runtime_error("Invalid vertex ID: 0");
 #endif
   return vertexList->add(id);

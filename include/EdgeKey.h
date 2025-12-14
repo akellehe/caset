@@ -20,7 +20,7 @@ class EdgeKey {
     IdType second{0};
 
     EdgeKey(IdType sourceId_, IdType targetId_) : first(sourceId_), second(targetId_), fingerprint({sourceId_, targetId_}) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       if (sourceId_ == targetId_) throw std::runtime_error("You can't create a self-reference.");
 #endif
       fingerprint = Fingerprint(fingerprint);

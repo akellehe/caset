@@ -28,11 +28,11 @@
 
 namespace caset {
 std::vector<SimplexRawPtr> Simplex::getFacets() {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
 #endif
   if (getVertices().size() == 1) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
     validate();
 #endif
     return {};
@@ -56,7 +56,7 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
       facet->addCoface(this);
       facets.push_back(std::move(facet));
     }
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
     validate();
 #endif
   }
@@ -75,7 +75,7 @@ Simplex::Simplex(
     vertices(vertices_),
     edges(edges_.begin(), edges_.end()),
     fingerprint({}) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
   orientation = SimplexOrientation::orientationOf(vertices_);
@@ -86,13 +86,13 @@ Simplex::Simplex(
   const Edges &edges_,
   const SimplexOrientation &orientation_
 ) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint({}) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
 }
 
 std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, Edges edges_) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
   std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(vertices_, edges_);
@@ -103,7 +103,7 @@ std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, Edges edge
 std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_,
                                          Edges edges_,
                                          const SimplexOrientation &orientation_) {
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
   std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(vertices_, edges_, orientation_);
@@ -119,11 +119,11 @@ void Simplex::initialize(SimplexRawPtr simplex) {
     v->addSimplex(simplex);
   }
   fingerprint = Fingerprint(ids);
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   if (getVertexIdLookup().empty()) throw std::runtime_error("Simplex is empty");
 #endif
 
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   validate();
 #endif
 }
@@ -201,7 +201,7 @@ std::size_t Simplex::getNumberOfEdges() const {
 
 void Simplex::addCoface(SimplexRawPtr simplex) {
   cofaces.insert(simplex);
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   simplex->validate();
   validate();
 #endif
@@ -498,7 +498,7 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
   newVertex->addSimplex(this);
   fingerprint.refreshFingerprint(vertexIds);
 
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   validate();
 #endif
   return true;
