@@ -49,6 +49,7 @@ namespace caset {
 #endif
         return it->second.get();
       }
+
 #ifdef CASET_DEBUG
       CLOG(CRITICAL_LEVEL, "---------------------------------------------------------------------------------------------------");
       CLOG(CRITICAL_LEVEL, "You attempted to insert an edge, ", edge->toString(), " that already exists!");
@@ -60,6 +61,8 @@ namespace caset {
       CLOG(CRITICAL_LEVEL, "---------------------------------------------------------------------------------------------------");
       throw std::runtime_error("You attempted to insert an edge that already exists. This will result in un unexpected free()");
 #endif
+
+      return found->second.get();
     }
 
     Edge *EdgeList::add(VertexPtr src, VertexPtr tgt) {
