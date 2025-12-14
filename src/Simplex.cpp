@@ -74,7 +74,7 @@ Simplex::Simplex(
 ) : orientation({0, 0}),
     vertices(vertices_),
     edges(edges_.begin(), edges_.end()),
-    fingerprint({}) {
+    fingerprint() {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -85,7 +85,7 @@ Simplex::Simplex(
   const VertexPtrs &vertices_,
   const Edges &edges_,
   const SimplexOrientation &orientation_
-) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint({}) {
+) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint() {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
