@@ -162,7 +162,7 @@ class Simplex {
 
 
     /// @returns Edges in traversal order (the order of input vertices).
-    [[nodiscard]] const EdgePtrSet &getEdges() const noexcept;
+    [[nodiscard]] const EdgePtrSet getEdges() const noexcept;
 
     [[nodiscard]]
     std::optional<VertexPtrs>

@@ -48,11 +48,14 @@ pybind11_add_module(caset MODULE ${CASET_SOURCES})
 
 if(CASET_ASAN)
     target_compile_options(caset PRIVATE
-            -O1 -g3 -fno-omit-frame-pointer
-            -fsanitize=address,undefined
+            -O1 -g3
+            -fno-omit-frame-pointer
+            -fsanitize=address,undefined,thread
+            -fno-sanitize-recover=address,undefined
+            -fno-optimize-sibling-calls
     )
     target_link_options(caset PRIVATE
-            -fsanitize=address,undefined
+            -fsanitize=address,undefined,thread
     )
     # Optional: make ASan reports symbolize nicely
     target_compile_definitions(caset PRIVATE ASAN_ENABLED=1)

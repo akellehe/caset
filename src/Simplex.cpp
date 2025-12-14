@@ -276,7 +276,7 @@ void Simplex::validate() const {
 }
 
 /// @returns Edges in traversal order (the order of input vertices).
-[[nodiscard]] const EdgePtrSet &Simplex::getEdges() const noexcept {
+[[nodiscard]] const EdgePtrSet Simplex::getEdges() const noexcept {
   return edges;
 }
 
