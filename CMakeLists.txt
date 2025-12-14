@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(caset LANGUAGES CXX)
 
 option(CASET_ASAN "Build caset with AddressSanitizer/UBSan" OFF)
+option(CASET_VERBOSE, "Build caset with C++ level logging" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,6 +48,7 @@ file(GLOB_RECURSE CASET_SOURCES
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
 
 if(CASET_ASAN)
+    message(STATUS "Compiling with ASAN/UBSAN support!")
     target_compile_options(caset PRIVATE
             -O1 -g3
             -fno-omit-frame-pointer
@@ -65,10 +67,19 @@ set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(caset PRIVATE CASET_DEBUG=1 VERBOSE=1)
-#    add_definitions(-DSOURCES_ROOT="${SOURCES_ROOT}")
+    message(STATUS "Compiling for DEBUGGING (-O1, assertions on)")
+    target_compile_definitions(caset PRIVATE CASET_DEBUG=1)
+    target_compile_options(caset PRIVATE -O1 -g3)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(STATUS "Compiling for RELEASE (-O3)")
     target_compile_options(caset PRIVATE -O3)
+endif()
+
+if (CASET_VERBOSE)
+    message(STATUS "Compiling with logging turned ON.")
+    target_compile_definitions(caset PRIVATE CASET_VERBOSE=1)
+else()
+    message(STATUS "Compiling with logging turned OFF.")
 endif()
 
 target_include_directories(caset
