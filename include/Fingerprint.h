@@ -79,41 +79,87 @@ inline constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
 ///
 class Fingerprint {
   public:
+    Fingerprint() noexcept : ids_({}), n_(0), h_(0), dirty_(false) {}
 
-    explicit Fingerprint(const std::vector<IdType> &ids_) : ids_({})  {
-      refreshFingerprint(ids_);
+    explicit Fingerprint(const std::vector<IdType> &ids) noexcept : ids_({}), n_(0), h_(0), dirty_(true) {
+      setIds(ids);
     }
 
-    static inline std::uint64_t mix64(IdType x) noexcept {
+    // Optimized hash mixing - constexpr for compile-time evaluation
+    static inline constexpr std::uint64_t mix64(IdType x) noexcept {
       x += 0x9e3779b97f4a7c15ull;
       x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
       x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
       return x ^ (x >> 31);
     }
 
-    static std::tuple<std::uint64_t, std::uint8_t, IdArray> computeFingerprint(
-      const std::vector<IdType> &ids__) {
-      if (ids__.size() > kMax) throw std::length_error("VertexFingerprint: Too many ids");
-      std::uint8_t n = static_cast<std::uint8_t>(ids__.size());
-      IdArray ids{};
-      for (std::size_t i = 0; i < n; ++i) {
-        ids[i] = ids__[i];
+    // Batch update - replaces all IDs, marks dirty
+    void setIds(const std::vector<IdType> &ids) noexcept {
+      n_ = 0;
+      for (auto id : ids) {
+        addId(id);
       }
-      std::sort(ids.begin(), ids.begin() + n);
-      auto it = std::unique(ids.begin(), ids.begin() + n);
-      n = static_cast<std::uint8_t>(std::distance(ids.begin(), it));
-      std::uint64_t h = 0xcbf29ce484222325ull ^ n;
-      for (std::uint8_t i = 0; i < n; ++i) {
-        h ^= mix64(ids[i] + 0x9e3779b97f4a7c15ull);
-        h *= 0x100000001b3ull; // FNV-ish step
-      }
-      return {h, n, ids};
+      dirty_ = true;
     }
 
-    std::string toString() {
+    // Incremental add - stages change, marks dirty
+    void addId(IdType id) noexcept {
+      // Check for duplicates using linear scan (fast for small n)
+      for (std::uint8_t i = 0; i < n_; ++i) {
+        if (ids_[i] == id) [[unlikely]] return; // Already present
+      }
+
+      if (n_ < kMax) [[likely]] {
+        ids_[n_++] = id;
+        dirty_ = true;
+      }
+    }
+
+    // Remove ID - stages change, marks dirty
+    void removeId(IdType id) noexcept {
+      for (std::uint8_t i = 0; i < n_; ++i) {
+        if (ids_[i] == id) {
+          // Remove by swapping with last element
+          ids_[i] = ids_[--n_];
+          dirty_ = true;
+          return;
+        }
+      }
+    }
+
+    // Lazy evaluation - only compute when accessed
+    std::uint64_t fingerprint() const noexcept {
+      if (dirty_) [[unlikely]] {
+        // Recompute hash from all IDs using commutative XOR
+        h_ = 0;
+        for (std::uint8_t i = 0; i < n_; ++i) {
+          h_ ^= mix64(ids_[i]);
+        }
+        dirty_ = false;
+      }
+      return h_;
+    }
+
+    // Force immediate refresh - call after batch updates if needed
+    void refresh() const noexcept {
+      if (dirty_) {
+        fingerprint(); // Trigger lazy evaluation
+      }
+    }
+
+    // Backward compatibility
+    void refreshFingerprint(const std::vector<IdType> &ids) {
+      setIds(ids);
+      refresh();
+    }
+
+    std::string toString() const {
+      // Force refresh before stringifying
+      refresh();
+
       std::stringstream ss;
       ss << "<Fingerprint: " << h_ << " (";
-      for (std::size_t i = 0; i < n_; ++i) {
+      for (std::uint8_t i = 0; i < n_; ++i) {
         ss << ids_[i];
         if (i < n_ - 1) ss << ", ";
       }
@@ -121,23 +167,38 @@ class Fingerprint {
       return ss.str();
     }
 
-    std::uint64_t fingerprint() const noexcept { return h_; }
-
-    void refreshFingerprint(const std::vector<IdType> &ids__) {
-      std::tie(h_, n_, ids_) = Fingerprint::computeFingerprint(ids__);
-    }
-
     bool operator==(const Fingerprint &o) const noexcept {
+      // Force refresh on both sides if needed
+      if (dirty_) [[unlikely]] refresh();
+      if (o.dirty_) [[unlikely]] o.refresh();
+
       if (n_ != o.n_) return false;
-      if (h_ != o.h_) return false; // fast reject
-      return std::memcmp(ids_.data(), o.ids_.data(), n_ * sizeof(IdType)) == 0;
+      if (h_ != o.h_) return false; // Fast path: hash mismatch
+
+      // Compare sets - both are unique but unsorted
+      // For small n (typically 2-5), nested loop is fastest
+      for (std::uint8_t i = 0; i < n_; ++i) {
+        bool found = false;
+        for (std::uint8_t j = 0; j < o.n_; ++j) {
+          if (ids_[i] == o.ids_[j]) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) return false;
+      }
+      return true;
     }
-    bool operator!=(const Fingerprint &o) const noexcept { return !(*this == o); }
+
+    bool operator!=(const Fingerprint &o) const noexcept {
+      return !(*this == o);
+    }
 
   private:
-    IdArray ids_{};
-    std::uint8_t n_{0};
-    std::uint64_t h_{kSeed};
+    IdArray ids_{};              // Unique IDs (unsorted for speed)
+    std::uint8_t n_{0};          // Count of unique IDs
+    mutable std::uint64_t h_{0}; // Cached XOR hash - recomputed when dirty
+    mutable bool dirty_{false};  // Needs recomputation?
 };
 
 template<typename T>
