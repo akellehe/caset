@@ -10,3 +10,4 @@ vendor/libtorch*
 __pycache__
 cmake-build
 *.pyc
+.idea/*
