@@ -69,7 +69,7 @@ target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Compiling for DEBUGGING (-O1, -g3)")
-    target_compile_options(caset PRIVATE -O1 -g3)
+    target_compile_options(caset PRIVATE -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Compiling for RELEASE (-O3)")
     target_compile_options(caset PRIVATE -O3)

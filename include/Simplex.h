@@ -50,8 +50,8 @@ class Simplex {
   public:
     ///
     /// @param vertices_
-    Simplex(const VertexPtrs &vertices_, const Edges &edges_);
-    Simplex(const VertexPtrs &vertices_, const Edges &edges_ ,const SimplexOrientation &orientation_);
+    Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_);
+    Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_ ,const SimplexOrientation &orientation_);
 
     void initialize(SimplexRawPtr simplex);
 
@@ -238,8 +238,8 @@ class Simplex {
 
     bool isInternal() const noexcept;
 
-    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_);
-    static std::unique_ptr<Simplex> create(const VertexPtrs &vertices_, Edges edges_, const SimplexOrientation &orientation_);
+    static std::unique_ptr<Simplex> create(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_);
+    static std::unique_ptr<Simplex> create(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_, const SimplexOrientation &orientation_);
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -280,6 +280,7 @@ class Simplex {
     VertexIdMap vertexIdLookup{};
     VertexPtrs vertices{};
     EdgePtrSet edges{};
+    Spacetime *spacetime{nullptr};
 
     std::vector<std::unique_ptr<Simplex>> facets{};
     std::unordered_set<SimplexRawPtr> cofaces{};

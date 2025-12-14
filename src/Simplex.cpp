@@ -52,7 +52,7 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
         if (!e->hasVertex(skipVertex.get())) faceEdges.push_back(e);
       }
       // TODO: Simplex::create should probably only be called by Spacetime, which holds canonical simplices.
-      std::unique_ptr<Simplex> facet = Simplex::create(faceVertices, faceEdges);
+      std::unique_ptr<Simplex> facet = Simplex::create(spacetime, faceVertices, faceEdges);
       facet->addCoface(this);
       facets.push_back(std::move(facet));
     }
@@ -69,12 +69,15 @@ std::vector<SimplexRawPtr> Simplex::getFacets() {
 }
 
 Simplex::Simplex(
+  Spacetime *spacetime_,
   const VertexPtrs &vertices_,
   const Edges &edges_
 ) : orientation({0, 0}),
     vertices(vertices_),
     edges(edges_.begin(), edges_.end()),
-    fingerprint() {
+    fingerprint(),
+    spacetime(spacetime_)
+{
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -82,31 +85,37 @@ Simplex::Simplex(
 }
 
 Simplex::Simplex(
+  Spacetime *spacetime_,
   const VertexPtrs &vertices_,
   const Edges &edges_,
   const SimplexOrientation &orientation_
-) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint() {
+) : orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()), fingerprint(), spacetime(spacetime_) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
 }
 
-std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_, Edges edges_) {
+std::unique_ptr<Simplex> Simplex::create(
+  Spacetime *spacetime_,
+  const VertexPtrs &vertices_,
+  Edges edges_) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(vertices_, edges_);
+  std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(spacetime_, vertices_, edges_);
   simplex->initialize(simplex.get());
   return simplex;
 }
 
-std::unique_ptr<Simplex> Simplex::create(const VertexPtrs &vertices_,
-                                         Edges edges_,
-                                         const SimplexOrientation &orientation_) {
+std::unique_ptr<Simplex> Simplex::create(
+  Spacetime *spacetime_,
+  const VertexPtrs &vertices_,
+  Edges edges_,
+  const SimplexOrientation &orientation_) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(vertices_, edges_, orientation_);
+  std::unique_ptr<Simplex> simplex = std::make_unique<Simplex>(spacetime_, vertices_, edges_, orientation_);
   simplex->initialize(simplex.get());
   return simplex;
 }

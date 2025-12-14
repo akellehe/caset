@@ -51,7 +51,7 @@ EdgeRawPtr Spacetime::createEdge(
   VertexPtr src,
   VertexPtr tgt
 ) {
-  EdgeRawPtr edge = edgeList->add(src, tgt);
+  EdgeRawPtr edge = edgeList->add(this, src, tgt);
   src->addOutEdge(edge);
   tgt->addInEdge(edge);
   return edge;
@@ -62,7 +62,7 @@ EdgeRawPtr Spacetime::createEdge(
   VertexPtr tgt,
   double squaredLength
 ) noexcept {
-  EdgeRawPtr edge = edgeList->add(src, tgt, squaredLength);
+  EdgeRawPtr edge = edgeList->add(this, src, tgt, squaredLength);
   src->addOutEdge(edge);
   tgt->addInEdge(edge);
   return edge;
@@ -73,7 +73,7 @@ SimplexRawPtr Spacetime::createSimplex(
 ) {
   CLOG(INFO_LEVEL, "Creating simplex...");
   const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
-  std::unique_ptr<Simplex> simplex = Simplex::create(vertices, edges);
+  std::unique_ptr<Simplex> simplex = Simplex::create(this, vertices, edges);
   auto raw = simplex.get();
   for (const auto &o : raw->getOrientation().getFacialOrientations()) {
     externalSimplices[o].insert(raw);
@@ -103,9 +103,9 @@ SimplexRawPtr Spacetime::createSimplex(std::size_t k) {
   edges.reserve(Simplex::computeNumberOfEdges(k));
   for (int i = 0; i < k; i++) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-    VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
+    VertexPtr newVertex = vertexList->add(this, vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
-      EdgeRawPtr edge = edgeList->add(existingVertex, newVertex, squaredLength);
+      EdgeRawPtr edge = edgeList->add(this, existingVertex, newVertex, squaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -128,13 +128,14 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
   for (int i = 0; i < ti; i++) {
     // Create ti Timelike vertices
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
-    VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
+    VertexPtr newVertex = vertexList->add(this, vertexIdCounter++, {static_cast<double>(currentTime)});
     if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
       timelikeSquaredLength = -alpha;
     }
     for (const auto &existingVertex : vertices) {
       CLOG(DEBUG_LEVEL, "Adding edge to edgelist...");
       EdgeRawPtr edge = edgeList->add(
+        this,
         existingVertex,
         newVertex,
         timelikeSquaredLength
@@ -151,16 +152,16 @@ SimplexRawPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numer
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     /// We can't just use the vertexList .size() here, because some vertices can be removed. We need to keep a
     /// counter:
-    VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime + 1)});
+    VertexPtr newVertex = vertexList->add(this, vertexIdCounter++, {static_cast<double>(currentTime + 1)});
     for (const auto &existingVertex : vertices) {
       EdgeRawPtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
         CLOG(DEBUG_LEVEL, "Adding edge to edgelist (2)...");
-        edge = edgeList->add(existingVertex, newVertex, squaredLength);
+        edge = edgeList->add(this, existingVertex, newVertex, squaredLength);
         CLOG(DEBUG_LEVEL, "done...");
       } else {
         CLOG(DEBUG_LEVEL, "Adding edge to edgelist (3)...");
-        edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
+        edge = edgeList->add(this, existingVertex, newVertex, timelikeSquaredLength);
         CLOG(DEBUG_LEVEL, "done...");
       }
       existingVertex->addOutEdge(edge);
@@ -510,11 +511,11 @@ VertexPtr Spacetime::createVertex(const IdType id) {
 #ifdef CASET_ASSERTIONS
   if (id == 0) throw std::runtime_error("Invalid vertex ID: 0");
 #endif
-  return vertexList->add(id);
+  return vertexList->add(this, id);
 }
 
 VertexPtr Spacetime::createVertex(const IdType id, const std::vector<double> &coords) {
-  return vertexList->add(id, coords);
+  return vertexList->add(this, id, coords);
 }
 
 bool Spacetime::removeIfIsolated(const VertexPtr &vertex) {

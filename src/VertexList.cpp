@@ -42,7 +42,7 @@ namespace caset {
       return found->second;
     }
 
-    std::shared_ptr<Vertex> VertexList::add(const std::shared_ptr<Vertex> &vertex) {
+    std::shared_ptr<Vertex> VertexList::add(Spacetime *spacetime_, const std::shared_ptr<Vertex> &vertex) {
       if (vertexList.contains(vertex->getId())) {
         return vertexList.at(vertex->getId());
       }
@@ -59,14 +59,14 @@ namespace caset {
       return vertexList.contains(id);
     }
 
-    std::shared_ptr<Vertex> VertexList::add(const IdType id, const std::vector<double> &coords) {
+    std::shared_ptr<Vertex> VertexList::add(Spacetime *spacetime_, const IdType id, const std::vector<double> &coords) {
 #ifdef CASET_ASSERTIONS
 if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
 #endif
       if (vertexList.contains(id)) {
         return vertexList.at(id);
       }
-      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
+      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(spacetime_, id, coords);
       auto [it, inserted] = vertexList.emplace(id, vertex);
 #ifdef CASET_ASSERTIONS
       if (!inserted) throw std::runtime_error("Failed to emplace a vertex!");
@@ -75,12 +75,12 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
       return it->second;
     }
 
-    std::shared_ptr<Vertex> VertexList::add(const IdType id) {
+    std::shared_ptr<Vertex> VertexList::add(Spacetime *spacetime_, const IdType id) {
 #ifdef CASET_ASSERTIONS
       if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
 #endif
       if (vertexList.contains(id)) return vertexList.at(id);
-      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id);
+      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(spacetime_, id);
       auto [it, inserted] = vertexList.emplace(id, vertex);
 #ifdef CASET_ASSERTIONS
       if (!inserted) throw std::runtime_error("Failed to add a vertex!");
@@ -95,8 +95,9 @@ if (id == 0) throw std::invalid_argument("Cannot add a 0 vertex");
       if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
 #endif
 
+      Spacetime *st = toRemove->getSpacetime();
       remove(toRemove);
-      add(toAdd);
+      add(st, toAdd);
     }
 
     void VertexList::remove(const std::shared_ptr<Vertex> &vertex) {

@@ -50,17 +50,21 @@ PYBIND11_MODULE(caset, m) {
   py::class_<Edge, std::shared_ptr<Edge> >(m, "Edge")
       .def(
         py::init<
+          Spacetime *,
           VertexPtr,
           VertexPtr
         >(),
+        py::arg("spacetime"),
         py::arg("source"),
         py::arg("target")
       )
       .def(
         py::init<
+          Spacetime *,
           VertexPtr,
           VertexPtr,
           double>(),
+        py::arg("spacetime"),
         py::arg("source"),
         py::arg("target"),
         py::arg("squaredLength")
@@ -82,10 +86,10 @@ PYBIND11_MODULE(caset, m) {
       .def("__eq__", &EdgeKey::operator==);
 
   // py::class_<EdgeKeyHash, std::shared_ptr<EdgeKeyHash> >(m, "EdgeKeyHash")
-      // .def("__call__", &EdgeKeyHash::operator());
+  // .def("__call__", &EdgeKeyHash::operator());
 
   // py::class_<EdgeKeyEq, std::shared_ptr<EdgeKeyEq> >(m, "EdgeKeyEqual")
-      // .def("__call__", &EdgeKeyEq::operator());
+  // .def("__call__", &EdgeKeyEq::operator());
 
   py::class_<Vertex, std::shared_ptr<Vertex> >(m, "Vertex")
       .def("__eq__", &Vertex::operator==)
@@ -107,18 +111,23 @@ PYBIND11_MODULE(caset, m) {
       .def("removeOutEdge", &Vertex::removeOutEdge)
       .def("setCoordinates", &Vertex::setCoordinates, py::arg("coordinates"))
       .def("getSimplices", &Vertex::getSimplicesForPython)
-      .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"));
+      .def(py::init<Spacetime *, std::uint64_t, std::vector<double> &>(),
+           py::arg("spacetime"),
+           py::arg("id"),
+           py::arg("coordinates"));
 
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")
       .def(py::init<>())
       .def("get", &VertexList::get)
       .def("add",
-           py::overload_cast<const std::shared_ptr<Vertex> &>(&VertexList::add),
+           py::overload_cast<Spacetime *, const std::shared_ptr<Vertex> &>(&VertexList::add),
            py::return_value_policy::reference_internal)
       .def("add",
-           py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList::add),
+           py::overload_cast<Spacetime *, const std::uint64_t, const std::vector<double> &>(&VertexList::add),
            py::return_value_policy::reference_internal)
-      .def("add", py::overload_cast<const std::uint64_t>(&VertexList::add), py::return_value_policy::reference_internal)
+      .def("add",
+           py::overload_cast<Spacetime *, const std::uint64_t>(&VertexList::add),
+           py::return_value_policy::reference_internal)
       .def("replace", &VertexList::replace, py::return_value_policy::reference_internal)
       .def("size", &VertexList::size)
       .def("toVector", &VertexList::toVector, py::return_value_policy::reference_internal);
@@ -126,15 +135,17 @@ PYBIND11_MODULE(caset, m) {
   py::class_<EdgeList, std::shared_ptr<EdgeList> >(m, "EdgeList")
       .def(py::init<>())
       .def("add",
-           py::overload_cast<VertexPtr, VertexPtr, double>(&EdgeList::add),
+           py::overload_cast<Spacetime *, VertexPtr, VertexPtr, double>(&EdgeList::add),
            py::return_value_policy::reference_internal,
+           py::arg("spacetime"),
            py::arg("sourceId"),
            py::arg("targetId"),
            py::arg("squaredLength")
       )
       .def("add",
-           py::overload_cast<VertexPtr, VertexPtr>(&EdgeList::add),
+           py::overload_cast<Spacetime *, VertexPtr, VertexPtr>(&EdgeList::add),
            py::return_value_policy::reference_internal,
+           py::arg("spacetime"),
            py::arg("sourceId"),
            py::arg("targetId")
       )

@@ -65,8 +65,8 @@ class Edge {
   public:
     Fingerprint fingerprint;
 
-    Edge(VertexPtr source_, VertexPtr target_, double squaredLength_);
-    Edge(VertexPtr source_, VertexPtr target_);
+    Edge(Spacetime *, VertexPtr source_, VertexPtr target_, double squaredLength_);
+    Edge(Spacetime *, VertexPtr source_, VertexPtr target_);
 
     [[nodiscard]] VertexPtr getSource() const;
     [[nodiscard]] VertexPtr getTarget() const;
@@ -74,8 +74,6 @@ class Edge {
     [[nodiscard]] std::string toString() const noexcept;
 
     void assertUnused() const;
-
-    void copyInPlaceTo(Edge *other);
 
     void replaceOnReferents(EdgeRawPtr replacement);
 
@@ -115,10 +113,7 @@ class Edge {
     VertexPtr source;
     VertexPtr target;
     SimplexPtrSet simplices;
-
-    /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
-    /// fingerprint for this Edge after replacing a source or target vertex in-place.
-    void refreshFingerprint() noexcept;
+    Spacetime *spacetime;
 
     double squaredLength;
 };

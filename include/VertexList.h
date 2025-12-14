@@ -36,9 +36,9 @@ namespace caset {
 class VertexList {
   public:
     bool contains(const IdType id) const noexcept;
-    std::shared_ptr<Vertex> add(const IdType id);
-    std::shared_ptr<Vertex> add(const IdType id, const std::vector<double> &coords);
-    std::shared_ptr<Vertex> add(const std::shared_ptr<Vertex> &vertex);
+    std::shared_ptr<Vertex> add(Spacetime *spacetime_, const IdType id);
+    std::shared_ptr<Vertex> add(Spacetime *spacetime_, const IdType id, const std::vector<double> &coords);
+    std::shared_ptr<Vertex> add(Spacetime *spacetime_, const std::shared_ptr<Vertex> &vertex);
     std::shared_ptr<Vertex> get(IdType id);
     std::size_t size() noexcept;
     std::vector<std::shared_ptr<Vertex>> toVector() const noexcept;

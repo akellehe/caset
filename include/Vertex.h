@@ -55,18 +55,23 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
     public:
         Vertex() noexcept {
             id = 1;
+            spacetime = nullptr;
             CLOG(INFO_LEVEL, "Vertex was default-constructed.");
         }
-        Vertex(const std::uint64_t id_, const std::vector<double> &coords) : id(id_), coordinates(coords) {
+        Vertex(Spacetime *spacetime_,
+               const std::uint64_t id_,
+               const std::vector<double> &coords) : spacetime(spacetime_), id(id_), coordinates(coords) {
 #ifdef CASET_ASSERTIONS
             if (id_ == 0) throw std::runtime_error("Vertex had a 0 ID.");
 #endif
         }
-        explicit Vertex(const std::uint64_t id_) : id(id_) {
+        Vertex(Spacetime *spacetime_, const std::uint64_t id_) : id(id_), spacetime(spacetime_) {
 #ifdef CASET_ASSERTIONS
             if (id_ == 0) throw std::runtime_error("Vertex had a 0 ID.");
 #endif
         }
+
+        Spacetime *getSpacetime() const noexcept;
 
         std::uint64_t getId() const {
 #ifdef CASET_ASSERTIONS
@@ -102,11 +107,11 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::size_t degree() const noexcept;
         std::vector<std::shared_ptr<Simplex> > getSimplicesForPython() const;
 
-        std::unordered_set<Edge *> getInEdges() const noexcept;
+        EdgePtrSet getInEdges() const noexcept;
 
-        std::unordered_set<Edge *> getOutEdges() const noexcept;
+        EdgePtrSet getOutEdges() const noexcept;
 
-        std::unordered_set<Edge *> getEdges() const noexcept;
+        EdgePtrSet getEdges() const noexcept;
 
         std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> > moveInEdgesTo(
             const std::shared_ptr<Vertex> &recipient);
@@ -128,20 +133,22 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         std::string toString() const noexcept;
 
-        std::unordered_set<Simplex *> getSimplices() const noexcept;
+        SimplexPtrSet getSimplices() const noexcept;
 
         void addSimplex(Simplex *simplex);
         void removeSimplex(Simplex *simplex);
 
         void assertUnused() const;
+        [[nodiscard]] bool const hasEdge(Edge *edge) const;
         [[nodiscard]] bool const hasEdge(const Edge *edge) const;
 
     private:
-        std::unordered_set<Edge *> outEdges{};
-        std::unordered_set<Edge *> inEdges{};
-        std::unordered_set<Simplex *> simplices{};
+        EdgePtrSet outEdges{};
+        EdgePtrSet inEdges{};
+        SimplexPtrSet simplices{};
         std::uint64_t id;
         std::vector<double> coordinates{};
+        Spacetime *spacetime;
 
         /// Helper method for moving edges in either direction. Returns toUpdate, toDelete listing which EdgeKey (s)
         /// should be re-keyed or deleted in the EdgeList maintaining ownership for the Edge (s).

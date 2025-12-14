@@ -33,19 +33,21 @@ namespace caset {
 class Simplex;
 
     Edge::Edge(
+      Spacetime *spacetime_,
       VertexPtr source_,
       VertexPtr target_,
       double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}) {
+    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}), spacetime(spacetime_) {
 #if CASET_ASSERTIONS
       if (source_ == target_) throw std::runtime_error("You can't create self-referential edges.");
 #endif
     }
 
     Edge::Edge(
+      Spacetime *spacetime_,
       VertexPtr source_,
       VertexPtr target_
-    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
+    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}), spacetime(spacetime_) {
       // Set squaredLength to a random value between -1 and 1
 #if CASET_ASSERTIONS
       if (source_ == target_) throw std::runtime_error("You can't create self-referential edges.");
@@ -75,13 +77,6 @@ class Simplex;
       return std::to_string(source->getId()) + "->" + std::to_string(target->getId());
     }
 
-    void Edge::copyInPlaceTo(Edge *other) {
-      other->source = source;
-      other->target = target;
-      other->simplices = getSimplices();
-      other->refreshFingerprint();
-    }
-
     /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
@@ -91,7 +86,8 @@ class Simplex;
         "You can't replace a source vertex with the same as the target since that would create a self-reference.");
 #endif
       source = source_;
-      refreshFingerprint();
+      fingerprint.removeId(source->getId());
+      fingerprint.addId(source_->getId());
     }
 
     /// This method changes the target Vertex in-place. Note that if this edge is registered elsewhere (e.g. in a
@@ -102,8 +98,9 @@ class Simplex;
       if (target_ == source) throw std::runtime_error(
         "You can't replace a target vertex with the same as the source since that would create a self-reference.");
 #endif
+      fingerprint.removeId(target->getId());
+      fingerprint.addId(target_->getId());
       target = target_;
-      refreshFingerprint();
     }
 
     ///
@@ -169,6 +166,16 @@ class Simplex;
 
 
     [[nodiscard]] const EdgeKey Edge::getKey() const noexcept {
+#ifdef CASET_ASSERTIONS
+      if (source == nullptr) {
+        CLOG(ERROR_LEVEL, "source was null");
+        throw std::runtime_error("Source vertex is null.");
+      }
+      if (target == nullptr) {
+        CLOG(ERROR_LEVEL, "target was null");
+        throw std::runtime_error("Target vertex is null.");
+      }
+#endif
       return {source->getId(), target->getId()};
     }
 
@@ -178,10 +185,6 @@ class Simplex;
 
     void Edge::removeSimplex(Simplex *simplex) noexcept {
       simplices.erase(simplex);
-    }
-
-    void Edge::refreshFingerprint() noexcept {
-      fingerprint = Fingerprint({source->getId(), target->getId()});
     }
 
 };

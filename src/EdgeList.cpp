@@ -65,7 +65,7 @@ namespace caset {
       return found->second.get();
     }
 
-    Edge *EdgeList::add(VertexPtr src, VertexPtr tgt) {
+    Edge *EdgeList::add(Spacetime *spacetime_, VertexPtr src, VertexPtr tgt) {
 #ifdef CASET_ASSERTIONS
       if (src->getId() == 0 || tgt->getId() == 0) {
         throw std::runtime_error("Invalid src and target ids!");
@@ -78,11 +78,11 @@ namespace caset {
         CLOG(WARN_LEVEL, "An edge with this source and target already exists!");
       }
 #endif
-      auto edge = std::make_unique<Edge>(src, tgt);
+      auto edge = std::make_unique<Edge>(spacetime_, src, tgt);
       return getOrInsert(std::move(edge));
     }
 
-    Edge *EdgeList::add(VertexPtr src, VertexPtr tgt, double squaredLength) {
+    Edge *EdgeList::add(Spacetime *spacetime_, VertexPtr src, VertexPtr tgt, double squaredLength) {
 #ifdef CASET_ASSERTIONS
       if (src->getId() == 0 || tgt->getId() == 0) {
         throw std::runtime_error("Invalid src and target ids!");
@@ -95,7 +95,7 @@ namespace caset {
         CLOG(WARN_LEVEL, "An edge with this source and target already exists!");
       }
 #endif
-      auto edge = std::make_unique<Edge>(src, tgt, squaredLength);
+      auto edge = std::make_unique<Edge>(spacetime_, src, tgt, squaredLength);
       return getOrInsert(std::move(edge));
     }
 

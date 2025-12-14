@@ -39,8 +39,8 @@
 namespace caset {
 class EdgeList {
   public:
-    Edge *add(VertexPtr src, VertexPtr tgt);
-    Edge *add(VertexPtr src, VertexPtr tgt, double squaredLength);
+    Edge *add(Spacetime *, VertexPtr src, VertexPtr tgt);
+    Edge *add(Spacetime *, VertexPtr src, VertexPtr tgt, double squaredLength);
     Edge *add(std::unique_ptr<Edge> edge);
     Edge *get(const EdgeKey &edgeKey);
     Edge* updateKey(const EdgeKey &oldKey);

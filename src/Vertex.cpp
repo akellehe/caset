@@ -62,9 +62,9 @@ Vertex::setCoordinates(const std::vector<double> &coords) noexcept {
   coordinates = coords;
 }
 
-std::unordered_set<Edge *>
+EdgePtrSet
 Vertex::getEdges() const noexcept {
-  std::unordered_set<Edge *> edges{};
+  EdgePtrSet edges{};
   edges.reserve(inEdges.size() + outEdges.size());
   edges.insert(inEdges.begin(), inEdges.end());
   edges.insert(outEdges.begin(), outEdges.end());
@@ -141,7 +141,7 @@ Vertex::moveEdgesToImpl(
     }
   }
 
-  std::unordered_set<Edge *> empty{};
+  EdgePtrSet empty{};
   if (direction == EdgeDirection::In) {
     inEdges = {};
     // inEdges.swap(empty);
@@ -197,14 +197,12 @@ Vertex::moveEdgesToForPython(const std::shared_ptr<Vertex> &vertex) {
   return returnValue;
 }
 
+bool const Vertex::hasEdge(Edge *edge) const {
+  return inEdges.contains(edge) || outEdges.contains(edge);
+}
+
 bool const Vertex::hasEdge(const Edge *edge) const {
-  for (const auto &inEdge : inEdges) {
-    if (edge == inEdge) return true;
-  }
-  for (const auto &outEdge : outEdges) {
-    if (outEdge == edge) return true;
-  }
-  return false;
+  return inEdges.contains(const_cast<Edge *>(edge)) || outEdges.contains(const_cast<Edge *>(edge));
 }
 
 void Vertex::assertUnused() const {
@@ -217,6 +215,11 @@ void Vertex::assertUnused() const {
   for (const auto &edge : getEdges()) {
     assert(!edge->hasVertex(this));
   }
+}
+
+
+Spacetime *Vertex::getSpacetime() const noexcept {
+  return spacetime;
 }
 
 void Vertex::addSimplex(Simplex *simplex) {
@@ -235,7 +238,7 @@ void Vertex::removeSimplex(Simplex *simplex) {
   simplices.erase(simplex);
 }
 
-std::unordered_set<Simplex *>
+SimplexPtrSet
 Vertex::getSimplices() const noexcept {
   return simplices;
 }
@@ -259,8 +262,10 @@ std::string Vertex::toString() const noexcept {
 }
 
 void Vertex::removeOutEdge(Edge *edge) noexcept {
+#ifdef CASET_ASSERTIONS
   if (!outEdges.contains(edge))
     CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+#endif
   outEdges.erase(edge);
 }
 
@@ -275,15 +280,17 @@ std::pair<EdgeRawPtr, bool> Vertex::addOutEdge(Edge *edge) noexcept {
 }
 
 void Vertex::removeInEdge(Edge *edge) noexcept {
+#ifdef CASET_ASSERTIONS
   if (!inEdges.contains(edge))
     CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
+#endif
   inEdges.erase(edge);
 }
 std::size_t Vertex::degree() const noexcept { return inEdges.size() + outEdges.size(); }
 
-std::unordered_set<Edge *>
+EdgePtrSet
 Vertex::getInEdges() const noexcept { return inEdges; }
 
-std::unordered_set<Edge *>
+EdgePtrSet
 Vertex::getOutEdges() const noexcept { return outEdges; }
 };
