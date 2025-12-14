@@ -250,10 +250,10 @@ void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &t
 }
 
 
-SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
   SimplexOrientationPtr o = std::make_shared<
     SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
-  SimplexPtrSet result{};
+  SimplexSet result{};
   for (const auto &bucket : externalSimplices | std::views::values) {
     for (const auto &simplex : bucket) {
       for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
@@ -265,7 +265,7 @@ SimplexPtrSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t
 }
 
 py::list Spacetime::getSimplicesWithOrientationForPython(std::tuple<uint8_t, uint8_t> orientation) {
-  SimplexPtrSet simplices_ = getSimplicesWithOrientation(orientation);
+  SimplexSet simplices_ = getSimplicesWithOrientation(orientation);
   py::list result{};
   for (auto simplex : simplices_) {
     result.append(wrap_non_owning(simplex));
@@ -329,15 +329,15 @@ void Spacetime::attachAtVertex(SimplexRawPtr unattachedSimplex, SimplexRawPtr at
   // when the edge is successfully inserted into its Vertex; it will appear to be canonical. Only when it already exists
   // upon updateKey in edgeList will we know that it is not.
 
-  // Now we need to re-key the oldEdges to their keys match newEdges.
-  for (const auto &updateKey : *updateKeys) {
-    edgeList->updateKey(updateKey);
-  }
 
   if (!deleteKeys->empty()) CLOG(INFO_LEVEL, "Deleting edge with keys: ");
   for (const auto &deleteKey : *deleteKeys) {
-    CLOG(INFO_LEVEL, "    - ", deleteKey.toString());
     edgeList->remove(deleteKey);
+  }
+
+  // Now we need to re-key the oldEdges to their keys match newEdges.
+  for (const auto &updateKey : *updateKeys) {
+    edgeList->updateKey(updateKey);
   }
 
   if (unattached->degree() == 0) vertexList->remove(unattached);
@@ -457,8 +457,8 @@ py::tuple Spacetime::chooseSimplexFacesToGlueForPython(
   return py::make_tuple(wrap_non_owning(first), wrap_non_owning(second));
 }
 
-SimplexPtrSet Spacetime::getExternalSimplices() noexcept {
-  SimplexPtrSet simplices{};
+SimplexSet Spacetime::getExternalSimplices() noexcept {
+  SimplexSet simplices{};
   for (const auto &[facialOrientation, bucket] : externalSimplices) {
     for (const auto &simplex : bucket) {
       simplices.insert(simplex);

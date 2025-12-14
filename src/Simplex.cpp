@@ -22,9 +22,9 @@
 #include "Vertex.h"
 #include "Simplex.h"
 #include "utils.h"
+#include "Fingerprint.h"
+#include "Edge.h"
 
-#include <ATen/core/interned_strings.h>
-#include <c10/util/ThreadLocalDebugInfo.h>
 
 namespace caset {
 std::vector<SimplexRawPtr> Simplex::getFacets() {
@@ -290,11 +290,16 @@ void Simplex::validate() const {
 }
 
 bool Simplex::removeEdge(Edge *edge) {
-  return edges.erase(edge) > 0;
+  bool removed = edges.erase(edge) > 0;
+  if (removed) {
+    edge->removeSimplex(this);
+  }
+  return removed;
 }
 
 std::pair<Edge *, bool> Simplex::addEdge(Edge *edge) {
   auto [it, inserted] = edges.insert(edge);
+  if (inserted) edge->addSimplex(this);
   return {*it, inserted};
 }
 

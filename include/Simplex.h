@@ -26,19 +26,16 @@
 #include <pybind11/stl.h>
 #include <pybind11/chrono.h>
 
-#include <memory>
-#include <vector>
-#include <functional>
 #include <algorithm>
 #include <coroutine>
-#include <deque>
+#include <functional>
+#include <memory>
+#include <vector>
 
-#include "Logger.h"
-#include "Edge.h"
-#include "EdgeList.h"
-#include "VertexList.h"
+// #include "Edge.h"
 #include "Fingerprint.h"
-#include "Vertex.h"
+// #include "ForwardDeclarations.h"
+// #include "Vertex.h"
 
 namespace py = pybind11;
 
@@ -233,8 +230,6 @@ using SimplexRawPtr = Simplex *;
 using SimplexPtrPair = std::pair<SimplexRawPtr, SimplexRawPtr>;
 using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
 using SimplexPtrs = std::vector<SimplexRawPtr>;
-using SimplexPtrSet = std::unordered_set<SimplexRawPtr>;
-using SimplexSet = std::unordered_set<Simplex>;
 
 /// # Simplex Class
 ///
@@ -421,6 +416,8 @@ class Simplex {
     bool operator==(const Simplex &other) const noexcept;
 
     /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
+    /// It needs to be corrected to take into account whether the dimensionality of the k-complex has codimension 2 and
+    /// whether or not the link represents a k - d - 1 dimension sphere or disk on the boundary.
     bool isCausallyAvailable() const noexcept;
 
     ///
@@ -482,16 +479,10 @@ class Simplex {
     std::unordered_set<SimplexRawPtr> cofaces{};
 };
 
-
+// using SimplexSet = std::unordered_set<SimplexRawPtr, SimplexHash, SimplexEq>;
 }
 
 
-template<>
-struct std::hash<caset::Simplex> {
-  size_t operator()(const caset::Simplex &s) const noexcept {
-    return std::hash<std::uint64_t>{}(s.fingerprint.fingerprint());
-  }
-};
 
 
 #endif //CASET_SIMPLEX_H

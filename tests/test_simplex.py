@@ -296,12 +296,23 @@ class TestSimplex(unittest.TestCase):
         self.assertIn(attachedVertex, unattached.getVertices())
         self.assertIn(attachedVertex.getId(), unattached.getVertexIdLookup())
 
-        facets2 = unattached.getFacets()
+        for facet in unattached.getFacets():
+            self.assertNotIn(unattachedVertex.getId(), [v.getId() for v in facet.getVertices()])
 
-        for f in facets1:
-            f.validate()
-        for f in facets2:
-            f.validate()
+        for coface in unattached.getCofaces():
+            self.assertNotIn(unattachedVertex.getId(), [v.getId() for v in coface.getVertices()])
+
+        self.assertEqual(len(unattachedVertex.getSimplices()), 0)
+        self.assertEqual(len(unattachedVertex.getEdges()), 0)
+
+        for simplex in st.getSimplices():
+            self.assertNotIn(unattachedVertex.getId(), [v.getId() for v in simplex.getVertices()])
+
+        for edge in st.getEdgeList().toVector():
+            self.assertNotEqual(edge.getSource(), unattachedVertex)
+            self.assertNotEqual(edge.getTarget(), unattachedVertex)
+
+        self.assertIsNone(st.getVertexList().get(unattachedVertex.getId()))
 
     def test_attaching_vertex_on_a_face_replaces_it_on_the_coface(self):
         st = Spacetime()
@@ -394,6 +405,90 @@ class TestSimplex(unittest.TestCase):
         s12.replaceVertex(v12, v21)
 
         self.assertEqual(s21.getVertices()[0], s12.getVertices()[0])
+
+    def test_attach_at_edge(self):
+        """
+        Test attaching two simplices at an edge (two adjacent compatible vertices).
+        Vertices are compatible when they are neighbors and have the same getTime() return value.
+        """
+        st = Spacetime()
+        unattached = st.createSimplex((1, 2))
+        attached = st.createSimplex((1, 2))
+
+        # Find an edge on the unattached simplex
+        unattachedEdge = unattached.getEdges()[0]
+        unattachedV1 = unattachedEdge.getSource()
+        unattachedV2 = unattachedEdge.getTarget()
+        unattachedT1 = unattachedV1.getTime()
+        unattachedT2 = unattachedV2.getTime()
+
+        # Find a compatible edge on the attached simplex
+        # Compatible means: edge endpoints have matching times
+        attachedV1 = None
+        attachedV2 = None
+        for edge in attached.getEdges():
+            source = edge.getSource()
+            target = edge.getTarget()
+            sourceTime = source.getTime()
+            targetTime = target.getTime()
+            print(source.getId(), sourceTime, target.getId(), targetTime) # , unattachedT1, unattachedT2)
+
+            # Check if this edge is compatible (times match in either order)
+            if ((sourceTime == unattachedT1 and targetTime == unattachedT2) or
+                (sourceTime == unattachedT2 and targetTime == unattachedT1)):
+                # Found a compatible edge
+                if sourceTime == unattachedT1:
+                    attachedV1 = source
+                    attachedV2 = target
+                else:
+                    attachedV1 = target
+                    attachedV2 = source
+                break
+
+        # Verify we found compatible vertices
+        self.assertIsNotNone(attachedV1, "Could not find compatible edge on attached simplex")
+        self.assertIsNotNone(attachedV2, "Could not find compatible edge on attached simplex")
+        self.assertEqual(attachedV1.getTime(), unattachedV1.getTime())
+        self.assertEqual(attachedV2.getTime(), unattachedV2.getTime())
+
+        # Attach at the first vertex
+        st.attachAtVertex(unattached, attached, unattachedV1, attachedV1)
+
+        # Attach at the second vertex
+        st.attachAtVertex(unattached, attached, unattachedV2, attachedV2)
+
+        # Verify both vertices were replaced in the unattached simplex
+        self.assertNotIn(unattachedV1, unattached.getVertices())
+        self.assertNotIn(unattachedV2, unattached.getVertices())
+        self.assertNotIn(unattachedV1.getId(), unattached.getVertexIdLookup())
+        self.assertNotIn(unattachedV2.getId(), unattached.getVertexIdLookup())
+
+        self.assertIn(attachedV1, unattached.getVertices())
+        self.assertIn(attachedV2, unattached.getVertices())
+        self.assertIn(attachedV1.getId(), unattached.getVertexIdLookup())
+        self.assertIn(attachedV2.getId(), unattached.getVertexIdLookup())
+
+        # Verify the unattached vertices are no longer in use
+        self.assertEqual(len(unattachedV1.getSimplices()), 0)
+        self.assertEqual(len(unattachedV1.getEdges()), 0)
+        self.assertEqual(len(unattachedV2.getSimplices()), 0)
+        self.assertEqual(len(unattachedV2.getEdges()), 0)
+
+        # Verify the vertices are removed from the vertex list
+        self.assertIsNone(st.getVertexList().get(unattachedV1.getId()))
+        self.assertIsNone(st.getVertexList().get(unattachedV2.getId()))
+
+        # Verify no edges reference the unattached vertices
+        for edge in st.getEdgeList().toVector():
+            self.assertNotEqual(edge.getSource(), unattachedV1)
+            self.assertNotEqual(edge.getTarget(), unattachedV1)
+            self.assertNotEqual(edge.getSource(), unattachedV2)
+            self.assertNotEqual(edge.getTarget(), unattachedV2)
+
+        # Verify no simplices reference the unattached vertices
+        for simplex in st.getSimplices():
+            self.assertNotIn(unattachedV1.getId(), [v.getId() for v in simplex.getVertices()])
+            self.assertNotIn(unattachedV2.getId(), [v.getId() for v in simplex.getVertices()])
 
 
 if __name__ == '__main__':

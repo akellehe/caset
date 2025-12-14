@@ -105,6 +105,8 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
 
         std::size_t degree() const noexcept;
 
+        std::vector<std::shared_ptr<Simplex>> getSimplicesForPython() const;
+
         std::unordered_set<Edge *>
         getInEdges() const noexcept;
 

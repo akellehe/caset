@@ -149,6 +149,8 @@ class Simplex;
       for (const auto &simplex : getSimplices()) {
         simplex->removeEdge(this);
         simplex->addEdge(replacement);
+        simplex->replaceVertex(source, replacement->getSource());
+        simplex->replaceVertex(target, replacement->getTarget());
       }
 
       source->removeOutEdge(this);
@@ -171,12 +173,12 @@ class Simplex;
       return {source->getId(), target->getId()};
     }
 
-    [[nodiscard]] std::vector<Simplex *> Edge::getSimplices() const noexcept { return simplices; }
+    [[nodiscard]] SimplexSet Edge::getSimplices() const noexcept { return simplices; }
 
-    void Edge::addSimplex(Simplex *simplex) noexcept { simplices.push_back(simplex); }
+    void Edge::addSimplex(Simplex *simplex) noexcept { simplices.insert(simplex); }
 
     void Edge::removeSimplex(Simplex *simplex) noexcept {
-      simplices.erase(std::remove(simplices.begin(), simplices.end(), simplex), simplices.end());
+      simplices.erase(simplex);
     }
 
     void Edge::refreshFingerprint() noexcept {

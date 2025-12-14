@@ -480,12 +480,14 @@ class TestSpacetime(unittest.TestCase):
     def test_attach_at_vertices(self):
         st = Spacetime()
 
+        print('1')
         attachedSimplex = st.createSimplex((1, 4))
         unattachedSimplex = st.createSimplex((2, 3))  # Unattached
 
         attachedSimplex.validate()
         unattachedSimplex.validate()
 
+        print('2')
         unattachedSimplexFace, attachedSimplexFace = st.chooseSimplexFacesToGlue(unattachedSimplex)
         unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
         attachedVertices = [v for v in attachedSimplexFace.getVertices()]
@@ -493,10 +495,12 @@ class TestSpacetime(unittest.TestCase):
         unattachedSimplexFace.validate()
         attachedSimplexFace.validate()
 
+        print('3')
         unattachedVertex = unattachedVertices[0]  # V6
         attachedVertex = attachedVertices[0]      # V0
 
         edgeCount = unattachedVertex.degree() + attachedVertex.degree()
+        print('4')
 
         st.attachAtVertices(
             unattachedSimplexFace,
@@ -504,39 +508,51 @@ class TestSpacetime(unittest.TestCase):
             [(u, a) for u, a in zip(unattachedVertices, attachedVertices)]
         )
 
+        print('5')
         attachedSimplex.validate()
         unattachedSimplex.validate()
         unattachedSimplexFace.validate()
         attachedSimplexFace.validate()
 
+        print('6')
         self.assertEqual(unattachedVertex.degree(), 0)
         self.assertNotIn(unattachedVertex, unattachedSimplex.getVertices())
         self.assertNotIn(unattachedVertex, unattachedSimplexFace.getVertices())
+        print('7')
 
         # Some edges will be removed/replaced because they are now superseded by edges on attachedSimplexFace.
         self.assertEqual(attachedVertex.degree(), 5)
         self.assertIn(attachedVertex, attachedSimplexFace.getVertices())
         self.assertIn(attachedVertex, attachedSimplex.getVertices())
+        print('8')
 
-        total_edges = attachedSimplex.getEdges() + unattachedSimplex.getEdges()
+        total_edges = attachedSimplex.getEdges()
+        print('9')
+        total_edges += unattachedSimplex.getEdges()
+        print('9.2')
 
         for edge in attachedSimplex.getEdges():
             self.assertTrue(attachedSimplex.hasVertex(edge.getSource().getId()))
             self.assertTrue(attachedSimplex.hasVertex(edge.getTarget().getId()))
+        print('10')
 
         for edge in unattachedSimplex.getEdges():
             self.assertTrue(unattachedSimplex.hasVertex(edge.getSource().getId()))
             self.assertTrue(unattachedSimplex.hasVertex(edge.getTarget().getId()))
+        print('11')
 
         self.assertEqual(len(total_edges), 20)  # 6 shared/doubled.
         self.assertEqual(len(set(total_edges)), 14)
+        print('12')
         shared_edges = set(attachedSimplex.getEdges()) & set(unattachedSimplex.getEdges())
         self.assertEqual(len(shared_edges), 6)
         self.assertEqual(len(set(total_edges)), len(st.getEdgeList().toVector()))
+        print('13')
 
         for edge in unattachedSimplex.getEdges():
             self.assertNotEqual(edge.getSource().getId(), unattachedVertex.getId())
             self.assertNotEqual(edge.getTarget().getId(), unattachedVertex.getId())
+        print('14')
 
 
     def test_attach_at_vertices_removes_old_edges(self):

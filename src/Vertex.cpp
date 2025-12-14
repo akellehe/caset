@@ -90,7 +90,7 @@ Vertex::moveOutEdgesToForPython(
 
 std::pair<std::shared_ptr<EdgeKeySet>, std::shared_ptr<EdgeKeySet> >
 Vertex::moveEdgesToImpl(
-  const std::shared_ptr<Vertex> &recipient,
+  const std::shared_ptr<Vertex> &recipient, // Recipient is from the attached simplex.
   EdgeDirection direction
 ) {
   std::shared_ptr<EdgeKeySet> toDelete = std::make_shared<EdgeKeySet>();
@@ -112,11 +112,12 @@ Vertex::moveEdgesToImpl(
       ? donorEdge->replaceTargetVertex(recipient)
       : donorEdge->replaceSourceVertex(recipient);
 
-    // Try to add the edge to the recipient
+    // Try to add the edge to the recipient. The edge owned by the recipient is always canonical.
     const auto &[canonicalEdge, wasCanonical] =
         (direction == EdgeDirection::In)
           ? recipient->addInEdge(donorEdge)
           : recipient->addOutEdge(donorEdge);
+
 #ifdef CASET_DEBUG
     if (wasCanonical && canonicalEdge != donorEdge) throw std::runtime_error("Canonical lies!");
     if (!wasCanonical && canonicalEdge == donorEdge) throw std::runtime_error("Canonical lies (2)!");
@@ -140,7 +141,26 @@ Vertex::moveEdgesToImpl(
     }
   }
 
-  direction == EdgeDirection::In ? inEdges.clear() : outEdges.clear();
+  std::unordered_set<Edge *> empty{};
+  if (direction == EdgeDirection::In) {
+    inEdges = {};
+    // inEdges.swap(empty);
+  } else {
+    outEdges = {};
+  }
+
+#ifdef CASET_DEBUG
+  for (const auto &k : *toUpdate) {
+    if (toDelete->contains(k)) {
+      throw std::runtime_error("You attempted to update and delete a key at the same time.");
+    }
+  }
+  for (const auto &k : *toDelete) {
+    if (toUpdate->contains(k)) {
+      throw std::runtime_error("You attempted to update and delete a key at the same time (2).");
+    }
+  }
+#endif
 
   return {toUpdate, toDelete};
 }
@@ -218,6 +238,15 @@ void Vertex::removeSimplex(Simplex *simplex) {
 std::unordered_set<Simplex *>
 Vertex::getSimplices() const noexcept {
   return simplices;
+}
+
+std::vector<std::shared_ptr<Simplex>> Vertex::getSimplicesForPython() const {
+  std::vector<std::shared_ptr<Simplex>> simplicesForPython{};
+  simplicesForPython.reserve(simplices.size());
+  for (const auto &s : simplices) {
+    simplicesForPython.emplace_back(s);
+  }
+  return simplicesForPython;
 }
 
 std::string Vertex::toString() const noexcept {

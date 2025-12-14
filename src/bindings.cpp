@@ -104,6 +104,7 @@ PYBIND11_MODULE(caset, m) {
       .def("removeInEdge", &Vertex::removeInEdge)
       .def("removeOutEdge", &Vertex::removeOutEdge)
       .def("setCoordinates", &Vertex::setCoordinates, py::arg("coordinates"))
+      .def("getSimplices", &Vertex::getSimplicesForPython)
       .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"));
 
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")

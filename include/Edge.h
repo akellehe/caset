@@ -22,13 +22,13 @@
 #ifndef CASET_CASET_SRC_EDGE_H_
 #define CASET_CASET_SRC_EDGE_H_
 
-#include "Fingerprint.h"
-#include "EdgeKey.h"
-#include "ForwardDeclarations.h"
-
-#include <vector>
-#include <random>
 #include <memory>
+#include <random>
+#include <vector>
+
+#include "Fingerprint.h"
+#include "ForwardDeclarations.h"
+// #include "Simplex.h"
 
 inline double random_uniform(double min = -1.0, double max = 1.0) {
   static std::random_device rd;
@@ -107,7 +107,7 @@ class Edge {
 
     [[nodiscard]] EdgeKey getKey() const noexcept;
 
-    [[nodiscard]] std::vector<Simplex *> getSimplices() const noexcept;
+    [[nodiscard]] SimplexSet getSimplices() const noexcept;
 
     void addSimplex(Simplex *simplex) noexcept;
 
@@ -116,7 +116,7 @@ class Edge {
   private:
     VertexPtr source;
     VertexPtr target;
-    std::vector<Simplex *> simplices;
+    SimplexSet simplices;
 
     /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
     /// fingerprint for this Edge after replacing a source or target vertex in-place.
@@ -125,12 +125,12 @@ class Edge {
     double squaredLength;
 };
 
-using EdgeHash = FingerprintHash<Edge>;
-using EdgeEq = FingerprintEq<Edge>;
 using EdgePtr = std::shared_ptr<Edge>;
 using EdgeRawPtr = Edge *;
+using EdgeHash = FingerprintHash<EdgeRawPtr>;
+using EdgeEq = FingerprintEq<EdgeRawPtr>;
 using Edges = std::vector<EdgeRawPtr>;
-using EdgeSet = std::unordered_set<EdgeRawPtr>;
+// using EdgeSet = std::unordered_set<EdgeRawPtr, EdgeHash, EdgeEq>;
 }
 
 #endif //CASET_CASET_SRC_EDGE_H_

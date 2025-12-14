@@ -58,8 +58,6 @@ namespace caset {
       CLOG(CRITICAL_LEVEL, "---------------------------------------------------------------------------------------------------");
       throw std::runtime_error("You attempted to insert an edge that already exists. This will result in un unexpected free()");
 #endif
-      // edge->copyInPlaceTo(found->second.get());
-      // return found->second.get();
     }
 
     Edge *EdgeList::add(VertexPtr src, VertexPtr tgt) {
@@ -156,14 +154,7 @@ namespace caset {
 
     Edge *EdgeList::get(const EdgeKey &edgeKey) {
       auto found = edgeList.find(edgeKey);
-      if (found == edgeList.end()) {
-        CLOG(WARN_LEVEL,
-             std::to_string(edgeKey.first),
-             "->",
-             std::to_string(edgeKey.second),
-             " not found! Returning nullptr.");
-        return nullptr;
-      }
+      if (found == edgeList.end()) return nullptr;
       return found->second.get();
     }
 

@@ -26,6 +26,7 @@
 #include <vector>
 #include <unordered_set>
 #include <cstdint>
+#include "Fingerprint.h"
 
 namespace caset {
 
@@ -46,7 +47,15 @@ using VertexPtrs = std::vector<VertexPtr>;
 using VertexPtrSet = std::unordered_set<VertexPtr>;
 
 using EdgeRawPtr = Edge *;
+using EdgeHash = FingerprintHash<Edge>;
+using EdgeEq = FingerprintEq<Edge>;
 using Edges = std::vector<EdgeRawPtr>;
+using EdgeSet = std::unordered_set<EdgeRawPtr, EdgeHash, EdgeEq>;
+
+using SimplexRawPtr = Simplex *;
+using SimplexHash = FingerprintHash<Simplex>;
+using SimplexEq = FingerprintEq<Simplex>;
+using SimplexSet = std::unordered_set<SimplexRawPtr, SimplexHash, SimplexEq>;
 
 } // namespace caset
 

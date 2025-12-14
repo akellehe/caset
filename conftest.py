@@ -52,10 +52,10 @@ def clean_build_env():
     return env
 
 def get_build_command(build_dir):
-    return ["cmake", "--build", str(build_dir.parent)]
+    return ["cmake", "--build", str(build_dir.parent), "--parallel"]
 
 def get_configure_command(build_dir):
-    cmd = ["cmake", "-S", ".", "-B", str(build_dir.parent), "-DCMAKE_BUILD_TYPE=Debug"]
+    cmd = ["cmake", "-S", ".", "-B", str(build_dir.parent), "-DCMAKE_BUILD_TYPE=Debug", "-G", "Ninja"]
     if CASET_ASAN:
         cmd.append("-DCASET_ASAN=ON")
     return cmd
