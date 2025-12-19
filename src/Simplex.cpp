@@ -36,8 +36,10 @@ bool Simplex::hasFacets() const {
   return !facets.empty();
 }
 
+#ifdef CASET_ASSERTIONS
 class SimplexCorruptionDetector : public CorruptionDetector<SimplexPtr, SimplexPtrHash, SimplexPtrEq> {
 };
+#endif
 
 const std::vector<SimplexPtr> &Simplex::getFacets() {
 #if CASET_ASSERTIONS

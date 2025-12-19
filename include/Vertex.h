@@ -33,52 +33,360 @@
 #include "Fingerprint.h"
 
 namespace caset {
+
 ///
-/// Vertices in modern lattice gauge theory have different coupling parameters. We have to add them in for strong vs
-/// weak forces, for example. If we can reproduce the quark spectrum with a homogenous coupling parameter then we've
-/// established the Gold Standard. The strong force is not actually observable. Observables are gauge variant. If you
-/// change your gauge then it changes what you observe. The EM vector potential is gauge invariant, so it cannot be
-/// observed.
+/// \brief Represents a vertex in a causal set (causet) spacetime discretization
 ///
-/// Quantum chromodynamics have different and paradoxical coupling parameters at different energy scales. The leading
-/// theories about it are called "running coupling"
+/// # Physical Context
+///
+/// In lattice gauge theory, vertices represent discrete points in spacetime where gauge fields
+/// and matter fields are defined. The coupling parameters at each vertex determine the strength
+/// of interactions:
+///
+/// - **Strong Force**: Described by quantum chromodynamics (QCD) with running coupling
+///   \f$ \alpha_s(Q^2) \f$ that varies with energy scale \f$ Q^2 \f$
+/// - **Weak Force**: Governed by the electroweak coupling \f$ g_W \f$
+/// - **Electromagnetic Force**: Characterized by the fine structure constant \f$ \alpha_{EM} \approx 1/137 \f$
+///
+/// A key challenge is that QCD exhibits **asymptotic freedom**: the coupling becomes weaker at
+/// high energies (short distances) and stronger at low energies (long distances), preventing
+/// perturbative calculations in the infrared regime. This is modeled through "running coupling"
+/// theories.
+///
+/// # Gauge Invariance
+///
+/// Observables in gauge theory must be gauge-invariant. The electromagnetic 4-potential
+/// \f$ A_\mu \f$ is gauge-variant and thus not directly observable. However, field strengths
+/// \f$ F_{\mu\nu} = \partial_\mu A_\nu - \partial_\nu A_\mu \f$ are gauge-invariant observables.
+///
+/// # Implementation Details
+///
+/// This class represents vertices in a **directed graph** structure where:
+/// - Edges have direction (source → target) to represent causal relationships
+/// - Vertices can have coordinates in arbitrary dimensions (though time calculation has constraints)
+/// - Each vertex maintains bidirectional edge lists (incoming and outgoing)
+/// - Simplices are registered to their constituent vertices for efficient topology queries
+///
+/// The vertex class uses shared_from_this to enable safe shared_ptr creation from member functions.
 ///
 class Vertex : public std::enable_shared_from_this<Vertex> {
     public:
+        // ========================================
+        // Constructors
+        // ========================================
+
+        /// Default constructor creating a vertex with ID 0
         Vertex() noexcept;
+
+        ///
+        /// \brief Construct vertex with ID and spatial coordinates
+        /// \param id_ Unique identifier for this vertex
+        /// \param coords Position in spacetime (arbitrary dimension)
+        ///
+        /// Creates a vertex with specified coordinates. The dimensionality is determined by coords.size():
+        /// - 1D: Time is \f$ |x_0| \f$
+        /// - 4D+: Time is \f$ \sqrt{\sum_{i=0}^{N-1} x_i^2} \f$
+        /// - 2D, 3D: Invalid - getTime() will throw std::out_of_range
+        ///
         Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept;
+
+        ///
+        /// \brief Construct coordinate-independent vertex with ID only
+        /// \param id_ Unique identifier for this vertex
+        ///
+        /// Creates a vertex without coordinate information. Calling getCoordinates() on such
+        /// a vertex will throw std::runtime_error.
+        ///
         explicit Vertex(const std::uint64_t id_) noexcept;
 
+        // ========================================
+        // Core Properties
+        // ========================================
+
+        ///
+        /// \brief Get the unique identifier of this vertex
+        /// \return The vertex ID
+        ///
         std::uint64_t getId() const noexcept;
 
         ///
-        /// We still need to implement what time means in the context of higher dimensional spacetimes. It seems like a
-        /// good idea to require users to specify dimensionality at compile-time, but maybe that's asking a little too
-        /// much.
+        /// \brief Compute the temporal coordinate in arbitrary dimensions
         ///
-        /// Let's just call 'time' the Euclidean magnitude of the elements of the coordinate vector excluding the
-        /// spatial elements.
+        /// # Mathematical Definition
         ///
-        /// By convention this will be \f$ \sqrt{\sum_{i=0}^{i=N-3}x_i^2} \f$ for all coordinate vectors of 4 or more
-        /// elements or just the absolute value of \f$ x_0 \f$ otherwise.
-        /// @return
+        /// The time coordinate is computed based on coordinate dimensionality:
+        ///
+        /// - **0D** (empty): Returns 0
+        /// - **1D**: \f$ t = |x_0| \f$
+        /// - **4D+**: \f$ t = \sqrt{\sum_{i=0}^{N-1} x_i^2} \f$ (Euclidean norm)
+        /// - **2D, 3D**: Throws std::out_of_range (unsupported)
+        ///
+        /// # Rationale
+        ///
+        /// In standard 4D Minkowski spacetime, we typically separate time and space.
+        /// For higher-dimensional theories (e.g., Kaluza-Klein, string theory), this
+        /// convention uses the Euclidean magnitude across all temporal dimensions,
+        /// with spatial dimensions handled separately by the embedding geometry.
+        ///
+        /// \return The time coordinate
+        /// \throws std::out_of_range if coordinate vector has length 2 or 3
+        ///
         [[nodiscard]] double getTime() const;
 
-        void checkDuplicates(std::string msg) const;
-        EdgePtr getEdge(const EdgePtr &edge);
-        EdgePtrSet getEdges() const noexcept;
-        EdgePtrSet getInEdges() const noexcept;
-        EdgePtrSet getOutEdges() const noexcept;
-        SimplexPtrSet getSimplices() const noexcept;
-        SimplexPtrSet removeInEdge(const EdgePtr &edge) noexcept;
-        SimplexPtrSet removeOutEdge(const EdgePtr &edge) noexcept;
-        bool addSimplex(const SimplexPtr &simplex);
-        bool operator==(const Vertex &vertex) const noexcept;
-        bool removeSimplex(const SimplexPtr &simplex);
-        std::pair<EdgePtrSet, EdgePtrSet> moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
-        std::pair<EdgePtrSet, EdgePtrSet> moveInEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
-        std::pair<EdgePtrSet, EdgePtrSet> moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        ///
+        /// \brief Get the coordinate vector for this vertex
+        ///
+        /// \return Vector of coordinate values
+        /// \throws std::runtime_error if vertex is coordinate-independent (empty coordinates)
+        ///
+        /// # Usage Notes
+        ///
+        /// Not all vertices need coordinates - some algorithms work purely with combinatorial
+        /// structure. Only call this if you're certain the vertex has coordinate data.
+        ///
+        std::vector<double> getCoordinates() const;
+
+        ///
+        /// \brief Set new coordinates for this vertex
+        /// \param coords New coordinate vector
+        ///
+        /// This operation does not update any cached values in edges or simplices.
+        /// Use with caution if edge lengths depend on coordinates.
+        ///
+        void setCoordinates(const std::vector<double> &coords) noexcept;
+
+        ///
+        /// \brief Get the total degree (number of incident edges)
+        /// \return Sum of in-degree and out-degree
+        ///
+        /// For a directed graph, this returns \f$ \deg(v) = \deg^-(v) + \deg^+(v) \f$
+        ///
         std::size_t degree() const noexcept;
+
+        // ========================================
+        // Edge Management
+        // ========================================
+
+        ///
+        /// \brief Find a specific edge incident to this vertex
+        /// \param edge Edge to search for (compared by ID)
+        /// \return Shared pointer to the edge if found, nullptr otherwise
+        ///
+        /// Searches both inEdges and outEdges. Useful for verifying edge membership
+        /// without needing to know direction.
+        ///
+        EdgePtr getEdge(const EdgePtr &edge);
+
+        ///
+        /// \brief Get all incident edges (both incoming and outgoing)
+        /// \return Set containing all edges where this vertex is source or target
+        ///
+        /// The returned set is a copy. Complexity: O(|inEdges| + |outEdges|)
+        ///
+        EdgePtrSet getEdges() const noexcept;
+
+        ///
+        /// \brief Get all edges targeting this vertex
+        /// \return Set of incoming edges \f$ \{e \mid e.target = v\} \f$
+        ///
+        EdgePtrSet getInEdges() const noexcept;
+
+        ///
+        /// \brief Get all edges originating from this vertex
+        /// \return Set of outgoing edges \f$ \{e \mid e.source = v\} \f$
+        ///
+        EdgePtrSet getOutEdges() const noexcept;
+
+        ///
+        /// \brief Add an incoming edge to this vertex
+        /// \param edge Edge where this vertex is the target
+        ///
+        /// **Caveat**: Does not verify that edge->getTarget() == this. Caller must ensure consistency.
+        ///
+        void addInEdge(const EdgePtr &edge) noexcept;
+
+        ///
+        /// \brief Add an outgoing edge from this vertex
+        /// \param edge Edge where this vertex is the source
+        ///
+        /// **Caveat**: Does not verify that edge->getSource() == this. Caller must ensure consistency.
+        ///
+        void addOutEdge(const EdgePtr &edge) noexcept;
+
+        ///
+        /// \brief Remove an incoming edge and update all affected simplices
+        /// \param edge The edge to remove from inEdges
+        /// \return Set of simplices that contained this edge (now modified)
+        ///
+        /// # Implementation Details
+        ///
+        /// 1. Removes the edge from all simplices that contain it via Simplex::removeEdge()
+        /// 2. Removes the edge from this vertex's inEdges set
+        /// 3. Returns affected simplices for caller to handle (e.g., re-validation)
+        ///
+        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// - Aborts if edge is nullptr
+        /// - Aborts if edge is not in inEdges
+        ///
+        SimplexPtrSet removeInEdge(const EdgePtr &edge) noexcept;
+
+        ///
+        /// \brief Remove an outgoing edge and update all affected simplices
+        /// \param edge The edge to remove from outEdges
+        /// \return Set of simplices that contained this edge (now modified)
+        ///
+        /// Symmetric to removeInEdge() but operates on outEdges.
+        ///
+        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// - Aborts if edge is nullptr
+        /// - Aborts if edge is not in outEdges
+        ///
+        SimplexPtrSet removeOutEdge(const EdgePtr &edge) noexcept;
+
+        // ========================================
+        // Simplex Management
+        // ========================================
+
+        ///
+        /// \brief Get all simplices that contain this vertex
+        /// \return Set of simplices where this vertex is a constituent
+        ///
+        /// A vertex belongs to a simplex if it's one of the simplex's vertices.
+        /// This is the inverse relationship: vertex → simplices containing it.
+        ///
+        SimplexPtrSet getSimplices() const noexcept;
+
+        ///
+        /// \brief Register a simplex as containing this vertex
+        /// \param simplex The simplex to add
+        /// \return true if simplex was newly added, false if already present
+        ///
+        /// # Duplicate Detection
+        ///
+        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// - Checks for null simplex pointer
+        /// - Checks for null 'this' pointer
+        /// - Calls checkDuplicates() before and after insertion
+        /// - Aborts on any violation
+        ///
+        /// This bidirectional relationship (Simplex ↔ Vertex) must be maintained
+        /// consistently: when a simplex is created with vertices, it must call
+        /// addSimplex() on each vertex.
+        ///
+        bool addSimplex(const SimplexPtr &simplex);
+
+        ///
+        /// \brief Unregister a simplex from this vertex
+        /// \param simplex The simplex to remove
+        /// \return true if simplex was removed, false if not found
+        ///
+        /// Called during simplex destruction or vertex replacement operations.
+        /// Removes the simplex from the internal simplices set.
+        ///
+        bool removeSimplex(const SimplexPtr &simplex);
+
+        ///
+        /// \brief Debug utility to detect duplicate simplices
+        /// \param msg Error message to log/throw if duplicates found
+        ///
+        /// **Assertions Only**: Only performs checks when CASET_ASSERTIONS is defined.
+        /// Scans all registered simplices and checks for duplicate fingerprints.
+        /// Logs at CRITICAL_LEVEL and throws std::runtime_error if duplicates exist.
+        ///
+        void checkDuplicates(std::string msg) const;
+
+        // ========================================
+        // Vertex Operations (Edge Migration)
+        // ========================================
+
+        ///
+        /// \brief Move all edges (both in and out) to another vertex
+        /// \param vertex Target vertex to receive edges
+        /// \param spacetime The spacetime context (must be non-null)
+        /// \return Pair of (old edges removed, new edges created)
+        ///
+        /// # Algorithm
+        ///
+        /// For each edge connected to this vertex:
+        /// 1. Remove edge from source/target vertex's edge lists
+        /// 2. Remove edge from spacetime's edge registry
+        /// 3. Create new edge with 'vertex' substituted for 'this'
+        /// 4. Insert new edge into spacetime
+        ///
+        /// This is equivalent to "redirecting" all edges to point to/from the new vertex
+        /// while preserving edge properties (e.g., squared length).
+        ///
+        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// - Throws std::runtime_error if spacetime is nullptr
+        ///
+        /// \see moveInEdgesTo(), moveOutEdgesTo()
+        ///
+        std::pair<EdgePtrSet, EdgePtrSet> moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+
+        ///
+        /// \brief Move only incoming edges to another vertex
+        /// \param vertex Target vertex to receive incoming edges
+        /// \param spacetime The spacetime context (must be non-null)
+        /// \return Pair of (old edges removed, new edges created)
+        ///
+        /// # Example
+        ///
+        /// Before: \f$ u \rightarrow \text{this} \f$
+        /// After:  \f$ u \rightarrow \text{vertex} \f$
+        ///
+        /// The source vertices remain unchanged; only the target is redirected.
+        ///
+        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// - Throws std::runtime_error if spacetime is nullptr
+        /// - Verifies sourceVertex != this (logic error if violated)
+        ///
+        std::pair<EdgePtrSet, EdgePtrSet> moveInEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+
+        ///
+        /// \brief Move only outgoing edges to another vertex
+        /// \param vertex Target vertex to become new source
+        /// \param spacetime The spacetime context (must be non-null)
+        /// \return Pair of (old edges removed, new edges created)
+        ///
+        /// # Example
+        ///
+        /// Before: \f$ \text{this} \rightarrow u \f$
+        /// After:  \f$ \text{vertex} \rightarrow u \f$
+        ///
+        /// The target vertices remain unchanged; only the source is redirected.
+        ///
+        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// - Throws std::runtime_error if spacetime is nullptr
+        /// - Verifies targetVertex != this (logic error if violated)
+        ///
+        std::pair<EdgePtrSet, EdgePtrSet> moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+
+        // ========================================
+        // Operators and Utilities
+        // ========================================
+
+        ///
+        /// \brief Equality comparison based on vertex ID
+        /// \param vertex Vertex to compare against
+        /// \return true if IDs match, false otherwise
+        ///
+        /// Two vertices are considered equal iff they have the same ID, regardless
+        /// of coordinates or topology. This is consistent with the hash function.
+        ///
+        bool operator==(const Vertex &vertex) const noexcept;
+
+        ///
+        /// \brief Generate human-readable string representation
+        /// \return LaTeX-formatted UTF-8 string describing the vertex
+        ///
+        /// # Format
+        ///
+        /// When CASET_VERBOSE is defined:
+        /// - Shows vertex ID, in-degree, out-degree, and time
+        /// - Example: \f$ V_{42}^{in=3} _{out=5}~(t=1.0) \f$
+        ///
+        /// When not defined: returns empty string for performance
+        ///
 #ifdef CASET_VERBOSE
         std::string toString() const noexcept;
 #else
@@ -86,33 +394,67 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
             return "";
         };
 #endif
-        std::vector<double> getCoordinates() const;
-        void addInEdge(const EdgePtr &edge) noexcept;
-        void addOutEdge(const EdgePtr &edge) noexcept;
-        void setCoordinates(const std::vector<double> &coords) noexcept;
 
+        // ========================================
+        // Public Members
+        // ========================================
+
+        ///
+        /// \brief Fingerprint for hashing and equality testing
+        ///
+        /// The fingerprint is computed from the vertex ID and used in hash tables
+        /// for SimplexPtrSet, VertexPtrSet, etc. This enables O(1) lookup.
+        ///
+        /// **Note**: This is public to allow direct access for performance-critical code.
+        ///
         Fingerprint fingerprint;
 
     private:
+        // ========================================
+        // Private Implementation
+        // ========================================
+
+        /// Edge direction for internal moveEdgesToImpl implementation
         enum class EdgeDirection { In, Out };
 
+        ///
+        /// \brief Internal implementation for moving edges
+        /// \param recipient Target vertex
+        /// \param spacetime Spacetime context
+        /// \param direction Whether to move In or Out edges
+        /// \return Pair of (old edges, new edges)
+        ///
         std::pair<EdgePtrSet, EdgePtrSet>
         moveEdgesToImpl(const VertexPtr &recipient, Spacetime *spacetime, EdgeDirection direction);
 
-        EdgePtrSet outEdges{};
-        EdgePtrSet inEdges{};
-        SimplexPtrSet simplices{};
-        std::uint64_t id;
-        std::vector<double> coordinates{};
+        // ========================================
+        // Private Members
+        // ========================================
+
+        EdgePtrSet outEdges{};        ///< Edges where this vertex is the source
+        EdgePtrSet inEdges{};          ///< Edges where this vertex is the target
+        SimplexPtrSet simplices{};     ///< Simplices containing this vertex
+        std::uint64_t id;              ///< Unique identifier
+        std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };
 
-// using VertexPtr = VertexPtr;
-// using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
-// using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
-// using VertexSet = std::unordered_set<VertexPtr>;
-}
+}  // namespace caset
+
+// ========================================
+// Standard Library Specializations
+// ========================================
 
 namespace std {
+
+///
+/// \brief Hash function specialization for caset::Vertex
+///
+/// Enables Vertex objects to be used as keys in std::unordered_set and std::unordered_map.
+/// The hash is computed from the vertex ID, ensuring consistent hashing across equal vertices.
+///
+/// # Complexity
+/// O(1) - delegates to std::hash<std::uint64_t>
+///
 template<>
 struct hash<caset::Vertex> {
     size_t operator()(const caset::Vertex &vertex) const noexcept {
@@ -120,6 +462,16 @@ struct hash<caset::Vertex> {
     }
 };
 
+///
+/// \brief Hash function specialization for std::shared_ptr<caset::Vertex>
+///
+/// Enables VertexPtr (shared_ptr<Vertex>) to be used as keys in hash tables.
+/// Hashes the underlying vertex ID, not the pointer address.
+///
+/// # Important
+/// Two shared_ptrs pointing to vertices with the same ID will hash to the same value,
+/// even if they are different pointer instances.
+///
 template<>
 struct hash<std::shared_ptr<caset::Vertex> > {
     size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
@@ -127,6 +479,15 @@ struct hash<std::shared_ptr<caset::Vertex> > {
     }
 };
 
+///
+/// \brief Equality comparison specialization for caset::Vertex
+///
+/// Used by standard library containers to compare Vertex objects.
+/// Two vertices are equal iff they have the same ID.
+///
+/// # Note
+/// This is consistent with the hash specialization above.
+///
 template<>
 struct equal_to<caset::Vertex> {
     size_t operator()(const caset::Vertex &a, const caset::Vertex &b) const noexcept {
@@ -134,12 +495,19 @@ struct equal_to<caset::Vertex> {
     }
 };
 
+///
+/// \brief Equality comparison specialization for std::shared_ptr<caset::Vertex>
+///
+/// Compares vertices by ID, not by pointer address.
+/// Consistent with the hash specialization for shared_ptr<Vertex>.
+///
 template<>
 struct equal_to<std::shared_ptr<caset::Vertex> > {
     size_t operator()(const caset::VertexPtr &a, const caset::VertexPtr &b) const noexcept {
         return a->getId() == b->getId();
     }
 };
-}
+
+}  // namespace std
 #endif //CASET_CASET_SRC_VERTEX_H_
 

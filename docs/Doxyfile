@@ -1,15 +1,17 @@
 # Doxygen configuration for caset
 
 AUTOLINK_SUPPORT       = YES
-EXTRACT_ALL            = YES
-FILE_PATTERNS          = *.h *.hpp *.hh *.cc *.cpp
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+FILE_PATTERNS          = 
+GENERATE_FILE_PAGES    = NO
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
-GENERATE_TREEVIEW      = YES
+GENERATE_TREEVIEW      = NO
 GENERATE_XML           = YES
 HAVE_DOT               = YES
 HTML_DYNAMIC_MENUS     = YES
-INLINE_SOURCES         = YES
+INLINE_SOURCES         = NO
 INPUT                  = ../src ../include
 INTERNAL_DOCS          = NO
 JAVADOC_AUTOBRIEF      = YES
@@ -20,6 +22,6 @@ RECURSIVE              = YES
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
 USE_MATHJAX            = YES
-WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_UNDOCUMENTED   = YES
 XML_OUTPUT             = xml
 

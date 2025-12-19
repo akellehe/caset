@@ -363,7 +363,7 @@ class Spacetime {
     /// Registers a simplex in the spacetime's internal data structures.
     ///
     /// Adds the simplex to:
-    /// - The main simplex set \f$ \{\sigma\} \f$
+    /// - The main simplex set \f$ K \f$
     /// - The appropriate orientation-indexed sets (external or internal)
     ///
     /// @param simplex The simplex \f$ \sigma \f$ to register
