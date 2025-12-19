@@ -66,7 +66,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     void initialize(const std::shared_ptr<Simplex> &simplex);
 
     // ==================== String Representation ====================
-    std::string toString() const;
+#ifdef CASET_VERBOSE
+    std::string toString() const noexcept;
+#else
+    std::string toString() const noexcept {
+      return "";
+    }
+#endif
 
     // ==================== Basic Getters ====================
     /// Each simplex has an associated _orientation_ in the case you're preserving causality with your work. You can

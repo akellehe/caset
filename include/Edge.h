@@ -104,7 +104,13 @@ class Edge : public std::enable_shared_from_this<Edge> {
     /// @return The square of the length of the edge.
     [[nodiscard]] double getSquaredLength() const noexcept;
 
+#ifdef CASET_VERBOSE
     [[nodiscard]] std::string toString() const noexcept;
+#else
+    [[nodiscard]] std::string toString() const noexcept {
+      return "";
+    };
+#endif
 
     /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to

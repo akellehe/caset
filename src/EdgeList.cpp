@@ -108,4 +108,8 @@ EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
   edgeList.emplace(edge->fingerprint.fingerprint(), edge);
   return edge;
 }
+
+void EdgeList::reserve(std::size_t size) {
+  edgeList.reserve(size);
+}
 } // caset

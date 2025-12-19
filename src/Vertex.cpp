@@ -223,6 +223,7 @@ Vertex::getSimplices() const noexcept {
   return simplices;
 }
 
+#ifdef CASET_VERBOSE
 std::string Vertex::toString() const noexcept {
   std::stringstream ss;
   ss << "<V" << "_{" << std::to_string(getId()) << "}";
@@ -231,6 +232,7 @@ std::string Vertex::toString() const noexcept {
   ss << " (t=" << std::fixed << std::setprecision(1) << getTime() << ")>";
   return latexToUtf8(ss.str());
 }
+#endif
 
 void Vertex::addInEdge(const EdgePtr &edge) noexcept {
   inEdges.insert(edge);

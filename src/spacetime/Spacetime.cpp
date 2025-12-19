@@ -208,6 +208,9 @@ void Spacetime::embedEuclidean(int dimensions = 4, double epsilon = 1e-8) {
 void Spacetime::build(int numSimplices) {
   // TODO: Implement topologies instead of the default.
   // return topology->build(this);
+  simplices.reserve(numSimplices + simplices.size());
+  edgeList->reserve(numSimplices * Simplex::computeNumberOfEdges(4)); // TODO: Change this to dimensions.
+  vertexList->reserve(numSimplices * 4 + 1);  // A k-simplex has k+1 vertices.
   std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
   createSimplex(orientations[1]);
   for (int i = 0; i < numSimplices; i++) {
@@ -565,11 +568,11 @@ OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &una
 
 void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
   if (!simplices.contains(simplex)) {
+#ifdef CASET_ASSERTIONS
     CLOG(CRITICAL_LEVEL, "You attempted to unregister a simplex that does not exist!!", simplex->toString(), " existing simplices are: ");
     for (const auto &s : simplices) {
       CLOG(CRITICAL_LEVEL, "    - ", s->toString());
     }
-#ifdef CASET_ASSERTIONS
     for (const auto &s : simplices) {
       if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
         CLOG(CRITICAL_LEVEL, "Hash table said a simplex was not registered, but one was found!");
@@ -579,11 +582,10 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
 #endif
     return;
   }
-  internalSimplicesByOrientation[simplex->getOrientation()].erase(simplex);
-  internalSimplicesByOrientation[simplex->getOrientation().flip()].erase(simplex);
-  for (const auto &orientation : simplex->getOrientation().getFacialOrientations()) {
-    externalSimplicesByFacialOrientation[orientation].erase(simplex);
-    externalSimplicesByFacialOrientation[orientation.flip()].erase(simplex);
+  const auto orientation = simplex->getOrientation();
+  internalSimplicesByOrientation[orientation].erase(simplex);
+  for (const auto &o : orientation.getFacialOrientations()) {
+    externalSimplicesByFacialOrientation[o].erase(simplex);
   }
   simplices.erase(simplex);
 }
@@ -607,11 +609,9 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
   CLOG(DEBUG_LEVEL, "Simplex was new!");
   if (internal) {
     internalSimplicesByOrientation[simplex->getOrientation()].emplace(*it);
-    internalSimplicesByOrientation[simplex->getOrientation().flip()].emplace(*it);
   } else {
     for (const auto &orientation : simplex->getOrientation().getFacialOrientations()) {
       externalSimplicesByFacialOrientation[orientation].emplace(*it);
-      externalSimplicesByFacialOrientation[orientation.flip()].emplace(*it);
     }
   }
 #ifdef CASET_ASSERTIONS

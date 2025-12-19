@@ -26,4 +26,8 @@
 #include "VertexList.h"
 
 namespace caset {
+
+void VertexList::reserve(std::size_t size) {
+  vertexList.reserve(size);
+}
 } // caset

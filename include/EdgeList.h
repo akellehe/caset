@@ -44,6 +44,7 @@ class EdgeList {
     EdgePtr get(const std::uint64_t &fingerprint);
     void remove(const EdgePtr &edge) noexcept;
     void replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept;
+    void reserve(std::size_t size);
 
   private:
     EdgePtrMap edgeList{};

@@ -59,9 +59,11 @@ class Simplex;
       return squaredLength;
     }
 
+#ifdef CASET_VERBOSE
     [[nodiscard]] std::string Edge::toString() const noexcept {
       return source->toString() + "->" + target->toString();
     }
+#endif
 
     void Edge::replaceSourceVertex(const VertexPtr &newSource) {
       fingerprint.removeId(source->getId());

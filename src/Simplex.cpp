@@ -67,21 +67,10 @@ std::vector<SimplexPtr> Simplex::getFacets() {
       }
       const auto &[facet, inserted] = spacetime->createSimplex(faceVertices, faceEdges); // Gets or creates!
       if (inserted) {
-        // TODO: The bug is here! The facets already exist, so we don't re-add the coface.
         SimplexPtr coface = spacetime->getSimplex(this->fingerprint.fingerprint());
-        if (coface != nullptr) {
-          CLOG(DEBUG_LEVEL, "Adding coface ", toString(), " to ", facet->toString());
-          facet->addCoface(coface);
-        } else {
-          CLOG(DEBUG_LEVEL, "NOT Adding coface ", toString(), " to ", facet->toString());
-          CLOG(WARN_LEVEL, "Cannot add coface - simplex not registered in spacetime");
-        }
-      } else {
-        CLOG(DEBUG_LEVEL, "NOT Adding coface ", toString(), " to ", facet->toString());
+        if (coface != nullptr) facet->addCoface(coface);
       }
       facets.push_back(facet);
-      // TODO: Make sure we rebuild facets when we replace a vertex. This should happen already as long as we iterate
-      //  the simplices that own the vertex and update each of them.
     }
   }
 #if CASET_ASSERTIONS
@@ -291,6 +280,7 @@ void Simplex::registerToVertices(const SimplexPtr &simplex) {
   }
 }
 
+#ifdef CASET_VERBOSE
 std::string Simplex::toString() const {
   std::stringstream sigmaLabel;
   sigmaLabel << std::to_string(getOrientation().getK()) << "-";
@@ -320,6 +310,7 @@ std::string Simplex::toString() const {
   ss << "<" << sigmaLabel.str() << orientationStr.str() << fpStr.str() << " " << vertexStr.str() << ">";
   return latexToUtf8(ss.str());
 }
+#endif
 
 [[nodiscard]] SimplexOrientation Simplex::getOrientation() const noexcept {
   return orientation;
@@ -513,7 +504,6 @@ void Simplex::validate() const {
     }
   }
   return edges_;
-  // return edges;
 }
 
 [[nodiscard]]

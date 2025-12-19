@@ -29,9 +29,15 @@ namespace caset {
       return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
     }
 
-    std::string EdgeKey::toString() const {
+#ifdef CASET_VERBOSE
+    std::string EdgeKey::toString() const noexcept {
       return "(" + std::to_string(first) + ", " + std::to_string(second) + ")";
     }
+#else
+std::string constexpr EdgeKey::toString() const noexcept {
+      return "";
+    }
+#endif
 
 
 } // caset

@@ -79,7 +79,13 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         std::pair<EdgePtrSet, EdgePtrSet> moveInEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
         std::pair<EdgePtrSet, EdgePtrSet> moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
         std::size_t degree() const noexcept;
+#ifdef CASET_VERBOSE
         std::string toString() const noexcept;
+#else
+        std::string toString() const noexcept {
+            return "";
+        };
+#endif
         std::vector<double> getCoordinates() const;
         void addInEdge(const EdgePtr &edge) noexcept;
         void addOutEdge(const EdgePtr &edge) noexcept;
