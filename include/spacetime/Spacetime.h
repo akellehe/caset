@@ -167,13 +167,8 @@ class Spacetime {
     /// 2. Updates all simplices containing \f$ v_i \f$ to use \f$ w_i \f$ instead
     /// 3. Removes isolated vertices
     ///
-    /// @param unattached The simplex containing vertices to be identified
-    /// @param attached The simplex whose vertices will replace the unattached vertices
-    /// @param vertexPairs Pairs of vertices {unattached_vertex, attached_vertex} to identify
-    void attachAtVertices(
-      const SimplexPtr &unattached,
-      const SimplexPtr &attached,
-      const std::vector<std::pair<VertexPtr, VertexPtr> > &vertexPairs
+    void replaceVertices(
+      const VertexPtrs &oldVertices, const VertexPtrs &replacements
     );
 
     ///

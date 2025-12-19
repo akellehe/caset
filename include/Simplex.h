@@ -38,9 +38,20 @@ namespace caset {
 /// # Simplex Class
 ///
 /// A simplex is a generalization of the concept of a triangle or tetrahedron to arbitrary dimensions. Each simplex
-/// is defined by it's vertices and edges. Each edge connects two vertices in spacetime.
+/// is defined by its vertices.
 ///
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
+///
+/// ### Some Implementation Details
+///
+/// A k-simplex, \f$ \sigma^k \f$, within a simplicial complex, \f$ K \f$ is defined as a set of k+1 vertices.
+/// Simplicial complex construction is a bit of a bottleneck in simulation of spacetime. At the moment; we declare some
+/// vertices, then use coning to create a Simplex from those vertices. Those vertices are passed to the Simplex along
+/// with the edges used to connect them as a performance optimization.
+///
+/// Most of the time building the simplicial complex is spent calculating facets from all subsets of Simplex Vertices. A
+/// faster method for building the complex would be to avoid computing those vertices and edges; and just compute the
+/// simplex as an abstraction with faces, cofaces, and an orientation. We'll leave this for a "Version 2 feature".
 ///
 class Simplex : public std::enable_shared_from_this<Simplex> {
   public:
@@ -250,22 +261,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     SimplexOrientationSet getGluableFaceOrientations();
 
     // ==================== Modification Methods ====================
-    /// This has been very troublesome method. This method is currently responsible for detaching all references to all
-    /// simplices corresponding to the `unattached` Vertex. Once detached, those simplices can be updated to replace a
-    /// given Vertex. Which this method does. After that, the simplices must be re-registered with every container from
-    /// which they were detached. This is how we avoid corrupting hash tables.
-    ///
-    /// What we would like to do next: Use RAII treating detachment as the resource. Initialize the SimplexGluer to
-    /// detach a given set of simplices. When it's destructor is called -- re-attach the simplices and it's little
-    /// friends.
-    ///
-    /// @param unattached A vertex that is part of a simplex that is not "attached" to a simplicial complex. This Vertex
-    ///   will be replaced by `attaached`, which is presumed to be a member of the simplicial complex
-    /// @param attached A vertex intended to replace `unattached` in all simplices to which it is a member. That's not
-    ///   just by name, but the actual pointer to `unattached` is replaced with that to `attached`.
-    ///
-    void attach(const VertexPtr &unattached, const VertexPtr &attached);
-
     bool addEdge(const EdgePtr &edge);
     bool removeEdge(const EdgePtr &edge);
     static void registerToVertices(const SimplexPtr &simplex);
@@ -327,18 +322,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     ///
     // const double computeDihedralAngles() const;
     // void computeEdges();
-  private:
-    Spacetime *spacetime{nullptr};
-    SimplexOrientation orientation{};
-
-    VertexIdToIndex vertexIdToIndex{};
-    VertexIndexToId vertexIndexToId{};
-    VertexPtrs vertices{};
-
-    EdgePtrSet edges{};
-
-    Simplices facets{};
-    SimplexPtrSet cofaces{};
 
     /// This method replaces the vertex only, Edge (s) should be replaced by the Spacetime, because it maintains the
     /// global lookup for Edge (s). If the Edge source/target is replaced; it's not enough to update the Edge, since
@@ -351,6 +334,18 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param newVertex The vertex with which to replace it.
     /// @return
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
+  private:
+    Spacetime *spacetime{nullptr};
+    SimplexOrientation orientation{};
+
+    VertexIdToIndex vertexIdToIndex{};
+    VertexIndexToId vertexIndexToId{};
+    VertexPtrs vertices{};
+
+    EdgePtrSet edges{};
+
+    Simplices facets{};
+    SimplexPtrSet cofaces{};
 
     template<typename Method, typename... Args>
     bool cascade(Method method, bool up, bool down, Args &&... args);

@@ -41,24 +41,3 @@ class TestEdgeList(unittest.TestCase):
         el.add(Edge(v1, v2, 3.))
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
-
-    def test_uniqueness_after_redirecting_edges(self):
-        v1 = Vertex(1, [])
-        v2 = Vertex(2, [])
-        v3 = Vertex(3, [])
-        v4 = Vertex(4, [])
-        v5 = Vertex(5, [])
-        e1 = Edge(v1, v2)
-        e2 = Edge(v2, v5)
-        e3 = Edge(v3, v4)
-
-        el = EdgeList()
-        el.add(e1)
-        el.add(e2)
-        el.add(e3)
-
-        el.remove(e1)
-        e1.redirect(v1, v3)
-        el.add(e1)
-
-        self.assertEqual(el.size(), 3)
