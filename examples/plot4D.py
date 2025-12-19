@@ -23,7 +23,6 @@ import argparse
 
 import time
 import torch
-from caset import Spacetime, Simplex
 
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
@@ -78,8 +77,8 @@ def embed_euclidean(st, dimensions=4, epsilon=1e-10):
     edgeIdxToAbsoluteSquaredLength = [0.0] * E
 
     for e, edge in enumerate(edgeVector):
-        s_id = edge.getSourceId()
-        t_id = edge.getTargetId()
+        s_id = edge.getSource().getId()
+        t_id = edge.getTarget().getId()
 
         s_idx = vertexIdToIndex[s_id]
         t_idx = vertexIdToIndex[t_id]
@@ -198,8 +197,8 @@ def label_vertices(st, ax):
 
 def label_edges(st, ax):
     for edge in st.getEdgeList().toVector():
-        src = st.getVertexList().get(edge.getSourceId())
-        tgt = st.getVertexList().get(edge.getTargetId())
+        src = st.getVertexList().get(edge.getSource().getId())
+        tgt = st.getVertexList().get(edge.getTarget().getId())
         srcX = project4_to_3(*src.getCoordinates())
         tgtX = project4_to_3(*tgt.getCoordinates())
 
@@ -226,9 +225,9 @@ def build(args):
     st.build(args.n_simplices)
     end = time.time() * 1000.
     print("Elapsed time: ", end - start)
-
+    print("--------------/Building Spacetime-------------")
+    return
     # Embed:
-
     print("---------------Embedding Euclidean------------")
     start = time.time() * 1000.
     embed_euclidean(st, dimensions=4, epsilon=10e-10)
@@ -258,8 +257,8 @@ def label_bounds_and_get_edges(st, ax):
     ymin, ymax = float("inf"), float("-inf")
     zmin, zmax = float("inf"), float("-inf")
     for edge in (st.getEdgeList().toVector()):
-        source = vlist.get(edge.getSourceId())
-        target = vlist.get(edge.getTargetId())
+        source = vlist.get(edge.getSource().getId())
+        target = vlist.get(edge.getTarget().getId())
 
         x1, y1, z1 = project4_to_3(*source.getCoordinates())
         x2, y2, z2 = project4_to_3(*target.getCoordinates())

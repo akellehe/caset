@@ -60,40 +60,27 @@ enum class SpacetimeType : uint8_t {
 ///
 class Spacetime {
   public:
-    Spacetime() {
-      Signature signature(4, SignatureType::Lorentzian);
-      metric = std::make_shared<Metric>(true, signature);
-      spacetimeType = SpacetimeType::CDT;
-      alpha = 1.;
-      topology = std::make_shared<Toroid>();
-    }
-
+    Spacetime();
     Spacetime(
       std::shared_ptr<Metric> metric_,
       const SpacetimeType spacetimeType_,
       std::optional<double> alpha_,
-      std::optional<std::shared_ptr<Topology> > topology_) : metric(metric_), spacetimeType(spacetimeType_) {
-      alpha = alpha_.value_or(1.);
-      topology = topology_.value_or(std::make_shared<Toroid>());
-    }
+      std::optional<std::shared_ptr<Topology> > topology_);
 
-    SimplexPtr createSimplex(const Vertices &vertices, const Edges &edges);
-    SimplexPtr createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
-    SimplexPtr createSimplex(std::size_t k);
+    std::pair<SimplexPtr, bool> createSimplex(const VertexPtrs &vertices, const Edges &edges);
+    std::pair<SimplexPtr, bool> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
+    std::pair<SimplexPtr, bool> createSimplex(std::size_t k);
     VertexPtr createVertex(const std::uint64_t id) noexcept;
     VertexPtr createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept;
-    [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept { return spacetimeType; }
-    [[nodiscard]] double getCurrentTime() const noexcept { return static_cast<double>(currentTime); }
-    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() noexcept { return edgeList; }
-    [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept { return metric; }
-    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() noexcept { return vertexList; }
-    double incrementTime() noexcept {
-      currentTime++;
-      return static_cast<double>(currentTime);
-    }
-    EdgePtr createEdge(const std::uint64_t src, const std::uint64_t tgt);
-    EdgePtr createEdge(const std::uint64_t src, const std::uint64_t tgt, double squaredLength) noexcept;
-    void addObservable(const std::shared_ptr<Observable> &observable) { observables.push_back(observable); }
+    [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept;
+    [[nodiscard]] double getCurrentTime() const noexcept;
+    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() const noexcept;
+    [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept;
+    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() const noexcept;
+    double incrementTime() noexcept;
+    EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt) const;
+    EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, double squaredLength) const noexcept;
+    void addObservable(const std::shared_ptr<Observable> &observable);
 
     ///
     /// Builds an n-dimensional (depending on your metric) triangulation/slice for t=0 with edge lengths equal to alpha
@@ -114,7 +101,7 @@ class Spacetime {
     ///   this simplex.
     ///
     /// @return {unattached, attached} faces that can be glued together.
-    [[nodiscard]] OptionalSimplexPair
+    [[nodiscard]] OptionalSimplexPtrPair
     getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex);
 
     void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
@@ -214,13 +201,18 @@ class Spacetime {
     /// If you want something truly random, though, you should probably implement that.
     ///
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
-    OptionalSimplexPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
+    OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
 
     /// This method is for testing only, very poor runtime performance.
     SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
 
-    [[nodiscard]] std::vector<Vertices> getConnectedComponents() const;
+    [[nodiscard]] std::vector<VertexPtrs> getConnectedComponents() const;
 
+    SimplexPtr registerSimplex(const SimplexPtr &simplex, bool internal);
+    void unregisterSimplex(const SimplexPtr &simplex);
+
+    SimplexPtr getSimplex(SimplexPtr simplex) const;
+    SimplexPtr getSimplex(std::uint64_t fingerprint) const;
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
@@ -232,6 +224,8 @@ class Spacetime {
     std::shared_ptr<Topology> topology;
     std::uint64_t currentTime = 0;
 
+    SimplexSet simplices{};
+
     ///
     /// These are simplices on the boundary of a simplicial complex. They have at least one external face, and hence can
     /// be glued to other simplices. The externalSimplices are organized by the orientation of their available faces. If
@@ -239,7 +233,7 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplices{};
+    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplicesByFacialOrientation{};
 
     ///
     /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
@@ -248,7 +242,7 @@ class Spacetime {
     /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
     /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
     /// orientation of the Simplex itself.
-    std::unordered_map<SimplexOrientationPtr, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplices{};
+    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplicesByOrientation{};
     std::vector<std::shared_ptr<Observable> > observables{};
 };
 } // caset

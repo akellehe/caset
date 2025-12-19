@@ -1,12 +1,34 @@
 cmake_minimum_required(VERSION 3.18)
 project(caset LANGUAGES CXX)
 
+option(CASET_ASAN "Build caset with AddressSanitizer/UBSan" OFF)
+option(CASET_VERBOSE "Build caset with C++ level logging" ON)
+option(CASET_ASSERTIONS "Build with assertions all over the place to encourage early failures." ON)
+option(CASET_PROFILE "Build with -g -O1 to keep symbol names for stack traces" ON)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- Python & pybind11 ----
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)
+
+include(CheckCXXSourceCompiles)
+
+check_cxx_source_compiles("
+  #include <syncstream>
+  int main() {
+      std::osyncstream out(std::cout);
+      out << \"test\" << std::endl;
+      return 0;
+  }
+" HAVE_STD_OSYNCSTREAM)
+
+if (HAVE_STD_OSYNCSTREAM)
+    add_compile_definitions(CASET_HAS_OSYNCSTREAM=1)
+else()
+    add_compile_definitions(CASET_HAS_OSYNCSTREAM=0)
+endif()
 
 
 # ---- <Locate Python's torch package WITHOUT importing it> ----
@@ -44,15 +66,47 @@ file(GLOB_RECURSE CASET_SOURCES
 # ---- <Build the Python module> ----
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
 
+if(CASET_ASAN)
+    message(STATUS "ASAN/UBSAN support ON")
+    target_compile_options(caset PRIVATE
+            -O1 -g3
+            -fno-omit-frame-pointer
+            -fsanitize=address,undefined
+            -fno-sanitize-recover=address,undefined
+            -fno-optimize-sibling-calls
+    )
+    target_link_options(caset PRIVATE
+            -fsanitize=address,undefined
+    )
+    # Optional: make ASan reports symbolize nicely
+    target_compile_definitions(caset PRIVATE ASAN_ENABLED=1)
+else()
+    message(STATUS "ASAN/UBSAN support OFF")
+endif()
+
 set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}")
-add_definitions(-DSOURCES_ROOT="${SOURCES_ROOT}")
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(caset PRIVATE CASET_DEBUG=1 VERBOSE=1)
-    add_definitions(-DSOURCES_ROOT="${SOURCES_ROOT}")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CASET_PROFILE)
+    message(STATUS "DEBUGGING (-O1, -g3) Support ON.")
+    target_compile_options(caset PRIVATE -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(caset PRIVATE -O3)
+    message(STATUS "DEBUGGING (-O1, -g3) Support OFF, will use -O3.")
+    target_compile_options(caset PRIVATE -O3)
+endif()
+
+if (CASET_VERBOSE)
+    message(STATUS "Logging turned ON.")
+    target_compile_definitions(caset PRIVATE CASET_VERBOSE=1)
+else()
+    message(STATUS "Logging turned OFF.")
+endif()
+
+if (CASET_ASSERTIONS)
+    message(STATUS "Assertions turned ON.")
+    target_compile_definitions(caset PRIVATE CASET_ASSERTIONS=1)
+else()
+    message(STATUS "Assertions turned OFF.")
 endif()
 
 target_include_directories(caset
@@ -81,8 +135,8 @@ if(UNIX AND NOT APPLE)
     target_link_options(caset PRIVATE "-Wl,-rpath,${TORCH_LIB_DIR}")
 endif()
 #if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_compile_options("-ftime-report")
-add_compile_options("-ftime-trace")
+#    add_compile_options("-ftime-report")
+#    add_compile_options("-ftime-trace")
 #endif()
 
 set_target_properties(caset PROPERTIES
@@ -99,6 +153,7 @@ install(TARGETS caset
         BUNDLE  DESTINATION .
 )
 
+if(!CASET_ASAN)
 # --- Generate Python stubs for caset (.pyi) ---
 set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
 
@@ -115,3 +170,4 @@ add_custom_command(
 
 # Install the stub next to the extension in the package
 install(FILES "${STUB_OUT_DIR}/caset.pyi" DESTINATION .)
+endif()

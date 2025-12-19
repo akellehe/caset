@@ -19,4 +19,80 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "Fingerprint.h"
 #include "Edge.h"
+#include "EdgeKey.h"
+#include "Vertex.h"
+
+#include <vector>
+#include <memory>
+
+
+namespace caset {
+
+class Simplex;
+
+    Edge::Edge(
+      const VertexPtr &source_,
+      const VertexPtr &target_,
+      double squaredLength_
+    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}) {
+    }
+
+    Edge::Edge(
+      const VertexPtr &source_,
+      const VertexPtr &target_
+    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
+      // Set squaredLength to a random value between -1 and 1
+      squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
+    }
+
+    [[nodiscard]] VertexPtr Edge::getSource() const noexcept {
+      return source;
+    }
+
+    [[nodiscard]] VertexPtr Edge::getTarget() const noexcept {
+      return target;
+    }
+
+    [[nodiscard]] double Edge::getSquaredLength() const noexcept {
+      return squaredLength;
+    }
+
+    [[nodiscard]] std::string Edge::toString() const noexcept {
+      return source->toString() + "->" + target->toString();
+    }
+
+    void Edge::replaceSourceVertex(const VertexPtr &newSource) {
+      fingerprint.removeId(source->getId());
+      source = newSource;
+      fingerprint.addId(newSource->getId());
+      fingerprint.refresh();
+    }
+
+    void Edge::replaceTargetVertex(const VertexPtr &newTarget) {
+      fingerprint.removeId(target->getId());
+      target = newTarget;
+      fingerprint.addId(newTarget->getId());
+      fingerprint.refresh();
+    }
+
+    bool Edge::hasVertex(std::uint64_t vertexId) {
+      if (getSource()->getId() == vertexId || getTarget()->getId() == vertexId) return true;
+      return false;
+    }
+
+    bool Edge::operator==(const Edge &other) const {
+      return fingerprint.fingerprint() == other.fingerprint.fingerprint();
+    }
+
+    [[nodiscard]] std::uint64_t Edge::toHash() const {
+      return fingerprint.fingerprint();
+    }
+
+    EdgeKey Edge::getKey() const noexcept {
+      return {source->getId(), target->getId()};
+    }
+
+}
+

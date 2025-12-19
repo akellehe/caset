@@ -23,8 +23,10 @@
 #define CASET_CASET_SRC_EDGE_H_
 
 #include "Fingerprint.h"
+#include "ForwardDeclarations.h"
+#include "EdgeKey.h"
+#include "Vertex.h"
 
-#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 #include <random>
@@ -55,29 +57,13 @@ enum class EdgeDisposition : uint8_t {
   Lightlike = 2
 };
 
-struct EdgeKeyHash {
-  std::size_t operator()(const std::pair<std::uint64_t, std::uint64_t> &p) const noexcept {
-    // Standard-ish hash combine
-    std::size_t h1 = std::hash<std::uint64_t>{}(p.first);
-    std::size_t h2 = std::hash<std::uint64_t>{}(p.second);
-    // from boost::hash_combine
-    return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
-  }
-};
-
-// Optional: custom equality if you ever need something non-trivial
-struct EdgeKeyEqual {
-  bool operator()(const std::pair<std::uint64_t, std::uint64_t> &a,
-                  const std::pair<std::uint64_t, std::uint64_t> &b) const noexcept {
-    return a.first == b.first && a.second == b.second;
-  }
-};
-
-class Simplex;
 
 /// # Edge Class
 ///
-/// An edge that links two points (vertices) in spacetime.
+/// An edge that links two points (vertices) in spacetime. When we merge two vertices in the process of connecting two
+/// adjacent simplices; we cannot modify the edges in place without first removing them from their containers. Otherwise
+/// avoiding the necessary re-hashing results in undefined behavior. We should keep as little state as possible on the
+/// edge in favor of maintaining that state on the Vertex.
 ///
 /// @param source_If this Edge represents a directed Edge; then this is the Vertex from which the Edge originates. For
 ///   undirected edges; it's just one of two Vertices that define the Edge.
@@ -89,112 +75,82 @@ class Simplex;
 class Edge : public std::enable_shared_from_this<Edge> {
   public:
     Edge(
-      std::uint64_t sourceId_,
-      std::uint64_t targetId_,
+      const VertexPtr &source,
+      const VertexPtr &target,
       double squaredLength_
-    ) : sourceId(sourceId_), targetId(targetId_), squaredLength(squaredLength_), fingerprint({sourceId_, targetId_}) {
-    }
+    );
 
     Edge(
-      std::uint64_t sourceId_,
-      std::uint64_t targetId_
-    ) : sourceId(sourceId_), targetId(targetId_), fingerprint({sourceId_, targetId_}) {
-      // Set squaredLength to a random value between -1 and 1
-      squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
-    }
+      const VertexPtr &source,
+      const VertexPtr &target
+    );
 
-    [[nodiscard]] std::uint64_t getSourceId() const noexcept {
-      return sourceId;
-    }
+    /// Every edge has a beginning and an end. Many have two! And by that I mean they're undirected, so the beginning is
+    /// the end and the end, the beginning. Edges are bidirectional, so it doesn't really matter if you consider them
+    /// directed or undirected. If you want to use a directed edge; in your code you should just specify that you only
+    /// traverse `Vertex::outEdges` and avoid `Vertex::inEdges` when you traverse around.
+    [[nodiscard]] VertexPtr getSource() const noexcept;
 
-    [[nodiscard]] std::uint64_t getTargetId() const noexcept {
-      return targetId;
-    }
+    /// `getTarget` is `getSource`'s better half. All good things come to an end, with a wonderful journey left to
+    /// memory. But seriously, though, `getTarget` gives the vertex on one end, and `getSource` gives the other.
+    [[nodiscard]] VertexPtr getTarget() const noexcept;
 
-    [[nodiscard]] double getSquaredLength() const noexcept {
-      return squaredLength;
-    }
+    /// We work in squared edge lengths because imaginary numbers don't play so nicely with floating point arithmetic.
+    /// To be less cryptic: timelike edges have imaginary length. Their squared edge length is negative. Something I've
+    /// always thought was kind of neat is a right triangle with the opposite and adjacent edges of length \f$ i \f$
+    /// and \f$ 1 \f$ respectively. So the hypotenuse is zero. So timelike edges have imaginary length, spacelike edges
+    /// have a positive length, and lightlike edges have zero length.
+    ///
+    /// @return The square of the length of the edge.
+    [[nodiscard]] double getSquaredLength() const noexcept;
 
-    [[nodiscard]] std::string toString() const noexcept {
-      return std::to_string(sourceId) + "->" + std::to_string(targetId);
-    }
+    [[nodiscard]] std::string toString() const noexcept;
 
     /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
-    /// ensure consistent hashing/lookup.
-    void replaceSourceVertex(std::uint64_t sourceId_) {
-      sourceId = sourceId_;
-      refreshFingerprint();
-    }
+    /// ensure consistent hashing/lookup. This method also updates the fingerprint hastily. If you want to update in
+    /// batches remove the fingerprint.refresh() call.
+    void replaceSourceVertex(const VertexPtr &newSource);
 
     /// This method changes the target Vertex in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
-    void replaceTargetVertex(std::uint64_t targetId_) {
-      targetId = targetId_;
-      refreshFingerprint();
-    }
+    /// CRITICAL: TODO: we need to remove edges from their containers before changing their fingerprints!
+    /// Same as replaceSourceVertex above, but for targets.
+    void replaceTargetVertex(const VertexPtr &newTarget);
 
+    ///
+    /// Check whether or not this Edge has a particular Vertex. The comparison is against source/target node IDs, so
+    /// don't worry too much about accidentally comparing pointers. This is mostly a convenience method to make your
+    /// code more clear and avoid typing.
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
-    bool hasVertex(std::uint64_t vertexId) {
-      if (getSourceId() == vertexId || getTargetId() == vertexId) return true;
-      return false;
-    }
+    bool hasVertex(std::uint64_t vertexId);
+    bool hasVertex(const VertexPtr &vertex);
 
+    bool operator==(const Edge &other) const;
+
+    [[nodiscard]] std::uint64_t toHash() const;
+
+    Fingerprint fingerprint{};
+
+    /// If you want to compare two edges by value; you can compare their keys. Assume two Edges with the same EdgeKey
+    /// are, for all intents and purposes, equal. This will change if we begin storing state on the Edge, but at the
+    /// moment let's focus on storing as much state on the Vertex as possible. Edges have potentially MUCH higher
+    /// cardinality than Vertices, so as much state as we can fit on the Vertex, we should fit on the Vertex. This
+    /// should be at the expense of slight inconvenience.
     ///
-    /// @param from the ID of a vertex to or from which this Edge should no longer point.
-    /// @param to the ID of a source or target vertex to which this Edge should now point.
-    void redirect(std::uint64_t from, std::uint64_t to) {
-      if (getSourceId() == from) {
-        replaceSourceVertex(to);
-      }
-      if (getTargetId() == from) {
-        replaceTargetVertex(to);
-      }
-    }
-
-    bool operator==(const Edge &other) const {
-      return fingerprint.fingerprint() == other.fingerprint.fingerprint();
-    }
-
-    [[nodiscard]] std::uint64_t toHash() const {
-      return fingerprint.fingerprint();
-    }
-
-    Fingerprint fingerprint;
-
-    std::pair<IdType, IdType> getKey() const noexcept {
-      return {sourceId, targetId};
-    }
-
-    std::vector<std::shared_ptr<Simplex> > getSimplices() const noexcept { return simplices; }
-
-    void addSimplex(const std::shared_ptr<Simplex> &simplex) noexcept { simplices.push_back(simplex); }
+    /// @returns A tuple of {sourceId, targetId}.
+    EdgeKey getKey() const noexcept;
 
   private:
-    std::uint64_t sourceId;
-    std::uint64_t targetId;
-    std::vector<std::shared_ptr<Simplex> > simplices;
-
-    /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
-    /// fingerprint for this Edge after replacing a source or target vertex in-place.
-    void refreshFingerprint() noexcept {
-      fingerprint = Fingerprint({sourceId, targetId});
-    }
+    VertexPtr source = nullptr;
+    VertexPtr target = nullptr;
 
     double squaredLength;
 };
 
-using EdgeHash = FingerprintHash<Edge>;
-using EdgeEq = FingerprintEq<Edge>;
-using EdgePtr = std::shared_ptr<Edge>;
-using Edges = std::vector<EdgePtr>;
-
-using EdgeKey = std::pair<IdType, IdType>;
-using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
-using EdgeIds = std::vector<EdgeKey>;
 }
 
 #endif //CASET_CASET_SRC_EDGE_H_

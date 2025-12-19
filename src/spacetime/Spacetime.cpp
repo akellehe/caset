@@ -28,8 +28,28 @@
 #include "Logger.h"
 #include <memory>
 #include "spacetime/Spacetime.h"
+#include "SimplexOrientation.h"
+#include "ForwardDeclarations.h"
+#include "EdgeList.h"
+#include "Edge.h"
 
 namespace caset {
+Spacetime::Spacetime() {
+  Signature signature(4, SignatureType::Lorentzian);
+  metric = std::make_shared<Metric>(true, signature);
+  spacetimeType = SpacetimeType::CDT;
+  alpha = 1.;
+  topology = std::make_shared<Toroid>();
+}
+
+Spacetime::Spacetime(
+  std::shared_ptr<Metric> metric_,
+  const SpacetimeType spacetimeType_,
+  std::optional<double> alpha_,
+  std::optional<std::shared_ptr<Topology> > topology_) : metric(metric_), spacetimeType(spacetimeType_) {
+  alpha = alpha_.value_or(1.);
+  topology = topology_.value_or(std::make_shared<Toroid>());
+}
 void Spacetime::embedEuclidean(int dimensions = 4, double epsilon = 1e-8) {
   pybind11::gil_scoped_release no_gil;
   if (vertexList->size() == 0) return;
@@ -69,13 +89,13 @@ void Spacetime::embedEuclidean(int dimensions = 4, double epsilon = 1e-8) {
 
   for (int e = 0; e < E; ++e) {
     const auto &edge = edgeVector[e];
-    auto sourceIndexIterator = vertexIdToIndex.find(edge->getSourceId());
-    auto targetIndexIterator = vertexIdToIndex.find(edge->getTargetId());
+    auto sourceIndexIterator = vertexIdToIndex.find(edge->getSource()->getId());
+    auto targetIndexIterator = vertexIdToIndex.find(edge->getTarget()->getId());
     if (sourceIndexIterator == vertexIdToIndex.end() || targetIndexIterator == vertexIdToIndex.end()) {
       throw std::runtime_error("Edge refers to unknown vertex id");
     }
-    auto sourceTimeIterator = vertexIdToTime.find(edge->getSourceId());
-    auto targetTimeIterator = vertexIdToTime.find(edge->getTargetId());
+    auto sourceTimeIterator = vertexIdToTime.find(edge->getSource()->getId());
+    auto targetTimeIterator = vertexIdToTime.find(edge->getTarget()->getId());
 
     edgeIdxToSourceIndex[e] = sourceIndexIterator->second;
     edgeIdxToTargetIndex[e] = targetIndexIterator->second;
@@ -191,8 +211,8 @@ void Spacetime::build(int numSimplices) {
   std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
   createSimplex(orientations[1]);
   for (int i = 0; i < numSimplices; i++) {
-    SimplexPtr rightSimplex = createSimplex(orientations[i % 2]);
-    OptionalSimplexPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
+    const auto [rightSimplex, created] = createSimplex(orientations[i % 2]);
+    OptionalSimplexPtrPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
     if (!leftFaceRightFace.has_value()) return;
     auto [leftFace, rightFace] = leftFaceRightFace.value();
     auto [left, succeeded] = causallyAttachFaces(leftFace, rightFace);
@@ -200,42 +220,73 @@ void Spacetime::build(int numSimplices) {
 }
 
 EdgePtr Spacetime::createEdge(
-  const std::uint64_t src,
-  const std::uint64_t tgt
-) {
+  const VertexPtr &src,
+  const VertexPtr &tgt
+) const {
   EdgePtr edge = edgeList->add(src, tgt);
-  vertexList->get(src)->addOutEdge(edge);
-  vertexList->get(tgt)->addInEdge(edge);
+  src->addOutEdge(edge);
+  tgt->addInEdge(edge);
   return edge;
 }
 
 EdgePtr Spacetime::createEdge(
-  const std::uint64_t src,
-  const std::uint64_t tgt,
+  const VertexPtr &src,
+  const VertexPtr &tgt,
   double squaredLength
-) noexcept {
+) const noexcept {
   EdgePtr edge = edgeList->add(src, tgt, squaredLength);
-  vertexList->get(src)->addOutEdge(edge);
-  vertexList->get(tgt)->addInEdge(edge);
+  src->addOutEdge(edge);
+  tgt->addInEdge(edge);
   return edge;
 }
 
-SimplexPtr Spacetime::createSimplex(
-  const Vertices &vertices, const Edges &edges
+std::pair<SimplexPtr, bool> Spacetime::createSimplex(
+  const VertexPtrs &vertices,
+  const Edges &edges
 ) {
-  const SimplexOrientationPtr orientation = SimplexOrientation::orientationOf(vertices);
-
-  SimplexPtr simplex = Simplex::create(vertices, edges);
-  for (const auto &o : simplex->getOrientation()->getFacialOrientations()) {
-    externalSimplices[o].insert(simplex);
-    externalSimplices[o->flip()].insert(simplex); // TODO: Remove the flipped orientation once attached.
+  const SimplexOrientation orientation = SimplexOrientation::orientationOf(vertices);
+  std::vector<IdType> ids{};
+  ids.reserve(vertices.size());
+  for (const auto &v : vertices) {
+    ids.push_back(v->getId());
   }
-  return simplex;
+  Fingerprint fp(ids);
+  const auto found = simplices.find(fp.fingerprint());
+  if (found == simplices.end()) {
+#ifdef CASET_ASSERTIONS
+    std::unordered_set<std::uint64_t> seen{};
+    for (const auto &s : simplices) {
+      if (seen.contains(s->fingerprint.fingerprint())) {
+        CLOG(CRITICAL_LEVEL, "attempted to create a new simplex with the same fingerprint as an existing one!");
+        CLOG(CRITICAL_LEVEL, "Attempted vertices: ");
+        for (const auto &v : vertices) {
+          CLOG(CRITICAL_LEVEL, "    - ", v->toString());
+        }
+        CLOG(CRITICAL_LEVEL,
+             "Existing simplex: ",
+             s->toString(),
+             " with fingerprint ",
+             std::to_string(s->fingerprint.fingerprint()),
+             " vs ",
+             std::to_string(fp.fingerprint()));
+        throw std::runtime_error("Duplicate simplex: " + s->toString());
+      }
+      seen.insert(s->fingerprint.fingerprint());
+    }
+#endif
+    SimplexPtr simplex = Simplex::create(this, vertices, edges);
+    registerSimplex(simplex, false);
+    return {simplex, true};
+  }
+#ifdef CASET_ASSERTIONS
+  CLOG(CRITICAL_LEVEL, "You attempted to create a simplex taht already exists: ", (*found)->toString());
+#endif
+  return {*found, false};
 }
 
-SimplexPtr Spacetime::createSimplex(std::size_t k) {
+std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
   double squaredLength = alpha;
-  Vertices vertices = {};
+  VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
@@ -243,7 +294,7 @@ SimplexPtr Spacetime::createSimplex(std::size_t k) {
     // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
     for (const auto &existingVertex : vertices) {
-      EdgePtr edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+      EdgePtr edge = edgeList->add(existingVertex, newVertex, squaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -253,15 +304,16 @@ SimplexPtr Spacetime::createSimplex(std::size_t k) {
   return createSimplex(vertices, edges);
 }
 
-SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
+std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
   double squaredLength = alpha;
   double timelikeSquaredLength = alpha;
-  SimplexOrientationPtr orientation = std::make_shared<SimplexOrientation>(
+  SimplexOrientation orientation = {
     std::get<0>(numericOrientation),
-    std::get<1>(numericOrientation));
-  std::uint8_t k = orientation->getK();
-  auto [ti, tf] = orientation->numeric();
-  Vertices vertices = {};
+    std::get<1>(numericOrientation)
+  };
+  std::uint8_t k = orientation.getK();
+  auto [ti, tf] = orientation.numeric();
+  VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
@@ -274,7 +326,7 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
     }
     for (const auto &existingVertex : vertices) {
       EdgePtr edge = edgeList->
-          add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+          add(existingVertex, newVertex, timelikeSquaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -290,9 +342,9 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
     for (const auto &existingVertex : vertices) {
       EdgePtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
-        edge = edgeList->add(existingVertex->getId(), newVertex->getId(), squaredLength);
+        edge = edgeList->add(existingVertex, newVertex, squaredLength);
       } else {
-        edge = edgeList->add(existingVertex->getId(), newVertex->getId(), timelikeSquaredLength);
+        edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -303,11 +355,11 @@ SimplexPtr Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericO
   return createSimplex(vertices, edges);
 }
 
-[[nodiscard]] OptionalSimplexPair
+[[nodiscard]] OptionalSimplexPtrPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
   auto unattachedFacets = unattachedSimplex->getFacets(); // vector<shared_ptr<Simplex>>
   auto attachedFacets = attachedSimplex->getFacets();
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   for (const auto &f : unattachedFacets) {
     f->validate();
   }
@@ -317,16 +369,16 @@ Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr
 #endif
 
   for (auto &unattachedFace : unattachedFacets) {
-    const auto [tia, tfa] = unattachedFace->getOrientation()->numeric();
+    const auto [tia, tfa] = unattachedFace->getOrientation().numeric();
     if (tia == 0 || tfa == 0) continue; // Skip degenerate faces
     if (!unattachedFace->isCausallyAvailable()) continue;
     for (auto &attachedFace : attachedFacets) {
       if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue;
       // Skip faces that don't match in timelikeness
-      const auto [tib, tfb] = attachedFace->getOrientation()->numeric();
+      const auto [tib, tfb] = attachedFace->getOrientation().numeric();
       if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
       if (attachedFace->isInternal()) continue;
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
       attachedFace->validate();
       unattachedFace->validate();
 #endif
@@ -340,11 +392,11 @@ Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr
 void Spacetime::moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
   for (const auto &edge : from->getInEdges()) {
     // The source is external to the face/simplex, the `from` node is going to be going away.
-    const VertexPtr originalSource = vertexList->get(edge->getSourceId());
+    const VertexPtr originalSource = vertexList->get(edge->getSource()->getId());
     originalSource->removeOutEdge(edge);
     from->removeInEdge(edge);
     edgeList->remove(edge);
-    edge->replaceTargetVertex(to->getId());
+    edge->replaceTargetVertex(to);
     const EdgePtr newEdge = edgeList->add(edge);
     to->addInEdge(newEdge);
     originalSource->addOutEdge(newEdge);
@@ -353,32 +405,29 @@ void Spacetime::moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to
 
 void Spacetime::moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &to) {
   for (const auto &edge : from->getOutEdges()) {
-    const VertexPtr originalTarget = vertexList->get(edge->getTargetId());
+    const VertexPtr originalTarget = vertexList->get(edge->getTarget()->getId());
     originalTarget->removeInEdge(edge);
     from->removeOutEdge(edge);
     edgeList->remove(edge);
-    edge->replaceSourceVertex(to->getId());
+    edge->replaceSourceVertex(to);
     const EdgePtr newEdge = edgeList->add(edge);
     to->addOutEdge(newEdge);
     originalTarget->addInEdge(newEdge);
   }
 }
 
-
 SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
-  SimplexOrientationPtr o = std::make_shared<
-    SimplexOrientation>(std::get<0>(orientation), std::get<1>(orientation));
+  SimplexOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
   SimplexSet result{};
-  for (const auto &bucket : externalSimplices | std::views::values) {
+  for (const auto &bucket : externalSimplicesByFacialOrientation | std::views::values) {
     for (const auto &simplex : bucket) {
-      for (const auto &simplexFacialOrientation : simplex->getOrientation()->getFacialOrientations()) {
+      for (const auto &simplexFacialOrientation : simplex->getOrientation().getFacialOrientations()) {
         if (simplex->getOrientation() == o) result.insert(simplex);
       }
     }
   }
   return result;
 }
-
 
 /// When we attach two simplices; the "attached" one is assumed to be part of a simplicial complex. The "unattached" one
 /// is assumed to be part of another simplicial complex, but usually by itself. The "attached" simplex replaces
@@ -392,15 +441,15 @@ void Spacetime::attachAtVertices(
 ) {
   CLOG(INFO_LEVEL, "attachAtVertices called. Pre-validating.");
   // Bone density in Regge calculus can be calculated as the size of the Simplex list on the Edge.
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   unattached->validate();
   attached->validate();
 #endif
   // Move external edges from unattached vertices to attached vertices.
   for (const auto &[unattachedVertex, attachedVertex] : vertexPairs) {
-    unattached->attach(unattachedVertex, attachedVertex, edgeList, vertexList);
+    unattached->attach(unattachedVertex, attachedVertex);
   }
-#if CASET_DEBUG
+#if CASET_ASSERTIONS
   unattached->validate();
   attached->validate();
 #endif
@@ -411,7 +460,11 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   const SimplexPtr &unattachedFace
 ) {
   if (!attachedFace->isCausallyAvailable() || !unattachedFace->isCausallyAvailable()) {
-    CLOG(ERROR_LEVEL, "One or more of attachedFace and unattachedFace was not causally available!\n", attachedFace->toString(), "\n", unattachedFace->toString());
+    CLOG(ERROR_LEVEL,
+         "One or more of attachedFace and unattachedFace was not causally available!\n",
+         attachedFace->toString(),
+         "\n",
+         unattachedFace->toString());
     return {attachedFace, false};
   }
   if (attachedFace->fingerprint.fingerprint() == unattachedFace->fingerprint.fingerprint()) {
@@ -421,11 +474,13 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   if (attachedFace->getOrientation() != unattachedFace->getOrientation()) {
     CLOG(ERROR_LEVEL,
          "Faces have different orientations: ",
-         attachedFace->getOrientation()->toString(),
+         attachedFace->getOrientation().toString(),
          " vs ",
-         unattachedFace->getOrientation()->toString());
+         unattachedFace->getOrientation().toString());
     return {attachedFace, false};
   }
+
+#ifdef CASET_ASSERTIONS
   for (const auto &attachedCoface : attachedFace->getCofaces()) {
     for (const auto &unattachedCoface : unattachedFace->getCofaces()) {
       if (attachedCoface->fingerprint.fingerprint() == unattachedCoface->fingerprint.fingerprint()) {
@@ -434,8 +489,9 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
       }
     }
   }
+#endif
 
-  Vertices vertices{};
+  VertexPtrs vertices{};
   vertices.reserve(attachedFace->size());
   Edges edges{};
   edges.reserve(attachedFace->size());
@@ -449,7 +505,8 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
 
   // myVertices and yourVertices should have a sequence that lines up, but they're not necessarily at the correct
   // starting node. We should shuffle through until they are either compatible or we've tried all possible orders.
-  const std::optional<Vertices> attachedOrderedVerticesOptional = attachedFace->getVerticesWithParityTo(unattachedFace);
+  const std::optional<VertexPtrs> attachedOrderedVerticesOptional = attachedFace->getVerticesWithParityTo(
+    unattachedFace);
 
   if (!attachedOrderedVerticesOptional.has_value()) {
     CLOG(WARN_LEVEL,
@@ -460,45 +517,43 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
     return {nullptr, false};
   }
 
-  const Vertices &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
+  const VertexPtrs &attachedOrderedVertices = attachedOrderedVerticesOptional.value();
   for (auto i = 0; i < attachedOrderedVertices.size(); i++) {
     std::pair<VertexPtr, VertexPtr> vp = std::make_pair(unattachedVertices[i], attachedOrderedVertices[i]);
     vertexPairs.push_back(vp);
   }
 
-  for (const auto &facialOrientation : attachedFace->getOrientation()->getFacialOrientations()) {
-    externalSimplices[facialOrientation].erase(attachedFace);
-    externalSimplices[facialOrientation->flip()].erase(attachedFace);
-  }
-
   attachAtVertices(unattachedFace, attachedFace, vertexPairs);
 
-  if (!unattachedFace->getCofaces().empty()) {
-    for (const auto &newCoface : unattachedFace->getCofaces()) {
-      attachedFace->addCoface(newCoface);
-    }
+  // Adding cofaces is not necessary because that already happens in Simplex::attach when we call registerToFacets.
+  // TODO: When we remove this we no longer segfault, but then facets don't share cofaces. We we don't we segfault,
+  //  but they do.
+  const auto attachedCofaces = attachedFace->getCofaces();
+  const auto unattachedCofaces = unattachedFace->getCofaces();
+  for (const auto &c : attachedCofaces) {
+    unattachedFace->addCoface(c);
   }
-
-  if (!attachedFace->isCausallyAvailable()) {
-    internalSimplices[attachedFace->getOrientation()].insert(attachedFace);
-    internalSimplices[attachedFace->getOrientation()->flip()].insert(attachedFace);
+  for (const auto &c : unattachedCofaces) {
+    attachedFace->addCoface(c);
   }
 
   return {attachedFace, true};
 }
 
-OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
+OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
-    const auto &prospectiveCofaces = externalSimplices[facialOrientation];
+    const auto &prospectiveCofaces = externalSimplicesByFacialOrientation[facialOrientation];
     if (prospectiveCofaces.empty()) continue;
     for (auto attachedCofaceId = prospectiveCofaces.begin(); attachedCofaceId != prospectiveCofaces.end(); ++
          attachedCofaceId) {
       if ((*attachedCofaceId)->fingerprint.fingerprint() == unattachedSimplex->fingerprint.fingerprint()) continue;
-      if (!unattachedSimplex->hasCausallyAvailableFacet() || !(*attachedCofaceId)->hasCausallyAvailableFacet()) continue;
-#if CASET_DEBUG
+      if (!unattachedSimplex->hasCausallyAvailableFacet() || !(*attachedCofaceId)->hasCausallyAvailableFacet())
+        continue
+            ;
+#if CASET_ASSERTIONS
       (*attachedCofaceId)->validate();
 #endif
-      OptionalSimplexPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
+      OptionalSimplexPtrPair gluablePair = getGluableFaces(unattachedSimplex, *attachedCofaceId);
       if (gluablePair.has_value()) {
         const auto &[unattachedFace, attachedFace] = gluablePair.value();
         return gluablePair;
@@ -508,25 +563,89 @@ OptionalSimplexPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unatta
   return std::nullopt;
 }
 
-SimplexSet Spacetime::getExternalSimplices() noexcept {
-  SimplexSet simplices{};
-  for (const auto &[facialOrientation, bucket] : externalSimplices) {
-    for (const auto &simplex : bucket) {
-      simplices.insert(simplex);
+void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
+  if (!simplices.contains(simplex)) {
+    CLOG(CRITICAL_LEVEL, "You attempted to unregister a simplex that does not exist!!", simplex->toString(), " existing simplices are: ");
+    for (const auto &s : simplices) {
+      CLOG(CRITICAL_LEVEL, "    - ", s->toString());
     }
+#ifdef CASET_ASSERTIONS
+    for (const auto &s : simplices) {
+      if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
+        CLOG(CRITICAL_LEVEL, "Hash table said a simplex was not registered, but one was found!");
+        throw std::runtime_error("registered simplex unexpectedly found. hash table corrupted.");
+      }
+    }
+#endif
+    return;
   }
-  return simplices;
+  internalSimplicesByOrientation[simplex->getOrientation()].erase(simplex);
+  internalSimplicesByOrientation[simplex->getOrientation().flip()].erase(simplex);
+  for (const auto &orientation : simplex->getOrientation().getFacialOrientations()) {
+    externalSimplicesByFacialOrientation[orientation].erase(simplex);
+    externalSimplicesByFacialOrientation[orientation.flip()].erase(simplex);
+  }
+  simplices.erase(simplex);
 }
 
-std::vector<Vertices> Spacetime::getConnectedComponents() const {
-  VertexSet seen{};
-  std::vector<Vertices> components{};
-  for (const auto &vertex : vertexList->toVector()) {
+SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) {
+#ifdef CASET_ASSERTIONS
+  std::unordered_set<std::uint64_t> seen{};
+  for (const auto &simp : simplices) {
+    if (seen.contains(simp->fingerprint.fingerprint())) {
+      CLOG(CRITICAL_LEVEL, "Duplicate simplex!");
+      throw std::runtime_error("Duplicate simplex!");
+    }
+    seen.insert(simp->fingerprint.fingerprint());
+  }
+#endif
+  const auto &[it, inserted] = simplices.emplace(simplex);
+  if (!inserted) {
+    CLOG(DEBUG_LEVEL, "Simplex was not new.");
+    return *it;
+  }
+  CLOG(DEBUG_LEVEL, "Simplex was new!");
+  if (internal) {
+    internalSimplicesByOrientation[simplex->getOrientation()].emplace(*it);
+    internalSimplicesByOrientation[simplex->getOrientation().flip()].emplace(*it);
+  } else {
+    for (const auto &orientation : simplex->getOrientation().getFacialOrientations()) {
+      externalSimplicesByFacialOrientation[orientation].emplace(*it);
+      externalSimplicesByFacialOrientation[orientation.flip()].emplace(*it);
+    }
+  }
+#ifdef CASET_ASSERTIONS
+  std::unordered_set<std::uint64_t> seen2{};
+  for (const auto &simp : simplices) {
+    if (seen2.contains(simp->fingerprint.fingerprint())) {
+      CLOG(CRITICAL_LEVEL, "Duplicate simplex!");
+      throw std::runtime_error("Duplicate simplex!");
+    }
+    seen2.insert(simp->fingerprint.fingerprint());
+  }
+#endif
+  return *it;
+}
+
+SimplexSet Spacetime::getExternalSimplices() noexcept {
+  SimplexSet simplices_{};
+  for (const auto &[facialOrientation, bucket] : externalSimplicesByFacialOrientation) {
+    for (const auto &simplex : bucket) {
+      simplices_.insert(simplex);
+    }
+  }
+  return simplices_;
+}
+
+std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
+  VertexPtrSet seen{};
+  std::vector<VertexPtrs> components{};
+  for (auto vertex : vertexList->toVector()) {
     if (seen.contains(vertex)) {
       continue;
     }
-    Vertices component{};
-    Vertices stack{vertex};
+    VertexPtrs component{};
+    VertexPtrs stack{vertex};
     while (!stack.empty()) {
       VertexPtr current = stack.back();
       stack.pop_back();
@@ -536,13 +655,13 @@ std::vector<Vertices> Spacetime::getConnectedComponents() const {
       seen.insert(current);
       component.push_back(current);
       for (const auto &edge : current->getOutEdges()) {
-        VertexPtr neighbor = vertexList->get(edge->getTargetId());
+        VertexPtr neighbor = vertexList->get(edge->getTarget()->getId());
         if (neighbor != nullptr && !seen.contains(neighbor)) {
           stack.push_back(neighbor);
         }
       }
       for (const auto &edge : current->getInEdges()) {
-        VertexPtr neighbor = vertexList->get(edge->getSourceId());
+        VertexPtr neighbor = vertexList->get(edge->getSource()->getId());
         if (neighbor != nullptr && !seen.contains(neighbor)) {
           stack.push_back(neighbor);
         }
@@ -570,4 +689,31 @@ bool Spacetime::removeIfIsolated(const VertexPtr &vertex) {
   CLOG(DEBUG_LEVEL, "NOT Removing vertex: ", vertex->toString());
   return false;
 }
+
+SimplexPtr Spacetime::getSimplex(SimplexPtr simplex) const {
+  auto it = simplices.find(simplex);
+  if (it == simplices.end()) {
+    return nullptr;
+  }
+  return *it;
+}
+
+SimplexPtr Spacetime::getSimplex(std::uint64_t fingerprint) const {
+  auto it = simplices.find(fingerprint);
+  if (it == simplices.end()) {
+    return nullptr;
+  }
+  return *it;
+}
+
+SpacetimeType Spacetime::getSpacetimeType() const noexcept { return spacetimeType; }
+double Spacetime::getCurrentTime() const noexcept { return static_cast<double>(currentTime); }
+std::shared_ptr<EdgeList> Spacetime::getEdgeList() const noexcept { return edgeList; }
+std::shared_ptr<Metric> Spacetime::getMetric() const noexcept { return metric; }
+std::shared_ptr<VertexList> Spacetime::getVertexList() const noexcept { return vertexList; }
+double Spacetime::incrementTime() noexcept {
+  currentTime++;
+  return static_cast<double>(currentTime);
+}
+void Spacetime::addObservable(const std::shared_ptr<Observable> &observable) { observables.push_back(observable); }
 } // caset

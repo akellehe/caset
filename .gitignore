@@ -1,4 +1,5 @@
 .eggs
+.idea/
 .idea/copilot*
 build
 cmake-build-debug
