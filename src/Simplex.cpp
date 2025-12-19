@@ -196,26 +196,6 @@ void Simplex::removeCoface(const SimplexPtr &coface) {
 #endif
 }
 
-// void Simplex::unregisterFromCofaces(const SimplexPtr &facet) {
-// for (const auto &coface : facet->getCofaces()) {
-// coface->removeFacet(facet);
-// }
-// }
-
-// void Simplex::registerToCofaces(const SimplexPtr &facet) {
-// for (const auto &coface : facet->getCofaces()) {
-// coface->addFacet(facet);
-// }
-// }
-
-// bool Simplex::addFacet(const SimplexPtr &facet) {
-// facets.push_back(facet);
-// }
-
-// bool Simplex::removeFacet(const SimplexPtr &facet) {
-// facets.
-// }
-
 Simplices Simplex::unregisterFromFacets(const SimplexPtr &coface) {
   if (!coface->hasFacets()) return {}; // They just haven't been computed.
   const auto &facets_ = coface->getFacets();
@@ -417,15 +397,12 @@ void Simplex::addCoface(const SimplexPtr &coface) {
     }
     std::abort();
   }
-#endif
   CLOG(INFO_LEVEL, "Adding ", coface->toString(), " as coface to ", toString());
   const auto &[it, inserted] = ownershipManager.insert(coface->toString(), toString() + "::cofaces", cofaces, coface);
   if ((*it)->toString() != coface->toString()) {
     CLOG(DEBUG_LEVEL, "Iterator ", (*it)->toString(), " did not match coface ", coface->toString());
     std::abort();
   }
-  // const auto &[it, inserted] = cofaces.insert(coface);
-#if CASET_ASSERTIONS
   if (coface == nullptr || coface.get() == nullptr) {
     CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
@@ -434,12 +411,14 @@ void Simplex::addCoface(const SimplexPtr &coface) {
     CLOG(DEBUG_LEVEL, "Corruption detected");;
     std::abort();
   }
-#endif
   if (inserted) {
     CLOG(DEBUG_LEVEL, "Added ", coface->toString(), " to ", toString(), "!");
   } else {
     CLOG(DEBUG_LEVEL, "Failed to add ", coface->toString(), " to ", toString(), "!");
   }
+#else
+  cofaces.insert(coface);
+#endif
 }
 
 [[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &coface) const {
@@ -492,7 +471,7 @@ void Simplex::validate() const {
   }
 }
 
-/// @returns Edges in traversal order (the order of input vertices).
+/// TODO: Optimize this method by tracking state on the `edges` member
 [[nodiscard]] EdgePtrSet Simplex::getEdges() const {
   EdgePtrSet edges_{};
   edges_.reserve(getNumberOfEdges());

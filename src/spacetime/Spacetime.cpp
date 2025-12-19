@@ -603,10 +603,8 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
 #endif
   const auto &[it, inserted] = simplices.emplace(simplex);
   if (!inserted) {
-    CLOG(DEBUG_LEVEL, "Simplex was not new.");
     return *it;
   }
-  CLOG(DEBUG_LEVEL, "Simplex was new!");
   if (internal) {
     internalSimplicesByOrientation[simplex->getOrientation()].emplace(*it);
   } else {
