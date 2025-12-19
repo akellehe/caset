@@ -8,6 +8,8 @@ are easier to solve, but they obscure the causal structure of spacetime.
 In Euclidean spacetimes, all points are effectively spacelike separated. Unitarity/probability conservation is tied to 
 the Lorentzian structure. 
 
+More interesting physics come into play when we use a Lorentzian metric, as described in [Discrete Lorentzian Quantum Gravity, 2000, R.Loll](./resources/CDT/0011194v1.pdf).
+
 ## Path Integrals and Wick Rotations
 
 The path integral formulation of quantum mechanics, introduced by Richard Feynman, lets us compute the probability 

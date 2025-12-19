@@ -8,6 +8,8 @@ are easier to solve, but they obscure the causal structure of spacetime.
 In Euclidean spacetimes, all points are effectively spacelike separated. Unitarity/probability conservation is tied to 
 the Lorentzian structure. 
 
+More interesting physics come into play when we use a Lorentzian metric, as described in [Discrete Lorentzian Quantum Gravity, 2000, R.Loll](./resources/CDT/0011194v1.pdf).
+
 ## Path Integrals and Wick Rotations
 
 The path integral formulation of quantum mechanics, introduced by Richard Feynman, lets us compute the probability 
@@ -92,18 +94,32 @@ hinges, leading to a discrete version of the gravitational action.
 ### CDT (Causal Dynamical Triangulations)
 
 Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from 
-causally ordered simplices. In CDT, the path integral over geometries is approximated by approximately summing over all 
-possible causal triangulations with a MCMC algorithm, ensuring that the causal structure of spacetime is preserved. This 
-approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at small 
-scales.
+causally ordered simplices. This is explained very well in 
+[Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019](./resources/1905.08669v1.pdf) In CDT, 
+the path integral over geometries is approximated by approximately summing over all possible causal triangulations. From
+equation (5) in [Discrete Lorentzian Quantum Gravity, R. Loll, 2000](./resources/CDT/0011194v1.pdf) the partition 
+function is
 
-Note that CDT allows for imaginary edge lengths. This is handled by allowing for spacelike squared edge lengths to be 
-some constant $ a^2 $ and time like squared edge lengths to be $ -\alpha a^2 $ for some constant $ \alpha > 0 $. This 
-allows for a Wick rotation, mapping [[1]](resources/CDT/1905.08669v1.pdf)
+$$
+Z(\lambda, G) = \sum_{causal T} \frac{1}{C_T} e^{iS^{Regge}}
+$$
+
+$$
+e^{iS^{Lor}} \rightarrow e^{-S^{Euclid}}
+$$
+
+where the right arrow represents allowing squared temporal edges to have a negative value. This allows for Wick rotation.
 
 $$
 l_t^2 = -\alpha a^2 \rightarrow l_t^2 = +\alpha a^2
 $$
+
+There has been much success in implementing CDT as an MCMC algorithm, ensuring that the causal structure of spacetime is 
+preserved. You can find a detailed description and source code in [Simulating CDT quantum gravity, Brunekreef et. al, 2023](./resources/CDT/moves.pdf) 
+This approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at 
+small scales. You can find lots of details of those results in [Causal Dynamical Triangulations without Preferred Foliation, 2013](./resources/CDT/cdt-wo-pref-folia.pdf), 
+[Quantum Gravity or The Art of Building Spacetime, 2006](./resources/CDT/0604212v1.pdf), [De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013](./resources/CDT/de-sitter.pdf) as well as
+others in docs/source/resources/CDT.
 
 ### Causal Sets
 
