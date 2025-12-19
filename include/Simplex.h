@@ -144,7 +144,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] Simplices getFacets();
+    [[nodiscard]] const Simplices &getFacets();
 
     bool hasFacets() const;
     bool hasStoredFacet(const SimplexPtr &facet);

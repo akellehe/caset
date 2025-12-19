@@ -39,7 +39,7 @@ bool Simplex::hasFacets() const {
 class SimplexCorruptionDetector : public CorruptionDetector<SimplexPtr, SimplexPtrHash, SimplexPtrEq> {
 };
 
-std::vector<SimplexPtr> Simplex::getFacets() {
+const std::vector<SimplexPtr> &Simplex::getFacets() {
 #if CASET_ASSERTIONS
   if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -47,10 +47,11 @@ std::vector<SimplexPtr> Simplex::getFacets() {
 #if CASET_ASSERTIONS
     validate();
 #endif
-    return {};
+    return facets;
   }
 
   if (facets.empty()) {
+    facets.reserve(getVertices().size());
     CLOG(DEBUG_LEVEL, "Computing new facets for ", toString(), "!!");
     facets.reserve(vertices.size());
     auto verts = getVertices();
