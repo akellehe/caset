@@ -51,7 +51,7 @@ std::vector<SimplexPtr> Simplex::getFacets() {
   }
 
   if (facets.empty()) {
-    CLOG(CRITICAL_LEVEL, "Computing new facets for ", toString(), "!!");
+    CLOG(DEBUG_LEVEL, "Computing new facets for ", toString(), "!!");
     facets.reserve(vertices.size());
     auto verts = getVertices();
     for (int skip = 0; skip < verts.size(); skip++) {
@@ -87,7 +87,7 @@ std::vector<SimplexPtr> Simplex::getFacets() {
 #if CASET_ASSERTIONS
   for (const auto &f : facets) {
     if (!isCofaceTo(f)) {
-      CLOG(CRITICAL_LEVEL, toString(), " is not a coface to ", f->toString());
+      CLOG(DEBUG_LEVEL, toString(), " is not a coface to ", f->toString());
       std::abort();
     }
   }
@@ -153,7 +153,7 @@ SimplexPtr Simplex::create(Spacetime *spacetime_,
 void Simplex::initialize(const SimplexPtr &simplex) {
 #ifdef CASET_ASSERTIONS
   if (initialized) {
-    CLOG(CRITICAL_LEVEL, "You attempted to re-initialize a simplex! Behavior is undefined.");
+    CLOG(DEBUG_LEVEL, "You attempted to re-initialize a simplex! Behavior is undefined.");
     std::abort();
   }
 #endif
@@ -177,11 +177,11 @@ void Simplex::removeCoface(const SimplexPtr &coface) {
 #if CASET_ASSERTIONS
   CLOG(DEBUG_LEVEL, "Removing coface ", coface->toString(), " from simplex ", toString());
   if (coface == nullptr || coface.get() == nullptr) {
-    CLOG(CRITICAL_LEVEL, "Coface was null");
+    CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
   }
   if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(CRITICAL_LEVEL, "Corruption detected");;
+    CLOG(DEBUG_LEVEL, "Corruption detected");;
     std::abort();
   }
 #endif
@@ -189,18 +189,18 @@ void Simplex::removeCoface(const SimplexPtr &coface) {
   // cofaces.erase(coface);
 #if CASET_ASSERTIONS
   if (coface == nullptr || coface.get() == nullptr) {
-    CLOG(CRITICAL_LEVEL, "Coface was null");
+    CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
   }
   if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(CRITICAL_LEVEL, "Corruption detected");;
+    CLOG(DEBUG_LEVEL, "Corruption detected");;
     std::abort();
   }
   if (SimplexCorruptionDetector::wouldDuplicate(cofaces, coface)) {
-    CLOG(CRITICAL_LEVEL, "Failed to remove coface!");
-    CLOG(CRITICAL_LEVEL, "All cofaces: ");
+    CLOG(DEBUG_LEVEL, "Failed to remove coface!");
+    CLOG(DEBUG_LEVEL, "All cofaces: ");
     for (const auto &c : cofaces) {
-      CLOG(CRITICAL_LEVEL, "    - ", c->toString());
+      CLOG(DEBUG_LEVEL, "    - ", c->toString());
     }
     std::abort();
   }
@@ -233,7 +233,7 @@ Simplices Simplex::unregisterFromFacets(const SimplexPtr &coface) {
   for (const auto &f : facets_) {
 #ifdef CASET_ASSERTIONS
     if (!f->hasCoface(coface)) {
-      CLOG(CRITICAL_LEVEL,
+      CLOG(DEBUG_LEVEL,
            f->toString(),
            " did not contain coface!",
            coface->toString());
@@ -243,7 +243,7 @@ Simplices Simplex::unregisterFromFacets(const SimplexPtr &coface) {
     f->removeCoface(coface);
 #ifdef CASET_ASSERTIONS
     if (f->hasCoface(coface)) {
-      CLOG(CRITICAL_LEVEL, "Failed to remove coface!");
+      CLOG(DEBUG_LEVEL, "Failed to remove coface!");
       throw std::runtime_error("Failed to remove coface!");
     }
 #endif
@@ -259,19 +259,19 @@ void Simplex::registerToFacets(const SimplexPtr &coface) {
   for (const auto &f : coface->getFacets()) {
 #ifdef CASET_ASSERTIONS
     if (f == nullptr || f.get() == nullptr) {
-      CLOG(CRITICAL_LEVEL, "Facet was null!");
+      CLOG(DEBUG_LEVEL, "Facet was null!");
       std::abort();
     }
     if (coface == nullptr || coface.get() == nullptr) {
-      CLOG(CRITICAL_LEVEL, "Simplex was null!");
+      CLOG(DEBUG_LEVEL, "Simplex was null!");
       std::abort();
     }
     if (!coface->isCofaceTo(f)) {
-      CLOG(CRITICAL_LEVEL, coface->toString(), " is not a coface of ", f->toString());
+      CLOG(DEBUG_LEVEL, coface->toString(), " is not a coface of ", f->toString());
       std::abort();
     }
     if (f->hasCoface(coface)) {
-      CLOG(CRITICAL_LEVEL, "Facet already contains coface!");
+      CLOG(DEBUG_LEVEL, "Facet already contains coface!");
       std::abort();
     }
 #endif
@@ -326,10 +326,6 @@ std::string Simplex::toString() const {
 }
 
 [[nodiscard]] VertexPtrs Simplex::getVertices() const noexcept { return vertices; };
-
-[[nodiscard]] std::size_t Simplex::size() const noexcept {
-  return vertices.size();
-}
 
 [[nodiscard]] bool Simplex::isTimelike() const {
   for (const auto &edge : getEdges()) {
@@ -411,22 +407,22 @@ std::size_t Simplex::getNumberOfEdges() const {
 void Simplex::addCoface(const SimplexPtr &coface) {
 #if CASET_ASSERTIONS
   if (coface == nullptr || coface.get() == nullptr) {
-    CLOG(CRITICAL_LEVEL, "Coface was null");
+    CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
   }
   if (!coface->isCofaceTo(shared_from_this())) {
-    CLOG(CRITICAL_LEVEL, coface->toString(), " is not a coface of ", toString());
+    CLOG(DEBUG_LEVEL, coface->toString(), " is not a coface of ", toString());
     throw std::runtime_error("You attempted to add a coface to a facet for which it is not a coface!");
   }
   if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(CRITICAL_LEVEL, "Corruption detected");;
+    CLOG(DEBUG_LEVEL, "Corruption detected");;
     std::abort();
   }
   if (SimplexCorruptionDetector::wouldDuplicate(cofaces, coface)) {
-    CLOG(CRITICAL_LEVEL, "You attempted to add a duplicate coface: ", coface->toString(), " to simplex ", toString());
-    CLOG(CRITICAL_LEVEL, "All cofaces: ");
+    CLOG(DEBUG_LEVEL, "You attempted to add a duplicate coface: ", coface->toString(), " to simplex ", toString());
+    CLOG(DEBUG_LEVEL, "All cofaces: ");
     for (const auto &c : cofaces) {
-      CLOG(CRITICAL_LEVEL, "    - ", c->toString());
+      CLOG(DEBUG_LEVEL, "    - ", c->toString());
     }
     std::abort();
   }
@@ -434,17 +430,17 @@ void Simplex::addCoface(const SimplexPtr &coface) {
   CLOG(INFO_LEVEL, "Adding ", coface->toString(), " as coface to ", toString());
   const auto &[it, inserted] = ownershipManager.insert(coface->toString(), toString() + "::cofaces", cofaces, coface);
   if ((*it)->toString() != coface->toString()) {
-    CLOG(CRITICAL_LEVEL, "Iterator ", (*it)->toString(), " did not match coface ", coface->toString());
+    CLOG(DEBUG_LEVEL, "Iterator ", (*it)->toString(), " did not match coface ", coface->toString());
     std::abort();
   }
   // const auto &[it, inserted] = cofaces.insert(coface);
 #if CASET_ASSERTIONS
   if (coface == nullptr || coface.get() == nullptr) {
-    CLOG(CRITICAL_LEVEL, "Coface was null");
+    CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
   }
   if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(CRITICAL_LEVEL, "Corruption detected");;
+    CLOG(DEBUG_LEVEL, "Corruption detected");;
     std::abort();
   }
 #endif
@@ -458,7 +454,7 @@ void Simplex::addCoface(const SimplexPtr &coface) {
 [[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &coface) const {
 #ifdef CASET_ASSERTIONS
   if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(CRITICAL_LEVEL, "Corruption detected!");
+    CLOG(DEBUG_LEVEL, "Corruption detected!");
     std::abort();
   }
 #endif
@@ -759,11 +755,11 @@ std::tuple<SimplexPtr, Simplices, Simplices> Simplex::breakReferences(const Simp
 
 #ifdef CASET_ASSERTIONS
   if (simplex->hasFacets()) {
-    CLOG(CRITICAL_LEVEL, "Simplex still has facets after clearing them!");
+    CLOG(DEBUG_LEVEL, "Simplex still has facets after clearing them!");
     std::abort();
   }
   if (!simplex->getCofaces().empty()) {
-    CLOG(CRITICAL_LEVEL, "Simplex still has cofaces!");
+    CLOG(DEBUG_LEVEL, "Simplex still has cofaces!");
     std::abort();
   }
 #endif
@@ -794,6 +790,10 @@ void Simplex::restoreReferences(SimplexPtr &simplex, const Simplices &cofaces_, 
   for (const auto f : facets_) {
     simplex->addFacet(f);
   }
+}
+
+std::uint64_t Simplex::size() const noexcept {
+  return vertices.size();
 }
 
 /// This simplex is the unattached simplex.
@@ -829,22 +829,26 @@ void Simplex::attach(const VertexPtr &unattached,
     brokenReferences.push_back(Simplex::breakReferences(simplex));
 #ifdef CASET_ASSERTIONS
     if (spacetime->getSimplex(simplex)) {
-      CLOG(CRITICAL_LEVEL, "Spacetime still has simplex ", simplex->toString(), "!!");
+      CLOG(DEBUG_LEVEL, "Spacetime still has simplex ", simplex->toString(), "!!");
     }
 #endif
   }
 
 #ifdef CASET_ASSERTIONS
-  for (const auto &[simplex, brokenCofaces, brokenFacets] : brokenReferences) {
+  for (const auto &[
+    simplex,
+    brokenCofaces,
+    brokenFacets
+    ] : brokenReferences) {
     for (const auto &bcf : brokenCofaces) {
       if (bcf->referencesSimplex(simplex)) {
-        CLOG(CRITICAL_LEVEL, bcf->toString(), " still references ", simplex->toString());
+        CLOG(DEBUG_LEVEL, bcf->toString(), " still references ", simplex->toString());
         std::abort();
       }
     }
     for (const auto &f : brokenFacets) {
       if (f->referencesSimplex(simplex)) {
-        CLOG(CRITICAL_LEVEL, f->toString(), " still references ", simplex->toString());
+        CLOG(DEBUG_LEVEL, f->toString(), " still references ", simplex->toString());
         std::abort();
       }
     }
@@ -856,42 +860,26 @@ void Simplex::attach(const VertexPtr &unattached,
   for (const auto &simplex : simplicesToProcess) {
     simplex->replaceVertex(unattached, attached);
     // TODO: Note that if we replaced a vertex such that e.g. a facet now collides with an existing Simplex in the
-    // spacetime; THAT FACET MUST BE REPLACED EVERYWHERE.
+    //  spacetime; THAT FACET MUST BE REPLACED EVERYWHERE.
   }
 
 #ifdef CASET_ASSERTIONS
   for (const auto &[simplex, brokenCofaces, brokenFacets] : brokenReferences) {
     for (const auto &bcf : brokenCofaces) {
       if (bcf->referencesSimplex(simplex)) {
-        CLOG(CRITICAL_LEVEL, bcf->toString(), " still references ", simplex->toString());
+        CLOG(DEBUG_LEVEL, bcf->toString(), " still references ", simplex->toString());
         std::abort();
       }
     }
     for (const auto &f : brokenFacets) {
       if (f->referencesSimplex(simplex)) {
-        CLOG(CRITICAL_LEVEL, f->toString(), " still references ", simplex->toString());
+        CLOG(DEBUG_LEVEL, f->toString(), " still references ", simplex->toString());
         std::abort();
       }
     }
   }
 #endif
 
-  // now go small to big.
-  // std::reverse(simplicesToProcess.begin(), simplicesToProcess.end());
-  // for (const auto &simplex : simplicesToProcess) {
-    // CLOG(DEBUG_LEVEL, "RE-Registering ", simplex->toString(), "to spacetime...");
-    // auto registeredSimplex = spacetime->registerSimplex(simplex, !simplex->isCausallyAvailable());
-// #ifdef CASET_ASSERTIONS
-    // if (registeredSimplex.get() != simplex.get()) {
-      // uh-oh, well, no one should have a reference to the simplex we accidentally created, so we should be able to
-      //  just replace it with the registered simplex.
-      // CLOG(CRITICAL_LEVEL, "Registered simplex was not the same (pointer) as the unregistered simplex!", registeredSimplex->toString(), simplex->toString());
-      // throw std::runtime_error("simplex mismatch");
-    // }
-// #endif
-  // }
-
-  // now go small to big.
   for (auto [simplex, brokenCofaces, brokenFacets] : brokenReferences) {
     // TODO: May need to check here whether or not the simplex is internal or external. I'm pretty sure this will always
     //  be internal as long as attach() is only used to attach previously unattached simplexes.
@@ -937,7 +925,7 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
   auto oldIndex = oldIndexIt->second;
 #ifdef CASET_ASSERTIONS
   if (oldIndex >= vertices.size()) {
-    CLOG(CRITICAL_LEVEL,
+    CLOG(DEBUG_LEVEL,
          "You requested an index: ",
          std::to_string(oldIndex),
          " larger than the number of vertices in the simplex: ",

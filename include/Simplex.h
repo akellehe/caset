@@ -42,7 +42,6 @@ namespace caset {
 ///
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
-///
 class Simplex : public std::enable_shared_from_this<Simplex> {
   public:
     // ==================== Static Factory Methods ====================
@@ -55,21 +54,47 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param vertices_
     explicit Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_);
     Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientation &orientation_);
+
+    std::uint64_t size() const noexcept;
+
+    /// The initialize step is necessary because the canonical owner of the Simplex object is the Spacetime, and ideally
+    /// that canonical owner is the only one to permanently hang onto a std::shared_ptr. So when we initialize with this
+    /// method we add the std::shared_ptr<Simplex> (aka SimplexPtr) to all the Vertex (es) that are members of the
+    /// Simplex. Again; we define a Simplex abstractly as a set of vertices with a time orientation.
+    /// When you construct a Spacetime which can abstractly be considered a Simplicial complex; having access to the
+    /// Simplex by Vertex is pretty handy for bookkeeping.
     void initialize(const std::shared_ptr<Simplex> &simplex);
 
     // ==================== String Representation ====================
     std::string toString() const;
 
     // ==================== Basic Getters ====================
+    /// Each simplex has an associated _orientation_ in the case you're preserving causality with your work. You can
+    /// find specifics of the SimplexOrientation abstractly and concretely/computationally in the documentation for the
+    /// SimplexOrientation
     [[nodiscard]] SimplexOrientation getOrientation() const noexcept;
-    [[nodiscard]] std::size_t size() const noexcept;
 
     // ==================== Vertex Queries ====================
     ///
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
     [[nodiscard]] VertexPtrs getVertices() const noexcept;
+
+    /// This method is self-explanatory. O(1) lookups for who has what.
     [[nodiscard]] bool hasVertex(const VertexPtr &vertex) const;
+
+    /// This method produces a lookup table \f$ Id \rightarrow Vertex \f$. The only place it's used at the moment is for
+    /// verifying state in our Python unit tests.
     [[nodiscard]] VertexIdMap getVertexIdLookup() const noexcept;
+
+    /// This method should be used when you have two simplices and you want to find some Vertices at which to join one
+    /// Simplex to the other. Two sets of ordered vertices, \f$ \mathcal{V_i} \f$ and \f$ \mathcal{V_j} \f$ "have parity"
+    /// when there is an ordered subset, \f$ V_i \f$ and \f$ V_j \f$ for which Vertex::getTime returns the same value
+    /// for each corresponding element. More specifically;
+    ///
+    /// Two sets of vertices "have pairty" iff
+    ///   - They have the same cardinality, \f$ N \f$
+    ///   - There exists an element \f$ v_m \memberof \f$ V_i \f$ for which there exists an an element
+    ///     \f$ v_n \memberof V_j \f$ such that \f$ v_m::getTime() = v_n::getTime() \forall (m, n) s.t. m = n \f$.
     [[nodiscard]] std::optional<VertexPtrs> getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const;
 
     // ==================== Edge Queries ====================
@@ -219,8 +244,22 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     SimplexOrientationSet getGluableFaceOrientations();
 
     // ==================== Modification Methods ====================
+    /// This has been very troublesome method. This method is currently responsible for detaching all references to all
+    /// simplices corresponding to the `unattached` Vertex. Once detached, those simplices can be updated to replace a
+    /// given Vertex. Which this method does. After that, the simplices must be re-registered with every container from
+    /// which they were detached. This is how we avoid corrupting hash tables.
+    ///
+    /// What we would like to do next: Use RAII treating detachment as the resource. Initialize the SimplexGluer to
+    /// detach a given set of simplices. When it's destructor is called -- re-attach the simplices and it's little
+    /// friends.
+    ///
+    /// @param unattached A vertex that is part of a simplex that is not "attached" to a simplicial complex. This Vertex
+    ///   will be replaced by `attaached`, which is presumed to be a member of the simplicial complex
+    /// @param attached A vertex intended to replace `unattached` in all simplices to which it is a member. That's not
+    ///   just by name, but the actual pointer to `unattached` is replaced with that to `attached`.
+    ///
     void attach(const VertexPtr &unattached, const VertexPtr &attached);
-    /// Removes this simplex from ALL containers that contain it.
+
     bool addEdge(const EdgePtr &edge);
     bool removeEdge(const EdgePtr &edge);
     static void registerToVertices(const SimplexPtr &simplex);

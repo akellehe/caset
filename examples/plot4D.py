@@ -226,8 +226,7 @@ def build(args):
     end = time.time() * 1000.
     print("Elapsed time: ", end - start)
     print("--------------/Building Spacetime-------------")
-
-    return;
+    return
     # Embed:
     print("---------------Embedding Euclidean------------")
     start = time.time() * 1000.

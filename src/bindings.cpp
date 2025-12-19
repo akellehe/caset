@@ -68,7 +68,6 @@ PYBIND11_MODULE(caset, m) {
             .def("__hash__", &Edge::toHash)
             .def("getSource", &Edge::getSource)
             .def("getSquaredLength", &Edge::getSquaredLength)
-            .def("redirect", &Edge::redirect)
             .def("getTarget", &Edge::getTarget);
 
     py::class_<Vertex, VertexPtr>(m, "Vertex")

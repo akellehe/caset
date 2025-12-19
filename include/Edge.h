@@ -85,34 +85,49 @@ class Edge : public std::enable_shared_from_this<Edge> {
       const VertexPtr &target
     );
 
+    /// Every edge has a beginning and an end. Many have two! And by that I mean they're undirected, so the beginning is
+    /// the end and the end, the beginning. Edges are bidirectional, so it doesn't really matter if you consider them
+    /// directed or undirected. If you want to use a directed edge; in your code you should just specify that you only
+    /// traverse `Vertex::outEdges` and avoid `Vertex::inEdges` when you traverse around.
     [[nodiscard]] VertexPtr getSource() const noexcept;
 
+    /// `getTarget` is `getSource`'s better half. All good things come to an end, with a wonderful journey left to
+    /// memory. But seriously, though, `getTarget` gives the vertex on one end, and `getSource` gives the other.
     [[nodiscard]] VertexPtr getTarget() const noexcept;
 
+    /// We work in squared edge lengths because imaginary numbers don't play so nicely with floating point arithmetic.
+    /// To be less cryptic: timelike edges have imaginary length. Their squared edge length is negative. Something I've
+    /// always thought was kind of neat is a right triangle with the opposite and adjacent edges of length \f$ i \f$
+    /// and \f$ 1 \f$ respectively. So the hypotenuse is zero. So timelike edges have imaginary length, spacelike edges
+    /// have a positive length, and lightlike edges have zero length.
+    ///
+    /// @return The square of the length of the edge.
     [[nodiscard]] double getSquaredLength() const noexcept;
 
     [[nodiscard]] std::string toString() const noexcept;
 
     /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
-    /// ensure consistent hashing/lookup.
+    /// ensure consistent hashing/lookup. This method also updates the fingerprint hastily. If you want to update in
+    /// batches remove the fingerprint.refresh() call.
     void replaceSourceVertex(const VertexPtr &newSource);
 
     /// This method changes the target Vertex in-place. Note that if this edge is registered elsewhere (e.g. in a
     /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
     /// ensure consistent hashing/lookup.
+    /// CRITICAL: TODO: we need to remove edges from their containers before changing their fingerprints!
+    /// Same as replaceSourceVertex above, but for targets.
     void replaceTargetVertex(const VertexPtr &newTarget);
 
+    ///
+    /// Check whether or not this Edge has a particular Vertex. The comparison is against source/target node IDs, so
+    /// don't worry too much about accidentally comparing pointers. This is mostly a convenience method to make your
+    /// code more clear and avoid typing.
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
     bool hasVertex(std::uint64_t vertexId);
     bool hasVertex(const VertexPtr &vertex);
-
-    ///
-    /// @param from the ID of a vertex to or from which this Edge should no longer point.
-    /// @param to the ID of a source or target vertex to which this Edge should now point.
-    void redirect(const VertexPtr &from, const VertexPtr &to) noexcept;
 
     bool operator==(const Edge &other) const;
 
@@ -120,15 +135,18 @@ class Edge : public std::enable_shared_from_this<Edge> {
 
     Fingerprint fingerprint{};
 
+    /// If you want to compare two edges by value; you can compare their keys. Assume two Edges with the same EdgeKey
+    /// are, for all intents and purposes, equal. This will change if we begin storing state on the Edge, but at the
+    /// moment let's focus on storing as much state on the Vertex as possible. Edges have potentially MUCH higher
+    /// cardinality than Vertices, so as much state as we can fit on the Vertex, we should fit on the Vertex. This
+    /// should be at the expense of slight inconvenience.
+    ///
+    /// @returns A tuple of {sourceId, targetId}.
     EdgeKey getKey() const noexcept;
 
   private:
     VertexPtr source = nullptr;
     VertexPtr target = nullptr;
-
-    /// We use fingerprints for fast hashing by the equivalence class of sets of vertices. This method updates the
-    /// fingerprint for this Edge after replacing a source or target vertex in-place.
-    void refreshFingerprint() noexcept;
 
     double squaredLength;
 };
