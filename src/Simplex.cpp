@@ -262,7 +262,7 @@ void Simplex::registerToVertices(const SimplexPtr &simplex) {
 }
 
 #ifdef CASET_VERBOSE
-std::string Simplex::toString() const {
+std::string Simplex::toString() const noexcept {
   std::stringstream sigmaLabel;
   sigmaLabel << std::to_string(getOrientation().getK()) << "-";
   sigmaLabel << "\\sigma";
