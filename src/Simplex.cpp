@@ -53,25 +53,39 @@ const std::vector<SimplexPtr> &Simplex::getFacets() {
   }
 
   if (facets.empty()) {
-    facets.reserve(getVertices().size());
+    const auto &verts = vertices;  // Use member directly, avoid copy
+    const std::size_t n = verts.size();
+    const std::size_t facetSize = n - 1;
+
+    facets.reserve(n);
     CLOG(DEBUG_LEVEL, "Computing new facets for ", toString(), "!!");
-    facets.reserve(vertices.size());
-    auto verts = getVertices();
-    for (int skip = 0; skip < verts.size(); skip++) {
-      const auto &skipVertex = verts[skip]->getId();
+
+    // CRITICAL OPTIMIZATION: Cache edges once before loop
+    const auto allEdges = getEdges();
+
+    // Pre-compute coface once
+    SimplexPtr coface = spacetime->getSimplex(this->fingerprint.fingerprint());
+
+    for (std::size_t skip = 0; skip < n; ++skip) {
+      const auto skipVertexId = verts[skip]->getId();
+
+      // Build faceVertices efficiently in one pass
       VertexPtrs faceVertices{};
-      Edges faceEdges{};
-      faceEdges.reserve(verts.size());
-      faceVertices.reserve(verts.size());
-      faceVertices.insert(faceVertices.end(), verts.begin(), verts.begin() + skip);
-      faceVertices.insert(faceVertices.end(), verts.begin() + skip + 1, verts.end());
-      for (const auto &e : getEdges()) {
-        if (!e->hasVertex(skipVertex)) faceEdges.push_back(e);
+      faceVertices.reserve(facetSize);
+      for (std::size_t i = 0; i < n; ++i) {
+        if (i != skip) faceVertices.push_back(verts[i]);
       }
+
+      // Filter edges without the skipped vertex
+      Edges faceEdges{};
+      faceEdges.reserve(facetSize);  // Approximate size
+      for (const auto &e : allEdges) {
+        if (!e->hasVertex(skipVertexId)) faceEdges.push_back(e);
+      }
+
       const auto &[facet, inserted] = spacetime->createSimplex(faceVertices, faceEdges); // Gets or creates!
-      if (inserted) {
-        SimplexPtr coface = spacetime->getSimplex(this->fingerprint.fingerprint());
-        if (coface != nullptr) facet->addCoface(coface);
+      if (inserted && coface != nullptr) {
+        facet->addCoface(coface);
       }
       facets.push_back(facet);
     }
@@ -766,119 +780,6 @@ void Simplex::restoreReferences(SimplexPtr &simplex, const Simplices &cofaces_, 
 
 std::uint64_t Simplex::size() const noexcept {
   return vertices.size();
-}
-
-/// This simplex is the unattached simplex.
-void Simplex::attach(const VertexPtr &unattached,
-                     const VertexPtr &attached) {
-  CLOG(DEBUG_LEVEL, "================================================================================================");
-  CLOG(DEBUG_LEVEL,
-       "Attaching unattached vertex, ",
-       unattached->toString(),
-       " to attached vertex ",
-       attached->toString());
-  CLOG(DEBUG_LEVEL, "================================================================================================");
-  // I think we might need to sort the simplices by dimension
-  SimplexPtrSet simplicesToProcessAsSet = unattached->getSimplices();  // Get all simplices that reference this vertex.
-  // TODO: The unattached vertex belongs to a facet on a coface. We need to ensure those facets/cofaces are all replaced
-  //  by those on the spacetime rather than accidentally duplicating them by replacing vertices such that they collide
-  //  with existing simplices.
-  Simplices simplicesToProcess{simplicesToProcessAsSet.begin(), simplicesToProcessAsSet.end()};
-
-  // Sort simplices to Process by dimension(k), descending.
-  std::sort(simplicesToProcess.begin(),
-            simplicesToProcess.end(),
-            [](const SimplexPtr &a, const SimplexPtr &b) {
-              return a->getOrientation().getK() < b->getOrientation().getK();
-            });
-
-  // Need to dereference everything, and store what was dereferenced.
-  std::vector<std::tuple<SimplexPtr, Simplices, Simplices>> brokenReferences{}; // simplex, cofaces, facets
-  brokenReferences.reserve(simplicesToProcess.size());
-
-  for (const auto &simplex : simplicesToProcess) {
-    CLOG(DEBUG_LEVEL, "Unregistering ", simplex->toString(), "...");
-    brokenReferences.push_back(Simplex::breakReferences(simplex));
-#ifdef CASET_ASSERTIONS
-    if (spacetime->getSimplex(simplex)) {
-      CLOG(DEBUG_LEVEL, "Spacetime still has simplex ", simplex->toString(), "!!");
-    }
-#endif
-  }
-
-#ifdef CASET_ASSERTIONS
-  for (const auto &[
-    simplex,
-    brokenCofaces,
-    brokenFacets
-    ] : brokenReferences) {
-    for (const auto &bcf : brokenCofaces) {
-      if (bcf->referencesSimplex(simplex)) {
-        CLOG(DEBUG_LEVEL, bcf->toString(), " still references ", simplex->toString());
-        std::abort();
-      }
-    }
-    for (const auto &f : brokenFacets) {
-      if (f->referencesSimplex(simplex)) {
-        CLOG(DEBUG_LEVEL, f->toString(), " still references ", simplex->toString());
-        std::abort();
-      }
-    }
-  }
-#endif
-
-  // Now simplex belongs nowhere (except facets, a vector). Free to modify without corrupting hash tables.
-  auto [oldEdges, newEdges] = unattached->moveEdgesTo(attached, spacetime);
-  for (const auto &simplex : simplicesToProcess) {
-    simplex->replaceVertex(unattached, attached);
-    // TODO: Note that if we replaced a vertex such that e.g. a facet now collides with an existing Simplex in the
-    //  spacetime; THAT FACET MUST BE REPLACED EVERYWHERE.
-  }
-
-#ifdef CASET_ASSERTIONS
-  for (const auto &[simplex, brokenCofaces, brokenFacets] : brokenReferences) {
-    for (const auto &bcf : brokenCofaces) {
-      if (bcf->referencesSimplex(simplex)) {
-        CLOG(DEBUG_LEVEL, bcf->toString(), " still references ", simplex->toString());
-        std::abort();
-      }
-    }
-    for (const auto &f : brokenFacets) {
-      if (f->referencesSimplex(simplex)) {
-        CLOG(DEBUG_LEVEL, f->toString(), " still references ", simplex->toString());
-        std::abort();
-      }
-    }
-  }
-#endif
-
-  for (auto [simplex, brokenCofaces, brokenFacets] : brokenReferences) {
-    // TODO: May need to check here whether or not the simplex is internal or external. I'm pretty sure this will always
-    //  be internal as long as attach() is only used to attach previously unattached simplexes.
-    auto registeredSimplex = spacetime->registerSimplex(simplex, !simplex->isCausallyAvailable());
-    CLOG(DEBUG_LEVEL, "RE-Registering ", simplex->toString(), "to vertices and facets...");
-    // May also need to check for brokenCofaces and brokenFacets in the already registered simplices!
-    Simplices registeredBrokenCofaces{};
-    registeredBrokenCofaces.reserve(brokenCofaces.size());
-    for (const auto &bcf : brokenCofaces) {
-      auto registeredCoface = spacetime->registerSimplex(bcf, bcf->isCausallyAvailable());
-      registeredBrokenCofaces.push_back(registeredCoface);
-    }
-    Simplices registeredBrokenFacets{};
-    registeredBrokenFacets.reserve(brokenFacets.size());
-    for (const auto &bf : brokenFacets) {
-      auto registeredFacet = spacetime->registerSimplex(bf, bf->isCausallyAvailable());
-      registeredBrokenFacets.push_back(registeredFacet);
-    }
-
-    Simplex::restoreReferences(registeredSimplex, registeredBrokenCofaces, registeredBrokenFacets);
-  }
-  CLOG(DEBUG_LEVEL, "Done attaching.");
-  if (unattached->degree() == 0) spacetime->getVertexList()->remove(unattached);
-#if CASET_ASSERTIONS
-  validate();
-#endif
-  CLOG(DEBUG_LEVEL, "------------------------------------------------------------------------------------------------");
 }
 
 bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {

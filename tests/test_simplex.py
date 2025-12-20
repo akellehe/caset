@@ -278,18 +278,18 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(simplex.getEdges()), 3)
 
         v0 = simplex.getVertices()[0]
-        v = st.createVertex(4, [0])
+        v4 = st.createVertex(4, [0])
         v0id = v0.getId()
 
-        simplex.attach(v0, v)
+        simplex.replaceVertex(v0, v4)
 
         self.assertEqual(len(simplex.getVertices()), 3)
-        self.assertEqual(len(simplex.getEdges()), 3)  # replace vertex only replaces it in the simplex, there is no assignment of edges to the new vertex.
+        self.assertEqual(len(simplex.getEdges()), 1)  # Edges are derived from constituent vertices.
 
         self.assertNotIn(v0, simplex.getVertices())
         self.assertNotIn(v0id, simplex.getVertexIdLookup())
 
-        self.assertIn(v, simplex.getVertices())
+        self.assertIn(v4, simplex.getVertices())
         self.assertIn(4, simplex.getVertexIdLookup())
 
         facets2 = simplex.getFacets()
@@ -302,8 +302,10 @@ class TestSimplex(unittest.TestCase):
     def test_replace_vertex_on_a_face_replaces_it_on_the_coface(self):
         st = Spacetime()
         simplex, _ = st.createSimplex((1, 2))
+        simplex2, _ = st.createSimplex((2, 1))
+
         v1, v2, v3 = simplex.getVertices()
-        v4 = st.createVertex(4, [0])
+        v4 = simplex2.getVertices()[0]
 
         facet = simplex.getFacets()[0]
 
@@ -318,7 +320,7 @@ class TestSimplex(unittest.TestCase):
 
         facet.validate()
         print("Replacing ", v2.getId(), "with ", v4.getId())
-        facet.attach(v2, v4)
+        st.replaceVertices([v2], [v4])
         facet.validate()
 
         # When we replace a vertex/edge on one facet; the edge AND vertex gets replaced there. on other facets, though,
@@ -364,7 +366,7 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(len(facet.getVertices()), 2)
         self.assertEqual(len(facet.getEdges()), 1)
 
-        simplex.attach(v2, v4)
+        st.replaceVertices([v2], [v4])
 
         self.assertEqual(len(simplex.getVertices()), 3)
         self.assertEqual(len(simplex.getEdges()), 3)

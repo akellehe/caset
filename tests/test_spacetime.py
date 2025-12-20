@@ -409,7 +409,7 @@ class TestSpacetime(unittest.TestCase):
         unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
         attachedVertices = [v for v in attachedSimplexFace.getVertices()]
 
-        st.attachAtVertices(unattachedSimplexFace, s23, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+        st.replaceVertices(unattachedVertices, attachedVertices)
 
         components = st.getConnectedComponents()
 
@@ -499,7 +499,7 @@ class TestSpacetime(unittest.TestCase):
         unattachedSimplexFace.validate()
         attachedSimplexFace.validate()
 
-        st.attachAtVertices(unattachedSimplexFace, attachedSimplexFace, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+        st.replaceVertices(unattachedVertices, attachedVertices)
 
         attachedSimplex.validate()
         unattachedSimplex.validate()
@@ -557,7 +557,7 @@ class TestSpacetime(unittest.TestCase):
         unattachedVertices = [v for v in unattachedSimplexFace.getVertices()]
         attachedVertices = [v for v in attachedSimplexFace.getVertices()]
 
-        st.attachAtVertices(unattachedSimplexFace, attachedSimplexFace, [(u, a) for u, a in zip(unattachedVertices, attachedVertices)])
+        st.replaceVertices(unattachedVertices, attachedVertices)
 
         unattachedVertex = unattachedVertices[0]  # V6
         attachedVertex = attachedVertices[0]      # V0
@@ -578,7 +578,7 @@ class TestSpacetime(unittest.TestCase):
 
         self.assertEqual(set(simplex_edges), set(total_edges))
 
-    def test_three_simplices_can_share_an_edge(self):
+    def test_three_simplices_cant_share_an_edge_with_preferred_foliation(self):
         """
         getCofaces() was previously under-reporting when we causally attached two faces together. All the cofaces of
         both facets apply to both attached facets. This test is failing and needs to be fixed because we don't consider
@@ -601,25 +601,25 @@ class TestSpacetime(unittest.TestCase):
         ff = [f for f in sf.getFacets() if f.getOrientation().numeric() == (1, 3)][0]
 
         fa, _ = st.causallyAttachFaces(fa, fb)
-        breakpoint()
         self.assertTrue(_)
         self.assertEqual(len(fa.getCofaces()), 2)
         self.assertEqual(len(fb.getCofaces()), 2)
 
-        fb, _ = st.causallyAttachFaces(fb, fc)
-        self.assertTrue(_)
-        self.assertEqual(len(fa.getCofaces()), 3)
+        _1, _ = st.causallyAttachFaces(fb, fc)
+        self.assertFalse(_)
+        self.assertEqual(len(fa.getCofaces()), 2)
+        self.assertEqual(len(fb.getCofaces()), 2)
 
-        self.assertEqual(len(fc.getCofaces()), 3)
-        fc, _ = st.causallyAttachFaces(fc, fd)
+        fb, _ = st.causallyAttachFaces(fc, fd)
         self.assertTrue(_)
-        self.assertEqual(len(fc.getCofaces()), 4)
+        self.assertEqual(len(fa.getCofaces()), 2)
+        self.assertEqual(len(fc.getCofaces()), 2)
 
-        fd, _ = st.causallyAttachFaces(fd, fe)
+        fc, _ = st.causallyAttachFaces(fe, ff)
         self.assertTrue(_)
+        self.assertEqual(len(fc.getCofaces()), 2)
 
-        fe, _ = st.causallyAttachFaces(fe, ff)
-        self.assertTrue(_)
+
 
         all_cofaces = [sa, sb, sc, sd, se, sf]
         all_facets = [fa, fb, fc, fd, fe, ff]

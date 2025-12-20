@@ -154,7 +154,7 @@ PYBIND11_MODULE(caset, m) {
             .def("hasVertex", &Simplex::hasVertex)
             .def("isCofaceTo", &Simplex::isCofaceTo, py::arg("facet"), py::arg("shallow") = true)
             .def("isTimelike", &Simplex::isTimelike)
-            .def("attach", &Simplex::attach, py::arg("unattachedVertex"), py::arg("attachedVertex"))
+            .def("replaceVertex", &Simplex::replaceVertex, py::arg("oldVertex"), py::arg("newVertex"))
             .def("validate", &Simplex::validate);
 
     py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
@@ -226,11 +226,10 @@ PYBIND11_MODULE(caset, m) {
             .def("createSimplex",
                  py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
                  py::arg("orientation"))
-            .def("attachAtVertices",
-                 &Spacetime::attachAtVertices,
-                 py::arg("simplex"),
-                 py::arg("vertexA"),
-                 py::arg("vertexB"))
+            .def("replaceVertices",
+                 &Spacetime::replaceVertices,
+                 py::arg("oldVertices"),
+                 py::arg("replacements"))
             .def("moveInEdgesFromVertex", &Spacetime::moveInEdgesFromVertex, py::arg("fromVertex"), py::arg("toVertex"))
             .def("moveOutEdgesFromVertex",
                  &Spacetime::moveOutEdgesFromVertex,
