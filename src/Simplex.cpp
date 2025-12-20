@@ -461,6 +461,7 @@ void Simplex::addCoface(const SimplexPtr &coface) {
 }
 
 void Simplex::validate() const {
+#ifdef CASET_ASSERTIONS
   for (const auto &e : getEdges()) {
     if (!hasVertex(e->getSource())) {
       CLOG(ERROR_LEVEL, "Missing source for one of its edges: ", e->toString());
@@ -481,6 +482,7 @@ void Simplex::validate() const {
       }
     }
   }
+#endif
 }
 
 /// TODO: Optimize this method by tracking state on the `edges` member
