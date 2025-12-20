@@ -167,10 +167,15 @@ void Simplex::initialize(const SimplexPtr &simplex) {
   ids.reserve(vertices.size());
   vertexIdToIndex.reserve(vertices.size());
   vertexIndexToId.reserve(vertices.size());
+  const auto t = vertices[0]->getTime();
+  _isTimelike = true;
   for (const auto &v : vertices) {
     vertexIdToIndex.emplace(v->getId(), ids.size());
     vertexIndexToId.emplace(ids.size(), v->getId());
     ids.push_back(v->getId());
+    if (v->getTime() != t) {
+      _isTimelike = false;
+    }
   }
   fingerprint.setIds(ids);
 
@@ -316,7 +321,6 @@ std::string Simplex::toString() const noexcept {
 [[nodiscard]] VertexPtrs Simplex::getVertices() const noexcept { return vertices; };
 
 [[nodiscard]] bool Simplex::isTimelike() const {
-  for (const auto &edge : getEdges()) {
 #ifdef CASET_ASSERTIONS
     if (!vertexIdToIndex.contains(edge->getSource()->getId())) {
       CLOG(ERROR_LEVEL,
@@ -336,11 +340,6 @@ std::string Simplex::toString() const noexcept {
            ". edges should all be internal");
       throw std::runtime_error("vertexIdLookup was missing target ID");
     }
-#endif
-    const auto srcIndex = vertexIdToIndex.find(edge->getSource()->getId())->second;
-    const auto tgtIndex = vertexIdToIndex.find(edge->getTarget()->getId())->second;
-
-#ifdef CASET_ASSERTIONS
     if (srcIndex >= vertices.size()) {
       throw std::runtime_error("You requested a src vertex with an index outside the vertex list size.");
     }
@@ -348,11 +347,7 @@ std::string Simplex::toString() const noexcept {
       throw std::runtime_error("You requested a tgt vertex with an index outside the vertex list size.");
     }
 #endif
-    const auto &src = vertices[srcIndex];
-    const auto &tgt = vertices[tgtIndex];
-    if (src->getTime() != tgt->getTime()) return false;
-  }
-  return true;
+  return _isTimelike;
 }
 
 [[nodiscard]] std::size_t Simplex::computeNumberOfEdges(std::size_t k) {
@@ -671,9 +666,9 @@ bool Simplex::isCausallyAvailable() const noexcept {
 
 bool Simplex::hasCausallyAvailableFacet() {
   for (const auto &face : getFacets()) {
+    if (face->isTimelike()) continue;
     if (face->getCofaces().size() < 2) return true;
   }
-
   return false;
 }
 

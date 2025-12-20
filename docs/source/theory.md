@@ -1,5 +1,22 @@
 # Theory
 
+This package is intended to provide a test bed with great unit test coverage for researchers and enthusiasts to 
+implement ideas with respect to the latest in the field of lattice quantum gravity.
+
+Since Tulio Regge's work decades ago (or maybe before, I don't know) there's been a ton of interest in implementing GR
+in such a way that it's compatible with quantum mechanics, quantum field theory (QFT), and quantum chromodynamics (QCD). 
+
+Regge Calculus is apparently not computationally efficient to work for any real world simulation. Dynamical 
+triangulations were are a new approach, eventually arguably subsumed into the work on Causal Dynamical Triangulations 
+(CDT).
+
+CDT tends to work with a "preferred foliation", meaning that spatial slices of spacetime are "foliated" such that each 
+spatial slice occurs between two temporal slices. This means in between every layer of spatial (i.e. spacelike) edges 
+there is a layer of only temporal (i.e. timelike) edges.
+
+Some of the later work in CDT explores models _without_ preferred foliation while maintaining contributions around fixed 
+edge lengths or fixed ratios of temporal and spatial edge lengths.
+
 ## Why the Lorentzian Metric is Important
 
 Lorentzian path integrals tend to integrate over an infinite domain, so they tend to "blow up". Euclidean path integrals 

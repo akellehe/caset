@@ -347,6 +347,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     Simplices facets{};
     SimplexPtrSet cofaces{};
 
+    bool _isTimelike{false};
     template<typename Method, typename... Args>
     bool cascade(Method method, bool up, bool down, Args &&... args);
 };
