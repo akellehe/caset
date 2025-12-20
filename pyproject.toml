@@ -22,7 +22,6 @@ dependencies = [
     "matplotlib==3.10.7",
     "numpy==2.3.4",
     "pybind11>=2.12",
-    "torch>=2.9",
 ]
 optional-dependencies.dev = [
     "numpy>=2.3.5",

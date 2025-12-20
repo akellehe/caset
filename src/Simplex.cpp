@@ -28,8 +28,7 @@
 #include "utils.h"
 
 #include <algorithm>
-#include <ATen/core/interned_strings.h>
-#include <c10/util/ThreadLocalDebugInfo.h>
+#include <deque>
 
 namespace caset {
 bool Simplex::hasFacets() const {

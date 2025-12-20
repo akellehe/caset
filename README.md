@@ -38,6 +38,14 @@ Installation requires
 To install `caset`, you can use pip. If you're in a virtual environment, make sure it's activated. `cd` to the project 
 root then run:
 
+### For CUDA Support
+```bash
+pip install -v -e torch>=2.9 \
+  --index-url https://download.pytorch.org/whl/cu121 &&
+  python3 -m pip install -v -e .
+```
+
+### CPU Only
 ```bash
 pip install -v -e .
 ```

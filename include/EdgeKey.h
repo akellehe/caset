@@ -23,12 +23,8 @@ class EdgeKey {
     bool operator==(const EdgeKey &other) const;
 
     [[nodiscard]] std::uint64_t hash() const;
-#ifdef CASET_VERBOSE
-    std::string toString() const noexcept;
-#else
-    std::string constexpr toString() const noexcept;
-#endif
 
+    std::string toString() const noexcept;
 
     Fingerprint fingerprint;
 };

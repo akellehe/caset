@@ -20,17 +20,48 @@
 # SOFTWARE.
 
 import argparse
-
 import time
+import os
+
+# CRITICAL: Set environment variables BEFORE importing torch
+# This prevents CUDA from being initialized prematurely
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
+print("Loading torch...")
 import torch
+print("Loaded torch.")
+
+# CRITICAL: Initialize CUDA properly BEFORE importing caset
+# The caset C++ extension uses LibTorch, so we need CUDA ready first
+DEVICE = "cpu"  # Default to CPU
+if torch.cuda.is_available():
+    try:
+        # Explicitly initialize CUDA and check for errors
+        torch.cuda.init()
+        torch.cuda.empty_cache()  # Clear any stale memory
+        device_count = torch.cuda.device_count()
+        print(f"CUDA initialized successfully. Found {device_count} device(s).")
+        DEVICE = "cuda"
+    except RuntimeError as e:
+        print(f"CUDA initialization failed: {e}")
+        print("Falling back to CPU.")
+        DEVICE = "cpu"
+else:
+    print("CUDA not available.")
+
+print(f"Using device: {DEVICE}")
 
 from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
+# CRITICAL: Import caset AFTER torch and CUDA are fully initialized
+print("Loading caset...")
 from caset import Spacetime, Simplex
+print("Loaded caset.")
 
+# Check if cuda is available:
 
 def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
     # Normalize so alpha^2 + beta^2 ~= 1 if you care:
@@ -69,7 +100,7 @@ def embed_euclidean(st, dimensions=4, epsilon=1e-10):
         vertexIdToIndex[vid] = i
         vertexTimes.append(vertex.getTime())
 
-    vertexTimesTensor = torch.tensor(vertexTimes, dtype=torch.double)  # (N,)
+    vertexTimesTensor = torch.tensor(vertexTimes, dtype=torch.double, device=DEVICE)  # (N,)
 
     # --- Edge index and length data ---
     edgeIdxToSourceIndex = [0] * E
@@ -90,18 +121,18 @@ def embed_euclidean(st, dimensions=4, epsilon=1e-10):
         # Treat |L| as the "target" squared Euclidean edge length
         edgeIdxToAbsoluteSquaredLength[e] = abs(L) if abs(L) > 0 else epsilon
 
-    edgeIdxToSourceIdxTensor = torch.tensor(edgeIdxToSourceIndex, dtype=torch.long)
-    edgeIdxToTargetIdxTensor = torch.tensor(edgeIdxToTargetIndex, dtype=torch.long)
-    targetSqLenTensor = torch.tensor(edgeIdxToAbsoluteSquaredLength, dtype=torch.double)
+    edgeIdxToSourceIdxTensor = torch.tensor(edgeIdxToSourceIndex, dtype=torch.long, device=DEVICE)
+    edgeIdxToTargetIdxTensor = torch.tensor(edgeIdxToTargetIndex, dtype=torch.long, device=DEVICE)
+    targetSqLenTensor = torch.tensor(edgeIdxToAbsoluteSquaredLength, dtype=torch.double, device=DEVICE)
 
     # --- Learn ONLY spatial coordinates (time is fixed separately) ---
     # positions[i] is (x_1, ..., x_{d-1}) for vertex i
-    positions = torch.randn((N, spatial_dims), dtype=torch.double, requires_grad=True)
+    positions = torch.randn((N, spatial_dims), dtype=torch.double, requires_grad=True, device=DEVICE)
 
-    optimizer = torch.optim.Adam([positions], lr=lr)
-    previousLoss = torch.tensor(float("inf"), dtype=torch.double)
+    optimizer = torch.optim.Adam([positions], lr=lr, device=DEVICE)
+    previousLoss = torch.tensor(float("inf"), dtype=torch.double, device=DEVICE)
 
-    epsilonTensor = torch.tensor(epsilon, dtype=torch.double)
+    epsilonTensor = torch.tensor(epsilon, dtype=torch.double, device=DEVICE)
     repulsion_weight = 1.15  # tune this to taste
 
     iter = 0
@@ -129,7 +160,7 @@ def embed_euclidean(st, dimensions=4, epsilon=1e-10):
         pair_sqdist = pair_diff.pow(2).sum(-1) # (N, N)
 
         # Avoid self-interaction
-        eye = torch.eye(N, dtype=torch.double)
+        eye = torch.eye(N, dtype=torch.double, device=DEVICE)
         pair_sqdist = pair_sqdist + eye * 1e9
 
         # More repulsion for vertices with the same time
@@ -226,7 +257,6 @@ def build(args):
     end = time.time() * 1000.
     print("Elapsed time: ", end - start)
     print("--------------/Building Spacetime-------------")
-    return
     # Embed:
     print("---------------Embedding Euclidean------------")
     start = time.time() * 1000.
@@ -282,8 +312,8 @@ def label_bounds_and_get_edges(st, ax):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
 
-    timelike_lc = Line3DCollection(timeEdges, linewidths=.7, colors="blue")
-    spacelike_lc = Line3DCollection(spaceEdges, linewidths=.7, colors="red")
+    timelike_lc = Line3DCollection(timeEdges, linewidths=.7, colors="red")
+    spacelike_lc = Line3DCollection(spaceEdges, linewidths=.7, colors="blue")
     return timelike_lc, spacelike_lc
 
 
