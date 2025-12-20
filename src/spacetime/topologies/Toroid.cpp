@@ -19,12 +19,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "spacetime/Spacetime.h"
 #include "spacetime/topologies/Toroid.h"
 #include <iostream>
+#include <vector>
+#include <memory>
+
 
 namespace caset {
-void Toroid::build(Spacetime *spacetime) {
-  std::cout << "Building toroid" << std::endl;
 
+
+void Toroid::build(Spacetime *spacetime, int numSimplices) {
+  int dimensions = spacetime->getMetric()->getSignature()->getDimensions();
+  std::vector<std::tuple<std::uint8_t, std::uint8_t> > orientations{};
+  if (dimensions == 3) {
+    orientations = {{1, 2}, {2, 1}};
+  } else if (dimensions == 4) {
+    orientations = {{1, 4}, {2, 3}};
+  }
+  spacetime->createSimplex(orientations[1]);
+  for (int i = 0; i < numSimplices; i++) {
+    const auto [rightSimplex, created] = spacetime->createSimplex(orientations[i % 2]);
+    OptionalSimplexPtrPair leftFaceRightFace = spacetime->chooseSimplexFacesToGlue(rightSimplex);
+    if (!leftFaceRightFace.has_value()) return;
+    auto [leftFace, rightFace] = leftFaceRightFace.value();
+    [[maybe_unused]] auto [left, succeeded] = spacetime->causallyAttachFaces(leftFace, rightFace);
+  }
 }
 }

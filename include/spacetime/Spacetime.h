@@ -36,15 +36,13 @@
 #include "Metric.h"
 #include "Simplex.h"
 #include "topologies/Toroid.h"
+#include "spacetime/Foliation.h"
 
 namespace caset {
 enum class SpacetimeType : uint8_t {
   CDT = 0,
   REGGE = 1,
-  COSET = 2,
-  REGGE_PACHNER = 3,
-  GFT_SPIN_FOAM = 4,
-  RICCI_FLOW_DISCRETIZATION = 5
+  COSET = 2
 };
 
 ///
@@ -79,8 +77,10 @@ class Spacetime {
     Spacetime(
       std::shared_ptr<Metric> metric_,
       const SpacetimeType spacetimeType_,
+      const Foliation foliation,
       std::optional<double> alpha_,
-      std::optional<std::shared_ptr<Topology> > topology_);
+      std::optional<std::shared_ptr<Topology> > topology_
+      );
 
     // ========================================
     // Creation Methods
@@ -137,6 +137,9 @@ class Spacetime {
     /// Constructs an initial simplicial complex \f$ \mathcal{K}_0 \f$ by iteratively gluing \f$ n \f$ simplices.
     /// @param numSimplices The number of simplices to add to the initial complex
     void build(int numSimplices=3);
+
+    /// Reserve memory appropriate to store numSimplices of the dimensionality of this Spacetime instance.
+    void reserve(int numSimplices=3);
 
     /// This method identifies a pair of faces (one from each simplex) that can be glued together while preserving the
     /// orientation of the simplices. The method checks for matching orientations and edge lengths to ensure
@@ -248,6 +251,12 @@ class Spacetime {
     /// @param unattachedSimplex The simplex \f$ \sigma \f$ for which to find a gluable face
     /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
     OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
+
+    /// This method takes a simplex, and glues it arbitrarily to the existing complex.
+    /// @param simplex
+    /// @returns {attachedFace, succeeded} The attached face after attachment to the complex. The simplex itself and the
+    ///   one to which it was glued share this face.
+    std::tuple<SimplexPtr, bool> glue(const SimplexPtr &simplex);
 
     // ========================================
     // Query Methods
@@ -377,12 +386,14 @@ class Spacetime {
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
 
+    Foliation foliation;
     IdType vertexIdCounter = 0;
     SpacetimeType spacetimeType;
     double alpha = 1.;
     std::shared_ptr<Metric> metric;
     std::shared_ptr<Topology> topology;
     std::uint64_t currentTime = 0;
+
 
     SimplexSet simplices{};
 

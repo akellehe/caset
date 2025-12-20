@@ -214,7 +214,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     // ==================== State Queries ====================
     [[nodiscard]] bool isTimelike() const;
     /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
-    bool isCausallyAvailable() const noexcept;
+    bool isCausallyAvailableFace() const noexcept;
     bool referencesSimplex(const SimplexPtr &simplex);
     static std::tuple<SimplexPtr, Simplices, Simplices> breakReferences(const SimplexPtr &simplex);
     static void restoreReferences(SimplexPtr &simplex, const Simplices &cofaces, const Simplices &facets);
@@ -347,9 +347,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     Simplices facets{};
     SimplexPtrSet cofaces{};
 
+
     bool _isTimelike{false};
-    template<typename Method, typename... Args>
-    bool cascade(Method method, bool up, bool down, Args &&... args);
 };
 
 }

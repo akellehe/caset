@@ -50,20 +50,20 @@ SimplexGluer::~SimplexGluer() {
     // TODO: May need to check here whether or not the simplex is internal or external. I'm pretty sure this will always
     //  be internal as long as attach() is only used to attach previously unattached simplexes.
 
-    auto registeredSimplex = spacetime->registerSimplex(simplex, !simplex->isCausallyAvailable());
+    auto registeredSimplex = spacetime->registerSimplex(simplex, !simplex->isCausallyAvailableFace());
     CLOG(DEBUG_LEVEL, "RE-Registering ", simplex->toString(), "to vertices and facets...");
 
     Simplices registeredBrokenCofaces{};
     registeredBrokenCofaces.reserve(brokenCofaces.size());
     for (const auto &bcf : brokenCofaces) {
-      auto registeredCoface = spacetime->registerSimplex(bcf, bcf->isCausallyAvailable());
+      auto registeredCoface = spacetime->registerSimplex(bcf, bcf->isCausallyAvailableFace());
       registeredBrokenCofaces.push_back(registeredCoface);
     }
 
     Simplices registeredBrokenFacets{};
     registeredBrokenFacets.reserve(brokenFacets.size());
     for (const auto &bf : brokenFacets) {
-      auto registeredFacet = spacetime->registerSimplex(bf, bf->isCausallyAvailable());
+      auto registeredFacet = spacetime->registerSimplex(bf, bf->isCausallyAvailableFace());
       registeredBrokenFacets.push_back(registeredFacet);
     }
 

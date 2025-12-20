@@ -411,6 +411,15 @@ class TestSimplex(unittest.TestCase):
             for coface in cofaces:
                 self.assertTrue(coface.isCofaceTo(facet))
 
+    def test_simplices_are_causally_available_when_one_facet_is_glued(self):
+        st = Spacetime()
+        left, created = st.createSimplex((1, 4))
+        right, created = st.createSimplex((2, 3))
+        sharedFace, success = st.glue(right)
+        self.assertTrue(success)
+        self.assertFalse(sharedFace.isCausallyAvailableFace())
+        self.assertTrue(left.hasCausallyAvailableFacet())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -661,14 +661,16 @@ std::uint64_t Simplex::hash() const noexcept {
   return fingerprint.fingerprint();
 }
 
-bool Simplex::isCausallyAvailable() const noexcept {
-  return getCofaces().size() < 2;
+bool Simplex::isCausallyAvailableFace() const noexcept {
+  /// If there are no cofaces then it is not a face.
+  /// If there are more than one cofaces then it is not available.
+  return getCofaces().size() == 1;
 }
 
 bool Simplex::hasCausallyAvailableFacet() {
   for (const auto &face : getFacets()) {
     if (face->isTimelike()) continue;
-    if (face->getCofaces().size() < 2) return true;
+    if (face->isCausallyAvailableFace()) return true;
   }
   return false;
 }
@@ -684,7 +686,7 @@ std::size_t Simplex::maxKPlusOneCofaces() const {
 SimplexOrientationSet Simplex::getGluableFaceOrientations() {
   SimplexOrientationSet allowedOrientations{};
   for (const auto &face : getFacets()) {
-    if (face->getCofaces().size() < 2) {
+    if (face->isCausallyAvailableFace()) {
       allowedOrientations.insert(face->getOrientation());
     }
   }
@@ -838,67 +840,6 @@ VertexIdMap Simplex::getVertexIdLookup() const noexcept {
   }
   return lookup;
 }
-
-template<typename Method, typename... Args>
-bool Simplex::cascade(Method method, bool up, bool down, Args &&... args) {
-  std::deque<SimplexPtr> simplicesToUpdate;
-  SimplexSet seen;
-  auto enqueueIfNew = [&](const SimplexPtr &s) {
-    if (!seen.contains(s)) simplicesToUpdate.push_back(s);
-  };
-
-  // --- Cascade to siblings --- //
-  for (const auto &coface : getCofaces()) {
-    for (const auto &sibling : coface->getFacets()) {
-      if (sibling->fingerprint.fingerprint() == fingerprint.fingerprint()) continue;
-      (sibling.get()->*method)(std::forward<Args>(args)...);
-    }
-  }
-
-  // --- Cascading to cofaces ---
-  if (up && !cofaces.empty()) {
-    simplicesToUpdate.insert(simplicesToUpdate.end(),
-                             cofaces.begin(),
-                             cofaces.end());
-    while (!simplicesToUpdate.empty()) {
-      const auto coface = simplicesToUpdate.front(); // copy the shared_ptr
-      simplicesToUpdate.pop_front();
-
-      if (!seen.insert(coface).second) {
-        continue;
-      }
-
-      // Call the member function on this coface
-      if ((coface.get()->*method)(std::forward<Args>(args)...)) {
-        for (const auto &nextCoface : coface->getCofaces()) {
-          enqueueIfNew(nextCoface);
-        }
-      }
-    }
-  }
-
-  // --- Cascading to facets ---
-  auto facets_ = getFacets();
-  if (down && !facets_.empty()) {
-    simplicesToUpdate.clear();
-    simplicesToUpdate.insert(simplicesToUpdate.end(),
-                             facets_.begin(),
-                             facets_.end());
-    while (!simplicesToUpdate.empty()) {
-      const auto facet = simplicesToUpdate.front(); // copy, NOT reference
-      simplicesToUpdate.pop_front();
-
-      if (!seen.insert(facet).second) continue;
-
-      if ((facet.get()->*method)(std::forward<Args>(args)...)) {
-        for (const auto &nextFacet : facet->getFacets()) {
-          enqueueIfNew(nextFacet);
-        }
-      }
-    }
-  }
-  return true;
-};
 
 bool Simplex::removeEdge(const EdgePtr &edge) {
   return edges.erase(edge) > 0;

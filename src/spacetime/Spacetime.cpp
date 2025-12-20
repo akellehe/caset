@@ -46,13 +46,15 @@ Spacetime::Spacetime() {
   spacetimeType = SpacetimeType::CDT;
   alpha = 1.;
   topology = std::make_shared<Toroid>();
+  foliation = Foliation::PREFERRED;
 }
 
 Spacetime::Spacetime(
   std::shared_ptr<Metric> metric_,
   const SpacetimeType spacetimeType_,
+  const Foliation foliation_,
   std::optional<double> alpha_,
-  std::optional<std::shared_ptr<Topology> > topology_) : metric(metric_), spacetimeType(spacetimeType_) {
+  std::optional<std::shared_ptr<Topology> > topology_) : metric(metric_), spacetimeType(spacetimeType_), foliation(foliation_) {
   alpha = alpha_.value_or(1.);
   topology = topology_.value_or(std::make_shared<Toroid>());
 }
@@ -210,20 +212,15 @@ EdgePtr Spacetime::createEdge(
 
 void Spacetime::build(int numSimplices) {
   // TODO: Implement topologies instead of the default.
-  // return topology->build(this);
+  return topology->build(this, numSimplices);
+}
+
+void Spacetime::reserve(int numSimplices) {
   simplices.reserve(numSimplices + simplices.size());
   edgeList->reserve(numSimplices * Simplex::computeNumberOfEdges(4)); // TODO: Change this to dimensions.
   vertexList->reserve(numSimplices * 4 + 1);  // A k-simplex has k+1 vertices.
-  std::vector<std::tuple<uint8_t, uint8_t> > orientations = {{1, 2}, {2, 1}};
-  createSimplex(orientations[1]);
-  for (int i = 0; i < numSimplices; i++) {
-    const auto [rightSimplex, created] = createSimplex(orientations[i % 2]);
-    OptionalSimplexPtrPair leftFaceRightFace = chooseSimplexFacesToGlue(rightSimplex);
-    if (!leftFaceRightFace.has_value()) return;
-    auto [leftFace, rightFace] = leftFaceRightFace.value();
-    [[maybe_unused]] auto [left, succeeded] = causallyAttachFaces(leftFace, rightFace);
-  }
 }
+
 
 [[nodiscard]] OptionalSimplexPtrPair
 Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex) {
@@ -241,13 +238,13 @@ Spacetime::getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr
   for (auto &unattachedFace : unattachedFacets) {
     const auto [tia, tfa] = unattachedFace->getOrientation().numeric();
     if (tia == 0 || tfa == 0) continue; // Skip degenerate faces
-    if (!unattachedFace->isCausallyAvailable()) continue;
+    if (!unattachedFace->isCausallyAvailableFace()) continue;
     for (auto &attachedFace : attachedFacets) {
       if (unattachedFace->isTimelike() != attachedFace->isTimelike()) continue;
       // Skip faces that don't match in timelikeness
       const auto [tib, tfb] = attachedFace->getOrientation().numeric();
       if (tib == 0 || tfb == 0) continue; // Skip degenerate faces
-      if (attachedFace->isInternal()) continue;
+      if (!attachedFace->isCausallyAvailableFace()) continue;
 #if CASET_ASSERTIONS
       attachedFace->validate();
       unattachedFace->validate();
@@ -285,7 +282,7 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   const SimplexPtr &unattachedFace
 ) {
   // Fast path: early exit checks
-  if (!attachedFace->isCausallyAvailable() || !unattachedFace->isCausallyAvailable()) {
+  if (!attachedFace->isCausallyAvailableFace() || !unattachedFace->isCausallyAvailableFace()) {
     CLOG(ERROR_LEVEL,
          "One or more of attachedFace and unattachedFace was not causally available!\n",
          attachedFace->toString(),
@@ -361,6 +358,13 @@ std::tuple<SimplexPtr, bool> Spacetime::causallyAttachFaces(
   return {attachedFace, true};
 }
 
+std::tuple<SimplexPtr, bool> Spacetime::glue(const SimplexPtr &simplex) {
+  OptionalSimplexPtrPair leftFaceRightFace = chooseSimplexFacesToGlue(simplex);
+  if (!leftFaceRightFace.has_value()) return {nullptr, false};
+  const auto &[leftFace, rightFace] = leftFaceRightFace.value();
+  return causallyAttachFaces(leftFace, rightFace);
+}
+
 OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex) {
   // OPTIMIZATION: Cache loop-invariant checks
   if (!unattachedSimplex->hasCausallyAvailableFacet()) {
@@ -368,18 +372,13 @@ OptionalSimplexPtrPair Spacetime::chooseSimplexFacesToGlue(const SimplexPtr &una
   }
 
   const auto unattachedFp = unattachedSimplex->fingerprint.fingerprint();
-
   for (const auto &facialOrientation : unattachedSimplex->getGluableFaceOrientations()) {
     const auto &prospectiveCofaces = externalSimplicesByFacialOrientation[facialOrientation];
     if (prospectiveCofaces.empty()) continue;
-
-    // OPTIMIZATION: Use range-based for loop, cleaner and potentially faster
     for (const auto &attachedCoface : prospectiveCofaces) {
       // OPTIMIZATION: Cache fingerprint to avoid repeated member access
       if (attachedCoface->fingerprint.fingerprint() == unattachedFp) continue;
-
       if (!attachedCoface->hasCausallyAvailableFacet()) continue;
-
 #if CASET_ASSERTIONS
       attachedCoface->validate();
 #endif
