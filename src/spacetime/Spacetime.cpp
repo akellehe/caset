@@ -426,6 +426,13 @@ SimplexSet Spacetime::getExternalSimplices() noexcept {
   return simplices_;
 }
 
+// I think we're going to want to implement Qhull https://www.qhull.org for delaunay triangulations because we can't
+// build the simplicial complex very easily just by attaching new simplices. We would have to expand from the complex in
+// a manner similar to coning, where we treat e.g. a (1, 3) face or the corner made by two (1, 3) faces as a new
+// attachment site, then we build off it by coning one new vertex and adding the Simplex abstraction on those two facets
+// plus the new vertex.
+throw std::runtime_error("Implement BFS on the boundary of the simplicial complex by using a deque for those facets that remain available (have fewer than 2 cofaces).")
+
 SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
   SimplexOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
   SimplexSet result{};
