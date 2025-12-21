@@ -1,6 +1,6 @@
-sphinx>=7
+sphinx
 furo
 breathe
 myst-parser
 sphinx-autobuild
-mathjax==0.1.2
+mathjax

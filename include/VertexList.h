@@ -106,7 +106,7 @@ class VertexList {
       return result;
     }
 
-    void reserve(std::size_t size);
+    void reserve(std::size_t nSimplices) noexcept;
   private:
     std::unordered_map<std::uint64_t, std::shared_ptr<Vertex>> vertexList{};
 };

@@ -133,6 +133,8 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         ///
         [[nodiscard]] double getTime() const;
 
+        void setTime(double time) noexcept;
+
         ///
         /// \brief Get the coordinate vector for this vertex
         ///

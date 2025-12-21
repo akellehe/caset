@@ -30,8 +30,8 @@ author = "caset contributors"
 
 extensions = [
     "myst_parser",
-    "sphinx.ext.mathjax",
     "breathe",
+    "sphinx.ext.mathjax",
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",

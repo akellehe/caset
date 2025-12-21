@@ -37,7 +37,7 @@ def prepend_license(path: pathlib.Path):
     with open(str(path), 'rb') as fp:
         text = fp.read()
 
-    if b"MIT License" in text.split(b"\n", 5)[0:5]:
+    if b"MIT License" in text:
         print(str(path), "already has a license")
         return  # already has a license header
 

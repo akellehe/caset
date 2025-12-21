@@ -27,7 +27,7 @@
 #include <iostream>
 
 namespace caset {
-void Cylinder::build(Spacetime *spacetime) {
+void Cylinder::build(Spacetime *spacetime, int numSimplices) {
   std::cout << "Building Cylinder" << std::endl;
 
 }

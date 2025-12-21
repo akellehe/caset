@@ -24,9 +24,9 @@ import argparse
 import time
 import torch
 
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
+# from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 from caset import Spacetime, Simplex
@@ -102,7 +102,7 @@ def embed_euclidean(st, dimensions=4, epsilon=1e-10):
     previousLoss = torch.tensor(float("inf"), dtype=torch.double)
 
     epsilonTensor = torch.tensor(epsilon, dtype=torch.double)
-    repulsion_weight = 1.15  # tune this to taste
+    repulsion_weight = 100.  # tune this to taste
 
     iter = 0
     while True:
@@ -226,8 +226,7 @@ def build(args):
     end = time.time() * 1000.
     print("Elapsed time: ", end - start)
     print("--------------/Building Spacetime-------------")
-    return
-    # Embed:
+
     print("---------------Embedding Euclidean------------")
     start = time.time() * 1000.
     embed_euclidean(st, dimensions=4, epsilon=10e-10)

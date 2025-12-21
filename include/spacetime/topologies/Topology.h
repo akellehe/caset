@@ -37,7 +37,7 @@ class Topology {
     ///
     /// Builds an initial triangulation matching this topology for t=0 on a given spacetime based on the parameters of
     /// the spacetime.
-    virtual void build(Spacetime *spacetime) = 0;
+    virtual void build(Spacetime *spacetime, int numSimplices) = 0;
 };
 }
 

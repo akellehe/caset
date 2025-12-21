@@ -23,6 +23,7 @@
 #include "Edge.h"
 #include "EdgeKey.h"
 #include "Vertex.h"
+#include "utils.h"
 
 #include <vector>
 #include <memory>

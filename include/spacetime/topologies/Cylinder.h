@@ -32,7 +32,7 @@ namespace caset {
 class Spacetime;
 class Cylinder : public Topology {
   public:
-    void build(Spacetime *spacetime) override;
+    void build(Spacetime *spacetime, int numSimplices) override;
 };
 }
 

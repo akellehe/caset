@@ -42,8 +42,6 @@ namespace caset {
 ///
 /// Each simplex has a volume \f$ V_s \f$, which can represent various physical properties depending on the context.
 ///
-/// ### Some Implementation Details
-///
 /// A k-simplex, \f$ \sigma^k \f$, within a simplicial complex, \f$ K \f$ is defined as a set of k+1 vertices.
 /// Simplicial complex construction is a bit of a bottleneck in simulation of spacetime. At the moment; we declare some
 /// vertices, then use coning to create a Simplex from those vertices. Those vertices are passed to the Simplex along
@@ -61,7 +59,6 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k);
 
     // ==================== Constructors & Initialization ====================
-    ///
     /// @param vertices_
     explicit Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_);
     Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientation &orientation_);
@@ -91,8 +88,15 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// SimplexOrientation
     [[nodiscard]] SimplexOrientation getOrientation() const noexcept;
 
+    /// The earliest time assigned to a vertex in this Simplex.
+    /// @returns ti for the Simplex.
+    double getTi() const noexcept;
+
+    /// The latest time assigned to a vertex in this Simplex.
+    /// @returns tf for the Simplex.
+    double getTf() const noexcept;
+
     // ==================== Vertex Queries ====================
-    ///
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
     [[nodiscard]] VertexPtrs getVertices() const noexcept;
 
@@ -103,24 +107,15 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// verifying state in our Python unit tests.
     [[nodiscard]] VertexIdMap getVertexIdLookup() const noexcept;
 
-    /// This method should be used when you have two simplices and you want to find some Vertices at which to join one
-    /// Simplex to the other. Two sets of ordered vertices, \f$ \mathcal{V_i} \f$ and \f$ \mathcal{V_j} \f$ "have parity"
-    /// when there is an ordered subset, \f$ V_i \f$ and \f$ V_j \f$ for which Vertex::getTime returns the same value
-    /// for each corresponding element. More specifically;
-    ///
-    /// Two sets of vertices "have pairty" iff
-    ///   - They have the same cardinality, \f$ N \f$
-    ///   - There exists an element \f$ v_m \memberof \f$ V_i \f$ for which there exists an an element
-    ///     \f$ v_n \memberof V_j \f$ such that \f$ v_m::getTime() = v_n::getTime() \forall (m, n) s.t. m = n \f$.
-    [[nodiscard]] std::optional<VertexPtrs> getVerticesWithParityTo(const std::shared_ptr<Simplex> &other) const;
 
     // ==================== Edge Queries ====================
     /// @returns Edges in traversal order (the order of input vertices).
     [[nodiscard]] EdgePtrSet getEdges() const;
     [[nodiscard]] std::size_t getNumberOfEdges() const;
+
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
-    /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1)}, e_{2 \rightarrow 0} \} \f$
+    /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1}, e_{2 \rightarrow 0} \} \f$
     [[nodiscard]] bool hasEdge(const EdgePtr &edge) const;
     [[nodiscard]] bool hasEdge(const VertexPtr &vertexA, const VertexPtr &vertexB) const;
     [[nodiscard]] bool hasEdgeContaining(IdType vertexId) const;
@@ -159,27 +154,18 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     bool hasFacets() const;
     bool hasStoredFacet(const SimplexPtr &facet);
-    bool addFacet(const SimplexPtr &facet);
-    bool removeFacet(const SimplexPtr &facet);
 
     // ==================== Coface Queries & Management ====================
     ///
-    /// A simplex, \f$ \sigma \memberof K \f$ with vertices \f$ V_{\sigma} \f$  is a coface of \f$ \tau \memberof K \f$
+    /// A simplex, \f$ \sigma \in K \f$ with vertices \f$ V_{\sigma} \f$  is a coface of \f$ \tau \in K \f$
     /// with vertices \f$ V_{\tau} \f$ iff \f$ V_{\tau} \subset V_{\sigma} \f$. For our purposes, however, we confine
     /// cofaces to those of dimensionality \f$ k+1 \f$ compared to the facet of dimension \f$ k \f$
     ///
     /// We define a _facet_ as a set of shared vertices. The facet of any given k-simplex \f$ \sigma^k \f$ is a k-1
-    /// simplex, such that  \f$ \sigma{k} \f$ is a coface of \f$ \sigma_{k-1} \f$.
+    /// simplex, such that  \f$ \sigma_{k} \f$ is a coface of \f$ \sigma_{k-1} \f$.
     ///
     void addCoface(const std::shared_ptr<Simplex> &simplex);
-    void removeCoface(const std::shared_ptr<Simplex> &simplex);
     bool isCofaceTo(const SimplexPtr &simplex, bool shallow=true) const;
-
-    Simplices clearCofaces();
-    Simplices clearFacets();
-
-    // static void unregisterFromCofaces(const std::shared_ptr<Simplex> &facet);
-    // static void registerToCofaces(const std::shared_ptr<Simplex> &facet);
 
     [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;
 
@@ -198,13 +184,13 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
     /// hence violate causality. If that's your goal then you want to use `isCausallyAvailable`
     ///
-    /// For a given k-simplex \f$ \sigma^k \f$, a co-face is defined as an m-simplex, \f$ \sigma^m \f$ such that \f$ m > k \f$
+    /// For a given k-simplex \f$ \sigma^k \f$, a co-face is defined as an m-simplex, \f$ \sigma^m \f$ such that \f$ m \gt k \f$
     /// and \f$ \sigma^k \subset \sigma^m \f$. The maximum number of co-faces that can be joined to a k-simplex is in
     /// general unbounded, but for our purposes we set it to the number of faces of the simplex, so we impose the
-    /// constraint that the coface no be _generally_ \f$ m > k \f$, but exactly \f$ k + 1 \f$, so \f$ m = k + 1 \f$.
+    /// constraint that the coface no be _generally_ \f$ m \gt k \f$, but exactly \f$ k + 1 \f$, so \f$ m = k + 1 \f$.
     ///
     /// This can be confusing because for the purpose of causally gluing simplices we look at a face, \f$ \sigma^k \f$
-    /// of the (k+1)-simplex, \f$ \sigma{k+1} \f$ where to that (k-) face we want to glue another (k+1)-simplex on one
+    /// of the (k+1)-simplex, \f$ \sigma^{k+1} \f$ where to that (k-) face we want to glue another (k+1)-simplex on one
     /// of it's k-faces. So the maximum number of co-faces that can be joined to a k-simplex is the number of faces of
     /// that simplex.
     ///
@@ -213,12 +199,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     // ==================== State Queries ====================
     [[nodiscard]] bool isTimelike() const;
+
     /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
     bool isCausallyAvailable() const noexcept;
-    bool referencesSimplex(const SimplexPtr &simplex);
-    static std::tuple<SimplexPtr, Simplices, Simplices> breakReferences(const SimplexPtr &simplex);
-    static void restoreReferences(SimplexPtr &simplex, const Simplices &cofaces, const Simplices &facets);
-    ///
+
     /// This method iterates over all faces of this Simplex; and counts the number of co-faces for each face. If a face
     /// has fewer than 2 co-faces; it's available to glue. We limit to 2 co-faces because we want to preserve
     /// manifoldness. There's nothing wrong with internal simplicies from the perspective of simplicial algebra, but
@@ -233,40 +217,22 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     // ==================== Computational & Utility Methods ====================
     template<typename T> T binomial(unsigned n, unsigned k) const;
 
-    ///
-    /// Simplices have an orientation which is given by the ordering of its Vertex (es). For a k-simplex,
-    /// \f$ \sigma^k = [v_0, v_1, ..., v_k] \f$ even permutations have the _same_ orientation. Odd permutations have
-    /// _opposite_ orientation.
-    ///
-    /// In order to glue two simplices they must have opposite orientation.
-    ///
-    /// For Face (s); orientation is inherited from the parent Simplex.
-    ///
-    /// \f[
-    /// \partial\sigma^k = \partial[v_0, v_1, ..., v_k] = \sum_{i=0}^k (-1)^i [v_0, v_1, ..., v_k]
-    /// \f]
-    ///
-    /// This method counts the number of cycles that result from mapping one set of vertex IDs to another set. That
-    /// number reflects the number of "swaps" of vertices required to get from one configuration to another. Each of
-    /// those swaps changes the sign of the orientation once. An odd number of swaps gives an opposite orientation; an
-    /// even number gives the same orientation.
-    ///
-    int8_t checkParity(const std::shared_ptr<Simplex> &other) const;
-
-    ///
-    /// @return A set of orientations for faces that can be glued to this Simplex. We look at it's available faces, and
-    ///   create a unique set of the orientations. That set can be used to look up a corresponding Simplex in the
-    ///   `externalSimplices` of the Spacetime.
-    ///
-    SimplexOrientationSet getGluableFaceOrientations();
 
     // ==================== Modification Methods ====================
     bool addEdge(const EdgePtr &edge);
     bool removeEdge(const EdgePtr &edge);
     static void registerToVertices(const SimplexPtr &simplex);
-    static void registerToFacets(const SimplexPtr &coface);
-    static void unregisterFromVertices(const SimplexPtr &simplex);
-    static Simplices unregisterFromFacets(const SimplexPtr &simplex);
+
+    /// If you're working in a 3-complex (tetrahedrons), \f$ K \f$ this method should be appropriately called on a
+    /// 2-simplex (a triangle), \f$ \sigma^2 \f$ or in general for a given k-complex, \f$ K \f$ you should just be
+    /// calling this method on simplices of dimension k-1. It creates a new k-simplex by writing drawing edges from
+    /// each vertex of this Facet to the new vertex. This creates a new k-simplex with a shared face (this Simplex!) in
+    /// effectively O(1) time.
+    ///
+    /// @param vertex A new, standalone, orphaned vertex with no existing edges or associated simplices.
+    /// @returns A pair of {simplex, facets}; The new k-simplex created by coning `vertex` to this facet and a vector of
+    ///   new exterior facets resulting from the new simplex.
+    std::pair<SimplexPtr, Simplices> cone(VertexPtr &vertex);
 
     // ==================== Validation ====================
     void validate() const;
@@ -278,7 +244,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     // ==================== Public Data ====================
     Fingerprint fingerprint{};
     bool initialized{false};
+
+#ifdef CASET_ASSERTIONS
     OwnershipManager<IdType, SimplexPtr, SimplexPtrHash, SimplexPtrEq> ownershipManager{};
+#endif
 
     // ==================== Commented Out / Future Methods ====================
     /// Returns the hinges of the simplex. A hinge is a simplex contained within a higher dimensional simplex. The hinge
@@ -334,6 +303,8 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param newVertex The vertex with which to replace it.
     /// @return
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
+
+    bool isInitialized() const noexcept;
   private:
     Spacetime *spacetime{nullptr};
     SimplexOrientation orientation{};
@@ -347,9 +318,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     Simplices facets{};
     SimplexPtrSet cofaces{};
 
-    bool _isTimelike{false};
-    template<typename Method, typename... Args>
-    bool cascade(Method method, bool up, bool down, Args &&... args);
+    bool _isTimelike;
+    double ti{std::numeric_limits<double>::max()};
+    double tf{-std::numeric_limits<double>::max()};
 };
 
 }

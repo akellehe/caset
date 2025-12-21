@@ -6,7 +6,17 @@ simplicial complexes.
 Below the C++ API is documented for users. To document for developers you can edit the Doxyfile and comment out 
 exclusions to see the entire interface.
 
-```{doxygenindex}
+```{doxygenfile} Spacetime.h
+```
+```{doxygenfile} Metric.h
+```
+```{doxygenfile} Signature.h
+```
+```{doxygenfile} Simplex.h
+```
+```{doxygenfile} Vertex.h
+```
+```{doxygenfile} Edge.h
 ```
 
 
