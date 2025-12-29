@@ -24,6 +24,7 @@
 //
 
 #include "EdgeList.h"
+#include "Vertex.h"
 #include <memory>
 #include <vector>
 
@@ -109,7 +110,7 @@ EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
   return edge;
 }
 
-void EdgeList::reserve(std::size_t size) {
-  edgeList.reserve(size);
+void EdgeList::reserve(std::size_t nSimplices) {
+  edgeList.reserve(nSimplices);
 }
 } // caset

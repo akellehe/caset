@@ -5,10 +5,10 @@
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="The Caset C++ API" href="cpp_api.html"><link rel="prev" title="Getting Started" href="getting_started.html">
 
-    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
         <title>Theory - caset documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
@@ -234,6 +234,18 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="theory">
 <h1>Theory<a class="headerlink" href="#theory" title="Link to this heading">¶</a></h1>
+<p>This package is intended to provide a test bed with great unit test coverage for researchers and enthusiasts to
+implement ideas with respect to the latest in the field of lattice quantum gravity.</p>
+<p>Since Tulio Regge’s work decades ago (or maybe before, I don’t know) there’s been a ton of interest in implementing GR
+in such a way that it’s compatible with quantum mechanics, quantum field theory (QFT), and quantum chromodynamics (QCD).</p>
+<p>Regge Calculus is apparently not computationally efficient to work for any real world simulation. Dynamical
+triangulations were are a new approach, eventually arguably subsumed into the work on Causal Dynamical Triangulations
+(CDT).</p>
+<p>CDT tends to work with a “preferred foliation”, meaning that spatial slices of spacetime are “foliated” such that each
+spatial slice occurs between two temporal slices. This means in between every layer of spatial (i.e. spacelike) edges
+there is a layer of only temporal (i.e. timelike) edges.</p>
+<p>Some of the later work in CDT explores models <em>without</em> preferred foliation while maintaining contributions around fixed
+edge lengths or fixed ratios of temporal and spatial edge lengths.</p>
 <section id="why-the-lorentzian-metric-is-important">
 <h2>Why the Lorentzian Metric is Important<a class="headerlink" href="#why-the-lorentzian-metric-is-important" title="Link to this heading">¶</a></h2>
 <p>Lorentzian path integrals tend to integrate over an infinite domain, so they tend to “blow up”. Euclidean path integrals
@@ -330,19 +342,36 @@ hinges, leading to a discrete version of the gravitational action.</p>
 <section id="cdt-causal-dynamical-triangulations">
 <h3>CDT (Causal Dynamical Triangulations)<a class="headerlink" href="#cdt-causal-dynamical-triangulations" title="Link to this heading">¶</a></h3>
 <p>Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from
-causally ordered simplices. In CDT, the path integral over geometries is approximated by approximately summing over all
-possible causal triangulations with a MCMC algorithm, ensuring that the causal structure of spacetime is preserved. This
-approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at small
-scales.</p>
-<p>Note that CDT allows for imaginary edge lengths. This is handled by allowing for spacelike squared edge lengths to be
-some constant <span class="math notranslate nohighlight">\( a^2 \)</span> and time like squared edge lengths to be <span class="math notranslate nohighlight">\( -\alpha a^2 \)</span> for some constant <span class="math notranslate nohighlight">\( \alpha &gt; 0 \)</span>. This
-allows for a Wick rotation, mapping <a class="reference download internal" download="" href="_downloads/71039bbc7ca56abfdce3727972cc5151/1905.08669v1.pdf"><span class="xref download myst">[1]</span></a></p>
+causally ordered simplices. This is explained very well in
+<a class="reference internal" href="#./resources/1905.08669v1.pdf"><span class="xref myst">Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019</span></a> In CDT,
+the path integral over geometries is approximated by approximately summing over all possible causal triangulations. From
+equation (5) in <a class="reference download internal" download="" href="_downloads/cc35aea228e1a5ec55745d7ee7ea305f/0011194v1.pdf"><span class="xref download myst">Discrete Lorentzian Quantum Gravity, R. Loll, 2000</span></a> the partition
+function is</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+Z(\lambda, G) = \sum_{causal T} \frac{1}{C_T} e^{iS^{Regge}}
+\]</div>
+</div>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+e^{iS^{Lor}} \rightarrow e^{-S^{Euclid}}
+\]</div>
+</div>
+<p>where the right arrow represents allowing squared temporal edges to have a negative value. This allows for Wick rotation.</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[
 l_t^2 = -\alpha a^2 \rightarrow l_t^2 = +\alpha a^2
 \]</div>
 </div>
+<p>There has been much success in implementing CDT as an MCMC algorithm, ensuring that the causal structure of spacetime is
+preserved. You can find a detailed description and source code in <a class="reference internal" href="#./resources/CDT/moves.pdf"><span class="xref myst">Simulating CDT quantum gravity, Brunekreef et. al, 2023</span></a>
+This approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at
+small scales. You can find lots of details of those results in <a class="reference download internal" download="" href="_downloads/8c1a3ab3313cbd83d361ce19f98bb438/cdt-wo-pref-folia.pdf"><span class="xref download myst">Causal Dynamical Triangulations without Preferred Foliation, 2013</span></a>,
+<a class="reference download internal" download="" href="_downloads/e359fbfe1991c367d7cd599c7b15a203/0604212v1.pdf"><span class="xref download myst">Quantum Gravity or The Art of Building Spacetime, 2006</span></a>, <a class="reference download internal" download="" href="_downloads/477330e8c765c70905285d27282620d3/de-sitter.pdf"><span class="xref download myst">De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013</span></a> as well as
+others in docs/source/resources/CDT.</p>
 </section>
 <section id="causal-sets">
 <h3>Causal Sets<a class="headerlink" href="#causal-sets" title="Link to this heading">¶</a></h3>

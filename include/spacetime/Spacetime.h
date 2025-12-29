@@ -32,10 +32,10 @@
 #include "topologies/Topology.h"
 #include "observables/Observable.h"
 #include "EdgeList.h"
+#include "Foliation.h"
 #include "VertexList.h"
 #include "Metric.h"
 #include "Simplex.h"
-#include "topologies/Toroid.h"
 
 namespace caset {
 enum class SpacetimeType : uint8_t {
@@ -74,17 +74,25 @@ class Spacetime {
     /// Parameterized constructor.
     /// @param metric_ The metric tensor defining the signature and dimension
     /// @param spacetimeType_ The type of quantum gravity formulation (CDT, Regge, etc.)
-    /// @param alpha_ The fundamental length scale (edge length parameter)
+    /// @param alpha_ The fundamental length scale coefficient, the number of times the length of a timelike edge is the
+    ///   length of a spacelike edge
+    /// @param a_ The fundamental length unit for a spacelike edge.
+    /// @param foliation_ The type of foliation for the spacetime. Preferred means spacelike slices are separated by
+    ///   timelike slices. None means they can be interspersed.
     /// @param topology_ The topology of the spatial slices (default: Toroid)
     Spacetime(
       std::shared_ptr<Metric> metric_,
-      const SpacetimeType spacetimeType_,
+      SpacetimeType spacetimeType_,
       std::optional<double> alpha_,
+      std::optional<double> a_,
+      Foliation foliation_,
       std::optional<std::shared_ptr<Topology> > topology_);
 
     // ========================================
     // Creation Methods
     // ========================================
+
+    std::pair<SimplexPtr, bool> createSimplex(const VertexPtrs &vertices);
 
     /// Creates a simplex \f$ \sigma^k \f$ from explicit vertices and edges.
     /// @param vertices The vertices \f$ \{v_0, \ldots, v_k\} \f$ of the simplex
@@ -102,30 +110,36 @@ class Spacetime {
     /// @return {simplex, wasCreated} pair where wasCreated=true if newly created
     std::pair<SimplexPtr, bool> createSimplex(std::size_t k);
 
+    /// Creates a vertex \f$ v \f$ with the next available ID at the current time.
+    /// @return Shared pointer to the created vertex
+    [[nodiscard]] VertexPtr createVertex() noexcept;
+    [[nodiscard]] VertexPtr createVertex(const std::vector<double> &coords) noexcept;
+
+
     /// Creates a vertex \f$ v \f$ with the given ID at the current time.
     /// @param id The unique identifier for the vertex
     /// @return Shared pointer to the created vertex
-    VertexPtr createVertex(const std::uint64_t id) noexcept;
+    [[nodiscard]] VertexPtr createVertex(std::uint64_t id) const noexcept;
 
     /// Creates a vertex \f$ v \f$ with the given ID and coordinates \f$ (t, x^1, \ldots, x^{n-1}) \f$.
     /// @param id The unique identifier for the vertex
     /// @param coords The spacetime coordinates of the vertex
     /// @return Shared pointer to the created vertex
-    VertexPtr createVertex(const std::uint64_t id, const std::vector<double> &coords) noexcept;
+    [[nodiscard]] VertexPtr createVertex(std::uint64_t id, const std::vector<double> &coords) const noexcept;
 
     /// Creates an edge \f$ e = (v_s, v_t) \f$ with squared length computed from the metric.
     /// The squared length is \f$ \ell^2 = g_{\mu\nu}(x^t - x^s)^\mu(x^t - x^s)^\nu \f$.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
     /// @return Shared pointer to the created edge
-    EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt) const;
+    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt) const noexcept;
 
     /// Creates an edge \f$ e = (v_s, v_t) \f$ with explicit squared length.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
     /// @param squaredLength The squared length \f$ \ell^2 \f$ of the edge
     /// @return Shared pointer to the created edge
-    EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, double squaredLength) const noexcept;
+    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, double squaredLength) const noexcept;
 
     // ========================================
     // Complex Building Methods
@@ -137,117 +151,6 @@ class Spacetime {
     /// Constructs an initial simplicial complex \f$ \mathcal{K}_0 \f$ by iteratively gluing \f$ n \f$ simplices.
     /// @param numSimplices The number of simplices to add to the initial complex
     void build(int numSimplices=3);
-
-    /// This method identifies a pair of faces (one from each simplex) that can be glued together while preserving the
-    /// orientation of the simplices. The method checks for matching orientations and edge lengths to ensure
-    /// compatibility.
-    ///
-    /// For faces \f$ \sigma^{k-1}_1 \subset \sigma^k_{\text{unattached}} \f$ and
-    /// \f$ \sigma^{k-1}_2 \subset \sigma^k_{\text{attached}} \f$, this returns the pair if:
-    /// - They have the same orientation (or complementary orientations)
-    /// - They have compatible timelike/spacelike character
-    /// - \f$ \sigma^{k-1}_2 \f$ is causally available (has < 2 cofaces)
-    ///
-    /// Before simplices are glued into the complex we consider them 'detached', so it doesn't matter if we're attaching
-    /// a (3, 2) or a (2, 3). There's a parity building method, `Simplex::getVerticesWithParityTo(yourFace)`, that finds
-    /// the right order to use when attaching the Simplex to the Simplicial complex.
-    ///
-    /// @param unattachedSimplex A simplex not yet attached to the simplicial complex.
-    /// @param attachedSimplex An attached simplex to which you would like to glue the first. Orientation is based on
-    ///   this simplex.
-    ///
-    /// @return {unattached, attached} faces that can be glued together.
-    [[nodiscard]] OptionalSimplexPtrPair
-    getGluableFaces(const SimplexPtr &unattachedSimplex, const SimplexPtr &attachedSimplex);
-
-    /// Attaches two simplices by identifying corresponding vertices.
-    ///
-    /// Given vertex pairs \f$ \{(v_i, w_i)\}_{i=0}^{k-1} \f$, this method:
-    /// 1. Redirects all external edges from \f$ v_i \f$ to \f$ w_i \f$
-    /// 2. Updates all simplices containing \f$ v_i \f$ to use \f$ w_i \f$ instead
-    /// 3. Removes isolated vertices
-    ///
-    void replaceVertices(
-      const VertexPtrs &oldVertices, const VertexPtrs &replacements
-    );
-
-    ///
-    /// This method is a simplicial isomorphism between two faces. Specifically; it takes two Simplex Face (s),
-    /// \f$ \sigma^{k-1}_{myFace} \f$ and \f$ \sigma^{k-1}_{yourFace} \f$ as inputs and creates a new face
-    /// \f$ \sigma^{k-1}_{newFace} \f$ indicating their adjacency in the simplicial complex while preserving the
-    /// orientation of both their cofaces.
-    ///
-    /// This method runs within the context of an n-dimensional simplicial manifold; each (n-1) simplex (where faces are
-    /// codimension-1) is incident to exactly 2 n-simplices for interior faces and exactly 1 n-simplex for faces along
-    /// the boundary.
-    ///
-    /// Because this method is (causal) orientation-aware; it's intended only to be used when we're building causal
-    /// simplicial complexes.
-    ///
-    /// If any face is shared by 3 or more n-simplices; then the neighborhood of some point becomes interior and is no
-    /// longer homeomorphic to \f$ \mathcal{R}^n \f$ or a half-space
-    /// \f$ \mathcal{R}^{n-1} \times [0, \infty) \f$, (the boundary points) so the spacetime effectively branches,
-    /// causing it to lose it's manifold properties.
-    ///
-    /// The building blocks of a 4D causal simplicial complex are (4, 1) and (3, 2) simplices. The (4, 1) simplex has 4
-    /// vertices on t=t and 1 on t=t + 1. The (3, 2) simplex has 3 vertices on t=t and 2 on t=t + 1. We build out the
-    /// complex by gluing these simplices together along their faces.
-    ///
-    /// The Face (s) or Facets of the simplex are all sets of vertices of cardinality k-1. So for a 4-simplex
-    /// \f$ \sigma^{(1, 4)}_{ab} \f$ we have vertices \f$ \{a_0, a_1, a_2, a_3, b_0\} \f$ and the
-    /// 4-faces are the (ordered) combinations of the 4 vertices, where \f$ a \f$ vertices are at \f$ t=t \f$ and \f$ b \f$
-    /// vertices are at \f$ t=t+1 \f$.
-    ///
-    /// \f[
-    /// \begin{aligned}
-    /// \sigma^{(4, 0)}_0 &= \{a_1, a_2, a_3, b_0\} \\
-    /// \sigma^{(3, 1)}_1 &= \{a_0, a_2, a_3, b_0\} \\
-    /// \sigma^{(3, 1)}_2 &= \{a_0, a_1, a_3, b_0\} \\
-    /// \sigma^{(3, 1)}_3 &= \{a_0, a_1, a_2, b_0\} \\
-    /// \sigma^{(3, 1)}_4 &= \{a_0, a_1, a_2, a_3\}
-    /// \end{aligned}
-    /// \f]
-    ///
-    /// When a face has vertices from both sets \f$ \{a_i \in A\} \f$ and \f$ \{b_i \in B\} \f$; the face is spacelike. When
-    /// it has only vertices from one or the other; it's timelike.
-    ///
-    /// Let \f$ \sigma^{(3, 2)}_{cd} \f$ have vertices \f$ \{c_i \in C \mid i \in [0, 4]\} \f$ and \f$ \{d_i \in D \mid i \in [0, 4]\} \f$
-    /// where vertices of \f$ C \f$ have \f$ t=t \f$ and in \f$ D \f$ they have \f$ t = t+1 \f$. Then \f$ \sigma^{(3, 2)}_{cd} \f$ has
-    /// faces,
-    ///
-    /// \f[
-    /// \{\sigma^{(2, 2)}_0, \sigma^{(2, 2)}_1, \sigma^{(2, 2)}_2, \sigma^{(3, 1)}_3, \sigma^{(3, 1)}_4\} \subset \sigma^{(3, 2)}_{cd}
-    /// \f]
-    ///
-    /// We can only join faces of the same shape, e.g. (3, 1) in this case.
-    ///
-    /// For a detailed picture; see "Quantum Gravity from Causal Dynamical Triangulations: A Review", R. Loll, 2019.
-    /// Figure 1.
-    ///
-    ///
-    /// The process of attaching faces amounts to moving external in-edges and out-edges from the vertices of the
-    /// unattachedFace to the analogous (parity matches) vertices of the attachedFace.
-    ///
-    /// This means we identify the vertices that match, in order. There are two classes of edges now. Those internal to
-    /// the unattachedFace, and those that have a vertex outside the unattachedFace. The internal edges have analogous
-    /// edges in the attachedFace, so we can delete those edges, replacing them with their analogous counterparts in the
-    /// attachedFace. The external edges need to be moved from the unattachedFace vertex to the attachedFace vertex.
-    ///
-    /// @param attachedFace The Face of this Simplex to attach to `unattachedFace` of the other Simplex
-    /// @param unattachedFace The Face of the other Simplex to attach to `attachedFace` of this Simplex.
-    /// @returns {attachedFace, succeeded} The `attachedFace` after attachment and whether the attachment succeeded.
-    std::tuple<SimplexPtr, bool> causallyAttachFaces(const SimplexPtr &attachedFace, const SimplexPtr &unattachedFace);
-
-    /// This method chooses a simplex from the boundary of the simplicial complex to which `unattachedSimplex` can be
-    /// glued. It does this by iterating through the `externalSimplices` and checking for compatible orientations and
-    /// edge lengths.
-    ///
-    /// To the extent the hashing function for vertex fingerprinting is good; this should be pretty well pseudo-random.
-    /// If you want something truly random, though, you should probably implement that.
-    ///
-    /// @param unattachedSimplex The simplex \f$ \sigma \f$ for which to find a gluable face
-    /// @returns A pair of \f$ k-1 \f$ simplices (faces) if a compatible k-simplex was found. None otherwise.
-    OptionalSimplexPtrPair chooseSimplexFacesToGlue(const SimplexPtr &unattachedSimplex);
 
     // ========================================
     // Query Methods
@@ -281,6 +184,11 @@ class Spacetime {
     /// @note This method is for testing only and has poor runtime performance.
     SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
 
+    /// Returns the foliation of the spacetime. Either NONE or PREFERRED. With PREFERRED foliation; each spatial slice
+    /// lies between a time slice and vis versa. Otherwise they can be any-which-a-way.
+    /// @return Foliation::PREFERRED or Foliation::NONE.
+    [[nodiscard]] Foliation getFoliation() const noexcept;
+
     /// Computes the connected components of the vertex graph.
     ///
     /// Uses depth-first search to identify connected components in the graph
@@ -292,12 +200,12 @@ class Spacetime {
     /// Retrieves a simplex from the complex by pointer lookup.
     /// @param simplex The simplex to find
     /// @return The canonical simplex from the complex, or nullptr if not found
-    SimplexPtr getSimplex(SimplexPtr simplex) const;
+    [[nodiscard]] SimplexPtr getSimplex(SimplexPtr simplex) const;
 
     /// Retrieves a simplex from the complex by fingerprint.
     /// @param fingerprint The fingerprint hash \f$ h(\sigma) \f$ of the simplex
     /// @return The simplex with the given fingerprint, or nullptr if not found
-    SimplexPtr getSimplex(std::uint64_t fingerprint) const;
+    [[nodiscard]] SimplexPtr getSimplex(std::uint64_t fingerprint) const;
 
     // ========================================
     // Manipulation & Helper Methods
@@ -307,42 +215,13 @@ class Spacetime {
     /// @return The new current time \f$ t \leftarrow t + 1 \f$
     double incrementTime() noexcept;
 
-    /// Redirects all incoming edges to a vertex.
-    ///
-    /// For each edge \f$ e = (u, v_{\text{from}}) \f$, creates a new edge \f$ e' = (u, v_{\text{to}}) \f$
-    /// and removes the old edge.
-    ///
-    /// @param from The source vertex \f$ v_{\text{from}} \f$ whose in-edges will be moved
-    /// @param to The target vertex \f$ v_{\text{to}} \f$ that will receive the in-edges
-    void moveInEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
-
-    /// Redirects all outgoing edges from a vertex.
-    ///
-    /// For each edge \f$ e = (v_{\text{from}}, u) \f$, creates a new edge \f$ e' = (v_{\text{to}}, u) \f$
-    /// and removes the old edge.
-    ///
-    /// @param from The source vertex \f$ v_{\text{from}} \f$ whose out-edges will be moved
-    /// @param to The target vertex \f$ v_{\text{to}} \f$ that will receive the out-edges
-    void moveOutEdgesFromVertex(const VertexPtr &from, const VertexPtr &to);
-
     /// Removes a vertex if it has no incident edges.
     ///
     /// Checks if \f$ \deg(v) = 0 \f$ and removes \f$ v \f$ from the vertex list if so.
     ///
     /// @param vertex The vertex \f$ v \f$ to potentially remove
     /// @return true if the vertex was removed, false if it has incident edges
-    bool removeIfIsolated(const VertexPtr &vertex);
-
-    /// Embeds the simplicial complex in Euclidean space using force-directed layout.
-    ///
-    /// Uses gradient descent to find coordinates \f$ \{x_i\} \f$ that minimize:
-    /// \f[
-    /// L = \sum_{e_{ij} \in E} \left( \|x_i - x_j\|^2 - \ell_{ij}^2 \right)^2
-    /// \f]
-    ///
-    /// @param dimensions The embedding dimension \f$ n \f$
-    /// @param epsilon Convergence threshold for the optimization
-    void embedEuclidean(int dimensions, double epsilon);
+    [[nodiscard]] bool removeIfIsolated(const VertexPtr &vertex) const noexcept;
 
     /// Adds an observable to track during evolution.
     ///
@@ -366,6 +245,38 @@ class Spacetime {
     /// @return The registered simplex
     SimplexPtr registerSimplex(const SimplexPtr &simplex, bool internal);
 
+
+    void reserve(int nSimplices);
+
+    /// Alpha is the coefficient that determines the ratio of timelike edge lengths to space like edge lengths. That
+    /// relationship is
+    ///
+    /// \f[
+    ///  l_s = +a
+    /// \f]
+    /// and
+    /// \f[
+    ///  l_t = - \alpha a
+    /// \f]
+    ///
+    /// @return The coefficient representing the number of times the timelike length is compared to the spatial length.
+    [[nodiscard]] double getAlpha() const noexcept;
+
+    /// `a` is the coefficient that sets the fixed edge length for spacelike edges according to
+    ///
+    /// \f[
+    ///  l_s = +a
+    /// \f]
+    /// for spacelike edges and
+    /// \f[
+    ///  l_t = - \alpha a
+    /// \f]
+    ///
+    /// for timelike edges.
+    ///
+    /// @return The constant spacelike edge length.
+    [[nodiscard]] double getA() const noexcept;
+
     /// Unregisters a simplex from the spacetime's internal data structures.
     ///
     /// Removes the simplex from all indexed sets. This should be called before
@@ -373,6 +284,7 @@ class Spacetime {
     ///
     /// @param simplex The simplex \f$ \sigma \f$ to unregister
     void unregisterSimplex(const SimplexPtr &simplex);
+
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
@@ -380,6 +292,8 @@ class Spacetime {
     IdType vertexIdCounter = 0;
     SpacetimeType spacetimeType;
     double alpha = 1.;
+    double a = 1.;
+    Foliation foliation = Foliation::PREFERRED;
     std::shared_ptr<Metric> metric;
     std::shared_ptr<Topology> topology;
     std::uint64_t currentTime = 0;
@@ -393,16 +307,9 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> externalSimplicesByFacialOrientation{};
+    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq>
+    externalSimplicesByFacialOrientation{};
 
-    ///
-    /// These are simplices that are fully internal to the simplicial complex. They have no external faces, and hence
-    /// cannot be glued to other simplices.
-    ///
-    /// A Simplex becomes _internal_ when all it's _external_ faces have been glued. At that point it is no longer
-    /// relevant to store that simplex by the orientation of any given face, so _internal_ simplices are stored by the
-    /// orientation of the Simplex itself.
-    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq> internalSimplicesByOrientation{};
     std::vector<std::shared_ptr<Observable> > observables{};
 };
 } // caset

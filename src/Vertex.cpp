@@ -33,14 +33,20 @@
 #include <sstream>
 
 namespace caset {
-Vertex::Vertex() noexcept { id = 0; }
+Vertex::Vertex() noexcept { id = 0; simplices.reserve(7); }
 Vertex::Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords),
-  fingerprint({id_}) {
-}
-Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) {
-}
+  fingerprint({id_}) { simplices.reserve(7); }
+Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) { simplices.reserve(7);}
 
 std::uint64_t Vertex::getId() const noexcept { return id; }
+
+void Vertex::setTime(double time) noexcept {
+  if (coordinates.empty()) {
+    coordinates = std::vector<double>();
+    coordinates.push_back(time);
+  }
+  coordinates[0] = time;
+}
 
 [[nodiscard]] double Vertex::getTime() const {
   if (coordinates.empty()) {
@@ -115,8 +121,7 @@ Vertex::moveEdgesToImpl(
   EdgePtrSet &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
   const char *directionStr = (direction == EdgeDirection::In) ? "in-edge" : "out-edge";
 
-  for (auto oldEdge : edgesToMove) {
-
+  for (auto &oldEdge : edgesToMove) {
     const auto &targetVertex = oldEdge->getTarget();
     const auto &sourceVertex = oldEdge->getSource();
 
@@ -194,10 +199,6 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
   if (simplex == nullptr || simplex.get() == nullptr) {
     CLOG(CRITICAL_LEVEL, "You passed a null simplex!");
     throw std::runtime_error("You passed a null simplex!");
-  }
-  if (this == nullptr) {
-    CLOG(CRITICAL_LEVEL, "vertex is null!");
-    throw std::runtime_error("vertex is null!");
   }
   checkDuplicates("Duplicated before emplacing a new simplex.");
 #endif

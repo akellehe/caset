@@ -25,19 +25,10 @@
 #include "Fingerprint.h"
 #include "ForwardDeclarations.h"
 #include "EdgeKey.h"
-#include "Vertex.h"
 
-#include <unordered_map>
-#include <vector>
 #include <random>
 #include <memory>
 
-inline double random_uniform(double min = -1.0, double max = 1.0) {
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
-  std::uniform_real_distribution<double> dist(min, max);
-  return dist(gen);
-}
 
 namespace caset {
 /// # Edge Disposition

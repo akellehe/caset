@@ -19,12 +19,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include "SimplexOrientation.h"
 #include "spacetime/topologies/Toroid.h"
-#include <iostream>
+#include "spacetime/Spacetime.h"
+#include "utils.h"
+#include <deque>
+#include <ATen/core/interned_strings.h>
 
 namespace caset {
-void Toroid::build(Spacetime *spacetime) {
-  std::cout << "Building toroid" << std::endl;
-
+void Toroid::build(Spacetime *spacetime, int nSimplices) {
+  auto dimensions = spacetime->getMetric()->getSignature()->getDimensions();
+  SimplexOrientation orientation{1, static_cast<std::uint8_t>(dimensions - 1)};
+  spacetime->reserve(nSimplices);
+  auto [seed, created] = spacetime->createSimplex(orientation.numeric());
+  const auto &facets = seed->getFacets();
+  std::deque<SimplexPtr> exteriorFacets{facets.begin(), facets.end()};
+  auto complexSize = 1;
+  std::vector<double> plusT{1.};
+  std::vector<double> minusT{-1};
+  while (complexSize < nSimplices) {
+    SimplexPtr &exteriorFacet = exteriorFacets.front();
+    exteriorFacets.pop_front();
+    if (exteriorFacet->isTimelike()) continue;
+    if (random_uniform() > 0) {
+      auto vertex = spacetime->createVertex(plusT);
+      auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
+      exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
+      ++complexSize;
+    } else {
+      auto vertex = spacetime->createVertex(minusT);
+      auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
+      exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
+      ++complexSize;
+    }
+  }
 }
 }
