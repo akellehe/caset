@@ -172,7 +172,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
       </label>
     </div>
@@ -227,7 +227,7 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
           </label>
         </div>
@@ -273,7 +273,12 @@ Elapsed<span class="w"> </span>time:<span class="w">  </span><span class="m">111
 ----------------------------------------------
 </pre></div>
 </div>
+<p>And that will output a nice plot like this:</p>
 <p><img alt="Plot of a 3-complex of 10 simplexes" src="_images/plot4D.png" /></p>
+<section id="customizing-the-spacetime">
+<h2>Customizing the Spacetime<a class="headerlink" href="#customizing-the-spacetime" title="Link to this heading">¶</a></h2>
+<p>The default topology is a <code class="docutils literal notranslate"><span class="pre">Toroid</span></code>, the default signature is Lorentzian, and the default edge length is 1 (for spacelike
+edges) or -1 (for timelike edges).</p>
 <p>You can adjust the behavior of that <code class="docutils literal notranslate"><span class="pre">Spacetime</span></code> by defining a <code class="docutils literal notranslate"><span class="pre">Metric</span></code> with a <code class="docutils literal notranslate"><span class="pre">Signature</span></code> as well as setting an
 <code class="docutils literal notranslate"><span class="pre">alpha</span></code> value to use as the default edge length.</p>
 <p>The default <code class="docutils literal notranslate"><span class="pre">Topology</span></code> is a <code class="docutils literal notranslate"><span class="pre">Toroid</span></code>, but you can choose others or define your own. The <code class="docutils literal notranslate"><span class="pre">Topology</span></code> is responsible for
@@ -283,6 +288,7 @@ constructing your initial spacetime as a lattice of <code class="docutils litera
 <span class="n">simplices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">getVolume</span><span class="p">()</span>
 </pre></div>
 </div>
+</section>
 </section>
 
         </article>
@@ -328,8 +334,27 @@ constructing your initial spacetime as a lattice of <code class="docutils litera
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Getting Started</a><ul>
+<li><a class="reference internal" href="#customizing-the-spacetime">Customizing the Spacetime</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>

@@ -717,6 +717,15 @@ exclusions to see the entire interface.</p>
 </dl>
 </dd></dl>
 
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK5caset9Spacetime20isSimplicialManifoldEv">
+<span id="_CPPv3NK5caset9Spacetime20isSimplicialManifoldEv"></span><span id="_CPPv2NK5caset9Spacetime20isSimplicialManifoldEv"></span><span id="caset::Spacetime::isSimplicialManifoldC"></span><span class="target" id="classcaset_1_1_spacetime_1a253b3bbbad8c76112e3814270e16bc69"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">isSimplicialManifold</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><a class="headerlink" href="#_CPPv4NK5caset9Spacetime20isSimplicialManifoldEv" title="Link to this definition">¶</a><br /></dt>
+<dd><p>In “Quantum Geometry and Effective Topology”, by J. </p>
+<p>van der Duin et. al as well as <a class="reference internal" href="#classcaset_1_1_spacetime"><span class="std std-ref">Spacetime</span></a> foam: a review by S. Carlip; a simplicial manifold is defined as a simplicial complex for which the <em>link</em> of each of it’s i-simplices <span class="math notranslate nohighlight">\( i \in \[0, 1, ..., d-1\] \)</span> is homeomorphic to the sphere <span class="math notranslate nohighlight">\( S^{d - i - 1} \)</span>. This is the simplicial analogue to the manifold condition that the neighborhood of each point is homeomorphic to an open subset of <span class="math notranslate nohighlight">\( \mathcal{R}^d \)</span>.</p>
+<p>This is another way of stating the condition that there can be no <em>interior</em> simplices. That point can be a little confusing, so here is a bit of clarification. Imagine joining 2-d equilateral triangles clockwise to form a circular pattern with the tip of the triangle in the center. When you add the last triangle to close the circle it may seem like adding another triangle would be internal to the complex because it now overlaps with another triangle. This is not the case! What you are NOT allowed to do is add a triangle to any edge already joined to two triangles. THAT is what creates an internal triangle. The complex overlapping on itself is very much allowed and even necessary.</p>
+<p>This method checks each link in the complex and asserts that this is the case. </p>
+</dd></dl>
+
 </div>
 <div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-private-members">Private Members</p>
@@ -1270,6 +1279,47 @@ exclusions to see the entire interface.</p>
 <dd class="field-even"><p></p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK5caset7Simplex7getLinkEv">
+<span id="_CPPv3NK5caset7Simplex7getLinkEv"></span><span id="_CPPv2NK5caset7Simplex7getLinkEv"></span><span id="caset::Simplex::getLinkC"></span><span class="target" id="classcaset_1_1_simplex_1ab84472bfaa3435dc0ca3bcc06de2a48b"></span><span class="n"><span class="pre">SimplexPtr</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getLink</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK5caset7Simplex7getLinkEv" title="Link to this definition">¶</a><br /></dt>
+<dd><p>The <em>link</em> of a i-simplex, <span class="math notranslate nohighlight">\( \sigma \)</span> in a k-complex, <span class="math notranslate nohighlight">\( K \)</span> should be homeomorphic to a sphere of dimension k - i - 1. </p>
+<p>The link is defined as:</p>
+<p><div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[Lk_K(\sigma) = \{ \tau \subseteq \eta \setminus \sigma | \eta \in St_K(\sigma) \}
+\]</div>
+</div>
+</p>
+<p>In plain-ish english:</p>
+<p><ol class="upperalpha simple">
+<li><p>Restrict to the star <span class="math notranslate nohighlight">\( \eta \in St_K(\sigma) \)</span></p></li>
+<li><p>Remove <span class="math notranslate nohighlight">\( \sigma \)</span> from those simplices ( <span class="math notranslate nohighlight">\( \eta \setminus \sigma \)</span>)</p></li>
+<li><p>Take the faces of what remains ( <span class="math notranslate nohighlight">\( \tau \subseteq \eta \setminus \sigma \)</span>)</p></li>
+</ol>
+</p>
+<p>Examples:</p>
+<p>In the case of a vertex (0-simplex) in a 2-complex (2D bunch of triangles) we have 2 - 0 - 1 = 1. So the link is a 1-sphere (circle) around the vertex formed by the edges and vertices connected to it after it is removed. So we find all simplices that are connected to the vertex. Then we remove the vertex and all edges connected to it. If what remains is a cycle, then we’ve verified the manifold condition.</p>
+<p>In the case of a vertex (0-simplex) in a 3-complex; we should have a 2-sphere (surface of a ball) formed by the triangles and edges left behind after removing the vertex and all it’s edges. We should be able to get to any point on the surface from any point on the surface to test the manifold-ness.</p>
+<p>In the case of a vertex (0-simplex) in a 4-complex; we should have a 3-sphere. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK5caset7Simplex7getStarEv">
+<span id="_CPPv3NK5caset7Simplex7getStarEv"></span><span id="_CPPv2NK5caset7Simplex7getStarEv"></span><span id="caset::Simplex::getStarC"></span><span class="target" id="classcaset_1_1_simplex_1a3cecc0ef53012a1352524202ba0d48bf"></span><span class="n"><span class="pre">SimplexPtr</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getStar</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK5caset7Simplex7getStarEv" title="Link to this definition">¶</a><br /></dt>
+<dd><p>From Rotman’s “An Introduction to Algebraic Topology”, 4th printing, 1998 p. </p>
+<p>135; Let <span class="math notranslate nohighlight">\( K \)</span> be a simplicial complex. Let <span class="math notranslate nohighlight">\( Vert(K) \)</span> be the vertices of <span class="math notranslate nohighlight">\( K \)</span> and let <span class="math notranslate nohighlight">\( p \in Vert(K) \)</span>. Then the <em>star</em> of <span class="math notranslate nohighlight">\( p \)</span> denoted <span class="math notranslate nohighlight">\( St(p) \)</span> is defined by   <div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[\begin{split}St(p) = \bigcup_{\substack{s \in K \\ p \in \mathrm{Vert}(s)}} s^\circ \subset |K|
+\end{split}\]</div>
+</div>
+</p>
 </dd></dl>
 
 <dl class="cpp function">
@@ -2313,6 +2363,7 @@ CDT does not treat that case. I’m making that up to fill in the gaps. If there
 <li><a class="reference internal" href="#_CPPv4NK5caset9Spacetime8getAlphaEv"><code class="docutils literal notranslate"><span class="pre">getAlpha()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK5caset9Spacetime4getAEv"><code class="docutils literal notranslate"><span class="pre">getA()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset9Spacetime17unregisterSimplexERK10SimplexPtr"><code class="docutils literal notranslate"><span class="pre">unregisterSimplex()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK5caset9Spacetime20isSimplicialManifoldEv"><code class="docutils literal notranslate"><span class="pre">isSimplicialManifold()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset9Spacetime8edgeListE"><code class="docutils literal notranslate"><span class="pre">edgeList</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset9Spacetime10vertexListE"><code class="docutils literal notranslate"><span class="pre">vertexList</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset9Spacetime15vertexIdCounterE"><code class="docutils literal notranslate"><span class="pre">vertexIdCounter</span></code></a></li>
@@ -2393,6 +2444,8 @@ CDT does not treat that case. I’m making that up to fill in the gaps. If there
 <li><a class="reference internal" href="#_CPPv4NK5caset7SimplexeqERK7Simplex"><code class="docutils literal notranslate"><span class="pre">operator==()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK5caset7SimplexeqERKNSt10shared_ptrI7SimplexEE"><code class="docutils literal notranslate"><span class="pre">operator==()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset7Simplex13replaceVertexERK9VertexPtrRK9VertexPtr"><code class="docutils literal notranslate"><span class="pre">replaceVertex()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK5caset7Simplex7getLinkEv"><code class="docutils literal notranslate"><span class="pre">getLink()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK5caset7Simplex7getStarEv"><code class="docutils literal notranslate"><span class="pre">getStar()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK5caset7Simplex13isInitializedEv"><code class="docutils literal notranslate"><span class="pre">isInitialized()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset7Simplex11fingerprintE"><code class="docutils literal notranslate"><span class="pre">fingerprint</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N5caset7Simplex11initializedE"><code class="docutils literal notranslate"><span class="pre">initialized</span></code></a></li>

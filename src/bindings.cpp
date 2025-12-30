@@ -143,11 +143,14 @@ PYBIND11_MODULE(caset, m) {
            static_cast<bool (Simplex::*)(const SimplexPtr &) const noexcept>(&Simplex::operator==))
       .def("__eq__",
            static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==))
+      .def("cone", &Simplex::cone)
       .def("getCofaces", &Simplex::getCofaces)
       .def("getEdges", &Simplex::getEdges)
       .def("getFacets", &Simplex::getFacets)
+      .def("getLink", &Simplex::getLink)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
+      .def("getStar", &Simplex::getStar)
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
       .def("getVertices", &Simplex::getVertices)
       .def("hasVertex", &Simplex::hasVertex)
@@ -224,7 +227,10 @@ PYBIND11_MODULE(caset, m) {
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t, const std::vector<double> &) const noexcept>(
              &Spacetime::createVertex))
-      .def("createSimplex",
+    .def("createVertex",
+         static_cast<VertexPtr (Spacetime::*)(const std::vector<double> &) noexcept>(
+           &Spacetime::createVertex))
+    .def("createSimplex",
            py::overload_cast<const std::vector<VertexPtr> &>(
              &Spacetime::createSimplex),
            py::arg("vertices"))

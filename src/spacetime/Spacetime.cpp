@@ -419,4 +419,5 @@ void Spacetime::reserve(int nSimplices) {
   vertexList->reserve(nSimplices);
 }
 
+
 } // caset

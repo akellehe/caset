@@ -273,6 +273,40 @@ class TestSimplex(unittest.TestCase):
             for coface in cofaces:
                 self.assertTrue(coface.isCofaceTo(facet))
 
+    def test_coning_adds_cofaces_to_facets(self):
+        st = Spacetime()
+        s1, created = st.createSimplex((1, 4))
+        facets = s1.getFacets()
+        for facet in facets:
+            cofaces = facet.getCofaces()
+            self.assertEqual(len(cofaces), 1)
+            for coface in cofaces:
+                self.assertTrue(coface.isCofaceTo(facet))
+
+        v5 = st.createVertex(5, [0])
+        sharedFacet = s1.getFacets()[0]
+        s2, newFacets = sharedFacet.cone(v5)
+
+        self.assertIsNotNone(sharedFacet)
+        self.assertIn(sharedFacet, s2.getFacets())
+        self.assertIn(sharedFacet, s1.getFacets())
+        self.assertEqual(len(sharedFacet.getCofaces()), 2)
+        self.assertIn(s1, sharedFacet.getCofaces())
+        self.assertIn(s2, sharedFacet.getCofaces())
+
+        for f1 in s1.getFacets():
+            if f1 != sharedFacet:
+                self.assertNotIn(f1, s2.getFacets())
+                self.assertEqual(len(f1.getCofaces()), 1)
+                self.assertEqual(list(f1.getCofaces())[0], s1)
+
+        for f2 in s2.getFacets():
+            if f2 != sharedFacet:
+                self.assertNotIn(f2, s1.getFacets())
+                self.assertEqual(len(f2.getCofaces()), 1)
+                self.assertEqual(list(f2.getCofaces())[0], s2)
+
+
 
 if __name__ == '__main__':
     unittest.main()

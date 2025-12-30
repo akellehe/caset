@@ -14,7 +14,7 @@ CDT tends to work with a "preferred foliation", meaning that spatial slices of s
 spatial slice occurs between two temporal slices. This means in between every layer of spatial (i.e. spacelike) edges 
 there is a layer of only temporal (i.e. timelike) edges.
 
-Some of the later work in CDT explores models _without_ preferred foliation while maintaining contributions around fixed 
+Some of the later work in CDT, see ( [De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, S. Jordan, R. Loll 2013]()) explores models _without_ preferred foliation while maintaining contributions around fixed 
 edge lengths or fixed ratios of temporal and spatial edge lengths.
 
 ## Why the Lorentzian Metric is Important

@@ -43,8 +43,14 @@ Elapsed time:  1.013916015625
 Elapsed time:  1117.57275390625
 ----------------------------------------------
 ```
+And that will output a nice plot like this: 
 
 ![Plot of a 3-complex of 10 simplexes](assets/plot4D.png)
+
+### Customizing the Spacetime
+
+The default topology is a `Toroid`, the default signature is Lorentzian, and the default edge length is 1 (for spacelike 
+edges) or -1 (for timelike edges).
 
 You can adjust the behavior of that `Spacetime` by defining a `Metric` with a `Signature` as well as setting an 
 `alpha` value to use as the default edge length.

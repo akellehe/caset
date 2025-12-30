@@ -74,13 +74,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     void initialize(const std::shared_ptr<Simplex> &simplex);
 
     // ==================== String Representation ====================
-#ifdef CASET_VERBOSE
     std::string toString() const noexcept;
-#else
-    std::string toString() const noexcept {
-      return "";
-    }
-#endif
 
     // ==================== Basic Getters ====================
     /// Each simplex has an associated _orientation_ in the case you're preserving causality with your work. You can
@@ -303,6 +297,54 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param newVertex The vertex with which to replace it.
     /// @return
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
+
+    /// The _link_ of a i-simplex, \f$ \sigma \f$ in a k-complex, \f$ K \f$ should be homeomorphic to a sphere of
+    /// dimension k - i - 1. The link is defined as:
+    ///
+    /// \f[
+    /// Lk_K(\sigma) = \{ \tau \subseteq \eta \setminus \sigma | \eta \in St_K(\sigma) \}
+    /// \f]
+    ///
+    /// In plain-ish english:
+    ///
+    ///   1. Restrict to the star \f$ \eta \in St_K(\sigma) \f$
+    ///   2. Remove \f$ \sigma \f$ from those simplices (\f$ \eta \setminus \sigma \f$)
+    ///   3. Take the faces of what remains (\f$ \tau \subseteq \eta \setminus \sigma \f$)
+    ///
+    /// Examples:
+    ///
+    /// In the case of a vertex (0-simplex) in a 2-complex (2D bunch of triangles) we have 2 - 0 - 1 = 1. So the link
+    /// is a 1-sphere (circle) around the vertex formed by the edges and vertices connected to it after it is removed.
+    /// So we find all simplices that are connected to the vertex. Then we remove the vertex and all edges connected to
+    /// it. If what remains is a cycle, then we've verified the manifold condition.
+    ///
+    /// In the case of a vertex (0-simplex) in a 3-complex; we should have a 2-sphere (surface of a ball) formed by the
+    /// triangles and edges left behind after removing the vertex and all it's edges. We should be able to get to any
+    /// point on the surface from any point on the surface to test the manifold-ness.
+    ///
+    /// In the case of a vertex (0-simplex) in a 4-complex; we should have a 3-sphere.
+    /// @return
+    SimplexPtr getLink();
+
+    SimplexPtr remove(SimplexPtr &simplex);
+
+    /// From Rotman's "An Introduction to Algebraic Topology", 4th printing, 1998 p. 135:
+    ///
+    /// Let \f$ K \f$ be a simplicial complex. Let \f$ Vert(K) \f$ be the vertices of \f$ K \f$ and let
+    /// \f$ p \in Vert(K) \f$. Then the _star_ of \f$ p \f$ denoted \f$ St(p) \f$ is defined by
+    ///
+    /// \f[
+    /// St(p) = \bigcup_{\substack{s \in K \\ p \in \mathrm{Vert}(s)}} s^\circ \subset |K|
+    /// \f]
+    ///
+    /// This notion extends to entire simplices by returning all simplices containing ALL the vertices of this simplex.
+    ///
+    /// @returns The union of simplices containing all this simplex's vertices.
+    SimplexPtr getStar();
+
+    /// This method assumes the vertices of the simplex have already had their coordinates set by e.g. embed_euclidean
+    /// in python. It creates a 3-D matplotlib plot of the simplex with timelike edges in red and spacelike edges in blue.
+    void plot() const;
 
     bool isInitialized() const noexcept;
   private:

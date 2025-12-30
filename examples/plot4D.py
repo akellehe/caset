@@ -31,8 +31,10 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 from caset import Spacetime, Simplex
 
+def to4(t, x=0, y=0, z=0):
+    return (t, x, y, z)
 
-def project4_to_3(t, x, y, z, alpha=0.7, beta=0.7):
+def project4_to_3(t, x=0, y=0, z=0, alpha=0.7, beta=0.7):
     # Normalize so alpha^2 + beta^2 ~= 1 if you care:
     norm = (alpha ** 2 + beta ** 2) ** 0.5
     alpha /= norm
@@ -179,12 +181,11 @@ def embed_euclidean(st, dimensions=4, epsilon=1e-10):
     )
 
 
-
 # Label Vertices:
 def label_vertices(st, ax):
     for vertex in st.getVertexList().toVector():
         x, y, z = project4_to_3(*vertex.getCoordinates())
-        _t, _x, _y, _z = vertex.getCoordinates()
+        _t, _x, _y, _z = to4(*vertex.getCoordinates())
         ax.text(
             x, y, z,
             f"({_x:.1f},{_y:.1f},{_z:.1f},{_t:.1f})",
@@ -234,16 +235,19 @@ def build(args):
     print("Elapsed time: ", end - start)
     print("----------------------------------------------")
 
-    # Plot:
+    plot_spacetime(st)
+
+
+def plot_spacetime(spacetime):
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    timelike_lc, spacelike_lc = label_bounds_and_get_edges(st, ax)
+    timelike_lc, spacelike_lc = label_bounds_and_get_edges(spacetime, ax)
     ax.add_collection(timelike_lc)
     ax.add_collection(spacelike_lc)
 
-    label_vertices(st, ax)
-    label_edges(st, ax)
+    label_vertices(spacetime, ax)
+    label_edges(spacetime, ax)
 
     plt.show()
 
@@ -256,16 +260,18 @@ def label_bounds_and_get_edges(st, ax):
     ymin, ymax = float("inf"), float("-inf")
     zmin, zmax = float("inf"), float("-inf")
     for edge in (st.getEdgeList().toVector()):
-        source = vlist.get(edge.getSource().getId())
-        target = vlist.get(edge.getTarget().getId())
+        source = edge.getSource()
+        target = edge.getTarget()
 
         x1, y1, z1 = project4_to_3(*source.getCoordinates())
         x2, y2, z2 = project4_to_3(*target.getCoordinates())
 
         xmin = min(xmin, x1, x2)
         xmax = max(xmax, x1, x2)
+
         ymin = min(ymin, y1, y2)
         ymax = max(ymax, y1, y2)
+
         zmin = min(zmin, z1, z2)
         zmax = max(zmax, z1, z2)
 
@@ -277,6 +283,7 @@ def label_bounds_and_get_edges(st, ax):
     ax.set_xlim(xmin - 1, xmax + 1)
     ax.set_ylim(ymin - 1, ymax + 1)
     ax.set_zlim(zmin - 1, zmax + 1)
+
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")

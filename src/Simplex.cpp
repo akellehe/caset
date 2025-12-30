@@ -181,12 +181,6 @@ void Simplex::initialize(const SimplexPtr &simplex) {
   // We have to register AFTER the fingerprint is set:
   registerToVertices(simplex);
   initialized = true;
-
-  if (ti != tf) {
-    CLOG(INFO_LEVEL, "ti != tf: ", std::to_string(ti), " != ", std::to_string(tf), " for ", toString());
-  } else {
-    CLOG(INFO_LEVEL, "ti == tf: ", std::to_string(ti), " != ", std::to_string(tf), " for ", toString());
-  }
 }
 
 double Simplex::getTi() const noexcept {
@@ -203,23 +197,42 @@ void Simplex::registerToVertices(const SimplexPtr &simplex) {
   }
 }
 
-#ifdef CASET_VERBOSE
+// #ifdef CASET_VERBOSE
 std::string Simplex::toString() const noexcept {
+  if (!isInitialized()) {
+    CLOG(DEBUG_LEVEL, "Simplex is not initialized!");
+    return "Simplex is not initialized!";
+  }
+  CLOG(DEBUG_LEVEL, "Getting orientation...");
   std::stringstream sigmaLabel;
   sigmaLabel << std::to_string(getOrientation().getK()) << "-";
   sigmaLabel << "\\sigma";
 
+  CLOG(DEBUG_LEVEL, "Formatting orientation...");
   std::stringstream orientationStr;
   orientationStr << "^{(" << std::to_string(std::get<0>(getOrientation().numeric())) << "/";
   orientationStr << std::to_string(std::get<1>(getOrientation().numeric())) << ")}";
 
-  std::string fp = std::to_string(fingerprint.fingerprint());
-  std::string fpShort = fp.substr(0, 3) + fp.substr(fp.size() - 3, 3);
+  CLOG(DEBUG_LEVEL, "Getting fingerprint...");
+  IdType fp = fingerprint.fingerprint();
+  std::string fpString = std::to_string(fingerprint.fingerprint());
+  CLOG(DEBUG_LEVEL, "Converted to string; ", fpString);
+  std::string fpShort{""};
+  if (fpString.size() < 6) {
+    fpShort = std::string(6 - fpString.size(), '0') + fpString;
+  } else {
+    fpShort = fpString.substr(0, 3) + fpString.substr(fpString.size() - 3, 3);
+  }
   std::stringstream fpStr;
   fpStr << "_{" << fpShort << "}";
 
   std::stringstream vertexStr;
   std::vector<IdType> vids{};
+  CLOG(DEBUG_LEVEL, "Getting vertices...");
+  if (vertices.empty()) {
+    CLOG(DEBUG_LEVEL, "Simplex has no vertices!");
+    return "Simplex has no vertices!";
+  }
   for (const auto &v : vertices) vids.push_back(v->getId());
   std::sort(vids.begin(), vids.end());
   for (const auto &v : vids) {
@@ -230,10 +243,13 @@ std::string Simplex::toString() const noexcept {
   }
 
   std::stringstream ss;
+  CLOG(DEBUG_LEVEL, "Concatenating...");
   ss << "<" << sigmaLabel.str() << orientationStr.str() << fpStr.str() << " " << vertexStr.str() << ">";
+
+  CLOG(DEBUG_LEVEL, "Converting to latex...");
   return latexToUtf8(ss.str());
 }
-#endif
+// #endif
 
 [[nodiscard]] SimplexOrientation Simplex::getOrientation() const noexcept {
   return orientation;
@@ -544,8 +560,11 @@ bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
 }
 
 std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
+  CLOG(INFO_LEVEL, "Getting signature...");
   auto signature = spacetime->getMetric()->getSignature();
+  CLOG(INFO_LEVEL, "Getting foliation");
   auto foliation = spacetime->getFoliation();
+  CLOG(INFO_LEVEL, "Checking sigtype");
   if (signature->getSignatureType() == SignatureType::Lorentzian) {
     // We have to preserve causality. That means if we cone to e.g. a (1, 3) facet (one vertex at \f$ t \f$, 3 at
     // \f$ t+1 \f$) with a (1, 4) coface; then the new simplex has to be a (2, 3) simplex with (2, 3) - (1, 3) = (1, 0)
@@ -560,7 +579,12 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
     // at \f$ t \f$ . So we need to add the vertex with which we cone at \f$ t = t+1 \f$ to make the new coface a (2, 2)
     // simplex.
     if (foliation == Foliation::PREFERRED) {
+      CLOG(INFO_LEVEL, "Preferred foliation, getting numeric orientation");
       auto [facet_ti, facet_tf] = getOrientation().numeric();
+      if (cofaces.empty()) {
+        CLOG(CRITICAL_LEVEL, "Coface was not a facet! Cannot cone from a simplex that is not a facet (it had no cofaces): ", toString());
+        throw std::runtime_error("Cannot cone from a simplex that is not a facet (it had no cofaces).");
+      }
       auto [coface_ti, coface_tf] = (*cofaces.begin())->getOrientation().numeric();
       if (coface_ti > facet_ti) {
         // Need an extra tf vertex.
@@ -586,10 +610,69 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
   auto myFingerprint = fingerprint.fingerprint();
   for (const auto &f : kSimplex->getFacets()) {
     if (f->fingerprint.fingerprint() != myFingerprint) {
-      facets.push_back(f);
+      newFacets.push_back(f);
     }
   }
-  return {kSimplex, facets};
+  addCoface(kSimplex);
+  return {kSimplex, newFacets};
+}
+
+SimplexPtr Simplex::getStar() {
+#ifdef CASET_ASSERTIONS
+  if (cofaces.empty()) {
+    CLOG(WARN_LEVEL, "No cofaces on a simplex for which you requested the star!");
+    return {};
+  }
+  CLOG(INFO_LEVEL, "Processing ", cofaces.size(), " cofaces");
+#endif
+
+  SimplexPtrSet cofacesToProcess{};
+  VertexPtrSet starVertexSet{};
+  EdgePtrSet starEdgeSet{};
+  for (const auto &f : getFacets()) {
+    for (const auto &c : f->getCofaces()) {
+      if (cofacesToProcess.contains(c)) continue;
+      cofacesToProcess.insert(c);
+      for (const auto &v : c->getVertices()) {
+        starVertexSet.insert(v);
+      }
+      for (const auto &e : c->getEdges()) {
+        starEdgeSet.insert(e);
+      }
+    }
+  }
+  Edges starEdges{starEdgeSet.begin(), starEdgeSet.end()};
+  VertexPtrs starVertices{starVertexSet.begin(), starVertexSet.end()};
+
+  auto [star, created] = spacetime->createSimplex(starVertices, starEdges);
+  return star;
+}
+
+SimplexPtr Simplex::remove(SimplexPtr &simplex) {
+  std::vector<VertexPtr> newVertices{};
+  Edges newEdges{};
+  for (const auto &v : getVertices()) {
+    if (!hasVertex(v)) newVertices.push_back(v);
+  }
+  for (const auto &e : getEdges()) {
+    if (!simplex->hasVertex(e->getSource()) && !simplex->hasVertex(e->getTarget())) newEdges.push_back(e);
+  }
+  auto [simplexPtr, created] = spacetime->createSimplex(newVertices, newEdges);
+  return simplexPtr;
+}
+
+SimplexPtr Simplex::getLink() {
+  CLOG(INFO_LEVEL, "Getting star...");
+  SimplexPtr star = getStar();
+  CLOG(INFO_LEVEL, "Removing simplex...");
+  auto shared = shared_from_this();
+  auto reduced = star->remove(shared);
+  CLOG(INFO_LEVEL, "Done.");
+  return reduced;
+}
+
+void Simplex::plot() const {
+  auto pyplot = pybind11::module::import("matplotlib.pyplot");
 }
 
 }

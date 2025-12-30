@@ -285,6 +285,22 @@ class Spacetime {
     /// @param simplex The simplex \f$ \sigma \f$ to unregister
     void unregisterSimplex(const SimplexPtr &simplex);
 
+    /// In "Quantum Geometry and Effective Topology", by J. van der Duin et. al as well as Spacetime foam: a review by
+    /// S. Carlip; a simplicial manifold is defined as a simplicial complex for which the _link_ of each of it's
+    /// i-simplices \f$ i \in \[0, 1, ..., d-1\] \f$ is homeomorphic to the sphere \f$ S^{d - i - 1} \f$. This is the
+    /// simplicial analogue to the manifold condition that the neighborhood of each point is homeomorphic to an open
+    /// subset of \f$ \mathcal{R}^d \f$.
+    ///
+    /// This is another way of stating the condition that there can be no _interior_ simplices. That point can be a
+    /// little confusing, so here is a bit of clarification. Imagine joining 2-d equilateral triangles clockwise to
+    /// form a circular pattern with the tip of the triangle in the center. When you add the last triangle to close the
+    /// circle it may seem like adding another triangle would be internal to the complex because it now overlaps with
+    /// another triangle. This is not the case! What you are NOT allowed to do is add a triangle to any edge already
+    /// joined to two triangles. THAT is what creates an internal triangle. The complex overlapping on itself is very
+    /// much allowed and even necessary.
+    ///
+    /// This method checks each link in the complex and asserts that this is the case.
+    bool isSimplicialManifold() const noexcept;
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
