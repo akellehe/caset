@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3D  # just to register 3D projection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-from caset import Spacetime, Simplex
+from caset import Spacetime, Simplex, Plotter4D
 
 def to4(t, x=0, y=0, z=0):
     return (t, x, y, z)
@@ -242,12 +242,16 @@ def plot_spacetime(spacetime):
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    timelike_lc, spacelike_lc = label_bounds_and_get_edges(spacetime, ax)
-    ax.add_collection(timelike_lc)
-    ax.add_collection(spacelike_lc)
-
-    label_vertices(spacetime, ax)
-    label_edges(spacetime, ax)
+    # timelike_lc, spacelike_lc = label_bounds_and_get_edges(spacetime, ax)
+    # ax.add_collection(timelike_lc)
+    # ax.add_collection(spacelike_lc)
+    #
+    # label_vertices(spacetime, ax)
+    # label_edges(spacetime, ax)
+    plotter = Plotter4D(ax)
+    plotter.addEdges(spacetime.getEdgeList().toVector())
+    plotter.addVertices(spacetime.getVertexList().toVector())
+    plotter.addCollections()
 
     plt.show()
 

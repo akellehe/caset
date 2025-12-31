@@ -37,12 +37,14 @@
 #include "Edge.h"
 #include "Simplex.h"
 #include "Metric.h"
+#include "Plotter.h"
 
 #include <vector>
 
 namespace py = pybind11;
 
 using namespace caset;
+
 
 PYBIND11_MODULE(caset, m) {
   py::class_<Edge, EdgePtr>(m, "Edge")
@@ -185,6 +187,34 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<int, SignatureType>(), py::arg("dimensions"), py::arg("signature_type"))
       .def("getDiagonal", &Signature::getDiagonal);
 
+  py::class_<Plotter<1>, std::shared_ptr<Plotter<1> > >(m, "Plotter1D")
+      .def("addVertices", &Plotter<1>::addVertices, py::arg("vertices"))
+      .def("addEdges", &Plotter<1>::addEdges, py::arg("edges"))
+      .def("addCollections", &Plotter<1>::addCollections)
+      .def("addSimplex", &Plotter<1>::addSimplex, py::arg("simplex"), py::arg("color") = "green")
+      .def(py::init<py::object &>(), py::arg("axes"));
+
+  py::class_<Plotter<2>, std::shared_ptr<Plotter<2> > >(m, "Plotter2D")
+      .def("addVertices", &Plotter<2>::addVertices, py::arg("vertices"))
+      .def("addEdges", &Plotter<2>::addEdges, py::arg("edges"))
+      .def("addCollections", &Plotter<2>::addCollections)
+      .def("addSimplex", &Plotter<2>::addSimplex, py::arg("simplex"), py::arg("color") = "green")
+      .def(py::init<py::object &>(), py::arg("axes"));
+
+  py::class_<Plotter<3>, std::shared_ptr<Plotter<3> > >(m, "Plotter3D")
+      .def("addVertices", &Plotter<3>::addVertices, py::arg("vertices"))
+      .def("addEdges", &Plotter<3>::addEdges, py::arg("edges"))
+      .def("addCollections", &Plotter<3>::addCollections)
+      .def("addSimplex", &Plotter<3>::addSimplex, py::arg("simplex"), py::arg("color") = "green")
+      .def(py::init<py::object &>(), py::arg("axes"));
+
+  py::class_<Plotter<4>, std::shared_ptr<Plotter<4> > >(m, "Plotter4D")
+      .def("addVertices", &Plotter<4>::addVertices, py::arg("vertices"))
+      .def("addEdges", &Plotter<4>::addEdges, py::arg("edges"))
+      .def("addCollections", &Plotter<4>::addCollections)
+      .def("addSimplex", &Plotter<4>::addSimplex, py::arg("simplex"), py::arg("color") = "green")
+      .def(py::init<py::object &>(), py::arg("axes"));
+
   py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime")
       .def(py::init<
              std::shared_ptr<Metric>,
@@ -227,10 +257,10 @@ PYBIND11_MODULE(caset, m) {
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t, const std::vector<double> &) const noexcept>(
              &Spacetime::createVertex))
-    .def("createVertex",
-         static_cast<VertexPtr (Spacetime::*)(const std::vector<double> &) noexcept>(
-           &Spacetime::createVertex))
-    .def("createSimplex",
+      .def("createVertex",
+           static_cast<VertexPtr (Spacetime::*)(const std::vector<double> &) noexcept>(
+             &Spacetime::createVertex))
+      .def("createSimplex",
            py::overload_cast<const std::vector<VertexPtr> &>(
              &Spacetime::createSimplex),
            py::arg("vertices"))
