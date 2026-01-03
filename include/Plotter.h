@@ -19,7 +19,7 @@ class Plotter {
   public:
 
     /// @param pyplot Axes object to which collections and such should be added.
-    explicit Plotter(py::object &ax);
+    Plotter();
 
     /// Use this method to define what vertices are being plotted. This class will plot each vertex with a label. You can
     /// totally print orphaned vertices, so don't worry about it if there's no corresponding Edge.
@@ -63,7 +63,12 @@ class Plotter {
     /// @param simplex A simplex to paint a particular color.
     void addSimplex(const SimplexPtr &simplex, std::string color);
 
+    /// To add all the edges/vertices in a spacetime, add it here.
+    void addSpacetime(const Spacetime &spacetime);
+
     [[nodiscard]] std::tuple<double, double, double> to3D(const VertexPtr &vertex) const;
+
+    void plot();
   private:
     /// Go through the vertices and add an x, y, z, t label to them.
     void labelVertices() const;

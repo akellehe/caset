@@ -239,8 +239,8 @@ def build(args):
 
 
 def plot_spacetime(spacetime):
-    fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection="3d")
+    # fig = plt.figure(figsize=(8, 8))
+    # ax = fig.add_subplot(111, projection="3d")
 
     # timelike_lc, spacelike_lc = label_bounds_and_get_edges(spacetime, ax)
     # ax.add_collection(timelike_lc)
@@ -248,10 +248,9 @@ def plot_spacetime(spacetime):
     #
     # label_vertices(spacetime, ax)
     # label_edges(spacetime, ax)
-    plotter = Plotter4D(ax)
-    plotter.addEdges(spacetime.getEdgeList().toVector())
-    plotter.addVertices(spacetime.getVertexList().toVector())
-    plotter.addCollections()
+    plotter = Plotter4D()
+    plotter.addSpacetime(spacetime)
+    plotter.plot()
 
     plt.show()
 

@@ -4,12 +4,16 @@
 
 #include "Simplex.h"
 #include "Vertex.h"
+#include "spacetime/Spacetime.h"
 
 namespace py = pybind11;
 
 namespace caset {
 template<int dimensions>
-Plotter<dimensions>::Plotter(py::object &ax_) : ax(ax_) {
+Plotter<dimensions>::Plotter() {
+  py::module plt = py::module::import("matplotlib.pyplot");
+  auto fig = plt.attr("figure")(py::arg("figsize") = py::make_tuple(8, 8));
+  ax = fig.attr("add_subplot")(111, py::arg("projection") = "3d");
 }
 
 template<int dimensions>
@@ -138,8 +142,6 @@ void Plotter<dimensions>::setBounds() const {
   ax.attr("set_xlabel")("X");
   ax.attr("set_ylabel")("Y");
   ax.attr("set_zlabel")("Z");
-
-
 }
 
 template<int dimensions>
@@ -194,8 +196,16 @@ void Plotter<dimensions>::addCollections() {
   ax.attr("add_collection")(spacelikeCollection);
 
   for (const auto &[simplex, color] : simplexColors) {
+    py::list pyEdges{};
+    for (const auto &edge : simplex->getEdges()) {
+      CLOG("Adding edge ", edge->toString(), " to simplex plot");
+      auto source = to3D(edge->getSource());
+      auto target = to3D(edge->getTarget());
+      pyEdges.append(
+        py::make_tuple(py::cast(source), py::cast(target)));
+    }
     py::object simplexCollection = Line3DCollection(
-      simplex->getEdges(),
+      pyEdges,
       py::arg("linewidths") = .9,
       py::arg("colors") = color
     );
@@ -217,9 +227,21 @@ void Plotter<dimensions>::addSimplex(const SimplexPtr &simplex, std::string colo
   }
 }
 
+template<int dimensions>
+void Plotter<dimensions>::plot() {
+  addCollections();
+  py::module plt = py::module::import("matplotlib.pyplot");
+  plt.attr("show")();
+}
+
+template<int dimensions>
+void Plotter<dimensions>::addSpacetime(const Spacetime &spacetime) {
+  addVertices(spacetime.getVertexList()->toVector());
+  addEdges(spacetime.getEdgeList()->toVector());
+}
+
 template class Plotter<1>;
 template class Plotter<2>;
 template class Plotter<3>;
 template class Plotter<4>;
-
 } // caset

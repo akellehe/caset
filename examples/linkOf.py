@@ -3,8 +3,9 @@ import random
 import collections
 
 from plot4D import embed_euclidean, plot_spacetime
+from matplotlib import pyplot as plt
 
-from caset import Spacetime, Simplex, SimplexOrientation
+from caset import Spacetime, Simplex, SimplexOrientation, Plotter4D
 
 
 def build_star(st, k, ti, tf):
@@ -40,10 +41,12 @@ if __name__ == "__main__":
     print("Getting star...")
     star = seed.getStar()
     link = seed.getLink()
+    embed_euclidean(st, dimensions=4, epsilon=10e-10)
+    plotter = Plotter4D()
+    plotter.addSpacetime(st)
     print("Got star!")
     print(star)
     breakpoint()
-    embed_euclidean(st, dimensions=4, epsilon=10e-10)
-
-    plot_spacetime(st)
+    plotter.addSimplex(star, color="green")
+    plt.show()
 
