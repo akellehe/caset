@@ -24,7 +24,7 @@
 #include "spacetime/Spacetime.h"
 #include "utils.h"
 #include <deque>
-#include <ATen/core/interned_strings.h>
+// #include <ATen/core/interned_strings.h>
 
 namespace caset {
 void Toroid::build(Spacetime *spacetime, int nSimplices) {
