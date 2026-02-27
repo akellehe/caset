@@ -43,29 +43,6 @@ else()
 endif()
 
 
-# ---- <Locate Python's torch package WITHOUT importing it> ----
-# Option to override ABI if needed
-#set(TORCH_CXX11_ABI "1" CACHE STRING "_GLIBCXX_USE_CXX11_ABI value for building against torch (default 1)")
-
-#execute_process(
-#        COMMAND "${Python_EXECUTABLE}" -c
-#        "import torch, os; print(torch.utils.cmake_prefix_path)"
-#        OUTPUT_VARIABLE TORCH_CMAKE_PREFIX_PATH
-#        OUTPUT_STRIP_TRAILING_WHITESPACE
-#)
-#if(NOT TORCH_CMAKE_PREFIX_PATH)
-#    message(FATAL_ERROR "Could not get torch.utils.cmake_prefix_path from ${Python_EXECUTABLE}")
-#endif()
-
-list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_PREFIX_PATH}")
-
-find_package(Torch REQUIRED)
-
-#message(STATUS "Torch CMake prefix: ${TORCH_CMAKE_PREFIX_PATH}")
-#message(STATUS "Torch include dirs: ${TORCH_INCLUDE_DIRS}")
-#message(STATUS "Torch libraries:    ${TORCH_LIBRARIES}")
-#message(STATUS "_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI}")
-# ---- </Locate Python's torch package WITHOUT importing it> ----
 
 # ---- <Define Sources> ----
 file(GLOB_RECURSE CASET_SOURCES
@@ -125,27 +102,7 @@ target_include_directories(caset
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${TORCH_INCLUDE_DIRS}
 )
-
-# Link ONLY against torch from site-packages
-#target_link_directories(caset PRIVATE ${TORCH_LIB_DIR})
-#target_link_libraries(caset PRIVATE  ${TORCH_LIBRARIES})
-
-# Match PyTorch’s C++11 ABI (default 1; override if needed)
-target_compile_definitions(caset PRIVATE _GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI})
-
-# RPATH so libc10/libtorch are found at runtime
-#set_target_properties(caset PROPERTIES
-#        BUILD_RPATH "${TORCH_LIB_DIR}"
-#        INSTALL_RPATH "${TORCH_LIB_DIR};$ORIGIN;$ORIGIN/.."
-#        BUILD_WITH_INSTALL_RPATH OFF
-#)
-
-# Extra belt-and-suspenders rpath
-if(UNIX AND NOT APPLE)
-    target_link_options(caset PRIVATE "-Wl,-rpath,${TORCH_LIB_DIR}")
-endif()
 
 set_target_properties(caset PROPERTIES
         CXX_VISIBILITY_PRESET default
