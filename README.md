@@ -33,6 +33,22 @@ Installation requires
   - torch (PyTorch) 2.9.0 or higher.
   - scikit-build-core
 
+For the c++ compiler, I recommend llvm. 
+```bash
+brew install llvm
+```
+
+The Homebrew version of Clang is installed in its own directory to avoid conflicts with the Apple-provided Clang.
+To use the Homebrew version by default, you must add its location to your PATH environment variable.
+
+```bash
+#bash
+echo 'export PATH="/usr/local/opt/llvm/bin:$PATH"' >> ~/.bash_profile
+
+#zsh
+echo 'export PATH="/opt/homebrew/opt/llvm/bin:$PATH"' >> ~/.zshrc
+```
+
 ## Installing caset
 
 To install `caset`, you can use pip. If you're in a virtual environment, make sure it's activated. `cd` to the project 
@@ -88,7 +104,7 @@ python3 -m pip install -v -e . --no-build-isolation
 Once you've compiled the package; you can install dependencies for documentation and build the documentation with
 
 ```bash
-cd docs && python3 -m pip install -r requirements-docs.txt && make html
+cd docs && python3 -m pip install -r requirements.txt && make html
 ```
 
 then open it with 
