@@ -32,7 +32,9 @@
 // #include <c10/util/ThreadLocalDebugInfo.h>
 
 namespace caset {
-bool Simplex::hasFacets() const {
+
+template<int D>
+bool Simplex<D>::hasFacets() const {
   return !facets.empty();
 }
 
@@ -41,7 +43,8 @@ class SimplexCorruptionDetector : public CorruptionDetector<SimplexPtr, SimplexP
 };
 #endif
 
-const std::vector<SimplexPtr> &Simplex::getFacets() {
+template<int D>
+const std::vector<SimplexPtr> &Simplex<D>::getFacets() {
 #if CASET_ASSERTIONS
   if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -103,7 +106,8 @@ const std::vector<SimplexPtr> &Simplex::getFacets() {
 
 ///
 /// @param vertices_
-Simplex::Simplex(
+template<int D>
+Simplex<D>::Simplex(
   Spacetime *spacetime_,
   const VertexPtrs &vertices_,
   Edges edges_
@@ -115,7 +119,8 @@ Simplex::Simplex(
 #endif
 }
 
-Simplex::Simplex(
+template<int D>
+Simplex<D>::Simplex(
   Spacetime *spacetime_,
   const VertexPtrs &vertices_,
   Edges edges_,
@@ -131,7 +136,8 @@ Simplex::Simplex(
 #endif
 }
 
-SimplexPtr Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_) {
+template<int D>
+SimplexPtr Simplex<D>::create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -143,9 +149,11 @@ SimplexPtr Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, c
   return simplex;
 }
 
-bool Simplex::isInitialized() const noexcept { return initialized; }
+template<int D>
+bool Simplex<D>::isInitialized() const noexcept { return initialized; }
 
-SimplexPtr Simplex::create(Spacetime *spacetime_,
+template<int D>
+SimplexPtr Simplex<D>::create(Spacetime *spacetime_,
                            const VertexPtrs &vertices_,
                            const Edges &edges_,
                            const SimplexOrientation &orientation_) {
@@ -157,7 +165,8 @@ SimplexPtr Simplex::create(Spacetime *spacetime_,
   return simplex;
 }
 
-void Simplex::initialize(const SimplexPtr &simplex) {
+template<int D>
+void Simplex<D>::initialize(const SimplexPtr &simplex) {
 #ifdef CASET_ASSERTIONS
   if (initialized) {
     CLOG(DEBUG_LEVEL, "You attempted to re-initialize a simplex! Behavior is undefined.");
@@ -189,22 +198,26 @@ void Simplex::initialize(const SimplexPtr &simplex) {
   }
 }
 
-double Simplex::getTi() const noexcept {
+template<int D>
+double Simplex<D>::getTi() const noexcept {
   return ti;
 }
 
-double Simplex::getTf() const noexcept {
+template<int D>
+double Simplex<D>::getTf() const noexcept {
   return tf;
 }
 
-void Simplex::registerToVertices(const SimplexPtr &simplex) {
+template<int D>
+void Simplex<D>::registerToVertices(const SimplexPtr &simplex) {
   for (const auto &owner : simplex->getVertices()) {
     owner->addSimplex(simplex);
   }
 }
 
 #ifdef CASET_VERBOSE
-std::string Simplex::toString() const noexcept {
+template<int D>
+std::string Simplex<D>::toString() const noexcept {
   std::stringstream sigmaLabel;
   sigmaLabel << std::to_string(getOrientation().getK()) << "-";
   sigmaLabel << "\\sigma";
@@ -235,13 +248,16 @@ std::string Simplex::toString() const noexcept {
 }
 #endif
 
-[[nodiscard]] SimplexOrientation Simplex::getOrientation() const noexcept {
+template<int D>
+[[nodiscard]] SimplexOrientation Simplex<D>::getOrientation() const noexcept {
   return orientation;
 }
 
-[[nodiscard]] VertexPtrs Simplex::getVertices() const noexcept { return vertices; };
+template<int D>
+[[nodiscard]] VertexPtrs Simplex<D>::getVertices() const noexcept { return vertices; };
 
-[[nodiscard]] bool Simplex::isTimelike() const {
+template<int D>
+[[nodiscard]] bool Simplex<D>::isTimelike() const {
   CLOG(INFO_LEVEL, "===============================", toString(), "========================================");
   CLOG(INFO_LEVEL, "ti: ", std::to_string(ti));
   CLOG(INFO_LEVEL, "tf: ", std::to_string(tf));
@@ -252,7 +268,8 @@ std::string Simplex::toString() const noexcept {
   return ti == tf;
 }
 
-[[nodiscard]] std::size_t Simplex::computeNumberOfEdges(std::size_t k) {
+template<int D>
+[[nodiscard]] std::size_t Simplex<D>::computeNumberOfEdges(std::size_t k) {
   if (k == 4) return 6;
   if (k == 3) return 3;
   if (k == 2) return 1;
@@ -265,8 +282,8 @@ std::string Simplex::toString() const noexcept {
   return n;
 }
 
-template<typename T>
-T Simplex::binomial(unsigned n, unsigned k) const {
+template<typename T, int D>
+T Simplex<D>::binomial(unsigned n, unsigned k) const {
   if (k > n) return 0;
   k = std::min(k, n - k);
 
@@ -279,23 +296,26 @@ T Simplex::binomial(unsigned n, unsigned k) const {
   return result;
 }
 
-std::size_t Simplex::getNumberOfFaces(std::size_t j) const {
+template<int D>
+std::size_t Simplex<D>::getNumberOfFaces(std::size_t j) const {
   auto k = getOrientation().getK();
   return binomial<std::size_t>(k + 1, j + 1);
 }
 
-std::size_t Simplex::getNumberOfEdges() const {
+template<int D>
+std::size_t Simplex<D>::getNumberOfEdges() const {
   auto k = getOrientation().getK();
   return (k + 1) * k / 2;
 }
 
-void Simplex::addCoface(const SimplexPtr &coface) {
+template<int D>
+void Simplex<D>::addCoface(const SimplexPtr &coface) {
 #if CASET_ASSERTIONS
   if (coface == nullptr || coface.get() == nullptr) {
     CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
   }
-  if (!coface->isCofaceTo(shared_from_this())) {
+  if (!coface->isCofaceTo(std::make_shared<Simplex>(*this))) { // Don't allow this to happen in production.
     CLOG(DEBUG_LEVEL, coface->toString(), " is not a coface of ", toString());
     throw std::runtime_error("You attempted to add a coface to a facet for which it is not a coface!");
   }
@@ -335,7 +355,8 @@ void Simplex::addCoface(const SimplexPtr &coface) {
 #endif
 }
 
-[[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &coface) const {
+template<int D>
+[[nodiscard]] bool Simplex<D>::hasCoface(const SimplexPtr &coface) const {
 #ifdef CASET_ASSERTIONS
   if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
     CLOG(DEBUG_LEVEL, "Corruption detected!");
@@ -350,11 +371,13 @@ void Simplex::addCoface(const SimplexPtr &coface) {
   return cofaces.contains(coface);
 }
 
-[[nodiscard]] bool Simplex::hasVertex(const VertexPtr &vertex) const {
+template<int D>
+[[nodiscard]] bool Simplex<D>::hasVertex(const VertexPtr &vertex) const {
   return vertexIdToIndex.contains(vertex->getId());
 }
 
-[[nodiscard]] bool Simplex::hasEdgeContaining(const IdType vertexId) const {
+template<int D>
+[[nodiscard]] bool Simplex<D>::hasEdgeContaining(const IdType vertexId) const {
   for (const auto &e : getEdges()) {
     if (e->getSource()->getId() == vertexId) return true;
     if (e->getTarget()->getId() == vertexId) return true;
@@ -362,7 +385,8 @@ void Simplex::addCoface(const SimplexPtr &coface) {
   return false;
 }
 
-void Simplex::validate() const {
+template<int D>
+void Simplex<D>::validate() const {
 #ifdef CASET_ASSERTIONS
   for (const auto &e : getEdges()) {
     if (!hasVertex(e->getSource())) {
@@ -387,11 +411,13 @@ void Simplex::validate() const {
 #endif
 }
 
-[[nodiscard]] EdgePtrSet Simplex::getEdges() const {
+template<int D>
+[[nodiscard]] EdgePtrSet Simplex<D>::getEdges() const {
   return edges;
 }
 
-[[nodiscard]] bool Simplex::hasEdge(const EdgePtr &edge) const {
+template<int D>
+[[nodiscard]] bool Simplex<D>::hasEdge(const EdgePtr &edge) const {
   if (!hasVertex(edge->getSource())) {
     return false;
   }
@@ -407,17 +433,20 @@ void Simplex::validate() const {
   return false;
 }
 
-[[nodiscard]] bool Simplex::hasEdge(const VertexPtr &vertexA, const VertexPtr &vertexB) const {
+template<int D>
+[[nodiscard]] bool Simplex<D>::hasEdge(const VertexPtr &vertexA, const VertexPtr &vertexB) const {
   const EdgePtr edge = std::make_shared<Edge>(vertexA, vertexB);
   return hasEdge(edge);
 }
 
+template<int D>
 [[nodiscard]] SimplexPtrSet
-Simplex::getCofaces() const noexcept {
+Simplex<D>::getCofaces() const noexcept {
   return cofaces;
 }
 
-bool Simplex::isCofaceTo(const SimplexPtr &facet, bool shallow) const {
+template<int D>
+bool Simplex<D>::isCofaceTo(const SimplexPtr &facet, bool shallow) const {
   if (shallow) {
     if (getOrientation().getK() != facet->getOrientation().getK() + 1) {
       return false;
@@ -429,23 +458,28 @@ bool Simplex::isCofaceTo(const SimplexPtr &facet, bool shallow) const {
   return true;
 }
 
-bool Simplex::operator==(const Simplex &other) const noexcept {
+template<int D>
+bool Simplex<D>::operator==(const Simplex &other) const noexcept {
   return fingerprint.fingerprint() == other.fingerprint.fingerprint();
 }
 
-bool Simplex::operator==(const SimplexPtr &other) const noexcept {
+template<int D>
+bool Simplex<D>::operator==(const SimplexPtr &other) const noexcept {
   return fingerprint.fingerprint() == other->fingerprint.fingerprint();
 }
 
-std::uint64_t Simplex::hash() const noexcept {
+template<int D>
+std::uint64_t Simplex<D>::hash() const noexcept {
   return fingerprint.fingerprint();
 }
 
-bool Simplex::isCausallyAvailable() const noexcept {
+template<int D>
+bool Simplex<D>::isCausallyAvailable() const noexcept {
   return getCofaces().size() < 2;
 }
 
-bool Simplex::hasCausallyAvailableFacet() {
+template<int D>
+bool Simplex<D>::hasCausallyAvailableFacet() {
   for (const auto &face : getFacets()) {
     if (face->isTimelike()) continue;
     if (face->getCofaces().size() < 2) return true;
@@ -453,19 +487,23 @@ bool Simplex::hasCausallyAvailableFacet() {
   return false;
 }
 
-bool Simplex::isInternal() const noexcept {
+template<int D>
+bool Simplex<D>::isInternal() const noexcept {
   return getCofaces().size() == 2;
 }
 
-std::size_t Simplex::maxKPlusOneCofaces() const {
+template<int D>
+std::size_t Simplex<D>::maxKPlusOneCofaces() const {
   return getNumberOfFaces(getOrientation().getK());
 }
 
-std::uint64_t Simplex::size() const noexcept {
+template<int D>
+std::uint64_t Simplex<D>::size() const noexcept {
   return vertices.size();
 }
 
-bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
+template<int D>
+bool Simplex<D>::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
   // TODO: Probably make this cascade, but we should just go to the Vertex for things to cascade to.
   if (hasVertex(newVertex)) {
 #if CASET_ASSERTIONS
@@ -518,7 +556,8 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
   return true;
 }
 
-VertexIdMap Simplex::getVertexIdLookup() const noexcept {
+template<int D>
+VertexIdMap Simplex<D>::getVertexIdLookup() const noexcept {
   VertexIdMap lookup{};
   for (const auto [vertexId, index] : vertexIdToIndex) {
     lookup.emplace(vertexId, vertices[index]);
@@ -526,16 +565,19 @@ VertexIdMap Simplex::getVertexIdLookup() const noexcept {
   return lookup;
 }
 
-bool Simplex::removeEdge(const EdgePtr &edge) {
+template<int D>
+bool Simplex<D>::removeEdge(const EdgePtr &edge) {
   return edges.erase(edge) > 0;
 }
 
-bool Simplex::addEdge(const EdgePtr &edge) {
+template<int D>
+bool Simplex<D>::addEdge(const EdgePtr &edge) {
   const auto [it, inserted] = edges.emplace(edge);
   return inserted;
 }
 
-bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
+template<int D>
+bool Simplex<D>::hasStoredFacet(const SimplexPtr &facet) {
   if (facets.empty()) return false;
   for (const auto &f : facets) {
     if (f == facet) return true;
@@ -543,7 +585,7 @@ bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
   return false;
 }
 
-std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
+std::pair<SimplexPtr, Simplices> Simplex<D>::cone(VertexPtr &vertex) {
   auto signature = spacetime->getMetric()->getSignature();
   auto foliation = spacetime->getFoliation();
   if (signature->getSignatureType() == SignatureType::Lorentzian) {

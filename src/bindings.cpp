@@ -40,86 +40,88 @@
 
 #include <vector>
 
+#define DIMENSIONS 4;
+
 namespace py = pybind11;
 
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
-  py::class_<Edge, EdgePtr>(m, "Edge")
+  py::class_<Edge4D, EdgePtr4D>(m, "Edge")
       .def(
         py::init<
-          const VertexPtr &,
-          const VertexPtr &>(),
+          const VertexPtr4D &,
+          const VertexPtr4D &>(),
         py::arg("source"),
         py::arg("target")
       )
       .def(
         py::init<
-          const VertexPtr &,
-          const VertexPtr &,
+          const VertexPtr4D &,
+          const VertexPtr4D &,
           double>(),
         py::arg("source"),
         py::arg("target"),
         py::arg("squaredLength")
       )
-      .def("__str__", &Edge::toString)
-      .def("__repr__", &Edge::toString)
-      .def("__eq__", &Edge::operator==)
-      .def("__hash__", &Edge::toHash)
-      .def("getSource", &Edge::getSource)
-      .def("getSquaredLength", &Edge::getSquaredLength)
-      .def("getTarget", &Edge::getTarget);
+      .def("__str__", &Edge4D::toString)
+      .def("__repr__", &Edge4D::toString)
+      .def("__eq__", &Edge4D::operator==)
+      .def("__hash__", &Edge4D::toHash)
+      .def("getSource", &Edge4D::getSource)
+      .def("getSquaredLength", &Edge4D::getSquaredLength)
+      .def("getTarget", &Edge4D::getTarget);
 
-  py::class_<Vertex, VertexPtr>(m, "Vertex")
-      .def("__eq__", &Vertex::operator==)
-      .def("__repr__", &Vertex::toString)
-      .def("__str__", &Vertex::toString)
-      .def("addInEdge", &Vertex::addInEdge, py::arg("edge"))
-      .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
-      .def("degree", &Vertex::degree)
-      .def("getCoordinates", &Vertex::getCoordinates)
-      .def("getEdges", &Vertex::getEdges)
-      .def("getId", &Vertex::getId)
-      .def("getInEdges", &Vertex::getInEdges)
-      .def("getOutEdges", &Vertex::getOutEdges)
-      .def("getSimplices", &Vertex::getSimplices)
-      .def("getTime", &Vertex::getTime)
-      .def("moveEdgesTo", &Vertex::moveEdgesTo)
-      .def("removeInEdge", &Vertex::removeInEdge)
-      .def("removeOutEdge", &Vertex::removeOutEdge)
-      .def("setCoordinates", &Vertex::setCoordinates, py::arg("coordinates"))
+  py::class_<Vertex4D, VertexPtr4D>(m, "Vertex")
+      .def("__eq__", &Vertex4D::operator==)
+      .def("__repr__", &Vertex4D::toString)
+      .def("__str__", &Vertex4D::toString)
+      .def("addInEdge", &Vertex4D::addInEdge, py::arg("edge"))
+      .def("addOutEdge", &Vertex4D::addOutEdge, py::arg("edge"))
+      .def("degree", &Vertex4D::degree)
+      .def("getCoordinates", &Vertex4D::getCoordinates)
+      .def("getEdges", &Vertex4D::getEdges)
+      .def("getId", &Vertex4D::getId)
+      .def("getInEdges", &Vertex4D::getInEdges)
+      .def("getOutEdges", &Vertex4D::getOutEdges)
+      .def("getSimplices", &Vertex4D::getSimplices)
+      .def("getTime", &Vertex4D::getTime)
+      .def("moveEdgesTo", &Vertex4D::moveEdgesTo)
+      .def("removeInEdge", &Vertex4D::removeInEdge)
+      .def("removeOutEdge", &Vertex4D::removeOutEdge)
+      .def("setCoordinates", &Vertex4D::setCoordinates, py::arg("coordinates"))
       .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"));
 
-  py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")
+  py::class_<VertexList4D, std::shared_ptr<VertexList4D> >(m, "VertexList")
       .def(py::init<>())
-      .def("__getitem__", &VertexList::operator[])
-      .def("get", &VertexList::get)
-      .def("add", py::overload_cast<const VertexPtr &>(&VertexList::add))
+      .def("__getitem__", &VertexList4D::operator[])
+      .def("get", &VertexList4D::get)
+      .def("add", py::overload_cast<const VertexPtr4D &>(&VertexList4D::add))
       .def("add",
-           py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList::add))
-      .def("add", py::overload_cast<const std::uint64_t>(&VertexList::add))
-      .def("replace", &VertexList::replace)
-      .def("size", &VertexList::size)
-      .def("toVector", &VertexList::toVector);
+           py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList4D::add))
+      .def("add", py::overload_cast<const std::uint64_t>(&VertexList4D::add))
+      .def("replace", &VertexList4D::replace)
+      .def("size", &VertexList4D::size)
+      .def("toVector", &VertexList4D::toVector);
 
-  py::class_<EdgeList, std::shared_ptr<EdgeList> >(m, "EdgeList")
+  py::class_<EdgeList4D, std::shared_ptr<EdgeList4D> >(m, "EdgeList")
       .def(py::init<>())
-      .def("add", py::overload_cast<const EdgePtr &>(&EdgeList::add))
-      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &, double>(&EdgeList::add))
-      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &>(&EdgeList::add))
-      .def("remove", py::overload_cast<const EdgePtr &>(&EdgeList::remove), py::arg("edge"))
-      .def("size", &EdgeList::size)
-      .def("toVector", &EdgeList::toVector);
+      .def("add", py::overload_cast<const EdgePtr4D &>(&EdgeList4D::add))
+      .def("add", py::overload_cast<const VertexPtr4D &, const VertexPtr4D &, double>(&EdgeList4D::add))
+      .def("add", py::overload_cast<const VertexPtr4D &, const VertexPtr4D &>(&EdgeList4D::add))
+      .def("remove", py::overload_cast<const EdgePtr4D &>(&EdgeList4D::remove), py::arg("edge"))
+      .def("size", &EdgeList4D::size)
+      .def("toVector", &EdgeList4D::toVector);
 
-  py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology");
+  py::class_<Topology4D, std::shared_ptr<Topology4D>>(m, "Topology");
 
-  py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere")
+  py::class_<Sphere4D, Topology4D, std::shared_ptr<Sphere4D> >(m, "Sphere")
       .def(py::init<>())
-      .def("build", &Sphere::build);
+      .def("build", &Sphere4D::build);
 
-  py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid")
+  py::class_<Toroid4D, Topology4D, std::shared_ptr<Toroid4D> >(m, "Toroid")
       .def(py::init<>())
-      .def("build", &Toroid::build);
+      .def("build", &Toroid4D::build);
 
   py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
       .def(py::init<uint8_t, uint8_t>())
@@ -135,27 +137,27 @@ PYBIND11_MODULE(caset, m) {
   py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq> >(m, "SimplexOrientationEq")
       .def(py::init<>());
 
-  py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
-      .def("__repr__", &Simplex::toString)
-      .def("__str__", &Simplex::toString)
-      .def("__hash__", &Simplex::hash)
+  py::class_<Simplex4D, std::shared_ptr<Simplex4D> >(m, "Simplex")
+      .def("__repr__", &Simplex4D::toString)
+      .def("__str__", &Simplex4D::toString)
+      .def("__hash__", &Simplex4D::hash)
       .def("__eq__",
-           static_cast<bool (Simplex::*)(const SimplexPtr &) const noexcept>(&Simplex::operator==))
+           static_cast<bool (Simplex4D::*)(const SimplexPtr &) const noexcept>(&Simplex4D::operator==))
       .def("__eq__",
-           static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==))
-      .def("getCofaces", &Simplex::getCofaces)
-      .def("getEdges", &Simplex::getEdges)
-      .def("getFacets", &Simplex::getFacets)
-      .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
-      .def("getOrientation", &Simplex::getOrientation)
-      .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
-      .def("getVertices", &Simplex::getVertices)
-      .def("hasVertex", &Simplex::hasVertex)
-      .def("isCofaceTo", &Simplex::isCofaceTo, py::arg("facet"), py::arg("shallow") = true)
-      .def("isInitialized", &Simplex::isInitialized)
-      .def("isTimelike", &Simplex::isTimelike)
-      .def("replaceVertex", &Simplex::replaceVertex, py::arg("oldVertex"), py::arg("newVertex"))
-      .def("validate", &Simplex::validate);
+           static_cast<bool (Simplex4D::*)(const Simplex &) const noexcept>(&Simplex4D::operator==))
+      .def("getCofaces", &Simplex4D::getCofaces)
+      .def("getEdges", &Simplex4D::getEdges)
+      .def("getFacets", &Simplex4D::getFacets)
+      .def("getNumberOfFaces", &Simplex4D::getNumberOfFaces)
+      .def("getOrientation", &Simplex4D::getOrientation)
+      .def("getVertexIdLookup", &Simplex4D::getVertexIdLookup)
+      .def("getVertices", &Simplex4D::getVertices)
+      .def("hasVertex", &Simplex4D::hasVertex)
+      .def("isCofaceTo", &Simplex4D::isCofaceTo, py::arg("facet"), py::arg("shallow") = true)
+      .def("isInitialized", &Simplex4D::isInitialized)
+      .def("isTimelike", &Simplex4D::isTimelike)
+      .def("replaceVertex", &Simplex4D::replaceVertex, py::arg("oldVertex"), py::arg("newVertex"))
+      .def("validate", &Simplex4D::validate);
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
       .def(py::init<>());
@@ -236,6 +238,7 @@ PYBIND11_MODULE(caset, m) {
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
            py::arg("orientation"));
+           */
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

@@ -33,14 +33,19 @@
 #include <sstream>
 
 namespace caset {
-Vertex::Vertex() noexcept { id = 0; simplices.reserve(7); }
-Vertex::Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords),
+template<int D>
+Vertex<D>::Vertex() noexcept { id = 0; simplices.reserve(7); }
+template<int D>
+Vertex<D>::Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords),
   fingerprint({id_}) { simplices.reserve(7); }
-Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) { simplices.reserve(7);}
+template<int D>
+Vertex<D>::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) { simplices.reserve(7);}
 
-std::uint64_t Vertex::getId() const noexcept { return id; }
+template<int D>
+std::uint64_t Vertex<D>::getId() const noexcept { return id; }
 
-void Vertex::setTime(double time) noexcept {
+template<int D>
+void Vertex<D>::setTime(double time) noexcept {
   if (coordinates.empty()) {
     coordinates = std::vector<double>();
     coordinates.push_back(time);
@@ -48,7 +53,8 @@ void Vertex::setTime(double time) noexcept {
   coordinates[0] = time;
 }
 
-[[nodiscard]] double Vertex::getTime() const {
+template<int D>
+[[nodiscard]] double Vertex<D>::getTime() const {
   if (coordinates.empty()) {
     return 0;
   }
@@ -66,33 +72,38 @@ void Vertex::setTime(double time) noexcept {
   throw std::out_of_range(msg);
 }
 
-bool Vertex::operator==(const Vertex &vertex) const noexcept {
+template<int D>
+bool Vertex<D>::operator==(const Vertex &vertex) const noexcept {
   return vertex.getId() == id;
 }
 
+template<int D>
 std::vector<double>
-Vertex::getCoordinates() const {
+Vertex<D>::getCoordinates() const {
   if (coordinates.empty()) {
     throw std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");
   }
   return coordinates;
 }
 
+template<int D>
 void
-Vertex::setCoordinates(const std::vector<double> &coords) noexcept {
+Vertex<D>::setCoordinates(const std::vector<double> &coords) noexcept {
   coordinates = coords;
 }
 
-EdgePtrSet
-Vertex::getEdges() const noexcept {
-  EdgePtrSet edges;
+template<int D>
+EdgePtrSet<D>
+Vertex<D>::getEdges() const noexcept {
+  EdgePtrSet<D> edges;
   edges.reserve(inEdges.size() + outEdges.size());
   edges.insert(inEdges.begin(), inEdges.end());
   edges.insert(outEdges.begin(), outEdges.end());
   return edges;
 }
 
-EdgePtr Vertex::getEdge(const EdgePtr &edge) {
+template<int D>
+EdgePtr<D> Vertex<D>::getEdge(const EdgePtr<D> &edge) {
   auto foundIn = inEdges.find(edge);
   if (foundIn != inEdges.end()) {
     return *foundIn;
@@ -104,8 +115,9 @@ EdgePtr Vertex::getEdge(const EdgePtr &edge) {
   return nullptr;
 }
 
-std::pair<EdgePtrSet, EdgePtrSet>
-Vertex::moveEdgesToImpl(
+template<int D>
+std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
+Vertex<D>::moveEdgesToImpl(
   const VertexPtr &recipient,
   Spacetime *spacetime,
   EdgeDirection direction
@@ -115,10 +127,10 @@ Vertex::moveEdgesToImpl(
     throw std::runtime_error("Spacetime was null in vertex.cpp");
   }
 #endif
-  EdgePtrSet oldEdges{};
-  EdgePtrSet newEdges{};
+  EdgePtrSet<D> oldEdges{};
+  EdgePtrSet<D> newEdges{};
 
-  EdgePtrSet &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
+  EdgePtrSet<D> &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
   const char *directionStr = (direction == EdgeDirection::In) ? "in-edge" : "out-edge";
 
   for (auto &oldEdge : edgesToMove) {
@@ -129,12 +141,12 @@ Vertex::moveEdgesToImpl(
 #ifdef CASET_ASSERTIONS
       if (sourceVertex.get() == this) throw std::runtime_error("sourceVertex was this");
 #endif
-      const SimplexPtrSet &outEdgeOwners = sourceVertex->removeOutEdge(oldEdge);
+      const SimplexPtrSet<D> &outEdgeOwners = sourceVertex->removeOutEdge(oldEdge);
     } else if (direction == EdgeDirection::Out) {
 #ifdef CASET_ASSERTIONS
       if (targetVertex.get() == this) throw std::runtime_error("targetVertex was this");
 #endif
-      const SimplexPtrSet &inEdgeOwners = targetVertex->removeInEdge(oldEdge);
+      const SimplexPtrSet<D> &inEdgeOwners = targetVertex->removeInEdge(oldEdge);
     }
 
     spacetime->getEdgeList()->remove(oldEdge);
@@ -151,23 +163,25 @@ Vertex::moveEdgesToImpl(
   return {oldEdges, newEdges};
 }
 
-std::pair<EdgePtrSet, EdgePtrSet>
-Vertex::moveInEdgesTo(
+template<int D>
+std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
+Vertex<D>::moveInEdgesTo(
   const VertexPtr &vertex,
   Spacetime *spacetime
 ) {
   return moveEdgesToImpl(vertex, spacetime, EdgeDirection::In);
 }
 
-std::pair<EdgePtrSet, EdgePtrSet>
-Vertex::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
+template<int D>
+std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
+Vertex<D>::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
 #ifdef CASET_ASSERTIONS
   if (spacetime == nullptr) {
     throw std::runtime_error("Spacetime was null in vertex.cpp (2)");
   }
 #endif
-  EdgePtrSet oldEdges{};
-  EdgePtrSet newEdges{};
+  EdgePtrSet<D> oldEdges{};
+  EdgePtrSet<D> newEdges{};
   const auto &[oldInEdges, newInEdges] = moveInEdgesTo(vertex, spacetime);
   const auto &[oldOutEdges, newOutEdges] = moveOutEdgesTo(vertex, spacetime);
   oldEdges.insert(oldInEdges.begin(), oldInEdges.end());
@@ -177,12 +191,14 @@ Vertex::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
   return {oldEdges, newEdges};
 }
 
-std::pair<EdgePtrSet, EdgePtrSet>
-Vertex::moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
+template<int D>
+std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
+Vertex<D>::moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
   return moveEdgesToImpl(vertex, spacetime, EdgeDirection::Out);
 }
 
-void Vertex::checkDuplicates(std::string msg) const {
+template<int D>
+void Vertex<D>::checkDuplicates(std::string msg) const {
   std::unordered_set<std::uint64_t> seen{};
   for (const auto &simp : simplices) {
     if (seen.contains(simp->fingerprint.fingerprint())) {
@@ -193,7 +209,8 @@ void Vertex::checkDuplicates(std::string msg) const {
   }
 }
 
-bool Vertex::addSimplex(const SimplexPtr &simplex) {
+template<int D>
+bool Vertex<D>::addSimplex(const SimplexPtr &simplex) {
   // CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
 #if CASET_ASSERTIONS
   if (simplex == nullptr || simplex.get() == nullptr) {
@@ -209,7 +226,8 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
   return inserted;
 }
 
-bool Vertex::removeSimplex(const SimplexPtr &simplex) {
+template<int D>
+bool Vertex<D>::removeSimplex(const SimplexPtr &simplex) {
 // #if CASET_ASSERTIONS
   // if (!simplices.contains(simplex)) {
     // throw std::runtime_error("You attempted to remove a simplex that did not exist");
@@ -219,13 +237,15 @@ bool Vertex::removeSimplex(const SimplexPtr &simplex) {
   return simplices.erase(simplex) > 0;
 }
 
-SimplexPtrSet
-Vertex::getSimplices() const noexcept {
+template<int D>
+SimplexPtrSet<D>
+Vertex<D>::getSimplices() const noexcept {
   return simplices;
 }
 
 #ifdef CASET_VERBOSE
-std::string Vertex::toString() const noexcept {
+template<int D>
+std::string Vertex<D>::toString() const noexcept {
   std::stringstream ss;
   ss << "<V" << "_{" << std::to_string(getId()) << "}";
   ss << "^{in=" << std::to_string(inEdges.size()) << "}";
@@ -235,15 +255,18 @@ std::string Vertex::toString() const noexcept {
 }
 #endif
 
-void Vertex::addInEdge(const EdgePtr &edge) noexcept {
+template<int D>
+void Vertex<D>::addInEdge(const EdgePtr<D> &edge) noexcept {
   inEdges.insert(edge);
 }
 
-void Vertex::addOutEdge(const EdgePtr &edge) noexcept {
+template<int D>
+void Vertex<D>::addOutEdge(const EdgePtr<D> &edge) noexcept {
   outEdges.insert(edge);
 }
 
-SimplexPtrSet Vertex::removeInEdge(const EdgePtr &edge) noexcept {
+template<int D>
+SimplexPtrSet<D> Vertex<D>::removeInEdge(const EdgePtr<D> &edge) noexcept {
 #ifdef CASET_ASSERTIONS
   if (edge == nullptr) {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
@@ -254,7 +277,7 @@ SimplexPtrSet Vertex::removeInEdge(const EdgePtr &edge) noexcept {
     std::abort();
   }
 #endif
-  SimplexPtrSet owners{};
+  SimplexPtrSet<D> owners{};
   for (const auto &simplex : simplices) {
     if (simplex->removeEdge(edge)) {
       owners.insert(simplex);
@@ -264,7 +287,8 @@ SimplexPtrSet Vertex::removeInEdge(const EdgePtr &edge) noexcept {
   return owners;
 }
 
-SimplexPtrSet Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
+template<int D>
+SimplexPtrSet<D> Vertex<D>::removeOutEdge(const EdgePtr<D> &edge) noexcept {
 #ifdef CASET_ASSERTIONS
   if (edge == nullptr) {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
@@ -275,7 +299,7 @@ SimplexPtrSet Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
     std::abort();
   }
 #endif
-  SimplexPtrSet owners{};
+  SimplexPtrSet<D> owners{};
   for (const auto &simplex : simplices) {
     if (simplex->removeEdge(edge)) {
       owners.insert(simplex);
@@ -285,11 +309,14 @@ SimplexPtrSet Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
   return owners;
 }
 
-std::size_t Vertex::degree() const noexcept { return inEdges.size() + outEdges.size(); }
+template<int D>
+std::size_t Vertex<D>::degree() const noexcept { return inEdges.size() + outEdges.size(); }
 
-EdgePtrSet
-Vertex::getInEdges() const noexcept { return inEdges; }
+template<int D>
+EdgePtrSet<D>
+Vertex<D>::getInEdges() const noexcept { return inEdges; }
 
-EdgePtrSet
-Vertex::getOutEdges() const noexcept { return outEdges; }
+template<int D>
+EdgePtrSet<D>
+Vertex<D>::getOutEdges() const noexcept { return outEdges; }
 };

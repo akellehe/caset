@@ -30,11 +30,14 @@
 #include "Observable.h"
 
 namespace caset {
+template<int D>
 class Spacetime;
+
+template<int D>
 class SpacetimeVolume : public Observable {
   public:
-    double compute(std::shared_ptr<Spacetime> &spacetime) override;
-    double update(std::shared_ptr<Spacetime> &spacetime) override;
+    double compute(std::shared_ptr<Spacetime<D>> &spacetime) override;
+    double update(std::shared_ptr<Spacetime<D>> &spacetime) override;
 };
 }
 

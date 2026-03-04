@@ -69,14 +69,15 @@ namespace caset {
 ///
 /// The vertex class uses shared_from_this to enable safe shared_ptr creation from member functions.
 ///
-class Vertex : public std::enable_shared_from_this<Vertex> {
+template<int D>
+class Vertex {
     public:
-        // ========================================
+        // =======================================
         // Constructors
         // ========================================
 
         /// Default constructor creating a vertex with ID 0
-        Vertex() noexcept;
+        Vertex<D>() noexcept;
 
         ///
         /// \brief Construct vertex with ID and spatial coordinates
@@ -88,7 +89,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - 4D+: Time is \f$ \sqrt{\sum_{i=0}^{N-1} x_i^2} \f$
         /// - 2D, 3D: Invalid - getTime() will throw std::out_of_range
         ///
-        Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept;
+        Vertex<D>(const std::uint64_t id_, const std::vector<double> &coords) noexcept;
 
         ///
         /// \brief Construct coordinate-independent vertex with ID only
@@ -97,7 +98,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// Creates a vertex without coordinate information. Calling getCoordinates() on such
         /// a vertex will throw std::runtime_error.
         ///
-        explicit Vertex(const std::uint64_t id_) noexcept;
+        explicit Vertex<D>(const std::uint64_t id_) noexcept;
 
         // ========================================
         // Core Properties
@@ -177,7 +178,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// Searches both inEdges and outEdges. Useful for verifying edge membership
         /// without needing to know direction.
         ///
-        EdgePtr getEdge(const EdgePtr &edge);
+        EdgePtr<D> getEdge(const EdgePtr<D> &edge);
 
         ///
         /// \brief Get all incident edges (both incoming and outgoing)
@@ -185,19 +186,19 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         ///
         /// The returned set is a copy. Complexity: O(|inEdges| + |outEdges|)
         ///
-        EdgePtrSet getEdges() const noexcept;
+        EdgePtrSet<D> getEdges() const noexcept;
 
         ///
         /// \brief Get all edges targeting this vertex
         /// \return Set of incoming edges \f$ \{e \mid e.target = v\} \f$
         ///
-        EdgePtrSet getInEdges() const noexcept;
+        EdgePtrSet<D> getInEdges() const noexcept;
 
         ///
         /// \brief Get all edges originating from this vertex
         /// \return Set of outgoing edges \f$ \{e \mid e.source = v\} \f$
         ///
-        EdgePtrSet getOutEdges() const noexcept;
+        EdgePtrSet<D> getOutEdges() const noexcept;
 
         ///
         /// \brief Add an incoming edge to this vertex
@@ -205,7 +206,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         ///
         /// **Caveat**: Does not verify that edge->getTarget() == this. Caller must ensure consistency.
         ///
-        void addInEdge(const EdgePtr &edge) noexcept;
+        void addInEdge(const EdgePtr<D> &edge) noexcept;
 
         ///
         /// \brief Add an outgoing edge from this vertex
@@ -213,7 +214,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         ///
         /// **Caveat**: Does not verify that edge->getSource() == this. Caller must ensure consistency.
         ///
-        void addOutEdge(const EdgePtr &edge) noexcept;
+        void addOutEdge(const EdgePtr<D> &edge) noexcept;
 
         ///
         /// \brief Remove an incoming edge and update all affected simplices
@@ -230,7 +231,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - Aborts if edge is nullptr
         /// - Aborts if edge is not in inEdges
         ///
-        SimplexPtrSet removeInEdge(const EdgePtr &edge) noexcept;
+        SimplexPtrSet<D> removeInEdge(const EdgePtr<D> &edge) noexcept;
 
         ///
         /// \brief Remove an outgoing edge and update all affected simplices
@@ -243,7 +244,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - Aborts if edge is nullptr
         /// - Aborts if edge is not in outEdges
         ///
-        SimplexPtrSet removeOutEdge(const EdgePtr &edge) noexcept;
+        SimplexPtrSet<D> removeOutEdge(const EdgePtr<D> &edge) noexcept;
 
         // ========================================
         // Simplex Management
@@ -256,7 +257,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// A vertex belongs to a simplex if it's one of the simplex's vertices.
         /// This is the inverse relationship: vertex → simplices containing it.
         ///
-        SimplexPtrSet getSimplices() const noexcept;
+        SimplexPtrSet<D> getSimplices() const noexcept;
 
         ///
         /// \brief Register a simplex as containing this vertex
@@ -275,7 +276,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// consistently: when a simplex is created with vertices, it must call
         /// addSimplex() on each vertex.
         ///
-        bool addSimplex(const SimplexPtr &simplex);
+        bool addSimplex(const SimplexPtr<D> &simplex);
 
         ///
         /// \brief Unregister a simplex from this vertex
@@ -285,7 +286,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// Called during simplex destruction or vertex replacement operations.
         /// Removes the simplex from the internal simplices set.
         ///
-        bool removeSimplex(const SimplexPtr &simplex);
+        bool removeSimplex(const SimplexPtr<D> &simplex);
 
         ///
         /// \brief Debug utility to detect duplicate simplices
@@ -323,7 +324,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         ///
         /// \see moveInEdgesTo(), moveOutEdgesTo()
         ///
-        std::pair<EdgePtrSet, EdgePtrSet> moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        std::pair<EdgePtrSet<D>, EdgePtrSet<D>> moveEdgesTo(const VertexPtr<D> &vertex, Spacetime<D> *spacetime);
 
         ///
         /// \brief Move only incoming edges to another vertex
@@ -342,7 +343,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - Throws std::runtime_error if spacetime is nullptr
         /// - Verifies sourceVertex != this (logic error if violated)
         ///
-        std::pair<EdgePtrSet, EdgePtrSet> moveInEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        std::pair<EdgePtrSet<D>, EdgePtrSet<D>> moveInEdgesTo(const VertexPtr<D> &vertex, Spacetime<D> *spacetime);
 
         ///
         /// \brief Move only outgoing edges to another vertex
@@ -361,7 +362,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - Throws std::runtime_error if spacetime is nullptr
         /// - Verifies targetVertex != this (logic error if violated)
         ///
-        std::pair<EdgePtrSet, EdgePtrSet> moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime);
+        std::pair<EdgePtrSet<D>, EdgePtrSet<D>> moveOutEdgesTo(const VertexPtr<D> &vertex, Spacetime<D> *spacetime);
 
         // ========================================
         // Operators and Utilities
@@ -375,7 +376,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// Two vertices are considered equal iff they have the same ID, regardless
         /// of coordinates or topology. This is consistent with the hash function.
         ///
-        bool operator==(const Vertex &vertex) const noexcept;
+        bool operator==(const Vertex<D> &vertex) const noexcept;
 
         ///
         /// \brief Generate human-readable string representation
@@ -405,11 +406,11 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// \brief Fingerprint for hashing and equality testing
         ///
         /// The fingerprint is computed from the vertex ID and used in hash tables
-        /// for SimplexPtrSet, VertexPtrSet, etc. This enables O(1) lookup.
+        /// for SimplexPtrSet<D>, VertexPtrSet, etc. This enables O(1) lookup.
         ///
         /// **Note**: This is public to allow direct access for performance-critical code.
         ///
-        Fingerprint fingerprint;
+        Fingerprint<D> fingerprint;
 
     private:
         // ========================================
@@ -426,19 +427,22 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// \param direction Whether to move In or Out edges
         /// \return Pair of (old edges, new edges)
         ///
-        std::pair<EdgePtrSet, EdgePtrSet>
-        moveEdgesToImpl(const VertexPtr &recipient, Spacetime *spacetime, EdgeDirection direction);
+        std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
+        moveEdgesToImpl(const VertexPtr<D> &recipient, Spacetime<D> *spacetime, EdgeDirection direction);
 
         // ========================================
         // Private Members
         // ========================================
 
-        EdgePtrSet outEdges{};        ///< Edges where this vertex is the source
-        EdgePtrSet inEdges{};          ///< Edges where this vertex is the target
-        SimplexPtrSet simplices{};     ///< Simplices containing this vertex
+        EdgePtrSet<D> outEdges{};        ///< Edges where this vertex is the source
+        EdgePtrSet<D> inEdges{};          ///< Edges where this vertex is the target
+        SimplexPtrSet<D> simplices{};     ///< Simplices containing this vertex
         std::uint64_t id;              ///< Unique identifier
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };
+
+using Vertex4D = Vertex<4>;
+using VertexPtr4D = VertexPtr<4>;
 
 }  // namespace caset
 
@@ -457,9 +461,10 @@ namespace std {
 /// # Complexity
 /// O(1) - delegates to std::hash<std::uint64_t>
 ///
-template<>
-struct hash<caset::Vertex> {
-    size_t operator()(const caset::Vertex &vertex) const noexcept {
+template<int D>
+struct hash<caset::Vertex<D>> {
+
+    size_t operator()(const caset::Vertex<D> &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex.getId());
     }
 };
@@ -474,9 +479,10 @@ struct hash<caset::Vertex> {
 /// Two shared_ptrs pointing to vertices with the same ID will hash to the same value,
 /// even if they are different pointer instances.
 ///
-template<>
-struct hash<std::shared_ptr<caset::Vertex> > {
-    size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
+template<int D>
+struct hash<std::shared_ptr<caset::Vertex<D>> > {
+
+    size_t operator()(const std::shared_ptr<caset::Vertex<D>> &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex->getId());
     }
 };
@@ -490,9 +496,9 @@ struct hash<std::shared_ptr<caset::Vertex> > {
 /// # Note
 /// This is consistent with the hash specialization above.
 ///
-template<>
-struct equal_to<caset::Vertex> {
-    size_t operator()(const caset::Vertex &a, const caset::Vertex &b) const noexcept {
+template<int D>
+struct equal_to<caset::Vertex<D>> {
+    size_t operator()(const caset::Vertex<D> &a, const caset::Vertex<D> &b) const noexcept {
         return a.getId() == b.getId();
     }
 };
@@ -503,9 +509,9 @@ struct equal_to<caset::Vertex> {
 /// Compares vertices by ID, not by pointer address.
 /// Consistent with the hash specialization for shared_ptr<Vertex>.
 ///
-template<>
-struct equal_to<std::shared_ptr<caset::Vertex> > {
-    size_t operator()(const caset::VertexPtr &a, const caset::VertexPtr &b) const noexcept {
+template<int D>
+struct equal_to<std::shared_ptr<caset::Vertex<D>> > {
+    size_t operator()(const caset::VertexPtr<D> &a, const caset::VertexPtr<D> &b) const noexcept {
         return a->getId() == b->getId();
     }
 };

@@ -33,21 +33,26 @@
 #include "Logger.h"
 
 namespace caset {
-EdgePtr EdgeList::add(const EdgePtr &edge) {
+
+template<int D>
+EdgePtr<D> EdgeList::add(const EdgePtr<D> &edge) {
   return getOrInsert(edge);
 }
 
-EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target) {
+template<int D>
+EdgePtr<D> EdgeList::add(const VertexPtr<D>&source, const VertexPtr<D>&target) {
   auto edge = std::make_shared<Edge>(source, target);
   return getOrInsert(edge);
 }
 
-EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept {
+template<int D>
+EdgePtr<D> EdgeList::add(const VertexPtr<D>&source, const VertexPtr<D>&target, double squaredLength) noexcept {
   auto edge = std::make_shared<Edge>(source, target, squaredLength);
   return getOrInsert(edge);
 }
 
-void EdgeList::remove(const EdgePtr &edge) noexcept {
+template<int D>
+void EdgeList::remove(const EdgePtr<D> &edge) noexcept {
 #ifdef CASET_ASSERTIONS
   if (!edgeList.contains(edge->fingerprint.fingerprint())) {
     CLOG(WARN_LEVEL, "You attempted to remove an edge that does not exist: ", edge->toString());
@@ -69,13 +74,15 @@ void EdgeList::remove(const EdgePtr &edge) noexcept {
 #endif
 }
 
-void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
+template<int D>
+void EdgeList::replace(const EdgePtr<D> &toRemove, const EdgePtr<D> &toAdd) noexcept {
   edgeList.erase(toRemove->fingerprint.fingerprint());
   edgeList.emplace(toAdd->fingerprint.fingerprint(), toAdd);
 }
 
-[[nodiscard]] Edges EdgeList::toVector() const noexcept {
-  Edges result{};
+template<int D>
+[[nodiscard]] Edges<D> EdgeList::toVector() const noexcept {
+  Edges<D> result{};
   result.reserve(edgeList.size());
   for (auto &[fp, edge] : edgeList) {
     result.push_back(edge);
@@ -83,15 +90,18 @@ void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
   return result;
 }
 
+template<int D>
 [[nodiscard]] std::size_t EdgeList::size() const {
   return edgeList.size();
 }
 
-EdgePtr EdgeList::get(const std::uint64_t &fingerprint) {
+template<int D>
+EdgePtr<D> EdgeList::get(const std::uint64_t &fingerprint) {
   return edgeList.at(fingerprint);
 }
 
-EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
+template<int D>
+EdgePtr<D> EdgeList::getOrInsert(const EdgePtr<D> &edge) {
   if (edge->getSource()->getId() == edge->getTarget()->getId()) {
     throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());
   }
@@ -110,6 +120,7 @@ EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
   return edge;
 }
 
+template<int D>
 void EdgeList::reserve(std::size_t nSimplices) {
   edgeList.reserve(nSimplices);
 }

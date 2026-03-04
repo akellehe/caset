@@ -29,10 +29,14 @@
 #include "Topology.h"
 
 namespace caset {
+
+template<int D>
 class Spacetime;
+
+template<int D>
 class Cylinder : public Topology {
   public:
-    void build(Spacetime *spacetime, int numSimplices) override;
+    void build(Spacetime<D> *spacetime, int numSimplices) override;
 };
 }
 

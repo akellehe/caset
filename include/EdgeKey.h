@@ -34,6 +34,7 @@
 #include <stdexcept>
 
 namespace caset {
+template<int D>
 class EdgeKey {
   public:
     IdType first{0};
@@ -51,7 +52,7 @@ class EdgeKey {
 #endif
 
 
-    Fingerprint fingerprint;
+    Fingerprint<D> fingerprint;
 };
 } // caset
 

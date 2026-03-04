@@ -36,65 +36,107 @@ namespace caset {
 using IdType = std::uint64_t;
 
 // Forward declarations
-class Vertex;
-class Edge;
-class Simplex;
-class EdgeList;
-class VertexList;
-class EdgeKey;
+template<int D> class Vertex;
+template<int D> class Edge;
+
+template<int D> class Simplex;
+template<int D> class EdgeList;
+template<int D> class VertexList;
+template<int D> class EdgeKey;
 
 // Type aliases
 
 // Edge Structures
-using EdgePtr = std::shared_ptr<Edge>;
-using EdgeHash = FingerprintHash<Edge>;
-using EdgeEq = FingerprintEq<Edge>;
-using EdgeSet = std::unordered_set<Edge, EdgeHash, EdgeEq>;
-using EdgePtrHash = FingerprintPtrHash<EdgePtr>;
-using EdgePtrEq = FingerprintPtrEq<EdgePtr>;
-using EdgePtrSet = std::unordered_set<EdgePtr, EdgePtrHash, EdgePtrEq>;
-using Edges = std::vector<EdgePtr>;
-using EdgePtrMap = std::unordered_map<std::uint64_t, EdgePtr>;
+template<int D>
+using EdgePtr = std::shared_ptr<Edge<D>>;
+template<int D>
+using EdgeHash = FingerprintHash<Edge<D>>;
+template<int D>
+using EdgeEq = FingerprintEq<Edge<D>>;
+template<int D>
+using EdgeSet = std::unordered_set<Edge<D>, EdgeHash<D>, EdgeEq<D>>;
+template<int D>
+using EdgePtrHash = FingerprintPtrHash<EdgePtr<D>>;
+template<int D>
+using EdgePtrEq = FingerprintPtrEq<EdgePtr<D>>;
+template<int D>
+using EdgePtrSet = std::unordered_set<EdgePtr<D>, EdgePtrHash<D>, EdgePtrEq<D>>;
+template<int D>
+using Edges = std::vector<EdgePtr<D>>;
+template<int D>
+using EdgePtrMap = std::unordered_map<std::uint64_t, EdgePtr<D>>;
 
 // Edge Key Structures
-using EdgeKeyRawPtr = EdgeKey *;
-using EdgeKeyHash = FingerprintHash<EdgeKey>;
-using EdgeKeyEq = FingerprintEq<EdgeKey>;
-using EdgeKeySet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEq>;
-using EdgeKeys = std::vector<EdgeKey>;
+template<int D>
+using EdgeKeyRawPtr = EdgeKey<D> *;
+template<int D>
+using EdgeKeyHash = FingerprintHash<EdgeKey<D>>;
+template<int D>
+using EdgeKeyEq = FingerprintEq<EdgeKey<D>>;
+template<int D>
+using EdgeKeySet = std::unordered_set<EdgeKey<D>, EdgeKeyHash<D>, EdgeKeyEq<D>>;
+template<int D>
+using EdgeKeys = std::vector<EdgeKey<D>>;
 
 // Simplex Structures
-using SimplexRawPtr = Simplex *;
-using SimplexPtr = std::shared_ptr<Simplex>;
-using SimplexHash = FingerprintHash<Simplex>;
-using SimplexEq = FingerprintEq<Simplex>;
-using SimplexSet = std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>;
+template<int D>
+using SimplexRawPtr = Simplex<D> *;
 
-using SimplexPtrPair = std::pair<SimplexPtr, SimplexPtr>;
-using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
-using Simplices = std::vector<SimplexPtr>;
+template<int D>
+using SimplexPtr = std::shared_ptr<Simplex<D>>;
 
-using SimplexPtrHash = FingerprintPtrHash<SimplexPtr>;
-using SimplexPtrEq = FingerprintPtrEq<SimplexPtr>;
-using SimplexPtrSet = std::unordered_set<SimplexPtr, SimplexPtrHash, SimplexPtrEq>;
-using SimplexPtrMap = std::unordered_map<SimplexPtr, Simplices, SimplexPtrHash, SimplexPtrEq>;
+template<int D>
+using SimplexHash = FingerprintHash<Simplex<D>>;
+template<int D>
+using SimplexEq = FingerprintEq<Simplex<D>>;
+template<int D>
+using SimplexSet = std::unordered_set<std::shared_ptr<Simplex<D>>, SimplexHash<D>, SimplexEq<D>>;
 
-using SimplexUniquePtr = std::unique_ptr<Simplex>;
-using SimplexUniquePtrHash = FingerprintPtrHash<SimplexUniquePtr>;
-using SimplexUniquePtrEq = FingerprintPtrEq<SimplexUniquePtr>;
-using SimplexUniquePtrSet = std::unordered_set<SimplexUniquePtr, SimplexUniquePtrHash, SimplexUniquePtrEq>;
+template<int D>
+using SimplexPtrPair = std::pair<SimplexPtr<D>, SimplexPtr<D>>;
+template<int D>
+using OptionalSimplexPtrPair = std::optional<SimplexPtrPair<D>>;
+template<int D>
+using Simplices = std::vector<SimplexPtr<D>>;
+
+template<int D>
+using SimplexPtrHash = FingerprintPtrHash<SimplexPtr<D>>;
+
+template<int D>
+using SimplexPtrEq = FingerprintPtrEq<SimplexPtr<D>>;
+
+template<int D>
+using SimplexPtrSet = std::unordered_set<SimplexPtr<D>, SimplexPtrHash<D>, SimplexPtrEq<D>>;
+
+template<int D>
+using SimplexPtrMap = std::unordered_map<SimplexPtr<D>, Simplices<D>, SimplexPtrHash<D>, SimplexPtrEq<D>>;
+
+template<int D>
+using SimplexUniquePtr = std::unique_ptr<Simplex<D>>;
+template<int D>
+using SimplexUniquePtrHash = FingerprintPtrHash<SimplexUniquePtr<D>>;
+template<int D>
+using SimplexUniquePtrEq = FingerprintPtrEq<SimplexUniquePtr<D>>;
+template<int D>
+using SimplexUniquePtrSet = std::unordered_set<SimplexUniquePtr<D>, SimplexUniquePtrHash<D>, SimplexUniquePtrEq<D>>;
 
 
 // Vertex Structures
-using VertexPtr = std::shared_ptr<Vertex>;
-using VertexPtrs = std::vector<VertexPtr>;
+template<int D>
+using VertexPtr = std::shared_ptr<Vertex<D>>;
+template<int D>
+using VertexPtrs = std::vector<VertexPtr<D>>;
 
-using VertexPtrHash = FingerprintPtrHash<VertexPtr>;
-using VertexPtrEq = FingerprintPtrEq<VertexPtr>;
-using VertexPtrSet = std::unordered_set<VertexPtr, VertexPtrHash, VertexPtrEq>;
+template<int D>
+using VertexPtrHash = FingerprintPtrHash<VertexPtr<D>>;
+template<int D>
+using VertexPtrEq = FingerprintPtrEq<VertexPtr<D>>;
+template<int D>
+using VertexPtrSet = std::unordered_set<VertexPtr<D>, VertexPtrHash<D>, VertexPtrEq<D>>;
 
 using VertexIndexMap = std::unordered_map<IdType, std::size_t>;
-using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
+template<int D>
+using VertexIdMap = std::unordered_map<IdType, VertexPtr<D>>;
 using VertexIdToIndex = std::unordered_map<IdType, std::size_t>;
 using VertexIndexToId = std::unordered_map<std::size_t, IdType>;
 
@@ -107,6 +149,7 @@ using SimplexOrientationHash = FingerprintHash<SimplexOrientation>;
 using SimplexOrientationEq = FingerprintEq<SimplexOrientation>;
 using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrientationHash, SimplexOrientationEq>;
 
+template<int D>
 class Spacetime;
 
 // using EdgeHash = FingerprintHash<Edge>;

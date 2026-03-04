@@ -30,6 +30,7 @@
 
 namespace caset {
 
+template<int D>
 class Spacetime;
 
 enum class ConstraintType : uint8_t {

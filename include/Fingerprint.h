@@ -140,6 +140,7 @@ inline constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
 /// Include a `Fingerprint` as a public member in your class:
 ///
 /// ```cpp
+/// template<int D>
 /// class Simplex {
 ///   public:
 ///     Fingerprint fingerprint;
@@ -190,6 +191,7 @@ inline constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
 /// Concurrent reads are safe if no writes occur. Use external synchronization
 /// for concurrent modification.
 ///
+template<int D>
 class Fingerprint {
   public:
     // ========================================

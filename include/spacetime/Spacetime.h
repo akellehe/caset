@@ -62,6 +62,7 @@ enum class SpacetimeType : uint8_t {
 ///
 /// Any assertions or state needed by the Topology to build the complex should be implemented in the Simplex.
 ///
+template<int D>
 class Spacetime {
   public:
     // ========================================
@@ -69,7 +70,7 @@ class Spacetime {
     // ========================================
 
     /// Default constructor. Creates a 4D Lorentzian spacetime with CDT type and Toroid topology.
-    Spacetime();
+    Spacetime<D>();
 
     /// Parameterized constructor.
     /// @param metric_ The metric tensor defining the signature and dimension
@@ -80,7 +81,7 @@ class Spacetime {
     /// @param foliation_ The type of foliation for the spacetime. Preferred means spacelike slices are separated by
     ///   timelike slices. None means they can be interspersed.
     /// @param topology_ The topology of the spatial slices (default: Toroid)
-    Spacetime(
+    Spacetime<D>(
       std::shared_ptr<Metric> metric_,
       SpacetimeType spacetimeType_,
       std::optional<double> alpha_,
@@ -92,23 +93,23 @@ class Spacetime {
     // Creation Methods
     // ========================================
 
-    std::pair<SimplexPtr, bool> createSimplex(const VertexPtrs &vertices);
+    std::pair<SimplexPtr<D>, bool> createSimplex(const VertexPtrs &vertices);
 
     /// Creates a simplex \f$ \sigma^k \f$ from explicit vertices and edges.
     /// @param vertices The vertices \f$ \{v_0, \ldots, v_k\} \f$ of the simplex
     /// @param edges The edges \f$ \{e_{ij}\} \f$ connecting the vertices
     /// @return {simplex, wasCreated} pair where wasCreated=true if newly created, false if already existed
-    std::pair<SimplexPtr, bool> createSimplex(const VertexPtrs &vertices, const Edges &edges);
+    std::pair<SimplexPtr<D>, bool> createSimplex(const VertexPtrs &vertices, const Edges &edges);
 
     /// Creates a simplex \f$ \sigma^{(t_i, t_f)} \f$ with the given causal orientation.
     /// @param numericOrientation Tuple (timelike_initial, timelike_final) defining the orientation
     /// @return {simplex, wasCreated} pair where wasCreated=true if newly created
-    std::pair<SimplexPtr, bool> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
+    std::pair<SimplexPtr<D>, bool> createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation);
 
     /// Creates a k-simplex with randomly positioned vertices and edges of length \f$ \alpha \f$.
     /// @param k The dimension of the simplex (k+1 vertices)
     /// @return {simplex, wasCreated} pair where wasCreated=true if newly created
-    std::pair<SimplexPtr, bool> createSimplex(std::size_t k);
+    std::pair<SimplexPtr<D>, bool> createSimplex(std::size_t k);
 
     /// Creates a vertex \f$ v \f$ with the next available ID at the current time.
     /// @return Shared pointer to the created vertex
@@ -176,13 +177,13 @@ class Spacetime {
     /// that this method does not return 2-simplices as you might expect, but 5-simplices since those are the standard
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
-    [[nodiscard]] SimplexSet getExternalSimplices() noexcept;
+    [[nodiscard]] SimplexSet<D> getExternalSimplices() noexcept;
 
     /// Retrieves all simplices with a specific causal orientation.
     /// @param orientation The orientation tuple (timelike_initial, timelike_final)
     /// @return Set of simplices \f$ \{\sigma^{(t_i, t_f)}\} \f$ with the given orientation
     /// @note This method is for testing only and has poor runtime performance.
-    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
+    SimplexSet<D> getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
 
     /// Returns the foliation of the spacetime. Either NONE or PREFERRED. With PREFERRED foliation; each spatial slice
     /// lies between a time slice and vis versa. Otherwise they can be any-which-a-way.
@@ -200,12 +201,12 @@ class Spacetime {
     /// Retrieves a simplex from the complex by pointer lookup.
     /// @param simplex The simplex to find
     /// @return The canonical simplex from the complex, or nullptr if not found
-    [[nodiscard]] SimplexPtr getSimplex(SimplexPtr simplex) const;
+    [[nodiscard]] SimplexPtr<D> getSimplex(SimplexPtr<D> simplex) const;
 
     /// Retrieves a simplex from the complex by fingerprint.
     /// @param fingerprint The fingerprint hash \f$ h(\sigma) \f$ of the simplex
     /// @return The simplex with the given fingerprint, or nullptr if not found
-    [[nodiscard]] SimplexPtr getSimplex(std::uint64_t fingerprint) const;
+    [[nodiscard]] SimplexPtr<D> getSimplex(std::uint64_t fingerprint) const;
 
     // ========================================
     // Manipulation & Helper Methods
@@ -243,7 +244,7 @@ class Spacetime {
     /// @param simplex The simplex \f$ \sigma \f$ to register
     /// @param internal true if the simplex is fully internal (all faces glued), false otherwise
     /// @return The registered simplex
-    SimplexPtr registerSimplex(const SimplexPtr &simplex, bool internal);
+    SimplexPtr<D> registerSimplex(const SimplexPtr<D> &simplex, bool internal);
 
 
     void reserve(int nSimplices);
@@ -283,7 +284,7 @@ class Spacetime {
     /// modifying a simplex's fingerprint to avoid hash table corruption.
     ///
     /// @param simplex The simplex \f$ \sigma \f$ to unregister
-    void unregisterSimplex(const SimplexPtr &simplex);
+    void unregisterSimplex(const SimplexPtr<D> &simplex);
 
   private:
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
@@ -298,7 +299,7 @@ class Spacetime {
     std::shared_ptr<Topology> topology;
     std::uint64_t currentTime = 0;
 
-    SimplexSet simplices{};
+    SimplexSet<D> simplices{};
 
     ///
     /// These are simplices on the boundary of a simplicial complex. They have at least one external face, and hence can
@@ -307,7 +308,7 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq>
+    std::unordered_map<SimplexOrientation, SimplexSet<D>, SimplexOrientationHash, SimplexOrientationEq>
     externalSimplicesByFacialOrientation{};
 
     std::vector<std::shared_ptr<Observable> > observables{};

@@ -29,11 +29,16 @@
 #include "Topology.h"
 
 namespace caset {
+template<int D>
 class Spacetime;
-class Toroid : public Topology {
+
+template<int D>
+class Toroid : public Topology<D> {
   public:
-    void build(Spacetime *spacetime, int numSimplices) override; // Spacetime *spacetime) override;
+    void build(Spacetime<D> *spacetime, int numSimplices) override; // Spacetime *spacetime) override;
 };
+
+using Toroid4D = Toroid<4>;
 }
 
 #endif //CASET_TOROID_H

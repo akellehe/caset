@@ -25,9 +25,13 @@
 #include <iostream>
 
 namespace caset {
-Topology::~Topology() = default;
+
+template<int D>
+Topology<D>::~Topology() = default;
 // std::vector<std::shared_ptr<Constraint> > Topology::getConstraints() {return {};}
-void Topology::build(Spacetime *spacetime, int numSimplices) {
+
+template<int D>
+void Topology<D>::build(Spacetime<D> *spacetime, int numSimplices) {
   std::cout << "Building Topology (base)" << std::endl;
 }
 } // namespace caset

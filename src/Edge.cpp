@@ -28,74 +28,84 @@
 #include <vector>
 #include <memory>
 
-
 namespace caset {
-
+template<int D>
 class Simplex;
 
-    Edge::Edge(
-      const VertexPtr &source_,
-      const VertexPtr &target_,
-      double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}) {
-    }
+template<int D>
+Edge<D>::Edge(
+  const VertexPtr<D> &source_,
+  const VertexPtr<D> &target_,
+  double squaredLength_
+) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}) {
+}
 
-    Edge::Edge(
-      const VertexPtr &source_,
-      const VertexPtr &target_
-    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
-      // Set squaredLength to a random value between -1 and 1
-      squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
-    }
+template<int D>
+Edge<D>::Edge(
+  const VertexPtr<D> &source_,
+  const VertexPtr<D> &target_
+) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
+  // Set squaredLength to a random value between -1 and 1
+  squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
+}
 
-    [[nodiscard]] VertexPtr Edge::getSource() const noexcept {
-      return source;
-    }
+template<int D>
+[[nodiscard]] VertexPtr<D> Edge<D>::getSource() const noexcept {
+  return source;
+}
 
-    [[nodiscard]] VertexPtr Edge::getTarget() const noexcept {
-      return target;
-    }
+template<int D>
+[[nodiscard]] VertexPtr<D> Edge<D>::getTarget() const noexcept {
+  return target;
+}
 
-    [[nodiscard]] double Edge::getSquaredLength() const noexcept {
-      return squaredLength;
-    }
+template<int D>
+[[nodiscard]] double Edge<D>::getSquaredLength() const noexcept {
+  return squaredLength;
+}
 
 #ifdef CASET_VERBOSE
-    [[nodiscard]] std::string Edge::toString() const noexcept {
-      return source->toString() + "->" + target->toString();
-    }
+template<int D>
+[[nodiscard]] std::string Edge<D>::toString() const noexcept {
+  return source->toString() + "->" + target->toString();
+}
 #endif
 
-    void Edge::replaceSourceVertex(const VertexPtr &newSource) {
-      fingerprint.removeId(source->getId());
-      source = newSource;
-      fingerprint.addId(newSource->getId());
-      fingerprint.refresh();
-    }
+template<int D>
+void Edge<D>::replaceSourceVertex(const VertexPtr<D> &newSource) {
+  fingerprint.removeId(source->getId());
+  source = newSource;
+  fingerprint.addId(newSource->getId());
+  fingerprint.refresh();
+}
 
-    void Edge::replaceTargetVertex(const VertexPtr &newTarget) {
-      fingerprint.removeId(target->getId());
-      target = newTarget;
-      fingerprint.addId(newTarget->getId());
-      fingerprint.refresh();
-    }
+template<int D>
+void Edge<D>::replaceTargetVertex(const VertexPtr<D> &newTarget) {
+  fingerprint.removeId(target->getId());
+  target = newTarget;
+  fingerprint.addId(newTarget->getId());
+  fingerprint.refresh();
+}
 
-    bool Edge::hasVertex(std::uint64_t vertexId) {
-      if (getSource()->getId() == vertexId || getTarget()->getId() == vertexId) return true;
-      return false;
-    }
+template<int D>
+bool Edge<D>::hasVertex(std::uint64_t vertexId) {
+  if (getSource()->getId() == vertexId || getTarget()->getId() == vertexId) return true;
+  return false;
+}
 
-    bool Edge::operator==(const Edge &other) const {
-      return fingerprint.fingerprint() == other.fingerprint.fingerprint();
-    }
+template<int D>
+bool Edge<D>::operator==(const Edge &other) const {
+  return fingerprint.fingerprint() == other.fingerprint.fingerprint();
+}
 
-    [[nodiscard]] std::uint64_t Edge::toHash() const {
-      return fingerprint.fingerprint();
-    }
+template<int D>
+[[nodiscard]] std::uint64_t Edge<D>::toHash() const {
+  return fingerprint.fingerprint();
+}
 
-    EdgeKey Edge::getKey() const noexcept {
-      return {source->getId(), target->getId()};
-    }
-
+template<int D>
+EdgeKey<D> Edge<D>::getKey() const noexcept {
+  return {source->getId(), target->getId()};
+}
 }
 

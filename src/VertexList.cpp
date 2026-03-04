@@ -27,7 +27,8 @@
 
 namespace caset {
 
-void VertexList::reserve(std::size_t nSimplices) noexcept {
+template<int D>
+void VertexList<D>::reserve(std::size_t nSimplices) noexcept {
   vertexList.reserve(nSimplices);
 }
 } // caset

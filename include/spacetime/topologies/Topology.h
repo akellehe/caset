@@ -25,20 +25,26 @@
 
 #ifndef CASET_TOPOLOGY_H
 #define CASET_TOPOLOGY_H
+#include <memory>
 
 namespace caset {
 
+template<int D>
 class Spacetime;
 
+template<int D>
 class Topology {
   public:
-    virtual ~Topology();
+    virtual ~Topology<D>();
 
     ///
     /// Builds an initial triangulation matching this topology for t=0 on a given spacetime based on the parameters of
     /// the spacetime.
-    virtual void build(Spacetime *spacetime, int numSimplices) = 0;
+    virtual void build(Spacetime<D> *spacetime, int numSimplices) = 0;
 };
+
+using Topology4D = Topology<4>;
+
 }
 
 #endif //CASET_TOPOLOGY_H

@@ -33,13 +33,16 @@
 #include "constraints/Constraint.h"
 
 namespace caset {
-class Sphere : public Topology {
+template<int D>
+class Sphere : public Topology<D> {
   public:
     // std::vector<std::shared_ptr<Constraint>> getConstraints() override {
       // return std::vector<std::shared_ptr<Constraint>>();
     // }
-    void build(Spacetime *spacetime, int numSimplices) override;
+    void build(Spacetime<D> *spacetime, int numSimplices) override;
 };
+
+using Sphere4D = Sphere<4>;
 }
 
 #endif //CASET_SPHERE_H

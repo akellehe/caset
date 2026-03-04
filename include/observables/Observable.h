@@ -30,12 +30,13 @@
 
 namespace caset {
 
+template<int D>
 class Spacetime;
 
 class Observable {
   public:
-    virtual double compute(std::shared_ptr<Spacetime> &spacetime);
-    virtual double update(std::shared_ptr<Spacetime> &spacetime);
+    virtual double compute(std::shared_ptr<Spacetime<D>> &spacetime);
+    virtual double update(std::shared_ptr<Spacetime<D>> &spacetime);
     virtual ~Observable() = default;
 };
 }

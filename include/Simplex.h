@@ -51,17 +51,18 @@ namespace caset {
 /// faster method for building the complex would be to avoid computing those vertices and edges; and just compute the
 /// simplex as an abstraction with faces, cofaces, and an orientation. We'll leave this for a "Version 2 feature".
 ///
-class Simplex : public std::enable_shared_from_this<Simplex> {
+template<int D>
+class Simplex {
   public:
     // ==================== Static Factory Methods ====================
-    static std::shared_ptr<Simplex> create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_);
-    static std::shared_ptr<Simplex> create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientation &orientation_);
+    static std::shared_ptr<Simplex<D>> create(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, const Edges<D> &edges_);
+    static std::shared_ptr<Simplex<D>> create(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, const Edges<D> &edges_, const SimplexOrientation &orientation_);
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k);
 
     // ==================== Constructors & Initialization ====================
     /// @param vertices_
-    explicit Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_);
-    Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientation &orientation_);
+    explicit Simplex(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, Edges<D> edges_);
+    Simplex(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, Edges<D> edges_ ,const SimplexOrientation &orientation_);
 
     std::uint64_t size() const noexcept;
 
@@ -98,26 +99,26 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     // ==================== Vertex Queries ====================
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
-    [[nodiscard]] VertexPtrs getVertices() const noexcept;
+    [[nodiscard]] VertexPtrs<D> getVertices() const noexcept;
 
     /// This method is self-explanatory. O(1) lookups for who has what.
-    [[nodiscard]] bool hasVertex(const VertexPtr &vertex) const;
+    [[nodiscard]] bool hasVertex(const VertexPtr4D &vertex) const;
 
     /// This method produces a lookup table \f$ Id \rightarrow Vertex \f$. The only place it's used at the moment is for
     /// verifying state in our Python unit tests.
-    [[nodiscard]] VertexIdMap getVertexIdLookup() const noexcept;
+    [[nodiscard]] VertexIdMap<D> getVertexIdLookup() const noexcept;
 
 
     // ==================== Edge Queries ====================
     /// @returns Edges in traversal order (the order of input vertices).
-    [[nodiscard]] EdgePtrSet getEdges() const;
+    [[nodiscard]] EdgePtrSet<D> getEdges() const;
     [[nodiscard]] std::size_t getNumberOfEdges() const;
 
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1}, e_{2 \rightarrow 0} \} \f$
-    [[nodiscard]] bool hasEdge(const EdgePtr &edge) const;
-    [[nodiscard]] bool hasEdge(const VertexPtr &vertexA, const VertexPtr &vertexB) const;
+    [[nodiscard]] bool hasEdge(const EdgePtr<D>&edge) const;
+    [[nodiscard]] bool hasEdge(const VertexPtr4D &vertexA, const VertexPtr4D &vertexB) const;
     [[nodiscard]] bool hasEdgeContaining(IdType vertexId) const;
 
     // ==================== Face & Facet Queries ====================
@@ -150,10 +151,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// to form a simplicial complex \f$ K \f$.
     ///
     /// @return all k-1 simplices contained within this k-simplex.
-    [[nodiscard]] const Simplices &getFacets();
+    [[nodiscard]] const Simplices<D> &getFacets();
 
     bool hasFacets() const;
-    bool hasStoredFacet(const SimplexPtr &facet);
+    bool hasStoredFacet(const SimplexPtr<D> &facet);
 
     // ==================== Coface Queries & Management ====================
     ///
@@ -164,10 +165,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// We define a _facet_ as a set of shared vertices. The facet of any given k-simplex \f$ \sigma^k \f$ is a k-1
     /// simplex, such that  \f$ \sigma_{k} \f$ is a coface of \f$ \sigma_{k-1} \f$.
     ///
-    void addCoface(const std::shared_ptr<Simplex> &simplex);
-    bool isCofaceTo(const SimplexPtr &simplex, bool shallow=true) const;
+    void addCoface(const std::shared_ptr<Simplex<D>> &simplex);
+    bool isCofaceTo(const SimplexPtr<D> &simplex, bool shallow=true) const;
 
-    [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;
+    [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex<D>> &simplex) const;
 
     ///
     /// Co-faces are maintained as state rather than computed on the fly. This means any time a Simplex is attached to
@@ -178,7 +179,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplices that share this face.
-    [[nodiscard]] SimplexPtrSet getCofaces() const noexcept;
+    [[nodiscard]] SimplexPtrSet<D> getCofaces() const noexcept;
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -219,9 +220,9 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
 
     // ==================== Modification Methods ====================
-    bool addEdge(const EdgePtr &edge);
-    bool removeEdge(const EdgePtr &edge);
-    static void registerToVertices(const SimplexPtr &simplex);
+    bool addEdge(const EdgePtr<D> &edge);
+    bool removeEdge(const EdgePtr<D> &edge);
+    static void registerToVertices(const SimplexPtr<D> &simplex);
 
     /// If you're working in a 3-complex (tetrahedrons), \f$ K \f$ this method should be appropriately called on a
     /// 2-simplex (a triangle), \f$ \sigma^2 \f$ or in general for a given k-complex, \f$ K \f$ you should just be
@@ -232,21 +233,21 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param vertex A new, standalone, orphaned vertex with no existing edges or associated simplices.
     /// @returns A pair of {simplex, facets}; The new k-simplex created by coning `vertex` to this facet and a vector of
     ///   new exterior facets resulting from the new simplex.
-    std::pair<SimplexPtr, Simplices> cone(VertexPtr &vertex);
+    std::pair<SimplexPtr<D>, Simplices<D>> cone(VertexPtr4D &vertex);
 
     // ==================== Validation ====================
     void validate() const;
 
     // ==================== Operators ====================
-    bool operator==(const Simplex &other) const noexcept;
-    bool operator==(const std::shared_ptr<Simplex> &other) const noexcept;
+    bool operator==(const Simplex<D> &other) const noexcept;
+    bool operator==(const std::shared_ptr<Simplex<D>> &other) const noexcept;
 
     // ==================== Public Data ====================
-    Fingerprint fingerprint{};
+    Fingerprint<D> fingerprint{};
     bool initialized{false};
 
 #ifdef CASET_ASSERTIONS
-    OwnershipManager<IdType, SimplexPtr, SimplexPtrHash, SimplexPtrEq> ownershipManager{};
+    OwnershipManager<IdType, SimplexPtr<D>, SimplexPtrHash<D>, SimplexPtrEq<D>> ownershipManager{};
 #endif
 
     // ==================== Commented Out / Future Methods ====================
@@ -302,26 +303,29 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param oldVertex The Vertex to replace
     /// @param newVertex The vertex with which to replace it.
     /// @return
-    bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
+    bool replaceVertex(const VertexPtr4D &oldVertex, const VertexPtr4D &newVertex);
 
     bool isInitialized() const noexcept;
   private:
-    Spacetime *spacetime{nullptr};
+    Spacetime<D> *spacetime{nullptr};
     SimplexOrientation orientation{};
 
     VertexIdToIndex vertexIdToIndex{};
     VertexIndexToId vertexIndexToId{};
-    VertexPtrs vertices{};
+    VertexPtrs<D> vertices{};
 
-    EdgePtrSet edges{};
+    EdgePtrSet<D> edges{};
 
-    Simplices facets{};
-    SimplexPtrSet cofaces{};
+    Simplices<D> facets{};
+    SimplexPtrSet<D> cofaces{};
 
     bool _isTimelike;
     double ti{std::numeric_limits<double>::max()};
     double tf{-std::numeric_limits<double>::max()};
 };
+
+using Simplex4D = Simplex<4>;
+using SimplexPtr4D = std::shared_ptr<Simplex4D>;
 
 }
 

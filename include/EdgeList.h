@@ -34,22 +34,26 @@
 #include "Logger.h"
 
 namespace caset {
+
+template<int D>
 class EdgeList {
   public:
     [[nodiscard]] std::size_t size() const;
-    [[nodiscard]] Edges toVector() const noexcept;
-    EdgePtr add(const EdgePtr &edge);
-    EdgePtr add(const VertexPtr &source, const VertexPtr &target);
-    EdgePtr add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept;
-    EdgePtr get(const std::uint64_t &fingerprint);
-    void remove(const EdgePtr &edge) noexcept;
-    void replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept;
+    [[nodiscard]] Edges<D> toVector() const noexcept;
+    EdgePtr<D> add(const EdgePtr<D> &edge);
+    EdgePtr<D> add(const VertexPtr<D>&source, const VertexPtr<D>&target);
+    EdgePtr<D> add(const VertexPtr<D>&source, const VertexPtr<D>&target, double squaredLength) noexcept;
+    EdgePtr<D> get(const std::uint64_t &fingerprint);
+    void remove(const EdgePtr<D> &edge) noexcept;
+    void replace(const EdgePtr<D> &toRemove, const EdgePtr<D> &toAdd) noexcept;
     void reserve(std::size_t nSimplices);
 
   private:
-    EdgePtrMap edgeList{};
-    EdgePtr getOrInsert(const EdgePtr &edge);
+    EdgePtrMap<D> edgeList{};
+    EdgePtr<D> getOrInsert(const EdgePtr<D> &edge);
 };
+
+using EdgeList4D = EdgeList<4>;
 } // caset
 
 #endif //CASET_EDGELIST_H
