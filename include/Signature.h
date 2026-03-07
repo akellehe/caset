@@ -35,19 +35,19 @@ enum class SignatureType : uint8_t {
   Euclidean = 1
 };
 
+template<int D>
 class Signature {
   public:
-    Signature(int dimensions_, SignatureType signatureType_);
+    Signature(SignatureType signatureType_);
 
     [[nodiscard]] std::vector<int> getDiagonal() const noexcept;
 
-    [[nodiscard]] int getDimensions() const noexcept;
+    [[nodiscard]] int getDimensions() const noexcept { return D; };
 
     [[nodiscard]] SignatureType getSignatureType() const noexcept;
 
   private:
     std::vector<int> diag;
-    int dimensions;
     SignatureType signatureType;
 
     static inline const double c = 1.;

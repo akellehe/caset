@@ -29,25 +29,23 @@
 #include <cstdint>
 
 namespace caset {
-Signature::Signature(int dimensions_, SignatureType signatureType_) {
-  dimensions = dimensions_;
-  signatureType = signatureType_;
-  diag = std::vector<int>(dimensions_);
-  std::fill_n(diag.begin(), dimensions_, 1);
+
+template<int D>
+Signature<D>::Signature(SignatureType signatureType_) : signatureType(signatureType_) {
+  diag = std::vector<int>(D);
+  std::fill_n(diag.begin(), D, 1);
   if (signatureType_ == SignatureType::Lorentzian) {
     diag[0] = -1;
   }
 }
 
-[[nodiscard]] std::vector<int> Signature::getDiagonal() const noexcept {
+template<int D>
+[[nodiscard]] std::vector<int> Signature<D>::getDiagonal() const noexcept {
   return diag;
 };
 
-[[nodiscard]] int Signature::getDimensions() const noexcept {
-  return dimensions;
-}
-
-[[nodiscard]] SignatureType Signature::getSignatureType() const noexcept {
+template<int D>
+[[nodiscard]] SignatureType Signature<D>::getSignatureType() const noexcept {
   return signatureType;
 }
 } // caset

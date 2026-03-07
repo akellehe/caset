@@ -118,13 +118,13 @@ EdgePtr<D> Vertex<D>::getEdge(const EdgePtr<D> &edge) {
 template<int D>
 std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
 Vertex<D>::moveEdgesToImpl(
-  const VertexPtr &recipient,
-  Spacetime *spacetime,
+  const VertexPtr<D> &recipient,
+  Spacetime<D> *spacetime,
   EdgeDirection direction
 ) {
 #ifdef CASET_ASSERTIONS
   if (spacetime == nullptr) {
-    throw std::runtime_error("Spacetime was null in vertex.cpp");
+    throw std::runtime_error("Spacetime<D> was null in vertex.cpp");
   }
 #endif
   EdgePtrSet<D> oldEdges{};
@@ -166,18 +166,18 @@ Vertex<D>::moveEdgesToImpl(
 template<int D>
 std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
 Vertex<D>::moveInEdgesTo(
-  const VertexPtr &vertex,
-  Spacetime *spacetime
+  const VertexPtr<D> &vertex,
+  Spacetime<D> *spacetime
 ) {
   return moveEdgesToImpl(vertex, spacetime, EdgeDirection::In);
 }
 
 template<int D>
 std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
-Vertex<D>::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
+Vertex<D>::moveEdgesTo(const VertexPtr<D> &vertex, Spacetime<D> *spacetime) {
 #ifdef CASET_ASSERTIONS
   if (spacetime == nullptr) {
-    throw std::runtime_error("Spacetime was null in vertex.cpp (2)");
+    throw std::runtime_error("Spacetime<D> was null in vertex.cpp (2)");
   }
 #endif
   EdgePtrSet<D> oldEdges{};
@@ -193,7 +193,7 @@ Vertex<D>::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
 
 template<int D>
 std::pair<EdgePtrSet<D>, EdgePtrSet<D>>
-Vertex<D>::moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
+Vertex<D>::moveOutEdgesTo(const VertexPtr<D> &vertex, Spacetime<D> *spacetime) {
   return moveEdgesToImpl(vertex, spacetime, EdgeDirection::Out);
 }
 
@@ -210,7 +210,7 @@ void Vertex<D>::checkDuplicates(std::string msg) const {
 }
 
 template<int D>
-bool Vertex<D>::addSimplex(const SimplexPtr &simplex) {
+bool Vertex<D>::addSimplex(const SimplexPtr<D> &simplex) {
   // CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
 #if CASET_ASSERTIONS
   if (simplex == nullptr || simplex.get() == nullptr) {
@@ -227,7 +227,7 @@ bool Vertex<D>::addSimplex(const SimplexPtr &simplex) {
 }
 
 template<int D>
-bool Vertex<D>::removeSimplex(const SimplexPtr &simplex) {
+bool Vertex<D>::removeSimplex(const SimplexPtr<D> &simplex) {
 // #if CASET_ASSERTIONS
   // if (!simplices.contains(simplex)) {
     // throw std::runtime_error("You attempted to remove a simplex that did not exist");

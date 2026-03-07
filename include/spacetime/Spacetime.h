@@ -82,24 +82,24 @@ class Spacetime {
     ///   timelike slices. None means they can be interspersed.
     /// @param topology_ The topology of the spatial slices (default: Toroid)
     Spacetime<D>(
-      std::shared_ptr<Metric> metric_,
+      std::shared_ptr<Metric<D>> metric_,
       SpacetimeType spacetimeType_,
       std::optional<double> alpha_,
       std::optional<double> a_,
       Foliation foliation_,
-      std::optional<std::shared_ptr<Topology> > topology_);
+      std::optional<std::shared_ptr<Topology<D>> > topology_);
 
     // ========================================
     // Creation Methods
     // ========================================
 
-    std::pair<SimplexPtr<D>, bool> createSimplex(const VertexPtrs &vertices);
+    std::pair<SimplexPtr<D>, bool> createSimplex(const VertexPtrs<D> &vertices);
 
     /// Creates a simplex \f$ \sigma^k \f$ from explicit vertices and edges.
     /// @param vertices The vertices \f$ \{v_0, \ldots, v_k\} \f$ of the simplex
     /// @param edges The edges \f$ \{e_{ij}\} \f$ connecting the vertices
     /// @return {simplex, wasCreated} pair where wasCreated=true if newly created, false if already existed
-    std::pair<SimplexPtr<D>, bool> createSimplex(const VertexPtrs &vertices, const Edges &edges);
+    std::pair<SimplexPtr<D>, bool> createSimplex(const VertexPtrs<D> &vertices, const Edges<D> &edges);
 
     /// Creates a simplex \f$ \sigma^{(t_i, t_f)} \f$ with the given causal orientation.
     /// @param numericOrientation Tuple (timelike_initial, timelike_final) defining the orientation
@@ -113,34 +113,34 @@ class Spacetime {
 
     /// Creates a vertex \f$ v \f$ with the next available ID at the current time.
     /// @return Shared pointer to the created vertex
-    [[nodiscard]] VertexPtr createVertex() noexcept;
-    [[nodiscard]] VertexPtr createVertex(const std::vector<double> &coords) noexcept;
+    [[nodiscard]] VertexPtr<D> createVertex() noexcept;
+    [[nodiscard]] VertexPtr<D> createVertex(const std::vector<double> &coords) noexcept;
 
 
     /// Creates a vertex \f$ v \f$ with the given ID at the current time.
     /// @param id The unique identifier for the vertex
     /// @return Shared pointer to the created vertex
-    [[nodiscard]] VertexPtr createVertex(std::uint64_t id) const noexcept;
+    [[nodiscard]] VertexPtr<D> createVertex(std::uint64_t id) const noexcept;
 
     /// Creates a vertex \f$ v \f$ with the given ID and coordinates \f$ (t, x^1, \ldots, x^{n-1}) \f$.
     /// @param id The unique identifier for the vertex
     /// @param coords The spacetime coordinates of the vertex
     /// @return Shared pointer to the created vertex
-    [[nodiscard]] VertexPtr createVertex(std::uint64_t id, const std::vector<double> &coords) const noexcept;
+    [[nodiscard]] VertexPtr<D> createVertex(std::uint64_t id, const std::vector<double> &coords) const noexcept;
 
     /// Creates an edge \f$ e = (v_s, v_t) \f$ with squared length computed from the metric.
     /// The squared length is \f$ \ell^2 = g_{\mu\nu}(x^t - x^s)^\mu(x^t - x^s)^\nu \f$.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
     /// @return Shared pointer to the created edge
-    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt) const noexcept;
+    [[nodiscard]] EdgePtr<D> createEdge(const VertexPtr<D> &src, const VertexPtr<D> &tgt) const noexcept;
 
     /// Creates an edge \f$ e = (v_s, v_t) \f$ with explicit squared length.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
     /// @param squaredLength The squared length \f$ \ell^2 \f$ of the edge
     /// @return Shared pointer to the created edge
-    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, double squaredLength) const noexcept;
+    [[nodiscard]] EdgePtr<D> createEdge(const VertexPtr<D> &src, const VertexPtr<D> &tgt, double squaredLength) const noexcept;
 
     // ========================================
     // Complex Building Methods
@@ -164,13 +164,13 @@ class Spacetime {
     [[nodiscard]] double getCurrentTime() const noexcept;
 
     /// @return The edge list \f$ E \f$ containing all edges in the complex
-    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() const noexcept;
+    [[nodiscard]] std::shared_ptr<EdgeList<D>> getEdgeList() const noexcept;
 
     /// @return The metric tensor \f$ g_{\mu\nu} \f$ defining the geometry
-    [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept;
+    [[nodiscard]] std::shared_ptr<Metric<D>> getMetric() const noexcept;
 
     /// @return The vertex list \f$ V \f$ containing all vertices in the complex
-    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() const noexcept;
+    [[nodiscard]] std::shared_ptr<VertexList<D>> getVertexList() const noexcept;
 
     /// @return Simplices around the boundary of the simplicial complex. These simplices have at
     /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note
@@ -196,7 +196,7 @@ class Spacetime {
     /// \f$ G = (V, E) \f$ where vertices are connected by edges.
     ///
     /// @return Vector of connected components, each containing a list of vertices
-    [[nodiscard]] std::vector<VertexPtrs> getConnectedComponents() const;
+    [[nodiscard]] std::vector<VertexPtrs<D>> getConnectedComponents() const;
 
     /// Retrieves a simplex from the complex by pointer lookup.
     /// @param simplex The simplex to find
@@ -222,14 +222,14 @@ class Spacetime {
     ///
     /// @param vertex The vertex \f$ v \f$ to potentially remove
     /// @return true if the vertex was removed, false if it has incident edges
-    [[nodiscard]] bool removeIfIsolated(const VertexPtr &vertex) const noexcept;
+    [[nodiscard]] bool removeIfIsolated(const VertexPtr<D> &vertex) const noexcept;
 
     /// Adds an observable to track during evolution.
     ///
     /// Observables are measured after each update step to monitor the system's properties.
     ///
     /// @param observable The observable \f$ \mathcal{O} \f$ to track
-    void addObservable(const std::shared_ptr<Observable> &observable);
+    void addObservable(const std::shared_ptr<Observable<D>> &observable);
 
     // ========================================
     // Internal Management
@@ -287,16 +287,16 @@ class Spacetime {
     void unregisterSimplex(const SimplexPtr<D> &simplex);
 
   private:
-    std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
-    std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
+    std::shared_ptr<EdgeList<D>> edgeList = std::make_shared<EdgeList<D>>();
+    std::shared_ptr<VertexList<D>> vertexList = std::make_shared<VertexList<D>>();
 
     IdType vertexIdCounter = 0;
     SpacetimeType spacetimeType;
     double alpha = 1.;
     double a = 1.;
     Foliation foliation = Foliation::PREFERRED;
-    std::shared_ptr<Metric> metric;
-    std::shared_ptr<Topology> topology;
+    std::shared_ptr<Metric<D>> metric;
+    std::shared_ptr<Topology<D>> topology;
     std::uint64_t currentTime = 0;
 
     SimplexSet<D> simplices{};
@@ -308,10 +308,10 @@ class Spacetime {
     /// the Simplex to which that Face belongs.
     ///
     /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientation, SimplexSet<D>, SimplexOrientationHash, SimplexOrientationEq>
+    std::unordered_map<SimplexOrientation<D>, SimplexSet<D>, SimplexOrientationHash<D>, SimplexOrientationEq<D>>
     externalSimplicesByFacialOrientation{};
 
-    std::vector<std::shared_ptr<Observable> > observables{};
+    std::vector<std::shared_ptr<Observable<D>> > observables{};
 };
 } // caset
 

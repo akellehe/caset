@@ -33,9 +33,10 @@
 namespace caset {
 /// # The Metric
 ///
+template <int D>
 class Metric {
   public:
-    Metric(bool coordinateFree_, Signature &signature_);
+    Metric(bool coordinateFree_, Signature<D> &signature_);
 
     ///
     /// This method computes the length of the edge between the source and target vertices when we're using a coordinate
@@ -66,10 +67,10 @@ class Metric {
       const std::vector<double> &targetCoords
       ) const;
 
-    [[nodiscard]] std::shared_ptr<Signature> getSignature() const noexcept;
+    [[nodiscard]] std::shared_ptr<Signature<D>> getSignature() const noexcept;
 
   private:
-    std::shared_ptr<Signature> signature;
+    std::shared_ptr<Signature<D>> signature;
     bool coordinateFree;
 };
 } // caset

@@ -45,6 +45,7 @@ enum class TimeOrientation : uint8_t {
   UNKNOWN = 2
 };
 
+template<int D>
 class SimplexOrientation {
   public:
     ///
@@ -75,13 +76,17 @@ class SimplexOrientation {
     [[nodiscard]] uint8_t getK() const; /// A k-simplex has \f$ k+1 \f$ vertices.
     [[nodiscard]] size_t hash() const;
     bool operator==(const SimplexOrientation &other) const noexcept;
-    static SimplexOrientation orientationOf(const VertexPtrs &vertices);
-    Fingerprint fingerprint;
+    static SimplexOrientation orientationOf(const VertexPtrs<D> &vertices);
+    Fingerprint<D> fingerprint;
   private:
     uint8_t ti{0};
     uint8_t tf{0};
     uint8_t k{0};
 };
+
+using SimplexOrientation4D = SimplexOrientation<4>;
+using SimplexOrientationHash4D = SimplexOrientationHash<4>;
+using SimplexOrientationEq4D = SimplexOrientationEq<4>;
 
 }
 

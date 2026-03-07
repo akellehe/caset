@@ -56,13 +56,13 @@ class Simplex {
   public:
     // ==================== Static Factory Methods ====================
     static std::shared_ptr<Simplex<D>> create(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, const Edges<D> &edges_);
-    static std::shared_ptr<Simplex<D>> create(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, const Edges<D> &edges_, const SimplexOrientation &orientation_);
+    static std::shared_ptr<Simplex<D>> create(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, const Edges<D> &edges_, const SimplexOrientation<D> &orientation_);
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k);
 
     // ==================== Constructors & Initialization ====================
     /// @param vertices_
     explicit Simplex(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, Edges<D> edges_);
-    Simplex(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, Edges<D> edges_ ,const SimplexOrientation &orientation_);
+    Simplex(Spacetime<D> *spacetime_, const VertexPtrs<D> &vertices_, Edges<D> edges_ ,const SimplexOrientation<D> &orientation_);
 
     std::uint64_t size() const noexcept;
 
@@ -87,7 +87,7 @@ class Simplex {
     /// Each simplex has an associated _orientation_ in the case you're preserving causality with your work. You can
     /// find specifics of the SimplexOrientation abstractly and concretely/computationally in the documentation for the
     /// SimplexOrientation
-    [[nodiscard]] SimplexOrientation getOrientation() const noexcept;
+    [[nodiscard]] SimplexOrientation<D> getOrientation() const noexcept;
 
     /// The earliest time assigned to a vertex in this Simplex.
     /// @returns ti for the Simplex.
@@ -102,7 +102,7 @@ class Simplex {
     [[nodiscard]] VertexPtrs<D> getVertices() const noexcept;
 
     /// This method is self-explanatory. O(1) lookups for who has what.
-    [[nodiscard]] bool hasVertex(const VertexPtr4D &vertex) const;
+    [[nodiscard]] bool hasVertex(const VertexPtr<D> &vertex) const;
 
     /// This method produces a lookup table \f$ Id \rightarrow Vertex \f$. The only place it's used at the moment is for
     /// verifying state in our Python unit tests.
@@ -118,7 +118,7 @@ class Simplex {
     /// since it can point either way as the direction relates to vertex order. So it's possible for e.g. vertices
     /// \f$ \{v_0, v_1, v_2\} \f$ to correspond to edges \f$ \{ e_{0 \rightarrow 1}, e_{2 \rightarrow 1}, e_{2 \rightarrow 0} \} \f$
     [[nodiscard]] bool hasEdge(const EdgePtr<D>&edge) const;
-    [[nodiscard]] bool hasEdge(const VertexPtr4D &vertexA, const VertexPtr4D &vertexB) const;
+    [[nodiscard]] bool hasEdge(const VertexPtr<D> &vertexA, const VertexPtr<D> &vertexB) const;
     [[nodiscard]] bool hasEdgeContaining(IdType vertexId) const;
 
     // ==================== Face & Facet Queries ====================
@@ -233,7 +233,7 @@ class Simplex {
     /// @param vertex A new, standalone, orphaned vertex with no existing edges or associated simplices.
     /// @returns A pair of {simplex, facets}; The new k-simplex created by coning `vertex` to this facet and a vector of
     ///   new exterior facets resulting from the new simplex.
-    std::pair<SimplexPtr<D>, Simplices<D>> cone(VertexPtr4D &vertex);
+    std::pair<SimplexPtr<D>, Simplices<D>> cone(VertexPtr<D> &vertex);
 
     // ==================== Validation ====================
     void validate() const;
@@ -303,12 +303,12 @@ class Simplex {
     /// @param oldVertex The Vertex to replace
     /// @param newVertex The vertex with which to replace it.
     /// @return
-    bool replaceVertex(const VertexPtr4D &oldVertex, const VertexPtr4D &newVertex);
+    bool replaceVertex(const VertexPtr<D> &oldVertex, const VertexPtr<D> &newVertex);
 
     bool isInitialized() const noexcept;
   private:
     Spacetime<D> *spacetime{nullptr};
-    SimplexOrientation orientation{};
+    SimplexOrientation<D> orientation{};
 
     VertexIdToIndex vertexIdToIndex{};
     VertexIndexToId vertexIndexToId{};

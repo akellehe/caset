@@ -34,7 +34,7 @@ template<int D>
 class Spacetime;
 
 template<int D>
-class Cylinder : public Topology {
+class Cylinder : public Topology<D> {
   public:
     void build(Spacetime<D> *spacetime, int numSimplices) override;
 };

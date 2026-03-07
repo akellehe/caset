@@ -38,11 +38,12 @@ enum class ConstraintType : uint8_t {
   All = 1
 };
 
+template<int D>
 class Constraint {
   public:
     virtual ~Constraint() = default;
 
-    virtual bool applies(std::shared_ptr<Spacetime> &spacetime, ConstraintType &type_);
+    virtual bool applies(std::shared_ptr<Spacetime<D>> &spacetime, ConstraintType &type_);
 
 };
 } // caset

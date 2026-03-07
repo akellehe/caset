@@ -123,18 +123,18 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<>())
       .def("build", &Toroid4D::build);
 
-  py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation")
+  py::class_<SimplexOrientation4D, std::shared_ptr<SimplexOrientation4D> >(m, "SimplexOrientation4D")
       .def(py::init<uint8_t, uint8_t>())
-      .def("getOrientation", &SimplexOrientation::getOrientation)
-      .def("__hash__", &SimplexOrientation::hash)
-      .def("__eq__", &SimplexOrientation::operator==)
-      .def("__str__", &SimplexOrientation::toString)
-      .def("__repr__", &SimplexOrientation::toString)
-      .def("numeric", &SimplexOrientation::numeric);
+      .def("getOrientation", &SimplexOrientation4D::getOrientation)
+      .def("__hash__", &SimplexOrientation4D::hash)
+      .def("__eq__", &SimplexOrientation4D::operator==)
+      .def("__str__", &SimplexOrientation4D::toString)
+      .def("__repr__", &SimplexOrientation4D::toString)
+      .def("numeric", &SimplexOrientation4D::numeric);
 
-  py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash> >(m, "SimplexOrientationHash")
+  py::class_<SimplexOrientationHash4D, std::shared_ptr<SimplexOrientationHash4D> >(m, "SimplexOrientationHash")
       .def(py::init<>());
-  py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq> >(m, "SimplexOrientationEq")
+  py::class_<SimplexOrientationEq4D, std::shared_ptr<SimplexOrientationEq4D> >(m, "SimplexOrientationEq")
       .def(py::init<>());
 
   py::class_<Simplex4D, std::shared_ptr<Simplex4D> >(m, "Simplex")

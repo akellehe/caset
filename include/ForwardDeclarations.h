@@ -141,13 +141,20 @@ using VertexIdToIndex = std::unordered_map<IdType, std::size_t>;
 using VertexIndexToId = std::unordered_map<std::size_t, IdType>;
 
 // SimplexOrientation Structures
-class SimplexOrientation;
-using SimplexOrientationPtr = std::shared_ptr<SimplexOrientation>;
-using SimplexOrientationPtrHash = FingerprintPtrHash<SimplexOrientationPtr>;
-using SimplexOrientationPtrEq = FingerprintPtrEq<SimplexOrientationPtr>;
-using SimplexOrientationHash = FingerprintHash<SimplexOrientation>;
-using SimplexOrientationEq = FingerprintEq<SimplexOrientation>;
-using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrientationHash, SimplexOrientationEq>;
+
+template <int D> class SimplexOrientation;
+template <int D>
+using SimplexOrientationPtr = std::shared_ptr<SimplexOrientation<D>>;
+template <int D>
+using SimplexOrientationPtrHash = FingerprintPtrHash<SimplexOrientationPtr<D>>;
+template <int D>
+using SimplexOrientationPtrEq = FingerprintPtrEq<SimplexOrientationPtr<D>>;
+template <int D>
+using SimplexOrientationHash = FingerprintHash<SimplexOrientation<D>>;
+template <int D>
+using SimplexOrientationEq = FingerprintEq<SimplexOrientation<D>>;
+template <int D>
+using SimplexOrientationSet = std::unordered_set<SimplexOrientation<D>, SimplexOrientationHash<D>, SimplexOrientationEq<D>>;
 
 template<int D>
 class Spacetime;
