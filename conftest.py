@@ -55,10 +55,10 @@ def clean_build_env():
     return env
 
 def get_build_command(build_dir):
-    return ["cmake", "--build", str(build_dir.parent), "--parallel"]
+    return ["cmake", "--build", str(build_dir), "--parallel"]
 
 def get_configure_command(build_dir):
-    cmd = ["cmake", "-S", ".", "-B", str(build_dir.parent), "-G", "Ninja"]
+    cmd = ["cmake", "-S", ".", "-B", str(build_dir), "-G", "Ninja"]
     if CMAKE_BUILD_TYPE:
         cmd.append(f"-DCMAKE_BUILD_TYPE={CMAKE_BUILD_TYPE}")
     if CASET_ASAN:
@@ -72,17 +72,28 @@ def get_configure_command(build_dir):
 def pytest_sessionstart(session):
     build_dir = get_scikit_build_dir()
     env = clean_build_env()
-    if not build_dir.parent.exists():
-        print("build dir does not exist (", str(build_dir.parent), ") configuring.")
+    if not build_dir.exists():
+        print("build dir does not exist (", str(build_dir), ") configuring.")
         subprocess.run(get_configure_command(build_dir), check=True, env=env)
     subprocess.run(get_build_command(build_dir), check=True, env=env)
-    sys.path.insert(0, str(build_dir.parent))
+    sys.path.insert(0, str(build_dir))
 
-    # refuse to import caset from site-packages by accident:
+    # If caset is editable-installed (pip install -e .), the module in
+    # site-packages is kept in sync with the build dir by scikit-build-core.
+    # Only warn when the module appears to come from a non-editable install.
     spec = importlib.util.find_spec("caset")
     if spec is not None and "site-packages" in (spec.origin or ""):
-        raise RuntimeError(
-            f"Refusing to use caset from site-packages: {spec.origin}\n"
-            f"Expected to load from: {build_dir}"
-            "Uninstall via python3 -m pip uninstall caset before running tests."
-        )
+        # Check whether this is an editable install
+        try:
+            from importlib.metadata import distribution
+            dist = distribution("caset")
+            is_editable = dist.read_text("direct_url.json") is not None and \
+                          "editable" in (dist.read_text("direct_url.json") or "")
+        except Exception:
+            is_editable = False
+        if not is_editable:
+            raise RuntimeError(
+                f"Refusing to use caset from site-packages: {spec.origin}\n"
+                f"Expected to load from: {build_dir}\n"
+                "Uninstall via python3 -m pip uninstall caset before running tests."
+            )

@@ -1,99 +1,82 @@
 # caset
 
-# Installation
+A C++/pybind11 extension for lattice spacetime and causal set simulations.
 
-## Setting up a Python Environment
+## Requirements
 
-We recommend using a virtual environment for Python development. `torch` currently has known compatibility issues with 
-Python 3.12, so we recommend using Python 3.11. You can create a Python environment pretty easily on a Mac with
+- Python 3.9+
+- A C++20 compatible compiler (gcc 7+, clang 5+, MSVC 2017+)
+- CMake 3.18+ and Ninja (installed automatically via pip)
 
-```bash
-pyenv install 3.11.9
-```
+## Installation
 
-Then running your virtual environment command. If you're using virtualenvwrapper that goes like:
+### Setting up a Python environment
 
-```bash
-mkvirtualenv caset --python=python3.11
-```
-
-## Installing Build Dependencies
-
-To build you'll need to install `scikit-build-core`.
+We recommend using a virtual environment. You can create one with pyenv and virtualenvwrapper:
 
 ```bash
-pip install scikit-build-core
+pyenv install 3.13.12
+mkvirtualenv caset --python=python3.13
 ```
 
-Installation requires 
+### Installing caset
 
-  - Python 3.9 or higher. 
-  - A C++17 compatible compiler (e.g. gcc 7+, clang 5+, MSVC 2017+).
-  - doxygen (for building documentation).
-  - torch (PyTorch) 2.9.0 or higher.
-  - scikit-build-core
-
-## Installing caset
-
-To install `caset`, you can use pip. If you're in a virtual environment, make sure it's activated. `cd` to the project 
-root then run:
+To install in editable (development) mode with all dev dependencies:
 
 ```bash
-pip install -v -e .
+pip install -e ".[dev]"
 ```
 
-And you'll have an "editable" install of `caset` in your environment. You can test it out by running
+Or for a minimal install without dev tools:
+
+```bash
+pip install -e .
+```
+
+Verify it works:
 
 ```bash
 python3 -c "import caset; print(caset.__file__)"
 ```
 
-## Building Documentation
+## Running Tests
 
-To build documentation you'll have to install `doxygen` with your package manager; 
-
-On MacOS, use Homebrew:
+Tests use pytest and are located in `tests/`. The `conftest.py` will automatically build the C++ extension via CMake before running tests.
 
 ```bash
-brew install doxygen
+pytest tests/ -v
 ```
 
-On Ubuntu/Debian, use apt:
-```asm
+### Build options
+
+You can enable additional build features via environment variables:
+
+```bash
+CASET_ASAN=1 pytest tests/        # AddressSanitizer + UBSan
+CASET_VERBOSE=1 pytest tests/     # C++ level logging
+CASET_ASSERTIONS=1 pytest tests/  # Extra assertions for early failure detection
+```
+
+## Building Documentation
+
+Install doxygen with your system package manager:
+
+```bash
+# macOS
+brew install doxygen
+
+# Ubuntu/Debian
 sudo apt-get install doxygen
 ```
 
-Then install the Python dependencies with pip. It's recommended to use a virtual environment. You can create one with:
+Then build the docs:
 
 ```bash
-mkvirtualenv caset
+cd docs && pip install -r requirements-docs.txt && make html
 ```
 
-Then install the dependencies. The development dependencies are listed in `dev-requirements.txt`. Install them using
-
-```bash
-python3 -m pip install -r dev-requirements.txt
-```
-
-To build the `caset` package there are a couple minor hoops. 
-
-If you run with build isolation (the default), for whatever reason python, pip, or someone fails to keep around the build directory in
-/tmp until the build completes, so you'll get weird errors about e.g. torch.h being missing. To work around this you can
-Build with 
-
-```bash
-python3 -m pip install -v -e . --no-build-isolation
-```
-
-Once you've compiled the package; you can install dependencies for documentation and build the documentation with
-
-```bash
-cd docs && python3 -m pip install -r requirements-docs.txt && make html
-```
-
-then open it with 
+Open the result:
 
 ```bash
 open _build/html/index.html
 ```
-

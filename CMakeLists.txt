@@ -118,7 +118,7 @@ install(TARGETS caset
         BUNDLE  DESTINATION .
 )
 
-if(!CASET_ASAN)
+if(NOT CASET_ASAN)
 # --- Generate Python stubs for caset (.pyi) ---
 set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
 
@@ -126,13 +126,15 @@ add_custom_command(
         TARGET caset POST_BUILD
         BYPRODUCTS "${STUB_OUT_DIR}/caset.pyi"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_OUT_DIR}"
-         Make the just-built module importable:
-        COMMAND ${CMAKE_COMMAND} -E env
-        PYTHONPATH=$<TARGET_FILE_DIR:caset>
-        ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"
+        # Make the just-built module importable:
+        COMMAND ${Python_EXECUTABLE} -c
+            "import pybind11_stubgen" && ${CMAKE_COMMAND} -E env
+            PYTHONPATH=$<TARGET_FILE_DIR:caset>
+            ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"
+            || ${CMAKE_COMMAND} -E echo "pybind11_stubgen not found, skipping stub generation"
         COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/caset.pyi"
 )
 
 # Install the stub next to the extension in the package
-install(FILES "${STUB_OUT_DIR}/caset.pyi" DESTINATION .)
+install(FILES "${STUB_OUT_DIR}/caset.pyi" DESTINATION . OPTIONAL)
 endif()

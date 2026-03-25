@@ -40,5 +40,11 @@ class TestBuilding(unittest.TestCase):
             print("  origin:", spec.origin)
             print("  loader:", spec.loader)
 
-        self.assertNotIn("site-packages", spec.origin)
+        # Allow site-packages if this is an editable install
+        if "site-packages" in spec.origin:
+            from importlib.metadata import distribution
+            dist = distribution("caset")
+            direct_url = dist.read_text("direct_url.json") or ""
+            self.assertIn("editable", direct_url,
+                          f"caset loaded from site-packages but is not an editable install: {spec.origin}")
         self.assertIsNotNone(path)

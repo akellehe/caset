@@ -4,7 +4,8 @@ requires = [
 #    "ninja",                # optional but faster on CI
     "pybind11>=2.12",
     "scikit-build-core>=0.9",
-    "numpy>=2.3.5"
+    "numpy>=2.3.4",
+    "pybind11-stubgen==2.5.5"
 ]
 build-backend = "scikit_build_core.build"
 
@@ -23,7 +24,6 @@ dependencies = [
     "pybind11>=2.12",
 ]
 optional-dependencies.dev = [
-    "numpy>=2.3.5",
     "pytest",
     "scikit-build-core>=0.9",
     "accessible-pygments==0.0.5",
