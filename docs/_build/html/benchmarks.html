@@ -1,13 +1,13 @@
 <!doctype html>
 <html class="no-js" lang="en" data-content_root="./">
-  <head>
-<meta charset="utf-8">
+  <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="#">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="The Caset C++ API" href="cpp_api.html"><link rel="prev" title="CDT Examples" href="examples.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-<meta name="robots" content="noindex" />
-<title>Search - caset  documentation</title><link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+        <title>Benchmarks - caset documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
     
@@ -172,7 +172,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
       </label>
     </div>
@@ -184,17 +184,17 @@
   
   <span class="sidebar-brand-text">caset  documentation</span>
   
-</a><form class="sidebar-search-container" method="get" action="#" role="search">
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
   <input type="hidden" name="check_keywords" value="yes">
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
-  <ul>
+  <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
 </ul>
 
@@ -215,7 +215,13 @@
           <span>Back to top</span>
         </a>
         <div class="content-icon-container">
-          <div class="theme-toggle-container theme-toggle-content">
+          <div class="view-this-page">
+  <a class="muted-link" href="_sources/benchmarks.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
             <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
               <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
               <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
@@ -223,30 +229,212 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          
-<noscript>
-<div class="admonition error">
-  <p class="admonition-title">Error</p>
-  <p>
-    Please activate JavaScript to enable the search functionality.
-  </p>
+          <section class="tex2jax_ignore mathjax_ignore" id="benchmarks">
+<h1>Benchmarks<a class="headerlink" href="#benchmarks" title="Link to this heading">¶</a></h1>
+<p>Build-time benchmarks for constructing CDT simplicial complexes across
+dimensions 1D through 4D and a range of target sizes.</p>
+<p>All timings are wall-clock averages over 5 repetitions on a single core,
+measured with <code class="docutils literal notranslate"><span class="pre">time.perf_counter()</span></code>.  Run the benchmark script yourself to
+get numbers for your hardware:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/benchmarks/build_benchmark.py<span class="w"> </span>--save<span class="w"> </span>docs/source/assets/benchmarks/
+</pre></div>
 </div>
-</noscript>
+<p>The script writes a structured JSON log alongside the plots
+(<code class="docutils literal notranslate"><span class="pre">benchmark_results.json</span></code>) for programmatic comparison across versions.</p>
+<hr class="docutils" />
+<section id="build-time-vs-complex-size">
+<h2>Build Time vs. Complex Size<a class="headerlink" href="#build-time-vs-complex-size" title="Link to this heading">¶</a></h2>
+<p>Build time scales roughly linearly with the number of target simplices in
+every dimension.  Higher-dimensional complexes are more expensive per
+simplex because each <span class="math notranslate nohighlight">\(d\)</span>-simplex carries <span class="math notranslate nohighlight">\(\binom{d+1}{2}\)</span> edges and
+<span class="math notranslate nohighlight">\(d + 1\)</span> vertices that must be linked into the triangulation.</p>
+<a class="reference internal image-reference" href="_images/build_time.png"><img alt="Log-log plot of build time vs. target simplices for 1D-4D" class="align-center" src="_images/build_time.png" style="width: 80%;" />
+</a>
+</section>
+<hr class="docutils" />
+<section id="build-throughput">
+<h2>Build Throughput<a class="headerlink" href="#build-throughput" title="Link to this heading">¶</a></h2>
+<p>Throughput (simplices per second) is highest in 2D (~70,000–95,000 simpl/s)
+and decreases with dimension as the per-simplex bookkeeping grows.  4D
+sustains ~30,000 simpl/s, meaning a 100k-simplex triangulation builds in
+about 3 seconds.</p>
+<a class="reference internal image-reference" href="_images/build_throughput.png"><img alt="Bar chart of build throughput by dimension and target size" class="align-center" src="_images/build_throughput.png" style="width: 80%;" />
+</a>
+</section>
+<hr class="docutils" />
+<section id="full-dashboard">
+<h2>Full Dashboard<a class="headerlink" href="#full-dashboard" title="Link to this heading">¶</a></h2>
+<p>The four-panel view combines build time, throughput, actual-vs-requested
+size, and complex density (vertices and edges per simplex) across all
+dimensions.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>1D CDT produces far fewer simplices than requested because the
+triangulation is topologically a circle and the builder converges once the
+minimal cell structure is complete.  The 1D data points are included for
+completeness but are not directly comparable to 2D–4D.</p>
+</div>
+<a class="reference internal image-reference" href="_images/build_benchmarks.png"><img alt="Four-panel benchmark dashboard" class="align-center" src="_images/build_benchmarks.png" style="width: 100%;" />
+</a>
+</section>
+<hr class="docutils" />
+<section id="results-table">
+<h2>Results Table<a class="headerlink" href="#results-table" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-given docutils container" id="id1">
+<table class="docutils align-default" id="id1">
+<caption><span class="caption-text">Build times (5-run average)</span><a class="headerlink" href="#id1" title="Link to this table">¶</a></caption>
+<colgroup>
+<col style="width: 9.6%" />
+<col style="width: 18.1%" />
+<col style="width: 18.1%" />
+<col style="width: 18.1%" />
+<col style="width: 18.1%" />
+<col style="width: 18.1%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Dim</p></th>
+<th class="head"><p>Target</p></th>
+<th class="head"><p>Actual</p></th>
+<th class="head"><p>Vertices</p></th>
+<th class="head"><p>Edges</p></th>
+<th class="head"><p>Time (s)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>2D</p></td>
+<td><p>500</p></td>
+<td><p>500</p></td>
+<td><p>514</p></td>
+<td><p>1,007</p></td>
+<td><p>0.005</p></td>
+</tr>
+<tr class="row-odd"><td><p>2D</p></td>
+<td><p>10,000</p></td>
+<td><p>10,000</p></td>
+<td><p>10,042</p></td>
+<td><p>20,021</p></td>
+<td><p>0.122</p></td>
+</tr>
+<tr class="row-even"><td><p>2D</p></td>
+<td><p>100,000</p></td>
+<td><p>100,000</p></td>
+<td><p>100,092</p></td>
+<td><p>200,046</p></td>
+<td><p>1.41</p></td>
+</tr>
+<tr class="row-odd"><td><p>3D</p></td>
+<td><p>500</p></td>
+<td><p>500</p></td>
+<td><p>521</p></td>
+<td><p>1,521</p></td>
+<td><p>0.027</p></td>
+</tr>
+<tr class="row-even"><td><p>3D</p></td>
+<td><p>10,000</p></td>
+<td><p>10,000</p></td>
+<td><p>10,063</p></td>
+<td><p>30,063</p></td>
+<td><p>0.195</p></td>
+</tr>
+<tr class="row-odd"><td><p>3D</p></td>
+<td><p>100,000</p></td>
+<td><p>100,000</p></td>
+<td><p>100,138</p></td>
+<td><p>300,138</p></td>
+<td><p>2.33</p></td>
+</tr>
+<tr class="row-even"><td><p>4D</p></td>
+<td><p>500</p></td>
+<td><p>500</p></td>
+<td><p>528</p></td>
+<td><p>2,042</p></td>
+<td><p>0.041</p></td>
+</tr>
+<tr class="row-odd"><td><p>4D</p></td>
+<td><p>10,000</p></td>
+<td><p>10,000</p></td>
+<td><p>10,084</p></td>
+<td><p>40,126</p></td>
+<td><p>0.288</p></td>
+</tr>
+<tr class="row-even"><td><p>4D</p></td>
+<td><p>100,000</p></td>
+<td><p>100,000</p></td>
+<td><p>100,184</p></td>
+<td><p>400,276</p></td>
+<td><p>3.32</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<hr class="docutils" />
+<section id="running-the-benchmark">
+<h2>Running the Benchmark<a class="headerlink" href="#running-the-benchmark" title="Link to this heading">¶</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Default: 5 sizes x 4 dimensions x 5 repeats (~1 minute)</span>
+python<span class="w"> </span>examples/benchmarks/build_benchmark.py<span class="w"> </span>--save<span class="w"> </span>docs/source/assets/benchmarks/
 
-<div id="search-results"></div>
+<span class="c1"># Quick check (fewer repeats)</span>
+python<span class="w"> </span>examples/benchmarks/build_benchmark.py<span class="w"> </span>--repeats<span class="w"> </span><span class="m">2</span><span class="w"> </span>--save<span class="w"> </span>/tmp/bench/
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">--save</span></code> directory receives:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head text-left"><p>File</p></th>
+<th class="head text-left"><p>Contents</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">benchmark_results.json</span></code></p></td>
+<td class="text-left"><p>Structured log with metadata, per-trial timings, and summary statistics</p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">build_benchmarks.png</span></code></p></td>
+<td class="text-left"><p>Four-panel dashboard</p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">build_time.png</span></code></p></td>
+<td class="text-left"><p>Build time vs. size (standalone)</p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p><code class="docutils literal notranslate"><span class="pre">build_throughput.png</span></code></p></td>
+<td class="text-left"><p>Throughput bar chart (standalone)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
 
         </article>
       </div>
       <footer>
         
         <div class="related-pages">
-          
-          
+          <a class="next-page" href="cpp_api.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">The Caset C++ API</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="examples.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">CDT Examples</div>
+                
+              </div>
+            </a>
         </div>
         <div class="bottom-of-page">
           <div class="left-details">
@@ -265,8 +453,31 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Benchmarks</a><ul>
+<li><a class="reference internal" href="#build-time-vs-complex-size">Build Time vs. Complex Size</a></li>
+<li><a class="reference internal" href="#build-throughput">Build Throughput</a></li>
+<li><a class="reference internal" href="#full-dashboard">Full Dashboard</a></li>
+<li><a class="reference internal" href="#results-table">Results Table</a></li>
+<li><a class="reference internal" href="#running-the-benchmark">Running the Benchmark</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>
@@ -275,8 +486,7 @@
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>
-    
-<script src="_static/searchtools.js"></script>
-<script src="_static/language_data.js"></script>
-<script src="searchindex.js"></script></body>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
 </html>
