@@ -115,7 +115,7 @@ python examples/spectral_dimension.py --n-simplices 800 --n-configs 8 --max-sigm
   decaying shape.  The Gaussian fit captures the trend but scatter is
   large due to limited statistics at $N_4 \sim 800$.
 - **$\cos^3$ comparison (bottom left):** The Monte Carlo average profile
-  is relatively flat compared to the peaked $\cos^4(\pi\tau/T)$
+  is relatively flat compared to the peaked $\cos^3(\pi\tau/T)$
   prediction.  This is expected: the $\cos^3$ shape emerges only at
   $N_4 \gg 10\,000$ with $T \geq 40$ time slices.  At our lattice
   size, the profile spans only $\sim 9$ slices with insufficient dynamic
@@ -148,7 +148,7 @@ python examples/effective_action.py --n-simplices 800 --n-meas 60
 - **Fig. 5** (Phase B, $\kappa_0 = 1.6$, $\Delta = 0$): crumpled geometry
   collapsed to $\sim 2$ time slices.
 - **Fig. 6** (Phase C, $\kappa_0 = 2.2$, $\Delta = 0.6$): extended
-  de Sitter universe with $N_3(\tau) \propto \cos^4(\pi\tau/T)$.
+  de Sitter universe with $N_3(\tau) \propto \cos^3(\pi\tau/T)$.
 
 **Our result:** At $N_4 \sim 800$ the three profiles are **not yet
 differentiated** -- all show a roughly uniform distribution across
