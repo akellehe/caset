@@ -304,7 +304,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getSpacetime", &CDT::getSpacetime)
       .def("getK0", &CDT::getK0)
       .def("getK4", &CDT::getK4)
-      .def("getDelta", &CDT::getDelta);
+      .def("getDelta", &CDT::getDelta)
+      .def("setRelabelVertices", &CDT::setRelabelVertices, py::arg("enabled"));
 
   py::class_<VolumeProfile, std::shared_ptr<VolumeProfile> >(m, "VolumeProfile")
       .def(py::init<>())

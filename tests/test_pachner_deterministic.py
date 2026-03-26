@@ -44,6 +44,8 @@ def _build_small(n_simplices=10):
     target = st.getN41()
     # epsilon=0 removes volume-fixing from acceptance (we call moves directly)
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, target)
+    # Disable vertex relabeling so fingerprint-based before/after comparisons work
+    cdt.setRelabelVertices(False)
     return cdt, st
 
 

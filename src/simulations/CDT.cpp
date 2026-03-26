@@ -208,7 +208,7 @@ bool CDT::add() {
   // with a uniformly chosen existing vertex. This implements the 1/(N0+1)
   // factor in the acceptance prefactor. Observables are label-invariant, so
   // this is physically neutral but ensures correct detailed balance.
-  {
+  if (relabelVertices_) {
     VertexPtr randomVert = spacetime->getRandomVertex();
     if (randomVert && randomVert->getId() != newVert->getId()) {
       spacetime->swapVertexLabels(newVert, randomVert);

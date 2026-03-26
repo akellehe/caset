@@ -241,11 +241,18 @@ class CDT : public Simulation {
     /// @return Asymmetry parameter \f$ \Delta \f$.
     [[nodiscard]] double getDelta() const noexcept;
 
+    /// Enable or disable vertex relabeling after add/remove moves.
+    /// [BGL] Sec. 2.2.1: relabeling ensures correct detailed balance.
+    /// Enabled by default. Disable for deterministic topology tests
+    /// where fingerprint-based before/after comparison is needed.
+    void setRelabelVertices(bool enabled) noexcept { relabelVertices_ = enabled; }
+
   private:
     std::shared_ptr<Spacetime> spacetime;
     double k0, k4, delta, epsilon;
     std::size_t targetN41;
     bool quadraticVolumeFix;
+    bool relabelVertices_{true};
     std::mt19937 rng{std::random_device{}()};
 
     /// Metropolis-Hastings acceptance test.
