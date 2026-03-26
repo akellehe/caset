@@ -205,15 +205,15 @@ def main():
     T = len(avg_profile)
     tau = np.arange(T)
 
-    # The minisuperspace prediction: N_3(tau) ~ cos^4(pi*tau/T)
-    # with the effective action S_eff from Eq. 40
-    cos4 = np.cos(np.pi * (tau - T / 2.0) / T) ** 4
-    if cos4.max() > 0:
-        cos4 *= avg_profile.max() / cos4.max()
+    # The minisuperspace prediction: N_3(tau) ~ cos^3(pi*tau/T)
+    # from Eq. 28 of hep-th/0505154 (4D de Sitter profile)
+    cos3 = np.cos(np.pi * (tau - T / 2.0) / T) ** 3
+    if cos3.max() > 0:
+        cos3 *= avg_profile.max() / cos3.max()
 
     ax_mss.plot(tau, avg_profile, "ko", markersize=4, label="Monte Carlo")
-    ax_mss.plot(tau, cos4, "r-", linewidth=1.5,
-                label=r"Minisuperspace: $\cos^4(\pi\tau/T)$")
+    ax_mss.plot(tau, cos3, "r-", linewidth=1.5,
+                label=r"Minisuperspace: $\cos^3(\pi\tau/T)$")
     ax_mss.set_xlabel(r"$\tau$", fontsize=12)
     ax_mss.set_ylabel(r"$N_3(\tau)$", fontsize=12)
     ax_mss.set_title("Volume profile vs minisuperspace prediction\n"

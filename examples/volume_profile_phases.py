@@ -144,12 +144,12 @@ def main():
         ax_line.plot(np.arange(len(avg)), avg, "o-", label=short_label,
                      linewidth=2, markersize=4)
 
-    # Overlay cos^4 reference on the line plot
+    # Overlay cos^3 reference on the line plot (Eq. 28, hep-th/0505154)
     T_ref = 7
     tau_ref = np.linspace(0, T_ref - 1, 100)
-    cos4_ref = np.cos(np.pi * (tau_ref - (T_ref - 1) / 2) / T_ref) ** 4
-    ax_line.plot(tau_ref, cos4_ref * ax_line.get_ylim()[1] * 0.9, "k--",
-                 alpha=0.4, linewidth=1.5, label=r"$\cos^4$ reference")
+    cos3_ref = np.cos(np.pi * (tau_ref - (T_ref - 1) / 2) / T_ref) ** 3
+    ax_line.plot(tau_ref, cos3_ref * ax_line.get_ylim()[1] * 0.9, "k--",
+                 alpha=0.4, linewidth=1.5, label=r"$\cos^3$ reference")
 
     ax_line.set_xlabel(r"Time slice $\tau$", fontsize=13)
     ax_line.set_ylabel(r"$N_3(\tau)$", fontsize=13)

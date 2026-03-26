@@ -14,7 +14,7 @@ The paper results were obtained on lattices of $N_4 = 10\,000$--$362\,000$
 four-simplices with $T = 80$ time slices and $10^5$--$10^8$ Monte Carlo
 sweeps.  The plots shown here use $N_4 \sim 800$--$1\,600$ to keep
 runtimes under a few minutes.  Observables that depend on large-scale
-geometry (phase boundaries, Hausdorff scaling, $\cos^4$ profile shape)
+geometry (phase boundaries, Hausdorff scaling, $\cos^3$ profile shape)
 require at least $N_4 > 5\,000$ to become visible.  Where our small-lattice
 results already confirm the paper predictions, this is noted explicitly;
 where they do not yet, the expected large-lattice behaviour is described.
@@ -114,9 +114,9 @@ python examples/spectral_dimension.py --n-simplices 800 --n-configs 8 --max-sigm
 - **Volume differences (top right):** The measured distribution shows a
   decaying shape.  The Gaussian fit captures the trend but scatter is
   large due to limited statistics at $N_4 \sim 800$.
-- **$\cos^4$ comparison (bottom left):** The Monte Carlo average profile
+- **$\cos^3$ comparison (bottom left):** The Monte Carlo average profile
   is relatively flat compared to the peaked $\cos^4(\pi\tau/T)$
-  prediction.  This is expected: the $\cos^4$ shape emerges only at
+  prediction.  This is expected: the $\cos^3$ shape emerges only at
   $N_4 \gg 10\,000$ with $T \geq 40$ time slices.  At our lattice
   size, the profile spans only $\sim 9$ slices with insufficient dynamic
   range to develop the characteristic bulge.
@@ -155,7 +155,7 @@ differentiated** -- all show a roughly uniform distribution across
 $\sim 9$ time slices.  The phase transitions in the paper occur at
 $N_4 \sim 20$k--$45$k; at smaller volumes the system is too small to
 develop the distinct geometric structures that characterise each phase.
-The dashed $\cos^4$ reference curve shows the expected shape for
+The dashed $\cos^3$ reference curve shows the expected shape for
 Phase $C_{dS}$ at large $N_4$.
 
 To reproduce the paper's Fig. 6 shape, run with `--n-simplices 10000`
@@ -263,7 +263,7 @@ python examples/phase_diagram.py --grid-size 10 --n-simplices 400 --n-sweeps 50
 | Figs. 4--6 | Volume profiles A/B/C | Not yet visible | Requires $N_4 > 10\,000$ |
 | Figs. 7--8 | Hausdorff dimension $D_H$ | Not yet visible | Requires $N_4 > 20\,000$ |
 | Fig. 3 | Phase diagram | Not yet visible | Requires $N_4 > 20\,000$ |
-| Figs. 12--13 | Effective action | Partially confirmed | $D_2$ minimum correct; $\cos^4$ needs larger lattice |
+| Figs. 12--13 | Effective action | Partially confirmed | $D_2$ minimum correct; $\cos^3$ needs larger lattice |
 
 ---
 

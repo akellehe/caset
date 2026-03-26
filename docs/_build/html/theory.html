@@ -194,6 +194,7 @@
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
 </ul>
 
@@ -237,14 +238,14 @@
 <h1>Theory<a class="headerlink" href="#theory" title="Link to this heading">¶</a></h1>
 <p>This package is intended to provide a test bed with great unit test coverage for researchers and enthusiasts to
 implement ideas with respect to the latest in the field of lattice quantum gravity.</p>
-<p>Since Tulio Regge’s work decades ago (or maybe before, I don’t know) there’s been a ton of interest in implementing GR
+<p>Since Tullio Regge’s work in the 1960s there’s been a ton of interest in implementing GR
 in such a way that it’s compatible with quantum mechanics, quantum field theory (QFT), and quantum chromodynamics (QCD).</p>
 <p>Regge Calculus is apparently not computationally efficient to work for any real world simulation. Dynamical
-triangulations were are a new approach, eventually arguably subsumed into the work on Causal Dynamical Triangulations
+triangulations are a newer approach, eventually arguably subsumed into the work on Causal Dynamical Triangulations
 (CDT).</p>
-<p>CDT tends to work with a “preferred foliation”, meaning that spatial slices of spacetime are “foliated” such that each
-spatial slice occurs between two temporal slices. This means in between every layer of spatial (i.e. spacelike) edges
-there is a layer of only temporal (i.e. timelike) edges.</p>
+<p>CDT tends to work with a “preferred foliation”, meaning that spacetime is sliced into spatial hypersurfaces at integer
+time steps. Within each time slice, edges are spacelike; connecting adjacent time slices, edges are timelike. The
+simplices that span two adjacent slices (e.g. (4,1) and (3,2) types in 4D) contain both spacelike and timelike edges.</p>
 <p>Some of the later work in CDT explores models <em>without</em> preferred foliation while maintaining contributions around fixed
 edge lengths or fixed ratios of temporal and spatial edge lengths.</p>
 <section id="why-the-lorentzian-metric-is-important">
@@ -317,21 +318,25 @@ Z = \int \frac{\mathcal{D}[g_{\mu\nu}]}{Diff(M)} e^{\frac{i}{\hbar} S_{EH}[g_{\m
 S_{EH} = \frac{1}{16 \pi G} \int d^4x \sqrt{-g} (R - 2 \Lambda)
 \]</div>
 </div>
-<p>This is the integral over all Lorentzian metrics under the equivalence class that differ by a
-diffeomorphism i.e. they are frame independent (since diffeomorphisms allow us to switch between frames). Another common
-way of saying that which is pretty cryptic is “The integral over all Lorentzian geometries modulo diffeomorphisms.” This
-is Feynman’s “sum over all spacetimes”. It requires regularization or contour deformation to make sense of it, though.</p>
+<p>This is the integral over equivalence classes of Lorentzian metrics, where two metrics are equivalent if they differ by a
+diffeomorphism — i.e. they are frame independent (since diffeomorphisms allow us to switch between frames). Another
+common way of saying that which is pretty cryptic is “The integral over all Lorentzian geometries modulo
+diffeomorphisms.” This is Feynman’s “sum over all spacetimes”. It requires regularization or contour deformation to
+make sense of it, though.</p>
 </section>
 <section id="lattice-gravity-approaches">
 <h2>Lattice Gravity Approaches<a class="headerlink" href="#lattice-gravity-approaches" title="Link to this heading">¶</a></h2>
 <section id="lorentzian-spin-foams">
 <h3>Lorentzian Spin Foams<a class="headerlink" href="#lorentzian-spin-foams" title="Link to this heading">¶</a></h3>
+<p><em>Not yet implemented in caset.</em></p>
 </section>
 <section id="loop-quantum-gravity-on-graphs">
 <h3>Loop Quantum Gravity on Graphs<a class="headerlink" href="#loop-quantum-gravity-on-graphs" title="Link to this heading">¶</a></h3>
+<p><em>Not yet implemented in caset.</em></p>
 </section>
 <section id="picard-lefschetz-theory">
 <h3>Picard-Lefschetz Theory<a class="headerlink" href="#picard-lefschetz-theory" title="Link to this heading">¶</a></h3>
+<p><em>Not yet implemented in caset.</em></p>
 </section>
 <section id="regge-calculus">
 <h3>Regge Calculus<a class="headerlink" href="#regge-calculus" title="Link to this heading">¶</a></h3>
@@ -344,8 +349,8 @@ hinges, leading to a discrete version of the gravitational action.</p>
 <h3>CDT (Causal Dynamical Triangulations)<a class="headerlink" href="#cdt-causal-dynamical-triangulations" title="Link to this heading">¶</a></h3>
 <p>Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from
 causally ordered simplices. This is explained very well in
-<a class="reference internal" href="#./resources/1905.08669v1.pdf"><span class="xref myst">Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019</span></a> In CDT,
-the path integral over geometries is approximated by approximately summing over all possible causal triangulations. From
+<a class="reference internal" href="#./resources/1905.08669v1.pdf"><span class="xref myst">Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019</span></a>. In CDT,
+the path integral over geometries is approximated by summing over all possible causal triangulations. From
 equation (5) in <a class="reference download internal" download="" href="_downloads/cc35aea228e1a5ec55745d7ee7ea305f/0011194v1.pdf"><span class="xref download myst">Discrete Lorentzian Quantum Gravity, R. Loll, 2000</span></a> the partition
 function is</p>
 <div class="math-wrapper docutils container">
@@ -360,19 +365,20 @@ Z(\lambda, G) = \sum_{causal T} \frac{1}{C_T} e^{iS^{Regge}}
 e^{iS^{Lor}} \rightarrow e^{-S^{Euclid}}
 \]</div>
 </div>
-<p>where the right arrow represents allowing squared temporal edges to have a negative value. This allows for Wick rotation.</p>
+<p>In the Lorentzian signature, squared temporal edge lengths are negative: <span class="math notranslate nohighlight">\( l_t^2 = -\alpha a^2 \)</span>.
+The Wick rotation takes them to positive values for Euclidean computation:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[
-l_t^2 = -\alpha a^2 \rightarrow l_t^2 = +\alpha a^2
+l_t^2 = -\alpha a^2 \xrightarrow{\text{Wick}} l_t^2 = +\alpha a^2
 \]</div>
 </div>
 <p>There has been much success in implementing CDT as an MCMC algorithm, ensuring that the causal structure of spacetime is
 preserved. You can find a detailed description and source code in <a class="reference internal" href="#./resources/CDT/moves.pdf"><span class="xref myst">Simulating CDT quantum gravity, Brunekreef et. al, 2023</span></a>
 This approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at
 small scales. You can find lots of details of those results in <a class="reference download internal" download="" href="_downloads/8c1a3ab3313cbd83d361ce19f98bb438/cdt-wo-pref-folia.pdf"><span class="xref download myst">Causal Dynamical Triangulations without Preferred Foliation, 2013</span></a>,
-<a class="reference download internal" download="" href="_downloads/e359fbfe1991c367d7cd599c7b15a203/0604212v1.pdf"><span class="xref download myst">Quantum Gravity or The Art of Building Spacetime, 2006</span></a>, <a class="reference download internal" download="" href="_downloads/477330e8c765c70905285d27282620d3/de-sitter.pdf"><span class="xref download myst">De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013</span></a> as well as
-others in docs/source/resources/CDT.</p>
+<a class="reference download internal" download="" href="_downloads/e359fbfe1991c367d7cd599c7b15a203/0604212v1.pdf"><span class="xref download myst">Quantum Gravity or The Art of Building Spacetime, 2006</span></a>, <a class="reference download internal" download="" href="_downloads/477330e8c765c70905285d27282620d3/de-sitter.pdf"><span class="xref download myst">De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013</span></a>,
+as well as others in the <code class="docutils literal notranslate"><span class="pre">resources/CDT/</span></code> directory.</p>
 </section>
 <section id="causal-sets">
 <h3>Causal Sets<a class="headerlink" href="#causal-sets" title="Link to this heading">¶</a></h3>
@@ -423,7 +429,7 @@ version of the Einstein-Hilbert action.</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[
-Z = \int_{Lor(M)/Diff(M)} \mathcal{D}[g_{\mu\nu}] e^{i S_{EH}[g_{\mu\nu}]\hbar}
+Z = \int_{Lor(M)/Diff(M)} \mathcal{D}[g_{\mu\nu}] e^{i S_{EH}[g_{\mu\nu}]/\hbar}
 \]</div>
 </div>
 <p>with the discrete analog integrating over edge lengths <span class="math notranslate nohighlight">\( l_{ij} \)</span> for all triangulations, <span class="math notranslate nohighlight">\( \mathcal{T} \)</span>, of the
@@ -455,7 +461,7 @@ spacetime.</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[
-V_3(t) = the number of 3 simplices in time slice t
+V_3(t) = \text{number of 3-simplices in time slice } t
 \]</div>
 </div>
 <p>the ensemble average is</p>
@@ -472,11 +478,12 @@ V_3(t) = the number of 3 simplices in time slice t
 V_3(t) \propto \cos^3\left(\frac{t}{R}\right)
 \]</div>
 </div>
-<p>Another approach is with the spectral dimension <span class="math notranslate nohighlight">\(D_S(\sigma)\)</span>. A diffusion process on triangulated spacetime. A random
-walk with diffusion time <span class="math notranslate nohighlight">\(\sigma\)</span> returns a probability <span class="math notranslate nohighlight">\(P(\sigma)\)</span> of returning to the starting point that decays with
-diffusion time. This is a measure of the effective dimension of spacetime at different scales. I think it also measures
-the holonomy of the triangulation within that region. It is scale dependent. Both of these are described in the
-‘Observables’ section of <a class="reference external" href="http://arxiv.org/abs/1905.08669">“Quantum Gravity from Causal Dynamical Triangulations: A Review” by R. Loll</a>.</p>
+<p>Another approach is the spectral dimension <span class="math notranslate nohighlight">\( D_S(\sigma) \)</span>, measured via a diffusion process on the triangulated
+spacetime. A random walk with diffusion time <span class="math notranslate nohighlight">\( \sigma \)</span> has a return probability <span class="math notranslate nohighlight">\( P(\sigma) \)</span> that decays as
+<span class="math notranslate nohighlight">\( P(\sigma) \sim \sigma^{-D_S/2} \)</span>, giving a scale-dependent measure of the effective dimensionality. In 4D CDT,
+<span class="math notranslate nohighlight">\( D_S \)</span> flows from <span class="math notranslate nohighlight">\( \approx 2 \)</span> at short scales to <span class="math notranslate nohighlight">\( \approx 4 \)</span> at large scales. Both of these observables are
+described in the ‘Observables’ section of
+<a class="reference external" href="http://arxiv.org/abs/1905.08669">“Quantum Gravity from Causal Dynamical Triangulations: A Review” by R. Loll</a>.</p>
 <p>Another approach is Geodesic distance distributions. You measure the volume of a geodesic ball.</p>
 </section>
 </section>
