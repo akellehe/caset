@@ -113,9 +113,14 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   const VertexPtrs &vertices
 ) {
   std::vector<EdgePtr> edges_{};
-  for (std::size_t i=0; i<vertices.size()-1; i++) {  // Cone!
-    for (int j=i+1; j<vertices.size(); j++) {
-      EdgePtr edge = createEdge(vertices[i], vertices[j], alpha);
+  bool isLorentzian = metric->getSignature()->getSignatureType() == SignatureType::Lorentzian;
+  for (std::size_t i=0; i<vertices.size()-1; i++) {
+    for (std::size_t j=i+1; j<vertices.size(); j++) {
+      double squaredLen = alpha;
+      if (isLorentzian && vertices[i]->getTime() == vertices[j]->getTime()) {
+        squaredLen = -alpha;
+      }
+      EdgePtr edge = createEdge(vertices[i], vertices[j], squaredLen);
       edges_.push_back(edge);
     }
   }
@@ -391,6 +396,12 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
     simplexOwner.emplace(fp, std::unique_ptr<Simplex>(simplex));
     simplexVecIndex[fp] = simplicesVec.size();
     simplicesVec.push_back(simplex);
+    // Track top-dimensional simplices separately for efficient random access
+    auto d = metric->getSignature()->getDimensions();
+    if (simplex->size() == static_cast<std::size_t>(d + 1)) {
+      topSimplexVecIndex[fp] = topSimplicesVec.size();
+      topSimplicesVec.push_back(simplex);
+    }
     updateOrientationCounters(simplex, +1);
   }
   return *it;
@@ -427,6 +438,18 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
     }
     simplicesVec.pop_back();
     simplexVecIndex.erase(idxIt);
+  }
+  // Remove from top-dimensional vector too
+  auto topIdxIt = topSimplexVecIndex.find(fp);
+  if (topIdxIt != topSimplexVecIndex.end()) {
+    std::size_t idx = topIdxIt->second;
+    if (idx < topSimplicesVec.size() - 1) {
+      auto backFp = topSimplicesVec.back()->fingerprint.fingerprint();
+      topSimplicesVec[idx] = topSimplicesVec.back();
+      topSimplexVecIndex[backFp] = idx;
+    }
+    topSimplicesVec.pop_back();
+    topSimplexVecIndex.erase(topIdxIt);
   }
   // Free the Simplex allocation
   simplexOwner.erase(fp);
@@ -467,6 +490,12 @@ SimplexPtr Spacetime::getRandomSimplex() {
   if (simplicesVec.empty()) return nullptr;
   std::uniform_int_distribution<std::size_t> dist(0, simplicesVec.size() - 1);
   return simplicesVec[dist(rng)];
+}
+
+SimplexPtr Spacetime::getRandomTopSimplex() {
+  if (topSimplicesVec.empty()) return nullptr;
+  std::uniform_int_distribution<std::size_t> dist(0, topSimplicesVec.size() - 1);
+  return topSimplicesVec[dist(rng)];
 }
 
 SimplexPtr Spacetime::getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf) {

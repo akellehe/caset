@@ -45,8 +45,8 @@ namespace caset {
 ///
 /// \f[
 ///   S_{\text{Regge}} = -(k_0 + 6\Delta)\, N_0
-///                     + (k_4 + \Delta)\, N_{41}
-///                     + k_4\, N_{32}
+///                     + (k_4 + 2\Delta)\, N_{41}
+///                     + (k_4 + \Delta)\, N_{32}
 /// \f]
 ///
 /// where:
@@ -244,6 +244,9 @@ class CDT : public Simulation {
     /// Compute the incremental action change for a proposed move without
     /// recomputing the full sum over simplices.
     double computeDeltaAction(int dN0, int dN41, int dN32) const;
+
+    /// Shared implementation for shift and ishift moves.
+    bool shiftImpl();
 
     int addAttempts = 0, addAccepted = 0;
     int removeAttempts = 0, removeAccepted = 0;

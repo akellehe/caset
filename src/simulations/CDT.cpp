@@ -46,7 +46,9 @@ double CDT::computeAction() const {
   auto n32 = static_cast<double>(spacetime->getN32());
   auto n4 = n41 + n32;
 
-  double regge = -(k0 + 6.0 * delta) * n0 + (k4 + delta) * n41 + k4 * n32;
+  double regge = -(k0 + 6.0 * delta) * n0
+               + (k4 + 2.0 * delta) * n41
+               + (k4 + delta) * n32;
   double volumeFix = epsilon * (n4 - static_cast<double>(targetN4))
                              * (n4 - static_cast<double>(targetN4));
   return regge + volumeFix;
@@ -57,7 +59,9 @@ double CDT::computeDeltaAction(int dN0, int dN41, int dN32) const {
   double n4 = static_cast<double>(spacetime->getN41() + spacetime->getN32());
   double target = static_cast<double>(targetN4);
 
-  double dRegge = -(k0 + 6.0 * delta) * dN0 + (k4 + delta) * dN41 + k4 * dN32;
+  double dRegge = -(k0 + 6.0 * delta) * dN0
+               + (k4 + 2.0 * delta) * dN41
+               + (k4 + delta) * dN32;
   double oldFix = epsilon * (n4 - target) * (n4 - target);
   double newFix = epsilon * (n4 + dN4 - target) * (n4 + dN4 - target);
   return dRegge + (newFix - oldFix);
@@ -78,8 +82,8 @@ bool CDT::add() {
   int dPlus1 = d + 1;
 
   // Pick a random d-simplex
-  SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
+  SimplexPtr sigma = spacetime->getRandomTopSimplex();
+  if (!sigma) return false;
 
   // Find a causally available facet (non-timelike, < 2 cofaces)
   const auto &facets = sigma->getFacets();
@@ -135,44 +139,23 @@ bool CDT::remove() {
   int d = getDim(spacetime);
   int dPlus1 = d + 1;
 
-  SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
+  // Pick a random top simplex and check if it has a vertex belonging to only
+  // this one top simplex (the "cone vertex" from a previous add move).
+  SimplexPtr sigma = spacetime->getRandomTopSimplex();
+  if (!sigma) return false;
 
-  // Check that sigma has a facet with only 1 coface (this simplex itself)
-  // This means removing sigma "exposes" that facet as external.
-  // Also check that the vertex unique to sigma (not in the shared facet) has
-  // no other d-simplices — so we can cleanly remove it.
-  const auto &facets = sigma->getFacets();
-  SimplexPtr removableFacet = nullptr;
   VertexPtr uniqueVert = nullptr;
-
-  for (const auto &f : facets) {
-    // This facet should only have sigma as coface
-    int topCofaceCount = 0;
-    for (const auto &cf : f->getCofaces()) {
-      if (static_cast<int>(cf->size()) == dPlus1) topCofaceCount++;
-    }
-    if (topCofaceCount != 1) continue;
-
-    // Find the vertex in sigma that's NOT in this facet
-    VertexPtr candidate = nullptr;
-    for (const auto &v : sigma->getVertices()) {
-      if (!f->hasVertex(v)) { candidate = v; break; }
-    }
-    if (!candidate) continue;
-
-    // The vertex should belong to only this d-simplex (so removing is clean)
+  for (const auto &v : sigma->getVertices()) {
     int dSimplexCount = 0;
-    for (const auto &s : candidate->getSimplices()) {
+    for (const auto &s : v->getSimplices()) {
       if (static_cast<int>(s->size()) == dPlus1) dSimplexCount++;
     }
-    if (dSimplexCount != 1) continue;
-
-    removableFacet = f;
-    uniqueVert = candidate;
-    break;
+    if (dSimplexCount == 1) {
+      uniqueVert = v;
+      break;
+    }
   }
-  if (!removableFacet || !uniqueVert) return false;
+  if (!uniqueVert) return false;
 
   // Compute action change: -1 vertex, -1 d-simplex
   auto [sti, stf] = sigma->getOrientation().numeric();
@@ -211,8 +194,8 @@ bool CDT::flip() {
   int d = getDim(spacetime);
   int dPlus1 = d + 1;
 
-  SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
+  SimplexPtr sigma = spacetime->getRandomTopSimplex();
+  if (!sigma) return false;
 
   // Get facets and pick a random one
   const auto &facets = sigma->getFacets();
@@ -302,11 +285,22 @@ bool CDT::flip() {
 // ========================================
 bool CDT::shift() {
   shiftAttempts++;
+  if (shiftImpl()) { shiftAccepted++; return true; }
+  return false;
+}
+
+bool CDT::ishift() {
+  ishiftAttempts++;
+  if (shiftImpl()) { ishiftAccepted++; return true; }
+  return false;
+}
+
+bool CDT::shiftImpl() {
   int d = getDim(spacetime);
   int dPlus1 = d + 1;
 
-  SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
+  SimplexPtr sigma = spacetime->getRandomTopSimplex();
+  if (!sigma) return false;
 
   // Pick 3 random vertices from sigma to form a candidate (d-2)-face
   const auto &sigmaVertsRef = sigma->getVertices();
@@ -388,13 +382,7 @@ bool CDT::shift() {
   for (const auto &s : sharing) spacetime->removeSimplex(s);
   for (const auto &nv : newSimplexVerts) spacetime->createSimplex(nv);
 
-  shiftAccepted++;
   return true;
-}
-
-bool CDT::ishift() {
-  ishiftAttempts++;
-  return shift();
 }
 
 // ========================================
@@ -423,11 +411,21 @@ int CDT::sweep() {
 }
 
 void CDT::tune() {
-  for (int i = 0; i < 100; ++i) {
+  // Tune k4 to its pseudo-critical value using proportional feedback.
+  // The critical k4 makes the Regge action change ~0 for add/remove moves,
+  // so that the volume constraint alone controls the volume.
+  //
+  // For an add move: dS_Regge = -(k0 + 6Δ)*1 + (k4 + ~1.5Δ)*1
+  // Setting this near 0: k4_crit ≈ k0 + 6Δ - 1.5Δ = k0 + 4.5Δ
+  k4 = k0 + 4.5 * delta;
+
+  // Fine-tune with short feedback sweeps
+  double target = static_cast<double>(targetN4);
+  for (int i = 0; i < 200; ++i) {
     sweep();
-    auto n4 = static_cast<double>(spacetime->getSimplexCount());
-    double error = n4 - static_cast<double>(targetN4);
-    k4 += 0.0001 * error;
+    double n4 = static_cast<double>(spacetime->getSimplexCount());
+    double error = (n4 - target) / target;  // normalized error
+    k4 += 0.01 * error;
   }
 }
 

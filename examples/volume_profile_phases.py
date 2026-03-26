@@ -10,6 +10,10 @@ Reproduces Figures 4, 5, 6 from:
 Paper parameters: k0=2.2, Delta=0.6, N4=10k-362k, T=80.
 Our parameters are smaller; the qualitative shape differences between
 phases emerge at N4 > ~5000.
+
+The Regge action is (Eq. 2 of hep-th/0505154):
+
+  S_E = -(k0 + 6*Delta)*N0 + (k4 + 2*Delta)*N41 + (k4 + Delta)*N32
 """
 import argparse
 import time
@@ -32,6 +36,12 @@ def run_cdt(n_simplices, k0, delta, n_therm, n_meas, meas_interval,
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, target)
     prefix = f"  [{phase_label}] " if phase_label else "  "
+
+    # Tune k4 toward its pseudo-critical value before thermalization
+    print(f"{prefix}Tuning k4 (initial={cdt.getK4():.4f})...")
+    cdt.tune()
+    print(f"{prefix}Tuned k4={cdt.getK4():.4f}")
+
     for _ in tqdm(range(n_therm), desc=f"{prefix}Thermalizing",
                   unit="sweep", leave=False):
         cdt.sweep()
@@ -88,9 +98,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="CDT volume profiles in phases A, B, C "
                     "(Figs 4-6 of hep-th/0505154)")
-    parser.add_argument("--n-simplices", type=int, default=500)
-    parser.add_argument("--n-therm", type=int, default=50)
-    parser.add_argument("--n-meas", type=int, default=20)
+    parser.add_argument("--n-simplices", type=int, default=800)
+    parser.add_argument("--n-therm", type=int, default=80)
+    parser.add_argument("--n-meas", type=int, default=30)
     parser.add_argument("--meas-interval", type=int, default=5)
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
@@ -118,6 +128,8 @@ def main():
     fig_line, ax_line = plt.subplots(figsize=(10, 6))
     t_total = time.time()
 
+    phase_c_avg = None  # track for cos^3 overlay
+
     for idx, (label, (k0, delta)) in enumerate(phases.items()):
         short = label.split("\n")[0]
         print(f"\n--- {short} (k0={k0}, Delta={delta}) "
@@ -144,12 +156,19 @@ def main():
         ax_line.plot(np.arange(len(avg)), avg, "o-", label=short_label,
                      linewidth=2, markersize=4)
 
+        if "C_{dS}" in label:
+            phase_c_avg = avg
+
     # Overlay cos^3 reference on the line plot (Eq. 28, hep-th/0505154)
-    T_ref = 7
-    tau_ref = np.linspace(0, T_ref - 1, 100)
-    cos3_ref = np.cos(np.pi * (tau_ref - (T_ref - 1) / 2) / T_ref) ** 3
-    ax_line.plot(tau_ref, cos3_ref * ax_line.get_ylim()[1] * 0.9, "k--",
-                 alpha=0.4, linewidth=1.5, label=r"$\cos^3$ reference")
+    # Scale to match the phase C profile if available
+    if phase_c_avg is not None:
+        T_ref = len(phase_c_avg)
+        tau_ref = np.linspace(0, T_ref - 1, 200)
+        cos3_ref = np.cos(np.pi * (tau_ref - (T_ref - 1) / 2) / T_ref) ** 3
+        cos3_ref = np.maximum(cos3_ref, 0)
+        scale = phase_c_avg.max()
+        ax_line.plot(tau_ref, cos3_ref * scale, "k--",
+                     alpha=0.4, linewidth=1.5, label=r"$\cos^3$ reference")
 
     ax_line.set_xlabel(r"Time slice $\tau$", fontsize=13)
     ax_line.set_ylabel(r"$N_3(\tau)$", fontsize=13)

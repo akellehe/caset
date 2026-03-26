@@ -259,6 +259,7 @@ PYBIND11_MODULE(caset, m) {
       .def("getN41", &Spacetime::getN41)
       .def("getN32", &Spacetime::getN32)
       .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference)
+      .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference)
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"));
 
   py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation")

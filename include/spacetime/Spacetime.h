@@ -178,9 +178,13 @@ class Spacetime {
     [[nodiscard]] const SimplexSet& getSimplices() const noexcept;
 
     /// Select a uniformly random simplex from the parallel access vector.
-    /// Used by the Metropolis algorithm to pick random move targets.
     /// @return A random simplex, or nullptr if the complex is empty
     [[nodiscard]] SimplexPtr getRandomSimplex();
+
+    /// Select a uniformly random top-dimensional simplex.
+    /// Used by the Metropolis algorithm to pick random move targets.
+    /// @return A random d-simplex, or nullptr if none exist
+    [[nodiscard]] SimplexPtr getRandomTopSimplex();
 
     /// Select a uniformly random simplex with a specific causal orientation.
     /// Tries random sampling first (fast when many match), then falls back
@@ -342,6 +346,8 @@ class Spacetime {
     std::unordered_map<std::uint64_t, std::unique_ptr<Simplex>> simplexOwner{}; // owns all Simplex allocations
     std::vector<SimplexPtr> simplicesVec{}; // parallel vector for O(1) random access
     std::unordered_map<std::uint64_t, std::size_t> simplexVecIndex{}; // fingerprint → index in simplicesVec
+    std::vector<SimplexPtr> topSimplicesVec{}; // top-dimensional simplices only
+    std::unordered_map<std::uint64_t, std::size_t> topSimplexVecIndex{}; // fingerprint → index in topSimplicesVec
     std::size_t n41Count = 0; // (4,1) + (1,4) simplices
     std::size_t n32Count = 0; // (3,2) + (2,3) simplices
     std::mt19937 rng{std::random_device{}()};
