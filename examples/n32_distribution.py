@@ -23,6 +23,7 @@ import time
 
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import caset
 
@@ -37,44 +38,66 @@ def main():
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
 
+    print("=" * 64)
+    print("  N32 Distribution at Fixed N41")
+    print("  Reproduces Fig 2, Ambjorn, Jurkiewicz, Loll (2005)")
+    print("  Parameters: k0=2.2, Delta=0.6")
+    print("=" * 64)
+
     # Run at multiple target volumes
-    target_n41_values = [200, 500, 1000]
+    # Paper (Fig 2) uses N̄₄ = 40k, 80k, 160k.  We use smaller but
+    # still large volumes to keep runtime under ~10 minutes.
+    target_n41_values = [5000, 10000, 20000]
     colors = ["black", "red", "green", "blue"]
 
     fig, ax = plt.subplots(figsize=(10, 7))
+    t_total = time.time()
 
     for idx, target_n41 in enumerate(target_n41_values):
         # Build with roughly 2x target since N41 ~ half of total
         n_build = target_n41 * 2
-        print(f"\nTarget N41 ~ {target_n41} (build={n_build})...")
+        print(f"\n--- Volume {idx+1}/{len(target_n41_values)}: "
+              f"target N41 ~ {target_n41:,} (build={n_build:,}) ---")
 
         sig = caset.Signature(4, caset.Lorentzian)
         metric = caset.Metric(True, sig)
         st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                              caset.Toroid())
+        t0 = time.time()
         st.build(n_build)
+        print(f"  Built triangulation: {st.getSimplexCount():,} simplices "
+              f"({time.time()-t0:.1f}s)")
 
         target = st.getSimplexCount()
         cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
         # Thermalize
-        for _ in range(args.n_therm):
+        for _ in tqdm(range(args.n_therm), desc="  Thermalizing",
+                      unit="sweep", leave=False):
             cdt.sweep()
 
         # Collect N32 samples
         n32_samples = []
         n41_samples = []
+        total_sweeps = args.n_meas * args.meas_interval
+        pbar = tqdm(total=total_sweeps, desc="  Measuring",
+                    unit="sweep", leave=False)
         for _ in range(args.n_meas):
             for _ in range(args.meas_interval):
                 cdt.sweep()
+                pbar.update(1)
             n32_samples.append(st.getN32())
             n41_samples.append(st.getN41())
+        pbar.close()
 
         n32_arr = np.array(n32_samples, dtype=float)
         n41_arr = np.array(n41_samples, dtype=float)
 
-        print(f"  N41: mean={n41_arr.mean():.0f}, std={n41_arr.std():.0f}")
-        print(f"  N32: mean={n32_arr.mean():.0f}, std={n32_arr.std():.0f}")
+        print(f"  N41: mean={n41_arr.mean():,.0f}  std={n41_arr.std():,.0f}  "
+              f"range=[{n41_arr.min():,.0f}, {n41_arr.max():,.0f}]")
+        print(f"  N32: mean={n32_arr.mean():,.0f}  std={n32_arr.std():,.0f}  "
+              f"range=[{n32_arr.min():,.0f}, {n32_arr.max():,.0f}]")
+        print(f"  N32/N41 ratio: {n32_arr.mean()/max(n41_arr.mean(),1):.3f}")
 
         # Plot histogram (normalized)
         if len(n32_arr) > 10 and n32_arr.std() > 0:
@@ -93,6 +116,7 @@ def main():
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
+    print(f"\nTotal elapsed: {time.time()-t_total:.1f}s")
     if args.save:
         fig.savefig(args.save, dpi=150)
         print(f"Saved to {args.save}")

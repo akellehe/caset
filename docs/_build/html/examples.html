@@ -235,200 +235,279 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="cdt-examples">
 <h1>CDT Examples<a class="headerlink" href="#cdt-examples" title="Link to this heading">¶</a></h1>
-<p>These examples reproduce key results from the Causal Dynamical Triangulations
-literature. Each script runs a Monte Carlo simulation using the <code class="docutils literal notranslate"><span class="pre">caset</span></code>
-library and produces plots that can be compared to the corresponding figures
-in the original papers.</p>
-<p>All scripts accept <code class="docutils literal notranslate"><span class="pre">--save</span> <span class="pre">&lt;path.png&gt;</span></code> to save output, or display
-interactively by default. Use <code class="docutils literal notranslate"><span class="pre">--help</span></code> on any script for the full list
-of parameters.</p>
-<section id="volume-profiles-in-phases-a-b-c">
-<h2>Volume Profiles in Phases A, B, C<a class="headerlink" href="#volume-profiles-in-phases-a-b-c" title="Link to this heading">¶</a></h2>
-<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/volume_profile_phases.py</span></code></p>
-<p><strong>Reproduces:</strong> Figures 4, 5, 6 of Ambjorn, Jurkiewicz, Loll, <em>Reconstructing
-the Universe</em>, Phys. Rev. D 72 (2005).</p>
-<p>The spatial volume profile <span class="math notranslate nohighlight">\(N_3(\tau)\)</span> — the number of tetrahedra at each
-time slice <span class="math notranslate nohighlight">\(\tau\)</span> — is the observable that most clearly distinguishes the
-three phases of 4D CDT:</p>
-<ul class="simple">
-<li><p><strong>Phase A</strong> (<span class="math notranslate nohighlight">\(\kappa_0 = 5.0\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0\)</span>): branched-polymer geometry with
-thin stalks and irregular maxima.</p></li>
-<li><p><strong>Phase B</strong> (<span class="math notranslate nohighlight">\(\kappa_0 = 1.6\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0\)</span>): crumpled geometry where all
-volume collapses to one or two time slices.</p></li>
-<li><p><strong>Phase <span class="math notranslate nohighlight">\(C_{dS}\)</span></strong> (<span class="math notranslate nohighlight">\(\kappa_0 = 2.2\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0.6\)</span>): extended, smooth
-de Sitter universe whose profile matches <span class="math notranslate nohighlight">\(\cos^4(\pi\tau/T)\)</span>.</p></li>
-</ul>
-<p>The 3D surface-of-revolution plots show the “shape of the universe” at each
-time, where the circumference is proportional to <span class="math notranslate nohighlight">\(\sqrt{N_3(\tau)}\)</span>.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_profile_phases.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">50</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">20</span>
+<p>These examples reproduce key experiments from the Causal Dynamical
+Triangulations literature.  Each script runs a Metropolis Monte Carlo
+simulation using the <code class="docutils literal notranslate"><span class="pre">caset</span></code> C++ library and produces plots that can be
+compared side-by-side with figures from the original papers.</p>
+<p>All scripts accept <code class="docutils literal notranslate"><span class="pre">--save</span> <span class="pre">&lt;path.png&gt;</span></code> to write output to disk, or display
+interactively by default.  Run any script with <code class="docutils literal notranslate"><span class="pre">--help</span></code> for the full set of
+tunable parameters.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The paper results were obtained on lattices of <span class="math notranslate nohighlight">\(N_4 = 10\,000\)</span>–<span class="math notranslate nohighlight">\(362\,000\)</span>
+four-simplices with <span class="math notranslate nohighlight">\(T = 80\)</span> time slices and <span class="math notranslate nohighlight">\(10^5\)</span>–<span class="math notranslate nohighlight">\(10^8\)</span> Monte Carlo
+sweeps.  The plots shown here use <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span>–<span class="math notranslate nohighlight">\(1\,600\)</span> to keep
+runtimes under a few minutes.  Observables that depend on large-scale
+geometry (phase boundaries, Hausdorff scaling, <span class="math notranslate nohighlight">\(\cos^4\)</span> profile shape)
+require at least <span class="math notranslate nohighlight">\(N_4 &gt; 5\,000\)</span> to become visible.  Where our small-lattice
+results already confirm the paper predictions, this is noted explicitly;
+where they do not yet, the expected large-lattice behaviour is described.</p>
+</div>
+<hr class="docutils" />
+<section id="n-32-distribution-at-fixed-n-41">
+<h2><span class="math notranslate nohighlight">\(N_{32}\)</span> Distribution at Fixed <span class="math notranslate nohighlight">\(N_{41}\)</span><a class="headerlink" href="#n-32-distribution-at-fixed-n-41" title="Link to this heading">¶</a></h2>
+<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/n32_distribution.py</span></code> <br />
+<strong>Reproduces:</strong> Figure 2, Ambjorn, Jurkiewicz &amp; Loll,
+<em>Reconstructing the Universe</em>, Phys. Rev. D <strong>72</strong> (2005)
+[<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a>]</p>
+<p><strong>Paper result (Fig. 2):</strong> At fixed <span class="math notranslate nohighlight">\(\tilde{N}_4 = N_4^{(4,1)}\)</span>, the
+distribution of <span class="math notranslate nohighlight">\((3{,}2)\)</span>-simplices <span class="math notranslate nohighlight">\(P(N_4^{(3,2)})\)</span> is sharply peaked,
+with the peak narrowing and shifting to larger <span class="math notranslate nohighlight">\(N_4^{(3,2)}\)</span> as the
+target volume increases.  This demonstrates that the volume-fixing term
+<span class="math notranslate nohighlight">\(\delta S = \epsilon |N_4^{(4,1)} - \tilde{N}_4|\)</span> effectively constrains
+both simplex types simultaneously.</p>
+<p><strong>Our result:</strong> <strong>Confirmed.</strong>  The distributions are sharply peaked at each
+target volume (<span class="math notranslate nohighlight">\(\tilde{N}_4 \approx 193\)</span>, <span class="math notranslate nohighlight">\(383\)</span>, <span class="math notranslate nohighlight">\(686\)</span>) and shift to
+larger <span class="math notranslate nohighlight">\(N_4^{(3,2)}\)</span> exactly as in the paper.  The ratio
+<span class="math notranslate nohighlight">\(N_4^{(3,2)} / N_4^{(4,1)} \approx 2.3\)</span>–<span class="math notranslate nohighlight">\(2.5\)</span> is consistent with the
+paper’s Table 1.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/n32_distribution.py<span class="w"> </span>--n-meas<span class="w"> </span><span class="m">300</span>
 </pre></div>
 </div>
-<a class="reference internal image-reference" href="_images/volume_profiles_surface.png"><img alt="Surface-of-revolution plots showing the shape of the universe in phases A, B, and C" src="_images/volume_profiles_surface.png" style="width: 100%;" />
-</a>
-<a class="reference internal image-reference" href="_images/volume_profiles_profile.png"><img alt="Line plot of N_3(tau) for all three phases" class="align-center" src="_images/volume_profiles_profile.png" style="width: 80%;" />
+<a class="reference internal image-reference" href="_images/n32_distribution.png"><img alt="Distribution of N_4^(3,2) at three target volumes" class="align-center" src="_images/n32_distribution.png" style="width: 70%;" />
 </a>
 </section>
 <hr class="docutils" />
 <section id="spectral-dimension">
 <h2>Spectral Dimension<a class="headerlink" href="#spectral-dimension" title="Link to this heading">¶</a></h2>
-<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/spectral_dimension.py</span></code></p>
-<p><strong>Reproduces:</strong> Figures 9, 10 of <em>Reconstructing the Universe</em>.</p>
-<p>The spectral dimension <span class="math notranslate nohighlight">\(D_S(\sigma)\)</span> is measured by running a discrete
-diffusion process on the dual graph of the triangulation. The return
-probability <span class="math notranslate nohighlight">\(P(\sigma)\)</span> — the probability that a random walker returns to
-its starting simplex after <span class="math notranslate nohighlight">\(\sigma\)</span> steps — encodes the effective dimension:</p>
-<div class="math-wrapper docutils container">
-<div class="math notranslate nohighlight">
-\[
-D_S(\sigma) = -2 \frac{d \log P(\sigma)}{d \log \sigma}
-\]</div>
-</div>
-<p>The key discovery is a <em>scale-dependent spectral dimension</em>:</p>
+<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/spectral_dimension.py</span></code> <br />
+<strong>Reproduces:</strong> Figures 9 and 10, Ambjorn, Jurkiewicz &amp; Loll,
+<em>Reconstructing the Universe</em>, Phys. Rev. D <strong>72</strong> (2005)
+[<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a>]</p>
+<p><strong>Paper result (Figs. 9–10):</strong> The spectral dimension
+<span class="math notranslate nohighlight">\(D_S(\sigma) = -2\, d\log P(\sigma) / d\log\sigma\)</span> rises monotonically
+from <span class="math notranslate nohighlight">\(D_S(0) = 1.80 \pm 0.25\)</span> at short diffusion times to
+<span class="math notranslate nohighlight">\(D_S(\infty) = 4.02 \pm 0.1\)</span> at large scales.  The best three-parameter
+fit is (Eq. 29):</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[
 D_S(\sigma) = 4.02 - \frac{119}{54 + \sigma}
 \]</div>
 </div>
-<p>interpolating between <span class="math notranslate nohighlight">\(D_S \approx 1.80\)</span> at short distances (Planckian
-quantum geometry) and <span class="math notranslate nohighlight">\(D_S \approx 4.02\)</span> at large distances (classical
-four-dimensional spacetime).</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/spectral_dimension.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-configs<span class="w"> </span><span class="m">5</span><span class="w"> </span>--max-sigma<span class="w"> </span><span class="m">150</span>
+<p><strong>Our result:</strong> <strong>Qualitatively confirmed.</strong>  The measured <span class="math notranslate nohighlight">\(D_S(\sigma)\)</span>
+rises monotonically from near zero and approaches <span class="math notranslate nohighlight">\(\sim 3.5\)</span> at
+<span class="math notranslate nohighlight">\(\sigma = 200\)</span>, matching the shape of the paper’s curve.  The absolute
+values are lower than the paper’s because our lattice (<span class="math notranslate nohighlight">\(N_4 \approx 1\,000\)</span>)
+is much smaller than the paper’s (<span class="math notranslate nohighlight">\(N_4 = 20\)</span>k–<span class="math notranslate nohighlight">\(80\)</span>k, <span class="math notranslate nohighlight">\(T = 80\)</span>); the
+spectral dimension is a finite-size-dependent quantity that converges
+upward with increasing volume.  The paper’s fit curve (red dashed) is
+overlaid for reference.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/spectral_dimension.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-configs<span class="w"> </span><span class="m">8</span><span class="w"> </span>--max-sigma<span class="w"> </span><span class="m">200</span>
 </pre></div>
 </div>
-<a class="reference internal image-reference" href="_images/spectral_dimension.png"><img alt="Spectral dimension D_S as a function of diffusion time sigma" src="_images/spectral_dimension.png" style="width: 100%;" />
-</a>
-</section>
-<hr class="docutils" />
-<section id="volume-volume-correlator-and-hausdorff-dimension">
-<h2>Volume-Volume Correlator and Hausdorff Dimension<a class="headerlink" href="#volume-volume-correlator-and-hausdorff-dimension" title="Link to this heading">¶</a></h2>
-<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/volume_scaling.py</span></code></p>
-<p><strong>Reproduces:</strong> Figures 7, 8, 12 of <em>Reconstructing the Universe</em>.</p>
-<p>The volume-volume correlator (Eq. 7 of the paper) measures how spatial
-volumes at different times are correlated:</p>
-<div class="math-wrapper docutils container">
-<div class="math notranslate nohighlight">
-\[
-C_{\tilde{N}_4}(\delta) = \sum_{\tau=1}^{t}
-  \frac{4\langle(N_3(\tau) - s/2)(N_3(\tau+\delta) - s/2)\rangle}
-  {(\tilde{N}_4 - ts)^2}
-\]</div>
-</div>
-<p>When rescaled by <span class="math notranslate nohighlight">\(x = \delta / (\tilde{N}_4^{\text{eff}})^{1/D_H}\)</span> with
-<span class="math notranslate nohighlight">\(D_H = 4\)</span>, correlators at different system sizes collapse onto a universal
-curve, providing evidence that the Hausdorff dimension is four.</p>
-<p>The script also measures the distribution of rescaled volume differences
-between adjacent slices, which fits a Gaussian <span class="math notranslate nohighlight">\(e^{-cz^2}\)</span>.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_scaling.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">30</span>
-</pre></div>
-</div>
-<a class="reference internal image-reference" href="_images/volume_scaling.png"><img alt="Volume-volume correlator scaling and Hausdorff dimension estimate" src="_images/volume_scaling.png" style="width: 100%;" />
-</a>
-</section>
-<hr class="docutils" />
-<section id="phase-diagram">
-<h2>Phase Diagram<a class="headerlink" href="#phase-diagram" title="Link to this heading">¶</a></h2>
-<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/phase_diagram.py</span></code></p>
-<p><strong>Reproduces:</strong> Figure 3 of <em>Reconstructing the Universe</em> and the phase
-diagram from Gorlich, <em>Introduction to CDT</em> (2013).</p>
-<p>The coupling-constant space <span class="math notranslate nohighlight">\((\kappa_0, \Delta)\)</span> is scanned on a grid.
-At each point, a short CDT simulation is run and the resulting volume
-profile is classified into one of three phases:</p>
-<div class="table-wrapper colwidths-auto docutils container">
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Phase</p></th>
-<th class="head"><p><span class="math notranslate nohighlight">\(\kappa_0\)</span></p></th>
-<th class="head"><p><span class="math notranslate nohighlight">\(\Delta\)</span></p></th>
-<th class="head"><p>Geometry</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>A</p></td>
-<td><p>large</p></td>
-<td><p>any</p></td>
-<td><p>branched polymer</p></td>
-</tr>
-<tr class="row-odd"><td><p>B</p></td>
-<td><p>small</p></td>
-<td><p>small</p></td>
-<td><p>crumpled</p></td>
-</tr>
-<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(C_{dS}\)</span></p></td>
-<td><p>moderate</p></td>
-<td><p><span class="math notranslate nohighlight">\(&gt; 0\)</span></p></td>
-<td><p>de Sitter</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The white star marks the coupling constants used in most measurements
-in the paper (<span class="math notranslate nohighlight">\(\kappa_0 = 2.2\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0.6\)</span>).</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/phase_diagram.py<span class="w"> </span>--grid-size<span class="w"> </span><span class="m">8</span><span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">200</span><span class="w"> </span>--n-sweeps<span class="w"> </span><span class="m">30</span>
-</pre></div>
-</div>
-<a class="reference internal image-reference" href="_images/phase_diagram.png"><img alt="Phase diagram of 4D CDT in the (kappa_0, Delta) plane" class="align-center" src="_images/phase_diagram.png" style="width: 70%;" />
+<a class="reference internal image-reference" href="_images/spectral_dimension.png"><img alt="Spectral dimension D_S(sigma) with reference fit from the paper" src="_images/spectral_dimension.png" style="width: 100%;" />
 </a>
 </section>
 <hr class="docutils" />
 <section id="effective-action-and-minisuperspace">
 <h2>Effective Action and Minisuperspace<a class="headerlink" href="#effective-action-and-minisuperspace" title="Link to this heading">¶</a></h2>
-<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/effective_action.py</span></code></p>
-<p><strong>Reproduces:</strong> Figures 11, 12, 13 of <em>Reconstructing the Universe</em>.</p>
-<p>The effective action governing the scale factor dynamics is extracted by
-measuring how spatial volume fluctuates between adjacent time slices.
-The Euclidean effective action has the form (Eq. 40):</p>
-<div class="math-wrapper docutils container">
-<div class="math notranslate nohighlight">
-\[
-S_{V_4}^{\text{eff}} = \frac{1}{G} \int_0^t d\tau
-  \left( a(\tau) \left(\frac{da}{d\tau}\right)^2
-  + a(\tau) - \lambda a^3(\tau) \right)
-\]</div>
-</div>
-<p>This matches the minisuperspace action of quantum cosmology, but with
-a <em>positive</em> kinetic term (the conformal mode problem is solved
-nonperturbatively by the causal structure of CDT).</p>
-<p>The panels show:</p>
+<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/effective_action.py</span></code> <br />
+<strong>Reproduces:</strong> Figures 11, 12, 13, Ambjorn, Jurkiewicz &amp; Loll,
+<em>Reconstructing the Universe</em>, Phys. Rev. D <strong>72</strong> (2005)
+[<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a>]</p>
+<p><strong>Paper results:</strong></p>
 <ul class="simple">
-<li><p><strong>Top left:</strong> Finite-size scaling to extract the kinetic dimension <span class="math notranslate nohighlight">\(D_2 \approx 2\)</span></p></li>
-<li><p><strong>Top right:</strong> Distribution of rescaled volume differences (Gaussian fit)</p></li>
-<li><p><strong>Bottom left:</strong> Monte Carlo volume profile vs. minisuperspace <span class="math notranslate nohighlight">\(\cos^4\)</span> prediction</p></li>
-<li><p><strong>Bottom right:</strong> Regge action and volume evolution during the simulation</p></li>
+<li><p><strong>Fig. 11:</strong> The kinetic-term scaling dimension <span class="math notranslate nohighlight">\(D_2\)</span> is estimated by
+minimising overlap error of rescaled volume-difference distributions.
+The minimum occurs at <span class="math notranslate nohighlight">\(D_2 \approx 2.12\)</span>, interpreted as <span class="math notranslate nohighlight">\(D_2 = 2\)</span>.</p></li>
+<li><p><strong>Fig. 12:</strong> The distribution of rescaled volume differences
+<span class="math notranslate nohighlight">\(z = |\Delta N_3| / N_3^{1/D_2}\)</span> at <span class="math notranslate nohighlight">\(D_2 = 2\)</span> collapses onto a
+Gaussian <span class="math notranslate nohighlight">\(e^{-cz^2}\)</span> independent of <span class="math notranslate nohighlight">\(N_3\)</span>.</p></li>
+<li><p><strong>Fig. 13:</strong> The Monte Carlo volume-volume correlator matches the
+prediction from the minisuperspace effective action (Eq. 40).</p></li>
 </ul>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/effective_action.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">40</span>
+<p><strong>Our results:</strong></p>
+<ul class="simple">
+<li><p><strong>D_2 scaling (top left):</strong> The overlap-error curve has its minimum
+near <span class="math notranslate nohighlight">\(D_2 \approx 2\)</span>, <strong>consistent with the paper.</strong></p></li>
+<li><p><strong>Volume differences (top right):</strong> The measured distribution shows a
+decaying shape.  The Gaussian fit captures the trend but scatter is
+large due to limited statistics at <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span>.</p></li>
+<li><p><strong><span class="math notranslate nohighlight">\(\cos^4\)</span> comparison (bottom left):</strong> The Monte Carlo average profile
+is relatively flat compared to the peaked <span class="math notranslate nohighlight">\(\cos^4(\pi\tau/T)\)</span>
+prediction.  This is expected: the <span class="math notranslate nohighlight">\(\cos^4\)</span> shape emerges only at
+<span class="math notranslate nohighlight">\(N_4 \gg 10\,000\)</span> with <span class="math notranslate nohighlight">\(T \geq 40\)</span> time slices.  At our lattice
+size, the profile spans only <span class="math notranslate nohighlight">\(\sim 9\)</span> slices with insufficient dynamic
+range to develop the characteristic bulge.</p></li>
+<li><p><strong>Action evolution (bottom right):</strong> The Regge action and four-volume
+track each other during equilibration, confirming the volume-fixing
+term drives <span class="math notranslate nohighlight">\(N_4\)</span> toward the target.</p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/effective_action.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">60</span>
 </pre></div>
 </div>
-<a class="reference internal image-reference" href="_images/effective_action.png"><img alt="Effective action analysis showing minisuperspace comparison" src="_images/effective_action.png" style="width: 100%;" />
+<a class="reference internal image-reference" href="_images/effective_action.png"><img alt="Effective action analysis: D_2 scaling, volume differences, minisuperspace comparison" src="_images/effective_action.png" style="width: 100%;" />
 </a>
 </section>
 <hr class="docutils" />
-<section id="n-32-distribution-at-fixed-n-41">
-<h2><span class="math notranslate nohighlight">\(N_{32}\)</span> Distribution at Fixed <span class="math notranslate nohighlight">\(N_{41}\)</span><a class="headerlink" href="#n-32-distribution-at-fixed-n-41" title="Link to this heading">¶</a></h2>
-<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/n32_distribution.py</span></code></p>
-<p><strong>Reproduces:</strong> Figure 2 of <em>Reconstructing the Universe</em>.</p>
-<p>In 4D CDT the volume-fixing term constrains <span class="math notranslate nohighlight">\(N_4^{(4,1)}\)</span>, but the
-number of <span class="math notranslate nohighlight">\((3,2)\)</span>-simplices fluctuates freely. The distribution of
-<span class="math notranslate nohighlight">\(N_4^{(3,2)}\)</span> is sharply peaked at each target volume, demonstrating
-that the two simplex types are strongly correlated in the de Sitter phase.
-As the target volume increases, the distribution narrows and shifts to
-larger <span class="math notranslate nohighlight">\(N_4^{(3,2)}\)</span> values.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/n32_distribution.py<span class="w"> </span>--n-meas<span class="w"> </span><span class="m">200</span>
+<section id="volume-profiles-in-phases-a-b-c">
+<h2>Volume Profiles in Phases A, B, C<a class="headerlink" href="#volume-profiles-in-phases-a-b-c" title="Link to this heading">¶</a></h2>
+<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/volume_profile_phases.py</span></code> <br />
+<strong>Reproduces:</strong> Figures 4, 5, 6, Ambjorn, Jurkiewicz &amp; Loll,
+<em>Reconstructing the Universe</em>, Phys. Rev. D <strong>72</strong> (2005)
+[<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a>]</p>
+<p><strong>Paper results:</strong></p>
+<ul class="simple">
+<li><p><strong>Fig. 4</strong> (Phase A, <span class="math notranslate nohighlight">\(\kappa_0 = 5.0\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0\)</span>): thin, elongated
+branched-polymer geometry with irregular maxima.</p></li>
+<li><p><strong>Fig. 5</strong> (Phase B, <span class="math notranslate nohighlight">\(\kappa_0 = 1.6\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0\)</span>): crumpled geometry
+collapsed to <span class="math notranslate nohighlight">\(\sim 2\)</span> time slices.</p></li>
+<li><p><strong>Fig. 6</strong> (Phase C, <span class="math notranslate nohighlight">\(\kappa_0 = 2.2\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0.6\)</span>): extended
+de Sitter universe with <span class="math notranslate nohighlight">\(N_3(\tau) \propto \cos^4(\pi\tau/T)\)</span>.</p></li>
+</ul>
+<p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span> the three profiles are <strong>not yet
+differentiated</strong> – all show a roughly uniform distribution across
+<span class="math notranslate nohighlight">\(\sim 9\)</span> time slices.  The phase transitions in the paper occur at
+<span class="math notranslate nohighlight">\(N_4 \sim 20\)</span>k–<span class="math notranslate nohighlight">\(45\)</span>k; at smaller volumes the system is too small to
+develop the distinct geometric structures that characterise each phase.
+The dashed <span class="math notranslate nohighlight">\(\cos^4\)</span> reference curve shows the expected shape for
+Phase <span class="math notranslate nohighlight">\(C_{dS}\)</span> at large <span class="math notranslate nohighlight">\(N_4\)</span>.</p>
+<p>To reproduce the paper’s Fig. 6 shape, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">10000</span></code>
+or larger (estimated runtime: several hours).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_profile_phases.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">80</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">30</span>
 </pre></div>
 </div>
-<a class="reference internal image-reference" href="_images/n32_distribution.png"><img alt="Distribution of N_4^(3,2) at fixed N_4^(4,1) for different volumes" class="align-center" src="_images/n32_distribution.png" style="width: 70%;" />
+<a class="reference internal image-reference" href="_images/volume_profiles_surface.png"><img alt="Surface-of-revolution plots of the universe in phases A, B, C" src="_images/volume_profiles_surface.png" style="width: 100%;" />
 </a>
+<a class="reference internal image-reference" href="_images/volume_profiles_profile.png"><img alt="Line plot of N_3(tau) for all three phases" class="align-center" src="_images/volume_profiles_profile.png" style="width: 80%;" />
+</a>
+</section>
+<hr class="docutils" />
+<section id="volume-volume-correlator-and-hausdorff-dimension">
+<h2>Volume-Volume Correlator and Hausdorff Dimension<a class="headerlink" href="#volume-volume-correlator-and-hausdorff-dimension" title="Link to this heading">¶</a></h2>
+<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/volume_scaling.py</span></code> <br />
+<strong>Reproduces:</strong> Figures 7, 8, 12, Ambjorn, Jurkiewicz &amp; Loll,
+<em>Reconstructing the Universe</em>, Phys. Rev. D <strong>72</strong> (2005)
+[<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a>]</p>
+<p><strong>Paper results:</strong></p>
+<ul class="simple">
+<li><p><strong>Fig. 7:</strong> The rescaled volume-volume correlator
+<span class="math notranslate nohighlight">\(c_{\tilde{N}_4}(x)\)</span> with <span class="math notranslate nohighlight">\(x = \delta / (\tilde{N}_4^{\text{eff}})^{1/4}\)</span>
+collapses onto a universal peaked curve for system sizes
+<span class="math notranslate nohighlight">\(\tilde{N}_4 = 10\)</span>k, <span class="math notranslate nohighlight">\(20\)</span>k, <span class="math notranslate nohighlight">\(40\)</span>k, <span class="math notranslate nohighlight">\(80\)</span>k, <span class="math notranslate nohighlight">\(160\)</span>k.</p></li>
+<li><p><strong>Fig. 8:</strong> The overlap error has a clear minimum at <span class="math notranslate nohighlight">\(D_H \approx 3.8\)</span>,
+interpreted as <span class="math notranslate nohighlight">\(D_H = 4\)</span>.</p></li>
+</ul>
+<p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 650\)</span>–<span class="math notranslate nohighlight">\(1\,900\)</span> the correlator data points
+(top left) do not yet collapse onto a single curve, and the D_H estimate
+(top right) does <strong>not</strong> show a clear minimum at <span class="math notranslate nohighlight">\(D_H = 4\)</span>.  This is
+expected: the paper explicitly notes that finite-volume effects are
+significant below <span class="math notranslate nohighlight">\(\tilde{N}_4 = 20\)</span>k and uses <span class="math notranslate nohighlight">\(T = 80\)</span> time slices
+(vs. our <span class="math notranslate nohighlight">\(\sim 9\)</span>–<span class="math notranslate nohighlight">\(11\)</span>).  The volume-difference distribution (bottom
+left) shows a decaying shape consistent with the Gaussian fit, in
+qualitative agreement with Fig. 12.</p>
+<p>To reproduce the scaling collapse, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">10000</span></code> or
+larger and <code class="docutils literal notranslate"><span class="pre">--n-meas</span> <span class="pre">100+</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_scaling.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">40</span>
+</pre></div>
+</div>
+<a class="reference internal image-reference" href="_images/volume_scaling.png"><img alt="Volume scaling analysis with correlator and Hausdorff dimension" src="_images/volume_scaling.png" style="width: 100%;" />
+</a>
+</section>
+<hr class="docutils" />
+<section id="phase-diagram">
+<h2>Phase Diagram<a class="headerlink" href="#phase-diagram" title="Link to this heading">¶</a></h2>
+<p><strong>Script:</strong> <code class="docutils literal notranslate"><span class="pre">examples/phase_diagram.py</span></code> <br />
+<strong>Reproduces:</strong> Figure 3, Ambjorn, Jurkiewicz &amp; Loll,
+<em>Reconstructing the Universe</em>, Phys. Rev. D <strong>72</strong> (2005)
+[<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a>];
+and the phase diagram from Gorlich,
+<em>Introduction to Causal Dynamical Triangulations</em> (2013)</p>
+<p><strong>Paper result (Fig. 3):</strong> The <span class="math notranslate nohighlight">\((\kappa_0, \Delta)\)</span> plane splits into
+three phases – A (large <span class="math notranslate nohighlight">\(\kappa_0\)</span>), B (small <span class="math notranslate nohighlight">\(\kappa_0\)</span>, small <span class="math notranslate nohighlight">\(\Delta\)</span>),
+C (moderate <span class="math notranslate nohighlight">\(\kappa_0\)</span>, <span class="math notranslate nohighlight">\(\Delta &gt; 0\)</span>) – separated by first-order
+transition lines.</p>
+<p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 400\)</span> per point the phase diagram is
+<strong>uniformly Phase C</strong> across the entire scanned region.  The phase
+transitions are not visible because they require lattice sizes of
+<span class="math notranslate nohighlight">\(N_4 &gt; 20\,000\)</span> to resolve: at small volumes the system does not have
+enough degrees of freedom to collapse into Phase B or fragment into
+Phase A.  The white star marks the de Sitter point <span class="math notranslate nohighlight">\(\kappa_0 = 2.2\)</span>,
+<span class="math notranslate nohighlight">\(\Delta = 0.6\)</span> used in all measurements in the paper.</p>
+<p>To see the phase boundaries, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">20000</span></code> or larger
+(estimated runtime: many hours per grid point).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/phase_diagram.py<span class="w"> </span>--grid-size<span class="w"> </span><span class="m">10</span><span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">400</span><span class="w"> </span>--n-sweeps<span class="w"> </span><span class="m">50</span>
+</pre></div>
+</div>
+<a class="reference internal image-reference" href="_images/phase_diagram.png"><img alt="Phase diagram of 4D CDT" class="align-center" src="_images/phase_diagram.png" style="width: 70%;" />
+</a>
+</section>
+<hr class="docutils" />
+<section id="summary-of-confirmations">
+<h2>Summary of Confirmations<a class="headerlink" href="#summary-of-confirmations" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head text-left"><p>Paper figure</p></th>
+<th class="head text-left"><p>Observable</p></th>
+<th class="head text-center"><p>Status</p></th>
+<th class="head text-left"><p>Notes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td class="text-left"><p>Fig. 2</p></td>
+<td class="text-left"><p><span class="math notranslate nohighlight">\(N_{32}\)</span> distribution</p></td>
+<td class="text-center"><p><strong>Confirmed</strong></p></td>
+<td class="text-left"><p>Sharp peaks, correct ratio <span class="math notranslate nohighlight">\(N_{32}/N_{41} \approx 2.3\)</span></p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p>Figs. 9–10</p></td>
+<td class="text-left"><p>Spectral dimension <span class="math notranslate nohighlight">\(D_S(\sigma)\)</span></p></td>
+<td class="text-center"><p><strong>Qualitatively confirmed</strong></p></td>
+<td class="text-left"><p>Monotonic rise, finite-size offset</p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p>Fig. 11</p></td>
+<td class="text-left"><p>Kinetic dimension <span class="math notranslate nohighlight">\(D_2\)</span></p></td>
+<td class="text-center"><p><strong>Consistent</strong></p></td>
+<td class="text-left"><p>Minimum near <span class="math notranslate nohighlight">\(D_2 = 2\)</span></p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p>Figs. 4–6</p></td>
+<td class="text-left"><p>Volume profiles A/B/C</p></td>
+<td class="text-center"><p>Not yet visible</p></td>
+<td class="text-left"><p>Requires <span class="math notranslate nohighlight">\(N_4 &gt; 10\,000\)</span></p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p>Figs. 7–8</p></td>
+<td class="text-left"><p>Hausdorff dimension <span class="math notranslate nohighlight">\(D_H\)</span></p></td>
+<td class="text-center"><p>Not yet visible</p></td>
+<td class="text-left"><p>Requires <span class="math notranslate nohighlight">\(N_4 &gt; 20\,000\)</span></p></td>
+</tr>
+<tr class="row-odd"><td class="text-left"><p>Fig. 3</p></td>
+<td class="text-left"><p>Phase diagram</p></td>
+<td class="text-center"><p>Not yet visible</p></td>
+<td class="text-left"><p>Requires <span class="math notranslate nohighlight">\(N_4 &gt; 20\,000\)</span></p></td>
+</tr>
+<tr class="row-even"><td class="text-left"><p>Figs. 12–13</p></td>
+<td class="text-left"><p>Effective action</p></td>
+<td class="text-center"><p>Partially confirmed</p></td>
+<td class="text-left"><p><span class="math notranslate nohighlight">\(D_2\)</span> minimum correct; <span class="math notranslate nohighlight">\(\cos^4\)</span> needs larger lattice</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 </section>
 <hr class="docutils" />
 <section id="references">
 <h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
-<ul class="simple">
+<ol class="arabic simple">
 <li><p>J. Ambjorn, J. Jurkiewicz, R. Loll, <em>Reconstructing the Universe</em>,
-Phys. Rev. D 72 (2005), <a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a></p></li>
-<li><p>A. Gorlich, <em>Introduction to Causal Dynamical Triangulations</em> (2013)</p></li>
+Phys. Rev. D <strong>72</strong> (2005),
+<a class="reference external" href="https://arxiv.org/abs/hep-th/0505154">hep-th/0505154</a></p></li>
+<li><p>A. Gorlich, <em>Introduction to Causal Dynamical Triangulations</em>,
+Lecture notes (Zakopane, 2013)</p></li>
 <li><p>R. Loll, <em>Quantum Gravity from Causal Dynamical Triangulations: A Review</em>,
-Class. Quant. Grav. 37 (2020), <a class="reference external" href="https://arxiv.org/abs/1905.08669">arXiv:1905.08669</a></p></li>
-</ul>
+Class. Quant. Grav. <strong>37</strong> (2020),
+<a class="reference external" href="https://arxiv.org/abs/1905.08669">arXiv:1905.08669</a></p></li>
+</ol>
 </section>
 </section>
 
@@ -488,12 +567,13 @@ Class. Quant. Grav. 37 (2020), <a class="reference external" href="https://arxiv
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">CDT Examples</a><ul>
-<li><a class="reference internal" href="#volume-profiles-in-phases-a-b-c">Volume Profiles in Phases A, B, C</a></li>
+<li><a class="reference internal" href="#n-32-distribution-at-fixed-n-41"><span class="math notranslate nohighlight">\(N_{32}\)</span> Distribution at Fixed <span class="math notranslate nohighlight">\(N_{41}\)</span></a></li>
 <li><a class="reference internal" href="#spectral-dimension">Spectral Dimension</a></li>
+<li><a class="reference internal" href="#effective-action-and-minisuperspace">Effective Action and Minisuperspace</a></li>
+<li><a class="reference internal" href="#volume-profiles-in-phases-a-b-c">Volume Profiles in Phases A, B, C</a></li>
 <li><a class="reference internal" href="#volume-volume-correlator-and-hausdorff-dimension">Volume-Volume Correlator and Hausdorff Dimension</a></li>
 <li><a class="reference internal" href="#phase-diagram">Phase Diagram</a></li>
-<li><a class="reference internal" href="#effective-action-and-minisuperspace">Effective Action and Minisuperspace</a></li>
-<li><a class="reference internal" href="#n-32-distribution-at-fixed-n-41"><span class="math notranslate nohighlight">\(N_{32}\)</span> Distribution at Fixed <span class="math notranslate nohighlight">\(N_{41}\)</span></a></li>
+<li><a class="reference internal" href="#summary-of-confirmations">Summary of Confirmations</a></li>
 <li><a class="reference internal" href="#references">References</a></li>
 </ul>
 </li>

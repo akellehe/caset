@@ -36,6 +36,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from tqdm import tqdm
 
 import caset
 
@@ -51,14 +52,20 @@ def collect_profiles(n_simplices, n_therm, n_meas, interval):
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
-    for _ in range(n_therm):
+    for _ in tqdm(range(n_therm), desc="  Thermalizing",
+                  unit="sweep", leave=False):
         cdt.sweep()
 
     profiles = []
+    total_sweeps = n_meas * interval
+    pbar = tqdm(total=total_sweeps, desc="  Measuring",
+                unit="sweep", leave=False)
     for _ in range(n_meas):
         for _ in range(interval):
             cdt.sweep()
+            pbar.update(1)
         profiles.append(np.array(cdt.getVolumeProfile(), dtype=float))
+    pbar.close()
 
     return profiles
 
@@ -74,11 +81,23 @@ def main():
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
 
-    print("Collecting configurations...")
+    print("=" * 64)
+    print("  Effective Action & Minisuperspace Comparison")
+    print("  Reproduces Figs 11-13, Ambjorn, Jurkiewicz, Loll (2005)")
+    print("  Parameters: k0=2.2, Delta=0.6")
+    print(f"  N4={args.n_simplices}, therm={args.n_therm}, "
+          f"meas={args.n_meas}, interval={args.meas_interval}")
+    print("=" * 64)
+
+    print("\nCollecting configurations...")
     t0 = time.time()
+    t_total = time.time()
     profiles = collect_profiles(
         args.n_simplices, args.n_therm, args.n_meas, args.meas_interval)
-    print(f"  Elapsed: {time.time()-t0:.1f}s, {len(profiles)} configurations")
+    avg_slices = np.mean([len(p) for p in profiles])
+    avg_vol = np.mean([np.sum(p) for p in profiles])
+    print(f"  {len(profiles)} configurations in {time.time()-t0:.1f}s")
+    print(f"  Avg slices: {avg_slices:.0f}, avg total volume: {avg_vol:,.0f}")
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 11))
 
@@ -215,7 +234,8 @@ def main():
 
     actions = []
     volumes = []
-    for sweep_num in range(100):
+    for sweep_num in tqdm(range(100), desc="  Action tracking",
+                          unit="sweep", leave=False):
         cdt.sweep()
         actions.append(cdt.computeAction())
         volumes.append(st.getSimplexCount())
@@ -235,6 +255,10 @@ def main():
     fig.suptitle(r"Effective action analysis ($\kappa_0=2.2$, $\Delta=0.6$)",
                  fontsize=14, y=1.01)
     fig.tight_layout()
+
+    print(f"\nAction range: [{min(actions):.2f}, {max(actions):.2f}], "
+          f"final N4={volumes[-1]:,}")
+    print(f"Total elapsed: {time.time()-t_total:.1f}s")
 
     if args.save:
         fig.savefig(args.save, dpi=150, bbox_inches="tight")

@@ -22,6 +22,7 @@ dependencies = [
     "matplotlib==3.10.7",
     "numpy==2.3.4",
     "pybind11>=2.12",
+    "tqdm>=4.66",
 ]
 optional-dependencies.dev = [
     "pytest",

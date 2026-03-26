@@ -36,6 +36,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from tqdm import tqdm
 
 import caset
 
@@ -114,26 +115,46 @@ def main():
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
 
+    print("=" * 64)
+    print("  CDT Phase Diagram Scan")
+    print("  Reproduces Fig 3, Ambjorn, Jurkiewicz, Loll (2005)")
+    print(f"  Grid: {args.grid_size}x{args.grid_size}, "
+          f"N4={args.n_simplices}, sweeps={args.n_sweeps}")
+    print(f"  k0 in [{args.k0_min}, {args.k0_max}], "
+          f"Delta in [{args.delta_min}, {args.delta_max}]")
+    print("=" * 64)
+
     k0_values = np.linspace(args.k0_min, args.k0_max, args.grid_size)
     delta_values = np.linspace(args.delta_min, args.delta_max, args.grid_size)
     phase_map = np.zeros((len(delta_values), len(k0_values)))
 
     total_points = len(k0_values) * len(delta_values)
-    print(f"Scanning {total_points} points in (k0, Delta) space...")
+    phase_counts = {"A": 0, "B": 0, "C": 0}
 
     t0 = time.time()
+    pbar = tqdm(total=total_points, desc="Scanning phase space",
+                unit="pt")
     for i, delta in enumerate(delta_values):
         for j, k0 in enumerate(k0_values):
             phase, profile = run_point(
                 k0, delta, args.n_simplices, args.n_sweeps)
             phase_map[i, j] = phase
             label = ["B", "C", "A"][phase]
-            print(f"  k0={k0:.1f}, Delta={delta:.2f} -> Phase {label} "
-                  f"({len(profile)} slices)")
+            phase_counts[label] += 1
+            pbar.set_postfix_str(
+                f"k0={k0:.1f} D={delta:.2f} -> {label}")
+            pbar.update(1)
+    pbar.close()
 
     elapsed = time.time() - t0
-    print(f"\nTotal time: {elapsed:.1f}s "
+    print(f"\nScan complete: {elapsed:.1f}s "
           f"({elapsed/total_points:.2f}s per point)")
+    print(f"  Phase A (polymer):    {phase_counts['A']:3d} points "
+          f"({100*phase_counts['A']/total_points:.0f}%)")
+    print(f"  Phase B (crumpled):   {phase_counts['B']:3d} points "
+          f"({100*phase_counts['B']/total_points:.0f}%)")
+    print(f"  Phase C (de Sitter):  {phase_counts['C']:3d} points "
+          f"({100*phase_counts['C']/total_points:.0f}%)")
 
     # ---- Plot ----
     fig, ax = plt.subplots(figsize=(9, 7))

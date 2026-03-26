@@ -33,6 +33,7 @@ import time
 
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import caset
 
@@ -157,37 +158,46 @@ def main():
                         help="Save figure to this path instead of showing")
     args = parser.parse_args()
 
+    print("=" * 64)
+    print("  Spectral Dimension Measurement via Discrete Diffusion")
+    print("  Reproduces Figs 9-10, Ambjorn, Jurkiewicz, Loll (2005)")
+    print("  Parameters: k0=2.2, Delta=0.6")
+    print(f"  Configs: {args.n_configs}, walks/config: {args.n_walks}, "
+          f"max sigma: {args.max_sigma}")
+    print("=" * 64)
+
     # --- Build and thermalize ---
-    print("Building spacetime...")
+    t_total = time.time()
+    print("\nBuilding spacetime...")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(args.n_simplices)
+    print(f"  {st.getSimplexCount():,} simplices built")
 
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
-    print(f"Thermalizing ({args.n_therm} sweeps)...")
-    for _ in range(args.n_therm):
+    for _ in tqdm(range(args.n_therm), desc="Thermalizing",
+                  unit="sweep", leave=False):
         cdt.sweep()
+    print(f"Thermalization complete ({args.n_therm} sweeps)")
 
     # --- Measure spectral dimension ---
     all_return_probs = []
 
-    for cfg in range(args.n_configs):
+    for cfg in tqdm(range(args.n_configs), desc="Configurations",
+                    unit="cfg"):
         # Decorrelate
         for _ in range(args.sweeps_between):
             cdt.sweep()
 
-        print(f"Configuration {cfg+1}/{args.n_configs}: "
-              f"N4={st.getSimplexCount()}", end="")
         t0 = time.time()
-
         adjacency, s2i = build_dual_adjacency(st)
         N = len(adjacency)
         if N == 0:
-            print(" (no simplices, skipping)")
+            tqdm.write(f"  Config {cfg+1}: no simplices, skipping")
             continue
 
         # Average over random starting simplices
@@ -196,11 +206,16 @@ def main():
             rp = diffuse(adjacency, start, args.max_sigma)
             all_return_probs.append(rp)
 
-        print(f"  ({time.time()-t0:.1f}s)")
+        avg_neighbors = np.mean([len(adj) for adj in adjacency])
+        tqdm.write(f"  Config {cfg+1}: N4={st.getSimplexCount():,}, "
+                   f"dual nodes={N:,}, avg neighbors={avg_neighbors:.1f}, "
+                   f"{time.time()-t0:.1f}s")
 
     if not all_return_probs:
         print("No data collected.")
         return
+
+    print(f"\nCollected {len(all_return_probs)} diffusion walks")
 
     # Average return probability
     max_len = max(len(rp) for rp in all_return_probs)
@@ -230,7 +245,8 @@ def main():
     ax1.set_xlabel(r"Diffusion time $\sigma$", fontsize=13)
     ax1.set_ylabel(r"$D_S(\sigma)$", fontsize=13)
     ax1.set_title(r"Spectral dimension $D_S(\sigma)$"
-                  "\n(cf. Fig 9, Ambjorn et al. 2005)")
+                  "\n(cf. Fig 9, Ambjorn, Jurkiewicz, Loll,\n"
+                  r"$\it{Reconstructing\ the\ Universe}$, 2005)")
     ax1.legend(fontsize=11)
     ax1.grid(True, alpha=0.3)
     ax1.set_ylim(0, 5)
@@ -246,12 +262,27 @@ def main():
     ax2.set_xlabel(r"$\sigma$", fontsize=13)
     ax2.set_ylabel(r"$D_S$", fontsize=13)
     ax2.set_title(r"Spectral dimension with reference values"
-                  "\n(cf. Fig 10, Ambjorn et al. 2005)")
+                  "\n(cf. Fig 10, Ambjorn, Jurkiewicz, Loll,\n"
+                  r"$\it{Reconstructing\ the\ Universe}$, 2005)")
     ax2.legend(fontsize=10)
     ax2.grid(True, alpha=0.3)
     ax2.set_ylim(0, 5)
 
     fig.tight_layout()
+
+    # Report key results
+    if len(sigma_vals) > 0:
+        # Large-scale estimate (last 20% of data)
+        n_tail = max(1, len(D_S_vals) // 5)
+        D_S_large = np.mean(D_S_vals[-n_tail:])
+        # Small-scale estimate (first 20% of data)
+        n_head = max(1, len(D_S_vals) // 5)
+        D_S_small = np.mean(D_S_vals[:n_head])
+        print(f"\nResults:")
+        print(f"  D_S(large scale)  = {D_S_large:.2f}  (paper: 4.02 +/- 0.1)")
+        print(f"  D_S(small scale)  = {D_S_small:.2f}  (paper: 1.80 +/- 0.25)")
+
+    print(f"Total elapsed: {time.time()-t_total:.1f}s")
 
     if args.save:
         fig.savefig(args.save, dpi=150)

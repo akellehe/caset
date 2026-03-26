@@ -3,31 +3,11 @@
 """
 Volume-volume correlator and Hausdorff dimension measurement.
 
-Reproduces Figures 7-8 from:
+Reproduces Figures 7-8, 12 from:
   Ambjorn, Jurkiewicz, Loll, "Reconstructing the Universe",
   Phys. Rev. D 72 (2005) [hep-th/0505154]
 
-The volume-volume correlator is defined as (Eq. 7):
-
-    C_{N4}(delta) = sum_{tau=1}^{t}
-        4 <(N_3(tau) - s/2)(N_3(tau+delta) - s/2)> / (N4_eff - t*s)^2
-
-where s is the stalk volume and N4_eff = N4 - t*s.
-
-The rescaled correlator c_{N4}(x) with x = delta / (N4_eff)^{1/D_H}
-should collapse onto a universal curve when D_H = 4 (the Hausdorff
-dimension), providing evidence that spacetime is four-dimensional
-at large scales.
-
-The paper also measures the distribution of rescaled volume differences
-between adjacent spatial slices (Fig 12):
-
-    z = |N_3(tau+1) - V*N_3(tau)| / N_3^{1/D_2}
-
-which collapses to a Gaussian e^{-c*z^2} when D_2 = 2.
-
-Parameters: k0 = 2.2, Delta = 0.6, t = 80.
-Estimated runtime: ~2-5 minutes.
+Paper parameters: k0=2.2, Delta=0.6, N4=10k-160k, T=80.
 """
 import argparse
 import time
@@ -35,89 +15,63 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from tqdm import tqdm
 
 import caset
 
 
-def run_cdt_collect_profiles(n_simplices, n_therm, n_meas, meas_interval):
-    """Build, thermalize, and collect volume profiles."""
+def run_cdt_collect_profiles(n_simplices, n_therm, n_meas, meas_interval,
+                             size_label=""):
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
-
-    for _ in range(n_therm):
+    prefix = f"  [N4={size_label}] " if size_label else "  "
+    for _ in tqdm(range(n_therm), desc=f"{prefix}Thermalizing",
+                  unit="sweep", leave=False):
         cdt.sweep()
-
     profiles = []
+    total_sweeps = n_meas * meas_interval
+    pbar = tqdm(total=total_sweeps, desc=f"{prefix}Measuring",
+                unit="sweep", leave=False)
     for _ in range(n_meas):
         for _ in range(meas_interval):
             cdt.sweep()
+            pbar.update(1)
         profiles.append(np.array(cdt.getVolumeProfile(), dtype=float))
-
+    pbar.close()
     return profiles
 
 
 def compute_volume_correlator(profiles, stalk_volume=None):
-    """
-    Compute the volume-volume correlator C_{N4}(delta) (Eq. 7).
-    """
+    """Volume-volume correlator C_{N4}(delta) (Eq. 7 of the paper)."""
     T = max(len(p) for p in profiles)
     correlator = np.zeros(T)
     count = np.zeros(T)
-
     for p in profiles:
         n3 = np.array(p, dtype=float)
         t = len(n3)
-        if stalk_volume is None:
-            s = np.min(n3) if len(n3) > 0 else 0
-        else:
-            s = stalk_volume
+        s = stalk_volume if stalk_volume is not None else max(np.min(n3), 0)
         n3_shifted = n3 - s / 2.0
         n4_eff = np.sum(n3) - t * s
         if n4_eff <= 0:
             continue
-
         for delta in range(t):
             c = 0.0
             for tau in range(t):
-                tau_delta = (tau + delta) % t
-                c += n3_shifted[tau] * n3_shifted[tau_delta]
+                c += n3_shifted[tau] * n3_shifted[(tau + delta) % t]
             correlator[delta] += 4.0 * c / (n4_eff ** 2)
             count[delta] += 1
-
     count[count == 0] = 1
     return correlator / count
 
 
-def compute_volume_differences(profiles, D_2=2.0):
-    """
-    Compute rescaled volume differences z between adjacent slices (Eq. 37):
-        z = |N_3(tau+1) - V * N_3(tau)| / N_3^{1/D_2}
-    where N_3 = N_3(tau) + N_3(tau+1) and V = N_3(tau+1)/N_3(tau).
-    """
-    all_z = []
-    for p in profiles:
-        n3 = np.array(p, dtype=float)
-        for tau in range(len(n3) - 1):
-            n3_total = n3[tau] + n3[tau + 1]
-            if n3_total <= 0 or n3[tau] <= 0:
-                continue
-            V = n3[tau + 1] / n3[tau]
-            diff = abs(n3[tau + 1] - V * n3[tau])
-            z = diff / (n3_total ** (1.0 / D_2))
-            all_z.append(z)
-    return np.array(all_z)
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="Volume-volume correlator and Hausdorff dimension "
-                    "(Figs 7-8, 11-12 of hep-th/0505154)")
+        description="Volume-volume correlator (Figs 7-8, 12)")
     parser.add_argument("--n-simplices", type=int, default=500)
     parser.add_argument("--n-therm", type=int, default=50)
     parser.add_argument("--n-meas", type=int, default=30)
@@ -125,99 +79,171 @@ def main():
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
 
-    # Run at multiple system sizes for scaling analysis
-    sizes = [args.n_simplices // 2, args.n_simplices, args.n_simplices * 2]
+    print("=" * 64)
+    print("  Volume-Volume Correlator & Hausdorff Dimension")
+    print("  Reproduces Figs 7-8, 12, Ambjorn, Jurkiewicz, Loll (2005)")
+    print("  Parameters: k0=2.2, Delta=0.6")
+    print("=" * 64)
 
+    sizes = [args.n_simplices // 2, args.n_simplices, args.n_simplices * 2]
     fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+
+    # Store correlators for D_H scan
+    all_corrs = {}
+    t_total = time.time()
 
     # ---- Fig 7: Rescaled volume-volume correlator ----
     ax_corr = axes[0, 0]
-    colors = ["red", "green", "blue", "orange"]
+    colors = ["red", "green", "blue"]
     for i, n4 in enumerate(sizes):
-        print(f"\nRunning N4={n4}...")
+        print(f"\n--- Size {i+1}/{len(sizes)}: N4={n4:,} ---")
         t0 = time.time()
         profiles = run_cdt_collect_profiles(
-            n4, args.n_therm, args.n_meas, args.meas_interval)
-        print(f"  Elapsed: {time.time()-t0:.1f}s, "
-              f"profiles: {len(profiles)} x ~{np.mean([len(p) for p in profiles]):.0f} slices")
+            n4, args.n_therm, args.n_meas, args.meas_interval,
+            size_label=str(n4))
+        avg_slices = np.mean([len(p) for p in profiles])
+        avg_vol = np.mean([np.sum(p) for p in profiles])
+        print(f"  Elapsed: {time.time()-t0:.1f}s")
+        print(f"  Profiles: {len(profiles)} x ~{avg_slices:.0f} slices, "
+              f"avg total volume: {avg_vol:,.0f}")
 
         corr = compute_volume_correlator(profiles)
         T = len(corr)
         if T < 2:
             continue
 
-        # Rescale: x = delta / N4_eff^{1/D_H} with D_H = 4
-        D_H = 4.0
         avg_n4_eff = np.mean([np.sum(p) for p in profiles])
+        all_corrs[avg_n4_eff] = corr
+
+        D_H = 4.0
         delta = np.arange(T)
         x = delta / max(avg_n4_eff ** (1.0 / D_H), 1e-10)
-
-        # Rescale correlator
         c_rescaled = corr * (avg_n4_eff ** (1.0 / D_H))
 
-        ax_corr.plot(x, c_rescaled, "o", markersize=3, color=colors[i % 4],
+        ax_corr.plot(x, c_rescaled, "o", markersize=3, color=colors[i],
                      label=f"$N_4 \\approx {int(avg_n4_eff)}$")
 
     ax_corr.set_xlabel(r"$x = \delta / (\tilde{N}_4^{\mathrm{eff}})^{1/D_H}$",
                        fontsize=12)
     ax_corr.set_ylabel(r"$c_{\tilde{N}_4}(x)$", fontsize=12)
-    ax_corr.set_title(r"Rescaled volume-volume correlator ($D_H=4$)"
-                      "\n(cf. Fig 7, Ambjorn et al. 2005)")
+    ax_corr.set_title(
+        r"Rescaled volume-volume correlator ($D_H=4$)"
+        "\n(cf. Fig 7, Ambjorn, Jurkiewicz, Loll,\n"
+        r"$\it{Reconstructing\ the\ Universe}$, 2005)")
     ax_corr.legend(fontsize=10)
     ax_corr.grid(True, alpha=0.3)
 
     # ---- Fig 8: D_H from best overlap ----
     ax_dh = axes[0, 1]
-    D_H_range = np.linspace(2.5, 5.5, 30)
-    # Simple overlap metric: variance of rescaled correlators at each x
-    # (lower variance = better overlap)
+    D_H_range = np.linspace(2.0, 6.0, 40)
+    errors = []
+
+    if len(all_corrs) >= 2:
+        # Pick the smallest correlator as reference, measure overlap with others
+        sorted_keys = sorted(all_corrs.keys())
+        ref_key = sorted_keys[len(sorted_keys) // 2]
+        ref_corr = all_corrs[ref_key]
+
+        for D_H_trial in D_H_range:
+            total_err = 0
+            n_pairs = 0
+            for n4_eff, corr in all_corrs.items():
+                if n4_eff == ref_key:
+                    continue
+                T1, T2 = len(ref_corr), len(corr)
+                # Rescale both to same x-axis
+                x_ref = np.arange(T1) / max(ref_key ** (1.0 / D_H_trial), 1e-10)
+                x_other = np.arange(T2) / max(n4_eff ** (1.0 / D_H_trial), 1e-10)
+                c_ref = ref_corr * (ref_key ** (1.0 / D_H_trial))
+                c_other = corr * (n4_eff ** (1.0 / D_H_trial))
+                # Interpolate and compare on common x range
+                x_max = min(x_ref[-1], x_other[-1])
+                x_common = np.linspace(0, x_max, 20)
+                if x_max <= 0:
+                    continue
+                c1 = np.interp(x_common, x_ref, c_ref)
+                c2 = np.interp(x_common, x_other, c_other)
+                norm = np.mean(np.abs(c1) + np.abs(c2)) + 1e-10
+                total_err += np.mean((c1 - c2) ** 2) / (norm ** 2)
+                n_pairs += 1
+            errors.append(total_err / max(n_pairs, 1))
+
+        errors = np.array(errors)
+        if errors.max() > 0:
+            errors /= errors.max()
+        ax_dh.plot(D_H_range, errors, "k-", linewidth=1.5)
+        best_dh = D_H_range[np.argmin(errors)]
+        ax_dh.axvline(x=best_dh, color="blue", linestyle="--", alpha=0.5,
+                      label=f"Best: $D_H \\approx {best_dh:.1f}$")
+
+    ax_dh.axvline(x=4.0, color="gray", linestyle=":", alpha=0.7,
+                  label=r"Paper: $D_H=4$")
     ax_dh.set_xlabel(r"$D_H$", fontsize=12)
-    ax_dh.set_ylabel("Overlap error", fontsize=12)
-    ax_dh.set_title(r"Hausdorff dimension estimate"
-                    "\n(cf. Fig 8, Ambjorn et al. 2005)")
-    ax_dh.axvline(x=4.0, color="gray", linestyle=":", label=r"$D_H=4$")
-    ax_dh.text(4.05, 0.5, r"$D_H=4$", transform=ax_dh.get_xaxis_transform(),
-               fontsize=11, color="gray")
+    ax_dh.set_ylabel("Overlap error (normalized)", fontsize=12)
+    ax_dh.set_title(
+        "Hausdorff dimension estimate\n"
+        "(cf. Fig 8, Ambjorn, Jurkiewicz, Loll,\n"
+        r"$\it{Reconstructing\ the\ Universe}$, 2005)")
+    ax_dh.legend(fontsize=10)
     ax_dh.grid(True, alpha=0.3)
 
     # ---- Fig 12: Volume difference distribution ----
     ax_vdiff = axes[1, 0]
-    # Use the largest size
     profiles = run_cdt_collect_profiles(
         sizes[-1], args.n_therm, args.n_meas, args.meas_interval)
-    z_values = compute_volume_differences(profiles, D_2=2.0)
+    all_z = []
+    for p in profiles:
+        for tau in range(len(p) - 1):
+            n3_total = p[tau] + p[tau + 1]
+            if n3_total <= 0:
+                continue
+            diff = abs(p[tau + 1] - p[tau])
+            z = diff / max(n3_total ** 0.5, 1e-10)
+            all_z.append(z)
 
-    if len(z_values) > 10:
-        hist, bin_edges = np.histogram(z_values, bins=30, density=True)
-        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
-        ax_vdiff.plot(bin_centers, hist, "o", markersize=4, color="blue",
+    if len(all_z) > 10:
+        all_z = np.array(all_z)
+        hist, edges = np.histogram(all_z, bins=25, density=True)
+        centers = (edges[:-1] + edges[1:]) / 2
+        ax_vdiff.plot(centers, hist, "o", markersize=4, color="blue",
                       label="Measured")
-
-        # Fit Gaussian
         try:
             def gaussian(x, A, c):
                 return A * np.exp(-c * x ** 2)
-            popt, _ = curve_fit(gaussian, bin_centers, hist,
+            mask = hist > 0
+            popt, _ = curve_fit(gaussian, centers[mask], hist[mask],
                                 p0=[hist.max(), 1.0], maxfev=5000)
-            x_fit = np.linspace(0, bin_centers.max(), 100)
-            ax_vdiff.plot(x_fit, gaussian(x_fit, *popt), "r-",
-                          label=fr"Gaussian fit: $e^{{-{popt[1]:.2f} z^2}}$")
+            x_fit = np.linspace(0, centers.max(), 100)
+            ax_vdiff.plot(x_fit, gaussian(x_fit, *popt), "r-", linewidth=1.5,
+                          label=fr"Gaussian: $e^{{-{popt[1]:.2f} z^2}}$")
         except Exception:
             pass
 
     ax_vdiff.set_xlabel(r"$z$", fontsize=12)
     ax_vdiff.set_ylabel(r"$P_{N_3}(z)$", fontsize=12)
-    ax_vdiff.set_title(r"Rescaled volume differences ($D_2=2$)"
-                       "\n(cf. Fig 12, Ambjorn et al. 2005)")
+    ax_vdiff.set_title(
+        r"Rescaled volume differences ($D_2=2$)"
+        "\n(cf. Fig 12, Ambjorn, Jurkiewicz, Loll,\n"
+        r"$\it{Reconstructing\ the\ Universe}$, 2005)")
     ax_vdiff.legend(fontsize=10)
     ax_vdiff.grid(True, alpha=0.3)
 
-    # ---- Volume profile in phase C ----
+    if len(all_corrs) >= 2 and errors.max() > 0:
+        print(f"\n  Best-fit Hausdorff dimension: D_H = {best_dh:.2f} "
+              f"(paper: D_H = 4)")
+
+    # ---- Volume profile with individual configs ----
     ax_prof = axes[1, 1]
     for p in profiles[-5:]:
         ax_prof.plot(p, alpha=0.3, color="blue", linewidth=0.8)
-    avg = np.mean([np.pad(p, (0, max(len(q) for q in profiles) - len(p)))
-                   for p in profiles], axis=0)
+    max_len = max(len(p) for p in profiles)
+    avg = np.zeros(max_len)
+    cnt = np.zeros(max_len)
+    for p in profiles:
+        avg[:len(p)] += p
+        cnt[:len(p)] += 1
+    cnt[cnt == 0] = 1
+    avg /= cnt
     ax_prof.plot(avg, "k-", linewidth=2, label="Average")
     ax_prof.set_xlabel(r"$\tau$", fontsize=12)
     ax_prof.set_ylabel(r"$N_3(\tau)$", fontsize=12)
@@ -225,10 +251,12 @@ def main():
     ax_prof.legend(fontsize=10)
     ax_prof.grid(True, alpha=0.3)
 
-    fig.suptitle(r"Volume scaling analysis ($\kappa_0=2.2$, $\Delta=0.6$)",
-                 fontsize=14, y=1.01)
+    fig.suptitle(
+        r"Volume scaling analysis ($\kappa_0=2.2$, $\Delta=0.6$)",
+        fontsize=14, y=1.01)
     fig.tight_layout()
 
+    print(f"\nTotal elapsed: {time.time()-t_total:.1f}s")
     if args.save:
         fig.savefig(args.save, dpi=150, bbox_inches="tight")
         print(f"Saved to {args.save}")
