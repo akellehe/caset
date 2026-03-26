@@ -82,6 +82,18 @@ class VertexList {
       vertexList.erase(vertex->getId());
     }
 
+    /// Swap the map keys of two vertices without destroying either object.
+    /// Used by Spacetime::swapVertexLabels for Brunekreef relabeling.
+    /// The vertices' internal IDs must already have been swapped before calling.
+    void swapKeys(std::uint64_t oldId1, std::uint64_t oldId2) {
+      auto nh1 = vertexList.extract(oldId1);
+      auto nh2 = vertexList.extract(oldId2);
+      nh1.key() = oldId2;
+      nh2.key() = oldId1;
+      vertexList.insert(std::move(nh1));
+      vertexList.insert(std::move(nh2));
+    }
+
     std::size_t size() noexcept {
       return vertexList.size();
     }

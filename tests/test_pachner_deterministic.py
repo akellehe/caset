@@ -149,11 +149,12 @@ class TestAddRemoveRoundTrip(unittest.TestCase):
         _verify_all_top_causal(st)
 
     def test_single_remove_exact_delta(self):
-        """One add then one remove: N4 returns to original."""
+        """One add then one remove: N41 returns to original."""
+        d = 4
+        delta_n41 = 2 * d - 2  # +6 in 4D
         cdt, st = _build_small(n_simplices=20)
         before = _snapshot(st)
 
-        # Add first
         for _ in range(500):
             if cdt.add():
                 break
@@ -161,9 +162,8 @@ class TestAddRemoveRoundTrip(unittest.TestCase):
             self.skipTest("No add accepted")
 
         mid = _snapshot(st)
-        self.assertEqual(mid["n4"], before["n4"] + 1)
+        self.assertEqual(mid["n41"], before["n41"] + delta_n41)
 
-        # Now remove
         for _ in range(500):
             if cdt.remove():
                 break
@@ -171,23 +171,20 @@ class TestAddRemoveRoundTrip(unittest.TestCase):
             self.skipTest("No remove accepted")
 
         after = _snapshot(st)
-
-        # N4 back to original
-        self.assertEqual(after["n4"], before["n4"])
-
-        # Exactly one simplex was removed
-        self.assertEqual(after["n4"], mid["n4"] - 1)
+        self.assertEqual(after["n41"], before["n41"])
+        self.assertEqual(after["n41"], mid["n41"] - delta_n41)
 
         _verify_counts_consistent(st)
         _verify_all_top_causal(st)
 
     def test_add_remove_many_cycles(self):
-        """Repeat add/remove 10 times.  After each pair, N4 should return."""
+        """Repeat add/remove 10 times.  After each pair, N41 should return."""
+        d = 4
+        delta_n41 = 2 * d - 2
         cdt, st = _build_small(n_simplices=20)
-        original_n4 = st.getSimplexCount()
+        original_n41 = st.getN41()
 
         for cycle in range(10):
-            # Add
             added = False
             for _ in range(500):
                 if cdt.add():
@@ -196,24 +193,22 @@ class TestAddRemoveRoundTrip(unittest.TestCase):
             if not added:
                 continue
 
-            self.assertEqual(st.getSimplexCount(), original_n4 + 1,
-                             f"Cycle {cycle}: N4 should be original+1 after add")
+            self.assertEqual(st.getN41(), original_n41 + delta_n41,
+                             f"Cycle {cycle}: N41 should be original+{delta_n41}")
             _verify_counts_consistent(st)
             _verify_all_top_causal(st)
 
-            # Remove
             removed = False
             for _ in range(500):
                 if cdt.remove():
                     removed = True
                     break
             if not removed:
-                # Can't remove — volume will drift. That's OK for this test.
-                original_n4 = st.getSimplexCount()
+                original_n41 = st.getN41()
                 continue
 
-            self.assertEqual(st.getSimplexCount(), original_n4,
-                             f"Cycle {cycle}: N4 should return after remove")
+            self.assertEqual(st.getN41(), original_n41,
+                             f"Cycle {cycle}: N41 should return after remove")
             _verify_counts_consistent(st)
             _verify_all_top_causal(st)
 
@@ -422,9 +417,9 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
     """
 
     def test_five_adds_then_five_removes(self):
-        """5 adds then 5 removes: N4 should return to start."""
+        """5 adds then 5 removes: N41 should return to start."""
         cdt, st = _build_small(n_simplices=20)
-        n4_start = st.getSimplexCount()
+        n41_start = st.getN41()
         n0_start = st.getVertexCount()
 
         n_added = 0
@@ -434,7 +429,9 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
                 if n_added >= 5:
                     break
 
-        self.assertEqual(st.getSimplexCount(), n4_start + n_added)
+        d = 4
+        delta_per_add = 2 * d - 2  # +6 per add in 4D
+        self.assertEqual(st.getN41(), n41_start + n_added * delta_per_add)
         _verify_counts_consistent(st)
         _verify_all_top_causal(st)
 
@@ -447,8 +444,8 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
 
         self.assertEqual(n_removed, n_added,
                          f"Could only remove {n_removed} of {n_added}")
-        self.assertEqual(st.getSimplexCount(), n4_start,
-                         f"N4 should return to {n4_start}")
+        self.assertEqual(st.getN41(), n41_start,
+                         f"N41 should return to {n41_start}")
         _verify_counts_consistent(st)
         _verify_all_top_causal(st)
 
@@ -495,10 +492,12 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
                     after_n0 = st.getVertexCount()
 
                     if name == "add":
-                        self.assertEqual(after_n4, before_n4 + 1)
+                        # (2,2d) add: dN41 = +(2d-2) = +6 in 4D
                         self.assertEqual(after_n0, before_n0 + 1)
+                        self.assertGreater(after_n4, before_n4)
                     elif name == "remove":
-                        self.assertEqual(after_n4, before_n4 - 1)
+                        # (2d,2) remove: dN41 = -(2d-2) = -6 in 4D
+                        self.assertLess(after_n4, before_n4)
                     elif name in ("flip", "iflip"):
                         # Normally +(d-2); can be less if a new simplex
                         # already exists (dedup on small lattices)

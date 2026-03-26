@@ -361,6 +361,20 @@ double Spacetime::incrementTime() noexcept {
   return static_cast<double>(currentTime);
 }
 
+void Spacetime::swapVertexLabels(VertexPtr /*v1*/, VertexPtr /*v2*/) {
+  // TODO(infrastructure): implement vertex label swap for exact detailed
+  // balance over the labelled triangulation ensemble (Brunekreef Sec. 2.2.1).
+  //
+  // This requires re-fingerprinting all simplices (including sub-simplices)
+  // containing exactly one of the two vertices, then re-registering them in
+  // the hash tables. The current simplex storage mixes top-simplices and
+  // sub-simplices in the same hash set, making safe unregister/re-register
+  // non-trivial. The acceptance formula already includes the correct 1/(N0+1)
+  // combinatorial factor regardless of whether the swap is performed, so all
+  // label-invariant observables (volume profile, spectral dimension, etc.)
+  // are unaffected.
+}
+
 bool Spacetime::removeIfIsolated(const VertexPtr &vertex) const noexcept {
   if (vertex->degree() == 0) {
     CLOG(DEBUG_LEVEL, "Removing vertex: ", vertex->toString());

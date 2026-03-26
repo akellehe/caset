@@ -40,6 +40,22 @@ def _assert_all_causal(test, st):
                          f"Non-causal: orientation={s.getOrientation().numeric()}")
 
 
+def _is_valid_cdt_simplex(verts):
+    """Check if vertex set spans exactly 2 times with valid CDT orientation."""
+    times = {v.getTime() for v in verts}
+    if len(times) != 2:
+        return False
+    o = caset.SimplexOrientation(0, 0)  # dummy
+    # Count vertices at each time
+    time_list = sorted(times)
+    ti_count = sum(1 for v in verts if v.getTime() == time_list[0])
+    tf_count = len(verts) - ti_count
+    d = len(verts) - 1
+    if (ti_count, tf_count) in ((d, 1), (1, d), (d-1, 2), (2, d-1)):
+        return True
+    return False
+
+
 def _assert_counts(test, st):
     """N4 = N41 + N32 and matches manual count."""
     n41, n32 = 0, 0
@@ -180,7 +196,8 @@ class TestFlipForward(unittest.TestCase):
     """
 
     def _find_flippable(self, st):
-        """Find a (d-1)-face with exactly 2 top cofaces.
+        """Find a (d-1)-face with exactly 2 top cofaces where the flip
+        produces only valid CDT simplices (spans exactly 2 times).
         Returns (facet, s1, s2, shared_verts, unique_verts) or None.
         """
         for top in _top_simplices(st):
@@ -200,6 +217,15 @@ class TestFlipForward(unittest.TestCase):
                              list(s1.getVertices()) + list(s2.getVertices())}
                 shared = [all_verts[vid] for vid in shared_vids]
                 unique = [all_verts[vid] for vid in unique_vids]
+                # Check that all d new simplices would be valid CDT
+                valid = True
+                for skip in range(4):
+                    nv = [shared[i] for i in range(4) if i != skip] + unique
+                    if not _is_valid_cdt_simplex(nv):
+                        valid = False
+                        break
+                if not valid:
+                    continue
                 return facet, s1, s2, shared, unique
         return None
 
@@ -466,6 +492,15 @@ class TestIteratedFlip(unittest.TestCase):
                              list(s1.getVertices()) + list(s2.getVertices())}
                 shared = [all_verts[vid] for vid in shared_vids]
                 unique = [all_verts[vid] for vid in unique_vids]
+                # Check new simplices would be valid CDT
+                valid = True
+                for skip in range(4):
+                    nv = [shared[i] for i in range(4) if i != skip] + unique
+                    if not _is_valid_cdt_simplex(nv):
+                        valid = False
+                        break
+                if not valid:
+                    continue
                 return s1, s2, shared, unique
         return None
 

@@ -109,6 +109,12 @@ class Vertex {
         ///
         std::uint64_t getId() const noexcept;
 
+        /// Set the vertex ID. Used by Spacetime::swapVertexLabels for
+        /// Brunekreef vertex relabeling (Sec. 2.2.1, 2.3.1).
+        /// WARNING: caller must update all containing data structures
+        /// (VertexList, Simplex fingerprints, etc.) after calling this.
+        void setId(std::uint64_t newId) noexcept { id = newId; }
+
         ///
         /// \brief Compute the temporal coordinate in arbitrary dimensions
         ///

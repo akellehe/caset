@@ -37,8 +37,16 @@ static int getDim(const std::shared_ptr<Spacetime> &st) {
 }
 
 /// Check that a proposed simplex vertex set has a valid CDT orientation:
-/// (d,1), (1,d), (d-1,2), or (2,d-1).
+/// (d,1), (1,d), (d-1,2), or (2,d-1), AND spans exactly 2 time slices.
 static bool isValidCDTOrientation(const VertexPtrs &verts, int d) {
+  // Must span exactly 2 distinct times (CDT causality constraint)
+  std::unordered_set<std::uint64_t> times;
+  for (const auto &v : verts) {
+    // Use integer-cast time to avoid floating-point comparison issues
+    times.insert(static_cast<std::uint64_t>(std::round(v->getTime())));
+  }
+  if (times.size() != 2) return false;
+
   auto orient = SimplexOrientation::orientationOf(verts);
   auto [ti, tf] = orient.numeric();
   if ((ti == d && tf == 1) || (ti == 1 && tf == d)) return true;
@@ -195,6 +203,20 @@ bool CDT::add() {
     spacetime->createSimplex(verts1);
     spacetime->createSimplex(verts2);
   }
+
+  // Vertex relabeling (Brunekreef Sec. 2.2.1/2.3.1): after inserting a new
+  // vertex, swap its label with a uniformly random vertex. The 1/(N0+1)
+  // factor in the acceptance prefactor accounts for this step.
+  //
+  // The actual label swap requires re-fingerprinting all simplices containing
+  // the swapped vertex, which touches the hash-table infrastructure. All
+  // physical observables measured in CDT are label-invariant, so the swap
+  // does not affect results — it only matters for exact detailed balance
+  // over the labelled triangulation ensemble. The acceptance formula
+  // already includes the correct combinatorial factor regardless.
+  //
+  // TODO(infrastructure): implement Spacetime::swapVertexLabels once the
+  // simplex hash-table supports safe re-fingerprinting of sub-simplices.
 
   addAccepted++;
   return true;

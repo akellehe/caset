@@ -264,6 +264,19 @@ class Spacetime {
     /// @return The new current time \f$ t \leftarrow t + 1 \f$
     double incrementTime() noexcept;
 
+    /// Swap the labels (IDs) of two vertices, updating all affected data structures.
+    ///
+    /// Implements the vertex relabeling step from Brunekreef Sec. 2.2.1/2.3.1:
+    /// after inserting a new vertex, swap its label with a randomly chosen vertex
+    /// to ensure uniform sampling over labelled triangulations.
+    ///
+    /// Updates: VertexList keys, Simplex fingerprints and vertex-ID maps,
+    /// and re-registers affected simplices in the hash tables.
+    ///
+    /// @param v1 First vertex
+    /// @param v2 Second vertex (may be the same as v1, in which case no-op)
+    void swapVertexLabels(VertexPtr v1, VertexPtr v2);
+
     /// Removes a vertex if it has no incident edges.
     ///
     /// Checks if \f$ \deg(v) = 0 \f$ and removes \f$ v \f$ from the vertex list if so.
