@@ -28,6 +28,9 @@ jobs:
         with:
           python-version: "3.12"  # or match your project
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y doxygen
+
       - name: Install dependencies
         run: |
            python -m pip install --upgrade pip
@@ -36,7 +39,7 @@ jobs:
            pip install -r docs/requirements.txt
       - name: Run tests
         run: |
-           python3 -m pytest tests/
+           python3 -m pytest tests/ -m "not slow"
       - name: Build Sphinx HTML
         working-directory: docs
         run: |

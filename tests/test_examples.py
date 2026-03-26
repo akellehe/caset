@@ -32,6 +32,8 @@ import sys
 import tempfile
 import unittest
 
+import pytest
+
 
 EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "..", "examples")
 PYTHON = sys.executable
@@ -230,8 +232,9 @@ class TestN32Distribution(unittest.TestCase):
     def test_runs_and_saves_plot(self):
         rc, out, err, path = run_example(
             "n32_distribution.py",
-            ["--n-therm", "3", "--n-meas", "10",
-             "--meas-interval", "1"])
+            ["--n-therm", "3", "--n-meas", "5",
+             "--meas-interval", "1",
+             "--target-volumes", "200", "400"])
         self.assertEqual(rc, 0, f"Script failed:\nstdout:\n{out}\nstderr:\n{err}")
         self.assertTrue(os.path.exists(path), f"No output at {path}")
         self.assertGreater(os.path.getsize(path), 0)
@@ -241,8 +244,9 @@ class TestN32Distribution(unittest.TestCase):
         """Should print mean and std for both simplex types."""
         rc, out, err, path = run_example(
             "n32_distribution.py",
-            ["--n-therm", "2", "--n-meas", "5",
-             "--meas-interval", "1"])
+            ["--n-therm", "2", "--n-meas", "3",
+             "--meas-interval", "1",
+             "--target-volumes", "200", "400"])
         self.assertEqual(rc, 0, f"stderr:\n{err}")
         self.assertIn("N41: mean=", out)
         self.assertIn("N32: mean=", out)
@@ -253,8 +257,9 @@ class TestN32Distribution(unittest.TestCase):
         """Should run at multiple target N41 values."""
         rc, out, err, path = run_example(
             "n32_distribution.py",
-            ["--n-therm", "2", "--n-meas", "5",
-             "--meas-interval", "1"])
+            ["--n-therm", "2", "--n-meas", "3",
+             "--meas-interval", "1",
+             "--target-volumes", "200", "400"])
         self.assertEqual(rc, 0, f"stderr:\n{err}")
         target_lines = [l for l in out.splitlines() if "target N41" in l]
         self.assertGreaterEqual(len(target_lines), 2,
@@ -263,6 +268,7 @@ class TestN32Distribution(unittest.TestCase):
             os.unlink(path)
 
 
+@pytest.mark.slow
 class TestBuildBenchmark(unittest.TestCase):
     """Tests for examples/benchmarks/build_benchmark.py"""
 

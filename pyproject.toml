@@ -49,6 +49,11 @@ optional-dependencies.dev = [
     "sphinx==8.2.3",
 ]
 
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests that take >30s (deselect with '-m \"not slow\"')",
+]
+
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"
 cmake.build-type = "Release"

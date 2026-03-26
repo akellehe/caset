@@ -35,19 +35,23 @@ def main():
     parser.add_argument("--n-therm", type=int, default=50)
     parser.add_argument("--n-meas", type=int, default=200)
     parser.add_argument("--meas-interval", type=int, default=3)
+    parser.add_argument("--target-volumes", type=int, nargs="+",
+                        default=None,
+                        help="Target N41 values (default: 5000 10000 20000)")
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
+
+    # Run at multiple target volumes
+    # Paper (Fig 2) uses N̄₄ = 40k, 80k, 160k.  We use smaller but
+    # still large volumes to keep runtime under ~10 minutes.
+    target_n41_values = args.target_volumes or [5000, 10000, 20000]
 
     print("=" * 64)
     print("  N32 Distribution at Fixed N41")
     print("  Reproduces Fig 2, Ambjorn, Jurkiewicz, Loll (2005)")
     print("  Parameters: k0=2.2, Delta=0.6")
+    print(f"  Target volumes: {target_n41_values}")
     print("=" * 64)
-
-    # Run at multiple target volumes
-    # Paper (Fig 2) uses N̄₄ = 40k, 80k, 160k.  We use smaller but
-    # still large volumes to keep runtime under ~10 minutes.
-    target_n41_values = [5000, 10000, 20000]
     colors = ["black", "red", "green", "blue"]
 
     fig, ax = plt.subplots(figsize=(10, 7))
