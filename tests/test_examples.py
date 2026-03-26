@@ -263,6 +263,47 @@ class TestN32Distribution(unittest.TestCase):
             os.unlink(path)
 
 
+class TestBuildBenchmark(unittest.TestCase):
+    """Tests for examples/benchmarks/build_benchmark.py"""
+
+    def test_runs_and_saves_output(self):
+        """Benchmark script should produce JSON log and PNG plots."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = [PYTHON,
+                   os.path.join(EXAMPLES_DIR, "benchmarks",
+                                "build_benchmark.py"),
+                   "--save", tmpdir, "--repeats", "1"]
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=120,
+                cwd=os.path.join(os.path.dirname(__file__), ".."))
+            self.assertEqual(result.returncode, 0,
+                             f"Script failed:\nstdout:\n{result.stdout}"
+                             f"\nstderr:\n{result.stderr}")
+            self.assertTrue(
+                os.path.exists(os.path.join(tmpdir,
+                                            "benchmark_results.json")),
+                "JSON log should be created")
+            self.assertTrue(
+                os.path.exists(os.path.join(tmpdir,
+                                            "build_benchmarks.png")),
+                "Dashboard plot should be created")
+
+    def test_reports_summary_table(self):
+        """stdout should contain the summary table."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = [PYTHON,
+                   os.path.join(EXAMPLES_DIR, "benchmarks",
+                                "build_benchmark.py"),
+                   "--save", tmpdir, "--repeats", "1"]
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=120,
+                cwd=os.path.join(os.path.dirname(__file__), ".."))
+            self.assertEqual(result.returncode, 0,
+                             f"stderr:\n{result.stderr}")
+            self.assertIn("Simpl/sec", result.stdout)
+            self.assertIn("4D", result.stdout)
+
+
 class TestPlot4D(unittest.TestCase):
     """Tests for the original examples/plot4D.py (if torch is available)."""
 
