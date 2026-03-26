@@ -212,8 +212,13 @@ def main():
 
     # --- 4-panel comparison figure ---
     fig, axes = plt.subplots(2, 2, figsize=(16, 13))
-    fig.suptitle("caset Build Benchmark Comparison",
-                 fontsize=16, fontweight="bold", y=0.98)
+    before_ver = meta_before.get("caset_version", "?")
+    after_ver = meta_after.get("caset_version", "?")
+    if before_ver == after_ver:
+        title = f"caset v{after_ver} Build Benchmark Comparison"
+    else:
+        title = f"caset Build Benchmark: v{before_ver} vs. v{after_ver}"
+    fig.suptitle(title, fontsize=16, fontweight="bold", y=0.98)
 
     plot_time_comparison(before, after, axes[0, 0])
     plot_speedup(before, after, axes[0, 1])

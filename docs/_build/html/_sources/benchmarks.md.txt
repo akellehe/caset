@@ -1,5 +1,11 @@
 # Benchmarks
 
+```{note}
+Results on this page were generated with **caset {{version}}**.
+The benchmark JSON log records the exact version, platform, and Python
+version for each run so results can be compared across releases.
+```
+
 Build-time benchmarks for constructing CDT simplicial complexes across
 dimensions 1D through 4D and a range of target sizes.
 

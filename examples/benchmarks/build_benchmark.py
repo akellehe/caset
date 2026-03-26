@@ -237,8 +237,9 @@ def create_all_plots(results, save_dir=None):
     """Generate the full benchmark figure set."""
     # --- Main 4-panel figure ---
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle("caset Build Benchmarks", fontsize=16, fontweight="bold",
-                 y=0.98)
+    ver = getattr(caset, "__version__", "?")
+    fig.suptitle(f"caset v{ver} Build Benchmarks", fontsize=16,
+                 fontweight="bold", y=0.98)
 
     plot_build_time(results, axes[0, 0])
     plot_throughput(results, axes[0, 1])

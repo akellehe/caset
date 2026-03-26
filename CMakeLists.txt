@@ -18,6 +18,12 @@ if (NOT CASET_PROFILE)
     set(CASET_PROFILE OFF)
 endif()
 
+# ---- Read version from pyproject.toml ----
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
+string(REGEX MATCH "version = \"([0-9]+\\.[0-9]+\\.[0-9]+[^\"]*)" _ "${PYPROJECT_CONTENTS}")
+set(CASET_VERSION "${CMAKE_MATCH_1}")
+message(STATUS "caset version: ${CASET_VERSION}")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -74,7 +80,10 @@ else()
 endif()
 
 set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(caset PRIVATE SOURCES_ROOT="${SOURCES_ROOT}")
+target_compile_definitions(caset PRIVATE
+    SOURCES_ROOT="${SOURCES_ROOT}"
+    CASET_VERSION="${CASET_VERSION}"
+)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CASET_PROFILE)
     message(STATUS "DEBUGGING (-O1, -g3) Support ON.")

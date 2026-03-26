@@ -284,4 +284,10 @@ PYBIND11_MODULE(caset, m) {
       .def("reset", &VolumeProfile::reset);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
+
+#ifdef CASET_VERSION
+  m.attr("__version__") = CASET_VERSION;
+#else
+  m.attr("__version__") = "unknown";
+#endif
 }

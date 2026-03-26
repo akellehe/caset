@@ -19,11 +19,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import os, sys, pathlib
+import os, sys, pathlib, tomllib
 
 THIS_DIR = pathlib.Path(__file__).resolve().parent
-REPO_ROOT = THIS_DIR.parent
-DOXY_XML = REPO_ROOT / "_doxygen" / "xml"
+REPO_ROOT = THIS_DIR.parent.parent
+DOXY_XML = THIS_DIR.parent / "_doxygen" / "xml"
+
+# Read version from pyproject.toml (single source of truth)
+with open(REPO_ROOT / "pyproject.toml", "rb") as f:
+    _pyproject = tomllib.load(f)
+version = _pyproject["project"]["version"]
+release = version
 
 project = "caset"
 author = "caset contributors"
@@ -38,7 +44,7 @@ extensions = [
     "sphinx.ext.autosectionlabel",
 ]
 
-myst_enable_extensions = ["dollarmath", "amsmath"]
+myst_enable_extensions = ["dollarmath", "amsmath", "substitution"]
 source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
@@ -59,3 +65,9 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 html_theme = "furo"
+
+# Make |version| and |release| available in .md files via substitution
+myst_substitutions = {
+    "version": version,
+    "release": release,
+}
