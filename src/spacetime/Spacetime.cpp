@@ -361,18 +361,82 @@ double Spacetime::incrementTime() noexcept {
   return static_cast<double>(currentTime);
 }
 
-void Spacetime::swapVertexLabels(VertexPtr /*v1*/, VertexPtr /*v2*/) {
-  // TODO(infrastructure): implement vertex label swap for exact detailed
-  // balance over the labelled triangulation ensemble (Brunekreef Sec. 2.2.1).
-  //
-  // This requires re-fingerprinting all simplices (including sub-simplices)
-  // containing exactly one of the two vertices, then re-registering them in
-  // the hash tables. The current simplex storage mixes top-simplices and
-  // sub-simplices in the same hash set, making safe unregister/re-register
-  // non-trivial. The acceptance formula already includes the correct 1/(N0+1)
-  // combinatorial factor regardless of whether the swap is performed, so all
-  // label-invariant observables (volume profile, spectral dimension, etc.)
-  // are unaffected.
+void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
+  if (v1 == v2 || v1->getId() == v2->getId()) return;
+
+  auto id1 = v1->getId();
+  auto id2 = v2->getId();
+
+  // Collect simplices containing EXACTLY ONE of v1, v2.
+  // Simplices containing both are unaffected (XOR fingerprint is symmetric).
+  struct AffectedSimplex { SimplexPtr ptr; std::uint64_t oldFp; };
+  std::vector<AffectedSimplex> affected;
+
+  for (const auto &s : v1->getSimplices()) {
+    if (!s->hasVertex(v2))
+      affected.push_back({s, s->fingerprint.fingerprint()});
+  }
+  for (const auto &s : v2->getSimplices()) {
+    if (!s->hasVertex(v1))
+      affected.push_back({s, s->fingerprint.fingerprint()});
+  }
+
+  // Phase 1: Remove affected simplices from hash tables (fingerprints still valid)
+  for (auto &[s, oldFp] : affected) {
+    simplices.erase(s);
+    simplexVecIndex.erase(oldFp);
+    topSimplexVecIndex.erase(oldFp);
+  }
+
+  // Record which affected simplices contained v1 vs v2 BEFORE swapping IDs
+  // (hasVertex uses internal ID maps that become stale after the swap)
+  std::unordered_set<SimplexPtr> containsV1;
+  for (const auto &s : v1->getSimplices()) {
+    if (!s->hasVertex(v2)) containsV1.insert(s);
+  }
+
+  // Phase 2: Swap vertex IDs, rekey vertex list
+  v1->setId(id2);
+  v2->setId(id1);
+  vertexList->swapKeys(id1, id2);
+
+  // Update internal ID maps on ALL simplices containing either vertex
+  // (including sub-simplices like facets and edges, not just top-simplices)
+  for (const auto &s : v1->getSimplices()) s->updateVertexId(id1, id2);
+  for (const auto &s : v2->getSimplices()) s->updateVertexId(id2, id1);
+
+  // Update fingerprints on affected simplices (those in hash tables)
+  for (auto &[s, oldFp] : affected) {
+    if (containsV1.count(s)) {
+      s->fingerprint.removeId(id1);
+      s->fingerprint.addId(id2);
+    } else {
+      s->fingerprint.removeId(id2);
+      s->fingerprint.addId(id1);
+    }
+    s->fingerprint.refresh();
+  }
+
+  // Phase 3: Re-insert into hash tables with new fingerprints
+  for (auto &[s, oldFp] : affected) {
+    auto newFp = s->fingerprint.fingerprint();
+    simplices.insert(s);
+
+    // Rekey simplexOwner (owns the Simplex allocation)
+    auto nh = simplexOwner.extract(oldFp);
+    if (!nh.empty()) {
+      nh.key() = newFp;
+      simplexOwner.insert(std::move(nh));
+    }
+
+    // Restore vec index mappings (vec position unchanged, just the key)
+    for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
+      if (simplicesVec[i] == s) { simplexVecIndex[newFp] = i; break; }
+    }
+    for (std::size_t i = 0; i < topSimplicesVec.size(); ++i) {
+      if (topSimplicesVec[i] == s) { topSimplexVecIndex[newFp] = i; break; }
+    }
+  }
 }
 
 bool Spacetime::removeIfIsolated(const VertexPtr &vertex) const noexcept {

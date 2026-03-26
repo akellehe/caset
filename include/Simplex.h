@@ -318,6 +318,11 @@ class Simplex {
     /// @return
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
 
+    /// Update internal ID maps after a vertex's ID has been changed externally.
+    /// Called by Spacetime::swapVertexLabels to keep vertexIdToIndex/vertexIndexToId
+    /// consistent with the actual vertex IDs.
+    void updateVertexId(IdType oldId, IdType newId);
+
     bool isInitialized() const noexcept;
   private:
     Spacetime *spacetime{nullptr};

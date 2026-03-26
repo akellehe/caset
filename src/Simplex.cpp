@@ -515,6 +515,16 @@ bool Simplex::addEdge(const EdgePtr &edge) {
   return true;
 }
 
+void Simplex::updateVertexId(IdType oldId, IdType newId) {
+  auto it = vertexIdToIndex.find(oldId);
+  if (it == vertexIdToIndex.end()) return;
+  auto index = it->second;
+  vertexIdToIndex.erase(it);
+  vertexIdToIndex.emplace(newId, index);
+  vertexIndexToId.erase(index);
+  vertexIndexToId.emplace(index, newId);
+}
+
 bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
   if (facets.empty()) return false;
   for (const auto &f : facets) {

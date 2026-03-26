@@ -348,7 +348,15 @@ class TestShiftForward(unittest.TestCase):
                             else:
                                 unique_v.append(v)
                         if len(shared_v) == 3 and len(unique_v) == 3:
-                            return sharing, shared_v, unique_v
+                            # Check new simplices would be valid CDT
+                            valid = True
+                            for skip in range(3):
+                                nv = [shared_v[ii] for ii in range(3) if ii != skip] + unique_v
+                                if not _is_valid_cdt_simplex(nv):
+                                    valid = False
+                                    break
+                            if valid:
+                                return sharing, shared_v, unique_v
         return None
 
     def test_shift_3_to_3(self):
