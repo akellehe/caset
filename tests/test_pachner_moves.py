@@ -20,7 +20,7 @@ def _make_cdt(n_simplices=100, k0=2.2, delta=0.6, epsilon=0.02):
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-    target = st.getSimplexCount()
+    target = st.getN41()
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, epsilon, target)
     return cdt, st
 
@@ -163,18 +163,22 @@ class TestCausalityInvariants(unittest.TestCase):
 # =====================================================================
 
 class TestAddMove(unittest.TestCase):
-    """The add move should: +1 vertex, +1 top simplex, preserve causality."""
+    """The (2,2d) add: +1 vertex, +(2d-2) N41 simplices.
 
-    def test_add_increments_vertex_and_simplex_count(self):
+    Ref: [BGL] Sec. 2.3.1 (adapted to 4D).
+    """
+
+    def test_add_increments_vertex_and_n41_count(self):
+        """(2,2d) add: dN0=+1, dN41=+6 in 4D."""
         cdt, st = _make_cdt(n_simplices=100)
         for _ in range(500):
             n0_before = st.getVertexCount()
-            n4_before = st.getSimplexCount()
+            n41_before = st.getN41()
             if cdt.add():
                 self.assertEqual(st.getVertexCount(), n0_before + 1,
                                  "add() should increment vertex count by 1")
-                self.assertEqual(st.getSimplexCount(), n4_before + 1,
-                                 "add() should increment N4 by 1")
+                self.assertEqual(st.getN41(), n41_before + 6,
+                                 "add() should increment N41 by 2d-2=6")
                 return
         self.skipTest("No add accepted in 500 attempts")
 
@@ -196,18 +200,21 @@ class TestAddMove(unittest.TestCase):
 # =====================================================================
 
 class TestRemoveMove(unittest.TestCase):
-    """The remove move should: -1 vertex, -1 top simplex."""
+    """The (2d,2) remove: -1 vertex, -(2d-2) N41 simplices.
 
-    def test_remove_decrements_simplex_count(self):
+    Ref: [BGL] Sec. 2.3.1 (adapted to 4D).
+    """
+
+    def test_remove_decrements_n41_count(self):
+        """(2d,2) remove: dN0=-1, dN41=-6 in 4D."""
         cdt, st = _make_cdt(n_simplices=100)
-        # Do some adds first to create removable simplices
         for _ in range(100):
             cdt.add()
         for _ in range(500):
-            n4_before = st.getSimplexCount()
+            n41_before = st.getN41()
             if cdt.remove():
-                self.assertEqual(st.getSimplexCount(), n4_before - 1,
-                                 "remove() should decrement N4 by 1")
+                self.assertEqual(st.getN41(), n41_before - 6,
+                                 "remove() should decrement N41 by 2d-2=6")
                 return
         self.skipTest("No remove accepted")
 
@@ -344,10 +351,10 @@ class TestActionConsistency(unittest.TestCase):
     """Verify action formula matches manual computation from counts."""
 
     def test_action_matches_formula(self):
-        """S = -(k0+6d)*N0 + (k4+2d)*N41 + (k4+d)*N32 + eps*(N4-tgt)^2"""
+        """S = -(k0+6d)*N0 + (k4+2d)*N41 + (k4+d)*N32 + eps*(N41-tgt)^2"""
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.02
         cdt, st = _make_cdt(n_simplices=100)
-        target = st.getSimplexCount()
+        target = st.getN41()
         cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target)
 
         action = cdt.computeAction()
@@ -355,12 +362,11 @@ class TestActionConsistency(unittest.TestCase):
         n0 = st.getVertexCount()
         n41 = st.getN41()
         n32 = st.getN32()
-        n4 = n41 + n32
 
         expected = (-(k0 + 6*delta)*n0
                     + (k4 + 2*delta)*n41
                     + (k4 + delta)*n32
-                    + eps*(n4 - target)**2)
+                    + eps*(n41 - target)**2)
 
         self.assertAlmostEqual(action, expected, places=6)
 
@@ -368,7 +374,7 @@ class TestActionConsistency(unittest.TestCase):
         """Action formula still consistent after moves change the complex."""
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.02
         cdt, st = _make_cdt(n_simplices=100)
-        target = st.getSimplexCount()
+        target = st.getN41()
         cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target)
         cdt.tune()
         k4 = cdt.getK4()  # tune changes k4
@@ -378,12 +384,11 @@ class TestActionConsistency(unittest.TestCase):
         n0 = st.getVertexCount()
         n41 = st.getN41()
         n32 = st.getN32()
-        n4 = n41 + n32
 
         expected = (-(k0 + 6*delta)*n0
                     + (k4 + 2*delta)*n41
                     + (k4 + delta)*n32
-                    + eps*(n4 - target)**2)
+                    + eps*(n41 - target)**2)
 
         self.assertAlmostEqual(action, expected, places=4)
 

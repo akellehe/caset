@@ -262,19 +262,22 @@ PYBIND11_MODULE(caset, m) {
       .def("getN32", &Spacetime::getN32)
       .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference)
       .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference)
+      .def("getRandomVertex", &Spacetime::getRandomVertex, py::return_value_policy::reference)
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"));
 
   py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation")
-      .def(py::init<std::shared_ptr<Spacetime>, double, double, double, double, std::size_t>(),
+      .def(py::init<std::shared_ptr<Spacetime>, double, double, double, double, std::size_t, bool>(),
            py::arg("spacetime"),
            py::arg("k0"),
            py::arg("k4"),
            py::arg("delta"),
            py::arg("epsilon"),
-           py::arg("targetN4"))
+           py::arg("targetN41"),
+           py::arg("quadraticVolumeFix") = true)
       .def("add", &CDT::add)
       .def("remove", &CDT::remove)
       .def("flip", &CDT::flip)
+      .def("iflip", &CDT::iflip)
       .def("shift", &CDT::shift)
       .def("ishift", &CDT::ishift)
       .def("sweep", [](CDT &self, int n_sweeps, py::object progress) {

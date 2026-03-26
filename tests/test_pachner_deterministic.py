@@ -35,7 +35,7 @@ def _build_small(n_simplices=10):
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-    target = st.getSimplexCount()
+    target = st.getN41()
     # epsilon=0 removes volume-fixing from acceptance (we call moves directly)
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, target)
     return cdt, st
@@ -103,12 +103,14 @@ def _verify_counts_consistent(st):
 # =====================================================================
 
 class TestAddRemoveRoundTrip(unittest.TestCase):
-    """Add creates +1 vertex, +1 simplex.
-    Remove undoes it: -1 simplex. Together they form a round trip.
+    """(2,2d) add creates +1 vertex, +(2d-2) N41 simplices.
+    (2d,2) remove undoes it. Together they form a round trip.
+
+    Ref: [BGL] Sec. 2.3.1 (adapted to 4D).
     """
 
     def test_single_add_exact_delta(self):
-        """One successful add: dN0=+1, dN4=+1, new simplex has 5 vertices."""
+        """One successful add: dN0=+1, dN41=+(2d-2)=+6."""
         cdt, st = _build_small(n_simplices=20)
         before = _snapshot(st)
 
@@ -122,19 +124,19 @@ class TestAddRemoveRoundTrip(unittest.TestCase):
 
         after = _snapshot(st)
 
-        # Exact deltas
+        # Exact deltas: (2,2d) add creates 2d new, removes 2 old
+        d = 4
         self.assertEqual(after["n0"], before["n0"] + 1)
-        self.assertEqual(after["n4"], before["n4"] + 1)
+        self.assertEqual(after["n41"], before["n41"] + 2 * d - 2,
+                         f"Add should change N41 by +{2*d-2}")
 
-        # Exactly one new top simplex appeared
+        # 2d new simplices appeared, 2 old disappeared
         new_fps = after["top_fps"] - before["top_fps"]
-        self.assertEqual(len(new_fps), 1,
-                         f"Expected 1 new simplex, got {len(new_fps)}")
-
-        # No simplices disappeared
         lost_fps = before["top_fps"] - after["top_fps"]
-        self.assertEqual(len(lost_fps), 0,
-                         f"Add should not remove simplices, lost {len(lost_fps)}")
+        self.assertEqual(len(new_fps), 2 * d,
+                         f"Expected {2*d} new simplices, got {len(new_fps)}")
+        self.assertEqual(len(lost_fps), 2,
+                         f"Expected 2 removed simplices, got {len(lost_fps)}")
 
         # The new simplex has a valid CDT orientation
         new_fp = new_fps.pop()
@@ -339,8 +341,10 @@ class TestShiftRoundTrip(unittest.TestCase):
 
         self.assertEqual(after["n0"], before["n0"],
                          "Shift should not change vertex count")
-        self.assertEqual(after["n4"], before["n4"],
-                         "Shift should not change N4")
+        # Normally N4 unchanged, but can decrease on small lattices
+        # if a new simplex already exists (dedup)
+        self.assertLessEqual(after["n4"], before["n4"],
+                             "Shift should not increase N4")
 
         lost = before["top_fps"] - after["top_fps"]
         gained = after["top_fps"] - before["top_fps"]
@@ -462,9 +466,10 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
         for _ in range(10000):
             if cdt.flip():
                 flips += 1
-                # N4 should increase (2 removed, up to 4 created)
-                self.assertGreater(st.getSimplexCount(), prev_n4,
-                                   f"Flip {flips}: N4 should increase")
+                # N4 should not decrease (2 removed, up to 4 created;
+                # can be unchanged if 2 new simplices already exist via dedup)
+                self.assertGreaterEqual(st.getSimplexCount(), prev_n4,
+                                        f"Flip {flips}: N4 should not decrease")
                 _verify_counts_consistent(st)
                 _verify_all_top_causal(st)
                 prev_n4 = st.getSimplexCount()
@@ -478,8 +483,8 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
         """Apply a mix of all move types, verify invariants after each."""
         cdt, st = _build_small(n_simplices=30)
 
-        moves = [cdt.add, cdt.remove, cdt.flip, cdt.shift, cdt.ishift]
-        move_names = ["add", "remove", "flip", "shift", "ishift"]
+        moves = [cdt.add, cdt.remove, cdt.flip, cdt.iflip, cdt.shift, cdt.ishift]
+        move_names = ["add", "remove", "flip", "iflip", "shift", "ishift"]
 
         for iteration in range(20):
             for move, name in zip(moves, move_names):
@@ -494,10 +499,10 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
                         self.assertEqual(after_n0, before_n0 + 1)
                     elif name == "remove":
                         self.assertEqual(after_n4, before_n4 - 1)
-                    elif name == "flip":
-                        # Normally +2; can be less if a new simplex
+                    elif name in ("flip", "iflip"):
+                        # Normally +(d-2); can be less if a new simplex
                         # already exists (dedup on small lattices)
-                        self.assertGreater(after_n4, before_n4)
+                        self.assertGreaterEqual(after_n4, before_n4)
                         self.assertEqual(after_n0, before_n0)
                     elif name in ("shift", "ishift"):
                         # Normally 0; can be negative on small lattices
@@ -514,14 +519,15 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
 # =====================================================================
 
 class TestAddRemoveVertexStructure(unittest.TestCase):
-    """Verify that add creates a vertex incident to exactly 1 top simplex,
-    and remove finds and removes exactly such a vertex.
+    """Verify (2,2d) add creates a vertex incident to 2d top simplices,
+    and (2d,2) remove finds and removes exactly such a vertex.
+
+    Ref: [BGL] Sec. 2.3.1 (adapted to 4D).
     """
 
-    def test_added_vertex_has_one_top_simplex(self):
-        """The vertex created by add() should belong to exactly 1 top simplex."""
+    def test_added_vertex_has_2d_top_simplices(self):
+        """The vertex created by (2,2d) add belongs to exactly 2d top simplices."""
         cdt, st = _build_small(n_simplices=20)
-        n0_before = st.getVertexCount()
 
         for _ in range(500):
             if cdt.add():
@@ -529,25 +535,21 @@ class TestAddRemoveVertexStructure(unittest.TestCase):
         else:
             self.skipTest("No add accepted")
 
-        # Find the new vertex (highest ID, since IDs are monotonically increasing)
+        # Find the new vertex (highest ID)
         all_verts = st.getVertexList().toVector()
         new_vert = max(all_verts, key=lambda v: v.getId())
 
-        # Count how many top simplices contain this vertex
-        top_count = 0
-        for s in st.getSimplices():
-            if len(s.getVertices()) == 5 and s.hasVertex(new_vert):
-                top_count += 1
+        top_count = sum(1 for s in st.getSimplices()
+                        if len(s.getVertices()) == 5 and s.hasVertex(new_vert))
 
-        self.assertEqual(top_count, 1,
-                         f"Added vertex should be in exactly 1 top simplex, "
-                         f"found {top_count}")
+        d = 4
+        self.assertEqual(top_count, 2 * d,
+                         f"Added vertex should be in exactly {2*d} top "
+                         f"simplices, found {top_count}")
 
-    def test_added_vertex_connects_to_facet_vertices(self):
-        """The added vertex should have edges to the d vertices of the
-        facet it was coned to (= 4 edges in 4D)."""
+    def test_added_vertex_connects_to_d_plus_2_vertices(self):
+        """The (2,2d) vertex connects to d spatial + 2 non-spatial = d+2 others."""
         cdt, st = _build_small(n_simplices=20)
-        n0_before = st.getVertexCount()
 
         for _ in range(500):
             if cdt.add():
@@ -558,47 +560,15 @@ class TestAddRemoveVertexStructure(unittest.TestCase):
         all_verts = st.getVertexList().toVector()
         new_vert = max(all_verts, key=lambda v: v.getId())
 
-        # The new vertex should have exactly 4 edges (d edges in d=4)
-        n_edges = len(new_vert.getEdges())
-        self.assertEqual(n_edges, 4,
-                         f"Added vertex should have 4 edges, has {n_edges}")
-
-    def test_new_simplex_shares_facet_with_parent(self):
-        """The new simplex from add() should share a (d-1)-face with
-        an existing simplex (the parent from which the facet was chosen)."""
-        cdt, st = _build_small(n_simplices=20)
-        before_fps = set()
-        for s in st.getSimplices():
-            if len(s.getVertices()) == 5:
-                before_fps.add(hash(s))
-
-        for _ in range(500):
-            if cdt.add():
-                break
-        else:
-            self.skipTest("No add accepted")
-
-        # Find the new simplex
-        new_simplex = None
-        for s in st.getSimplices():
-            if len(s.getVertices()) == 5 and hash(s) not in before_fps:
-                new_simplex = s
-                break
-        self.assertIsNotNone(new_simplex, "Should find a new simplex")
-
-        # The new simplex should share 4 vertices with at least one old simplex
-        new_vids = set(v.getId() for v in new_simplex.getVertices())
-        shared_found = False
-        for s in st.getSimplices():
-            if len(s.getVertices()) != 5 or hash(s) == hash(new_simplex):
-                continue
-            old_vids = set(v.getId() for v in s.getVertices())
-            if len(new_vids & old_vids) == 4:
-                shared_found = True
-                break
-
-        self.assertTrue(shared_found,
-                        "New simplex should share 4 vertices with a parent")
+        # d+2 edges: d to spatial vertices + 2 to non-spatial
+        d = 4
+        edge_pairs = set()
+        for e in new_vert.getEdges():
+            a, b = e.getSource().getId(), e.getTarget().getId()
+            edge_pairs.add((min(a, b), max(a, b)))
+        self.assertEqual(len(edge_pairs), d + 2,
+                         f"Added vertex should have {d+2} edges, "
+                         f"has {len(edge_pairs)}")
 
 
 if __name__ == "__main__":

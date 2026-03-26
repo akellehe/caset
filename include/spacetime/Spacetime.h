@@ -177,6 +177,11 @@ class Spacetime {
     /// (all simplices of all dimensions registered in the complex).
     [[nodiscard]] const SimplexSet& getSimplices() const noexcept;
 
+    /// Select a uniformly random vertex from the vertex list.
+    /// Used by the (2d,2) delete move for blind-guessing vertex selection.
+    /// @return A random vertex, or nullptr if none exist
+    [[nodiscard]] VertexPtr getRandomVertex();
+
     /// Select a uniformly random simplex from the parallel access vector.
     /// @return A random simplex, or nullptr if the complex is empty
     [[nodiscard]] SimplexPtr getRandomSimplex();

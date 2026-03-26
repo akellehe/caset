@@ -486,6 +486,13 @@ const SimplexSet& Spacetime::getSimplices() const noexcept {
   return simplices;
 }
 
+VertexPtr Spacetime::getRandomVertex() {
+  auto verts = vertexList->toVector();
+  if (verts.empty()) return nullptr;
+  std::uniform_int_distribution<std::size_t> dist(0, verts.size() - 1);
+  return verts[dist(rng)];
+}
+
 SimplexPtr Spacetime::getRandomSimplex() {
   if (simplicesVec.empty()) return nullptr;
   std::uniform_int_distribution<std::size_t> dist(0, simplicesVec.size() - 1);

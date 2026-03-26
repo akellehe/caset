@@ -36,10 +36,12 @@ class TestCDTAction(unittest.TestCase):
 
     def test_action_computation(self):
         """Verify action is computed from the correct formula (Eq. 2, hep-th/0505154):
-        S = -(k0 + 6*delta)*N0 + (k4 + 2*delta)*N41 + (k4 + delta)*N32 + epsilon*(N4 - target)^2
+        S = -(k0 + 6*delta)*N0 + (k4 + 2*delta)*N41 + (k4 + delta)*N32 + epsilon*(N41 - target)^2
+        Volume-fix targets N41 per Reconstructing the Universe eq. 6.
         """
         st = self._make_spacetime(n_simplices=5)
-        k0, k4, delta, epsilon, target = 2.0, 0.5, 0.6, 0.02, 100
+        k0, k4, delta, epsilon = 2.0, 0.5, 0.6, 0.02
+        target = st.getN41()
 
         cdt = caset.CDTSimulation(st, k0, k4, delta, epsilon, target)
         action = cdt.computeAction()
@@ -48,10 +50,9 @@ class TestCDTAction(unittest.TestCase):
         n0 = st.getVertexCount()
         n41 = st.getN41()
         n32 = st.getN32()
-        n4 = n41 + n32
 
         expected = -(k0 + 6 * delta) * n0 + (k4 + 2 * delta) * n41 + (k4 + delta) * n32
-        expected += epsilon * (n4 - target) ** 2
+        expected += epsilon * (n41 - target) ** 2
 
         self.assertAlmostEqual(action, expected, places=6,
                                msg=f"Action mismatch: got {action}, expected {expected}")

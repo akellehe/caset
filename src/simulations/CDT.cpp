@@ -28,12 +28,22 @@
 namespace caset {
 
 CDT::CDT(std::shared_ptr<Spacetime> spacetime_, double k0_, double k4_, double delta_,
-         double epsilon_, std::size_t targetN4_)
+         double epsilon_, std::size_t targetN41_, bool quadraticVolumeFix_)
     : spacetime(std::move(spacetime_)), k0(k0_), k4(k4_), delta(delta_),
-      epsilon(epsilon_), targetN4(targetN4_) {}
+      epsilon(epsilon_), targetN41(targetN41_), quadraticVolumeFix(quadraticVolumeFix_) {}
 
 static int getDim(const std::shared_ptr<Spacetime> &st) {
   return st->getMetric()->getSignature()->getDimensions();
+}
+
+/// Check that a proposed simplex vertex set has a valid CDT orientation:
+/// (d,1), (1,d), (d-1,2), or (2,d-1).
+static bool isValidCDTOrientation(const VertexPtrs &verts, int d) {
+  auto orient = SimplexOrientation::orientationOf(verts);
+  auto [ti, tf] = orient.numeric();
+  if ((ti == d && tf == 1) || (ti == 1 && tf == d)) return true;
+  if ((ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1)) return true;
+  return false;
 }
 
 // ========================================
@@ -44,143 +54,256 @@ double CDT::computeAction() const {
   auto n0 = static_cast<double>(spacetime->getVertexCount());
   auto n41 = static_cast<double>(spacetime->getN41());
   auto n32 = static_cast<double>(spacetime->getN32());
-  auto n4 = n41 + n32;
 
   double regge = -(k0 + 6.0 * delta) * n0
                + (k4 + 2.0 * delta) * n41
                + (k4 + delta) * n32;
-  double volumeFix = epsilon * (n4 - static_cast<double>(targetN4))
-                             * (n4 - static_cast<double>(targetN4));
+  double target = static_cast<double>(targetN41);
+  double volumeFix;
+  if (quadraticVolumeFix) {
+    volumeFix = epsilon * (n41 - target) * (n41 - target);
+  } else {
+    volumeFix = epsilon * std::abs(n41 - target);
+  }
   return regge + volumeFix;
 }
 
 double CDT::computeDeltaAction(int dN0, int dN41, int dN32) const {
-  int dN4 = dN41 + dN32;
-  double n4 = static_cast<double>(spacetime->getN41() + spacetime->getN32());
-  double target = static_cast<double>(targetN4);
+  double n41 = static_cast<double>(spacetime->getN41());
+  double target = static_cast<double>(targetN41);
 
   double dRegge = -(k0 + 6.0 * delta) * dN0
                + (k4 + 2.0 * delta) * dN41
                + (k4 + delta) * dN32;
-  double oldFix = epsilon * (n4 - target) * (n4 - target);
-  double newFix = epsilon * (n4 + dN4 - target) * (n4 + dN4 - target);
+  double oldFix, newFix;
+  if (quadraticVolumeFix) {
+    oldFix = epsilon * (n41 - target) * (n41 - target);
+    newFix = epsilon * (n41 + dN41 - target) * (n41 + dN41 - target);
+  } else {
+    oldFix = epsilon * std::abs(n41 - target);
+    newFix = epsilon * std::abs(n41 + dN41 - target);
+  }
   return dRegge + (newFix - oldFix);
 }
 
-bool CDT::accept(double deltaS) {
-  if (deltaS <= 0.0) return true;
+bool CDT::accept(double deltaS, double logPrefactor) {
+  double exponent = -deltaS + logPrefactor;
+  if (exponent >= 0.0) return true;
   std::uniform_real_distribution<double> dist(0.0, 1.0);
-  return dist(rng) < std::exp(-deltaS);
+  return dist(rng) < std::exp(exponent);
 }
 
 // ========================================
-// Add Move: grow the complex by coning an external facet
+// (2, 2d) Add Move: vertex insertion at spatial face
 // ========================================
 bool CDT::add() {
   addAttempts++;
   int d = getDim(spacetime);
   int dPlus1 = d + 1;
 
-  // Pick a random d-simplex
+  // Blind guessing: pick random top simplex, check if N41-type.
+  // This gives uniform selection probability 1/N41 over all N41 simplices,
+  // matching the prefactor derivation (Brunekreef eq 25-26 pattern).
   SimplexPtr sigma = spacetime->getRandomTopSimplex();
   if (!sigma) return false;
+  auto [sti_check, stf_check] = sigma->getOrientation().numeric();
+  bool isN41 = (sti_check == d && stf_check == 1) || (sti_check == 1 && stf_check == d);
+  if (!isN41) return false;
 
-  // Find a causally available facet (non-timelike, < 2 cofaces)
-  const auto &facets = sigma->getFacets();
-  std::vector<SimplexPtr> available;
-  for (const auto &f : facets) {
-    if (!f->isTimelike() && f->isCausallyAvailable()) {
-      available.push_back(f);
+  auto [sti, stf] = sigma->getOrientation().numeric();
+
+  // Find the spatial facet: the one where all vertices are at the same time.
+  // For (d,1): skip the 1 vertex at tf → spatial face has d vertices at ti.
+  // For (1,d): skip the 1 vertex at ti → spatial face has d vertices at tf.
+  SimplexPtr spatialFacet = nullptr;
+  for (const auto &f : sigma->getFacets()) {
+    if (f->isTimelike()) {
+      spatialFacet = f;
+      break;
     }
   }
-  if (available.empty()) return false;
+  if (!spatialFacet) return false;
 
-  std::uniform_int_distribution<std::size_t> fDist(0, available.size() - 1);
-  SimplexPtr facet = available[fDist(rng)];
-
-  // Pre-compute the action change: +1 vertex, +1 d-simplex
-  // The new simplex orientation depends on the cone direction. Estimate conservatively.
-  auto [fti, ftf] = facet->getOrientation().numeric();
-  auto coface = sigma;
-  auto [cti, ctf] = coface->getOrientation().numeric();
-
-  // Determine what orientation the new simplex will have
-  int newTi, newTf;
-  if (ctf > ftf) {
-    // Cone adds vertex at ti → increases ti count
-    newTi = fti + 1; newTf = ftf;
-  } else {
-    newTi = fti; newTf = ftf + 1;
+  // Find the adjacent simplex sharing this spatial facet (opposite orientation)
+  SimplexPtr sigmaAdj = nullptr;
+  for (const auto &cf : spatialFacet->getCofaces()) {
+    if (static_cast<int>(cf->size()) == dPlus1 && cf != sigma) {
+      sigmaAdj = cf;
+      break;
+    }
   }
+  if (!sigmaAdj) return false;
 
+  // The adjacent simplex should be N41-type (opposite orientation)
+  auto [ati, atf] = sigmaAdj->getOrientation().numeric();
+  bool adjIsN41 = (ati == d && atf == 1) || (ati == 1 && atf == d);
+  if (!adjIsN41) return false;
+
+  // Identify the non-spatial ("top" and "bottom") vertices
+  VertexPtr vertA = nullptr, vertB = nullptr;
+  for (const auto &v : sigma->getVertices()) {
+    if (!spatialFacet->hasVertex(v)) { vertA = v; break; }
+  }
+  for (const auto &v : sigmaAdj->getVertices()) {
+    if (!spatialFacet->hasVertex(v)) { vertB = v; break; }
+  }
+  if (!vertA || !vertB) return false;
+
+  // Action change: dN0=+1, dN41=+(2d-2), dN32=0
+  // We remove 2 N41 simplices and create 2d N41 simplices → net +(2d-2)
   int dN0 = 1;
-  int dN41 = 0, dN32 = 0;
-  if ((newTi == d && newTf == 1) || (newTi == 1 && newTf == d)) dN41 = 1;
-  else if ((newTi == d - 1 && newTf == 2) || (newTi == 2 && newTf == d - 1)) dN32 = 1;
+  int dN41 = 2 * d - 2;
+  int dN32 = 0;
 
   double deltaS = computeDeltaAction(dN0, dN41, dN32);
-  if (!accept(deltaS)) return false;
 
-  // Execute: create vertex and cone
-  double coneTime = (ctf > ftf) ? facet->getTi() : facet->getTf();
-  std::vector<double> coords{coneTime};
-  VertexPtr newVert = spacetime->createVertex(coords);
-  facet->cone(newVert);
+  // Combinatorial prefactor: N41/(N0+1)
+  // From Brunekreef eq 26 pattern: selection 1/N41, relabeling 1/(N0+1),
+  // reverse selection 1/(N0+1)
+  double N41 = static_cast<double>(spacetime->getN41());
+  double N0 = static_cast<double>(spacetime->getVertexCount());
+  double logPrefactor = std::log(N41) - std::log(N0 + 1.0);
+
+  if (!accept(deltaS, logPrefactor)) return false;
+
+  // Execute: create new vertex at the spatial time slice
+  double spatialTime = spatialFacet->getTi();  // all verts at same time
+  VertexPtr newVert = spacetime->createVertex(std::vector<double>{spatialTime});
+
+  // Save spatial vertices before removing simplices
+  VertexPtrs spatialVerts(spatialFacet->getVertices().begin(),
+                          spatialFacet->getVertices().end());
+
+  // Remove the 2 old simplices
+  spacetime->removeSimplex(sigma);
+  spacetime->removeSimplex(sigmaAdj);
+
+  // Create 2d new simplices: for each of d sub-faces (drop one spatial vertex, add newVert)
+  for (int skip = 0; skip < d; ++skip) {
+    VertexPtrs verts1, verts2;
+    for (int i = 0; i < d; ++i) {
+      if (i != skip) {
+        verts1.push_back(spatialVerts[i]);
+        verts2.push_back(spatialVerts[i]);
+      }
+    }
+    verts1.push_back(newVert);
+    verts1.push_back(vertA);
+    verts2.push_back(newVert);
+    verts2.push_back(vertB);
+
+    spacetime->createSimplex(verts1);
+    spacetime->createSimplex(verts2);
+  }
 
   addAccepted++;
   return true;
 }
 
 // ========================================
-// Remove Move: shrink by removing a d-simplex with an external facet
+// (2d, 2) Remove Move: vertex deletion (blind guessing)
 // ========================================
 bool CDT::remove() {
   removeAttempts++;
   int d = getDim(spacetime);
   int dPlus1 = d + 1;
+  int requiredOrder = 2 * d;
 
-  // Pick a random top simplex and check if it has a vertex belonging to only
-  // this one top simplex (the "cone vertex" from a previous add move).
-  SimplexPtr sigma = spacetime->getRandomTopSimplex();
-  if (!sigma) return false;
+  // Pick a random vertex (blind guessing, Brunekreef Sec 2.3.1)
+  VertexPtr v = spacetime->getRandomVertex();
+  if (!v) return false;
 
-  VertexPtr uniqueVert = nullptr;
-  for (const auto &v : sigma->getVertices()) {
-    int dSimplexCount = 0;
-    for (const auto &s : v->getSimplices()) {
-      if (static_cast<int>(s->size()) == dPlus1) dSimplexCount++;
-    }
-    if (dSimplexCount == 1) {
-      uniqueVert = v;
-      break;
+  // Count top simplices incident to this vertex; require exactly 2d
+  std::vector<SimplexPtr> incident;
+  for (const auto &s : v->getSimplices()) {
+    if (static_cast<int>(s->size()) == dPlus1) incident.push_back(s);
+  }
+  if (static_cast<int>(incident.size()) != requiredOrder) return false;
+
+  // Verify structure: all incident simplices must be N41-type,
+  // and they must share exactly d spatial vertices (besides v)
+  // plus 2 non-spatial vertices (one "top", one "bottom")
+  VertexPtr vertA = nullptr, vertB = nullptr;
+  VertexPtrs spatialVerts;
+
+  // Collect all vertices across incident simplices (besides v)
+  std::map<std::uint64_t, VertexPtr> otherVerts;
+  std::map<std::uint64_t, int> vertCounts;
+  for (const auto &s : incident) {
+    // All must be N41-type
+    auto [sti, stf] = s->getOrientation().numeric();
+    bool isN41 = (sti == d && stf == 1) || (sti == 1 && stf == d);
+    if (!isN41) return false;
+
+    for (const auto &vert : s->getVertices()) {
+      if (vert->getId() == v->getId()) continue;
+      otherVerts[vert->getId()] = vert;
+      vertCounts[vert->getId()]++;
     }
   }
-  if (!uniqueVert) return false;
 
-  // Compute action change: -1 vertex, -1 d-simplex
-  auto [sti, stf] = sigma->getOrientation().numeric();
+  // Should have d+2 other vertices: d spatial (each in 2(d-1) simplices) + 2 non-spatial (each in d)
+  if (static_cast<int>(otherVerts.size()) != d + 2) return false;
+
+  // Spatial vertices appear in all 2d incident simplices minus those that skip them.
+  // Each spatial vertex appears in 2(d-1) of the 2d simplices.
+  // The "top" and "bottom" vertices each appear in exactly d simplices.
+  for (const auto &[vid, count] : vertCounts) {
+    if (count == d) {
+      if (!vertA) vertA = otherVerts[vid];
+      else if (!vertB) vertB = otherVerts[vid];
+      else return false;  // more than 2 non-spatial vertices
+    } else if (count == 2 * (d - 1)) {
+      spatialVerts.push_back(otherVerts[vid]);
+    } else {
+      return false;  // unexpected structure
+    }
+  }
+  if (!vertA || !vertB || static_cast<int>(spatialVerts.size()) != d) return false;
+
+  // Action change: dN0=-1, dN41=-(2d-2), dN32=0
   int dN0 = -1;
-  int dN41 = 0, dN32 = 0;
-  if ((sti == d && stf == 1) || (sti == 1 && stf == d)) dN41 = -1;
-  else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) dN32 = -1;
+  int dN41_change = -(2 * d - 2);
+  int dN32 = 0;
 
-  double deltaS = computeDeltaAction(dN0, dN41, dN32);
-  if (!accept(deltaS)) return false;
+  double deltaS = computeDeltaAction(dN0, dN41_change, dN32);
 
-  // Execute: remove simplex, clean up vertex
-  spacetime->removeSimplex(sigma);
+  // Combinatorial prefactor: N0 / (N41 - (2d-2))
+  // Inverse of add: reverse add from T' would select from N41'=N41-(2d-2)
+  double N41 = static_cast<double>(spacetime->getN41());
+  double N0 = static_cast<double>(spacetime->getVertexCount());
+  double N41after = N41 + dN41_change;
+  if (N41after <= 0) return false;
+  double logPrefactor = std::log(N0) - std::log(N41after);
 
-  // Remove edges connecting uniqueVert to the facet vertices
-  // getEdges() returns a vector snapshot; safe to iterate while modifying
-  Edges edgesToRemove = uniqueVert->getEdges();
+  if (!accept(deltaS, logPrefactor)) return false;
+
+  // Execute: remove 2d simplices
+  for (const auto &s : incident) {
+    spacetime->removeSimplex(s);
+  }
+
+  // Remove all edges incident to v from both endpoints and the global edge list
+  Edges edgesToRemove = v->getEdges();
   for (const auto &e : edgesToRemove) {
-    VertexPtr other = (e->getSource()->getId() == uniqueVert->getId())
+    VertexPtr other = (e->getSource()->getId() == v->getId())
                       ? e->getTarget() : e->getSource();
     other->removeOutEdge(e);
     other->removeInEdge(e);
+    v->removeOutEdge(e);
+    v->removeInEdge(e);
     spacetime->getEdgeList()->remove(e);
   }
-  (void)spacetime->removeIfIsolated(uniqueVert);
+  (void)spacetime->removeIfIsolated(v);
+
+  // Create 2 replacement simplices: {spatialVerts + vertA} and {spatialVerts + vertB}
+  VertexPtrs verts1(spatialVerts.begin(), spatialVerts.end());
+  verts1.push_back(vertA);
+  VertexPtrs verts2(spatialVerts.begin(), spatialVerts.end());
+  verts2.push_back(vertB);
+
+  spacetime->createSimplex(verts1);
+  spacetime->createSimplex(verts2);
 
   removeAccepted++;
   return true;
@@ -255,6 +378,11 @@ bool CDT::flip() {
     newSimplexVerts.push_back(nv);
   }
 
+  // Reject if any new simplex would have a non-CDT orientation
+  for (const auto &nv : newSimplexVerts) {
+    if (!isValidCDTOrientation(nv, d)) return false;
+  }
+
   // Count new orientations
   int new_n41 = 0, new_n32 = 0;
   for (const auto &nv : newSimplexVerts) {
@@ -268,7 +396,16 @@ bool CDT::flip() {
   int dN41 = new_n41 - old_n41;
   int dN32 = new_n32 - old_n32;
   double deltaS = computeDeltaAction(dN0, dN41, dN32);
-  if (!accept(deltaS)) return false;
+
+  // Combinatorial prefactor from g(T'→T)/g(T→T'):
+  // flip selects 1 of (d+1) facets; iflip selects 1 of C(d+1,2) edges.
+  // g_iflip/g_flip = N4*(d+1) / (N4'*C(d+1,2)) = 2*N4 / (N4'*d)
+  double N4 = static_cast<double>(spacetime->getSimplexCount());
+  double logPrefactor = std::log(2.0) + std::log(N4)
+                      - std::log(static_cast<double>(d))
+                      - std::log(N4 + d - 2);
+
+  if (!accept(deltaS, logPrefactor)) return false;
 
   spacetime->removeSimplex(s1);
   spacetime->removeSimplex(s2);
@@ -281,7 +418,113 @@ bool CDT::flip() {
 }
 
 // ========================================
-// (3, 3) Shift / Inverse Shift
+// (d, 2) Inverse Flip Move
+// ========================================
+bool CDT::iflip() {
+  iflipAttempts++;
+  int d = getDim(spacetime);
+  int dPlus1 = d + 1;
+
+  SimplexPtr sigma = spacetime->getRandomTopSimplex();
+  if (!sigma) return false;
+
+  // Pick a random edge of sigma
+  const auto &edges = sigma->getEdges();
+  if (edges.empty()) return false;
+  std::uniform_int_distribution<std::size_t> edgeDist(0, edges.size() - 1);
+  EdgePtr edge = edges[edgeDist(rng)];
+
+  VertexPtr v1 = edge->getSource();
+  VertexPtr v2 = edge->getTarget();
+
+  // Find all top simplices containing both endpoints
+  std::vector<SimplexPtr> sharing;
+  for (const auto &s : v1->getSimplices()) {
+    if (static_cast<int>(s->size()) == dPlus1 && s->hasVertex(v2)) {
+      sharing.push_back(s);
+    }
+  }
+  if (static_cast<int>(sharing.size()) != d) return false;
+
+  // Collect all vertices across the d simplices: should be d+2 total
+  VertexPtrs allVerts;
+  allVerts.reserve(d + 2);
+  for (const auto &s : sharing) {
+    for (const auto &v : s->getVertices()) {
+      bool dup = false;
+      for (const auto &av : allVerts) {
+        if (av->getId() == v->getId()) { dup = true; break; }
+      }
+      if (!dup) allVerts.push_back(v);
+    }
+  }
+  if (static_cast<int>(allVerts.size()) != d + 2) return false;
+
+  // Separate shared (the 2 edge endpoints) and unique (d vertices)
+  VertexPtrs shared, unique;
+  for (const auto &v : allVerts) {
+    if (v->getId() == v1->getId() || v->getId() == v2->getId()) shared.push_back(v);
+    else unique.push_back(v);
+  }
+  if (shared.size() != 2 || static_cast<int>(unique.size()) != d) return false;
+
+  // Count old orientations
+  int old_n41 = 0, old_n32 = 0;
+  for (const auto &s : sharing) {
+    auto [sti, stf] = s->getOrientation().numeric();
+    if ((sti == d && stf == 1) || (sti == 1 && stf == d)) old_n41++;
+    else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) old_n32++;
+  }
+
+  // Create 2 new simplices: each has all d unique + 1 of 2 shared
+  std::vector<VertexPtrs> newSimplexVerts;
+  for (int i = 0; i < 2; ++i) {
+    VertexPtrs nv(unique.begin(), unique.end());
+    nv.push_back(shared[i]);
+    if (static_cast<int>(nv.size()) != dPlus1) return false;
+    newSimplexVerts.push_back(nv);
+  }
+
+  // Reject if any new simplex would have a non-CDT orientation
+  for (const auto &nv : newSimplexVerts) {
+    if (!isValidCDTOrientation(nv, d)) return false;
+  }
+
+  // Count new orientations
+  int new_n41 = 0, new_n32 = 0;
+  for (const auto &nv : newSimplexVerts) {
+    auto orient = SimplexOrientation::orientationOf(nv);
+    auto [oti, otf] = orient.numeric();
+    if ((oti == d && otf == 1) || (oti == 1 && otf == d)) new_n41++;
+    else if ((oti == d - 1 && otf == 2) || (oti == 2 && otf == d - 1)) new_n32++;
+  }
+
+  int dN0 = 0;
+  int dN41 = new_n41 - old_n41;
+  int dN32 = new_n32 - old_n32;
+  double deltaS = computeDeltaAction(dN0, dN41, dN32);
+
+  // Combinatorial prefactor from g(T'→T)/g(T→T'):
+  // iflip selects 1 of C(d+1,2) edges; flip selects 1 of (d+1) facets.
+  // g_flip/g_iflip = N4*d / (2*N4')
+  double N4 = static_cast<double>(spacetime->getSimplexCount());
+  double logPrefactor = std::log(static_cast<double>(d)) + std::log(N4)
+                      - std::log(2.0)
+                      - std::log(N4 - d + 2);
+
+  if (!accept(deltaS, logPrefactor)) return false;
+
+  for (const auto &s : sharing) spacetime->removeSimplex(s);
+  for (const auto &nv : newSimplexVerts) {
+    spacetime->createSimplex(nv);
+  }
+
+  iflipAccepted++;
+  return true;
+}
+
+// ========================================
+// (3, 3) Shift (self-inverse)
 // ========================================
 bool CDT::shift() {
   shiftAttempts++;
@@ -291,6 +534,7 @@ bool CDT::shift() {
 
 bool CDT::ishift() {
   ishiftAttempts++;
+  // Deprecated: (3,3) is self-inverse, so ishift = shift
   if (shiftImpl()) { ishiftAccepted++; return true; }
   return false;
 }
@@ -365,6 +609,11 @@ bool CDT::shiftImpl() {
     newSimplexVerts.push_back(nv);
   }
 
+  // Reject if any new simplex would have a non-CDT orientation
+  for (const auto &nv : newSimplexVerts) {
+    if (!isValidCDTOrientation(nv, d)) return false;
+  }
+
   int new_n41 = 0, new_n32 = 0;
   for (const auto &nv : newSimplexVerts) {
     auto orient = SimplexOrientation::orientationOf(nv);
@@ -377,7 +626,9 @@ bool CDT::shiftImpl() {
   int dN41 = new_n41 - old_n41;
   int dN32 = new_n32 - old_n32;
   double deltaS = computeDeltaAction(dN0, dN41, dN32);
-  if (!accept(deltaS)) return false;
+
+  // (3,3) is self-inverse with symmetric selection: no prefactor
+  if (!accept(deltaS, 0.0)) return false;
 
   for (const auto &s : sharing) spacetime->removeSimplex(s);
   for (const auto &nv : newSimplexVerts) spacetime->createSimplex(nv);
@@ -402,8 +653,8 @@ int CDT::sweep() {
       case 0: result = add(); break;
       case 1: result = remove(); break;
       case 2: result = flip(); break;
-      case 3: result = shift(); break;
-      case 4: result = ishift(); break;
+      case 3: result = iflip(); break;
+      case 4: result = shift(); break;
     }
     if (result) accepted++;
   }
@@ -412,19 +663,17 @@ int CDT::sweep() {
 
 void CDT::tune() {
   // Tune k4 to its pseudo-critical value using proportional feedback.
-  // The critical k4 makes the Regge action change ~0 for add/remove moves,
-  // so that the volume constraint alone controls the volume.
-  //
-  // For an add move: dS_Regge = -(k0 + 6Δ)*1 + (k4 + ~1.5Δ)*1
-  // Setting this near 0: k4_crit ≈ k0 + 6Δ - 1.5Δ = k0 + 4.5Δ
-  k4 = k0 + 4.5 * delta;
+  // For the (2,2d) add move: dS_Regge ≈ -(k0+6Δ) + (2d-2)(k4+2Δ)
+  // Setting this near 0 for d=4: k4_crit ≈ (k0+6Δ)/(2d-2) - 2Δ
+  int d = getDim(spacetime);
+  k4 = (k0 + 6.0 * delta) / (2.0 * d - 2.0) - 2.0 * delta;
 
   // Fine-tune with short feedback sweeps
-  double target = static_cast<double>(targetN4);
+  double target = static_cast<double>(targetN41);
   for (int i = 0; i < 20; ++i) {
     sweep();
-    double n4 = static_cast<double>(spacetime->getSimplexCount());
-    double error = (n4 - target) / target;  // normalized error
+    double n41 = static_cast<double>(spacetime->getN41());
+    double error = (n41 - target) / target;  // normalized error
     k4 += 0.01 * error;
   }
 }
@@ -472,6 +721,7 @@ std::map<std::string, double> CDT::getAcceptanceRates() const {
     {"add", rate(addAccepted, addAttempts)},
     {"remove", rate(removeAccepted, removeAttempts)},
     {"flip", rate(flipAccepted, flipAttempts)},
+    {"iflip", rate(iflipAccepted, iflipAttempts)},
     {"shift", rate(shiftAccepted, shiftAttempts)},
     {"ishift", rate(ishiftAccepted, ishiftAttempts)},
   };

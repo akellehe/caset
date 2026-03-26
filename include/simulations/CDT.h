@@ -134,24 +134,26 @@ class CDT : public Simulation {
     /// @param k4 Coupling constant \f$ k_4 \f$ (related to \f$ \Lambda \f$)
     /// @param delta Asymmetry parameter \f$ \Delta \f$
     /// @param epsilon Volume-fixing strength \f$ \varepsilon \f$
-    /// @param targetN4 Target four-volume \f$ \bar{N}_4 \f$
+    /// @param targetN41 Target \f$(d,1)\f$-type four-volume \f$ \tilde{N}_4 = N_4^{(4,1)} \f$
+    /// @param quadraticVolumeFix If true, use \f$ \varepsilon(N_{41} - \tilde{N}_4)^2 \f$;
+    ///   if false, use \f$ \varepsilon |N_{41} - \tilde{N}_4| \f$ (Reconstructing the Universe eq. 6)
     CDT(std::shared_ptr<Spacetime> spacetime, double k0, double k4, double delta,
-        double epsilon, std::size_t targetN4);
+        double epsilon, std::size_t targetN41, bool quadraticVolumeFix = true);
 
-    /// Grow the triangulation by coning an external \f$(d\!-\!1)\f$-face to a new vertex.
+    /// \f$(2, 2d)\f$ vertex insertion move (Brunekreef Sec. 2.3.1, adapted to 4D).
     ///
-    /// Picks a random causally-available facet of a random \f$ d \f$-simplex and cones it
-    /// to a new vertex, creating one new \f$ d \f$-simplex. The new vertex is placed at
-    /// the appropriate time slice to preserve the causal structure.
+    /// Picks a random \f$ N_{41} \f$-type simplex, finds its spatial \f$(d\!-\!1)\f$-face
+    /// and the adjacent simplex of opposite orientation. Inserts a new vertex at the
+    /// shared spatial time slice, replacing the 2 simplices with \f$ 2d \f$ new ones.
     ///
-    /// @return true if the move was accepted by the Metropolis criterion
+    /// @return true if the move was accepted by the Metropolis-Hastings criterion
     bool add();
 
-    /// Shrink the triangulation by removing a \f$ d \f$-simplex with an isolated apex.
+    /// \f$(2d, 2)\f$ vertex deletion move (inverse of add).
     ///
-    /// Finds a \f$ d \f$-simplex that has a facet with exactly one coface (itself) and
-    /// whose unique vertex belongs to no other top-dimensional simplex. Removing it
-    /// reverses a previous add move.
+    /// Picks a random vertex and checks if it has exactly \f$ 2d \f$ incident
+    /// top-simplices with the structure of a previous vertex insertion. If so,
+    /// collapses them back to 2 simplices sharing a spatial face.
     ///
     /// @return true if the move was accepted
     bool remove();
@@ -177,10 +179,18 @@ class CDT : public Simulation {
     /// @return true if the move was accepted
     bool shift();
 
-    /// Inverse of the \f$(3, 3)\f$ shift. Structurally identical; the Metropolis
-    /// criterion handles the directional asymmetry.
+    /// Inverse bistellar \f$(d, 2)\f$ flip: replace \f$ d \f$ simplices sharing an edge
+    /// with 2 simplices sharing a \f$(d\!-\!1)\f$-face.
+    ///
+    /// Finds an edge shared by exactly \f$ d \f$ top-simplices. The \f$ d \f$ simplices
+    /// span \f$ d + 2 \f$ vertices (2 shared edge endpoints, \f$ d \f$ unique). They are
+    /// replaced by 2 new simplices, each containing all \f$ d \f$ unique vertices
+    /// and one of the 2 shared vertices.
     ///
     /// @return true if the move was accepted
+    bool iflip();
+
+    /// Deprecated alias for shift(). The \f$(3,3)\f$ move is self-inverse.
     bool ishift();
 
     /// Adjust the cosmological coupling \f$ k_4 \f$ to drive the total four-volume
@@ -195,8 +205,8 @@ class CDT : public Simulation {
     void thermalize() override;
 
     /// Execute one Monte Carlo sweep: propose \f$ N_4 \f$ random moves (uniformly
-    /// chosen among add, remove, flip, shift, ishift) and accept or reject each
-    /// via the Metropolis criterion.
+    /// chosen among add, remove, flip, iflip, shift) and accept or reject each
+    /// via the Metropolis-Hastings criterion.
     ///
     /// @return Number of accepted moves in this sweep
     int sweep();
@@ -234,12 +244,17 @@ class CDT : public Simulation {
   private:
     std::shared_ptr<Spacetime> spacetime;
     double k0, k4, delta, epsilon;
-    std::size_t targetN4;
+    std::size_t targetN41;
+    bool quadraticVolumeFix;
     std::mt19937 rng{std::random_device{}()};
 
-    /// Metropolis acceptance test: accept if \f$ \Delta S \le 0 \f$, otherwise
-    /// accept with probability \f$ e^{-\Delta S} \f$.
-    bool accept(double deltaS);
+    /// Metropolis-Hastings acceptance test.
+    ///
+    /// Accepts if \f$ \Delta S - \log P \le 0 \f$, otherwise accepts with
+    /// probability \f$ e^{-\Delta S + \log P} \f$, where \f$ \log P \f$ is the
+    /// log of the combinatorial prefactor \f$ g(T' \to T) P_l(T') / [g(T \to T') P_l(T)] \f$
+    /// divided by \f$ e^{-\Delta S} \f$.
+    bool accept(double deltaS, double logPrefactor = 0.0);
 
     /// Compute the incremental action change for a proposed move without
     /// recomputing the full sum over simplices.
@@ -251,6 +266,7 @@ class CDT : public Simulation {
     int addAttempts = 0, addAccepted = 0;
     int removeAttempts = 0, removeAccepted = 0;
     int flipAttempts = 0, flipAccepted = 0;
+    int iflipAttempts = 0, iflipAccepted = 0;
     int shiftAttempts = 0, shiftAccepted = 0;
     int ishiftAttempts = 0, ishiftAccepted = 0;
 };
