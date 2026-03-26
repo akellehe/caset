@@ -204,14 +204,16 @@ bool CDT::add() {
     spacetime->createSimplex(verts2);
   }
 
-  // Vertex relabeling (Brunekreef Sec. 2.2.1/2.3.1): the 1/(N0+1) factor in
-  // the acceptance prefactor accounts for a uniform random label swap of the
-  // new vertex. The actual swap is not performed because vertex IDs are used
-  // as keys at every level of the data structure (Edge fingerprints, Simplex
-  // internal ID maps, sub-simplex hash tables). A safe implementation requires
-  // re-keying all levels atomically, which is future infrastructure work.
-  // All CDT observables (volume profile, spectral dimension, Hausdorff
-  // dimension) are label-invariant, so this does not affect physical results.
+  // Vertex relabeling ([BGL] Sec. 2.2.1/2.3.1): swap the new vertex's label
+  // with a uniformly chosen existing vertex. This implements the 1/(N0+1)
+  // factor in the acceptance prefactor. Observables are label-invariant, so
+  // this is physically neutral but ensures correct detailed balance.
+  {
+    VertexPtr randomVert = spacetime->getRandomVertex();
+    if (randomVert && randomVert->getId() != newVert->getId()) {
+      spacetime->swapVertexLabels(newVert, randomVert);
+    }
+  }
 
   addAccepted++;
   return true;

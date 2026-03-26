@@ -151,7 +151,7 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-    target = st.getSimplexCount()
+    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
     cdt.tune()
 

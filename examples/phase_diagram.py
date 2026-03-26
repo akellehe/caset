@@ -106,7 +106,7 @@ def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
                          caset.Toroid())
     st.build(n_simplices)
 
-    target = st.getSimplexCount()
+    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, target)
 
     cdt.sweep(n_sweeps, progress=sweep_cb)

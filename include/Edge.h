@@ -103,17 +103,17 @@ class Edge {
     };
 #endif
 
-    /// This method changes the target source in-place. Note that if this edge is registered elsewhere (e.g. in a
-    /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
-    /// ensure consistent hashing/lookup. This method also updates the fingerprint hastily. If you want to update in
-    /// batches remove the fingerprint.refresh() call.
+    /// Replace the source vertex in-place and update the fingerprint.
+    ///
+    /// WARNING: The caller MUST extract this edge from EdgeList BEFORE calling,
+    /// then reinsert after. Modifying the fingerprint while the edge is in a
+    /// hash-keyed container causes undefined behavior (stale bucket placement).
+    /// See Spacetime::swapVertexLabels for the correct extract/update/reinsert pattern.
     void replaceSourceVertex(const VertexPtr &newSource);
 
-    /// This method changes the target Vertex in-place. Note that if this edge is registered elsewhere (e.g. in a
-    /// std::unordered_map in the Spacetime) then it needs to be unregistered first, modified, then re-registered to
-    /// ensure consistent hashing/lookup.
-    /// CRITICAL: TODO: we need to remove edges from their containers before changing their fingerprints!
-    /// Same as replaceSourceVertex above, but for targets.
+    /// Replace the target vertex in-place and update the fingerprint.
+    ///
+    /// WARNING: Same container-safety requirement as replaceSourceVertex.
     void replaceTargetVertex(const VertexPtr &newTarget);
 
     ///

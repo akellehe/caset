@@ -20,3 +20,16 @@
 // SOFTWARE.
 
 #include "observables/SpacetimeVolume.h"
+#include "spacetime/Spacetime.h"
+
+namespace caset {
+
+double SpacetimeVolume::compute(std::shared_ptr<Spacetime> &spacetime) {
+  return static_cast<double>(spacetime->getSimplexCount());
+}
+
+double SpacetimeVolume::update(std::shared_ptr<Spacetime> &spacetime) {
+  return compute(spacetime);
+}
+
+} // caset

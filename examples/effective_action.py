@@ -74,7 +74,7 @@ def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-    target = st.getSimplexCount()
+    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
     cdt.tune()
 
@@ -307,7 +307,7 @@ def main():
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(args.n_simplices)
-    target = st.getSimplexCount()
+    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
     cdt.tune()
 

@@ -53,7 +53,7 @@ def _volume_worker(target_n41, n_therm, n_meas, meas_interval,
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_build)
-    target = st.getSimplexCount()
+    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
     cdt.sweep(n_therm, progress=sweep_cb)

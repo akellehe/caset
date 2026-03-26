@@ -50,7 +50,7 @@ def _phase_worker(label, k0, delta, n_simplices, n_therm, n_meas,
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-    target = st.getSimplexCount()
+    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, target)
 
     cdt.tune()
