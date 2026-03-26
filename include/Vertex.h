@@ -191,13 +191,13 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// \brief Get all edges targeting this vertex
         /// \return Set of incoming edges \f$ \{e \mid e.target = v\} \f$
         ///
-        const EdgePtrSet &getInEdges() const noexcept;
+        const Edges &getInEdges() const noexcept;
 
         ///
         /// \brief Get all edges originating from this vertex
         /// \return Set of outgoing edges \f$ \{e \mid e.source = v\} \f$
         ///
-        const EdgePtrSet &getOutEdges() const noexcept;
+        const Edges &getOutEdges() const noexcept;
 
         ///
         /// \brief Add an incoming edge to this vertex
@@ -255,7 +255,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// A vertex belongs to a simplex if it's one of the simplex's vertices.
         /// This is the inverse relationship: vertex → simplices containing it.
         ///
-        const SimplexPtrSet &getSimplices() const noexcept;
+        const Simplices &getSimplices() const noexcept;
 
         ///
         /// \brief Register a simplex as containing this vertex
@@ -432,9 +432,9 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         // Private Members
         // ========================================
 
-        EdgePtrSet outEdges{};        ///< Edges where this vertex is the source
-        EdgePtrSet inEdges{};          ///< Edges where this vertex is the target
-        SimplexPtrSet simplices{};     ///< Simplices containing this vertex
+        Edges outEdges{};              ///< Edges where this vertex is the source
+        Edges inEdges{};               ///< Edges where this vertex is the target
+        Simplices simplices{};         ///< Simplices containing this vertex
         std::uint64_t id;              ///< Unique identifier
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };

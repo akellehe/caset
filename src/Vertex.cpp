@@ -33,10 +33,10 @@
 #include <sstream>
 
 namespace caset {
-Vertex::Vertex() noexcept { id = 0; simplices.reserve(7); }
+Vertex::Vertex() noexcept : id(0) { }
 Vertex::Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords),
-  fingerprint({id_}) { simplices.reserve(7); }
-Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) { simplices.reserve(7);}
+  fingerprint({id_}) { }
+Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) { }
 
 std::uint64_t Vertex::getId() const noexcept { return id; }
 
@@ -93,13 +93,12 @@ Vertex::getEdges() const noexcept {
 }
 
 EdgePtr Vertex::getEdge(const EdgePtr &edge) {
-  auto foundIn = inEdges.find(edge);
-  if (foundIn != inEdges.end()) {
-    return *foundIn;
+  auto fp = edge->fingerprint.fingerprint();
+  for (const auto &e : inEdges) {
+    if (e->fingerprint.fingerprint() == fp) return e;
   }
-  auto foundOut = outEdges.find(edge);
-  if (foundOut != outEdges.end()) {
-    return *foundOut;
+  for (const auto &e : outEdges) {
+    if (e->fingerprint.fingerprint() == fp) return e;
   }
   return nullptr;
 }
@@ -118,7 +117,7 @@ Vertex::moveEdgesToImpl(
   EdgePtrSet oldEdges{};
   EdgePtrSet newEdges{};
 
-  EdgePtrSet &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
+  Edges &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
   const char *directionStr = (direction == EdgeDirection::In) ? "in-edge" : "out-edge";
 
   for (auto &oldEdge : edgesToMove) {
@@ -194,7 +193,6 @@ void Vertex::checkDuplicates(std::string msg) const {
 }
 
 bool Vertex::addSimplex(const SimplexPtr &simplex) {
-  // CLOG(INFO_LEVEL, "Adding simplex to vertex", toString());
 #if CASET_ASSERTIONS
   if (simplex == nullptr || simplex.get() == nullptr) {
     CLOG(CRITICAL_LEVEL, "You passed a null simplex!");
@@ -202,24 +200,31 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
   }
   checkDuplicates("Duplicated before emplacing a new simplex.");
 #endif
-  const auto [it, inserted] = simplices.emplace(simplex);
+  auto fp = simplex->fingerprint.fingerprint();
+  for (const auto &s : simplices) {
+    if (s->fingerprint.fingerprint() == fp) return false;
+  }
+  simplices.push_back(simplex);
 #ifdef CASET_ASSERTIONS
   checkDuplicates("Duplicated after emplacing a new simplex.");
 #endif
-  return inserted;
+  return true;
 }
 
 bool Vertex::removeSimplex(const SimplexPtr &simplex) {
-// #if CASET_ASSERTIONS
-  // if (!simplices.contains(simplex)) {
-    // throw std::runtime_error("You attempted to remove a simplex that did not exist");
-  // }
-// #endif
   CLOG(INFO_LEVEL, "Removing simplex: ", simplex->toString(), " from ", toString());
-  return simplices.erase(simplex) > 0;
+  auto fp = simplex->fingerprint.fingerprint();
+  for (auto it = simplices.begin(); it != simplices.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      *it = simplices.back();
+      simplices.pop_back();
+      return true;
+    }
+  }
+  return false;
 }
 
-const SimplexPtrSet &
+const Simplices &
 Vertex::getSimplices() const noexcept {
   return simplices;
 }
@@ -236,11 +241,19 @@ std::string Vertex::toString() const noexcept {
 #endif
 
 void Vertex::addInEdge(const EdgePtr &edge) noexcept {
-  inEdges.insert(edge);
+  auto fp = edge->fingerprint.fingerprint();
+  for (const auto &e : inEdges) {
+    if (e->fingerprint.fingerprint() == fp) return;
+  }
+  inEdges.push_back(edge);
 }
 
 void Vertex::addOutEdge(const EdgePtr &edge) noexcept {
-  outEdges.insert(edge);
+  auto fp = edge->fingerprint.fingerprint();
+  for (const auto &e : outEdges) {
+    if (e->fingerprint.fingerprint() == fp) return;
+  }
+  outEdges.push_back(edge);
 }
 
 void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
@@ -249,15 +262,18 @@ void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an in edge! Refusing.");
     std::abort();
   }
-  if (!inEdges.contains(edge)) {
-    CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
-    std::abort();
-  }
 #endif
   for (const auto &simplex : simplices) {
     simplex->removeEdge(edge);
   }
-  inEdges.erase(edge);
+  auto fp = edge->fingerprint.fingerprint();
+  for (auto it = inEdges.begin(); it != inEdges.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      *it = inEdges.back();
+      inEdges.pop_back();
+      return;
+    }
+  }
 }
 
 void Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
@@ -266,22 +282,25 @@ void Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
     std::abort();
   }
-  if (!outEdges.contains(edge)) {
-    CLOG(WARN_LEVEL, "Edge ", edge->toString(), " not found in vertex ", toString());
-    std::abort();
-  }
 #endif
   for (const auto &simplex : simplices) {
     simplex->removeEdge(edge);
   }
-  outEdges.erase(edge);
+  auto fp = edge->fingerprint.fingerprint();
+  for (auto it = outEdges.begin(); it != outEdges.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      *it = outEdges.back();
+      outEdges.pop_back();
+      return;
+    }
+  }
 }
 
 std::size_t Vertex::degree() const noexcept { return inEdges.size() + outEdges.size(); }
 
-const EdgePtrSet &
+const Edges &
 Vertex::getInEdges() const noexcept { return inEdges; }
 
-const EdgePtrSet &
+const Edges &
 Vertex::getOutEdges() const noexcept { return outEdges; }
 };
