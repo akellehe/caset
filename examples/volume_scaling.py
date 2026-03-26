@@ -8,9 +8,22 @@ Reproduces Figures 7-8, 12 from:
   Phys. Rev. D 72 (2005) [hep-th/0505154]
 
 Paper parameters: k0=2.2, Delta=0.6, N4=10k-160k, T=80.
+
+Parallelization
+---------------
+The script runs CDT at three system sizes (N4/2, N4, 2*N4) plus an
+extra run at the largest size for the volume-difference distribution —
+four independent simulations in total.  Each builds its own spacetime
+and Markov chain, sharing no mutable state, so all four run
+concurrently in threads (--workers).
+
+The GIL is released inside the C++ sweep() call, giving threads real
+CPU parallelism without forking processes or duplicating memory.
 """
 import argparse
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,8 +33,13 @@ from tqdm import tqdm
 import caset
 
 
-def run_cdt_collect_profiles(n_simplices, n_therm, n_meas, meas_interval,
-                             size_label=""):
+def _profiles_worker(n_simplices, n_therm, n_meas, meas_interval,
+                     sweep_cb=None):
+    """Run one system-size simulation and collect volume profiles.
+
+    Each size is independent.  The GIL is released during sweep(),
+    so multiple threads run in parallel.
+    """
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -29,21 +47,14 @@ def run_cdt_collect_profiles(n_simplices, n_therm, n_meas, meas_interval,
     st.build(n_simplices)
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
-    prefix = f"  [N4={size_label}] " if size_label else "  "
-    for _ in tqdm(range(n_therm), desc=f"{prefix}Thermalizing",
-                  unit="sweep", leave=False):
-        cdt.sweep()
+
+    cdt.sweep(n_therm, progress=sweep_cb)
+
     profiles = []
-    total_sweeps = n_meas * meas_interval
-    pbar = tqdm(total=total_sweeps, desc=f"{prefix}Measuring",
-                unit="sweep", leave=False)
     for _ in range(n_meas):
-        for _ in range(meas_interval):
-            cdt.sweep()
-            pbar.update(1)
+        cdt.sweep(meas_interval, progress=sweep_cb)
         profiles.append(np.array(cdt.getVolumeProfile(), dtype=float))
-    pbar.close()
-    return profiles
+    return n_simplices, profiles
 
 
 def compute_volume_correlator(profiles, stalk_volume=None):
@@ -76,13 +87,19 @@ def main():
     parser.add_argument("--n-therm", type=int, default=50)
     parser.add_argument("--n-meas", type=int, default=30)
     parser.add_argument("--meas-interval", type=int, default=5)
+    parser.add_argument("--workers", type=int,
+                        default=min(os.cpu_count() or 1, 8),
+                        help="Parallel worker threads (default: min(cpus, 8))")
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
+
+    n_workers = max(1, args.workers)
 
     print("=" * 64)
     print("  Volume-Volume Correlator & Hausdorff Dimension")
     print("  Reproduces Figs 7-8, 12, Ambjorn, Jurkiewicz, Loll (2005)")
     print("  Parameters: k0=2.2, Delta=0.6")
+    print(f"  Workers: {n_workers} (threads, shared memory)")
     print("=" * 64)
 
     sizes = [args.n_simplices // 2, args.n_simplices, args.n_simplices * 2]
@@ -92,20 +109,47 @@ def main():
     all_corrs = {}
     t_total = time.time()
 
+    # ---- Run all sizes + Fig 12 run in parallel ----
+    # The 3 sizes for Fig 7 plus an extra run at the largest size for Fig 12
+    # are all independent simulations.
+    all_runs = sizes + [sizes[-1]]  # 4th entry is for Fig 12
+    n_runs = len(all_runs)
+    sweeps_per_run = args.n_therm + args.n_meas * args.meas_interval
+    total_sweeps = n_runs * sweeps_per_run
+
+    run_bar = tqdm(total=n_runs, desc="Runs", unit="run", position=0)
+    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
+                     position=1, leave=False)
+    sweep_cb = lambda i, n: sweep_bar.update(1)
+
+    size_profiles = {}
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {
+            pool.submit(_profiles_worker, n4, args.n_therm,
+                        args.n_meas, args.meas_interval, sweep_cb):
+            (idx, n4)
+            for idx, n4 in enumerate(all_runs)
+        }
+        for f in as_completed(futures):
+            idx, n4 = futures[f]
+            _, profiles = f.result()
+            size_profiles[idx] = profiles
+            avg_slices = np.mean([len(p) for p in profiles])
+            avg_vol = np.mean([np.sum(p) for p in profiles])
+            run_bar.set_postfix_str(
+                f"N4={n4:,}, {len(profiles)} profiles")
+            run_bar.update(1)
+
+    sweep_bar.close()
+    run_bar.close()
+
     # ---- Fig 7: Rescaled volume-volume correlator ----
     ax_corr = axes[0, 0]
     colors = ["red", "green", "blue"]
     for i, n4 in enumerate(sizes):
-        print(f"\n--- Size {i+1}/{len(sizes)}: N4={n4:,} ---")
-        t0 = time.time()
-        profiles = run_cdt_collect_profiles(
-            n4, args.n_therm, args.n_meas, args.meas_interval,
-            size_label=str(n4))
+        profiles = size_profiles[i]
         avg_slices = np.mean([len(p) for p in profiles])
         avg_vol = np.mean([np.sum(p) for p in profiles])
-        print(f"  Elapsed: {time.time()-t0:.1f}s")
-        print(f"  Profiles: {len(profiles)} x ~{avg_slices:.0f} slices, "
-              f"avg total volume: {avg_vol:,.0f}")
 
         corr = compute_volume_correlator(profiles)
         T = len(corr)
@@ -189,8 +233,7 @@ def main():
 
     # ---- Fig 12: Volume difference distribution ----
     ax_vdiff = axes[1, 0]
-    profiles = run_cdt_collect_profiles(
-        sizes[-1], args.n_therm, args.n_meas, args.meas_interval)
+    profiles = size_profiles[3]  # extra run at largest size
     all_z = []
     for p in profiles:
         for tau in range(len(p) - 1):

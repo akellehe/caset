@@ -29,9 +29,29 @@ The paper shows that:
 
 Parameters: k0 = 2.2, Delta = 0.6.
 Estimated runtime: ~2-5 minutes.
+
+Parallelization
+---------------
+The n_meas volume-profile measurements are distributed across --workers
+independent Markov chains, each with its own spacetime.  This is valid
+because the analysis (D_2 scaling, volume-difference distribution,
+average profile) only requires a set of equilibrium configurations — it
+does not matter whether they come from one chain or many.  Independent
+chains are actually preferable: they eliminate within-chain
+autocorrelation, giving statistically cleaner samples.
+
+The action-tracking subplot (bottom right) intentionally stays
+sequential: it visualizes the temporal evolution of S_Regge on a single
+chain, which is inherently serial.
+
+The GIL is released inside the C++ sweep() call, so threads achieve
+real CPU parallelism without forking processes or duplicating memory.
 """
 import argparse
+import math
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -41,33 +61,31 @@ from tqdm import tqdm
 import caset
 
 
-def collect_profiles(n_simplices, n_therm, n_meas, interval):
-    """Run CDT and collect volume profiles."""
+def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
+                    sweep_cb=None):
+    """Run one independent Markov chain and collect volume profiles.
+
+    Each worker builds, thermalizes, and measures its own spacetime.
+    Independent chains give truly decorrelated samples.  The GIL is
+    released during sweep(), so multiple threads run in parallel.
+    """
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
     st.build(n_simplices)
-
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt.tune()
 
-    for _ in tqdm(range(n_therm), desc="  Thermalizing",
-                  unit="sweep", leave=False):
-        cdt.sweep()
+    cdt.sweep(n_therm, progress=sweep_cb)
 
     profiles = []
-    total_sweeps = n_meas * interval
-    pbar = tqdm(total=total_sweeps, desc="  Measuring",
-                unit="sweep", leave=False)
     for _ in range(n_meas):
-        for _ in range(interval):
-            cdt.sweep()
-            pbar.update(1)
+        cdt.sweep(interval, progress=sweep_cb)
         profiles.append(np.array(cdt.getVolumeProfile(), dtype=float))
-    pbar.close()
 
-    return profiles
+    return worker_id, profiles
 
 
 def main():
@@ -78,8 +96,14 @@ def main():
     parser.add_argument("--n-therm", type=int, default=50)
     parser.add_argument("--n-meas", type=int, default=40)
     parser.add_argument("--meas-interval", type=int, default=5)
+    parser.add_argument("--workers", type=int,
+                        default=min(os.cpu_count() or 1, 8),
+                        help="Independent Markov chains in parallel "
+                             "(default: min(cpus, 8))")
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
+
+    n_workers = max(1, args.workers)
 
     print("=" * 64)
     print("  Effective Action & Minisuperspace Comparison")
@@ -87,13 +111,58 @@ def main():
     print("  Parameters: k0=2.2, Delta=0.6")
     print(f"  N4={args.n_simplices}, therm={args.n_therm}, "
           f"meas={args.n_meas}, interval={args.meas_interval}")
+    print(f"  Workers: {n_workers} independent chains (threads, shared memory)")
     print("=" * 64)
 
     print("\nCollecting configurations...")
     t0 = time.time()
     t_total = time.time()
-    profiles = collect_profiles(
-        args.n_simplices, args.n_therm, args.n_meas, args.meas_interval)
+
+    # Distribute measurements across independent Markov chains.
+    # Each chain thermalizes independently — the resulting profiles are
+    # truly decorrelated, which is statistically better than one long chain.
+    profiles = []
+    meas_per_worker = math.ceil(args.n_meas / n_workers)
+
+    # Compute total sweeps across all chains for the progress bar
+    actual_workers = 0
+    remaining = args.n_meas
+    worker_meas = []
+    for w in range(n_workers):
+        n = min(meas_per_worker, remaining)
+        if n <= 0:
+            break
+        remaining -= n
+        worker_meas.append(n)
+        actual_workers += 1
+    total_sweeps = sum(
+        args.n_therm + n * args.meas_interval for n in worker_meas)
+
+    chain_bar = tqdm(total=actual_workers, desc="Chains", unit="chain",
+                     position=0)
+    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
+                     position=1, leave=False)
+    sweep_cb = lambda i, n: sweep_bar.update(1)
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {}
+        for w, n in enumerate(worker_meas):
+            f = pool.submit(_collect_worker, w, args.n_simplices,
+                            args.n_therm, n, args.meas_interval,
+                            sweep_cb)
+            futures[f] = (w, n)
+
+        for f in as_completed(futures):
+            wid, n = futures[f]
+            _, worker_profiles = f.result()
+            profiles.extend(worker_profiles)
+            chain_bar.set_postfix_str(
+                f"chain {wid+1}: {len(worker_profiles)} profiles")
+            chain_bar.update(1)
+
+    sweep_bar.close()
+    chain_bar.close()
+
     avg_slices = np.mean([len(p) for p in profiles])
     avg_vol = np.mean([np.sum(p) for p in profiles])
     print(f"  {len(profiles)} configurations in {time.time()-t0:.1f}s")
@@ -148,12 +217,6 @@ def main():
     # ---- Fig 12: Volume difference distribution ----
     ax_dist = axes[0, 1]
 
-    for p in profiles:
-        for tau in range(len(p) - 1):
-            n3 = p[tau] + p[tau + 1]
-            if n3 <= 0:
-                continue
-
     all_z = []
     for p in profiles:
         for tau in range(len(p) - 1):
@@ -189,39 +252,54 @@ def main():
     ax_dist.legend(fontsize=10)
     ax_dist.grid(True, alpha=0.3)
 
-    # ---- Fig 13: Volume-volume correlator vs minisuperspace ----
+    # ---- Fig 13: Volume profile vs minisuperspace prediction ----
+    # Following the paper: center each configuration's profile on its peak
+    # before averaging (to prevent smearing from peak-position fluctuations
+    # on the torus), subtract the stalk, then normalise so the peak = 1.
     ax_mss = axes[1, 0]
 
-    # Average profile
-    max_len = max(len(p) for p in profiles)
-    avg_profile = np.zeros(max_len)
-    counts = np.zeros(max_len)
+    # Pad all profiles to the same length (the modal length)
+    lengths = [len(p) for p in profiles]
+    T = max(lengths)
+
+    # Center each profile on its peak (circular roll) and subtract stalk.
+    centered = []
     for p in profiles:
-        avg_profile[:len(p)] += p
-        counts[:len(p)] += 1
-    counts[counts == 0] = 1
-    avg_profile /= counts
+        arr = np.zeros(T)
+        arr[:len(p)] = p
+        stalk = float(arr.min())
+        arr -= stalk
+        peak_idx = int(np.argmax(arr))
+        shift = T // 2 - peak_idx
+        arr = np.roll(arr, shift)       # peak now at T//2
+        centered.append(arr)
 
-    T = len(avg_profile)
-    tau = np.arange(T)
+    avg_centered = np.mean(centered, axis=0)
+    peak_val = avg_centered.max()
+    if peak_val > 0:
+        avg_centered /= peak_val        # normalise to peak = 1
 
-    # The minisuperspace prediction: N_3(tau) ~ cos^3(pi*tau/T)
-    # from Eq. 28 of hep-th/0505154 (4D de Sitter profile)
-    cos3 = np.cos(np.pi * (tau - T / 2.0) / T) ** 3
-    if cos3.max() > 0:
-        cos3 *= avg_profile.max() / cos3.max()
+    # x-axis: centered time so peak is at 0
+    tau_centered = np.arange(T) - T // 2
 
-    ax_mss.plot(tau, avg_profile, "ko", markersize=4, label="Monte Carlo")
-    ax_mss.plot(tau, cos3, "r-", linewidth=1.5,
-                label=r"Minisuperspace: $\cos^3(\pi\tau/T)$")
-    ax_mss.set_xlabel(r"$\tau$", fontsize=12)
-    ax_mss.set_ylabel(r"$N_3(\tau)$", fontsize=12)
+    # Minisuperspace prediction: cos^3(pi * tau / T)
+    tau_dense = np.linspace(-T / 2, T / 2, 300)
+    cos3_pred = np.maximum(np.cos(np.pi * tau_dense / T), 0) ** 3
+
+    ax_mss.plot(tau_centered, avg_centered, "ko", markersize=4,
+                label="Monte Carlo")
+    ax_mss.plot(tau_dense, cos3_pred, "r-", linewidth=1.5,
+                label=r"$\cos^3(\pi\tau/T)$")
+    ax_mss.set_xlabel(r"$\tau - \tau_{\mathrm{peak}}$", fontsize=12)
+    ax_mss.set_ylabel(r"$N_3 / N_3^{\mathrm{max}}$", fontsize=12)
     ax_mss.set_title("Volume profile vs minisuperspace prediction\n"
                      "(cf. Fig 13, Ambjorn et al. 2005)")
     ax_mss.legend(fontsize=10)
     ax_mss.grid(True, alpha=0.3)
 
     # ---- Action tracking over simulation ----
+    # Build a fresh chain, tune k4 to pseudo-critical, thermalize into
+    # de Sitter, then track action evolution in equilibrium.
     ax_action = axes[1, 1]
 
     sig = caset.Signature(4, caset.Lorentzian)
@@ -231,14 +309,20 @@ def main():
     st.build(args.n_simplices)
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt.tune()
 
+    n_track = max(100, args.n_therm * 2)
     actions = []
     volumes = []
-    for sweep_num in tqdm(range(100), desc="  Action tracking",
-                          unit="sweep", leave=False):
-        cdt.sweep()
+    pbar = tqdm(total=args.n_therm + n_track,
+                desc="  Action tracking", unit="sweep", leave=False)
+    cdt.sweep(args.n_therm, progress=lambda i, n: pbar.update(1))
+    for _ in range(n_track):
+        cdt.sweep(1)
         actions.append(cdt.computeAction())
         volumes.append(st.getSimplexCount())
+        pbar.update(1)
+    pbar.close()
 
     ax_action.plot(actions, "b-", linewidth=0.8, alpha=0.7)
     ax_action.set_xlabel("Sweep", fontsize=12)

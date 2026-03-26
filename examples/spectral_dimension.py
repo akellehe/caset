@@ -26,11 +26,26 @@ Key results from the paper (k0=2.2, Delta=0.6, t=80):
   Best fit:  D_S(sigma) = 4.02 - 119/(54 + sigma)    [Eq. 29]
 
 Parameters: k0 = 2.2, Delta = 0.6.
+
+Parallelization
+---------------
+Each "configuration" is an independent Markov chain: it builds its own
+spacetime, thermalizes from a cold start, and runs its own diffusion
+walks.  Because no state is shared between configurations, they can run
+concurrently in threads (--workers).  The GIL is released inside the
+C++ sweep() call, so threads achieve real parallelism without forking
+separate processes and without duplicating memory.
+
+The final D_S(sigma) curve is the average over return probabilities
+collected from all configurations.  Mixing independent chains is
+standard practice in lattice Monte Carlo — it is statistically
+equivalent to (and better decorrelated than) taking the same number of
+measurements from a single long chain.
 """
 import argparse
-import multiprocessing
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -123,13 +138,14 @@ def diffuse_sparse(T, starts, max_sigma):
 # Worker for parallel configurations
 # ---------------------------------------------------------------------------
 
-def _worker(args_tuple):
+def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
+            n_walks, max_sigma, sweep_cb=None):
     """Run one independent configuration: build spacetime, thermalize,
     build dual graph, run diffusion walks.  Returns list of return-prob arrays.
-    """
-    (cfg_id, n_simplices, n_therm, sweeps_between,
-     n_walks, max_sigma) = args_tuple
 
+    GIL is released during sweep() calls, so multiple threads get real
+    C++ parallelism without duplicating process memory.
+    """
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -139,12 +155,10 @@ def _worker(args_tuple):
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
     cdt.tune()
 
-    for _ in range(n_therm):
-        cdt.sweep()
+    cdt.sweep(n_therm, progress=sweep_cb)
 
     # Decorrelate
-    for _ in range(sweeps_between):
-        cdt.sweep()
+    cdt.sweep(sweeps_between, progress=sweep_cb)
 
     t0 = time.time()
     T, N = build_transition_matrix(st)
@@ -225,44 +239,44 @@ def main():
     print("  Parameters: k0=2.2, Delta=0.6")
     print(f"  Configs: {args.n_configs}, walks/config: {args.n_walks}, "
           f"max sigma: {args.max_sigma}")
-    print(f"  Workers: {n_workers}")
+    print(f"  Workers: {n_workers} (threads, shared memory)")
     print("=" * 64)
 
     t_total = time.time()
 
-    # Each worker gets its own independent spacetime + simulation
-    tasks = [
-        (cfg, args.n_simplices, args.n_therm, args.sweeps_between,
-         args.n_walks, args.max_sigma)
-        for cfg in range(args.n_configs)
-    ]
-
     all_return_probs = []
 
-    if n_workers == 1:
-        # Sequential fallback
-        for task in tqdm(tasks, desc="Configurations", unit="cfg"):
-            cfg_id, rps, N, avg_nbr, elapsed = _worker(task)
+    sweeps_per_cfg = args.n_therm + args.sweeps_between
+    total_sweeps = args.n_configs * sweeps_per_cfg
+
+    # Threads share address space — no memory duplication.
+    # The GIL is released inside sweep(), so threads get real C++ parallelism.
+    cfg_bar = tqdm(total=args.n_configs, desc="Configs", unit="cfg",
+                   position=0)
+    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
+                     position=1, leave=False)
+    sweep_cb = lambda i, n: sweep_bar.update(1)
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {
+            pool.submit(
+                _worker, cfg, args.n_simplices, args.n_therm,
+                args.sweeps_between, args.n_walks, args.max_sigma,
+                sweep_cb
+            ): cfg
+            for cfg in range(args.n_configs)
+        }
+        for future in as_completed(futures):
+            cfg_id, rps, N, avg_nbr, elapsed = future.result()
             if rps:
                 all_return_probs.extend(rps)
-                print(f"  Config {cfg_id+1}: N4~{N:,}, "
-                      f"avg neighbors={avg_nbr:.1f}, {elapsed:.1f}s")
-            else:
-                print(f"  Config {cfg_id+1}: no simplices, skipping")
-    else:
-        with multiprocessing.Pool(n_workers) as pool:
-            results = pool.imap_unordered(_worker, tasks)
-            done = 0
-            for cfg_id, rps, N, avg_nbr, elapsed in results:
-                done += 1
-                if rps:
-                    all_return_probs.extend(rps)
-                    print(f"  Config {cfg_id+1}: N4~{N:,}, "
-                          f"avg neighbors={avg_nbr:.1f}, "
-                          f"{elapsed:.1f}s  [{done}/{args.n_configs}]")
-                else:
-                    print(f"  Config {cfg_id+1}: no simplices  "
-                          f"[{done}/{args.n_configs}]")
+            cfg_bar.set_postfix_str(
+                f"cfg {cfg_id+1}: N4~{N:,}" if rps else
+                f"cfg {cfg_id+1}: empty")
+            cfg_bar.update(1)
+
+    sweep_bar.close()
+    cfg_bar.close()
 
     if not all_return_probs:
         print("No data collected.")

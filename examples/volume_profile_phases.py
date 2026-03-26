@@ -14,9 +14,21 @@ phases emerge at N4 > ~5000.
 The Regge action is (Eq. 2 of hep-th/0505154):
 
   S_E = -(k0 + 6*Delta)*N0 + (k4 + 2*Delta)*N41 + (k4 + Delta)*N32
+
+Parallelization
+---------------
+The three phases (A, B, C_dS) use different coupling constants (k0,
+Delta) and each builds its own spacetime from scratch.  No state is
+shared between phases, so all three run concurrently in threads
+(--workers).
+
+The GIL is released inside the C++ sweep() call, giving threads real
+CPU parallelism without forking processes or duplicating memory.
 """
 import argparse
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,8 +38,13 @@ from tqdm import tqdm
 import caset
 
 
-def run_cdt(n_simplices, k0, delta, n_therm, n_meas, meas_interval,
-            phase_label=""):
+def _phase_worker(label, k0, delta, n_simplices, n_therm, n_meas,
+                  meas_interval, sweep_cb=None):
+    """Run one phase simulation: build, tune, thermalize, measure.
+
+    Each phase uses different coupling constants and is fully independent.
+    The GIL is released during sweep(), so threads run in parallel.
+    """
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -35,27 +52,16 @@ def run_cdt(n_simplices, k0, delta, n_therm, n_meas, meas_interval,
     st.build(n_simplices)
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, target)
-    prefix = f"  [{phase_label}] " if phase_label else "  "
 
-    # Tune k4 toward its pseudo-critical value before thermalization
-    print(f"{prefix}Tuning k4 (initial={cdt.getK4():.4f})...")
     cdt.tune()
-    print(f"{prefix}Tuned k4={cdt.getK4():.4f}")
+    cdt.sweep(n_therm, progress=sweep_cb)
 
-    for _ in tqdm(range(n_therm), desc=f"{prefix}Thermalizing",
-                  unit="sweep", leave=False):
-        cdt.sweep()
     profiles = []
-    total_sweeps = n_meas * meas_interval
-    pbar = tqdm(total=total_sweeps, desc=f"{prefix}Measuring",
-                unit="sweep", leave=False)
     for _ in range(n_meas):
-        for _ in range(meas_interval):
-            cdt.sweep()
-            pbar.update(1)
+        cdt.sweep(meas_interval, progress=sweep_cb)
         profiles.append(cdt.getVolumeProfile())
-    pbar.close()
-    return profiles, cdt.getAcceptanceRates()
+
+    return label, profiles, cdt.getAcceptanceRates(), cdt.getK4()
 
 
 def average_profile(profiles):
@@ -102,14 +108,20 @@ def main():
     parser.add_argument("--n-therm", type=int, default=80)
     parser.add_argument("--n-meas", type=int, default=30)
     parser.add_argument("--meas-interval", type=int, default=5)
+    parser.add_argument("--workers", type=int,
+                        default=min(os.cpu_count() or 1, 8),
+                        help="Parallel worker threads (default: min(cpus, 8))")
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
+
+    n_workers = max(1, args.workers)
 
     print("=" * 64)
     print("  CDT Volume Profiles in Phases A, B, C")
     print("  Reproduces Figs 4-6, Ambjorn, Jurkiewicz, Loll (2005)")
     print(f"  N4={args.n_simplices}, therm={args.n_therm}, "
           f"meas={args.n_meas}, interval={args.meas_interval}")
+    print(f"  Workers: {n_workers} (threads, shared memory)")
     print("=" * 64)
 
     phases = {
@@ -128,26 +140,48 @@ def main():
     fig_line, ax_line = plt.subplots(figsize=(10, 6))
     t_total = time.time()
 
+    # All three phases are independent — run in parallel.
+    n_phases = len(phases)
+    sweeps_per_phase = args.n_therm + args.n_meas * args.meas_interval
+    total_sweeps = n_phases * sweeps_per_phase
+
+    phase_bar = tqdm(total=n_phases, desc="Phases", unit="phase",
+                     position=0)
+    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
+                     position=1, leave=False)
+    sweep_cb = lambda i, n: sweep_bar.update(1)
+
+    phase_results = {}
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {
+            pool.submit(_phase_worker, label, k0, delta,
+                        args.n_simplices, args.n_therm,
+                        args.n_meas, args.meas_interval,
+                        sweep_cb): label
+            for label, (k0, delta) in phases.items()
+        }
+        for f in as_completed(futures):
+            label, profiles, rates, k4 = f.result()
+            phase_results[label] = (profiles, rates)
+            short = label.split("\n")[0]
+            phase_bar.set_postfix_str(short)
+            phase_bar.update(1)
+
+    sweep_bar.close()
+    phase_bar.close()
+
+    for label, (profiles, rates) in phase_results.items():
+        short = label.split("\n")[0]
+        avg = average_profile(profiles)
+        print(f"  {short}: slices={len(avg)}, "
+              f"peak N3={avg.max():.1f}, rates={rates}")
+
     phase_c_avg = None  # track for cos^3 overlay
 
     for idx, (label, (k0, delta)) in enumerate(phases.items()):
-        short = label.split("\n")[0]
-        print(f"\n--- {short} (k0={k0}, Delta={delta}) "
-              f"[{idx+1}/{len(phases)}] ---")
-        t0 = time.time()
-        profiles, rates = run_cdt(
-            args.n_simplices, k0, delta,
-            args.n_therm, args.n_meas, args.meas_interval,
-            phase_label=short)
-        elapsed = time.time() - t0
+        profiles, rates = phase_results[label]
         avg = average_profile(profiles)
         peak_slice = np.argmax(avg)
-        print(f"  Elapsed: {elapsed:.1f}s")
-        print(f"  Time slices: {len(avg)}, "
-              f"peak at tau={peak_slice} (N3={avg[peak_slice]:.1f})")
-        print(f"  Volume: mean={avg.mean():.1f}, max={avg.max():.1f}, "
-              f"total={avg.sum():.0f}")
-        print(f"  Acceptance rates: {rates}")
 
         ax_surf = fig_surf.add_subplot(1, 3, idx + 1, projection="3d")
         plot_universe_surface(avg, label, ax_surf)
@@ -160,14 +194,19 @@ def main():
             phase_c_avg = avg
 
     # Overlay cos^3 reference on the line plot (Eq. 28, hep-th/0505154)
-    # Scale to match the phase C profile if available
+    # On a torus the de Sitter blob sits on a nonzero stalk; use periodic
+    # distance from the measured peak.
     if phase_c_avg is not None:
         T_ref = len(phase_c_avg)
+        peak_tau = np.argmax(phase_c_avg)
+        stalk = float(np.min(phase_c_avg))
+        amplitude = float(phase_c_avg.max()) - stalk
         tau_ref = np.linspace(0, T_ref - 1, 200)
-        cos3_ref = np.cos(np.pi * (tau_ref - (T_ref - 1) / 2) / T_ref) ** 3
-        cos3_ref = np.maximum(cos3_ref, 0)
-        scale = phase_c_avg.max()
-        ax_line.plot(tau_ref, cos3_ref * scale, "k--",
+        dist = np.abs(tau_ref - peak_tau)
+        dist = np.minimum(dist, T_ref - dist)
+        cos_arg = np.pi * dist / T_ref
+        cos3_ref = stalk + amplitude * np.maximum(np.cos(cos_arg), 0) ** 3
+        ax_line.plot(tau_ref, cos3_ref, "k--",
                      alpha=0.4, linewidth=1.5, label=r"$\cos^3$ reference")
 
     ax_line.set_xlabel(r"Time slice $\tau$", fontsize=13)

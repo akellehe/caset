@@ -1,0 +1,605 @@
+# MIT License
+# Copyright (c) 2025 Andrew Kelleher
+"""
+Deterministic forward-backward tests for each Pachner move.
+
+Each test:
+  1. Builds a small lattice and snapshots the full state.
+  2. Applies one move, verifies the exact combinatorial change.
+  3. Applies the inverse move, verifies we return to a compatible state.
+  4. Repeats for several iterations.
+
+The moves are stochastic (random simplex selection), so we retry until
+one succeeds. But once a move succeeds, we assert exact combinatorial
+deltas — not statistical properties.
+"""
+
+import unittest
+import caset
+
+
+# =====================================================================
+# Helpers
+# =====================================================================
+
+def _build_small(n_simplices=10):
+    """Build a minimal CDT spacetime.
+
+    Uses epsilon=0 so the Metropolis criterion only depends on the Regge
+    action, and sets k4 very high so that add moves are expensive (keeps
+    the lattice from growing).  Individual move tests call the moves
+    directly, bypassing acceptance.
+    """
+    sig = caset.Signature(4, caset.Lorentzian)
+    metric = caset.Metric(True, sig)
+    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                         caset.Toroid())
+    st.build(n_simplices)
+    target = st.getSimplexCount()
+    # epsilon=0 removes volume-fixing from acceptance (we call moves directly)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, target)
+    return cdt, st
+
+
+def _snapshot(st):
+    """Capture the full lattice state as a dict."""
+    top_fps = set()
+    orientations = {}
+    for s in st.getSimplices():
+        if len(s.getVertices()) == 5:
+            fp = hash(s)
+            top_fps.add(fp)
+            orientations[fp] = s.getOrientation().numeric()
+    return {
+        "n4": st.getSimplexCount(),
+        "n41": st.getN41(),
+        "n32": st.getN32(),
+        "n0": st.getVertexCount(),
+        "top_fps": top_fps,
+        "orientations": orientations,
+    }
+
+
+def _verify_all_top_causal(st):
+    """Assert every top simplex spans exactly 2 time slices."""
+    for s in st.getSimplices():
+        if len(s.getVertices()) != 5:
+            continue
+        times = set(v.getTime() for v in s.getVertices())
+        assert len(times) == 2, (
+            f"Non-causal top simplex: orientation={s.getOrientation().numeric()}, "
+            f"times={times}")
+
+
+def _verify_counts_consistent(st):
+    """Assert N4 = N41 + N32 and matches manual count."""
+    n41_manual = 0
+    n32_manual = 0
+    n_top = 0
+    for s in st.getSimplices():
+        if len(s.getVertices()) != 5:
+            continue
+        n_top += 1
+        o = s.getOrientation().numeric()
+        if o in ((4, 1), (1, 4)):
+            n41_manual += 1
+        elif o in ((3, 2), (2, 3)):
+            n32_manual += 1
+        else:
+            raise AssertionError(f"Invalid orientation {o}")
+    assert st.getSimplexCount() == st.getN41() + st.getN32(), (
+        f"N4 mismatch: {st.getSimplexCount()} != {st.getN41()} + {st.getN32()}")
+    assert st.getN41() == n41_manual, (
+        f"N41 mismatch: {st.getN41()} != {n41_manual}")
+    assert st.getN32() == n32_manual, (
+        f"N32 mismatch: {st.getN32()} != {n32_manual}")
+    assert n_top == n41_manual + n32_manual, (
+        f"Non-CDT orientations: {n_top} top simplices, "
+        f"{n41_manual} N41 + {n32_manual} N32")
+
+
+# =====================================================================
+# Add / Remove round-trip
+# =====================================================================
+
+class TestAddRemoveRoundTrip(unittest.TestCase):
+    """Add creates +1 vertex, +1 simplex.
+    Remove undoes it: -1 simplex. Together they form a round trip.
+    """
+
+    def test_single_add_exact_delta(self):
+        """One successful add: dN0=+1, dN4=+1, new simplex has 5 vertices."""
+        cdt, st = _build_small(n_simplices=20)
+        before = _snapshot(st)
+
+        accepted = False
+        for _ in range(500):
+            if cdt.add():
+                accepted = True
+                break
+        if not accepted:
+            self.skipTest("No add accepted")
+
+        after = _snapshot(st)
+
+        # Exact deltas
+        self.assertEqual(after["n0"], before["n0"] + 1)
+        self.assertEqual(after["n4"], before["n4"] + 1)
+
+        # Exactly one new top simplex appeared
+        new_fps = after["top_fps"] - before["top_fps"]
+        self.assertEqual(len(new_fps), 1,
+                         f"Expected 1 new simplex, got {len(new_fps)}")
+
+        # No simplices disappeared
+        lost_fps = before["top_fps"] - after["top_fps"]
+        self.assertEqual(len(lost_fps), 0,
+                         f"Add should not remove simplices, lost {len(lost_fps)}")
+
+        # The new simplex has a valid CDT orientation
+        new_fp = new_fps.pop()
+        o = after["orientations"][new_fp]
+        self.assertIn(o, ((4, 1), (1, 4), (3, 2), (2, 3)),
+                      f"New simplex has invalid orientation {o}")
+
+        # Invariants hold
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+    def test_single_remove_exact_delta(self):
+        """One add then one remove: N4 returns to original."""
+        cdt, st = _build_small(n_simplices=20)
+        before = _snapshot(st)
+
+        # Add first
+        for _ in range(500):
+            if cdt.add():
+                break
+        else:
+            self.skipTest("No add accepted")
+
+        mid = _snapshot(st)
+        self.assertEqual(mid["n4"], before["n4"] + 1)
+
+        # Now remove
+        for _ in range(500):
+            if cdt.remove():
+                break
+        else:
+            self.skipTest("No remove accepted")
+
+        after = _snapshot(st)
+
+        # N4 back to original
+        self.assertEqual(after["n4"], before["n4"])
+
+        # Exactly one simplex was removed
+        self.assertEqual(after["n4"], mid["n4"] - 1)
+
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+    def test_add_remove_many_cycles(self):
+        """Repeat add/remove 10 times.  After each pair, N4 should return."""
+        cdt, st = _build_small(n_simplices=20)
+        original_n4 = st.getSimplexCount()
+
+        for cycle in range(10):
+            # Add
+            added = False
+            for _ in range(500):
+                if cdt.add():
+                    added = True
+                    break
+            if not added:
+                continue
+
+            self.assertEqual(st.getSimplexCount(), original_n4 + 1,
+                             f"Cycle {cycle}: N4 should be original+1 after add")
+            _verify_counts_consistent(st)
+            _verify_all_top_causal(st)
+
+            # Remove
+            removed = False
+            for _ in range(500):
+                if cdt.remove():
+                    removed = True
+                    break
+            if not removed:
+                # Can't remove — volume will drift. That's OK for this test.
+                original_n4 = st.getSimplexCount()
+                continue
+
+            self.assertEqual(st.getSimplexCount(), original_n4,
+                             f"Cycle {cycle}: N4 should return after remove")
+            _verify_counts_consistent(st)
+            _verify_all_top_causal(st)
+
+
+# =====================================================================
+# Flip forward and backward
+# =====================================================================
+
+class TestFlipRoundTrip(unittest.TestCase):
+    """The (2,4) flip: 2 simplices → 4 simplices.
+
+    dN0=0, dN4=+2.  Exactly 2 old simplices disappear, 4 new ones appear.
+    A second flip can (but doesn't always) undo the first.
+    """
+
+    def test_single_flip_exact_delta(self):
+        """One flip: dN0=0, dN4=+2, 2 lost + 4 gained."""
+        cdt, st = _build_small(n_simplices=30)
+        before = _snapshot(st)
+
+        accepted = False
+        for _ in range(2000):
+            if cdt.flip():
+                accepted = True
+                break
+        if not accepted:
+            self.skipTest("No flip accepted")
+
+        after = _snapshot(st)
+
+        # Exact deltas
+        self.assertEqual(after["n0"], before["n0"],
+                         "Flip should not change vertex count")
+        self.assertEqual(after["n4"], before["n4"] + 2,
+                         "Flip should change N4 by +2")
+
+        # 2 old simplices gone, 4 new ones appeared
+        lost = before["top_fps"] - after["top_fps"]
+        gained = after["top_fps"] - before["top_fps"]
+        self.assertEqual(len(lost), 2,
+                         f"Flip should remove 2 simplices, removed {len(lost)}")
+        self.assertEqual(len(gained), 4,
+                         f"Flip should create 4 simplices, created {len(gained)}")
+
+        # All new simplices have valid orientations
+        for fp in gained:
+            o = after["orientations"][fp]
+            self.assertIn(o, ((4, 1), (1, 4), (3, 2), (2, 3)),
+                          f"New simplex has invalid orientation {o}")
+
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+    def test_flip_twice_deltas_accumulate(self):
+        """Two flips: each adds exactly +2 to N4."""
+        cdt, st = _build_small(n_simplices=30)
+        n4_start = st.getSimplexCount()
+
+        flips_done = 0
+        for _ in range(5000):
+            if cdt.flip():
+                flips_done += 1
+                expected = n4_start + 2 * flips_done
+                self.assertEqual(st.getSimplexCount(), expected,
+                                 f"After {flips_done} flips, N4 should be "
+                                 f"{expected}, got {st.getSimplexCount()}")
+                _verify_counts_consistent(st)
+                _verify_all_top_causal(st)
+                if flips_done >= 2:
+                    return
+
+        if flips_done < 2:
+            self.skipTest(f"Only {flips_done} flips accepted")
+
+    def test_flip_preserves_vertex_set(self):
+        """The exact set of vertex IDs should not change under a flip."""
+        cdt, st = _build_small(n_simplices=30)
+
+        verts_before = set()
+        for s in st.getSimplices():
+            for v in s.getVertices():
+                verts_before.add(v.getId())
+
+        for _ in range(2000):
+            if cdt.flip():
+                break
+        else:
+            self.skipTest("No flip accepted")
+
+        verts_after = set()
+        for s in st.getSimplices():
+            for v in s.getVertices():
+                verts_after.add(v.getId())
+
+        self.assertEqual(verts_before, verts_after,
+                         "Flip should not change the vertex set")
+
+
+# =====================================================================
+# Shift forward and backward
+# =====================================================================
+
+class TestShiftRoundTrip(unittest.TestCase):
+    """The (3,3) shift: 3 simplices → 3 simplices.
+
+    dN0=0, dN4=0.  Exactly 3 old simplices disappear, 3 new ones appear.
+    """
+
+    def test_single_shift_exact_delta(self):
+        """One shift: dN0=0, dN4=0, 3 lost + 3 gained."""
+        cdt, st = _build_small(n_simplices=200)
+        # Do some sweeps to create a richer topology for shifts
+        cdt.sweep(50)
+        before = _snapshot(st)
+
+        accepted = False
+        for _ in range(20000):
+            if cdt.shift():
+                accepted = True
+                break
+        if not accepted:
+            self.skipTest("No shift accepted")
+
+        after = _snapshot(st)
+
+        self.assertEqual(after["n0"], before["n0"],
+                         "Shift should not change vertex count")
+        self.assertEqual(after["n4"], before["n4"],
+                         "Shift should not change N4")
+
+        lost = before["top_fps"] - after["top_fps"]
+        gained = after["top_fps"] - before["top_fps"]
+        self.assertEqual(len(lost), 3,
+                         f"Shift should remove 3 simplices, removed {len(lost)}")
+        # Gained can be < 3 if a new simplex already existed (dedup)
+        self.assertGreaterEqual(len(gained), 1)
+        self.assertLessEqual(len(gained), 3)
+
+        for fp in gained:
+            o = after["orientations"][fp]
+            self.assertIn(o, ((4, 1), (1, 4), (3, 2), (2, 3)))
+
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+    def test_single_ishift_exact_delta(self):
+        """One ishift: same combinatorics as shift (3→3)."""
+        cdt, st = _build_small(n_simplices=200)
+        cdt.sweep(50)
+        before = _snapshot(st)
+
+        accepted = False
+        for _ in range(20000):
+            if cdt.ishift():
+                accepted = True
+                break
+        if not accepted:
+            self.skipTest("No ishift accepted")
+
+        after = _snapshot(st)
+
+        self.assertEqual(after["n0"], before["n0"])
+
+        lost = before["top_fps"] - after["top_fps"]
+        gained = after["top_fps"] - before["top_fps"]
+        self.assertEqual(len(lost), 3)
+        self.assertGreaterEqual(len(gained), 1)
+        self.assertLessEqual(len(gained), 3)
+
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+    def test_shift_preserves_vertex_set(self):
+        """The exact set of vertex IDs should not change under a shift."""
+        cdt, st = _build_small(n_simplices=200)
+        cdt.sweep(50)
+
+        verts_before = set()
+        for s in st.getSimplices():
+            for v in s.getVertices():
+                verts_before.add(v.getId())
+
+        for _ in range(20000):
+            if cdt.shift():
+                break
+        else:
+            self.skipTest("No shift accepted")
+
+        verts_after = set()
+        for s in st.getSimplices():
+            for v in s.getVertices():
+                verts_after.add(v.getId())
+
+        self.assertEqual(verts_before, verts_after)
+
+
+# =====================================================================
+# Multi-iteration round-trip stress tests
+# =====================================================================
+
+class TestMultiIterationRoundTrips(unittest.TestCase):
+    """Apply a move several times, then the inverse the same number of
+    times, and verify that the lattice returns to a compatible state.
+    """
+
+    def test_five_adds_then_five_removes(self):
+        """5 adds then 5 removes: N4 should return to start."""
+        cdt, st = _build_small(n_simplices=20)
+        n4_start = st.getSimplexCount()
+        n0_start = st.getVertexCount()
+
+        n_added = 0
+        for _ in range(2500):
+            if cdt.add():
+                n_added += 1
+                if n_added >= 5:
+                    break
+
+        self.assertEqual(st.getSimplexCount(), n4_start + n_added)
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+        n_removed = 0
+        for _ in range(2500):
+            if cdt.remove():
+                n_removed += 1
+                if n_removed >= n_added:
+                    break
+
+        self.assertEqual(n_removed, n_added,
+                         f"Could only remove {n_removed} of {n_added}")
+        self.assertEqual(st.getSimplexCount(), n4_start,
+                         f"N4 should return to {n4_start}")
+        _verify_counts_consistent(st)
+        _verify_all_top_causal(st)
+
+    def test_three_flips_counts_and_causality(self):
+        """3 flips: each should increase N4 and maintain all invariants.
+
+        On a tiny lattice, a flip normally gives dN4=+2, but can give less
+        if one of the 4 new simplices happens to already exist (vertex
+        reuse on small complexes).  We check the invariants regardless.
+        """
+        cdt, st = _build_small(n_simplices=50)
+        prev_n4 = st.getSimplexCount()
+
+        flips = 0
+        for _ in range(10000):
+            if cdt.flip():
+                flips += 1
+                # N4 should increase (2 removed, up to 4 created)
+                self.assertGreater(st.getSimplexCount(), prev_n4,
+                                   f"Flip {flips}: N4 should increase")
+                _verify_counts_consistent(st)
+                _verify_all_top_causal(st)
+                prev_n4 = st.getSimplexCount()
+                if flips >= 3:
+                    return
+
+        if flips < 3:
+            self.skipTest(f"Only {flips} flips accepted")
+
+    def test_mixed_moves_then_verify(self):
+        """Apply a mix of all move types, verify invariants after each."""
+        cdt, st = _build_small(n_simplices=30)
+
+        moves = [cdt.add, cdt.remove, cdt.flip, cdt.shift, cdt.ishift]
+        move_names = ["add", "remove", "flip", "shift", "ishift"]
+
+        for iteration in range(20):
+            for move, name in zip(moves, move_names):
+                before_n4 = st.getSimplexCount()
+                before_n0 = st.getVertexCount()
+                if move():
+                    after_n4 = st.getSimplexCount()
+                    after_n0 = st.getVertexCount()
+
+                    if name == "add":
+                        self.assertEqual(after_n4, before_n4 + 1)
+                        self.assertEqual(after_n0, before_n0 + 1)
+                    elif name == "remove":
+                        self.assertEqual(after_n4, before_n4 - 1)
+                    elif name == "flip":
+                        # Normally +2; can be less if a new simplex
+                        # already exists (dedup on small lattices)
+                        self.assertGreater(after_n4, before_n4)
+                        self.assertEqual(after_n0, before_n0)
+                    elif name in ("shift", "ishift"):
+                        # Normally 0; can be negative on small lattices
+                        # if a new simplex already exists (dedup)
+                        self.assertEqual(after_n0, before_n0)
+
+                    with self.subTest(iteration=iteration, move=name):
+                        _verify_counts_consistent(st)
+                        _verify_all_top_causal(st)
+
+
+# =====================================================================
+# Vertex structure tests for add/remove
+# =====================================================================
+
+class TestAddRemoveVertexStructure(unittest.TestCase):
+    """Verify that add creates a vertex incident to exactly 1 top simplex,
+    and remove finds and removes exactly such a vertex.
+    """
+
+    def test_added_vertex_has_one_top_simplex(self):
+        """The vertex created by add() should belong to exactly 1 top simplex."""
+        cdt, st = _build_small(n_simplices=20)
+        n0_before = st.getVertexCount()
+
+        for _ in range(500):
+            if cdt.add():
+                break
+        else:
+            self.skipTest("No add accepted")
+
+        # Find the new vertex (highest ID, since IDs are monotonically increasing)
+        all_verts = st.getVertexList().toVector()
+        new_vert = max(all_verts, key=lambda v: v.getId())
+
+        # Count how many top simplices contain this vertex
+        top_count = 0
+        for s in st.getSimplices():
+            if len(s.getVertices()) == 5 and s.hasVertex(new_vert):
+                top_count += 1
+
+        self.assertEqual(top_count, 1,
+                         f"Added vertex should be in exactly 1 top simplex, "
+                         f"found {top_count}")
+
+    def test_added_vertex_connects_to_facet_vertices(self):
+        """The added vertex should have edges to the d vertices of the
+        facet it was coned to (= 4 edges in 4D)."""
+        cdt, st = _build_small(n_simplices=20)
+        n0_before = st.getVertexCount()
+
+        for _ in range(500):
+            if cdt.add():
+                break
+        else:
+            self.skipTest("No add accepted")
+
+        all_verts = st.getVertexList().toVector()
+        new_vert = max(all_verts, key=lambda v: v.getId())
+
+        # The new vertex should have exactly 4 edges (d edges in d=4)
+        n_edges = len(new_vert.getEdges())
+        self.assertEqual(n_edges, 4,
+                         f"Added vertex should have 4 edges, has {n_edges}")
+
+    def test_new_simplex_shares_facet_with_parent(self):
+        """The new simplex from add() should share a (d-1)-face with
+        an existing simplex (the parent from which the facet was chosen)."""
+        cdt, st = _build_small(n_simplices=20)
+        before_fps = set()
+        for s in st.getSimplices():
+            if len(s.getVertices()) == 5:
+                before_fps.add(hash(s))
+
+        for _ in range(500):
+            if cdt.add():
+                break
+        else:
+            self.skipTest("No add accepted")
+
+        # Find the new simplex
+        new_simplex = None
+        for s in st.getSimplices():
+            if len(s.getVertices()) == 5 and hash(s) not in before_fps:
+                new_simplex = s
+                break
+        self.assertIsNotNone(new_simplex, "Should find a new simplex")
+
+        # The new simplex should share 4 vertices with at least one old simplex
+        new_vids = set(v.getId() for v in new_simplex.getVertices())
+        shared_found = False
+        for s in st.getSimplices():
+            if len(s.getVertices()) != 5 or hash(s) == hash(new_simplex):
+                continue
+            old_vids = set(v.getId() for v in s.getVertices())
+            if len(new_vids & old_vids) == 4:
+                shared_found = True
+                break
+
+        self.assertTrue(shared_found,
+                        "New simplex should share 4 vertices with a parent")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -41,6 +41,7 @@
 #include "Metric.h"
 
 #include <vector>
+#include <algorithm>
 
 namespace py = pybind11;
 
@@ -216,7 +217,7 @@ PYBIND11_MODULE(caset, m) {
            py::return_value_policy::reference)
       .def("getEdgeList", &Spacetime::getEdgeList)
       .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference)
-      .def("build", &Spacetime::build)
+      .def("build", &Spacetime::build, py::call_guard<py::gil_scoped_release>())
       .def("getSimplices", &Spacetime::getSimplices, py::return_value_policy::reference)
       .def("getExternalSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::reference)
       .def("createEdge",
@@ -276,9 +277,23 @@ PYBIND11_MODULE(caset, m) {
       .def("flip", &CDT::flip)
       .def("shift", &CDT::shift)
       .def("ishift", &CDT::ishift)
-      .def("sweep", &CDT::sweep)
-      .def("tune", &CDT::tune)
-      .def("thermalize", &CDT::thermalize)
+      .def("sweep", [](CDT &self, int n_sweeps, py::object progress) {
+          int total = 0;
+          for (int i = 0; i < n_sweeps; i++) {
+              int accepted;
+              {
+                  py::gil_scoped_release release;
+                  accepted = self.sweep();
+              }
+              total += accepted;
+              if (!progress.is_none()) {
+                  progress(i + 1, n_sweeps);
+              }
+          }
+          return total;
+      }, py::arg("n_sweeps") = 1, py::arg("progress") = py::none())
+      .def("tune", &CDT::tune, py::call_guard<py::gil_scoped_release>())
+      .def("thermalize", &CDT::thermalize, py::call_guard<py::gil_scoped_release>())
       .def("computeAction", &CDT::computeAction)
       .def("getVolumeProfile", &CDT::getVolumeProfile)
       .def("getAcceptanceRates", &CDT::getAcceptanceRates)

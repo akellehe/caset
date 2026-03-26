@@ -29,9 +29,23 @@ Parameters scanned:
   Delta in [0.0, 1.0]
 
 Estimated runtime: ~5-20 minutes depending on grid resolution.
+
+Parallelization
+---------------
+Each (k0, Delta) grid point is a short, self-contained CDT run:
+build a spacetime, perform n_sweeps sweeps, classify the resulting
+volume profile.  No grid point reads or writes state used by any
+other, so all points can execute concurrently in threads (--workers).
+
+The GIL is released inside the C++ sweep() call, giving threads real
+CPU parallelism without forking processes or duplicating memory.
+With a 10x10 grid (100 points) and 8 threads, up to 8 grid points
+are evaluated simultaneously.
 """
 import argparse
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -81,8 +95,11 @@ def classify_phase(profile):
         return 1  # Phase C: de Sitter (extended, smooth)
 
 
-def run_point(k0, delta, n_simplices, n_sweeps):
-    """Run CDT at a single (k0, Delta) point and return the phase."""
+def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
+    """Run CDT at a single (k0, Delta) point and return the phase.
+
+    GIL is released during sweep(), so threads get real C++ parallelism.
+    """
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -92,8 +109,7 @@ def run_point(k0, delta, n_simplices, n_sweeps):
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, target)
 
-    for _ in range(n_sweeps):
-        cdt.sweep()
+    cdt.sweep(n_sweeps, progress=sweep_cb)
 
     profile = cdt.getVolumeProfile()
     return classify_phase(profile), profile
@@ -112,8 +128,13 @@ def main():
     parser.add_argument("--delta-max", type=float, default=1.0)
     parser.add_argument("--grid-size", type=int, default=10,
                         help="Number of grid points per axis")
+    parser.add_argument("--workers", type=int,
+                        default=min(os.cpu_count() or 1, 8),
+                        help="Parallel worker threads (default: min(cpus, 8))")
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
+
+    n_workers = max(1, args.workers)
 
     print("=" * 64)
     print("  CDT Phase Diagram Scan")
@@ -122,6 +143,7 @@ def main():
           f"N4={args.n_simplices}, sweeps={args.n_sweeps}")
     print(f"  k0 in [{args.k0_min}, {args.k0_max}], "
           f"Delta in [{args.delta_min}, {args.delta_max}]")
+    print(f"  Workers: {n_workers} (threads, shared memory)")
     print("=" * 64)
 
     k0_values = np.linspace(args.k0_min, args.k0_max, args.grid_size)
@@ -132,19 +154,37 @@ def main():
     phase_counts = {"A": 0, "B": 0, "C": 0}
 
     t0 = time.time()
-    pbar = tqdm(total=total_points, desc="Scanning phase space",
-                unit="pt")
-    for i, delta in enumerate(delta_values):
-        for j, k0 in enumerate(k0_values):
-            phase, profile = run_point(
-                k0, delta, args.n_simplices, args.n_sweeps)
+    total_sweeps = total_points * args.n_sweeps
+
+    pt_bar = tqdm(total=total_points, desc="Grid points", unit="pt",
+                  position=0)
+    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
+                     position=1, leave=False)
+    sweep_cb = lambda i, n: sweep_bar.update(1)
+
+    # Each grid point is independent — threads share memory, GIL released
+    # during sweep() so all threads compute in parallel.
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {}
+        for i, delta in enumerate(delta_values):
+            for j, k0 in enumerate(k0_values):
+                f = pool.submit(run_point, k0, delta,
+                                args.n_simplices, args.n_sweeps,
+                                sweep_cb)
+                futures[f] = (i, j, k0, delta)
+
+        for future in as_completed(futures):
+            i, j, k0, delta = futures[future]
+            phase, profile = future.result()
             phase_map[i, j] = phase
             label = ["B", "C", "A"][phase]
             phase_counts[label] += 1
-            pbar.set_postfix_str(
+            pt_bar.set_postfix_str(
                 f"k0={k0:.1f} D={delta:.2f} -> {label}")
-            pbar.update(1)
-    pbar.close()
+            pt_bar.update(1)
+
+    sweep_bar.close()
+    pt_bar.close()
 
     elapsed = time.time() - t0
     print(f"\nScan complete: {elapsed:.1f}s "

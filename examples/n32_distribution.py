@@ -17,15 +17,57 @@ correlated in the de Sitter phase.
 
 Parameters: k0 = 2.2, Delta = 0.6.
 Estimated runtime: ~1-3 minutes.
+
+Parallelization
+---------------
+The script runs one simulation per target volume (e.g. N41 = 5k, 10k,
+20k).  Each target volume builds its own spacetime with independent
+coupling constants and topology — there is no shared state — so all
+volumes execute concurrently in threads (--workers).
+
+The GIL is released inside the C++ sweep() call, giving threads real
+CPU parallelism without forking processes or duplicating memory.
 """
 import argparse
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 import caset
+
+
+def _volume_worker(target_n41, n_therm, n_meas, meas_interval,
+                   sweep_cb=None):
+    """Run one target-volume simulation: build, thermalize, collect N32/N41.
+
+    Each volume is a fully independent simulation.  The GIL is released
+    during sweep(), so multiple threads run in parallel.
+    """
+    n_build = target_n41 * 2
+    sig = caset.Signature(4, caset.Lorentzian)
+    metric = caset.Metric(True, sig)
+    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                         caset.Toroid())
+    st.build(n_build)
+    target = st.getSimplexCount()
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+
+    cdt.sweep(n_therm, progress=sweep_cb)
+
+    n32_samples = []
+    n41_samples = []
+    for _ in range(n_meas):
+        cdt.sweep(meas_interval, progress=sweep_cb)
+        n32_samples.append(st.getN32())
+        n41_samples.append(st.getN41())
+
+    return (target_n41,
+            np.array(n32_samples, dtype=float),
+            np.array(n41_samples, dtype=float))
 
 
 def main():
@@ -38,6 +80,9 @@ def main():
     parser.add_argument("--target-volumes", type=int, nargs="+",
                         default=None,
                         help="Target N41 values (default: 5000 10000 20000)")
+    parser.add_argument("--workers", type=int,
+                        default=min(os.cpu_count() or 1, 8),
+                        help="Parallel worker threads (default: min(cpus, 8))")
     parser.add_argument("--save", type=str, default=None)
     args = parser.parse_args()
 
@@ -45,63 +90,60 @@ def main():
     # Paper (Fig 2) uses N̄₄ = 40k, 80k, 160k.  We use smaller but
     # still large volumes to keep runtime under ~10 minutes.
     target_n41_values = args.target_volumes or [5000, 10000, 20000]
+    n_workers = max(1, args.workers)
 
     print("=" * 64)
     print("  N32 Distribution at Fixed N41")
     print("  Reproduces Fig 2, Ambjorn, Jurkiewicz, Loll (2005)")
     print("  Parameters: k0=2.2, Delta=0.6")
     print(f"  Target volumes: {target_n41_values}")
+    print(f"  Workers: {n_workers} (threads, shared memory)")
     print("=" * 64)
     colors = ["black", "red", "green", "blue"]
 
     fig, ax = plt.subplots(figsize=(10, 7))
     t_total = time.time()
 
-    for idx, target_n41 in enumerate(target_n41_values):
-        # Build with roughly 2x target since N41 ~ half of total
-        n_build = target_n41 * 2
-        print(f"\n--- Volume {idx+1}/{len(target_n41_values)}: "
-              f"target N41 ~ {target_n41:,} (build={n_build:,}) ---")
+    # Each target volume is independent — run all in parallel.
+    n_vols = len(target_n41_values)
+    sweeps_per_vol = args.n_therm + args.n_meas * args.meas_interval
+    total_sweeps = n_vols * sweeps_per_vol
 
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                             caset.Toroid())
-        t0 = time.time()
-        st.build(n_build)
-        print(f"  Built triangulation: {st.getSimplexCount():,} simplices "
-              f"({time.time()-t0:.1f}s)")
+    vol_bar = tqdm(total=n_vols, desc="Volumes", unit="vol", position=0)
+    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
+                     position=1, leave=False)
+    sweep_cb = lambda i, n: sweep_bar.update(1)
 
-        target = st.getSimplexCount()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    results = {}
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {
+            pool.submit(_volume_worker, tv, args.n_therm,
+                        args.n_meas, args.meas_interval, sweep_cb): tv
+            for tv in target_n41_values
+        }
+        for f in as_completed(futures):
+            target_n41, n32_arr, n41_arr = f.result()
+            results[target_n41] = (n32_arr, n41_arr)
+            vol_bar.set_postfix_str(f"N41~{target_n41:,}")
+            vol_bar.update(1)
 
-        # Thermalize
-        for _ in tqdm(range(args.n_therm), desc="  Thermalizing",
-                      unit="sweep", leave=False):
-            cdt.sweep()
+    sweep_bar.close()
+    vol_bar.close()
 
-        # Collect N32 samples
-        n32_samples = []
-        n41_samples = []
-        total_sweeps = args.n_meas * args.meas_interval
-        pbar = tqdm(total=total_sweeps, desc="  Measuring",
-                    unit="sweep", leave=False)
-        for _ in range(args.n_meas):
-            for _ in range(args.meas_interval):
-                cdt.sweep()
-                pbar.update(1)
-            n32_samples.append(st.getN32())
-            n41_samples.append(st.getN41())
-        pbar.close()
-
-        n32_arr = np.array(n32_samples, dtype=float)
-        n41_arr = np.array(n41_samples, dtype=float)
-
-        print(f"  N41: mean={n41_arr.mean():,.0f}  std={n41_arr.std():,.0f}  "
+    for tv in target_n41_values:
+        n32_arr, n41_arr = results[tv]
+        print(f"  N41~{tv:,}: "
+              f"mean={n41_arr.mean():,.0f}  std={n41_arr.std():,.0f}  "
               f"range=[{n41_arr.min():,.0f}, {n41_arr.max():,.0f}]")
-        print(f"  N32: mean={n32_arr.mean():,.0f}  std={n32_arr.std():,.0f}  "
+        print(f"  N32: mean={n32_arr.mean():,.0f}  "
+              f"std={n32_arr.std():,.0f}  "
               f"range=[{n32_arr.min():,.0f}, {n32_arr.max():,.0f}]")
-        print(f"  N32/N41 ratio: {n32_arr.mean()/max(n41_arr.mean(),1):.3f}")
+        print(f"  N32/N41 ratio: "
+              f"{n32_arr.mean()/max(n41_arr.mean(),1):.3f}")
+
+    # Plot in order of target volume
+    for idx, target_n41 in enumerate(target_n41_values):
+        n32_arr, n41_arr = results[target_n41]
 
         # Plot histogram (normalized)
         if len(n32_arr) > 10 and n32_arr.std() > 0:
