@@ -80,11 +80,11 @@ class Edge : public std::enable_shared_from_this<Edge> {
     /// the end and the end, the beginning. Edges are bidirectional, so it doesn't really matter if you consider them
     /// directed or undirected. If you want to use a directed edge; in your code you should just specify that you only
     /// traverse `Vertex::outEdges` and avoid `Vertex::inEdges` when you traverse around.
-    [[nodiscard]] VertexPtr getSource() const noexcept;
+    [[nodiscard]] const VertexPtr &getSource() const noexcept;
 
     /// `getTarget` is `getSource`'s better half. All good things come to an end, with a wonderful journey left to
     /// memory. But seriously, though, `getTarget` gives the vertex on one end, and `getSource` gives the other.
-    [[nodiscard]] VertexPtr getTarget() const noexcept;
+    [[nodiscard]] const VertexPtr &getTarget() const noexcept;
 
     /// We work in squared edge lengths because imaginary numbers don't play so nicely with floating point arithmetic.
     /// To be less cryptic: timelike edges have imaginary length. Their squared edge length is negative. Something I've

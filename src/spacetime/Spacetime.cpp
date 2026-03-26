@@ -70,13 +70,13 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   const VertexPtrs &vertices,
   const Edges &edges
 ) {
-  std::vector<IdType> ids{};
-  ids.reserve(vertices.size());
+  // Compute hash directly without allocating a temporary Fingerprint.
+  // Uses heterogeneous lookup (is_transparent) on the SimplexSet.
+  std::uint64_t hash = 0;
   for (const auto &v : vertices) {
-    ids.push_back(v->getId());
+    hash ^= Fingerprint::mix64(v->getId());
   }
-  Fingerprint fp(ids);
-  const auto found = simplices.find(fp.fingerprint());
+  const auto found = simplices.find(hash);
   if (found == simplices.end()) {
 #ifdef CASET_ASSERTIONS
     std::unordered_set<std::uint64_t> seen{};
@@ -93,7 +93,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
              " with fingerprint ",
              std::to_string(s->fingerprint.fingerprint()),
              " vs ",
-             std::to_string(fp.fingerprint()));
+             std::to_string(hash));
         throw std::runtime_error("Duplicate simplex: " + s->toString());
       }
       seen.insert(s->fingerprint.fingerprint());
@@ -112,13 +112,8 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   const VertexPtrs &vertices
 ) {
-  std::vector<IdType> ids{};
-  ids.reserve(vertices.size());
-  for (const auto &v : vertices) {
-    ids.push_back(v->getId());
-  }
   std::vector<EdgePtr> edges_{};
-  for (int i=0; i<vertices.size()-1; i++) {  // Cone!
+  for (std::size_t i=0; i<vertices.size()-1; i++) {  // Cone!
     for (int j=i+1; j<vertices.size(); j++) {
       EdgePtr edge = createEdge(vertices[i], vertices[j], alpha);
       edges_.push_back(edge);
@@ -392,6 +387,7 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
 #endif
   const auto &[it, inserted] = simplices.emplace(simplex);
   if (inserted) {
+    simplexVecIndex[simplex->fingerprint.fingerprint()] = simplicesVec.size();
     simplicesVec.push_back(simplex);
     updateOrientationCounters(simplex, +1);
   }
@@ -416,13 +412,19 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
   }
   updateOrientationCounters(simplex, -1);
   simplices.erase(simplex);
-  // Remove from parallel vector (swap-and-pop for O(1))
-  for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
-    if (simplicesVec[i]->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
-      simplicesVec[i] = simplicesVec.back();
-      simplicesVec.pop_back();
-      break;
+  // Remove from parallel vector via index map (O(1) swap-and-pop)
+  auto fp = simplex->fingerprint.fingerprint();
+  auto idxIt = simplexVecIndex.find(fp);
+  if (idxIt != simplexVecIndex.end()) {
+    std::size_t idx = idxIt->second;
+    if (idx < simplicesVec.size() - 1) {
+      // Swap with last element and update the swapped element's index
+      auto backFp = simplicesVec.back()->fingerprint.fingerprint();
+      simplicesVec[idx] = simplicesVec.back();
+      simplexVecIndex[backFp] = idx;
     }
+    simplicesVec.pop_back();
+    simplexVecIndex.erase(idxIt);
   }
 }
 

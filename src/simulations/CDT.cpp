@@ -79,7 +79,7 @@ bool CDT::add() {
 
   // Pick a random d-simplex
   SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->getVertices().size()) != dPlus1) return false;
+  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
 
   // Find a causally available facet (non-timelike, < 2 cofaces)
   const auto &facets = sigma->getFacets();
@@ -136,7 +136,7 @@ bool CDT::remove() {
   int dPlus1 = d + 1;
 
   SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->getVertices().size()) != dPlus1) return false;
+  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
 
   // Check that sigma has a facet with only 1 coface (this simplex itself)
   // This means removing sigma "exposes" that facet as external.
@@ -148,11 +148,11 @@ bool CDT::remove() {
 
   for (const auto &f : facets) {
     // This facet should only have sigma as coface
-    SimplexPtrSet topCofaces;
+    int topCofaceCount = 0;
     for (const auto &cf : f->getCofaces()) {
-      if (static_cast<int>(cf->getVertices().size()) == dPlus1) topCofaces.insert(cf);
+      if (static_cast<int>(cf->size()) == dPlus1) topCofaceCount++;
     }
-    if (topCofaces.size() != 1) continue;
+    if (topCofaceCount != 1) continue;
 
     // Find the vertex in sigma that's NOT in this facet
     VertexPtr candidate = nullptr;
@@ -164,7 +164,7 @@ bool CDT::remove() {
     // The vertex should belong to only this d-simplex (so removing is clean)
     int dSimplexCount = 0;
     for (const auto &s : candidate->getSimplices()) {
-      if (static_cast<int>(s->getVertices().size()) == dPlus1) dSimplexCount++;
+      if (static_cast<int>(s->size()) == dPlus1) dSimplexCount++;
     }
     if (dSimplexCount != 1) continue;
 
@@ -212,7 +212,7 @@ bool CDT::flip() {
   int dPlus1 = d + 1;
 
   SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->getVertices().size()) != dPlus1) return false;
+  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
 
   // Get facets and pick a random one
   const auto &facets = sigma->getFacets();
@@ -222,20 +222,26 @@ bool CDT::flip() {
   SimplexPtr facet = facets[facetDist(rng)];
 
   // Need exactly 2 d-simplex cofaces
-  SimplexPtrSet topCofaces;
+  Simplices topCofaces;
   for (const auto &cf : facet->getCofaces()) {
-    if (static_cast<int>(cf->getVertices().size()) == dPlus1) topCofaces.insert(cf);
+    if (static_cast<int>(cf->size()) == dPlus1) topCofaces.push_back(cf);
   }
   if (topCofaces.size() != 2) return false;
 
-  auto it = topCofaces.begin();
-  SimplexPtr s1 = *it++;
-  SimplexPtr s2 = *it;
+  SimplexPtr s1 = topCofaces[0];
+  SimplexPtr s2 = topCofaces[1];
 
-  // Collect vertices: should be d+2 total (d shared + 2 unique)
-  VertexPtrSet allVerts;
-  for (const auto &v : s1->getVertices()) allVerts.insert(v);
-  for (const auto &v : s2->getVertices()) allVerts.insert(v);
+  // Collect unique vertices: should be d+2 total (d shared + 2 unique)
+  VertexPtrs allVerts;
+  allVerts.reserve(d + 2);
+  for (const auto &v : s1->getVertices()) allVerts.push_back(v);
+  for (const auto &v : s2->getVertices()) {
+    bool dup = false;
+    for (const auto &av : allVerts) {
+      if (av->getId() == v->getId()) { dup = true; break; }
+    }
+    if (!dup) allVerts.push_back(v);
+  }
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
   VertexPtrs shared, unique;
@@ -300,7 +306,7 @@ bool CDT::shift() {
   int dPlus1 = d + 1;
 
   SimplexPtr sigma = spacetime->getRandomSimplex();
-  if (!sigma || static_cast<int>(sigma->getVertices().size()) != dPlus1) return false;
+  if (!sigma || static_cast<int>(sigma->size()) != dPlus1) return false;
 
   // Pick 3 random vertices from sigma to form a candidate (d-2)-face
   const auto &sigmaVertsRef = sigma->getVertices();
@@ -312,17 +318,24 @@ bool CDT::shift() {
   // Find all d-simplices containing all 3 vertices
   std::vector<SimplexPtr> sharing;
   for (const auto &s : triVerts[0]->getSimplices()) {
-    if (static_cast<int>(s->getVertices().size()) != dPlus1) continue;
+    if (static_cast<int>(s->size()) != dPlus1) continue;
     if (s->hasVertex(triVerts[1]) && s->hasVertex(triVerts[2])) {
       sharing.push_back(s);
     }
   }
   if (sharing.size() != 3) return false;
 
-  // Collect all vertices (should be d+2)
-  VertexPtrSet allVerts;
+  // Collect unique vertices (should be d+2)
+  VertexPtrs allVerts;
+  allVerts.reserve(d + 2);
   for (const auto &s : sharing) {
-    for (const auto &v : s->getVertices()) allVerts.insert(v);
+    for (const auto &v : s->getVertices()) {
+      bool dup = false;
+      for (const auto &av : allVerts) {
+        if (av->getId() == v->getId()) { dup = true; break; }
+      }
+      if (!dup) allVerts.push_back(v);
+    }
   }
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 

@@ -108,7 +108,7 @@ Simplex::Simplex(
   const VertexPtrs &vertices_,
   Edges edges_
 ) : spacetime(spacetime_), orientation(SimplexOrientation::orientationOf(vertices_)), vertices(vertices_),
-    edges(edges_.begin(), edges_.end()),
+    edges(std::move(edges_)),
     fingerprint({0}) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
@@ -120,7 +120,7 @@ Simplex::Simplex(
   const VertexPtrs &vertices_,
   Edges edges_,
   const SimplexOrientation &orientation_
-) : spacetime(spacetime_), orientation(orientation_), vertices(vertices_), edges(edges_.begin(), edges_.end()),
+) : spacetime(spacetime_), orientation(orientation_), vertices(vertices_), edges(std::move(edges_)),
     fingerprint() {
   for (const auto &v : vertices_) {
     fingerprint.addId(v->getId());
@@ -189,13 +189,7 @@ void Simplex::initialize(const SimplexPtr &simplex) {
   }
 }
 
-double Simplex::getTi() const noexcept {
-  return ti;
-}
-
-double Simplex::getTf() const noexcept {
-  return tf;
-}
+// getTi(), getTf() inlined in Simplex.h
 
 void Simplex::registerToVertices(const SimplexPtr &simplex) {
   for (const auto &owner : simplex->getVertices()) {
@@ -235,22 +229,11 @@ std::string Simplex::toString() const noexcept {
 }
 #endif
 
-[[nodiscard]] SimplexOrientation Simplex::getOrientation() const noexcept {
-  return orientation;
-}
+// getOrientation() inlined in Simplex.h
 
 [[nodiscard]] const VertexPtrs &Simplex::getVertices() const noexcept { return vertices; }
 
-[[nodiscard]] bool Simplex::isTimelike() const {
-  CLOG(INFO_LEVEL, "===============================", toString(), "========================================");
-  CLOG(INFO_LEVEL, "ti: ", std::to_string(ti));
-  CLOG(INFO_LEVEL, "tf: ", std::to_string(tf));
-  for (const auto &v : vertices) {
-    CLOG(INFO_LEVEL, "Checking vertex ", v->toString(), " with time ", std::to_string(v->getTime()));
-  }
-  CLOG(INFO_LEVEL, "---------------------------------------------------------------------------------------------------");
-  return ti == tf;
-}
+// isTimelike() inlined in Simplex.h (uses cached _isTimelike)
 
 [[nodiscard]] std::size_t Simplex::computeNumberOfEdges(std::size_t k) {
   if (k == 4) return 6;
@@ -299,54 +282,35 @@ void Simplex::addCoface(const SimplexPtr &coface) {
     CLOG(DEBUG_LEVEL, coface->toString(), " is not a coface of ", toString());
     throw std::runtime_error("You attempted to add a coface to a facet for which it is not a coface!");
   }
-  if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(DEBUG_LEVEL, "Corruption detected");;
-    std::abort();
-  }
-  if (SimplexCorruptionDetector::wouldDuplicate(cofaces, coface)) {
+  if (hasCoface(coface)) {
     CLOG(DEBUG_LEVEL, "You attempted to add a duplicate coface: ", coface->toString(), " to simplex ", toString());
-    CLOG(DEBUG_LEVEL, "All cofaces: ");
-    for (const auto &c : cofaces) {
-      CLOG(DEBUG_LEVEL, "    - ", c->toString());
-    }
     std::abort();
   }
-  CLOG(INFO_LEVEL, "Adding ", coface->toString(), " as coface to ", toString());
-  const auto &[it, inserted] = ownershipManager.insert(coface->toString(), toString() + "::cofaces", cofaces, coface);
-  if ((*it)->toString() != coface->toString()) {
-    CLOG(DEBUG_LEVEL, "Iterator ", (*it)->toString(), " did not match coface ", coface->toString());
-    std::abort();
-  }
-  if (coface == nullptr || coface.get() == nullptr) {
-    CLOG(DEBUG_LEVEL, "Coface was null");
-    std::abort();
-  }
-  if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(DEBUG_LEVEL, "Corruption detected");;
-    std::abort();
-  }
-  if (inserted) {
-    CLOG(DEBUG_LEVEL, "Added ", coface->toString(), " to ", toString(), "!");
-  } else {
-    CLOG(DEBUG_LEVEL, "Failed to add ", coface->toString(), " to ", toString(), "!");
-  }
-#else
-  cofaces.insert(coface);
 #endif
+  // Cofaces are 0-2 elements; linear duplicate check is faster than hash table
+  if (!hasCoface(coface)) {
+    cofaces.push_back(coface);
+  }
 }
 
 void Simplex::removeCoface(const SimplexPtr &coface) {
-  cofaces.erase(coface);
+  auto fp = coface->fingerprint.fingerprint();
+  for (auto it = cofaces.begin(); it != cofaces.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      // Swap-and-pop for O(1) removal
+      *it = cofaces.back();
+      cofaces.pop_back();
+      return;
+    }
+  }
 }
 
 [[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &coface) const {
-#ifdef CASET_ASSERTIONS
-  if (SimplexCorruptionDetector::isCorrupted(cofaces)) {
-    CLOG(DEBUG_LEVEL, "Corruption detected!");
-    std::abort();
+  auto fp = coface->fingerprint.fingerprint();
+  for (const auto &c : cofaces) {
+    if (c->fingerprint.fingerprint() == fp) return true;
   }
-#endif
-  return cofaces.contains(coface);
+  return false;
 }
 
 [[nodiscard]] bool Simplex::hasVertex(const VertexPtr &vertex) const {
@@ -386,7 +350,7 @@ void Simplex::validate() const {
 #endif
 }
 
-[[nodiscard]] const EdgePtrSet &Simplex::getEdges() const {
+[[nodiscard]] const Edges &Simplex::getEdges() const {
   return edges;
 }
 
@@ -418,7 +382,7 @@ void Simplex::validate() const {
   return false;
 }
 
-[[nodiscard]] const SimplexPtrSet &
+[[nodiscard]] const Simplices &
 Simplex::getCofaces() const noexcept {
   return cofaces;
 }
@@ -467,9 +431,7 @@ std::size_t Simplex::maxKPlusOneCofaces() const {
   return getNumberOfFaces(getOrientation().getK());
 }
 
-std::uint64_t Simplex::size() const noexcept {
-  return vertices.size();
-}
+// size() inlined in Simplex.h
 
 bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
   // TODO: Probably make this cascade, but we should just go to the Vertex for things to cascade to.
@@ -533,12 +495,24 @@ VertexIdMap Simplex::getVertexIdLookup() const noexcept {
 }
 
 bool Simplex::removeEdge(const EdgePtr &edge) {
-  return edges.erase(edge) > 0;
+  auto fp = edge->fingerprint.fingerprint();
+  for (auto it = edges.begin(); it != edges.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      *it = edges.back();
+      edges.pop_back();
+      return true;
+    }
+  }
+  return false;
 }
 
 bool Simplex::addEdge(const EdgePtr &edge) {
-  const auto [it, inserted] = edges.emplace(edge);
-  return inserted;
+  auto fp = edge->fingerprint.fingerprint();
+  for (const auto &e : edges) {
+    if (e->fingerprint.fingerprint() == fp) return false;
+  }
+  edges.push_back(edge);
+  return true;
 }
 
 bool Simplex::hasStoredFacet(const SimplexPtr &facet) {

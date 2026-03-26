@@ -340,6 +340,7 @@ class Spacetime {
 
     SimplexSet simplices{};
     std::vector<SimplexPtr> simplicesVec{}; // parallel vector for O(1) random access
+    std::unordered_map<std::uint64_t, std::size_t> simplexVecIndex{}; // fingerprint → index in simplicesVec
     std::size_t n41Count = 0; // (4,1) + (1,4) simplices
     std::size_t n32Count = 0; // (3,2) + (2,3) simplices
     std::mt19937 rng{std::random_device{}()};

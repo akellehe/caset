@@ -101,9 +101,11 @@ using IdType = std::uint64_t;
 /// - 3-simplex (tetrahedron): 4 IDs
 /// - k-simplex: k+1 IDs
 ///
-/// The value 64 supports up to 63-simplices, far exceeding practical needs.
+/// The value 8 supports up to 7-simplices (a 4-simplex uses 5 slots).
+/// Reduced from 64 to save ~448 bytes per Fingerprint instance, which
+/// at scale (500k objects) translates to ~214 MB of eliminated cache waste.
 ///
-inline constexpr std::size_t kMax = 64;
+inline constexpr std::size_t kMax = 8;
 
 ///
 /// \brief Fixed-size array for storing IDs

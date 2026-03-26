@@ -63,7 +63,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     explicit Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_);
     Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientation &orientation_);
 
-    std::uint64_t size() const noexcept;
+    std::uint64_t size() const noexcept { return vertices.size(); }
 
     /// The initialize step is necessary because the canonical owner of the Simplex object is the Spacetime, and ideally
     /// that canonical owner is the only one to permanently hang onto a std::shared_ptr. So when we initialize with this
@@ -86,15 +86,15 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// Each simplex has an associated _orientation_ in the case you're preserving causality with your work. You can
     /// find specifics of the SimplexOrientation abstractly and concretely/computationally in the documentation for the
     /// SimplexOrientation
-    [[nodiscard]] SimplexOrientation getOrientation() const noexcept;
+    [[nodiscard]] const SimplexOrientation &getOrientation() const noexcept { return orientation; }
 
     /// The earliest time assigned to a vertex in this Simplex.
     /// @returns ti for the Simplex.
-    double getTi() const noexcept;
+    double getTi() const noexcept { return ti; }
 
     /// The latest time assigned to a vertex in this Simplex.
     /// @returns tf for the Simplex.
-    double getTf() const noexcept;
+    double getTf() const noexcept { return tf; }
 
     // ==================== Vertex Queries ====================
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
@@ -110,7 +110,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     // ==================== Edge Queries ====================
     /// @returns Edges in traversal order (the order of input vertices).
-    [[nodiscard]] const EdgePtrSet &getEdges() const;
+    [[nodiscard]] const Edges &getEdges() const;
     [[nodiscard]] std::size_t getNumberOfEdges() const;
 
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
@@ -192,7 +192,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplices that share this face.
-    [[nodiscard]] const SimplexPtrSet &getCofaces() const noexcept;
+    [[nodiscard]] const Simplices &getCofaces() const noexcept;
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
@@ -212,7 +212,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     std::size_t maxKPlusOneCofaces() const;
 
     // ==================== State Queries ====================
-    [[nodiscard]] bool isTimelike() const;
+    [[nodiscard]] bool isTimelike() const noexcept { return _isTimelike; }
 
     /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
     bool isCausallyAvailable() const noexcept;
@@ -327,10 +327,10 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     VertexIndexToId vertexIndexToId{};
     VertexPtrs vertices{};
 
-    EdgePtrSet edges{};
+    Edges edges{};
 
     Simplices facets{};
-    SimplexPtrSet cofaces{};
+    Simplices cofaces{};
 
     bool _isTimelike;
     double ti{std::numeric_limits<double>::max()};

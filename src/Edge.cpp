@@ -48,11 +48,11 @@ class Simplex;
       squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
     }
 
-    [[nodiscard]] VertexPtr Edge::getSource() const noexcept {
+    [[nodiscard]] const VertexPtr &Edge::getSource() const noexcept {
       return source;
     }
 
-    [[nodiscard]] VertexPtr Edge::getTarget() const noexcept {
+    [[nodiscard]] const VertexPtr &Edge::getTarget() const noexcept {
       return target;
     }
 
