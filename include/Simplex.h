@@ -98,7 +98,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     // ==================== Vertex Queries ====================
     /// @return A list of Vertex (es) in traversal order. You can iterate these to walk the Face.
-    [[nodiscard]] VertexPtrs getVertices() const noexcept;
+    [[nodiscard]] const VertexPtrs &getVertices() const noexcept;
 
     /// This method is self-explanatory. O(1) lookups for who has what.
     [[nodiscard]] bool hasVertex(const VertexPtr &vertex) const;
@@ -110,7 +110,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     // ==================== Edge Queries ====================
     /// @returns Edges in traversal order (the order of input vertices).
-    [[nodiscard]] EdgePtrSet getEdges() const;
+    [[nodiscard]] const EdgePtrSet &getEdges() const;
     [[nodiscard]] std::size_t getNumberOfEdges() const;
 
     /// This method computes Edge (s) of the Simplex in traversal order. Note that the edges are effectively undirected
@@ -192,7 +192,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f]
     ///
     /// @return The set of k-simplices that share this face.
-    [[nodiscard]] SimplexPtrSet getCofaces() const noexcept;
+    [[nodiscard]] const SimplexPtrSet &getCofaces() const noexcept;
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
     /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and

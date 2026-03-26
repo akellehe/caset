@@ -256,7 +256,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// A vertex belongs to a simplex if it's one of the simplex's vertices.
         /// This is the inverse relationship: vertex → simplices containing it.
         ///
-        SimplexPtrSet getSimplices() const noexcept;
+        const SimplexPtrSet &getSimplices() const noexcept;
 
         ///
         /// \brief Register a simplex as containing this vertex

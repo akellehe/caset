@@ -239,7 +239,7 @@ std::string Simplex::toString() const noexcept {
   return orientation;
 }
 
-[[nodiscard]] VertexPtrs Simplex::getVertices() const noexcept { return vertices; };
+[[nodiscard]] const VertexPtrs &Simplex::getVertices() const noexcept { return vertices; }
 
 [[nodiscard]] bool Simplex::isTimelike() const {
   CLOG(INFO_LEVEL, "===============================", toString(), "========================================");
@@ -346,11 +346,6 @@ void Simplex::removeCoface(const SimplexPtr &coface) {
     std::abort();
   }
 #endif
-  for (const auto &c : cofaces) {
-    if (c == coface) return true;
-  }
-  return false;
-  // Unsafe for corrupted tables:
   return cofaces.contains(coface);
 }
 
@@ -391,7 +386,7 @@ void Simplex::validate() const {
 #endif
 }
 
-[[nodiscard]] EdgePtrSet Simplex::getEdges() const {
+[[nodiscard]] const EdgePtrSet &Simplex::getEdges() const {
   return edges;
 }
 
@@ -412,11 +407,18 @@ void Simplex::validate() const {
 }
 
 [[nodiscard]] bool Simplex::hasEdge(const VertexPtr &vertexA, const VertexPtr &vertexB) const {
-  const EdgePtr edge = std::make_shared<Edge>(vertexA, vertexB);
-  return hasEdge(edge);
+  if (!hasVertex(vertexA) || !hasVertex(vertexB)) return false;
+  auto aId = vertexA->getId();
+  auto bId = vertexB->getId();
+  for (const auto &e : edges) {
+    if ((e->getSource()->getId() == aId && e->getTarget()->getId() == bId) ||
+        (e->getSource()->getId() == bId && e->getTarget()->getId() == aId))
+      return true;
+  }
+  return false;
 }
 
-[[nodiscard]] SimplexPtrSet
+[[nodiscard]] const SimplexPtrSet &
 Simplex::getCofaces() const noexcept {
   return cofaces;
 }
@@ -446,19 +448,19 @@ std::uint64_t Simplex::hash() const noexcept {
 }
 
 bool Simplex::isCausallyAvailable() const noexcept {
-  return getCofaces().size() < 2;
+  return cofaces.size() < 2;
 }
 
 bool Simplex::hasCausallyAvailableFacet() {
   for (const auto &face : getFacets()) {
     if (face->isTimelike()) continue;
-    if (face->getCofaces().size() < 2) return true;
+    if (face->isCausallyAvailable()) return true;
   }
   return false;
 }
 
 bool Simplex::isInternal() const noexcept {
-  return getCofaces().size() == 2;
+  return cofaces.size() == 2;
 }
 
 std::size_t Simplex::maxKPlusOneCofaces() const {

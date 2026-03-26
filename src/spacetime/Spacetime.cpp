@@ -481,7 +481,7 @@ SimplexPtr Spacetime::getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf) {
 
 void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) {
   auto d = metric->getSignature()->getDimensions();
-  auto nVerts = simplex->getVertices().size();
+  auto nVerts = simplex->size();
   // Only count top-dimensional simplices (d-simplices have d+1 vertices)
   if (nVerts != static_cast<std::size_t>(d + 1)) return;
   auto [ti, tf] = simplex->getOrientation().numeric();

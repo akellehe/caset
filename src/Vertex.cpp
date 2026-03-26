@@ -219,7 +219,7 @@ bool Vertex::removeSimplex(const SimplexPtr &simplex) {
   return simplices.erase(simplex) > 0;
 }
 
-SimplexPtrSet
+const SimplexPtrSet &
 Vertex::getSimplices() const noexcept {
   return simplices;
 }

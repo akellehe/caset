@@ -33,8 +33,7 @@
 #include <string>
 
 inline double random_uniform(double min = -1.0, double max = 1.0) {
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
+  thread_local std::mt19937 gen{std::random_device{}()};
   std::uniform_real_distribution<double> dist(min, max);
   return dist(gen);
 }

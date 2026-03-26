@@ -188,16 +188,16 @@ bool CDT::remove() {
   spacetime->removeSimplex(sigma);
 
   // Remove edges connecting uniqueVert to the facet vertices
-  auto edges = uniqueVert->getEdges();
-  for (const auto &e : edges) {
+  // Copy needed: we're modifying the edge sets during iteration
+  EdgePtrSet edgesToRemove = uniqueVert->getEdges();
+  for (const auto &e : edgesToRemove) {
     VertexPtr other = (e->getSource()->getId() == uniqueVert->getId())
                       ? e->getTarget() : e->getSource();
     other->removeOutEdge(e);
     other->removeInEdge(e);
     spacetime->getEdgeList()->remove(e);
   }
-  uniqueVert->getEdges(); // clear
-  spacetime->removeIfIsolated(uniqueVert);
+  (void)spacetime->removeIfIsolated(uniqueVert);
 
   removeAccepted++;
   return true;
@@ -303,8 +303,9 @@ bool CDT::shift() {
   if (!sigma || static_cast<int>(sigma->getVertices().size()) != dPlus1) return false;
 
   // Pick 3 random vertices from sigma to form a candidate (d-2)-face
-  auto sigmaVerts = sigma->getVertices();
-  if (static_cast<int>(sigmaVerts.size()) < 3) return false;
+  const auto &sigmaVertsRef = sigma->getVertices();
+  if (static_cast<int>(sigmaVertsRef.size()) < 3) return false;
+  VertexPtrs sigmaVerts(sigmaVertsRef.begin(), sigmaVertsRef.end());
   std::shuffle(sigmaVerts.begin(), sigmaVerts.end(), rng);
   VertexPtrs triVerts(sigmaVerts.begin(), sigmaVerts.begin() + 3);
 
@@ -435,10 +436,10 @@ void CDT::thermalize() {
 
 std::vector<int> CDT::getVolumeProfile() const {
   int d = getDim(spacetime);
-  int dPlus1 = d + 1;
+  std::size_t dPlus1 = static_cast<std::size_t>(d + 1);
   std::map<int, int> profile;
   for (const auto &s : spacetime->getSimplices()) {
-    if (static_cast<int>(s->getVertices().size()) != dPlus1) continue;
+    if (s->size() != dPlus1) continue;
     int tMin = static_cast<int>(s->getTi());
     profile[tMin]++;
   }

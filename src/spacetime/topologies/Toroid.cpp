@@ -50,17 +50,10 @@ void Toroid::build(Spacetime *spacetime, int nSimplices) {
       SimplexPtr &exteriorFacet = exteriorFacets.front();
       exteriorFacets.pop_front();
       if (exteriorFacet->isTimelike()) continue;
-      if (random_uniform() > 0) {
-        auto vertex = spacetime->createVertex(std::vector<double>{1.});
-        auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
-        exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
-        ++complexSize;
-      } else {
-        auto vertex = spacetime->createVertex(std::vector<double>{-1.});
-        auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
-        exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
-        ++complexSize;
-      }
+      auto vertex = spacetime->createVertex(std::vector<double>{1.});
+      auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
+      exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
+      ++complexSize;
     }
     spacetime->incrementTime();
   }
