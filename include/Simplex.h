@@ -165,6 +165,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// simplex, such that  \f$ \sigma_{k} \f$ is a coface of \f$ \sigma_{k-1} \f$.
     ///
     void addCoface(const std::shared_ptr<Simplex> &simplex);
+    void removeCoface(const std::shared_ptr<Simplex> &simplex);
     bool isCofaceTo(const SimplexPtr &simplex, bool shallow=true) const;
 
     [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;

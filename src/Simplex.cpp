@@ -83,7 +83,7 @@ const std::vector<SimplexPtr> &Simplex::getFacets() {
       }
 
       const auto &[facet, inserted] = spacetime->createSimplex(faceVertices, faceEdges); // Gets or creates!
-      if (inserted && coface != nullptr) {
+      if (coface != nullptr && !facet->hasCoface(coface)) {
         facet->addCoface(coface);
       }
       facets.push_back(facet);
@@ -333,6 +333,10 @@ void Simplex::addCoface(const SimplexPtr &coface) {
 #else
   cofaces.insert(coface);
 #endif
+}
+
+void Simplex::removeCoface(const SimplexPtr &coface) {
+  cofaces.erase(coface);
 }
 
 [[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &coface) const {

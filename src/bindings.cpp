@@ -29,6 +29,8 @@
 #include "spacetime/topologies/Topology.h"
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
+#include "simulations/CDT.h"
+#include "observables/VolumeProfile.h"
 #include "spacetime/Spacetime.h"
 #include "VertexList.h"
 #include "EdgeList.h"
@@ -182,6 +184,12 @@ PYBIND11_MODULE(caset, m) {
       .def(py::init<int, SignatureType>(), py::arg("dimensions"), py::arg("signature_type"))
       .def("getDiagonal", &Signature::getDiagonal);
 
+  py::enum_<SpacetimeType>(m, "SpacetimeType")
+      .value("CDT", SpacetimeType::CDT)
+      .value("REGGE", SpacetimeType::REGGE)
+      .value("COSET", SpacetimeType::COSET)
+      .export_values();
+
   py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime")
       .def(py::init<
              std::shared_ptr<Metric>,
@@ -235,7 +243,45 @@ PYBIND11_MODULE(caset, m) {
            py::arg("edges"))
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
-           py::arg("orientation"));
+           py::arg("orientation"))
+      .def("getSimplexCount", &Spacetime::getSimplexCount)
+      .def("getVertexCount", &Spacetime::getVertexCount)
+      .def("getN41", &Spacetime::getN41)
+      .def("getN32", &Spacetime::getN32)
+      .def("getRandomSimplex", &Spacetime::getRandomSimplex)
+      .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"));
+
+  py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation")
+      .def(py::init<std::shared_ptr<Spacetime>, double, double, double, double, std::size_t>(),
+           py::arg("spacetime"),
+           py::arg("k0"),
+           py::arg("k4"),
+           py::arg("delta"),
+           py::arg("epsilon"),
+           py::arg("targetN4"))
+      .def("add", &CDT::add)
+      .def("remove", &CDT::remove)
+      .def("flip", &CDT::flip)
+      .def("shift", &CDT::shift)
+      .def("ishift", &CDT::ishift)
+      .def("sweep", &CDT::sweep)
+      .def("tune", &CDT::tune)
+      .def("thermalize", &CDT::thermalize)
+      .def("computeAction", &CDT::computeAction)
+      .def("getVolumeProfile", &CDT::getVolumeProfile)
+      .def("getAcceptanceRates", &CDT::getAcceptanceRates)
+      .def("getSpacetime", &CDT::getSpacetime)
+      .def("getK0", &CDT::getK0)
+      .def("getK4", &CDT::getK4)
+      .def("getDelta", &CDT::getDelta);
+
+  py::class_<VolumeProfile, std::shared_ptr<VolumeProfile> >(m, "VolumeProfile")
+      .def(py::init<>())
+      .def("compute", &VolumeProfile::compute, py::arg("spacetime"))
+      .def("getProfile", &VolumeProfile::getProfile)
+      .def("getAverageProfile", &VolumeProfile::getAverageProfile)
+      .def("measure", &VolumeProfile::measure, py::arg("spacetime"))
+      .def("reset", &VolumeProfile::reset);
 
   m.doc() = "A C++ library for simulating lattice spacetime and causal sets";
 }

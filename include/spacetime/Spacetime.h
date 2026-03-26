@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <optional>
+#include <random>
 #include <ranges>
 #include <unordered_map>
 #include <unordered_set>
@@ -155,6 +156,31 @@ class Spacetime {
     // ========================================
     // Query Methods
     // ========================================
+
+    /// @return Total number of top-dimensional simplices
+    [[nodiscard]] std::size_t getSimplexCount() const noexcept;
+
+    /// @return Number of vertices N0
+    [[nodiscard]] std::size_t getVertexCount() const noexcept;
+
+    /// @return Count of (4,1)+(1,4) type simplices
+    [[nodiscard]] std::size_t getN41() const noexcept;
+
+    /// @return Count of (3,2)+(2,3) type simplices
+    [[nodiscard]] std::size_t getN32() const noexcept;
+
+    /// @return Const reference to the full simplex set
+    [[nodiscard]] const SimplexSet& getSimplices() const noexcept;
+
+    /// @return A uniformly random simplex from the complex
+    [[nodiscard]] SimplexPtr getRandomSimplex();
+
+    /// @return A uniformly random simplex with the given orientation, or nullptr if none exist
+    [[nodiscard]] SimplexPtr getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf);
+
+    /// Fully removes a simplex: unregisters it, removes from vertex simplex lists,
+    /// and cleans up coface references in its facets.
+    void removeSimplex(const SimplexPtr &simplex);
 
     /// @return The type of quantum gravity formulation (CDT, Regge, etc.)
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept;
@@ -299,6 +325,12 @@ class Spacetime {
     std::uint64_t currentTime = 0;
 
     SimplexSet simplices{};
+    std::vector<SimplexPtr> simplicesVec{}; // parallel vector for O(1) random access
+    std::size_t n41Count = 0; // (4,1) + (1,4) simplices
+    std::size_t n32Count = 0; // (3,2) + (2,3) simplices
+    std::mt19937 rng{std::random_device{}()};
+
+    void updateOrientationCounters(const SimplexPtr &simplex, int delta);
 
     ///
     /// These are simplices on the boundary of a simplicial complex. They have at least one external face, and hence can

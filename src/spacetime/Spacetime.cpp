@@ -391,6 +391,10 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
   }
 #endif
   const auto &[it, inserted] = simplices.emplace(simplex);
+  if (inserted) {
+    simplicesVec.push_back(simplex);
+    updateOrientationCounters(simplex, +1);
+  }
   return *it;
 }
 
@@ -410,13 +414,99 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
 #endif
     return;
   }
+  updateOrientationCounters(simplex, -1);
   simplices.erase(simplex);
+  // Remove from parallel vector (swap-and-pop for O(1))
+  for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
+    if (simplicesVec[i]->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
+      simplicesVec[i] = simplicesVec.back();
+      simplicesVec.pop_back();
+      break;
+    }
+  }
 }
 
 void Spacetime::reserve(int nSimplices) {
   simplices.reserve(nSimplices);
   edgeList->reserve(nSimplices);
   vertexList->reserve(nSimplices);
+}
+
+// ========================================
+// Counting & Access
+// ========================================
+
+std::size_t Spacetime::getSimplexCount() const noexcept {
+  return n41Count + n32Count;
+}
+
+std::size_t Spacetime::getVertexCount() const noexcept {
+  return vertexList->size();
+}
+
+std::size_t Spacetime::getN41() const noexcept {
+  return n41Count;
+}
+
+std::size_t Spacetime::getN32() const noexcept {
+  return n32Count;
+}
+
+const SimplexSet& Spacetime::getSimplices() const noexcept {
+  return simplices;
+}
+
+SimplexPtr Spacetime::getRandomSimplex() {
+  if (simplicesVec.empty()) return nullptr;
+  std::uniform_int_distribution<std::size_t> dist(0, simplicesVec.size() - 1);
+  return simplicesVec[dist(rng)];
+}
+
+SimplexPtr Spacetime::getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf) {
+  SimplexOrientation target{ti, tf};
+  // Try random sampling first (fast if many match)
+  for (int attempt = 0; attempt < 100; ++attempt) {
+    auto s = getRandomSimplex();
+    if (s && s->getOrientation() == target) return s;
+  }
+  // Fallback: linear scan and pick random from matches
+  std::vector<SimplexPtr> matches;
+  for (const auto &s : simplices) {
+    if (s->getOrientation() == target) matches.push_back(s);
+  }
+  if (matches.empty()) return nullptr;
+  std::uniform_int_distribution<std::size_t> dist(0, matches.size() - 1);
+  return matches[dist(rng)];
+}
+
+void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) {
+  auto d = metric->getSignature()->getDimensions();
+  auto nVerts = simplex->getVertices().size();
+  // Only count top-dimensional simplices (d-simplices have d+1 vertices)
+  if (nVerts != static_cast<std::size_t>(d + 1)) return;
+  auto [ti, tf] = simplex->getOrientation().numeric();
+  // (d, 1) or (1, d) type
+  if ((ti == d && tf == 1) || (ti == 1 && tf == d)) {
+    n41Count += delta;
+  }
+  // (d-1, 2) or (2, d-1) type
+  else if ((ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1)) {
+    n32Count += delta;
+  }
+}
+
+void Spacetime::removeSimplex(const SimplexPtr &simplex) {
+  // Remove from vertex simplex lists
+  for (const auto &v : simplex->getVertices()) {
+    v->removeSimplex(simplex);
+  }
+  // Remove coface references from facets
+  if (simplex->hasFacets()) {
+    for (const auto &facet : simplex->getFacets()) {
+      facet->removeCoface(simplex);
+    }
+  }
+  unregisterSimplex(simplex);
 }
 
 } // caset

@@ -24,34 +24,45 @@
 #include "spacetime/Spacetime.h"
 #include "utils.h"
 #include <deque>
-// #include <ATen/core/interned_strings.h>
+#include <cmath>
 
 namespace caset {
 void Toroid::build(Spacetime *spacetime, int nSimplices) {
   auto dimensions = spacetime->getMetric()->getSignature()->getDimensions();
-  SimplexOrientation orientation{1, static_cast<std::uint8_t>(dimensions - 1)};
+  SimplexOrientation orientation{1, static_cast<std::uint8_t>(dimensions)};
   spacetime->reserve(nSimplices);
-  auto [seed, created] = spacetime->createSimplex(orientation.numeric());
-  const auto &facets = seed->getFacets();
-  std::deque<SimplexPtr> exteriorFacets{facets.begin(), facets.end()};
-  auto complexSize = 1;
-  std::vector<double> plusT{1.};
-  std::vector<double> minusT{-1};
-  while (complexSize < nSimplices) {
-    SimplexPtr &exteriorFacet = exteriorFacets.front();
-    exteriorFacets.pop_front();
-    if (exteriorFacet->isTimelike()) continue;
-    if (random_uniform() > 0) {
-      auto vertex = spacetime->createVertex(plusT);
-      auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
-      exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
-      ++complexSize;
-    } else {
-      auto vertex = spacetime->createVertex(minusT);
-      auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
-      exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
-      ++complexSize;
+
+  // Build multiple time layers for a richer volume profile.
+  // Each layer gets a seed simplex at time t → t+1, then grows by coning.
+  int numLayers = std::max(2, static_cast<int>(std::cbrt(nSimplices)));
+  int perLayer = std::max(1, nSimplices / numLayers);
+  int complexSize = 0;
+
+  for (int layer = 0; layer < numLayers && complexSize < nSimplices; ++layer) {
+    auto [seed, created] = spacetime->createSimplex(orientation.numeric());
+    if (!created) continue;
+    const auto &facets = seed->getFacets();
+    std::deque<SimplexPtr> exteriorFacets{facets.begin(), facets.end()};
+    ++complexSize;
+
+    int layerTarget = std::min(complexSize + perLayer, nSimplices);
+    while (complexSize < layerTarget && !exteriorFacets.empty()) {
+      SimplexPtr &exteriorFacet = exteriorFacets.front();
+      exteriorFacets.pop_front();
+      if (exteriorFacet->isTimelike()) continue;
+      if (random_uniform() > 0) {
+        auto vertex = spacetime->createVertex(std::vector<double>{1.});
+        auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
+        exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
+        ++complexSize;
+      } else {
+        auto vertex = spacetime->createVertex(std::vector<double>{-1.});
+        auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);
+        exteriorFacets.insert(exteriorFacets.end(), newFacets.begin(), newFacets.end());
+        ++complexSize;
+      }
     }
+    spacetime->incrementTime();
   }
 }
 }

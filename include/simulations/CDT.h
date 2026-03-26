@@ -19,59 +19,98 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by Andrew Kelleher on 11/10/25.
-//
-
 #ifndef CASET_CDT_H
 #define CASET_CDT_H
 
 #include "simulations/Simulation.h"
+#include "spacetime/Spacetime.h"
+#include <memory>
+#include <random>
+#include <vector>
+#include <map>
 
 namespace caset {
+
+/// CDT implements the Metropolis Monte Carlo algorithm for Causal Dynamical Triangulations
+/// in 4 dimensions. The algorithm samples triangulated spacetimes weighted by the
+/// Regge action, using local Pachner moves that preserve the causal structure.
+///
+/// The Regge action for 4D CDT is:
+/// \f[
+///   S = -(k_0 + 6\Delta) N_0 + (k_4 + \Delta) N_{41} + k_4 N_{32}
+///       + \varepsilon (N_4 - \bar{N}_4)^2
+/// \f]
 class CDT : public Simulation {
   public:
+    /// @param spacetime The spacetime to simulate. Must be built before passing.
+    /// @param k0 Coupling constant related to inverse Newton constant
+    /// @param k4 Coupling constant related to cosmological constant
+    /// @param delta Asymmetry parameter between timelike and spacelike edges
+    /// @param epsilon Volume fixing strength
+    /// @param targetN4 Target total number of 4-simplices
+    CDT(std::shared_ptr<Spacetime> spacetime, double k0, double k4, double delta,
+        double epsilon, std::size_t targetN4);
 
-    void add() {
+    /// (2,8) move: Insert a vertex into a (4,1) or (1,4) simplex pair,
+    /// creating 8 new simplices from 2.
+    bool add();
 
-    }
+    /// (8,2) move: Remove an order-8 vertex, merging 8 simplices into 2.
+    bool remove();
 
-    void flip() {
+    /// (4,6)/(6,4) move: Flip simplices around a shared triangle.
+    bool flip();
 
-    }
+    /// (2,4) move: Rearrange simplices around a timelike edge.
+    bool shift();
 
-    void shift() {
+    /// (4,2) move: Inverse of shift.
+    bool ishift();
 
-    }
+    /// Adjust k4 to drive N4 toward targetN4.
+    void tune() override;
 
-    void ishift() {
+    /// Run sweeps until the system is thermalized.
+    void thermalize() override;
 
-    }
+    /// One Monte Carlo sweep: N4 random move attempts with Metropolis acceptance.
+    /// @return Number of accepted moves in this sweep.
+    int sweep();
 
-    ///
-    /// `tune` is the initial stage of building the spacetime. Some example are:
-    ///
-    /// The stage in CDT where we approach the desired cosmological constant by continuously adjusting it based on the
-    /// desired spacetime volume.
-    ///
-    /// In Regge calculus we build an initial triangulation of the Spacetime.
-    ///
-    void tune() override {
+    /// Compute the full Regge action for the current configuration.
+    [[nodiscard]] double computeAction() const;
 
-    }
+    /// Compute the volume profile: number of simplices straddling each time slice.
+    [[nodiscard]] std::vector<int> getVolumeProfile() const;
 
-    ///
-    /// `thermalize` implements some kind of adjustment to the initial lattice.
-    ///
-    /// In the case of CST (Causal Set Theory) this amounts to executing a poisson "Sprinkling" of Vertices to preserve
-    /// Lorentz invariance.
-    ///
-    /// For Regge calculus this can be a randomly applied variation in an initially fixed edge length triangulation.
-    ///
-    void thermalize() override {
+    /// @return Acceptance rates as {moveName: acceptedCount/attemptCount}
+    [[nodiscard]] std::map<std::string, double> getAcceptanceRates() const;
 
-    }
+    [[nodiscard]] std::shared_ptr<Spacetime> getSpacetime() const noexcept;
+    [[nodiscard]] double getK0() const noexcept;
+    [[nodiscard]] double getK4() const noexcept;
+    [[nodiscard]] double getDelta() const noexcept;
+
+  private:
+    std::shared_ptr<Spacetime> spacetime;
+    double k0, k4, delta, epsilon;
+    std::size_t targetN4;
+    std::mt19937 rng{std::random_device{}()};
+
+    // Metropolis acceptance test
+    bool accept(double deltaS);
+
+    // Incremental action change
+    double computeDeltaAction(int dN0, int dN41, int dN32) const;
+
+    // Statistics
+    int addAttempts = 0, addAccepted = 0;
+    int removeAttempts = 0, removeAccepted = 0;
+    int flipAttempts = 0, flipAccepted = 0;
+    int shiftAttempts = 0, shiftAccepted = 0;
+    int ishiftAttempts = 0, ishiftAccepted = 0;
 };
-}
+
+} // caset
 
 #endif //CASET_CDT_H
