@@ -83,12 +83,12 @@ Vertex::setCoordinates(const std::vector<double> &coords) noexcept {
   coordinates = coords;
 }
 
-EdgePtrSet
+Edges
 Vertex::getEdges() const noexcept {
-  EdgePtrSet edges;
+  Edges edges;
   edges.reserve(inEdges.size() + outEdges.size());
-  edges.insert(inEdges.begin(), inEdges.end());
-  edges.insert(outEdges.begin(), outEdges.end());
+  for (const auto &e : inEdges) edges.push_back(e);
+  for (const auto &e : outEdges) edges.push_back(e);
   return edges;
 }
 
@@ -129,12 +129,12 @@ Vertex::moveEdgesToImpl(
 #ifdef CASET_ASSERTIONS
       if (sourceVertex.get() == this) throw std::runtime_error("sourceVertex was this");
 #endif
-      const SimplexPtrSet &outEdgeOwners = sourceVertex->removeOutEdge(oldEdge);
+      sourceVertex->removeOutEdge(oldEdge);
     } else if (direction == EdgeDirection::Out) {
 #ifdef CASET_ASSERTIONS
       if (targetVertex.get() == this) throw std::runtime_error("targetVertex was this");
 #endif
-      const SimplexPtrSet &inEdgeOwners = targetVertex->removeInEdge(oldEdge);
+      targetVertex->removeInEdge(oldEdge);
     }
 
     spacetime->getEdgeList()->remove(oldEdge);
@@ -243,10 +243,10 @@ void Vertex::addOutEdge(const EdgePtr &edge) noexcept {
   outEdges.insert(edge);
 }
 
-SimplexPtrSet Vertex::removeInEdge(const EdgePtr &edge) noexcept {
+void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
 #ifdef CASET_ASSERTIONS
   if (edge == nullptr) {
-    CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
+    CLOG(WARN_LEVEL, "You passed a null pointer to remove an in edge! Refusing.");
     std::abort();
   }
   if (!inEdges.contains(edge)) {
@@ -254,17 +254,13 @@ SimplexPtrSet Vertex::removeInEdge(const EdgePtr &edge) noexcept {
     std::abort();
   }
 #endif
-  SimplexPtrSet owners{};
   for (const auto &simplex : simplices) {
-    if (simplex->removeEdge(edge)) {
-      owners.insert(simplex);
-    }
+    simplex->removeEdge(edge);
   }
   inEdges.erase(edge);
-  return owners;
 }
 
-SimplexPtrSet Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
+void Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
 #ifdef CASET_ASSERTIONS
   if (edge == nullptr) {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
@@ -275,21 +271,17 @@ SimplexPtrSet Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
     std::abort();
   }
 #endif
-  SimplexPtrSet owners{};
   for (const auto &simplex : simplices) {
-    if (simplex->removeEdge(edge)) {
-      owners.insert(simplex);
-    }
+    simplex->removeEdge(edge);
   }
   outEdges.erase(edge);
-  return owners;
 }
 
 std::size_t Vertex::degree() const noexcept { return inEdges.size() + outEdges.size(); }
 
-EdgePtrSet
+const EdgePtrSet &
 Vertex::getInEdges() const noexcept { return inEdges; }
 
-EdgePtrSet
+const EdgePtrSet &
 Vertex::getOutEdges() const noexcept { return outEdges; }
 };

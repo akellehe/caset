@@ -38,11 +38,19 @@ EdgePtr EdgeList::add(const EdgePtr &edge) {
 }
 
 EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target) {
+  // Check if edge exists before allocating
+  std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
+  auto it = edgeList.find(fp);
+  if (it != edgeList.end()) return it->second;
   auto edge = std::make_shared<Edge>(source, target);
   return getOrInsert(edge);
 }
 
 EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept {
+  // Check if edge exists before allocating
+  std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
+  auto it = edgeList.find(fp);
+  if (it != edgeList.end()) return it->second;
   auto edge = std::make_shared<Edge>(source, target, squaredLength);
   return getOrInsert(edge);
 }
@@ -95,18 +103,19 @@ EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
   if (edge->getSource()->getId() == edge->getTarget()->getId()) {
     throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());
   }
-  if (edgeList.contains(edge->fingerprint.fingerprint())) {
-    const auto &[fingerprint, found] = *edgeList.find(edge->fingerprint.fingerprint());
+  auto fp = edge->fingerprint.fingerprint();
+  auto it = edgeList.find(fp);
+  if (it != edgeList.end()) {
 #ifdef CASET_ASSERTIONS
+    const auto &found = it->second;
     if (found->getSource()->getId() != edge->getSource()->getId() || found->getTarget()->getId() != edge->getTarget()->getId()) {
       throw std::runtime_error(
         "Fingerprint collision between edges: " + edge->toString() + " and " + found->toString());
     }
 #endif
-    return found;
+    return it->second;
   }
-  // CLOG(DEBUG_LEVEL, "Adding edge: ", edge->toString());
-  edgeList.emplace(edge->fingerprint.fingerprint(), edge);
+  edgeList.emplace(fp, edge);
   return edge;
 }
 

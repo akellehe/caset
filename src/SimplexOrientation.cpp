@@ -36,16 +36,12 @@
 
 
 namespace caset {
-SimplexOrientation::SimplexOrientation(uint8_t ti_, uint8_t tf_) : ti(ti_), tf(tf_), fingerprint({ti_, tf_}) {
-  k = ti_ + tf_ - 1;
-  fingerprint = Fingerprint({ti_, tf_}); // TODO: Does this initialize twice?
+SimplexOrientation::SimplexOrientation(uint8_t ti_, uint8_t tf_)
+    : ti(ti_), tf(tf_), k(ti_ + tf_ - 1), fingerprint({ti_, tf_}) {
 }
 
-SimplexOrientation::SimplexOrientation() : ti(0), tf(0), fingerprint({0, 0}) {
-  ti = 0;
-  tf = 0;
-  k = 0;
-  fingerprint = Fingerprint({ti, tf});
+SimplexOrientation::SimplexOrientation()
+    : ti(0), tf(0), k(0), fingerprint({0, 0}) {
 }
 
 [[nodiscard]] std::pair<uint8_t, uint8_t> SimplexOrientation::numeric() const {

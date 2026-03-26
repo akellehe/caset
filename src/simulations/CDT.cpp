@@ -188,8 +188,8 @@ bool CDT::remove() {
   spacetime->removeSimplex(sigma);
 
   // Remove edges connecting uniqueVert to the facet vertices
-  // Copy needed: we're modifying the edge sets during iteration
-  EdgePtrSet edgesToRemove = uniqueVert->getEdges();
+  // getEdges() returns a vector snapshot; safe to iterate while modifying
+  Edges edgesToRemove = uniqueVert->getEdges();
   for (const auto &e : edgesToRemove) {
     VertexPtr other = (e->getSource()->getId() == uniqueVert->getId())
                       ? e->getTarget() : e->getSource();

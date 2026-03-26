@@ -183,21 +183,21 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// \brief Get all incident edges (both incoming and outgoing)
         /// \return Set containing all edges where this vertex is source or target
         ///
-        /// The returned set is a copy. Complexity: O(|inEdges| + |outEdges|)
+        /// The returned vector is a copy. Complexity: O(|inEdges| + |outEdges|)
         ///
-        EdgePtrSet getEdges() const noexcept;
+        Edges getEdges() const noexcept;
 
         ///
         /// \brief Get all edges targeting this vertex
         /// \return Set of incoming edges \f$ \{e \mid e.target = v\} \f$
         ///
-        EdgePtrSet getInEdges() const noexcept;
+        const EdgePtrSet &getInEdges() const noexcept;
 
         ///
         /// \brief Get all edges originating from this vertex
         /// \return Set of outgoing edges \f$ \{e \mid e.source = v\} \f$
         ///
-        EdgePtrSet getOutEdges() const noexcept;
+        const EdgePtrSet &getOutEdges() const noexcept;
 
         ///
         /// \brief Add an incoming edge to this vertex
@@ -230,12 +230,11 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - Aborts if edge is nullptr
         /// - Aborts if edge is not in inEdges
         ///
-        SimplexPtrSet removeInEdge(const EdgePtr &edge) noexcept;
+        void removeInEdge(const EdgePtr &edge) noexcept;
 
         ///
         /// \brief Remove an outgoing edge and update all affected simplices
         /// \param edge The edge to remove from outEdges
-        /// \return Set of simplices that contained this edge (now modified)
         ///
         /// Symmetric to removeInEdge() but operates on outEdges.
         ///
@@ -243,7 +242,7 @@ class Vertex : public std::enable_shared_from_this<Vertex> {
         /// - Aborts if edge is nullptr
         /// - Aborts if edge is not in outEdges
         ///
-        SimplexPtrSet removeOutEdge(const EdgePtr &edge) noexcept;
+        void removeOutEdge(const EdgePtr &edge) noexcept;
 
         // ========================================
         // Simplex Management
