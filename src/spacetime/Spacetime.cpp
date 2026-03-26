@@ -385,9 +385,11 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
     seen.insert(simp->fingerprint.fingerprint());
   }
 #endif
+  auto fp = simplex->fingerprint.fingerprint();
   const auto &[it, inserted] = simplices.emplace(simplex);
   if (inserted) {
-    simplexVecIndex[simplex->fingerprint.fingerprint()] = simplicesVec.size();
+    simplexOwner.emplace(fp, std::unique_ptr<Simplex>(simplex));
+    simplexVecIndex[fp] = simplicesVec.size();
     simplicesVec.push_back(simplex);
     updateOrientationCounters(simplex, +1);
   }
@@ -426,10 +428,13 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
     simplicesVec.pop_back();
     simplexVecIndex.erase(idxIt);
   }
+  // Free the Simplex allocation
+  simplexOwner.erase(fp);
 }
 
 void Spacetime::reserve(int nSimplices) {
   simplices.reserve(nSimplices);
+  simplexOwner.reserve(nSimplices);
   edgeList->reserve(nSimplices);
   vertexList->reserve(nSimplices);
 }

@@ -46,7 +46,7 @@ class EdgeKey;
 // Type aliases
 
 // Edge Structures
-using EdgePtr = std::shared_ptr<Edge>;
+using EdgePtr = Edge*;
 using EdgeHash = FingerprintHash<Edge>;
 using EdgeEq = FingerprintEq<Edge>;
 using EdgeSet = std::unordered_set<Edge, EdgeHash, EdgeEq>;
@@ -65,28 +65,23 @@ using EdgeKeys = std::vector<EdgeKey>;
 
 // Simplex Structures
 using SimplexRawPtr = Simplex *;
-using SimplexPtr = std::shared_ptr<Simplex>;
+using SimplexPtr = Simplex*;
 using SimplexHash = FingerprintHash<Simplex>;
 using SimplexEq = FingerprintEq<Simplex>;
-using SimplexSet = std::unordered_set<std::shared_ptr<Simplex>, SimplexHash, SimplexEq>;
+using SimplexPtrHash = FingerprintPtrHash<SimplexPtr>;
+using SimplexPtrEq = FingerprintPtrEq<SimplexPtr>;
+using SimplexSet = std::unordered_set<SimplexPtr, SimplexPtrHash, SimplexPtrEq>;
 
 using SimplexPtrPair = std::pair<SimplexPtr, SimplexPtr>;
 using OptionalSimplexPtrPair = std::optional<SimplexPtrPair>;
 using Simplices = std::vector<SimplexPtr>;
 
-using SimplexPtrHash = FingerprintPtrHash<SimplexPtr>;
-using SimplexPtrEq = FingerprintPtrEq<SimplexPtr>;
 using SimplexPtrSet = std::unordered_set<SimplexPtr, SimplexPtrHash, SimplexPtrEq>;
 using SimplexPtrMap = std::unordered_map<SimplexPtr, Simplices, SimplexPtrHash, SimplexPtrEq>;
 
-using SimplexUniquePtr = std::unique_ptr<Simplex>;
-using SimplexUniquePtrHash = FingerprintPtrHash<SimplexUniquePtr>;
-using SimplexUniquePtrEq = FingerprintPtrEq<SimplexUniquePtr>;
-using SimplexUniquePtrSet = std::unordered_set<SimplexUniquePtr, SimplexUniquePtrHash, SimplexUniquePtrEq>;
-
 
 // Vertex Structures
-using VertexPtr = std::shared_ptr<Vertex>;
+using VertexPtr = Vertex*;
 using VertexPtrs = std::vector<VertexPtr>;
 
 using VertexPtrHash = FingerprintPtrHash<VertexPtr>;
@@ -109,19 +104,6 @@ using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrie
 
 class Spacetime;
 
-// using EdgeHash = FingerprintHash<Edge>;
-// using EdgeEq = FingerprintEq<Edge>;
-// using Edges = std::vector<EdgePtr>;
-
-// using EdgeKey = std::pair<IdType, IdType>;
-// using EdgeIdSet = std::unordered_set<EdgeKey, EdgeKeyHash, EdgeKeyEqual>;
-// using EdgeIds = std::vector<EdgeKey>;
-
-// using SimplexPtr = std::shared_ptr<Simplex>;
-// using SimplexPair = std::pair<SimplexPtr, SimplexPtr>;
-// using OptionalSimplexPair = std::optional<SimplexPair>;
-// using Simplices = std::vector<SimplexPtr>;
-// using SimplexSet = std::unordered_set<SimplexPtr, SimplexHash, SimplexEq>;
 } // namespace caset
 
 #endif // CASET_FORWARD_DECLARATIONS_H

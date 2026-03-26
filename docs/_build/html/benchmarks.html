@@ -317,63 +317,63 @@ completeness but are not directly comparable to 2D–4D.</p>
 <td><p>500</p></td>
 <td><p>514</p></td>
 <td><p>1,007</p></td>
-<td><p>0.003</p></td>
+<td><p>0.002</p></td>
 </tr>
 <tr class="row-odd"><td><p>2D</p></td>
 <td><p>10,000</p></td>
 <td><p>10,000</p></td>
 <td><p>10,042</p></td>
 <td><p>20,021</p></td>
-<td><p>0.075</p></td>
+<td><p>0.042</p></td>
 </tr>
 <tr class="row-even"><td><p>2D</p></td>
 <td><p>100,000</p></td>
 <td><p>100,000</p></td>
 <td><p>100,092</p></td>
 <td><p>200,046</p></td>
-<td><p>1.11</p></td>
+<td><p>0.64</p></td>
 </tr>
 <tr class="row-odd"><td><p>3D</p></td>
 <td><p>500</p></td>
 <td><p>500</p></td>
 <td><p>521</p></td>
 <td><p>1,521</p></td>
-<td><p>0.028</p></td>
+<td><p>0.003</p></td>
 </tr>
 <tr class="row-even"><td><p>3D</p></td>
 <td><p>10,000</p></td>
 <td><p>10,000</p></td>
 <td><p>10,063</p></td>
 <td><p>30,063</p></td>
-<td><p>0.136</p></td>
+<td><p>0.061</p></td>
 </tr>
 <tr class="row-odd"><td><p>3D</p></td>
 <td><p>100,000</p></td>
 <td><p>100,000</p></td>
 <td><p>100,138</p></td>
 <td><p>300,138</p></td>
-<td><p>1.78</p></td>
+<td><p>1.06</p></td>
 </tr>
 <tr class="row-even"><td><p>4D</p></td>
 <td><p>500</p></td>
 <td><p>500</p></td>
 <td><p>528</p></td>
 <td><p>2,042</p></td>
-<td><p>0.040</p></td>
+<td><p>0.004</p></td>
 </tr>
 <tr class="row-odd"><td><p>4D</p></td>
 <td><p>10,000</p></td>
 <td><p>10,000</p></td>
 <td><p>10,084</p></td>
 <td><p>40,126</p></td>
-<td><p>0.177</p></td>
+<td><p>0.119</p></td>
 </tr>
 <tr class="row-even"><td><p>4D</p></td>
 <td><p>100,000</p></td>
 <td><p>100,000</p></td>
 <td><p>100,184</p></td>
 <td><p>400,276</p></td>
-<td><p>2.38</p></td>
+<td><p>2.26</p></td>
 </tr>
 </tbody>
 </table>
@@ -402,9 +402,20 @@ copy containers or bump refcounts on every call.</p></li>
 allocation by computing the XOR hash inline and using heterogeneous lookup.</p></li>
 <li><p><strong>CDT move locals</strong> — replaced <code class="docutils literal notranslate"><span class="pre">unordered_set</span></code> with <code class="docutils literal notranslate"><span class="pre">vector</span></code> for small
 per-move vertex/simplex collections.</p></li>
+<li><p><strong>Vertex <code class="docutils literal notranslate"><span class="pre">inEdges</span></code>/<code class="docutils literal notranslate"><span class="pre">outEdges</span></code>/<code class="docutils literal notranslate"><span class="pre">simplices</span></code>: <code class="docutils literal notranslate"><span class="pre">unordered_set</span></code> → <code class="docutils literal notranslate"><span class="pre">vector</span></code></strong> —
+same flat-vector optimization applied to per-vertex containers (5-20
+elements).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">shared_ptr</span></code> → raw pointers</strong> — replaced <code class="docutils literal notranslate"><span class="pre">shared_ptr&lt;Simplex&gt;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">shared_ptr&lt;Edge&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">shared_ptr&lt;Vertex&gt;</span></code> with raw pointers throughout.
+Ownership is now explicit via <code class="docutils literal notranslate"><span class="pre">unique_ptr</span></code> in the owning containers
+(Spacetime, EdgeList, VertexList). Eliminates atomic refcount overhead
+on every pointer copy in the sweep inner loop.</p></li>
+<li><p><strong>Eliminated dead return values</strong> — <code class="docutils literal notranslate"><span class="pre">removeInEdge</span></code>/<code class="docutils literal notranslate"><span class="pre">removeOutEdge</span></code> were
+allocating a hash table of “owner” simplices on every call and returning
+it to nobody.</p></li>
 </ul>
-<p>Build time improvement is <strong>20-40%</strong> across the board, with the largest
-gains at smaller sizes where per-object overhead dominates.</p>
+<p>Build time improvement is <strong>30-65%</strong> across the board, with sweep
+performance improving by up to <strong>6x</strong> at typical lattice sizes.</p>
 <a class="reference internal image-reference" href="_images/benchmark_comparison.png"><img alt="Before vs. after benchmark comparison" class="align-center" src="_images/benchmark_comparison.png" style="width: 100%;" />
 </a>
 <p>To regenerate this comparison after further changes:</p>

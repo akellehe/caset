@@ -131,11 +131,11 @@ Simplex::Simplex(
 #endif
 }
 
-SimplexPtr Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_) {
+Simplex* Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  SimplexPtr simplex = std::make_shared<Simplex>(spacetime_, vertices_, edges_);
+  Simplex* simplex = new Simplex(spacetime_, vertices_, edges_);
   if (!simplex->initialized) {
     simplex->initialize(simplex);
   }
@@ -145,19 +145,19 @@ SimplexPtr Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, c
 
 bool Simplex::isInitialized() const noexcept { return initialized; }
 
-SimplexPtr Simplex::create(Spacetime *spacetime_,
+Simplex* Simplex::create(Spacetime *spacetime_,
                            const VertexPtrs &vertices_,
                            const Edges &edges_,
                            const SimplexOrientation &orientation_) {
 #if CASET_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  SimplexPtr simplex = std::make_shared<Simplex>(spacetime_, vertices_, edges_, orientation_);
+  Simplex* simplex = new Simplex(spacetime_, vertices_, edges_, orientation_);
   simplex->initialize(simplex);
   return simplex;
 }
 
-void Simplex::initialize(const SimplexPtr &simplex) {
+void Simplex::initialize(Simplex* simplex) {
 #ifdef CASET_ASSERTIONS
   if (initialized) {
     CLOG(DEBUG_LEVEL, "You attempted to re-initialize a simplex! Behavior is undefined.");
@@ -191,7 +191,7 @@ void Simplex::initialize(const SimplexPtr &simplex) {
 
 // getTi(), getTf() inlined in Simplex.h
 
-void Simplex::registerToVertices(const SimplexPtr &simplex) {
+void Simplex::registerToVertices(Simplex* simplex) {
   for (const auto &owner : simplex->getVertices()) {
     owner->addSimplex(simplex);
   }
@@ -272,13 +272,13 @@ std::size_t Simplex::getNumberOfEdges() const {
   return (k + 1) * k / 2;
 }
 
-void Simplex::addCoface(const SimplexPtr &coface) {
+void Simplex::addCoface(SimplexPtr coface) {
 #if CASET_ASSERTIONS
-  if (coface == nullptr || coface.get() == nullptr) {
+  if (coface == nullptr) {
     CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
   }
-  if (!coface->isCofaceTo(shared_from_this())) {
+  if (!coface->isCofaceTo(this)) {
     CLOG(DEBUG_LEVEL, coface->toString(), " is not a coface of ", toString());
     throw std::runtime_error("You attempted to add a coface to a facet for which it is not a coface!");
   }
@@ -293,7 +293,7 @@ void Simplex::addCoface(const SimplexPtr &coface) {
   }
 }
 
-void Simplex::removeCoface(const SimplexPtr &coface) {
+void Simplex::removeCoface(SimplexPtr coface) {
   auto fp = coface->fingerprint.fingerprint();
   for (auto it = cofaces.begin(); it != cofaces.end(); ++it) {
     if ((*it)->fingerprint.fingerprint() == fp) {
@@ -305,7 +305,7 @@ void Simplex::removeCoface(const SimplexPtr &coface) {
   }
 }
 
-[[nodiscard]] bool Simplex::hasCoface(const SimplexPtr &coface) const {
+[[nodiscard]] bool Simplex::hasCoface(SimplexPtr coface) const {
   auto fp = coface->fingerprint.fingerprint();
   for (const auto &c : cofaces) {
     if (c->fingerprint.fingerprint() == fp) return true;
@@ -403,7 +403,7 @@ bool Simplex::operator==(const Simplex &other) const noexcept {
   return fingerprint.fingerprint() == other.fingerprint.fingerprint();
 }
 
-bool Simplex::operator==(const SimplexPtr &other) const noexcept {
+bool Simplex::operator==(const Simplex* other) const noexcept {
   return fingerprint.fingerprint() == other->fingerprint.fingerprint();
 }
 

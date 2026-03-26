@@ -90,55 +90,55 @@ completeness but are not directly comparable to 2D--4D.
   - 500
   - 514
   - 1,007
-  - 0.003
+  - 0.002
 * - 2D
   - 10,000
   - 10,000
   - 10,042
   - 20,021
-  - 0.075
+  - 0.042
 * - 2D
   - 100,000
   - 100,000
   - 100,092
   - 200,046
-  - 1.11
+  - 0.64
 * - 3D
   - 500
   - 500
   - 521
   - 1,521
-  - 0.028
+  - 0.003
 * - 3D
   - 10,000
   - 10,000
   - 10,063
   - 30,063
-  - 0.136
+  - 0.061
 * - 3D
   - 100,000
   - 100,000
   - 100,138
   - 300,138
-  - 1.78
+  - 1.06
 * - 4D
   - 500
   - 500
   - 528
   - 2,042
-  - 0.040
+  - 0.004
 * - 4D
   - 10,000
   - 10,000
   - 10,084
   - 40,126
-  - 0.177
+  - 0.119
 * - 4D
   - 100,000
   - 100,000
   - 100,184
   - 400,276
-  - 2.38
+  - 2.26
 ```
 
 ---
@@ -165,9 +165,20 @@ current v{{version}} code.  The cumulative optimizations include:
   allocation by computing the XOR hash inline and using heterogeneous lookup.
 - **CDT move locals** — replaced `unordered_set` with `vector` for small
   per-move vertex/simplex collections.
+- **Vertex `inEdges`/`outEdges`/`simplices`: `unordered_set` → `vector`** —
+  same flat-vector optimization applied to per-vertex containers (5-20
+  elements).
+- **`shared_ptr` → raw pointers** — replaced `shared_ptr<Simplex>`,
+  `shared_ptr<Edge>`, `shared_ptr<Vertex>` with raw pointers throughout.
+  Ownership is now explicit via `unique_ptr` in the owning containers
+  (Spacetime, EdgeList, VertexList). Eliminates atomic refcount overhead
+  on every pointer copy in the sweep inner loop.
+- **Eliminated dead return values** — `removeInEdge`/`removeOutEdge` were
+  allocating a hash table of "owner" simplices on every call and returning
+  it to nobody.
 
-Build time improvement is **20-40%** across the board, with the largest
-gains at smaller sizes where per-object overhead dominates.
+Build time improvement is **30-65%** across the board, with sweep
+performance improving by up to **6x** at typical lattice sizes.
 
 ```{image} assets/benchmarks/benchmark_comparison.png
 :alt: Before vs. after benchmark comparison

@@ -47,7 +47,7 @@ namespace py = pybind11;
 using namespace caset;
 
 PYBIND11_MODULE(caset, m) {
-  py::class_<Edge, EdgePtr>(m, "Edge")
+  py::class_<Edge, std::unique_ptr<Edge, py::nodelete>>(m, "Edge")
       .def(
         py::init<
           const VertexPtr &,
@@ -68,11 +68,11 @@ PYBIND11_MODULE(caset, m) {
       .def("__repr__", &Edge::toString)
       .def("__eq__", &Edge::operator==)
       .def("__hash__", &Edge::toHash)
-      .def("getSource", &Edge::getSource)
+      .def("getSource", &Edge::getSource, py::return_value_policy::reference)
       .def("getSquaredLength", &Edge::getSquaredLength)
-      .def("getTarget", &Edge::getTarget);
+      .def("getTarget", &Edge::getTarget, py::return_value_policy::reference);
 
-  py::class_<Vertex, VertexPtr>(m, "Vertex")
+  py::class_<Vertex, std::unique_ptr<Vertex, py::nodelete>>(m, "Vertex")
       .def("__eq__", &Vertex::operator==)
       .def("__repr__", &Vertex::toString)
       .def("__str__", &Vertex::toString)
@@ -80,11 +80,11 @@ PYBIND11_MODULE(caset, m) {
       .def("addOutEdge", &Vertex::addOutEdge, py::arg("edge"))
       .def("degree", &Vertex::degree)
       .def("getCoordinates", &Vertex::getCoordinates)
-      .def("getEdges", &Vertex::getEdges)
+      .def("getEdges", &Vertex::getEdges, py::return_value_policy::reference)
       .def("getId", &Vertex::getId)
-      .def("getInEdges", &Vertex::getInEdges)
-      .def("getOutEdges", &Vertex::getOutEdges)
-      .def("getSimplices", &Vertex::getSimplices)
+      .def("getInEdges", &Vertex::getInEdges, py::return_value_policy::reference)
+      .def("getOutEdges", &Vertex::getOutEdges, py::return_value_policy::reference)
+      .def("getSimplices", &Vertex::getSimplices, py::return_value_policy::reference)
       .def("getTime", &Vertex::getTime)
       .def("moveEdgesTo", &Vertex::moveEdgesTo)
       .def("removeInEdge", &Vertex::removeInEdge)
@@ -94,24 +94,26 @@ PYBIND11_MODULE(caset, m) {
 
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList")
       .def(py::init<>())
-      .def("__getitem__", &VertexList::operator[])
-      .def("get", &VertexList::get)
-      .def("add", py::overload_cast<const VertexPtr &>(&VertexList::add))
+      .def("__getitem__", &VertexList::operator[], py::return_value_policy::reference)
+      .def("get", &VertexList::get, py::return_value_policy::reference)
       .def("add",
-           py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList::add))
-      .def("add", py::overload_cast<const std::uint64_t>(&VertexList::add))
+           py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList::add),
+           py::return_value_policy::reference)
+      .def("add", py::overload_cast<const std::uint64_t>(&VertexList::add),
+           py::return_value_policy::reference)
       .def("replace", &VertexList::replace)
       .def("size", &VertexList::size)
-      .def("toVector", &VertexList::toVector);
+      .def("toVector", &VertexList::toVector, py::return_value_policy::reference);
 
   py::class_<EdgeList, std::shared_ptr<EdgeList> >(m, "EdgeList")
       .def(py::init<>())
-      .def("add", py::overload_cast<const EdgePtr &>(&EdgeList::add))
-      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &, double>(&EdgeList::add))
-      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &>(&EdgeList::add))
+      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &, double>(&EdgeList::add),
+           py::return_value_policy::reference)
+      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &>(&EdgeList::add),
+           py::return_value_policy::reference)
       .def("remove", py::overload_cast<const EdgePtr &>(&EdgeList::remove), py::arg("edge"))
       .def("size", &EdgeList::size)
-      .def("toVector", &EdgeList::toVector);
+      .def("toVector", &EdgeList::toVector, py::return_value_policy::reference);
 
   py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology");
 
@@ -137,21 +139,21 @@ PYBIND11_MODULE(caset, m) {
   py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq> >(m, "SimplexOrientationEq")
       .def(py::init<>());
 
-  py::class_<Simplex, std::shared_ptr<Simplex> >(m, "Simplex")
+  py::class_<Simplex, std::unique_ptr<Simplex, py::nodelete>>(m, "Simplex")
       .def("__repr__", &Simplex::toString)
       .def("__str__", &Simplex::toString)
       .def("__hash__", &Simplex::hash)
       .def("__eq__",
-           static_cast<bool (Simplex::*)(const SimplexPtr &) const noexcept>(&Simplex::operator==))
+           static_cast<bool (Simplex::*)(const Simplex*) const noexcept>(&Simplex::operator==))
       .def("__eq__",
            static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==))
-      .def("getCofaces", &Simplex::getCofaces)
-      .def("getEdges", &Simplex::getEdges)
-      .def("getFacets", &Simplex::getFacets)
+      .def("getCofaces", &Simplex::getCofaces, py::return_value_policy::reference)
+      .def("getEdges", &Simplex::getEdges, py::return_value_policy::reference)
+      .def("getFacets", &Simplex::getFacets, py::return_value_policy::reference)
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces)
       .def("getOrientation", &Simplex::getOrientation)
-      .def("getVertexIdLookup", &Simplex::getVertexIdLookup)
-      .def("getVertices", &Simplex::getVertices)
+      .def("getVertexIdLookup", &Simplex::getVertexIdLookup, py::return_value_policy::reference)
+      .def("getVertices", &Simplex::getVertices, py::return_value_policy::reference)
       .def("hasVertex", &Simplex::hasVertex)
       .def("isCofaceTo", &Simplex::isCofaceTo, py::arg("facet"), py::arg("shallow") = true)
       .def("isInitialized", &Simplex::isInitialized)
@@ -210,45 +212,53 @@ PYBIND11_MODULE(caset, m) {
       .def("getVertexList", &Spacetime::getVertexList)
       .def("getSimplicesWithOrientation",
            &Spacetime::getSimplicesWithOrientation,
-           py::arg("orientation"))
+           py::arg("orientation"),
+           py::return_value_policy::reference)
       .def("getEdgeList", &Spacetime::getEdgeList)
-      .def("getConnectedComponents", &Spacetime::getConnectedComponents)
+      .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference)
       .def("build", &Spacetime::build)
-      .def("getSimplices", &Spacetime::getExternalSimplices)
+      .def("getSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::reference)
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&
              Spacetime::createEdge),
            py::arg("source"),
-           py::arg("target"))
+           py::arg("target"),
+           py::return_value_policy::reference)
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &, double) const>(&
              Spacetime::createEdge),
            py::arg("source"),
            py::arg("target"),
-           py::arg("squaredLength"))
+           py::arg("squaredLength"),
+           py::return_value_policy::reference)
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t) const noexcept>(
-             &Spacetime::createVertex))
+             &Spacetime::createVertex),
+           py::return_value_policy::reference)
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t, const std::vector<double> &) const noexcept>(
-             &Spacetime::createVertex))
+             &Spacetime::createVertex),
+           py::return_value_policy::reference)
       .def("createSimplex",
            py::overload_cast<const std::vector<VertexPtr> &>(
              &Spacetime::createSimplex),
-           py::arg("vertices"))
+           py::arg("vertices"),
+           py::return_value_policy::reference)
       .def("createSimplex",
            py::overload_cast<const std::vector<VertexPtr> &, const std::vector<EdgePtr> &>(
              &Spacetime::createSimplex),
            py::arg("vertices"),
-           py::arg("edges"))
+           py::arg("edges"),
+           py::return_value_policy::reference)
       .def("createSimplex",
            py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
-           py::arg("orientation"))
+           py::arg("orientation"),
+           py::return_value_policy::reference)
       .def("getSimplexCount", &Spacetime::getSimplexCount)
       .def("getVertexCount", &Spacetime::getVertexCount)
       .def("getN41", &Spacetime::getN41)
       .def("getN32", &Spacetime::getN32)
-      .def("getRandomSimplex", &Spacetime::getRandomSimplex)
+      .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference)
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"));
 
   py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation")

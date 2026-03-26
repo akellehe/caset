@@ -35,61 +35,50 @@
 namespace caset {
 class VertexList {
   public:
-    std::shared_ptr<Vertex> operator[](const std::uint64_t vertexId) {
-      return vertexList[vertexId];
+    Vertex* operator[](const std::uint64_t vertexId) {
+      auto it = vertexList.find(vertexId);
+      if (it == vertexList.end()) return nullptr;
+      return it->second.get();
     }
 
-    std::shared_ptr<Vertex> get(std::uint64_t id) {
-      return vertexList[id];
-    }
-
-    std::shared_ptr<Vertex> add(const std::shared_ptr<Vertex> &vertex) noexcept {
-      auto found = vertexList.find(vertex->getId());
-      if (found != vertexList.end()) {
-        CLOG(INFO_LEVEL, "Vertex ", std::to_string(vertex->getId()), " already exists!");
-      }
-      const auto &[it, inserted] = vertexList.insert_or_assign(vertex->getId(), vertex);
-      if (!inserted) {
-        CLOG(INFO_LEVEL, "Vertex ", std::to_string(vertex->getId()), " already exists!");
-        return it->second;
-      }
-      return vertex;
+    Vertex* get(std::uint64_t id) {
+      auto it = vertexList.find(id);
+      if (it == vertexList.end()) return nullptr;
+      return it->second.get();
     }
 
     bool contains(const std::uint64_t id) const noexcept {
       return vertexList.contains(id);
     }
 
-    std::shared_ptr<Vertex> add(const std::uint64_t id, const std::vector<double> &coords) noexcept {
+    Vertex* add(const std::uint64_t id, const std::vector<double> &coords) noexcept {
       auto found = vertexList.find(id);
       if (found != vertexList.end()) {
         CLOG(INFO_LEVEL, "Vertex ", std::to_string(id), " already exists!");
-        return found->second;
+        return found->second.get();
       }
-      std::shared_ptr<Vertex> vertex = std::make_shared<Vertex>(id, coords);
-      const auto &[it, inserted] = vertexList.insert_or_assign(id, vertex);
-      if (!inserted) {
-        CLOG(INFO_LEVEL, "Vertex ", std::to_string(id), " already exists!");
-        return it->second;
-      }
-      return vertex;
+      auto vertex = std::make_unique<Vertex>(id, coords);
+      Vertex* raw = vertex.get();
+      vertexList.emplace(id, std::move(vertex));
+      return raw;
     }
 
-    std::shared_ptr<Vertex> add(const std::uint64_t id) noexcept {
+    Vertex* add(const std::uint64_t id) noexcept {
       return add(id, std::vector<double>{});
     }
 
-    void replace(const std::shared_ptr<Vertex> &toRemove, const std::shared_ptr<Vertex> &toAdd) {
+    void replace(Vertex* toRemove, Vertex* toAdd) {
 #if CASET_ASSERTIONS
       if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
       if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
 #endif
 
       remove(toRemove);
-      add(toAdd);
+      // Re-add with the same ID and coordinates
+      add(toAdd->getId(), toAdd->getCoordinates());
     }
 
-    void remove(const std::shared_ptr<Vertex> &vertex) noexcept {
+    void remove(Vertex* vertex) noexcept {
       vertexList.erase(vertex->getId());
     }
 
@@ -97,18 +86,18 @@ class VertexList {
       return vertexList.size();
     }
 
-    std::vector<std::shared_ptr<Vertex>> toVector() const noexcept {
-      std::vector<std::shared_ptr<Vertex>> result{};
+    std::vector<Vertex*> toVector() const noexcept {
+      std::vector<Vertex*> result{};
       result.reserve(vertexList.size());
       for (const auto &[key, vertex] : vertexList) {
-        result.push_back(vertex);
+        result.push_back(vertex.get());
       }
       return result;
     }
 
     void reserve(std::size_t nSimplices) noexcept;
   private:
-    std::unordered_map<std::uint64_t, std::shared_ptr<Vertex>> vertexList{};
+    std::unordered_map<std::uint64_t, std::unique_ptr<Vertex>> vertexList{};
 };
 } // caset
 

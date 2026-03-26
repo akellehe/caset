@@ -33,26 +33,21 @@
 #include "Logger.h"
 
 namespace caset {
-EdgePtr EdgeList::add(const EdgePtr &edge) {
-  return getOrInsert(edge);
-}
 
 EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target) {
   // Check if edge exists before allocating
   std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
   auto it = edgeList.find(fp);
-  if (it != edgeList.end()) return it->second;
-  auto edge = std::make_shared<Edge>(source, target);
-  return getOrInsert(edge);
+  if (it != edgeList.end()) return it->second.get();
+  return getOrInsert(std::make_unique<Edge>(source, target));
 }
 
 EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept {
   // Check if edge exists before allocating
   std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
   auto it = edgeList.find(fp);
-  if (it != edgeList.end()) return it->second;
-  auto edge = std::make_shared<Edge>(source, target, squaredLength);
-  return getOrInsert(edge);
+  if (it != edgeList.end()) return it->second.get();
+  return getOrInsert(std::make_unique<Edge>(source, target, squaredLength));
 }
 
 void EdgeList::remove(const EdgePtr &edge) noexcept {
@@ -79,14 +74,15 @@ void EdgeList::remove(const EdgePtr &edge) noexcept {
 
 void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
   edgeList.erase(toRemove->fingerprint.fingerprint());
-  edgeList.emplace(toAdd->fingerprint.fingerprint(), toAdd);
+  auto uptr = std::make_unique<Edge>(toAdd->getSource(), toAdd->getTarget(), toAdd->getSquaredLength());
+  edgeList.emplace(toAdd->fingerprint.fingerprint(), std::move(uptr));
 }
 
 [[nodiscard]] Edges EdgeList::toVector() const noexcept {
   Edges result{};
   result.reserve(edgeList.size());
-  for (auto &[fp, edge] : edgeList) {
-    result.push_back(edge);
+  for (const auto &[fp, edge] : edgeList) {
+    result.push_back(edge.get());
   }
   return result;
 }
@@ -96,10 +92,10 @@ void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
 }
 
 EdgePtr EdgeList::get(const std::uint64_t &fingerprint) {
-  return edgeList.at(fingerprint);
+  return edgeList.at(fingerprint).get();
 }
 
-EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
+EdgePtr EdgeList::getOrInsert(std::unique_ptr<Edge> edge) {
   if (edge->getSource()->getId() == edge->getTarget()->getId()) {
     throw std::runtime_error("You cannot create an edge from a vertex to itself: " + edge->toString());
   }
@@ -113,10 +109,11 @@ EdgePtr EdgeList::getOrInsert(const EdgePtr &edge) {
         "Fingerprint collision between edges: " + edge->toString() + " and " + found->toString());
     }
 #endif
-    return it->second;
+    return it->second.get();
   }
-  edgeList.emplace(fp, edge);
-  return edge;
+  Edge* raw = edge.get();
+  edgeList.emplace(fp, std::move(edge));
+  return raw;
 }
 
 void EdgeList::reserve(std::size_t nSimplices) {

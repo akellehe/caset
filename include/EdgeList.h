@@ -38,7 +38,6 @@ class EdgeList {
   public:
     [[nodiscard]] std::size_t size() const;
     [[nodiscard]] Edges toVector() const noexcept;
-    EdgePtr add(const EdgePtr &edge);
     EdgePtr add(const VertexPtr &source, const VertexPtr &target);
     EdgePtr add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept;
     EdgePtr get(const std::uint64_t &fingerprint);
@@ -47,8 +46,8 @@ class EdgeList {
     void reserve(std::size_t nSimplices);
 
   private:
-    EdgePtrMap edgeList{};
-    EdgePtr getOrInsert(const EdgePtr &edge);
+    std::unordered_map<std::uint64_t, std::unique_ptr<Edge>> edgeList{};
+    EdgePtr getOrInsert(std::unique_ptr<Edge> edge);
 };
 } // caset
 

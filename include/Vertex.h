@@ -69,7 +69,7 @@ namespace caset {
 ///
 /// The vertex class uses shared_from_this to enable safe shared_ptr creation from member functions.
 ///
-class Vertex : public std::enable_shared_from_this<Vertex> {
+class Vertex {
     public:
         // ========================================
         // Constructors
@@ -464,18 +464,18 @@ struct hash<caset::Vertex> {
 };
 
 ///
-/// \brief Hash function specialization for std::shared_ptr<caset::Vertex>
+/// \brief Hash function specialization for caset::Vertex*
 ///
-/// Enables VertexPtr (shared_ptr<Vertex>) to be used as keys in hash tables.
+/// Enables VertexPtr (Vertex*) to be used as keys in hash tables.
 /// Hashes the underlying vertex ID, not the pointer address.
 ///
 /// # Important
-/// Two shared_ptrs pointing to vertices with the same ID will hash to the same value,
+/// Two pointers pointing to vertices with the same ID will hash to the same value,
 /// even if they are different pointer instances.
 ///
 template<>
-struct hash<std::shared_ptr<caset::Vertex> > {
-    size_t operator()(const std::shared_ptr<caset::Vertex> &vertex) const noexcept {
+struct hash<caset::Vertex*> {
+    size_t operator()(caset::Vertex* const &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex->getId());
     }
 };
@@ -497,14 +497,14 @@ struct equal_to<caset::Vertex> {
 };
 
 ///
-/// \brief Equality comparison specialization for std::shared_ptr<caset::Vertex>
+/// \brief Equality comparison specialization for caset::Vertex*
 ///
 /// Compares vertices by ID, not by pointer address.
-/// Consistent with the hash specialization for shared_ptr<Vertex>.
+/// Consistent with the hash specialization for Vertex*.
 ///
 template<>
-struct equal_to<std::shared_ptr<caset::Vertex> > {
-    size_t operator()(const caset::VertexPtr &a, const caset::VertexPtr &b) const noexcept {
+struct equal_to<caset::Vertex*> {
+    size_t operator()(caset::Vertex* const &a, caset::Vertex* const &b) const noexcept {
         return a->getId() == b->getId();
     }
 };

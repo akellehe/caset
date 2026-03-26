@@ -685,6 +685,8 @@ struct FingerprintEq {
 ///
 template<typename T>
 struct FingerprintPtrHash {
+  using is_transparent = void; // enables heterogeneous lookup
+
   /// Hash a pointer (aborts on nullptr with assertions)
   size_t operator()(const T &s) const noexcept {
 #ifdef CASET_ASSERTIONS
@@ -713,6 +715,8 @@ struct FingerprintPtrHash {
 ///
 template<typename T>
 struct FingerprintPtrEq {
+  using is_transparent = void; // enables heterogeneous lookup
+
   /// Compare two pointers by fingerprint (asserts non-null)
   bool operator()(const T &a, const T &b) const noexcept {
 #ifdef CASET_ASSERTIONS
@@ -720,6 +724,22 @@ struct FingerprintPtrEq {
     assert(b != nullptr);
 #endif
     return a->fingerprint.fingerprint() == b->fingerprint.fingerprint();
+  }
+
+  /// Compare pointer to raw fingerprint value
+  bool operator()(const T &a, uint64_t fp) const noexcept {
+#ifdef CASET_ASSERTIONS
+    assert(a != nullptr);
+#endif
+    return a->fingerprint.fingerprint() == fp;
+  }
+
+  /// Compare raw fingerprint value to pointer
+  bool operator()(uint64_t fp, const T &a) const noexcept {
+#ifdef CASET_ASSERTIONS
+    assert(a != nullptr);
+#endif
+    return fp == a->fingerprint.fingerprint();
   }
 };
 
@@ -780,7 +800,7 @@ class CorruptionDetector {
     static bool isCorrupted(const std::unordered_set<Ptr, PtrHash, PtrEq> &container) {
       std::unordered_set<IdType> seen{};
       for (const auto &o : container) {
-        if (o == nullptr || o.get() == nullptr) {
+        if (o == nullptr) {
           CLOG(WARN_LEVEL, "Corruption detected (nullptr)!");
           return true;
         }
@@ -813,7 +833,7 @@ class CorruptionDetector {
     static bool isCorrupted(const std::unordered_map<IdType, Ptr, PtrHash, PtrEq> &container) {
       std::unordered_set<IdType> seen{};
       for (const auto &[id, o] : container) {
-        if (o == nullptr || o.get() == nullptr) {
+        if (o == nullptr) {
           CLOG(WARN_LEVEL, "Corruption detected (nullptr)!");
           return true;
         }

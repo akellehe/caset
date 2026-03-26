@@ -51,11 +51,11 @@ namespace caset {
 /// faster method for building the complex would be to avoid computing those vertices and edges; and just compute the
 /// simplex as an abstraction with faces, cofaces, and an orientation. We'll leave this for a "Version 2 feature".
 ///
-class Simplex : public std::enable_shared_from_this<Simplex> {
+class Simplex {
   public:
     // ==================== Static Factory Methods ====================
-    static std::shared_ptr<Simplex> create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_);
-    static std::shared_ptr<Simplex> create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientation &orientation_);
+    static Simplex* create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_);
+    static Simplex* create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientation &orientation_);
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k);
 
     // ==================== Constructors & Initialization ====================
@@ -71,7 +71,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// Simplex. Again; we define a Simplex abstractly as a set of vertices with a time orientation.
     /// When you construct a Spacetime which can abstractly be considered a Simplicial complex; having access to the
     /// Simplex by Vertex is pretty handy for bookkeeping.
-    void initialize(const std::shared_ptr<Simplex> &simplex);
+    void initialize(Simplex* simplex);
 
     // ==================== String Representation ====================
 #ifdef CASET_VERBOSE
@@ -169,11 +169,11 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// \f$ \sigma^{k+1} \f$ is a coface of \f$ \sigma^k \f$ iff
     /// \f$ \sigma^k \subset \sigma^{k+1} \f$ (the lower-dimensional simplex is a face
     /// of the higher-dimensional one).
-    void addCoface(const std::shared_ptr<Simplex> &simplex);
+    void addCoface(SimplexPtr simplex);
 
     /// Unregister a coface from this simplex. Called during simplex removal in
     /// Pachner moves to maintain consistent coface bookkeeping.
-    void removeCoface(const std::shared_ptr<Simplex> &simplex);
+    void removeCoface(SimplexPtr simplex);
 
     /// Check whether this simplex is a coface of the given facet,
     /// i.e., whether all vertices of the facet are contained in this simplex.
@@ -181,7 +181,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// @param shallow If true, also require the dimension difference to be exactly 1
     bool isCofaceTo(const SimplexPtr &simplex, bool shallow=true) const;
 
-    [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;
+    [[nodiscard]] bool hasCoface(SimplexPtr simplex) const;
 
     ///
     /// Co-faces are maintained as state rather than computed on the fly. This means any time a Simplex is attached to
@@ -235,7 +235,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     // ==================== Modification Methods ====================
     bool addEdge(const EdgePtr &edge);
     bool removeEdge(const EdgePtr &edge);
-    static void registerToVertices(const SimplexPtr &simplex);
+    static void registerToVertices(Simplex* simplex);
 
     /// If you're working in a 3-complex (tetrahedrons), \f$ K \f$ this method should be appropriately called on a
     /// 2-simplex (a triangle), \f$ \sigma^2 \f$ or in general for a given k-complex, \f$ K \f$ you should just be
@@ -253,7 +253,7 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
 
     // ==================== Operators ====================
     bool operator==(const Simplex &other) const noexcept;
-    bool operator==(const std::shared_ptr<Simplex> &other) const noexcept;
+    bool operator==(const Simplex* other) const noexcept;
 
     // ==================== Public Data ====================
     Fingerprint fingerprint{};

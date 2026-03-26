@@ -126,12 +126,12 @@ Vertex::moveEdgesToImpl(
 
     if (direction == EdgeDirection::In) {
 #ifdef CASET_ASSERTIONS
-      if (sourceVertex.get() == this) throw std::runtime_error("sourceVertex was this");
+      if (sourceVertex == this) throw std::runtime_error("sourceVertex was this");
 #endif
       sourceVertex->removeOutEdge(oldEdge);
     } else if (direction == EdgeDirection::Out) {
 #ifdef CASET_ASSERTIONS
-      if (targetVertex.get() == this) throw std::runtime_error("targetVertex was this");
+      if (targetVertex == this) throw std::runtime_error("targetVertex was this");
 #endif
       targetVertex->removeInEdge(oldEdge);
     }
@@ -194,7 +194,7 @@ void Vertex::checkDuplicates(std::string msg) const {
 
 bool Vertex::addSimplex(const SimplexPtr &simplex) {
 #if CASET_ASSERTIONS
-  if (simplex == nullptr || simplex.get() == nullptr) {
+  if (simplex == nullptr) {
     CLOG(CRITICAL_LEVEL, "You passed a null simplex!");
     throw std::runtime_error("You passed a null simplex!");
   }

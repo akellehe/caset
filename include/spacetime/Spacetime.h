@@ -339,6 +339,7 @@ class Spacetime {
     std::uint64_t currentTime = 0;
 
     SimplexSet simplices{};
+    std::unordered_map<std::uint64_t, std::unique_ptr<Simplex>> simplexOwner{}; // owns all Simplex allocations
     std::vector<SimplexPtr> simplicesVec{}; // parallel vector for O(1) random access
     std::unordered_map<std::uint64_t, std::size_t> simplexVecIndex{}; // fingerprint → index in simplicesVec
     std::size_t n41Count = 0; // (4,1) + (1,4) simplices

@@ -63,7 +63,7 @@ enum class EdgeDisposition : uint8_t {
 /// @param squaredLength_ The squared length of the edge according to whatever spacetime metric is being used. We work
 ///   in squared lengths to allow the use of imaginary Edge lengths (they have negative values).
 ///
-class Edge : public std::enable_shared_from_this<Edge> {
+class Edge {
   public:
     Edge(
       const VertexPtr &source,
