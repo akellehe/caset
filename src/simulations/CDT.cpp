@@ -421,7 +421,7 @@ void CDT::tune() {
 
   // Fine-tune with short feedback sweeps
   double target = static_cast<double>(targetN4);
-  for (int i = 0; i < 200; ++i) {
+  for (int i = 0; i < 20; ++i) {
     sweep();
     double n4 = static_cast<double>(spacetime->getSimplexCount());
     double error = (n4 - target) / target;  // normalized error
