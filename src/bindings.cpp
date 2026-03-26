@@ -217,7 +217,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getEdgeList", &Spacetime::getEdgeList)
       .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference)
       .def("build", &Spacetime::build)
-      .def("getSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::reference)
+      .def("getSimplices", &Spacetime::getSimplices, py::return_value_policy::reference)
+      .def("getExternalSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::reference)
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&
              Spacetime::createEdge),

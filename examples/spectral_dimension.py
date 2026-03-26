@@ -179,6 +179,10 @@ def main():
     target = st.getSimplexCount()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
+    print("Tuning k4...")
+    cdt.tune()
+    print(f"  k4 = {cdt.getK4():.4f}")
+
     for _ in tqdm(range(args.n_therm), desc="Thermalizing",
                   unit="sweep", leave=False):
         cdt.sweep()
