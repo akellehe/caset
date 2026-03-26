@@ -7,6 +7,12 @@ from random selection and Metropolis acceptance.
 Each test builds a known lattice using the low-level spacetime API,
 applies the move's topology change directly, asserts the exact result,
 then applies the inverse and asserts we return.
+
+References:
+  [RU]  Ambjorn, Jurkiewicz, Loll, "Reconstructing the Universe",
+        Phys. Rev. D 72 (2005), arXiv:hep-th/0505154v2
+  [BGL] Brunekreef, Gorlich, Loll, "Simulating CDT quantum gravity",
+        arXiv:2310.16744v1 (2023)
 """
 
 import unittest
@@ -77,7 +83,7 @@ def _assert_counts(test, st):
 # =====================================================================
 
 class TestConeForward(unittest.TestCase):
-    """Cone a facet to a new vertex using createSimplex.
+    """[BGL] Sec. 2.3.1: Cone a facet to a new vertex using createSimplex.
 
     This tests the raw topology primitive that underlies vertex insertion,
     separated from CDT move selection and acceptance.
@@ -191,7 +197,7 @@ class TestConeForward(unittest.TestCase):
 # =====================================================================
 
 class TestFlipForward(unittest.TestCase):
-    """The (2,d) flip replaces 2 simplices sharing a (d-1)-face with d
+    """[BGL] Sec. 2.3.2: The (2,d) flip replaces 2 simplices sharing a (d-1)-face with d
     new simplices.  This is the topology change, decoupled from CDT::flip().
     """
 
@@ -306,7 +312,7 @@ class TestFlipForward(unittest.TestCase):
 # =====================================================================
 
 class TestShiftForward(unittest.TestCase):
-    """The (3,3) shift replaces 3 simplices sharing a (d-2)-face with
+    """[BGL] Sec. 2.3.3: The (3,3) shift replaces 3 simplices sharing a (d-2)-face with
     3 new simplices.  Decoupled from CDT::shift().
     """
 
@@ -362,10 +368,10 @@ class TestShiftForward(unittest.TestCase):
     def test_shift_3_to_3(self):
         """Remove 3, create 3 new simplices with correct vertex sets."""
         st = _make_spacetime()
-        st.build(30)
+        st.build(200)
         target = st.getN41()
         cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
-        cdt.sweep(50)
+        cdt.sweep(200)
 
         before_n4 = st.getSimplexCount()
         before_n0 = st.getVertexCount()
@@ -400,10 +406,10 @@ class TestShiftForward(unittest.TestCase):
     def test_shift_then_reverse(self):
         """Shift forward, then shift back: N4 returns."""
         st = _make_spacetime()
-        st.build(30)
+        st.build(200)
         target = st.getN41()
         cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
-        cdt.sweep(50)
+        cdt.sweep(200)
 
         before_n4 = st.getSimplexCount()
 
@@ -440,7 +446,7 @@ class TestShiftForward(unittest.TestCase):
 # =====================================================================
 
 class TestIteratedConeRemove(unittest.TestCase):
-    """Cone then removeSimplex, iterated many times."""
+    """[BGL] Sec. 2.3.1: Cone then removeSimplex, iterated many times."""
 
     def test_ten_iterations(self):
         st = _make_spacetime()
@@ -480,7 +486,7 @@ class TestIteratedConeRemove(unittest.TestCase):
 
 
 class TestIteratedFlip(unittest.TestCase):
-    """Flip forward then backward, iterated."""
+    """[BGL] Sec. 2.3.2: Flip forward then backward, iterated."""
 
     def _find_flippable(self, st):
         for top in _top_simplices(st):

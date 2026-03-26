@@ -43,6 +43,16 @@ class EdgeList {
     EdgePtr get(const std::uint64_t &fingerprint);
     void remove(const EdgePtr &edge) noexcept;
     void replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept;
+    void rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp);
+
+    /// Extract an edge from the map by fingerprint, returning the node handle.
+    /// The caller must reinsert it (via reinsertEdge) after updating the fingerprint.
+    auto extractEdge(std::uint64_t fp) { return edgeList.extract(fp); }
+
+    /// Reinsert an extracted edge node with its new key.
+    template<typename NodeHandle>
+    void reinsertEdge(NodeHandle &&nh) { edgeList.insert(std::forward<NodeHandle>(nh)); }
+
     void reserve(std::size_t nSimplices);
 
   private:

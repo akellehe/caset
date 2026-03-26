@@ -11,6 +11,12 @@ Dimensions tested:
   - d=2,3,4 for cone (add) and its reverse (remove)
   - d=2,3,4 for the (2,d) flip and its reverse
   - d=4 for the (3,3) shift and its reverse
+
+References:
+  [RU]  Ambjorn, Jurkiewicz, Loll, "Reconstructing the Universe",
+        Phys. Rev. D 72 (2005), arXiv:hep-th/0505154v2
+  [BGL] Brunekreef, Gorlich, Loll, "Simulating CDT quantum gravity",
+        arXiv:2310.16744v1 (2023)
 """
 
 import unittest
@@ -72,7 +78,7 @@ def _get_vertex(st, vid):
 # =====================================================================
 
 class TestConeExact(unittest.TestCase):
-    """Build a single seed simplex, cone a known facet, assert exact structure.
+    """[BGL] Sec. 2.3.1: Build a single seed simplex, cone a known facet, assert exact structure.
 
     Seed: (1, d) simplex → v0@t=0, v1..vd@t=1.
     Chosen facet: first non-timelike = {v0, v2, ..., vd} (skips v1).
@@ -201,7 +207,7 @@ class TestConeExact(unittest.TestCase):
 # =====================================================================
 
 class TestFlipExact(unittest.TestCase):
-    """Build 2 top simplices sharing a (d-1)-face via cone, then flip.
+    """[BGL] Sec. 2.3.2: Build 2 top simplices sharing a (d-1)-face via cone, then flip.
 
     Starting lattice (after cone):
       Seed: {v0, v1, ..., vd} orient (1, d)
@@ -362,7 +368,7 @@ class TestFlipExact(unittest.TestCase):
 # =====================================================================
 
 class TestShiftExact(unittest.TestCase):
-    """Build 3 top simplices sharing a triangle (3 vertices), shift.
+    """[BGL] Sec. 2.3.3: Build 3 top simplices sharing a triangle (3 vertices), shift.
 
     Lattice: 6 vertices total.
       Shared: a(0)@t=0, b(1)@t=0, c(2)@t=0
@@ -533,7 +539,7 @@ class TestShiftExact(unittest.TestCase):
 # =====================================================================
 
 class TestDimensionProperties(unittest.TestCase):
-    """Verify that the topology changes produce correct results
+    """[BGL] Sec. 2.3: Verify that the topology changes produce correct results
     specific to each dimension's combinatorics."""
 
     def test_flip_simplex_count_change(self):

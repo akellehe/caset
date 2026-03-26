@@ -525,6 +525,21 @@ void Simplex::updateVertexId(IdType oldId, IdType newId) {
   vertexIndexToId.emplace(index, newId);
 }
 
+void Simplex::swapVertexIds(IdType id1, IdType id2) {
+  auto it1 = vertexIdToIndex.find(id1);
+  auto it2 = vertexIdToIndex.find(id2);
+  if (it1 == vertexIdToIndex.end() || it2 == vertexIdToIndex.end()) return;
+  auto idx1 = it1->second;
+  auto idx2 = it2->second;
+  // Erase both, then re-emplace with swapped keys
+  vertexIdToIndex.erase(it1);
+  vertexIdToIndex.erase(it2);
+  vertexIdToIndex.emplace(id2, idx1);
+  vertexIdToIndex.emplace(id1, idx2);
+  vertexIndexToId[idx1] = id2;
+  vertexIndexToId[idx2] = id1;
+}
+
 bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
   if (facets.empty()) return false;
   for (const auto &f : facets) {

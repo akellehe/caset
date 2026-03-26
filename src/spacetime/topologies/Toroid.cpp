@@ -29,23 +29,25 @@
 
 namespace caset {
 
-/// Build a CDT triangulation with proper bi-directional spatial face structure.
+/// Build a CDT triangulation using the staircase product triangulation.
 ///
 /// Constructs time slabs between adjacent layers of (d+1) vertices each.
-/// Each slab contains 2*(d+1) simplices: (d+1) of type (d,1) and (d+1) of
-/// type (1,d). The spatial (d-1)-faces at interior time slices are shared
-/// by simplices from adjacent slabs, enabling the (2,2d) vertex insertion
-/// move (Brunekreef Sec. 2.3.1).
-///
 /// The spatial topology at each time slice is the boundary of the d-simplex
-/// (S^{d-1}), which is the minimal triangulation of the spatial sphere.
-/// For d=4 this gives S^3 with 5 vertices and 5 tetrahedra per slice,
-/// matching the initial configuration described in "Reconstructing the
-/// Universe" (Ambjorn et al. 2005, Sec. 3).
+/// (S^{d-1}): for d=4 this gives S^3 with 5 vertices and 5 tetrahedra.
+///
+/// Each slab is triangulated using the staircase decomposition of the
+/// product S^{d-1} × [t, t+1]. For each spatial (d-1)-simplex (face),
+/// the staircase produces d top-simplices covering all CDT orientation
+/// types: (d,1), (d-1,2), ..., (2,d-1), (1,d). This yields d*(d+1)
+/// simplices per slab (20 for d=4), including (3,2)/(2,3) types that
+/// enable flip and shift moves ([BGL] Sec. 2.3.2–2.3.3).
+///
+/// Ref: Ambjorn et al. "Reconstructing the Universe" (2005), Sec. 3;
+///      Brunekreef et al. "Simulating CDT quantum gravity" (2023), Sec. 2.3.
 void Toroid::build(Spacetime *spacetime, int nSimplices) {
   auto d = spacetime->getMetric()->getSignature()->getDimensions();
   int dPlus1 = d + 1;
-  int simplicesPerSlab = 2 * dPlus1;
+  int simplicesPerSlab = d * dPlus1;  // staircase: d simplices per face, (d+1) faces
   int numSlabs = std::max(2, nSimplices / simplicesPerSlab);
   int numLayers = numSlabs + 1;
 
@@ -61,32 +63,41 @@ void Toroid::build(Spacetime *spacetime, int nSimplices) {
     if (t > 0) spacetime->incrementTime();
   }
 
-  // Create simplices for each time slab.
-  // Each slab from layer t to t+1 gets:
-  //   (d,1) type: for each i, take all layer-t vertices except [i], plus layer-(t+1) vertex [i]
-  //   (1,d) type: for each i, take layer-t vertex [i], plus all layer-(t+1) vertices except [i]
+  // Create simplices for each time slab using staircase triangulation.
+  // For each spatial face F_i (skip vertex i), the face has d vertices.
+  // The staircase produces d simplices with orientations (d,1) down to (1,d):
+  //   k=d-1: {v0,...,v_{d-1}, w_{d-1}}             — (d,1)
+  //   k=d-2: {v0,...,v_{d-2}, w_{d-2}, w_{d-1}}    — (d-1,2)
+  //   ...
+  //   k=0:   {v0, w0, w1, ..., w_{d-1}}            — (1,d)
+  // where v_j are the d lower-layer vertices of F_i and w_j are their
+  // upper-layer counterparts.
   for (int slab = 0; slab < numSlabs; ++slab) {
     auto &S = layers[slab];       // spatial vertices at time t
     auto &N = layers[slab + 1];   // next-time vertices at time t+1
 
+    // For each spatial face F_i (skip vertex i from the boundary of Δ^d)
     for (int i = 0; i < dPlus1; ++i) {
-      // (d,1) simplex: {S[0],...,S[d]} \ {S[i]} ∪ {N[i]}
-      VertexPtrs verts_d1;
-      verts_d1.reserve(dPlus1);
+      // Collect the d face vertices and their upper counterparts
+      std::vector<VertexPtr> faceS, faceN;
+      faceS.reserve(d);
+      faceN.reserve(d);
       for (int j = 0; j < dPlus1; ++j) {
-        if (j != i) verts_d1.push_back(S[j]);
+        if (j != i) {
+          faceS.push_back(S[j]);
+          faceN.push_back(N[j]);
+        }
       }
-      verts_d1.push_back(N[i]);
-      auto [s1, c1] = spacetime->createSimplex(verts_d1);
 
-      // (1,d) simplex: {S[i]} ∪ {N[0],...,N[d]} \ {N[i]}
-      VertexPtrs verts_1d;
-      verts_1d.reserve(dPlus1);
-      verts_1d.push_back(S[i]);
-      for (int j = 0; j < dPlus1; ++j) {
-        if (j != i) verts_1d.push_back(N[j]);
+      // Staircase: for k = d-1 down to 0, create one simplex
+      // with (k+1) lower vertices and (d-k) upper vertices
+      for (int k = d - 1; k >= 0; --k) {
+        VertexPtrs verts;
+        verts.reserve(dPlus1);
+        for (int j = 0; j <= k; ++j) verts.push_back(faceS[j]);
+        for (int j = k; j < d; ++j) verts.push_back(faceN[j]);
+        spacetime->createSimplex(verts);
       }
-      auto [s2, c2] = spacetime->createSimplex(verts_1d);
     }
   }
 

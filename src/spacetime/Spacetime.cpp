@@ -382,10 +382,18 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
   }
 
   // Phase 1: Remove affected simplices from hash tables (fingerprints still valid)
+  // Track which were actually in each hash table to avoid re-inserting sub-simplices.
+  // Extract simplexOwner nodes now to avoid transient collisions in Phase 3
+  // (same issue as edges: v1 and v2 sharing a neighbor causes fp collision).
+  std::unordered_set<SimplexPtr> wasInSimplices;
+  using OwnerNodeHandle = decltype(simplexOwner.extract(std::uint64_t{}));
+  std::vector<OwnerNodeHandle> ownerNodes;
   for (auto &[s, oldFp] : affected) {
-    simplices.erase(s);
+    if (simplices.erase(s)) wasInSimplices.insert(s);
     simplexVecIndex.erase(oldFp);
     topSimplexVecIndex.erase(oldFp);
+    auto nh = simplexOwner.extract(oldFp);
+    if (!nh.empty()) ownerNodes.push_back(std::move(nh));
   }
 
   // Record which affected simplices contained v1 vs v2 BEFORE swapping IDs
@@ -401,9 +409,74 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
   vertexList->swapKeys(id1, id2);
 
   // Update internal ID maps on ALL simplices containing either vertex
-  // (including sub-simplices like facets and edges, not just top-simplices)
-  for (const auto &s : v1->getSimplices()) s->updateVertexId(id1, id2);
-  for (const auto &s : v2->getSimplices()) s->updateVertexId(id2, id1);
+  // (including sub-simplices like facets and edges, not just top-simplices).
+  // Simplices containing BOTH must use atomic swap to avoid map key collisions.
+  {
+    std::unordered_set<SimplexPtr> v1Set(v1->getSimplices().begin(),
+                                          v1->getSimplices().end());
+    std::unordered_set<SimplexPtr> v2Set(v2->getSimplices().begin(),
+                                          v2->getSimplices().end());
+    // Shared simplices: atomic swap
+    for (const auto &s : v1Set) {
+      if (v2Set.count(s)) s->swapVertexIds(id1, id2);
+    }
+    // v1-only simplices
+    for (const auto &s : v1Set) {
+      if (!v2Set.count(s)) s->updateVertexId(id1, id2);
+    }
+    // v2-only simplices
+    for (const auto &s : v2Set) {
+      if (!v1Set.count(s)) s->updateVertexId(id2, id1);
+    }
+  }
+
+  // Phase 2.5: Update edge fingerprints and rekey in EdgeList
+  // Edges incident to exactly one of v1, v2 need fingerprint updates.
+  // Edges between v1 and v2 are unaffected (XOR is commutative).
+  // [BGL] Sec. 2.2.1: vertex relabeling requires consistent edge lookup.
+  //
+  // Must batch: extract-all, update-all, reinsert-all to avoid transient
+  // collisions when v1 and v2 share a neighbor (edge (v1,v3) would collide
+  // with edge (v2,v3) mid-rekey).
+  struct AffectedEdge { EdgePtr ptr; bool fromV1; };
+  std::vector<AffectedEdge> affectedEdges;
+
+  for (const auto &e : v1->getEdges()) {
+    if (!e->hasVertex(id1))  // id1 is now v2's id; skip v1-v2 edge
+      affectedEdges.push_back({e, true});
+  }
+  for (const auto &e : v2->getEdges()) {
+    if (!e->hasVertex(id2))  // id2 is now v1's id; skip v1-v2 edge
+      affectedEdges.push_back({e, false});
+  }
+
+  // Extract all affected edges from EdgeList (removes them from the map)
+  using NodeHandle = decltype(edgeList->extractEdge(0));
+  std::vector<NodeHandle> edgeNodes;
+  edgeNodes.reserve(affectedEdges.size());
+  for (auto &[e, fromV1] : affectedEdges) {
+    auto nh = edgeList->extractEdge(e->fingerprint.fingerprint());
+    if (!nh.empty()) edgeNodes.push_back(std::move(nh));
+  }
+
+  // Update fingerprints on the edge objects
+  for (auto &[e, fromV1] : affectedEdges) {
+    if (fromV1) {
+      e->fingerprint.removeId(id1);
+      e->fingerprint.addId(id2);
+    } else {
+      e->fingerprint.removeId(id2);
+      e->fingerprint.addId(id1);
+    }
+    e->fingerprint.refresh();
+  }
+
+  // Reinsert with new fingerprints as keys
+  for (auto &nh : edgeNodes) {
+    auto newFp = nh.mapped()->fingerprint.fingerprint();
+    nh.key() = newFp;
+    edgeList->reinsertEdge(std::move(nh));
+  }
 
   // Update fingerprints on affected simplices (those in hash tables)
   for (auto &[s, oldFp] : affected) {
@@ -418,16 +491,10 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
   }
 
   // Phase 3: Re-insert into hash tables with new fingerprints
+  // Only re-insert simplices that were actually in the hash set (skip sub-simplices)
   for (auto &[s, oldFp] : affected) {
     auto newFp = s->fingerprint.fingerprint();
-    simplices.insert(s);
-
-    // Rekey simplexOwner (owns the Simplex allocation)
-    auto nh = simplexOwner.extract(oldFp);
-    if (!nh.empty()) {
-      nh.key() = newFp;
-      simplexOwner.insert(std::move(nh));
-    }
+    if (wasInSimplices.count(s)) simplices.insert(s);
 
     // Restore vec index mappings (vec position unchanged, just the key)
     for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
@@ -436,6 +503,12 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
     for (std::size_t i = 0; i < topSimplicesVec.size(); ++i) {
       if (topSimplicesVec[i] == s) { topSimplexVecIndex[newFp] = i; break; }
     }
+  }
+
+  // Reinsert simplexOwner nodes with updated fingerprint keys
+  for (auto &nh : ownerNodes) {
+    nh.key() = nh.mapped()->fingerprint.fingerprint();
+    simplexOwner.insert(std::move(nh));
   }
 }
 

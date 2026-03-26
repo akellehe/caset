@@ -323,6 +323,10 @@ class Simplex {
     /// consistent with the actual vertex IDs.
     void updateVertexId(IdType oldId, IdType newId);
 
+    /// Swap two vertex IDs atomically in the internal maps.
+    /// Used when a simplex contains both swapped vertices.
+    void swapVertexIds(IdType id1, IdType id2);
+
     bool isInitialized() const noexcept;
   private:
     Spacetime *spacetime{nullptr};

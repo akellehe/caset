@@ -19,12 +19,22 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""
+Tests for CDT simulation infrastructure.
+
+References:
+  [RU]  Ambjorn, Jurkiewicz, Loll, "Reconstructing the Universe",
+        Phys. Rev. D 72 (2005), arXiv:hep-th/0505154v2
+  [BGL] Brunekreef, Gorlich, Loll, "Simulating CDT quantum gravity",
+        arXiv:2310.16744v1 (2023)
+"""
+
 import unittest
 import caset
 
 
 class TestCDTAction(unittest.TestCase):
-    """Test the Regge action computation for 4D CDT."""
+    """[RU] eq. 2: Test the Regge action computation for 4D CDT."""
 
     def _make_spacetime(self, topology=None, n_simplices=10):
         sig = caset.Signature(4, caset.Lorentzian)
@@ -66,7 +76,7 @@ class TestCDTAction(unittest.TestCase):
 
 
 class TestCDTMoves(unittest.TestCase):
-    """Test individual Pachner moves."""
+    """[BGL] Sec. 2.3: Test individual Pachner moves."""
 
     def _make_cdt(self, n_simplices=20, topology=None):
         sig = caset.Signature(4, caset.Lorentzian)
@@ -124,7 +134,7 @@ class TestCDTMoves(unittest.TestCase):
 
 
 class TestCDTTopologies(unittest.TestCase):
-    """Test that each topology builds and supports CDT simulation."""
+    """[RU] Sec. 3: Test that each topology builds and supports CDT simulation."""
 
     def _test_topology_builds_and_simulates(self, topology):
         sig = caset.Signature(4, caset.Lorentzian)
@@ -150,7 +160,7 @@ class TestCDTTopologies(unittest.TestCase):
 
 
 class TestCDTVolumeProfile(unittest.TestCase):
-    """Test volume profile computation."""
+    """[RU] eq. 6: Test volume profile computation."""
 
     def test_volume_profile_nonempty(self):
         """Volume profile should be non-empty after building a spacetime."""
@@ -178,7 +188,7 @@ class TestCDTVolumeProfile(unittest.TestCase):
 
 
 class TestCDTAcceptanceRates(unittest.TestCase):
-    """Test acceptance rate tracking."""
+    """[BGL] eq. 11: Test acceptance rate tracking."""
 
     def test_acceptance_rates_reported(self):
         """Acceptance rates should be a dict with all move types."""
@@ -198,7 +208,7 @@ class TestCDTAcceptanceRates(unittest.TestCase):
 
 
 class TestSpacetimeCounting(unittest.TestCase):
-    """Test new Spacetime counting methods."""
+    """[RU] eq. 2: Test Spacetime counting methods."""
 
     def test_counts_after_build(self):
         sig = caset.Signature(4, caset.Lorentzian)

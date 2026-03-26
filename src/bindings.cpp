@@ -263,7 +263,8 @@ PYBIND11_MODULE(caset, m) {
       .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference)
       .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference)
       .def("getRandomVertex", &Spacetime::getRandomVertex, py::return_value_policy::reference)
-      .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"));
+      .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"))
+      .def("swapVertexLabels", &Spacetime::swapVertexLabels, py::arg("v1"), py::arg("v2"));
 
   py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation")
       .def(py::init<std::shared_ptr<Spacetime>, double, double, double, double, std::size_t, bool>(),

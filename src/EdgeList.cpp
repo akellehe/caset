@@ -72,6 +72,15 @@ void EdgeList::remove(const EdgePtr &edge) noexcept {
 #endif
 }
 
+void EdgeList::rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp) {
+  if (oldFp == newFp) return;
+  auto nh = edgeList.extract(oldFp);
+  if (!nh.empty()) {
+    nh.key() = newFp;
+    edgeList.insert(std::move(nh));
+  }
+}
+
 void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
   edgeList.erase(toRemove->fingerprint.fingerprint());
   auto uptr = std::make_unique<Edge>(toAdd->getSource(), toAdd->getTarget(), toAdd->getSquaredLength());
