@@ -26,98 +26,151 @@ Key results from the paper (k0=2.2, Delta=0.6, t=80):
   Best fit:  D_S(sigma) = 4.02 - 119/(54 + sigma)    [Eq. 29]
 
 Parameters: k0 = 2.2, Delta = 0.6.
-Estimated runtime: ~2-5 minutes.
 """
 import argparse
+import multiprocessing
+import os
 import time
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import sparse
 from tqdm import tqdm
 
 import caset
 
 
-def build_dual_adjacency(st):
-    """
-    Build the dual graph adjacency: each top-dimensional simplex is a node,
-    two nodes are adjacent if their simplices share a (d-1)-face.
+# ---------------------------------------------------------------------------
+# Dual-graph construction
+# ---------------------------------------------------------------------------
 
-    Uses the coface structure: a facet shared by exactly 2 top-simplices
-    connects those two simplices in the dual graph.
-    """
-    d = 4  # spacetime dimension
-    d_plus_1 = d + 1
+def build_transition_matrix(st):
+    """Build the sparse row-stochastic transition matrix for diffusion on
+    the dual graph of the triangulation.
 
-    # Collect top-dimensional simplices
+    Each top-dimensional simplex is a node.  Two nodes are adjacent if their
+    simplices share a (d-1)-face.  The transition probability is uniform over
+    neighbours: T[j,i] = 1/deg(i) for every neighbour j of i.
+
+    Returns (T, N) where T is a CSC sparse matrix and N the number of nodes.
+    """
+    d_plus_1 = 5  # 4D
+
     top_simplices = []
     simplex_to_idx = {}
     for s in st.getSimplices():
         if len(s.getVertices()) == d_plus_1:
-            idx = len(top_simplices)
-            simplex_to_idx[hash(s)] = idx
+            simplex_to_idx[hash(s)] = len(top_simplices)
             top_simplices.append(s)
 
     N = len(top_simplices)
     if N == 0:
-        return [], {}
+        return None, 0
 
-    # Build adjacency lists
-    adjacency = [[] for _ in range(N)]
+    rows, cols = [], []
     for i, s in enumerate(top_simplices):
-        facets = s.getFacets()
-        for f in facets:
+        for f in s.getFacets():
             for cf in f.getCofaces():
                 if len(cf.getVertices()) == d_plus_1:
                     h = hash(cf)
                     if h in simplex_to_idx:
                         j = simplex_to_idx[h]
-                        if j != i and j not in adjacency[i]:
-                            adjacency[i].append(j)
+                        if j != i:
+                            rows.append(j)
+                            cols.append(i)
 
-    return adjacency, simplex_to_idx
+    if not rows:
+        return None, N
+
+    # Build adjacency, remove duplicate edges, then normalise
+    A = sparse.csc_matrix((np.ones(len(rows)), (rows, cols)),
+                          shape=(N, N))
+    # Eliminate duplicates (summed) – set all nonzeros to 1
+    A.data[:] = 1.0
+    # Row-stochastic: divide each column by its sum (= degree of that node)
+    deg = np.array(A.sum(axis=0)).ravel()
+    deg[deg == 0] = 1.0
+    T = A @ sparse.diags(1.0 / deg)
+    return T.tocsc(), N
 
 
-def diffuse(adjacency, start, max_sigma):
+def diffuse_sparse(T, starts, max_sigma):
+    """Run diffusion for multiple starting nodes simultaneously using sparse
+    matrix–vector products.
+
+    Returns an array of shape (len(starts), max_sigma+1) with P(sigma) for
+    each starting node.
     """
-    Run a discrete diffusion process on the dual graph.
-    At each step, the probability distributes uniformly to neighbors.
+    N = T.shape[0]
+    n_walks = len(starts)
+    return_probs = np.zeros((n_walks, max_sigma + 1))
+    return_probs[:, 0] = 1.0
 
-    Returns P(sigma) = probability of being at the start node after sigma steps.
-    """
-    N = len(adjacency)
-    if N == 0:
-        return np.zeros(max_sigma + 1)
-
-    # prob[i] = probability of being at node i
-    prob = np.zeros(N)
-    prob[start] = 1.0
-
-    return_prob = np.zeros(max_sigma + 1)
-    return_prob[0] = 1.0
+    # prob[:, w] is the probability vector for walk w
+    prob = np.zeros((N, n_walks))
+    for w, s in enumerate(starts):
+        prob[s, w] = 1.0
 
     for sigma in range(1, max_sigma + 1):
-        new_prob = np.zeros(N)
-        for i in range(N):
-            if prob[i] > 0 and len(adjacency[i]) > 0:
-                share = prob[i] / len(adjacency[i])
-                for j in adjacency[i]:
-                    new_prob[j] += share
-        prob = new_prob
-        return_prob[sigma] = prob[start]
+        prob = T @ prob                       # sparse mat × dense mat
+        for w, s in enumerate(starts):
+            return_probs[w, sigma] = prob[s, w]
 
-    return return_prob
+    return return_probs
 
+
+# ---------------------------------------------------------------------------
+# Worker for parallel configurations
+# ---------------------------------------------------------------------------
+
+def _worker(args_tuple):
+    """Run one independent configuration: build spacetime, thermalize,
+    build dual graph, run diffusion walks.  Returns list of return-prob arrays.
+    """
+    (cfg_id, n_simplices, n_therm, sweeps_between,
+     n_walks, max_sigma) = args_tuple
+
+    sig = caset.Signature(4, caset.Lorentzian)
+    metric = caset.Metric(True, sig)
+    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                         caset.Toroid())
+    st.build(n_simplices)
+    target = st.getSimplexCount()
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt.tune()
+
+    for _ in range(n_therm):
+        cdt.sweep()
+
+    # Decorrelate
+    for _ in range(sweeps_between):
+        cdt.sweep()
+
+    t0 = time.time()
+    T, N = build_transition_matrix(st)
+    if T is None or N == 0:
+        return cfg_id, [], 0, 0.0, 0.0
+
+    starts = np.random.choice(N, size=min(n_walks, N), replace=False)
+    rp = diffuse_sparse(T, starts, max_sigma)
+
+    deg = np.array(T.sum(axis=0)).ravel()
+    avg_nbr = deg.mean()
+    elapsed = time.time() - t0
+    return cfg_id, rp.tolist(), N, avg_nbr, elapsed
+
+
+# ---------------------------------------------------------------------------
+# Spectral dimension extraction
+# ---------------------------------------------------------------------------
 
 def compute_spectral_dimension(return_prob):
-    """
-    Compute D_S(sigma) = -2 d(log P) / d(log sigma).
+    """Compute D_S(sigma) = -2 d(log P) / d(log sigma).
 
     Uses centered finite differences on log-log data.
     Returns (sigma_values, D_S_values) excluding endpoints and zeros.
     """
     sigma = np.arange(len(return_prob))
-    # Skip sigma=0 and any zeros
     valid = (sigma > 1) & (return_prob > 0)
     s = sigma[valid].astype(float)
     p = return_prob[valid]
@@ -128,7 +181,6 @@ def compute_spectral_dimension(return_prob):
     if len(log_s) < 2:
         return s, np.zeros(len(s))
 
-    # Centered finite differences
     ds = np.zeros(len(log_s))
     ds[1:-1] = (log_p[2:] - log_p[:-2]) / (log_s[2:] - log_s[:-2])
     ds[0] = (log_p[1] - log_p[0]) / (log_s[1] - log_s[0])
@@ -137,6 +189,10 @@ def compute_spectral_dimension(return_prob):
     D_S = -2.0 * ds
     return s, D_S
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
@@ -154,9 +210,14 @@ def main():
                         help="Maximum diffusion time")
     parser.add_argument("--sweeps-between", type=int, default=10,
                         help="Sweeps between configurations for decorrelation")
+    parser.add_argument("--workers", type=int,
+                        default=min(os.cpu_count() or 1, 8),
+                        help="Parallel worker processes (default: min(cpus, 8))")
     parser.add_argument("--save", type=str, default=None,
                         help="Save figure to this path instead of showing")
     args = parser.parse_args()
+
+    n_workers = max(1, args.workers)
 
     print("=" * 64)
     print("  Spectral Dimension Measurement via Discrete Diffusion")
@@ -164,61 +225,50 @@ def main():
     print("  Parameters: k0=2.2, Delta=0.6")
     print(f"  Configs: {args.n_configs}, walks/config: {args.n_walks}, "
           f"max sigma: {args.max_sigma}")
+    print(f"  Workers: {n_workers}")
     print("=" * 64)
 
-    # --- Build and thermalize ---
     t_total = time.time()
-    print("\nBuilding spacetime...")
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
-    st.build(args.n_simplices)
-    print(f"  {st.getSimplexCount():,} simplices built")
 
-    target = st.getSimplexCount()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    # Each worker gets its own independent spacetime + simulation
+    tasks = [
+        (cfg, args.n_simplices, args.n_therm, args.sweeps_between,
+         args.n_walks, args.max_sigma)
+        for cfg in range(args.n_configs)
+    ]
 
-    print("Tuning k4...")
-    cdt.tune()
-    print(f"  k4 = {cdt.getK4():.4f}")
-
-    for _ in tqdm(range(args.n_therm), desc="Thermalizing",
-                  unit="sweep", leave=False):
-        cdt.sweep()
-    print(f"Thermalization complete ({args.n_therm} sweeps)")
-
-    # --- Measure spectral dimension ---
     all_return_probs = []
 
-    for cfg in tqdm(range(args.n_configs), desc="Configurations",
-                    unit="cfg"):
-        # Decorrelate
-        for _ in range(args.sweeps_between):
-            cdt.sweep()
-
-        t0 = time.time()
-        adjacency, s2i = build_dual_adjacency(st)
-        N = len(adjacency)
-        if N == 0:
-            tqdm.write(f"  Config {cfg+1}: no simplices, skipping")
-            continue
-
-        # Average over random starting simplices
-        starts = np.random.choice(N, size=min(args.n_walks, N), replace=False)
-        for start in starts:
-            rp = diffuse(adjacency, start, args.max_sigma)
-            all_return_probs.append(rp)
-
-        avg_neighbors = np.mean([len(adj) for adj in adjacency])
-        tqdm.write(f"  Config {cfg+1}: N4={st.getSimplexCount():,}, "
-                   f"dual nodes={N:,}, avg neighbors={avg_neighbors:.1f}, "
-                   f"{time.time()-t0:.1f}s")
+    if n_workers == 1:
+        # Sequential fallback
+        for task in tqdm(tasks, desc="Configurations", unit="cfg"):
+            cfg_id, rps, N, avg_nbr, elapsed = _worker(task)
+            if rps:
+                all_return_probs.extend(rps)
+                print(f"  Config {cfg_id+1}: N4~{N:,}, "
+                      f"avg neighbors={avg_nbr:.1f}, {elapsed:.1f}s")
+            else:
+                print(f"  Config {cfg_id+1}: no simplices, skipping")
+    else:
+        with multiprocessing.Pool(n_workers) as pool:
+            results = pool.imap_unordered(_worker, tasks)
+            done = 0
+            for cfg_id, rps, N, avg_nbr, elapsed in results:
+                done += 1
+                if rps:
+                    all_return_probs.extend(rps)
+                    print(f"  Config {cfg_id+1}: N4~{N:,}, "
+                          f"avg neighbors={avg_nbr:.1f}, "
+                          f"{elapsed:.1f}s  [{done}/{args.n_configs}]")
+                else:
+                    print(f"  Config {cfg_id+1}: no simplices  "
+                          f"[{done}/{args.n_configs}]")
 
     if not all_return_probs:
         print("No data collected.")
         return
 
+    all_return_probs = [np.array(rp) for rp in all_return_probs]
     print(f"\nCollected {len(all_return_probs)} diffusion walks")
 
     # Average return probability
@@ -237,15 +287,11 @@ def main():
     # --- Plot (Fig 9/10 style) ---
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
-    # Fig 9: D_S(sigma) vs sigma
     ax1.plot(sigma_vals, D_S_vals, "b-", linewidth=1.5, label="Measured")
-
-    # Overlay the paper's best fit: D_S = 4.02 - 119/(54 + sigma)
     sigma_fit = np.linspace(10, args.max_sigma, 200)
     D_S_fit = 4.02 - 119.0 / (54.0 + sigma_fit)
     ax1.plot(sigma_fit, D_S_fit, "r--", linewidth=1.5,
              label=r"Fit: $D_S = 4.02 - \frac{119}{54+\sigma}$")
-
     ax1.set_xlabel(r"Diffusion time $\sigma$", fontsize=13)
     ax1.set_ylabel(r"$D_S(\sigma)$", fontsize=13)
     ax1.set_title(r"Spectral dimension $D_S(\sigma)$"
@@ -255,7 +301,6 @@ def main():
     ax1.grid(True, alpha=0.3)
     ax1.set_ylim(0, 5)
 
-    # Fig 10 style: same data with error envelope
     ax2.plot(sigma_vals, D_S_vals, "k-", linewidth=1.5, label="Measured")
     ax2.plot(sigma_fit, D_S_fit, "g--", linewidth=1,
              label=r"$4.02 - 119/(54+\sigma)$")
@@ -274,12 +319,9 @@ def main():
 
     fig.tight_layout()
 
-    # Report key results
     if len(sigma_vals) > 0:
-        # Large-scale estimate (last 20% of data)
         n_tail = max(1, len(D_S_vals) // 5)
         D_S_large = np.mean(D_S_vals[-n_tail:])
-        # Small-scale estimate (first 20% of data)
         n_head = max(1, len(D_S_vals) // 5)
         D_S_small = np.mean(D_S_vals[:n_head])
         print(f"\nResults:")

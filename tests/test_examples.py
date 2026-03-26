@@ -125,10 +125,11 @@ class TestSpectralDimension(unittest.TestCase):
             "spectral_dimension.py",
             ["--n-simplices", "80", "--n-therm", "2",
              "--n-configs", "1", "--n-walks", "1",
-             "--max-sigma", "10", "--sweeps-between", "1"])
+             "--max-sigma", "10", "--sweeps-between", "1",
+             "--workers", "1"])
         self.assertEqual(rc, 0, f"stderr:\n{err}")
         self.assertIn("Config 1:", out)
-        self.assertIn("N4=", out)
+        self.assertIn("N4~", out)
         if os.path.exists(path):
             os.unlink(path)
 
