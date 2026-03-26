@@ -1,5 +1,10 @@
 # caset
 
+[![Build & Deploy Docs](https://github.com/akellehe/caset/actions/workflows/pages.yml/badge.svg)](https://github.com/akellehe/caset/actions/workflows/pages.yml)
+[![Deploy static content](https://github.com/akellehe/caset/actions/workflows/static.yml/badge.svg)](https://github.com/akellehe/caset/actions/workflows/static.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+
 A C++/pybind11 extension for lattice spacetime and causal set simulations.
 
 ## Requirements
