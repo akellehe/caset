@@ -19,39 +19,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by Andrew Kelleher on 11/10/25.
-//
-
 #ifndef CASET_SIMULATION_H
 #define CASET_SIMULATION_H
 
 namespace caset {
+
+/// # Simulation Base Class
+///
+/// Abstract interface for Monte Carlo simulations of discrete spacetime geometries.
+/// Each subclass implements a specific approach to quantum gravity:
+///
+///   - **CDT** (Causal Dynamical Triangulations): Metropolis sampling over causal
+///     triangulations weighted by the Regge action. Preserves a global time foliation.
+///   - **Regge calculus**: Varies edge lengths on a fixed triangulation, computing
+///     the Einstein-Hilbert action via deficit angles at hinges.
+///   - **Causal Set Theory (CST)**: Poisson sprinklings of points in a Lorentzian
+///     manifold, with order relations encoding causal structure.
+///
+/// The simulation lifecycle has two phases:
+///
+///   1. **Tuning**: Adjust bare coupling constants (e.g., the cosmological constant)
+///      so that macroscopic observables (e.g., total spacetime volume) reach their
+///      target values. In CDT, this drives \f$ N_4 \to \bar{N}_4 \f$.
+///
+///   2. **Thermalization**: Evolve the system under the Monte Carlo dynamics until
+///      it reaches thermal equilibrium, after which configurations are drawn from
+///      the stationary distribution \f$ P(\mathcal{T}) \propto e^{-S[\mathcal{T}]} \f$.
+///
 class Simulation {
   public:
-
     virtual ~Simulation() = default;
 
+    /// Tune bare coupling constants toward physically meaningful values.
     ///
-    /// `tune` is the initial stage of building the spacetime. Some example are:
-    ///
-    /// The stage in CDT where we approach the desired cosmological constant by continuously adjusting it based on the
-    /// desired spacetime volume.
-    ///
-    /// In Regge calculus we build an initial triangulation of the Spacetime.
-    ///
+    /// In CDT this adjusts \f$ k_4 \f$ so the four-volume fluctuates around the target.
+    /// In Regge calculus this constructs an initial triangulation. In CST this sets
+    /// the sprinkling density.
     virtual void tune();
 
+    /// Evolve the system to thermal equilibrium.
     ///
-    /// `thermalize` implements some kind of adjustment to the initial lattice.
-    ///
-    /// In the case of CST (Causal Set Theory) this amounts to executing a poisson "Sprinkling" of Vertices to preserve
-    /// Lorentz invariance.
-    ///
-    /// For Regge calculus this can be a randomly applied variation in an initially fixed edge length triangulation.
-    ///
+    /// In CDT this runs Monte Carlo sweeps until the action stabilizes. In CST this
+    /// applies a Poisson sprinkling to break Lorentz-invariance-violating lattice
+    /// artifacts. In Regge calculus this applies random edge-length perturbations.
     virtual void thermalize();
 };
-}
+
+} // caset
 
 #endif //CASET_SIMULATION_H

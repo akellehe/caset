@@ -19,10 +19,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by Andrew Kelleher on 11/10/25.
-//
-
 #ifndef CASET_OBSERVABLE_H
 #define CASET_OBSERVABLE_H
 
@@ -32,12 +28,41 @@ namespace caset {
 
 class Spacetime;
 
+/// # Observable Base Class
+///
+/// Interface for physical observables measured on a triangulated spacetime
+/// configuration. In lattice quantum gravity, observables are functions
+/// \f$ \mathcal{O}[\mathcal{T}] \f$ of the triangulation \f$ \mathcal{T} \f$
+/// whose expectation values are estimated by averaging over Monte Carlo samples:
+///
+/// \f[
+///   \langle \mathcal{O} \rangle
+///     = \frac{1}{Z} \sum_{\mathcal{T}} \mathcal{O}[\mathcal{T}]\, e^{-S[\mathcal{T}]}
+///     \approx \frac{1}{N_{\text{meas}}} \sum_{i=1}^{N_{\text{meas}}} \mathcal{O}[\mathcal{T}_i]
+/// \f]
+///
+/// Subclasses include:
+///   - **SpacetimeVolume**: total number of \f$ d \f$-simplices \f$ N_d \f$,
+///   - **VolumeProfile**: spatial volume per time slice \f$ N_{d-1}(t) \f$.
+///
 class Observable {
   public:
+    /// Compute the observable from scratch for the given spacetime.
+    ///
+    /// @param spacetime The spacetime configuration to measure
+    /// @return The scalar value of the observable
     virtual double compute(std::shared_ptr<Spacetime> &spacetime);
+
+    /// Incrementally update the observable after a local move.
+    /// Default implementation delegates to compute().
+    ///
+    /// @param spacetime The spacetime after the most recent move
+    /// @return The updated scalar value
     virtual double update(std::shared_ptr<Spacetime> &spacetime);
+
     virtual ~Observable() = default;
 };
-}
+
+} // caset
 
 #endif //CASET_OBSERVABLE_H

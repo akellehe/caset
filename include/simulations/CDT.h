@@ -31,64 +31,204 @@
 
 namespace caset {
 
-/// CDT implements the Metropolis Monte Carlo algorithm for Causal Dynamical Triangulations
-/// in 4 dimensions. The algorithm samples triangulated spacetimes weighted by the
-/// Regge action, using local Pachner moves that preserve the causal structure.
+/// # Causal Dynamical Triangulations (CDT) Simulation
 ///
-/// The Regge action for 4D CDT is:
+/// This class implements the Metropolis Monte Carlo algorithm for Causal Dynamical
+/// Triangulations in \f$ d \f$ dimensions (typically \f$ d = 4 \f$). CDT is a
+/// non-perturbative approach to quantum gravity introduced by Ambjorn, Jurkiewicz,
+/// and Loll in which the gravitational path integral is approximated by a sum over
+/// causal triangulations of spacetime.
+///
+/// ## The Regge Action
+///
+/// The Euclidean Regge action for CDT (after Wick rotation) is
+///
 /// \f[
-///   S = -(k_0 + 6\Delta) N_0 + (k_4 + \Delta) N_{41} + k_4 N_{32}
-///       + \varepsilon (N_4 - \bar{N}_4)^2
+///   S_{\text{Regge}} = -(k_0 + 6\Delta)\, N_0
+///                     + (k_4 + \Delta)\, N_{41}
+///                     + k_4\, N_{32}
 /// \f]
+///
+/// where:
+///   - \f$ N_0 \f$ is the number of vertices,
+///   - \f$ N_{41} \f$ is the number of \f$(d,1) + (1,d)\f$-type simplices,
+///   - \f$ N_{32} \f$ is the number of \f$(d\!-\!1, 2) + (2, d\!-\!1)\f$-type simplices,
+///   - \f$ k_0 \f$ is a coupling related to the inverse bare Newton constant \f$ G_N^{-1} \f$,
+///   - \f$ k_4 \f$ is a coupling related to the bare cosmological constant \f$ \Lambda \f$,
+///   - \f$ \Delta \f$ is the asymmetry parameter encoding the ratio of timelike to
+///     spacelike squared edge lengths via \f$ \ell_t^2 = -\alpha\, a^2 \f$.
+///
+/// An additional volume-fixing term
+///
+/// \f[
+///   S_{\text{fix}} = \varepsilon \left( N_4 - \bar{N}_4 \right)^2
+/// \f]
+///
+/// constrains the total four-volume \f$ N_4 = N_{41} + N_{32} \f$ to fluctuate
+/// around the target value \f$ \bar{N}_4 \f$.
+///
+/// ## Metropolis Algorithm
+///
+/// Each Monte Carlo sweep proposes \f$ N_4 \f$ random local moves and accepts or
+/// rejects each according to the Metropolis criterion:
+///
+/// \f[
+///   P_{\text{accept}} = \min\!\left(1,\; e^{-\Delta S}\right)
+/// \f]
+///
+/// where \f$ \Delta S = S_{\text{new}} - S_{\text{old}} \f$. This satisfies
+/// detailed balance with respect to the CDT partition function
+/// \f$ Z = \sum_{\mathcal{T}} e^{-S[\mathcal{T}]} \f$.
+///
+/// ## Pachner Moves
+///
+/// The local moves are Pachner (bistellar) moves that preserve the piecewise-linear
+/// manifold structure and the causal (foliated) time slicing:
+///
+///   - **Add** (grow): Cone an external facet to a new vertex, adding one \f$ d \f$-simplex.
+///   - **Remove** (shrink): Remove a \f$ d \f$-simplex whose apex vertex has no other
+///     incident top-simplices, reversing an add move.
+///   - **Flip** \f$(2, d)\f$: Replace two \f$ d \f$-simplices sharing a \f$(d\!-\!1)\f$-face
+///     with \f$ d \f$ new simplices sharing an edge. This is the standard bistellar flip.
+///   - **Shift** \f$(3, 3)\f$: Replace three \f$ d \f$-simplices sharing a \f$(d\!-\!2)\f$-face
+///     with three new simplices sharing a different \f$(d\!-\!2)\f$-face.
+///
+/// These moves are ergodic: any causal triangulation of a given topology can be
+/// reached from any other by a finite sequence of moves (Alexander's theorem).
+///
+/// ## Phase Structure
+///
+/// In 4D, the coupling-constant space \f$(k_0, \Delta)\f$ exhibits four phases:
+///   - **Phase A** (branched polymer): elongated, fractal geometry,
+///   - **Phase B** (crumpled): collapsed, high-connectivity geometry,
+///   - **Phase \f$ C_{dS} \f$** (de Sitter): extended, four-dimensional geometry
+///     whose volume profile \f$ N_3(t) \f$ matches the Euclidean four-sphere,
+///   - **Phase \f$ C_b \f$** (bifurcation): exhibits a singular vertex.
+///
+/// The physically relevant phase is \f$ C_{dS} \f$, where the average spatial
+/// volume profile follows
+///
+/// \f[
+///   \langle N_3(t) \rangle \propto \cos^4\!\left(\frac{\pi\, t}{T}\right)
+/// \f]
+///
+/// matching the round \f$ S^4 \f$ metric of Euclidean de Sitter space.
+///
+/// ## References
+///
+///   - Ambjorn, Jurkiewicz, Loll, *Reconstructing the Universe*, Phys. Rev. D 72 (2005)
+///   - Gorlich, *Introduction to Causal Dynamical Triangulations* (2013)
+///   - Loll, *Quantum Gravity from Causal Dynamical Triangulations: A Review*, Class. Quant. Grav. 37 (2020)
+///
 class CDT : public Simulation {
   public:
-    /// @param spacetime The spacetime to simulate. Must be built before passing.
-    /// @param k0 Coupling constant related to inverse Newton constant
-    /// @param k4 Coupling constant related to cosmological constant
-    /// @param delta Asymmetry parameter between timelike and spacelike edges
-    /// @param epsilon Volume fixing strength
-    /// @param targetN4 Target total number of 4-simplices
+    /// Construct a CDT simulation for a given spacetime.
+    ///
+    /// The spacetime should already be initialized via `build()` before constructing the
+    /// simulation. The coupling constants \f$(k_0, k_4, \Delta)\f$ determine which phase
+    /// the simulation explores. Typical de Sitter phase values are
+    /// \f$ k_0 \approx 2 \f$, \f$ \Delta \approx 0.6 \f$.
+    ///
+    /// @param spacetime The built spacetime triangulation to simulate
+    /// @param k0 Coupling constant \f$ k_0 \f$ (related to \f$ G_N^{-1} \f$)
+    /// @param k4 Coupling constant \f$ k_4 \f$ (related to \f$ \Lambda \f$)
+    /// @param delta Asymmetry parameter \f$ \Delta \f$
+    /// @param epsilon Volume-fixing strength \f$ \varepsilon \f$
+    /// @param targetN4 Target four-volume \f$ \bar{N}_4 \f$
     CDT(std::shared_ptr<Spacetime> spacetime, double k0, double k4, double delta,
         double epsilon, std::size_t targetN4);
 
-    /// (2,8) move: Insert a vertex into a (4,1) or (1,4) simplex pair,
-    /// creating 8 new simplices from 2.
+    /// Grow the triangulation by coning an external \f$(d\!-\!1)\f$-face to a new vertex.
+    ///
+    /// Picks a random causally-available facet of a random \f$ d \f$-simplex and cones it
+    /// to a new vertex, creating one new \f$ d \f$-simplex. The new vertex is placed at
+    /// the appropriate time slice to preserve the causal structure.
+    ///
+    /// @return true if the move was accepted by the Metropolis criterion
     bool add();
 
-    /// (8,2) move: Remove an order-8 vertex, merging 8 simplices into 2.
+    /// Shrink the triangulation by removing a \f$ d \f$-simplex with an isolated apex.
+    ///
+    /// Finds a \f$ d \f$-simplex that has a facet with exactly one coface (itself) and
+    /// whose unique vertex belongs to no other top-dimensional simplex. Removing it
+    /// reverses a previous add move.
+    ///
+    /// @return true if the move was accepted
     bool remove();
 
-    /// (4,6)/(6,4) move: Flip simplices around a shared triangle.
+    /// Bistellar \f$(2, d)\f$ flip: replace two \f$ d \f$-simplices with \f$ d \f$ new ones.
+    ///
+    /// Finds a \f$(d\!-\!1)\f$-face shared by exactly two \f$ d \f$-simplices. The
+    /// two simplices together span \f$ d + 2 \f$ vertices (\f$ d \f$ shared, 2 unique).
+    /// They are replaced by \f$ d \f$ new simplices, each containing both unique
+    /// vertices and \f$ d - 1 \f$ of the \f$ d \f$ shared vertices. The move preserves
+    /// vertex count and topology.
+    ///
+    /// @return true if the move was accepted
     bool flip();
 
-    /// (2,4) move: Rearrange simplices around a timelike edge.
+    /// \f$(3, 3)\f$ Pachner move: replace three simplices sharing a \f$(d\!-\!2)\f$-face
+    /// with three new simplices sharing the complementary \f$(d\!-\!2)\f$-face.
+    ///
+    /// The three old simplices share a triangle (\f$ d - 2 \f$ face) of 3 vertices and
+    /// have 3 unique vertices. The replacement simplices share the dual triangle
+    /// formed by the 3 unique vertices.
+    ///
+    /// @return true if the move was accepted
     bool shift();
 
-    /// (4,2) move: Inverse of shift.
+    /// Inverse of the \f$(3, 3)\f$ shift. Structurally identical; the Metropolis
+    /// criterion handles the directional asymmetry.
+    ///
+    /// @return true if the move was accepted
     bool ishift();
 
-    /// Adjust k4 to drive N4 toward targetN4.
+    /// Adjust the cosmological coupling \f$ k_4 \f$ to drive the total four-volume
+    /// \f$ N_4 \f$ toward the target \f$ \bar{N}_4 \f$. Uses a proportional controller
+    /// that increases \f$ k_4 \f$ when volume exceeds the target (making growth
+    /// more expensive) and decreases it when volume is below target.
     void tune() override;
 
-    /// Run sweeps until the system is thermalized.
+    /// Run Monte Carlo sweeps until the action \f$ S \f$ stabilizes, indicating
+    /// the system has reached thermal equilibrium. Equilibrium is detected when
+    /// the relative change in \f$ S \f$ between sweeps drops below 1%.
     void thermalize() override;
 
-    /// One Monte Carlo sweep: N4 random move attempts with Metropolis acceptance.
-    /// @return Number of accepted moves in this sweep.
+    /// Execute one Monte Carlo sweep: propose \f$ N_4 \f$ random moves (uniformly
+    /// chosen among add, remove, flip, shift, ishift) and accept or reject each
+    /// via the Metropolis criterion.
+    ///
+    /// @return Number of accepted moves in this sweep
     int sweep();
 
-    /// Compute the full Regge action for the current configuration.
+    /// Evaluate the full Regge action \f$ S = S_{\text{Regge}} + S_{\text{fix}} \f$
+    /// for the current triangulation state.
+    ///
+    /// @return The action value \f$ S \f$
     [[nodiscard]] double computeAction() const;
 
-    /// Compute the volume profile: number of simplices straddling each time slice.
+    /// Compute the spatial volume profile \f$ N_3(t) \f$: the number of top-dimensional
+    /// simplices whose earliest vertex lies at time slice \f$ t \f$.
+    ///
+    /// In the de Sitter phase, the average of this quantity over many configurations
+    /// approximates \f$ \langle N_3(t) \rangle \propto \cos^4(\pi t / T) \f$.
+    ///
+    /// @return Vector of simplex counts indexed by time slice offset
     [[nodiscard]] std::vector<int> getVolumeProfile() const;
 
-    /// @return Acceptance rates as {moveName: acceptedCount/attemptCount}
+    /// @return Acceptance rate (accepted/attempted) for each move type.
     [[nodiscard]] std::map<std::string, double> getAcceptanceRates() const;
 
+    /// @return The spacetime being simulated.
     [[nodiscard]] std::shared_ptr<Spacetime> getSpacetime() const noexcept;
+
+    /// @return Coupling constant \f$ k_0 \f$.
     [[nodiscard]] double getK0() const noexcept;
+
+    /// @return Coupling constant \f$ k_4 \f$ (may be modified by tuning).
     [[nodiscard]] double getK4() const noexcept;
+
+    /// @return Asymmetry parameter \f$ \Delta \f$.
     [[nodiscard]] double getDelta() const noexcept;
 
   private:
@@ -97,13 +237,14 @@ class CDT : public Simulation {
     std::size_t targetN4;
     std::mt19937 rng{std::random_device{}()};
 
-    // Metropolis acceptance test
+    /// Metropolis acceptance test: accept if \f$ \Delta S \le 0 \f$, otherwise
+    /// accept with probability \f$ e^{-\Delta S} \f$.
     bool accept(double deltaS);
 
-    // Incremental action change
+    /// Compute the incremental action change for a proposed move without
+    /// recomputing the full sum over simplices.
     double computeDeltaAction(int dN0, int dN41, int dN32) const;
 
-    // Statistics
     int addAttempts = 0, addAccepted = 0;
     int removeAttempts = 0, removeAccepted = 0;
     int flipAttempts = 0, flipAccepted = 0;

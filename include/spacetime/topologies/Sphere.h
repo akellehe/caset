@@ -19,27 +19,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by Andrew Kelleher on 11/10/25.
-//
-
 #ifndef CASET_SPHERE_H
 #define CASET_SPHERE_H
 
-#include <vector>
-#include <memory>
-
 #include "Topology.h"
-#include "constraints/Constraint.h"
 
 namespace caset {
+
+/// # Spherical Topology \f$ S^{d-1} \f$
+///
+/// Spatial slices have the topology of a \f$(d\!-\!1)\f$-sphere, giving a
+/// spacetime manifold \f$ \mathcal{M} \cong S^{d-1} \times S^1 \f$. This is
+/// the topology used in most 4D CDT simulations, where spatial slices are
+/// three-spheres \f$ S^3 \f$.
+///
+/// The Euclidean de Sitter solution (the round four-sphere \f$ S^4 \f$) naturally
+/// decomposes into \f$ S^3 \f$ spatial slices, making this topology the natural
+/// choice for studying de Sitter quantum gravity. The volume profile of each
+/// slice follows
+///
+/// \f[
+///   V_3(t) \propto \cos^3\!\left(\frac{\pi\, t}{T}\right)
+/// \f]
+///
+/// for the continuum \f$ S^4 \f$ geometry.
+///
+/// The build alternates coning direction between layers to close the manifold.
+///
 class Sphere : public Topology {
   public:
-    // std::vector<std::shared_ptr<Constraint>> getConstraints() override {
-      // return std::vector<std::shared_ptr<Constraint>>();
-    // }
+    /// Build a spherical triangulation by coning in alternating \f$ \pm t \f$ directions.
+    ///
+    /// @param spacetime The spacetime to populate
+    /// @param numSimplices Target number of top-dimensional simplices
     void build(Spacetime *spacetime, int numSimplices) override;
 };
-}
+
+} // caset
 
 #endif //CASET_SPHERE_H

@@ -157,29 +157,43 @@ class Spacetime {
     // Query Methods
     // ========================================
 
-    /// @return Total number of top-dimensional simplices
+    /// @return Total number of top-dimensional (\f$ d \f$-) simplices, i.e.,
+    ///   the four-volume \f$ N_4 = N_{41} + N_{32} \f$ in 4D CDT.
     [[nodiscard]] std::size_t getSimplexCount() const noexcept;
 
-    /// @return Number of vertices N0
+    /// @return Number of vertices \f$ N_0 \f$ in the triangulation.
+    /// In the Regge action this appears as \f$ -(k_0 + 6\Delta)\, N_0 \f$.
     [[nodiscard]] std::size_t getVertexCount() const noexcept;
 
-    /// @return Count of (4,1)+(1,4) type simplices
+    /// @return Count of \f$(d,1) + (1,d)\f$-type simplices \f$ N_{41} \f$.
+    /// These simplices have \f$ d \f$ vertices on one time slice and 1 on the adjacent slice.
     [[nodiscard]] std::size_t getN41() const noexcept;
 
-    /// @return Count of (3,2)+(2,3) type simplices
+    /// @return Count of \f$(d\!-\!1, 2) + (2, d\!-\!1)\f$-type simplices \f$ N_{32} \f$.
+    /// These simplices have their vertices split \f$(d\!-\!1, 2)\f$ across adjacent slices.
     [[nodiscard]] std::size_t getN32() const noexcept;
 
-    /// @return Const reference to the full simplex set
+    /// @return Const reference to the full simplex set \f$ \mathcal{K} \f$
+    /// (all simplices of all dimensions registered in the complex).
     [[nodiscard]] const SimplexSet& getSimplices() const noexcept;
 
-    /// @return A uniformly random simplex from the complex
+    /// Select a uniformly random simplex from the parallel access vector.
+    /// Used by the Metropolis algorithm to pick random move targets.
+    /// @return A random simplex, or nullptr if the complex is empty
     [[nodiscard]] SimplexPtr getRandomSimplex();
 
-    /// @return A uniformly random simplex with the given orientation, or nullptr if none exist
+    /// Select a uniformly random simplex with a specific causal orientation.
+    /// Tries random sampling first (fast when many match), then falls back
+    /// to a linear scan.
+    /// @param ti Number of vertices on the initial time slice
+    /// @param tf Number of vertices on the final time slice
+    /// @return A matching simplex, or nullptr if none exist
     [[nodiscard]] SimplexPtr getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf);
 
-    /// Fully removes a simplex: unregisters it, removes from vertex simplex lists,
-    /// and cleans up coface references in its facets.
+    /// Fully remove a \f$ d \f$-simplex from the complex: unregister it from the
+    /// simplex set, remove it from each constituent vertex's simplex list, and
+    /// clean up coface references in its facets. Used by CDT Pachner moves.
+    /// @param simplex The simplex \f$ \sigma \f$ to remove
     void removeSimplex(const SimplexPtr &simplex);
 
     /// @return The type of quantum gravity formulation (CDT, Regge, etc.)

@@ -19,10 +19,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by Andrew Kelleher on 11/10/25.
-//
-
 #ifndef CASET_CYLINDER_H
 #define CASET_CYLINDER_H
 
@@ -30,10 +26,32 @@
 
 namespace caset {
 class Spacetime;
+
+/// # Cylindrical Topology \f$ \Sigma \times [0, T] \f$
+///
+/// Spatial slices have a closed topology \f$ \Sigma \f$ but time is non-periodic:
+/// the manifold has the structure \f$ \Sigma \times [0, T] \f$ with open temporal
+/// boundaries at \f$ t = 0 \f$ and \f$ t = T \f$.
+///
+/// This topology is useful for studying spacetimes with initial and final
+/// spatial slices, analogous to the "no-boundary" proposals in quantum cosmology,
+/// or for computing transition amplitudes between two spatial geometries.
+///
+/// The build creates layers by coning only in the forward time direction,
+/// producing a monotonically increasing time structure.
+///
 class Cylinder : public Topology {
   public:
+    /// Build a cylindrical triangulation with open time boundaries.
+    ///
+    /// Each layer grows by coning exterior facets forward in time only.
+    /// The first and last time slices are boundary slices.
+    ///
+    /// @param spacetime The spacetime to populate
+    /// @param numSimplices Target number of top-dimensional simplices
     void build(Spacetime *spacetime, int numSimplices) override;
 };
-}
+
+} // caset
 
 #endif //CASET_CYLINDER_H

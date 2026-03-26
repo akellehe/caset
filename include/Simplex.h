@@ -164,8 +164,21 @@ class Simplex : public std::enable_shared_from_this<Simplex> {
     /// We define a _facet_ as a set of shared vertices. The facet of any given k-simplex \f$ \sigma^k \f$ is a k-1
     /// simplex, such that  \f$ \sigma_{k} \f$ is a coface of \f$ \sigma_{k-1} \f$.
     ///
+    /// Register a \f$(k\!+\!1)\f$-simplex as a coface of this \f$ k \f$-simplex.
+    /// The coface relation encodes the incidence structure of the simplicial complex:
+    /// \f$ \sigma^{k+1} \f$ is a coface of \f$ \sigma^k \f$ iff
+    /// \f$ \sigma^k \subset \sigma^{k+1} \f$ (the lower-dimensional simplex is a face
+    /// of the higher-dimensional one).
     void addCoface(const std::shared_ptr<Simplex> &simplex);
+
+    /// Unregister a coface from this simplex. Called during simplex removal in
+    /// Pachner moves to maintain consistent coface bookkeeping.
     void removeCoface(const std::shared_ptr<Simplex> &simplex);
+
+    /// Check whether this simplex is a coface of the given facet,
+    /// i.e., whether all vertices of the facet are contained in this simplex.
+    /// @param facet The candidate lower-dimensional simplex
+    /// @param shallow If true, also require the dimension difference to be exactly 1
     bool isCofaceTo(const SimplexPtr &simplex, bool shallow=true) const;
 
     [[nodiscard]] bool hasCoface(const std::shared_ptr<Simplex> &simplex) const;

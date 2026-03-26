@@ -19,10 +19,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by Andrew Kelleher on 11/10/25.
-//
-
 #ifndef CASET_TOPOLOGY_H
 #define CASET_TOPOLOGY_H
 
@@ -30,15 +26,40 @@ namespace caset {
 
 class Spacetime;
 
+/// # Spatial Topology
+///
+/// Abstract base class for the topology of spatial slices in a foliated spacetime.
+/// In CDT, the spacetime manifold \f$ \mathcal{M} \f$ has the product structure
+///
+/// \f[
+///   \mathcal{M} \cong \Sigma \times I
+/// \f]
+///
+/// where \f$ \Sigma \f$ is a compact spatial manifold and \f$ I \f$ is either
+/// an interval \f$[0, T]\f$ (cylinder) or a circle \f$ S^1 \f$ (periodic time).
+/// The topology of \f$ \Sigma \f$ is fixed throughout the simulation and
+/// determines the boundary conditions and initial triangulation.
+///
+/// Subclasses implement `build()` to construct an initial triangulation matching
+/// their spatial topology via the coning mechanism: a seed \f$ d \f$-simplex is
+/// created at each time layer, and exterior facets are iteratively coned to new
+/// vertices to grow the complex.
+///
 class Topology {
   public:
     virtual ~Topology();
 
+    /// Build an initial triangulation with the given spatial topology.
     ///
-    /// Builds an initial triangulation matching this topology for t=0 on a given spacetime based on the parameters of
-    /// the spacetime.
+    /// Creates \f$ d \f$-simplices across multiple time layers using iterated
+    /// coning from seed simplices. The resulting simplicial complex
+    /// \f$ \mathcal{K} \f$ has the combinatorial structure of the chosen topology.
+    ///
+    /// @param spacetime The spacetime in which to build the triangulation
+    /// @param numSimplices Target number of top-dimensional simplices to create
     virtual void build(Spacetime *spacetime, int numSimplices) = 0;
 };
-}
+
+} // caset
 
 #endif //CASET_TOPOLOGY_H

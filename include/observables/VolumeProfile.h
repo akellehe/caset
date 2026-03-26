@@ -29,28 +29,68 @@
 
 namespace caset {
 
-/// Measures the volume profile N3(t): the number of simplices straddling each time slice.
-/// This is the primary observable for comparing CDT simulations to de Sitter cosmology.
+/// # Volume Profile Observable
+///
+/// Measures the spatial volume profile \f$ N_3(t) \f$, defined as the number
+/// of top-dimensional simplices whose initial vertex lies at time slice \f$ t \f$.
+/// This is the primary observable for comparing CDT simulations to continuum
+/// cosmology.
+///
+/// ## Physical Significance
+///
+/// In the de Sitter phase \f$(C_{dS})\f$ of 4D CDT, the ensemble-averaged
+/// volume profile matches the metric of the Euclidean four-sphere \f$ S^4 \f$:
+///
+/// \f[
+///   \langle N_3(t) \rangle \;\propto\; \cos^4\!\left(\frac{\pi\, t}{T}\right)
+/// \f]
+///
+/// where \f$ T \f$ is the total time extent. This is the discrete analogue of the
+/// scale factor in Friedmann-Lemaitre-Robertson-Walker (FLRW) cosmology:
+///
+/// \f[
+///   ds^2 = -dt^2 + a(t)^2\, d\Omega_3^2
+///   \qquad\text{with}\quad
+///   a(t) = \cos\!\left(\frac{\pi\, t}{T}\right)
+/// \f]
+///
+/// In the crumpled phase (B), the volume concentrates on a single time slice.
+/// In the branched-polymer phase (A), the profile becomes thin and elongated.
+///
+/// ## References
+///
+///   - Ambjorn, Jurkiewicz, Loll, *Reconstructing the Universe*, Phys. Rev. D 72 (2005)
+///   - Gorlich, *Introduction to Causal Dynamical Triangulations* (2013), Section 3.3
+///
 class VolumeProfile : public Observable {
   public:
+    /// Compute the current volume profile and return the peak volume.
+    ///
+    /// @param spacetime The spacetime to measure
+    /// @return The maximum value of \f$ N_3(t) \f$ across all time slices
     double compute(std::shared_ptr<Spacetime> &spacetime) override;
+
+    /// Recompute the profile (equivalent to compute for this observable).
     double update(std::shared_ptr<Spacetime> &spacetime) override;
 
-    /// @return The volume profile as a vector indexed by time slice offset from tMin.
+    /// @return The most recently computed volume profile as a vector indexed by time slice.
     [[nodiscard]] std::vector<int> getProfile() const;
 
-    /// @return The accumulated average volume profile over multiple measurements.
+    /// @return The average volume profile over all recorded measurements.
     [[nodiscard]] std::vector<double> getAverageProfile() const;
 
-    /// Record a measurement of the current profile for averaging.
+    /// Record the current volume profile for later averaging.
+    /// Call this after each decorrelated Monte Carlo measurement to build statistics.
+    ///
+    /// @param spacetime The spacetime to measure
     void measure(std::shared_ptr<Spacetime> &spacetime);
 
-    /// Reset accumulated measurements.
+    /// Reset all accumulated measurements.
     void reset();
 
   private:
-    std::vector<int> currentProfile;
-    std::vector<std::vector<int>> measurements;
+    std::vector<int> currentProfile;          ///< Most recent \f$ N_3(t) \f$
+    std::vector<std::vector<int>> measurements; ///< History of profiles for averaging
 };
 
 } // caset
