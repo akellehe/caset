@@ -69,7 +69,7 @@ completeness but are not directly comparable to 2D--4D.
 
 ## Results Table
 
-```{list-table} Build times (5-run average)
+```{list-table} Build times (5-run average, current)
 :header-rows: 1
 :widths: 8 15 15 15 15 15
 
@@ -90,49 +90,85 @@ completeness but are not directly comparable to 2D--4D.
   - 10,000
   - 10,042
   - 20,021
-  - 0.122
+  - 0.119
 * - 2D
   - 100,000
   - 100,000
   - 100,092
   - 200,046
-  - 1.41
+  - 1.39
 * - 3D
   - 500
   - 500
   - 521
   - 1,521
-  - 0.027
+  - 0.026
 * - 3D
   - 10,000
   - 10,000
   - 10,063
   - 30,063
-  - 0.195
+  - 0.188
 * - 3D
   - 100,000
   - 100,000
   - 100,138
   - 300,138
-  - 2.33
+  - 2.21
 * - 4D
   - 500
   - 500
   - 528
   - 2,042
-  - 0.041
+  - 0.040
 * - 4D
   - 10,000
   - 10,000
   - 10,084
   - 40,126
-  - 0.288
+  - 0.275
 * - 4D
   - 100,000
   - 100,000
   - 100,184
   - 400,276
-  - 3.32
+  - 3.13
+```
+
+---
+
+## Optimization History
+
+The chart below compares build times before and after the C++ optimization
+pass that eliminated redundant container copies from hot-path accessors
+(`getVertices`, `getEdges`, `getCofaces`, `getSimplices`), fixed
+thread-unsafe RNG initialization, replaced linear scans with hash lookups,
+and removed dead code from the Toroid builder.
+
+The improvement scales with dimension: 2D sees ~2%, 3D ~4%, and 4D ~5%
+faster builds.  The simulation (sweep) path benefits more since
+the eliminated copies occur thousands of times per sweep.
+
+```{image} assets/benchmarks/benchmark_comparison.png
+:alt: Before vs. after benchmark comparison
+:width: 100%
+:align: center
+```
+
+To regenerate this comparison after further changes:
+
+```bash
+# Save a baseline
+python examples/benchmarks/build_benchmark.py --save /tmp/baseline/
+
+# ... make changes, rebuild ...
+
+# Save and compare
+python examples/benchmarks/build_benchmark.py --save /tmp/new/
+python examples/benchmarks/compare_benchmarks.py \
+    --before /tmp/baseline/benchmark_results.json \
+    --after /tmp/new/benchmark_results.json \
+    --save docs/source/assets/benchmarks/
 ```
 
 ---

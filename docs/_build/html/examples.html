@@ -249,7 +249,7 @@ tunable parameters.</p>
 four-simplices with <span class="math notranslate nohighlight">\(T = 80\)</span> time slices and <span class="math notranslate nohighlight">\(10^5\)</span>–<span class="math notranslate nohighlight">\(10^8\)</span> Monte Carlo
 sweeps.  The plots shown here use <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span>–<span class="math notranslate nohighlight">\(1\,600\)</span> to keep
 runtimes under a few minutes.  Observables that depend on large-scale
-geometry (phase boundaries, Hausdorff scaling, <span class="math notranslate nohighlight">\(\cos^4\)</span> profile shape)
+geometry (phase boundaries, Hausdorff scaling, <span class="math notranslate nohighlight">\(\cos^3\)</span> profile shape)
 require at least <span class="math notranslate nohighlight">\(N_4 &gt; 5\,000\)</span> to become visible.  Where our small-lattice
 results already confirm the paper predictions, this is noted explicitly;
 where they do not yet, the expected large-lattice behaviour is described.</p>
@@ -335,9 +335,9 @@ near <span class="math notranslate nohighlight">\(D_2 \approx 2\)</span>, <stron
 <li><p><strong>Volume differences (top right):</strong> The measured distribution shows a
 decaying shape.  The Gaussian fit captures the trend but scatter is
 large due to limited statistics at <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span>.</p></li>
-<li><p><strong><span class="math notranslate nohighlight">\(\cos^4\)</span> comparison (bottom left):</strong> The Monte Carlo average profile
-is relatively flat compared to the peaked <span class="math notranslate nohighlight">\(\cos^4(\pi\tau/T)\)</span>
-prediction.  This is expected: the <span class="math notranslate nohighlight">\(\cos^4\)</span> shape emerges only at
+<li><p><strong><span class="math notranslate nohighlight">\(\cos^3\)</span> comparison (bottom left):</strong> The Monte Carlo average profile
+is relatively flat compared to the peaked <span class="math notranslate nohighlight">\(\cos^3(\pi\tau/T)\)</span>
+prediction.  This is expected: the <span class="math notranslate nohighlight">\(\cos^3\)</span> shape emerges only at
 <span class="math notranslate nohighlight">\(N_4 \gg 10\,000\)</span> with <span class="math notranslate nohighlight">\(T \geq 40\)</span> time slices.  At our lattice
 size, the profile spans only <span class="math notranslate nohighlight">\(\sim 9\)</span> slices with insufficient dynamic
 range to develop the characteristic bulge.</p></li>
@@ -365,14 +365,14 @@ branched-polymer geometry with irregular maxima.</p></li>
 <li><p><strong>Fig. 5</strong> (Phase B, <span class="math notranslate nohighlight">\(\kappa_0 = 1.6\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0\)</span>): crumpled geometry
 collapsed to <span class="math notranslate nohighlight">\(\sim 2\)</span> time slices.</p></li>
 <li><p><strong>Fig. 6</strong> (Phase C, <span class="math notranslate nohighlight">\(\kappa_0 = 2.2\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0.6\)</span>): extended
-de Sitter universe with <span class="math notranslate nohighlight">\(N_3(\tau) \propto \cos^4(\pi\tau/T)\)</span>.</p></li>
+de Sitter universe with <span class="math notranslate nohighlight">\(N_3(\tau) \propto \cos^3(\pi\tau/T)\)</span>.</p></li>
 </ul>
 <p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span> the three profiles are <strong>not yet
 differentiated</strong> – all show a roughly uniform distribution across
 <span class="math notranslate nohighlight">\(\sim 9\)</span> time slices.  The phase transitions in the paper occur at
 <span class="math notranslate nohighlight">\(N_4 \sim 20\)</span>k–<span class="math notranslate nohighlight">\(45\)</span>k; at smaller volumes the system is too small to
 develop the distinct geometric structures that characterise each phase.
-The dashed <span class="math notranslate nohighlight">\(\cos^4\)</span> reference curve shows the expected shape for
+The dashed <span class="math notranslate nohighlight">\(\cos^3\)</span> reference curve shows the expected shape for
 Phase <span class="math notranslate nohighlight">\(C_{dS}\)</span> at large <span class="math notranslate nohighlight">\(N_4\)</span>.</p>
 <p>To reproduce the paper’s Fig. 6 shape, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">10000</span></code>
 or larger (estimated runtime: several hours).</p>
@@ -490,7 +490,7 @@ Phase A.  The white star marks the de Sitter point <span class="math notranslate
 <tr class="row-even"><td class="text-left"><p>Figs. 12–13</p></td>
 <td class="text-left"><p>Effective action</p></td>
 <td class="text-center"><p>Partially confirmed</p></td>
-<td class="text-left"><p><span class="math notranslate nohighlight">\(D_2\)</span> minimum correct; <span class="math notranslate nohighlight">\(\cos^4\)</span> needs larger lattice</p></td>
+<td class="text-left"><p><span class="math notranslate nohighlight">\(D_2\)</span> minimum correct; <span class="math notranslate nohighlight">\(\cos^3\)</span> needs larger lattice</p></td>
 </tr>
 </tbody>
 </table>
