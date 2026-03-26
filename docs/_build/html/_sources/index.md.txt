@@ -17,5 +17,6 @@ bindings to move back and forth.
 
 getting_started
 theory
+examples
 cpp_api
 ```
