@@ -109,6 +109,20 @@ bool CDT::add() {
   int d = getDim(spacetime);
   int dPlus1 = d + 1;
 
+#ifdef CASET_LAZY_CATALOGS
+  // Rebuild catalogs if dirty (stale after a previous accepted move)
+  rebuildCatalogs();
+  if (n41Catalog_.empty()) return false;
+  std::uniform_int_distribution<std::size_t> catDist(0, n41Catalog_.size() - 1);
+  auto fp = n41Catalog_[catDist(rng)];
+  SimplexPtr sigma = spacetime->getSimplex(fp);
+  if (!sigma) return false; // stale catalog entry (simplex was deleted)
+  {
+    auto [sti_check, stf_check] = sigma->getOrientation().numeric();
+    bool isN41 = (sti_check == d && stf_check == 1) || (sti_check == 1 && stf_check == d);
+    if (!isN41) return false; // orientation changed
+  }
+#else
   // Blind guessing: pick random top simplex, check if N41-type.
   // This gives uniform selection probability 1/N41 over all N41 simplices,
   // matching the prefactor derivation (Brunekreef eq 25-26 pattern).
@@ -117,6 +131,7 @@ bool CDT::add() {
   auto [sti_check, stf_check] = sigma->getOrientation().numeric();
   bool isN41 = (sti_check == d && stf_check == 1) || (sti_check == 1 && stf_check == d);
   if (!isN41) return false;
+#endif
 
   auto [sti, stf] = sigma->getOrientation().numeric();
 
@@ -216,6 +231,9 @@ bool CDT::add() {
   }
 
   addAccepted++;
+#ifdef CASET_LAZY_CATALOGS
+  markCatalogsDirty();
+#endif
   return true;
 }
 
@@ -228,8 +246,17 @@ bool CDT::remove() {
   int dPlus1 = d + 1;
   int requiredOrder = 2 * d;
 
+#ifdef CASET_LAZY_CATALOGS
+  // Rebuild catalogs if dirty
+  rebuildCatalogs();
+  if (removeCatalog_.empty()) return false;
+  std::uniform_int_distribution<std::size_t> catDist(0, removeCatalog_.size() - 1);
+  auto vid = removeCatalog_[catDist(rng)];
+  VertexPtr v = spacetime->getVertexList()->get(vid);
+#else
   // Pick a random vertex (blind guessing, Brunekreef Sec 2.3.1)
   VertexPtr v = spacetime->getRandomVertex();
+#endif
   if (!v) return false;
 
   // Count top simplices incident to this vertex; require exactly 2d
@@ -325,6 +352,9 @@ bool CDT::remove() {
   spacetime->createSimplex(verts2);
 
   removeAccepted++;
+#ifdef CASET_LAZY_CATALOGS
+  markCatalogsDirty();
+#endif
   return true;
 }
 
@@ -433,6 +463,9 @@ bool CDT::flip() {
   }
 
   flipAccepted++;
+#ifdef CASET_LAZY_CATALOGS
+  markCatalogsDirty();
+#endif
   return true;
 }
 
@@ -539,6 +572,9 @@ bool CDT::iflip() {
   }
 
   iflipAccepted++;
+#ifdef CASET_LAZY_CATALOGS
+  markCatalogsDirty();
+#endif
   return true;
 }
 
@@ -547,14 +583,25 @@ bool CDT::iflip() {
 // ========================================
 bool CDT::shift() {
   shiftAttempts++;
-  if (shiftImpl()) { shiftAccepted++; return true; }
+  if (shiftImpl()) {
+    shiftAccepted++;
+#ifdef CASET_LAZY_CATALOGS
+    markCatalogsDirty();
+#endif
+    return true;
+  }
   return false;
 }
 
 bool CDT::ishift() {
   ishiftAttempts++;
-  // Deprecated: (3,3) is self-inverse, so ishift = shift
-  if (shiftImpl()) { ishiftAccepted++; return true; }
+  if (shiftImpl()) {
+    ishiftAccepted++;
+#ifdef CASET_LAZY_CATALOGS
+    markCatalogsDirty();
+#endif
+    return true;
+  }
   return false;
 }
 
@@ -664,6 +711,43 @@ int CDT::sweep() {
   if (n4 <= 0) n4 = 1;
   int accepted = 0;
 
+#ifdef CASET_LAZY_CATALOGS
+  // Rebuild catalogs at the start of each sweep
+  rebuildCatalogs();
+
+  // Weighted move selection: P(move_i) = catalog_size_i / (5 * N_top).
+  // Flip/iflip/shift use N_top (full top-simplex set) as their "catalog".
+  auto nTop = static_cast<double>(spacetime->getSimplexCount());
+  if (nTop <= 0) nTop = 1;
+  double wAdd    = static_cast<double>(n41Catalog_.size());
+  double wRemove = static_cast<double>(removeCatalog_.size());
+  double wFlip   = nTop;
+  double wIflip  = nTop;
+  double wShift  = nTop;
+  double wTotal  = 5.0 * nTop; // normalizer to match 1/(5*N_top) per target
+
+  std::uniform_real_distribution<double> dist(0.0, wTotal);
+  for (int i = 0; i < n4; ++i) {
+    double r = dist(rng);
+    bool result = false;
+    if (r < wAdd) {
+      result = add();
+    } else if (r < wAdd + wRemove) {
+      result = remove();
+    } else if (r < wAdd + wRemove + wFlip) {
+      result = flip();
+    } else if (r < wAdd + wRemove + wFlip + wIflip) {
+      result = iflip();
+    } else if (r < wAdd + wRemove + wFlip + wIflip + wShift) {
+      result = shift();
+    }
+    // else: no-op (residual probability)
+    if (result) {
+      accepted++;
+      markCatalogsDirty();
+    }
+  }
+#else
   std::uniform_int_distribution<int> moveDist(0, 4);
   for (int i = 0; i < n4; ++i) {
     int moveType = moveDist(rng);
@@ -677,8 +761,39 @@ int CDT::sweep() {
     }
     if (result) accepted++;
   }
+#endif
   return accepted;
 }
+
+#ifdef CASET_LAZY_CATALOGS
+void CDT::rebuildCatalogs() {
+  if (!catalogsDirty_) return;
+  int d = getDim(spacetime);
+  int dPlus1 = d + 1;
+  int maxRemoveDegree = 2 * d + 2; // superset: allow a small margin
+
+  // N41 catalog: fingerprints of all N41-type top simplices
+  n41Catalog_.clear();
+  for (const auto &s : spacetime->getSimplices()) {
+    if (static_cast<int>(s->size()) != dPlus1) continue;
+    auto [ti, tf] = s->getOrientation().numeric();
+    if ((ti == d && tf == 1) || (ti == 1 && tf == d))
+      n41Catalog_.push_back(s->fingerprint.fingerprint());
+  }
+
+  // Remove catalog: IDs of vertices whose top-simplex degree is in [1, 2d+2]
+  removeCatalog_.clear();
+  for (const auto &v : spacetime->getVertexList()->liveVector()) {
+    int topDegree = 0;
+    for (const auto &s : v->getSimplices()) {
+      if (static_cast<int>(s->size()) == dPlus1) topDegree++;
+    }
+    if (topDegree > 0 && topDegree <= maxRemoveDegree)
+      removeCatalog_.push_back(v->getId());
+  }
+  catalogsDirty_ = false;
+}
+#endif
 
 void CDT::tune() {
   // Tune k4 to its pseudo-critical value using proportional feedback.

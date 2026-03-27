@@ -31,6 +31,7 @@ import platform
 CASET_ASSERTIONS = os.environ.get("CASET_ASSERTIONS")
 CASET_VERBOSE = os.environ.get("CASET_VERBOSE")
 CASET_ASAN = os.environ.get("CASET_ASAN")
+CASET_LAZY_CATALOGS = os.environ.get("CASET_LAZY_CATALOGS")
 LD_PRELOAD = os.environ.get("LD_PRELOAD")
 CMAKE_BUILD_TYPE = os.environ.get("CMAKE_BUILD_TYPE", "Debug")
 
@@ -67,6 +68,8 @@ def get_configure_command(build_dir):
         cmd.append("-DCASET_VERBOSE=ON")
     if CASET_ASSERTIONS:
         cmd.append("-DCASET_ASSERTIONS=ON")
+    if CASET_LAZY_CATALOGS:
+        cmd.append("-DCASET_LAZY_CATALOGS=ON")
     return cmd
 
 def pytest_sessionstart(session):

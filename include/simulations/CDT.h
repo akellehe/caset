@@ -276,6 +276,15 @@ class CDT : public Simulation {
     int iflipAttempts = 0, iflipAccepted = 0;
     int shiftAttempts = 0, shiftAccepted = 0;
     int ishiftAttempts = 0, ishiftAccepted = 0;
+
+#ifdef CASET_LAZY_CATALOGS
+    std::vector<std::uint64_t> n41Catalog_; ///< Fingerprints of N41-type top simplices
+    std::vector<std::uint64_t> removeCatalog_; ///< Vertex IDs with top-degree near 2d
+    bool catalogsDirty_{true};
+    /// Rebuild catalogs from scratch (only if dirty).
+    void rebuildCatalogs();
+    void markCatalogsDirty() { catalogsDirty_ = true; }
+#endif
 };
 
 } // caset
