@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <optional>
+#include <deque>
 #include <random>
 #include <ranges>
 #include <unordered_map>
@@ -71,6 +72,9 @@ class Spacetime {
 
     /// Default constructor. Creates a 4D Lorentzian spacetime with CDT type and Toroid topology.
     Spacetime();
+    ~Spacetime() {
+      for (auto *p : simplexPool_) delete p;
+    }
 
     /// Parameterized constructor.
     /// @param metric_ The metric tensor defining the signature and dimension
@@ -173,9 +177,9 @@ class Spacetime {
     /// These simplices have their vertices split \f$(d\!-\!1, 2)\f$ across adjacent slices.
     [[nodiscard]] std::size_t getN32() const noexcept;
 
-    /// @return Const reference to the full simplex set \f$ \mathcal{K} \f$
+    /// @return Const reference to the flat simplex vector \f$ \mathcal{K} \f$
     /// (all simplices of all dimensions registered in the complex).
-    [[nodiscard]] const SimplexSet& getSimplices() const noexcept;
+    [[nodiscard]] const std::vector<SimplexPtr>& getSimplices() const noexcept;
 
     /// Select a uniformly random vertex from the vertex list.
     /// Used by the (2d,2) delete move for blind-guessing vertex selection.
@@ -231,7 +235,7 @@ class Spacetime {
     /// @param orientation The orientation tuple (timelike_initial, timelike_final)
     /// @return Set of simplices \f$ \{\sigma^{(t_i, t_f)}\} \f$ with the given orientation
     /// @note This method is for testing only and has poor runtime performance.
-    SimplexSet getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
+    std::vector<SimplexPtr> getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
 
     /// Returns the foliation of the spacetime. Either NONE or PREFERRED. With PREFERRED foliation; each spatial slice
     /// lies between a time slice and vis versa. Otherwise they can be any-which-a-way.
@@ -360,12 +364,13 @@ class Spacetime {
     std::shared_ptr<Topology> topology;
     std::uint64_t currentTime = 0;
 
-    SimplexSet simplices{};
-    std::unordered_map<std::uint64_t, std::unique_ptr<Simplex>> simplexOwner{}; // owns all Simplex allocations
-    std::vector<SimplexPtr> simplicesVec{}; // parallel vector for O(1) random access
-    std::unordered_map<std::uint64_t, std::size_t> simplexVecIndex{}; // fingerprint → index in simplicesVec
+    std::vector<SimplexPtr> simplexPool_{}; // owns all Simplex allocations (raw new ptrs)
+    std::vector<std::uint32_t> simplexFreeSlots_{}; // recycled pool slots
+    std::vector<SimplexPtr> simplicesVec{}; // flat array of live simplex pointers (swap-and-pop)
+    std::unordered_map<std::uint64_t, std::uint32_t> simplexVecIndex{}; // fingerprint → index in simplicesVec
     std::vector<SimplexPtr> topSimplicesVec{}; // top-dimensional simplices only
-    std::unordered_map<std::uint64_t, std::size_t> topSimplexVecIndex{}; // fingerprint → index in topSimplicesVec
+    std::unordered_map<std::uint64_t, std::uint32_t> topSimplexVecIndex{}; // fingerprint → index in topSimplicesVec
+    std::unordered_map<std::uint64_t, std::uint32_t> simplexPoolIndex_{}; // fingerprint → pool slot
     std::size_t n41Count = 0; // (4,1) + (1,4) simplices
     std::size_t n32Count = 0; // (3,2) + (2,3) simplices
     std::mt19937 rng{std::random_device{}()};

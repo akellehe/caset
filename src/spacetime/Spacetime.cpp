@@ -76,37 +76,16 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   for (const auto &v : vertices) {
     hash ^= Fingerprint::mix64(v->getId());
   }
-  const auto found = simplices.find(hash);
-  if (found == simplices.end()) {
-#ifdef CASET_ASSERTIONS
-    std::unordered_set<std::uint64_t> seen{};
-    for (const auto &s : simplices) {
-      if (seen.contains(s->fingerprint.fingerprint())) {
-        CLOG(CRITICAL_LEVEL, "attempted to create a new simplex with the same fingerprint as an existing one!");
-        CLOG(CRITICAL_LEVEL, "Attempted vertices: ");
-        for (const auto &v : vertices) {
-          CLOG(CRITICAL_LEVEL, "    - ", v->toString());
-        }
-        CLOG(CRITICAL_LEVEL,
-             "Existing simplex: ",
-             s->toString(),
-             " with fingerprint ",
-             std::to_string(s->fingerprint.fingerprint()),
-             " vs ",
-             std::to_string(hash));
-        throw std::runtime_error("Duplicate simplex: " + s->toString());
-      }
-      seen.insert(s->fingerprint.fingerprint());
-    }
-#endif
+  auto foundIt = simplexVecIndex.find(hash);
+  if (foundIt == simplexVecIndex.end()) {
     SimplexPtr simplex = Simplex::create(this, vertices, edges);
     registerSimplex(simplex, false);
     return {simplex, true};
   }
 #ifdef CASET_ASSERTIONS
-  CLOG(DEBUG_LEVEL, "You attempted to create a simplex that already exists: ", (*found)->toString());
+  CLOG(DEBUG_LEVEL, "You attempted to create a simplex that already exists: ", simplicesVec[foundIt->second]->toString());
 #endif
-  return {*found, false};
+  return {simplicesVec[foundIt->second], false};
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(
@@ -284,19 +263,18 @@ std::shared_ptr<VertexList> Spacetime::getVertexList() const noexcept {
 }
 
 SimplexSet Spacetime::getExternalSimplices() noexcept {
-  SimplexSet simplices_{};
   SimplexSet result{};
-  for (const auto &simplex : simplices) {
+  for (const auto &simplex : simplicesVec) {
     if (simplex->hasCausallyAvailableFacet()) result.insert(simplex);
   }
   return result;
 }
 
-SimplexSet Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+std::vector<SimplexPtr> Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
   SimplexOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
-  SimplexSet result{};
-  for (const auto &simplex : simplices) {
-    if (simplex->getOrientation() == o) result.insert(simplex);
+  std::vector<SimplexPtr> result{};
+  for (const auto &simplex : simplicesVec) {
+    if (simplex->getOrientation() == o) result.push_back(simplex);
   }
   return result;
 }
@@ -337,19 +315,16 @@ std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
 }
 
 SimplexPtr Spacetime::getSimplex(SimplexPtr simplex) const {
-  auto it = simplices.find(simplex);
-  if (it == simplices.end()) {
-    return nullptr;
-  }
-  return *it;
+  auto fp = simplex->fingerprint.fingerprint();
+  auto it = simplexVecIndex.find(fp);
+  if (it == simplexVecIndex.end()) return nullptr;
+  return simplicesVec[it->second];
 }
 
 SimplexPtr Spacetime::getSimplex(std::uint64_t fingerprint) const {
-  auto it = simplices.find(fingerprint);
-  if (it == simplices.end()) {
-    return nullptr;
-  }
-  return *it;
+  auto it = simplexVecIndex.find(fingerprint);
+  if (it == simplexVecIndex.end()) return nullptr;
+  return simplicesVec[it->second];
 }
 
 // ========================================
@@ -381,19 +356,19 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
       affected.push_back({s, s->fingerprint.fingerprint()});
   }
 
-  // Phase 1: Remove affected simplices from hash tables (fingerprints still valid)
-  // Track which were actually in each hash table to avoid re-inserting sub-simplices.
-  // Extract simplexOwner nodes now to avoid transient collisions in Phase 3
-  // (same issue as edges: v1 and v2 sharing a neighbor causes fp collision).
-  std::unordered_set<SimplexPtr> wasInSimplices;
-  using OwnerNodeHandle = decltype(simplexOwner.extract(std::uint64_t{}));
-  std::vector<OwnerNodeHandle> ownerNodes;
+  // Phase 1: Remove affected simplices from lookup maps (fingerprints still valid)
+  // Track which were actually registered to avoid re-inserting sub-simplices.
+  std::unordered_set<SimplexPtr> wasRegistered;
+  // Detach pool index entries (object stays alive in pool)
+  std::vector<std::uint32_t> detachedPoolSlots;
   for (auto &[s, oldFp] : affected) {
-    if (simplices.erase(s)) wasInSimplices.insert(s);
-    simplexVecIndex.erase(oldFp);
+    if (simplexVecIndex.erase(oldFp)) wasRegistered.insert(s);
     topSimplexVecIndex.erase(oldFp);
-    auto nh = simplexOwner.extract(oldFp);
-    if (!nh.empty()) ownerNodes.push_back(std::move(nh));
+    auto poolIt = simplexPoolIndex_.find(oldFp);
+    if (poolIt != simplexPoolIndex_.end()) {
+      detachedPoolSlots.push_back(poolIt->second);
+      simplexPoolIndex_.erase(poolIt);
+    }
   }
 
   // Record which affected simplices contained v1 vs v2 BEFORE swapping IDs
@@ -450,13 +425,12 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
       affectedEdges.push_back({e, false});
   }
 
-  // Extract all affected edges from EdgeList (removes them from the map)
-  using NodeHandle = decltype(edgeList->extractEdge(0));
-  std::vector<NodeHandle> edgeNodes;
-  edgeNodes.reserve(affectedEdges.size());
+  // Detach affected edges from the fingerprint lookup (keeps objects alive in pool)
+  std::vector<std::uint32_t> edgeSlots;
+  edgeSlots.reserve(affectedEdges.size());
   for (auto &[e, fromV1] : affectedEdges) {
-    auto nh = edgeList->extractEdge(e->fingerprint.fingerprint());
-    if (!nh.empty()) edgeNodes.push_back(std::move(nh));
+    auto slot = edgeList->detachEdge(e->fingerprint.fingerprint());
+    if (slot != UINT32_MAX) edgeSlots.push_back(slot);
   }
 
   // Update fingerprints on the edge objects
@@ -471,11 +445,9 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
     e->fingerprint.refresh();
   }
 
-  // Reinsert with new fingerprints as keys
-  for (auto &nh : edgeNodes) {
-    auto newFp = nh.mapped()->fingerprint.fingerprint();
-    nh.key() = newFp;
-    edgeList->reinsertEdge(std::move(nh));
+  // Reattach with new fingerprints
+  for (auto slot : edgeSlots) {
+    edgeList->reattachEdge(slot);
   }
 
   // Update fingerprints on affected simplices (those in hash tables)
@@ -490,25 +462,25 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
     s->fingerprint.refresh();
   }
 
-  // Phase 3: Re-insert into hash tables with new fingerprints
-  // Only re-insert simplices that were actually in the hash set (skip sub-simplices)
+  // Phase 3: Re-insert into lookup maps with new fingerprints
   for (auto &[s, oldFp] : affected) {
     auto newFp = s->fingerprint.fingerprint();
-    if (wasInSimplices.count(s)) simplices.insert(s);
 
     // Restore vec index mappings (vec position unchanged, just the key)
-    for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
-      if (simplicesVec[i] == s) { simplexVecIndex[newFp] = i; break; }
-    }
-    for (std::size_t i = 0; i < topSimplicesVec.size(); ++i) {
-      if (topSimplicesVec[i] == s) { topSimplexVecIndex[newFp] = i; break; }
+    if (wasRegistered.count(s)) {
+      for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(simplicesVec.size()); ++i) {
+        if (simplicesVec[i] == s) { simplexVecIndex[newFp] = i; break; }
+      }
+      for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(topSimplicesVec.size()); ++i) {
+        if (topSimplicesVec[i] == s) { topSimplexVecIndex[newFp] = i; break; }
+      }
     }
   }
 
-  // Reinsert simplexOwner nodes with updated fingerprint keys
-  for (auto &nh : ownerNodes) {
-    nh.key() = nh.mapped()->fingerprint.fingerprint();
-    simplexOwner.insert(std::move(nh));
+  // Reattach pool index entries with new fingerprints
+  for (auto slot : detachedPoolSlots) {
+    auto newFp = simplexPool_[slot]->fingerprint.fingerprint();
+    simplexPoolIndex_[newFp] = slot;
   }
 }
 
@@ -531,84 +503,87 @@ void Spacetime::addObservable(const std::shared_ptr<Observable> &observable) {
 // ========================================
 
 SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) {
-#ifdef CASET_ASSERTIONS
-  std::unordered_set<std::uint64_t> seen{};
-  for (const auto &simp : simplices) {
-    if (seen.contains(simp->fingerprint.fingerprint())) {
-      CLOG(CRITICAL_LEVEL, "Duplicate simplex!");
-      throw std::runtime_error("Duplicate simplex!");
-    }
-    seen.insert(simp->fingerprint.fingerprint());
-  }
-#endif
   auto fp = simplex->fingerprint.fingerprint();
-  const auto &[it, inserted] = simplices.emplace(simplex);
-  if (inserted) {
-    simplexOwner.emplace(fp, std::unique_ptr<Simplex>(simplex));
-    simplexVecIndex[fp] = simplicesVec.size();
-    simplicesVec.push_back(simplex);
-    // Track top-dimensional simplices separately for efficient random access
-    auto d = metric->getSignature()->getDimensions();
-    if (simplex->size() == static_cast<std::size_t>(d + 1)) {
-      topSimplexVecIndex[fp] = topSimplicesVec.size();
-      topSimplicesVec.push_back(simplex);
-    }
-    updateOrientationCounters(simplex, +1);
+  // Check if already registered
+  auto existIt = simplexVecIndex.find(fp);
+  if (existIt != simplexVecIndex.end()) {
+    return simplicesVec[existIt->second];
   }
-  return *it;
+
+  // Store the raw pointer (allocated by Simplex::create with new).
+  // The pool owns the allocation and will free it on unregister.
+  std::uint32_t slot;
+  if (!simplexFreeSlots_.empty()) {
+    slot = simplexFreeSlots_.back();
+    simplexFreeSlots_.pop_back();
+  } else {
+    slot = static_cast<std::uint32_t>(simplexPool_.size());
+    simplexPool_.push_back(nullptr);
+  }
+  simplexPool_[slot] = simplex;
+
+  simplexPoolIndex_[fp] = slot;
+  simplexVecIndex[fp] = static_cast<std::uint32_t>(simplicesVec.size());
+  simplicesVec.push_back(simplex);
+
+  // Track top-dimensional simplices separately for efficient random access
+  auto d = metric->getSignature()->getDimensions();
+  if (simplex->size() == static_cast<std::size_t>(d + 1)) {
+    topSimplexVecIndex[fp] = static_cast<std::uint32_t>(topSimplicesVec.size());
+    topSimplicesVec.push_back(simplex);
+  }
+  updateOrientationCounters(simplex, +1);
+  return simplex;
 }
 
 void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
-  if (!simplices.contains(simplex)) {
+  auto fp = simplex->fingerprint.fingerprint();
+  auto idxIt = simplexVecIndex.find(fp);
+  if (idxIt == simplexVecIndex.end()) {
 #ifdef CASET_ASSERTIONS
-    CLOG(CRITICAL_LEVEL, "You attempted to unregister a simplex that does not exist! ", simplex->toString(), " existing simplices are: ");
-    for (const auto &s : simplices) {
-      CLOG(CRITICAL_LEVEL, "    - ", s->toString());
-    }
-    for (const auto &s : simplices) {
-      if (s->fingerprint.fingerprint() == simplex->fingerprint.fingerprint()) {
-        CLOG(CRITICAL_LEVEL, "Hash table said a simplex was not registered, but one was found!");
-        throw std::runtime_error("registered simplex unexpectedly found. hash table corrupted.");
-      }
-    }
+    CLOG(CRITICAL_LEVEL, "You attempted to unregister a simplex that does not exist!");
 #endif
     return;
   }
+
   updateOrientationCounters(simplex, -1);
-  simplices.erase(simplex);
-  // Remove from parallel vector via index map (O(1) swap-and-pop)
-  auto fp = simplex->fingerprint.fingerprint();
-  auto idxIt = simplexVecIndex.find(fp);
-  if (idxIt != simplexVecIndex.end()) {
-    std::size_t idx = idxIt->second;
-    if (idx < simplicesVec.size() - 1) {
-      // Swap with last element and update the swapped element's index
-      auto backFp = simplicesVec.back()->fingerprint.fingerprint();
-      simplicesVec[idx] = simplicesVec.back();
-      simplexVecIndex[backFp] = idx;
-    }
-    simplicesVec.pop_back();
-    simplexVecIndex.erase(idxIt);
+
+  // Swap-and-pop from simplicesVec
+  auto idx = idxIt->second;
+  if (idx < static_cast<std::uint32_t>(simplicesVec.size()) - 1) {
+    auto backFp = simplicesVec.back()->fingerprint.fingerprint();
+    simplicesVec[idx] = simplicesVec.back();
+    simplexVecIndex[backFp] = idx;
   }
-  // Remove from top-dimensional vector too
+  simplicesVec.pop_back();
+  simplexVecIndex.erase(idxIt);
+
+  // Swap-and-pop from topSimplicesVec
   auto topIdxIt = topSimplexVecIndex.find(fp);
   if (topIdxIt != topSimplexVecIndex.end()) {
-    std::size_t idx = topIdxIt->second;
-    if (idx < topSimplicesVec.size() - 1) {
+    auto tidx = topIdxIt->second;
+    if (tidx < static_cast<std::uint32_t>(topSimplicesVec.size()) - 1) {
       auto backFp = topSimplicesVec.back()->fingerprint.fingerprint();
-      topSimplicesVec[idx] = topSimplicesVec.back();
-      topSimplexVecIndex[backFp] = idx;
+      topSimplicesVec[tidx] = topSimplicesVec.back();
+      topSimplexVecIndex[backFp] = tidx;
     }
     topSimplicesVec.pop_back();
     topSimplexVecIndex.erase(topIdxIt);
   }
-  // Free the Simplex allocation
-  simplexOwner.erase(fp);
+
+  // Release pool slot and free the allocation
+  auto poolIt = simplexPoolIndex_.find(fp);
+  if (poolIt != simplexPoolIndex_.end()) {
+    delete simplexPool_[poolIt->second];
+    simplexPool_[poolIt->second] = nullptr;
+    simplexFreeSlots_.push_back(poolIt->second);
+    simplexPoolIndex_.erase(poolIt);
+  }
 }
 
 void Spacetime::reserve(int nSimplices) {
-  simplices.reserve(nSimplices);
-  simplexOwner.reserve(nSimplices);
+  simplexVecIndex.reserve(nSimplices);
+  simplexPoolIndex_.reserve(nSimplices);
   edgeList->reserve(nSimplices);
   vertexList->reserve(nSimplices);
 }
@@ -633,12 +608,12 @@ std::size_t Spacetime::getN32() const noexcept {
   return n32Count;
 }
 
-const SimplexSet& Spacetime::getSimplices() const noexcept {
-  return simplices;
+const std::vector<SimplexPtr>& Spacetime::getSimplices() const noexcept {
+  return simplicesVec;
 }
 
 VertexPtr Spacetime::getRandomVertex() {
-  auto verts = vertexList->toVector();
+  const auto &verts = vertexList->liveVector();
   if (verts.empty()) return nullptr;
   std::uniform_int_distribution<std::size_t> dist(0, verts.size() - 1);
   return verts[dist(rng)];
@@ -665,7 +640,7 @@ SimplexPtr Spacetime::getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf) {
   }
   // Fallback: linear scan and pick random from matches
   std::vector<SimplexPtr> matches;
-  for (const auto &s : simplices) {
+  for (const auto &s : simplicesVec) {
     if (s->getOrientation() == target) matches.push_back(s);
   }
   if (matches.empty()) return nullptr;

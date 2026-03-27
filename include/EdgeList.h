@@ -1,5 +1,4 @@
-// MIT License
-// Copyright (c) 2025 Andrew Kelleher
+// MIT License -- Copyright (c) 2025 Andrew Kelleher
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -19,45 +18,67 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//
-// Created by andrew on 10/23/25.
-//
-
 #ifndef CASET_EDGELIST_H
 #define CASET_EDGELIST_H
 
-#include <memory>
+#include <cstdint>
+#include <deque>
 #include <vector>
-#include <unordered_set>
+#include <unordered_map>
 
 #include "Edge.h"
 #include "Logger.h"
 
 namespace caset {
+
+/// Flat-pool edge container.
+///
+/// Edges live in a `std::deque` (stable element addresses) with a free-list
+/// for slot reuse.  `fpToSlot_` maps edge fingerprint → pool slot for O(1)
+/// deduplication.
 class EdgeList {
   public:
     [[nodiscard]] std::size_t size() const;
     [[nodiscard]] Edges toVector() const noexcept;
+
     EdgePtr add(const VertexPtr &source, const VertexPtr &target);
     EdgePtr add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept;
     EdgePtr get(const std::uint64_t &fingerprint);
     void remove(const EdgePtr &edge) noexcept;
     void replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept;
+
+    /// Re-key an edge's fingerprint in the lookup map without moving the object.
     void rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp);
 
-    /// Extract an edge from the map by fingerprint, returning the node handle.
-    /// The caller must reinsert it (via reinsertEdge) after updating the fingerprint.
-    auto extractEdge(std::uint64_t fp) { return edgeList.extract(fp); }
+    /// Detach an edge from the fingerprint lookup (but keep it in the pool).
+    /// Returns the pool slot so the caller can update the fingerprint and call
+    /// reattachEdge().  Returns UINT32_MAX if not found.
+    std::uint32_t detachEdge(std::uint64_t fp) {
+      auto it = fpToSlot_.find(fp);
+      if (it == fpToSlot_.end()) return UINT32_MAX;
+      auto slot = it->second;
+      fpToSlot_.erase(it);
+      return slot;
+    }
 
-    /// Reinsert an extracted edge node with its new key.
-    template<typename NodeHandle>
-    void reinsertEdge(NodeHandle &&nh) { edgeList.insert(std::forward<NodeHandle>(nh)); }
+    /// Re-attach a previously detached edge under its (possibly new) fingerprint.
+    void reattachEdge(std::uint32_t slot) {
+      auto fp = pool_[slot].fingerprint.fingerprint();
+      fpToSlot_.emplace(fp, slot);
+    }
 
     void reserve(std::size_t nSimplices);
 
   private:
-    std::unordered_map<std::uint64_t, std::unique_ptr<Edge>> edgeList{};
-    EdgePtr getOrInsert(std::unique_ptr<Edge> edge);
+    std::deque<Edge> pool_;
+    std::vector<std::uint32_t> freeSlots_;
+    std::unordered_map<std::uint64_t, std::uint32_t> fpToSlot_;
+    // liveVec_ for toVector() — maintained as pointers into pool_
+    std::vector<EdgePtr> liveVec_;
+    std::unordered_map<std::uint64_t, std::uint32_t> liveIndex_; // fp → liveVec position
+
+    EdgePtr getOrInsert(const VertexPtr &source, const VertexPtr &target, double squaredLength);
+    std::uint32_t allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength);
 };
 } // caset
 

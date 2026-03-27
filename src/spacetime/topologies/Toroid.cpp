@@ -104,7 +104,11 @@ void Toroid::build(Spacetime *spacetime, int nSimplices) {
   // Force facet computation on all top simplices so that coface
   // relationships are established. This is needed for the add move
   // to find spatial-face partners via getCofaces().
-  for (const auto &s : spacetime->getSimplices()) {
+  // Iterate by index: getFacets() may register new sub-simplices,
+  // growing simplicesVec.  We only process the original top-simplices.
+  auto nBefore = spacetime->getSimplices().size();
+  for (std::size_t i = 0; i < nBefore; ++i) {
+    auto s = spacetime->getSimplices()[i];
     if (s->size() == static_cast<std::size_t>(dPlus1)) {
       s->getFacets();
     }
