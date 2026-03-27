@@ -23,11 +23,11 @@
 // Created by andrew on 10/23/25.
 //
 
-#include "Metric.h"
+#include "spacetime/Metric.h"
 
 #include <memory>
 
-#include "Signature.h"
+#include "spacetime/Signature.h"
 #include "Logger.h"
 
 namespace caset {

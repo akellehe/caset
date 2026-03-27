@@ -29,8 +29,8 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
-#include "ForwardDeclarations.h"
-#include "Fingerprint.h"
+#include "mesh/ForwardDeclarations.h"
+#include "mesh/Fingerprint.h"
 
 namespace caset {
 

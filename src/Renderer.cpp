@@ -2,10 +2,10 @@
 #include "Renderer.h"
 
 #include "spacetime/Spacetime.h"
-#include "Vertex.h"
-#include "Edge.h"
-#include "VertexList.h"
-#include "EdgeList.h"
+#include "mesh/Vertex.h"
+#include "mesh/Edge.h"
+#include "mesh/VertexList.h"
+#include "mesh/EdgeList.h"
 
 #include <zlib.h>
 

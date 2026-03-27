@@ -23,8 +23,8 @@
 // Created by andrew on 12/12/25.
 //
 
-#include "EdgeKey.h"
-#include "ForwardDeclarations.h"
+#include "mesh/EdgeKey.h"
+#include "mesh/ForwardDeclarations.h"
 #include <string>
 #include <vector>
 #include <cstdint>

@@ -31,7 +31,7 @@
 #include <vector>
 #include <unordered_map>
 
-#include "Vertex.h"
+#include "mesh/Vertex.h"
 
 namespace caset {
 

@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "SimplexOrientation.h"
+#include "mesh/SimplexOrientation.h"
 #include "spacetime/topologies/Toroid.h"
 #include "spacetime/Spacetime.h"
 #include "utils.h"

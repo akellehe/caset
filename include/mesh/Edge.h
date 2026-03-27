@@ -22,9 +22,9 @@
 #ifndef CASET_CASET_SRC_EDGE_H_
 #define CASET_CASET_SRC_EDGE_H_
 
-#include "Fingerprint.h"
-#include "ForwardDeclarations.h"
-#include "EdgeKey.h"
+#include "mesh/Fingerprint.h"
+#include "mesh/ForwardDeclarations.h"
+#include "mesh/EdgeKey.h"
 
 #include <random>
 #include <memory>
@@ -140,6 +140,10 @@ class Edge {
     ///
     /// @returns A tuple of {sourceId, targetId}.
     EdgeKey getKey() const noexcept;
+
+    /// Set the squared edge length.  Used by the Regge solver to optimize
+    /// the geometry without rebuilding the mesh.
+    void setSquaredLength(double sq) noexcept { squaredLength = sq; }
 
   private:
     VertexPtr source = nullptr;

@@ -22,15 +22,15 @@
 #ifndef CASET_SIMPLEX_H
 #define CASET_SIMPLEX_H
 
-#include "ForwardDeclarations.h"
+#include "mesh/ForwardDeclarations.h"
 #include <memory>
 #include <vector>
 #include <functional>
 
 #include "Logger.h"
-#include "EdgeList.h"
-#include "Fingerprint.h"
-#include "SimplexOrientation.h"
+#include "mesh/EdgeList.h"
+#include "mesh/Fingerprint.h"
+#include "mesh/SimplexOrientation.h"
 #include "utils.h"
 
 namespace caset {

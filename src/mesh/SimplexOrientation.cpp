@@ -30,9 +30,9 @@
 #include <memory>
 #include <vector>
 
-#include "ForwardDeclarations.h"
-#include "SimplexOrientation.h"
-#include "Vertex.h"
+#include "mesh/ForwardDeclarations.h"
+#include "mesh/SimplexOrientation.h"
+#include "mesh/Vertex.h"
 
 
 namespace caset {

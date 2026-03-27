@@ -1,7 +1,7 @@
 // MIT License
 // Copyright (c) 2025 Andrew Kelleher
 
-#include "SimplexOrientation.h"
+#include "mesh/SimplexOrientation.h"
 #include "spacetime/topologies/Cylinder.h"
 #include "spacetime/Spacetime.h"
 #include "utils.h"

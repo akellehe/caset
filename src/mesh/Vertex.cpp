@@ -19,14 +19,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "Vertex.h"
-#include "EdgeList.h"
-#include "VertexList.h"
-#include "EdgeKey.h"
-#include "Edge.h"
-#include "ForwardDeclarations.h"
-#include "Simplex.h"
-#include "Fingerprint.h"
+#include "mesh/Vertex.h"
+#include "mesh/EdgeList.h"
+#include "mesh/VertexList.h"
+#include "mesh/EdgeKey.h"
+#include "mesh/Edge.h"
+#include "mesh/ForwardDeclarations.h"
+#include "mesh/Simplex.h"
+#include "mesh/Fingerprint.h"
 #include "spacetime/Spacetime.h"
 #include "utils.h"
 #include <iomanip>

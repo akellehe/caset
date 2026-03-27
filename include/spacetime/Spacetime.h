@@ -33,11 +33,11 @@
 
 #include "topologies/Topology.h"
 #include "observables/Observable.h"
-#include "EdgeList.h"
+#include "mesh/EdgeList.h"
 #include "Foliation.h"
-#include "VertexList.h"
-#include "Metric.h"
-#include "Simplex.h"
+#include "mesh/VertexList.h"
+#include "spacetime/Metric.h"
+#include "mesh/Simplex.h"
 
 namespace caset {
 enum class SpacetimeType : uint8_t {

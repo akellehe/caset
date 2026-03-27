@@ -26,7 +26,7 @@
 #include <vector>
 #include <unordered_map>
 
-#include "Edge.h"
+#include "mesh/Edge.h"
 #include "Logger.h"
 
 namespace caset {

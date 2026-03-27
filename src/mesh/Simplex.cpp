@@ -19,10 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "Vertex.h"
-#include "Simplex.h"
-#include "ForwardDeclarations.h"
-#include "SimplexOrientation.h"
+#include "mesh/Vertex.h"
+#include "mesh/Simplex.h"
+#include "mesh/ForwardDeclarations.h"
+#include "mesh/SimplexOrientation.h"
 #include "spacetime/Spacetime.h"
 #include "Logger.h"
 #include "utils.h"

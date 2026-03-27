@@ -27,7 +27,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <cstdint>
-#include "Fingerprint.h"
+#include "mesh/Fingerprint.h"
 #include <optional>
 
 namespace caset {

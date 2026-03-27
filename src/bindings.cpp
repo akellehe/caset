@@ -30,15 +30,17 @@
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
 #include "simulations/CDT.h"
+#include "simulations/ReggeSolver.h"
+#include "matter/MatterConfiguration.h"
 #include "observables/VolumeProfile.h"
 #include "spacetime/Spacetime.h"
-#include "VertexList.h"
-#include "EdgeList.h"
-#include "Signature.h"
-#include "Vertex.h"
-#include "Edge.h"
-#include "Simplex.h"
-#include "Metric.h"
+#include "mesh/VertexList.h"
+#include "mesh/EdgeList.h"
+#include "spacetime/Signature.h"
+#include "mesh/Vertex.h"
+#include "mesh/Edge.h"
+#include "mesh/Simplex.h"
+#include "spacetime/Metric.h"
 #include "Renderer.h"
 
 #include <vector>
@@ -725,6 +727,75 @@ multiple configurations for averaging.)doc")
            "Compute and accumulate a volume profile measurement for averaging.")
       .def("reset", &VolumeProfile::reset,
            "Reset the accumulated measurements.");
+
+  // ========================================
+  // MatterConfiguration
+  // ========================================
+  py::class_<MatterConfiguration>(m, "MatterConfiguration",
+      R"doc(Intrinsic (coordinate-free) specification of stress-energy on a triangulation.
+
+Matter is defined relationally: by assigning energy densities to vertices,
+simplices, or as a function of geodesic distance from a reference vertex.)doc")
+      .def(py::init<>())
+      .def("setPointMass", &MatterConfiguration::setPointMass,
+           py::arg("vertex"), py::arg("mass"),
+           R"doc(Assign a point mass to a vertex.
+
+Args:
+    vertex: The vertex at which to place the mass.
+    mass: The mass in geometrized units (G=c=1).)doc")
+      .def("setEnergyDensity", &MatterConfiguration::setEnergyDensity,
+           py::arg("simplex"), py::arg("rho"),
+           R"doc(Assign energy density to a top-simplex.
+
+Args:
+    simplex: The simplex to assign density to.
+    rho: Energy density in geometrized units.)doc")
+      .def("setRadialProfile", &MatterConfiguration::setRadialProfile,
+           py::arg("center"), py::arg("rho_of_r"),
+           R"doc(Assign energy density as a function of geodesic distance.
+
+Args:
+    center: The reference vertex.
+    rho_of_r: A callable taking distance (float) and returning density (float).)doc");
+
+  // ========================================
+  // ReggeSolver
+  // ========================================
+  py::class_<ReggeSolver>(m, "ReggeSolver",
+      R"doc(Regge equation solver.
+
+Adjusts edge lengths so that deficit angles at every hinge satisfy the
+discretized Einstein equations for a given matter configuration.
+
+Uses gradient descent on the squared residual
+L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>, MatterConfiguration>(),
+           py::arg("spacetime"), py::arg("matter"))
+      .def("dihedralAngle", &ReggeSolver::dihedralAngle,
+           py::arg("sigma"), py::arg("hinge"),
+           "Dihedral angle at hinge h within top-simplex sigma.")
+      .def("deficitAngle", &ReggeSolver::deficitAngle,
+           py::arg("hinge"),
+           "Deficit angle at a hinge: 2π minus sum of dihedral angles.")
+      .def_static("hingeArea", &ReggeSolver::hingeArea,
+           py::arg("hinge"),
+           "Area of a triangular hinge (Heron's formula).")
+      .def("reggeAction", &ReggeSolver::reggeAction,
+           "Full Regge action: Σ_h A_h · ε_h.")
+      .def("residual", &ReggeSolver::residual,
+           "Squared residual: Σ_h (ε_h - ε*_h)².")
+      .def("step", &ReggeSolver::step,
+           py::arg("learning_rate") = 0.001,
+           "One gradient-descent step. Returns new residual.")
+      .def("solve", &ReggeSolver::solve,
+           py::arg("tol") = 1e-8,
+           py::arg("max_iters") = 5000,
+           py::arg("learning_rate") = 0.001,
+           R"doc(Iterate step() until convergence.
+
+Returns:
+    Tuple of (converged: bool, residual: float, iterations: int).)doc");
 
 #ifdef CASET_VERSION
   m.attr("__version__") = CASET_VERSION;

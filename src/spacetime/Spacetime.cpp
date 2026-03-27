@@ -28,10 +28,10 @@
 #include "Logger.h"
 #include <memory>
 #include "spacetime/Spacetime.h"
-#include "SimplexOrientation.h"
-#include "ForwardDeclarations.h"
-#include "EdgeList.h"
-#include "Edge.h"
+#include "mesh/SimplexOrientation.h"
+#include "mesh/ForwardDeclarations.h"
+#include "mesh/EdgeList.h"
+#include "mesh/Edge.h"
 #include "spacetime/topologies/Toroid.h"
 
 namespace caset {

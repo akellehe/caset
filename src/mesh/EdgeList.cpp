@@ -1,6 +1,6 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
-#include "EdgeList.h"
-#include "Vertex.h"
+#include "mesh/EdgeList.h"
+#include "mesh/Vertex.h"
 
 namespace caset {
 

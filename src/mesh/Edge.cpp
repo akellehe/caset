@@ -19,10 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include "Fingerprint.h"
-#include "Edge.h"
-#include "EdgeKey.h"
-#include "Vertex.h"
+#include "mesh/Fingerprint.h"
+#include "mesh/Edge.h"
+#include "mesh/EdgeKey.h"
+#include "mesh/Vertex.h"
 #include "utils.h"
 
 #include <vector>

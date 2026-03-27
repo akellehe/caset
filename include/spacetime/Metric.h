@@ -28,7 +28,7 @@
 
 #include <memory>
 
-#include "Signature.h"
+#include "spacetime/Signature.h"
 
 namespace caset {
 /// # The Metric

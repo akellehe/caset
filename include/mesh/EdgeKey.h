@@ -26,7 +26,7 @@
 #ifndef CASET_EDGEKEY_H
 #define CASET_EDGEKEY_H
 
-#include "ForwardDeclarations.h"
+#include "mesh/ForwardDeclarations.h"
 #include <unordered_set>
 #include <string>
 #include <vector>
