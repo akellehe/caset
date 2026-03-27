@@ -166,13 +166,9 @@ void Simplex::initialize(Simplex* simplex) {
 #endif
   std::vector<IdType> ids = {};
   ids.reserve(vertices.size());
-  vertexIdToIndex.reserve(vertices.size());
-  vertexIndexToId.reserve(vertices.size());
   for (const auto &v : vertices) {
     ti = std::min(ti, v->getTime());
     tf = std::max(tf, v->getTime());
-    vertexIdToIndex.emplace(v->getId(), ids.size());
-    vertexIndexToId.emplace(ids.size(), v->getId());
     ids.push_back(v->getId());
   }
   fingerprint.setIds(ids);
@@ -314,7 +310,10 @@ void Simplex::removeCoface(SimplexPtr coface) {
 }
 
 [[nodiscard]] bool Simplex::hasVertex(const VertexPtr &vertex) const {
-  return vertexIdToIndex.contains(vertex->getId());
+  auto id = vertex->getId();
+  for (const auto &v : vertices)
+    if (v->getId() == id) return true;
+  return false;
 }
 
 [[nodiscard]] bool Simplex::hasEdgeContaining(const IdType vertexId) const {
@@ -442,38 +441,13 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
     return false;
   }
   auto oldId = oldVertex->getId();
-  auto oldIndexIt = vertexIdToIndex.find(oldId);
-  if (oldIndexIt == vertexIdToIndex.end()) {
-    return false;
+  std::size_t oldIndex = vertices.size(); // sentinel
+  for (std::size_t i = 0; i < vertices.size(); ++i) {
+    if (vertices[i]->getId() == oldId) { oldIndex = i; break; }
   }
-  auto oldIndex = oldIndexIt->second;
-#ifdef CASET_ASSERTIONS
-  if (oldIndex >= vertices.size()) {
-    CLOG(DEBUG_LEVEL,
-         "You requested an index: ",
-         std::to_string(oldIndex),
-         " larger than the number of vertices in the simplex: ",
-         vertices.size());
-    throw std::runtime_error("out of range.");
-  }
-  if (vertices.size() != vertexIdToIndex.size()) {
-    throw std::runtime_error(
-      "Vertices not keeping up with id to index mapping: " + std::to_string(vertices.size()) + " != " + std::to_string(
-        vertexIdToIndex.size()));
-  }
-  if (vertices.size() != vertexIndexToId.size()) {
-    throw std::runtime_error(
-      "Vertices not keeping up with id to index mapping: " + std::to_string(vertices.size()) + " != " + std::to_string(
-        vertexIndexToId.size()));
-  }
-#endif
+  if (oldIndex == vertices.size()) return false;
+
   vertices[oldIndex] = newVertex;
-
-  vertexIdToIndex.erase(oldId);
-  vertexIdToIndex.emplace(newVertex->getId(), oldIndex);
-
-  vertexIndexToId.erase(oldIndex);
-  vertexIndexToId.emplace(oldIndex, newVertex->getId());
 
   fingerprint.removeId(oldId);
   fingerprint.addId(newVertex->getId());
@@ -488,8 +462,8 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
 
 VertexIdMap Simplex::getVertexIdLookup() const noexcept {
   VertexIdMap lookup{};
-  for (const auto [vertexId, index] : vertexIdToIndex) {
-    lookup.emplace(vertexId, vertices[index]);
+  for (const auto &v : vertices) {
+    lookup.emplace(v->getId(), v);
   }
   return lookup;
 }
@@ -515,30 +489,8 @@ bool Simplex::addEdge(const EdgePtr &edge) {
   return true;
 }
 
-void Simplex::updateVertexId(IdType oldId, IdType newId) {
-  auto it = vertexIdToIndex.find(oldId);
-  if (it == vertexIdToIndex.end()) return;
-  auto index = it->second;
-  vertexIdToIndex.erase(it);
-  vertexIdToIndex.emplace(newId, index);
-  vertexIndexToId.erase(index);
-  vertexIndexToId.emplace(index, newId);
-}
-
-void Simplex::swapVertexIds(IdType id1, IdType id2) {
-  auto it1 = vertexIdToIndex.find(id1);
-  auto it2 = vertexIdToIndex.find(id2);
-  if (it1 == vertexIdToIndex.end() || it2 == vertexIdToIndex.end()) return;
-  auto idx1 = it1->second;
-  auto idx2 = it2->second;
-  // Erase both, then re-emplace with swapped keys
-  vertexIdToIndex.erase(it1);
-  vertexIdToIndex.erase(it2);
-  vertexIdToIndex.emplace(id2, idx1);
-  vertexIdToIndex.emplace(id1, idx2);
-  vertexIndexToId[idx1] = id2;
-  vertexIndexToId[idx2] = id1;
-}
+// updateVertexId and swapVertexIds are now inlined no-ops in Simplex.h.
+// The vertices vector stores pointers whose IDs are updated externally.
 
 bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
   if (facets.empty()) return false;

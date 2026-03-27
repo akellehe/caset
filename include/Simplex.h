@@ -318,22 +318,18 @@ class Simplex {
     /// @return
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
 
-    /// Update internal ID maps after a vertex's ID has been changed externally.
-    /// Called by Spacetime::swapVertexLabels to keep vertexIdToIndex/vertexIndexToId
-    /// consistent with the actual vertex IDs.
-    void updateVertexId(IdType oldId, IdType newId);
+    /// No-op after removing per-simplex ID maps.  The vertices vector stores
+    /// pointers whose IDs are updated externally by Spacetime::swapVertexLabels.
+    void updateVertexId(IdType oldId, IdType newId) { (void)oldId; (void)newId; }
 
-    /// Swap two vertex IDs atomically in the internal maps.
-    /// Used when a simplex contains both swapped vertices.
-    void swapVertexIds(IdType id1, IdType id2);
+    /// No-op — see updateVertexId.
+    void swapVertexIds(IdType id1, IdType id2) { (void)id1; (void)id2; }
 
     bool isInitialized() const noexcept;
   private:
     Spacetime *spacetime{nullptr};
     SimplexOrientation orientation{};
 
-    VertexIdToIndex vertexIdToIndex{};
-    VertexIndexToId vertexIndexToId{};
     VertexPtrs vertices{};
 
     Edges edges{};
