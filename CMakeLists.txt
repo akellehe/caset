@@ -30,6 +30,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---- Python & pybind11 ----
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 find_package(pybind11 CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
 
 include(CheckCXXSourceCompiles)
 
@@ -112,6 +113,7 @@ target_include_directories(caset
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+target_link_libraries(caset PRIVATE ZLIB::ZLIB)
 
 set_target_properties(caset PROPERTIES
         CXX_VISIBILITY_PRESET default

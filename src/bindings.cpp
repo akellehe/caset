@@ -39,6 +39,7 @@
 #include "Edge.h"
 #include "Simplex.h"
 #include "Metric.h"
+#include "Renderer.h"
 
 #include <vector>
 #include <algorithm>
@@ -512,7 +513,28 @@ Edge fingerprints, Simplex vertex-ID maps, and all hash tables.
 Handles shared simplices, transient fingerprint collisions, and
 sub-simplex ownership correctly.
 
-No-op if v1 and v2 are the same vertex.)doc");
+No-op if v1 and v2 are the same vertex.)doc")
+      .def("save", [](const Spacetime &st, const std::string &path,
+                       int panelSize, int layoutIters) {
+          renderSpacetime(st, path, panelSize, layoutIters);
+      }, py::arg("path"), py::arg("panel_size") = 800,
+         py::arg("layout_iters") = 500,
+           R"doc(Render the spacetime to an image file.
+
+Uses a force-directed layout (time fixed, spatial coordinates
+optimized via spring + repulsion) then projects onto 2D.
+
+If the path ends in .gif, produces an animated GIF that rotates
+around the Y (time) axis with a gentle X-axis tilt (36 frames,
+infinite loop).  Otherwise produces a static PNG with four panels
+(no rotation, 40 deg X, 40 deg Y, 40 deg Z).
+
+The layout is computed internally and does not modify vertex state.
+
+Args:
+    path: Output file path (.png or .gif).
+    panel_size: Pixel size of each panel (default 800).
+    layout_iters: Maximum force-directed iterations (default 500).)doc");
 
   // ========================================
   // CDTSimulation
