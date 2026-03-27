@@ -515,26 +515,51 @@ sub-simplex ownership correctly.
 
 No-op if v1 and v2 are the same vertex.)doc")
       .def("save", [](const Spacetime &st, const std::string &path,
-                       int panelSize, int layoutIters) {
-          renderSpacetime(st, path, panelSize, layoutIters);
+                       int panelSize, int layoutIters,
+                       double tilt, int spin, int precession,
+                       int nFrames, int delayCentiseconds) {
+          renderSpacetime(st, path, panelSize, layoutIters,
+                          tilt, spin, precession, nFrames, delayCentiseconds);
       }, py::arg("path"), py::arg("panel_size") = 800,
          py::arg("layout_iters") = 500,
+         py::arg("tilt") = 25.0,
+         py::arg("spin") = 1,
+         py::arg("precession") = 1,
+         py::arg("n_frames") = 36,
+         py::arg("delay_cs") = 7,
            R"doc(Render the spacetime to an image file.
 
 Uses a force-directed layout (time fixed, spatial coordinates
 optimized via spring + repulsion) then projects onto 2D.
 
-If the path ends in .gif, produces an animated GIF that rotates
-around the Y (time) axis with a gentle X-axis tilt (36 frames,
-infinite loop).  Otherwise produces a static PNG with four panels
-(no rotation, 40 deg X, 40 deg Y, 40 deg Z).
+If the path ends in .gif, produces an animated GIF whose rotation
+is controlled by three parameters:
+
+    tilt        – cone half-angle in degrees (default 25).
+    spin        – full Y-axis rotations per loop (default 1).
+    precession  – precession cycles per loop (default 1).
+
+Per-frame rotation:
+    ry = 2π · spin · t
+    rx = tilt · cos(2π · precession · t)
+    rz = tilt · sin(2π · precession · t)
+
+Integer values for spin and precession guarantee a perfect loop.
+
+Otherwise produces a static PNG with four panels
+(no rotation, 40° X, 40° Y, 40° Z).
 
 The layout is computed internally and does not modify vertex state.
 
 Args:
     path: Output file path (.png or .gif).
     panel_size: Pixel size of each panel (default 800).
-    layout_iters: Maximum force-directed iterations (default 500).)doc");
+    layout_iters: Maximum force-directed iterations (default 500).
+    tilt: Precession cone half-angle in degrees (default 25).
+    spin: Y-axis rotations per loop, integer for perfect loop (default 1).
+    precession: Precession cycles per loop, integer for perfect loop (default 1).
+    n_frames: Number of GIF frames (default 36).
+    delay_cs: Frame delay in centiseconds (default 7).)doc");
 
   // ========================================
   // CDTSimulation

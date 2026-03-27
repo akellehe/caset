@@ -549,15 +549,16 @@ struct BBox {
     double xmin, xmax, ymin, ymax;
 };
 
-BBox computeGifBBox(const LayoutData &layout, int nFrames) {
+BBox computeGifBBox(const LayoutData &layout, int nFrames,
+                    double tiltRad, int spin, int precession) {
     BBox bb = {1e18, -1e18, 1e18, -1e18};
     for (int i = 0; i < nFrames; ++i) {
         double t = static_cast<double>(i) / nFrames;
-        double ry = 2.0 * std::numbers::pi * t;
-        double rx = 25.0 * std::numbers::pi / 180.0 *
-                    std::sin(2.0 * std::numbers::pi * t);
+        double ry = 2.0 * std::numbers::pi * spin * t;
+        double rx = tiltRad * std::cos(2.0 * std::numbers::pi * precession * t);
+        double rz = tiltRad * std::sin(2.0 * std::numbers::pi * precession * t);
         for (const auto &pos : layout.pos) {
-            Vec3 r = applyRotation(pos, rx, ry, 0);
+            Vec3 r = applyRotation(pos, rx, ry, rz);
             bb.xmin = std::min(bb.xmin, r.x);
             bb.xmax = std::max(bb.xmax, r.x);
             bb.ymin = std::min(bb.ymin, r.y);
@@ -667,25 +668,27 @@ bool endsWith(const std::string &s, const std::string &suffix) {
 }
 
 void renderSpacetime(const Spacetime &st, const std::string &path,
-                     int panelSize, int layoutIters) {
+                     int panelSize, int layoutIters,
+                     double tilt, int spin, int precession,
+                     int nFrames, int delayCentiseconds) {
     auto layout = computeLayout(st, layoutIters);
 
     if (endsWith(path, ".gif")) {
-        // Animated GIF: turntable Y rotation + sinusoidal X tilt
-        constexpr int nFrames = 36;
-        constexpr int delayCentiseconds = 7; // 70ms per frame, ~14fps
+        double tiltRad = tilt * std::numbers::pi / 180.0;
 
-        auto bb = computeGifBBox(layout, nFrames);
+        auto bb = computeGifBBox(layout, nFrames, tiltRad, spin, precession);
 
         std::vector<Image> frames;
         frames.reserve(nFrames);
         for (int i = 0; i < nFrames; ++i) {
             double t = static_cast<double>(i) / nFrames;
-            double ry = 2.0 * std::numbers::pi * t;
-            double rx = 25.0 * std::numbers::pi / 180.0 *
-                        std::sin(2.0 * std::numbers::pi * t);
+            double ry = 2.0 * std::numbers::pi * spin * t;
+            double rx = tiltRad *
+                        std::cos(2.0 * std::numbers::pi * precession * t);
+            double rz = tiltRad *
+                        std::sin(2.0 * std::numbers::pi * precession * t);
             Image frame(panelSize, panelSize);
-            renderPanel(frame, 0, 0, panelSize, panelSize, layout, rx, ry, 0,
+            renderPanel(frame, 0, 0, panelSize, panelSize, layout, rx, ry, rz,
                         &bb);
             frames.push_back(std::move(frame));
         }
