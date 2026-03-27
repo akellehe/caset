@@ -1,24 +1,64 @@
+#!/usr/bin/env python3
+import argparse
 import caset
 
-sig = caset.Signature(4, caset.Lorentzian)
-metric = caset.Metric(True, sig)
-st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
-st.build(2000)
 
-# Optional: thermalize first
-cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
-cdt.tune()
-cdt.sweep(50)
+def main():
+    p = argparse.ArgumentParser(description="Build, thermalize, and render a CDT spacetime.")
 
-st.save("spacetime.png")                          # default 800px panels
-# st.save("spacetime_hires.png", panel_size=1200)    # larger
-# st.save("spacetime_fast.png", layout_iters=100)    # faster layout
+    # Spacetime
+    p.add_argument("--n-simplices", type=int, default=2000,
+                   help="Initial number of simplices (default: 2000)")
 
-# Animated GIF with default precession (spin=1, precession=1, tilt=25°)
-st.save("spacetime.gif")
+    # CDT couplings
+    p.add_argument("--k0", type=float, default=2.2,
+                   help="Bare inverse Newton's constant (default: 2.2)")
+    p.add_argument("--k4", type=float, default=0.5,
+                   help="Cosmological constant coupling (default: 0.5)")
+    p.add_argument("--delta", type=float, default=0.6,
+                   help="Asymmetry parameter (default: 0.6)")
+    p.add_argument("--epsilon", type=float, default=0.02,
+                   help="Volume-fixing strength (default: 0.02)")
+    p.add_argument("--targetN41", type=int, default=None,
+                   help="Target (d,1)-volume (default: N41 after build)")
+    p.add_argument("--quadraticVolume", action="store_true", default=True,
+                   help="Use quadratic volume fixing (default)")
+    p.add_argument("--no-quadraticVolume", action="store_false", dest="quadraticVolume",
+                   help="Use linear volume fixing")
 
-# More precession wobble
-# st.save("spacetime_prec.gif", precession=2, tilt=30)
+    # Thermalization
+    p.add_argument("--n-sweeps", type=int, default=50,
+                   help="Number of thermalization sweeps (default: 50)")
 
-# Pure turntable, no wobble
-# st.save("spacetime_turntable.gif", precession=0, tilt=0)
+    # GIF rotation
+    p.add_argument("--tilt", type=float, default=25.0,
+                   help="Precession cone half-angle in degrees (default: 25)")
+    p.add_argument("--spin", type=int, default=1,
+                   help="Y-axis rotations per loop (default: 1)")
+    p.add_argument("--precession", type=int, default=1,
+                   help="Precession cycles per loop (default: 1)")
+
+    # Output
+    p.add_argument("--save", type=str, default="spacetime.gif",
+                   help="Output filename, .gif or .png (default: spacetime.gif)")
+
+    args = p.parse_args()
+
+    sig = caset.Signature(4, caset.Lorentzian)
+    metric = caset.Metric(True, sig)
+    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+    st.build(args.n_simplices)
+
+    target = args.targetN41 if args.targetN41 is not None else st.getN41()
+    cdt = caset.CDTSimulation(st, args.k0, args.k4, args.delta, args.epsilon,
+                              target, args.quadraticVolume)
+    cdt.tune()
+    if args.n_sweeps > 0:
+        cdt.sweep(args.n_sweeps)
+
+    st.save(args.save, tilt=args.tilt, spin=args.spin, precession=args.precession)
+    print(f"Saved {args.save}")
+
+
+if __name__ == "__main__":
+    main()
