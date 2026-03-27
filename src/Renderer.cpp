@@ -653,6 +653,91 @@ void renderPanel(Image &img, int ox, int oy, int pw, int ph,
     img.drawRect(ox, oy, pw, ph, {60, 60, 80});
 }
 
+// =====================================================================
+// Graph export (GraphML / DOT)
+// =====================================================================
+
+bool writeGraphML(const Spacetime &st, const std::string &path) {
+    auto vertList = st.getVertexList();
+    auto edgeList = st.getEdgeList();
+    if (!vertList || !edgeList) return false;
+
+    auto verts = vertList->toVector();
+    auto edges = edgeList->toVector();
+
+    std::ofstream f(path);
+    if (!f) return false;
+
+    f << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+      << "<graphml xmlns=\"http://graphml.graphstudio.org\"\n"
+      << "         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
+      << "         xsi:schemaLocation=\"http://graphml.graphstudio.org\">\n"
+      << "  <key id=\"time\" for=\"node\" attr.name=\"time\" "
+         "attr.type=\"double\"/>\n"
+      << "  <key id=\"degree\" for=\"node\" attr.name=\"degree\" "
+         "attr.type=\"int\"/>\n"
+      << "  <key id=\"sq_length\" for=\"edge\" attr.name=\"squared_length\" "
+         "attr.type=\"double\"/>\n"
+      << "  <key id=\"timelike\" for=\"edge\" attr.name=\"timelike\" "
+         "attr.type=\"boolean\"/>\n"
+      << "  <graph id=\"spacetime\" edgedefault=\"undirected\">\n";
+
+    for (auto *v : verts) {
+        f << "    <node id=\"" << v->getId() << "\">\n"
+          << "      <data key=\"time\">" << v->getTime() << "</data>\n"
+          << "      <data key=\"degree\">" << v->degree() << "</data>\n"
+          << "    </node>\n";
+    }
+
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        auto *e = edges[i];
+        double sq = e->getSquaredLength();
+        f << "    <edge id=\"e" << i << "\" source=\""
+          << e->getSource()->getId() << "\" target=\""
+          << e->getTarget()->getId() << "\">\n"
+          << "      <data key=\"sq_length\">" << sq << "</data>\n"
+          << "      <data key=\"timelike\">"
+          << (sq < 0 ? "true" : "false") << "</data>\n"
+          << "    </edge>\n";
+    }
+
+    f << "  </graph>\n</graphml>\n";
+    return f.good();
+}
+
+bool writeDot(const Spacetime &st, const std::string &path) {
+    auto vertList = st.getVertexList();
+    auto edgeList = st.getEdgeList();
+    if (!vertList || !edgeList) return false;
+
+    auto verts = vertList->toVector();
+    auto edges = edgeList->toVector();
+
+    std::ofstream f(path);
+    if (!f) return false;
+
+    f << "graph spacetime {\n"
+      << "  node [shape=point];\n";
+
+    for (auto *v : verts)
+        f << "  " << v->getId()
+          << " [time=" << v->getTime()
+          << ", degree=" << v->degree() << "];\n";
+
+    for (auto *e : edges) {
+        double sq = e->getSquaredLength();
+        bool tl = sq < 0;
+        f << "  " << e->getSource()->getId()
+          << " -- " << e->getTarget()->getId()
+          << " [squared_length=" << sq
+          << ", timelike=" << (tl ? "true" : "false")
+          << ", color=" << (tl ? "blue" : "red") << "];\n";
+    }
+
+    f << "}\n";
+    return f.good();
+}
+
 } // anonymous namespace
 
 // =====================================================================
@@ -671,6 +756,15 @@ void renderSpacetime(const Spacetime &st, const std::string &path,
                      int panelSize, int layoutIters,
                      double tilt, int spin, int precession,
                      int nFrames, int delayCentiseconds) {
+    if (endsWith(path, ".graphml")) {
+        writeGraphML(st, path);
+        return;
+    }
+    if (endsWith(path, ".dot") || endsWith(path, ".gv")) {
+        writeDot(st, path);
+        return;
+    }
+
     auto layout = computeLayout(st, layoutIters);
 
     if (endsWith(path, ".gif")) {

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
+"""Export a CDT spacetime to GraphML or DOT format."""
 import argparse
 import caset
-from tqdm import tqdm
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build, thermalize, and render a CDT spacetime.")
+    p = argparse.ArgumentParser(description="Build, thermalize, and export a CDT spacetime graph.")
 
     # Spacetime
     p.add_argument("--n-simplices", type=int, default=2000,
@@ -31,17 +31,9 @@ def main():
     p.add_argument("--n-sweeps", type=int, default=50,
                    help="Number of thermalization sweeps (default: 50)")
 
-    # GIF rotation
-    p.add_argument("--tilt", type=float, default=25.0,
-                   help="Precession cone half-angle in degrees (default: 25)")
-    p.add_argument("--spin", type=int, default=1,
-                   help="Y-axis rotations per loop (default: 1)")
-    p.add_argument("--precession", type=int, default=1,
-                   help="Precession cycles per loop (default: 1)")
-
     # Output
-    p.add_argument("--save", type=str, default="spacetime.gif",
-                   help="Output filename, .gif or .png (default: spacetime.gif)")
+    p.add_argument("--save", type=str, default="spacetime.graphml",
+                   help="Output filename, .graphml or .dot (default: spacetime.graphml)")
 
     args = p.parse_args()
 
@@ -55,11 +47,9 @@ def main():
                               target, args.quadraticVolume)
     cdt.tune()
     if args.n_sweeps > 0:
-        sweep_bar = tqdm(total=args.n_sweeps, desc="Sweeps", unit="sweep", position=1, leave=False)
-        sweep_cb = lambda i, n: sweep_bar.update(1)
-        cdt.sweep(args.n_sweeps, progress=sweep_cb)
+        cdt.sweep(args.n_sweeps)
 
-    st.save(args.save, tilt=args.tilt, spin=args.spin, precession=args.precession)
+    st.save(args.save)
     print(f"Saved {args.save}")
 
 

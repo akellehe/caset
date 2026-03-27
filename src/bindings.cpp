@@ -546,13 +546,17 @@ Per-frame rotation:
 
 Integer values for spin and precession guarantee a perfect loop.
 
+For .graphml or .dot/.gv, exports the graph structure with vertex
+attributes (id, time, degree) and edge attributes (squared_length,
+timelike).  Layout/rotation parameters are ignored for these formats.
+
 Otherwise produces a static PNG with four panels
 (no rotation, 40° X, 40° Y, 40° Z).
 
 The layout is computed internally and does not modify vertex state.
 
 Args:
-    path: Output file path (.png or .gif).
+    path: Output file path (.png, .gif, .graphml, .dot, or .gv).
     panel_size: Pixel size of each panel (default 800).
     layout_iters: Maximum force-directed iterations (default 500).
     tilt: Precession cone half-angle in degrees (default 25).
