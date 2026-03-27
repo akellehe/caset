@@ -106,7 +106,7 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
       )
       .def("__str__", &Edge::toString)
       .def("__repr__", &Edge::toString)
-      .def("__eq__", &Edge::operator==)
+      .def("__eq__", &Edge::operator==, py::arg("other"))
       .def("__hash__", &Edge::toHash)
       .def("getSource", &Edge::getSource, py::return_value_policy::reference,
            "Return the source vertex of this edge.")
@@ -128,7 +128,7 @@ timelike (imaginary-length) edges.)doc")
 Each vertex carries a time coordinate (the first element of its
 coordinate vector) and maintains references to its incident edges
 and containing simplices.)doc")
-      .def("__eq__", &Vertex::operator==)
+      .def("__eq__", &Vertex::operator==, py::arg("other"))
       .def("__repr__", &Vertex::toString)
       .def("__str__", &Vertex::toString)
       .def("addInEdge", &Vertex::addInEdge, py::arg("edge"),
@@ -151,11 +151,11 @@ and containing simplices.)doc")
            "Return all simplices (of any dimension) containing this vertex.")
       .def("getTime", &Vertex::getTime,
            "Return the time coordinate of this vertex (first coordinate).")
-      .def("moveEdgesTo", &Vertex::moveEdgesTo,
+      .def("moveEdgesTo", &Vertex::moveEdgesTo, py::arg("vertex"), py::arg("spacetime"),
            "Transfer all edges from this vertex to another vertex.")
-      .def("removeInEdge", &Vertex::removeInEdge,
+      .def("removeInEdge", &Vertex::removeInEdge, py::arg("edge"),
            "Remove an incoming edge from this vertex and its containing simplices.")
-      .def("removeOutEdge", &Vertex::removeOutEdge,
+      .def("removeOutEdge", &Vertex::removeOutEdge, py::arg("edge"),
            "Remove an outgoing edge from this vertex and its containing simplices.")
       .def("setCoordinates", &Vertex::setCoordinates, py::arg("coordinates"),
            "Set the coordinate vector of this vertex.")
@@ -168,18 +168,20 @@ and containing simplices.)doc")
   py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList",
       "Container mapping vertex IDs to Vertex objects.")
       .def(py::init<>())
-      .def("__getitem__", &VertexList::operator[], py::return_value_policy::reference,
+      .def("__getitem__", &VertexList::operator[], py::arg("vertexId"), py::return_value_policy::reference,
            "Look up a vertex by ID (operator[]).")
-      .def("get", &VertexList::get, py::return_value_policy::reference,
+      .def("get", &VertexList::get, py::arg("id"), py::return_value_policy::reference,
            "Look up a vertex by its integer ID.  Raises if not found.")
       .def("add",
            py::overload_cast<const std::uint64_t, const std::vector<double> &>(&VertexList::add),
+           py::arg("id"), py::arg("coordinates"),
            py::return_value_policy::reference,
            "Create and insert a vertex with the given ID and coordinates.")
       .def("add", py::overload_cast<const std::uint64_t>(&VertexList::add),
+           py::arg("id"),
            py::return_value_policy::reference,
            "Create and insert a vertex with the given ID (no coordinates).")
-      .def("replace", &VertexList::replace,
+      .def("replace", &VertexList::replace, py::arg("toRemove"), py::arg("toAdd"),
            "Replace a vertex in the list (same ID, new object).")
       .def("size", &VertexList::size,
            "Return the number of vertices in the list.")
@@ -193,9 +195,11 @@ and containing simplices.)doc")
       "Container storing all edges in the spacetime, keyed by fingerprint.")
       .def(py::init<>())
       .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &, double>(&EdgeList::add),
+           py::arg("source"), py::arg("target"), py::arg("squaredLength"),
            py::return_value_policy::reference,
            "Add an edge with a specified squared length, or return existing if duplicate.")
       .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &>(&EdgeList::add),
+           py::arg("source"), py::arg("target"),
            py::return_value_policy::reference,
            "Add an edge with auto-computed squared length, or return existing if duplicate.")
       .def("remove", py::overload_cast<const EdgePtr &>(&EdgeList::remove), py::arg("edge"),
@@ -214,7 +218,8 @@ and containing simplices.)doc")
   py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere",
       "Spherical spatial topology S^{d-1}.")
       .def(py::init<>())
-      .def("build", &Sphere::build);
+      .def("build", &Sphere::build, py::arg("spacetime"), py::arg("numSimplices"),
+           "Build a spherical initial triangulation with the given number of simplices.");
 
   py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid",
       R"doc(Toroidal spatial topology (periodic boundary conditions).
@@ -225,7 +230,8 @@ d*(d+1) simplices covering all CDT orientation types (d,1), (d-1,2),
 numbers of (4,1), (3,2), (2,3), and (1,4) types, enabling all five
 Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def(py::init<>())
-      .def("build", &Toroid::build);
+      .def("build", &Toroid::build, py::arg("spacetime"), py::arg("numSimplices"),
+           "Build a toroidal staircase triangulation with the given number of simplices.");
 
   // ========================================
   // SimplexOrientation
@@ -240,11 +246,11 @@ For a d-simplex spanning times t and t+1:
 
 Valid CDT orientations: (d,1), (1,d), (d-1,2), (2,d-1).
 For d=4: (4,1), (1,4), (3,2), (2,3).)doc")
-      .def(py::init<uint8_t, uint8_t>())
+      .def(py::init<uint8_t, uint8_t>(), py::arg("ti"), py::arg("tf"))
       .def("getOrientation", &SimplexOrientation::getOrientation,
            "Return the (ti, tf) orientation as a pair.")
       .def("__hash__", &SimplexOrientation::hash)
-      .def("__eq__", &SimplexOrientation::operator==)
+      .def("__eq__", &SimplexOrientation::operator==, py::arg("other"))
       .def("__str__", &SimplexOrientation::toString)
       .def("__repr__", &SimplexOrientation::toString)
       .def("numeric", &SimplexOrientation::numeric,
@@ -271,9 +277,11 @@ their vertex IDs.)doc")
       .def("__str__", &Simplex::toString)
       .def("__hash__", &Simplex::hash)
       .def("__eq__",
-           static_cast<bool (Simplex::*)(const Simplex*) const noexcept>(&Simplex::operator==))
+           static_cast<bool (Simplex::*)(const Simplex*) const noexcept>(&Simplex::operator==),
+           py::arg("other"))
       .def("__eq__",
-           static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==))
+           static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==),
+           py::arg("other"))
       .def("getCofaces", &Simplex::getCofaces, py::return_value_policy::reference,
            "Return all simplices of one dimension higher that contain this simplex as a face.")
       .def("getEdges", &Simplex::getEdges, py::return_value_policy::reference,
@@ -292,7 +300,7 @@ facet.getCofaces() includes this simplex.)doc")
            "Return the internal vertex-ID-to-index mapping.")
       .def("getVertices", &Simplex::getVertices, py::return_value_policy::reference,
            "Return the vertices of this simplex.")
-      .def("hasVertex", &Simplex::hasVertex,
+      .def("hasVertex", &Simplex::hasVertex, py::arg("vertex"),
            "Return True if this simplex contains the given vertex.")
       .def("isCofaceTo", &Simplex::isCofaceTo, py::arg("facet"), py::arg("shallow") = true,
            "Return True if this simplex is a coface of the given facet.")
@@ -326,6 +334,7 @@ Args:
            py::arg("coordinateFree"),
            py::arg("signature"))
       .def("getSquaredLength", &Metric::getSquaredLength,
+           py::arg("sourceCoords"), py::arg("targetCoords"),
            "Compute the squared length of an edge from vertex coordinates.");
 
   // ========================================
@@ -416,7 +425,7 @@ Args:
            "Return the EdgeList containing all edges.")
       .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference,
            "Return the connected components of the simplicial complex.")
-      .def("build", &Spacetime::build, py::call_guard<py::gil_scoped_release>(),
+      .def("build", &Spacetime::build, py::arg("numSimplices") = 3, py::call_guard<py::gil_scoped_release>(),
            R"doc(Build the initial triangulation with approximately n_simplices top simplices.
 
 Uses the topology's builder (e.g. Toroid staircase triangulation) to
@@ -444,11 +453,13 @@ may differ slightly due to slab quantization.)doc")
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t) const noexcept>(
              &Spacetime::createVertex),
+           py::arg("id"),
            py::return_value_policy::reference,
            "Create a vertex with the given ID (auto-assigned coordinates).")
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t, const std::vector<double> &) const noexcept>(
              &Spacetime::createVertex),
+           py::arg("id"), py::arg("coordinates"),
            py::return_value_policy::reference,
            "Create a vertex with the given ID and coordinates (first = time).")
       .def("createSimplex",
