@@ -9,6 +9,15 @@ Reproduces Figures 7-8, 12 from:
 
 Paper parameters: k0=2.2, Delta=0.6, N4=10k-160k, T=80.
 
+To reproduce the paper results (Figs 7-8, 12):
+  python examples/volume_scaling.py \
+      --n-simplices 80000 --n-therm 500 --n-meas 200 \
+      --meas-interval 50
+
+This runs at N4 = 40k, 80k, 160k (half, full, double --n-simplices).
+The paper uses three system sizes to demonstrate D_H = 4 scaling
+collapse of the volume-volume correlator.
+
 Parallelization
 ---------------
 The script runs CDT at three system sizes (N4/2, N4, 2*N4) plus an

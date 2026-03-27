@@ -15,6 +15,14 @@ The Regge action is (Eq. 2 of hep-th/0505154):
 
   S_E = -(k0 + 6*Delta)*N0 + (k4 + 2*Delta)*N41 + (k4 + Delta)*N32
 
+To reproduce the paper results (Figs 4-6):
+  python examples/volume_profile_phases.py \
+      --n-simplices 80000 --n-therm 500 --n-meas 100 \
+      --meas-interval 50
+
+The paper uses N4 up to 362k; 80k is sufficient to clearly
+distinguish the three phase profiles (blob, crumpled, polymer).
+
 Parallelization
 ---------------
 The three phases (A, B, C_dS) use different coupling constants (k0,

@@ -30,6 +30,13 @@ Parameters scanned:
 
 Estimated runtime: ~5-20 minutes depending on grid resolution.
 
+To reproduce the paper results (Fig 3):
+  python examples/phase_diagram.py \
+      --n-simplices 10000 --n-sweeps 200 --grid-size 20
+
+A finer grid (--grid-size 30) and more sweeps (--n-sweeps 500) give
+cleaner phase boundaries but take proportionally longer.
+
 Parallelization
 ---------------
 Each (k0, Delta) grid point is a short, self-contained CDT run:

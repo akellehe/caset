@@ -16,7 +16,14 @@ peaked, demonstrating that the two types of simplices are strongly
 correlated in the de Sitter phase.
 
 Parameters: k0 = 2.2, Delta = 0.6.
-Estimated runtime: ~1-3 minutes.
+
+To reproduce the paper results (Fig 2):
+  python examples/n32_distribution.py \
+      --target-volumes 40000 80000 160000 --n-therm 500 \
+      --n-meas 500 --meas-interval 50
+
+The paper uses N4 = 40k, 80k, 160k to show the sharply peaked
+N32 distribution narrows with increasing volume.
 
 Parallelization
 ---------------

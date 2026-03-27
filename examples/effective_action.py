@@ -28,7 +28,15 @@ The paper shows that:
      nonperturbatively).
 
 Parameters: k0 = 2.2, Delta = 0.6.
-Estimated runtime: ~2-5 minutes.
+
+To reproduce the paper results (Figs 11-13):
+  python examples/effective_action.py \
+      --n-simplices 160000 --n-therm 500 --n-meas 200 \
+      --meas-interval 50
+
+The paper uses N4 ~ 160k to extract D_2 = 2 scaling (Fig 11),
+the Gaussian volume-difference distribution (Fig 12), and the
+cos^3 minisuperspace fit (Fig 13).
 
 Parallelization
 ---------------

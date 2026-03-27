@@ -27,6 +27,11 @@ Key results from the paper (k0=2.2, Delta=0.6, t=80):
 
 Parameters: k0 = 2.2, Delta = 0.6.
 
+To reproduce the paper results (Figs 9-10):
+  python examples/spectral_dimension.py \
+      --n-simplices 160000 --n-therm 500 --n-configs 50 \
+      --n-walks 100 --max-sigma 500 --sweeps-between 50
+
 Parallelization
 ---------------
 Each "configuration" is an independent Markov chain: it builds its own
