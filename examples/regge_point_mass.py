@@ -9,26 +9,26 @@ concentrates near the mass.
 
 Usage:
     python examples/regge_point_mass.py
-    python examples/regge_point_mass.py --mass 5.0 --n-simplices 2000 --save schwarzschild.gif
+    python examples/regge_point_mass.py --mass 5.0 --n-simplices 200 --save schwarzschild.gif
 """
 import argparse
-import math
 
 import caset
+from tqdm import tqdm
 
 
 def main():
     p = argparse.ArgumentParser(
         description="Regge solver: point mass → spacetime geometry → GIF")
 
-    p.add_argument("--n-simplices", type=int, default=1000,
-                   help="Initial number of simplices (default: 1000)")
-    p.add_argument("--mass", type=float, default=2.0,
-                   help="Point mass in geometrized units G=c=1 (default: 2.0)")
-    p.add_argument("--learning-rate", type=float, default=0.0001,
-                   help="Gradient descent learning rate (default: 0.0001)")
-    p.add_argument("--max-iters", type=int, default=500,
-                   help="Maximum solver iterations (default: 500)")
+    p.add_argument("--n-simplices", type=int, default=50,
+                   help="Initial number of simplices (default: 50)")
+    p.add_argument("--mass", type=float, default=1.0,
+                   help="Point mass in geometrized units G=c=1 (default: 1.0)")
+    p.add_argument("--learning-rate", type=float, default=0.01,
+                   help="Gradient descent learning rate (default: 0.01)")
+    p.add_argument("--max-iters", type=int, default=100,
+                   help="Maximum solver iterations (default: 100)")
     p.add_argument("--tol", type=float, default=1e-6,
                    help="Convergence tolerance (default: 1e-6)")
     p.add_argument("--save", type=str, default="point_mass.gif",
@@ -52,15 +52,14 @@ def main():
     print(f"  Vertices: {st.getVertexCount()}, "
           f"Top simplices: {st.getSimplexCount()}")
 
-    # Optionally thermalize to get a more physical starting configuration
+    # Thermalize to get a more physical starting configuration
     target = st.getN41()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
     cdt.tune()
-    print("Thermalizing (10 sweeps)...")
+    print("Thermalizing...")
     cdt.sweep(10)
 
-    # Pick the vertex with highest degree as the "center" — it's the
-    # most connected point, a natural place for a mass concentration.
+    # Pick the vertex with highest degree as the "center"
     verts = st.getVertexList().toVector()
     center = max(verts, key=lambda v: v.degree())
     print(f"  Center vertex: id={center.getId()}, degree={center.degree()}")
@@ -69,28 +68,38 @@ def main():
     matter = caset.MatterConfiguration()
     matter.setPointMass(center, args.mass)
 
-    # Create solver and report initial state
+    # Create solver
     solver = caset.ReggeSolver(st, matter)
     L0 = solver.residual()
     S0 = solver.reggeAction()
-    print(f"  Initial Regge action: {S0:.6f}")
-    print(f"  Initial residual:     {L0:.6f}")
+    print(f"  Initial Regge action: {S0:.4f}")
+    print(f"  Initial residual:     {L0:.4f}")
 
-    # Solve
-    print(f"Solving (lr={args.learning_rate}, max_iters={args.max_iters}, "
-          f"tol={args.tol})...")
+    # Solve with tqdm progress bar
+    bar = tqdm(total=args.max_iters, desc="Solving", unit="iter",
+               bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                          "[{elapsed}<{remaining}, {rate_fmt}] "
+                          "residual={postfix}")
+    bar.set_postfix_str(f"{L0:.2f}")
+
+    def on_progress(iteration, residual):
+        bar.update(1)
+        bar.set_postfix_str(f"{residual:.2f}")
+
     converged, L_final, iters = solver.solve(
         tol=args.tol,
         max_iters=args.max_iters,
         learning_rate=args.learning_rate,
+        progress=on_progress,
     )
+    bar.close()
+
     S_final = solver.reggeAction()
-    print(f"  {'Converged' if converged else 'Did not converge'} "
-          f"after {iters} iterations")
-    print(f"  Final Regge action: {S_final:.6f}")
-    print(f"  Final residual:     {L_final:.6f}")
-    print(f"  Residual reduction: {L0:.4g} → {L_final:.4g} "
-          f"({L_final/L0*100:.1f}% of initial)" if L0 > 0 else "")
+    reduction = (1 - L_final / L0) * 100 if L0 > 0 else 0
+    status = "Converged" if converged else "Did not converge"
+    print(f"\n{status} after {iters} iterations")
+    print(f"  Regge action: {S0:.4f} → {S_final:.4f}")
+    print(f"  Residual:     {L0:.4f} → {L_final:.4f} ({reduction:+.1f}%)")
 
     # Render
     print(f"Saving {args.save}...")

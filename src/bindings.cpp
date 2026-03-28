@@ -788,11 +788,29 @@ L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
       .def("step", &ReggeSolver::step,
            py::arg("learning_rate") = 0.001,
            "One gradient-descent step. Returns new residual.")
-      .def("solve", &ReggeSolver::solve,
+      .def("solve", [](ReggeSolver &self, double tol, int maxIters,
+                        double learningRate, py::object progress) {
+          ReggeSolver::ProgressCallback cb = nullptr;
+          if (!progress.is_none()) {
+              cb = [&progress](int iter, double residual) {
+                  py::gil_scoped_acquire acquire;
+                  progress(iter, residual);
+              };
+          }
+          py::gil_scoped_release release;
+          return self.solve(tol, maxIters, learningRate, cb);
+      },
            py::arg("tol") = 1e-8,
            py::arg("max_iters") = 5000,
            py::arg("learning_rate") = 0.001,
+           py::arg("progress") = py::none(),
            R"doc(Iterate step() until convergence.
+
+Args:
+    tol: Convergence tolerance on residual.
+    max_iters: Maximum number of iterations.
+    learning_rate: Gradient descent step size.
+    progress: Optional callback(iter, residual) called after each iteration.
 
 Returns:
     Tuple of (converged: bool, residual: float, iterations: int).)doc");

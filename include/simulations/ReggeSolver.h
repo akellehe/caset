@@ -3,6 +3,7 @@
 
 #include "mesh/ForwardDeclarations.h"
 #include "matter/MatterConfiguration.h"
+#include <functional>
 #include <memory>
 #include <tuple>
 #include <unordered_map>
@@ -77,10 +78,15 @@ class ReggeSolver {
     double step(double learningRate = 0.001);
 
     /// Iterate step() until convergence or max iterations.
+    ///
+    /// @param progress Optional callback invoked after each iteration with
+    ///   (iteration, residual).  Useful for progress bars.
     /// @return (converged, final_residual, iterations)
+    using ProgressCallback = std::function<void(int iter, double residual)>;
     std::tuple<bool, double, int> solve(double tol = 1e-8,
                                          int maxIters = 5000,
-                                         double learningRate = 0.001);
+                                         double learningRate = 0.001,
+                                         ProgressCallback progress = nullptr);
 
     // ==================== Accessors ====================
 

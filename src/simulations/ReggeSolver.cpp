@@ -263,12 +263,31 @@ double ReggeSolver::dihedralAngle(SimplexPtr sigma,
 // =====================================================================
 
 double ReggeSolver::deficitAngle(SimplexPtr hinge) const {
-    // Sum dihedral angles of all top-simplices containing this hinge
-    double sum = 0.0;
+    // Find all top-simplices containing this hinge by checking which
+    // top-simplices contain ALL vertices of the hinge.
+    // (We can't rely on coface pointers because the hinge's direct cofaces
+    // are (d-1)-simplices, not top-simplices.)
+    int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    int topSize = d + 1;
+    auto hingeVerts = hinge->getVertices();
 
-    // A hinge's cofaces are the top-simplices that contain it
-    for (const auto &sigma : hinge->getCofaces()) {
-        sum += dihedralAngle(sigma, hinge);
+    // Start from simplices incident to the first hinge vertex
+    double sum = 0.0;
+    if (hingeVerts.empty()) return 2.0 * std::numbers::pi;
+
+    for (const auto &sigma : hingeVerts[0]->getSimplices()) {
+        if (static_cast<int>(sigma->size()) != topSize) continue;
+        // Check if sigma contains ALL hinge vertices
+        bool containsAll = true;
+        for (std::size_t i = 1; i < hingeVerts.size(); ++i) {
+            if (!sigma->hasVertex(hingeVerts[i])) {
+                containsAll = false;
+                break;
+            }
+        }
+        if (containsAll) {
+            sum += dihedralAngle(sigma, hinge);
+        }
     }
 
     return 2.0 * std::numbers::pi - sum;
@@ -347,26 +366,30 @@ double ReggeSolver::residual() const {
 // =====================================================================
 
 double ReggeSolver::step(double learningRate) {
-    // Numerical gradient: perturb each edge length and measure residual change
+    // Numerical gradient: perturb each edge length and measure residual change.
+    // Uses relative perturbation to handle varying edge length scales.
     auto edgeList = spacetime_->getEdgeList();
     auto edges = edgeList->toVector();
     double L0 = residual();
-    constexpr double h = 1e-6;
 
-    for (auto *e : edges) {
-        double origSq = e->getSquaredLength();
+    // First pass: compute gradients (without modifying edges yet)
+    std::vector<double> grads(edges.size(), 0.0);
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        double origSq = edges[i]->getSquaredLength();
+        double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
 
-        // Forward difference
-        e->setSquaredLength(origSq + h);
+        edges[i]->setSquaredLength(origSq + h);
         double Lp = residual();
+        edges[i]->setSquaredLength(origSq);
 
-        // Restore and compute gradient
-        e->setSquaredLength(origSq);
-        double grad = (Lp - L0) / h;
+        grads[i] = (Lp - L0) / h;
+    }
 
-        // Update
-        double newSq = origSq - learningRate * grad;
-        e->setSquaredLength(newSq);
+    // Second pass: apply updates
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        double origSq = edges[i]->getSquaredLength();
+        double newSq = origSq - learningRate * grads[i];
+        edges[i]->setSquaredLength(newSq);
     }
 
     return residual();
@@ -377,11 +400,16 @@ double ReggeSolver::step(double learningRate) {
 // =====================================================================
 
 std::tuple<bool, double, int> ReggeSolver::solve(
-    double tol, int maxIters, double learningRate) {
+    double tol, int maxIters, double learningRate,
+    ProgressCallback progress) {
     double L = residual();
     for (int i = 0; i < maxIters; ++i) {
-        if (L < tol) return {true, L, i};
+        if (L < tol) {
+            if (progress) progress(i, L);
+            return {true, L, i};
+        }
         L = step(learningRate);
+        if (progress) progress(i, L);
     }
     return {L < tol, L, maxIters};
 }
