@@ -646,14 +646,21 @@ Returns True if accepted, False if rejected.)doc")
 Returns True if accepted, False if rejected.)doc")
       .def("sweep", [](CDT &self, int n_sweeps, py::object progress) {
           int total = 0;
-          for (int i = 0; i < n_sweeps; i++) {
-              int accepted;
-              {
-                  py::gil_scoped_release release;
-                  accepted = self.sweep();
+          if (progress.is_none()) {
+              // No callback — release the GIL for the entire loop so
+              // multiple threads get true parallelism.
+              py::gil_scoped_release release;
+              for (int i = 0; i < n_sweeps; i++) {
+                  total += self.sweep();
               }
-              total += accepted;
-              if (!progress.is_none()) {
+          } else {
+              for (int i = 0; i < n_sweeps; i++) {
+                  int accepted;
+                  {
+                      py::gil_scoped_release release;
+                      accepted = self.sweep();
+                  }
+                  total += accepted;
                   progress(i + 1, n_sweeps);
               }
           }

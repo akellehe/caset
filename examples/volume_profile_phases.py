@@ -149,23 +149,19 @@ def main():
     t_total = time.time()
 
     # All three phases are independent — run in parallel.
+    # We intentionally do NOT pass a per-sweep progress callback here:
+    # a Python callback would reacquire the GIL every sweep, serializing
+    # the threads.  Instead we report progress at the phase level.
     n_phases = len(phases)
-    sweeps_per_phase = args.n_therm + args.n_meas * args.meas_interval
-    total_sweeps = n_phases * sweeps_per_phase
 
-    phase_bar = tqdm(total=n_phases, desc="Phases", unit="phase",
-                     position=0)
-    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
-                     position=1, leave=False)
-    sweep_cb = lambda i, n: sweep_bar.update(1)
+    phase_bar = tqdm(total=n_phases, desc="Phases", unit="phase")
 
     phase_results = {}
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {
             pool.submit(_phase_worker, label, k0, delta,
                         args.n_simplices, args.n_therm,
-                        args.n_meas, args.meas_interval,
-                        sweep_cb): label
+                        args.n_meas, args.meas_interval): label
             for label, (k0, delta) in phases.items()
         }
         for f in as_completed(futures):
@@ -175,7 +171,6 @@ def main():
             phase_bar.set_postfix_str(short)
             phase_bar.update(1)
 
-    sweep_bar.close()
     phase_bar.close()
 
     for label, (profiles, rates) in phase_results.items():
