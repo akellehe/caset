@@ -470,13 +470,12 @@ bool CDT::flip() {
   int dN32 = new_n32 - old_n32;
   double deltaS = computeDeltaAction(dN0, dN41, dN32);
 
-  // Combinatorial prefactor from g(T'→T)/g(T→T'):
-  // flip selects 1 of (d+1) facets; iflip selects 1 of C(d+1,2) edges.
-  // g_iflip/g_flip = N4*(d+1) / (N4'*C(d+1,2)) = 2*N4 / (N4'*d)
+  // Combinatorial prefactor: q(T'→T)/q(T→T') = N4/N4'.
+  // Both flip and iflip proposals have total probability 2/(N×(d+1))
+  // (flip: 2 simplices × 1 facet; iflip: d simplices × 1 edge ×
+  // 2/(d(d+1)) = 2/(N(d+1))), so the ratio is simply N4/N4'.
   double N4 = static_cast<double>(spacetime->getSimplexCount());
-  double logPrefactor = std::log(2.0) + std::log(N4)
-                      - std::log(static_cast<double>(d))
-                      - std::log(N4 + d - 2);
+  double logPrefactor = std::log(N4) - std::log(N4 + d - 2);
 
   if (!accept(deltaS, logPrefactor)) return false;
 
@@ -605,13 +604,10 @@ bool CDT::iflip() {
   int dN32 = new_n32 - old_n32;
   double deltaS = computeDeltaAction(dN0, dN41, dN32);
 
-  // Combinatorial prefactor from g(T'→T)/g(T→T'):
-  // iflip selects 1 of C(d+1,2) edges; flip selects 1 of (d+1) facets.
-  // g_flip/g_iflip = N4*d / (2*N4')
+  // Combinatorial prefactor: q(T'→T)/q(T→T') = N4/N4'.
+  // See flip() comment for derivation.
   double N4 = static_cast<double>(spacetime->getSimplexCount());
-  double logPrefactor = std::log(static_cast<double>(d)) + std::log(N4)
-                      - std::log(2.0)
-                      - std::log(N4 - d + 2);
+  double logPrefactor = std::log(N4) - std::log(N4 - d + 2);
 
   if (!accept(deltaS, logPrefactor)) return false;
 
@@ -661,22 +657,25 @@ bool CDT::shiftImpl() {
   SimplexPtr sigma = spacetime->getRandomTopSimplex();
   if (!sigma) return false;
 
-  // Pick 3 random vertices from sigma to form a candidate (d-2)-face
+  // Pick (d-1) random vertices from sigma to form a candidate (d-2)-face
+  int hingeSize = d - 1;  // number of vertices in a (d-2)-simplex
   const auto &sigmaVertsRef = sigma->getVertices();
-  if (static_cast<int>(sigmaVertsRef.size()) < 3) return false;
+  if (static_cast<int>(sigmaVertsRef.size()) < hingeSize) return false;
   VertexPtrs sigmaVerts(sigmaVertsRef.begin(), sigmaVertsRef.end());
   std::shuffle(sigmaVerts.begin(), sigmaVerts.end(), rng);
-  VertexPtrs triVerts(sigmaVerts.begin(), sigmaVerts.begin() + 3);
+  VertexPtrs faceVerts(sigmaVerts.begin(), sigmaVerts.begin() + hingeSize);
 
-  // Find all d-simplices containing all 3 vertices
+  // Find all d-simplices containing all (d-1) face vertices
   std::vector<SimplexPtr> sharing;
-  for (const auto &s : triVerts[0]->getSimplices()) {
+  for (const auto &s : faceVerts[0]->getSimplices()) {
     if (static_cast<int>(s->size()) != dPlus1) continue;
-    if (s->hasVertex(triVerts[1]) && s->hasVertex(triVerts[2])) {
-      sharing.push_back(s);
+    bool containsAll = true;
+    for (int i = 1; i < hingeSize; ++i) {
+      if (!s->hasVertex(faceVerts[i])) { containsAll = false; break; }
     }
+    if (containsAll) sharing.push_back(s);
   }
-  if (sharing.size() != 3) return false;
+  if (static_cast<int>(sharing.size()) != hingeSize) return false;
 
   // Collect unique vertices (should be d+2)
   VertexPtrs allVerts;
@@ -702,7 +701,8 @@ bool CDT::shiftImpl() {
     if (inAll) sharedVerts.push_back(v);
     else uniqueVerts.push_back(v);
   }
-  if (sharedVerts.size() != 3 || uniqueVerts.size() != 3) return false;
+  if (static_cast<int>(sharedVerts.size()) != hingeSize ||
+      static_cast<int>(uniqueVerts.size()) != hingeSize) return false;
 
   // Count old orientations
   int old_n41 = 0, old_n32 = 0;
@@ -712,11 +712,11 @@ bool CDT::shiftImpl() {
     else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) old_n32++;
   }
 
-  // (3,3) move: each new simplex has all 3 unique + 2 of 3 shared
+  // (d-1,d-1) move: each new simplex has all unique + (hingeSize-1) shared
   std::vector<VertexPtrs> newSimplexVerts;
-  for (int skip = 0; skip < 3; ++skip) {
+  for (int skip = 0; skip < hingeSize; ++skip) {
     VertexPtrs nv;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < hingeSize; ++i) {
       if (i != skip) nv.push_back(sharedVerts[i]);
     }
     for (const auto &u : uniqueVerts) nv.push_back(u);

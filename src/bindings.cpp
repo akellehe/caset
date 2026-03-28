@@ -27,6 +27,7 @@
 #include <pybind11/chrono.h>
 
 #include "spacetime/topologies/Topology.h"
+#include "spacetime/topologies/Cylinder.h"
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
 #include "simulations/CDT.h"
@@ -225,6 +226,12 @@ and containing simplices.)doc")
       .def(py::init<>())
       .def("build", &Sphere::build, py::arg("spacetime"), py::arg("numSimplices"),
            "Build a spherical initial triangulation with the given number of simplices.");
+
+  py::class_<Cylinder, Topology, std::shared_ptr<Cylinder> >(m, "Cylinder",
+      "Cylindrical spatial topology with open time boundaries.")
+      .def(py::init<>())
+      .def("build", &Cylinder::build, py::arg("spacetime"), py::arg("numSimplices"),
+           "Build a cylindrical triangulation with the given number of simplices.");
 
   py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid",
       R"doc(Toroidal spatial topology (periodic boundary conditions).

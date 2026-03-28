@@ -153,7 +153,7 @@ class TestCDTTopologies(unittest.TestCase):
         self._test_topology_builds_and_simulates(caset.Toroid())
 
     def test_cylinder_topology(self):
-        self._test_topology_builds_and_simulates(caset.Sphere())
+        self._test_topology_builds_and_simulates(caset.Cylinder())
 
     def test_sphere_topology(self):
         self._test_topology_builds_and_simulates(caset.Sphere())
