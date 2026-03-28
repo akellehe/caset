@@ -84,8 +84,8 @@ References:
       R"doc(An edge connecting two vertices in the simplicial complex.
 
 Edges are 1-simplices linking a source and target vertex.  In CDT the
-squared length determines the edge disposition: positive = timelike,
-negative = spacelike, zero = lightlike.
+squared length determines the edge disposition: positive = spacelike,
+negative = timelike, zero = lightlike.
 
 Edges are identified by an order-independent fingerprint of their
 endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
@@ -116,7 +116,7 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
       .def("getSquaredLength", &Edge::getSquaredLength,
            R"doc(Return the squared edge length.
 
-Positive = timelike, negative = spacelike, zero = lightlike.
+Positive = spacelike, negative = timelike, zero = lightlike.
 We work in squared lengths to avoid complex arithmetic for
 timelike (imaginary-length) edges.)doc")
       .def("getTarget", &Edge::getTarget, py::return_value_policy::reference,
@@ -741,22 +741,18 @@ multiple configurations for averaging.)doc")
       R"doc(Intrinsic (coordinate-free) specification of stress-energy on a triangulation.
 
 Matter is defined relationally: by assigning energy densities to vertices,
-simplices, or as a function of geodesic distance from a reference vertex.)doc")
-      .def(py::init<>())
-      .def("setPointMass", &MatterConfiguration::setPointMass,
-           py::arg("vertex"), py::arg("mass"),
-           R"doc(Assign a point mass to a single vertex (one spacetime event).
+simplices, or as a function of geodesic distance from a reference vertex.
 
-Args:
-    vertex: The vertex at which to place the mass.
-    mass: The mass in geometrized units (G=c=1).)doc")
+For point particles, the matter action is the proper-time action:
+S_matter = -M Σ √(-ℓ²) along the worldline.)doc")
+      .def(py::init<>())
       .def("setWorldlineMass", &MatterConfiguration::setWorldlineMass,
            py::arg("center"), py::arg("mass"), py::arg("spacetime"),
            R"doc(Assign a static point mass along its worldline through all time slices.
 
 Traces a worldline from center through the foliation by following
-timelike edges, then assigns mass to every vertex on the worldline.
-This produces a time-independent matter source.
+timelike edges.  The matter action is the proper-time action:
+S_matter = -M Σ √(-ℓ²) along the worldline.
 
 Args:
     center: A vertex on the worldline (any time slice).
@@ -792,11 +788,13 @@ Returns a list of vertices, one per time slice, ordered by time.)doc")
   py::class_<ReggeSolver>(m, "ReggeSolver",
       R"doc(Regge equation solver.
 
-Adjusts edge lengths so that deficit angles at every hinge satisfy the
-discretized Einstein equations for a given matter configuration.
+Adjusts edge lengths so that the Regge equations (∂S/∂ℓ² = 0) are satisfied.
+The total action is S = S_grav + S_matter where:
+  S_grav = Σ_h A_h ε_h   (Regge gravitational action)
+  S_matter = -M Σ √(-ℓ²)  (proper-time action along worldlines)
 
-Uses gradient descent on the squared residual
-L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
+Minimizes F = ||∇S||² to find stationary points of S (the discrete
+Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
       .def(py::init<std::shared_ptr<Spacetime>, MatterConfiguration>(),
            py::arg("spacetime"), py::arg("matter"))
       .def("dihedralAngle", &ReggeSolver::dihedralAngle,
@@ -811,21 +809,21 @@ L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
       .def("reggeAction", &ReggeSolver::reggeAction,
            "Gravitational Regge action: S_grav = Σ_h A_h · ε_h.")
       .def("matterAction", &ReggeSolver::matterAction,
-           "Matter action: S_matter = -8π Σ_h A_h · T_h.")
+           "Point-particle matter action: S_matter = -M Σ √(-ℓ²) along worldlines.")
       .def("totalAction", &ReggeSolver::totalAction,
            "Total action: S = S_grav + S_matter.  Stationary point = Einstein eqs.")
-      .def("deficitResidual", &ReggeSolver::deficitResidual,
-           "Squared deficit residual: Σ A_h (ε_h - target_h)². Zero = Regge equations solved.")
+      .def("actionGradientNorm", &ReggeSolver::actionGradientNorm,
+           "||∇S||² = Σ_e (∂S/∂ℓ²_e)².  Zero = Regge equations solved.")
       .def("step", &ReggeSolver::step,
            py::arg("learning_rate") = 0.001,
-           "One gradient-descent step. Returns new residual.")
+           "One gradient-descent step on F = ||∇S||². Returns gradient norm² of F.")
       .def("solve", [](ReggeSolver &self, double tol, int maxIters,
                         double learningRate, py::object progress) {
           ReggeSolver::ProgressCallback cb = nullptr;
           if (!progress.is_none()) {
-              cb = [&progress](int iter, double residual) {
+              cb = [&progress](int iter, double F) {
                   py::gil_scoped_acquire acquire;
-                  progress(iter, residual);
+                  progress(iter, F);
               };
           }
           py::gil_scoped_release release;
@@ -837,14 +835,16 @@ L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
            py::arg("progress") = py::none(),
            R"doc(Find stationary point of the total Regge action (discrete Einstein eqs).
 
+Minimizes F = ||∇S||² until ||∇F||² < tol or max_iters reached.
+
 Args:
-    tol: Convergence tolerance on gradient norm squared.
+    tol: Convergence tolerance on ||∇F||².
     max_iters: Maximum number of iterations.
     learning_rate: Gradient descent step size.
-    progress: Optional callback(iter, action) called after each iteration.
+    progress: Optional callback(iter, F) called after each iteration.
 
 Returns:
-    Tuple of (converged: bool, final_action: float, iterations: int).)doc");
+    Tuple of (converged: bool, final_F: float, iterations: int).)doc");
 
 #ifdef CASET_VERSION
   m.attr("__version__") = CASET_VERSION;

@@ -40,7 +40,6 @@ ReggeSolver::ReggeSolver(std::shared_ptr<Spacetime> spacetime,
                 s->getFacets(); // registers (d-2)-simplices (hinges)
         }
     }
-    targetDeficits_ = matter_.computeTargetDeficits(*spacetime_);
 }
 
 // =====================================================================
@@ -350,13 +349,25 @@ double ReggeSolver::reggeAction() const {
 }
 
 double ReggeSolver::matterAction() const {
+    // Point-particle action: S_matter = -M ∫ dτ
+    // Timelike edges (between slices) have ℓ² < 0; spacelike edges (within a
+    // slice) have ℓ² > 0.  Proper time = √(-ℓ²).
     double S = 0.0;
-    for (const auto &h : collectHinges()) {
-        auto fp = h->fingerprint.fingerprint();
-        auto it = targetDeficits_.find(fp);
-        if (it != targetDeficits_.end() && it->second != 0.0) {
-            // targetDeficits_ stores 8π T_h already (set in computeTargetDeficits)
-            S -= hingeArea(h) * it->second;
+    for (const auto &wl : matter_.getWorldlines()) {
+        for (std::size_t i = 0; i + 1 < wl.vertices.size(); ++i) {
+            auto *v1 = wl.vertices[i];
+            auto *v2 = wl.vertices[i + 1];
+            // Find the edge connecting consecutive worldline vertices
+            for (const auto &e : v1->getEdges()) {
+                auto *other = (e->getSource()->getId() == v1->getId())
+                              ? e->getTarget() : e->getSource();
+                if (other->getId() == v2->getId()) {
+                    double sq = e->getSquaredLength();
+                    if (sq < 0.0)  // timelike: ℓ² < 0
+                        S -= wl.mass * std::sqrt(-sq);
+                    break;
+                }
+            }
         }
     }
     return S;
@@ -367,21 +378,29 @@ double ReggeSolver::totalAction() const {
 }
 
 // =====================================================================
-// Deficit residual: Σ A_h (ε_h - target_h)²
+// Action gradient: ∂S/∂ℓ²_e for each edge (numerical)
 // =====================================================================
 
-double ReggeSolver::deficitResidual() const {
-    double R = 0.0;
-    for (const auto &h : collectHinges()) {
-        double epsilon = deficitAngle(h);
-        double target = 0.0;
-        auto fp = h->fingerprint.fingerprint();
-        auto it = targetDeficits_.find(fp);
-        if (it != targetDeficits_.end()) target = it->second;
-        double diff = epsilon - target;
-        R += hingeArea(h) * diff * diff;
+std::vector<double> ReggeSolver::actionGradient() const {
+    auto edgeList = spacetime_->getEdgeList();
+    auto edges = edgeList->toVector();
+    double S0 = totalAction();
+    std::vector<double> g(edges.size());
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        double origSq = edges[i]->getSquaredLength();
+        double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
+        edges[i]->setSquaredLength(origSq + h);
+        g[i] = (totalAction() - S0) / h;
+        edges[i]->setSquaredLength(origSq);
     }
-    return R;
+    return g;
+}
+
+double ReggeSolver::actionGradientNorm() const {
+    auto g = actionGradient();
+    double F = 0.0;
+    for (double gi : g) F += gi * gi;
+    return F;
 }
 
 // =====================================================================
@@ -551,13 +570,8 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
             mesh.edge_dist_positions[off + k] = edgeDistPos[ei][k];
     }
 
-    // --- Target deficits ---
+    // --- Target deficits (no longer used; zero for future GPU residual) ---
     mesh.target_deficits.resize(mesh.n_hinges, 0.0);
-    for (int hi = 0; hi < mesh.n_hinges; ++hi) {
-        auto fp = hinges[hi]->fingerprint.fingerprint();
-        auto it = targetDeficits_.find(fp);
-        if (it != targetDeficits_.end()) mesh.target_deficits[hi] = it->second;
-    }
 
     return mesh;
 }
@@ -570,31 +584,40 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
 double ReggeSolver::step(double learningRate) {
     auto edgeList = spacetime_->getEdgeList();
     auto edges = edgeList->toVector();
+    int n = static_cast<int>(edges.size());
 
-    // Minimize the deficit residual R = Σ A_h (ε_h - target_h)².
-    // R is non-negative and zero at the solution, so gradient descent
-    // converges rather than diverging (the action S itself is unbounded
-    // below due to the conformal mode / matter coupling).
-    double R0 = deficitResidual();
-    std::vector<double> grads(edges.size(), 0.0);
-    for (std::size_t i = 0; i < edges.size(); ++i) {
-        double origSq = edges[i]->getSquaredLength();
+    // Minimize F = ||∇S||² = Σ_e (∂S/∂ℓ²_e)².
+    // F ≥ 0 and F = 0 exactly at a stationary point of S (= Regge equations).
+    // We cannot minimize S directly because it is unbounded below.
+    //
+    // ∂F/∂ℓ²_j = 2 Σ_i g_i · H_ij  where g = ∇S and H = Hessian of S.
+    // We compute this by numerical differentiation: perturb edge j, recompute
+    // the full gradient, and dot with g₀.
+
+    auto g0 = actionGradient();
+    double F0 = 0.0;
+    for (double gi : g0) F0 += gi * gi;
+
+    // Compute ∂F/∂ℓ²_j for each edge j
+    std::vector<double> dF(n, 0.0);
+    for (int j = 0; j < n; ++j) {
+        double origSq = edges[j]->getSquaredLength();
         double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
+        edges[j]->setSquaredLength(origSq + h);
+        auto gp = actionGradient();
+        edges[j]->setSquaredLength(origSq);
 
-        edges[i]->setSquaredLength(origSq + h);
-        double Rp = deficitResidual();
-        edges[i]->setSquaredLength(origSq);
-
-        grads[i] = (Rp - R0) / h;
+        double Fp = 0.0;
+        for (double gi : gp) Fp += gi * gi;
+        dF[j] = (Fp - F0) / h;
     }
 
-    // Apply updates: ℓ²_e -= η · ∂R/∂ℓ²_e
+    // Apply updates: ℓ²_j -= η · ∂F/∂ℓ²_j
     double gradNormSq = 0.0;
-    for (std::size_t i = 0; i < edges.size(); ++i) {
-        gradNormSq += grads[i] * grads[i];
-        double origSq = edges[i]->getSquaredLength();
-        double newSq = origSq - learningRate * grads[i];
-        edges[i]->setSquaredLength(newSq);
+    for (int j = 0; j < n; ++j) {
+        gradNormSq += dF[j] * dF[j];
+        double origSq = edges[j]->getSquaredLength();
+        edges[j]->setSquaredLength(origSq - learningRate * dF[j]);
     }
 
     return gradNormSq;
@@ -607,16 +630,16 @@ double ReggeSolver::step(double learningRate) {
 std::tuple<bool, double, int> ReggeSolver::solve(
     double tol, int maxIters, double learningRate,
     ProgressCallback progress) {
-    double R = deficitResidual();
+    double F = actionGradientNorm();
     for (int i = 0; i < maxIters; ++i) {
         double gradNorm = step(learningRate);
-        R = deficitResidual();
-        if (progress) progress(i, R);
+        F = actionGradientNorm();
+        if (progress) progress(i, F);
         if (gradNorm < tol) {
-            return {true, R, i + 1};
+            return {true, F, i + 1};
         }
     }
-    return {R < tol, R, maxIters};
+    return {F < tol, F, maxIters};
 }
 
 } // namespace caset

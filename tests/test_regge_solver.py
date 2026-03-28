@@ -62,45 +62,55 @@ class TestReggeAction(unittest.TestCase):
         self.assertTrue(math.isfinite(S), f"Regge action should be finite, got {S}")
 
 
-class TestFlatSpaceResidual(unittest.TestCase):
-    """In vacuum (no matter), the target deficit is 0 everywhere.
-    The residual measures how far the geometry is from flat."""
+class TestActionGradientNorm(unittest.TestCase):
+    """In vacuum (no matter), ||∇S||² measures how far from the Regge equations."""
 
-    def test_vacuum_residual_is_nonnegative(self):
+    def test_vacuum_gradient_norm_is_nonnegative(self):
         st = _make_spacetime(20)
         matter = caset.MatterConfiguration()  # no matter = vacuum
         solver = caset.ReggeSolver(st, matter)
-        L = solver.deficitResidual()
-        self.assertGreaterEqual(L, 0.0)
+        F = solver.actionGradientNorm()
+        self.assertGreaterEqual(F, 0.0)
 
-    def test_solver_reduces_residual(self):
-        """A few gradient steps should reduce (or not increase) the residual."""
+    def test_solver_reduces_gradient_norm(self):
+        """A few gradient steps should reduce (or not increase) ||∇S||²."""
         st = _make_spacetime(20)
         matter = caset.MatterConfiguration()
         solver = caset.ReggeSolver(st, matter)
-        L0 = solver.deficitResidual()
-        if L0 < 1e-12:
-            self.skipTest("Already at flat space")
+        F0 = solver.actionGradientNorm()
+        if F0 < 1e-12:
+            self.skipTest("Already at stationary point")
         for _ in range(5):
-            L1 = solver.step(0.0001)
-        # After several steps the residual should generally decrease
-        # (not a strict guarantee per step, but over several steps)
-        self.assertLess(L1, L0 * 10,
-            f"Residual should not explode: {L1} vs initial {L0}")
+            solver.step(0.0001)
+        F1 = solver.actionGradientNorm()
+        # After several steps, ||∇S||² should generally decrease
+        self.assertLess(F1, F0 * 10,
+            f"||∇S||² should not explode: {F1} vs initial {F0}")
 
 
 class TestMatterConfiguration(unittest.TestCase):
     """Test matter configuration specification."""
 
-    def test_point_mass_creates_nonzero_targets(self):
+    def test_worldline_mass_creates_nonzero_gradient(self):
         st = _make_spacetime(20)
         matter = caset.MatterConfiguration()
         v = st.getVertexList().toVector()[0]
-        matter.setPointMass(v, 1.0)
+        matter.setWorldlineMass(v, 1.0, st)
         solver = caset.ReggeSolver(st, matter)
-        # With matter, residual should be nonzero (geometry doesn't match yet)
-        L = solver.deficitResidual()
-        self.assertGreater(L, 0.0)
+        # With matter, gradient norm should be nonzero (not at solution yet)
+        F = solver.actionGradientNorm()
+        self.assertGreater(F, 0.0)
+
+    def test_matter_action_is_negative(self):
+        """S_matter = -M Σ √(-ℓ²) should be negative for positive mass."""
+        st = _make_spacetime(20)
+        matter = caset.MatterConfiguration()
+        v = st.getVertexList().toVector()[0]
+        matter.setWorldlineMass(v, 1.0, st)
+        solver = caset.ReggeSolver(st, matter)
+        S_matter = solver.matterAction()
+        self.assertLess(S_matter, 0.0,
+            "Proper-time matter action should be negative for positive mass")
 
     def test_radial_profile(self):
         st = _make_spacetime(20)
@@ -108,9 +118,11 @@ class TestMatterConfiguration(unittest.TestCase):
         v = st.getVertexList().toVector()[0]
         # Exponential profile: ρ(r) = exp(-r)
         matter.setRadialProfile(v, lambda r: math.exp(-r))
+        # Radial profiles don't contribute to proper-time action,
+        # so just check that it doesn't crash
         solver = caset.ReggeSolver(st, matter)
-        L = solver.deficitResidual()
-        self.assertGreater(L, 0.0)
+        S = solver.totalAction()
+        self.assertTrue(math.isfinite(S))
 
 
 class TestHingeArea(unittest.TestCase):

@@ -96,7 +96,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   for (std::size_t i=0; i<vertices.size()-1; i++) {
     for (std::size_t j=i+1; j<vertices.size(); j++) {
       double squaredLen = alpha;
-      if (isLorentzian && vertices[i]->getTime() == vertices[j]->getTime()) {
+      if (isLorentzian && vertices[i]->getTime() != vertices[j]->getTime()) {
         squaredLen = -alpha;
       }
       EdgePtr edge = createEdge(vertices[i], vertices[j], squaredLen);
@@ -107,8 +107,8 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-  double squaredLength = alpha;
   double timelikeSquaredLength = alpha;
+  double spacelikeSquaredLength = alpha;
   SimplexOrientation orientation = {
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation)
@@ -128,7 +128,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
     }
     for (const auto &existingVertex : vertices) {
       EdgePtr edge = edgeList->
-          add(existingVertex, newVertex, timelikeSquaredLength);
+          add(existingVertex, newVertex, spacelikeSquaredLength);
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
       edges.push_back(edge);
@@ -144,9 +144,9 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
     for (const auto &existingVertex : vertices) {
       EdgePtr edge;
       if (existingVertex->getTime() < newVertex->getTime()) {
-        edge = edgeList->add(existingVertex, newVertex, squaredLength);
-      } else {
         edge = edgeList->add(existingVertex, newVertex, timelikeSquaredLength);
+      } else {
+        edge = edgeList->add(existingVertex, newVertex, spacelikeSquaredLength);
       }
       existingVertex->addOutEdge(edge);
       newVertex->addInEdge(edge);
@@ -217,8 +217,8 @@ EdgePtr Spacetime::createEdge(
   double squaredLength
 ) const noexcept {
 #ifdef CASET_ASSERTIONS
-  if (src->getTime() == tgt->getTime() && squaredLength >= 0) {
-    CLOG(INFO_LEVEL, "You attempted to create an edge for which the start and end vertices have the same time, but the squared length is greater than 0");
+  if (src->getTime() == tgt->getTime() && squaredLength <= 0) {
+    CLOG(INFO_LEVEL, "You attempted to create a same-time (spacelike) edge with non-positive squared length");
     std::abort();
   }
 #endif

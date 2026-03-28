@@ -151,19 +151,19 @@ class TestConeExact(unittest.TestCase):
         self.assertEqual(new_v_edges, expected_edges,
                          f"d={d}: new vertex edges {new_v_edges} != {expected_edges}")
 
-        # Edge types: v0→new_v is spacelike (same time=0, sqlen<0),
-        # all others are timelike (different times, sqlen>0)
+        # Edge types: v0→new_v is spacelike (same time=0, sqlen>0),
+        # all others are timelike (different times, sqlen<0)
         for e in new_v.getEdges():
             src_id, tgt_id = e.getSource().getId(), e.getTarget().getId()
             other_id = tgt_id if src_id == new_vid else src_id
             if other_id == 0:
                 # Both at t=0 → spacelike
-                self.assertLess(e.getSquaredLength(), 0,
-                                "v0-new_v edge should be spacelike (sqlen<0)")
+                self.assertGreater(e.getSquaredLength(), 0,
+                                   "v0-new_v edge should be spacelike (sqlen>0)")
             else:
                 # new_v@t=0 to other@t=1 → timelike
-                self.assertGreater(e.getSquaredLength(), 0,
-                                   f"v{other_id}-new_v edge should be timelike (sqlen>0)")
+                self.assertLess(e.getSquaredLength(), 0,
+                                f"v{other_id}-new_v edge should be timelike (sqlen<0)")
 
         # Orientation counts
         if d == 2:

@@ -37,11 +37,9 @@ namespace caset {
 /// edge length. If the squared length is negative in a (-, +, +, +) signature it's timelike. A negative edge length in
 /// a (+, -, -, -) signature is spacelike. A 0-length in either is lightlike/null.
 ///
-/// The second thing that determines the edge disposition is whether the vertices exist both in space (lightlike), both
-/// at the same time (timelike), or one in space and one in time (spacelike). See "Quantum Gravity from Causal Dynamical
-/// Triangulations: A Review" by R. Loll, 2019. Figure 1. There's no discussion of lightlike edges since CDT does not
-/// treat that case. I'm making that up to fill in the gaps. If there's some existing discussion around this in the
-/// literature I'm not aware at the time of this writing.
+/// The second thing that determines the edge disposition is whether the vertices are at the same time (spacelike,
+/// within a spatial slice) or at different times (timelike, crossing between slices). See "Quantum Gravity from Causal
+/// Dynamical Triangulations: A Review" by R. Loll, 2019. Figure 1. CDT does not treat the lightlike case.
 enum class EdgeDisposition : uint8_t {
   Spacelike = 0,
   Timelike = 1,

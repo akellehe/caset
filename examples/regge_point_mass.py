@@ -3,8 +3,10 @@
 then render the result as an animated GIF.
 
 The point mass is placed at a central vertex. The solver adjusts edge lengths
-so that deficit angles match the discretized Schwarzschild solution. The
-resulting triangulation is exported as a rotating GIF showing how curvature
+so that the Regge equations (∂S/∂ℓ² = 0) are satisfied, where
+S = S_grav + S_matter with S_matter = -M Σ √(-ℓ²) (proper-time action).
+
+The resulting triangulation is exported as a rotating GIF showing how curvature
 concentrates near the mass.
 
 Usage:
@@ -75,22 +77,22 @@ def main():
     solver = caset.ReggeSolver(st, matter)
     S_grav = solver.reggeAction()
     S_matt = solver.matterAction()
-    R0 = solver.deficitResidual()
+    F0 = solver.actionGradientNorm()
     print(f"  S_grav = {S_grav:.4f},  S_matter = {S_matt:.4f}")
-    print(f"  Deficit residual R = {R0:.6f}")
+    print(f"  ||∇S||² = {F0:.6f}")
 
     # Solve with tqdm progress bar
     bar = tqdm(total=args.max_iters, desc="Solving", unit="iter",
                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
                           "[{elapsed}<{remaining}, {rate_fmt}] "
-                          "R={postfix}")
-    bar.set_postfix_str(f"{R0:.6f}")
+                          "F={postfix}")
+    bar.set_postfix_str(f"{F0:.6f}")
 
-    def on_progress(iteration, residual):
+    def on_progress(iteration, F):
         bar.update(1)
-        bar.set_postfix_str(f"{residual:.6f}")
+        bar.set_postfix_str(f"{F:.6f}")
 
-    converged, R_final, iters = solver.solve(
+    converged, F_final, iters = solver.solve(
         tol=args.tol,
         max_iters=args.max_iters,
         learning_rate=args.learning_rate,
@@ -100,8 +102,8 @@ def main():
 
     status = "Converged" if converged else "Did not converge"
     print(f"\n{status} after {iters} iterations")
-    print(f"  Residual: {R0:.6f} → {R_final:.6f}")
-    print(f"  S_grav:  {S_grav:.4f} → {solver.reggeAction():.4f}")
+    print(f"  ||∇S||²: {F0:.6f} → {F_final:.6f}")
+    print(f"  S_grav:   {S_grav:.4f} → {solver.reggeAction():.4f}")
     print(f"  S_matter: {S_matt:.4f} → {solver.matterAction():.4f}")
 
     # Render

@@ -24,10 +24,15 @@ class Spacetime;
 /// discretized Einstein equations:
 ///
 /// \f[
-///   \varepsilon_h = \varepsilon^{\text{target}}_h
+///   \frac{\partial S}{\partial \ell^2_e} = 0
 /// \f]
 ///
-/// where the target deficit is determined by the local stress-energy.
+/// The total action is:
+/// \f[
+///   S = \underbrace{\sum_h A_h\,\varepsilon_h}_{S_{\text{grav}}}
+///     \underbrace{- M \sum_{e \in W} \sqrt{-\ell^2_e}}_{S_{\text{matter}}}
+/// \f]
+/// (Timelike edges have \f$\ell^2 < 0\f$; spacelike edges have \f$\ell^2 > 0\f$.)
 ///
 /// ## Algorithm
 ///
@@ -35,12 +40,10 @@ class Spacetime;
 ///    lengths.
 /// 2. Derive dihedral angles from the cofactors of \f$G\f$.
 /// 3. Sum dihedral angles at each hinge → actual deficit angles.
-/// 4. Minimize the deficit residual
-///    \f$R = \sum_h A_h\,(\varepsilon_h - \varepsilon^{\text{target}}_h)^2\f$
-///    by gradient descent with respect to squared edge lengths.
-///    \f$R = 0\f$ when the Regge equations are satisfied.  (The action
-///    \f$S\f$ is unbounded below due to the conformal mode, so direct
-///    minimization of \f$S\f$ diverges.)
+/// 4. Minimize \f$F = \|\nabla S\|^2 = \sum_e (\partial S/\partial \ell^2_e)^2\f$
+///    by gradient descent.  \f$F = 0\f$ exactly at a stationary point of
+///    the action, i.e. when the Regge equations are satisfied.
+///    (Minimizing \f$S\f$ directly diverges because it is unbounded below.)
 ///
 class ReggeSolver {
   public:
@@ -50,16 +53,6 @@ class ReggeSolver {
     // ==================== Geometry queries ====================
 
     /// Dihedral angle at hinge \a h within top-simplex \a sigma.
-    ///
-    /// The hinge is a \f$(d{-}2)\f$-simplex (triangle in 4-D).  The dihedral
-    /// angle is the angle between the two \f$(d{-}1)\f$-faces of \a sigma
-    /// that meet at \a h.
-    ///
-    /// Uses the Gram-matrix cofactor formula (Simplex.h §295–306):
-    /// \f[
-    ///   \cos\theta_{ij} = -\frac{C_{ij}}{\sqrt{C_{ii}\,C_{jj}}}
-    /// \f]
-    /// where \a i,j are the two vertices of \a sigma opposite to \a h.
     [[nodiscard]] double dihedralAngle(SimplexPtr sigma,
                                         SimplexPtr hinge) const;
 
@@ -72,32 +65,30 @@ class ReggeSolver {
     /// Gravitational Regge action: \f$S_{\text{grav}} = \sum_h A_h\,\varepsilon_h\f$.
     [[nodiscard]] double reggeAction() const;
 
-    /// Matter action: \f$S_{\text{matter}} = -8\pi \sum_h A_h\,T_h\f$.
+    /// Point-particle matter action: \f$S_{\text{matter}} = -M \sum_{e \in W} \sqrt{-\ell^2_e}\f$.
     [[nodiscard]] double matterAction() const;
 
     /// Total action: \f$S = S_{\text{grav}} + S_{\text{matter}}\f$.
     /// The Regge equations are \f$\partial S/\partial \ell^2_e = 0\f$.
     [[nodiscard]] double totalAction() const;
 
-    /// Squared deficit residual: \f$R = \sum_h A_h\,(\varepsilon_h - \varepsilon^{\text{target}}_h)^2\f$.
+    /// Squared gradient norm: \f$F = \sum_e (\partial S/\partial \ell^2_e)^2\f$.
     /// Non-negative; zero exactly when the Regge equations are satisfied.
-    [[nodiscard]] double deficitResidual() const;
+    [[nodiscard]] double actionGradientNorm() const;
 
     // ==================== Solver ====================
 
-    /// One gradient-descent step on the deficit residual \f$R\f$.
-    /// Adjusts every edge's squared length by
-    /// \f$\ell^2_e \mathrel{-}= \eta\,\partial R/\partial \ell^2_e\f$.
+    /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.
     ///
-    /// @return the gradient norm² after the step
+    /// @return the gradient norm² of F after the step
     double step(double learningRate = 0.001);
 
     /// Iterate step() until convergence or max iterations.
     ///
     /// @param progress Optional callback invoked after each iteration with
-    ///   (iteration, residual).  Useful for progress bars.
-    /// @return (converged, final_residual, iterations)
-    using ProgressCallback = std::function<void(int iter, double residual)>;
+    ///   (iteration, F).  Useful for progress bars.
+    /// @return (converged, final_F, iterations)
+    using ProgressCallback = std::function<void(int iter, double F)>;
     std::tuple<bool, double, int> solve(double tol = 1e-8,
                                          int maxIters = 5000,
                                          double learningRate = 0.001,
@@ -116,10 +107,12 @@ class ReggeSolver {
   private:
     std::shared_ptr<Spacetime> spacetime_;
     MatterConfiguration matter_;
-    std::unordered_map<std::uint64_t, double> targetDeficits_;
 
     /// Collect all (d-2)-simplices (hinges) in the complex.
     [[nodiscard]] std::vector<SimplexPtr> collectHinges() const;
+
+    /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
+    [[nodiscard]] std::vector<double> actionGradient() const;
 
 #ifdef CASET_CUDA
     /// Flatten mesh topology into GPU-friendly arrays.
