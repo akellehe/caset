@@ -80,7 +80,7 @@ class ReggeSolver {
 
     /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.
     ///
-    /// @return the gradient norm² of F after the step
+    /// @return F = \f$\|\nabla S\|^2\f$ before the update
     double step(double learningRate = 0.001);
 
     /// Iterate step() until convergence or max iterations.

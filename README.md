@@ -38,14 +38,21 @@ Build a 4D Lorentzian spacetime, thermalize it with CDT, and export a rotating G
 ```python
 import caset
 
-sig   = caset.Signature(4, caset.Lorentzian)
-metric = caset.Metric(True, sig)
-st    = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
-                        caset.PREFERRED, caset.Toroid())
+metric = caset.Metric(
+    coordinateFree=True,
+    signature=caset.Signature(dimensions=4, signature_type=caset.Lorentzian),
+)
+st = caset.Spacetime(
+    metric=metric, spacetimeType=caset.CDT,
+    alpha=1.0, a=1.0,
+    foliation=caset.PREFERRED, topology=caset.Toroid(),
+)
 st.build(500)
 
-cdt = caset.CDTSimulation(st, k0=2.2, k4=0.5, delta=0.6,
-                           epsilon=0.02, target_n41=st.getN41())
+cdt = caset.CDTSimulation(
+    spacetime=st, k0=2.2, k4=0.5, delta=0.6,
+    epsilon=0.02, targetN41=st.getN41(),
+)
 cdt.tune()
 cdt.sweep(100)
 
@@ -111,17 +118,25 @@ Each script includes the paper's coupling constants (k_0=2.2, delta=0.6) and pri
 Three spatial topologies for the foliated slices. Just swap the last argument to the `Spacetime` constructor:
 
 ```python
+metric = caset.Metric(
+    coordinateFree=True,
+    signature=caset.Signature(dimensions=4, signature_type=caset.Lorentzian),
+)
+
 # Toroid (T^3 x S^1) -- periodic in space and time, default
-st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                     caset.Toroid())
+st = caset.Spacetime(metric=metric, spacetimeType=caset.CDT,
+                     alpha=1.0, a=1.0, foliation=caset.PREFERRED,
+                     topology=caset.Toroid())
 
 # Sphere (S^3 x S^1) -- natural for de Sitter cosmology
-st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                     caset.Sphere())
+st = caset.Spacetime(metric=metric, spacetimeType=caset.CDT,
+                     alpha=1.0, a=1.0, foliation=caset.PREFERRED,
+                     topology=caset.Sphere())
 
 # Cylinder (Sigma x [0,T]) -- open time boundaries for transition amplitudes
-st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                     caset.Cylinder())
+st = caset.Spacetime(metric=metric, spacetimeType=caset.CDT,
+                     alpha=1.0, a=1.0, foliation=caset.PREFERRED,
+                     topology=caset.Cylinder())
 ```
 
 ### Visualization

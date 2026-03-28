@@ -487,12 +487,11 @@ __global__ void action_gradient_kernel(
 
     double delta_grav = Sp_partial - S0_partial;
 
-    // Matter contribution: S_matter = -M √(-ℓ²) for worldline edges
+    // Matter contribution: S_matter = -M √(W) for worldline edges
+    // (W = |ℓ²| = Wick-rotated squared length, stored in sq_dist_flat)
     double delta_matter = 0.0;
-    if (worldline_mask[eid] && origSq < 0.0) {
-        double sq_pert = origSq + h;
-        if (sq_pert < 0.0)
-            delta_matter = -worldline_mass * (sqrt(-sq_pert) - sqrt(-origSq));
+    if (worldline_mask[eid] && origSq > 0.0) {
+        delta_matter = -worldline_mass * (sqrt(origSq + h) - sqrt(origSq));
     }
 
     gradients[eid] = (delta_grav + delta_matter) / h;
@@ -538,6 +537,269 @@ void compute_action_gradient_gpu(const GpuMeshData &mesh,
 
     cudaFree(d_base_contribs);
     cudaFree(d_wl_mask);
+    g.free();
+}
+
+// =====================================================================
+// Fused ∂F/∂W kernel: one thread per edge, all in one launch
+// =====================================================================
+
+// Compute A_h · ε_h for one hinge from sq_dist_flat with two additive
+// perturbations applied.  Pass p_end <= p_start to skip a perturbation.
+__device__ double hinge_action_2pert(
+    int hid,
+    const int *hinge_simplex_offsets,
+    const int *hinge_simplex_ids,
+    const int *hinge_opposite_a,
+    const int *hinge_opposite_b,
+    const int *simplex_sq_dist_offsets,
+    const double *sq_dist_flat,
+    const int *simplex_n_verts,
+    const int *edge_dist_positions,
+    int p1_start, int p1_end, double h1,
+    int p2_start, int p2_end, double h2
+) {
+    int s_start = hinge_simplex_offsets[hid];
+    int s_end   = hinge_simplex_offsets[hid + 1];
+    double angle_sum = 0.0;
+    double area = 0.0;
+
+    for (int si = s_start; si < s_end; ++si) {
+        int sid = hinge_simplex_ids[si];
+        int nv  = simplex_n_verts[sid];
+        int sd_off = simplex_sq_dist_offsets[sid];
+        int va = hinge_opposite_a[si];
+        int vb = hinge_opposite_b[si];
+
+        double local_sq[MAX_DIM * MAX_DIM];
+        for (int i = 0; i < nv * nv; ++i)
+            local_sq[i] = sq_dist_flat[sd_off + i];
+
+        for (int di = p1_start; di < p1_end; ++di) {
+            int pos = edge_dist_positions[di];
+            if (pos >= sd_off && pos < sd_off + nv * nv)
+                local_sq[pos - sd_off] += h1;
+        }
+        for (int di = p2_start; di < p2_end; ++di) {
+            int pos = edge_dist_positions[di];
+            if (pos >= sd_off && pos < sd_off + nv * nv)
+                local_sq[pos - sd_off] += h2;
+        }
+
+        double B[MAX_DIM * MAX_DIM];
+        build_cm(local_sq, nv, B);
+        angle_sum += dihedral_from_cm(B, nv + 1, va, vb);
+        if (si == s_start)
+            area = hinge_area_dev(local_sq, nv, va, vb);
+    }
+    return area * (2.0 * M_PI - angle_sum);
+}
+
+// For each edge j (one thread), compute ∂F/∂W_j where F = ||∇S||².
+//
+// When W_j is perturbed by h_j, only the action gradients of edges
+// in nbr(j) change.  For each neighbor e, the change Δg(e) comes from
+// hinges shared between e and j:
+//
+//   Δg(e) = Σ_{h shared} [(S_je - S_j0) - (S_0e - S_00)] / h_e
+//
+// where S_xy denotes A_h·ε_h with perturbation x on j and y on e.
+//
+//   dF[j] = {Σ_{e ∈ nbr(j)} [2·g0(e)·Δg(e) + Δg(e)²]} / h_j
+//
+__global__ void fused_F_gradient_kernel(
+    const double *sq_dist_flat,
+    const int *hinge_simplex_offsets,
+    const int *hinge_simplex_ids,
+    const int *hinge_opposite_a,
+    const int *hinge_opposite_b,
+    const int *simplex_sq_dist_offsets,
+    const int *simplex_n_verts,
+    const int *edge_hinge_offsets,
+    const int *edge_hinge_ids,
+    const int *edge_dist_offsets,
+    const int *edge_dist_positions,
+    const int *edge_nbr_offsets,
+    const int *edge_nbr_ids,
+    const double *base_action_grad,   // g0[n_edges] from first kernel
+    const int *worldline_mask,
+    double worldline_mass,
+    double *dF,
+    int n_edges
+) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    if (j >= n_edges) return;
+
+    int dj_start = edge_dist_offsets[j];
+    int dj_end   = edge_dist_offsets[j + 1];
+    if (dj_start == dj_end) { dF[j] = 0.0; return; }
+
+    double Wj = sq_dist_flat[edge_dist_positions[dj_start]];
+    double hj = fmax(fabs(Wj) * 1e-4, 1e-8);
+
+    int hj_start = edge_hinge_offsets[j];
+    int hj_end   = edge_hinge_offsets[j + 1];
+
+    double F_delta = 0.0;
+
+    int nbr_start = edge_nbr_offsets[j];
+    int nbr_end   = edge_nbr_offsets[j + 1];
+
+    for (int ni = nbr_start; ni < nbr_end; ++ni) {
+        int e = edge_nbr_ids[ni];
+
+        int de_start = edge_dist_offsets[e];
+        int de_end   = edge_dist_offsets[e + 1];
+        if (de_start == de_end) continue;
+
+        double We = sq_dist_flat[edge_dist_positions[de_start]];
+        double he = fmax(fabs(We) * 1e-4, 1e-8);
+
+        int he_start = edge_hinge_offsets[e];
+        int he_end   = edge_hinge_offsets[e + 1];
+
+        double delta_g = 0.0;
+
+        // Sum over hinges of e that are shared with j
+        for (int hi_e = he_start; hi_e < he_end; ++hi_e) {
+            int hid = edge_hinge_ids[hi_e];
+
+            // Linear search: is hid also a hinge of j?
+            bool shared = false;
+            for (int hi_j = hj_start; hi_j < hj_end; ++hi_j) {
+                if (edge_hinge_ids[hi_j] == hid) { shared = true; break; }
+            }
+            if (!shared) continue;
+
+            // Four evaluations of A_h · ε_h:
+            //   S00 = base,  S0e = +e,  Sj0 = +j,  Sje = +j+e
+            double S00 = hinge_action_2pert(
+                hid, hinge_simplex_offsets, hinge_simplex_ids,
+                hinge_opposite_a, hinge_opposite_b,
+                simplex_sq_dist_offsets, sq_dist_flat, simplex_n_verts,
+                edge_dist_positions,
+                0, 0, 0.0,  0, 0, 0.0);
+
+            double S0e = hinge_action_2pert(
+                hid, hinge_simplex_offsets, hinge_simplex_ids,
+                hinge_opposite_a, hinge_opposite_b,
+                simplex_sq_dist_offsets, sq_dist_flat, simplex_n_verts,
+                edge_dist_positions,
+                de_start, de_end, he,  0, 0, 0.0);
+
+            double Sj0 = hinge_action_2pert(
+                hid, hinge_simplex_offsets, hinge_simplex_ids,
+                hinge_opposite_a, hinge_opposite_b,
+                simplex_sq_dist_offsets, sq_dist_flat, simplex_n_verts,
+                edge_dist_positions,
+                dj_start, dj_end, hj,  0, 0, 0.0);
+
+            double Sje = hinge_action_2pert(
+                hid, hinge_simplex_offsets, hinge_simplex_ids,
+                hinge_opposite_a, hinge_opposite_b,
+                simplex_sq_dist_offsets, sq_dist_flat, simplex_n_verts,
+                edge_dist_positions,
+                dj_start, dj_end, hj,  de_start, de_end, he);
+
+            delta_g += ((Sje - Sj0) - (S0e - S00)) / he;
+        }
+
+        // Matter contribution to Δg: only when e = j and j is worldline
+        if (e == j && worldline_mask[j] && Wj > 0.0) {
+            double g_base = -worldline_mass *
+                (sqrt(Wj + he) - sqrt(Wj)) / he;
+            double g_pert = -worldline_mass *
+                (sqrt(Wj + hj + he) - sqrt(Wj + hj)) / he;
+            delta_g += g_pert - g_base;
+        }
+
+        double g0e = base_action_grad[e];
+        F_delta += 2.0 * g0e * delta_g + delta_g * delta_g;
+    }
+
+    dF[j] = F_delta / hj;
+}
+
+// =====================================================================
+// Host-side: full step (base gradient + fused F gradient)
+// =====================================================================
+
+void compute_step_gpu(const GpuMeshData &mesh,
+                      double *h_base_grad,
+                      double *h_dF) {
+    // Increase stack size for deeply nested device calls
+    // (build_cm → dihedral_from_cm → cofactor_ij → det_small)
+    cudaDeviceSetLimit(cudaLimitStackSize, 8192);
+
+    GpuArrays g;
+    g.alloc(mesh);
+    g.upload(mesh);
+
+    int nh = mesh.n_hinges, ne = mesh.n_edges;
+    int bs = 256;
+    int gs_e = (ne + bs - 1) / bs;
+
+    // --- Extra arrays for action gradient kernel ---
+    double *d_base_contribs;
+    int *d_wl_mask;
+    cudaMalloc(&d_base_contribs, nh * sizeof(double));
+    cudaMalloc(&d_wl_mask, ne * sizeof(int));
+    cudaMemcpy(d_base_contribs, mesh.base_hinge_contribs.data(),
+               nh * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_wl_mask, mesh.worldline_edge_mask.data(),
+               ne * sizeof(int), cudaMemcpyHostToDevice);
+
+    // --- Step 1: base action gradient (1 kernel launch) ---
+    action_gradient_kernel<<<gs_e, bs>>>(
+        g.simplex_sq_dist_flat,
+        g.hinge_simplex_offsets, g.hinge_simplex_ids,
+        g.hinge_opposite_a, g.hinge_opposite_b,
+        g.simplex_sq_dist_offsets, g.simplex_n_verts,
+        g.edge_hinge_offsets, g.edge_hinge_ids,
+        g.edge_dist_offsets, g.edge_dist_positions,
+        d_base_contribs, d_wl_mask, mesh.worldline_mass,
+        g.gradients, ne);
+    cudaDeviceSynchronize();
+    cudaMemcpy(h_base_grad, g.gradients, ne * sizeof(double),
+               cudaMemcpyDeviceToHost);
+
+    // --- Step 2: fused F gradient (1 kernel launch) ---
+    double *d_base_grad, *d_dF;
+    int *d_nbr_offsets, *d_nbr_ids;
+    int nnz_nbr = static_cast<int>(mesh.edge_nbr_ids.size());
+
+    cudaMalloc(&d_base_grad, ne * sizeof(double));
+    cudaMalloc(&d_dF, ne * sizeof(double));
+    cudaMalloc(&d_nbr_offsets, (ne + 1) * sizeof(int));
+    cudaMalloc(&d_nbr_ids, nnz_nbr * sizeof(int));
+
+    cudaMemcpy(d_base_grad, h_base_grad,
+               ne * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_nbr_offsets, mesh.edge_nbr_offsets.data(),
+               (ne + 1) * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_nbr_ids, mesh.edge_nbr_ids.data(),
+               nnz_nbr * sizeof(int), cudaMemcpyHostToDevice);
+
+    fused_F_gradient_kernel<<<gs_e, bs>>>(
+        g.simplex_sq_dist_flat,
+        g.hinge_simplex_offsets, g.hinge_simplex_ids,
+        g.hinge_opposite_a, g.hinge_opposite_b,
+        g.simplex_sq_dist_offsets, g.simplex_n_verts,
+        g.edge_hinge_offsets, g.edge_hinge_ids,
+        g.edge_dist_offsets, g.edge_dist_positions,
+        d_nbr_offsets, d_nbr_ids,
+        d_base_grad, d_wl_mask, mesh.worldline_mass,
+        d_dF, ne);
+    cudaDeviceSynchronize();
+    cudaMemcpy(h_dF, d_dF, ne * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // --- Cleanup ---
+    cudaFree(d_base_contribs);
+    cudaFree(d_wl_mask);
+    cudaFree(d_base_grad);
+    cudaFree(d_dF);
+    cudaFree(d_nbr_offsets);
+    cudaFree(d_nbr_ids);
     g.free();
 }
 

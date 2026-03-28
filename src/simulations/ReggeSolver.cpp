@@ -571,6 +571,39 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
             mesh.edge_dist_positions[off + k] = edgeDistPos[ei][k];
     }
 
+    // --- Edge → neighbor edges CSR ---
+    // Two edges are neighbors if they share at least one hinge.
+    // Build reverse map: hinge → edges (inverse of edge → hinges).
+    std::vector<std::vector<int>> hingeEdges(mesh.n_hinges);
+    for (int ei = 0; ei < mesh.n_edges; ++ei) {
+        for (int k = mesh.edge_hinge_offsets[ei];
+             k < mesh.edge_hinge_offsets[ei + 1]; ++k)
+            hingeEdges[mesh.edge_hinge_ids[k]].push_back(ei);
+    }
+    std::vector<std::set<int>> nbrSets(mesh.n_edges);
+    for (int ei = 0; ei < mesh.n_edges; ++ei) {
+        nbrSets[ei].insert(ei); // self-neighbor
+        for (int k = mesh.edge_hinge_offsets[ei];
+             k < mesh.edge_hinge_offsets[ei + 1]; ++k) {
+            int hid = mesh.edge_hinge_ids[k];
+            for (int nb : hingeEdges[hid])
+                nbrSets[ei].insert(nb);
+        }
+    }
+    mesh.edge_nbr_offsets.resize(mesh.n_edges + 1, 0);
+    for (int ei = 0; ei < mesh.n_edges; ++ei)
+        mesh.edge_nbr_offsets[ei + 1] =
+            mesh.edge_nbr_offsets[ei] +
+            static_cast<int>(nbrSets[ei].size());
+    int nnz_nbr = mesh.edge_nbr_offsets[mesh.n_edges];
+    mesh.edge_nbr_ids.resize(nnz_nbr);
+    for (int ei = 0; ei < mesh.n_edges; ++ei) {
+        int off = mesh.edge_nbr_offsets[ei];
+        int k = 0;
+        for (int nb : nbrSets[ei])
+            mesh.edge_nbr_ids[off + k++] = nb;
+    }
+
     // --- Target deficits (zero for deficit-residual kernel) ---
     mesh.target_deficits.resize(mesh.n_hinges, 0.0);
 
@@ -611,59 +644,36 @@ double ReggeSolver::step(double learningRate) {
     // Minimize F = ||∇S||² = Σ_e (∂S/∂ℓ²_e)².
     // F ≥ 0 and F = 0 exactly at a stationary point of S (= Regge equations).
     // We cannot minimize S directly because it is unbounded below.
-    //
-    // Step 1: compute ∂S/∂ℓ²_e (the action gradient) for every edge.
-    // Step 2: compute ∂F/∂ℓ²_j by perturbing edge j, recomputing the
-    //         action gradient, and differencing ||g||².
-    //
-    // With CUDA, step 1 is a single GPU launch (one thread per edge).
-    // Step 2 repeats step 1 for each edge j — n+1 GPU launches total.
 
 #ifdef CASET_CUDA
-    // Flatten mesh once; we'll mutate sq_dist_flat in place for perturbations.
+    // GPU path: 2 kernel launches total.
+    //   1. Base action gradient ∂S/∂W_e  (one thread per edge)
+    //   2. Fused ∂F/∂W_j  (one thread per edge, using edge neighborhoods)
+    // All GPU memory allocated/uploaded/downloaded/freed in one cycle.
     auto mesh = flattenMeshForGpu();
 
-    // Base action gradient  (one GPU launch)
     std::vector<double> g0(n);
-    cuda::compute_action_gradient_gpu(mesh, g0.data());
-    double F0 = 0.0;
-    for (double gi : g0) F0 += gi * gi;
-
-    // Compute ∂F/∂ℓ²_j for each edge j
     std::vector<double> dF(n, 0.0);
+    cuda::compute_step_gpu(mesh, g0.data(), dF.data());
+
+    double F = 0.0;
+    for (double gi : g0) F += gi * gi;
+
+    // Update in Wick-rotated (W) space, preserving edge signature.
+    // dF[j] is ∂F/∂W_j; gradient descent: W_j -= lr · ∂F/∂W_j.
     for (int j = 0; j < n; ++j) {
-        int d_start = mesh.edge_dist_offsets[j];
-        int d_end   = mesh.edge_dist_offsets[j + 1];
-        if (d_start == d_end) continue;
-
-        double origSq = mesh.simplex_sq_dist_flat[mesh.edge_dist_positions[d_start]];
-        double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
-
-        // Perturb this edge's entries in the flat distance array
-        for (int di = d_start; di < d_end; ++di)
-            mesh.simplex_sq_dist_flat[mesh.edge_dist_positions[di]] += h;
-
-        // Recompute action gradient with perturbation  (one GPU launch)
-        // base_hinge_contribs stays at the original (unperturbed) values —
-        // the kernel subtracts these and recomputes the perturbed A·ε from
-        // the (now-perturbed) sq_dist_flat.
-        std::vector<double> gp(n);
-        cuda::compute_action_gradient_gpu(mesh, gp.data());
-
-        double Fp = 0.0;
-        for (double gi : gp) Fp += gi * gi;
-        dF[j] = (Fp - F0) / h;
-
-        // Restore
-        for (int di = d_start; di < d_end; ++di)
-            mesh.simplex_sq_dist_flat[mesh.edge_dist_positions[di]] -= h;
+        double origSq = edges[j]->getSquaredLength();
+        double W = std::abs(origSq);
+        double W_new = W - learningRate * dF[j];
+        if (W_new < 1e-12) W_new = 1e-12;
+        double sign = (origSq < 0.0) ? -1.0 : 1.0;
+        edges[j]->setSquaredLength(sign * W_new);
     }
 #else
-    // CPU path: same algorithm, using actionGradient() which evaluates
-    // totalAction() per edge.
+    // CPU path: perturb each edge in signed ℓ² space.
     auto g0 = actionGradient();
-    double F0 = 0.0;
-    for (double gi : g0) F0 += gi * gi;
+    double F = 0.0;
+    for (double gi : g0) F += gi * gi;
 
     std::vector<double> dF(n, 0.0);
     for (int j = 0; j < n; ++j) {
@@ -675,19 +685,16 @@ double ReggeSolver::step(double learningRate) {
 
         double Fp = 0.0;
         for (double gi : gp) Fp += gi * gi;
-        dF[j] = (Fp - F0) / h;
+        dF[j] = (Fp - F) / h;
     }
-#endif
 
-    // Apply updates: ℓ²_j -= η · ∂F/∂ℓ²_j
-    double gradNormSq = 0.0;
     for (int j = 0; j < n; ++j) {
-        gradNormSq += dF[j] * dF[j];
         double origSq = edges[j]->getSquaredLength();
         edges[j]->setSquaredLength(origSq - learningRate * dF[j]);
     }
+#endif
 
-    return gradNormSq;
+    return F;
 }
 
 // =====================================================================
@@ -697,16 +704,15 @@ double ReggeSolver::step(double learningRate) {
 std::tuple<bool, double, int> ReggeSolver::solve(
     double tol, int maxIters, double learningRate,
     ProgressCallback progress) {
-    double F = actionGradientNorm();
+    double F = 0.0;
     for (int i = 0; i < maxIters; ++i) {
-        double gradNorm = step(learningRate);
-        F = actionGradientNorm();
+        F = step(learningRate);   // returns ||∇S||² before the update
         if (progress) progress(i, F);
-        if (gradNorm < tol) {
+        if (F < tol) {
             return {true, F, i + 1};
         }
     }
-    return {F < tol, F, maxIters};
+    return {false, F, maxIters};
 }
 
 } // namespace caset

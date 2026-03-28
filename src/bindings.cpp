@@ -823,7 +823,7 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "||∇S||² = Σ_e (∂S/∂ℓ²_e)².  Zero = Regge equations solved.")
       .def("step", &ReggeSolver::step,
            py::arg("learning_rate") = 0.001,
-           "One gradient-descent step on F = ||∇S||². Returns gradient norm² of F.")
+           "One gradient-descent step on F = ||∇S||². Returns F before the update.")
       .def("solve", [](ReggeSolver &self, double tol, int maxIters,
                         double learningRate, py::object progress) {
           ReggeSolver::ProgressCallback cb = nullptr;
@@ -842,10 +842,10 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            py::arg("progress") = py::none(),
            R"doc(Find stationary point of the total Regge action (discrete Einstein eqs).
 
-Minimizes F = ||∇S||² until ||∇F||² < tol or max_iters reached.
+Minimizes F = ||∇S||² until F < tol or max_iters reached.
 
 Args:
-    tol: Convergence tolerance on ||∇F||².
+    tol: Convergence tolerance on F = ||∇S||².
     max_iters: Maximum number of iterations.
     learning_rate: Gradient descent step size.
     progress: Optional callback(iter, F) called after each iteration.

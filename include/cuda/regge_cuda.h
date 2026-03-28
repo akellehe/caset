@@ -40,6 +40,13 @@ struct GpuMeshData {
     std::vector<int> edge_dist_offsets;       // [n_edges+1]
     std::vector<int> edge_dist_positions;     // absolute positions in sq_dist_flat
 
+    // --- Edge → neighbor edges (CSR) ---
+    // Two edges are neighbors if they share at least one hinge.  When one
+    // edge is perturbed, only its neighbors' action gradients change.
+    // Each edge is its own neighbor (self-loop included).
+    std::vector<int> edge_nbr_offsets;        // [n_edges+1]
+    std::vector<int> edge_nbr_ids;            // neighbor edge indices
+
     // --- Target deficit angles ---
     std::vector<double> target_deficits;      // [n_hinges]
 
@@ -64,6 +71,16 @@ void compute_gradients_gpu(const GpuMeshData &mesh,
 /// the Regge equation solver's step() function.
 void compute_action_gradient_gpu(const GpuMeshData &mesh,
                                  double *h_gradients);
+
+/// Compute one full solver step on the GPU:
+///   1. Base action gradient ∂S/∂W_e  (1 kernel launch)
+///   2. Fused ∂F/∂W_e where F = ||∇S||²  (1 kernel launch)
+/// All GPU memory is allocated once, uploaded once, downloaded once.
+/// h_base_grad[n_edges] receives ∂S/∂W_e.
+/// h_dF[n_edges] receives ∂F/∂W_e.
+void compute_step_gpu(const GpuMeshData &mesh,
+                      double *h_base_grad,
+                      double *h_dF);
 
 } // namespace cuda
 } // namespace caset
