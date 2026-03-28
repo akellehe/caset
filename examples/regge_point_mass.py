@@ -61,10 +61,52 @@ def main():
     print("Thermalizing...")
     cdt.sweep(10)
 
-    # Pick the vertex with highest degree as the "center"
+    # Pick the vertex closest to the center of its spatial slice.
+    # Group vertices by time slice, pick the slice with the most vertices
+    # (the bulk), then BFS within the spacelike subgraph to find the
+    # vertex that minimizes the sum of geodesic distances to all others.
+    from collections import defaultdict, deque
+
     verts = st.getVertexList().toVector()
-    center = max(verts, key=lambda v: v.degree())
-    print(f"  Center vertex: id={center.getId()}, degree={center.degree()}")
+    slices = defaultdict(list)
+    for v in verts:
+        slices[round(v.getTime())].append(v)
+
+    # Pick the largest spatial slice (peak of volume profile)
+    peak_time = max(slices, key=lambda t: len(slices[t]))
+    slice_verts = slices[peak_time]
+
+    # Build spacelike adjacency for this slice
+    slice_ids = {v.getId() for v in slice_verts}
+    adj = defaultdict(list)
+    for v in slice_verts:
+        for e in v.getEdges():
+            other = e.getTarget() if e.getSource().getId() == v.getId() \
+                else e.getSource()
+            if other.getId() in slice_ids and e.getSquaredLength() > 0:
+                adj[v.getId()].append(other.getId())
+
+    # BFS from each vertex, pick the one with minimum total distance
+    id_to_vert = {v.getId(): v for v in slice_verts}
+    best_v, best_total = None, float("inf")
+    for v in slice_verts:
+        dist = {v.getId(): 0}
+        q = deque([v.getId()])
+        total = 0
+        while q:
+            uid = q.popleft()
+            for nid in adj[uid]:
+                if nid not in dist:
+                    dist[nid] = dist[uid] + 1
+                    total += dist[nid]
+                    q.append(nid)
+        if total < best_total:
+            best_total = total
+            best_v = v
+
+    center = best_v
+    print(f"  Center vertex: id={center.getId()}, "
+          f"slice t={peak_time}, sum_dist={best_total}")
 
     # Configure matter: static point mass along worldline through all slices
     matter = caset.MatterConfiguration()
