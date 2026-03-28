@@ -43,7 +43,9 @@ $N_4^{(3,2)} / N_4^{(4,1)} \approx 2.3$--$2.5$ is consistent with the
 paper's Table 1.
 
 ```bash
-python examples/n32_distribution.py --n-meas 300
+python examples/n32_distribution.py \
+    --target-volumes 40000 80000 160000 --n-therm 500 \
+    --n-meas 500 --meas-interval 50
 ```
 
 ```{image} assets/cdt/n32_distribution.png
@@ -81,7 +83,9 @@ upward with increasing volume.  The paper's fit curve (red dashed) is
 overlaid for reference.
 
 ```bash
-python examples/spectral_dimension.py --n-simplices 800 --n-configs 8 --max-sigma 200
+python examples/spectral_dimension.py \
+    --n-simplices 160000 --n-therm 500 --n-configs 50 \
+    --n-walks 100 --max-sigma 500 --sweeps-between 50
 ```
 
 ```{image} assets/cdt/spectral_dimension.png
@@ -125,7 +129,9 @@ python examples/spectral_dimension.py --n-simplices 800 --n-configs 8 --max-sigm
   term drives $N_4$ toward the target.
 
 ```bash
-python examples/effective_action.py --n-simplices 800 --n-meas 60
+python examples/effective_action.py \
+    --n-simplices 160000 --n-therm 500 --n-meas 200 \
+    --meas-interval 50
 ```
 
 ```{image} assets/cdt/effective_action.png
@@ -162,7 +168,9 @@ To reproduce the paper's Fig. 6 shape, run with `--n-simplices 10000`
 or larger (estimated runtime: several hours).
 
 ```bash
-python examples/volume_profile_phases.py --n-simplices 800 --n-therm 80 --n-meas 30
+python examples/volume_profile_phases.py \
+    --n-simplices 80000 --n-therm 500 --n-meas 100 \
+    --meas-interval 50
 ```
 
 ```{image} assets/cdt/volume_profiles_surface.png
@@ -206,7 +214,9 @@ To reproduce the scaling collapse, run with `--n-simplices 10000` or
 larger and `--n-meas 100+`.
 
 ```bash
-python examples/volume_scaling.py --n-simplices 800 --n-meas 40
+python examples/volume_scaling.py \
+    --n-simplices 80000 --n-therm 500 --n-meas 200 \
+    --meas-interval 50
 ```
 
 ```{image} assets/cdt/volume_scaling.png
@@ -242,7 +252,8 @@ To see the phase boundaries, run with `--n-simplices 20000` or larger
 (estimated runtime: many hours per grid point).
 
 ```bash
-python examples/phase_diagram.py --grid-size 10 --n-simplices 400 --n-sweeps 50
+python examples/phase_diagram.py \
+    --n-simplices 10000 --n-sweeps 200 --grid-size 20
 ```
 
 ```{image} assets/cdt/phase_diagram.png
