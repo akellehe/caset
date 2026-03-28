@@ -693,12 +693,12 @@ taking measurements.)doc")
 
 S = -(k0 + 6*delta)*N0 + (k4 + 2*delta)*N41
     + (k4 + delta)*N32 + volume_fix_term)doc")
-      .def("getVolumeProfile", &CDT::getVolumeProfile,
+      .def("getVolumeProfile", &CDT::getVolumeProfile, py::call_guard<py::gil_scoped_release>(),
            R"doc(Return the spatial volume profile as a list of simplex counts per time slice.
 
 Each entry is the number of top simplices whose minimum vertex time
 equals that slice.  The sum equals N4.)doc")
-      .def("getAcceptanceRates", &CDT::getAcceptanceRates,
+      .def("getAcceptanceRates", &CDT::getAcceptanceRates, py::call_guard<py::gil_scoped_release>(),
            R"doc(Return acceptance rates for each move type as a dict.
 
 Keys: 'add', 'remove', 'flip', 'iflip', 'shift', 'ishift'.
