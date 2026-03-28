@@ -164,7 +164,7 @@ class TestSpacetime(unittest.TestCase):
         for facet in facets14:
             print(facet)
             self.assertTrue(facet.isInitialized())
-            if facet.isTimelike():
+            if facet.isSpatial():
                 print("Timelike facet:", facet)
                 self.assertTrue(facet.getOrientation().numeric()[0] == 0 or facet.getOrientation().numeric()[1] == 0)
                 ntime += 1
@@ -197,7 +197,7 @@ class TestSpacetime(unittest.TestCase):
         nspace = 0
         ntime = 0
         for face in facets23:
-            if face.isTimelike():
+            if face.isSpatial():
                 ntime += 1
             else:
                 nspace += 1

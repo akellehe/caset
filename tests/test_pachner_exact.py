@@ -95,10 +95,10 @@ class TestConeExact(unittest.TestCase):
         self.assertEqual(_vids(seed), frozenset(seed_ids))
         self.assertEqual(seed.getOrientation().numeric(), (1, d))
 
-        # Pick first non-timelike facet (skips v1 → {v0, v2, ..., vd})
+        # Pick first non-spatial facet (spans multiple time slices)
         facet = None
         for f in seed.getFacets():
-            if not f.isTimelike():
+            if not f.isSpatial():
                 facet = f
                 break
         self.assertIsNotNone(facet)
@@ -224,7 +224,7 @@ class TestFlipExact(unittest.TestCase):
         st = _make_spacetime(d)
         seed, _ = st.createSimplex((1, d))
 
-        facet = [f for f in seed.getFacets() if not f.isTimelike()][0]
+        facet = [f for f in seed.getFacets() if not f.isSpatial()][0]
         facet_ids = _vids(facet)
 
         new_vid = d + 1
@@ -549,7 +549,7 @@ class TestDimensionProperties(unittest.TestCase):
                 st = _make_spacetime(d)
                 seed, _ = st.createSimplex((1, d))
                 facet = [f for f in seed.getFacets()
-                         if not f.isTimelike()][0]
+                         if not f.isSpatial()][0]
                 new_v = st.createVertex(d + 1, [0.0])
                 coned, _ = st.createSimplex(
                     list(facet.getVertices()) + [new_v])
@@ -580,7 +580,7 @@ class TestDimensionProperties(unittest.TestCase):
                 for s in st.getSimplices():
                     if len(s.getVertices()) == d + 1:
                         for f in s.getFacets():
-                            if not f.isTimelike():
+                            if not f.isSpatial():
                                 facet = f
                                 break
                         break

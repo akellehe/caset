@@ -31,6 +31,6 @@ void renderSpacetime(const Spacetime &st, const std::string &path,
                      int panelSize = 800, int layoutIters = 500,
                      double tilt = 25.0, int spin = 1,
                      int precession = 1, int nFrames = 36,
-                     int delayCentiseconds = 7);
+                     int delayCentiseconds = 15);
 
 } // namespace caset

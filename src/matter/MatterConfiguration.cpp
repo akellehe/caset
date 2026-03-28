@@ -19,8 +19,128 @@ void MatterConfiguration::setPointMass(VertexPtr vertex, double mass) {
     pointMasses_[vertex->getId()] = mass;
 }
 
+void MatterConfiguration::setWorldlineMass(VertexPtr center, double mass,
+                                            const Spacetime &st) {
+    auto worldline = buildWorldline(center, st);
+    for (auto *v : worldline)
+        pointMasses_[v->getId()] = mass;
+}
+
 void MatterConfiguration::setEnergyDensity(SimplexPtr simplex, double rho) {
     simplexRho_[simplex->fingerprint.fingerprint()] = rho;
+}
+
+// =====================================================================
+// Worldline construction via spatial Chebyshev center
+// =====================================================================
+
+// Compute spacelike geodesic distances from `source` to all other vertices
+// on the same time slice, using only spacelike edges (same-time neighbors).
+static std::unordered_map<std::uint64_t, double>
+spatialDijkstra(VertexPtr source) {
+    double sourceTime = source->getTime();
+    std::unordered_map<std::uint64_t, double> dist;
+    using PQ = std::priority_queue<
+        std::pair<double, VertexPtr>,
+        std::vector<std::pair<double, VertexPtr>>,
+        std::greater<>>;
+    PQ pq;
+    dist[source->getId()] = 0.0;
+    pq.push({0.0, source});
+
+    while (!pq.empty()) {
+        auto [d, v] = pq.top();
+        pq.pop();
+        if (d > dist[v->getId()]) continue;
+        for (const auto &e : v->getEdges()) {
+            VertexPtr other = (e->getSource()->getId() == v->getId())
+                                  ? e->getTarget() : e->getSource();
+            // Only follow spacelike edges (same time slice)
+            if (std::abs(other->getTime() - sourceTime) > 0.5) continue;
+            double edgeLen = std::sqrt(std::abs(e->getSquaredLength()));
+            double nd = d + edgeLen;
+            auto it = dist.find(other->getId());
+            if (it == dist.end() || nd < it->second) {
+                dist[other->getId()] = nd;
+                pq.push({nd, other});
+            }
+        }
+    }
+    return dist;
+}
+
+// Find the Chebyshev center of a spatial slice: the vertex with minimum
+// eccentricity (minimum of maximum geodesic distance to any other vertex).
+static VertexPtr findSliceCenter(const std::vector<VertexPtr> &sliceVerts) {
+    if (sliceVerts.empty()) return nullptr;
+    if (sliceVerts.size() == 1) return sliceVerts[0];
+
+    VertexPtr bestVertex = nullptr;
+    double bestEccentricity = std::numeric_limits<double>::max();
+
+    for (auto *v : sliceVerts) {
+        auto dists = spatialDijkstra(v);
+        double eccentricity = 0.0;
+        for (auto *u : sliceVerts) {
+            auto it = dists.find(u->getId());
+            if (it != dists.end())
+                eccentricity = std::max(eccentricity, it->second);
+        }
+        if (eccentricity < bestEccentricity) {
+            bestEccentricity = eccentricity;
+            bestVertex = v;
+        }
+    }
+    return bestVertex;
+}
+
+std::vector<VertexPtr> MatterConfiguration::buildWorldline(
+    VertexPtr center, const Spacetime &st) {
+
+    // Group all vertices by time slice
+    std::unordered_map<int, std::vector<VertexPtr>> slices;
+    for (auto *v : st.getVertexList()->liveVector()) {
+        int t = static_cast<int>(std::round(v->getTime()));
+        slices[t].push_back(v);
+    }
+
+    // Find all unique times, sorted
+    std::vector<int> times;
+    times.reserve(slices.size());
+    for (auto &[t, _] : slices) times.push_back(t);
+    std::sort(times.begin(), times.end());
+
+    // On the center's slice, use the provided vertex.
+    // On every other slice, find the Chebyshev center independently.
+    int centerTime = static_cast<int>(std::round(center->getTime()));
+
+    std::vector<VertexPtr> worldline;
+    worldline.reserve(times.size());
+    for (int t : times) {
+        if (t == centerTime) {
+            worldline.push_back(center);
+        } else {
+            VertexPtr sliceCenter = findSliceCenter(slices[t]);
+            if (sliceCenter) worldline.push_back(sliceCenter);
+        }
+    }
+    return worldline;
+}
+
+// =====================================================================
+// Hinge classification
+// =====================================================================
+
+HingeType MatterConfiguration::classifyHinge(SimplexPtr hinge) {
+    auto verts = hinge->getVertices();
+    if (verts.empty()) return HingeType::SPATIAL;
+
+    double t0 = verts[0]->getTime();
+    for (std::size_t i = 1; i < verts.size(); ++i) {
+        if (std::abs(verts[i]->getTime() - t0) > 0.5)
+            return HingeType::TIMELIKE;
+    }
+    return HingeType::SPATIAL;
 }
 
 void MatterConfiguration::setRadialProfile(
@@ -84,40 +204,40 @@ MatterConfiguration::computeTargetDeficits(const Spacetime &st) const {
     for (auto &[fp, h] : hinges)
         targets[fp] = 0.0;
 
-    // Point masses: distribute 8πM equally among hinges incident to the vertex
+    // Point masses: distribute 8πM equally among SPATIAL hinges incident
+    // to the vertex.  The Hamiltonian constraint sources 3D spatial curvature
+    // from energy density; timelike hinges encode time evolution, not matter.
     for (auto &[vid, mass] : pointMasses_) {
-        // Find hinges containing this vertex
-        std::vector<std::uint64_t> incidentHinges;
+        std::vector<std::uint64_t> incidentSpatialHinges;
         for (auto &[fp, h] : hinges) {
+            if (classifyHinge(h) != HingeType::SPATIAL) continue;
             for (const auto &v : h->getVertices()) {
                 if (v->getId() == vid) {
-                    incidentHinges.push_back(fp);
+                    incidentSpatialHinges.push_back(fp);
                     break;
                 }
             }
         }
-        if (!incidentHinges.empty()) {
+        if (!incidentSpatialHinges.empty()) {
             double deficitPerHinge = 8.0 * std::numbers::pi * mass
-                                     / static_cast<double>(incidentHinges.size());
-            for (auto fp : incidentHinges)
+                                     / static_cast<double>(incidentSpatialHinges.size());
+            for (auto fp : incidentSpatialHinges)
                 targets[fp] += deficitPerHinge;
         }
     }
 
-    // Radial profiles: evaluate ρ(r) at each hinge's centroid distance
+    // Radial profiles: evaluate ρ(r) only at SPATIAL hinges.
     for (auto &profile : radialProfiles_) {
         auto dists = geodesicDistances(st, profile.center);
         for (auto &[fp, h] : hinges) {
-            // Average geodesic distance of hinge vertices from center
+            if (classifyHinge(h) != HingeType::SPATIAL) continue;
+
             double avgDist = 0.0;
             for (const auto &v : h->getVertices())
                 avgDist += dists[v->getId()];
             avgDist /= static_cast<double>(h->size());
 
             double rho = profile.rho(avgDist);
-            // Convert energy density to deficit angle contribution:
-            // ε ≈ 8π ρ V_local / A_hinge (rough discretization)
-            // For simplicity, use ε += 8π ρ (dimensionless in geometrized units)
             targets[fp] += 8.0 * std::numbers::pi * rho;
         }
     }

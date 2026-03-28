@@ -172,7 +172,7 @@ void Simplex::initialize(Simplex* simplex) {
     ids.push_back(v->getId());
   }
   fingerprint.setIds(ids);
-  _isTimelike = ti == tf;
+  _isSpatial = ti == tf;
 
   // We have to register AFTER the fingerprint is set:
   registerToVertices(simplex);
@@ -229,7 +229,7 @@ std::string Simplex::toString() const noexcept {
 
 [[nodiscard]] const VertexPtrs &Simplex::getVertices() const noexcept { return vertices; }
 
-// isTimelike() inlined in Simplex.h (uses cached _isTimelike)
+// isSpatial() / isTimelike() inlined in Simplex.h (uses cached _isSpatial)
 
 [[nodiscard]] std::size_t Simplex::computeNumberOfEdges(std::size_t k) {
   if (k == 4) return 6;
@@ -416,7 +416,7 @@ bool Simplex::isCausallyAvailable() const noexcept {
 
 bool Simplex::hasCausallyAvailableFacet() {
   for (const auto &face : getFacets()) {
-    if (face->isTimelike()) continue;
+    if (face->isSpatial()) continue;
     if (face->isCausallyAvailable()) return true;
   }
   return false;

@@ -7,10 +7,15 @@
 #include "mesh/EdgeList.h"
 #include "mesh/Fingerprint.h"
 
+#ifdef CASET_CUDA
+#include "cuda/regge_cuda.h"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <numeric>
+#include <set>
 #include <stdexcept>
 
 namespace caset {
@@ -333,7 +338,7 @@ std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
 }
 
 // =====================================================================
-// Regge action
+// Actions
 // =====================================================================
 
 double ReggeSolver::reggeAction() const {
@@ -344,55 +349,255 @@ double ReggeSolver::reggeAction() const {
     return S;
 }
 
-// =====================================================================
-// Residual
-// =====================================================================
-
-double ReggeSolver::residual() const {
-    double L = 0.0;
+double ReggeSolver::matterAction() const {
+    double S = 0.0;
     for (const auto &h : collectHinges()) {
-        double eps = deficitAngle(h);
         auto fp = h->fingerprint.fingerprint();
         auto it = targetDeficits_.find(fp);
-        double target = (it != targetDeficits_.end()) ? it->second : 0.0;
-        double diff = eps - target;
-        L += diff * diff;
+        if (it != targetDeficits_.end() && it->second != 0.0) {
+            // targetDeficits_ stores 8π T_h already (set in computeTargetDeficits)
+            S -= hingeArea(h) * it->second;
+        }
     }
-    return L;
+    return S;
 }
+
+double ReggeSolver::totalAction() const {
+    return reggeAction() + matterAction();
+}
+
+// =====================================================================
+// Deficit residual: Σ A_h (ε_h - target_h)²
+// =====================================================================
+
+double ReggeSolver::deficitResidual() const {
+    double R = 0.0;
+    for (const auto &h : collectHinges()) {
+        double epsilon = deficitAngle(h);
+        double target = 0.0;
+        auto fp = h->fingerprint.fingerprint();
+        auto it = targetDeficits_.find(fp);
+        if (it != targetDeficits_.end()) target = it->second;
+        double diff = epsilon - target;
+        R += hingeArea(h) * diff * diff;
+    }
+    return R;
+}
+
+// =====================================================================
+// GPU mesh flattening (CUDA path)
+// =====================================================================
+
+#ifdef CASET_CUDA
+cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
+    cuda::GpuMeshData mesh;
+    int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    int topSize = d + 1;
+
+    // --- Collect top-simplices ---
+    std::vector<SimplexPtr> topSimplices;
+    std::unordered_map<std::uint64_t, int> simplexToIdx;
+    for (const auto &s : spacetime_->getSimplices()) {
+        if (static_cast<int>(s->size()) == topSize) {
+            simplexToIdx[s->fingerprint.fingerprint()] =
+                static_cast<int>(topSimplices.size());
+            topSimplices.push_back(s);
+        }
+    }
+    mesh.n_simplices = static_cast<int>(topSimplices.size());
+
+    // --- Collect edges and assign indices ---
+    auto edgeVec = spacetime_->getEdgeList()->toVector();
+    mesh.n_edges = static_cast<int>(edgeVec.size());
+    std::unordered_map<std::uint64_t, int> edgeToIdx;
+    for (int ei = 0; ei < mesh.n_edges; ++ei)
+        edgeToIdx[edgeVec[ei]->fingerprint.fingerprint()] = ei;
+
+    // --- Per-simplex squared-distance matrices ---
+    // Also record which (simplex, row, col) positions correspond to each edge.
+    mesh.simplex_sq_dist_offsets.resize(mesh.n_simplices + 1);
+    mesh.simplex_n_verts.resize(mesh.n_simplices);
+    std::vector<std::vector<int>> edgeDistPos(mesh.n_edges); // per edge: positions in flat array
+    int sq_offset = 0;
+
+    for (int si = 0; si < mesh.n_simplices; ++si) {
+        auto verts = topSimplices[si]->getVertices();
+        int nv = static_cast<int>(verts.size());
+        mesh.simplex_n_verts[si] = nv;
+        mesh.simplex_sq_dist_offsets[si] = sq_offset;
+
+        std::unordered_map<std::uint64_t, double> sqMap;
+        for (const auto &e : topSimplices[si]->getEdges()) {
+            auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
+                      Fingerprint::mix64(e->getTarget()->getId());
+            sqMap[fp] = e->getSquaredLength();
+        }
+
+        for (int i = 0; i < nv; ++i) {
+            for (int j = 0; j < nv; ++j) {
+                int pos = sq_offset + i * nv + j;
+                if (i == j) {
+                    mesh.simplex_sq_dist_flat.push_back(0.0);
+                } else {
+                    auto fp = Fingerprint::mix64(verts[i]->getId()) ^
+                              Fingerprint::mix64(verts[j]->getId());
+                    auto sqIt = sqMap.find(fp);
+                    mesh.simplex_sq_dist_flat.push_back(
+                        sqIt != sqMap.end() ? sqIt->second : 0.0);
+                    // Record this position for the edge
+                    auto eIt = edgeToIdx.find(fp);
+                    if (eIt != edgeToIdx.end())
+                        edgeDistPos[eIt->second].push_back(pos);
+                }
+            }
+        }
+        sq_offset += nv * nv;
+    }
+    mesh.simplex_sq_dist_offsets[mesh.n_simplices] = sq_offset;
+
+    // --- Collect hinges ---
+    auto hinges = collectHinges();
+    mesh.n_hinges = static_cast<int>(hinges.size());
+    std::unordered_map<std::uint64_t, int> hingeToIdx;
+    for (int hi = 0; hi < mesh.n_hinges; ++hi)
+        hingeToIdx[hinges[hi]->fingerprint.fingerprint()] = hi;
+
+    // --- Hinge → simplex CSR ---
+    mesh.hinge_simplex_offsets.resize(mesh.n_hinges + 1, 0);
+    std::vector<std::vector<std::tuple<int,int,int>>> hingeEntries(mesh.n_hinges);
+    for (int si = 0; si < mesh.n_simplices; ++si) {
+        auto sigmaVerts = topSimplices[si]->getVertices();
+        int nv = static_cast<int>(sigmaVerts.size());
+        for (int a = 0; a < nv; ++a) {
+            for (int b = a + 1; b < nv; ++b) {
+                std::uint64_t hingeFp = 0;
+                for (int k = 0; k < nv; ++k)
+                    if (k != a && k != b) hingeFp ^= Fingerprint::mix64(sigmaVerts[k]->getId());
+                auto it = hingeToIdx.find(hingeFp);
+                if (it != hingeToIdx.end())
+                    hingeEntries[it->second].emplace_back(si, a, b);
+            }
+        }
+    }
+    for (int hi = 0; hi < mesh.n_hinges; ++hi)
+        mesh.hinge_simplex_offsets[hi+1] =
+            mesh.hinge_simplex_offsets[hi] + static_cast<int>(hingeEntries[hi].size());
+    int nnz_hs = mesh.hinge_simplex_offsets[mesh.n_hinges];
+    mesh.hinge_simplex_ids.resize(nnz_hs);
+    mesh.hinge_opposite_a.resize(nnz_hs);
+    mesh.hinge_opposite_b.resize(nnz_hs);
+    for (int hi = 0; hi < mesh.n_hinges; ++hi) {
+        int off = mesh.hinge_simplex_offsets[hi];
+        for (int k = 0; k < static_cast<int>(hingeEntries[hi].size()); ++k) {
+            auto [si, a, b] = hingeEntries[hi][k];
+            mesh.hinge_simplex_ids[off+k] = si;
+            mesh.hinge_opposite_a[off+k] = a;
+            mesh.hinge_opposite_b[off+k] = b;
+        }
+    }
+
+    // --- Edge → hinge CSR (which hinges does each edge affect?) ---
+    // An edge affects a hinge if they share a simplex.
+    // Equivalently: edge (u,v) affects hinge h if some top-simplex contains
+    // both edge vertices and all hinge vertices.
+    std::vector<std::set<int>> edgeHingesSets(mesh.n_edges);
+    for (int si = 0; si < mesh.n_simplices; ++si) {
+        auto sigmaVerts = topSimplices[si]->getVertices();
+        int nv = static_cast<int>(sigmaVerts.size());
+
+        // Edges in this simplex
+        std::vector<int> simplexEdgeIds;
+        for (const auto &e : topSimplices[si]->getEdges()) {
+            auto it = edgeToIdx.find(e->fingerprint.fingerprint());
+            if (it != edgeToIdx.end()) simplexEdgeIds.push_back(it->second);
+        }
+        // Hinges in this simplex (complement of each pair)
+        for (int a = 0; a < nv; ++a) {
+            for (int b = a + 1; b < nv; ++b) {
+                std::uint64_t hingeFp = 0;
+                for (int k = 0; k < nv; ++k)
+                    if (k != a && k != b) hingeFp ^= Fingerprint::mix64(sigmaVerts[k]->getId());
+                auto it = hingeToIdx.find(hingeFp);
+                if (it == hingeToIdx.end()) continue;
+                int hid = it->second;
+                for (int eid : simplexEdgeIds)
+                    edgeHingesSets[eid].insert(hid);
+            }
+        }
+    }
+    mesh.edge_hinge_offsets.resize(mesh.n_edges + 1, 0);
+    for (int ei = 0; ei < mesh.n_edges; ++ei)
+        mesh.edge_hinge_offsets[ei+1] =
+            mesh.edge_hinge_offsets[ei] + static_cast<int>(edgeHingesSets[ei].size());
+    int nnz_eh = mesh.edge_hinge_offsets[mesh.n_edges];
+    mesh.edge_hinge_ids.resize(nnz_eh);
+    for (int ei = 0; ei < mesh.n_edges; ++ei) {
+        int off = mesh.edge_hinge_offsets[ei];
+        int k = 0;
+        for (int hid : edgeHingesSets[ei])
+            mesh.edge_hinge_ids[off + k++] = hid;
+    }
+
+    // --- Edge → dist positions CSR ---
+    mesh.edge_dist_offsets.resize(mesh.n_edges + 1, 0);
+    for (int ei = 0; ei < mesh.n_edges; ++ei)
+        mesh.edge_dist_offsets[ei+1] =
+            mesh.edge_dist_offsets[ei] + static_cast<int>(edgeDistPos[ei].size());
+    int nnz_ed = mesh.edge_dist_offsets[mesh.n_edges];
+    mesh.edge_dist_positions.resize(nnz_ed);
+    for (int ei = 0; ei < mesh.n_edges; ++ei) {
+        int off = mesh.edge_dist_offsets[ei];
+        for (int k = 0; k < static_cast<int>(edgeDistPos[ei].size()); ++k)
+            mesh.edge_dist_positions[off + k] = edgeDistPos[ei][k];
+    }
+
+    // --- Target deficits ---
+    mesh.target_deficits.resize(mesh.n_hinges, 0.0);
+    for (int hi = 0; hi < mesh.n_hinges; ++hi) {
+        auto fp = hinges[hi]->fingerprint.fingerprint();
+        auto it = targetDeficits_.find(fp);
+        if (it != targetDeficits_.end()) mesh.target_deficits[hi] = it->second;
+    }
+
+    return mesh;
+}
+#endif
 
 // =====================================================================
 // Gradient descent step
 // =====================================================================
 
 double ReggeSolver::step(double learningRate) {
-    // Numerical gradient: perturb each edge length and measure residual change.
-    // Uses relative perturbation to handle varying edge length scales.
     auto edgeList = spacetime_->getEdgeList();
     auto edges = edgeList->toVector();
-    double L0 = residual();
 
-    // First pass: compute gradients (without modifying edges yet)
+    // Minimize the deficit residual R = Σ A_h (ε_h - target_h)².
+    // R is non-negative and zero at the solution, so gradient descent
+    // converges rather than diverging (the action S itself is unbounded
+    // below due to the conformal mode / matter coupling).
+    double R0 = deficitResidual();
     std::vector<double> grads(edges.size(), 0.0);
     for (std::size_t i = 0; i < edges.size(); ++i) {
         double origSq = edges[i]->getSquaredLength();
         double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
 
         edges[i]->setSquaredLength(origSq + h);
-        double Lp = residual();
+        double Rp = deficitResidual();
         edges[i]->setSquaredLength(origSq);
 
-        grads[i] = (Lp - L0) / h;
+        grads[i] = (Rp - R0) / h;
     }
 
-    // Second pass: apply updates
+    // Apply updates: ℓ²_e -= η · ∂R/∂ℓ²_e
+    double gradNormSq = 0.0;
     for (std::size_t i = 0; i < edges.size(); ++i) {
+        gradNormSq += grads[i] * grads[i];
         double origSq = edges[i]->getSquaredLength();
         double newSq = origSq - learningRate * grads[i];
         edges[i]->setSquaredLength(newSq);
     }
 
-    return residual();
+    return gradNormSq;
 }
 
 // =====================================================================
@@ -402,16 +607,16 @@ double ReggeSolver::step(double learningRate) {
 std::tuple<bool, double, int> ReggeSolver::solve(
     double tol, int maxIters, double learningRate,
     ProgressCallback progress) {
-    double L = residual();
+    double R = deficitResidual();
     for (int i = 0; i < maxIters; ++i) {
-        if (L < tol) {
-            if (progress) progress(i, L);
-            return {true, L, i};
+        double gradNorm = step(learningRate);
+        R = deficitResidual();
+        if (progress) progress(i, R);
+        if (gradNorm < tol) {
+            return {true, R, i + 1};
         }
-        L = step(learningRate);
-        if (progress) progress(i, L);
     }
-    return {L < tol, L, maxIters};
+    return {R < tol, R, maxIters};
 }
 
 } // namespace caset

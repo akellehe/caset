@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "simulations/CDT.h"
+#include "mesh/Fingerprint.h"
 #include "Logger.h"
 #include <algorithm>
 #include <cmath>
@@ -52,6 +53,44 @@ static bool isValidCDTOrientation(const VertexPtrs &verts, int d) {
   if ((ti == d && tf == 1) || (ti == 1 && tf == d)) return true;
   if ((ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1)) return true;
   return false;
+}
+
+static bool isN41Type(const SimplexPtr &s, int d) {
+  auto [ti, tf] = s->getOrientation().numeric();
+  return (ti == d && tf == 1) || (ti == 1 && tf == d);
+}
+
+/// Check whether an edge already exists between two vertices in the global edge list.
+/// Used for manifold-condition validation during flip/iflip moves (Brunekreef p. 22).
+static bool edgeExists(const std::shared_ptr<Spacetime> &st,
+                       const VertexPtr &v1, const VertexPtr &v2) {
+  auto fp = Fingerprint::mix64(v1->getId()) ^ Fingerprint::mix64(v2->getId());
+  try {
+    st->getEdgeList()->get(fp);
+    return true;
+  } catch (const std::out_of_range &) {
+    return false;
+  }
+}
+
+/// Select a uniformly random N41-type top simplex.
+/// Uses rejection sampling with a fallback linear scan.
+SimplexPtr CDT::getRandomN41Simplex(int d) {
+  int dPlus1 = d + 1;
+  // Fast path: rejection sampling (effective when N41/N4 is not too small)
+  for (int attempt = 0; attempt < 100; ++attempt) {
+    auto s = spacetime->getRandomTopSimplex();
+    if (s && static_cast<int>(s->size()) == dPlus1 && isN41Type(s, d)) return s;
+  }
+  // Fallback: linear scan
+  std::vector<SimplexPtr> matches;
+  for (const auto &s : spacetime->getSimplices()) {
+    if (static_cast<int>(s->size()) == dPlus1 && isN41Type(s, d))
+      matches.push_back(s);
+  }
+  if (matches.empty()) return nullptr;
+  std::uniform_int_distribution<std::size_t> dist(0, matches.size() - 1);
+  return matches[dist(rng)];
 }
 
 // ========================================
@@ -123,14 +162,12 @@ bool CDT::add() {
     if (!isN41) return false; // orientation changed
   }
 #else
-  // Blind guessing: pick random top simplex, check if N41-type.
-  // This gives uniform selection probability 1/N41 over all N41 simplices,
-  // matching the prefactor derivation (Brunekreef eq 25-26 pattern).
-  SimplexPtr sigma = spacetime->getRandomTopSimplex();
+  // Select a random N41-type top simplex. The prefactor N41/(N0+1) requires
+  // the selection probability to be 1/N41 (Brunekreef Sec. 2.3.1).
+  // We must NOT select from all N4 top simplices, as that would give
+  // selection probability 1/N4, violating detailed balance.
+  SimplexPtr sigma = getRandomN41Simplex(d);
   if (!sigma) return false;
-  auto [sti_check, stf_check] = sigma->getOrientation().numeric();
-  bool isN41 = (sti_check == d && stf_check == 1) || (sti_check == 1 && stf_check == d);
-  if (!isN41) return false;
 #endif
 
   auto [sti, stf] = sigma->getOrientation().numeric();
@@ -140,7 +177,7 @@ bool CDT::add() {
   // For (1,d): skip the 1 vertex at ti → spatial face has d vertices at tf.
   SimplexPtr spatialFacet = nullptr;
   for (const auto &f : sigma->getFacets()) {
-    if (f->isTimelike()) {
+    if (f->isSpatial()) {
       spatialFacet = f;
       break;
     }
@@ -406,6 +443,11 @@ bool CDT::flip() {
   }
   if (static_cast<int>(shared.size()) != d || unique.size() != 2) return false;
 
+  // Manifold condition (Brunekreef p. 22): the flip creates a new edge between
+  // the two unique vertices. If that edge already exists, the move would produce
+  // duplicate edges, violating the simplicial manifold property.
+  if (edgeExists(spacetime, unique[0], unique[1])) return false;
+
   // Count old orientations
   int old_n41 = 0, old_n32 = 0;
   for (const auto &s : {s1, s2}) {
@@ -519,6 +561,31 @@ bool CDT::iflip() {
     else unique.push_back(v);
   }
   if (shared.size() != 2 || static_cast<int>(unique.size()) != d) return false;
+
+  // Manifold condition: the iflip creates two new simplices, each containing
+  // all d unique vertices plus one shared vertex. Check that neither proposed
+  // simplex already exists by verifying no top-simplex currently contains
+  // {unique[0..d-1], shared[i]}. We check this by looking for a top-simplex
+  // incident to unique[0] that contains all other unique vertices plus a shared
+  // vertex but is NOT one of the d simplices we're about to remove.
+  for (int i = 0; i < 2; ++i) {
+    for (const auto &s : unique[0]->getSimplices()) {
+      if (static_cast<int>(s->size()) != dPlus1) continue;
+      // Skip the d simplices we're removing
+      bool isSharing = false;
+      for (const auto &sh : sharing) {
+        if (s == sh) { isSharing = true; break; }
+      }
+      if (isSharing) continue;
+      // Check if s contains all unique vertices and shared[i]
+      if (!s->hasVertex(shared[i])) continue;
+      bool hasAll = true;
+      for (const auto &u : unique) {
+        if (!s->hasVertex(u)) { hasAll = false; break; }
+      }
+      if (hasAll) return false; // would create duplicate simplex
+    }
+  }
 
   // Count old orientations
   int old_n41 = 0, old_n32 = 0;

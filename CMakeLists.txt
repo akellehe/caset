@@ -1,5 +1,26 @@
 cmake_minimum_required(VERSION 3.18)
-project(caset LANGUAGES CXX)
+option(CASET_CUDA "Build with CUDA GPU acceleration for the Regge solver" ON)
+if (DEFINED ENV{CASET_CUDA} AND NOT "$ENV{CASET_CUDA}" STREQUAL "")
+    set(CASET_CUDA $ENV{CASET_CUDA})
+endif()
+
+if (CASET_CUDA)
+    # Help CMake find nvcc at the standard /usr/local/cuda path
+    if (NOT CMAKE_CUDA_COMPILER AND EXISTS "/usr/local/cuda/bin/nvcc")
+        set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
+    endif()
+    include(CheckLanguage)
+    check_language(CUDA)
+    if (CMAKE_CUDA_COMPILER)
+        project(caset LANGUAGES CXX CUDA)
+    else()
+        message(WARNING "CUDA requested but nvcc not found — falling back to CPU.")
+        set(CASET_CUDA OFF)
+        project(caset LANGUAGES CXX)
+    endif()
+else()
+    project(caset LANGUAGES CXX)
+endif()
 
 option(CASET_ASAN "Build caset with AddressSanitizer/UBSan" $ENV{CASET_ASAN})
 if(NOT CASET_ASAN)
@@ -17,9 +38,9 @@ option(CASET_PROFILE "Build with -g -O1 to keep symbol names for stack traces" $
 if (NOT CASET_PROFILE)
     set(CASET_PROFILE OFF)
 endif()
-option(CASET_LAZY_CATALOGS "Build with lazy approximate catalogs for CDT move selection" $ENV{CASET_LAZY_CATALOGS})
-if (NOT CASET_LAZY_CATALOGS)
-    set(CASET_LAZY_CATALOGS OFF)
+option(CASET_LAZY_CATALOGS "Build with lazy approximate catalogs for CDT move selection" ON)
+if (DEFINED ENV{CASET_LAZY_CATALOGS} AND NOT "$ENV{CASET_LAZY_CATALOGS}" STREQUAL "")
+    set(CASET_LAZY_CATALOGS $ENV{CASET_LAZY_CATALOGS})
 endif()
 
 # ---- Read version from pyproject.toml ----
@@ -63,8 +84,36 @@ file(GLOB_RECURSE CASET_SOURCES
 )
 # ---- </Define Sources> ----
 
+# ---- <Build CUDA kernels as static library> ----
+if (CASET_CUDA)
+    file(GLOB_RECURSE CASET_CUDA_SOURCES
+            CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu"
+    )
+    add_library(caset_cuda STATIC ${CASET_CUDA_SOURCES})
+    set_target_properties(caset_cuda PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        POSITION_INDEPENDENT_CODE ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    )
+    target_include_directories(caset_cuda PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    find_package(CUDAToolkit REQUIRED)
+    target_link_libraries(caset_cuda PRIVATE CUDA::cudart)
+endif()
+
 # ---- <Build the Python module> ----
 pybind11_add_module(caset MODULE ${CASET_SOURCES})
+
+if (CASET_CUDA)
+    message(STATUS "CUDA acceleration turned ON.")
+    target_compile_definitions(caset PRIVATE CASET_CUDA=1)
+    target_link_libraries(caset PRIVATE caset_cuda CUDA::cudart)
+else()
+    message(STATUS "CUDA acceleration turned OFF.")
+endif()
 
 if(CASET_ASAN)
     message(STATUS "ASAN/UBSAN support ON")

@@ -61,11 +61,11 @@ namespace caset {
 /// An additional volume-fixing term
 ///
 /// \f[
-///   S_{\text{fix}} = \varepsilon \left( N_4 - \bar{N}_4 \right)^2
+///   S_{\text{fix}} = \varepsilon \left( N_{41} - \tilde{N}_{41} \right)^2
 /// \f]
 ///
-/// constrains the total four-volume \f$ N_4 = N_{41} + N_{32} \f$ to fluctuate
-/// around the target value \f$ \bar{N}_4 \f$.
+/// constrains the \f$(d,1)\f$-type four-volume \f$ N_{41} \f$ to fluctuate
+/// around the target value \f$ \tilde{N}_{41} \f$.
 ///
 /// ## Metropolis Algorithm
 ///
@@ -269,6 +269,9 @@ class CDT : public Simulation {
 
     /// Shared implementation for shift and ishift moves.
     bool shiftImpl();
+
+    /// Select a uniformly random N41-type top simplex (rejection + fallback scan).
+    SimplexPtr getRandomN41Simplex(int d);
 
     int addAttempts = 0, addAccepted = 0;
     int removeAttempts = 0, removeAccepted = 0;

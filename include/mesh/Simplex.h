@@ -212,7 +212,12 @@ class Simplex {
     std::size_t maxKPlusOneCofaces() const;
 
     // ==================== State Queries ====================
-    [[nodiscard]] bool isTimelike() const noexcept { return _isTimelike; }
+    /// True when every vertex lies on the same time slice (a purely spatial simplex).
+    [[nodiscard]] bool isSpatial() const noexcept { return _isSpatial; }
+
+    /// @deprecated Use isSpatial(). Historically misnamed: returns true for spatial
+    /// simplices (all vertices at the same time), NOT for timelike ones.
+    [[nodiscard]] bool isTimelike() const noexcept { return _isSpatial; }
 
     /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
     bool isCausallyAvailable() const noexcept;
@@ -337,7 +342,7 @@ class Simplex {
     Simplices facets{};
     Simplices cofaces{};
 
-    bool _isTimelike;
+    bool _isSpatial;
     double ti{std::numeric_limits<double>::max()};
     double tf{-std::numeric_limits<double>::max()};
 };

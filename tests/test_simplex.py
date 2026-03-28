@@ -49,11 +49,11 @@ class TestSimplex(unittest.TestCase):
             self.assertEqual(len(face.getEdges()), 6)
             self.assertEqual(len(set([(e.getSource().getId(), e.getTarget().getId()) for e in face.getEdges()])), 6)
             self.assertEqual(len(face.getCofaces()), 1)
-            if face.isTimelike():
+            if face.isSpatial():
                 nTimelike += 1
                 for timelikeFace in face.getFacets():
                     timelikeFace.validate()
-                    self.assertTrue(timelikeFace.isTimelike())
+                    self.assertTrue(timelikeFace.isSpatial())
                     self.assertEqual(len(timelikeFace.getVertices()), 3)
                     self.assertEqual(len(timelikeFace.getEdges()), 3)
                     self.assertEqual(len(set([(e.getSource().getId(), e.getTarget().getId()) for e in timelikeFace.getEdges()])), 3)
@@ -185,7 +185,7 @@ class TestSimplex(unittest.TestCase):
         ntime = 0
         nspace = 0
         for facet in simplex14.getFacets():
-            if facet.isTimelike():
+            if facet.isSpatial():
                 ntime += 1
             else:
                 nspace += 1
@@ -199,7 +199,7 @@ class TestSimplex(unittest.TestCase):
         ntime = 0
         nspace = 0
         for facet in simplex41.getFacets():
-            if facet.isTimelike():
+            if facet.isSpatial():
                 ntime += 1
             else:
                 nspace += 1
@@ -213,7 +213,7 @@ class TestSimplex(unittest.TestCase):
         ntime = 0
         nspace = 0
         for facet in simplex23.getFacets():
-            if facet.isTimelike():
+            if facet.isSpatial():
                 ntime += 1
             else:
                 nspace += 1

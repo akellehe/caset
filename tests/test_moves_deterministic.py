@@ -100,7 +100,7 @@ class TestConeForward(unittest.TestCase):
         """
         facet = None
         for f in top_simplex.getFacets():
-            if not f.isTimelike():
+            if not f.isSpatial():
                 facet = f
                 break
         if facet is None:
@@ -457,7 +457,7 @@ class TestIteratedConeRemove(unittest.TestCase):
             top = _top_simplices(st)[0]
             facet = None
             for f in top.getFacets():
-                if not f.isTimelike():
+                if not f.isSpatial():
                     facet = f
                     break
             self.assertIsNotNone(facet, f"Iter {iteration}: need facet")

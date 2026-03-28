@@ -64,29 +64,33 @@ def main():
     center = max(verts, key=lambda v: v.degree())
     print(f"  Center vertex: id={center.getId()}, degree={center.degree()}")
 
-    # Configure matter: point mass at center
+    # Configure matter: static point mass along worldline through all slices
     matter = caset.MatterConfiguration()
-    matter.setPointMass(center, args.mass)
+    worldline = caset.MatterConfiguration.buildWorldline(center, st)
+    print(f"  Worldline: {len(worldline)} vertices across "
+          f"{len(set(v.getTime() for v in worldline))} time slices")
+    matter.setWorldlineMass(center, args.mass, st)
 
     # Create solver
     solver = caset.ReggeSolver(st, matter)
-    L0 = solver.residual()
-    S0 = solver.reggeAction()
-    print(f"  Initial Regge action: {S0:.4f}")
-    print(f"  Initial residual:     {L0:.4f}")
+    S_grav = solver.reggeAction()
+    S_matt = solver.matterAction()
+    R0 = solver.deficitResidual()
+    print(f"  S_grav = {S_grav:.4f},  S_matter = {S_matt:.4f}")
+    print(f"  Deficit residual R = {R0:.6f}")
 
     # Solve with tqdm progress bar
     bar = tqdm(total=args.max_iters, desc="Solving", unit="iter",
                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
                           "[{elapsed}<{remaining}, {rate_fmt}] "
-                          "residual={postfix}")
-    bar.set_postfix_str(f"{L0:.2f}")
+                          "R={postfix}")
+    bar.set_postfix_str(f"{R0:.6f}")
 
     def on_progress(iteration, residual):
         bar.update(1)
-        bar.set_postfix_str(f"{residual:.2f}")
+        bar.set_postfix_str(f"{residual:.6f}")
 
-    converged, L_final, iters = solver.solve(
+    converged, R_final, iters = solver.solve(
         tol=args.tol,
         max_iters=args.max_iters,
         learning_rate=args.learning_rate,
@@ -94,12 +98,11 @@ def main():
     )
     bar.close()
 
-    S_final = solver.reggeAction()
-    reduction = (1 - L_final / L0) * 100 if L0 > 0 else 0
     status = "Converged" if converged else "Did not converge"
     print(f"\n{status} after {iters} iterations")
-    print(f"  Regge action: {S0:.4f} → {S_final:.4f}")
-    print(f"  Residual:     {L0:.4f} → {L_final:.4f} ({reduction:+.1f}%)")
+    print(f"  Residual: {R0:.6f} → {R_final:.6f}")
+    print(f"  S_grav:  {S_grav:.4f} → {solver.reggeAction():.4f}")
+    print(f"  S_matter: {S_matt:.4f} → {solver.matterAction():.4f}")
 
     # Render
     print(f"Saving {args.save}...")

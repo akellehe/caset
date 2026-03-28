@@ -309,8 +309,10 @@ facet.getCofaces() includes this simplex.)doc")
            "Return True if this simplex is a coface of the given facet.")
       .def("isInitialized", &Simplex::isInitialized,
            "Return True if this simplex has been properly initialized with vertices.")
+      .def("isSpatial", &Simplex::isSpatial,
+           "Return True if all vertices lie on the same time slice (purely spatial simplex).")
       .def("isTimelike", &Simplex::isTimelike,
-           "Return True if this simplex spans more than one time slice.")
+           "Deprecated: misnamed. Returns True for *spatial* simplices (all same time). Use isSpatial().")
       .def("replaceVertex", &Simplex::replaceVertex, py::arg("oldVertex"), py::arg("newVertex"),
            "Replace a vertex in this simplex (updates fingerprint and internal maps).")
       .def("validate", &Simplex::validate,
@@ -528,7 +530,7 @@ No-op if v1 and v2 are the same vertex.)doc")
          py::arg("spin") = 1,
          py::arg("precession") = 1,
          py::arg("n_frames") = 36,
-         py::arg("delay_cs") = 7,
+         py::arg("delay_cs") = 15,
            R"doc(Render the spacetime to an image file.
 
 Uses a force-directed layout (time fixed, spatial coordinates
@@ -731,6 +733,10 @@ multiple configurations for averaging.)doc")
   // ========================================
   // MatterConfiguration
   // ========================================
+  py::enum_<HingeType>(m, "HingeType")
+      .value("SPATIAL", HingeType::SPATIAL)
+      .value("TIMELIKE", HingeType::TIMELIKE);
+
   py::class_<MatterConfiguration>(m, "MatterConfiguration",
       R"doc(Intrinsic (coordinate-free) specification of stress-energy on a triangulation.
 
@@ -739,11 +745,23 @@ simplices, or as a function of geodesic distance from a reference vertex.)doc")
       .def(py::init<>())
       .def("setPointMass", &MatterConfiguration::setPointMass,
            py::arg("vertex"), py::arg("mass"),
-           R"doc(Assign a point mass to a vertex.
+           R"doc(Assign a point mass to a single vertex (one spacetime event).
 
 Args:
     vertex: The vertex at which to place the mass.
     mass: The mass in geometrized units (G=c=1).)doc")
+      .def("setWorldlineMass", &MatterConfiguration::setWorldlineMass,
+           py::arg("center"), py::arg("mass"), py::arg("spacetime"),
+           R"doc(Assign a static point mass along its worldline through all time slices.
+
+Traces a worldline from center through the foliation by following
+timelike edges, then assigns mass to every vertex on the worldline.
+This produces a time-independent matter source.
+
+Args:
+    center: A vertex on the worldline (any time slice).
+    mass: The mass in geometrized units (G=c=1).
+    spacetime: The spacetime to trace through.)doc")
       .def("setEnergyDensity", &MatterConfiguration::setEnergyDensity,
            py::arg("simplex"), py::arg("rho"),
            R"doc(Assign energy density to a top-simplex.
@@ -757,7 +775,16 @@ Args:
 
 Args:
     center: The reference vertex.
-    rho_of_r: A callable taking distance (float) and returning density (float).)doc");
+    rho_of_r: A callable taking distance (float) and returning density (float).)doc")
+      .def_static("buildWorldline", &MatterConfiguration::buildWorldline,
+           py::arg("center"), py::arg("spacetime"),
+           py::return_value_policy::reference,
+           R"doc(Trace a worldline from center through all time slices.
+
+Returns a list of vertices, one per time slice, ordered by time.)doc")
+      .def_static("classifyHinge", &MatterConfiguration::classifyHinge,
+           py::arg("hinge"),
+           R"doc(Classify a hinge as SPATIAL (all vertices at one time) or TIMELIKE.)doc");
 
   // ========================================
   // ReggeSolver
@@ -782,9 +809,13 @@ L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
            py::arg("hinge"),
            "Area of a triangular hinge (Heron's formula).")
       .def("reggeAction", &ReggeSolver::reggeAction,
-           "Full Regge action: Σ_h A_h · ε_h.")
-      .def("residual", &ReggeSolver::residual,
-           "Squared residual: Σ_h (ε_h - ε*_h)².")
+           "Gravitational Regge action: S_grav = Σ_h A_h · ε_h.")
+      .def("matterAction", &ReggeSolver::matterAction,
+           "Matter action: S_matter = -8π Σ_h A_h · T_h.")
+      .def("totalAction", &ReggeSolver::totalAction,
+           "Total action: S = S_grav + S_matter.  Stationary point = Einstein eqs.")
+      .def("deficitResidual", &ReggeSolver::deficitResidual,
+           "Squared deficit residual: Σ A_h (ε_h - target_h)². Zero = Regge equations solved.")
       .def("step", &ReggeSolver::step,
            py::arg("learning_rate") = 0.001,
            "One gradient-descent step. Returns new residual.")
@@ -804,16 +835,16 @@ L = Σ_h (ε_h - ε*_h)² with respect to squared edge lengths.)doc")
            py::arg("max_iters") = 5000,
            py::arg("learning_rate") = 0.001,
            py::arg("progress") = py::none(),
-           R"doc(Iterate step() until convergence.
+           R"doc(Find stationary point of the total Regge action (discrete Einstein eqs).
 
 Args:
-    tol: Convergence tolerance on residual.
+    tol: Convergence tolerance on gradient norm squared.
     max_iters: Maximum number of iterations.
     learning_rate: Gradient descent step size.
-    progress: Optional callback(iter, residual) called after each iteration.
+    progress: Optional callback(iter, action) called after each iteration.
 
 Returns:
-    Tuple of (converged: bool, residual: float, iterations: int).)doc");
+    Tuple of (converged: bool, final_action: float, iterations: int).)doc");
 
 #ifdef CASET_VERSION
   m.attr("__version__") = CASET_VERSION;

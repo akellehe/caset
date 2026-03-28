@@ -31,7 +31,7 @@ void Sphere::build(Spacetime *spacetime, int nSimplices) {
     while (complexSize < layerTarget && !exteriorFacets.empty()) {
       SimplexPtr &exteriorFacet = exteriorFacets.front();
       exteriorFacets.pop_front();
-      if (exteriorFacet->isTimelike()) continue;
+      if (exteriorFacet->isSpatial()) continue;
       auto vertex = spacetime->createVertex(
           std::vector<double>{forward ? 1. : -1.});
       auto [kSimplex, newFacets] = exteriorFacet->cone(vertex);

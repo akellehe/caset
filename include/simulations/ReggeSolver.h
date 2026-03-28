@@ -9,6 +9,10 @@
 #include <unordered_map>
 #include <vector>
 
+#ifdef CASET_CUDA
+#include "cuda/regge_cuda.h"
+#endif
+
 namespace caset {
 
 class Spacetime;
@@ -31,9 +35,12 @@ class Spacetime;
 ///    lengths.
 /// 2. Derive dihedral angles from the cofactors of \f$G\f$.
 /// 3. Sum dihedral angles at each hinge → actual deficit angles.
-/// 4. Gradient-descend on the squared residual
-///    \f$L = \sum_h (\varepsilon_h - \varepsilon^*_h)^2\f$
-///    with respect to squared edge lengths.
+/// 4. Minimize the deficit residual
+///    \f$R = \sum_h A_h\,(\varepsilon_h - \varepsilon^{\text{target}}_h)^2\f$
+///    by gradient descent with respect to squared edge lengths.
+///    \f$R = 0\f$ when the Regge equations are satisfied.  (The action
+///    \f$S\f$ is unbounded below due to the conformal mode, so direct
+///    minimization of \f$S\f$ diverges.)
 ///
 class ReggeSolver {
   public:
@@ -62,19 +69,27 @@ class ReggeSolver {
     /// Area of a triangular hinge (for the Regge action weighting).
     [[nodiscard]] static double hingeArea(SimplexPtr hinge);
 
-    /// Full Regge action \f$S = \sum_h A_h\,\varepsilon_h\f$.
+    /// Gravitational Regge action: \f$S_{\text{grav}} = \sum_h A_h\,\varepsilon_h\f$.
     [[nodiscard]] double reggeAction() const;
+
+    /// Matter action: \f$S_{\text{matter}} = -8\pi \sum_h A_h\,T_h\f$.
+    [[nodiscard]] double matterAction() const;
+
+    /// Total action: \f$S = S_{\text{grav}} + S_{\text{matter}}\f$.
+    /// The Regge equations are \f$\partial S/\partial \ell^2_e = 0\f$.
+    [[nodiscard]] double totalAction() const;
+
+    /// Squared deficit residual: \f$R = \sum_h A_h\,(\varepsilon_h - \varepsilon^{\text{target}}_h)^2\f$.
+    /// Non-negative; zero exactly when the Regge equations are satisfied.
+    [[nodiscard]] double deficitResidual() const;
 
     // ==================== Solver ====================
 
-    /// Squared residual \f$L = \sum_h (\varepsilon_h - \varepsilon^*_h)^2\f$.
-    [[nodiscard]] double residual() const;
-
-    /// One gradient-descent step on the squared residual.
+    /// One gradient-descent step on the deficit residual \f$R\f$.
     /// Adjusts every edge's squared length by
-    /// \f$\ell^2_e \mathrel{-}= \eta\,\partial L / \partial \ell^2_e\f$.
+    /// \f$\ell^2_e \mathrel{-}= \eta\,\partial R/\partial \ell^2_e\f$.
     ///
-    /// @return the new residual after the step
+    /// @return the gradient norm² after the step
     double step(double learningRate = 0.001);
 
     /// Iterate step() until convergence or max iterations.
@@ -105,6 +120,11 @@ class ReggeSolver {
 
     /// Collect all (d-2)-simplices (hinges) in the complex.
     [[nodiscard]] std::vector<SimplexPtr> collectHinges() const;
+
+#ifdef CASET_CUDA
+    /// Flatten mesh topology into GPU-friendly arrays.
+    [[nodiscard]] cuda::GpuMeshData flattenMeshForGpu() const;
+#endif
 
     /// Build the Gram matrix for a top-simplex from its edge lengths.
     /// Returns a flat (d×d) row-major matrix (vertex 0 is the origin).

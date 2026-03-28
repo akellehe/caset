@@ -70,7 +70,7 @@ class TestFlatSpaceResidual(unittest.TestCase):
         st = _make_spacetime(20)
         matter = caset.MatterConfiguration()  # no matter = vacuum
         solver = caset.ReggeSolver(st, matter)
-        L = solver.residual()
+        L = solver.deficitResidual()
         self.assertGreaterEqual(L, 0.0)
 
     def test_solver_reduces_residual(self):
@@ -78,7 +78,7 @@ class TestFlatSpaceResidual(unittest.TestCase):
         st = _make_spacetime(20)
         matter = caset.MatterConfiguration()
         solver = caset.ReggeSolver(st, matter)
-        L0 = solver.residual()
+        L0 = solver.deficitResidual()
         if L0 < 1e-12:
             self.skipTest("Already at flat space")
         for _ in range(5):
@@ -99,7 +99,7 @@ class TestMatterConfiguration(unittest.TestCase):
         matter.setPointMass(v, 1.0)
         solver = caset.ReggeSolver(st, matter)
         # With matter, residual should be nonzero (geometry doesn't match yet)
-        L = solver.residual()
+        L = solver.deficitResidual()
         self.assertGreater(L, 0.0)
 
     def test_radial_profile(self):
@@ -109,7 +109,7 @@ class TestMatterConfiguration(unittest.TestCase):
         # Exponential profile: ρ(r) = exp(-r)
         matter.setRadialProfile(v, lambda r: math.exp(-r))
         solver = caset.ReggeSolver(st, matter)
-        L = solver.residual()
+        L = solver.deficitResidual()
         self.assertGreater(L, 0.0)
 
 
