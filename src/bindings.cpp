@@ -35,6 +35,7 @@
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
 #include "spacetime/Spacetime.h"
+#include "ForceLayout.h"
 #include "mesh/VertexList.h"
 #include "mesh/EdgeList.h"
 #include "spacetime/Signature.h"
@@ -431,6 +432,17 @@ Args:
            "Return the EdgeList containing all edges.")
       .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference,
            "Return the connected components of the simplicial complex.")
+      .def("getTimeSlices", &Spacetime::getTimeSlices,
+           "Return sorted list of integer time values in the triangulation.")
+      .def("getVerticesAtTime", &Spacetime::getVerticesAtTime,
+           py::arg("t"), py::return_value_policy::reference,
+           "Return all vertices at integer time t.")
+      .def("getSpatialSubgraph", &Spacetime::getSpatialSubgraph,
+           py::arg("t"), py::return_value_policy::reference,
+           "Return (vertices, spacelike_edges) at time t.")
+      .def("bfsDistances", &Spacetime::bfsDistances,
+           py::arg("center"), py::arg("maxDepth") = -1,
+           "BFS distances from center through spacelike edges.  Returns {id: dist}.")
       .def("build", &Spacetime::build, py::arg("numSimplices") = 3, py::call_guard<py::gil_scoped_release>(),
            R"doc(Build the initial triangulation with approximately n_simplices top simplices.
 
@@ -943,6 +955,39 @@ Args:
 
 Returns:
     Tuple of (converged: bool, final_F: float, iterations: int).)doc");
+
+  // ========================================
+  // ForceLayout
+  // ========================================
+  m.def("forceLayout3D", &forceLayout3D,
+        py::arg("n"),
+        py::arg("edges"),
+        py::arg("centerIdx") = -1,
+        py::arg("initPos") = std::vector<double>{},
+        py::arg("restLengths") = std::vector<double>{},
+        py::arg("springK") = 0.01,
+        py::arg("repulsionK") = 0.5,
+        py::arg("iters") = 300,
+        py::arg("cooling") = 0.995,
+        py::arg("repulsionCap") = 200,
+        py::arg("seed") = 42,
+        R"doc(Spring-electrical force-directed layout in 3D.
+
+Returns a flat list of n*3 floats (row-major x,y,z positions).
+Reshape to (n, 3) with numpy: ``np.array(result).reshape(n, 3)``.
+
+Args:
+    n: Number of nodes.
+    edges: List of (i, j) index pairs.
+    centerIdx: Pin this node at the origin (-1 to disable).
+    initPos: Flat initial positions (length n*3). Random if empty.
+    restLengths: Per-edge rest lengths. Unit if empty.
+    springK: Spring constant (default 0.01).
+    repulsionK: Coulomb constant (default 0.5).
+    iters: Number of iterations (default 300).
+    cooling: Step-size decay per iteration (default 0.995).
+    repulsionCap: Max nodes for O(n^2) repulsion (default 200).
+    seed: Random seed (default 42).)doc");
 
 #ifdef CASET_VERSION
   m.attr("__version__") = CASET_VERSION;

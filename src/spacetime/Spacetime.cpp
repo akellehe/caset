@@ -26,7 +26,10 @@
 #include <pybind11/pybind11.h>
 // #include <torch/torch.h>
 #include "Logger.h"
+#include <cmath>
 #include <memory>
+#include <queue>
+#include <set>
 #include "spacetime/Spacetime.h"
 #include "mesh/SimplexOrientation.h"
 #include "mesh/ForwardDeclarations.h"
@@ -255,6 +258,78 @@ Foliation Spacetime::getFoliation() const noexcept {
 
 std::shared_ptr<Metric> Spacetime::getMetric() const noexcept {
   return metric;
+}
+
+// ========================================
+// Time-Slice & Spatial-Subgraph Queries
+// ========================================
+
+std::vector<int> Spacetime::getTimeSlices() const {
+  std::set<int> times;
+  for (auto *v : vertexList->liveVector())
+    times.insert(static_cast<int>(std::round(v->getTime())));
+  return {times.begin(), times.end()};
+}
+
+VertexPtrs Spacetime::getVerticesAtTime(int t) const {
+  VertexPtrs result;
+  for (auto *v : vertexList->liveVector())
+    if (static_cast<int>(std::round(v->getTime())) == t)
+      result.push_back(v);
+  return result;
+}
+
+std::pair<VertexPtrs, Edges> Spacetime::getSpatialSubgraph(int t) const {
+  auto verts = getVerticesAtTime(t);
+  std::unordered_set<std::uint64_t> vidSet;
+  for (auto *v : verts) vidSet.insert(v->getId());
+
+  Edges spatial;
+  std::unordered_set<std::uint64_t> seen;
+  for (auto *v : verts) {
+    for (const auto &e : v->getEdges()) {
+      auto fp = e->fingerprint.fingerprint();
+      if (seen.count(fp)) continue;
+      seen.insert(fp);
+      if (vidSet.count(e->getSource()->getId())
+          && vidSet.count(e->getTarget()->getId())
+          && e->getSquaredLength() > 0)
+        spatial.push_back(e);
+    }
+  }
+  return {verts, spatial};
+}
+
+std::unordered_map<std::uint64_t, int>
+Spacetime::bfsDistances(VertexPtr center, int maxDepth) const {
+  // Build adjacency from spacelike edges at center's time slice
+  int t = static_cast<int>(std::round(center->getTime()));
+  auto [verts, edges] = getSpatialSubgraph(t);
+
+  std::unordered_map<std::uint64_t, std::vector<std::uint64_t>> adj;
+  for (auto *v : verts) adj[v->getId()]; // ensure entry
+  for (auto *e : edges) {
+    auto s = e->getSource()->getId();
+    auto tgt = e->getTarget()->getId();
+    adj[s].push_back(tgt);
+    adj[tgt].push_back(s);
+  }
+
+  std::unordered_map<std::uint64_t, int> dist;
+  dist[center->getId()] = 0;
+  std::queue<std::uint64_t> q;
+  q.push(center->getId());
+  while (!q.empty()) {
+    auto vid = q.front(); q.pop();
+    if (maxDepth >= 0 && dist[vid] >= maxDepth) continue;
+    for (auto nbr : adj[vid]) {
+      if (!dist.count(nbr)) {
+        dist[nbr] = dist[vid] + 1;
+        q.push(nbr);
+      }
+    }
+  }
+  return dist;
 }
 
 std::shared_ptr<VertexList> Spacetime::getVertexList() const noexcept {

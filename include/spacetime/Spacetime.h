@@ -242,6 +242,26 @@ class Spacetime {
     /// @return Foliation::PREFERRED or Foliation::NONE.
     [[nodiscard]] Foliation getFoliation() const noexcept;
 
+    // ========================================
+    // Time-Slice & Spatial-Subgraph Queries
+    // ========================================
+
+    /// Sorted list of integer time values present in the triangulation.
+    [[nodiscard]] std::vector<int> getTimeSlices() const;
+
+    /// All vertices at a given integer time slice.
+    [[nodiscard]] VertexPtrs getVerticesAtTime(int t) const;
+
+    /// Spatial subgraph at time \a t: vertices and spacelike edges
+    /// (positive squared length) connecting them within the slice.
+    [[nodiscard]] std::pair<VertexPtrs, Edges> getSpatialSubgraph(int t) const;
+
+    /// BFS shortest-path distances from \a center through spacelike edges.
+    /// If \a maxDepth >= 0, stops exploring beyond that depth.
+    /// Returns a map from vertex ID to distance.
+    [[nodiscard]] std::unordered_map<std::uint64_t, int>
+    bfsDistances(VertexPtr center, int maxDepth = -1) const;
+
     /// Computes the connected components of the vertex graph.
     ///
     /// Uses depth-first search to identify connected components in the graph

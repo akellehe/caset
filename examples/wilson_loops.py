@@ -89,44 +89,76 @@ def _force_layout_3d(verts, edges, *, iters=200, rng=None):
 # Dual-graph layout: one node per top-simplex, edges between adjacent ones
 # =========================================================================
 
-def _loop_layout(loop, *, iters=300, rng=None):
-    """Force-directed layout of ONLY the loop simplices as a cycle graph.
+def _skey(s):
+    """Vertex-ID frozenset as a stable key for a simplex."""
+    return frozenset(v.getId() for v in s.getVertices())
 
-    Each loop simplex is a node.  Edges connect consecutive simplices
-    (including the closing edge).  Returns (positions, loop_edges).
+
+def _build_dual_complex(st):
+    """Build the full dual complex: nodes = top-simplices, edges = shared facets.
+
+    Returns (key_to_idx, all_keys, dual_edges, key_to_simplex).
     """
+    top_size = st.getMetric().getSignature().getDimensions() + 1 \
+        if hasattr(st, 'getMetric') else 5  # fallback to 4D
+    # Find top-simplex size from data
+    top_size = 0
+    for s in st.getSimplices():
+        sz = len(s.getVertices())
+        if sz > top_size:
+            top_size = sz
+
+    all_simplices = {}
+    for s in st.getSimplices():
+        if len(s.getVertices()) == top_size:
+            all_simplices[_skey(s)] = s
+
+    key_list = sorted(all_simplices.keys(), key=lambda k: sorted(k))
+    key_to_idx = {k: i for i, k in enumerate(key_list)}
+
+    dual_edges = {}  # (a, b) -> is_timelike
+    for k in key_list:
+        s = all_simplices[k]
+        for facet in s.getFacets():
+            for coface in facet.getCofaces():
+                ck = _skey(coface)
+                if ck in key_to_idx and ck != k:
+                    a, b = key_to_idx[k], key_to_idx[ck]
+                    edge = (min(a, b), max(a, b))
+                    if edge not in dual_edges:
+                        # Classify by shared facet: timelike if vertices
+                        # span multiple time slices
+                        fv = facet.getVertices()
+                        t0 = round(fv[0].getTime())
+                        is_tl = any(round(v.getTime()) != t0 for v in fv)
+                        dual_edges[edge] = is_tl
+
+    edge_list = list(dual_edges.keys())
+    edge_types = [dual_edges[e] for e in edge_list]
+    return key_to_idx, key_list, edge_list, edge_types, all_simplices
+
+
+def _dual_complex_layout(key_list, dual_edges, n, *, iters=300, rng=None):
+    """Force-directed layout of the full dual complex."""
     if rng is None:
         rng = np.random.default_rng(42)
 
-    n = len(loop.simplices)
-    if n < 2:
-        return np.zeros((max(n, 1), 3)), []
-
-    # Cycle edges: 0-1, 1-2, ..., (n-1)-0
-    edges = [(i, (i + 1) % n) for i in range(n)]
-
-    # Initialize on a circle in the xy-plane, then perturb in z
-    pos = np.zeros((n, 3))
-    for i in range(n):
-        angle = 2 * math.pi * i / n
-        pos[i] = [math.cos(angle), math.sin(angle),
-                  rng.uniform(-0.1, 0.1)]
-
-    # Force-directed refinement
-    step = 0.3
+    pos = rng.standard_normal((n, 3)) * 1.0
+    step = 0.5
     for _ in range(iters):
         forces = np.zeros_like(pos)
-        for a, b in edges:
+        for a, b in dual_edges:
             d = pos[b] - pos[a]
             dist = max(np.linalg.norm(d), 1e-6)
-            f = 0.1 * (dist - 1.0) * d / dist
+            f = 0.05 * (dist - 1.0) * d / dist
             forces[a] += f
             forces[b] -= f
-        for a in range(n):
-            for b in range(a + 1, n):
+        cap = min(n, 300)
+        for a in range(cap):
+            for b in range(a + 1, cap):
                 d = pos[a] - pos[b]
                 d2 = np.dot(d, d) + 1e-6
-                f = 0.5 / d2 * d / math.sqrt(d2)
+                f = 0.3 / d2 * d / math.sqrt(d2)
                 forces[a] += f
                 forces[b] -= f
         norms = np.linalg.norm(forces, axis=1, keepdims=True)
@@ -134,33 +166,108 @@ def _loop_layout(loop, *, iters=300, rng=None):
         forces = np.where(norms > step, forces / norms * step, forces)
         pos += forces
         step *= 0.995
+    return pos
 
-    return pos, edges
+
+def _loop_indices(loop, key_to_idx):
+    """Map loop simplices to indices in the dual-complex layout."""
+    return [key_to_idx[_skey(s)] for s in loop.simplices
+            if _skey(s) in key_to_idx]
 
 
-def _render_loop_frame(pos, edges, title,
-                       fig_size=(7, 7), elev=25, azim=45):
-    """Render the loop as a clean cycle with numbered nodes."""
+def _spread_loop_nodes(pos, loop_indices, blend=0.5):
+    """Nudge loop nodes toward a circular arrangement so the loop is visible.
+
+    Blends between the full-complex position (blend=0) and a circle
+    centered at the loop centroid (blend=1).  Returns a copy of pos.
+    """
+    pos = pos.copy()
+    n = len(loop_indices)
+    if n < 3:
+        return pos
+
+    loop_pos = pos[loop_indices]
+    centroid = loop_pos.mean(axis=0)
+
+    # Compute a circle in the plane of best fit (PCA)
+    centered = loop_pos - centroid
+    _, _, Vt = np.linalg.svd(centered, full_matrices=False)
+    # Project onto first two principal components
+    u = Vt[0]
+    v = Vt[1]
+    # Use a radius that ensures the loop is visually open
+    spread = np.linalg.norm(centered, axis=1).mean()
+    all_spread = np.linalg.norm(pos - pos.mean(axis=0), axis=1).mean()
+    radius = max(spread * 2.0, all_spread * 0.4)
+
+    for i, li in enumerate(loop_indices):
+        angle = 2 * math.pi * i / n
+        circle_pt = centroid + radius * (math.cos(angle) * u +
+                                          math.sin(angle) * v)
+        pos[li] = (1 - blend) * pos[li] + blend * circle_pt
+
+    return pos
+
+
+def _render_frame(pos, dual_edges, edge_types, loop_indices, title,
+                  show_dual_dotted=False,
+                  fig_size=(7, 7), elev=25, azim=45):
+    """Render the full dual complex with the loop path highlighted.
+
+    Dual edges colored by type: blue = timelike, black = spacelike.
+    If show_dual_dotted=True, dual edges are drawn as dotted lines.
+    """
     fig = plt.figure(figsize=fig_size)
     ax = fig.add_subplot(111, projection="3d")
 
-    n = len(pos)
+    loop_set = set(loop_indices)
 
-    # Draw loop edges
-    if edges:
-        segs = [[pos[a], pos[b]] for a, b in edges]
-        lc = Line3DCollection(segs, linewidths=2.5,
-                              colors="red", alpha=0.9)
+    # Draw dual-complex edges, colored by type
+    if dual_edges:
+        segs = [[pos[a], pos[b]] for a, b in dual_edges]
+        if show_dual_dotted:
+            colors = [(0.15, 0.30, 0.80, 0.8) if tl
+                      else (0.0, 0.0, 0.0, 0.7)
+                      for tl in edge_types]
+            lc = Line3DCollection(segs, linewidths=1.0, colors=colors,
+                                  linestyles="dotted")
+        else:
+            colors = [(0.15, 0.30, 0.80, 0.75) if tl
+                      else (0.0, 0.0, 0.0, 0.6)
+                      for tl in edge_types]
+            lc = Line3DCollection(segs, linewidths=0.7, colors=colors)
         ax.add_collection(lc)
 
-    # Draw loop nodes with index labels
+    # Draw dual-complex nodes
+    node_colors = []
+    node_sizes = []
+    for i in range(len(pos)):
+        if i in loop_set:
+            node_colors.append("red")
+            node_sizes.append(70)
+        else:
+            node_colors.append("lightgray")
+            node_sizes.append(12)
     ax.scatter(pos[:, 0], pos[:, 1], pos[:, 2],
-               c="red", s=80, edgecolors="black", linewidths=0.8,
-               zorder=10, depthshade=True)
-    for i in range(n):
-        ax.text(pos[i, 0], pos[i, 1], pos[i, 2] + 0.15,
-                str(i), fontsize=8, ha="center", va="bottom",
-                fontweight="bold", zorder=11)
+               c=node_colors, s=node_sizes,
+               edgecolors="gray", linewidths=0.2,
+               depthshade=True)
+
+    # Draw loop path (red, thick)
+    if len(loop_indices) >= 2:
+        loop_segs = []
+        for i in range(len(loop_indices)):
+            j = (i + 1) % len(loop_indices)
+            loop_segs.append([pos[loop_indices[i]], pos[loop_indices[j]]])
+        lc_loop = Line3DCollection(loop_segs, linewidths=3.0,
+                                   colors="red", alpha=0.9)
+        ax.add_collection(lc_loop)
+
+        # Node labels on loop
+        for idx, li in enumerate(loop_indices):
+            ax.text(pos[li, 0], pos[li, 1], pos[li, 2] + 0.15,
+                    str(idx), fontsize=8, ha="center", va="bottom",
+                    fontweight="bold", color="darkred", zorder=11)
 
     ax.set_title(title, fontsize=11)
     ax.view_init(elev=elev, azim=azim)
@@ -265,27 +372,35 @@ def main():
         for size, val in sorted(avg.items()):
             print(f"  size={size}: W={val:.4f}")
 
+    # Build full dual-complex layout (shared across all loop types)
+    print("  Building dual-complex layout...")
+    key_to_idx, key_list, dual_edges, edge_types, _ = _build_dual_complex(st)
+    dual_pos = _dual_complex_layout(key_list, dual_edges, len(key_list))
+
     # Render GIF: for each loop type, show rotating views
     frames = []
-    azimuths = list(range(0, 360, 30))  # 12 rotation angles
+    azimuths = list(range(0, 360, 1))  # 24 frames per loop
 
     for loop_name, loop in loops.items():
         r = wl.evaluate(loop, caset.WilsonMode.DEFICIT_ANGLE)
         title = (f"{loop_name} loop (size={r.loopSize}, "
                  f"W={r.value:.3f})")
+        lidx = _loop_indices(loop, key_to_idx)
+        dotted = (loop_name == "Dual-lattice")
 
-        loop_pos, loop_edges = _loop_layout(loop)
+        frame_pos = _spread_loop_nodes(dual_pos, lidx, blend=0.8)
 
         for az in azimuths:
-            img = _render_loop_frame(loop_pos, loop_edges, title,
-                                     elev=25, azim=az)
+            img = _render_frame(frame_pos, dual_edges, edge_types, lidx,
+                                title, show_dual_dotted=dotted,
+                                elev=25, azim=az)
             frames.append(img)
 
     # Assemble GIF
     pil_frames = [Image.fromarray(f[:, :, :3]) for f in frames]
     pil_frames[0].save(args.save, save_all=True,
                        append_images=pil_frames[1:],
-                       duration=200, loop=0)
+                       duration=50, loop=0)
     print(f"\nSaved {args.save}")
 
 
