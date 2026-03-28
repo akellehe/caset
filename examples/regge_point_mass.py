@@ -41,6 +41,8 @@ def main():
                    help="GIF Y-axis rotations per loop (default: 1)")
     p.add_argument("--precession", type=int, default=1,
                    help="GIF precession cycles per loop (default: 1)")
+    p.add_argument("--no-curvature-gif", action="store_true",
+                   help="Skip the per-slice curvature heat map GIF")
 
     args = p.parse_args()
 
@@ -61,10 +63,8 @@ def main():
     print("Thermalizing...")
     cdt.sweep(10)
 
-    # Pick the vertex closest to the center of its spatial slice.
-    # Group vertices by time slice, pick the slice with the most vertices
-    # (the bulk), then BFS within the spacelike subgraph to find the
-    # vertex that minimizes the sum of geodesic distances to all others.
+    # Pick the spatial center: vertex with the most spacelike neighbors.
+    # Ties broken by BFS depth-5 sum-of-distances (avoids torus wrapping).
     from collections import defaultdict, deque
 
     verts = st.getVertexList().toVector()
@@ -86,27 +86,36 @@ def main():
             if other.getId() in slice_ids and e.getSquaredLength() > 0:
                 adj[v.getId()].append(other.getId())
 
-    # BFS from each vertex, pick the one with minimum total distance
-    id_to_vert = {v.getId(): v for v in slice_verts}
-    best_v, best_total = None, float("inf")
-    for v in slice_verts:
-        dist = {v.getId(): 0}
-        q = deque([v.getId()])
-        total = 0
-        while q:
-            uid = q.popleft()
-            for nid in adj[uid]:
-                if nid not in dist:
-                    dist[nid] = dist[uid] + 1
-                    total += dist[nid]
-                    q.append(nid)
-        if total < best_total:
-            best_total = total
-            best_v = v
+    # Primary: most spacelike neighbors
+    max_deg = max(len(adj[v.getId()]) for v in slice_verts)
+    candidates = [v for v in slice_verts if len(adj[v.getId()]) == max_deg]
 
-    center = best_v
+    if len(candidates) == 1:
+        center = candidates[0]
+    else:
+        # Tiebreaker: BFS depth <= 5, pick smallest total distance
+        max_depth = 5
+        best_v, best_total = candidates[0], float("inf")
+        for v in candidates:
+            dist = {v.getId(): 0}
+            q = deque([v.getId()])
+            total = 0
+            while q:
+                uid = q.popleft()
+                if dist[uid] >= max_depth:
+                    continue
+                for nid in adj[uid]:
+                    if nid not in dist:
+                        dist[nid] = dist[uid] + 1
+                        total += dist[nid]
+                        q.append(nid)
+            if total < best_total:
+                best_total = total
+                best_v = v
+        center = best_v
+
     print(f"  Center vertex: id={center.getId()}, "
-          f"slice t={peak_time}, sum_dist={best_total}")
+          f"slice t={peak_time}, degree={len(adj[center.getId()])}")
 
     # Configure matter: static point mass along worldline through all slices
     matter = caset.MatterConfiguration()
@@ -148,11 +157,19 @@ def main():
     print(f"  S_grav:   {S_grav:.4f} → {solver.reggeAction():.4f}")
     print(f"  S_matter: {S_matt:.4f} → {solver.matterAction():.4f}")
 
-    # Render
+    # Render simplicial embedding GIF
     print(f"Saving {args.save}...")
     st.save(args.save, tilt=args.tilt, spin=args.spin,
             precession=args.precession)
     print(f"Done. Output: {args.save}")
+
+    # Render per-slice curvature heat map GIF
+    if not args.no_curvature_gif and args.save.endswith(".gif"):
+        from curvature_slice_gif import render_curvature_gif
+        curv_path = args.save.replace(".gif", "_curvature.gif")
+        print(f"Rendering curvature slices: {curv_path}...")
+        render_curvature_gif(st, solver, worldline, curv_path)
+        print(f"Done. Output: {curv_path}")
 
 
 if __name__ == "__main__":

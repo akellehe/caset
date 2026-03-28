@@ -42,16 +42,28 @@ struct GpuMeshData {
 
     // --- Target deficit angles ---
     std::vector<double> target_deficits;      // [n_hinges]
+
+    // --- Precomputed base hinge contributions: A_h * ε_h per hinge ---
+    std::vector<double> base_hinge_contribs;  // [n_hinges]
+
+    // --- Worldline (matter) ---
+    std::vector<int> worldline_edge_mask;     // [n_edges] 1 if on worldline
+    double worldline_mass = 0.0;
 };
 
 /// Compute deficit angles for all hinges on the GPU.
 void compute_deficits_gpu(const GpuMeshData &mesh, double *h_deficits);
 
-/// Compute numerical gradients for all edges in parallel on the GPU.
-/// Each thread perturbs one edge's sq_dist_flat entries, recomputes the
-/// partial residual (only affected hinges), and outputs the gradient.
+/// Compute numerical gradients of the deficit-residual Σ(ε_h - ε_target)²
+/// for all edges in parallel on the GPU.
 void compute_gradients_gpu(const GpuMeshData &mesh,
                            double *h_gradients);
+
+/// Compute the action gradient ∂S/∂ℓ²_e for all edges in parallel,
+/// where S = Σ A_h·ε_h + S_matter.  This is the correct gradient for
+/// the Regge equation solver's step() function.
+void compute_action_gradient_gpu(const GpuMeshData &mesh,
+                                 double *h_gradients);
 
 } // namespace cuda
 } // namespace caset

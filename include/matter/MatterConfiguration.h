@@ -52,13 +52,12 @@ class MatterConfiguration {
 
     // ==================== Utilities ====================
 
-    /// Trace a worldline from \a center through all time slices by following
-    /// timelike edges.  Returns one vertex per slice, ordered by time.
+    /// Trace a worldline through all time slices, passing through the spatial
+    /// center of each slice.  Returns one vertex per slice, ordered by time.
     ///
-    /// At each step, the next vertex is the timelike neighbor on the adjacent
-    /// slice that shares the most spacelike neighbors with the current vertex
-    /// (maximally "same spatial position").  Consecutive vertices are
-    /// guaranteed to be connected by a timelike edge.
+    /// On each slice, the center vertex is the one with the most spacelike
+    /// neighbors.  Ties are broken by BFS (depth <= 5) sum-of-distances.
+    /// The depth limit avoids wrapping around compact topologies.
     static std::vector<VertexPtr> buildWorldline(VertexPtr center,
                                                   const Spacetime &st);
 

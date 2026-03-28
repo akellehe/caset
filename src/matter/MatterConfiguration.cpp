@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <queue>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,79 +29,121 @@ void MatterConfiguration::setEnergyDensity(SimplexPtr simplex, double rho) {
 // Worldline construction by following timelike edges
 // =====================================================================
 
+/// Find the spatial center of a slice: the vertex with the most spacelike
+/// neighbors.  Ties are broken by BFS (depth <= 5) sum-of-distances —
+/// the tied vertex with the smallest local total wins.
+static VertexPtr sliceCenter(const std::vector<VertexPtr> &sliceVerts) {
+    if (sliceVerts.empty()) return nullptr;
+    if (sliceVerts.size() == 1) return sliceVerts[0];
+
+    // Build spacelike adjacency within the slice
+    std::unordered_set<std::uint64_t> sliceIds;
+    for (auto *v : sliceVerts) sliceIds.insert(v->getId());
+
+    std::unordered_map<std::uint64_t, std::vector<std::uint64_t>> adj;
+    for (auto *v : sliceVerts) {
+        for (const auto &e : v->getEdges()) {
+            if (e->getSquaredLength() <= 0) continue;  // skip timelike/null
+            auto *other = (e->getSource()->getId() == v->getId())
+                          ? e->getTarget() : e->getSource();
+            if (sliceIds.count(other->getId()))
+                adj[v->getId()].push_back(other->getId());
+        }
+    }
+
+    // Primary criterion: most spacelike neighbors
+    int maxDegree = 0;
+    for (auto *v : sliceVerts) {
+        int deg = static_cast<int>(adj[v->getId()].size());
+        if (deg > maxDegree) maxDegree = deg;
+    }
+
+    // Collect candidates with max degree
+    std::vector<VertexPtr> candidates;
+    for (auto *v : sliceVerts) {
+        if (static_cast<int>(adj[v->getId()].size()) == maxDegree)
+            candidates.push_back(v);
+    }
+    if (candidates.size() == 1) return candidates[0];
+
+    // Tiebreaker: BFS depth <= 5, pick smallest total distance
+    constexpr int maxDepth = 5;
+    VertexPtr best = candidates[0];
+    int bestTotal = std::numeric_limits<int>::max();
+
+    for (auto *v : candidates) {
+        std::unordered_map<std::uint64_t, int> dist;
+        dist[v->getId()] = 0;
+        std::queue<std::uint64_t> q;
+        q.push(v->getId());
+        int total = 0;
+        while (!q.empty()) {
+            auto uid = q.front(); q.pop();
+            if (dist[uid] >= maxDepth) continue;
+            for (auto nid : adj[uid]) {
+                if (!dist.count(nid)) {
+                    dist[nid] = dist[uid] + 1;
+                    total += dist[nid];
+                    q.push(nid);
+                }
+            }
+        }
+        if (total < bestTotal) {
+            bestTotal = total;
+            best = v;
+        }
+    }
+    return best;
+}
+
 std::vector<VertexPtr> MatterConfiguration::buildWorldline(
     VertexPtr center, const Spacetime &st) {
 
-    // Determine all time slices present in the triangulation
-    std::set<int> timeSet;
+    // Group all vertices by time slice
+    std::unordered_map<int, std::vector<VertexPtr>> sliceMap;
     for (auto *v : st.getVertexList()->liveVector())
-        timeSet.insert(static_cast<int>(std::round(v->getTime())));
+        sliceMap[static_cast<int>(std::round(v->getTime()))].push_back(v);
+
+    std::set<int> timeSet;
+    for (const auto &[t, _] : sliceMap) timeSet.insert(t);
     std::vector<int> times(timeSet.begin(), timeSet.end());
 
     int centerTime = static_cast<int>(std::round(center->getTime()));
-
-    // Helper: among timelike neighbors of `current` on slice `targetTime`,
-    // pick the one sharing the most spacelike neighbors (same spatial position).
-    auto bestNeighborOnSlice = [](VertexPtr current, int targetTime) -> VertexPtr {
-        double curTime = current->getTime();
-
-        // Collect current vertex's spacelike neighbors (same slice)
-        std::unordered_set<std::uint64_t> spatialNbrs;
-        for (const auto &e : current->getEdges()) {
-            VertexPtr other = (e->getSource()->getId() == current->getId())
-                              ? e->getTarget() : e->getSource();
-            if (std::abs(other->getTime() - curTime) < 0.5)
-                spatialNbrs.insert(other->getId());
-        }
-
-        VertexPtr best = nullptr;
-        int bestScore = -1;
-
-        for (const auto &e : current->getEdges()) {
-            VertexPtr other = (e->getSource()->getId() == current->getId())
-                              ? e->getTarget() : e->getSource();
-            if (static_cast<int>(std::round(other->getTime())) != targetTime)
-                continue;
-
-            // Score: number of other's same-slice neighbors that overlap
-            // with current's same-slice neighbors
-            int score = 0;
-            for (const auto &e2 : other->getEdges()) {
-                VertexPtr nbr = (e2->getSource()->getId() == other->getId())
-                                ? e2->getTarget() : e2->getSource();
-                if (spatialNbrs.count(nbr->getId())) ++score;
-            }
-
-            if (score > bestScore) {
-                bestScore = score;
-                best = other;
-            }
-        }
-        return best;
-    };
 
     // Find center's index in sorted times
     auto centerIt = std::find(times.begin(), times.end(), centerTime);
     int centerIdx = static_cast<int>(centerIt - times.begin());
 
+    // For each time slice, find the spatial median vertex. The worldline
+    // passes through the center of each slice so the point mass sits at
+    // the spatial origin of the effective spacetime.
+    std::unordered_map<int, VertexPtr> medianCache;
+    medianCache[centerTime] = center;
+
+    auto getMedian = [&](int t) -> VertexPtr {
+        auto it = medianCache.find(t);
+        if (it != medianCache.end()) return it->second;
+        auto sliceIt = sliceMap.find(t);
+        if (sliceIt == sliceMap.end()) return nullptr;
+        auto *m = sliceCenter(sliceIt->second);
+        medianCache[t] = m;
+        return m;
+    };
+
     // Trace forward (increasing time)
     std::vector<VertexPtr> forward;
-    VertexPtr current = center;
     for (int i = centerIdx + 1; i < static_cast<int>(times.size()); ++i) {
-        VertexPtr next = bestNeighborOnSlice(current, times[i]);
+        VertexPtr next = getMedian(times[i]);
         if (!next) break;
         forward.push_back(next);
-        current = next;
     }
 
     // Trace backward (decreasing time)
     std::vector<VertexPtr> backward;
-    current = center;
     for (int i = centerIdx - 1; i >= 0; --i) {
-        VertexPtr prev = bestNeighborOnSlice(current, times[i]);
+        VertexPtr prev = getMedian(times[i]);
         if (!prev) break;
         backward.push_back(prev);
-        current = prev;
     }
 
     // Combine: backward (reversed) + center + forward

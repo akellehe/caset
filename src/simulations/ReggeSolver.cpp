@@ -450,7 +450,7 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
         for (const auto &e : topSimplices[si]->getEdges()) {
             auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                       Fingerprint::mix64(e->getTarget()->getId());
-            sqMap[fp] = e->getSquaredLength();
+            sqMap[fp] = std::abs(e->getSquaredLength());  // Wick-rotated
         }
 
         for (int i = 0; i < nv; ++i) {
@@ -571,8 +571,29 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
             mesh.edge_dist_positions[off + k] = edgeDistPos[ei][k];
     }
 
-    // --- Target deficits (no longer used; zero for future GPU residual) ---
+    // --- Target deficits (zero for deficit-residual kernel) ---
     mesh.target_deficits.resize(mesh.n_hinges, 0.0);
+
+    // --- Base hinge contributions A_h * ε_h (for action gradient kernel) ---
+    mesh.base_hinge_contribs.resize(mesh.n_hinges);
+    for (int hi = 0; hi < mesh.n_hinges; ++hi) {
+        mesh.base_hinge_contribs[hi] =
+            hingeArea(hinges[hi]) * deficitAngle(hinges[hi]);
+    }
+
+    // --- Worldline mask ---
+    mesh.worldline_edge_mask.resize(mesh.n_edges, 0);
+    mesh.worldline_mass = 0.0;
+    for (const auto &wl : matter_.getWorldlines()) {
+        mesh.worldline_mass = wl.mass;  // last worldline wins (single-particle)
+        for (std::size_t i = 0; i + 1 < wl.vertices.size(); ++i) {
+            auto fp = Fingerprint::mix64(wl.vertices[i]->getId()) ^
+                      Fingerprint::mix64(wl.vertices[i + 1]->getId());
+            auto it = edgeToIdx.find(fp);
+            if (it != edgeToIdx.end())
+                mesh.worldline_edge_mask[it->second] = 1;
+        }
+    }
 
     return mesh;
 }
@@ -591,15 +612,59 @@ double ReggeSolver::step(double learningRate) {
     // F ≥ 0 and F = 0 exactly at a stationary point of S (= Regge equations).
     // We cannot minimize S directly because it is unbounded below.
     //
-    // ∂F/∂ℓ²_j = 2 Σ_i g_i · H_ij  where g = ∇S and H = Hessian of S.
-    // We compute this by numerical differentiation: perturb edge j, recompute
-    // the full gradient, and dot with g₀.
+    // Step 1: compute ∂S/∂ℓ²_e (the action gradient) for every edge.
+    // Step 2: compute ∂F/∂ℓ²_j by perturbing edge j, recomputing the
+    //         action gradient, and differencing ||g||².
+    //
+    // With CUDA, step 1 is a single GPU launch (one thread per edge).
+    // Step 2 repeats step 1 for each edge j — n+1 GPU launches total.
 
-    auto g0 = actionGradient();
+#ifdef CASET_CUDA
+    // Flatten mesh once; we'll mutate sq_dist_flat in place for perturbations.
+    auto mesh = flattenMeshForGpu();
+
+    // Base action gradient  (one GPU launch)
+    std::vector<double> g0(n);
+    cuda::compute_action_gradient_gpu(mesh, g0.data());
     double F0 = 0.0;
     for (double gi : g0) F0 += gi * gi;
 
     // Compute ∂F/∂ℓ²_j for each edge j
+    std::vector<double> dF(n, 0.0);
+    for (int j = 0; j < n; ++j) {
+        int d_start = mesh.edge_dist_offsets[j];
+        int d_end   = mesh.edge_dist_offsets[j + 1];
+        if (d_start == d_end) continue;
+
+        double origSq = mesh.simplex_sq_dist_flat[mesh.edge_dist_positions[d_start]];
+        double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
+
+        // Perturb this edge's entries in the flat distance array
+        for (int di = d_start; di < d_end; ++di)
+            mesh.simplex_sq_dist_flat[mesh.edge_dist_positions[di]] += h;
+
+        // Recompute action gradient with perturbation  (one GPU launch)
+        // base_hinge_contribs stays at the original (unperturbed) values —
+        // the kernel subtracts these and recomputes the perturbed A·ε from
+        // the (now-perturbed) sq_dist_flat.
+        std::vector<double> gp(n);
+        cuda::compute_action_gradient_gpu(mesh, gp.data());
+
+        double Fp = 0.0;
+        for (double gi : gp) Fp += gi * gi;
+        dF[j] = (Fp - F0) / h;
+
+        // Restore
+        for (int di = d_start; di < d_end; ++di)
+            mesh.simplex_sq_dist_flat[mesh.edge_dist_positions[di]] -= h;
+    }
+#else
+    // CPU path: same algorithm, using actionGradient() which evaluates
+    // totalAction() per edge.
+    auto g0 = actionGradient();
+    double F0 = 0.0;
+    for (double gi : g0) F0 += gi * gi;
+
     std::vector<double> dF(n, 0.0);
     for (int j = 0; j < n; ++j) {
         double origSq = edges[j]->getSquaredLength();
@@ -612,6 +677,7 @@ double ReggeSolver::step(double learningRate) {
         for (double gi : gp) Fp += gi * gi;
         dF[j] = (Fp - F0) / h;
     }
+#endif
 
     // Apply updates: ℓ²_j -= η · ∂F/∂ℓ²_j
     double gradNormSq = 0.0;

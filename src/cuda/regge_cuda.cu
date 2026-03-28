@@ -355,5 +355,191 @@ void compute_gradients_gpu(const GpuMeshData &mesh, double *h_gradients) {
     g.free();
 }
 
+// =====================================================================
+// Action gradient kernel: ∂S/∂ℓ²_e where S = Σ A_h·ε_h + S_matter
+// =====================================================================
+
+// Hinge area from a top-simplex's sq_dist matrix via Heron's formula.
+// The hinge is the (d-2)-face opposite vertices a and b.
+__device__ double hinge_area_dev(const double *sq_dist, int nv, int a, int b) {
+    double sq[3];
+    int idx = 0;
+    for (int i = 0; i < nv && idx < 3; ++i) {
+        if (i == a || i == b) continue;
+        for (int j = i + 1; j < nv && idx < 3; ++j) {
+            if (j == a || j == b) continue;
+            sq[idx++] = fabs(sq_dist[i * nv + j]);
+        }
+    }
+    if (idx < 3) return 0.0;
+    double a2 = sq[0], b2 = sq[1], c2 = sq[2];
+    double val = 2.0*(a2*b2 + b2*c2 + c2*a2) - (a2*a2 + b2*b2 + c2*c2);
+    if (val <= 0.0) return 0.0;
+    return sqrt(val) / 4.0;
+}
+
+// Compute A_h * ε_h for one hinge from (possibly perturbed) sq_dist_flat.
+__device__ double compute_hinge_action(
+    int hid,
+    const int *hinge_simplex_offsets,
+    const int *hinge_simplex_ids,
+    const int *hinge_opposite_a,
+    const int *hinge_opposite_b,
+    const int *simplex_sq_dist_offsets,
+    const double *sq_dist_flat,
+    const int *simplex_n_verts
+) {
+    int s_start = hinge_simplex_offsets[hid];
+    int s_end   = hinge_simplex_offsets[hid + 1];
+    double angle_sum = 0.0;
+    double area = 0.0;
+
+    for (int si = s_start; si < s_end; ++si) {
+        int sid = hinge_simplex_ids[si];
+        int nv  = simplex_n_verts[sid];
+        int off = simplex_sq_dist_offsets[sid];
+        const double *sd = sq_dist_flat + off;
+
+        double B[MAX_DIM * MAX_DIM];
+        build_cm(sd, nv, B);
+        angle_sum += dihedral_from_cm(B, nv + 1,
+                                       hinge_opposite_a[si],
+                                       hinge_opposite_b[si]);
+        if (si == s_start)
+            area = hinge_area_dev(sd, nv,
+                                   hinge_opposite_a[si],
+                                   hinge_opposite_b[si]);
+    }
+    return area * (2.0 * M_PI - angle_sum);
+}
+
+__global__ void action_gradient_kernel(
+    const double *sq_dist_flat,
+    const int *hinge_simplex_offsets,
+    const int *hinge_simplex_ids,
+    const int *hinge_opposite_a,
+    const int *hinge_opposite_b,
+    const int *simplex_sq_dist_offsets,
+    const int *simplex_n_verts,
+    const int *edge_hinge_offsets,
+    const int *edge_hinge_ids,
+    const int *edge_dist_offsets,
+    const int *edge_dist_positions,
+    const double *base_hinge_contribs,   // precomputed A_h·ε_h per hinge
+    const int *worldline_mask,
+    double worldline_mass,
+    double *gradients,
+    int n_edges
+) {
+    int eid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (eid >= n_edges) return;
+
+    int h_start = edge_hinge_offsets[eid];
+    int h_end   = edge_hinge_offsets[eid + 1];
+    int d_start = edge_dist_offsets[eid];
+    int d_end   = edge_dist_offsets[eid + 1];
+
+    double origSq = (d_start < d_end)
+                    ? sq_dist_flat[edge_dist_positions[d_start]] : 1.0;
+    double h = fmax(fabs(origSq) * 1e-4, 1e-8);
+
+    // Base action contribution from affected hinges
+    double S0_partial = 0.0;
+    for (int hi = h_start; hi < h_end; ++hi)
+        S0_partial += base_hinge_contribs[edge_hinge_ids[hi]];
+
+    // Perturbed action contribution
+    double Sp_partial = 0.0;
+    for (int hi = h_start; hi < h_end; ++hi) {
+        int hid = edge_hinge_ids[hi];
+        int s_start_ = hinge_simplex_offsets[hid];
+        int s_end_   = hinge_simplex_offsets[hid + 1];
+
+        double angle_sum = 0.0;
+        double area = 0.0;
+
+        for (int si = s_start_; si < s_end_; ++si) {
+            int sid = hinge_simplex_ids[si];
+            int nv  = simplex_n_verts[sid];
+            int sd_off = simplex_sq_dist_offsets[sid];
+
+            double local_sq[MAX_DIM * MAX_DIM];
+            for (int i = 0; i < nv * nv; ++i)
+                local_sq[i] = sq_dist_flat[sd_off + i];
+            for (int di = d_start; di < d_end; ++di) {
+                int pos = edge_dist_positions[di];
+                if (pos >= sd_off && pos < sd_off + nv * nv)
+                    local_sq[pos - sd_off] += h;
+            }
+
+            double B[MAX_DIM * MAX_DIM];
+            build_cm(local_sq, nv, B);
+            angle_sum += dihedral_from_cm(B, nv + 1,
+                                           hinge_opposite_a[si],
+                                           hinge_opposite_b[si]);
+            if (si == s_start_)
+                area = hinge_area_dev(local_sq, nv,
+                                       hinge_opposite_a[si],
+                                       hinge_opposite_b[si]);
+        }
+        Sp_partial += area * (2.0 * M_PI - angle_sum);
+    }
+
+    double delta_grav = Sp_partial - S0_partial;
+
+    // Matter contribution: S_matter = -M √(-ℓ²) for worldline edges
+    double delta_matter = 0.0;
+    if (worldline_mask[eid] && origSq < 0.0) {
+        double sq_pert = origSq + h;
+        if (sq_pert < 0.0)
+            delta_matter = -worldline_mass * (sqrt(-sq_pert) - sqrt(-origSq));
+    }
+
+    gradients[eid] = (delta_grav + delta_matter) / h;
+}
+
+// =====================================================================
+// Host-side: action gradient
+// =====================================================================
+
+void compute_action_gradient_gpu(const GpuMeshData &mesh,
+                                 double *h_gradients) {
+    GpuArrays g;
+    g.alloc(mesh);
+    g.upload(mesh);
+
+    int nh = mesh.n_hinges, ne = mesh.n_edges;
+    int bs = 256;
+
+    // Upload extra arrays for the action gradient kernel
+    double *d_base_contribs;
+    int *d_wl_mask;
+    cudaMalloc(&d_base_contribs, nh * sizeof(double));
+    cudaMalloc(&d_wl_mask, ne * sizeof(int));
+    cudaMemcpy(d_base_contribs, mesh.base_hinge_contribs.data(),
+               nh * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_wl_mask, mesh.worldline_edge_mask.data(),
+               ne * sizeof(int), cudaMemcpyHostToDevice);
+
+    int gs_e = (ne + bs - 1) / bs;
+    action_gradient_kernel<<<gs_e, bs>>>(
+        g.simplex_sq_dist_flat,
+        g.hinge_simplex_offsets, g.hinge_simplex_ids,
+        g.hinge_opposite_a, g.hinge_opposite_b,
+        g.simplex_sq_dist_offsets, g.simplex_n_verts,
+        g.edge_hinge_offsets, g.edge_hinge_ids,
+        g.edge_dist_offsets, g.edge_dist_positions,
+        d_base_contribs, d_wl_mask, mesh.worldline_mass,
+        g.gradients, ne);
+
+    cudaDeviceSynchronize();
+    cudaMemcpy(h_gradients, g.gradients, ne * sizeof(double),
+               cudaMemcpyDeviceToHost);
+
+    cudaFree(d_base_contribs);
+    cudaFree(d_wl_mask);
+    g.free();
+}
+
 } // namespace cuda
 } // namespace caset
