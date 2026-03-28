@@ -119,13 +119,14 @@ std::vector<double> ReggeSolver::gramMatrix(SimplexPtr sigma) {
     int d = dPlus1 - 1;
     if (d < 1) return {};
 
-    // Build squared-distance lookup: sq[i][j] = ℓ²(vi, vj)
-    // Use edges stored in the simplex
+    // Build squared-distance lookup: sq[i][j] = |ℓ²(vi, vj)|
+    // Use Euclidean (Wick-rotated) squared lengths: abs() converts
+    // timelike ℓ² = -α·a to Euclidean ℓ² = α·a.
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : sigma->getEdges()) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = e->getSquaredLength();
+        sqMap[fp] = std::abs(e->getSquaredLength());
     }
 
     auto getSq = [&](int i, int j) -> double {
@@ -199,12 +200,12 @@ double ReggeSolver::dihedralAngle(SimplexPtr sigma,
     // For the general case (any pair of vertices, not just non-origin):
     // we use the (d+1)×(d+1) distance matrix approach.
 
-    // Distance matrix D where D_ij = ℓ²(vi, vj)
+    // Distance matrix D where D_ij = |ℓ²(vi, vj)| (Euclidean / Wick-rotated)
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : sigma->getEdges()) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = e->getSquaredLength();
+        sqMap[fp] = std::abs(e->getSquaredLength());
     }
 
     auto getSq = [&](int i, int j) -> double {
