@@ -95,9 +95,9 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   bool isLorentzian = metric->getSignature()->getSignatureType() == SignatureType::Lorentzian;
   for (std::size_t i=0; i<vertices.size()-1; i++) {
     for (std::size_t j=i+1; j<vertices.size(); j++) {
-      double squaredLen = alpha;
+      double squaredLen = a;  // spacelike: ℓ² = a
       if (isLorentzian && vertices[i]->getTime() != vertices[j]->getTime()) {
-        squaredLen = -alpha;
+        squaredLen = -alpha * a;  // timelike: ℓ² = -α·a
       }
       EdgePtr edge = createEdge(vertices[i], vertices[j], squaredLen);
       edges_.push_back(edge);
@@ -107,8 +107,11 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
-  double timelikeSquaredLength = alpha;
-  double spacelikeSquaredLength = alpha;
+  double spacelikeSquaredLength = a;           // ℓ² = a
+  double timelikeSquaredLength = -alpha * a;    // ℓ² = -α·a
+  if (getMetric()->getSignature()->getSignatureType() != SignatureType::Lorentzian) {
+    timelikeSquaredLength = a;  // Euclidean: all edges positive
+  }
   SimplexOrientation orientation = {
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation)
@@ -120,12 +123,8 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
   Edges edges = {};
   edges.reserve(Simplex::computeNumberOfEdges(k));
   for (int i = 0; i < ti; i++) {
-    // Create ti Timelike vertices
-    // Use coning to construct the vertex edges. For each new vertex; draw an edge to each existing vertex.
+    // Create ti vertices at currentTime (initial time slice).
     VertexPtr newVertex = vertexList->add(vertexIdCounter++, {static_cast<double>(currentTime)});
-    if (getMetric()->getSignature()->getSignatureType() == SignatureType::Lorentzian) {
-      timelikeSquaredLength = -alpha;
-    }
     for (const auto &existingVertex : vertices) {
       EdgePtr edge = edgeList->
           add(existingVertex, newVertex, spacelikeSquaredLength);
@@ -166,7 +165,7 @@ double Spacetime::getA() const noexcept {
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
-  double squaredLength = alpha;
+  double squaredLength = a;  // all same-time → spacelike: ℓ² = a
   VertexPtrs vertices = {};
   vertices.reserve(k);
   Edges edges = {};

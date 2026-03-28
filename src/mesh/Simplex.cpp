@@ -532,9 +532,11 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
   Edges newEdges{edges.begin(), edges.end()};
   for (auto &existing : kPlusOneVertices) {
     if (existing->getTime() == vertex->getTime()) {
-      newEdges.push_back(spacetime->createEdge(existing, vertex, -(spacetime->getAlpha() * spacetime->getA())));
-    } else {
+      // Spacelike edge (same time slice): ℓ² = a
       newEdges.push_back(spacetime->createEdge(existing, vertex, spacetime->getA()));
+    } else {
+      // Timelike edge (different time slices): ℓ² = -α·a
+      newEdges.push_back(spacetime->createEdge(existing, vertex, -(spacetime->getAlpha() * spacetime->getA())));
     }
   }
   kPlusOneVertices.push_back(vertex);

@@ -20,7 +20,6 @@
 // SOFTWARE.
 
 #include "simulations/CDT.h"
-#include "mesh/Fingerprint.h"
 #include "Logger.h"
 #include <algorithm>
 #include <cmath>
@@ -60,18 +59,6 @@ static bool isN41Type(const SimplexPtr &s, int d) {
   return (ti == d && tf == 1) || (ti == 1 && tf == d);
 }
 
-/// Check whether an edge already exists between two vertices in the global edge list.
-/// Used for manifold-condition validation during flip/iflip moves (Brunekreef p. 22).
-static bool edgeExists(const std::shared_ptr<Spacetime> &st,
-                       const VertexPtr &v1, const VertexPtr &v2) {
-  auto fp = Fingerprint::mix64(v1->getId()) ^ Fingerprint::mix64(v2->getId());
-  try {
-    st->getEdgeList()->get(fp);
-    return true;
-  } catch (const std::out_of_range &) {
-    return false;
-  }
-}
 
 /// Select a uniformly random N41-type top simplex.
 /// Uses rejection sampling with a fallback linear scan.
@@ -442,11 +429,6 @@ bool CDT::flip() {
     else unique.push_back(v);
   }
   if (static_cast<int>(shared.size()) != d || unique.size() != 2) return false;
-
-  // Manifold condition (Brunekreef p. 22): the flip creates a new edge between
-  // the two unique vertices. If that edge already exists, the move would produce
-  // duplicate edges, violating the simplicial manifold property.
-  if (edgeExists(spacetime, unique[0], unique[1])) return false;
 
   // Count old orientations
   int old_n41 = 0, old_n32 = 0;
