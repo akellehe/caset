@@ -1,0 +1,185 @@
+"""Tests for the Wilson loop observable."""
+import math
+import unittest
+
+import caset
+
+
+def _make_spacetime(n_simplices=20):
+    sig = caset.Signature(4, caset.Lorentzian)
+    metric = caset.Metric(True, sig)
+    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                         caset.Toroid())
+    st.build(n_simplices)
+    return st
+
+
+def _find_hinge(st):
+    """Find a hinge (3-vertex simplex) with cofaces."""
+    for s in st.getSimplices():
+        if len(s.getVertices()) == 3 and len(s.getCofaces()) > 0:
+            return s
+    return None
+
+
+class TestHingeLoop(unittest.TestCase):
+    def test_hinge_loop_nonempty(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        self.assertGreaterEqual(len(loop), 2,
+            "Hinge loop should have at least 2 simplices")
+
+    def test_hinge_loop_all_contain_hinge(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        hinge_verts = hinge.getVertices()
+        for sigma in loop.simplices:
+            for hv in hinge_verts:
+                self.assertTrue(sigma.hasVertex(hv),
+                    "Every loop simplex must contain the hinge")
+
+
+class TestGeodesicLoop(unittest.TestCase):
+    def test_geodesic_loop_exists(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        # Find a top-simplex
+        start = None
+        for s in st.getSimplices():
+            if len(s.getVertices()) == 5:  # top-simplex in 4D
+                start = s
+                break
+        if start is None:
+            self.skipTest("No top-simplex found")
+        loop = wl.geodesicLoop(start)
+        self.assertGreaterEqual(len(loop), 2,
+            "Geodesic loop should exist on a closed manifold")
+
+
+class TestDualLatticeLoop(unittest.TestCase):
+    def test_dual_lattice_loop_exists(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        start = None
+        for s in st.getSimplices():
+            if len(s.getVertices()) == 5:  # top-simplex in 4D
+                start = s
+                break
+        if start is None:
+            self.skipTest("No top-simplex found")
+        loop = wl.dualLatticeLoop(start, 6)
+        self.assertGreaterEqual(len(loop), 2)
+
+
+class TestCombinatorialMode(unittest.TestCase):
+    def test_combinatorial_returns_loop_size(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        result = wl.evaluateCombinatorial(loop)
+        self.assertEqual(result.loopSize, len(loop))
+        self.assertEqual(result.value, float(len(loop)))
+
+
+class TestDeficitAngleMode(unittest.TestCase):
+    def test_hinge_wilson_value_bounded(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        if len(loop) < 2:
+            self.skipTest("Hinge loop too small")
+        result = wl.evaluateDeficitAngle(loop)
+        self.assertTrue(math.isfinite(result.value),
+            f"Wilson value should be finite, got {result.value}")
+        self.assertGreaterEqual(result.value, -1.0)
+        self.assertLessEqual(result.value, 1.0)
+
+    def test_hinge_wilson_matches_deficit(self):
+        """For a hinge loop, W = ((d-2)+2cos(ε))/d should match."""
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        matter = caset.MatterConfiguration()
+        solver = caset.ReggeSolver(st, matter)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        if len(loop) < 2:
+            self.skipTest("Hinge loop too small")
+        result = wl.evaluateDeficitAngle(loop)
+        eps = solver.deficitAngle(hinge)
+        expected = ((4 - 2) + 2 * math.cos(eps)) / 4
+        self.assertAlmostEqual(result.value, expected, places=6,
+            msg=f"Wilson value {result.value} != expected {expected}")
+
+
+class TestCausalMode(unittest.TestCase):
+    def test_causal_winding_is_integer(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        if len(loop) < 2:
+            self.skipTest("Hinge loop too small")
+        result = wl.evaluateCausal(loop)
+        self.assertEqual(result.causalWindingNumber,
+                         int(result.causalWindingNumber))
+
+
+class TestEvaluateDispatch(unittest.TestCase):
+    def test_evaluate_dispatches_correctly(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        hinge = _find_hinge(st)
+        if hinge is None:
+            self.skipTest("No hinge found")
+        loop = wl.hingeLoop(hinge)
+        if len(loop) < 2:
+            self.skipTest("Hinge loop too small")
+        r1 = wl.evaluate(loop, caset.WilsonMode.COMBINATORIAL)
+        r2 = wl.evaluateCombinatorial(loop)
+        self.assertEqual(r1.value, r2.value)
+        self.assertEqual(r1.loopSize, r2.loopSize)
+
+
+class TestMeasurements(unittest.TestCase):
+    def test_measure_all_hinges_populates(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        wl.measureAllHinges(caset.WilsonMode.DEFICIT_ANGLE)
+        measurements = wl.getMeasurements()
+        self.assertGreater(len(measurements), 0,
+            "measureAllHinges should produce measurements")
+
+    def test_reset_clears(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        wl.measureAllHinges(caset.WilsonMode.DEFICIT_ANGLE)
+        wl.reset()
+        self.assertEqual(len(wl.getMeasurements()), 0)
+
+    def test_average_by_size(self):
+        st = _make_spacetime()
+        wl = caset.WilsonLoop(st)
+        wl.measureAllHinges(caset.WilsonMode.DEFICIT_ANGLE)
+        avg = wl.getAverageBySize()
+        self.assertGreater(len(avg), 0)
+        for size, val in avg.items():
+            self.assertIsInstance(size, int)
+            self.assertTrue(math.isfinite(val))

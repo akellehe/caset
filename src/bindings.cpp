@@ -33,6 +33,7 @@
 #include "simulations/ReggeSolver.h"
 #include "matter/MatterConfiguration.h"
 #include "observables/VolumeProfile.h"
+#include "observables/WilsonLoop.h"
 #include "spacetime/Spacetime.h"
 #include "mesh/VertexList.h"
 #include "mesh/EdgeList.h"
@@ -736,6 +737,96 @@ multiple configurations for averaging.)doc")
            "Compute and accumulate a volume profile measurement for averaging.")
       .def("reset", &VolumeProfile::reset,
            "Reset the accumulated measurements.");
+
+  // ========================================
+  // WilsonLoop
+  // ========================================
+  py::enum_<WilsonMode>(m, "WilsonMode",
+      "Evaluation mode for Wilson loops.")
+      .value("COMBINATORIAL", WilsonMode::COMBINATORIAL,
+             "Dual-graph topology only (loop length, enclosed hinges).")
+      .value("DEFICIT_ANGLE", WilsonMode::DEFICIT_ANGLE,
+             "Deficit-angle based: W = ((d-2)+2cos(epsilon))/d.")
+      .value("CAUSAL", WilsonMode::CAUSAL,
+             "CDT causal orientation changes around the loop.");
+
+  py::enum_<LoopType>(m, "LoopType",
+      "Which loop-shape generator to use.")
+      .value("HINGE", LoopType::HINGE,
+             "Elementary loop around a (d-2)-simplex.")
+      .value("DUAL_LATTICE", LoopType::DUAL_LATTICE,
+             "BFS-discovered loop of a target size.")
+      .value("GEODESIC", LoopType::GEODESIC,
+             "Shortest cycle through a start simplex.");
+
+  py::class_<LoopPath>(m, "LoopPath",
+      "A closed path through the dual graph (sequence of top-simplices).")
+      .def_readonly("simplices", &LoopPath::simplices,
+                    py::return_value_policy::reference)
+      .def_readonly("facets", &LoopPath::facets,
+                    py::return_value_policy::reference)
+      .def("__len__", [](const LoopPath &lp) { return lp.simplices.size(); });
+
+  py::class_<WilsonResult>(m, "WilsonResult",
+      "Result of evaluating a Wilson loop.")
+      .def_readonly("value", &WilsonResult::value,
+                    "Primary scalar value.")
+      .def_readonly("loopSize", &WilsonResult::loopSize,
+                    "Number of simplices in the loop.")
+      .def_readonly("enclosedHinges", &WilsonResult::enclosedHinges,
+                    "Hinges enclosed by the loop.")
+      .def_readonly("contractible", &WilsonResult::contractible,
+                    "Whether the loop is contractible.")
+      .def_readonly("causalWindingNumber", &WilsonResult::causalWindingNumber,
+                    "Net time-orientation changes (causal mode).");
+
+  py::class_<WilsonLoop, std::shared_ptr<WilsonLoop>>(m, "WilsonLoop",
+      R"doc(Wilson loop observable on a triangulated spacetime.
+
+Computes holonomy-like quantities around closed paths in the dual graph.
+Three evaluation modes at increasing levels of geometric commitment:
+  COMBINATORIAL -- dual-graph topology only
+  DEFICIT_ANGLE -- curvature via deficit angles
+  CAUSAL        -- CDT causal structure
+
+Three loop-shape generators:
+  hingeLoop()       -- elementary loop around a hinge
+  dualLatticeLoop() -- BFS-discovered loop of target size
+  geodesicLoop()    -- shortest cycle through a simplex)doc")
+      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"))
+      .def("evaluate", &WilsonLoop::evaluate,
+           py::arg("loop"), py::arg("mode"),
+           "Evaluate the Wilson loop in the given mode.")
+      .def("evaluateCombinatorial", &WilsonLoop::evaluateCombinatorial,
+           py::arg("loop"),
+           "Evaluate using dual-graph topology only.")
+      .def("evaluateDeficitAngle", &WilsonLoop::evaluateDeficitAngle,
+           py::arg("loop"),
+           "Evaluate using deficit angles.")
+      .def("evaluateCausal", &WilsonLoop::evaluateCausal,
+           py::arg("loop"),
+           "Evaluate using CDT causal orientation changes.")
+      .def("hingeLoop", &WilsonLoop::hingeLoop,
+           py::arg("hinge"),
+           "Generate the loop of top-simplices around a hinge.")
+      .def("dualLatticeLoop", &WilsonLoop::dualLatticeLoop,
+           py::arg("start"), py::arg("targetLength"),
+           "BFS-discovered loop of approximately targetLength simplices.")
+      .def("geodesicLoop", &WilsonLoop::geodesicLoop,
+           py::arg("start"),
+           "Shortest cycle through start in the dual graph.")
+      .def("measure", &WilsonLoop::measure,
+           py::arg("loop"), py::arg("mode"),
+           "Evaluate and record a measurement.")
+      .def("measureAllHinges", &WilsonLoop::measureAllHinges,
+           py::arg("mode"),
+           "Measure all hinge loops in the spacetime.")
+      .def("reset", &WilsonLoop::reset,
+           "Clear accumulated measurements.")
+      .def("getMeasurements", &WilsonLoop::getMeasurements,
+           "Return all recorded WilsonResult objects.")
+      .def("getAverageBySize", &WilsonLoop::getAverageBySize,
+           "Return average Wilson value for each loop size.");
 
   // ========================================
   // MatterConfiguration
