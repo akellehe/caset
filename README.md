@@ -108,11 +108,21 @@ Each script includes the paper's coupling constants (k_0=2.2, delta=0.6) and pri
 
 ### Topologies
 
-Three spatial topologies for the foliated slices:
+Three spatial topologies for the foliated slices. Just swap the last argument to the `Spacetime` constructor:
 
-- **Toroid** (`T^3 x S^1`) -- periodic boundaries, default
-- **Sphere** (`S^3 x S^1`) -- natural for de Sitter cosmology
-- **Cylinder** (`Sigma x [0,T]`) -- open time boundaries for transition amplitudes
+```python
+# Toroid (T^3 x S^1) -- periodic in space and time, default
+st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                     caset.Toroid())
+
+# Sphere (S^3 x S^1) -- natural for de Sitter cosmology
+st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                     caset.Sphere())
+
+# Cylinder (Sigma x [0,T]) -- open time boundaries for transition amplitudes
+st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
+                     caset.Cylinder())
+```
 
 ### Visualization
 
