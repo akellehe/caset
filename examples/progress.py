@@ -8,11 +8,14 @@ Provides two display classes:
                       (build → tune → thermalize → solve → render)
 
 Both use ANSI colors and emoji when connected to a TTY, and degrade
-gracefully to plain text otherwise.
+gracefully to plain text otherwise.  Both show a nonlinear ETA estimate
+that adapts to sub-linear and super-linear progress curves.
 """
 import sys
 import threading
 import time
+
+from eta import ETAEstimator
 
 # ─── ANSI helpers ────────────────────────────────────────────────────
 _BOLD = "\033[1m"
@@ -52,7 +55,8 @@ class ProgressDisplay:
     """Thread-safe multi-line progress display with emoji phases and a spinner.
 
     Designed for parallel workloads where multiple configs/points/chains
-    are running concurrently.
+    are running concurrently.  Shows a nonlinear ETA based on item
+    completion rate.
 
     Args:
         n_items:      Total number of work items (configs, grid points, …).
@@ -77,6 +81,7 @@ class ProgressDisplay:
         self._spin_idx = 0
         self._start = time.time()
         self._active = True
+        self._eta = ETAEstimator()
 
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
@@ -91,12 +96,14 @@ class ProgressDisplay:
     def on_sweep(self, _i, _n):
         with self._lock:
             self.sweeps_done += 1
+            self._eta.update(self.sweeps_done, self.total_sweeps)
 
     def on_item_done(self, item_id, info=""):
         with self._lock:
             self._phases[item_id] = "done"
             self._info[item_id] = info
             self.completed += 1
+            self._eta.update(self.completed, self.n_items)
 
     def finish(self):
         self._active = False
@@ -131,6 +138,10 @@ class ProgressDisplay:
         bar = "█" * filled + "░" * (bar_w - filled)
         sw_pct = (self.sweeps_done / self.total_sweeps * 100) if self.total_sweeps else 0
 
+        eta_str = self._eta.format_compact()
+        if eta_str:
+            eta_str = f"  {eta_str}"
+
         if c:
             out.append(
                 f"{_ERASE_LINE}{_BOLD}📊 {self.item_label}{_RST} "
@@ -140,6 +151,7 @@ class ProgressDisplay:
                 f"{_BOLD}🔄 Sweeps{_RST} {self.sweeps_done}/{self.total_sweeps} "
                 f"{_DIM}({sw_pct:.0f}%){_RST}  "
                 f"{_DIM}⏱ {elapsed:.1f}s{_RST}"
+                f"{_DIM}{eta_str}{_RST}"
             )
         else:
             out.append(
@@ -147,6 +159,7 @@ class ProgressDisplay:
                 f"{self.completed}/{self.n_items} ({pct:.0f}%)  "
                 f"Sweeps {self.sweeps_done}/{self.total_sweeps} "
                 f"({sw_pct:.0f}%)  {elapsed:.1f}s"
+                f"{eta_str}"
             )
 
         for item_id in sorted(self._phases.keys()):
@@ -180,7 +193,8 @@ class SingleTaskProgress:
     """Single-line spinner for sequential scripts.
 
     Shows the current phase with an animated spinner and optional
-    counter (e.g. sweep count, solver iteration).
+    counter (e.g. sweep count, solver iteration).  When a total is
+    provided, displays a nonlinear ETA estimate.
 
     Usage::
 
@@ -208,6 +222,7 @@ class SingleTaskProgress:
         self._start = time.time()
         self._drawn = False
         self._active = True
+        self._eta = ETAEstimator()
 
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
@@ -219,10 +234,13 @@ class SingleTaskProgress:
             self._count = 0
             self._total = total
             self._extra = extra
+            self._eta.reset()
 
     def on_tick(self, _i=None, _n=None):
         with self._lock:
             self._count += 1
+            if self._total > 0:
+                self._eta.update(self._count, self._total)
 
     def finish(self, message="done"):
         self._active = False
@@ -256,6 +274,12 @@ class SingleTaskProgress:
 
         extra = f"  {self._extra}" if self._extra else ""
 
+        eta_str = self._eta.format_compact()
+        if eta_str and not final:
+            eta_str = f"  {eta_str}"
+        else:
+            eta_str = ""
+
         if final:
             emoji, color = PHASE_STYLE.get("done", ("✅", _GREEN))
 
@@ -268,11 +292,13 @@ class SingleTaskProgress:
                 f"{_ERASE_LINE}{indicator} "
                 f"{color}{phase}{_RST}"
                 f"{_DIM}{counter}{extra}  ⏱ {elapsed:.1f}s{_RST}"
+                f"{_DIM}{eta_str}{_RST}"
             )
         else:
             line = (
                 f"{_ERASE_LINE}{emoji} {phase}"
                 f"{counter}{extra}  {elapsed:.1f}s"
+                f"{eta_str}"
             )
 
         prefix = "\033[1A" if self._drawn else ""
