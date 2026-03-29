@@ -145,15 +145,15 @@ and containing simplices.)doc")
            "Return the total number of edges incident to this vertex (in + out).")
       .def("getCoordinates", &Vertex::getCoordinates,
            "Return the coordinate vector of this vertex.")
-      .def("getEdges", &Vertex::getEdges, py::return_value_policy::reference,
+      .def("getEdges", &Vertex::getEdges, py::return_value_policy::copy,
            "Return all edges (both in and out) incident to this vertex.")
       .def("getId", &Vertex::getId,
            "Return the unique integer ID of this vertex.")
-      .def("getInEdges", &Vertex::getInEdges, py::return_value_policy::reference,
+      .def("getInEdges", &Vertex::getInEdges, py::return_value_policy::copy,
            "Return edges where this vertex is the target.")
-      .def("getOutEdges", &Vertex::getOutEdges, py::return_value_policy::reference,
+      .def("getOutEdges", &Vertex::getOutEdges, py::return_value_policy::copy,
            "Return edges where this vertex is the source.")
-      .def("getSimplices", &Vertex::getSimplices, py::return_value_policy::reference,
+      .def("getSimplices", &Vertex::getSimplices, py::return_value_policy::copy,
            "Return all simplices (of any dimension) containing this vertex.")
       .def("getTime", &Vertex::getTime,
            "Return the time coordinate of this vertex (first coordinate).")
@@ -294,11 +294,11 @@ their vertex IDs.)doc")
       .def("__eq__",
            static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==),
            py::arg("other"))
-      .def("getCofaces", &Simplex::getCofaces, py::return_value_policy::reference,
+      .def("getCofaces", &Simplex::getCofaces, py::return_value_policy::copy,
            "Return all simplices of one dimension higher that contain this simplex as a face.")
-      .def("getEdges", &Simplex::getEdges, py::return_value_policy::reference,
+      .def("getEdges", &Simplex::getEdges, py::return_value_policy::copy,
            "Return the edges (1-faces) of this simplex.")
-      .def("getFacets", &Simplex::getFacets, py::return_value_policy::reference,
+      .def("getFacets", &Simplex::getFacets, py::return_value_policy::copy,
            R"doc(Return the (k-1)-dimensional faces of this k-simplex.
 
 For a top d-simplex with d+1 vertices, returns d+1 facets each with
@@ -308,9 +308,9 @@ facet.getCofaces() includes this simplex.)doc")
            "Return the number of sub-faces at each dimension.")
       .def("getOrientation", &Simplex::getOrientation,
            "Return the CDT orientation (ti, tf) of this simplex.")
-      .def("getVertexIdLookup", &Simplex::getVertexIdLookup, py::return_value_policy::reference,
+      .def("getVertexIdLookup", &Simplex::getVertexIdLookup, py::return_value_policy::copy,
            "Return the internal vertex-ID-to-index mapping.")
-      .def("getVertices", &Simplex::getVertices, py::return_value_policy::reference,
+      .def("getVertices", &Simplex::getVertices, py::return_value_policy::copy,
            "Return the vertices of this simplex.")
       .def("hasVertex", &Simplex::hasVertex, py::arg("vertex"),
            "Return True if this simplex contains the given vertex.")
@@ -456,9 +456,9 @@ Args:
 Uses the topology's builder (e.g. Toroid staircase triangulation) to
 create the initial simplicial complex.  The actual number of simplices
 may differ slightly due to slab quantization.)doc")
-      .def("getSimplices", &Spacetime::getSimplices, py::return_value_policy::reference,
+      .def("getSimplices", &Spacetime::getSimplices, py::return_value_policy::copy,
            "Return all top-dimensional simplices in the complex.")
-      .def("getExternalSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::reference,
+      .def("getExternalSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::copy,
            "Return simplices on the boundary of the complex.")
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&

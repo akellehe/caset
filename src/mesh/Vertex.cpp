@@ -120,6 +120,9 @@ Vertex::moveEdgesToImpl(
   Edges &edgesToMove = (direction == EdgeDirection::In) ? inEdges : outEdges;
   const char *directionStr = (direction == EdgeDirection::In) ? "in-edge" : "out-edge";
 
+  // Collect old edges before we modify the list
+  for (auto &e : edgesToMove) oldEdges.insert(e);
+
   for (auto &oldEdge : edgesToMove) {
     const auto &targetVertex = oldEdge->getTarget();
     const auto &sourceVertex = oldEdge->getSource();

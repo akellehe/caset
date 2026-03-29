@@ -153,9 +153,11 @@ class TestVolumeScaling(unittest.TestCase):
             ["--n-simplices", "60", "--n-therm", "2",
              "--n-meas", "2", "--meas-interval", "1"])
         self.assertEqual(rc, 0, f"stderr:\n{err}")
-        # tqdm output goes to stderr; check that multiple runs completed
+        # Verify the script produced actual scaling output
         combined = out + err
         self.assertIn("Runs", combined)
+        self.assertIn("N4", combined,
+                       "Expected volume scaling output with N4 data")
         if os.path.exists(path):
             os.unlink(path)
 

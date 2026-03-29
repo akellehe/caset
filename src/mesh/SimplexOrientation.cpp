@@ -60,16 +60,15 @@ SimplexOrientation::SimplexOrientation()
 
 [[nodiscard]]
 SimplexOrientation SimplexOrientation::decTi() const {
-  auto newTi = static_cast<uint8_t>(ti - 1);
-  // constructor recomputes k automatically
-  SimplexOrientation o{newTi, tf};
+  if (ti == 0) return {0, tf};
+  SimplexOrientation o{static_cast<uint8_t>(ti - 1), tf};
   return o;
 }
 
 [[nodiscard]]
 SimplexOrientation SimplexOrientation::decTf() const {
-  auto newTf = static_cast<uint8_t>(tf - 1);
-  SimplexOrientation o{ti, newTf};
+  if (tf == 0) return {ti, 0};
+  SimplexOrientation o{ti, static_cast<uint8_t>(tf - 1)};
   return o;
 }
 
@@ -104,31 +103,23 @@ bool SimplexOrientation::operator==(const SimplexOrientation &other) const noexc
 }
 
 SimplexOrientation SimplexOrientation::orientationOf(const VertexPtrs &vertices) {
+  // Two-pass: first find min/max times, then count.
+  // Single-pass was buggy when the first vertex was at tf, not ti.
+  double tMin = std::numeric_limits<double>::max();
+  double tMax = std::numeric_limits<double>::lowest();
+  for (const auto &v : vertices) {
+    double t = v->getTime();
+    tMin = std::min(tMin, t);
+    tMax = std::max(tMax, t);
+  }
   uint8_t tiVertices = 0;
   uint8_t tfVertices = 0;
-  double ti = std::numeric_limits<double>::max();
-  double tf = -1;
-  double initial = -1;
-  int unassigned = 0;
-  for (const auto &vertex : vertices) {
-    double t = vertex->getTime();
-    ti = std::min(ti, t);
-    tf = std::max(tf, t);
-    if (ti == tf) {
-      initial = t;
-      unassigned++;
-    } else if (t == ti) {
+  for (const auto &v : vertices) {
+    if (v->getTime() == tMin)
       tiVertices++;
-    } else {
+    else
       tfVertices++;
-    }
   }
-  if (initial == ti) {
-    tiVertices += unassigned;
-  } else {
-    tfVertices += unassigned;
-  }
-  SimplexOrientation o{tiVertices, tfVertices};
-  return o;
+  return {tiVertices, tfVertices};
 }
 }

@@ -139,7 +139,7 @@ Simplex* Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, con
   if (!simplex->initialized) {
     simplex->initialize(simplex);
   }
-  // TODO: Here for some reason we add the simplex to it's vertices multiple times.
+  // registerToVertices() is called during initialize(); addSimplex() deduplicates.
   return simplex;
 }
 

@@ -55,7 +55,7 @@ struct GpuMeshData {
 
     // --- Worldline (matter) ---
     std::vector<int> worldline_edge_mask;     // [n_edges] 1 if on worldline
-    double worldline_mass = 0.0;
+    std::vector<double> worldline_edge_mass;  // [n_edges] mass for worldline edges (0 if not on worldline)
 };
 
 /// Compute deficit angles for all hinges on the GPU.

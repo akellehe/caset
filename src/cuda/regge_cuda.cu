@@ -8,6 +8,27 @@
 #include "cuda/regge_cuda.h"
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
+
+#define CUDA_CHECK(call) do { \
+    cudaError_t err = (call); \
+    if (err != cudaSuccess) { \
+        char msg[256]; \
+        snprintf(msg, sizeof(msg), "CUDA error at %s:%d: %s", \
+                 __FILE__, __LINE__, cudaGetErrorString(err)); \
+        throw std::runtime_error(msg); \
+    } \
+} while (0)
+
+#define CUDA_CHECK_KERNEL() do { \
+    cudaError_t err = cudaGetLastError(); \
+    if (err != cudaSuccess) { \
+        char msg[256]; \
+        snprintf(msg, sizeof(msg), "CUDA kernel error at %s:%d: %s", \
+                 __FILE__, __LINE__, cudaGetErrorString(err)); \
+        throw std::runtime_error(msg); \
+    } \
+} while (0)
 
 namespace caset {
 namespace cuda {
@@ -316,7 +337,8 @@ void compute_deficits_gpu(const GpuMeshData &mesh, double *h_deficits) {
         g.hinge_opposite_a, g.hinge_opposite_b,
         g.simplex_sq_dist_offsets, g.simplex_sq_dist_flat,
         g.simplex_n_verts, g.deficit_angles, nh);
-    cudaDeviceSynchronize();
+    CUDA_CHECK_KERNEL();
+    CUDA_CHECK(cudaDeviceSynchronize());
     cudaMemcpy(h_deficits, g.deficit_angles, nh*sizeof(double), cudaMemcpyDeviceToHost);
     g.free();
 }
@@ -350,7 +372,8 @@ void compute_gradients_gpu(const GpuMeshData &mesh, double *h_gradients) {
         g.target_deficits, g.base_deficits,
         g.gradients, ne, total_sq);
 
-    cudaDeviceSynchronize();
+    CUDA_CHECK_KERNEL();
+    CUDA_CHECK(cudaDeviceSynchronize());
     cudaMemcpy(h_gradients, g.gradients, ne*sizeof(double), cudaMemcpyDeviceToHost);
     g.free();
 }
@@ -427,7 +450,7 @@ __global__ void action_gradient_kernel(
     const int *edge_dist_positions,
     const double *base_hinge_contribs,   // precomputed A_h·ε_h per hinge
     const int *worldline_mask,
-    double worldline_mass,
+    const double *worldline_edge_mass,  // per-edge mass (0 if not on worldline)
     double *gradients,
     int n_edges
 ) {
@@ -491,7 +514,8 @@ __global__ void action_gradient_kernel(
     // (W = |ℓ²| = Wick-rotated squared length, stored in sq_dist_flat)
     double delta_matter = 0.0;
     if (worldline_mask[eid] && origSq > 0.0) {
-        delta_matter = -worldline_mass * (sqrt(origSq + h) - sqrt(origSq));
+        double M = worldline_edge_mass[eid];
+        delta_matter = -M * (sqrt(origSq + h) - sqrt(origSq));
     }
 
     gradients[eid] = (delta_grav + delta_matter) / h;
@@ -511,14 +535,17 @@ void compute_action_gradient_gpu(const GpuMeshData &mesh,
     int bs = 256;
 
     // Upload extra arrays for the action gradient kernel
-    double *d_base_contribs;
+    double *d_base_contribs, *d_wl_mass;
     int *d_wl_mask;
     cudaMalloc(&d_base_contribs, nh * sizeof(double));
     cudaMalloc(&d_wl_mask, ne * sizeof(int));
+    cudaMalloc(&d_wl_mass, ne * sizeof(double));
     cudaMemcpy(d_base_contribs, mesh.base_hinge_contribs.data(),
                nh * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(d_wl_mask, mesh.worldline_edge_mask.data(),
                ne * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_wl_mass, mesh.worldline_edge_mass.data(),
+               ne * sizeof(double), cudaMemcpyHostToDevice);
 
     int gs_e = (ne + bs - 1) / bs;
     action_gradient_kernel<<<gs_e, bs>>>(
@@ -528,15 +555,17 @@ void compute_action_gradient_gpu(const GpuMeshData &mesh,
         g.simplex_sq_dist_offsets, g.simplex_n_verts,
         g.edge_hinge_offsets, g.edge_hinge_ids,
         g.edge_dist_offsets, g.edge_dist_positions,
-        d_base_contribs, d_wl_mask, mesh.worldline_mass,
+        d_base_contribs, d_wl_mask, d_wl_mass,
         g.gradients, ne);
 
-    cudaDeviceSynchronize();
+    CUDA_CHECK_KERNEL();
+    CUDA_CHECK(cudaDeviceSynchronize());
     cudaMemcpy(h_gradients, g.gradients, ne * sizeof(double),
                cudaMemcpyDeviceToHost);
 
     cudaFree(d_base_contribs);
     cudaFree(d_wl_mask);
+    cudaFree(d_wl_mass);
     g.free();
 }
 
@@ -623,7 +652,7 @@ __global__ void fused_F_gradient_kernel(
     const int *edge_nbr_ids,
     const double *base_action_grad,   // g0[n_edges] from first kernel
     const int *worldline_mask,
-    double worldline_mass,
+    const double *worldline_edge_mass,
     double *dF,
     int n_edges
 ) {
@@ -706,10 +735,9 @@ __global__ void fused_F_gradient_kernel(
 
         // Matter contribution to Δg: only when e = j and j is worldline
         if (e == j && worldline_mask[j] && Wj > 0.0) {
-            double g_base = -worldline_mass *
-                (sqrt(Wj + he) - sqrt(Wj)) / he;
-            double g_pert = -worldline_mass *
-                (sqrt(Wj + hj + he) - sqrt(Wj + hj)) / he;
+            double M = worldline_edge_mass[j];
+            double g_base = -M * (sqrt(Wj + he) - sqrt(Wj)) / he;
+            double g_pert = -M * (sqrt(Wj + hj + he) - sqrt(Wj + hj)) / he;
             delta_g += g_pert - g_base;
         }
 
@@ -740,14 +768,17 @@ void compute_step_gpu(const GpuMeshData &mesh,
     int gs_e = (ne + bs - 1) / bs;
 
     // --- Extra arrays for action gradient kernel ---
-    double *d_base_contribs;
+    double *d_base_contribs, *d_wl_mass;
     int *d_wl_mask;
     cudaMalloc(&d_base_contribs, nh * sizeof(double));
     cudaMalloc(&d_wl_mask, ne * sizeof(int));
+    cudaMalloc(&d_wl_mass, ne * sizeof(double));
     cudaMemcpy(d_base_contribs, mesh.base_hinge_contribs.data(),
                nh * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(d_wl_mask, mesh.worldline_edge_mask.data(),
                ne * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_wl_mass, mesh.worldline_edge_mass.data(),
+               ne * sizeof(double), cudaMemcpyHostToDevice);
 
     // --- Step 1: base action gradient (1 kernel launch) ---
     action_gradient_kernel<<<gs_e, bs>>>(
@@ -757,9 +788,10 @@ void compute_step_gpu(const GpuMeshData &mesh,
         g.simplex_sq_dist_offsets, g.simplex_n_verts,
         g.edge_hinge_offsets, g.edge_hinge_ids,
         g.edge_dist_offsets, g.edge_dist_positions,
-        d_base_contribs, d_wl_mask, mesh.worldline_mass,
+        d_base_contribs, d_wl_mask, d_wl_mass,
         g.gradients, ne);
-    cudaDeviceSynchronize();
+    CUDA_CHECK_KERNEL();
+    CUDA_CHECK(cudaDeviceSynchronize());
     cudaMemcpy(h_base_grad, g.gradients, ne * sizeof(double),
                cudaMemcpyDeviceToHost);
 
@@ -788,14 +820,16 @@ void compute_step_gpu(const GpuMeshData &mesh,
         g.edge_hinge_offsets, g.edge_hinge_ids,
         g.edge_dist_offsets, g.edge_dist_positions,
         d_nbr_offsets, d_nbr_ids,
-        d_base_grad, d_wl_mask, mesh.worldline_mass,
+        d_base_grad, d_wl_mask, d_wl_mass,
         d_dF, ne);
-    cudaDeviceSynchronize();
+    CUDA_CHECK_KERNEL();
+    CUDA_CHECK(cudaDeviceSynchronize());
     cudaMemcpy(h_dF, d_dF, ne * sizeof(double), cudaMemcpyDeviceToHost);
 
     // --- Cleanup ---
     cudaFree(d_base_contribs);
     cudaFree(d_wl_mask);
+    cudaFree(d_wl_mass);
     cudaFree(d_base_grad);
     cudaFree(d_dF);
     cudaFree(d_nbr_offsets);

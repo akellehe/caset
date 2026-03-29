@@ -24,6 +24,7 @@
 
 #include "simulations/Simulation.h"
 #include "spacetime/Spacetime.h"
+#include <cstdint>
 #include <memory>
 #include <random>
 #include <vector>
@@ -273,12 +274,12 @@ class CDT : public Simulation {
     /// Select a uniformly random N41-type top simplex (rejection + fallback scan).
     SimplexPtr getRandomN41Simplex(int d);
 
-    int addAttempts = 0, addAccepted = 0;
-    int removeAttempts = 0, removeAccepted = 0;
-    int flipAttempts = 0, flipAccepted = 0;
-    int iflipAttempts = 0, iflipAccepted = 0;
-    int shiftAttempts = 0, shiftAccepted = 0;
-    int ishiftAttempts = 0, ishiftAccepted = 0;
+    std::int64_t addAttempts = 0, addAccepted = 0;
+    std::int64_t removeAttempts = 0, removeAccepted = 0;
+    std::int64_t flipAttempts = 0, flipAccepted = 0;
+    std::int64_t iflipAttempts = 0, iflipAccepted = 0;
+    std::int64_t shiftAttempts = 0, shiftAccepted = 0;
+    std::int64_t ishiftAttempts = 0, ishiftAccepted = 0;
 
 #ifdef CASET_LAZY_CATALOGS
     std::vector<std::uint64_t> n41Catalog_; ///< Fingerprints of N41-type top simplices

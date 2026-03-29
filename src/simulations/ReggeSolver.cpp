@@ -385,13 +385,15 @@ double ReggeSolver::totalAction() const {
 std::vector<double> ReggeSolver::actionGradient() const {
     auto edgeList = spacetime_->getEdgeList();
     auto edges = edgeList->toVector();
-    double S0 = totalAction();
     std::vector<double> g(edges.size());
     for (std::size_t i = 0; i < edges.size(); ++i) {
         double origSq = edges[i]->getSquaredLength();
         double h = std::max(std::abs(origSq) * 1e-4, 1e-8);
         edges[i]->setSquaredLength(origSq + h);
-        g[i] = (totalAction() - S0) / h;
+        double Sp = totalAction();
+        edges[i]->setSquaredLength(origSq - h);
+        double Sm = totalAction();
+        g[i] = (Sp - Sm) / (2.0 * h);
         edges[i]->setSquaredLength(origSq);
     }
     return g;
@@ -614,17 +616,18 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
             hingeArea(hinges[hi]) * deficitAngle(hinges[hi]);
     }
 
-    // --- Worldline mask ---
+    // --- Worldline mask and per-edge mass ---
     mesh.worldline_edge_mask.resize(mesh.n_edges, 0);
-    mesh.worldline_mass = 0.0;
+    mesh.worldline_edge_mass.resize(mesh.n_edges, 0.0);
     for (const auto &wl : matter_.getWorldlines()) {
-        mesh.worldline_mass = wl.mass;  // last worldline wins (single-particle)
         for (std::size_t i = 0; i + 1 < wl.vertices.size(); ++i) {
             auto fp = Fingerprint::mix64(wl.vertices[i]->getId()) ^
                       Fingerprint::mix64(wl.vertices[i + 1]->getId());
             auto it = edgeToIdx.find(fp);
-            if (it != edgeToIdx.end())
+            if (it != edgeToIdx.end()) {
                 mesh.worldline_edge_mask[it->second] = 1;
+                mesh.worldline_edge_mass[it->second] = wl.mass;
+            }
         }
     }
 
@@ -705,10 +708,14 @@ std::tuple<bool, double, int> ReggeSolver::solve(
     double tol, int maxIters, double learningRate,
     ProgressCallback progress) {
     double F = 0.0;
+    double F0 = -1.0; // initial F, for relative tolerance
     for (int i = 0; i < maxIters; ++i) {
         F = step(learningRate);   // returns ||∇S||² before the update
+        if (F0 < 0.0) F0 = F;
         if (progress) progress(i, F);
-        if (F < tol) {
+        // Converge when F < tol (absolute) or F < tol * F0 (relative)
+        double threshold = std::max(tol, tol * F0);
+        if (F < threshold) {
             return {true, F, i + 1};
         }
     }

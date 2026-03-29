@@ -42,8 +42,8 @@ static bool isValidCDTOrientation(const VertexPtrs &verts, int d) {
   // Must span exactly 2 distinct times (CDT causality constraint)
   std::unordered_set<std::uint64_t> times;
   for (const auto &v : verts) {
-    // Use integer-cast time to avoid floating-point comparison issues
-    times.insert(static_cast<std::uint64_t>(std::round(v->getTime())));
+    // Use floor cast (consistent with volume profile time binning)
+    times.insert(static_cast<std::uint64_t>(v->getTime()));
   }
   if (times.size() != 2) return false;
 
@@ -761,22 +761,21 @@ int CDT::sweep() {
   int accepted = 0;
 
 #ifdef CASET_LAZY_CATALOGS
-  // Rebuild catalogs at the start of each sweep
-  rebuildCatalogs();
-
-  // Weighted move selection: P(move_i) = catalog_size_i / (5 * N_top).
-  // Flip/iflip/shift use N_top (full top-simplex set) as their "catalog".
-  auto nTop = static_cast<double>(spacetime->getSimplexCount());
-  if (nTop <= 0) nTop = 1;
-  double wAdd    = static_cast<double>(n41Catalog_.size());
-  double wRemove = static_cast<double>(removeCatalog_.size());
-  double wFlip   = nTop;
-  double wIflip  = nTop;
-  double wShift  = nTop;
-  double wTotal  = 5.0 * nTop; // normalizer to match 1/(5*N_top) per target
-
-  std::uniform_real_distribution<double> dist(0.0, wTotal);
   for (int i = 0; i < n4; ++i) {
+    // Rebuild catalogs and recompute weights after each accepted move
+    // so that move selection reflects the current state.
+    rebuildCatalogs();
+    auto nTop = static_cast<double>(spacetime->getSimplexCount());
+    if (nTop <= 0) nTop = 1;
+    double wAdd    = static_cast<double>(n41Catalog_.size());
+    double wRemove = static_cast<double>(removeCatalog_.size());
+    double wFlip   = nTop;
+    double wIflip  = nTop;
+    double wShift  = nTop;
+    double wTotal  = wAdd + wRemove + wFlip + wIflip + wShift;
+    if (wTotal <= 0) continue;
+
+    std::uniform_real_distribution<double> dist(0.0, wTotal);
     double r = dist(rng);
     bool result = false;
     if (r < wAdd) {
@@ -787,10 +786,9 @@ int CDT::sweep() {
       result = flip();
     } else if (r < wAdd + wRemove + wFlip + wIflip) {
       result = iflip();
-    } else if (r < wAdd + wRemove + wFlip + wIflip + wShift) {
+    } else {
       result = shift();
     }
-    // else: no-op (residual probability)
     if (result) {
       accepted++;
       markCatalogsDirty();
@@ -897,8 +895,8 @@ std::vector<int> CDT::getVolumeProfile() const {
 }
 
 std::map<std::string, double> CDT::getAcceptanceRates() const {
-  auto rate = [](int accepted, int attempted) -> double {
-    return attempted > 0 ? static_cast<double>(accepted) / attempted : 0.0;
+  auto rate = [](std::int64_t accepted, std::int64_t attempted) -> double {
+    return attempted > 0 ? static_cast<double>(accepted) / static_cast<double>(attempted) : 0.0;
   };
   return {
     {"add", rate(addAccepted, addAttempts)},

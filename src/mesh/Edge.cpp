@@ -45,7 +45,7 @@ class Simplex;
       const VertexPtr &target_
     ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
       // Set squaredLength to a random value between -1 and 1
-      squaredLength = random_uniform(); // TODO: Should we use a poisson dist here for coset theory?
+      squaredLength = random_uniform(); // Fallback: CDT always provides explicit edge lengths.
     }
 
     [[nodiscard]] const VertexPtr &Edge::getSource() const noexcept {

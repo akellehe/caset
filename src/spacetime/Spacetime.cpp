@@ -267,14 +267,14 @@ std::shared_ptr<Metric> Spacetime::getMetric() const noexcept {
 std::vector<int> Spacetime::getTimeSlices() const {
   std::set<int> times;
   for (auto *v : vertexList->liveVector())
-    times.insert(static_cast<int>(std::round(v->getTime())));
+    times.insert(static_cast<int>(v->getTime()));
   return {times.begin(), times.end()};
 }
 
 VertexPtrs Spacetime::getVerticesAtTime(int t) const {
   VertexPtrs result;
   for (auto *v : vertexList->liveVector())
-    if (static_cast<int>(std::round(v->getTime())) == t)
+    if (static_cast<int>(v->getTime()) == t)
       result.push_back(v);
   return result;
 }
@@ -499,16 +499,20 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
       affectedEdges.push_back({e, false});
   }
 
-  // Detach affected edges from the fingerprint lookup (keeps objects alive in pool)
-  std::vector<std::uint32_t> edgeSlots;
+  // Detach affected edges from the fingerprint lookup, update fingerprints,
+  // then reattach.  Only modify edges that were successfully detached —
+  // modifying an untracked edge would corrupt its fingerprint silently.
+  std::vector<std::pair<std::uint32_t, std::size_t>> edgeSlots; // (pool slot, index in affectedEdges)
   edgeSlots.reserve(affectedEdges.size());
-  for (auto &[e, fromV1] : affectedEdges) {
-    auto slot = edgeList->detachEdge(e->fingerprint.fingerprint());
-    if (slot != UINT32_MAX) edgeSlots.push_back(slot);
+  for (std::size_t i = 0; i < affectedEdges.size(); ++i) {
+    auto slot = edgeList->detachEdge(affectedEdges[i].ptr->fingerprint.fingerprint());
+    if (slot != UINT32_MAX)
+      edgeSlots.push_back({slot, i});
   }
 
-  // Update fingerprints on the edge objects
-  for (auto &[e, fromV1] : affectedEdges) {
+  // Update fingerprints only on successfully detached edges
+  for (auto &[slot, idx] : edgeSlots) {
+    auto &[e, fromV1] = affectedEdges[idx];
     if (fromV1) {
       e->fingerprint.removeId(id1);
       e->fingerprint.addId(id2);
@@ -520,7 +524,7 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
   }
 
   // Reattach with new fingerprints
-  for (auto slot : edgeSlots) {
+  for (auto &[slot, idx] : edgeSlots) {
     edgeList->reattachEdge(slot);
   }
 
