@@ -38,10 +38,6 @@ option(CASET_PROFILE "Build with -g -O1 to keep symbol names for stack traces" $
 if (NOT CASET_PROFILE)
     set(CASET_PROFILE OFF)
 endif()
-option(CASET_LAZY_CATALOGS "Build with lazy approximate catalogs for CDT move selection" ON)
-if (DEFINED ENV{CASET_LAZY_CATALOGS} AND NOT "$ENV{CASET_LAZY_CATALOGS}" STREQUAL "")
-    set(CASET_LAZY_CATALOGS $ENV{CASET_LAZY_CATALOGS})
-endif()
 
 # ---- Read version from pyproject.toml ----
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
@@ -161,12 +157,6 @@ else()
     message(STATUS "Assertions turned OFF.")
 endif()
 
-if (CASET_LAZY_CATALOGS)
-    message(STATUS "Lazy catalogs turned ON.")
-    target_compile_definitions(caset PRIVATE CASET_LAZY_CATALOGS=1)
-else()
-    message(STATUS "Lazy catalogs turned OFF.")
-endif()
 
 target_include_directories(caset
         PRIVATE

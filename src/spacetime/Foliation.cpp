@@ -23,7 +23,7 @@
 // Created by andrew on 12/20/25.
 //
 
-#include "Foliation.h"
+#include "spacetime/Foliation.h"
 
 namespace caset {
 } // caset

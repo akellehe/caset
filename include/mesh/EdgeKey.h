@@ -47,7 +47,7 @@ class EdgeKey {
 #ifdef CASET_VERBOSE
     std::string toString() const noexcept;
 #else
-    std::string constexpr toString() const noexcept;
+    std::string toString() const noexcept;
 #endif
 
 

@@ -219,8 +219,8 @@ class TestSpacetimeCounting(unittest.TestCase):
         self.assertGreater(st.getSimplexCount(), 0)
         self.assertGreater(st.getVertexCount(), 0)
         # N41 and N32 are subsets of the total simplex count
-        self.assertGreaterEqual(st.getSimplexCount(), st.getN41() + st.getN32(),
-                                "N41 + N32 should not exceed total simplex count")
+        self.assertEqual(st.getSimplexCount(), st.getN41() + st.getN32(),
+                         "N4 should equal N41 + N32")
 
     def test_random_simplex(self):
         sig = caset.Signature(4, caset.Lorentzian)

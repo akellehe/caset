@@ -307,7 +307,7 @@ class Spacetime {
     ///
     /// @param vertex The vertex \f$ v \f$ to potentially remove
     /// @return true if the vertex was removed, false if it has incident edges
-    [[nodiscard]] bool removeIfIsolated(const VertexPtr &vertex) const noexcept;
+    [[nodiscard]] bool removeIfIsolated(const VertexPtr &vertex) noexcept;
 
     /// Adds an observable to track during evolution.
     ///

@@ -80,7 +80,7 @@ class Simplex;
       fingerprint.refresh();
     }
 
-    bool Edge::hasVertex(std::uint64_t vertexId) {
+    bool Edge::hasVertex(std::uint64_t vertexId) const {
       if (getSource()->getId() == vertexId || getTarget()->getId() == vertexId) return true;
       return false;
     }

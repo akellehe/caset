@@ -159,7 +159,7 @@ Simplex* Simplex::create(Spacetime *spacetime_,
 
 void Simplex::initialize(Simplex* simplex) {
 #ifdef CASET_ASSERTIONS
-  if (initialized) {
+  if (simplex->initialized) {
     CLOG(DEBUG_LEVEL, "You attempted to re-initialize a simplex! Behavior is undefined.");
     std::abort();
   }
@@ -181,7 +181,7 @@ void Simplex::initialize(Simplex* simplex) {
   if (ti != tf) {
     CLOG(INFO_LEVEL, "ti != tf: ", std::to_string(ti), " != ", std::to_string(tf), " for ", toString());
   } else {
-    CLOG(INFO_LEVEL, "ti == tf: ", std::to_string(ti), " != ", std::to_string(tf), " for ", toString());
+    CLOG(INFO_LEVEL, "ti == tf: ", std::to_string(ti), " == ", std::to_string(tf), " for ", toString());
   }
 }
 
@@ -204,7 +204,9 @@ std::string Simplex::toString() const noexcept {
   orientationStr << std::to_string(std::get<1>(getOrientation().numeric())) << ")}";
 
   std::string fp = std::to_string(fingerprint.fingerprint());
-  std::string fpShort = fp.substr(0, 3) + fp.substr(fp.size() - 3, 3);
+  std::string fpShort = fp.size() >= 6
+      ? fp.substr(0, 3) + fp.substr(fp.size() - 3)
+      : fp;
   std::stringstream fpStr;
   fpStr << "_{" << fpShort << "}";
 
@@ -452,10 +454,9 @@ bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVert
   fingerprint.removeId(oldId);
   fingerprint.addId(newVertex->getId());
 
-  // CRITICAL: Clear the facets cache because the facets are computed based on vertices.
-  // If we don't clear this, getFacets() will return stale facets with the old vertices.
-  // facets.clear();
-  // cofaces.clear();
+  // Clear cached facets/cofaces — they depend on the vertex set which just changed.
+  facets.clear();
+  cofaces.clear();
 
   return true;
 }
@@ -516,7 +517,7 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
     // If we have a e.g. a (3, 1) simplex with a (2, 1) facet, then we have (3, 1) - (2, 1) = (1, 0) = 1 extra vertex
     // at \f$ t \f$ . So we need to add the vertex with which we cone at \f$ t = t+1 \f$ to make the new coface a (2, 2)
     // simplex.
-    if (foliation == Foliation::PREFERRED) {
+    if (foliation == Foliation::PREFERRED && !cofaces.empty()) {
       auto [facet_ti, facet_tf] = getOrientation().numeric();
       auto [coface_ti, coface_tf] = (*cofaces.begin())->getOrientation().numeric();
       if (coface_ti > facet_ti) {

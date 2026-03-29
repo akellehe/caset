@@ -31,7 +31,6 @@ import platform
 CASET_ASSERTIONS = os.environ.get("CASET_ASSERTIONS")
 CASET_VERBOSE = os.environ.get("CASET_VERBOSE")
 CASET_ASAN = os.environ.get("CASET_ASAN")
-CASET_LAZY_CATALOGS = os.environ.get("CASET_LAZY_CATALOGS")
 CASET_CUDA = os.environ.get("CASET_CUDA")
 LD_PRELOAD = os.environ.get("LD_PRELOAD")
 CMAKE_BUILD_TYPE = os.environ.get("CMAKE_BUILD_TYPE", "Debug")
@@ -69,8 +68,6 @@ def get_configure_command(build_dir):
         cmd.append("-DCASET_VERBOSE=ON")
     if CASET_ASSERTIONS:
         cmd.append("-DCASET_ASSERTIONS=ON")
-    if CASET_LAZY_CATALOGS:
-        cmd.append("-DCASET_LAZY_CATALOGS=ON")
     if CASET_CUDA is not None:
         cmd.append(f"-DCASET_CUDA={'ON' if CASET_CUDA else 'OFF'}")
     return cmd
@@ -93,8 +90,8 @@ def pytest_sessionstart(session):
         try:
             from importlib.metadata import distribution
             dist = distribution("caset")
-            is_editable = dist.read_text("direct_url.json") is not None and \
-                          "editable" in (dist.read_text("direct_url.json") or "")
+            direct_url = dist.read_text("direct_url.json")
+            is_editable = direct_url is not None and "editable" in (direct_url or "")
         except Exception:
             is_editable = False
         if not is_editable:

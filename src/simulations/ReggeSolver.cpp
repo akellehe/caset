@@ -135,7 +135,8 @@ std::vector<double> ReggeSolver::gramMatrix(SimplexPtr sigma) {
                   Fingerprint::mix64(verts[j]->getId());
         auto it = sqMap.find(fp);
         if (it != sqMap.end()) return it->second;
-        return 0.0; // shouldn't happen in a valid simplex
+        CLOG(WARN_LEVEL, "gramMatrix: missing edge between vertices ", std::to_string(i), " and ", std::to_string(j));
+        return 0.0;
     };
 
     // G_ij = ½(ℓ²(v0,vi+1) + ℓ²(v0,vj+1) - ℓ²(vi+1,vj+1))
@@ -254,7 +255,7 @@ double ReggeSolver::dihedralAngle(SimplexPtr sigma,
     double Cii = cof[bi * n + bi];
     double Cjj = cof[bj * n + bj];
 
-    double denom = std::sqrt(std::abs(Cii * Cjj));
+    double denom = std::sqrt(std::abs(Cii) * std::abs(Cjj));
     if (denom < 1e-15) return 0.0;
 
     double cosTheta = -Cij / denom;

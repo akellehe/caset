@@ -303,7 +303,7 @@ std::pair<VertexPtrs, Edges> Spacetime::getSpatialSubgraph(int t) const {
 std::unordered_map<std::uint64_t, int>
 Spacetime::bfsDistances(VertexPtr center, int maxDepth) const {
   // Build adjacency from spacelike edges at center's time slice
-  int t = static_cast<int>(std::round(center->getTime()));
+  int t = static_cast<int>(center->getTime());
   auto [verts, edges] = getSpatialSubgraph(t);
 
   std::unordered_map<std::uint64_t, std::vector<std::uint64_t>> adj;
@@ -562,7 +562,7 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
   }
 }
 
-bool Spacetime::removeIfIsolated(const VertexPtr &vertex) const noexcept {
+bool Spacetime::removeIfIsolated(const VertexPtr &vertex) noexcept {
   if (vertex->degree() == 0) {
     CLOG(DEBUG_LEVEL, "Removing vertex: ", vertex->toString());
     vertexList->remove(vertex);
@@ -628,24 +628,24 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
 
   // Swap-and-pop from simplicesVec
   auto idx = idxIt->second;
-  if (idx < static_cast<std::uint32_t>(simplicesVec.size()) - 1) {
+  if (!simplicesVec.empty() && idx + 1 < static_cast<std::uint32_t>(simplicesVec.size())) {
     auto backFp = simplicesVec.back()->fingerprint.fingerprint();
     simplicesVec[idx] = simplicesVec.back();
     simplexVecIndex[backFp] = idx;
   }
-  simplicesVec.pop_back();
+  if (!simplicesVec.empty()) simplicesVec.pop_back();
   simplexVecIndex.erase(idxIt);
 
   // Swap-and-pop from topSimplicesVec
   auto topIdxIt = topSimplexVecIndex.find(fp);
   if (topIdxIt != topSimplexVecIndex.end()) {
     auto tidx = topIdxIt->second;
-    if (tidx < static_cast<std::uint32_t>(topSimplicesVec.size()) - 1) {
+    if (!topSimplicesVec.empty() && tidx + 1 < static_cast<std::uint32_t>(topSimplicesVec.size())) {
       auto backFp = topSimplicesVec.back()->fingerprint.fingerprint();
       topSimplicesVec[tidx] = topSimplicesVec.back();
       topSimplexVecIndex[backFp] = tidx;
     }
-    topSimplicesVec.pop_back();
+    if (!topSimplicesVec.empty()) topSimplicesVec.pop_back();
     topSimplexVecIndex.erase(topIdxIt);
   }
 

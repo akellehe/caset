@@ -37,7 +37,6 @@ namespace caset {
 #if CASET_ASSERTIONS
       if (sourceId_ == targetId_) throw std::runtime_error("You can't create a self-reference.");
 #endif
-      fingerprint = Fingerprint(fingerprint);
     }
 
     bool EdgeKey::operator==(const EdgeKey &other) const {
@@ -55,7 +54,7 @@ namespace caset {
       return "(" + std::to_string(first) + ", " + std::to_string(second) + ")";
     }
 #else
-std::string constexpr EdgeKey::toString() const noexcept {
+std::string EdgeKey::toString() const noexcept {
       return "";
     }
 #endif

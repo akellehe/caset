@@ -84,8 +84,8 @@ class TestActionGradientNorm(unittest.TestCase):
             solver.step(0.0001)
         F1 = solver.actionGradientNorm()
         # After several steps, ||∇S||² should generally decrease
-        self.assertLess(F1, F0 * 10,
-            f"||∇S||² should not explode: {F1} vs initial {F0}")
+        self.assertLess(F1, F0 * 2,
+            f"||∇S||² should decrease after steps: {F1} vs initial {F0}")
 
 
 class TestMatterConfiguration(unittest.TestCase):

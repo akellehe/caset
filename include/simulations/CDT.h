@@ -110,7 +110,7 @@ namespace caset {
 /// volume profile follows
 ///
 /// \f[
-///   \langle N_3(t) \rangle \propto \cos^4\!\left(\frac{\pi\, t}{T}\right)
+///   \langle N_3(t) \rangle \propto \cos^3\!\left(\frac{\pi\, t}{T}\right)
 /// \f]
 ///
 /// matching the round \f$ S^4 \f$ metric of Euclidean de Sitter space.
@@ -280,15 +280,6 @@ class CDT : public Simulation {
     std::int64_t iflipAttempts = 0, iflipAccepted = 0;
     std::int64_t shiftAttempts = 0, shiftAccepted = 0;
     std::int64_t ishiftAttempts = 0, ishiftAccepted = 0;
-
-#ifdef CASET_LAZY_CATALOGS
-    std::vector<std::uint64_t> n41Catalog_; ///< Fingerprints of N41-type top simplices
-    std::vector<std::uint64_t> removeCatalog_; ///< Vertex IDs with top-degree near 2d
-    bool catalogsDirty_{true};
-    /// Rebuild catalogs from scratch (only if dirty).
-    void rebuildCatalogs();
-    void markCatalogsDirty() { catalogsDirty_ = true; }
-#endif
 };
 
 } // caset

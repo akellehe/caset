@@ -344,10 +344,11 @@ class TestShiftRoundTrip(unittest.TestCase):
 
         self.assertEqual(after["n0"], before["n0"],
                          "Shift should not change vertex count")
-        # Normally N4 unchanged, but can decrease on small lattices
-        # if a new simplex already exists (dedup)
-        self.assertLessEqual(after["n4"], before["n4"],
-                             "Shift should not increase N4")
+        # (3,3) shift replaces 3 simplices with 3: dN4 = 0.
+        # On very small lattices dedup can cause dN4 in [-3, 0].
+        dN4 = after["n4"] - before["n4"]
+        self.assertGreaterEqual(dN4, -3, f"Shift dN4 too negative: {dN4}")
+        self.assertLessEqual(dN4, 0, f"Shift should not increase N4: dN4={dN4}")
 
         lost = before["top_fps"] - after["top_fps"]
         gained = after["top_fps"] - before["top_fps"]

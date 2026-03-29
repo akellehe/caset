@@ -162,10 +162,8 @@ class TestSpacetime(unittest.TestCase):
         facets14 = simplex14.getFacets()
         ntime, nspace = 0, 0
         for facet in facets14:
-            print(facet)
             self.assertTrue(facet.isInitialized())
             if facet.isSpatial():
-                print("Timelike facet:", facet)
                 self.assertTrue(facet.getOrientation().numeric()[0] == 0 or facet.getOrientation().numeric()[1] == 0)
                 ntime += 1
                 ti, tf = float('inf'), float('-inf')
@@ -174,9 +172,6 @@ class TestSpacetime(unittest.TestCase):
                     tf = max(tf, v.getTime())
                 self.assertEqual(ti, tf)
             else:
-                print("Spacelike facet:", facet)
-                for vertex in facet.getVertices():
-                    print(vertex)
                 self.assertNotEqual(facet.getOrientation().numeric()[0], 0)
                 self.assertNotEqual(facet.getOrientation().numeric()[1], 0)
                 nspace += 1

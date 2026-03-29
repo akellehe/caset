@@ -102,11 +102,8 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(oti, ti)
         self.assertEqual(otf, tf)
 
-    def setUp(self):
-        self.spacetime = Spacetime()
-    
-    @unittest.skip
-    def test_pairty(self):
+    @unittest.skip("Parity check not yet implemented")
+    def test_parity(self):
         simplex41, _ = self.spacetime.createSimplex((4, 1))
         f1, f2, f3, f4, f5 = simplex41.getFacets()
 
@@ -159,24 +156,24 @@ class TestSimplex(unittest.TestCase):
         self.assertEqual(e1[1], 2)
 
         # 2>3
-        self.assertTrue(e2[0], 1)
-        self.assertTrue(e2[1], 3)
+        self.assertEqual(e2[0], 1)
+        self.assertEqual(e2[1], 3)
 
         # 1>3
-        self.assertTrue(e3[0], 1)
-        self.assertTrue(e3[1], 4)
+        self.assertEqual(e3[0], 1)
+        self.assertEqual(e3[1], 4)
 
         # 3>4
-        self.assertTrue(e4[0], 2)
-        self.assertTrue(e4[1], 3)
+        self.assertEqual(e4[0], 2)
+        self.assertEqual(e4[1], 3)
 
         # 2>4
-        self.assertTrue(e5[0], 2)
-        self.assertTrue(e5[1], 4)
+        self.assertEqual(e5[0], 2)
+        self.assertEqual(e5[1], 4)
 
         # 1>4
-        self.assertTrue(e6[0], 3)
-        self.assertTrue(e6[1], 4)
+        self.assertEqual(e6[0], 3)
+        self.assertEqual(e6[1], 4)
 
 
     def test_is_timelike14(self):

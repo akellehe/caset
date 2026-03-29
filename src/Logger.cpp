@@ -83,7 +83,7 @@ std::string Logger::nameLevel(short int level) {
 std::string Logger::makeRelative(const std::string &absolute, const std::string &root) {
   size_t pos = absolute.find(root);
   if (pos != std::string::npos) {
-    return absolute.substr(root.size() + 1, absolute.size() - pos);
+    return absolute.substr(pos + root.size() + 1);
   }
   return absolute;
 }

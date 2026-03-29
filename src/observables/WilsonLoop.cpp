@@ -67,9 +67,11 @@ LoopPath WilsonLoop::buildLoopPath(
     lp.simplices = simplices;
     int n = static_cast<int>(simplices.size());
     lp.facets.resize(n);
-    for (int i = 0; i < n; ++i)
+    for (int i = 0; i < n; ++i) {
         lp.facets[i] = findSharedFacet(simplices[i],
                                         simplices[(i + 1) % n]);
+        if (!lp.facets[i]) return {};  // non-adjacent pair → invalid loop
+    }
     return lp;
 }
 

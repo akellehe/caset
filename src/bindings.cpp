@@ -891,7 +891,7 @@ Args:
     rho_of_r: A callable taking distance (float) and returning density (float).)doc")
       .def_static("buildWorldline", &MatterConfiguration::buildWorldline,
            py::arg("center"), py::arg("spacetime"),
-           py::return_value_policy::reference,
+           py::return_value_policy::copy,
            R"doc(Trace a worldline from center through all time slices.
 
 Returns a list of vertices, one per time slice, ordered by time.)doc")

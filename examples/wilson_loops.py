@@ -99,8 +99,6 @@ def _build_dual_complex(st):
 
     Returns (key_to_idx, all_keys, dual_edges, key_to_simplex).
     """
-    top_size = st.getMetric().getSignature().getDimensions() + 1 \
-        if hasattr(st, 'getMetric') else 5  # fallback to 4D
     # Find top-simplex size from data
     top_size = 0
     for s in st.getSimplices():

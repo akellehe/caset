@@ -121,8 +121,8 @@ class Edge {
     ///
     /// @param vertexId The ID of a Vertex for which ownership should be checked.
     /// @return true if the Vertex exists as an endpoint of this edge
-    bool hasVertex(std::uint64_t vertexId);
-    bool hasVertex(const VertexPtr &vertex);
+    bool hasVertex(std::uint64_t vertexId) const;
+    bool hasVertex(const VertexPtr &vertex) const;
 
     bool operator==(const Edge &other) const;
 

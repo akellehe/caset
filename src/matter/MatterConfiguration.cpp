@@ -102,13 +102,13 @@ std::vector<VertexPtr> MatterConfiguration::buildWorldline(
     // Group all vertices by time slice
     std::unordered_map<int, std::vector<VertexPtr>> sliceMap;
     for (auto *v : st.getVertexList()->liveVector())
-        sliceMap[static_cast<int>(std::round(v->getTime()))].push_back(v);
+        sliceMap[static_cast<int>(v->getTime())].push_back(v);
 
     std::set<int> timeSet;
     for (const auto &[t, _] : sliceMap) timeSet.insert(t);
     std::vector<int> times(timeSet.begin(), timeSet.end());
 
-    int centerTime = static_cast<int>(std::round(center->getTime()));
+    int centerTime = static_cast<int>(center->getTime());
 
     // Find center's index in sorted times
     auto centerIt = std::find(times.begin(), times.end(), centerTime);
