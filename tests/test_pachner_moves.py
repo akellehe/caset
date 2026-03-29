@@ -408,13 +408,17 @@ class TestSimplexOrientation(unittest.TestCase):
     """[RU] Sec. 3: Verify orientation computation from vertex times."""
 
     def _make_simplex(self, times):
-        """Create a 4-simplex with vertices at given times."""
-        st = caset.Spacetime()
+        """Create a 4-simplex with vertices at given times.
+
+        Stores the Spacetime on self to keep it alive — the simplex
+        holds raw pointers to vertices/edges owned by the Spacetime.
+        """
+        self._st = caset.Spacetime()
         verts = []
         for i, t in enumerate(times):
-            v = st.createVertex(i, [float(t)])
+            v = self._st.createVertex(i, [float(t)])
             verts.append(v)
-        s, _ = st.createSimplex(verts)
+        s, _ = self._st.createSimplex(verts)
         return s
 
     def test_41_orientation(self):
