@@ -128,6 +128,9 @@ class TestMatterConfiguration(unittest.TestCase):
 class TestHingeArea(unittest.TestCase):
     def test_hinge_area_positive(self):
         st = _make_spacetime(20)
+        # Creating a ReggeSolver registers hinges (triangles) via getFacets()
+        matter = caset.MatterConfiguration()
+        caset.ReggeSolver(st, matter)
         for s in st.getSimplices():
             if len(s.getVertices()) == 3 and len(s.getEdges()) >= 3:
                 area = caset.ReggeSolver.hingeArea(s)

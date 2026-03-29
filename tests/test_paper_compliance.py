@@ -409,16 +409,18 @@ class TestFlipMoves(unittest.TestCase):
         if one of the 2 new simplices already exists.
         """
         st = _make_spacetime()
-        st.build(200)
+        st.build(500)
         cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
 
-        # Do sweeps to diversify topology, then flips to create iflip-able configs
-        cdt.sweep(50)
-        for _ in range(10000):
+        # Do sweeps to diversify topology, then flips to create iflip-able configs.
+        # Iflips require exactly d top-simplices sharing an edge, which needs
+        # a well-mixed lattice — more sweeps and a larger build help.
+        cdt.sweep(200)
+        for _ in range(20000):
             cdt.flip()
 
         n4 = st.getSimplexCount()
-        for _ in range(10000):
+        for _ in range(50000):
             if cdt.iflip():
                 self.assertLess(st.getSimplexCount(), n4,
                                 "(4,2) iflip should decrease N4")
