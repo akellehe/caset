@@ -53,8 +53,9 @@ def _profiles_worker(n_simplices, n_therm, n_meas, meas_interval,
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
-    st.build(n_simplices)
-    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
+    max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
+    st.build(min(n_simplices, max_build))
+    target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
     cdt.tune()

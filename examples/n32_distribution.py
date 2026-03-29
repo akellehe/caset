@@ -55,12 +55,13 @@ def _volume_worker(target_n41, n_therm, n_meas, meas_interval,
     during sweep(), so multiple threads run in parallel.
     """
     n_build = target_n41 * 2
+    max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
-    st.build(n_build)
-    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
+    st.build(min(n_build, max_build))
+    target = st.getN41() if n_build <= max_build else target_n41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
     cdt.tune()

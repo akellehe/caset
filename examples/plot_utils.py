@@ -42,8 +42,13 @@ def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
         alpha=1.0, a=1.0,
         foliation=caset.PREFERRED, topology=topo,
     )
-    st.build(n_simplices)
-    target = st.getN41()
+    # Cap at ~80 time slices so spatial volume per slice is large enough
+    # for meaningful geometry.  The staircase product creates d*(d+1)=20
+    # simplices per slab in 4D; building directly with large n_simplices
+    # would create n/20 slices (e.g. 160k → 8000 razor-thin slices).
+    max_build = 80 * 20  # 80 slabs × 20 simplices/slab in 4D
+    st.build(min(n_simplices, max_build))
+    target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     cdt = caset.CDTSimulation(
         spacetime=st, k0=k0, k4=k4, delta=delta,
         epsilon=epsilon, targetN41=target,

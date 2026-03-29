@@ -97,7 +97,7 @@ def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
 
     target = n_simplices // 2
     d = 4 # Hardcoded dimensions
-    k4 = (k0 * 6 * delta) / (2 * d - 2) - 2 * delta
+    k4 = (k0 + 6 * delta) / (2 * d - 2) - 2 * delta
     epsilon = 1. / target
     print(f"Using k0={k0:.2f} k4={k4:.2f} epsilon={epsilon:.2f} delta={delta:.2f} N41={target:.2f}")
     cdt = caset.CDTSimulation(spacetime=st, k0=k0, k4=k4, delta=delta, epsilon=epsilon, targetN41=target)
