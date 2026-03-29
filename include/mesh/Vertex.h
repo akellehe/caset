@@ -416,6 +416,9 @@ class Vertex {
         ///
         Fingerprint fingerprint;
 
+        /// Index into VertexList::liveVec_ (maintained by VertexList).
+        std::uint32_t liveIdx_{UINT32_MAX};
+
     private:
         // ========================================
         // Private Implementation

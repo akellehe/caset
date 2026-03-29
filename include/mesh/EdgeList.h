@@ -73,9 +73,7 @@ class EdgeList {
     std::deque<Edge> pool_;
     std::vector<std::uint32_t> freeSlots_;
     std::unordered_map<std::uint64_t, std::uint32_t> fpToSlot_;
-    // liveVec_ for toVector() — maintained as pointers into pool_
     std::vector<EdgePtr> liveVec_;
-    std::unordered_map<std::uint64_t, std::uint32_t> liveIndex_; // fp → liveVec position
 
     EdgePtr getOrInsert(const VertexPtr &source, const VertexPtr &target, double squaredLength);
     std::uint32_t allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength);

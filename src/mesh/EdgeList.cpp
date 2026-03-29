@@ -42,8 +42,8 @@ EdgePtr EdgeList::getOrInsert(const VertexPtr &source, const VertexPtr &target, 
   auto slot = allocSlot(source, target, squaredLength);
   fpToSlot_.emplace(fp, slot);
   EdgePtr raw = &pool_[slot];
+  raw->liveIdx_ = static_cast<std::uint32_t>(liveVec_.size());
   liveVec_.push_back(raw);
-  liveIndex_.emplace(fp, static_cast<std::uint32_t>(liveVec_.size() - 1));
   return raw;
 }
 
@@ -54,18 +54,17 @@ void EdgeList::remove(const EdgePtr &edge) noexcept {
   freeSlots_.push_back(it->second);
   fpToSlot_.erase(it);
 
-  // Swap-and-pop from liveVec_
-  auto liIt = liveIndex_.find(fp);
-  if (liIt != liveIndex_.end()) {
-    auto idx = liIt->second;
+  // Swap-and-pop from liveVec_ using the index stored on the Edge
+  auto idx = edge->liveIdx_;
+  if (idx < liveVec_.size()) {
     auto lastIdx = static_cast<std::uint32_t>(liveVec_.size() - 1);
     if (idx != lastIdx) {
       liveVec_[idx] = liveVec_[lastIdx];
-      liveIndex_[liveVec_[idx]->fingerprint.fingerprint()] = idx;
+      liveVec_[idx]->liveIdx_ = idx;
     }
     liveVec_.pop_back();
-    liveIndex_.erase(liIt);
   }
+  edge->liveIdx_ = UINT32_MAX;
 }
 
 void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
@@ -80,14 +79,7 @@ void EdgeList::rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp) {
   auto slot = it->second;
   fpToSlot_.erase(it);
   fpToSlot_.emplace(newFp, slot);
-
-  // Update liveIndex_ key
-  auto liIt = liveIndex_.find(oldFp);
-  if (liIt != liveIndex_.end()) {
-    auto idx = liIt->second;
-    liveIndex_.erase(liIt);
-    liveIndex_.emplace(newFp, idx);
-  }
+  // liveIdx_ on the Edge object doesn't change — only the fingerprint key does
 }
 
 const Edges &EdgeList::toVector() const noexcept {

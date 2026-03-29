@@ -75,8 +75,8 @@ class VertexList {
       }
       idToIndex_.emplace(id, slot);
       Vertex* raw = &pool_[slot];
+      raw->liveIdx_ = static_cast<std::uint32_t>(liveVec_.size());
       liveVec_.push_back(raw);
-      liveIndex_[id] = static_cast<std::uint32_t>(liveVec_.size() - 1);
       return raw;
     }
 
@@ -100,18 +100,17 @@ class VertexList {
       freeSlots_.push_back(poolIt->second);
       idToIndex_.erase(poolIt);
 
-      // Swap-and-pop from liveVec_
-      auto liveIt = liveIndex_.find(id);
-      if (liveIt != liveIndex_.end()) {
-        auto idx = liveIt->second;
+      // Swap-and-pop from liveVec_ using the index stored on the Vertex
+      auto idx = vertex->liveIdx_;
+      if (idx < liveVec_.size()) {
         auto lastIdx = static_cast<std::uint32_t>(liveVec_.size() - 1);
         if (idx != lastIdx) {
           liveVec_[idx] = liveVec_[lastIdx];
-          liveIndex_[liveVec_[idx]->getId()] = idx;
+          liveVec_[idx]->liveIdx_ = idx;
         }
         liveVec_.pop_back();
-        liveIndex_.erase(liveIt);
       }
+      vertex->liveIdx_ = UINT32_MAX;
     }
 
     /// Swap the map keys of two vertices without destroying either object.
@@ -127,18 +126,7 @@ class VertexList {
       idToIndex_.erase(it2);
       idToIndex_.emplace(oldId2, slot1);
       idToIndex_.emplace(oldId1, slot2);
-
-      // Update liveIndex_ keys too
-      auto li1 = liveIndex_.find(oldId1);
-      auto li2 = liveIndex_.find(oldId2);
-      if (li1 != liveIndex_.end() && li2 != liveIndex_.end()) {
-        auto lv1 = li1->second;
-        auto lv2 = li2->second;
-        liveIndex_.erase(li1);
-        liveIndex_.erase(li2);
-        liveIndex_.emplace(oldId2, lv1);
-        liveIndex_.emplace(oldId1, lv2);
-      }
+      // liveIdx_ on the Vertex objects doesn't change — only the map keys do
     }
 
     std::size_t size() const noexcept {
@@ -164,7 +152,6 @@ class VertexList {
     std::vector<std::uint32_t> freeSlots_;                     ///< Recycled pool indices
     std::unordered_map<std::uint64_t, std::uint32_t> idToIndex_; ///< vertex ID → pool slot
     std::vector<Vertex*> liveVec_;                             ///< Flat array of live vertices
-    std::unordered_map<std::uint64_t, std::uint32_t> liveIndex_; ///< vertex ID → liveVec position
 };
 } // caset
 

@@ -38,6 +38,7 @@
 #include "mesh/VertexList.h"
 #include "spacetime/Metric.h"
 #include "mesh/Simplex.h"
+#include "mesh/FlatHashMap.h"
 
 namespace caset {
 enum class SpacetimeType : uint8_t {
@@ -398,9 +399,9 @@ class Spacetime {
     std::vector<std::uint32_t> simplexFreeSlots_{}; // recycled pool slots
     std::vector<SimplexPtr> simplicesVec{}; // flat array of live simplex pointers (swap-and-pop)
     struct SimplexSlots { std::uint32_t vecIdx; std::uint32_t poolSlot; };
-    std::unordered_map<std::uint64_t, SimplexSlots> simplexIndex_{}; // fingerprint → vec index + pool slot
+    FlatHashMap<SimplexSlots> simplexIndex_{}; // fingerprint → vec index + pool slot
     std::vector<SimplexPtr> topSimplicesVec{}; // top-dimensional simplices only
-    std::unordered_map<std::uint64_t, std::uint32_t> topSimplexVecIndex{}; // fingerprint → index in topSimplicesVec
+    FlatHashMap<std::uint32_t> topSimplexVecIndex{}; // fingerprint → index in topSimplicesVec
     std::size_t n41Count = 0; // (4,1) + (1,4) simplices
     std::size_t n32Count = 0; // (3,2) + (2,3) simplices
     std::mt19937 rng{std::random_device{}()};

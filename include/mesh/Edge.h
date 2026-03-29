@@ -143,6 +143,9 @@ class Edge {
     /// the geometry without rebuilding the mesh.
     void setSquaredLength(double sq) noexcept { squaredLength = sq; }
 
+    /// Index into EdgeList::liveVec_ (maintained by EdgeList).
+    std::uint32_t liveIdx_{UINT32_MAX};
+
   private:
     VertexPtr source = nullptr;
     VertexPtr target = nullptr;
