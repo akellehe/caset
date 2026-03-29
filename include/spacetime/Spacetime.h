@@ -397,15 +397,6 @@ class Spacetime {
 
     void updateOrientationCounters(const SimplexPtr &simplex, int delta);
 
-    ///
-    /// These are simplices on the boundary of a simplicial complex. They have at least one external face, and hence can
-    /// be glued to other simplices. The externalSimplices are organized by the orientation of their available faces. If
-    /// a face is available; the orientation of that face can be found as a key corresponding to a SimplexSet containing
-    /// the Simplex to which that Face belongs.
-    ///
-    /// This makes for fast lookups when gluing simplices together to form a complex.
-    std::unordered_map<SimplexOrientation, SimplexSet, SimplexOrientationHash, SimplexOrientationEq>
-    externalSimplicesByFacialOrientation{};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 };

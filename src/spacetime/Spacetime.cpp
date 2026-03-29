@@ -339,7 +339,7 @@ std::shared_ptr<VertexList> Spacetime::getVertexList() const noexcept {
 SimplexSet Spacetime::getExternalSimplices() noexcept {
   SimplexSet result{};
   for (const auto &simplex : simplicesVec) {
-    if (simplex->hasCausallyAvailableFacet()) result.insert(simplex);
+    if (simplex->hasBoundaryFacet()) result.insert(simplex);
   }
   return result;
 }

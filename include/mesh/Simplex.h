@@ -195,8 +195,7 @@ class Simplex {
     [[nodiscard]] const Simplices &getCofaces() const noexcept;
 
     /// This method computes the maximum number of k+1 co-faces that can be joined to this k-Simplex _in general_.
-    /// Do not use this method the purpose of causal gluing in CDT. It would create internal/non-manifold simplices and
-    /// hence violate causality. If that's your goal then you want to use `isCausallyAvailable`
+    /// To check whether a simplex is on the boundary (available for gluing), use `isBoundary()`.
     ///
     /// For a given k-simplex \f$ \sigma^k \f$, a co-face is defined as an m-simplex, \f$ \sigma^m \f$ such that \f$ m \gt k \f$
     /// and \f$ \sigma^k \subset \sigma^m \f$. The maximum number of co-faces that can be joined to a k-simplex is in
@@ -219,18 +218,12 @@ class Simplex {
     /// simplices (all vertices at the same time), NOT for timelike ones.
     [[nodiscard]] bool isTimelike() const noexcept { return _isSpatial; }
 
-    /// This method just returns whether or not the simplex has fewer than 2 co-faces. If it does; then it is available.
-    bool isCausallyAvailable() const noexcept;
+    /// True when this simplex has fewer than 2 cofaces, i.e. it lies on
+    /// the boundary of the complex and has a free face available for gluing.
+    [[nodiscard]] bool isBoundary() const noexcept;
 
-    /// This method iterates over all faces of this Simplex; and counts the number of co-faces for each face. If a face
-    /// has fewer than 2 co-faces; it's available to glue. We limit to 2 co-faces because we want to preserve
-    /// manifoldness. There's nothing wrong with internal simplicies from the perspective of simplicial algebra, but
-    /// there is from the perspective of relativity.
-    ///
-    /// @return Whether or not this Simplex is available to glue. A face is only available when it has less than 2
-    /// co-faces.
-    bool hasCausallyAvailableFacet();
-    bool isInternal() const noexcept;
+    /// True when any facet of this simplex is on the boundary (has < 2 cofaces).
+    bool hasBoundaryFacet();
     std::uint64_t hash() const noexcept;
 
     // ==================== Geometry ====================

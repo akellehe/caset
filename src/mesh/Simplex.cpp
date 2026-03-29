@@ -413,20 +413,15 @@ std::uint64_t Simplex::hash() const noexcept {
   return fingerprint.fingerprint();
 }
 
-bool Simplex::isCausallyAvailable() const noexcept {
+bool Simplex::isBoundary() const noexcept {
   return cofaces.size() < 2;
 }
 
-bool Simplex::hasCausallyAvailableFacet() {
+bool Simplex::hasBoundaryFacet() {
   for (const auto &face : getFacets()) {
-    if (face->isSpatial()) continue;
-    if (face->isCausallyAvailable()) return true;
+    if (face->isBoundary()) return true;
   }
   return false;
-}
-
-bool Simplex::isInternal() const noexcept {
-  return cofaces.size() == 2;
 }
 
 std::size_t Simplex::maxKPlusOneCofaces() const {
