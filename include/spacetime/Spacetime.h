@@ -216,13 +216,13 @@ class Spacetime {
     [[nodiscard]] double getCurrentTime() const noexcept;
 
     /// @return The edge list \f$ E \f$ containing all edges in the complex
-    [[nodiscard]] std::shared_ptr<EdgeList> getEdgeList() const noexcept;
+    [[nodiscard]] const std::shared_ptr<EdgeList> &getEdgeList() const noexcept;
 
     /// @return The metric tensor \f$ g_{\mu\nu} \f$ defining the geometry
-    [[nodiscard]] std::shared_ptr<Metric> getMetric() const noexcept;
+    [[nodiscard]] const std::shared_ptr<Metric> &getMetric() const noexcept;
 
     /// @return The vertex list \f$ V \f$ containing all vertices in the complex
-    [[nodiscard]] std::shared_ptr<VertexList> getVertexList() const noexcept;
+    [[nodiscard]] const std::shared_ptr<VertexList> &getVertexList() const noexcept;
 
     /// @return Simplices around the boundary of the simplicial complex. These simplices have at
     /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note

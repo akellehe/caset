@@ -73,6 +73,14 @@ def get_configure_command(build_dir):
     return cmd
 
 def pytest_sessionstart(session):
+    # Skip cmake rebuild if caset is already importable (e.g. from pip install -e .)
+    try:
+        import caset as _caset
+        if hasattr(_caset, '__file__') and _caset.__file__:
+            return  # already available, no rebuild needed
+    except ImportError:
+        pass
+
     build_dir = get_scikit_build_dir()
     env = clean_build_env()
     if not build_dir.exists():

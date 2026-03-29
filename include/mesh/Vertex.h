@@ -152,7 +152,7 @@ class Vertex {
         /// Not all vertices need coordinates - some algorithms work purely with combinatorial
         /// structure. Only call this if you're certain the vertex has coordinate data.
         ///
-        std::vector<double> getCoordinates() const;
+        const std::vector<double> &getCoordinates() const;
 
         ///
         /// \brief Set new coordinates for this vertex

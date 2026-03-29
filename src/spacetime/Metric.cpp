@@ -54,7 +54,7 @@ namespace caset {
       return lengthSquared;
     }
 
-    [[nodiscard]] std::shared_ptr<Signature> Metric::getSignature() const noexcept {
+    [[nodiscard]] const std::shared_ptr<Signature> &Metric::getSignature() const noexcept {
       return signature;
     }
 

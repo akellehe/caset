@@ -801,7 +801,7 @@ std::map<std::string, double> CDT::getAcceptanceRates() const {
   };
 }
 
-std::shared_ptr<Spacetime> CDT::getSpacetime() const noexcept { return spacetime; }
+const std::shared_ptr<Spacetime> &CDT::getSpacetime() const noexcept { return spacetime; }
 double CDT::getK0() const noexcept { return k0; }
 double CDT::getK4() const noexcept { return k4; }
 double CDT::getDelta() const noexcept { return delta; }

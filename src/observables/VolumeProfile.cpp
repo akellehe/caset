@@ -50,7 +50,7 @@ double VolumeProfile::update(const std::shared_ptr<Spacetime> &spacetime) {
   return compute(spacetime);
 }
 
-std::vector<int> VolumeProfile::getProfile() const {
+const std::vector<int> &VolumeProfile::getProfile() const {
   return currentProfile;
 }
 

@@ -248,7 +248,7 @@ double Spacetime::getCurrentTime() const noexcept {
   return static_cast<double>(currentTime);
 }
 
-std::shared_ptr<EdgeList> Spacetime::getEdgeList() const noexcept {
+const std::shared_ptr<EdgeList> &Spacetime::getEdgeList() const noexcept {
   return edgeList;
 }
 
@@ -256,7 +256,7 @@ Foliation Spacetime::getFoliation() const noexcept {
   return foliation;
 }
 
-std::shared_ptr<Metric> Spacetime::getMetric() const noexcept {
+const std::shared_ptr<Metric> &Spacetime::getMetric() const noexcept {
   return metric;
 }
 
@@ -332,7 +332,7 @@ Spacetime::bfsDistances(VertexPtr center, int maxDepth) const {
   return dist;
 }
 
-std::shared_ptr<VertexList> Spacetime::getVertexList() const noexcept {
+const std::shared_ptr<VertexList> &Spacetime::getVertexList() const noexcept {
   return vertexList;
 }
 

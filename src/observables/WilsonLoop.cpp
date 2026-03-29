@@ -382,7 +382,7 @@ void WilsonLoop::measureAllHinges(WilsonMode mode) {
 
 void WilsonLoop::reset() { measurements_.clear(); }
 
-std::vector<WilsonResult> WilsonLoop::getMeasurements() const {
+const std::vector<WilsonResult> &WilsonLoop::getMeasurements() const {
     return measurements_;
 }
 

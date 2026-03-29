@@ -64,7 +64,7 @@ class Signature {
     Signature(int dimensions_, SignatureType signatureType_);
 
     /// @return The diagonal entries of \f$ g_{\mu\nu} \f$, e.g., \f$\{-1, 1, 1, 1\}\f$ for 4D Lorentzian.
-    [[nodiscard]] std::vector<int> getDiagonal() const noexcept;
+    [[nodiscard]] const std::vector<int> &getDiagonal() const noexcept;
 
     /// @return The spacetime dimension \f$ d \f$.
     [[nodiscard]] int getDimensions() const noexcept;

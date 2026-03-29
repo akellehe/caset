@@ -86,7 +86,7 @@ class WilsonLoop {
     void measure(const LoopPath &loop, WilsonMode mode);
     void measureAllHinges(WilsonMode mode);
     void reset();
-    [[nodiscard]] std::vector<WilsonResult> getMeasurements() const;
+    [[nodiscard]] const std::vector<WilsonResult> &getMeasurements() const;
     [[nodiscard]] std::map<int, double> getAverageBySize() const;
 
   private:

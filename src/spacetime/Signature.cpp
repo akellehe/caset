@@ -39,9 +39,9 @@ Signature::Signature(int dimensions_, SignatureType signatureType_) {
   }
 }
 
-[[nodiscard]] std::vector<int> Signature::getDiagonal() const noexcept {
+[[nodiscard]] const std::vector<int> &Signature::getDiagonal() const noexcept {
   return diag;
-};
+}
 
 [[nodiscard]] int Signature::getDimensions() const noexcept {
   return dimensions;

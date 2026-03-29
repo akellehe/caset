@@ -96,7 +96,7 @@ class ReggeSolver {
 
     // ==================== Accessors ====================
 
-    [[nodiscard]] std::shared_ptr<Spacetime> getSpacetime() const noexcept {
+    [[nodiscard]] const std::shared_ptr<Spacetime> &getSpacetime() const noexcept {
         return spacetime_;
     }
 

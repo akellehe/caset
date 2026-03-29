@@ -39,7 +39,7 @@ namespace caset {
 class EdgeList {
   public:
     [[nodiscard]] std::size_t size() const;
-    [[nodiscard]] Edges toVector() const noexcept;
+    [[nodiscard]] const Edges &toVector() const noexcept;
 
     EdgePtr add(const VertexPtr &source, const VertexPtr &target);
     EdgePtr add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept;

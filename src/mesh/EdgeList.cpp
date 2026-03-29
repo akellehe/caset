@@ -90,7 +90,7 @@ void EdgeList::rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp) {
   }
 }
 
-Edges EdgeList::toVector() const noexcept {
+const Edges &EdgeList::toVector() const noexcept {
   return liveVec_;
 }
 

@@ -70,7 +70,7 @@ bool Vertex::operator==(const Vertex &vertex) const noexcept {
   return vertex.getId() == id;
 }
 
-std::vector<double>
+const std::vector<double> &
 Vertex::getCoordinates() const {
   if (coordinates.empty()) {
     throw std::runtime_error("You requested coordinates for a vertex that is coordinate independent.");

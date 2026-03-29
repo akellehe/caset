@@ -66,7 +66,7 @@ class Metric {
       const std::vector<double> &targetCoords
       ) const;
 
-    [[nodiscard]] std::shared_ptr<Signature> getSignature() const noexcept;
+    [[nodiscard]] const std::shared_ptr<Signature> &getSignature() const noexcept;
 
   private:
     std::shared_ptr<Signature> signature;

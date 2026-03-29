@@ -192,7 +192,8 @@ add_custom_command(
             "import pybind11_stubgen" && ${CMAKE_COMMAND} -E env
             PYTHONPATH=$<TARGET_FILE_DIR:caset>
             ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"
-            || ${CMAKE_COMMAND} -E echo "pybind11_stubgen not found, skipping stub generation"
+                --ignore-invalid-expressions="caset::.*"
+            || ${CMAKE_COMMAND} -E echo "Warning: pybind11_stubgen not found, skipping stub generation"
         COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/caset.pyi"
 )
 

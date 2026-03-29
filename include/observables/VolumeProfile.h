@@ -74,7 +74,7 @@ class VolumeProfile : public Observable {
     double update(const std::shared_ptr<Spacetime> &spacetime) override;
 
     /// @return The most recently computed volume profile as a vector indexed by time slice.
-    [[nodiscard]] std::vector<int> getProfile() const;
+    [[nodiscard]] const std::vector<int> &getProfile() const;
 
     /// @return The average volume profile over all recorded measurements.
     [[nodiscard]] std::vector<double> getAverageProfile() const;

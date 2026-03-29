@@ -231,7 +231,7 @@ class CDT : public Simulation {
     [[nodiscard]] std::map<std::string, double> getAcceptanceRates() const;
 
     /// @return The spacetime being simulated.
-    [[nodiscard]] std::shared_ptr<Spacetime> getSpacetime() const noexcept;
+    [[nodiscard]] const std::shared_ptr<Spacetime> &getSpacetime() const noexcept;
 
     /// @return Coupling constant \f$ k_0 \f$.
     [[nodiscard]] double getK0() const noexcept;
