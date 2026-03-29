@@ -62,7 +62,7 @@ def _volume_worker(target_n41, n_therm, n_meas, meas_interval,
                          caset.Toroid())
     st.build(min(n_build, max_build))
     target = st.getN41() if n_build <= max_build else target_n41
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     cdt.tune()
     cdt.sweep(n_therm, progress=sweep_cb)

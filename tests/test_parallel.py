@@ -42,7 +42,7 @@ def _make_cdt(n_simplices=50):
                          caset.Toroid())
     st.build(n_simplices)
     target = st.getSimplexCount()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
     return cdt, st
 
 

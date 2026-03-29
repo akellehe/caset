@@ -189,7 +189,7 @@ class TestAcceptanceCriterion(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
 
         for _ in range(20):
@@ -207,7 +207,7 @@ class TestAcceptanceCriterion(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
         cdt.sweep(200)
 
@@ -486,7 +486,7 @@ class TestShiftMove(unittest.TestCase):
         """(3,3) shift: dN0 = 0, dN4 = 0."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.sweep(50)  # diversify topology
 
         n0 = st.getVertexCount()
@@ -506,7 +506,7 @@ class TestShiftMove(unittest.TestCase):
         """The (3,3) move is self-inverse; ishift == shift."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.sweep(50)
 
         n0 = st.getVertexCount()
@@ -534,7 +534,7 @@ class TestSweepStructure(unittest.TestCase):
     def test_sweep_returns_accepted_count(self):
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         accepted = cdt.sweep(1)
         self.assertIsInstance(accepted, int)
         self.assertGreaterEqual(accepted, 0)
@@ -543,7 +543,7 @@ class TestSweepStructure(unittest.TestCase):
         """Sweep should attempt all 5 move types."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.sweep(10)
         rates = cdt.getAcceptanceRates()
         for move_type in ["add", "remove", "flip", "iflip", "shift"]:
@@ -557,7 +557,7 @@ class TestSweepStructure(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
 
         for step in range(20):
@@ -658,7 +658,7 @@ class TestManifoldPreservation(unittest.TestCase):
         """500 sweeps should produce no (5,0) or other invalid types."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
         cdt.sweep(500)
 
@@ -672,7 +672,7 @@ class TestManifoldPreservation(unittest.TestCase):
         """Every top simplex must have vertices at exactly 2 distinct times."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
         cdt.sweep(500)
 
@@ -696,7 +696,7 @@ class TestTuning(unittest.TestCase):
         """tune() should modify k4 from its initial value."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         k4_before = cdt.getK4()
         cdt.tune()
         k4_after = cdt.getK4()
@@ -711,7 +711,7 @@ class TestTuning(unittest.TestCase):
         st = _make_spacetime()
         st.build(100)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.tune()
         # After tuning with feedback sweeps, N41 should still be
         # in the vicinity of the target (not wildly off)

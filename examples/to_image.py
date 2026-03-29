@@ -18,8 +18,8 @@ def main():
                    help="Cosmological constant coupling (default: 0.5)")
     p.add_argument("--delta", type=float, default=0.6,
                    help="Asymmetry parameter (default: 0.6)")
-    p.add_argument("--epsilon", type=float, default=0.02,
-                   help="Volume-fixing strength (default: 0.02)")
+    p.add_argument("--epsilon", type=float, default=None,
+                   help="Volume-fixing strength (default: 1/target_N41)")
     p.add_argument("--targetN41", type=int, default=None,
                    help="Target (d,1)-volume (default: N41 after build)")
     p.add_argument("--quadraticVolume", action="store_true", default=True,
@@ -51,7 +51,8 @@ def main():
     st.build(args.n_simplices)
 
     target = args.targetN41 if args.targetN41 is not None else st.getN41()
-    cdt = caset.CDTSimulation(st, args.k0, args.k4, args.delta, args.epsilon,
+    eps = args.epsilon if args.epsilon is not None else 1.0 / max(target, 1)
+    cdt = caset.CDTSimulation(st, args.k0, args.k4, args.delta, eps,
                               target, args.quadraticVolume)
     cdt.tune()
     if args.n_sweeps > 0:

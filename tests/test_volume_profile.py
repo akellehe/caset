@@ -109,7 +109,7 @@ class TestVolumeProfileShape(unittest.TestCase):
         """
         st = make_spacetime(n_simplices=500)
         target = st.getSimplexCount()
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.02, target)
+        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(target, 1), target)
 
         # Thermalize
         for _ in range(50):
@@ -203,7 +203,7 @@ class TestPhaseStructure(unittest.TestCase):
         profiles = {}
         for name, k0, delta in [("B", 0.5, 0.1), ("C_dS", 2.0, 0.6), ("A", 5.0, 2.0)]:
             st = make_spacetime(n_simplices=200)
-            cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, 200)
+            cdt = caset.CDTSimulation(st, k0, 0.5, delta, 1.0 / max(200, 1), 200)
 
             for _ in range(30):
                 cdt.sweep()
@@ -228,7 +228,7 @@ class TestEachTopologySimulates(unittest.TestCase):
 
     def _run_simulation(self, topology, name):
         st = make_spacetime(topology=topology, n_simplices=20)
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.02, 50)
+        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(50, 1), 50)
 
         initial_count = st.getSimplexCount()
         total_accepted = 0

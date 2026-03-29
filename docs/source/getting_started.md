@@ -1,66 +1,183 @@
 # Getting Started
 
-To construct a `Spacetime` in python you can run
+## Installation
 
-```python
-from caset import Spacetime
-
-spacetime = Spacetime()
-```
-
-You can see an example of how the spacetime is constructed and embedded into a 3D euclidean space with the example 
-script, examples/plot4D.py.
+You need Python 3.9+, a C++20 compiler (GCC 10+, Clang 10+, or MSVC 2019+), and CMake 3.18+.
 
 ```bash
-python3 plot4D.py --n-simplices 10
+pip install -e ".[dev]"
 ```
+
+Verify:
 
 ```bash
-(caset) andrew@workstation03-2 caset % python3 examples/plot4D.py --n-simplices 10
----------------Building Spacetime-------------
-Elapsed time:  1.013916015625
---------------/Building Spacetime-------------
----------------Embedding Euclidean------------
-[embedEuclidean-fixedTime] iter 200 loss=22.755005 length=5.891840 rep=0.168632
-[embedEuclidean-fixedTime] iter 400 loss=20.746782 length=5.572462 rep=0.151743
-[embedEuclidean-fixedTime] iter 600 loss=20.366627 length=5.428848 rep=0.149378
-[embedEuclidean-fixedTime] iter 800 loss=20.330727 length=5.416332 rep=0.149144
-[embedEuclidean-fixedTime] iter 1000 loss=20.312382 length=5.411129 rep=0.149013
-[embedEuclidean-fixedTime] iter 1200 loss=20.279960 length=5.388338 rep=0.148916
-[embedEuclidean-fixedTime] iter 1400 loss=20.275390 length=5.388520 rep=0.148869
-[embedEuclidean-fixedTime] iter 1600 loss=20.273111 length=5.387974 rep=0.148851
-[embedEuclidean-fixedTime] iter 1800 loss=20.271108 length=5.386815 rep=0.148843
-[embedEuclidean-fixedTime] iter 2000 loss=20.269556 length=5.385744 rep=0.148838
-[embedEuclidean-fixedTime] iter 2200 loss=20.268537 length=5.384959 rep=0.148836
-[embedEuclidean-fixedTime] iter 2400 loss=20.267968 length=5.384461 rep=0.148835
-[embedEuclidean-fixedTime] iter 2600 loss=20.267695 length=5.384176 rep=0.148835
-[embedEuclidean-fixedTime] iter 2800 loss=20.267581 length=5.384025 rep=0.148836
-[embedEuclidean-fixedTime] iter 3000 loss=20.267540 length=5.383947 rep=0.148836
-[embedEuclidean-fixedTime] iter 3200 loss=20.267527 length=5.383909 rep=0.148836
-[embedEuclidean-fixedTime] iter 3400 loss=20.267524 length=5.383890 rep=0.148836
-[embedEuclidean-fixedTime] iter 3600 loss=20.267523 length=5.383881 rep=0.148836
-[embedEuclidean-fixedTime] Iteration: 3654 Final loss: 20.267523 Previous loss: 20.267523
-Elapsed time:  1117.57275390625
-----------------------------------------------
+python -c "import caset; print('caset OK')"
 ```
-And that will output a nice plot like this: 
 
-![Plot of a 3-complex of 10 simplexes](assets/plot4D.png)
+CUDA GPU acceleration is auto-detected. To force CPU-only: `CASET_CUDA=0 pip install -e .`
 
-### Customizing the Spacetime
+## Quick start: build a universe
 
-The default topology is a `Toroid`, the default signature is Lorentzian, and the default edge length is 1 (for spacelike 
-edges) or -1 (for timelike edges).
-
-You can adjust the behavior of that `Spacetime` by defining a `Metric` with a `Signature` as well as setting an 
-`alpha` value to use as the default edge length.
-
-The default `Topology` is a `Toroid`, but you can choose others or define your own. The `Topology` is responsible for 
-constructing your initial spacetime as a lattice of `Edge`s and `Vertex`(s). 
-
-Once you've done that you can use the `Simplex` interface to interact with the `Spacetime` lattice. For example
+Build a 4D Lorentzian spacetime, thermalize it with CDT Monte Carlo, and export a rotating GIF:
 
 ```python
-simplices = spacetime.getSimplices()
-simplices[0].getVolume()
+import caset
+
+# Set up a 4D Lorentzian metric on a toroidal topology
+metric = caset.Metric(
+    coordinateFree=True,
+    signature=caset.Signature(dimensions=4, signature_type=caset.Lorentzian),
+)
+st = caset.Spacetime(
+    metric=metric, spacetimeType=caset.CDT,
+    alpha=1.0, a=1.0,
+    foliation=caset.PREFERRED, topology=caset.Toroid(),
+)
+st.build(2000)
+
+# Run CDT Monte Carlo: tune coupling, then sweep
+cdt = caset.CDTSimulation(
+    spacetime=st, k0=2.2, k4=0.5, delta=0.6,
+    epsilon=0.02, targetN41=st.getN41(),
+)
+cdt.tune()
+cdt.sweep(50)
+
+# Export a rotating GIF
+st.save("spacetime.gif", tilt=25, spin=1, precession=1)
 ```
+
+![Rotating CDT spacetime](assets/cdt/spacetime.gif)
+
+The blue edges are spacelike (within a time slice) and the red edges are timelike (connecting adjacent slices). The vertical axis is time.
+
+## Coupling constants
+
+CDT has three coupling constants that control the geometry:
+
+| Parameter | Role | Typical value |
+|-----------|------|---------------|
+| `k0` | Bare inverse Newton's constant | 2.2 |
+| `delta` | Asymmetry between spacelike and timelike edges | 0.6 |
+| `k4` | Cosmological constant coupling (auto-tuned) | -- |
+
+The `tune()` method adjusts `k4` to its pseudo-critical value so that the four-volume fluctuates around the target. You set `k0` and `delta`; together they determine which **phase** the universe is in.
+
+## The CDT phase diagram
+
+Varying `k0` and `delta` produces three qualitatively different geometries:
+
+| Phase | Regime | Geometry |
+|-------|--------|----------|
+| **A** (branched polymer) | Large `k0` | Fractal, elongated, tree-like |
+| **B** (crumpled) | Small `k0`, small `delta` | Collapsed to 1--2 time slices |
+| **C** (de Sitter) | Moderate `k0`, nonzero `delta` | Extended 4D, matches a round S^4 |
+
+Scan the coupling-constant plane to see all three phases:
+
+```bash
+python examples/phase_diagram.py --n-simplices 2000 --n-sweeps 200 --grid-size 10 \
+    --save phase_diagram.png
+```
+
+![CDT phase diagram](assets/cdt/phase_diagram.png)
+
+The left panel shows the discrete phase classification. The right panel shows the continuous order parameter (N32/N41 simplex ratio) whose jumps mark the phase boundaries. The white star marks the de Sitter point used in the original paper.
+
+## Visualizing the three phases
+
+Generate volume profiles for each phase -- the spatial volume N3 as a function of time:
+
+```bash
+python examples/volume_profile_phases.py --n-simplices 5000 --n-therm 100 \
+    --save volume_profiles.png
+```
+
+![Volume profiles in phases A, B, C](assets/cdt/volume_profiles_surface.png)
+
+Each panel shows the "shape of the universe" in that phase -- the radius at each time slice, rendered as a surface of revolution. Phase C (de Sitter) produces the smooth blob that matches the round four-sphere.
+
+## Regge calculus: discrete general relativity
+
+Solve the discrete Einstein equations for a point mass and watch curvature concentrate around the source:
+
+```bash
+python examples/regge_point_mass.py --n-simplices 50 --mass 1.0 \
+    --save point_mass.gif
+```
+
+![Point mass curvature](assets/cdt/point_mass.gif)
+
+The solver minimizes the Regge action gradient. The resulting geometry concentrates curvature (deficit angles) around the mass source -- the discrete analogue of Schwarzschild spacetime.
+
+## Measuring observables
+
+### Spectral dimension
+
+Run discrete random walks on the triangulation to measure the spectral dimension -- a fractal property that interpolates between D~1.8 at short distances and D~4 at large scales:
+
+```bash
+python examples/spectral_dimension.py --n-simplices 10000 --n-configs 10 \
+    --save spectral_dimension.png
+```
+
+![Spectral dimension](assets/cdt/spectral_dimension.png)
+
+### Hausdorff dimension from volume scaling
+
+Measure the volume-volume correlator at multiple system sizes to extract the Hausdorff dimension (expected D_H ~ 4 in Phase C):
+
+```bash
+python examples/volume_scaling.py --n-simplices 5000 --n-meas 50 \
+    --save volume_scaling.png
+```
+
+![Volume scaling](assets/cdt/volume_scaling.png)
+
+### Effective action
+
+Compare the measured volume fluctuations to the minisuperspace prediction:
+
+```bash
+python examples/effective_action.py --n-simplices 10000 --n-meas 100 \
+    --save effective_action.png
+```
+
+![Effective action](assets/cdt/effective_action.png)
+
+## Wilson loops
+
+Compute holonomies (parallel transport around closed loops) in three modes -- combinatorial, deficit-angle, and causal -- and visualize them on a spatial slice:
+
+```bash
+python examples/wilson_loops.py --n-simplices 100 --save wilson_loops.gif
+```
+
+![Wilson loops](assets/wilson_loops.gif)
+
+## Export and interop
+
+Export a thermalized spacetime to GraphML or DOT format for visualization in Gephi, yEd, or Graphviz:
+
+```bash
+python examples/to_graph.py --n-simplices 500 --save spacetime.graphml
+python examples/to_graph.py --n-simplices 500 --save spacetime.dot
+```
+
+## Parallelization
+
+All example scripts accept `--workers N` to run independent simulations in parallel. The GIL is released during the C++ `sweep()` call, so threads get real CPU parallelism without process forking.
+
+## Running tests
+
+```bash
+pytest tests/ -v                      # full suite
+pytest tests/ -v -m "not slow"        # fast subset (CI mode)
+```
+
+## What next
+
+- [Theory background](theory.md) -- path integrals, CDT, and Regge calculus
+- [Examples in depth](examples.md) -- detailed parameter guidance and output interpretation
+- [C++ API reference](cpp_api.md) -- header-level documentation for extending caset
+- [Benchmarks](benchmarks.md) -- build-time performance across dimensions and lattice sizes

@@ -58,7 +58,7 @@ def main():
 
     # Thermalize to get a more physical starting configuration
     target = st.getN41()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     cdt.tune()
     print("Thermalizing...")
     cdt.sweep(10)

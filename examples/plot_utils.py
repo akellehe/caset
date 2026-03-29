@@ -26,8 +26,11 @@ import caset
 # =========================================================================
 
 def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
-                    epsilon=0.02, n_sweeps=10, topology=None):
+                    epsilon=None, n_sweeps=10, topology=None):
     """Build, tune, and thermalize a 4D Lorentzian CDT spacetime.
+
+    If *epsilon* is None (the default), it is set to ``1/target_N41``
+    so the volume-fixing penalty stays proportionate at any lattice size.
 
     Returns (spacetime, cdt_simulation).
     """
@@ -49,6 +52,8 @@ def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
     max_build = 80 * 20  # 80 slabs × 20 simplices/slab in 4D
     st.build(min(n_simplices, max_build))
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
+    if epsilon is None:
+        epsilon = 1.0 / max(target, 1)
     cdt = caset.CDTSimulation(
         spacetime=st, k0=k0, k4=k4, delta=delta,
         epsilon=epsilon, targetN41=target,

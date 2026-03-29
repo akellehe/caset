@@ -329,7 +329,7 @@ class TestSwapInvariants(unittest.TestCase):
         st = _make_spacetime()
         st.build(50)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
 
         v0 = st.getVertexList().get(0)
         v1 = st.getVertexList().get(1)
@@ -398,7 +398,7 @@ class TestSwapStress(unittest.TestCase):
         st = _make_spacetime()
         st.build(100)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.tune()
 
         import random

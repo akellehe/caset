@@ -298,7 +298,7 @@ def main():
                          caset.Toroid())
     st.build(args.n_simplices)
     target = st.getN41()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     cdt.tune()
     cdt.sweep(10)
     print(f"  Vertices: {st.getVertexCount()}, "

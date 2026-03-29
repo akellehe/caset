@@ -84,7 +84,7 @@ def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
     max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
     st.build(min(n_simplices, max_build))
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     cdt.tune()
 
     cdt.sweep(n_therm, progress=sweep_cb)
@@ -317,7 +317,7 @@ def main():
                          caset.Toroid())
     st.build(args.n_simplices)
     target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     cdt.tune()
 
     n_track = max(100, args.n_therm * 2)

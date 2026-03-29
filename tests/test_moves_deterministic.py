@@ -370,7 +370,7 @@ class TestShiftForward(unittest.TestCase):
         st = _make_spacetime()
         st.build(200)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.sweep(200)
 
         before_n4 = st.getSimplexCount()
@@ -408,7 +408,7 @@ class TestShiftForward(unittest.TestCase):
         st = _make_spacetime()
         st.build(200)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.sweep(200)
 
         before_n4 = st.getSimplexCount()

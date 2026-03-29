@@ -145,7 +145,7 @@ class TestCDTTopologies(unittest.TestCase):
         self.assertGreater(st.getVertexCount(), 0, "Topology should produce vertices")
 
         # Run a sweep
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.02, 100)
+        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         accepted = cdt.sweep()
         self.assertIsInstance(accepted, int)
 
@@ -169,7 +169,7 @@ class TestCDTVolumeProfile(unittest.TestCase):
         st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
         st.build(15)
 
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.02, 100)
+        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         profile = cdt.getVolumeProfile()
         self.assertGreater(len(profile), 0, "Volume profile should not be empty")
         self.assertGreater(sum(profile), 0, "Total volume should be positive")
@@ -181,7 +181,7 @@ class TestCDTVolumeProfile(unittest.TestCase):
         st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
         st.build(15)
 
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.02, 100)
+        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         profile = cdt.getVolumeProfile()
         self.assertEqual(sum(profile), st.getSimplexCount(),
                          "Volume profile should sum to total simplex count")
@@ -197,7 +197,7 @@ class TestCDTAcceptanceRates(unittest.TestCase):
         st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
         st.build(20)
 
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.02, 100)
+        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         cdt.sweep()
         rates = cdt.getAcceptanceRates()
 

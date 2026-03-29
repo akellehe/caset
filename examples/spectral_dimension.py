@@ -158,7 +158,7 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
     st.build(min(n_simplices, max_build))
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
+    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     cdt.tune()
 
     cdt.sweep(n_therm, progress=sweep_cb)
