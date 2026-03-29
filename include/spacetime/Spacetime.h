@@ -235,7 +235,7 @@ class Spacetime {
     /// @param orientation The orientation tuple (timelike_initial, timelike_final)
     /// @return Set of simplices \f$ \{\sigma^{(t_i, t_f)}\} \f$ with the given orientation
     /// @note This method is for testing only and has poor runtime performance.
-    std::vector<SimplexPtr> getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation);
+    std::vector<SimplexPtr> getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) const;
 
     /// Returns the foliation of the spacetime. Either NONE or PREFERRED. With PREFERRED foliation; each spatial slice
     /// lies between a time slice and vis versa. Otherwise they can be any-which-a-way.

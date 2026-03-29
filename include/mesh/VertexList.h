@@ -141,7 +141,7 @@ class VertexList {
       }
     }
 
-    std::size_t size() noexcept {
+    std::size_t size() const noexcept {
       return idToIndex_.size();
     }
 

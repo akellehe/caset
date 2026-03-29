@@ -51,14 +51,14 @@ class Observable {
     ///
     /// @param spacetime The spacetime configuration to measure
     /// @return The scalar value of the observable
-    virtual double compute(std::shared_ptr<Spacetime> &spacetime);
+    virtual double compute(const std::shared_ptr<Spacetime> &spacetime);
 
     /// Incrementally update the observable after a local move.
     /// Default implementation delegates to compute().
     ///
     /// @param spacetime The spacetime after the most recent move
     /// @return The updated scalar value
-    virtual double update(std::shared_ptr<Spacetime> &spacetime);
+    virtual double update(const std::shared_ptr<Spacetime> &spacetime);
 
     virtual ~Observable() = default;
 };

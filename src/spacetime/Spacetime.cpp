@@ -344,7 +344,7 @@ SimplexSet Spacetime::getExternalSimplices() noexcept {
   return result;
 }
 
-std::vector<SimplexPtr> Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) {
+std::vector<SimplexPtr> Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) const {
   SimplexOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
   std::vector<SimplexPtr> result{};
   for (const auto &simplex : simplicesVec) {

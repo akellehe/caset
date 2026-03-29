@@ -92,7 +92,7 @@ Vertex::getEdges() const noexcept {
   return edges;
 }
 
-EdgePtr Vertex::getEdge(const EdgePtr &edge) {
+EdgePtr Vertex::getEdge(const EdgePtr &edge) const {
   auto fp = edge->fingerprint.fingerprint();
   for (const auto &e : inEdges) {
     if (e->fingerprint.fingerprint() == fp) return e;
@@ -184,7 +184,7 @@ Vertex::moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
   return moveEdgesToImpl(vertex, spacetime, EdgeDirection::Out);
 }
 
-void Vertex::checkDuplicates(std::string msg) const {
+void Vertex::checkDuplicates(const std::string &msg) const {
   std::unordered_set<std::uint64_t> seen{};
   for (const auto &simp : simplices) {
     if (seen.contains(simp->fingerprint.fingerprint())) {

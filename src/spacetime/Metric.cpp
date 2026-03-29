@@ -32,7 +32,7 @@
 
 namespace caset {
 
-    Metric::Metric(bool coordinateFree_, Signature &signature_) : signature(std::make_shared<Signature>(signature_)), coordinateFree(coordinateFree_) {
+    Metric::Metric(bool coordinateFree_, const Signature &signature_) : signature(std::make_shared<Signature>(signature_)), coordinateFree(coordinateFree_) {
     }
 
     [[nodiscard]] double Metric::getSquaredLength(

@@ -60,7 +60,7 @@ class Logger {
                    const std::string &filename,
                    std::string func,
                    const int lineno,
-                   std::string &message);
+                   const std::string &message);
 
   static std::string makeRelative(const std::string &absolute, const std::string &root);
 
@@ -139,7 +139,7 @@ inline void Logger::emit(short int level,
                          const std::string &filename,
                          std::string func,
                          const int lineno,
-                         std::string &message) {
+                         const std::string &message) {
   const bool color = shouldColorize();
 
   const std::string ts = getTime();

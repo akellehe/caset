@@ -183,7 +183,7 @@ class Vertex {
         /// Searches both inEdges and outEdges. Useful for verifying edge membership
         /// without needing to know direction.
         ///
-        EdgePtr getEdge(const EdgePtr &edge);
+        EdgePtr getEdge(const EdgePtr &edge) const;
 
         ///
         /// \brief Get all incident edges (both incoming and outgoing)
@@ -300,7 +300,7 @@ class Vertex {
         /// Scans all registered simplices and checks for duplicate fingerprints.
         /// Logs at CRITICAL_LEVEL and throws std::runtime_error if duplicates exist.
         ///
-        void checkDuplicates(std::string msg) const;
+        void checkDuplicates(const std::string &msg) const;
 
         // ========================================
         // Vertex Operations (Edge Migration)

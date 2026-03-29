@@ -153,7 +153,7 @@ class Simplex {
     [[nodiscard]] const Simplices &getFacets();
 
     bool hasFacets() const;
-    bool hasStoredFacet(const SimplexPtr &facet);
+    bool hasStoredFacet(const SimplexPtr &facet) const;
 
     // ==================== Coface Queries & Management ====================
     ///

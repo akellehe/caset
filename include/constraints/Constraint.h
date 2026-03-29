@@ -65,7 +65,7 @@ class Constraint {
     /// @param spacetime The spacetime to check
     /// @param type_ The type of constraint check to perform
     /// @return true if the constraint is satisfied
-    virtual bool applies(std::shared_ptr<Spacetime> &spacetime, ConstraintType &type_) = 0;
+    virtual bool applies(const std::shared_ptr<Spacetime> &spacetime, const ConstraintType &type_) = 0;
 };
 
 } // caset

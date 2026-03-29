@@ -35,7 +35,7 @@ namespace caset {
 ///
 class Metric {
   public:
-    Metric(bool coordinateFree_, Signature &signature_);
+    Metric(bool coordinateFree_, const Signature &signature_);
 
     ///
     /// This method computes the length of the edge between the source and target vertices when we're using a coordinate

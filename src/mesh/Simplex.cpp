@@ -489,7 +489,7 @@ bool Simplex::addEdge(const EdgePtr &edge) {
 // updateVertexId and swapVertexIds are now inlined no-ops in Simplex.h.
 // The vertices vector stores pointers whose IDs are updated externally.
 
-bool Simplex::hasStoredFacet(const SimplexPtr &facet) {
+bool Simplex::hasStoredFacet(const SimplexPtr &facet) const {
   if (facets.empty()) return false;
   for (const auto &f : facets) {
     if (f == facet) return true;

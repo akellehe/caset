@@ -24,11 +24,11 @@
 
 namespace caset {
 
-double SpacetimeVolume::compute(std::shared_ptr<Spacetime> &spacetime) {
+double SpacetimeVolume::compute(const std::shared_ptr<Spacetime> &spacetime) {
   return static_cast<double>(spacetime->getSimplexCount());
 }
 
-double SpacetimeVolume::update(std::shared_ptr<Spacetime> &spacetime) {
+double SpacetimeVolume::update(const std::shared_ptr<Spacetime> &spacetime) {
   return compute(spacetime);
 }
 

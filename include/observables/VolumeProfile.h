@@ -68,10 +68,10 @@ class VolumeProfile : public Observable {
     ///
     /// @param spacetime The spacetime to measure
     /// @return The maximum value of \f$ N_3(t) \f$ across all time slices
-    double compute(std::shared_ptr<Spacetime> &spacetime) override;
+    double compute(const std::shared_ptr<Spacetime> &spacetime) override;
 
     /// Recompute the profile (equivalent to compute for this observable).
-    double update(std::shared_ptr<Spacetime> &spacetime) override;
+    double update(const std::shared_ptr<Spacetime> &spacetime) override;
 
     /// @return The most recently computed volume profile as a vector indexed by time slice.
     [[nodiscard]] std::vector<int> getProfile() const;
@@ -83,7 +83,7 @@ class VolumeProfile : public Observable {
     /// Call this after each decorrelated Monte Carlo measurement to build statistics.
     ///
     /// @param spacetime The spacetime to measure
-    void measure(std::shared_ptr<Spacetime> &spacetime);
+    void measure(const std::shared_ptr<Spacetime> &spacetime);
 
     /// Reset all accumulated measurements.
     void reset();

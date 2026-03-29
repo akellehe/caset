@@ -24,7 +24,7 @@
 
 namespace caset {
 
-double VolumeProfile::compute(std::shared_ptr<Spacetime> &spacetime) {
+double VolumeProfile::compute(const std::shared_ptr<Spacetime> &spacetime) {
   int topSize = spacetime->getMetric()->getSignature()->getDimensions() + 1;
   std::map<int, int> profile;
   for (const auto &s : spacetime->getSimplices()) {
@@ -46,7 +46,7 @@ double VolumeProfile::compute(std::shared_ptr<Spacetime> &spacetime) {
   return static_cast<double>(*std::max_element(currentProfile.begin(), currentProfile.end()));
 }
 
-double VolumeProfile::update(std::shared_ptr<Spacetime> &spacetime) {
+double VolumeProfile::update(const std::shared_ptr<Spacetime> &spacetime) {
   return compute(spacetime);
 }
 
@@ -54,7 +54,7 @@ std::vector<int> VolumeProfile::getProfile() const {
   return currentProfile;
 }
 
-void VolumeProfile::measure(std::shared_ptr<Spacetime> &spacetime) {
+void VolumeProfile::measure(const std::shared_ptr<Spacetime> &spacetime) {
   compute(spacetime);
   measurements.push_back(currentProfile);
 }
