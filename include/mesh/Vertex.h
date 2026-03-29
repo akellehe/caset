@@ -302,6 +302,10 @@ class Vertex {
         ///
         void checkDuplicates(const std::string &msg) const;
 
+        /// Update a cached simplex fingerprint after the simplex's fingerprint
+        /// changed (e.g. due to vertex relabeling).
+        void updateSimplexFp(std::uint64_t oldFp, std::uint64_t newFp) noexcept;
+
         // ========================================
         // Vertex Operations (Edge Migration)
         // ========================================
@@ -444,6 +448,7 @@ class Vertex {
         Edges outEdges{};              ///< Edges where this vertex is the source
         Edges inEdges{};               ///< Edges where this vertex is the target
         Simplices simplices{};         ///< Simplices containing this vertex
+        std::vector<std::uint64_t> simplexFps_{}; ///< Parallel fingerprint cache (avoids pointer chasing)
         std::uint64_t id;              ///< Unique identifier
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };

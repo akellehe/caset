@@ -574,6 +574,11 @@ void Spacetime::swapVertexLabels(VertexPtr v1, VertexPtr v2) {
       s->fingerprint.addId(id1);
     }
     s->fingerprint.refresh();
+    // Update the inline fingerprint cache on each of this simplex's vertices
+    auto newFp = s->fingerprint.fingerprint();
+    for (const auto &v : s->getVertices()) {
+      v->updateSimplexFp(oldFp, newFp);
+    }
   }
 
   // Phase 3: Re-insert into lookup maps with new fingerprints.
