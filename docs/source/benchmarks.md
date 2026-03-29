@@ -39,10 +39,10 @@ $d + 1$ vertices that must be linked into the triangulation.
 
 ## Build Throughput
 
-Throughput (simplices per second) is highest in 2D (~70,000--95,000 simpl/s)
-and decreases with dimension as the per-simplex bookkeeping grows.  4D
-sustains ~30,000 simpl/s, meaning a 100k-simplex triangulation builds in
-about 3 seconds.
+Throughput (simplices per second) is highest in 1D--2D (~200,000--500,000
+simpl/s) and decreases with dimension as the per-simplex bookkeeping
+grows.  4D sustains ~150,000 simpl/s at 100k simplices, meaning a
+100k-simplex triangulation builds in under 1 second.
 
 ```{image} assets/benchmarks/build_throughput.png
 :alt: Bar chart of build throughput by dimension and target size
@@ -87,58 +87,58 @@ completeness but are not directly comparable to 2D--4D.
   - Time (s)
 * - 2D
   - 500
+  - 498
+  - 252
+  - 750
+  - 0.001
+* - 2D
+  - 10,000
+  - 9,996
+  - 5,001
+  - 14,997
+  - 0.038
+* - 2D
+  - 100,000
+  - 99,996
+  - 50,001
+  - 149,997
+  - 0.509
+* - 3D
   - 500
-  - 514
-  - 1,007
+  - 492
+  - 168
+  - 662
   - 0.002
-* - 2D
-  - 10,000
-  - 10,000
-  - 10,042
-  - 20,021
-  - 0.042
-* - 2D
-  - 100,000
-  - 100,000
-  - 100,092
-  - 200,046
-  - 0.64
 * - 3D
+  - 10,000
+  - 9,996
+  - 3,336
+  - 13,334
+  - 0.043
+* - 3D
+  - 100,000
+  - 99,996
+  - 33,336
+  - 133,334
+  - 0.580
+* - 4D
   - 500
   - 500
-  - 521
-  - 1,521
+  - 130
+  - 635
   - 0.003
-* - 3D
-  - 10,000
-  - 10,000
-  - 10,063
-  - 30,063
-  - 0.061
-* - 3D
-  - 100,000
-  - 100,000
-  - 100,138
-  - 300,138
-  - 1.06
-* - 4D
-  - 500
-  - 500
-  - 528
-  - 2,042
-  - 0.004
 * - 4D
   - 10,000
   - 10,000
-  - 10,084
-  - 40,126
-  - 0.119
+  - 2,505
+  - 12,510
+  - 0.058
 * - 4D
   - 100,000
   - 100,000
-  - 100,184
-  - 400,276
-  - 2.26
+  - 25,005
+  - 125,010
+  - 0.684
 ```
 
 ---
@@ -176,9 +176,35 @@ current v{{version}} code.  The cumulative optimizations include:
 - **Eliminated dead return values** — `removeInEdge`/`removeOutEdge` were
   allocating a hash table of "owner" simplices on every call and returning
   it to nobody.
+- **Merged redundant hash tables** — consolidated `simplexVecIndex` and
+  `simplexPoolIndex_` into a single `simplexIndex_`, halving hash lookups
+  in `registerSimplex`/`unregisterSimplex`.
+- **Open-addressing flat hash map** — replaced `std::unordered_map` (chained
+  hashing) with a custom `FlatHashMap` using identity hash and linear
+  probing for the two hot-path simplex index tables. ~3x better cache
+  locality on lookup-heavy workloads.
+- **Eliminated `liveIndex_` maps** — stored the live-vector index directly on
+  `Edge` and `Vertex` objects, removing two `unordered_map`s (~5k entries
+  each) and their associated hash lookups on every add/remove.
+- **Inlined `computeDeltaAction` and `accept`** — moved the Metropolis
+  acceptance test and incremental action computation to the header,
+  eliminating function call overhead on every move attempt (~100k+/sec).
+- **Stack-allocated move temporaries** — replaced heap-allocated `std::vector`
+  with a fixed-capacity `StackVec<T, 8>` for vertex/simplex lists in flip,
+  iflip, and shift moves, eliminating `malloc`/`free` on every rejected
+  move attempt.
+- **Inline fingerprint cache on vertices** — added a parallel
+  `std::vector<uint64_t>` alongside the vertex simplex list so
+  `addSimplex`/`removeSimplex` can compare fingerprints without chasing
+  pointers to Simplex objects scattered across the heap (~68 entries).
+- **Orphaned sub-simplex cleanup** — facets whose last coface is removed
+  are now evicted from the simplex index, preventing unbounded growth of
+  the hash tables during long simulations. Reduced the total/top simplex
+  ratio from 4.6x to 3.4x.
 
-Build time improvement is **30-65%** across the board, with sweep
-performance improving by up to **6x** at typical lattice sizes.
+Cumulative build-time improvement is **50-67%** at large lattice sizes,
+with sweep performance improving by up to **1.7x** (7.7 → 4.3 µs/move
+at N4=19k).
 
 ```{image} assets/benchmarks/benchmark_comparison.png
 :alt: Before vs. after benchmark comparison
