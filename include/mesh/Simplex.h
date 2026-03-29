@@ -271,7 +271,7 @@ class Simplex {
     /// @param vertex A new, standalone, orphaned vertex with no existing edges or associated simplices.
     /// @returns A pair of {simplex, facets}; The new k-simplex created by coning `vertex` to this facet and a vector of
     ///   new exterior facets resulting from the new simplex.
-    std::pair<SimplexPtr, Simplices> cone(VertexPtr &vertex);
+    std::pair<SimplexPtr, Simplices> cone(VertexPtr vertex);
 
     // ==================== Validation ====================
     void validate() const;

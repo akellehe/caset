@@ -497,7 +497,7 @@ bool Simplex::hasStoredFacet(const SimplexPtr &facet) const {
   return false;
 }
 
-std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
+std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr vertex) {
   auto signature = spacetime->getMetric()->getSignature();
   auto foliation = spacetime->getFoliation();
   if (signature->getSignatureType() == SignatureType::Lorentzian) {

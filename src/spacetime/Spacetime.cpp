@@ -59,10 +59,10 @@ Spacetime::Spacetime(
   std::optional<double> alpha_,
   std::optional<double> a_,
   Foliation foliation_,
-  std::optional<std::shared_ptr<Topology> > topology_) : metric(metric_), spacetimeType(spacetimeType_), foliation(foliation_) {
+  std::optional<std::shared_ptr<Topology> > topology_) : metric(std::move(metric_)), spacetimeType(spacetimeType_), foliation(foliation_) {
   alpha = alpha_.value_or(1.);
   a = a_.value_or(1.);
-  topology = topology_.value_or(std::make_shared<Toroid>());
+  topology = topology_.has_value() ? std::move(*topology_) : std::make_shared<Toroid>();
 }
 
 // ========================================
