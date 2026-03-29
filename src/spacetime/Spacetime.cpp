@@ -24,7 +24,6 @@
 //
 
 #include <pybind11/pybind11.h>
-// #include <torch/torch.h>
 #include "Logger.h"
 #include <cmath>
 #include <memory>

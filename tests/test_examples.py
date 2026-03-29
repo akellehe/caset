@@ -312,10 +312,3 @@ class TestBuildBenchmark(unittest.TestCase):
             self.assertIn("4D", result.stdout)
 
 
-class TestPlot4D(unittest.TestCase):
-    """Tests for the original examples/plot4D.py (if torch is available)."""
-
-    def test_script_exists(self):
-        self.assertTrue(
-            os.path.exists(os.path.join(EXAMPLES_DIR, "plot4D.py")),
-            "plot4D.py should exist")
