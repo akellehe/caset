@@ -782,13 +782,44 @@ void Spacetime::removeSimplex(const SimplexPtr &simplex) {
   for (const auto &v : simplex->getVertices()) {
     v->removeSimplex(simplex);
   }
-  // Remove coface references from facets
+  // Remove coface references from facets; collect orphaned facets for cleanup.
+  // Facets whose last coface is removed are no longer reachable and would
+  // otherwise accumulate indefinitely, bloating the simplex index.
+  Simplices orphanedFacets;
   if (simplex->hasFacets()) {
     for (const auto &facet : simplex->getFacets()) {
       facet->removeCoface(simplex);
+      if (facet->getCofaces().empty()) {
+        orphanedFacets.push_back(facet);
+      }
     }
   }
   unregisterSimplex(simplex);
+
+  // Remove orphaned facets from the index so they don't bloat hash lookups.
+  // We do NOT delete the objects: other simplices may still hold cached pointers
+  // to these facets (e.g. in their facets_ vector from a prior getFacets() call).
+  // The pool destructor will free them when the Spacetime is destroyed.
+  for (const auto &facet : orphanedFacets) {
+    for (const auto &v : facet->getVertices()) {
+      v->removeSimplex(facet);
+    }
+    // Remove from index maps and simplicesVec, but keep the object alive in the pool
+    auto fp = facet->fingerprint.fingerprint();
+    auto *slots = simplexIndex_.find(fp);
+    if (slots) {
+      auto vecIdx = slots->vecIdx;
+      // Swap-and-pop from simplicesVec
+      if (!simplicesVec.empty() && vecIdx + 1 < static_cast<std::uint32_t>(simplicesVec.size())) {
+        auto backFp = simplicesVec.back()->fingerprint.fingerprint();
+        simplicesVec[vecIdx] = simplicesVec.back();
+        auto *backSlots = simplexIndex_.find(backFp);
+        if (backSlots) backSlots->vecIdx = vecIdx;
+      }
+      if (!simplicesVec.empty()) simplicesVec.pop_back();
+      simplexIndex_.erase(fp);
+    }
+  }
 }
 
 } // caset
