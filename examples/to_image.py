@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import caset
-from tqdm import tqdm
+from progress import SingleTaskProgress
 
 
 def main():
@@ -45,6 +45,9 @@ def main():
 
     args = p.parse_args()
 
+    prog = SingleTaskProgress()
+    prog.phase("building", extra=f"{args.n_simplices} simplices")
+
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
@@ -54,14 +57,16 @@ def main():
     eps = args.epsilon if args.epsilon is not None else 1.0 / max(target, 1)
     cdt = caset.CDTSimulation(st, args.k0, args.k4, args.delta, eps,
                               target, args.quadraticVolume)
+
+    prog.phase("tuning")
     cdt.tune()
     if args.n_sweeps > 0:
-        sweep_bar = tqdm(total=args.n_sweeps, desc="Sweeps", unit="sweep", position=1, leave=False)
-        sweep_cb = lambda i, n: sweep_bar.update(1)
-        cdt.sweep(args.n_sweeps, progress=sweep_cb)
+        prog.phase("thermalizing", total=args.n_sweeps)
+        cdt.sweep(args.n_sweeps, progress=prog.on_tick)
 
+    prog.phase("rendering", extra=args.save)
     st.save(args.save, tilt=args.tilt, spin=args.spin, precession=args.precession)
-    print(f"Saved {args.save}")
+    prog.finish(f"saved {args.save}")
 
 
 if __name__ == "__main__":

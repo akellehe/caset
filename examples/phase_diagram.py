@@ -55,16 +55,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-from tqdm import tqdm
 
 import caset
+from progress import ProgressDisplay
 
 
 # =====================================================================
 # Simulation
 # =====================================================================
 
-def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
+def run_point(k0, delta, n_simplices, n_sweeps,
+              sweep_cb=None, phase_cb=None, point_id=None):
     """Run CDT at a single (k0, Delta) point and return observables.
 
     The Toroid staircase product creates d*(d+1)=20 simplices per time
@@ -78,6 +79,9 @@ def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
 
     GIL is released during sweep(), so threads get real C++ parallelism.
     """
+    _ph = lambda p: phase_cb(point_id, p) if phase_cb and point_id is not None else None
+
+    _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric=metric,
@@ -93,22 +97,21 @@ def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
     max_build = 40 * 20  # 40 slabs x 20 simplices/slab in 4D
     st.build(min(n_simplices, max_build))
 
-    # TODO: Comment what is going on here:
-
     target = n_simplices // 2
     d = 4 # Hardcoded dimensions
     k4 = (k0 + 6 * delta) / (2 * d - 2) - 2 * delta
     epsilon = 1. / target
-    print(f"Using k0={k0:.2f} k4={k4:.2f} epsilon={epsilon:.2f} delta={delta:.2f} N41={target:.2f}")
     cdt = caset.CDTSimulation(spacetime=st, k0=k0, k4=k4, delta=delta, epsilon=epsilon, targetN41=target)
 
     # tune() adjusts k4 to the pseudo-critical value for this (k0,delta)
     # and runs 20 feedback sweeps during which the system grows to target.
+    _ph("tuning")
     cdt.tune()
 
     # Evolve.  Do NOT use thermalize() — its early-stopping criterion
     # converges to the nearest action basin (always Phase C from the
     # initial state) and prevents exploration of other phases.
+    _ph("sweeping")
     cdt.sweep(n_sweeps, progress=sweep_cb)
 
     profile = cdt.getVolumeProfile()
@@ -208,35 +211,33 @@ def main():
     t0 = time.time()
     total_sweeps = total_points * args.n_sweeps
 
-    pt_bar = tqdm(total=total_points, desc="Grid points", unit="pt",
-                  position=0)
-    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
-                     position=1, leave=False)
-    sweep_cb = lambda i, n: sweep_bar.update(1)
+    progress = ProgressDisplay(total_points, total_sweeps,
+                               item_label="Points")
 
     # Collect results from all grid points
     results = {}  # (i, j) -> result dict
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {}
+        point_id = 0
         for i, delta in enumerate(delta_values):
             for j, k0 in enumerate(k0_values):
                 f = pool.submit(run_point, k0, delta,
                                 args.n_simplices, args.n_sweeps,
-                                sweep_cb)
-                futures[f] = (i, j, k0, delta)
+                                progress.on_sweep, progress.on_phase,
+                                point_id)
+                futures[f] = (i, j, k0, delta, point_id)
+                point_id += 1
 
         for future in as_completed(futures):
-            i, j, k0, delta = futures[future]
+            i, j, k0, delta, pid = futures[future]
             result = future.result()
             results[(i, j)] = result
             ratio = result['n32'] / max(result['n41'], 1)
-            pt_bar.set_postfix_str(
-                f"k0={k0:.1f} D={delta:.2f} N32/N41={ratio:.2f}")
-            pt_bar.update(1)
+            progress.on_item_done(pid,
+                f"k₀={k0:.1f} Δ={delta:.2f} N32/N41={ratio:.2f}")
 
-    sweep_bar.close()
-    pt_bar.close()
+    progress.finish()
 
     # Build the N32/N41 order-parameter grid and classify
     op_grid = np.zeros((len(delta_values), len(k0_values)))

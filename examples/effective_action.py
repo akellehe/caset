@@ -64,19 +64,22 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-from tqdm import tqdm
 
 import caset
+from progress import ProgressDisplay, SingleTaskProgress
 
 
 def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
-                    sweep_cb=None):
+                    sweep_cb=None, phase_cb=None):
     """Run one independent Markov chain and collect volume profiles.
 
     Each worker builds, thermalizes, and measures its own spacetime.
     Independent chains give truly decorrelated samples.  The GIL is
     released during sweep(), so multiple threads run in parallel.
     """
+    _ph = lambda p: phase_cb(worker_id, p) if phase_cb else None
+
+    _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -85,10 +88,13 @@ def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
     st.build(min(n_simplices, max_build))
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
-    cdt.tune()
 
+    _ph("tuning")
+    cdt.tune()
+    _ph("thermalizing")
     cdt.sweep(n_therm, progress=sweep_cb)
 
+    _ph("measuring")
     profiles = []
     for _ in range(n_meas):
         cdt.sweep(interval, progress=sweep_cb)
@@ -147,30 +153,25 @@ def main():
     total_sweeps = sum(
         args.n_therm + n * args.meas_interval for n in worker_meas)
 
-    chain_bar = tqdm(total=actual_workers, desc="Chains", unit="chain",
-                     position=0)
-    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
-                     position=1, leave=False)
-    sweep_cb = lambda i, n: sweep_bar.update(1)
+    progress = ProgressDisplay(actual_workers, total_sweeps,
+                               item_label="Chains")
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {}
         for w, n in enumerate(worker_meas):
             f = pool.submit(_collect_worker, w, args.n_simplices,
                             args.n_therm, n, args.meas_interval,
-                            sweep_cb)
+                            progress.on_sweep, progress.on_phase)
             futures[f] = (w, n)
 
         for f in as_completed(futures):
             wid, n = futures[f]
             _, worker_profiles = f.result()
             profiles.extend(worker_profiles)
-            chain_bar.set_postfix_str(
-                f"chain {wid+1}: {len(worker_profiles)} profiles")
-            chain_bar.update(1)
+            progress.on_item_done(wid,
+                f"{len(worker_profiles)} profiles")
 
-    sweep_bar.close()
-    chain_bar.close()
+    progress.finish()
 
     avg_slices = np.mean([len(p) for p in profiles])
     avg_vol = np.mean([np.sum(p) for p in profiles])
@@ -323,15 +324,16 @@ def main():
     n_track = max(100, args.n_therm * 2)
     actions = []
     volumes = []
-    pbar = tqdm(total=args.n_therm + n_track,
-                desc="  Action tracking", unit="sweep", leave=False)
-    cdt.sweep(args.n_therm, progress=lambda i, n: pbar.update(1))
+    prog2 = SingleTaskProgress()
+    prog2.phase("thermalizing", total=args.n_therm)
+    cdt.sweep(args.n_therm, progress=prog2.on_tick)
+    prog2.phase("tracking action", total=n_track)
     for _ in range(n_track):
         cdt.sweep(1)
         actions.append(cdt.computeAction())
         volumes.append(st.getSimplexCount())
-        pbar.update(1)
-    pbar.close()
+        prog2.on_tick()
+    prog2.finish()
 
     ax_action.plot(actions, "b-", linewidth=0.8, alpha=0.7)
     ax_action.set_xlabel("Sweep", fontsize=12)

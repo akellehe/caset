@@ -22,6 +22,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from PIL import Image
 
 import caset
+from progress import SingleTaskProgress
 
 
 # =========================================================================
@@ -290,8 +291,10 @@ def main():
     p.add_argument("--save", type=str, default="wilson_loops.gif")
     args = p.parse_args()
 
+    prog = SingleTaskProgress()
+
     # Build spacetime
-    print(f"Building spacetime with {args.n_simplices} simplices...")
+    prog.phase("building", extra=f"{args.n_simplices} simplices")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -299,8 +302,10 @@ def main():
     st.build(args.n_simplices)
     target = st.getN41()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    prog.phase("tuning")
     cdt.tune()
-    cdt.sweep(10)
+    prog.phase("thermalizing", total=10)
+    cdt.sweep(10, progress=prog.on_tick)
     print(f"  Vertices: {st.getVertexCount()}, "
           f"Top simplices: {st.getSimplexCount()}")
 
@@ -371,13 +376,14 @@ def main():
             print(f"  size={size}: W={val:.4f}")
 
     # Build full dual-complex layout (shared across all loop types)
-    print("  Building dual-complex layout...")
+    prog.phase("layouting", extra="dual complex")
     key_to_idx, key_list, dual_edges, edge_types, _ = _build_dual_complex(st)
     dual_pos = _dual_complex_layout(key_list, dual_edges, len(key_list))
 
     # Render GIF: for each loop type, show rotating views
+    prog.phase("rendering", extra=args.save)
     frames = []
-    azimuths = list(range(0, 360, 1))  # 24 frames per loop
+    azimuths = list(range(0, 360, 1))
 
     for loop_name, loop in loops.items():
         r = wl.evaluate(loop, caset.WilsonMode.DEFICIT_ANGLE)
@@ -399,7 +405,7 @@ def main():
     pil_frames[0].save(args.save, save_all=True,
                        append_images=pil_frames[1:],
                        duration=50, loop=0)
-    print(f"\nSaved {args.save}")
+    prog.finish(f"saved {args.save}")
 
 
 if __name__ == "__main__":

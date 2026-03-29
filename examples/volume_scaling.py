@@ -37,18 +37,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-from tqdm import tqdm
 
 import caset
+from progress import ProgressDisplay
 
 
-def _profiles_worker(n_simplices, n_therm, n_meas, meas_interval,
-                     sweep_cb=None):
+def _profiles_worker(run_id, n_simplices, n_therm, n_meas, meas_interval,
+                     sweep_cb=None, phase_cb=None):
     """Run one system-size simulation and collect volume profiles.
 
     Each size is independent.  The GIL is released during sweep(),
     so multiple threads run in parallel.
     """
+    _ph = lambda p: phase_cb(run_id, p) if phase_cb else None
+
+    _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -58,9 +61,12 @@ def _profiles_worker(n_simplices, n_therm, n_meas, meas_interval,
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
+    _ph("tuning")
     cdt.tune()
+    _ph("thermalizing")
     cdt.sweep(n_therm, progress=sweep_cb)
 
+    _ph("measuring")
     profiles = []
     for _ in range(n_meas):
         cdt.sweep(meas_interval, progress=sweep_cb)
@@ -128,16 +134,14 @@ def main():
     sweeps_per_run = args.n_therm + args.n_meas * args.meas_interval
     total_sweeps = n_runs * sweeps_per_run
 
-    run_bar = tqdm(total=n_runs, desc="Runs", unit="run", position=0)
-    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
-                     position=1, leave=False)
-    sweep_cb = lambda i, n: sweep_bar.update(1)
+    progress = ProgressDisplay(n_runs, total_sweeps, item_label="Runs")
 
     size_profiles = {}
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {
-            pool.submit(_profiles_worker, n4, args.n_therm,
-                        args.n_meas, args.meas_interval, sweep_cb):
+            pool.submit(_profiles_worker, idx, n4, args.n_therm,
+                        args.n_meas, args.meas_interval,
+                        progress.on_sweep, progress.on_phase):
             (idx, n4)
             for idx, n4 in enumerate(all_runs)
         }
@@ -145,14 +149,10 @@ def main():
             idx, n4 = futures[f]
             _, profiles = f.result()
             size_profiles[idx] = profiles
-            avg_slices = np.mean([len(p) for p in profiles])
-            avg_vol = np.mean([np.sum(p) for p in profiles])
-            run_bar.set_postfix_str(
-                f"N4={n4:,}, {len(profiles)} profiles")
-            run_bar.update(1)
+            progress.on_item_done(idx,
+                f"N₄={n4:,}, {len(profiles)} profiles")
 
-    sweep_bar.close()
-    run_bar.close()
+    progress.finish()
 
     # ---- Fig 7: Rescaled volume-volume correlator ----
     ax_corr = axes[0, 0]

@@ -41,18 +41,25 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from tqdm import tqdm
 
 import caset
+from progress import ProgressDisplay
 
 
-def _phase_worker(label, k0, delta, n_simplices, n_therm, n_meas,
-                  meas_interval, sweep_cb=None):
+def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
+                  meas_interval, phase_cb=None):
     """Run one phase simulation: build, tune, thermalize, measure.
 
     Each phase uses different coupling constants and is fully independent.
     The GIL is released during sweep(), so threads run in parallel.
+
+    We intentionally do NOT pass a per-sweep progress callback:
+    a Python callback would reacquire the GIL every sweep, serializing
+    the threads.  Instead we report progress at the phase level.
     """
+    _ph = lambda p: phase_cb(phase_id, p) if phase_cb else None
+
+    _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -62,12 +69,15 @@ def _phase_worker(label, k0, delta, n_simplices, n_therm, n_meas,
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 1.0 / target, target)
 
+    _ph("tuning")
     cdt.tune()
-    cdt.sweep(n_therm, progress=sweep_cb)
+    _ph("thermalizing")
+    cdt.sweep(n_therm)
 
+    _ph("measuring")
     profiles = []
     for _ in range(n_meas):
-        cdt.sweep(meas_interval, progress=sweep_cb)
+        cdt.sweep(meas_interval)
         profiles.append(cdt.getVolumeProfile())
 
     return label, profiles, cdt.getAcceptanceRates(), cdt.getK4()
@@ -150,29 +160,30 @@ def main():
     t_total = time.time()
 
     # All three phases are independent — run in parallel.
-    # We intentionally do NOT pass a per-sweep progress callback here:
-    # a Python callback would reacquire the GIL every sweep, serializing
-    # the threads.  Instead we report progress at the phase level.
     n_phases = len(phases)
-
-    phase_bar = tqdm(total=n_phases, desc="Phases", unit="phase")
+    sweeps_per_phase = args.n_therm + args.n_meas * args.meas_interval
+    progress = ProgressDisplay(n_phases, n_phases * sweeps_per_phase,
+                               item_label="Phases")
 
     phase_results = {}
+    label_to_pid = {}
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
-        futures = {
-            pool.submit(_phase_worker, label, k0, delta,
-                        args.n_simplices, args.n_therm,
-                        args.n_meas, args.meas_interval): label
-            for label, (k0, delta) in phases.items()
-        }
+        futures = {}
+        for pid, (label, (k0, delta)) in enumerate(phases.items()):
+            label_to_pid[label] = pid
+            f = pool.submit(_phase_worker, pid, label, k0, delta,
+                            args.n_simplices, args.n_therm,
+                            args.n_meas, args.meas_interval,
+                            progress.on_phase)
+            futures[f] = label
+
         for f in as_completed(futures):
             label, profiles, rates, k4 = f.result()
             phase_results[label] = (profiles, rates)
             short = label.split("\n")[0]
-            phase_bar.set_postfix_str(short)
-            phase_bar.update(1)
+            progress.on_item_done(label_to_pid[label], short)
 
-    phase_bar.close()
+    progress.finish()
 
     for label, (profiles, rates) in phase_results.items():
         short = label.split("\n")[0]

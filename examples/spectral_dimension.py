@@ -55,9 +55,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import sparse
-from tqdm import tqdm
 
 import caset
+from progress import ProgressDisplay
 
 
 # ---------------------------------------------------------------------------
@@ -123,13 +123,15 @@ def diffuse_sparse(T, starts, max_sigma):
 # ---------------------------------------------------------------------------
 
 def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
-            n_walks, max_sigma, sweep_cb=None):
+            n_walks, max_sigma, sweep_cb=None, phase_cb=None):
     """Run one independent configuration: build spacetime, thermalize,
     build dual graph, run diffusion walks.  Returns list of return-prob arrays.
 
     GIL is released during sweep() calls, so multiple threads get real
     C++ parallelism without duplicating process memory.
     """
+    if phase_cb:
+        phase_cb(cfg_id, "building")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -137,13 +139,22 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     st.build(n_simplices)
     target = st.getN41()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+
+    if phase_cb:
+        phase_cb(cfg_id, "tuning")
     cdt.tune()
 
+    if phase_cb:
+        phase_cb(cfg_id, "thermalizing")
     cdt.sweep(n_therm, progress=sweep_cb)
 
+    if phase_cb:
+        phase_cb(cfg_id, "decorrelating")
     # Decorrelate
     cdt.sweep(sweeps_between, progress=sweep_cb)
 
+    if phase_cb:
+        phase_cb(cfg_id, "diffusing")
     t0 = time.time()
     T, N = build_transition_matrix(st)
     if T is None or N == 0:
@@ -235,18 +246,14 @@ def main():
 
     # Threads share address space — no memory duplication.
     # The GIL is released inside sweep(), so threads get real C++ parallelism.
-    cfg_bar = tqdm(total=args.n_configs, desc="Configs", unit="cfg",
-                   position=0)
-    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
-                     position=1, leave=False)
-    sweep_cb = lambda i, n: sweep_bar.update(1)
+    progress = ProgressDisplay(args.n_configs, total_sweeps)
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {
             pool.submit(
                 _worker, cfg, args.n_simplices, args.n_therm,
                 args.sweeps_between, args.n_walks, args.max_sigma,
-                sweep_cb
+                progress.on_sweep, progress.on_phase
             ): cfg
             for cfg in range(args.n_configs)
         }
@@ -254,13 +261,9 @@ def main():
             cfg_id, rps, N, avg_nbr, elapsed = future.result()
             if rps:
                 all_return_probs.extend(rps)
-            cfg_bar.set_postfix_str(
-                f"cfg {cfg_id+1}: N4~{N:,}" if rps else
-                f"cfg {cfg_id+1}: empty")
-            cfg_bar.update(1)
+            progress.on_item_done(cfg_id, f"N₄≈{N:,}" if rps else "empty")
 
-    sweep_bar.close()
-    cfg_bar.close()
+    progress.finish()
 
     if not all_return_probs:
         print("No data collected.")

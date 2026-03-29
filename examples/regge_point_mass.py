@@ -16,7 +16,7 @@ Usage:
 import argparse
 
 import caset
-from tqdm import tqdm
+from progress import SingleTaskProgress
 
 
 def main():
@@ -46,8 +46,10 @@ def main():
 
     args = p.parse_args()
 
+    prog = SingleTaskProgress()
+
     # Build the triangulation
-    print(f"Building spacetime with {args.n_simplices} simplices...")
+    prog.phase("building", extra=f"{args.n_simplices} simplices")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -59,9 +61,10 @@ def main():
     # Thermalize to get a more physical starting configuration
     target = st.getN41()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    prog.phase("tuning")
     cdt.tune()
-    print("Thermalizing...")
-    cdt.sweep(10)
+    prog.phase("thermalizing", total=10)
+    cdt.sweep(10, progress=prog.on_tick)
 
     # Pick the spatial center: vertex with the most spacelike neighbors.
     # Ties broken by BFS depth-5 sum-of-distances (avoids torus wrapping).
@@ -132,16 +135,15 @@ def main():
     print(f"  S_grav = {S_grav:.4f},  S_matter = {S_matt:.4f}")
     print(f"  ||∇S||² = {F0:.6f}")
 
-    # Solve with tqdm progress bar
-    bar = tqdm(total=args.max_iters, desc="Solving", unit="iter",
-               bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
-                          "[{elapsed}<{remaining}, {rate_fmt}] "
-                          "F={postfix}")
-    bar.set_postfix_str(f"{F0:.6f}")
+    # Solve with progress display
+    prog.phase("solving", total=args.max_iters,
+               extra=f"‖∇S‖²={F0:.6f}")
 
     def on_progress(iteration, F):
-        bar.update(1)
-        bar.set_postfix_str(f"{F:.6f}")
+        prog.on_tick()
+        prog._lock.acquire()
+        prog._extra = f"‖∇S‖²={F:.6f}"
+        prog._lock.release()
 
     converged, F_final, iters = solver.solve(
         tol=args.tol,
@@ -149,7 +151,6 @@ def main():
         learning_rate=args.learning_rate,
         progress=on_progress,
     )
-    bar.close()
 
     status = "Converged" if converged else "Did not converge"
     print(f"\n{status} after {iters} iterations")
@@ -158,18 +159,18 @@ def main():
     print(f"  S_matter: {S_matt:.4f} → {solver.matterAction():.4f}")
 
     # Render simplicial embedding GIF
-    print(f"Saving {args.save}...")
+    prog.phase("rendering", extra=args.save)
     st.save(args.save, tilt=args.tilt, spin=args.spin,
             precession=args.precession)
-    print(f"Done. Output: {args.save}")
 
     # Render per-slice curvature heat map GIF
     if not args.no_curvature_gif and args.save.endswith(".gif"):
         from curvature_slice_gif import render_curvature_gif
         curv_path = args.save.replace(".gif", "_curvature.gif")
-        print(f"Rendering curvature slices: {curv_path}...")
+        prog.phase("rendering", extra=f"curvature → {curv_path}")
         render_curvature_gif(st, solver, worldline, curv_path)
-        print(f"Done. Output: {curv_path}")
+
+    prog.finish(f"saved {args.save}")
 
 
 if __name__ == "__main__":

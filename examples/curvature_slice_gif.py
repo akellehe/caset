@@ -28,6 +28,7 @@ from PIL import Image
 import caset
 from plot_utils import (build_spacetime, time_slices, spatial_subgraph,
                         bfs_distances, save_gif)
+from progress import SingleTaskProgress
 
 
 # =========================================================================
@@ -314,6 +315,9 @@ def main():
     p.add_argument("--save", type=str, default="curvature_slices.gif")
     args = p.parse_args()
 
+    prog = SingleTaskProgress()
+    prog.phase("building", extra=f"{args.n_simplices} simplices")
+
     st, _ = build_spacetime(args.n_simplices)
 
     verts = st.getVertexList().toVector()
@@ -324,16 +328,16 @@ def main():
     matter.setWorldlineMass(center, args.mass, st)
 
     solver = caset.ReggeSolver(st, matter)
-    print(f"Solving (max {args.max_iters} iters)...")
+    prog.phase("solving", total=args.max_iters)
     converged, F, iters = solver.solve(
         tol=args.tol, max_iters=args.max_iters,
         learning_rate=args.learning_rate)
     print(f"{'Converged' if converged else 'Did not converge'} "
           f"after {iters} iters, F={F:.6f}")
 
-    print(f"Rendering {args.save}...")
+    prog.phase("rendering", extra=args.save)
     render_curvature_gif(st, solver, worldline, args.save)
-    print(f"Done. Output: {args.save}")
+    prog.finish(f"saved {args.save}")
 
 
 if __name__ == "__main__":

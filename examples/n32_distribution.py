@@ -42,18 +42,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 import caset
+from progress import ProgressDisplay
 
 
-def _volume_worker(target_n41, n_therm, n_meas, meas_interval,
-                   sweep_cb=None):
+def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
+                   sweep_cb=None, phase_cb=None):
     """Run one target-volume simulation: build, thermalize, collect N32/N41.
 
     Each volume is a fully independent simulation.  The GIL is released
     during sweep(), so multiple threads run in parallel.
     """
+    _ph = lambda p: phase_cb(vol_id, p) if phase_cb else None
+
+    _ph("building")
     n_build = target_n41 * 2
     max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
     sig = caset.Signature(4, caset.Lorentzian)
@@ -64,9 +67,12 @@ def _volume_worker(target_n41, n_therm, n_meas, meas_interval,
     target = st.getN41() if n_build <= max_build else target_n41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
+    _ph("tuning")
     cdt.tune()
+    _ph("thermalizing")
     cdt.sweep(n_therm, progress=sweep_cb)
 
+    _ph("measuring")
     n32_samples = []
     n41_samples = []
     for _ in range(n_meas):
@@ -118,26 +124,24 @@ def main():
     sweeps_per_vol = args.n_therm + args.n_meas * args.meas_interval
     total_sweeps = n_vols * sweeps_per_vol
 
-    vol_bar = tqdm(total=n_vols, desc="Volumes", unit="vol", position=0)
-    sweep_bar = tqdm(total=total_sweeps, desc="Sweeps", unit="sweep",
-                     position=1, leave=False)
-    sweep_cb = lambda i, n: sweep_bar.update(1)
+    progress = ProgressDisplay(n_vols, total_sweeps, item_label="Volumes")
 
     results = {}
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {
-            pool.submit(_volume_worker, tv, args.n_therm,
-                        args.n_meas, args.meas_interval, sweep_cb): tv
-            for tv in target_n41_values
+            pool.submit(_volume_worker, vid, tv, args.n_therm,
+                        args.n_meas, args.meas_interval,
+                        progress.on_sweep, progress.on_phase):
+            (vid, tv)
+            for vid, tv in enumerate(target_n41_values)
         }
         for f in as_completed(futures):
+            vid, tv = futures[f]
             target_n41, n32_arr, n41_arr = f.result()
             results[target_n41] = (n32_arr, n41_arr)
-            vol_bar.set_postfix_str(f"N41~{target_n41:,}")
-            vol_bar.update(1)
+            progress.on_item_done(vid, f"N₄₁≈{target_n41:,}")
 
-    sweep_bar.close()
-    vol_bar.close()
+    progress.finish()
 
     for tv in target_n41_values:
         n32_arr, n41_arr = results[tv]
