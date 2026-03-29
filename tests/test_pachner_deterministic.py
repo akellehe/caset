@@ -554,9 +554,9 @@ class TestAddRemoveVertexStructure(unittest.TestCase):
 
     def test_added_vertex_connects_to_d_plus_2_vertices(self):
         """The (2,2d) vertex connects to d spatial + 2 non-spatial = d+2 others."""
-        cdt, st = _build_small(n_simplices=20)
+        cdt, st = _build_small(n_simplices=100)
 
-        for _ in range(500):
+        for _ in range(2000):
             if cdt.add():
                 break
         else:

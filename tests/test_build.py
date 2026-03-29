@@ -25,26 +25,28 @@ import sys
 
 class TestBuilding(unittest.TestCase):
     def test_building(self):
-        path = None
-        for p in sys.path:
-            if "cmake-build-debug" in p:
-                path = p
-                break
-
-        print("sys.path[0..5]:")
-        for p in sys.path[:6]:
-            print(" ", p)
-
+        """Verify that caset is importable — from cmake-build-debug, pip install -e ., or pip install ."""
         spec = importlib.util.find_spec("caset")
-        if spec is not None:
-            print("  origin:", spec.origin)
-            print("  loader:", spec.loader)
+        self.assertIsNotNone(spec, "caset module not found")
+        self.assertIsNotNone(spec.origin, "caset module has no origin")
 
-        # Allow site-packages if this is an editable install
-        if "site-packages" in spec.origin:
+        print("  origin:", spec.origin)
+
+        if "site-packages" in (spec.origin or ""):
+            # Loaded from a pip install.  Accept both editable (`pip install -e .`)
+            # and regular (`pip install .`) local installs — both produce a
+            # direct_url.json with a file:// URL pointing at the source tree.
+            # Only reject if there's no direct_url at all (stale system wheel).
             from importlib.metadata import distribution
             dist = distribution("caset")
             direct_url = dist.read_text("direct_url.json") or ""
-            self.assertIn("editable", direct_url,
-                          f"caset loaded from site-packages but is not an editable install: {spec.origin}")
-        self.assertIsNotNone(path)
+            self.assertTrue(
+                direct_url,
+                f"caset loaded from site-packages without a direct_url.json — "
+                f"stale install? origin: {spec.origin}")
+        else:
+            # Loaded from cmake-build-debug (conftest.py injected it)
+            found = any("cmake-build-debug" in p for p in sys.path)
+            self.assertTrue(
+                found,
+                "cmake-build-debug not on sys.path and caset is not a pip install")
