@@ -156,8 +156,8 @@ class TestVolumeScaling(unittest.TestCase):
         # Verify the script produced actual scaling output
         combined = out + err
         self.assertIn("Runs", combined)
-        self.assertIn("N4", combined,
-                       "Expected volume scaling output with N4 data")
+        self.assertTrue("N4" in combined or "N₄" in combined,
+                        "Expected volume scaling output with N4 data")
         if os.path.exists(path):
             os.unlink(path)
 
