@@ -353,6 +353,44 @@ std::vector<SimplexPtr> Spacetime::getSimplicesWithOrientation(std::tuple<uint8_
   return result;
 }
 
+std::tuple<std::vector<std::uint32_t>,
+           std::vector<std::uint32_t>,
+           std::uint32_t>
+Spacetime::getDualAdjacency() const {
+  const std::uint32_t N = static_cast<std::uint32_t>(topSimplicesVec.size());
+
+  // Map fingerprint → index in topSimplicesVec
+  // (topSimplexVecIndex already exists but maps to pool slots; rebuild a clean one)
+  std::unordered_map<std::uint64_t, std::uint32_t> fpToIdx;
+  fpToIdx.reserve(N);
+  for (std::uint32_t i = 0; i < N; ++i) {
+    fpToIdx[topSimplicesVec[i]->fingerprint.fingerprint()] = i;
+  }
+
+  std::vector<std::uint32_t> rows, cols;
+  rows.reserve(N * 5);  // ~d+1 neighbours per simplex in d dimensions
+  cols.reserve(N * 5);
+
+  for (std::uint32_t i = 0; i < N; ++i) {
+    const auto &simplex = topSimplicesVec[i];
+    const auto &facets = simplex->getFacets();
+    for (const auto &facet : facets) {
+      const auto &cofaces = facet->getCofaces();
+      for (const auto &coface : cofaces) {
+        if (coface == simplex) continue;
+        const auto fp = coface->fingerprint.fingerprint();
+        auto it = fpToIdx.find(fp);
+        if (it != fpToIdx.end()) {
+          rows.push_back(it->second);
+          cols.push_back(i);
+        }
+      }
+    }
+  }
+
+  return {std::move(rows), std::move(cols), N};
+}
+
 std::vector<VertexPtrs> Spacetime::getConnectedComponents() const {
   VertexPtrSet seen{};
   std::vector<VertexPtrs> components{};

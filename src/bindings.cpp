@@ -448,6 +448,15 @@ Args:
            "Return the EdgeList containing all edges.")
       .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference,
            "Return the connected components of the simplicial complex.")
+      .def("getDualAdjacency", &Spacetime::getDualAdjacency,
+           R"doc(Return the dual graph of the top-dimensional triangulation as COO arrays.
+
+Two top simplices are adjacent when they share a (d-1)-face.  Returns
+(rows, cols, N) where rows[k] and cols[k] are 0-based indices into the
+internal top-simplex array and N is the number of top simplices.
+
+This is much faster than iterating over simplices/facets/cofaces from
+Python because it makes a single C++ call instead of O(N) round trips.)doc")
       .def("getTimeSlices", &Spacetime::getTimeSlices,
            "Return sorted list of integer time values in the triangulation.")
       .def("getVerticesAtTime", &Spacetime::getVerticesAtTime,

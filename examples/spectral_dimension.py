@@ -74,33 +74,12 @@ def build_transition_matrix(st):
 
     Returns (T, N) where T is a CSC sparse matrix and N the number of nodes.
     """
-    d_plus_1 = 5  # 4D
-
-    top_simplices = []
-    simplex_to_idx = {}
-    for s in st.getSimplices():
-        if len(s.getVertices()) == d_plus_1:
-            simplex_to_idx[hash(s)] = len(top_simplices)
-            top_simplices.append(s)
-
-    N = len(top_simplices)
-    if N == 0:
-        return None, 0
-
-    rows, cols = [], []
-    for i, s in enumerate(top_simplices):
-        for f in s.getFacets():
-            for cf in f.getCofaces():
-                if len(cf.getVertices()) == d_plus_1:
-                    h = hash(cf)
-                    if h in simplex_to_idx:
-                        j = simplex_to_idx[h]
-                        if j != i:
-                            rows.append(j)
-                            cols.append(i)
-
-    if not rows:
+    rows, cols, N = st.getDualAdjacency()
+    if N == 0 or len(rows) == 0:
         return None, N
+
+    rows = np.asarray(rows, dtype=np.int32)
+    cols = np.asarray(cols, dtype=np.int32)
 
     # Build adjacency, remove duplicate edges, then normalise
     A = sparse.csc_matrix((np.ones(len(rows)), (rows, cols)),
@@ -131,10 +110,10 @@ def diffuse_sparse(T, starts, max_sigma):
     for w, s in enumerate(starts):
         prob[s, w] = 1.0
 
+    walk_idx = np.arange(n_walks)
     for sigma in range(1, max_sigma + 1):
         prob = T @ prob                       # sparse mat × dense mat
-        for w, s in enumerate(starts):
-            return_probs[w, sigma] = prob[s, w]
+        return_probs[:, sigma] = prob[starts, walk_idx]
 
     return return_probs
 
@@ -155,9 +134,8 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
-    max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
-    st.build(min(n_simplices, max_build))
-    target = st.getN41() if n_simplices <= max_build else n_simplices // 2
+    st.build(n_simplices)
+    target = st.getN41()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     cdt.tune()
 
