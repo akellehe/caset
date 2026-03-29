@@ -22,8 +22,23 @@
 #include "simulations/CDT.h"
 #include "Logger.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
+
+namespace { // anonymous — local to this TU
+template<typename T, std::size_t Cap = 8>
+struct StackVec {
+  std::array<T, Cap> data_{};
+  std::uint8_t len_ = 0;
+  void push_back(T v) noexcept { if (len_ < Cap) data_[len_++] = v; }
+  T  operator[](std::size_t i) const noexcept { return data_[i]; }
+  T &operator[](std::size_t i)       noexcept { return data_[i]; }
+  std::size_t size()  const noexcept { return len_; }
+  const T *begin() const noexcept { return data_.data(); }
+  const T *end()   const noexcept { return data_.data() + len_; }
+};
+} // anon
 
 namespace caset {
 
@@ -354,7 +369,7 @@ bool CDT::flip() {
   SimplexPtr facet = facets[facetDist(rng)];
 
   // Need exactly 2 d-simplex cofaces
-  Simplices topCofaces;
+  StackVec<SimplexPtr> topCofaces;
   for (const auto &cf : facet->getCofaces()) {
     if (static_cast<int>(cf->size()) == dPlus1) topCofaces.push_back(cf);
   }
@@ -364,20 +379,20 @@ bool CDT::flip() {
   SimplexPtr s2 = topCofaces[1];
 
   // Collect unique vertices: should be d+2 total (d shared + 2 unique)
-  VertexPtrs allVerts;
-  allVerts.reserve(d + 2);
+  StackVec<VertexPtr> allVerts;
   for (const auto &v : s1->getVertices()) allVerts.push_back(v);
   for (const auto &v : s2->getVertices()) {
     bool dup = false;
-    for (const auto &av : allVerts) {
-      if (av->getId() == v->getId()) { dup = true; break; }
+    for (std::size_t i = 0; i < allVerts.size(); ++i) {
+      if (allVerts[i]->getId() == v->getId()) { dup = true; break; }
     }
     if (!dup) allVerts.push_back(v);
   }
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
-  VertexPtrs shared, unique;
-  for (const auto &v : allVerts) {
+  StackVec<VertexPtr> shared, unique;
+  for (std::size_t i = 0; i < allVerts.size(); ++i) {
+    auto v = allVerts[i];
     if (s1->hasVertex(v) && s2->hasVertex(v)) shared.push_back(v);
     else unique.push_back(v);
   }
@@ -463,7 +478,7 @@ bool CDT::iflip() {
   VertexPtr v2 = edge->getTarget();
 
   // Find all top simplices containing both endpoints
-  std::vector<SimplexPtr> sharing;
+  StackVec<SimplexPtr> sharing;
   for (const auto &s : v1->getSimplices()) {
     if (static_cast<int>(s->size()) == dPlus1 && s->hasVertex(v2)) {
       sharing.push_back(s);
@@ -472,13 +487,12 @@ bool CDT::iflip() {
   if (static_cast<int>(sharing.size()) != d) return false;
 
   // Collect all vertices across the d simplices: should be d+2 total
-  VertexPtrs allVerts;
-  allVerts.reserve(d + 2);
-  for (const auto &s : sharing) {
-    for (const auto &v : s->getVertices()) {
+  StackVec<VertexPtr> allVerts;
+  for (std::size_t si = 0; si < sharing.size(); ++si) {
+    for (const auto &v : sharing[si]->getVertices()) {
       bool dup = false;
-      for (const auto &av : allVerts) {
-        if (av->getId() == v->getId()) { dup = true; break; }
+      for (std::size_t ai = 0; ai < allVerts.size(); ++ai) {
+        if (allVerts[ai]->getId() == v->getId()) { dup = true; break; }
       }
       if (!dup) allVerts.push_back(v);
     }
@@ -486,8 +500,9 @@ bool CDT::iflip() {
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
   // Separate shared (the 2 edge endpoints) and unique (d vertices)
-  VertexPtrs shared, unique;
-  for (const auto &v : allVerts) {
+  StackVec<VertexPtr> shared, unique;
+  for (std::size_t i = 0; i < allVerts.size(); ++i) {
+    auto v = allVerts[i];
     if (v->getId() == v1->getId() || v->getId() == v2->getId()) shared.push_back(v);
     else unique.push_back(v);
   }
@@ -607,7 +622,7 @@ bool CDT::shiftImpl() {
   VertexPtrs faceVerts(sigmaVerts.begin(), sigmaVerts.begin() + hingeSize);
 
   // Find all d-simplices containing all (d-1) face vertices
-  std::vector<SimplexPtr> sharing;
+  StackVec<SimplexPtr> sharing;
   for (const auto &s : faceVerts[0]->getSimplices()) {
     if (static_cast<int>(s->size()) != dPlus1) continue;
     bool containsAll = true;
@@ -619,13 +634,12 @@ bool CDT::shiftImpl() {
   if (static_cast<int>(sharing.size()) != hingeSize) return false;
 
   // Collect unique vertices (should be d+2)
-  VertexPtrs allVerts;
-  allVerts.reserve(d + 2);
-  for (const auto &s : sharing) {
-    for (const auto &v : s->getVertices()) {
+  StackVec<VertexPtr> allVerts;
+  for (std::size_t si = 0; si < sharing.size(); ++si) {
+    for (const auto &v : sharing[si]->getVertices()) {
       bool dup = false;
-      for (const auto &av : allVerts) {
-        if (av->getId() == v->getId()) { dup = true; break; }
+      for (std::size_t ai = 0; ai < allVerts.size(); ++ai) {
+        if (allVerts[ai]->getId() == v->getId()) { dup = true; break; }
       }
       if (!dup) allVerts.push_back(v);
     }
@@ -633,11 +647,12 @@ bool CDT::shiftImpl() {
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
   // Separate shared (in all 3) and unique vertices
-  VertexPtrs sharedVerts, uniqueVerts;
-  for (const auto &v : allVerts) {
+  StackVec<VertexPtr> sharedVerts, uniqueVerts;
+  for (std::size_t i = 0; i < allVerts.size(); ++i) {
+    auto v = allVerts[i];
     bool inAll = true;
-    for (const auto &s : sharing) {
-      if (!s->hasVertex(v)) { inAll = false; break; }
+    for (std::size_t si = 0; si < sharing.size(); ++si) {
+      if (!sharing[si]->hasVertex(v)) { inAll = false; break; }
     }
     if (inAll) sharedVerts.push_back(v);
     else uniqueVerts.push_back(v);
@@ -647,8 +662,8 @@ bool CDT::shiftImpl() {
 
   // Count old orientations
   int old_n41 = 0, old_n32 = 0;
-  for (const auto &s : sharing) {
-    auto [sti, stf] = s->getOrientation().numeric();
+  for (std::size_t si = 0; si < sharing.size(); ++si) {
+    auto [sti, stf] = sharing[si]->getOrientation().numeric();
     if ((sti == d && stf == 1) || (sti == 1 && stf == d)) old_n41++;
     else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) old_n32++;
   }
