@@ -57,6 +57,7 @@ def _profiles_worker(n_simplices, n_therm, n_meas, meas_interval,
     target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, target)
 
+    cdt.tune()
     cdt.sweep(n_therm, progress=sweep_cb)
 
     profiles = []

@@ -10,19 +10,17 @@ and the phase diagram from:
   Gorlich, "Introduction to Causal Dynamical Triangulations" (2013)
 
 Scans the coupling-constant space (k0, Delta) and classifies each point
-into one of three phases using order parameters:
+into one of three phases using the vertex ratio N0/N41 — the canonical
+order parameter for CDT phase transitions:
 
   Phase A (branched polymer): large k0.
-    Signature: highly irregular volume profile with many thin stalks.
-    Order parameter: large variance-to-mean ratio of N_3(tau).
+    High vertex ratio: many vertices, low connectivity.
 
   Phase B (crumpled): small k0, small Delta.
-    Signature: volume collapses to 1-2 time slices.
-    Order parameter: high concentration (max_slice / total > 0.5).
+    Low vertex ratio: few vertices, high connectivity.
 
   Phase C (de Sitter): moderate k0, nonzero Delta.
-    Signature: smooth, extended volume profile.
-    Order parameter: low concentration, moderate variance.
+    Intermediate vertex ratio.
 
 Parameters scanned:
   k0 in [0.5, 6.0]
@@ -41,7 +39,7 @@ Parallelization
 ---------------
 Each (k0, Delta) grid point is a short, self-contained CDT run:
 build a spacetime, perform n_sweeps sweeps, classify the resulting
-volume profile.  No grid point reads or writes state used by any
+configuration.  No grid point reads or writes state used by any
 other, so all points can execute concurrently in threads (--workers).
 
 The GIL is released inside the C++ sweep() call, giving threads real
@@ -62,65 +60,114 @@ from tqdm import tqdm
 import caset
 
 
-def classify_phase(profile):
-    """
-    Classify a volume profile into phase A, B, or C.
-
-    Returns:
-      0 = Phase B (crumpled)
-      1 = Phase C (de Sitter)
-      2 = Phase A (branched polymer)
-    """
-    if len(profile) == 0:
-        return 0
-
-    profile = np.array(profile, dtype=float)
-    total = np.sum(profile)
-    if total <= 0:
-        return 0
-
-    # Concentration: fraction of volume in the largest slice
-    concentration = np.max(profile) / total
-
-    # Variance-to-mean ratio (dispersion index)
-    mean_vol = np.mean(profile)
-    if mean_vol > 0:
-        dispersion = np.var(profile) / mean_vol
-    else:
-        dispersion = 0
-
-    # Number of "active" slices (above 10% of mean)
-    active_slices = np.sum(profile > 0.1 * mean_vol) if mean_vol > 0 else 0
-    active_fraction = active_slices / max(len(profile), 1)
-
-    # Classification heuristics
-    if concentration > 0.5:
-        return 0  # Phase B: crumpled (most volume on 1-2 slices)
-    elif dispersion > 5 * mean_vol and active_fraction < 0.3:
-        return 2  # Phase A: branched polymer (irregular, thin)
-    else:
-        return 1  # Phase C: de Sitter (extended, smooth)
-
+# =====================================================================
+# Simulation
+# =====================================================================
 
 def run_point(k0, delta, n_simplices, n_sweeps, sweep_cb=None):
-    """Run CDT at a single (k0, Delta) point and return the phase.
+    """Run CDT at a single (k0, Delta) point and return observables.
+
+    The Toroid staircase product creates d*(d+1)=20 simplices per time
+    slab in 4D.  Building directly with n_simplices would create
+    n_simplices/20 time slices — far too many for the spatial volume to
+    develop phase structure (e.g. 10000 simplices -> 500 slices of 20).
+    Real CDT simulations use T~40-80 with thousands of simplices per
+    slice.  Instead, build a small initial lattice to establish a
+    reasonable number of time slices, set targetN41 to the desired
+    volume, and let the Monte Carlo grow the system via add moves.
 
     GIL is released during sweep(), so threads get real C++ parallelism.
     """
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
-    st.build(n_simplices)
+    st = caset.Spacetime(metric=metric,
+                         spacetimeType=caset.CDT,
+                         alpha=1.0,
+                         a=1.0,
+                         foliation=caset.PREFERRED,
+                         topology=caset.Toroid()
+                         )
 
-    target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
-    cdt = caset.CDTSimulation(st, k0, 0.5, delta, 0.02, target)
+    # Build a small initial lattice: cap at ~40 time slices so spatial
+    # volume per slice is large enough for phase structure to develop.
+    max_build = 40 * 20  # 40 slabs x 20 simplices/slab in 4D
+    st.build(min(n_simplices, max_build))
 
+    # TODO: Comment what is going on here:
+
+    target = n_simplices // 2
+    d = 4 # Hardcoded dimensions
+    k4 = (k0 * 6 * delta) / (2 * d - 2) - 2 * delta
+    epsilon = 1. / target
+    print(f"Using k0={k0:.2f} k4={k4:.2f} epsilon={epsilon:.2f} delta={delta:.2f} N41={target:.2f}")
+    cdt = caset.CDTSimulation(spacetime=st, k0=k0, k4=k4, delta=delta, epsilon=epsilon, targetN41=target)
+
+    # tune() adjusts k4 to the pseudo-critical value for this (k0,delta)
+    # and runs 20 feedback sweeps during which the system grows to target.
+    cdt.tune()
+
+    # Evolve.  Do NOT use thermalize() — its early-stopping criterion
+    # converges to the nearest action basin (always Phase C from the
+    # initial state) and prevents exploration of other phases.
     cdt.sweep(n_sweeps, progress=sweep_cb)
 
     profile = cdt.getVolumeProfile()
-    return classify_phase(profile), profile
+    n0 = st.getVertexCount()
+    n41 = st.getN41()
+    n32 = st.getN32()
+    rates = cdt.getAcceptanceRates()
+    k4 = cdt.getK4()
 
+    return {
+        'profile': profile,
+        'n0': n0, 'n41': n41, 'n32': n32,
+        'vertex_ratio': n0 / max(n41, 1),
+        'rates': rates,
+        'k4': k4,
+    }
+
+
+# =====================================================================
+# Classification
+# =====================================================================
+
+def classify_grid(order_param):
+    """Classify grid points into 3 phases using N32/N41 simplex ratio.
+
+    After k4 is tuned to the pseudo-critical value for each (k0, Delta),
+    the equilibrium N32/N41 ratio reflects the position in coupling-
+    constant space.  High k4 (large k0) suppresses flips, keeping N32
+    low; low k4 (small k0) makes flips free, letting N32 grow.
+
+      - Phase A (polymer):  LOW  N32/N41 (large k4 suppresses flips)
+      - Phase B (crumpled):  HIGH N32/N41 (small k4, flips are cheap)
+      - Phase C (de Sitter): intermediate
+
+    Classification uses the 33rd and 67th percentiles of the order
+    parameter distribution.  At small system sizes the phase transition
+    is a smooth crossover (no sharp discontinuity), so percentile-based
+    thresholds are more robust than gap-detection.
+    """
+    flat = order_param.flatten()
+    total_range = flat.max() - flat.min()
+    mean_val = np.mean(flat)
+
+    # If there is no meaningful variation, everything is Phase C
+    if total_range < 0.05 * max(mean_val, 1e-10):
+        return np.ones_like(order_param, dtype=int)
+
+    thresh_low = np.percentile(flat, 33)
+    thresh_high = np.percentile(flat, 67)
+
+    phase_map = np.ones_like(order_param, dtype=int)    # default C
+    phase_map[order_param < thresh_low] = 2              # Phase A (low)
+    phase_map[order_param > thresh_high] = 0             # Phase B (high)
+    return phase_map
+
+
+# =====================================================================
+# Main
+# =====================================================================
 
 def main():
     parser = argparse.ArgumentParser(
@@ -155,10 +202,8 @@ def main():
 
     k0_values = np.linspace(args.k0_min, args.k0_max, args.grid_size)
     delta_values = np.linspace(args.delta_min, args.delta_max, args.grid_size)
-    phase_map = np.zeros((len(delta_values), len(k0_values)))
 
     total_points = len(k0_values) * len(delta_values)
-    phase_counts = {"A": 0, "B": 0, "C": 0}
 
     t0 = time.time()
     total_sweeps = total_points * args.n_sweeps
@@ -169,8 +214,9 @@ def main():
                      position=1, leave=False)
     sweep_cb = lambda i, n: sweep_bar.update(1)
 
-    # Each grid point is independent — threads share memory, GIL released
-    # during sweep() so all threads compute in parallel.
+    # Collect results from all grid points
+    results = {}  # (i, j) -> result dict
+
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {}
         for i, delta in enumerate(delta_values):
@@ -182,52 +228,93 @@ def main():
 
         for future in as_completed(futures):
             i, j, k0, delta = futures[future]
-            phase, profile = future.result()
-            phase_map[i, j] = phase
-            label = ["B", "C", "A"][phase]
-            phase_counts[label] += 1
+            result = future.result()
+            results[(i, j)] = result
+            ratio = result['n32'] / max(result['n41'], 1)
             pt_bar.set_postfix_str(
-                f"k0={k0:.1f} D={delta:.2f} -> {label}")
+                f"k0={k0:.1f} D={delta:.2f} N32/N41={ratio:.2f}")
             pt_bar.update(1)
 
     sweep_bar.close()
     pt_bar.close()
 
+    # Build the N32/N41 order-parameter grid and classify
+    op_grid = np.zeros((len(delta_values), len(k0_values)))
+    for (i, j), result in results.items():
+        op_grid[i, j] = result['n32'] / max(result['n41'], 1)
+
+    phase_map = classify_grid(op_grid)
+
+    # Count phases
+    phase_counts = {"A": 0, "B": 0, "C": 0}
+    for i in range(len(delta_values)):
+        for j in range(len(k0_values)):
+            label = ["B", "C", "A"][phase_map[i, j]]
+            phase_counts[label] += 1
+
     elapsed = time.time() - t0
     print(f"\nScan complete: {elapsed:.1f}s "
-          f"({elapsed/total_points:.2f}s per point)")
+          f"({elapsed / total_points:.2f}s per point)")
     print(f"  Phase A (polymer):    {phase_counts['A']:3d} points "
-          f"({100*phase_counts['A']/total_points:.0f}%)")
+          f"({100 * phase_counts['A'] / total_points:.0f}%)")
     print(f"  Phase B (crumpled):   {phase_counts['B']:3d} points "
-          f"({100*phase_counts['B']/total_points:.0f}%)")
+          f"({100 * phase_counts['B'] / total_points:.0f}%)")
     print(f"  Phase C (de Sitter):  {phase_counts['C']:3d} points "
-          f"({100*phase_counts['C']/total_points:.0f}%)")
+          f"({100 * phase_counts['C'] / total_points:.0f}%)")
+
+    # Diagnostics: show order parameter range
+    op_flat = op_grid.flatten()
+    print(f"\n  Order param N32/N41: "
+          f"min={op_flat.min():.4f}, max={op_flat.max():.4f}, "
+          f"mean={op_flat.mean():.4f}, std={op_flat.std():.4f}")
+
+    # Show corner diagnostics
+    corners = [
+        (0, 0, "k0=min, D=min"),
+        (0, -1, "k0=max, D=min"),
+        (-1, 0, "k0=min, D=max"),
+        (-1, -1, "k0=max, D=max"),
+    ]
+    for di, ki, label in corners:
+        r = results[(di % len(delta_values), ki % len(k0_values))]
+        print(f"  {label}: N0={r['n0']}, N41={r['n41']}, N32={r['n32']}, "
+              f"VR={r['vertex_ratio']:.4f}, k4={r['k4']:.3f}, "
+              f"rates={{add={r['rates']['add']:.3f}, "
+              f"rem={r['rates']['remove']:.3f}, "
+              f"flip={r['rates']['flip']:.3f}}}")
 
     # ---- Plot ----
-    fig, ax = plt.subplots(figsize=(9, 7))
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
 
+    # Left panel: discrete phase map
+    ax = axes[0]
     cmap = ListedColormap(["#4477AA", "#66CC66", "#EE6677"])
     phase_labels = ["Phase B\n(crumpled)", r"Phase $C_{dS}$""\n(de Sitter)",
                     "Phase A\n(polymer)"]
 
     im = ax.pcolormesh(k0_values, delta_values, phase_map,
                        cmap=cmap, vmin=-0.5, vmax=2.5, shading="nearest")
-
-    # Add colorbar with phase labels
     cbar = fig.colorbar(im, ax=ax, ticks=[0, 1, 2])
     cbar.ax.set_yticklabels(phase_labels)
 
     ax.set_xlabel(r"$\kappa_0$", fontsize=14)
     ax.set_ylabel(r"$\Delta$", fontsize=14)
     ax.set_title("CDT Phase Diagram\n"
-                 "(cf. Fig 3, Ambjorn et al. 2005;\n"
-                 "Gorlich 2013, Phase diagram slide)",
-                 fontsize=13)
-
-    # Mark the de Sitter point used in the paper
+                 "(cf. Fig 3, Ambjorn et al. 2005)", fontsize=13)
     ax.plot(2.2, 0.6, "w*", markersize=15, markeredgecolor="black",
             label=r"Paper: $\kappa_0=2.2, \Delta=0.6$")
     ax.legend(fontsize=11, loc="upper right")
+
+    # Right panel: continuous order parameter
+    ax2 = axes[1]
+    im2 = ax2.pcolormesh(k0_values, delta_values, op_grid,
+                         cmap="RdYlBu_r", shading="nearest")
+    fig.colorbar(im2, ax=ax2, label=r"$N_{32} / N_{41}$")
+    ax2.set_xlabel(r"$\kappa_0$", fontsize=14)
+    ax2.set_ylabel(r"$\Delta$", fontsize=14)
+    ax2.set_title(r"Simplex ratio $N_{32} / N_{41}$"
+                  "\n(order parameter)", fontsize=13)
+    ax2.plot(2.2, 0.6, "w*", markersize=15, markeredgecolor="black")
 
     fig.tight_layout()
 
