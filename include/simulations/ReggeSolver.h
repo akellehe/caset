@@ -119,17 +119,6 @@ class ReggeSolver {
     [[nodiscard]] cuda::GpuMeshData flattenMeshForGpu() const;
 #endif
 
-    /// Build the Gram matrix for a top-simplex from its edge lengths.
-    /// Returns a flat (d×d) row-major matrix (vertex 0 is the origin).
-    [[nodiscard]] static std::vector<double> gramMatrix(SimplexPtr sigma);
-
-    /// Cofactor matrix of a square matrix (flat row-major, size n×n).
-    [[nodiscard]] static std::vector<double> cofactorMatrix(
-        const std::vector<double> &M, int n);
-
-    /// Determinant of a square matrix (flat row-major, size n×n).
-    [[nodiscard]] static double determinant(
-        const std::vector<double> &M, int n);
 };
 
 } // namespace caset

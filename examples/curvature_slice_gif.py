@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Render a GIF showing each spatial time slice as a 3D force-directed embedding
+"""Render a GIF showing each spatial time slice as a 2D radial embedding
 centered on the point-mass worldline vertex, with curvature encoded as a heat map.
 
-Each frame = one time slice.  Vertices are colored by the area-weighted deficit
-angle summed over incident spatial hinges.  The worldline vertex is pinned at the
-origin and marked with a star.
+Each frame = one time slice.  Vertices are placed at radius = BFS distance
+from the worldline vertex and spread angularly by force-directed layout.
+Color = area-weighted deficit angle.  The point mass is always at the
+visual center.
 
 Usage (standalone):
     python examples/curvature_slice_gif.py --n-simplices 50 --mass 1.0
@@ -20,11 +21,13 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.colors
+from matplotlib.collections import LineCollection
+from PIL import Image
 
 import caset
 from plot_utils import (build_spacetime, time_slices, spatial_subgraph,
-                        bfs_distances, force_layout_3d, pca_align,
-                        draw_edges, render_frame, save_gif)
+                        bfs_distances, save_gif)
 
 
 # =========================================================================
@@ -53,47 +56,173 @@ def _vertex_curvatures(verts, solver, t):
 
 
 # =========================================================================
-# Layout with BFS-based initialization
+# 2D radial layout: center at origin, radius = BFS distance
 # =========================================================================
 
-def _layout_centered(verts, edges, center_vid, bfs_dist, *,
-                     iters=300, seed=42):
-    """Force-directed layout with center pinned at origin, initialized
-    on concentric spheres by BFS distance."""
+def _radial_layout_2d(verts, edges, center_vid, bfs_dist, *,
+                      iters=200, prev_angles=None, seed=42):
+    """Place vertices in 2D: radius = BFS distance, angles from force layout.
+
+    Returns (pos_2d, vid_to_idx, edge_idx, angles_by_dist) where
+    angles_by_dist maps BFS distance to list of (angle, vid) for seeding
+    the next frame.
+    """
     rng = np.random.default_rng(seed)
+    n = len(verts)
     vid_to_idx = {v.getId(): i for i, v in enumerate(verts)}
     center_idx = vid_to_idx[center_vid]
-    n = len(verts)
 
-    # Initialize on concentric spheres
+    # Group vertices by BFS distance
     max_d = max(bfs_dist.values()) if bfs_dist else 1
-    init_pos = np.zeros((n, 3))
+
+    # Initialize: place on circles by BFS distance with angular spread
+    pos = np.zeros((n, 2))
     for v in verts:
         idx = vid_to_idx[v.getId()]
         d = bfs_dist.get(v.getId(), max_d + 1)
         if v.getId() == center_vid:
             continue
         r = float(d)
-        theta = rng.uniform(0, math.pi)
-        phi = rng.uniform(0, 2 * math.pi)
-        init_pos[idx] = [r * math.sin(theta) * math.cos(phi),
-                         r * math.sin(theta) * math.sin(phi),
-                         r * math.cos(theta)]
+        # Try to use previous frame's angular structure for stability
+        if prev_angles and d in prev_angles and prev_angles[d]:
+            # Pick the angle closest to a uniform distribution
+            used = len([1 for vi in verts[:idx]
+                       if bfs_dist.get(vi.getId(), -1) == d])
+            n_at_d = sum(1 for vi in verts
+                        if bfs_dist.get(vi.getId(), -1) == d)
+            base_angle = prev_angles[d][0] if prev_angles[d] else 0
+            angle = base_angle + 2 * math.pi * used / max(n_at_d, 1)
+        else:
+            angle = rng.uniform(0, 2 * math.pi)
+        pos[idx] = [r * math.cos(angle), r * math.sin(angle)]
 
-    # Build edge index and rest lengths
+    # Build edge index
     edge_idx = []
-    rest_lens = []
     for e in edges:
         si = vid_to_idx.get(e.getSource().getId())
         ti = vid_to_idx.get(e.getTarget().getId())
         if si is not None and ti is not None:
             edge_idx.append((si, ti))
-            rest_lens.append(math.sqrt(abs(e.getSquaredLength())))
 
-    pos = force_layout_3d(n, edge_idx, center_idx=center_idx,
-                          init_pos=init_pos, rest_lengths=rest_lens,
-                          iters=iters, seed=seed)
-    return pos, vid_to_idx, edge_idx
+    # Force-directed refinement (angular only — preserve radii)
+    step = 0.3
+    eps = 1e-6
+    for _ in range(iters):
+        forces = np.zeros_like(pos)
+
+        # Spring forces along edges
+        for si, ti in edge_idx:
+            d = pos[ti] - pos[si]
+            dist = max(np.linalg.norm(d), eps)
+            f = 0.02 * (dist - 1.0) * d / dist
+            forces[si] += f
+            forces[ti] -= f
+
+        # Repulsion between vertices at the same BFS distance
+        cap = min(n, 200)
+        for a in range(cap):
+            for b in range(a + 1, cap):
+                d = pos[a] - pos[b]
+                d2 = np.dot(d, d) + eps
+                f = 0.3 / d2 * d / math.sqrt(d2)
+                forces[a] += f
+                forces[b] -= f
+
+        # Pin center
+        forces[center_idx] = 0.0
+
+        # Project forces to preserve radii (tangential only)
+        for i in range(n):
+            if i == center_idx:
+                continue
+            r = np.linalg.norm(pos[i])
+            if r < eps:
+                continue
+            radial = pos[i] / r
+            # Remove radial component of force
+            f_radial = np.dot(forces[i], radial)
+            forces[i] -= f_radial * radial
+
+        norms = np.linalg.norm(forces, axis=1, keepdims=True)
+        norms = np.maximum(norms, eps)
+        forces = np.where(norms > step, forces / norms * step, forces)
+        pos += forces
+
+        # Re-snap to correct radii
+        for i in range(n):
+            if i == center_idx:
+                continue
+            vid = verts[i].getId()
+            target_r = float(bfs_dist.get(vid, max_d + 1))
+            r = np.linalg.norm(pos[i])
+            if r > eps:
+                pos[i] = pos[i] / r * target_r
+
+        step *= 0.995
+
+    # Record angles for next frame
+    angles_by_dist = {}
+    for v in verts:
+        idx = vid_to_idx[v.getId()]
+        d = bfs_dist.get(v.getId(), max_d + 1)
+        if v.getId() == center_vid:
+            continue
+        angle = math.atan2(pos[idx, 1], pos[idx, 0])
+        angles_by_dist.setdefault(d, []).append(angle)
+    for d in angles_by_dist:
+        angles_by_dist[d].sort()
+
+    return pos, vid_to_idx, edge_idx, angles_by_dist
+
+
+# =========================================================================
+# Render a 2D frame
+# =========================================================================
+
+def _render_2d_frame(pos, edge_idx, curvatures, center_idx, t,
+                     vmin, vmax, fig_size, cmap_name, axis_limit):
+    """Render a 2D radial frame with curvature heatmap."""
+    fig, ax = plt.subplots(figsize=fig_size)
+    ax.set_aspect("equal")
+
+    cmap = plt.get_cmap(cmap_name)
+    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+
+    # Draw edges
+    if edge_idx:
+        segs = [[pos[s], pos[t]] for s, t in edge_idx]
+        lc = LineCollection(segs, linewidths=0.5, colors=(0.7, 0.7, 0.7, 0.5))
+        ax.add_collection(lc)
+
+    # Draw vertices colored by curvature
+    sizes = np.full(len(pos), 30.0)
+    sizes[center_idx] = 120.0
+    ax.scatter(pos[:, 0], pos[:, 1],
+               c=curvatures, cmap=cmap, norm=norm,
+               s=sizes, edgecolors="k", linewidths=0.3, zorder=5)
+
+    # Center vertex star
+    ax.scatter([pos[center_idx, 0]], [pos[center_idx, 1]],
+               c="black", s=150, marker="*", zorder=10)
+
+    # Fixed axis limits centered on origin
+    ax.set_xlim(-axis_limit, axis_limit)
+    ax.set_ylim(-axis_limit, axis_limit)
+    ax.set_axis_off()
+
+    # Colorbar
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
+    cbar.set_label("Curvature (A * deficit)", fontsize=9)
+
+    ax.set_title(f"t = {t}", fontsize=12, pad=10)
+
+    fig.tight_layout()
+    fig.canvas.draw()
+    img = np.asarray(fig.canvas.buffer_rgba()).copy()
+    plt.close(fig)
+    return img
 
 
 # =========================================================================
@@ -102,10 +231,14 @@ def _layout_centered(verts, edges, center_vid, bfs_dist, *,
 
 def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
                          *, fig_size=(6, 6), cmap_name="RdYlBu_r",
-                         layout_iters=300, frame_duration_ms=500,
-                         elev=25.0, azim=45.0):
+                         layout_iters=200, frame_duration_ms=500,
+                         **_kwargs):
     """Render a GIF with one frame per time slice showing the spatial
-    subgraph as a force-directed 3D embedding with curvature heat map."""
+    subgraph as a 2D radial embedding with curvature heat map.
+
+    The point mass (worldline vertex) is always at the visual center.
+    Radius = BFS graph distance.  Color = area-weighted deficit angle.
+    """
     wl_by_time = {}
     for v in worldline:
         wl_by_time[round(v.getTime())] = v
@@ -114,7 +247,7 @@ def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
 
     # --- Pass 1: compute layouts and curvatures ---
     slice_data = []
-    prev_axes = None
+    prev_angles = None
     for t in times:
         if t not in wl_by_time:
             continue
@@ -123,7 +256,7 @@ def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
         if len(verts) < 3:
             continue
 
-        bfs_dist = bfs_distances(center, verts, edges)
+        bfs_dist = bfs_distances(center, st)
         reachable_ids = set(bfs_dist.keys())
         verts = [v for v in verts if v.getId() in reachable_ids]
         edges = [e for e in edges
@@ -132,9 +265,9 @@ def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
         if len(verts) < 3:
             continue
 
-        pos, vid_to_idx, edge_idx = _layout_centered(
-            verts, edges, center.getId(), bfs_dist, iters=layout_iters)
-        pos, prev_axes = pca_align(pos, prev_axes)
+        pos, vid_to_idx, edge_idx, prev_angles = _radial_layout_2d(
+            verts, edges, center.getId(), bfs_dist,
+            iters=layout_iters, prev_angles=prev_angles)
 
         curvatures = _vertex_curvatures(verts, solver, t)
         center_idx = vid_to_idx[center.getId()]
@@ -151,31 +284,15 @@ def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
         vmin -= 0.5
         vmax += 0.5
 
-    # --- Pass 2: render frames ---
-    cmap = plt.get_cmap(cmap_name)
-    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+    # Global axis limit: max radius across all frames + padding
+    max_radius = max(np.linalg.norm(d[1], axis=1).max() for d in slice_data)
+    axis_limit = max_radius * 1.3
 
+    # --- Pass 2: render frames ---
     frames = []
     for t, pos, edge_idx, curvatures, center_idx in slice_data:
-
-        def draw(ax, _pos=pos, _edge_idx=edge_idx, _curv=curvatures,
-                 _cidx=center_idx, _t=t):
-            draw_edges(ax, _pos, _edge_idx)
-            sizes = np.full(len(_pos), 20.0)
-            sizes[_cidx] = 80.0
-            ax.scatter(_pos[:, 0], _pos[:, 1], _pos[:, 2],
-                       c=_curv, cmap=cmap, norm=norm,
-                       s=sizes, edgecolors="k", linewidths=0.2,
-                       depthshade=True)
-            ax.scatter([_pos[_cidx, 0]], [_pos[_cidx, 1]], [_pos[_cidx, 2]],
-                       c="black", s=100, marker="*", zorder=10)
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            sm.set_array([])
-            plt.colorbar(sm, ax=ax, shrink=0.6, pad=0.1,
-                         label="Curvature (A * deficit)")
-
-        img = render_frame(draw, figsize=fig_size, title=f"t = {t}",
-                           elev=elev, azim=azim)
+        img = _render_2d_frame(pos, edge_idx, curvatures, center_idx, t,
+                               vmin, vmax, fig_size, cmap_name, axis_limit)
         frames.append(img)
 
     save_gif(frames, output_path, duration_ms=frame_duration_ms)

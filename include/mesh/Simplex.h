@@ -233,6 +233,33 @@ class Simplex {
     bool isInternal() const noexcept;
     std::uint64_t hash() const noexcept;
 
+    // ==================== Geometry ====================
+
+    /// Gram matrix of this simplex from its edge lengths (Wick-rotated).
+    /// Returns a flat (d x d) row-major matrix where d = size() - 1.
+    /// Vertex 0 is the origin: G_ij = 1/2(|l^2(v0,vi)| + |l^2(v0,vj)| - |l^2(vi,vj)|).
+    [[nodiscard]] std::vector<double> gramMatrix() const;
+
+    /// Dihedral angle at a hinge within this simplex.
+    /// The hinge must be a (d-2)-subsimplex of this d-simplex.
+    [[nodiscard]] double dihedralAngle(SimplexPtr hinge) const;
+
+    /// Deficit angle at this hinge: 2*pi minus the sum of dihedral angles
+    /// from all top-simplices containing this hinge.
+    [[nodiscard]] double deficitAngle() const;
+
+    /// Area of this simplex interpreted as a triangular hinge (3 vertices).
+    /// Uses Heron's formula on |l^2| of the three edges.
+    [[nodiscard]] double area() const;
+
+    /// Determinant of a square matrix (flat row-major, size n x n).
+    [[nodiscard]] static double determinant(
+        const std::vector<double> &M, int n);
+
+    /// Cofactor matrix of a square matrix (flat row-major, size n x n).
+    [[nodiscard]] static std::vector<double> cofactorMatrix(
+        const std::vector<double> &M, int n);
+
     // ==================== Computational & Utility Methods ====================
     template<typename T> T binomial(unsigned n, unsigned k) const;
 

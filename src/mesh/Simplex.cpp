@@ -28,8 +28,9 @@
 #include "utils.h"
 
 #include <algorithm>
-// #include <ATen/core/interned_strings.h>
-// #include <c10/util/ThreadLocalDebugInfo.h>
+#include <cmath>
+#include <numbers>
+#include <unordered_map>
 
 namespace caset {
 bool Simplex::hasFacets() const {
@@ -550,6 +551,170 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr &vertex) {
     }
   }
   return {kSimplex, facets};
+}
+
+// =====================================================================
+// Geometry
+// =====================================================================
+
+double Simplex::determinant(const std::vector<double> &M, int n) {
+    if (n == 1) return M[0];
+    if (n == 2) return M[0] * M[3] - M[1] * M[2];
+    std::vector<double> A(M);
+    double det = 1.0;
+    for (int col = 0; col < n; ++col) {
+        int pivot = col;
+        double maxVal = std::abs(A[col * n + col]);
+        for (int row = col + 1; row < n; ++row) {
+            double val = std::abs(A[row * n + col]);
+            if (val > maxVal) { maxVal = val; pivot = row; }
+        }
+        if (maxVal < 1e-15) return 0.0;
+        if (pivot != col) {
+            for (int j = 0; j < n; ++j)
+                std::swap(A[col * n + j], A[pivot * n + j]);
+            det = -det;
+        }
+        det *= A[col * n + col];
+        for (int row = col + 1; row < n; ++row) {
+            double factor = A[row * n + col] / A[col * n + col];
+            for (int j = col + 1; j < n; ++j)
+                A[row * n + j] -= factor * A[col * n + j];
+        }
+    }
+    return det;
+}
+
+std::vector<double> Simplex::cofactorMatrix(
+    const std::vector<double> &M, int n) {
+    std::vector<double> C(n * n, 0.0);
+    if (n == 1) { C[0] = 1.0; return C; }
+    std::vector<double> sub((n - 1) * (n - 1));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            int si = 0;
+            for (int r = 0; r < n; ++r) {
+                if (r == i) continue;
+                int sj = 0;
+                for (int c = 0; c < n; ++c) {
+                    if (c == j) continue;
+                    sub[si * (n - 1) + sj] = M[r * n + c];
+                    sj++;
+                }
+                si++;
+            }
+            double sign = ((i + j) % 2 == 0) ? 1.0 : -1.0;
+            C[i * n + j] = sign * determinant(sub, n - 1);
+        }
+    }
+    return C;
+}
+
+std::vector<double> Simplex::gramMatrix() const {
+    int dPlus1 = static_cast<int>(vertices.size());
+    int d = dPlus1 - 1;
+    if (d < 1) return {};
+
+    // Build squared-distance lookup using Wick-rotated (absolute) values.
+    std::unordered_map<std::uint64_t, double> sqMap;
+    for (const auto &e : edges) {
+        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
+                  Fingerprint::mix64(e->getTarget()->getId());
+        sqMap[fp] = std::abs(e->getSquaredLength());
+    }
+    auto getSq = [&](int i, int j) -> double {
+        if (i == j) return 0.0;
+        auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
+                  Fingerprint::mix64(vertices[j]->getId());
+        auto it = sqMap.find(fp);
+        return it != sqMap.end() ? it->second : 0.0;
+    };
+
+    std::vector<double> G(d * d, 0.0);
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            G[i * d + j] = 0.5 * (getSq(0, i + 1) + getSq(0, j + 1)
+                                   - getSq(i + 1, j + 1));
+    return G;
+}
+
+double Simplex::dihedralAngle(SimplexPtr hinge) const {
+    int dPlus1 = static_cast<int>(vertices.size());
+
+    // Find the two vertices in this simplex but not in the hinge.
+    auto hingeVerts = hinge->getVertices();
+    std::vector<int> opposite;
+    for (int k = 0; k < dPlus1; ++k) {
+        bool inHinge = false;
+        for (const auto &hv : hingeVerts)
+            if (hv->getId() == vertices[k]->getId()) { inHinge = true; break; }
+        if (!inHinge) opposite.push_back(k);
+    }
+    if (opposite.size() != 2) return 0.0;
+    int vi = opposite[0], vj = opposite[1];
+
+    // Cayley-Menger bordered matrix approach.
+    std::unordered_map<std::uint64_t, double> sqMap;
+    for (const auto &e : edges) {
+        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
+                  Fingerprint::mix64(e->getTarget()->getId());
+        sqMap[fp] = std::abs(e->getSquaredLength());
+    }
+    auto getSq = [&](int i, int j) -> double {
+        if (i == j) return 0.0;
+        auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
+                  Fingerprint::mix64(vertices[j]->getId());
+        auto it = sqMap.find(fp);
+        return it != sqMap.end() ? it->second : 0.0;
+    };
+
+    int n = dPlus1 + 1;
+    std::vector<double> B(n * n, 0.0);
+    for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
+    for (int i = 0; i < dPlus1; ++i)
+        for (int j = 0; j < dPlus1; ++j)
+            B[(i + 1) * n + (j + 1)] = getSq(i, j);
+
+    auto cof = cofactorMatrix(B, n);
+    int bi = vi + 1, bj = vj + 1;
+    double Cij = cof[bi * n + bj];
+    double Cii = cof[bi * n + bi];
+    double Cjj = cof[bj * n + bj];
+
+    double denom = std::sqrt(std::abs(Cii * Cjj));
+    if (denom < 1e-15) return 0.0;
+    double cosTheta = std::clamp(-Cij / denom, -1.0, 1.0);
+    return std::acos(cosTheta);
+}
+
+double Simplex::deficitAngle() const {
+    if (!spacetime) return 2.0 * std::numbers::pi;
+    int d = spacetime->getMetric()->getSignature()->getDimensions();
+    int topSize = d + 1;
+
+    double sum = 0.0;
+    if (vertices.empty()) return 2.0 * std::numbers::pi;
+
+    for (const auto &sigma : vertices[0]->getSimplices()) {
+        if (static_cast<int>(sigma->size()) != topSize) continue;
+        bool containsAll = true;
+        for (std::size_t i = 1; i < vertices.size(); ++i)
+            if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
+        if (containsAll)
+            sum += sigma->dihedralAngle(const_cast<Simplex*>(this));
+    }
+    return 2.0 * std::numbers::pi - sum;
+}
+
+double Simplex::area() const {
+    if (edges.size() < 3) return 0.0;
+    double a2 = std::abs(edges[0]->getSquaredLength());
+    double b2 = std::abs(edges[1]->getSquaredLength());
+    double c2 = std::abs(edges[2]->getSquaredLength());
+    double val = 2.0 * (a2 * b2 + b2 * c2 + c2 * a2)
+                 - (a2 * a2 + b2 * b2 + c2 * c2);
+    if (val <= 0.0) return 0.0;
+    return std::sqrt(val) / 4.0;
 }
 
 }

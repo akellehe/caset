@@ -325,7 +325,16 @@ facet.getCofaces() includes this simplex.)doc")
       .def("replaceVertex", &Simplex::replaceVertex, py::arg("oldVertex"), py::arg("newVertex"),
            "Replace a vertex in this simplex (updates fingerprint and internal maps).")
       .def("validate", &Simplex::validate,
-           "Run internal consistency checks on this simplex.");
+           "Run internal consistency checks on this simplex.")
+      .def("gramMatrix", &Simplex::gramMatrix,
+           "Gram matrix from edge lengths (flat d*d row-major, Wick-rotated).")
+      .def("dihedralAngle", &Simplex::dihedralAngle,
+           py::arg("hinge"),
+           "Dihedral angle at a hinge within this simplex.")
+      .def("deficitAngle", &Simplex::deficitAngle,
+           "Deficit angle at this hinge (2*pi - sum of dihedral angles).")
+      .def("area", &Simplex::area,
+           "Area of this triangle (hinge) via Heron's formula.");
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
       .def(py::init<>());

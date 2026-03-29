@@ -248,133 +248,6 @@ done:
 }
 
 // =====================================================================
-// Linear algebra (duplicated from ReggeSolver — private there)
-// =====================================================================
-
-double WilsonLoop::determinant(const std::vector<double> &M, int n) {
-    if (n == 1) return M[0];
-    if (n == 2) return M[0] * M[3] - M[1] * M[2];
-    std::vector<double> A(M);
-    double det = 1.0;
-    for (int col = 0; col < n; ++col) {
-        int pivot = col;
-        double maxVal = std::abs(A[col * n + col]);
-        for (int row = col + 1; row < n; ++row) {
-            double val = std::abs(A[row * n + col]);
-            if (val > maxVal) { maxVal = val; pivot = row; }
-        }
-        if (maxVal < 1e-15) return 0.0;
-        if (pivot != col) {
-            for (int j = 0; j < n; ++j)
-                std::swap(A[col * n + j], A[pivot * n + j]);
-            det = -det;
-        }
-        det *= A[col * n + col];
-        for (int row = col + 1; row < n; ++row) {
-            double factor = A[row * n + col] / A[col * n + col];
-            for (int j = col + 1; j < n; ++j)
-                A[row * n + j] -= factor * A[col * n + j];
-        }
-    }
-    return det;
-}
-
-std::vector<double> WilsonLoop::cofactorMatrix(
-    const std::vector<double> &M, int n) {
-    std::vector<double> C(n * n, 0.0);
-    if (n == 1) { C[0] = 1.0; return C; }
-    std::vector<double> sub((n - 1) * (n - 1));
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < n; ++j) {
-            int si = 0;
-            for (int r = 0; r < n; ++r) {
-                if (r == i) continue;
-                int sj = 0;
-                for (int c = 0; c < n; ++c) {
-                    if (c == j) continue;
-                    sub[si * (n - 1) + sj] = M[r * n + c];
-                    sj++;
-                }
-                si++;
-            }
-            double sign = ((i + j) % 2 == 0) ? 1.0 : -1.0;
-            C[i * n + j] = sign * determinant(sub, n - 1);
-        }
-    }
-    return C;
-}
-
-// =====================================================================
-// Dihedral / deficit angle (self-contained, no ReggeSolver dependency)
-// =====================================================================
-
-double WilsonLoop::dihedralAngle(SimplexPtr sigma,
-                                  SimplexPtr hinge) const {
-    auto sigmaVerts = sigma->getVertices();
-    auto hingeVerts = hinge->getVertices();
-    int dPlus1 = static_cast<int>(sigmaVerts.size());
-
-    std::vector<int> opposite;
-    for (int k = 0; k < dPlus1; ++k) {
-        bool inHinge = false;
-        for (const auto &hv : hingeVerts)
-            if (hv->getId() == sigmaVerts[k]->getId()) { inHinge = true; break; }
-        if (!inHinge) opposite.push_back(k);
-    }
-    if (opposite.size() != 2) return 0.0;
-
-    int vi = opposite[0], vj = opposite[1];
-
-    std::unordered_map<std::uint64_t, double> sqMap;
-    for (const auto &e : sigma->getEdges()) {
-        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
-                  Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = std::abs(e->getSquaredLength());
-    }
-    auto getSq = [&](int i, int j) -> double {
-        if (i == j) return 0.0;
-        auto fp = Fingerprint::mix64(sigmaVerts[i]->getId()) ^
-                  Fingerprint::mix64(sigmaVerts[j]->getId());
-        auto it = sqMap.find(fp);
-        return it != sqMap.end() ? it->second : 0.0;
-    };
-
-    int n = dPlus1 + 1;
-    std::vector<double> B(n * n, 0.0);
-    for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
-    for (int i = 0; i < dPlus1; ++i)
-        for (int j = 0; j < dPlus1; ++j)
-            B[(i + 1) * n + (j + 1)] = getSq(i, j);
-
-    auto cof = cofactorMatrix(B, n);
-    int bi = vi + 1, bj = vj + 1;
-    double Cij = cof[bi * n + bj];
-    double Cii = cof[bi * n + bi];
-    double Cjj = cof[bj * n + bj];
-
-    double denom = std::sqrt(std::abs(Cii * Cjj));
-    if (denom < 1e-15) return 0.0;
-    double cosTheta = std::clamp(-Cij / denom, -1.0, 1.0);
-    return std::acos(cosTheta);
-}
-
-double WilsonLoop::deficitAngle(SimplexPtr hinge) const {
-    int topSize = d_ + 1;
-    auto hingeVerts = hinge->getVertices();
-    if (hingeVerts.empty()) return 2.0 * std::numbers::pi;
-
-    double sum = 0.0;
-    for (const auto &sigma : hingeVerts[0]->getSimplices()) {
-        if (static_cast<int>(sigma->size()) != topSize) continue;
-        bool all = true;
-        for (std::size_t i = 1; i < hingeVerts.size(); ++i)
-            if (!sigma->hasVertex(hingeVerts[i])) { all = false; break; }
-        if (all) sum += dihedralAngle(sigma, hinge);
-    }
-    return 2.0 * std::numbers::pi - sum;
-}
-
-// =====================================================================
 // Evaluation modes
 // =====================================================================
 
@@ -454,14 +327,14 @@ WilsonResult WilsonLoop::evaluateDeficitAngle(const LoopPath &loop) const {
 
     if (enclosedHinges.size() == 1) {
         // Hinge loop: exact Wilson loop value
-        double eps = deficitAngle(enclosedHinges[0]);
+        double eps = enclosedHinges[0]->deficitAngle();
         r.value = (static_cast<double>(d_ - 2) + 2.0 * std::cos(eps))
                   / static_cast<double>(d_);
     } else {
         // General loop: U(1) approximation — product of cos(epsilon)
         double product = 1.0;
         for (const auto &h : enclosedHinges)
-            product *= std::cos(deficitAngle(h));
+            product *= std::cos(h->deficitAngle());
         r.value = product;
     }
     return r;

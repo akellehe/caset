@@ -104,18 +104,6 @@ class WilsonLoop {
     [[nodiscard]] LoopPath buildLoopPath(
         const std::vector<SimplexPtr> &simplices) const;
 
-    /// Deficit angle at a hinge (reimplemented to avoid ReggeSolver dep).
-    [[nodiscard]] double deficitAngle(SimplexPtr hinge) const;
-
-    /// Dihedral angle at hinge within top-simplex.
-    [[nodiscard]] double dihedralAngle(SimplexPtr sigma,
-                                        SimplexPtr hinge) const;
-
-    // ---- small linear-algebra helpers (same as ReggeSolver) ----
-    [[nodiscard]] static double determinant(
-        const std::vector<double> &M, int n);
-    [[nodiscard]] static std::vector<double> cofactorMatrix(
-        const std::vector<double> &M, int n);
 };
 
 } // namespace caset
