@@ -326,16 +326,22 @@ bool CDT::remove() {
     spacetime->removeSimplex(s);
   }
 
-  // Remove all edges incident to v from both endpoints and the global edge list
-  Edges edgesToRemove = v->getEdges();
-  for (const auto &e : edgesToRemove) {
-    VertexPtr other = (e->getSource()->getId() == v->getId())
-                      ? e->getTarget() : e->getSource();
-    other->removeOutEdge(e);
-    other->removeInEdge(e);
-    v->removeOutEdge(e);
-    v->removeInEdge(e);
-    spacetime->getEdgeList()->remove(e);
+  // Remove all edges incident to v from both endpoints and the global edge list.
+  // Process in-edges and out-edges separately to avoid redundant scans:
+  // an in-edge (other→v) is outEdge on other; an out-edge (v→other) is inEdge on other.
+  {
+    Edges inCopy(v->getInEdges().begin(), v->getInEdges().end());
+    for (const auto &e : inCopy) {
+      e->getSource()->removeOutEdge(e);
+      v->removeInEdge(e);
+      spacetime->getEdgeList()->remove(e);
+    }
+    Edges outCopy(v->getOutEdges().begin(), v->getOutEdges().end());
+    for (const auto &e : outCopy) {
+      e->getTarget()->removeInEdge(e);
+      v->removeOutEdge(e);
+      spacetime->getEdgeList()->remove(e);
+    }
   }
   (void)spacetime->removeIfIsolated(v);
 

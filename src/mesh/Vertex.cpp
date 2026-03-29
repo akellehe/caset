@@ -267,7 +267,9 @@ void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
   }
 #endif
   for (const auto &simplex : simplices) {
-    simplex->removeEdge(edge);
+    if (simplex->hasVertex(edge->getSource()) && simplex->hasVertex(edge->getTarget())) {
+      simplex->removeEdge(edge);
+    }
   }
   auto fp = edge->fingerprint.fingerprint();
   for (auto it = inEdges.begin(); it != inEdges.end(); ++it) {
@@ -287,7 +289,9 @@ void Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
   }
 #endif
   for (const auto &simplex : simplices) {
-    simplex->removeEdge(edge);
+    if (simplex->hasVertex(edge->getSource()) && simplex->hasVertex(edge->getTarget())) {
+      simplex->removeEdge(edge);
+    }
   }
   auto fp = edge->fingerprint.fingerprint();
   for (auto it = outEdges.begin(); it != outEdges.end(); ++it) {

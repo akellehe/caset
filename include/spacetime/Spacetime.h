@@ -397,10 +397,10 @@ class Spacetime {
     std::vector<SimplexPtr> simplexPool_{}; // owns all Simplex allocations (raw new ptrs)
     std::vector<std::uint32_t> simplexFreeSlots_{}; // recycled pool slots
     std::vector<SimplexPtr> simplicesVec{}; // flat array of live simplex pointers (swap-and-pop)
-    std::unordered_map<std::uint64_t, std::uint32_t> simplexVecIndex{}; // fingerprint → index in simplicesVec
+    struct SimplexSlots { std::uint32_t vecIdx; std::uint32_t poolSlot; };
+    std::unordered_map<std::uint64_t, SimplexSlots> simplexIndex_{}; // fingerprint → vec index + pool slot
     std::vector<SimplexPtr> topSimplicesVec{}; // top-dimensional simplices only
     std::unordered_map<std::uint64_t, std::uint32_t> topSimplexVecIndex{}; // fingerprint → index in topSimplicesVec
-    std::unordered_map<std::uint64_t, std::uint32_t> simplexPoolIndex_{}; // fingerprint → pool slot
     std::size_t n41Count = 0; // (4,1) + (1,4) simplices
     std::size_t n32Count = 0; // (3,2) + (2,3) simplices
     std::mt19937 rng{std::random_device{}()};
