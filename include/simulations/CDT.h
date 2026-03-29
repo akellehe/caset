@@ -24,6 +24,7 @@
 
 #include "simulations/Simulation.h"
 #include "spacetime/Spacetime.h"
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <random>
@@ -262,11 +263,29 @@ class CDT : public Simulation {
     /// probability \f$ e^{-\Delta S + \log P} \f$, where \f$ \log P \f$ is the
     /// log of the combinatorial prefactor \f$ g(T' \to T) P_l(T') / [g(T \to T') P_l(T)] \f$
     /// divided by \f$ e^{-\Delta S} \f$.
-    bool accept(double deltaS, double logPrefactor = 0.0);
+    inline bool accept(double deltaS, double logPrefactor = 0.0) {
+      double exponent = -deltaS + logPrefactor;
+      if (exponent >= 0.0) return true;
+      std::uniform_real_distribution<double> dist(0.0, 1.0);
+      return dist(rng) < std::exp(exponent);
+    }
 
-    /// Compute the incremental action change for a proposed move without
-    /// recomputing the full sum over simplices.
-    double computeDeltaAction(int dN0, int dN41, int dN32) const;
+    inline double computeDeltaAction(int dN0, int dN41, int dN32) const {
+      double n41 = static_cast<double>(spacetime->getN41());
+      double target = static_cast<double>(targetN41);
+      double dRegge = -(k0 + 6.0 * delta) * dN0
+                    + (k4 + 2.0 * delta) * dN41
+                    + (k4 + delta) * dN32;
+      double oldFix, newFix;
+      if (quadraticVolumeFix) {
+        oldFix = epsilon * (n41 - target) * (n41 - target);
+        newFix = epsilon * (n41 + dN41 - target) * (n41 + dN41 - target);
+      } else {
+        oldFix = epsilon * std::abs(n41 - target);
+        newFix = epsilon * std::abs(n41 + dN41 - target);
+      }
+      return dRegge + (newFix - oldFix);
+    }
 
     /// Shared implementation for shift and ishift moves.
     bool shiftImpl();

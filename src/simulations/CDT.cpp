@@ -102,30 +102,7 @@ double CDT::computeAction() const {
   return regge + volumeFix;
 }
 
-double CDT::computeDeltaAction(int dN0, int dN41, int dN32) const {
-  double n41 = static_cast<double>(spacetime->getN41());
-  double target = static_cast<double>(targetN41);
-
-  double dRegge = -(k0 + 6.0 * delta) * dN0
-               + (k4 + 2.0 * delta) * dN41
-               + (k4 + delta) * dN32;
-  double oldFix, newFix;
-  if (quadraticVolumeFix) {
-    oldFix = epsilon * (n41 - target) * (n41 - target);
-    newFix = epsilon * (n41 + dN41 - target) * (n41 + dN41 - target);
-  } else {
-    oldFix = epsilon * std::abs(n41 - target);
-    newFix = epsilon * std::abs(n41 + dN41 - target);
-  }
-  return dRegge + (newFix - oldFix);
-}
-
-bool CDT::accept(double deltaS, double logPrefactor) {
-  double exponent = -deltaS + logPrefactor;
-  if (exponent >= 0.0) return true;
-  std::uniform_real_distribution<double> dist(0.0, 1.0);
-  return dist(rng) < std::exp(exponent);
-}
+// computeDeltaAction and accept are inlined in CDT.h
 
 // ========================================
 // (2, 2d) Add Move: vertex insertion at spatial face
