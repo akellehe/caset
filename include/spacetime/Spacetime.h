@@ -262,6 +262,16 @@ class Spacetime {
     [[nodiscard]] std::unordered_map<std::uint64_t, int>
     bfsDistances(VertexPtr center, int maxDepth = -1) const;
 
+    /// Returns the dual graph of the top-dimensional triangulation as COO-format
+    /// adjacency data.  Two top simplices are adjacent if they share a (d-1)-face.
+    ///
+    /// @return (rows, cols, N) where rows[k],cols[k] are adjacent simplex indices
+    ///   (0-based into the top-simplex array) and N is the number of top simplices.
+    [[nodiscard]] std::tuple<std::vector<std::uint32_t>,
+                             std::vector<std::uint32_t>,
+                             std::uint32_t>
+    getDualAdjacency() const;
+
     /// Computes the connected components of the vertex graph.
     ///
     /// Uses depth-first search to identify connected components in the graph
