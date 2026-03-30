@@ -186,12 +186,12 @@ Vertex::moveOutEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
 
 void Vertex::checkDuplicates(const std::string &msg) const {
   std::unordered_set<std::uint64_t> seen{};
-  for (const auto fp : simplexFps_) {
-    if (seen.contains(fp)) {
+  for (const auto &simp : simplices) {
+    if (seen.contains(simp->fingerprint.fingerprint())) {
       CLOG(CRITICAL_LEVEL, "Simplex was duplicated for vertex!!!! " + msg);
       throw std::runtime_error(msg);
     }
-    seen.insert(fp);
+    seen.insert(simp->fingerprint.fingerprint());
   }
 }
 
@@ -204,12 +204,10 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
   checkDuplicates("Duplicated before emplacing a new simplex.");
 #endif
   auto fp = simplex->fingerprint.fingerprint();
-  // Scan the inline fingerprint cache — no pointer dereferences
-  for (const auto cachedFp : simplexFps_) {
-    if (cachedFp == fp) return false;
+  for (const auto &s : simplices) {
+    if (s->fingerprint.fingerprint() == fp) return false;
   }
   simplices.push_back(simplex);
-  simplexFps_.push_back(fp);
 #ifdef CASET_ASSERTIONS
   checkDuplicates("Duplicated after emplacing a new simplex.");
 #endif
@@ -219,24 +217,14 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
 bool Vertex::removeSimplex(const SimplexPtr &simplex) {
   CLOG(INFO_LEVEL, "Removing simplex: ", simplex->toString(), " from ", toString());
   auto fp = simplex->fingerprint.fingerprint();
-  auto n = simplexFps_.size();
-  for (std::size_t i = 0; i < n; ++i) {
-    if (simplexFps_[i] == fp) {
-      // Swap-and-pop both parallel arrays
-      simplices[i] = simplices.back();
+  for (auto it = simplices.begin(); it != simplices.end(); ++it) {
+    if ((*it)->fingerprint.fingerprint() == fp) {
+      *it = simplices.back();
       simplices.pop_back();
-      simplexFps_[i] = simplexFps_.back();
-      simplexFps_.pop_back();
       return true;
     }
   }
   return false;
-}
-
-void Vertex::updateSimplexFp(std::uint64_t oldFp, std::uint64_t newFp) noexcept {
-  for (auto &fp : simplexFps_) {
-    if (fp == oldFp) { fp = newFp; return; }
-  }
 }
 
 const Simplices &

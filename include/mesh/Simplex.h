@@ -284,6 +284,12 @@ class Simplex {
     Fingerprint fingerprint{};
     bool initialized{false};
 
+    /// Indices maintained by Spacetime for O(1) swap-and-pop removal.
+    /// UINT32_MAX means "not registered in that vector".
+    std::uint32_t vecIdx_{UINT32_MAX};    // index in Spacetime::simplicesVec
+    std::uint32_t poolSlot_{UINT32_MAX};  // index in Spacetime::simplexPool_
+    std::uint32_t topVecIdx_{UINT32_MAX}; // index in Spacetime::topSimplicesVec
+
 #ifdef CASET_ASSERTIONS
     OwnershipManager<IdType, SimplexPtr, SimplexPtrHash, SimplexPtrEq> ownershipManager{};
 #endif

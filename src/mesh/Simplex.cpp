@@ -63,8 +63,8 @@ const std::vector<SimplexPtr> &Simplex::getFacets() {
     // CRITICAL OPTIMIZATION: Cache edges once before loop
     const auto &allEdges = getEdges();
 
-    // Pre-compute coface once
-    SimplexPtr coface = spacetime->getSimplex(this->fingerprint.fingerprint());
+    // Use this directly — no hash lookup needed.
+    SimplexPtr coface = this;
 
     for (std::size_t skip = 0; skip < n; ++skip) {
       const auto skipVertexId = verts[skip]->getId();

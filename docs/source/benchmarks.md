@@ -193,17 +193,9 @@ current v{{version}} code.  The cumulative optimizations include:
   with a fixed-capacity `StackVec<T, 8>` for vertex/simplex lists in flip,
   iflip, and shift moves, eliminating `malloc`/`free` on every rejected
   move attempt.
-- **Inline fingerprint cache on vertices** — added a parallel
-  `std::vector<uint64_t>` alongside the vertex simplex list so
-  `addSimplex`/`removeSimplex` can compare fingerprints without chasing
-  pointers to Simplex objects scattered across the heap (~68 entries).
-- **Orphaned sub-simplex cleanup** — facets whose last coface is removed
-  are now evicted from the simplex index, preventing unbounded growth of
-  the hash tables during long simulations. Reduced the total/top simplex
-  ratio from 4.6x to 3.4x.
 
 Cumulative build-time improvement is **50-67%** at large lattice sizes,
-with sweep performance improving by up to **1.7x** (7.7 → 4.3 µs/move
+with sweep performance improving by up to **1.7x** (7.7 → 4.6 µs/move
 at N4=19k).
 
 ```{image} assets/benchmarks/benchmark_comparison.png
