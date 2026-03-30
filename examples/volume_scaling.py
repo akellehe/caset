@@ -136,7 +136,8 @@ def main():
     sweeps_per_run = args.n_therm + args.n_meas * args.meas_interval
     total_sweeps = n_runs * sweeps_per_run
 
-    progress = ProgressDisplay(n_runs, total_sweeps, item_label="Runs")
+    progress = ProgressDisplay(n_runs, total_sweeps, item_label="Runs",
+                                   memory_monitor=monitor)
 
     size_profiles = {}
     with ThreadPoolExecutor(max_workers=n_workers) as pool:

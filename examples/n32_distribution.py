@@ -126,7 +126,8 @@ def main():
     sweeps_per_vol = args.n_therm + args.n_meas * args.meas_interval
     total_sweeps = n_vols * sweeps_per_vol
 
-    progress = ProgressDisplay(n_vols, total_sweeps, item_label="Volumes")
+    progress = ProgressDisplay(n_vols, total_sweeps, item_label="Volumes",
+                                   memory_monitor=monitor)
 
     results = {}
     with ThreadPoolExecutor(max_workers=n_workers) as pool:

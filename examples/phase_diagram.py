@@ -214,7 +214,8 @@ def main():
     total_sweeps = total_points * args.n_sweeps
 
     progress = ProgressDisplay(total_points, total_sweeps,
-                               item_label="Points")
+                               item_label="Points",
+                               memory_monitor=monitor)
 
     # Collect results from all grid points
     results = {}  # (i, j) -> result dict

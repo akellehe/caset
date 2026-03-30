@@ -248,7 +248,8 @@ def main():
 
     # Threads share address space — no memory duplication.
     # The GIL is released inside sweep(), so threads get real C++ parallelism.
-    progress = ProgressDisplay(args.n_configs, total_sweeps)
+    progress = ProgressDisplay(args.n_configs, total_sweeps,
+                                   memory_monitor=monitor)
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {

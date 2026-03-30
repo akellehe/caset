@@ -317,7 +317,7 @@ def main():
     p.add_argument("--save", type=str, default="curvature_slices.gif")
     args = p.parse_args()
 
-    prog = SingleTaskProgress()
+    prog = SingleTaskProgress(memory_monitor=monitor)
     prog.phase("building", extra=f"{args.n_simplices} simplices")
 
     st, _ = build_spacetime(args.n_simplices)

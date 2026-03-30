@@ -293,7 +293,7 @@ def main():
     p.add_argument("--save", type=str, default="wilson_loops.gif")
     args = p.parse_args()
 
-    prog = SingleTaskProgress()
+    prog = SingleTaskProgress(memory_monitor=monitor)
 
     # Build spacetime
     prog.phase("building", extra=f"{args.n_simplices} simplices")

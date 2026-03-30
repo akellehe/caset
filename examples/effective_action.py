@@ -156,7 +156,8 @@ def main():
         args.n_therm + n * args.meas_interval for n in worker_meas)
 
     progress = ProgressDisplay(actual_workers, total_sweeps,
-                               item_label="Chains")
+                               item_label="Chains",
+                               memory_monitor=monitor)
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = {}
@@ -326,7 +327,7 @@ def main():
     n_track = max(100, args.n_therm * 2)
     actions = []
     volumes = []
-    prog2 = SingleTaskProgress()
+    prog2 = SingleTaskProgress(memory_monitor=monitor)
     prog2.phase("thermalizing", total=args.n_therm)
     cdt.sweep(args.n_therm, progress=prog2.on_tick)
     prog2.phase("tracking action", total=n_track)

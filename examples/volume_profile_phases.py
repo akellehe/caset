@@ -191,7 +191,8 @@ def main():
     n_phases = len(phases)
     sweeps_per_phase = args.n_therm + args.n_meas * args.meas_interval
     progress = ProgressDisplay(n_phases, n_phases * sweeps_per_phase,
-                               item_label="Phases")
+                               item_label="Phases",
+                               memory_monitor=monitor)
 
     phase_results = {}
     label_to_pid = {}

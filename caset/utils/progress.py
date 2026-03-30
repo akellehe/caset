@@ -66,7 +66,8 @@ class ProgressDisplay:
     """
 
     def __init__(self, n_items, total_sweeps, *,
-                 item_label="Configs", use_color=True):
+                 item_label="Configs", use_color=True,
+                 memory_monitor=None):
         self._lock = threading.Lock()
         self.n_items = n_items
         self.total_sweeps = total_sweeps
@@ -74,6 +75,7 @@ class ProgressDisplay:
         self.completed = 0
         self.sweeps_done = 0
         self.use_color = use_color and sys.stderr.isatty()
+        self._memory_monitor = memory_monitor
 
         self._phases = {}       # item_id → phase string
         self._info = {}         # item_id → extra info string
@@ -109,7 +111,12 @@ class ProgressDisplay:
         self._active = False
         self._spinner_thread.join(timeout=1)
         with self._lock:
-            self._draw()
+            # Only draw if the spinner thread never got a chance to
+            # (e.g. workers completed in < 80 ms).  Otherwise the
+            # spinner's last iteration already rendered the final state
+            # and re-drawing causes a visible flash of duplication.
+            if self._lines_drawn == 0:
+                self._draw()
             sys.stderr.write("\n")
             sys.stderr.flush()
 
@@ -142,6 +149,12 @@ class ProgressDisplay:
         if eta_str:
             eta_str = f"  {eta_str}"
 
+        mem_str = ""
+        if self._memory_monitor is not None:
+            rss = self._memory_monitor.rss_mb
+            if rss is not None:
+                mem_str = f"  💾 {rss} MB" if c else f"  RSS {rss} MB"
+
         if c:
             out.append(
                 f"{_ERASE_LINE}{_BOLD}📊 {self.item_label}{_RST} "
@@ -152,6 +165,7 @@ class ProgressDisplay:
                 f"{_DIM}({sw_pct:.0f}%){_RST}  "
                 f"{_DIM}⏱ {elapsed:.1f}s{_RST}"
                 f"{_DIM}{eta_str}{_RST}"
+                f"{_DIM}{mem_str}{_RST}"
             )
         else:
             out.append(
@@ -160,6 +174,7 @@ class ProgressDisplay:
                 f"Sweeps {self.sweeps_done}/{self.total_sweeps} "
                 f"({sw_pct:.0f}%)  {elapsed:.1f}s"
                 f"{eta_str}"
+                f"{mem_str}"
             )
 
         for item_id in sorted(self._phases.keys()):
@@ -211,9 +226,10 @@ class SingleTaskProgress:
         prog.finish("done")
     """
 
-    def __init__(self, use_color=True):
+    def __init__(self, use_color=True, memory_monitor=None):
         self._lock = threading.Lock()
         self.use_color = use_color and sys.stderr.isatty()
+        self._memory_monitor = memory_monitor
         self._phase = ""
         self._count = 0
         self._total = 0
@@ -280,6 +296,12 @@ class SingleTaskProgress:
         else:
             eta_str = ""
 
+        mem_str = ""
+        if self._memory_monitor is not None:
+            rss = self._memory_monitor.rss_mb
+            if rss is not None:
+                mem_str = f"  💾 {rss} MB" if c else f"  RSS {rss} MB"
+
         if final:
             emoji, color = PHASE_STYLE.get("done", ("✅", _GREEN))
 
@@ -293,12 +315,14 @@ class SingleTaskProgress:
                 f"{color}{phase}{_RST}"
                 f"{_DIM}{counter}{extra}  ⏱ {elapsed:.1f}s{_RST}"
                 f"{_DIM}{eta_str}{_RST}"
+                f"{_DIM}{mem_str}{_RST}"
             )
         else:
             line = (
                 f"{_ERASE_LINE}{emoji} {phase}"
                 f"{counter}{extra}  {elapsed:.1f}s"
                 f"{eta_str}"
+                f"{mem_str}"
             )
 
         prefix = "\033[1A" if self._drawn else ""

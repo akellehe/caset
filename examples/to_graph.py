@@ -40,7 +40,7 @@ def main():
 
     args = p.parse_args()
 
-    prog = SingleTaskProgress()
+    prog = SingleTaskProgress(memory_monitor=monitor)
     prog.phase("building", extra=f"{args.n_simplices} simplices")
 
     sig = caset.Signature(4, caset.Lorentzian)

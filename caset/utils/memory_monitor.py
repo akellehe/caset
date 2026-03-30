@@ -109,6 +109,7 @@ class MemoryMonitor:
         self._system_critical_pct = system_critical_pct
         self._verbose = verbose
         self._total_kb = _read_meminfo_total_kb()
+        self._last_rss_kb: int | None = _read_proc_self_rss_kb()
 
         # Auto-detect RSS limit as 75% of total system RAM.
         if process_rss_limit_mb is not None:
@@ -148,6 +149,12 @@ class MemoryMonitor:
         )
         self._thread.start()
 
+    @property
+    def rss_mb(self) -> int | None:
+        """Current process RSS in MB, or *None* if unavailable."""
+        rss = self._last_rss_kb
+        return rss // 1024 if rss is not None else None
+
     def stop(self) -> None:
         """Stop the monitor thread."""
         self._stop_event.set()
@@ -158,6 +165,8 @@ class MemoryMonitor:
         while not self._stop_event.wait(self._check_interval):
             rss_kb = _read_proc_self_rss_kb()
             avail_kb = _read_meminfo_available_kb()
+            if rss_kb is not None:
+                self._last_rss_kb = rss_kb
             if rss_kb is None or avail_kb is None:
                 continue
 
