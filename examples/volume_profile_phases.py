@@ -84,15 +84,35 @@ def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
     return label, profiles, cdt.getAcceptanceRates(), cdt.getK4()
 
 
-def average_profile(profiles):
+def average_profile(profiles, center=True):
+    """Average volume profiles, optionally centering on the peak first.
+
+    On a torus the de Sitter blob can sit at any time slice and its
+    position diffuses along the Markov chain.  Naive bin-by-bin averaging
+    smears the blob into uniform noise.  When *center=True* (default),
+    each profile is circularly rolled so its peak aligns at T//2 before
+    averaging — the same technique used in effective_action.py and
+    described in the CDT literature (Ambjorn et al., 2005).
+    """
     max_len = max(len(p) for p in profiles)
-    avg = np.zeros(max_len)
-    counts = np.zeros(max_len)
-    for p in profiles:
-        avg[:len(p)] += p
-        counts[:len(p)] += 1
-    counts[counts == 0] = 1
-    return avg / counts
+    if center:
+        centered = []
+        for p in profiles:
+            arr = np.zeros(max_len)
+            arr[:len(p)] = p
+            peak_idx = int(np.argmax(arr))
+            shift = max_len // 2 - peak_idx
+            arr = np.roll(arr, shift)
+            centered.append(arr)
+        return np.mean(centered, axis=0)
+    else:
+        avg = np.zeros(max_len)
+        counts = np.zeros(max_len)
+        for p in profiles:
+            avg[:len(p)] += p
+            counts[:len(p)] += 1
+        counts[counts == 0] = 1
+        return avg / counts
 
 
 def plot_universe_surface(profile, title, ax, color_map=cm.coolwarm):
@@ -125,10 +145,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="CDT volume profiles in phases A, B, C "
                     "(Figs 4-6 of hep-th/0505154)")
-    parser.add_argument("--n-simplices", type=int, default=800)
-    parser.add_argument("--n-therm", type=int, default=80)
-    parser.add_argument("--n-meas", type=int, default=30)
-    parser.add_argument("--meas-interval", type=int, default=5)
+    parser.add_argument("--n-simplices", type=int, default=5000,
+                        help="Target number of simplices (>=5000 for "
+                             "cos^3 to emerge)")
+    parser.add_argument("--n-therm", type=int, default=200,
+                        help="Thermalization sweeps")
+    parser.add_argument("--n-meas", type=int, default=30,
+                        help="Number of measurement configurations")
+    parser.add_argument("--meas-interval", type=int, default=20,
+                        help="Sweeps between measurements for "
+                             "decorrelation")
     parser.add_argument("--workers", type=int,
                         default=min(os.cpu_count() or 1, 8),
                         help="Parallel worker threads (default: min(cpus, 8))")
@@ -198,35 +224,32 @@ def main():
     for idx, (label, (k0, delta)) in enumerate(phases.items()):
         profiles, rates = phase_results[label]
         avg = average_profile(profiles)
-        peak_slice = np.argmax(avg)
 
         ax_surf = fig_surf.add_subplot(1, 3, idx + 1, projection="3d")
         plot_universe_surface(avg, label, ax_surf)
 
         short_label = label.split("\n")[0]
-        ax_line.plot(np.arange(len(avg)), avg, "o-", label=short_label,
+        tau = np.arange(len(avg)) - len(avg) // 2
+        ax_line.plot(tau, avg, "o-", label=short_label,
                      linewidth=2, markersize=4)
 
         if "C_{dS}" in label:
             phase_c_avg = avg
 
-    # Overlay cos^3 reference on the line plot (Eq. 28, hep-th/0505154)
-    # On a torus the de Sitter blob sits on a nonzero stalk; use periodic
-    # distance from the measured peak.
+    # Overlay cos^3 reference on the line plot (Eq. 28, hep-th/0505154).
+    # Profiles are centered on their peak (at T//2), so the blob is at
+    # the origin and the reference curve is simply cos^3(pi*tau/T).
     if phase_c_avg is not None:
         T_ref = len(phase_c_avg)
-        peak_tau = np.argmax(phase_c_avg)
         stalk = float(np.min(phase_c_avg))
         amplitude = float(phase_c_avg.max()) - stalk
-        tau_ref = np.linspace(0, T_ref - 1, 200)
-        dist = np.abs(tau_ref - peak_tau)
-        dist = np.minimum(dist, T_ref - dist)
-        cos_arg = np.pi * dist / T_ref
-        cos3_ref = stalk + amplitude * np.maximum(np.cos(cos_arg), 0) ** 3
+        tau_ref = np.linspace(-T_ref / 2, T_ref / 2, 200)
+        cos3_ref = stalk + amplitude * np.maximum(
+            np.cos(np.pi * tau_ref / T_ref), 0) ** 3
         ax_line.plot(tau_ref, cos3_ref, "k--",
                      alpha=0.4, linewidth=1.5, label=r"$\cos^3$ reference")
 
-    ax_line.set_xlabel(r"Time slice $\tau$", fontsize=13)
+    ax_line.set_xlabel(r"$\tau - \tau_{\mathrm{peak}}$", fontsize=13)
     ax_line.set_ylabel(r"$N_3(\tau)$", fontsize=13)
     ax_line.set_title(
         r"Spatial volume profile $N_3(\tau)$"
