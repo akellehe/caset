@@ -79,6 +79,7 @@ class ProgressDisplay:
 
         self._phases = {}       # item_id → phase string
         self._info = {}         # item_id → extra info string
+        self._progress = {}     # item_id → (done, total)
         self._lines_drawn = 0
         self._spin_idx = 0
         self._start = time.time()
@@ -91,9 +92,13 @@ class ProgressDisplay:
 
     # ── callbacks (called from worker threads) ──
 
-    def on_phase(self, item_id, phase):
+    def on_phase(self, item_id, phase, done=0, total=0):
         with self._lock:
             self._phases[item_id] = phase
+            if total > 0:
+                self._progress[item_id] = (done, total)
+            elif item_id in self._progress:
+                del self._progress[item_id]
 
     def on_sweep(self, _i, _n):
         with self._lock:
@@ -104,6 +109,7 @@ class ProgressDisplay:
         with self._lock:
             self._phases[item_id] = "done"
             self._info[item_id] = info
+            self._progress.pop(item_id, None)
             self.completed += 1
             self._eta.update(self.completed, self.n_items)
 
@@ -184,17 +190,24 @@ class ProgressDisplay:
             if extra:
                 extra = f"  {extra}"
 
+            prog_str = ""
+            prog_pair = self._progress.get(item_id)
+            if prog_pair:
+                d, t = prog_pair
+                prog_str = f" {d}/{t} ({d/t*100:.0f}%)" if t else ""
+
             if c:
                 indicator = emoji if phase == "done" else f"{color}{spin}{_RST} {emoji}"
                 out.append(
                     f"{_ERASE_LINE}  {indicator} "
                     f"{_DIM}#{item_id+1:>2}{_RST} "
                     f"{color}{phase}{_RST}"
-                    f"{_DIM}{extra}{_RST}"
+                    f"{_DIM}{prog_str}{extra}{_RST}"
                 )
             else:
                 out.append(
-                    f"{_ERASE_LINE}  {emoji} #{item_id+1:>2} {phase}{extra}"
+                    f"{_ERASE_LINE}  {emoji} #{item_id+1:>2} {phase}"
+                    f"{prog_str}{extra}"
                 )
 
         self._lines_drawn = len(out)

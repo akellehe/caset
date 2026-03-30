@@ -55,7 +55,7 @@ def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
     Each volume is a fully independent simulation.  The GIL is released
     during sweep(), so multiple threads run in parallel.
     """
-    _ph = lambda p: phase_cb(vol_id, p) if phase_cb else None
+    _ph = lambda p, done=0, total=0: phase_cb(vol_id, p, done, total) if phase_cb else None
 
     _ph("building")
     n_build = target_n41 * 2
@@ -70,16 +70,20 @@ def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
 
     _ph("tuning")
     cdt.tune()
-    _ph("thermalizing")
-    cdt.sweep(n_therm, progress=sweep_cb)
 
-    _ph("measuring")
+    chunk = max(1, n_therm // 20)
+    for start in range(0, n_therm, chunk):
+        batch = min(chunk, n_therm - start)
+        cdt.sweep(batch, progress=sweep_cb)
+        _ph("thermalizing", start + batch, n_therm)
+
     n32_samples = []
     n41_samples = []
-    for _ in range(n_meas):
+    for i in range(n_meas):
         cdt.sweep(meas_interval, progress=sweep_cb)
         n32_samples.append(st.getN32())
         n41_samples.append(st.getN41())
+        _ph("measuring", i + 1, n_meas)
 
     return (target_n41,
             np.array(n32_samples, dtype=float),

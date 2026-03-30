@@ -50,7 +50,7 @@ def _profiles_worker(run_id, n_simplices, n_therm, n_meas, meas_interval,
     Each size is independent.  The GIL is released during sweep(),
     so multiple threads run in parallel.
     """
-    _ph = lambda p: phase_cb(run_id, p) if phase_cb else None
+    _ph = lambda p, done=0, total=0: phase_cb(run_id, p, done, total) if phase_cb else None
 
     _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
@@ -64,14 +64,18 @@ def _profiles_worker(run_id, n_simplices, n_therm, n_meas, meas_interval,
 
     _ph("tuning")
     cdt.tune()
-    _ph("thermalizing")
-    cdt.sweep(n_therm, progress=sweep_cb)
 
-    _ph("measuring")
+    chunk = max(1, n_therm // 20)
+    for start in range(0, n_therm, chunk):
+        batch = min(chunk, n_therm - start)
+        cdt.sweep(batch, progress=sweep_cb)
+        _ph("thermalizing", start + batch, n_therm)
+
     profiles = []
-    for _ in range(n_meas):
+    for i in range(n_meas):
         cdt.sweep(meas_interval, progress=sweep_cb)
         profiles.append(np.array(cdt.getVolumeProfile(), dtype=float))
+        _ph("measuring", i + 1, n_meas)
     return n_simplices, profiles
 
 

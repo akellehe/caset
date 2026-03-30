@@ -131,8 +131,9 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     GIL is released during sweep() calls, so multiple threads get real
     C++ parallelism without duplicating process memory.
     """
-    if phase_cb:
-        phase_cb(cfg_id, "building")
+    _ph = lambda p, done=0, total=0: phase_cb(cfg_id, p, done, total) if phase_cb else None
+
+    _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
@@ -141,21 +142,22 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     target = st.getN41()
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
-    if phase_cb:
-        phase_cb(cfg_id, "tuning")
+    _ph("tuning")
     cdt.tune()
 
-    if phase_cb:
-        phase_cb(cfg_id, "thermalizing")
-    cdt.sweep(n_therm, progress=sweep_cb)
+    chunk = max(1, n_therm // 20)
+    for start in range(0, n_therm, chunk):
+        batch = min(chunk, n_therm - start)
+        cdt.sweep(batch, progress=sweep_cb)
+        _ph("thermalizing", start + batch, n_therm)
 
-    if phase_cb:
-        phase_cb(cfg_id, "decorrelating")
-    # Decorrelate
-    cdt.sweep(sweeps_between, progress=sweep_cb)
+    chunk = max(1, sweeps_between // 20)
+    for start in range(0, sweeps_between, chunk):
+        batch = min(chunk, sweeps_between - start)
+        cdt.sweep(batch, progress=sweep_cb)
+        _ph("decorrelating", start + batch, sweeps_between)
 
-    if phase_cb:
-        phase_cb(cfg_id, "diffusing")
+    _ph("diffusing")
     t0 = time.time()
     T, N = build_transition_matrix(st)
     if T is None or N == 0:

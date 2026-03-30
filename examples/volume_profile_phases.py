@@ -58,7 +58,7 @@ def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
     a Python callback would reacquire the GIL every sweep, serializing
     the threads.  Instead we report progress at the phase level.
     """
-    _ph = lambda p: phase_cb(phase_id, p) if phase_cb else None
+    _ph = lambda p, done=0, total=0: phase_cb(phase_id, p, done, total) if phase_cb else None
 
     _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
@@ -72,14 +72,19 @@ def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
 
     _ph("tuning")
     cdt.tune()
-    _ph("thermalizing")
-    cdt.sweep(n_therm)
 
-    _ph("measuring")
+    # Chunk sweeps to report progress without per-sweep GIL overhead.
+    chunk = max(1, n_therm // 20)
+    for start in range(0, n_therm, chunk):
+        batch = min(chunk, n_therm - start)
+        cdt.sweep(batch)
+        _ph("thermalizing", start + batch, n_therm)
+
     profiles = []
-    for _ in range(n_meas):
+    for i in range(n_meas):
         cdt.sweep(meas_interval)
         profiles.append(cdt.getVolumeProfile())
+        _ph("measuring", i + 1, n_meas)
 
     return label, profiles, cdt.getAcceptanceRates(), cdt.getK4()
 

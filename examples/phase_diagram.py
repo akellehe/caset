@@ -80,7 +80,7 @@ def run_point(k0, delta, n_simplices, n_sweeps,
 
     GIL is released during sweep(), so threads get real C++ parallelism.
     """
-    _ph = lambda p: phase_cb(point_id, p) if phase_cb and point_id is not None else None
+    _ph = lambda p, done=0, total=0: phase_cb(point_id, p, done, total) if phase_cb and point_id is not None else None
 
     _ph("building")
     sig = caset.Signature(4, caset.Lorentzian)
@@ -112,8 +112,11 @@ def run_point(k0, delta, n_simplices, n_sweeps,
     # Evolve.  Do NOT use thermalize() — its early-stopping criterion
     # converges to the nearest action basin (always Phase C from the
     # initial state) and prevents exploration of other phases.
-    _ph("sweeping")
-    cdt.sweep(n_sweeps, progress=sweep_cb)
+    chunk = max(1, n_sweeps // 20)
+    for start in range(0, n_sweeps, chunk):
+        batch = min(chunk, n_sweeps - start)
+        cdt.sweep(batch, progress=sweep_cb)
+        _ph("sweeping", start + batch, n_sweeps)
 
     profile = cdt.getVolumeProfile()
     n0 = st.getVertexCount()
