@@ -57,7 +57,8 @@ import matplotlib.pyplot as plt
 from scipy import sparse
 
 import caset
-from progress import ProgressDisplay
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import ProgressDisplay
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,7 @@ def compute_spectral_dimension(return_prob):
 # ---------------------------------------------------------------------------
 
 def main():
+    monitor = MemoryMonitor()
     parser = argparse.ArgumentParser(
         description="Spectral dimension D_S(sigma) measurement "
                     "(Figs 9-10 of hep-th/0505154)")

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import caset
-from progress import SingleTaskProgress
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import SingleTaskProgress
 
 
 def main():
+    monitor = MemoryMonitor()
     p = argparse.ArgumentParser(description="Build, thermalize, and render a CDT spacetime.")
 
     # Spacetime

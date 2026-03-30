@@ -57,7 +57,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
 import caset
-from progress import ProgressDisplay
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import ProgressDisplay
 
 
 # =====================================================================
@@ -173,6 +174,7 @@ def classify_grid(order_param):
 # =====================================================================
 
 def main():
+    monitor = MemoryMonitor()
     parser = argparse.ArgumentParser(
         description="CDT phase diagram (Fig 3 of hep-th/0505154)")
     parser.add_argument("--n-simplices", type=int, default=200,

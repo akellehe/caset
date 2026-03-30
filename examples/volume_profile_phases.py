@@ -43,7 +43,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 import caset
-from progress import ProgressDisplay
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import ProgressDisplay
 
 
 def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
@@ -120,6 +121,7 @@ def plot_universe_surface(profile, title, ax, color_map=cm.coolwarm):
 
 
 def main():
+    monitor = MemoryMonitor()
     parser = argparse.ArgumentParser(
         description="CDT volume profiles in phases A, B, C "
                     "(Figs 4-6 of hep-th/0505154)")

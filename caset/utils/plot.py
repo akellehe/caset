@@ -6,8 +6,8 @@ for 3D rendering and GIF assembly.
 
 Usage::
 
-    from plot_utils import build_spacetime, spatial_subgraph, force_layout_3d
-    from plot_utils import render_frame, draw_edges, save_gif
+    from caset.utils.plot import build_spacetime, spatial_subgraph, force_layout_3d
+    from caset.utils.plot import render_frame, draw_edges, save_gif
 """
 import math
 

@@ -101,82 +101,82 @@ if (CASET_CUDA)
 endif()
 
 # ---- <Build the Python module> ----
-pybind11_add_module(caset MODULE ${CASET_SOURCES})
+pybind11_add_module(_caset MODULE ${CASET_SOURCES})
 
 if (CASET_CUDA)
     message(STATUS "CUDA acceleration turned ON.")
-    target_compile_definitions(caset PRIVATE CASET_CUDA=1)
-    target_link_libraries(caset PRIVATE caset_cuda CUDA::cudart)
+    target_compile_definitions(_caset PRIVATE CASET_CUDA=1)
+    target_link_libraries(_caset PRIVATE caset_cuda CUDA::cudart)
 else()
     message(STATUS "CUDA acceleration turned OFF.")
 endif()
 
 if(CASET_ASAN)
     message(STATUS "ASAN/UBSAN support ON")
-    target_compile_options(caset PRIVATE
+    target_compile_options(_caset PRIVATE
             -O1 -g3
             -fno-omit-frame-pointer
             -fsanitize=address,undefined
             -fno-sanitize-recover=address,undefined
             -fno-optimize-sibling-calls
     )
-    target_link_options(caset PRIVATE
+    target_link_options(_caset PRIVATE
             -fsanitize=address,undefined
     )
     # Optional: make ASan reports symbolize nicely
-    target_compile_definitions(caset PRIVATE ASAN_ENABLED=1)
+    target_compile_definitions(_caset PRIVATE ASAN_ENABLED=1)
 else()
     message(STATUS "ASAN/UBSAN support OFF")
 endif()
 
 set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(caset PRIVATE
+target_compile_definitions(_caset PRIVATE
     SOURCES_ROOT="${SOURCES_ROOT}"
     CASET_VERSION="${CASET_VERSION}"
 )
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CASET_PROFILE)
     message(STATUS "DEBUGGING (-O1, -g3) Support ON.")
-    target_compile_options(caset PRIVATE -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
+    target_compile_options(_caset PRIVATE -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "DEBUGGING (-O1, -g3) Support OFF, will use -O3.")
-    target_compile_options(caset PRIVATE -O3)
+    target_compile_options(_caset PRIVATE -O3)
 endif()
 
 if (CASET_VERBOSE)
     message(STATUS "Logging turned ON.")
-    target_compile_definitions(caset PRIVATE CASET_VERBOSE=1)
+    target_compile_definitions(_caset PRIVATE CASET_VERBOSE=1)
 else()
     message(STATUS "Logging turned OFF.")
 endif()
 
 if (CASET_ASSERTIONS)
     message(STATUS "Assertions turned ON.")
-    target_compile_definitions(caset PRIVATE CASET_ASSERTIONS=1)
+    target_compile_definitions(_caset PRIVATE CASET_ASSERTIONS=1)
 else()
     message(STATUS "Assertions turned OFF.")
 endif()
 
 
-target_include_directories(caset
+target_include_directories(_caset
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-target_link_libraries(caset PRIVATE ZLIB::ZLIB)
+target_link_libraries(_caset PRIVATE ZLIB::ZLIB)
 
-set_target_properties(caset PROPERTIES
+set_target_properties(_caset PROPERTIES
         CXX_VISIBILITY_PRESET default
         VISIBILITY_INLINES_HIDDEN OFF
 )
 # ---- </Build the Python module> ----
 
-# Install next to your package
-install(TARGETS caset
-        LIBRARY DESTINATION .
-        RUNTIME DESTINATION .
-        ARCHIVE DESTINATION .
-        BUNDLE  DESTINATION .
+# Install the C extension inside the caset/ package directory
+install(TARGETS _caset
+        LIBRARY DESTINATION caset
+        RUNTIME DESTINATION caset
+        ARCHIVE DESTINATION caset
+        BUNDLE  DESTINATION caset
 )
 
 if(NOT CASET_ASAN)
@@ -184,19 +184,19 @@ if(NOT CASET_ASAN)
 set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
 
 add_custom_command(
-        TARGET caset POST_BUILD
-        BYPRODUCTS "${STUB_OUT_DIR}/caset.pyi"
+        TARGET _caset POST_BUILD
+        BYPRODUCTS "${STUB_OUT_DIR}/_caset.pyi"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_OUT_DIR}"
         # Make the just-built module importable:
         COMMAND ${Python_EXECUTABLE} -c
             "import pybind11_stubgen" && ${CMAKE_COMMAND} -E env
-            PYTHONPATH=$<TARGET_FILE_DIR:caset>
-            ${Python_EXECUTABLE} -m pybind11_stubgen caset -o "${STUB_OUT_DIR}"
+            PYTHONPATH=$<TARGET_FILE_DIR:_caset>
+            ${Python_EXECUTABLE} -m pybind11_stubgen _caset -o "${STUB_OUT_DIR}"
                 --ignore-invalid-expressions="caset::.*"
             || ${CMAKE_COMMAND} -E echo "Warning: pybind11_stubgen not found, skipping stub generation"
-        COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/caset.pyi"
+        COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/_caset.pyi"
 )
 
 # Install the stub next to the extension in the package
-install(FILES "${STUB_OUT_DIR}/caset.pyi" DESTINATION . OPTIONAL)
+install(FILES "${STUB_OUT_DIR}/_caset.pyi" DESTINATION caset OPTIONAL)
 endif()

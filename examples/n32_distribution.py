@@ -44,7 +44,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import caset
-from progress import ProgressDisplay
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import ProgressDisplay
 
 
 def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
@@ -86,6 +87,7 @@ def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
 
 
 def main():
+    monitor = MemoryMonitor()
     parser = argparse.ArgumentParser(
         description="N_4^{(3,2)} distribution at fixed N_4^{(4,1)} "
                     "(Fig 2 of hep-th/0505154)")

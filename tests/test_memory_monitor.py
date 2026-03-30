@@ -8,11 +8,8 @@ import time
 import unittest
 from unittest import mock
 
-# Allow importing from examples/
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "examples"))
-
-import memory_monitor
-from memory_monitor import (
+from caset.utils import memory_monitor
+from caset.utils.memory_monitor import (
     MemoryMonitor,
     _read_meminfo_available_kb,
     _read_meminfo_total_kb,
@@ -71,7 +68,7 @@ class TestProcReaders(unittest.TestCase):
 def _patch_proc(rss_kb, avail_kb, total_kb):
     """Return a context manager that patches all three /proc readers."""
     return mock.patch.multiple(
-        "memory_monitor",
+        "caset.utils.memory_monitor",
         _read_proc_self_rss_kb=mock.DEFAULT,
         _read_meminfo_available_kb=mock.DEFAULT,
         _read_meminfo_total_kb=mock.DEFAULT,
@@ -106,17 +103,17 @@ class _FakeProcValues:
 
 class TestMonitorConstruction(unittest.TestCase):
 
-    @mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=None)
-    @mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=None)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
     def test_no_proc_disables_monitor(self, _mock_total, _mock_rss):
         """On non-Linux, the monitor should be a no-op (no thread)."""
         mon = MemoryMonitor(check_interval=0.05)
         self.assertIsNone(mon._thread)
         mon.stop()  # should not raise
 
-    @mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000)
-    @mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
-    @mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
     def test_thread_starts_on_linux(self, *_):
         mon = MemoryMonitor(check_interval=0.05)
         try:
@@ -126,17 +123,17 @@ class TestMonitorConstruction(unittest.TestCase):
         finally:
             mon.stop()
 
-    @mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000)
-    @mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
-    @mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
     def test_stop_joins_thread(self, *_):
         mon = MemoryMonitor(check_interval=0.05)
         mon.stop()
         self.assertFalse(mon._thread.is_alive())
 
-    @mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000)
-    @mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
-    @mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
     def test_explicit_rss_limit(self, *_):
         mon = MemoryMonitor(process_rss_limit_mb=2048, check_interval=0.05)
         try:
@@ -144,9 +141,9 @@ class TestMonitorConstruction(unittest.TestCase):
         finally:
             mon.stop()
 
-    @mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000)
-    @mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
-    @mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000)
     def test_auto_rss_limit_is_75pct_of_total(self, *_):
         mon = MemoryMonitor(check_interval=0.05)
         try:
@@ -154,9 +151,9 @@ class TestMonitorConstruction(unittest.TestCase):
         finally:
             mon.stop()
 
-    @mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000)
-    @mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
-    @mock.patch("memory_monitor._read_meminfo_total_kb", return_value=None)
+    @mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000)
+    @mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=None)
     def test_auto_rss_limit_fallback_when_total_unknown(self, *_):
         mon = MemoryMonitor(check_interval=0.05)
         try:
@@ -184,10 +181,10 @@ class TestKillConditions(unittest.TestCase):
         fake = _FakeProcValues(rss_kb, avail_kb, total_kb)
         kills = []
 
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", side_effect=lambda: fake.get_rss()), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", side_effect=lambda: fake.get_avail()), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", side_effect=lambda: fake.get_total()), \
-             mock.patch("memory_monitor.os.kill", side_effect=lambda pid, sig: kills.append((pid, sig))):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", side_effect=lambda: fake.get_rss()), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", side_effect=lambda: fake.get_avail()), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", side_effect=lambda: fake.get_total()), \
+             mock.patch("caset.utils.memory_monitor.os.kill", side_effect=lambda pid, sig: kills.append((pid, sig))):
             kwargs.setdefault("check_interval", 0.02)
             mon = MemoryMonitor(**kwargs)
             # Let the monitor thread run at least one check cycle
@@ -307,14 +304,14 @@ class TestEdgeCases(unittest.TestCase):
             call_count[0] += 1
             return None  # simulate /proc read failure
 
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000):
             mon = MemoryMonitor(check_interval=0.02)
 
         # Now make RSS unreadable during the loop
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", side_effect=flaky_rss), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", return_value=400_000), \
-             mock.patch("memory_monitor.os.kill") as mock_kill:
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", side_effect=flaky_rss), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=400_000), \
+             mock.patch("caset.utils.memory_monitor.os.kill") as mock_kill:
             time.sleep(0.1)
             mon.stop()
             # Should not have killed because rss was None
@@ -322,13 +319,13 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_none_avail_skips_check(self):
         """If /proc/meminfo becomes unreadable mid-run, don't crash."""
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000):
             mon = MemoryMonitor(check_interval=0.02)
 
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=13_000_000), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", return_value=None), \
-             mock.patch("memory_monitor.os.kill") as mock_kill:
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=13_000_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=None), \
+             mock.patch("caset.utils.memory_monitor.os.kill") as mock_kill:
             time.sleep(0.1)
             mon.stop()
             mock_kill.assert_not_called()
@@ -336,10 +333,10 @@ class TestEdgeCases(unittest.TestCase):
     def test_total_kb_none_skips_critical_pct(self):
         """If total RAM is unknown, the critical-pct check is skipped."""
         kills = []
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", return_value=400_000), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", return_value=None), \
-             mock.patch("memory_monitor.os.kill", side_effect=lambda p, s: kills.append((p, s))):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=400_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=None), \
+             mock.patch("caset.utils.memory_monitor.os.kill", side_effect=lambda p, s: kills.append((p, s))):
             mon = MemoryMonitor(check_interval=0.02)
             time.sleep(0.15)
             mon.stop()
@@ -347,24 +344,24 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(kills, [])
 
     def test_stop_is_idempotent(self):
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000):
             mon = MemoryMonitor(check_interval=0.02)
             mon.stop()
             mon.stop()  # should not raise
 
     def test_stop_on_noop_monitor(self):
         """stop() on a no-op monitor (non-Linux) doesn't raise."""
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=None), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", return_value=None):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=None), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=None):
             mon = MemoryMonitor()
             mon.stop()
 
     def test_verbose_prints_to_stderr(self, ):
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", return_value=8_000_000), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", return_value=16_000_000), \
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", return_value=100_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", return_value=8_000_000), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", return_value=16_000_000), \
              mock.patch("sys.stderr") as mock_stderr:
             mon = MemoryMonitor(check_interval=0.02, verbose=True)
             time.sleep(0.1)
@@ -385,10 +382,10 @@ class TestDynamicValues(unittest.TestCase):
             rss_kb=100_000, avail_kb=8_000_000, total_kb=16_000_000)
         kills = []
 
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", side_effect=lambda: fake.get_rss()), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", side_effect=lambda: fake.get_avail()), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", side_effect=lambda: fake.get_total()), \
-             mock.patch("memory_monitor.os.kill", side_effect=lambda p, s: kills.append((p, s))):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", side_effect=lambda: fake.get_rss()), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", side_effect=lambda: fake.get_avail()), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", side_effect=lambda: fake.get_total()), \
+             mock.patch("caset.utils.memory_monitor.os.kill", side_effect=lambda p, s: kills.append((p, s))):
             mon = MemoryMonitor(check_interval=0.02)
             # Let it run a couple checks with safe values
             time.sleep(0.1)
@@ -408,10 +405,10 @@ class TestDynamicValues(unittest.TestCase):
             rss_kb=13_000_000, avail_kb=8_000_000, total_kb=16_000_000)
         kills = []
 
-        with mock.patch("memory_monitor._read_proc_self_rss_kb", side_effect=lambda: fake.get_rss()), \
-             mock.patch("memory_monitor._read_meminfo_available_kb", side_effect=lambda: fake.get_avail()), \
-             mock.patch("memory_monitor._read_meminfo_total_kb", side_effect=lambda: fake.get_total()), \
-             mock.patch("memory_monitor.os.kill", side_effect=lambda p, s: kills.append((p, s))):
+        with mock.patch("caset.utils.memory_monitor._read_proc_self_rss_kb", side_effect=lambda: fake.get_rss()), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_available_kb", side_effect=lambda: fake.get_avail()), \
+             mock.patch("caset.utils.memory_monitor._read_meminfo_total_kb", side_effect=lambda: fake.get_total()), \
+             mock.patch("caset.utils.memory_monitor.os.kill", side_effect=lambda p, s: kills.append((p, s))):
             mon = MemoryMonitor(check_interval=0.02, system_critical_pct=99.0)
             time.sleep(0.1)
             self.assertEqual(kills, [])

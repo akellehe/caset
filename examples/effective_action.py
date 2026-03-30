@@ -66,7 +66,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 import caset
-from progress import ProgressDisplay, SingleTaskProgress
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import ProgressDisplay, SingleTaskProgress
 
 
 def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
@@ -104,6 +105,7 @@ def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
 
 
 def main():
+    monitor = MemoryMonitor()
     parser = argparse.ArgumentParser(
         description="Effective action analysis "
                     "(Figs 11-13 of hep-th/0505154)")

@@ -47,6 +47,7 @@ markers = [
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"
 cmake.build-type = "Release"
+wheel.packages = ["caset"]
 
 [tool.scikit-build.cmake.define]
 Python_EXECUTABLE = "${python.executable}"

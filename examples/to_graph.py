@@ -2,10 +2,12 @@
 """Export a CDT spacetime to GraphML or DOT format."""
 import argparse
 import caset
-from progress import SingleTaskProgress
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import SingleTaskProgress
 
 
 def main():
+    monitor = MemoryMonitor()
     p = argparse.ArgumentParser(description="Build, thermalize, and export a CDT spacetime graph.")
 
     # Spacetime

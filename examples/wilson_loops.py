@@ -22,7 +22,8 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from PIL import Image
 
 import caset
-from progress import SingleTaskProgress
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import SingleTaskProgress
 
 
 # =========================================================================
@@ -285,6 +286,7 @@ def _render_frame(pos, dual_edges, edge_types, loop_indices, title,
 # =========================================================================
 
 def main():
+    monitor = MemoryMonitor()
     p = argparse.ArgumentParser(
         description="Wilson loop visualization across three evaluation modes")
     p.add_argument("--n-simplices", type=int, default=50)

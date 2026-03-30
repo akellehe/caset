@@ -73,9 +73,10 @@ def get_configure_command(build_dir):
     return cmd
 
 def pytest_sessionstart(session):
-    # Skip cmake rebuild if caset is already importable (e.g. from pip install -e .)
+    # Skip cmake rebuild if caset._caset (the C extension) is already importable
+    # (e.g. from pip install -e .)
     try:
-        import caset as _caset
+        from caset import _caset
         if hasattr(_caset, '__file__') and _caset.__file__:
             return  # already available, no rebuild needed
     except ImportError:
@@ -87,12 +88,14 @@ def pytest_sessionstart(session):
         print("build dir does not exist (", str(build_dir), ") configuring.")
         subprocess.run(get_configure_command(build_dir), check=True, env=env)
     subprocess.run(get_build_command(build_dir), check=True, env=env)
+    # The C extension (_caset.so) is built into the build dir root.
+    # Add it so ``from _caset import *`` in caset/__init__.py can find it.
     sys.path.insert(0, str(build_dir))
 
     # If caset is editable-installed (pip install -e .), the module in
     # site-packages is kept in sync with the build dir by scikit-build-core.
     # Only warn when the module appears to come from a non-editable install.
-    spec = importlib.util.find_spec("caset")
+    spec = importlib.util.find_spec("caset._caset")
     if spec is not None and "site-packages" in (spec.origin or ""):
         # Check whether this is an editable install
         try:
@@ -104,7 +107,7 @@ def pytest_sessionstart(session):
             is_editable = False
         if not is_editable:
             raise RuntimeError(
-                f"Refusing to use caset from site-packages: {spec.origin}\n"
+                f"Refusing to use caset._caset from site-packages: {spec.origin}\n"
                 f"Expected to load from: {build_dir}\n"
                 "Uninstall via python3 -m pip uninstall caset before running tests."
             )

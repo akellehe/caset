@@ -26,9 +26,10 @@ from matplotlib.collections import LineCollection
 from PIL import Image
 
 import caset
-from plot_utils import (build_spacetime, time_slices, spatial_subgraph,
-                        bfs_distances, save_gif)
-from progress import SingleTaskProgress
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.plot import (build_spacetime, time_slices, spatial_subgraph,
+                              bfs_distances, save_gif)
+from caset.utils.progress import SingleTaskProgress
 
 
 # =========================================================================
@@ -305,6 +306,7 @@ def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
 # =========================================================================
 
 def main():
+    monitor = MemoryMonitor()
     p = argparse.ArgumentParser(
         description="Curvature-slice GIF: spatial slices with heat map")
     p.add_argument("--n-simplices", type=int, default=50)

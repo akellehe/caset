@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 
-from eta import ETAEstimator
+from caset.utils.eta import ETAEstimator
 
 # ─── ANSI helpers ────────────────────────────────────────────────────
 _BOLD = "\033[1m"

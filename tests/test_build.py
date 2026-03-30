@@ -26,9 +26,10 @@ import sys
 class TestBuilding(unittest.TestCase):
     def test_building(self):
         """Verify that caset is importable — from cmake-build-debug, pip install -e ., or pip install ."""
-        spec = importlib.util.find_spec("caset")
-        self.assertIsNotNone(spec, "caset module not found")
-        self.assertIsNotNone(spec.origin, "caset module has no origin")
+        # The caset package is a Python wrapper; check the C extension underneath.
+        spec = importlib.util.find_spec("caset._caset")
+        self.assertIsNotNone(spec, "caset._caset C extension not found")
+        self.assertIsNotNone(spec.origin, "caset._caset has no origin")
 
         print("  origin:", spec.origin)
 
@@ -42,7 +43,7 @@ class TestBuilding(unittest.TestCase):
             direct_url = dist.read_text("direct_url.json") or ""
             self.assertTrue(
                 direct_url,
-                f"caset loaded from site-packages without a direct_url.json — "
+                f"caset._caset loaded from site-packages without a direct_url.json — "
                 f"stale install? origin: {spec.origin}")
         else:
             # Loaded from cmake-build-debug (conftest.py injected it)

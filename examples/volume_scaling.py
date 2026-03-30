@@ -39,7 +39,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 import caset
-from progress import ProgressDisplay
+from caset.utils.memory_monitor import MemoryMonitor
+from caset.utils.progress import ProgressDisplay
 
 
 def _profiles_worker(run_id, n_simplices, n_therm, n_meas, meas_interval,
@@ -98,6 +99,7 @@ def compute_volume_correlator(profiles, stalk_volume=None):
 
 
 def main():
+    monitor = MemoryMonitor()
     parser = argparse.ArgumentParser(
         description="Volume-volume correlator (Figs 7-8, 12)")
     parser.add_argument("--n-simplices", type=int, default=500)

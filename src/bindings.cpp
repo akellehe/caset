@@ -53,7 +53,7 @@ namespace py = pybind11;
 
 using namespace caset;
 
-PYBIND11_MODULE(caset, m) {
+PYBIND11_MODULE(_caset, m) {
   m.doc() = R"doc(
 caset -- Causal Set and CDT simulation library.
 
