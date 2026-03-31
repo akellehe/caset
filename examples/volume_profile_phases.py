@@ -18,7 +18,7 @@ The Regge action is (Eq. 2 of hep-th/0505154):
 To reproduce the paper results (Figs 4-6):
   python examples/volume_profile_phases.py \
       --n-simplices 80000 --n-therm 500 --n-meas 100 \
-      --meas-interval 50
+      --meas-interval 20
 
 The paper uses N4 up to 362k; 80k is sufficient to clearly
 distinguish the three phase profiles (blob, crumpled, polymer).
@@ -44,7 +44,7 @@ from matplotlib import cm
 
 import caset
 from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay
+from caset.utils.progress import ProgressDisplay, make_tune_cb
 
 
 def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
@@ -71,7 +71,7 @@ def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
     cdt = caset.CDTSimulation(st, k0, 0.5, delta, 1.0 / target, target)
 
     _ph("tuning")
-    cdt.tune()
+    cdt.tune(progress=make_tune_cb(phase_cb, phase_id))
 
     # Chunk sweeps to report progress without per-sweep GIL overhead.
     chunk = max(1, n_therm // 20)

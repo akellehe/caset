@@ -22,6 +22,8 @@
 #ifndef CASET_SIMULATION_H
 #define CASET_SIMULATION_H
 
+#include <functional>
+
 namespace caset {
 
 /// # Simulation Base Class
@@ -55,7 +57,7 @@ class Simulation {
     /// In CDT this adjusts \f$ k_4 \f$ so the four-volume fluctuates around the target.
     /// In Regge calculus this constructs an initial triangulation. In CST this sets
     /// the sprinkling density.
-    virtual void tune();
+    virtual void tune(std::function<void(int,int)> progress = nullptr);
 
     /// Evolve the system to thermal equilibrium.
     ///

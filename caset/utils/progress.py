@@ -49,6 +49,35 @@ PHASE_STYLE = {
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
+def _mini_bar(done, total, width=10, color=True):
+    """Compact progress bar: ▓▓▓▓░░░░░░ 40%"""
+    if total <= 0:
+        return ""
+    frac = min(done / total, 1.0)
+    filled = int(width * frac)
+    pct = frac * 100
+    bar = "▓" * filled + "░" * (width - filled)
+    if color:
+        return f"{bar} {done}/{total} ({pct:.0f}%)"
+    return f"{bar} {done}/{total} ({pct:.0f}%)"
+
+
+def make_tune_cb(phase_cb, item_id=None):
+    """Create a progress callback for cdt.tune() from a phase callback.
+
+    For multi-worker examples (ProgressDisplay), pass the phase_cb and
+    item_id.  For single-task examples (SingleTaskProgress), pass None
+    for item_id and use prog.on_tick directly instead.
+
+    Returns a callable(i, n) suitable for cdt.tune(progress=...).
+    """
+    if phase_cb is None:
+        return None
+    if item_id is not None:
+        return lambda i, n: phase_cb(item_id, "tuning", i, n)
+    return lambda i, n: phase_cb("tuning", i, n)
+
+
 # ─── Multi-worker display ────────────────────────────────────────────
 
 class ProgressDisplay:
@@ -194,7 +223,7 @@ class ProgressDisplay:
             prog_pair = self._progress.get(item_id)
             if prog_pair:
                 d, t = prog_pair
-                prog_str = f" {d}/{t} ({d/t*100:.0f}%)" if t else ""
+                prog_str = f" {_mini_bar(d, t, width=10, color=c)}" if t else ""
 
             if c:
                 indicator = emoji if phase == "done" else f"{color}{spin}{_RST} {emoji}"
@@ -296,8 +325,7 @@ class SingleTaskProgress:
 
         counter = ""
         if self._total > 0:
-            pct = self._count / self._total * 100
-            counter = f" {self._count}/{self._total} ({pct:.0f}%)"
+            counter = f" {_mini_bar(self._count, self._total, width=10, color=c)}"
         elif self._count > 0:
             counter = f" {self._count}"
 

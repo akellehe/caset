@@ -40,7 +40,7 @@ from scipy.optimize import curve_fit
 
 import caset
 from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay
+from caset.utils.progress import ProgressDisplay, make_tune_cb
 
 
 def _profiles_worker(run_id, n_simplices, n_therm, n_meas, meas_interval,
@@ -63,7 +63,7 @@ def _profiles_worker(run_id, n_simplices, n_therm, n_meas, meas_interval,
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
-    cdt.tune()
+    cdt.tune(progress=make_tune_cb(phase_cb, run_id))
 
     chunk = max(1, n_therm // 20)
     for start in range(0, n_therm, chunk):

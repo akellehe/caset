@@ -58,7 +58,7 @@ from scipy import sparse
 
 import caset
 from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay
+from caset.utils.progress import ProgressDisplay, make_tune_cb
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
-    cdt.tune()
+    cdt.tune(progress=make_tune_cb(phase_cb, cfg_id))
 
     chunk = max(1, n_therm // 20)
     for start in range(0, n_therm, chunk):

@@ -45,7 +45,7 @@ import matplotlib.pyplot as plt
 
 import caset
 from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay
+from caset.utils.progress import ProgressDisplay, make_tune_cb
 
 
 def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
@@ -69,7 +69,7 @@ def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
-    cdt.tune()
+    cdt.tune(progress=make_tune_cb(phase_cb, vol_id))
 
     chunk = max(1, n_therm // 20)
     for start in range(0, n_therm, chunk):

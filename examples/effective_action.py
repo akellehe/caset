@@ -67,7 +67,7 @@ from scipy.optimize import curve_fit
 
 import caset
 from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay, SingleTaskProgress
+from caset.utils.progress import ProgressDisplay, SingleTaskProgress, make_tune_cb
 
 
 def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
@@ -91,7 +91,7 @@ def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
-    cdt.tune()
+    cdt.tune(progress=make_tune_cb(phase_cb, worker_id))
 
     chunk = max(1, n_therm // 20)
     for start in range(0, n_therm, chunk):
@@ -326,12 +326,13 @@ def main():
     st.build(args.n_simplices)
     target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
-    cdt.tune()
 
     n_track = max(100, args.n_therm * 2)
     actions = []
     volumes = []
     prog2 = SingleTaskProgress(memory_monitor=monitor)
+    prog2.phase("tuning", total=20)
+    cdt.tune(progress=prog2.on_tick)
     prog2.phase("thermalizing", total=args.n_therm)
     cdt.sweep(args.n_therm, progress=prog2.on_tick)
     prog2.phase("tracking action", total=n_track)

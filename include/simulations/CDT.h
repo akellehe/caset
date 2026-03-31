@@ -199,7 +199,7 @@ class CDT : public Simulation {
     /// \f$ N_4 \f$ toward the target \f$ \bar{N}_4 \f$. Uses a proportional controller
     /// that increases \f$ k_4 \f$ when volume exceeds the target (making growth
     /// more expensive) and decreases it when volume is below target.
-    void tune() override;
+    void tune(std::function<void(int,int)> progress = nullptr) override;
 
     /// Run Monte Carlo sweeps until the action \f$ S \f$ stabilizes, indicating
     /// the system has reached thermal equilibrium. Equilibrium is detected when

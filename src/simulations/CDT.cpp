@@ -732,7 +732,7 @@ int CDT::sweep() {
   return accepted;
 }
 
-void CDT::tune() {
+void CDT::tune(std::function<void(int,int)> progress) {
   // Tune k4 to its pseudo-critical value using proportional feedback.
   // For the (2,2d) add move: dS_Regge ≈ -(k0+6Δ) + (2d-2)(k4+2Δ)
   // Setting this near 0 for d=4: k4_crit ≈ (k0+6Δ)/(2d-2) - 2Δ
@@ -741,12 +741,14 @@ void CDT::tune() {
   k4 = (k0 + 6.0 * delta) / (2.0 * d - 2.0) - 2.0 * delta;
 
   // Fine-tune with short feedback sweeps
+  constexpr int nTuneSteps = 20;
   double target = static_cast<double>(targetN41);
-  for (int i = 0; i < 20; ++i) {
+  for (int i = 0; i < nTuneSteps; ++i) {
     sweep();
     double n41 = static_cast<double>(spacetime->getN41());
     double error = (n41 - target) / target;  // normalized error
     k4 += 0.01 * error;
+    if (progress) progress(i + 1, nTuneSteps);
   }
 }
 

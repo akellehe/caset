@@ -5,7 +5,7 @@
 
 namespace caset {
 
-void Simulation::tune() {}
+void Simulation::tune(std::function<void(int,int)> /*progress*/) {}
 void Simulation::thermalize() {}
 
 } // caset

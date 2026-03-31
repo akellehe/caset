@@ -53,8 +53,8 @@ def main():
     cdt = caset.CDTSimulation(st, args.k0, args.k4, args.delta, eps,
                               target, args.quadraticVolume)
 
-    prog.phase("tuning")
-    cdt.tune()
+    prog.phase("tuning", total=20)
+    cdt.tune(progress=prog.on_tick)
     if args.n_sweeps > 0:
         prog.phase("thermalizing", total=args.n_sweeps)
         cdt.sweep(args.n_sweeps, progress=prog.on_tick)

@@ -714,12 +714,25 @@ Args:
     progress: Optional callback(i, n) called after each sweep.
 
 Returns the total number of accepted moves across all sweeps.)doc")
-      .def("tune", &CDT::tune, py::call_guard<py::gil_scoped_release>(),
+      .def("tune", [](CDT &self, py::object progress) {
+          if (progress.is_none()) {
+              py::gil_scoped_release release;
+              self.tune();
+          } else {
+              self.tune([&](int i, int n) {
+                  py::gil_scoped_acquire acquire;
+                  progress(i, n);
+              });
+          }
+      }, py::arg("progress") = py::none(),
            R"doc(Tune k4 to its pseudo-critical value ([BGL] Sec. 3.3.1).
 
 Computes an initial estimate of k4 from the coupling constants, then
 performs 20 feedback sweeps adjusting k4 to drive N41 toward the target.
-Call this before sweep() for stable simulations.)doc")
+Call this before sweep() for stable simulations.
+
+Args:
+    progress: Optional callback(i, n) called after each tuning sweep.)doc")
       .def("thermalize", &CDT::thermalize, py::call_guard<py::gil_scoped_release>(),
            R"doc(Thermalize the simulation until the action stabilizes.
 

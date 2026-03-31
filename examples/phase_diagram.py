@@ -58,7 +58,7 @@ from matplotlib.colors import ListedColormap
 
 import caset
 from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay
+from caset.utils.progress import ProgressDisplay, make_tune_cb
 
 
 # =====================================================================
@@ -107,7 +107,7 @@ def run_point(k0, delta, n_simplices, n_sweeps,
     # tune() adjusts k4 to the pseudo-critical value for this (k0,delta)
     # and runs 20 feedback sweeps during which the system grows to target.
     _ph("tuning")
-    cdt.tune()
+    cdt.tune(progress=make_tune_cb(phase_cb, point_id))
 
     # Evolve.  Do NOT use thermalize() — its early-stopping criterion
     # converges to the nearest action basin (always Phase C from the
