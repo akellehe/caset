@@ -9,13 +9,16 @@ Provides two display classes:
 
 Both use ANSI colors and emoji when connected to a TTY, and degrade
 gracefully to plain text otherwise.  Both show a nonlinear ETA estimate
-that adapts to sub-linear and super-linear progress curves.
+that adapts to sub-linear and super-linear progress curves, and a
+sliding-window sparkline showing per-iteration timing trends.
 """
 import sys
 import threading
 import time
 
 from caset.utils.eta import ETAEstimator
+
+_SPARK_CHARS = " ▁▂▃▄▅▆▇█"
 
 # ─── ANSI helpers ────────────────────────────────────────────────────
 _BOLD = "\033[1m"
@@ -78,6 +81,72 @@ def make_tune_cb(phase_cb, item_id=None):
     return lambda i, n: phase_cb("tuning", i, n)
 
 
+# ─── Sparkline ───────────────────────────────────────────────────────
+
+class _Sparkline:
+    """Sliding-window sparkline of per-tick duration.
+
+    Records monotonic timestamps on each ``record()`` call and renders
+    the last *width* inter-tick durations as a Unicode block-element
+    mini line chart.  Taller bars = slower iterations.
+
+    Thread-safe: callers must hold the owning display's lock.
+    """
+
+    def __init__(self, window=30):
+        self._times: list[float] = []
+        self._window = window
+
+    def record(self):
+        """Record the current timestamp (call once per tick/sweep)."""
+        self._times.append(time.monotonic())
+        # Keep one extra so we can compute `window` durations
+        if len(self._times) > self._window + 1:
+            self._times = self._times[-(self._window + 1):]
+
+    def reset(self):
+        """Clear history (e.g. on phase change)."""
+        self._times.clear()
+
+    def render(self, width=20, color=True):
+        """Return a sparkline string, or '' if not enough data."""
+        if len(self._times) < 3:
+            return ""
+        durations = [self._times[i + 1] - self._times[i]
+                     for i in range(len(self._times) - 1)]
+        # Show the most recent `width` durations
+        durations = durations[-width:]
+
+        lo = min(durations)
+        hi = max(durations)
+        span = hi - lo
+
+        chars = []
+        n_levels = len(_SPARK_CHARS) - 1  # 8
+        for d in durations:
+            if span < 1e-9:
+                level = n_levels // 2
+            else:
+                level = int((d - lo) / span * n_levels + 0.5)
+                level = max(0, min(n_levels, level))
+            chars.append(_SPARK_CHARS[level])
+        spark = "".join(chars)
+
+        latest = durations[-1]
+        if latest >= 10:
+            rate = f"{latest:.0f}s/it"
+        elif latest >= 1:
+            rate = f"{latest:.1f}s/it"
+        elif latest >= 0.01:
+            rate = f"{latest*1000:.0f}ms/it"
+        else:
+            rate = f"{latest*1000:.1f}ms/it"
+
+        if color:
+            return f"{_DIM}📈{spark} {rate}{_RST}"
+        return f"[{spark}] {rate}"
+
+
 # ─── Multi-worker display ────────────────────────────────────────────
 
 class ProgressDisplay:
@@ -114,6 +183,7 @@ class ProgressDisplay:
         self._start = time.time()
         self._active = True
         self._eta = ETAEstimator()
+        self._sparkline = _Sparkline()
 
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
@@ -133,6 +203,7 @@ class ProgressDisplay:
         with self._lock:
             self.sweeps_done += 1
             self._eta.update(self.sweeps_done, self.total_sweeps)
+            self._sparkline.record()
 
     def on_item_done(self, item_id, info=""):
         with self._lock:
@@ -212,6 +283,10 @@ class ProgressDisplay:
                 f"{mem_str}"
             )
 
+        spark_str = self._sparkline.render(width=30, color=c)
+        if spark_str:
+            out.append(f"{_ERASE_LINE}  {spark_str}")
+
         for item_id in sorted(self._phases.keys()):
             phase = self._phases[item_id]
             emoji, color = PHASE_STYLE.get(phase, ("⏳", _WHITE))
@@ -239,6 +314,9 @@ class ProgressDisplay:
                     f"{prog_str}{extra}"
                 )
 
+        # Erase leftover lines if the display shrank (e.g. items finished)
+        while len(out) < self._lines_drawn:
+            out.append(_ERASE_LINE)
         self._lines_drawn = len(out)
         sys.stderr.write("\n".join(out) + "\n")
         sys.stderr.flush()
@@ -278,9 +356,10 @@ class SingleTaskProgress:
         self._extra = ""
         self._spin_idx = 0
         self._start = time.time()
-        self._drawn = False
+        self._lines_drawn = 0
         self._active = True
         self._eta = ETAEstimator()
+        self._sparkline = _Sparkline()
 
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
@@ -293,10 +372,12 @@ class SingleTaskProgress:
             self._total = total
             self._extra = extra
             self._eta.reset()
+            self._sparkline.reset()
 
     def on_tick(self, _i=None, _n=None):
         with self._lock:
             self._count += 1
+            self._sparkline.record()
             if self._total > 0:
                 self._eta.update(self._count, self._total)
 
@@ -366,7 +447,20 @@ class SingleTaskProgress:
                 f"{mem_str}"
             )
 
-        prefix = "\033[1A" if self._drawn else ""
-        sys.stderr.write(f"{prefix}{line}\n")
+        lines = [line]
+        spark_str = self._sparkline.render(width=30, color=c)
+        if spark_str and not final:
+            lines.append(f"{_ERASE_LINE}  {spark_str}")
+
+        # Pad with blank lines if we previously drew more (e.g. sparkline
+        # disappeared on phase change) so the old content is erased.
+        while len(lines) < self._lines_drawn:
+            lines.append(_ERASE_LINE)
+
+        if self._lines_drawn > 0:
+            prefix = f"\033[{self._lines_drawn}A"
+        else:
+            prefix = ""
+        self._lines_drawn = len(lines)
+        sys.stderr.write(f"{prefix}" + "\n".join(lines) + "\n")
         sys.stderr.flush()
-        self._drawn = True
