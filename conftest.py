@@ -22,6 +22,7 @@
 from pathlib import Path
 import importlib
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -88,9 +89,18 @@ def pytest_sessionstart(session):
         print("build dir does not exist (", str(build_dir), ") configuring.")
         subprocess.run(get_configure_command(build_dir), check=True, env=env)
     subprocess.run(get_build_command(build_dir), check=True, env=env)
-    # The C extension (_caset.so) is built into the build dir root.
-    # Add it so ``from _caset import *`` in caset/__init__.py can find it.
-    sys.path.insert(0, str(build_dir))
+
+    # cmake --build leaves _caset*.so at the build-dir root. caset/__init__.py
+    # imports it as ``caset._caset``, which requires the .so to live inside
+    # the caset/ package directory that Python resolves first on sys.path —
+    # that's the source-tree caset/ here, since pytest puts the repo root
+    # ahead of site-packages. Copy the fresh .so in so the submodule exists.
+    pkg_dir = Path(__file__).resolve().parent / "caset"
+    for so_src in build_dir.glob("_caset*.so"):
+        shutil.copy2(so_src, pkg_dir / so_src.name)
+    importlib.invalidate_caches()
+    sys.modules.pop("caset", None)
+    sys.modules.pop("caset._caset", None)
 
     # If caset is editable-installed (pip install -e .), the module in
     # site-packages is kept in sync with the build dir by scikit-build-core.

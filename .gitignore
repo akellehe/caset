@@ -4,6 +4,7 @@
 build
 cmake-build-debug
 caset.cpython-313-darwin.so
+caset/_caset*.so
 dist
 docs/_doxygen
 vendor/libtorch*
