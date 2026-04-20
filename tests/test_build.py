@@ -22,6 +22,10 @@
 import unittest
 import importlib.util
 import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SOURCE_PKG_DIR = REPO_ROOT / "caset"
 
 class TestBuilding(unittest.TestCase):
     def test_building(self):
@@ -33,7 +37,9 @@ class TestBuilding(unittest.TestCase):
 
         print("  origin:", spec.origin)
 
-        if "site-packages" in (spec.origin or ""):
+        origin = Path(spec.origin).resolve()
+
+        if "site-packages" in str(origin):
             # Loaded from a pip install.  Accept both editable (`pip install -e .`)
             # and regular (`pip install .`) local installs — both produce a
             # direct_url.json with a file:// URL pointing at the source tree.
@@ -45,6 +51,18 @@ class TestBuilding(unittest.TestCase):
                 direct_url,
                 f"caset._caset loaded from site-packages without a direct_url.json — "
                 f"stale install? origin: {spec.origin}")
+        elif origin.parent == SOURCE_PKG_DIR:
+            # Loaded from the source-tree caset/ package. conftest.py copies
+            # the freshly-built .so here from cmake-build-debug so that the
+            # source-tree package (which shadows site-packages when running
+            # from the repo root) has a usable _caset submodule. Verify a
+            # matching build actually exists so we don't accept a stale copy.
+            build_root = REPO_ROOT / "cmake-build-debug"
+            matching = list(build_root.glob(f"*/{origin.name}")) if build_root.exists() else []
+            self.assertTrue(
+                matching,
+                f"caset._caset loaded from source tree ({origin}) but no matching "
+                f"build found under {build_root} — stale copy?")
         else:
             # Loaded from cmake-build-debug (conftest.py injected it)
             found = any("cmake-build-debug" in p for p in sys.path)
