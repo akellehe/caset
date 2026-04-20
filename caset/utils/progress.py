@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 
-from caset.utils.eta import ETAEstimator
+from caset.utils.eta import ETAEstimator, _fmt_duration
 
 _SPARK_CHARS = " ▁▂▃▄▅▆▇█"
 
@@ -163,6 +163,11 @@ class ProgressDisplay:
         use_color:    Whether to emit ANSI codes (auto-detected from TTY).
     """
 
+    # Emit a plain-text progress line to stdout at this interval (seconds).
+    # Useful for long-running jobs where the live terminal display may not
+    # be visible (nohup, detached screen/tmux, CI logs, etc.).
+    _LOG_INTERVAL = 120  # 2 minutes
+
     def __init__(self, n_items, total_sweeps, *,
                  item_label="Configs", use_color=True,
                  memory_monitor=None):
@@ -184,6 +189,7 @@ class ProgressDisplay:
         self._active = True
         self._eta = ETAEstimator()
         self._sparkline = _Sparkline()
+        self._last_log = time.monotonic()
 
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
@@ -234,6 +240,53 @@ class ProgressDisplay:
             with self._lock:
                 self._spin_idx = (self._spin_idx + 1) % len(_SPINNER)
                 self._draw()
+                self._maybe_log()
+
+    def _maybe_log(self):
+        """Emit a plain-text progress summary to stdout periodically.
+
+        Runs under self._lock.  The line is written to stdout (not stderr)
+        so it persists in scrollback and is captured by nohup/CI.
+        """
+        now = time.monotonic()
+        if now - self._last_log < self._LOG_INTERVAL:
+            return
+        self._last_log = now
+
+        elapsed = time.time() - self._start
+        sw_pct = (self.sweeps_done / self.total_sweeps * 100
+                  ) if self.total_sweeps else 0
+
+        # Per-item status summary
+        item_parts = []
+        for item_id in sorted(self._phases.keys()):
+            phase = self._phases[item_id]
+            prog_pair = self._progress.get(item_id)
+            if prog_pair:
+                d, t = prog_pair
+                item_parts.append(f"#{item_id+1} {phase} {d}/{t}")
+            else:
+                item_parts.append(f"#{item_id+1} {phase}")
+        items_str = ", ".join(item_parts) if item_parts else ""
+
+        eta_str = self._eta.format_eta()  # "ETA 2m 15s" or "ETA --:--"
+
+        mem_str = ""
+        if self._memory_monitor is not None:
+            rss = self._memory_monitor.rss_mb
+            if rss is not None:
+                mem_str = f", RSS {rss} MB"
+
+        line = (
+            f"[{_fmt_duration(elapsed)} elapsed] "
+            f"{self.item_label}: {self.completed}/{self.n_items} done, "
+            f"sweeps: {self.sweeps_done}/{self.total_sweeps} ({sw_pct:.0f}%), "
+            f"{eta_str}{mem_str}"
+        )
+        if items_str:
+            line += f"\n  {items_str}"
+        # Write to stdout so it persists in scrollback / nohup.out
+        print(line, flush=True)
 
     def _draw(self):
         c = self.use_color

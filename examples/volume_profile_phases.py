@@ -48,15 +48,14 @@ from caset.utils.progress import ProgressDisplay, make_tune_cb
 
 
 def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
-                  meas_interval, phase_cb=None):
+                  meas_interval, sweep_cb=None, phase_cb=None):
     """Run one phase simulation: build, tune, thermalize, measure.
 
     Each phase uses different coupling constants and is fully independent.
     The GIL is released during sweep(), so threads run in parallel.
-
-    We intentionally do NOT pass a per-sweep progress callback:
-    a Python callback would reacquire the GIL every sweep, serializing
-    the threads.  Instead we report progress at the phase level.
+    The per-sweep callback reacquires the GIL only briefly (microseconds)
+    between sweeps that each take milliseconds-to-seconds at large N4,
+    so the overhead is negligible.
     """
     _ph = lambda p, done=0, total=0: phase_cb(phase_id, p, done, total) if phase_cb else None
 
@@ -73,16 +72,15 @@ def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
     _ph("tuning")
     cdt.tune(progress=make_tune_cb(phase_cb, phase_id))
 
-    # Chunk sweeps to report progress without per-sweep GIL overhead.
     chunk = max(1, n_therm // 20)
     for start in range(0, n_therm, chunk):
         batch = min(chunk, n_therm - start)
-        cdt.sweep(batch)
+        cdt.sweep(batch, progress=sweep_cb)
         _ph("thermalizing", start + batch, n_therm)
 
     profiles = []
     for i in range(n_meas):
-        cdt.sweep(meas_interval)
+        cdt.sweep(meas_interval, progress=sweep_cb)
         profiles.append(cdt.getVolumeProfile())
         _ph("measuring", i + 1, n_meas)
 
@@ -208,7 +206,7 @@ def main():
             f = pool.submit(_phase_worker, pid, label, k0, delta,
                             args.n_simplices, args.n_therm,
                             args.n_meas, args.meas_interval,
-                            progress.on_phase)
+                            progress.on_sweep, progress.on_phase)
             futures[f] = label
 
         for f in as_completed(futures):
