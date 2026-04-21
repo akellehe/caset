@@ -138,8 +138,15 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     metric = caset.Metric(True, sig)
     st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
                          caset.Toroid())
-    st.build(n_simplices)
-    target = st.getN41()
+    # Toroid::build creates n_simplices/(d*(d+1)) = n_simplices/20 time
+    # slabs at d=4, each only ~5 spatial vertices wide. Building the full
+    # size directly yields a long thin tube (~1D dual graph), which traps
+    # diffusion at D_S~1. Match volume_profile_phases.py: cap the initial
+    # build at T=80 slabs (paper value) and let the Metropolis chain grow
+    # the volume sideways to target via (2,8)/(8,2) moves.
+    max_build = 80 * 20  # 80 time slabs x 20 simplices/slab in d=4
+    st.build(min(n_simplices, max_build))
+    target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
@@ -211,23 +218,28 @@ def main():
     parser = argparse.ArgumentParser(
         description="Spectral dimension D_S(sigma) measurement "
                     "(Figs 9-10 of hep-th/0505154)")
-    parser.add_argument("--n-simplices", type=int, default=500,
+    # Defaults sized so D_S rises cleanly through ~3 toward ~4 at long
+    # sigma while staying cheaper than the full paper reproduction. For
+    # full paper reproduction (Figs 9-10 of AJL 2005) use
+    #   --n-simplices 160000 --n-therm 500 --n-configs 50
+    #   --n-walks 100 --max-sigma 500 --sweeps-between 50.
+    parser.add_argument("--n-simplices", type=int, default=80000,
                         help="Initial number of simplices")
-    parser.add_argument("--n-therm", type=int, default=50,
+    parser.add_argument("--n-therm", type=int, default=800,
                         help="Thermalization sweeps")
-    parser.add_argument("--n-configs", type=int, default=10,
+    parser.add_argument("--n-configs", type=int, default=20,
                         help="Number of independent configurations to average")
-    parser.add_argument("--n-walks", type=int, default=20,
+    parser.add_argument("--n-walks", type=int, default=50,
                         help="Diffusion processes per configuration")
-    parser.add_argument("--max-sigma", type=int, default=200,
+    parser.add_argument("--max-sigma", type=int, default=400,
                         help="Maximum diffusion time")
-    parser.add_argument("--sweeps-between", type=int, default=10,
+    parser.add_argument("--sweeps-between", type=int, default=80,
                         help="Sweeps between configurations for decorrelation")
     parser.add_argument("--workers", type=int,
                         default=min(os.cpu_count() or 1, 8),
                         help="Parallel worker processes (default: min(cpus, 8))")
-    parser.add_argument("--save", type=str, default=None,
-                        help="Save figure to this path instead of showing")
+    parser.add_argument("--save", type=str, default="./spectral_dimension.png",
+                        help="Path to save the figure (default: ./spectral_dimension.png)")
     args = parser.parse_args()
 
     n_workers = max(1, args.workers)
@@ -266,7 +278,18 @@ def main():
             cfg_id, rps, N, avg_nbr, elapsed = future.result()
             if rps:
                 all_return_probs.extend(rps)
-            progress.on_item_done(cfg_id, f"N₄≈{N:,}" if rps else "empty")
+                cfg_avg = np.mean(np.asarray(rps), axis=0)
+                _, ds = compute_spectral_dimension(cfg_avg)
+                if len(ds):
+                    n_tail = max(1, len(ds) // 5)
+                    ds_small = float(np.mean(ds[:n_tail]))
+                    ds_large = float(np.mean(ds[-n_tail:]))
+                    info = f"N₄≈{N:,}  D_S(small)={ds_small:.2f}  D_S(large)={ds_large:.2f}"
+                else:
+                    info = f"N₄≈{N:,}"
+            else:
+                info = "empty"
+            progress.on_item_done(cfg_id, info)
 
     progress.finish()
 
@@ -336,11 +359,9 @@ def main():
 
     print(f"Total elapsed: {time.time()-t_total:.1f}s")
 
-    if args.save:
-        fig.savefig(args.save, dpi=150)
-        print(f"Saved to {args.save}")
-    else:
-        plt.show()
+    fig.savefig(args.save, dpi=150)
+    print(f"Saved to {args.save}")
+    plt.show()
 
 
 if __name__ == "__main__":
