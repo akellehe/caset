@@ -12,11 +12,18 @@ gracefully to plain text otherwise.  Both show a nonlinear ETA estimate
 that adapts to sub-linear and super-linear progress curves, and a
 sliding-window sparkline showing per-iteration timing trends.
 """
+import atexit
 import sys
 import threading
 import time
 
 from caset.utils.eta import ETAEstimator, _fmt_duration
+
+try:
+    import termios
+    _HAS_TERMIOS = True
+except ImportError:
+    _HAS_TERMIOS = False
 
 _SPARK_CHARS = " ▁▂▃▄▅▆▇█"
 
@@ -50,6 +57,62 @@ PHASE_STYLE = {
     "done":          ("✅", _GREEN),
 }
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+# ─── Stdin echo suppression ──────────────────────────────────────────
+#
+# The live display moves the cursor up and rewrites lines in place.  If
+# the user hits Enter (or types anything) while a display is active, the
+# terminal echoes that input, which inserts a newline into the output
+# stream and throws off the cursor-up line count — the next redraw then
+# overwrites part of its own prior output.  Suppressing input echo on
+# stdin while a display is active eliminates the corruption.
+#
+# ISIG is left on so Ctrl-C still raises KeyboardInterrupt; ICANON is
+# left on so input remains line-buffered (nothing reads stdin, but we
+# want to stay as close to normal terminal semantics as possible).
+
+class _StdinEchoSuppressor:
+    """Disable stdin echo while a progress display is active.
+
+    No-op when stdin is not a TTY or when termios is unavailable
+    (Windows).  Registers an atexit hook the first time it activates so
+    the terminal is restored even if the process exits abnormally
+    without reaching ``finish()``.
+    """
+
+    def __init__(self):
+        self._old = None
+        self._fd = None
+
+    def enable(self):
+        if self._old is not None:
+            return
+        if not _HAS_TERMIOS or not sys.stdin.isatty():
+            return
+        try:
+            self._fd = sys.stdin.fileno()
+            self._old = termios.tcgetattr(self._fd)
+            new_attrs = list(self._old)
+            # c_lflag is index 3. Clearing ECHO silences typed chars;
+            # clearing ECHONL silences newline echo when ICANON is on.
+            new_attrs[3] &= ~(termios.ECHO | termios.ECHONL)
+            termios.tcsetattr(self._fd, termios.TCSANOW, new_attrs)
+            atexit.register(self.disable)
+        except (termios.error, OSError, ValueError):
+            self._old = None
+            self._fd = None
+
+    def disable(self):
+        if self._old is None:
+            return
+        try:
+            termios.tcsetattr(self._fd, termios.TCSANOW, self._old)
+        except (termios.error, OSError, ValueError):
+            pass
+        finally:
+            self._old = None
+            self._fd = None
 
 
 def _mini_bar(done, total, width=10, color=True):
@@ -191,6 +254,9 @@ class ProgressDisplay:
         self._sparkline = _Sparkline()
         self._last_log = time.monotonic()
 
+        self._echo_suppressor = _StdinEchoSuppressor()
+        self._echo_suppressor.enable()
+
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
         self._spinner_thread.start()
@@ -231,6 +297,7 @@ class ProgressDisplay:
                 self._draw()
             sys.stderr.write("\n")
             sys.stderr.flush()
+        self._echo_suppressor.disable()
 
     # ── rendering ──
 
@@ -414,6 +481,9 @@ class SingleTaskProgress:
         self._eta = ETAEstimator()
         self._sparkline = _Sparkline()
 
+        self._echo_suppressor = _StdinEchoSuppressor()
+        self._echo_suppressor.enable()
+
         self._spinner_thread = threading.Thread(
             target=self._spin_loop, daemon=True)
         self._spinner_thread.start()
@@ -442,6 +512,7 @@ class SingleTaskProgress:
             self._draw(final=True)
             sys.stderr.write("\n")
             sys.stderr.flush()
+        self._echo_suppressor.disable()
 
     def _spin_loop(self):
         while self._active:
