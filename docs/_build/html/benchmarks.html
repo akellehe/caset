@@ -265,10 +265,10 @@ simplex because each <span class="math notranslate nohighlight">\(d\)</span>-sim
 <hr class="docutils" />
 <section id="build-throughput">
 <h2>Build Throughput<a class="headerlink" href="#build-throughput" title="Link to this heading">¶</a></h2>
-<p>Throughput (simplices per second) is highest in 2D (~70,000–95,000 simpl/s)
-and decreases with dimension as the per-simplex bookkeeping grows.  4D
-sustains ~30,000 simpl/s, meaning a 100k-simplex triangulation builds in
-about 3 seconds.</p>
+<p>Throughput (simplices per second) is highest in 1D–2D (~200,000–500,000
+simpl/s) and decreases with dimension as the per-simplex bookkeeping
+grows.  4D sustains ~150,000 simpl/s at 100k simplices, meaning a
+100k-simplex triangulation builds in under 1 second.</p>
 <a class="reference internal image-reference" href="_images/build_throughput.png"><img alt="Bar chart of build throughput by dimension and target size" class="align-center" src="_images/build_throughput.png" style="width: 80%;" />
 </a>
 </section>
@@ -314,66 +314,66 @@ completeness but are not directly comparable to 2D–4D.</p>
 <tbody>
 <tr class="row-even"><td><p>2D</p></td>
 <td><p>500</p></td>
-<td><p>500</p></td>
-<td><p>514</p></td>
-<td><p>1,007</p></td>
-<td><p>0.002</p></td>
+<td><p>498</p></td>
+<td><p>252</p></td>
+<td><p>750</p></td>
+<td><p>0.001</p></td>
 </tr>
 <tr class="row-odd"><td><p>2D</p></td>
 <td><p>10,000</p></td>
-<td><p>10,000</p></td>
-<td><p>10,042</p></td>
-<td><p>20,021</p></td>
-<td><p>0.042</p></td>
+<td><p>9,996</p></td>
+<td><p>5,001</p></td>
+<td><p>14,997</p></td>
+<td><p>0.038</p></td>
 </tr>
 <tr class="row-even"><td><p>2D</p></td>
 <td><p>100,000</p></td>
-<td><p>100,000</p></td>
-<td><p>100,092</p></td>
-<td><p>200,046</p></td>
-<td><p>0.64</p></td>
+<td><p>99,996</p></td>
+<td><p>50,001</p></td>
+<td><p>149,997</p></td>
+<td><p>0.509</p></td>
 </tr>
 <tr class="row-odd"><td><p>3D</p></td>
 <td><p>500</p></td>
-<td><p>500</p></td>
-<td><p>521</p></td>
-<td><p>1,521</p></td>
-<td><p>0.003</p></td>
+<td><p>492</p></td>
+<td><p>168</p></td>
+<td><p>662</p></td>
+<td><p>0.002</p></td>
 </tr>
 <tr class="row-even"><td><p>3D</p></td>
 <td><p>10,000</p></td>
-<td><p>10,000</p></td>
-<td><p>10,063</p></td>
-<td><p>30,063</p></td>
-<td><p>0.061</p></td>
+<td><p>9,996</p></td>
+<td><p>3,336</p></td>
+<td><p>13,334</p></td>
+<td><p>0.043</p></td>
 </tr>
 <tr class="row-odd"><td><p>3D</p></td>
 <td><p>100,000</p></td>
-<td><p>100,000</p></td>
-<td><p>100,138</p></td>
-<td><p>300,138</p></td>
-<td><p>1.06</p></td>
+<td><p>99,996</p></td>
+<td><p>33,336</p></td>
+<td><p>133,334</p></td>
+<td><p>0.580</p></td>
 </tr>
 <tr class="row-even"><td><p>4D</p></td>
 <td><p>500</p></td>
 <td><p>500</p></td>
-<td><p>528</p></td>
-<td><p>2,042</p></td>
-<td><p>0.004</p></td>
+<td><p>130</p></td>
+<td><p>635</p></td>
+<td><p>0.003</p></td>
 </tr>
 <tr class="row-odd"><td><p>4D</p></td>
 <td><p>10,000</p></td>
 <td><p>10,000</p></td>
-<td><p>10,084</p></td>
-<td><p>40,126</p></td>
-<td><p>0.119</p></td>
+<td><p>2,505</p></td>
+<td><p>12,510</p></td>
+<td><p>0.058</p></td>
 </tr>
 <tr class="row-even"><td><p>4D</p></td>
 <td><p>100,000</p></td>
 <td><p>100,000</p></td>
-<td><p>100,184</p></td>
-<td><p>400,276</p></td>
-<td><p>2.26</p></td>
+<td><p>25,005</p></td>
+<td><p>125,010</p></td>
+<td><p>0.684</p></td>
 </tr>
 </tbody>
 </table>
@@ -413,9 +413,27 @@ on every pointer copy in the sweep inner loop.</p></li>
 <li><p><strong>Eliminated dead return values</strong> — <code class="docutils literal notranslate"><span class="pre">removeInEdge</span></code>/<code class="docutils literal notranslate"><span class="pre">removeOutEdge</span></code> were
 allocating a hash table of “owner” simplices on every call and returning
 it to nobody.</p></li>
+<li><p><strong>Merged redundant hash tables</strong> — consolidated <code class="docutils literal notranslate"><span class="pre">simplexVecIndex</span></code> and
+<code class="docutils literal notranslate"><span class="pre">simplexPoolIndex_</span></code> into a single <code class="docutils literal notranslate"><span class="pre">simplexIndex_</span></code>, halving hash lookups
+in <code class="docutils literal notranslate"><span class="pre">registerSimplex</span></code>/<code class="docutils literal notranslate"><span class="pre">unregisterSimplex</span></code>.</p></li>
+<li><p><strong>Open-addressing flat hash map</strong> — replaced <code class="docutils literal notranslate"><span class="pre">std::unordered_map</span></code> (chained
+hashing) with a custom <code class="docutils literal notranslate"><span class="pre">FlatHashMap</span></code> using identity hash and linear
+probing for the two hot-path simplex index tables. ~3x better cache
+locality on lookup-heavy workloads.</p></li>
+<li><p><strong>Eliminated <code class="docutils literal notranslate"><span class="pre">liveIndex_</span></code> maps</strong> — stored the live-vector index directly on
+<code class="docutils literal notranslate"><span class="pre">Edge</span></code> and <code class="docutils literal notranslate"><span class="pre">Vertex</span></code> objects, removing two <code class="docutils literal notranslate"><span class="pre">unordered_map</span></code>s (~5k entries
+each) and their associated hash lookups on every add/remove.</p></li>
+<li><p><strong>Inlined <code class="docutils literal notranslate"><span class="pre">computeDeltaAction</span></code> and <code class="docutils literal notranslate"><span class="pre">accept</span></code></strong> — moved the Metropolis
+acceptance test and incremental action computation to the header,
+eliminating function call overhead on every move attempt (~100k+/sec).</p></li>
+<li><p><strong>Stack-allocated move temporaries</strong> — replaced heap-allocated <code class="docutils literal notranslate"><span class="pre">std::vector</span></code>
+with a fixed-capacity <code class="docutils literal notranslate"><span class="pre">StackVec&lt;T,</span> <span class="pre">8&gt;</span></code> for vertex/simplex lists in flip,
+iflip, and shift moves, eliminating <code class="docutils literal notranslate"><span class="pre">malloc</span></code>/<code class="docutils literal notranslate"><span class="pre">free</span></code> on every rejected
+move attempt.</p></li>
 </ul>
-<p>Build time improvement is <strong>30-65%</strong> across the board, with sweep
-performance improving by up to <strong>6x</strong> at typical lattice sizes.</p>
+<p>Cumulative build-time improvement is <strong>50-67%</strong> at large lattice sizes,
+with sweep performance improving by up to <strong>1.7x</strong> (7.7 → 4.6 µs/move
+at N4=19k).</p>
 <a class="reference internal image-reference" href="_images/benchmark_comparison.png"><img alt="Before vs. after benchmark comparison" class="align-center" src="_images/benchmark_comparison.png" style="width: 100%;" />
 </a>
 <p>To regenerate this comparison after further changes:</p>

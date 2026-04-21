@@ -272,7 +272,9 @@ target volume (<span class="math notranslate nohighlight">\(\tilde{N}_4 \approx 
 larger <span class="math notranslate nohighlight">\(N_4^{(3,2)}\)</span> exactly as in the paper.  The ratio
 <span class="math notranslate nohighlight">\(N_4^{(3,2)} / N_4^{(4,1)} \approx 2.3\)</span>–<span class="math notranslate nohighlight">\(2.5\)</span> is consistent with the
 paper’s Table 1.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/n32_distribution.py<span class="w"> </span>--n-meas<span class="w"> </span><span class="m">300</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/n32_distribution.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target-volumes<span class="w"> </span><span class="m">40000</span><span class="w"> </span><span class="m">80000</span><span class="w"> </span><span class="m">160000</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-meas<span class="w"> </span><span class="m">500</span><span class="w"> </span>--meas-interval<span class="w"> </span><span class="m">50</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/n32_distribution.png"><img alt="Distribution of N_4^(3,2) at three target volumes" class="align-center" src="_images/n32_distribution.png" style="width: 70%;" />
@@ -304,7 +306,9 @@ is much smaller than the paper’s (<span class="math notranslate nohighlight">\
 spectral dimension is a finite-size-dependent quantity that converges
 upward with increasing volume.  The paper’s fit curve (red dashed) is
 overlaid for reference.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/spectral_dimension.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-configs<span class="w"> </span><span class="m">8</span><span class="w"> </span>--max-sigma<span class="w"> </span><span class="m">200</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/spectral_dimension.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-simplices<span class="w"> </span><span class="m">160000</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-configs<span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-walks<span class="w"> </span><span class="m">100</span><span class="w"> </span>--max-sigma<span class="w"> </span><span class="m">500</span><span class="w"> </span>--sweeps-between<span class="w"> </span><span class="m">50</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/spectral_dimension.png"><img alt="Spectral dimension D_S(sigma) with reference fit from the paper" src="_images/spectral_dimension.png" style="width: 100%;" />
@@ -345,7 +349,9 @@ range to develop the characteristic bulge.</p></li>
 track each other during equilibration, confirming the volume-fixing
 term drives <span class="math notranslate nohighlight">\(N_4\)</span> toward the target.</p></li>
 </ul>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/effective_action.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">60</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/effective_action.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-simplices<span class="w"> </span><span class="m">160000</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">200</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--meas-interval<span class="w"> </span><span class="m">50</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/effective_action.png"><img alt="Effective action analysis: D_2 scaling, volume differences, minisuperspace comparison" src="_images/effective_action.png" style="width: 100%;" />
@@ -376,7 +382,9 @@ The dashed <span class="math notranslate nohighlight">\(\cos^3\)</span> referenc
 Phase <span class="math notranslate nohighlight">\(C_{dS}\)</span> at large <span class="math notranslate nohighlight">\(N_4\)</span>.</p>
 <p>To reproduce the paper’s Fig. 6 shape, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">10000</span></code>
 or larger (estimated runtime: several hours).</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_profile_phases.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">80</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">30</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_profile_phases.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-simplices<span class="w"> </span><span class="m">80000</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">100</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--meas-interval<span class="w"> </span><span class="m">50</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/volume_profiles_surface.png"><img alt="Surface-of-revolution plots of the universe in phases A, B, C" src="_images/volume_profiles_surface.png" style="width: 100%;" />
@@ -410,7 +418,9 @@ left) shows a decaying shape consistent with the Gaussian fit, in
 qualitative agreement with Fig. 12.</p>
 <p>To reproduce the scaling collapse, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">10000</span></code> or
 larger and <code class="docutils literal notranslate"><span class="pre">--n-meas</span> <span class="pre">100+</span></code>.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_scaling.py<span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">800</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">40</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/volume_scaling.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-simplices<span class="w"> </span><span class="m">80000</span><span class="w"> </span>--n-therm<span class="w"> </span><span class="m">500</span><span class="w"> </span>--n-meas<span class="w"> </span><span class="m">200</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--meas-interval<span class="w"> </span><span class="m">50</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/volume_scaling.png"><img alt="Volume scaling analysis with correlator and Hausdorff dimension" src="_images/volume_scaling.png" style="width: 100%;" />
@@ -438,7 +448,8 @@ Phase A.  The white star marks the de Sitter point <span class="math notranslate
 <span class="math notranslate nohighlight">\(\Delta = 0.6\)</span> used in all measurements in the paper.</p>
 <p>To see the phase boundaries, run with <code class="docutils literal notranslate"><span class="pre">--n-simplices</span> <span class="pre">20000</span></code> or larger
 (estimated runtime: many hours per grid point).</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/phase_diagram.py<span class="w"> </span>--grid-size<span class="w"> </span><span class="m">10</span><span class="w"> </span>--n-simplices<span class="w"> </span><span class="m">400</span><span class="w"> </span>--n-sweeps<span class="w"> </span><span class="m">50</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/phase_diagram.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-simplices<span class="w"> </span><span class="m">10000</span><span class="w"> </span>--n-sweeps<span class="w"> </span><span class="m">200</span><span class="w"> </span>--grid-size<span class="w"> </span><span class="m">20</span>
 </pre></div>
 </div>
 <a class="reference internal image-reference" href="_images/phase_diagram.png"><img alt="Phase diagram of 4D CDT" class="align-center" src="_images/phase_diagram.png" style="width: 70%;" />
