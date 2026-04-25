@@ -42,9 +42,17 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.autosectionlabel",
+    "sphinxcontrib.bibtex",
 ]
 
-myst_enable_extensions = ["dollarmath", "amsmath", "substitution"]
+# Bibliographic references for the quantum-methodology page (and any future
+# pages that need {cite}). All bib entries live in references.bib next to
+# this conf.py so they're auto-discovered by sphinx-build.
+bibtex_bibfiles = ["references.bib"]
+bibtex_default_style = "unsrt"
+bibtex_reference_style = "label"
+
+myst_enable_extensions = ["dollarmath", "amsmath", "substitution", "colon_fence"]
 source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",

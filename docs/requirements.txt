@@ -3,4 +3,5 @@ furo
 breathe
 myst-parser
 sphinx-autobuild
+sphinxcontrib-bibtex
 mathjax

@@ -34,6 +34,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -165,6 +166,10 @@ CaseResult run_small_case(SchwingerParams p) {
 
 int main() {
     bool ok = true;
+
+    // Print enough digits that downstream Python wrappers (Phase 2 acceptance)
+    // can hardcode references without losing precision relative to DMRG noise.
+    std::cout << std::setprecision(12);
 
     std::cout << "Phase 1 acceptance — Schwinger MPO vs dense ED (Sz=0)\n";
     std::cout << "------------------------------------------------------\n";

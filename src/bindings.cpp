@@ -53,6 +53,12 @@ namespace py = pybind11;
 
 using namespace caset;
 
+#ifdef CASET_QUANTUM
+// Defined in src/quantum/bindings.cpp. Conditionally compiled when the
+// CASET_QUANTUM CMake option is on — see CMakeLists.txt for the wiring.
+void register_quantum_bindings(py::module_ m);
+#endif
+
 PYBIND11_MODULE(_caset, m) {
   m.doc() = R"doc(
 caset -- Causal Set and CDT simulation library.
@@ -1031,5 +1037,13 @@ Args:
   m.attr("__version__") = CASET_VERSION;
 #else
   m.attr("__version__") = "unknown";
+#endif
+
+#ifdef CASET_QUANTUM
+  // Register the Schwinger / DMRG bindings as a `quantum` submodule so users
+  // call them as `caset._caset.quantum.compute_ground_state(...)` (typically
+  // routed through `caset.quantum` — see caset/quantum/__init__.py).
+  register_quantum_bindings(m.def_submodule("quantum",
+      "Schwinger model + DMRG (Phase 2 of docs/source/quantum-plan.md)."));
 #endif
 }

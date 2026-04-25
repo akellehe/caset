@@ -85,6 +85,15 @@ file(GLOB_RECURSE CASET_SOURCES
 # Quantum subsystem lives in its own library; exclude it from the core glob so
 # core caset still builds when ITensor / BLAS / LAPACK are not available.
 list(FILTER CASET_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+# When CASET_QUANTUM=ON we re-add just the pybind11 binding TU so the quantum
+# Python API surface lives inside the same _caset module as the rest of caset.
+# The actual implementation is in libcaset_quantum.a (built below); we only
+# pull the bindings TU into _caset so it can call into that library and
+# expose a `quantum` submodule.
+if(CASET_QUANTUM)
+    list(APPEND CASET_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/bindings.cpp")
+endif()
 # ---- </Define Sources> ----
 
 # ---- <Build CUDA kernels as static library> ----
@@ -196,6 +205,9 @@ if(CASET_QUANTUM)
             CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/*.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/*.hpp")
+    # bindings.cpp uses pybind11 + Python.h and goes into _caset, not the
+    # pybind-free static lib.
+    list(FILTER CASET_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/bindings\\.cpp$")
     add_library(caset_quantum STATIC ${CASET_QUANTUM_SOURCES})
     target_include_directories(caset_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -219,6 +231,13 @@ if(CASET_QUANTUM)
                 CXX_STANDARD_REQUIRED ON)
         add_test(NAME ${_test_name} COMMAND ${_test_name})
     endforeach()
+
+    # Wire the quantum bindings TU (added to CASET_SOURCES above) into
+    # _caset by linking against the implementation library and flipping
+    # the CASET_QUANTUM compile flag so src/bindings.cpp registers the
+    # `quantum` submodule.
+    target_link_libraries(_caset PRIVATE caset_quantum)
+    target_compile_definitions(_caset PRIVATE CASET_QUANTUM=1)
 else()
     message(STATUS "Quantum subsystem turned OFF (set CASET_QUANTUM=1 to enable).")
 endif()

@@ -4,6 +4,11 @@ Hand this file to Claude Code as the working spec. Each phase has a
 concrete deliverable, a file layout, and an acceptance test. Do not
 skip acceptance tests; every phase gates the next.
 
+The hypothesis this plan is built to test, plus falsification criteria,
+limitations, and bibliographic context, are in
+[quantum-methodology.md](quantum-methodology.md). The user-facing API
+documentation for what's built so far is in [quantum.md](quantum.md).
+
 ## 0. Goal and scope
 
 Extend `caset` with a C++ subsystem that:
