@@ -1,4 +1,4 @@
-// Implementation of run_qqbar_quench (Phase 4 end-to-end pipeline).
+// Implementation of runQqbarQuench (Phase 4 end-to-end pipeline).
 // See include/quantum/tdvp_runner.hpp for the architectural narrative.
 
 #include "quantum/tdvp_runner.hpp"
@@ -65,18 +65,18 @@ TDVPSnapshot make_snapshot(double t,
                            itensor::MPS const& psi,
                            SchwingerMPO const& sm,
                            SchwingerParams const& p,
-                           bool record_spectra,
-                           bool record_poset) {
+                           bool recordSpectra,
+                           bool recordPoset) {
     TDVPSnapshot snap;
     snap.time      = t;
     snap.energy    = compute_energy(psi, sm.H, sm.constant);
-    snap.bond_dim  = itensor::maxLinkDim(psi);
-    snap.Z_profile = sigma_z_profile(psi, sm.sites);
-    snap.L_profile = L_profile_from_sz(snap.Z_profile, p.L0);
-    if (record_spectra || record_poset) {
-        snap.spectra = all_contiguous_spectra(psi);
-        if (record_poset) {
-            snap.poset = majorization_poset(snap.spectra.spectra);
+    snap.bondDim  = itensor::maxLinkDim(psi);
+    snap.zProfile = sigma_z_profile(psi, sm.sites);
+    snap.lProfile = L_profile_from_sz(snap.zProfile, p.L0);
+    if (recordSpectra || recordPoset) {
+        snap.spectra = allContiguousSpectra(psi);
+        if (recordPoset) {
+            snap.poset = majorizationPoset(snap.spectra.spectra);
         }
     }
     return snap;
@@ -84,9 +84,9 @@ TDVPSnapshot make_snapshot(double t,
 
 // ─── DMRG / TDVP sweep schedules ──────────────────────────────────────────
 
-itensor::Sweeps make_dmrg_sweeps(int max_bond, int n_sweeps,
+itensor::Sweeps make_dmrg_sweeps(int max_bond, int nSweeps,
                                  int krylov, double cutoff) {
-    auto sweeps = itensor::Sweeps(n_sweeps);
+    auto sweeps = itensor::Sweeps(nSweeps);
     sweeps.maxdim() = std::min(20, max_bond),
                       std::min(40, max_bond),
                       std::min(80, max_bond),
@@ -117,44 +117,44 @@ itensor::MPS neel_init(itensor::SpinHalf const& sites, int N) {
 
 } // namespace
 
-QuenchResult run_qqbar_quench(TDVPConfig const& cfg) {
+QuenchResult runQqbarQuench(TDVPConfig const& cfg) {
     // (1) Build the Schwinger MPO and run DMRG to the GS — same setup
-    // as compute_ground_state(), reproduced here so the runner is self-
+    // as computeGroundState(), reproduced here so the runner is self-
     // contained.
     SchwingerParams p;
     p.N = cfg.N; p.a = cfg.a; p.m = cfg.m; p.g = cfg.g; p.L0 = cfg.L0;
 
-    auto sm = build_schwinger_mpo(p, cfg.conserve_qns);
+    auto sm = buildSchwingerMpo(p, cfg.conserveQns);
     auto psi0 = neel_init(sm.sites, cfg.N);
     auto sweeps_dmrg = make_dmrg_sweeps(
-        cfg.dmrg_max_bond_dim, cfg.dmrg_n_sweeps,
-        cfg.dmrg_krylov_dim, cfg.dmrg_cutoff);
+        cfg.dmrgMaxBondDim, cfg.dmrgNSweeps,
+        cfg.dmrgKrylovDim, cfg.dmrgCutoff);
     auto [E_gs, psi_gs] = itensor::dmrg(
         sm.H, psi0, sweeps_dmrg,
         itensor::Args("Silent", cfg.quiet));
 
     QuenchResult result;
-    result.ground_state.operator_energy = E_gs;
-    result.ground_state.constant        = sm.constant;
-    result.ground_state.energy          = E_gs + sm.constant;
-    result.ground_state.bond_dim        = itensor::maxLinkDim(psi_gs);
-    result.ground_state.truncation_err  = cfg.dmrg_cutoff;
+    result.groundState.operatorEnergy = E_gs;
+    result.groundState.constant        = sm.constant;
+    result.groundState.energy          = E_gs + sm.constant;
+    result.groundState.bondDim        = itensor::maxLinkDim(psi_gs);
+    result.groundState.truncationErr  = cfg.dmrgCutoff;
 
     // (2) Apply the q-qbar quench (Phase 4 ≈ Buyens 2014 string state).
-    auto psi = apply_qqbar_quench(psi_gs, sm.sites, cfg.i0, cfg.d,
-                                  cfg.quench_enforce_parity);
+    auto psi = applyQqbarQuench(psi_gs, sm.sites, cfg.i0, cfg.d,
+                                  cfg.quenchEnforceParity);
 
     // (3) Initial snapshot: t = 0 means "right after the quench, before
     // any TDVP step". Energy here is generally above the GS energy by
     // the quench excitation cost.
     result.snapshots.push_back(make_snapshot(
         /*t=*/0.0, psi, sm, p,
-        cfg.record_spectra, cfg.record_poset));
+        cfg.recordSpectra, cfg.recordPoset));
 
     // (4) TDVP loop. Real-time evolution e^{-i H Δt} corresponds to
     // ITensor's tdvp(...) with the time argument t = -i Δt.
     auto sweeps_tdvp = make_tdvp_sweeps(
-        cfg.max_bond_dim, cfg.krylov_dim, cfg.cutoff);
+        cfg.maxBondDim, cfg.krylovDim, cfg.cutoff);
     const itensor::Cplx t_step{0.0, -cfg.dt};
     const auto tdvp_args = itensor::Args(
         "Truncate",     true,
@@ -169,13 +169,13 @@ QuenchResult run_qqbar_quench(TDVPConfig const& cfg) {
     const int n_steps = static_cast<int>(std::round(cfg.T / cfg.dt));
     for (int step = 1; step <= n_steps; ++step) {
         itensor::tdvp(psi, sm.H, t_step, sweeps_tdvp, tdvp_args);
-        // Take a snapshot every `snapshot_every` steps and always at the
+        // Take a snapshot every `snapshotEvery` steps and always at the
         // very last step so callers see the final state.
-        if (step % cfg.snapshot_every == 0 || step == n_steps) {
+        if (step % cfg.snapshotEvery == 0 || step == n_steps) {
             const double current_t = step * cfg.dt;
             result.snapshots.push_back(make_snapshot(
                 current_t, psi, sm, p,
-                cfg.record_spectra, cfg.record_poset));
+                cfg.recordSpectra, cfg.recordPoset));
         }
     }
 

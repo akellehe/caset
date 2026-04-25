@@ -4,7 +4,7 @@
 // surfaces to Python — keeps the language boundary thin (one config in,
 // one struct of plain data out).
 //
-// Splitting this off from compute_ground_state(config) (in dmrg_runner.hpp)
+// Splitting this off from computeGroundState(config) (in dmrg_runner.hpp)
 // is deliberate: most users only want the energy and don't pay the O(N²)
 // SVD cost; callers who do want the poset opt in by calling this function
 // instead.
@@ -17,11 +17,11 @@
 
 namespace caset::quantum {
 
-// Result struct for compute_ground_state_majorization. Bundles the same
-// scalar diagnostics that compute_ground_state returns with the Schmidt
+// Result struct for computeGroundStateMajorization. Bundles the same
+// scalar diagnostics that computeGroundState returns with the Schmidt
 // spectra and the majorization poset of those spectra.
 struct GroundStateMajorizationResult {
-    GroundStateResult ground_state;  // energy, bond_dim, truncation_err …
+    GroundStateResult groundState;  // energy, bondDim, truncationErr …
     SchmidtSpectra    spectra;       // labelled contiguous-cut spectra
     Poset             poset;         // Hasse cover edges of strict majorization
 };
@@ -29,7 +29,7 @@ struct GroundStateMajorizationResult {
 // Run DMRG to the Schwinger ground state, extract all contiguous-cut
 // Schmidt spectra, and build the majorization poset on those spectra.
 //
-// `config` is interpreted exactly as for compute_ground_state — the same
+// `config` is interpreted exactly as for computeGroundState — the same
 // validation rules apply (N ≥ 2, a > 0, …).
 //
 // `tol` controls the slack in the majorization comparisons used to build
@@ -37,7 +37,7 @@ struct GroundStateMajorizationResult {
 // problem sizes we exercise; tighten only for synthetic spectra where you
 // can prove numerically exact equality.
 GroundStateMajorizationResult
-compute_ground_state_majorization(QuantumConfig const& config,
+computeGroundStateMajorization(QuantumConfig const& config,
                                   double tol = 1e-12);
 
 } // namespace caset::quantum

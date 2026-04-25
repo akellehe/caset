@@ -1,4 +1,4 @@
-// Implementation of caset::quantum::extract_causet_chain — see
+// Implementation of caset::quantum::extractCausetChain — see
 // include/quantum/causet_chain.hpp for the design.
 
 #include "quantum/causet_chain.hpp"
@@ -17,7 +17,7 @@
 
 namespace caset::quantum {
 
-CausetChain extract_causet_chain(caset::Spacetime const& st) {
+CausetChain extractCausetChain(caset::Spacetime const& st) {
     CausetChain out;
 
     auto const& vlist = st.getVertexList();
@@ -49,11 +49,11 @@ CausetChain extract_causet_chain(caset::Spacetime const& st) {
         out.antichains.push_back(ids);  // copy of sorted ids
         for (auto id : ids) {
             id_to_flat.emplace(id, flat_idx);
-            out.vertex_ids.push_back(id);
+            out.vertexIds.push_back(id);
             ++flat_idx;
         }
     }
-    out.n_sites = flat_idx;
+    out.nSites = flat_idx;
 
     // ── For each timelike edge whose endpoints land on adjacent
     // antichains, record a hopping pair in the flat-index space.
@@ -95,24 +95,24 @@ CausetChain extract_causet_chain(caset::Spacetime const& st) {
             int j = it_fd->second;
             if (i == j) continue;
             if (i > j) std::swap(i, j);  // canonicalise i < j
-            out.hopping_pairs.emplace_back(i, j);
+            out.hoppingPairs.emplace_back(i, j);
         }
     }
     // Dedupe — a CDT mesh can produce parallel edges between the same
     // vertex pair via different simplices.
-    std::sort(out.hopping_pairs.begin(), out.hopping_pairs.end());
-    out.hopping_pairs.erase(
-        std::unique(out.hopping_pairs.begin(), out.hopping_pairs.end()),
-        out.hopping_pairs.end());
+    std::sort(out.hoppingPairs.begin(), out.hoppingPairs.end());
+    out.hoppingPairs.erase(
+        std::unique(out.hoppingPairs.begin(), out.hoppingPairs.end()),
+        out.hoppingPairs.end());
 
     // ── Inherit the Hasse cover Poset on the flat-lattice label set.
-    // Poset::from_spacetime uses the same ascending-ID remapping we
+    // Poset::fromSpacetime uses the same ascending-ID remapping we
     // applied above (sort by Vertex::getId()), so its node IDs
     // coincide with our flat-lattice indices when every Spacetime
     // vertex has a unique time slice. When several vertices share a
     // time slice, the per-slice ascending-ID order also matches, so
     // the two index spaces stay aligned.
-    out.partial_order = caset::Poset::from_spacetime(st);
+    out.partialOrder = caset::Poset::fromSpacetime(st);
     return out;
 }
 

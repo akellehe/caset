@@ -61,7 +61,7 @@ struct Interval {
 // fast; for very large intervals on long chains the memory may dominate
 // and a complement-side computation would be preferable, but Phase 3's
 // acceptance tests stay well below that regime.
-std::vector<double> schmidt_spectrum(itensor::MPS const& psi,
+std::vector<double> schmidtSpectrum(itensor::MPS const& psi,
                                      int i, int j);
 
 // All-contiguous-cut Schmidt spectra of `psi`, excluding the trivial
@@ -73,6 +73,6 @@ struct SchmidtSpectra {
     std::vector<std::vector<double>> spectra; // spectra[k] for intervals[k]
 };
 
-SchmidtSpectra all_contiguous_spectra(itensor::MPS const& psi);
+SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi);
 
 } // namespace caset::quantum

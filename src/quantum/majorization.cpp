@@ -48,13 +48,13 @@ bool majorizes(std::vector<double> const& mu,
     return std::abs(sum_mu - sum_la) <= tol;
 }
 
-bool strictly_majorizes(std::vector<double> const& mu,
+bool strictlyMajorizes(std::vector<double> const& mu,
                         std::vector<double> const& lambda,
                         double tol) {
     return majorizes(mu, lambda, tol) && !majorizes(lambda, mu, tol);
 }
 
-Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
+Poset majorizationPoset(std::vector<std::vector<double>> const& spectra,
                          double tol) {
     const int N = static_cast<int>(spectra.size());
     Poset out(N);
@@ -67,7 +67,7 @@ Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < N; ++j) {
             if (i == j) continue;
-            if (strictly_majorizes(spectra[i], spectra[j], tol)) {
+            if (strictlyMajorizes(spectra[i], spectra[j], tol)) {
                 strict[i][j] = 1;
             }
         }
@@ -87,7 +87,7 @@ Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
                 }
             }
             if (!has_intermediate) {
-                out.add_cover(i, j);
+                out.addCover(i, j);
             }
         }
     }

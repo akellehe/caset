@@ -26,7 +26,7 @@ import caset
 # =========================================================================
 
 def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
-                    epsilon=None, n_sweeps=10, topology=None):
+                    epsilon=None, nSweeps=10, topology=None):
     """Build, tune, and thermalize a 4D Lorentzian CDT spacetime.
 
     If *epsilon* is None (the default), it is set to ``1/target_N41``
@@ -37,7 +37,7 @@ def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
     metric = caset.Metric(
         coordinateFree=True,
         signature=caset.Signature(dimensions=4,
-                                  signature_type=caset.Lorentzian),
+                                  signatureType=caset.Lorentzian),
     )
     topo = topology or caset.Toroid()
     st = caset.Spacetime(
@@ -59,8 +59,8 @@ def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
         epsilon=epsilon, targetN41=target,
     )
     cdt.tune()
-    if n_sweeps > 0:
-        cdt.sweep(n_sweeps)
+    if nSweeps > 0:
+        cdt.sweep(nSweeps)
     return st, cdt
 
 

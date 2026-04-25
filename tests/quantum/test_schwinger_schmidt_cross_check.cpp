@@ -1,4 +1,4 @@
-// Cross-check schmidt_spectrum() (MPS path) against an independent dense
+// Cross-check schmidtSpectrum() (MPS path) against an independent dense
 // Schmidt decomposition for the Schwinger ground state at small N.
 //
 // The Phase 3 product / GHZ / Bell tests in test_schmidt_spectra.cpp use
@@ -8,13 +8,13 @@
 // MPS-side Schmidt extraction would diverge from the dense reference.
 //
 // Pipeline:
-//   1. Build the dense Schwinger Hamiltonian (build_schwinger_dense).
+//   1. Build the dense Schwinger Hamiltonian (buildSchwingerDense).
 //   2. Diagonalize and pick the GS eigenvector in the Sz=0 sector
 //      (charge-neutral, our DMRG sector).
 //   3. For each contiguous bipartition [i, j] | rest, reshape the GS
 //      vector into a (sites_in_A) × (sites_in_bar_A) matrix and SVD.
 //      The squared singular values are the reference Schmidt spectrum.
-//   4. Compare against schmidt_spectrum() applied to a DMRG-optimized
+//   4. Compare against schmidtSpectrum() applied to a DMRG-optimized
 //      MPS at the same parameters; agreement to ~1e-10 is expected
 //      (dense ED is exact, DMRG converges to machine precision at this
 //      size).
@@ -142,23 +142,23 @@ bool run_case(int N, double m, double L0) {
     p.N = N; p.a = 1.0; p.g = 1.0; p.m = m; p.L0 = L0;
 
     // Dense reference: full ED of the Schwinger H.
-    auto sd = build_schwinger_dense(p);
+    auto sd = buildSchwingerDense(p);
     auto psi_dense = dense_gs_sz0(sd);
 
-    // MPS path: DMRG to convergence, then schmidt_spectrum().
+    // MPS path: DMRG to convergence, then schmidtSpectrum().
     QuantumConfig cfg;
     cfg.N = N; cfg.a = p.a; cfg.g = p.g; cfg.m = p.m; cfg.L0 = p.L0;
-    cfg.max_bond_dim = 64;
-    cfg.n_sweeps = 12;
+    cfg.maxBondDim = 64;
+    cfg.nSweeps = 12;
     cfg.cutoff = 1e-14;
 
-    auto sm = build_schwinger_mpo(p, /*conserve_qns=*/true);
+    auto sm = buildSchwingerMpo(p, /*conserveQns=*/true);
     auto state = itensor::InitState(sm.sites);
     for (int i = 1; i <= N; ++i) {
         state.set(i, (i % 2 == 1) ? "Up" : "Dn");
     }
     auto psi0 = itensor::MPS(state);
-    auto sweeps = itensor::Sweeps(cfg.n_sweeps);
+    auto sweeps = itensor::Sweeps(cfg.nSweeps);
     sweeps.maxdim() = 20, 40, 64, 64;
     sweeps.cutoff() = cfg.cutoff;
     sweeps.niter() = 4;
@@ -175,7 +175,7 @@ bool run_case(int N, double m, double L0) {
             if (i == 1 && j == N) continue;
             const std::uint64_t mask = contiguous_mask(N, i, j);
             const auto ref = dense_schmidt_spectrum_subset(psi_dense, N, mask);
-            const auto mps = schmidt_spectrum(psi_mps, i, j);
+            const auto mps = schmidtSpectrum(psi_mps, i, j);
             if (!spectra_close(ref, mps, tol)) {
                 ok = false;
                 std::cout << "  FAIL [" << i << "," << j << "]"

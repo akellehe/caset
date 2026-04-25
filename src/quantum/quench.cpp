@@ -9,7 +9,7 @@
 
 namespace caset::quantum {
 
-itensor::MPS apply_qqbar_quench(itensor::MPS const& psi_in,
+itensor::MPS applyQqbarQuench(itensor::MPS const& psi_in,
                                 itensor::SpinHalf const& sites,
                                 int i0,
                                 int d,
@@ -18,11 +18,11 @@ itensor::MPS apply_qqbar_quench(itensor::MPS const& psi_in,
     const int N = length(psi_in);
     if (i0 < 1 || i0 > N) {
         throw std::invalid_argument(
-            "apply_qqbar_quench: i0 out of range [1, N]");
+            "applyQqbarQuench: i0 out of range [1, N]");
     }
     if (d < 1 || i0 + d > N) {
         throw std::invalid_argument(
-            "apply_qqbar_quench: i0 + d out of range [i0+1, N]");
+            "applyQqbarQuench: i0 + d out of range [i0+1, N]");
     }
     if (enforce_parity) {
         // For the heavy-quark vacuum |↑↓↑↓ … ⟩: σ⁻ acts non-trivially only
@@ -30,13 +30,13 @@ itensor::MPS apply_qqbar_quench(itensor::MPS const& psi_in,
         // So i0 must be odd and i0 + d must be even ⇒ d must be odd.
         if ((i0 % 2) != 1) {
             throw std::invalid_argument(
-                "apply_qqbar_quench: i0 must be in the Up sublattice (odd, "
+                "applyQqbarQuench: i0 must be in the Up sublattice (odd, "
                 "1-based) for the heavy-quark vacuum; pass "
                 "enforce_parity=false to override");
         }
         if ((d % 2) != 1) {
             throw std::invalid_argument(
-                "apply_qqbar_quench: d must be odd so i0 + d lands in the "
+                "applyQqbarQuench: d must be odd so i0 + d lands in the "
                 "Dn sublattice (even, 1-based); pass enforce_parity=false "
                 "to override");
         }

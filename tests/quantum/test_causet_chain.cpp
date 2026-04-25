@@ -1,4 +1,4 @@
-// Phase 6 acceptance tests for caset::quantum::extract_causet_chain
+// Phase 6 acceptance tests for caset::quantum::extractCausetChain
 // (docs/source/quantum-plan.md §6 — caset-embedded Schwinger lattice
 // extraction).
 //
@@ -20,12 +20,12 @@
 //
 //   (4) Sparse vertex IDs — non-contiguous Spacetime IDs are densely
 //       remapped to flat lattice indices in a way consistent with
-//       Poset::from_spacetime, so the inherited partial_order's node
-//       IDs match the flat lattice indices used in hopping_pairs.
+//       Poset::fromSpacetime, so the inherited partialOrder's node
+//       IDs match the flat lattice indices used in hoppingPairs.
 //
 //   (5) Skipping edges — a timelike edge that spans two slices (t=0
 //       to t=2 with t=1 also populated) is NOT included in
-//       hopping_pairs (would not be a Hasse cover).
+//       hoppingPairs (would not be a Hasse cover).
 
 #include "Poset.h"
 #include "quantum/causet_chain.hpp"
@@ -61,22 +61,22 @@ bool acceptance_trivial_chain() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v2, v3, -1.0);
 
-    auto chain = caset::quantum::extract_causet_chain(st);
+    auto chain = caset::quantum::extractCausetChain(st);
 
     const std::vector<std::pair<int, int>> want_hops{
         {0, 1}, {1, 2}, {2, 3}
     };
     bool ok = true;
-    ok &= (chain.n_sites == 4);
+    ok &= (chain.nSites == 4);
     ok &= (chain.times.size() == 4);
     ok &= (chain.antichains.size() == 4);
-    ok &= pairs_equal(chain.hopping_pairs, want_hops);
-    ok &= (chain.partial_order.n_nodes() == 4);
-    ok &= (chain.partial_order.covers().size() == 3);
+    ok &= pairs_equal(chain.hoppingPairs, want_hops);
+    ok &= (chain.partialOrder.getNodeCount() == 4);
+    ok &= (chain.partialOrder.covers().size() == 3);
 
-    std::cout << "  n_sites=" << chain.n_sites
-              << "  hops=" << chain.hopping_pairs.size()
-              << "  poset_covers=" << chain.partial_order.covers().size()
+    std::cout << "  nSites=" << chain.nSites
+              << "  hops=" << chain.hoppingPairs.size()
+              << "  poset_covers=" << chain.partialOrder.covers().size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }
@@ -91,10 +91,10 @@ bool acceptance_branching_antichain() {
     st.createEdge(v0, v1, -1.0);
     st.createEdge(v0, v2, -1.0);
 
-    auto chain = caset::quantum::extract_causet_chain(st);
+    auto chain = caset::quantum::extractCausetChain(st);
 
     bool ok = true;
-    ok &= (chain.n_sites == 3);
+    ok &= (chain.nSites == 3);
     ok &= (chain.times.size() == 2);  // t=0, t=1
     ok &= (chain.antichains.size() == 2);
     ok &= (chain.antichains[0].size() == 1);  // {0}
@@ -102,16 +102,16 @@ bool acceptance_branching_antichain() {
     // Flat layout: site 0 = vid 0, site 1 = vid 1, site 2 = vid 2.
     // Both timelike edges connect site 0 to site 1 / 2 → two hops.
     const std::vector<std::pair<int, int>> want_hops{{0, 1}, {0, 2}};
-    ok &= pairs_equal(chain.hopping_pairs, want_hops);
-    // partial_order should also see two covers: 0→1 and 0→2.
+    ok &= pairs_equal(chain.hoppingPairs, want_hops);
+    // partialOrder should also see two covers: 0→1 and 0→2.
     const std::vector<std::pair<int, int>> want_covers{{0, 1}, {0, 2}};
-    auto got_covers = chain.partial_order.covers();
+    auto got_covers = chain.partialOrder.covers();
     ok &= pairs_equal(got_covers, want_covers);
 
-    std::cout << "  n_sites=" << chain.n_sites
+    std::cout << "  nSites=" << chain.nSites
               << "  antichain_sizes=[" << chain.antichains[0].size()
               << "," << chain.antichains[1].size() << "]"
-              << "  hops=" << chain.hopping_pairs.size()
+              << "  hops=" << chain.hoppingPairs.size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }
@@ -120,16 +120,16 @@ bool acceptance_empty_spacetime() {
     std::cout << "Acceptance #3 — empty Spacetime → empty CausetChain\n";
 
     caset::Spacetime st;
-    auto chain = caset::quantum::extract_causet_chain(st);
+    auto chain = caset::quantum::extractCausetChain(st);
 
-    bool ok = (chain.n_sites == 0)
+    bool ok = (chain.nSites == 0)
             && chain.times.empty()
             && chain.antichains.empty()
-            && chain.vertex_ids.empty()
-            && chain.hopping_pairs.empty()
-            && (chain.partial_order.n_nodes() == 0);
+            && chain.vertexIds.empty()
+            && chain.hoppingPairs.empty()
+            && (chain.partialOrder.getNodeCount() == 0);
 
-    std::cout << "  n_sites=" << chain.n_sites
+    std::cout << "  nSites=" << chain.nSites
               << "  times=" << chain.times.size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
@@ -145,22 +145,22 @@ bool acceptance_sparse_ids() {
     st.createEdge(va, vb, -1.0);
     st.createEdge(vb, vc, -1.0);
 
-    auto chain = caset::quantum::extract_causet_chain(st);
+    auto chain = caset::quantum::extractCausetChain(st);
 
     // Sorted ascending IDs: 7 → site 0, 11 → site 1, 19 → site 2.
     bool ok = true;
-    ok &= (chain.n_sites == 3);
-    ok &= (chain.vertex_ids.size() == 3);
-    ok &= (chain.vertex_ids[0] == 7);
-    ok &= (chain.vertex_ids[1] == 11);
-    ok &= (chain.vertex_ids[2] == 19);
+    ok &= (chain.nSites == 3);
+    ok &= (chain.vertexIds.size() == 3);
+    ok &= (chain.vertexIds[0] == 7);
+    ok &= (chain.vertexIds[1] == 11);
+    ok &= (chain.vertexIds[2] == 19);
     const std::vector<std::pair<int, int>> want{{0, 1}, {1, 2}};
-    ok &= pairs_equal(chain.hopping_pairs, want);
+    ok &= pairs_equal(chain.hoppingPairs, want);
 
-    std::cout << "  vertex_ids=[" << chain.vertex_ids[0]
-              << "," << chain.vertex_ids[1]
-              << "," << chain.vertex_ids[2] << "]"
-              << "  hops_match=" << pairs_equal(chain.hopping_pairs, want)
+    std::cout << "  vertexIds=[" << chain.vertexIds[0]
+              << "," << chain.vertexIds[1]
+              << "," << chain.vertexIds[2] << "]"
+              << "  hops_match=" << pairs_equal(chain.hoppingPairs, want)
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }
@@ -176,16 +176,16 @@ bool acceptance_skipping_edge_dropped() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v0, v2, -1.0);  // skips t=1 — should NOT be a hop
 
-    auto chain = caset::quantum::extract_causet_chain(st);
+    auto chain = caset::quantum::extractCausetChain(st);
 
     const std::vector<std::pair<int, int>> want_hops{{0, 1}, {1, 2}};
-    bool ok = pairs_equal(chain.hopping_pairs, want_hops);
-    // partial_order should also reduce 0→2 out as a non-cover.
+    bool ok = pairs_equal(chain.hoppingPairs, want_hops);
+    // partialOrder should also reduce 0→2 out as a non-cover.
     const std::vector<std::pair<int, int>> want_covers{{0, 1}, {1, 2}};
-    ok &= pairs_equal(chain.partial_order.covers(), want_covers);
+    ok &= pairs_equal(chain.partialOrder.covers(), want_covers);
 
-    std::cout << "  hops=" << chain.hopping_pairs.size()
-              << " (want 2)  poset_covers=" << chain.partial_order.covers().size()
+    std::cout << "  hops=" << chain.hoppingPairs.size()
+              << " (want 2)  poset_covers=" << chain.partialOrder.covers().size()
               << " (want 2)  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }

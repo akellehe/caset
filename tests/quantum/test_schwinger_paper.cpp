@@ -122,9 +122,9 @@ double chiral_condensate(MPS const& psi_in, itensor::SpinHalf const& sites, int 
 
 struct DMRGResult { double energy; MPS psi; };
 
-DMRGResult run_dmrg_gs(SchwingerMPO const& sm, int max_bond, int n_sweeps) {
+DMRGResult run_dmrg_gs(SchwingerMPO const& sm, int max_bond, int nSweeps) {
     auto psi0 = neel_init(sm.sites, sm.params.N);
-    auto sweeps = Sweeps(n_sweeps);
+    auto sweeps = Sweeps(nSweeps);
     sweeps.maxdim() = 20, 40, 80, max_bond, max_bond;
     sweeps.cutoff() = 1e-12;
     sweeps.niter() = 4;
@@ -139,9 +139,9 @@ DMRGResult run_dmrg_gs(SchwingerMPO const& sm, int max_bond, int n_sweeps) {
 // minimum of the penalized H is then the lowest state orthogonal to ψ_0.
 // W must exceed the GS-excited gap or DMRG will just rediscover the GS.
 DMRGResult run_dmrg_first_excited(SchwingerMPO const& sm, MPS const& gs,
-                                  int max_bond, int n_sweeps) {
+                                  int max_bond, int nSweeps) {
     auto psi_init = neel_init(sm.sites, sm.params.N);
-    auto sweeps = Sweeps(n_sweeps);
+    auto sweeps = Sweeps(nSweeps);
     sweeps.maxdim() = 20, 40, 80, max_bond, max_bond;
     sweeps.cutoff() = 1e-12;
     sweeps.niter() = 4;
@@ -182,7 +182,7 @@ bool check_continuum_trend() {
         p.m = 0.0;
         p.L0 = 0.0;
 
-        auto sm = build_schwinger_mpo(p);
+        auto sm = buildSchwingerMpo(p);
         auto gs = run_dmrg_gs(sm, pt.max_bond, pt.sweeps);
         const double e_total = gs.energy + sm.constant;
         // ω_0 = (a/N) * E_dim_total  (derivation in file header).
@@ -260,7 +260,7 @@ bool check_vector_mass_continuum_trend() {
         p.m = 0.0;
         p.L0 = 0.0;
 
-        auto sm  = build_schwinger_mpo(p);
+        auto sm  = buildSchwingerMpo(p);
         auto gs  = run_dmrg_gs(sm, pt.max_bond, pt.gs_sweeps);
         auto ex1 = run_dmrg_first_excited(sm, gs.psi, pt.max_bond, pt.ex1_sweeps);
         const double gap_dim   = ex1.energy - gs.energy;
@@ -321,7 +321,7 @@ bool check_mass_gap() {
     SchwingerParams p;
     p.N = 20; p.a = 1.0; p.g = 1.0; p.m = 0.0; p.L0 = 0.0;
 
-    auto sm = build_schwinger_mpo(p);
+    auto sm = buildSchwingerMpo(p);
     auto gs  = run_dmrg_gs(sm, /*max_bond=*/100, /*sweeps=*/14);
     auto ex1 = run_dmrg_first_excited(sm, gs.psi, /*max_bond=*/100, /*sweeps=*/16);
 
@@ -463,7 +463,7 @@ bool check_charge_conjugation_parity() {
     for (int N : {8, 12}) {
         SchwingerParams p;
         p.N = N; p.a = 1.0; p.g = 1.0; p.m = 0.0; p.L0 = 0.0;
-        auto sd = build_schwinger_dense(p);
+        auto sd = buildSchwingerDense(p);
         auto spec = sz0_spectrum(sd);
 
         bool saw_neg = false;
@@ -522,7 +522,7 @@ bool check_chiral_condensate() {
     {
         SchwingerParams p;
         p.N = 20; p.a = 1.0; p.g = 1.0; p.m = 0.0; p.L0 = 0.0;
-        auto sm = build_schwinger_mpo(p);
+        auto sm = buildSchwingerMpo(p);
         auto gs = run_dmrg_gs(sm, 100, 12);
         const double cc = chiral_condensate(gs.psi, sm.sites, p.N);
         const bool nonzero = std::abs(cc) > 0.05;
@@ -535,7 +535,7 @@ bool check_chiral_condensate() {
     {
         SchwingerParams p;
         p.N = 20; p.a = 1.0; p.g = 1.0; p.m = 100.0; p.L0 = 0.0;
-        auto sm = build_schwinger_mpo(p);
+        auto sm = buildSchwingerMpo(p);
         auto gs = run_dmrg_gs(sm, 60, 8);
         const double cc = chiral_condensate(gs.psi, sm.sites, p.N);
         const bool saturated = std::abs(cc - (-1.0)) < 0.05;

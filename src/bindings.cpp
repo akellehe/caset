@@ -389,8 +389,8 @@ Args:
 
 Args:
     dimensions: Number of spacetime dimensions d (e.g. 4 for 4D CDT).
-    signature_type: Lorentzian or Euclidean.)doc")
-      .def(py::init<int, SignatureType>(), py::arg("dimensions"), py::arg("signature_type"))
+    signatureType: Lorentzian or Euclidean.)doc")
+      .def(py::init<int, SignatureType>(), py::arg("dimensions"), py::arg("signatureType"))
       .def("getDiagonal", &Signature::getDiagonal,
            "Return the diagonal entries of the metric signature tensor.");
 
@@ -568,13 +568,13 @@ No-op if v1 and v2 are the same vertex.)doc")
                        int nFrames, int delayCentiseconds) {
           renderSpacetime(st, path, panelSize, layoutIters,
                           tilt, spin, precession, nFrames, delayCentiseconds);
-      }, py::arg("path"), py::arg("panel_size") = 800,
-         py::arg("layout_iters") = 500,
+      }, py::arg("path"), py::arg("panelSize") = 800,
+         py::arg("layoutIters") = 500,
          py::arg("tilt") = 25.0,
          py::arg("spin") = 1,
          py::arg("precession") = 1,
-         py::arg("n_frames") = 36,
-         py::arg("delay_cs") = 15,
+         py::arg("nFrames") = 36,
+         py::arg("delayCs") = 15,
            R"doc(Render the spacetime to an image file.
 
 Uses a force-directed layout (time fixed, spatial coordinates
@@ -605,13 +605,13 @@ The layout is computed internally and does not modify vertex state.
 
 Args:
     path: Output file path (.png, .gif, .graphml, .dot, or .gv).
-    panel_size: Pixel size of each panel (default 800).
-    layout_iters: Maximum force-directed iterations (default 500).
+    panelSize: Pixel size of each panel (default 800).
+    layoutIters: Maximum force-directed iterations (default 500).
     tilt: Precession cone half-angle in degrees (default 25).
     spin: Y-axis rotations per loop, integer for perfect loop (default 1).
     precession: Precession cycles per loop, integer for perfect loop (default 1).
-    n_frames: Number of GIF frames (default 36).
-    delay_cs: Frame delay in centiseconds (default 7).)doc");
+    nFrames: Number of GIF frames (default 36).
+    delayCs: Frame delay in centiseconds (default 7).)doc");
 
   // ========================================
   // CDTSimulation
@@ -688,35 +688,35 @@ Returns True if accepted, False if rejected.)doc")
            R"doc(Attempt one inverse shift move (same as shift, since (3,3) is self-inverse).
 
 Returns True if accepted, False if rejected.)doc")
-      .def("sweep", [](CDT &self, int n_sweeps, py::object progress) {
+      .def("sweep", [](CDT &self, int nSweeps, py::object progress) {
           int total = 0;
           if (progress.is_none()) {
               // No callback — release the GIL for the entire loop so
               // multiple threads get true parallelism.
               py::gil_scoped_release release;
-              for (int i = 0; i < n_sweeps; i++) {
+              for (int i = 0; i < nSweeps; i++) {
                   total += self.sweep();
               }
           } else {
-              for (int i = 0; i < n_sweeps; i++) {
+              for (int i = 0; i < nSweeps; i++) {
                   int accepted;
                   {
                       py::gil_scoped_release release;
                       accepted = self.sweep();
                   }
                   total += accepted;
-                  progress(i + 1, n_sweeps);
+                  progress(i + 1, nSweeps);
               }
           }
           return total;
-      }, py::arg("n_sweeps") = 1, py::arg("progress") = py::none(),
+      }, py::arg("nSweeps") = 1, py::arg("progress") = py::none(),
            R"doc(Run one or more Monte Carlo sweeps.
 
 Each sweep proposes N4 moves uniformly among all 5 types
 (add, remove, flip, iflip, shift).
 
 Args:
-    n_sweeps: Number of sweeps to perform (default 1).
+    nSweeps: Number of sweeps to perform (default 1).
     progress: Optional callback(i, n) called after each sweep.
 
 Returns the total number of accepted moves across all sweeps.)doc")
@@ -920,12 +920,12 @@ Args:
     simplex: The simplex to assign density to.
     rho: Energy density in geometrized units.)doc")
       .def("setRadialProfile", &MatterConfiguration::setRadialProfile,
-           py::arg("center"), py::arg("rho_of_r"),
+           py::arg("center"), py::arg("rhoOfR"),
            R"doc(Assign energy density as a function of geodesic distance.
 
 Args:
     center: The reference vertex.
-    rho_of_r: A callable taking distance (float) and returning density (float).)doc")
+    rhoOfR: A callable taking distance (float) and returning density (float).)doc")
       .def_static("buildWorldline", &MatterConfiguration::buildWorldline,
            py::arg("center"), py::arg("spacetime"),
            py::return_value_policy::copy,
@@ -969,7 +969,7 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
       .def("actionGradientNorm", &ReggeSolver::actionGradientNorm,
            "||∇S||² = Σ_e (∂S/∂ℓ²_e)².  Zero = Regge equations solved.")
       .def("step", &ReggeSolver::step,
-           py::arg("learning_rate") = 0.001,
+           py::arg("learningRate") = 0.001,
            "One gradient-descent step on F = ||∇S||². Returns F before the update.")
       .def("solve", [](ReggeSolver &self, double tol, int maxIters,
                         double learningRate, py::object progress) {
@@ -984,17 +984,17 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
           return self.solve(tol, maxIters, learningRate, cb);
       },
            py::arg("tol") = 1e-8,
-           py::arg("max_iters") = 5000,
-           py::arg("learning_rate") = 0.001,
+           py::arg("maxIters") = 5000,
+           py::arg("learningRate") = 0.001,
            py::arg("progress") = py::none(),
            R"doc(Find stationary point of the total Regge action (discrete Einstein eqs).
 
-Minimizes F = ||∇S||² until F < tol or max_iters reached.
+Minimizes F = ||∇S||² until F < tol or maxIters reached.
 
 Args:
     tol: Convergence tolerance on F = ||∇S||².
-    max_iters: Maximum number of iterations.
-    learning_rate: Gradient descent step size.
+    maxIters: Maximum number of iterations.
+    learningRate: Gradient descent step size.
     progress: Optional callback(iter, F) called after each iteration.
 
 Returns:
@@ -1041,7 +1041,7 @@ Args:
 
 #ifdef CASET_QUANTUM
   // Register the Schwinger / DMRG bindings as a `quantum` submodule so users
-  // call them as `caset._caset.quantum.compute_ground_state(...)` (typically
+  // call them as `caset._caset.quantum.computeGroundState(...)` (typically
   // routed through `caset.quantum` — see caset/quantum/__init__.py).
   register_quantum_bindings(m.def_submodule("quantum",
       "Schwinger model + DMRG (Phase 2 of docs/source/quantum-plan.md)."));

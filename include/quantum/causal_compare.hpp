@@ -7,11 +7,11 @@
 //   1. ≼_maj — majorization order: (A, s) ≼_maj (B, t) iff the Schmidt
 //      spectrum λ_A(s) is majorized by λ_B(t). Built by feeding all
 //      snapshot spectra (across cuts AND times) into the Phase 3
-//      majorization_poset() routine. Per PLAN.md §3 hypothesis: this
+//      majorizationPoset() routine. Per PLAN.md §3 hypothesis: this
 //      order is meant to "see" the entanglement causal structure.
 //
 //   2. ≼_LR — Lieb-Robinson cone: (A, s) ≼_LR (B, t) iff s < t AND the
-//      shortest distance between intervals A and B is ≤ v_LR · (t − s).
+//      shortest distance between intervals A and B is ≤ vLr · (t − s).
 //      The strict order has only cross-time edges; same-time pairs are
 //      incomparable in this ordering. Within-cone information transport
 //      bound from {cite}`LiebRobinson1972, HastingsKoma2006`.
@@ -22,19 +22,19 @@
 //      point ≼_cs becomes informative within time slices too.
 //
 // Each order is stored as a Hasse-cover Poset over the same shared label
-// set. compare_orders() then computes Kendall-τ, the discordant-pair
+// set. compareOrders() then computes Kendall-τ, the discordant-pair
 // fraction, and the Hasse-graph edit distance between any two of the
 // three.
 //
 // ─── Lieb-Robinson velocity ──────────────────────────────────────────────
 //
 // Plan §7 trap: "OTOC computation: expensive. Compute only at the final
-// time and at one or two intermediate times for v_LR estimation; do not
-// run every step." For v1 we accept v_LR as a config input rather than
+// time and at one or two intermediate times for vLr estimation; do not
+// run every step." For v1 we accept vLr as a config input rather than
 // extracting it from OTOC fronts. For our Schwinger spin Hamiltonian the
-// natural scale is v_LR ≈ 1/a (free-fermion group velocity) — that is
-// the default in the high-level `compute_causal_comparison` entry point,
-// and the Phase 5 acceptance test explicitly tries v_LR = 2/a too to
+// natural scale is vLr ≈ 1/a (free-fermion group velocity) — that is
+// the default in the high-level `computeCausalComparison` entry point,
+// and the Phase 5 acceptance test explicitly tries vLr = 2/a too to
 // see the cone-tightening effect.
 
 #pragma once
@@ -49,10 +49,10 @@ namespace caset::quantum {
 
 // One node in the (cut, time) label set.
 struct LabelSpacetime {
-    int      cut_idx{0};      // index into the snapshot's spectra/intervals
-    int      t_idx{0};        // index into TDVPSnapshot list
-    int      interval_i{0};   // the contiguous interval [interval_i, interval_j]
-    int      interval_j{0};
+    int      cutIdx{0};      // index into the snapshot's spectra/intervals
+    int      tIdx{0};        // index into TDVPSnapshot list
+    int      intervalI{0};   // the contiguous interval [intervalI, intervalJ]
+    int      intervalJ{0};
     double   time{0.0};       // physical time at this snapshot
 };
 
@@ -75,42 +75,42 @@ struct CausalOrders {
 //   * "discordant" = both posets relate the pair, in opposite directions.
 //
 // Kendall-τ is on the (concordant, discordant) subset:
-//     τ = (n_concordant − n_discordant) / n_comparable_both.
+//     τ = (nConcordant − nDiscordant) / nComparableBoth.
 //
-// hasse_edit_distance is the symmetric difference of cover-edge sets,
+// hasseEditDistance is the symmetric difference of cover-edge sets,
 // normalized by the union size.
 // OrderAgreement is defined at top-level caset (see include/Poset.h).
 // The using-alias in include/quantum/majorization.hpp keeps the old
 // `caset::quantum::OrderAgreement` spelling available.
 
 struct CausalComparisonReport {
-    OrderAgreement maj_vs_lr;
-    OrderAgreement maj_vs_cs;
-    OrderAgreement lr_vs_cs;
-    int n_labels{0};
-    int n_snapshots{0};
-    double v_LR{0.0};   // Lieb-Robinson velocity used to build ≼_LR
+    OrderAgreement majVsLr;
+    OrderAgreement majVsCs;
+    OrderAgreement lrVsCs;
+    int nLabels{0};
+    int nSnapshots{0};
+    double vLr{0.0};   // Lieb-Robinson velocity used to build ≼_LR
 };
 
 // Build the cross-time majorization poset from a list of snapshots
-// (which must have been recorded with record_spectra=true). The first
+// (which must have been recorded with recordSpectra=true). The first
 // dim labels in the returned CausalOrders are from snapshots[0], the
 // next from snapshots[1], etc.
-CausalOrders build_causal_orders(std::vector<TDVPSnapshot> const& snapshots,
-                                 double v_LR);
+CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
+                                 double vLr);
 
-// caset::compare_orders is the canonical implementation; the alias in
+// caset::compareOrders is the canonical implementation; the alias in
 // include/quantum/majorization.hpp re-exports it as
-// caset::quantum::compare_orders for back-compat.
+// caset::quantum::compareOrders for back-compat.
 
 // End-to-end pipeline: DMRG ground state → q-qbar quench → TDVP loop with
 // per-step Schmidt spectra → build the three orders → compare. Forces
-// `tdvp_cfg.record_spectra = true` regardless of the input.
+// `tdvp_cfg.recordSpectra = true` regardless of the input.
 //
-// `v_LR` is the Lieb-Robinson velocity in lattice units (sites / time).
+// `vLr` is the Lieb-Robinson velocity in lattice units (sites / time).
 // Default 1.0 corresponds to the free-fermion group velocity for our
 // hopping coefficient.
 CausalComparisonReport
-compute_causal_comparison(TDVPConfig const& tdvp_cfg, double v_LR = 1.0);
+computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr = 1.0);
 
 } // namespace caset::quantum

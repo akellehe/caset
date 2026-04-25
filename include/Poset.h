@@ -9,11 +9,11 @@
 //
 // ─── What this provides ───────────────────────────────────────────────────
 //
-// • Poset itself — the cover-edge container with add_cover / covers /
-//   to_dot / from_spacetime.
+// • Poset itself — the cover-edge container with addCover / covers /
+//   toDot / fromSpacetime.
 // • OrderAgreement struct — pairwise statistics on two posets that share
 //   a label set.
-// • compare_orders() — Kendall-τ, discordant fraction, Hasse edit
+// • compareOrders() — Kendall-τ, discordant fraction, Hasse edit
 //   distance.
 //
 // All three are general-purpose; the quantum subsystem layers
@@ -32,7 +32,7 @@
 
 namespace caset {
 
-class Spacetime;  // forward decl for Poset::from_spacetime (Phase 6)
+class Spacetime;  // forward decl for Poset::fromSpacetime (Phase 6)
 
 // Hasse-cover representation of a partial order on integer-indexed nodes.
 //
@@ -47,8 +47,8 @@ public:
     // Default-construct an empty Poset.
     Poset() = default;
 
-    // Construct with `n_nodes` pre-populated as Vertex(id=0..n-1).
-    explicit Poset(int n_nodes);
+    // Construct with `getNodeCount` pre-populated as Vertex(id=0..n-1).
+    explicit Poset(int getNodeCount);
 
     // Pool-based VertexList / EdgeList don't trivially copy because of
     // the back-pointer / fingerprint maps; implement value-style copy
@@ -58,32 +58,32 @@ public:
     Poset(Poset&& other) noexcept = default;
     Poset& operator=(Poset&& other) noexcept = default;
 
-    // Number of nodes (0 .. n_nodes()-1).
-    int n_nodes() const noexcept;
+    // Number of nodes (0 .. getNodeCount()-1).
+    int getNodeCount() const noexcept;
 
     // Resize: add empty Vertex(id) entries for missing IDs in [0, n).
     // Does NOT remove existing nodes if n is smaller than the current
     // count. Cover edges are preserved across resizes.
-    void set_n_nodes(int n);
+    void setNodeCount(int n);
 
     // Number of cover edges currently registered.
-    int n_covers() const noexcept;
+    int getCoverCount() const noexcept;
 
     // Add a strict cover edge a → b (a strictly precedes b in the partial
     // order with no intermediate). Caller is responsible for ensuring
     // transitivity and acyclicity; Poset itself does not validate.
     //
-    // Both endpoints must already exist (set_n_nodes() must have been
+    // Both endpoints must already exist (setNodeCount() must have been
     // called or the constructor must have been given a sufficient n).
     // No deduplication is performed — adding the same cover twice
     // creates two parallel edges. Standard usage feeds covers from a
     // transitive-reduction algorithm where duplicates can't arise.
-    void add_cover(int a, int b);
+    void addCover(int a, int b);
 
     // Replace the entire cover list with `new_covers`. Equivalent to
-    // clearing edges_ and calling add_cover() for each pair, but in one
+    // clearing edges_ and calling addCover() for each pair, but in one
     // pass.
-    void set_covers(std::vector<std::pair<int, int>> const& new_covers);
+    void setCovers(std::vector<std::pair<int, int>> const& new_covers);
 
     // Materialize cover edges as (from, to) integer pairs. Order is
     // insertion order (don't rely on it for correctness — the underlying
@@ -108,14 +108,14 @@ public:
     // Phase 6 of the quantum-plan extends this for the (cut, time)
     // label set used by majorization-vs-LR-vs-causet comparison;
     // currently this base version is implemented as a Phase-6 stub.
-    static Poset from_spacetime(Spacetime const& st);
+    static Poset fromSpacetime(Spacetime const& st);
 
     // ─── Output ────────────────────────────────────────────────────────
 
     // Graphviz DOT representation of the Hasse diagram. Nodes labelled by
     // their integer id; cover edges drawn from "a -> b" meaning
     // a strictly precedes b. Suitable for `dot -Tsvg` rendering.
-    std::string to_dot() const;
+    std::string toDot() const;
 
 private:
     VertexList vertices_;
@@ -132,31 +132,31 @@ private:
 //   * "only_b"          — B relates the pair but A does not.
 //
 // The five counts (concordant, discordant, only_a, only_b, neither) form
-// a partition of the C(n_labels, 2) unordered pairs. The
+// a partition of the C(nLabels, 2) unordered pairs. The
 // strong-falsification criterion (quantum-methodology.md §1.2 #1) reads
 // directly off `only_a` when (A, B) = (≼_maj, ≼_LR): it's the count of
 // majorization pairs whose endpoints lie OUTSIDE the LR cone. Symmetric
 // for `only_b`.
 struct OrderAgreement {
-    double kendall_tau{0.0};         // (concordant - discordant) / both, in [-1, 1]
-    double discordant_fraction{0.0}; // discordant / both, in [0, 1]
-    double hasse_edit_distance{0.0}; // |E_a △ E_b| / |E_a ∪ E_b|, in [0, 1]
-    int    n_concordant{0};
-    int    n_discordant{0};
-    int    n_comparable_both{0};
-    int    n_only_a{0};              // pairs related by a only
-    int    n_only_b{0};              // pairs related by b only
+    double kendallTau{0.0};         // (concordant - discordant) / both, in [-1, 1]
+    double discordantFraction{0.0}; // discordant / both, in [0, 1]
+    double hasseEditDistance{0.0}; // |E_a △ E_b| / |E_a ∪ E_b|, in [0, 1]
+    int    nConcordant{0};
+    int    nDiscordant{0};
+    int    nComparableBoth{0};
+    int    nOnlyA{0};              // pairs related by a only
+    int    nOnlyB{0};              // pairs related by b only
 };
 
 // Pairwise agreement statistics between two posets on the same label set
-// of size n_labels.
+// of size nLabels.
 //
-// Complexity: O(n_labels^3) for the Floyd-Warshall transitive closures,
-// then O(n_labels^2) to count pairs. Practical on n_labels up to a few
+// Complexity: O(nLabels^3) for the Floyd-Warshall transitive closures,
+// then O(nLabels^2) to count pairs. Practical on nLabels up to a few
 // thousand.
-OrderAgreement compare_orders(Poset const& a,
+OrderAgreement compareOrders(Poset const& a,
                               Poset const& b,
-                              int n_labels);
+                              int nLabels);
 
 } // namespace caset
 

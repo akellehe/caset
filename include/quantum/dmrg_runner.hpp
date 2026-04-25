@@ -25,8 +25,8 @@ namespace caset::quantum {
 
 // Flat, Python-friendly configuration. Holds Hamiltonian parameters plus
 // DMRG sweep settings. Defaults are tuned for the small / moderate N runs
-// we use in tests; production callers should override max_bond_dim and
-// n_sweeps for tighter convergence.
+// we use in tests; production callers should override maxBondDim and
+// nSweeps for tighter convergence.
 struct QuantumConfig {
     // ─── Hamiltonian (passed straight to SchwingerParams) ───────────────
     int    N{0};       // staggered sites, 1-based; must be ≥ 2
@@ -36,35 +36,35 @@ struct QuantumConfig {
     double L0{0.0};    // background electric field on the link left of site 1
 
     // ─── DMRG ──────────────────────────────────────────────────────────
-    int    max_bond_dim{100};  // cap on MPS bond dim during sweeps
-    int    n_sweeps{12};       // total sweep count
+    int    maxBondDim{100};  // cap on MPS bond dim during sweeps
+    int    nSweeps{12};       // total sweep count
     double cutoff{1e-12};      // SVD truncation threshold per local solve
-    int    krylov_dim{4};      // Lanczos / Krylov dimension per local solve
+    int    krylovDim{4};      // Lanczos / Krylov dimension per local solve
     bool   quiet{true};        // suppress ITensor's per-sweep diagnostics
-    bool   conserve_qns{true}; // U(1) total-Sz conservation on the SiteSet
+    bool   conserveQns{true}; // U(1) total-Sz conservation on the SiteSet
 
-    // ─── Phase 4 (TDVP / quench) parameters; unused by compute_ground_state.
+    // ─── Phase 4 (TDVP / quench) parameters; unused by computeGroundState.
     // Carried in this struct to match PLAN.md §6's exposed API surface.
     double dt{0.01};   // real-time step size
     double T{1.0};     // total evolution time
 };
 
-// What compute_ground_state returns. PLAN.md §6 specifies just
-// (energy, bond_dim, truncation_err); we additionally expose `constant`
-// and `operator_energy` because callers comparing against published
+// What computeGroundState returns. PLAN.md §6 specifies just
+// (energy, bondDim, truncationErr); we additionally expose `constant`
+// and `operatorEnergy` because callers comparing against published
 // numerics need to know whether the value they have is the operator-only
 // part or the full physical energy.
 struct GroundStateResult {
     double energy{0.0};          // ⟨H⟩ + constant — the full physical energy
-    double operator_energy{0.0}; // ⟨H⟩ alone — what ITensor's dmrg() returned
+    double operatorEnergy{0.0}; // ⟨H⟩ alone — what ITensor's dmrg() returned
     double constant{0.0};        // c-number shift from L_n² expansion
-    int    bond_dim{0};          // achieved max bond dim of the optimized MPS
-    double truncation_err{0.0};  // largest truncation error in the final sweep
+    int    bondDim{0};          // achieved max bond dim of the optimized MPS
+    double truncationErr{0.0};  // largest truncation error in the final sweep
 };
 
 // Run DMRG to the ground state at the parameters in `config`. Throws
 // std::invalid_argument for invalid Hamiltonian parameters (forwarded
-// from build_schwinger_mpo).
-GroundStateResult compute_ground_state(QuantumConfig const& config);
+// from buildSchwingerMpo).
+GroundStateResult computeGroundState(QuantumConfig const& config);
 
 } // namespace caset::quantum

@@ -1,4 +1,4 @@
-// Implementation of compute_ground_state — see dmrg_runner.hpp for the
+// Implementation of computeGroundState — see dmrg_runner.hpp for the
 // full architectural rationale.
 
 #include "quantum/dmrg_runner.hpp"
@@ -28,8 +28,8 @@ itensor::MPS neel_init(itensor::SpinHalf const& sites, int N) {
 // for the first two sweeps to perturb out of local minima, then off so
 // later sweeps converge cleanly.
 itensor::Sweeps make_sweeps(QuantumConfig const& cfg) {
-    auto sweeps = itensor::Sweeps(cfg.n_sweeps);
-    const int b = cfg.max_bond_dim;
+    auto sweeps = itensor::Sweeps(cfg.nSweeps);
+    const int b = cfg.maxBondDim;
     // Ramp values clamp at b so smaller caps don't get pulled up by the
     // initial 20/40/80 plateau when the user explicitly asked for less.
     sweeps.maxdim() = std::min(20, b),
@@ -37,21 +37,21 @@ itensor::Sweeps make_sweeps(QuantumConfig const& cfg) {
                       std::min(80, b),
                       b, b;
     sweeps.cutoff() = cfg.cutoff;
-    sweeps.niter()  = cfg.krylov_dim;
+    sweeps.niter()  = cfg.krylovDim;
     sweeps.noise()  = 1e-7, 1e-8, 0.0;
     return sweeps;
 }
 
 } // namespace
 
-GroundStateResult compute_ground_state(QuantumConfig const& cfg) {
+GroundStateResult computeGroundState(QuantumConfig const& cfg) {
     // 1) Forward the Hamiltonian parameters into a SchwingerParams and
     //    build the MPO. Validation (N ≥ 2, a > 0) happens inside
-    //    build_schwinger_mpo and surfaces as std::invalid_argument.
+    //    buildSchwingerMpo and surfaces as std::invalid_argument.
     SchwingerParams p;
     p.N = cfg.N; p.a = cfg.a; p.m = cfg.m; p.g = cfg.g; p.L0 = cfg.L0;
 
-    auto sm = build_schwinger_mpo(p, cfg.conserve_qns);
+    auto sm = buildSchwingerMpo(p, cfg.conserveQns);
 
     // 2) Néel initial state (Sz = 0 for even N).
     auto psi0 = neel_init(sm.sites, p.N);
@@ -69,11 +69,11 @@ GroundStateResult compute_ground_state(QuantumConfig const& cfg) {
     //     mass discarded is at most cutoff — we report that as our
     //     conservative upper bound.
     GroundStateResult r;
-    r.operator_energy = energy;
+    r.operatorEnergy = energy;
     r.constant        = sm.constant;
     r.energy          = energy + sm.constant;
-    r.bond_dim        = itensor::maxLinkDim(psi);
-    r.truncation_err  = cfg.cutoff;
+    r.bondDim        = itensor::maxLinkDim(psi);
+    r.truncationErr  = cfg.cutoff;
     return r;
 }
 

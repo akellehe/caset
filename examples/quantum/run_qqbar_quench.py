@@ -56,15 +56,15 @@ Examples
 
 Heavy-quark limit (PLAN.md §5 Phase 4 acceptance setup)::
 
-    python examples/quantum/run_qqbar_quench.py
+    python examples/quantum/runQqbarQuench.py
 
 Light-quark limit — flux tube spreads / breaks::
 
-    python examples/quantum/run_qqbar_quench.py --m-over-g 0.5 --T 4.0
+    python examples/quantum/runQqbarQuench.py --m-over-g 0.5 --T 4.0
 
 Track the bond dimension over time::
 
-    python examples/quantum/run_qqbar_quench.py --N 20 --d 5 --max-bond-dim 200
+    python examples/quantum/runQqbarQuench.py --N 20 --d 5 --max-bond-dim 200
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ import math
 import sys
 
 try:
-    from caset.quantum import TDVPConfig, run_qqbar_quench
+    from caset.quantum import TDVPConfig, runQqbarQuench
 except ImportError as e:
     print(f"caset.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: CASET_QUANTUM=1 pip install -e .", file=sys.stderr)
@@ -86,9 +86,9 @@ def _print_header(N: int) -> None:
 
 
 def _format_row(snap, N: int) -> str:
-    L = snap.L_profile
+    L = snap.lProfile
     body = "".join(f"{x:>7.3f}" for x in L)
-    return f"{snap.time:>8.3f} {snap.energy:>14.6f} {snap.bond_dim:>5}  {body}"
+    return f"{snap.time:>8.3f} {snap.energy:>14.6f} {snap.bondDim:>5}  {body}"
 
 
 def main() -> None:
@@ -131,31 +131,31 @@ def main() -> None:
     cfg.a    = 1.0; cfg.g = args.g
     cfg.m    = args.m_over_g * args.g
     cfg.L0   = args.L0
-    cfg.dmrg_max_bond_dim = args.dmrg_bond
-    cfg.dmrg_n_sweeps     = args.dmrg_sweeps
-    cfg.dmrg_krylov_dim   = 4
-    cfg.dmrg_cutoff       = 1e-12
+    cfg.dmrgMaxBondDim = args.dmrg_bond
+    cfg.dmrgNSweeps     = args.dmrg_sweeps
+    cfg.dmrgKrylovDim   = 4
+    cfg.dmrgCutoff       = 1e-12
     cfg.i0 = args.i0; cfg.d = args.d
-    cfg.quench_enforce_parity = not args.bypass_parity
+    cfg.quenchEnforceParity = not args.bypass_parity
     cfg.dt = args.dt
     cfg.T  = args.T if args.T is not None else float(args.d)
-    cfg.max_bond_dim = args.max_bond_dim
+    cfg.maxBondDim = args.max_bond_dim
     cfg.cutoff       = 1e-10
-    cfg.krylov_dim   = 12
-    cfg.snapshot_every = args.snapshot_every
+    cfg.krylovDim   = 12
+    cfg.snapshotEvery = args.snapshot_every
     cfg.quiet = True
-    cfg.conserve_qns = True
+    cfg.conserveQns = True
 
     print(f"Schwinger q-qbar quench — N={cfg.N}, m/g={args.m_over_g}, "
           f"g={cfg.g}, L0={cfg.L0}")
     print(f"  q-qbar pair at sites ({cfg.i0}, {cfg.i0 + cfg.d}); d={cfg.d}")
     print(f"  TDVP: dt={cfg.dt}, T={cfg.T} ({int(round(cfg.T / cfg.dt))} steps), "
-          f"bond_dim≤{cfg.max_bond_dim}")
+          f"bondDim≤{cfg.maxBondDim}")
     print()
 
-    result = run_qqbar_quench(cfg)
-    print(f"DMRG ground state: E = {result.ground_state.energy:.6f}, "
-          f"bond_dim = {result.ground_state.bond_dim}")
+    result = runQqbarQuench(cfg)
+    print(f"DMRG ground state: E = {result.groundState.energy:.6f}, "
+          f"bondDim = {result.groundState.bondDim}")
     print()
 
     _print_header(cfg.N)

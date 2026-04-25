@@ -78,18 +78,18 @@ struct SchwingerMPO {
 
 // Build the Schwinger MPO via ITensor's AutoMPO.
 //
-// `conserve_qns = true` (default) makes the bond indices carry total Sz, i.e.
+// `conserveQns = true` (default) makes the bond indices carry total Sz, i.e.
 // total electric charge after JW. This blocks the MPO/MPS into U(1) sectors,
 // makes DMRG converge faster in the charge-neutral sector, and lets us pin
 // the GS sector via a Néel initial state.
 //
-// Pass `conserve_qns = false` for measurements with operators that don't
+// Pass `conserveQns = false` for measurements with operators that don't
 // preserve Sz (e.g. σ^x, the building block of the lattice charge-conjugation
 // S_R = σ^x_odd · T⁽¹⁾ on Bañuls page 8). With QNs enabled, applying σ^x to
 // an MPS would require ITensor to handle indefinite-flux tensors, which it
 // doesn't cleanly support; the path of least resistance is to rebuild H
 // without symmetry tracking for that one measurement.
-SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns = true);
+SchwingerMPO buildSchwingerMpo(SchwingerParams const& p, bool conserveQns = true);
 
 // Phase 6.0 — chain-causet variant. Same Schwinger Hamiltonian, but the
 // hopping graph for H_hop is supplied externally as a list of
@@ -101,27 +101,27 @@ SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns = t
 //
 // The intended usage:
 //
-//   auto chain   = caset::quantum::extract_causet_chain(spacetime);
-//   SchwingerParams p; p.N = chain.n_sites; …;
-//   auto sm = build_schwinger_mpo_chain(p, chain.hopping_pairs);
+//   auto chain   = caset::quantum::extractCausetChain(spacetime);
+//   SchwingerParams p; p.N = chain.nSites; …;
+//   auto sm = buildSchwingerMpoChain(p, chain.hoppingPairs);
 //
-// For a chain causet (every antichain has one vertex), `hopping_pairs`
+// For a chain causet (every antichain has one vertex), `hoppingPairs`
 // is exactly `[(0,1), (1,2), …, (N-2, N-1)]` and the resulting MPO is
-// bit-for-bit identical to `build_schwinger_mpo(p)` — that's the Phase
+// bit-for-bit identical to `buildSchwingerMpo(p)` — that's the Phase
 // 6.0 sanity equality.
 //
-// For a non-trivial antichain causet (Phase 6.1), `hopping_pairs` will
+// For a non-trivial antichain causet (Phase 6.1), `hoppingPairs` will
 // include strides > 1 in the flat lattice indexing; H_hop just absorbs
 // them via AutoMPO. The H_m and H_E reinterpretation issue surfaces at
 // 6.1 — for now we rely on the chain-causet linear ordering.
 //
-// Sites in `hopping_pairs` are 0-based flat indices and must be in
+// Sites in `hoppingPairs` are 0-based flat indices and must be in
 // [0, p.N - 1]. ITensor's site indexing is 1-based internally; we
 // add 1 when feeding AutoMPO.
-SchwingerMPO build_schwinger_mpo_chain(
+SchwingerMPO buildSchwingerMpoChain(
     SchwingerParams const& p,
-    std::vector<std::pair<int, int>> const& hopping_pairs,
-    bool conserve_qns = true);
+    std::vector<std::pair<int, int>> const& hoppingPairs,
+    bool conserveQns = true);
 
 // Dense 2^N×2^N reference Hamiltonian. No symmetry reduction; bit n of the
 // row index corresponds to spin n in the convention documented in the .cpp
@@ -132,7 +132,7 @@ struct SchwingerDense {
     Eigen::MatrixXd H;     // 2^N × 2^N, real symmetric
     double constant{0.0};  // same c-number shift as in SchwingerMPO
 };
-SchwingerDense build_schwinger_dense(SchwingerParams const& p);
+SchwingerDense buildSchwingerDense(SchwingerParams const& p);
 
 // The c-number part of L_n² accumulated over n = 1..N-1, multiplied by the
 // (g²a/2) prefactor in front of H_E. Returned alongside the MPO/dense H so
@@ -141,6 +141,6 @@ SchwingerDense build_schwinger_dense(SchwingerParams const& p);
 //   constant = (g²a/2) Σ_{n=1..N-1} (c_n² + n/4)
 //
 // (Derivation in the .cpp file.)
-double schwinger_energy_constant(SchwingerParams const& p);
+double schwingerEnergyConstant(SchwingerParams const& p);
 
 } // namespace caset::quantum

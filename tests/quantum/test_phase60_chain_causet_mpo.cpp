@@ -1,5 +1,5 @@
-// Phase 6.0 acceptance — `build_schwinger_mpo_chain` reproduces
-// `build_schwinger_mpo` exactly on a chain causet (one vertex per
+// Phase 6.0 acceptance — `buildSchwingerMpoChain` reproduces
+// `buildSchwingerMpo` exactly on a chain causet (one vertex per
 // time slice).
 //
 // The test does two equivalence checks plus a robustness probe:
@@ -8,10 +8,10 @@
 //       The chain MPO ground-state energy should equal the standard
 //       MPO's to ~1e-12 (DMRG-side numerical noise).
 //
-//   (2) Spacetime-derived chain causet via extract_causet_chain. We
+//   (2) Spacetime-derived chain causet via extractCausetChain. We
 //       build a 1+1D toy spacetime where each time slice has a single
 //       vertex linked to the next slice's vertex by a timelike edge.
-//       extract_causet_chain returns hopping_pairs = [(0,1), (1,2), …]
+//       extractCausetChain returns hoppingPairs = [(0,1), (1,2), …]
 //       and the MPO from those pairs should ALSO equal the standard
 //       MPO.
 //
@@ -59,9 +59,9 @@ MPS neel_init(itensor::SpinHalf const& sites, int N) {
 
 double dmrg_gs_energy(SchwingerMPO const& sm,
                       int max_bond = 64,
-                      int n_sweeps = 10) {
+                      int nSweeps = 10) {
     auto psi0 = neel_init(sm.sites, sm.params.N);
-    auto sweeps = Sweeps(n_sweeps);
+    auto sweeps = Sweeps(nSweeps);
     sweeps.maxdim() = 20, 40, 80, max_bond, max_bond;
     sweeps.cutoff() = 1e-12;
     sweeps.niter()  = 4;
@@ -95,10 +95,10 @@ bool acceptance_synthetic_chain_pairs() {
     SchwingerParams p;
     p.N = 8; p.a = 1.0; p.g = 1.0; p.m = 0.5; p.L0 = 0.0;
 
-    auto std_mpo = build_schwinger_mpo(p);
+    auto std_mpo = buildSchwingerMpo(p);
     std::vector<std::pair<int, int>> nn_pairs;
     for (int n = 0; n < p.N - 1; ++n) nn_pairs.emplace_back(n, n + 1);
-    auto chain_mpo = build_schwinger_mpo_chain(p, nn_pairs);
+    auto chain_mpo = buildSchwingerMpoChain(p, nn_pairs);
 
     const double E_std   = dmrg_gs_energy(std_mpo);
     const double E_chain = dmrg_gs_energy(chain_mpo);
@@ -135,18 +135,18 @@ bool acceptance_spacetime_chain_extraction() {
                       -1.0);   // squaredLength < 0 ⇒ timelike
     }
 
-    auto chain = caset::quantum::extract_causet_chain(st);
-    if (chain.n_sites != N) {
-        std::cout << "  FAIL: chain.n_sites=" << chain.n_sites
+    auto chain = caset::quantum::extractCausetChain(st);
+    if (chain.nSites != N) {
+        std::cout << "  FAIL: chain.nSites=" << chain.nSites
                   << " expected " << N << "\n";
         return false;
     }
 
     SchwingerParams p;
-    p.N = chain.n_sites; p.a = 1.0; p.g = 1.0; p.m = 0.5; p.L0 = 0.0;
+    p.N = chain.nSites; p.a = 1.0; p.g = 1.0; p.m = 0.5; p.L0 = 0.0;
 
-    auto std_mpo   = build_schwinger_mpo(p);
-    auto chain_mpo = build_schwinger_mpo_chain(p, chain.hopping_pairs);
+    auto std_mpo   = buildSchwingerMpo(p);
+    auto chain_mpo = buildSchwingerMpoChain(p, chain.hoppingPairs);
 
     const double E_std   = dmrg_gs_energy(std_mpo);
     const double E_chain = dmrg_gs_energy(chain_mpo);
@@ -169,8 +169,8 @@ bool acceptance_dense_agreement() {
 
     std::vector<std::pair<int, int>> nn_pairs;
     for (int n = 0; n < p.N - 1; ++n) nn_pairs.emplace_back(n, n + 1);
-    auto chain_mpo = build_schwinger_mpo_chain(p, nn_pairs);
-    auto dense     = build_schwinger_dense(p);
+    auto chain_mpo = buildSchwingerMpoChain(p, nn_pairs);
+    auto dense     = buildSchwingerDense(p);
 
     const double E_chain_op = dmrg_gs_energy(chain_mpo);
     const double E_chain    = E_chain_op + chain_mpo.constant;
@@ -197,7 +197,7 @@ bool acceptance_rejects_invalid_pairs() {
     // Out-of-range index.
     try {
         std::vector<std::pair<int, int>> bad{{0, 1}, {1, 99}};
-        build_schwinger_mpo_chain(p, bad);
+        buildSchwingerMpoChain(p, bad);
         std::cout << "  FAIL: out-of-range index NOT rejected\n";
         ok = false;
     } catch (std::invalid_argument const&) { /* expected */ }
@@ -205,7 +205,7 @@ bool acceptance_rejects_invalid_pairs() {
     // Self-loop.
     try {
         std::vector<std::pair<int, int>> bad{{0, 1}, {2, 2}};
-        build_schwinger_mpo_chain(p, bad);
+        buildSchwingerMpoChain(p, bad);
         std::cout << "  FAIL: self-loop NOT rejected\n";
         ok = false;
     } catch (std::invalid_argument const&) { /* expected */ }

@@ -2,7 +2,7 @@
 // Hasse-diagram construction we use to build the majorization poset of
 // Schmidt spectra of an MPS (Phase 3 of docs/source/quantum-plan.md).
 //
-// The Poset / OrderAgreement / compare_orders types themselves live at
+// The Poset / OrderAgreement / compareOrders types themselves live at
 // the top of caset (`include/Poset.h`) so they're shareable with non-
 // quantum analyses; this header re-exports them under
 // `caset::quantum::` for backward compatibility with Phase 3-5 code.
@@ -36,7 +36,7 @@
 
 #pragma once
 
-#include "Poset.h"  // top-level caset::Poset / OrderAgreement / compare_orders
+#include "Poset.h"  // top-level caset::Poset / OrderAgreement / compareOrders
 
 #include <cstddef>
 #include <utility>
@@ -49,7 +49,7 @@ namespace caset::quantum {
 // them too.
 using Poset = ::caset::Poset;
 using OrderAgreement = ::caset::OrderAgreement;
-using ::caset::compare_orders;
+using ::caset::compareOrders;
 
 // Returns true iff μ majorizes λ. Both vectors are sorted non-increasingly
 // internally; the shorter is zero-padded to the longer's length.
@@ -64,11 +64,11 @@ bool majorizes(std::vector<double> const& mu,
 
 // μ strictly majorizes λ iff μ ≻ λ but not λ ≻ μ — i.e. the relation is
 // proper and not just an equality of sorted-padded vectors.
-bool strictly_majorizes(std::vector<double> const& mu,
+bool strictlyMajorizes(std::vector<double> const& mu,
                         std::vector<double> const& lambda,
                         double tol = 1e-12);
 
-// Poset, OrderAgreement, compare_orders are imported via `using` above —
+// Poset, OrderAgreement, compareOrders are imported via `using` above —
 // see include/Poset.h for the canonical definitions. Cover edges are
 // (a, b) with a strictly majorizing b and no intermediate node;
 // equivalence classes (μ ≼ λ AND λ ≼ μ) get no cover edges among
@@ -82,7 +82,7 @@ bool strictly_majorizes(std::vector<double> const& mu,
 // Complexity: O(M^3) for M = spectra.size(), dominated by the transitive-
 // reduction pass. Each pair-of-spectra majorizes() call is O(L log L) on
 // the spectrum lengths L; for our use case L ≤ MPS bond dimension squared.
-Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
+Poset majorizationPoset(std::vector<std::vector<double>> const& spectra,
                          double tol = 1e-12);
 
 } // namespace caset::quantum

@@ -8,10 +8,10 @@
 //
 //   1. Every timelike edge in the Spacetime connects vertices in adjacent
 //      time slices — never skips a slice.
-//   2. Therefore every Hasse cover edge in `Poset::from_spacetime` also
+//   2. Therefore every Hasse cover edge in `Poset::fromSpacetime` also
 //      spans exactly one slice (no transitive reduction can collapse a
 //      direct adjacent-slice cover). i.e. on a foliated CDT, covers and
-//      hopping_pairs of the chain-of-antichains adapter are the same set.
+//      hoppingPairs of the chain-of-antichains adapter are the same set.
 //   3. The longest chain in the Hasse diagram has length
 //      (numTimeSlices - 1): pick any vertex at layer 0, follow covers
 //      through one vertex per layer up to the top.
@@ -58,8 +58,8 @@ bool acceptance_covers_span_adjacent_layers(
     caset::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #1 — every cover spans adjacent time slices\n";
 
-    auto const& poset = chain.partial_order;
-    std::vector<int> layer_of(static_cast<std::size_t>(chain.n_sites), -1);
+    auto const& poset = chain.partialOrder;
+    std::vector<int> layer_of(static_cast<std::size_t>(chain.nSites), -1);
     int idx = 0;
     for (int li = 0; li < static_cast<int>(chain.antichains.size()); ++li) {
         for (std::size_t k = 0; k < chain.antichains[static_cast<std::size_t>(li)].size(); ++k) {
@@ -79,7 +79,7 @@ bool acceptance_covers_span_adjacent_layers(
         else ++ok_pairs;
     }
     const bool ok = (bad == 0) && (ok_pairs == static_cast<int>(cov.size()));
-    std::cout << "  n_covers=" << cov.size()
+    std::cout << "  getCoverCount=" << cov.size()
               << "  adjacent_layer_covers=" << ok_pairs
               << "  bad=" << bad
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
@@ -88,12 +88,12 @@ bool acceptance_covers_span_adjacent_layers(
 
 bool acceptance_covers_match_hopping_pairs(
     caset::quantum::CausetChain const& chain) {
-    std::cout << "Acceptance #2 — covers == hopping_pairs on a foliated CDT\n";
+    std::cout << "Acceptance #2 — covers == hoppingPairs on a foliated CDT\n";
 
-    auto cov = chain.partial_order.covers();
+    auto cov = chain.partialOrder.covers();
     std::set<std::pair<int, int>> covers_set(cov.begin(), cov.end());
     std::set<std::pair<int, int>> hops_set(
-        chain.hopping_pairs.begin(), chain.hopping_pairs.end());
+        chain.hoppingPairs.begin(), chain.hoppingPairs.end());
 
     const bool ok = (covers_set == hops_set);
     std::cout << "  |covers|=" << covers_set.size()
@@ -107,7 +107,7 @@ bool acceptance_covers_match_hopping_pairs(
 // rank(u) = max over predecessors p of rank(p) + 1, with rank of minimal
 // elements = 0.
 int longest_chain_length(caset::Poset const& p) {
-    const int n = p.n_nodes();
+    const int n = p.getNodeCount();
     if (n == 0) return 0;
     // Adjacency: incoming covers per node.
     std::vector<std::vector<int>> in_edges(static_cast<std::size_t>(n));
@@ -137,7 +137,7 @@ bool acceptance_height_equals_num_slices_minus_one(
     caset::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #3 — Hasse height = num_time_slices - 1\n";
 
-    const int height = longest_chain_length(chain.partial_order);
+    const int height = longest_chain_length(chain.partialOrder);
     const int expected = static_cast<int>(chain.times.size()) - 1;
     const bool ok = (height == expected);
     std::cout << "  num_layers=" << chain.times.size()
@@ -153,9 +153,9 @@ bool acceptance_total_extraction(caset::Spacetime const& st,
 
     auto const& vlist = st.getVertexList();
     int expected = vlist ? static_cast<int>(vlist->liveVector().size()) : 0;
-    const bool ok = (chain.partial_order.n_nodes() == expected);
+    const bool ok = (chain.partialOrder.getNodeCount() == expected);
     std::cout << "  spacetime_vertices=" << expected
-              << "  poset_nodes=" << chain.partial_order.n_nodes()
+              << "  poset_nodes=" << chain.partialOrder.getNodeCount()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }
@@ -164,10 +164,10 @@ bool acceptance_layer_indegree_outdegree(
     caset::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #5 — top-layer has out-degree 0; bottom in-degree 0\n";
 
-    const int n = chain.n_sites;
+    const int n = chain.nSites;
     std::vector<int> outdeg(static_cast<std::size_t>(n), 0);
     std::vector<int> indeg(static_cast<std::size_t>(n), 0);
-    for (auto const& [a, b] : chain.partial_order.covers()) {
+    for (auto const& [a, b] : chain.partialOrder.covers()) {
         outdeg[static_cast<std::size_t>(a)]++;
         indeg[static_cast<std::size_t>(b)]++;
     }
@@ -208,7 +208,7 @@ int main() {
     // Spacetime instance avoids any subtle move-construction effects on
     // the VertexList / EdgeList / simplexPool ownership semantics.
     auto st = build_toroid_cdt(60);
-    auto chain = caset::quantum::extract_causet_chain(st);
+    auto chain = caset::quantum::extractCausetChain(st);
 
     bool ok = true;
     ok &= acceptance_covers_span_adjacent_layers(chain);

@@ -38,7 +38,7 @@ cleaner phase boundaries but take proportionally longer.
 Parallelization
 ---------------
 Each (k0, Delta) grid point is a short, self-contained CDT run:
-build a spacetime, perform n_sweeps sweeps, classify the resulting
+build a spacetime, perform nSweeps sweeps, classify the resulting
 configuration.  No grid point reads or writes state used by any
 other, so all points can execute concurrently in threads (--workers).
 
@@ -65,7 +65,7 @@ from caset.utils.progress import ProgressDisplay, make_tune_cb
 # Simulation
 # =====================================================================
 
-def run_point(k0, delta, n_simplices, n_sweeps,
+def run_point(k0, delta, n_simplices, nSweeps,
               sweep_cb=None, phase_cb=None, point_id=None):
     """Run CDT at a single (k0, Delta) point and return observables.
 
@@ -112,11 +112,11 @@ def run_point(k0, delta, n_simplices, n_sweeps,
     # Evolve.  Do NOT use thermalize() — its early-stopping criterion
     # converges to the nearest action basin (always Phase C from the
     # initial state) and prevents exploration of other phases.
-    chunk = max(1, n_sweeps // 20)
-    for start in range(0, n_sweeps, chunk):
-        batch = min(chunk, n_sweeps - start)
+    chunk = max(1, nSweeps // 20)
+    for start in range(0, nSweeps, chunk):
+        batch = min(chunk, nSweeps - start)
         cdt.sweep(batch, progress=sweep_cb)
-        _ph("sweeping", start + batch, n_sweeps)
+        _ph("sweeping", start + batch, nSweeps)
 
     profile = cdt.getVolumeProfile()
     n0 = st.getVertexCount()

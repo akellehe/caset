@@ -15,13 +15,13 @@
 //      using the eigendecomposition. This is exact unitary evolution.
 //   5. From the dense state, compute ⟨σ^z_n⟩(t) for every site, and
 //      then ⟨L_n⟩(t) via the same closed form as tdvp_runner.cpp.
-//   6. Run run_qqbar_quench() through the C++ pipeline at the same
+//   6. Run runQqbarQuench() through the C++ pipeline at the same
 //      parameters and compare snapshot-by-snapshot to the dense
 //      reference.
 //
 // The agreement bound is set by the TDVP Trotter / SVD truncation
 // error, not by the dense reference (which is exact). For small N
-// with bond_dim sufficient to be exact, agreement should be ~1e-6 over
+// with bondDim sufficient to be exact, agreement should be ~1e-6 over
 // the full evolution.
 
 #include "quantum/quench.hpp"
@@ -46,7 +46,7 @@ using VecRe  = Eigen::VectorXd;
 using MatRe  = Eigen::MatrixXd;
 
 // σ^z eigenvalue on basis state s at 1-based site n. Same MSB-first bit
-// layout as build_schwinger_dense.
+// layout as buildSchwingerDense.
 inline double sigma_z(std::uint64_t s, int n, int N) {
     return ((s >> (N - n)) & 1ull) == 0 ? +1.0 : -1.0;
 }
@@ -80,7 +80,7 @@ struct DenseDecomp {
     VecCx gs_sz0;
 };
 DenseDecomp dense_decomp_with_gs(SchwingerParams const& p) {
-    auto sd = build_schwinger_dense(p);
+    auto sd = buildSchwingerDense(p);
     Eigen::SelfAdjointEigenSolver<MatRe> es(sd.H);
 
     // Find the lowest-energy eigenvector with Sz_total = 0
@@ -155,7 +155,7 @@ std::vector<double> L_profile_from_sz(std::vector<double> const& sz,
 }
 
 bool case_test(int N, int i0, int d, double m,
-               double T, double dt, int snapshot_every,
+               double T, double dt, int snapshotEvery,
                double tol_profile) {
     std::cout << "\nN=" << N << " m=" << m
               << " i0=" << i0 << " d=" << d
@@ -176,19 +176,19 @@ bool case_test(int N, int i0, int d, double m,
     // TDVP path through the production runner
     TDVPConfig cfg;
     cfg.N = N; cfg.a = p.a; cfg.g = p.g; cfg.m = p.m; cfg.L0 = p.L0;
-    cfg.dmrg_max_bond_dim = 1 << N;   // generously above max possible
-    cfg.dmrg_n_sweeps = 14;
-    cfg.dmrg_cutoff = 1e-14;
+    cfg.dmrgMaxBondDim = 1 << N;   // generously above max possible
+    cfg.dmrgNSweeps = 14;
+    cfg.dmrgCutoff = 1e-14;
     cfg.i0 = i0; cfg.d = d;
     cfg.dt = dt; cfg.T = T;
-    cfg.max_bond_dim = 1 << (N / 2);
+    cfg.maxBondDim = 1 << (N / 2);
     cfg.cutoff = 1e-12;
-    cfg.krylov_dim = 14;
-    cfg.snapshot_every = snapshot_every;
+    cfg.krylovDim = 14;
+    cfg.snapshotEvery = snapshotEvery;
     cfg.quiet = true;
-    cfg.conserve_qns = true;
+    cfg.conserveQns = true;
 
-    auto result = run_qqbar_quench(cfg);
+    auto result = runQqbarQuench(cfg);
 
     // Compare each TDVP snapshot to the dense evolution at the same time.
     bool ok = true;
@@ -200,14 +200,14 @@ bool case_test(int N, int i0, int d, double m,
 
         for (int n = 1; n <= N; ++n) {
             const double dZ = std::abs(
-                snap.Z_profile[static_cast<std::size_t>(n - 1)]
+                snap.zProfile[static_cast<std::size_t>(n - 1)]
                 - sz_dense[static_cast<std::size_t>(n - 1)]);
             if (dZ > max_dz) max_dz = dZ;
             if (dZ > tol_profile) ok = false;
         }
         for (int n = 1; n <= N - 1; ++n) {
             const double dL = std::abs(
-                snap.L_profile[static_cast<std::size_t>(n - 1)]
+                snap.lProfile[static_cast<std::size_t>(n - 1)]
                 - L_dense[static_cast<std::size_t>(n - 1)]);
             if (dL > max_dL) max_dL = dL;
             if (dL > tol_profile) ok = false;

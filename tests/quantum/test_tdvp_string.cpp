@@ -72,28 +72,28 @@ bool flux_tube_test() {
     cfg.a    = 1.0; cfg.g = 1.0;
     cfg.m    = 20.0;       // heavy-quark limit
     cfg.L0   = 0.0;
-    cfg.dmrg_max_bond_dim = 64;
-    cfg.dmrg_n_sweeps     = 12;
-    cfg.dmrg_krylov_dim   = 4;
-    cfg.dmrg_cutoff       = 1e-12;
+    cfg.dmrgMaxBondDim = 64;
+    cfg.dmrgNSweeps     = 12;
+    cfg.dmrgKrylovDim   = 4;
+    cfg.dmrgCutoff       = 1e-12;
 
     cfg.i0 = 5;            // odd → Up site in the heavy-quark vacuum
     cfg.d  = 5;            // odd → i0 + d = 10 is even → Dn site
 
     cfg.dt              = 0.05;
     cfg.T               = static_cast<double>(cfg.d) * cfg.a;  // T = d·a = 5
-    cfg.max_bond_dim    = 100;
+    cfg.maxBondDim    = 100;
     cfg.cutoff          = 1e-10;
-    cfg.krylov_dim      = 12;
-    cfg.snapshot_every  = 5;
+    cfg.krylovDim      = 12;
+    cfg.snapshotEvery  = 5;
     cfg.quiet           = true;
-    cfg.conserve_qns    = true;
+    cfg.conserveQns    = true;
     // Spectrum / poset recording is expensive and not needed for the
     // flux-tube test; leave them off.
-    cfg.record_spectra  = false;
-    cfg.record_poset    = false;
+    cfg.recordSpectra  = false;
+    cfg.recordPoset    = false;
 
-    auto result = run_qqbar_quench(cfg);
+    auto result = runQqbarQuench(cfg);
 
     // Sanity: we always get an initial snapshot (t = 0) and at least
     // one mid-run snapshot before the final.
@@ -117,12 +117,12 @@ bool flux_tube_test() {
     constexpr double initial_tol = 0.05;
     for (int n = 1; n <= cfg.N - 1; ++n) {
         const double diff = std::abs(
-            snap0.L_profile[static_cast<std::size_t>(n - 1)]
+            snap0.lProfile[static_cast<std::size_t>(n - 1)]
             - reference[static_cast<std::size_t>(n - 1)]);
         if (diff > initial_tol) initial_ok = false;
     }
     std::cout << "Initial post-quench ⟨L_n⟩ vs heavy-quark flux-tube reference\n";
-    print_profile("L(t=0)", snap0.L_profile, reference);
+    print_profile("L(t=0)", snap0.lProfile, reference);
     std::cout << "  " << (initial_ok ? "PASS" : "FAIL")
               << "  (tol " << initial_tol << ")\n\n";
 
@@ -132,13 +132,13 @@ bool flux_tube_test() {
     constexpr double mid_tol = 0.05;
     for (int n = 1; n <= cfg.N - 1; ++n) {
         const double diff = std::abs(
-            snap_mid.L_profile[static_cast<std::size_t>(n - 1)]
+            snap_mid.lProfile[static_cast<std::size_t>(n - 1)]
             - reference[static_cast<std::size_t>(n - 1)]);
         if (diff > mid_tol) mid_ok = false;
     }
     std::cout << "Mid-run ⟨L_n⟩ at t = " << snap_mid.time
               << " (≈ T/2 = " << cfg.T / 2 << ")\n";
-    print_profile("L(t=T/2)", snap_mid.L_profile, reference);
+    print_profile("L(t=T/2)", snap_mid.lProfile, reference);
     std::cout << "  " << (mid_ok ? "PASS" : "FAIL")
               << "  (tol " << mid_tol << ")\n\n";
 

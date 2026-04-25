@@ -1,7 +1,7 @@
 # Phase 5 hypothesis-test scan — 2026-04-25
 
-First experimental run of `caset.quantum.compute_causal_comparison`
-across a small (m/g, T, N) × v_LR grid on a regular 1+1D chain. This
+First experimental run of `caset.quantum.computeCausalComparison`
+across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
 addresses the **strong falsification** criterion of
 `docs/source/quantum-methodology.md` §1.2:
 
@@ -23,8 +23,8 @@ time-only order, so ≼_LR ⊆ ≼_cs by construction (verified — `τ(LR, cs)
   q-q̄ quench at $i_0 = 3$, separation $d = 3$.
 - 2-site TDVP integration with $\Delta t = 0.1$, total $T = 1.0$ or
   $2.0$. Snapshots recorded every 5 steps so the inter-snapshot gap is
-  $0.5$ — large enough that the LR cone responds to the v_LR sweep.
-  (At `snapshot_every=1`, all v_LR ∈ [0.5, 4] give cone bounds < 1
+  $0.5$ — large enough that the LR cone responds to the vLr sweep.
+  (At `snapshotEvery=1`, all vLr ∈ [0.5, 4] give cone bounds < 1
   lattice site for the smallest time gap, so the cone admits the same
   set of pairs across the whole sweep.)
 - Cut family: contiguous intervals $[i, j]$, excluding the trivial
@@ -35,7 +35,7 @@ time-only order, so ≼_LR ⊆ ≼_cs by construction (verified — `τ(LR, cs)
 
 ```
 Regime A — light quark (m/g=0.5), N=10, T=1.0
-   v_LR   τ(maj,LR)    discord    edit   τ(maj,cs)   n_comp(maj,LR)   n_comp(LR,cs)
+   vLr   τ(maj,LR)    discord    edit   τ(maj,cs)   n_comp(maj,LR)   n_comp(LR,cs)
    0.50      0.3938     0.3031   0.962      0.3622             3583            6766
    2.00      0.3896     0.3052   0.956      0.3622             3991            7428
    4.00      0.3779     0.3111   0.957      0.3622             4221            7908
@@ -64,7 +64,7 @@ Regime D — light quark (m/g=0.5), N=14, T=1.0
   16.00      0.2470     0.3765   0.975      0.2462           15666           32168
 ```
 
-(Reproducible: `python docs/source/quantum-experiments/phase5_scan_2026_04_25.py`.
+(Reproducible: `python examples/quantum/phase5_scan.py`.
 Total runtime ~80 s on a single node.)
 
 ## Sanity checks
@@ -73,11 +73,11 @@ Total runtime ~80 s on a single node.)
   strict subset of `≼_cs` on the regular chain because `≼_cs` is just
   time-only, and any LR-related pair is necessarily cross-time. This
   is the methodology page's criterion-3 caveat in observational form.
-- **`n_comp(LR, cs)` grows monotonically in v_LR.** As the cone widens
-  more pairs become LR-comparable. By the time we hit v_LR = 16 with
+- **`n_comp(LR, cs)` grows monotonically in vLr.** As the cone widens
+  more pairs become LR-comparable. By the time we hit vLr = 16 with
   effective Δt = 0.5, the cone reaches 8 sites — close to (but not
   yet at) the diameter of the chain, so LR is still a strict subset
-  of cs. Saturation would require v_LR · T > N.
+  of cs. Saturation would require vLr · T > N.
 - **Σλ = 1 invariant** verified separately in
   `test_schmidt_invariants_dmrg.cpp` across 330 spectra — the
   agreement statistics aren't hostage to a Schmidt normalisation drift.
@@ -99,24 +99,24 @@ What we see — `0.25 ≤ τ ≤ 0.55` with substantial discordance —
 indicates ≼_maj is **partially** time-correlated and partially driven
 by something the time order doesn't see.
 
-### 2. `τ(maj, LR)` *decreases* as v_LR widens
+### 2. `τ(maj, LR)` *decreases* as vLr widens
 
 A wider LR cone sees more pairs as LR-comparable. If the new pairs
 were concordant with ≼_maj, τ would rise. They're net *discordant*
-instead — τ drifts down by ~0.03–0.05 over the v_LR ∈ [0.5, 16] range
+instead — τ drifts down by ~0.03–0.05 over the vLr ∈ [0.5, 16] range
 in every regime. The interpretation: the within-light-cone subset of
 ≼_LR aligns *better* with ≼_maj than the wider cone does. ≼_maj has a
 near-cone signal (concordance there) plus a counter-cone signal (the
-new pairs added at large v_LR push τ down).
+new pairs added at large vLr push τ down).
 
 This inverts a naive expectation. It hints that the entanglement order
-sees something like a *stricter* cone than the v_LR = 1 free-fermion
-bound — the agreement at v_LR = 0.5 is the highest in every regime.
+sees something like a *stricter* cone than the vLr = 1 free-fermion
+bound — the agreement at vLr = 0.5 is the highest in every regime.
 
 ### 3. Heavy quark agrees better with time order than light quark
 
 Compare Regime A (m/g = 0.5) vs Regime B (m/g = 5.0) at fixed N, T:
-`τ(maj, LR)` jumps from 0.39 to 0.55 at v_LR = 0.5. The heavy-quark
+`τ(maj, LR)` jumps from 0.39 to 0.55 at vLr = 0.5. The heavy-quark
 flux tube is approximately stable (we tested this in
 `test_tdvp_string.cpp`); little entanglement spreading means the
 Schmidt spectra evolve slowly in time, so ≼_maj tracks time more
@@ -129,7 +129,7 @@ Regime C (T = 2.0) gives a higher τ than Regime A (T = 1.0) — 0.54 vs
 0.39 — but the gap is more about the additional snapshots increasing
 the relative weight of long-time pairs (which are more LR-comparable)
 than about a real agreement-improving trend. Both regimes show the
-same v_LR → ↓τ direction.
+same vLr → ↓τ direction.
 
 ### 5. Larger N decreases τ
 
@@ -141,17 +141,17 @@ haven't run the scan large enough to extrapolate.
 
 ## Strong-falsification follow-up — explicit cone-overflow counts
 
-Added `n_only_a` / `n_only_b` to `OrderAgreement` (2026-04-25 patch)
+Added `nOnlyA` / `nOnlyB` to `OrderAgreement` (2026-04-25 patch)
 to count pairs related by exactly one of the two orders. With
-`(a, b) = (≼_maj, ≼_LR)`, `n_only_a` is the count of
+`(a, b) = (≼_maj, ≼_LR)`, `nOnlyA` is the count of
 **majorization-related pairs whose endpoints lie OUTSIDE the LR
 cone** — the explicit strong-falsification metric.
 
-Re-run with N=10, 14, 20 (m/g=0.5, T=1, snapshot_every=5):
+Re-run with N=10, 14, 20 (m/g=0.5, T=1, snapshotEvery=5):
 
 ```
 Regime A — N=10, m/g=0.5
-   v_LR    τ(maj,LR)    n_maj∉LR    n_maj∉LR/|maj|    n_LR∉maj   |≼_maj|
+   vLr    τ(maj,LR)    n_maj∉LR    n_maj∉LR/|maj|    n_LR∉maj   |≼_maj|
    0.50      0.3938       3263         47.66%           3183       6846
    1.00      0.3938       3263         47.66%           3183       6846
    2.00      0.3896       2855         41.70%           3437       6846
@@ -174,7 +174,7 @@ Regime B — N=10, m/g=5.0  (heavy quark)
 
 ### What the numbers say
 
-**At `v_LR = 1.0` (free-fermion bound, the physically-relevant value
+**At `vLr = 1.0` (free-fermion bound, the physically-relevant value
 for our hopping coefficient)**: roughly **half** of all majorization-
 related label pairs lie outside the Lieb–Robinson cone:
 
@@ -189,7 +189,7 @@ The fraction is *near 50% across all four regimes* and *grows weakly
 with N*. By the strict reading of methodology §1.2 #1, the hypothesis
 is decisively rejected on the regular chain.
 
-**At `v_LR = 16` (a 16× looser cone, well above any physical
+**At `vLr = 16` (a 16× looser cone, well above any physical
 estimate)**: 32–36% of ≼_maj pairs are still outside the cone. So
 *even unboundedly fast information transport cannot account for all
 of ≼_maj's relations* — about a third of them point sideways or
@@ -197,20 +197,20 @@ backward in time. (Recall ≼_maj is a partial order, so an edge
 `(A, s) ≼_maj (B, t)` with `s > t` is anti-causal in the lattice
 sense.)
 
-`n_only_b` (pairs in the LR cone but not in ≼_maj) is comparable in
-size to `n_only_a` — ≼_maj is *not* a refinement of ≼_LR; the two
+`nOnlyB` (pairs in the LR cone but not in ≼_maj) is comparable in
+size to `nOnlyA` — ≼_maj is *not* a refinement of ≼_LR; the two
 orders are largely orthogonal. They share a substantial concordant
 subset, but each has a piece the other doesn't see.
 
 ### Caveats on the strong-falsification reading
 
-- **n_only_a includes same-time pairs.** A label pair `(A, s)` and
+- **nOnlyA includes same-time pairs.** A label pair `(A, s)` and
   `(B, s)` with `s_a = s_b` is NOT LR-comparable by construction
   (≼_LR is strictly cross-time). If ≼_maj relates them — same-time
-  Schmidt-spectrum strict majorization — they show up as `n_only_a`
+  Schmidt-spectrum strict majorization — they show up as `nOnlyA`
   without being "outside the cone" in any geometric sense. To
   separate true cone-overflow from same-time hits we'd need a
-  finer-grained breakdown. (Easy to add — split `n_only_a` by
+  finer-grained breakdown. (Easy to add — split `nOnlyA` by
   whether `t_a == t_b`.)
 - **Spectra equivalence classes.** Two cuts with identical Schmidt
   spectra get no ≼_maj cover edge between them, but they CAN both
@@ -257,16 +257,16 @@ that distinguishes them.**
 
 A — Quick (under a day):
 
-- Add `n_only_a`, `n_only_b` to `OrderAgreement` so we can directly
+- Add `nOnlyA`, `nOnlyB` to `OrderAgreement` so we can directly
   count maj-pairs outside the LR cone.
-- Bind `build_causal_orders` to Python so a follow-up scan can dump
+- Bind `buildCausalOrders` to Python so a follow-up scan can dump
   the actual maj-cover edges that are outside the cone.
 - Re-run the scan with a Trotter-bootstrap (5-10 seeds per regime)
   to put error bars on τ.
 
 B — Medium (1-3 days):
 
-- Phase 6 MPO rebuild: build_schwinger_mpo accepts a CausetChain
+- Phase 6 MPO rebuild: buildSchwingerMpo accepts a CausetChain
   hopping pattern; for chain causets (1 vertex per slice) reduces to
   the existing MPO. Run a second scan with the chain-causet ≼_cs
   replacing the time-only ≼_cs. Compare τ(maj, cs) before and after.

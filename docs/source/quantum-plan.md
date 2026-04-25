@@ -142,7 +142,7 @@ Bond dimension 100 is enough for this check.
 - `dmrg_runner.hpp`: thin wrapper around `ITensor::dmrg`.
   Inputs: `SchwingerMPO`, sweep schedule, max bond dim, noise, Krylov
   dim. Outputs: `MPS` ground state, converged energy, final bond dim.
-- Expose `compute_ground_state(config)` through pybind11 returning
+- Expose `computeGroundState(config)` through pybind11 returning
   only $(E_0, \text{bond\_dim}, \text{truncation\_err})$.
 
 **Acceptance**: re-runs Phase 1 with the wrapper; numerics unchanged.
@@ -236,17 +236,17 @@ rebuild on the extracted chain is the remaining piece.
 
 Done:
 
-- `caset::Poset::from_spacetime(Spacetime const&)` — inherits a Hasse
+- `caset::Poset::fromSpacetime(Spacetime const&)` — inherits a Hasse
   cover Poset from the timelike-edge subgraph of any
   `caset::Spacetime`. Uses transitive closure + reduction; preserves
   metric semantics by orienting earliest-time → latest-time and
   filtering on `Edge::getSquaredLength() < 0`.
-- `caset::quantum::extract_causet_chain(Spacetime const&)` — packages
+- `caset::quantum::extractCausetChain(Spacetime const&)` — packages
   the antichain layering, flat lattice ↔ Spacetime ID mapping,
   adjacent-slice timelike-edge hopping pairs, and the inherited
   partial-order Poset into a single `CausetChain`.
-- Python bindings: `caset.quantum.Poset.from_spacetime(st)` and
-  `caset.quantum.extract_causet_chain(st)` work on any
+- Python bindings: `caset.quantum.Poset.fromSpacetime(st)` and
+  `caset.quantum.extractCausetChain(st)` work on any
   `caset.Spacetime` instance (CDT-built, hand-crafted, or future
   `caset.CausalSet`).
 - C++ acceptance: `tests/quantum/test_poset_from_spacetime.cpp` (7
@@ -258,8 +258,8 @@ Remaining for v1 close-out (deferred):
 - Rebuild the Schwinger MPO on the `CausetChain` so
   `H_hop` follows the extracted hopping pairs rather than uniform
   nearest-neighbour. For trivial chains (one vertex per slice) this
-  is just `params.N = chain.n_sites` and the existing
-  `build_schwinger_mpo` runs as-is.
+  is just `params.N = chain.nSites` and the existing
+  `buildSchwingerMpo` runs as-is.
 - For non-trivial antichains (causet branches), the chain layout
   produces hopping pairs with stride > 1. Two paths:
     1. Stay on a 1D MPS, accept the long-range hopping cost in the
@@ -268,9 +268,9 @@ Remaining for v1 close-out (deferred):
        handles branching antichains natively.
   Both paths are open work; pick after profiling the stride-1 case
   on a small CDT-derived chain.
-- Replace ≼_cs in `compute_causal_comparison` with the inherited
-  `partial_order` on the cut/time label set, then re-run the Phase 5
-  invariants (`lr_vs_cs.kendall_tau == 1.0` should still hold when
+- Replace ≼_cs in `computeCausalComparison` with the inherited
+  `partialOrder` on the cut/time label set, then re-run the Phase 5
+  invariants (`lrVsCs.kendallTau == 1.0` should still hold when
   the chain is totally ordered per slice; it may relax for branching
   causets, which is the Phase 6 hypothesis).
 
@@ -294,23 +294,23 @@ py::class_<QuantumConfig>(m, "QuantumConfig")
     .def_readwrite("m", &QuantumConfig::m)
     .def_readwrite("g", &QuantumConfig::g)
     .def_readwrite("L0", &QuantumConfig::L0)
-    .def_readwrite("max_bond_dim", &QuantumConfig::max_bond_dim)
+    .def_readwrite("maxBondDim", &QuantumConfig::maxBondDim)
     .def_readwrite("dt", &QuantumConfig::dt)
     .def_readwrite("T", &QuantumConfig::T);
 
 py::class_<GroundStateResult>(m, "GroundStateResult")
     .def_readonly("energy", &GroundStateResult::energy)
-    .def_readonly("bond_dim", &GroundStateResult::bond_dim)
-    .def_readonly("truncation_err", &GroundStateResult::truncation_err);
+    .def_readonly("bondDim", &GroundStateResult::bondDim)
+    .def_readonly("truncationErr", &GroundStateResult::truncationErr);
 
 py::class_<QuenchResult>(m, "QuenchResult")
     .def_readonly("times", &QuenchResult::times)
-    .def_readonly("L_profile", &QuenchResult::L_profile)  // [t][n]
-    .def_readonly("Z_profile", &QuenchResult::Z_profile)
+    .def_readonly("lProfile", &QuenchResult::lProfile)  // [t][n]
+    .def_readonly("zProfile", &QuenchResult::zProfile)
     .def_readonly("posets", &QuenchResult::posets);       // one per t
 
-m.def("compute_ground_state", &compute_ground_state);
-m.def("run_qqbar_quench", &run_qqbar_quench);
+m.def("computeGroundState", &computeGroundState);
+m.def("runQqbarQuench", &runQqbarQuench);
 ```
 
 No MPS, MPO, or ITensor type crosses the barrier.

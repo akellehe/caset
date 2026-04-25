@@ -58,7 +58,7 @@ from typing import Iterable
 try:
     from caset.quantum import (
         QuantumConfig,
-        compute_ground_state_majorization,
+        computeGroundStateMajorization,
     )
 except ImportError as e:
     print(f"caset.quantum unavailable: {e}", file=sys.stderr)
@@ -144,20 +144,20 @@ def main() -> None:
     cfg.g            = 1.0 / math.sqrt(args.x)
     cfg.m            = args.m_over_g * cfg.g
     cfg.L0           = args.L0
-    cfg.max_bond_dim = args.max_bond_dim
-    cfg.n_sweeps     = args.n_sweeps
+    cfg.maxBondDim = args.max_bond_dim
+    cfg.nSweeps     = args.n_sweeps
     cfg.cutoff       = 1e-12
-    cfg.krylov_dim   = 4
+    cfg.krylovDim   = 4
     cfg.quiet        = True
 
-    r = compute_ground_state_majorization(cfg, tol=args.tol)
+    r = computeGroundStateMajorization(cfg, tol=args.tol)
 
     print(f"Schwinger ground state — N={args.N}, m/g={args.m_over_g}, "
           f"x={args.x}, L0={args.L0}")
-    print(f"  E_total       = {r.ground_state.energy:.8f}")
-    print(f"  E_op          = {r.ground_state.operator_energy:.8f}")
-    print(f"  E_const       = {r.ground_state.constant:.8f}")
-    print(f"  bond_dim      = {r.ground_state.bond_dim}")
+    print(f"  E_total       = {r.groundState.energy:.8f}")
+    print(f"  E_op          = {r.groundState.operatorEnergy:.8f}")
+    print(f"  E_const       = {r.groundState.constant:.8f}")
+    print(f"  bondDim      = {r.groundState.bondDim}")
     print(f"  n_intervals   = {len(r.spectra.intervals)}")
     print(f"  n_cover_edges = {len(r.poset.covers)}")
 

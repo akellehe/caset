@@ -59,7 +59,7 @@ namespace caset::quantum {
 // the parity constraint described in this header. Pass `enforce_parity =
 // false` to skip the parity check (e.g. for the broader-mass regime
 // where the GS pattern shifts).
-itensor::MPS apply_qqbar_quench(itensor::MPS const& psi,
+itensor::MPS applyQqbarQuench(itensor::MPS const& psi,
                                 itensor::SpinHalf const& sites,
                                 int i0,
                                 int d,

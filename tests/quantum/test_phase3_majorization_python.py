@@ -1,5 +1,5 @@
 """Phase 3 Python-level tests: pure majorization predicate, Poset
-construction, and the end-to-end compute_ground_state_majorization
+construction, and the end-to-end computeGroundStateMajorization
 pipeline through the caset.quantum API.
 
 These mirror the C++-side tests in test_majorization.cpp,
@@ -24,9 +24,9 @@ try:
         SchmidtSpectra,
         Poset,
         majorizes,
-        strictly_majorizes,
-        majorization_poset,
-        compute_ground_state_majorization,
+        strictlyMajorizes,
+        majorizationPoset,
+        computeGroundStateMajorization,
     )
     HAVE_QUANTUM = True
 except ImportError:
@@ -41,22 +41,22 @@ TOL = 1e-10
 
 @unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
 class TestMajorizesPredicate(unittest.TestCase):
-    """Pure-function tests on majorizes() / strictly_majorizes()."""
+    """Pure-function tests on majorizes() / strictlyMajorizes()."""
 
     def test_reflexivity(self) -> None:
         for v in ([1.0], [0.5, 0.5], [0.7, 0.2, 0.1]):
             self.assertTrue(majorizes(v, v))
-            self.assertFalse(strictly_majorizes(v, v))
+            self.assertFalse(strictlyMajorizes(v, v))
 
     def test_canonical_strict_pair(self) -> None:
         self.assertTrue(majorizes([1.0, 0.0], [0.5, 0.5]))
         self.assertFalse(majorizes([0.5, 0.5], [1.0, 0.0]))
-        self.assertTrue(strictly_majorizes([1.0, 0.0], [0.5, 0.5]))
+        self.assertTrue(strictlyMajorizes([1.0, 0.0], [0.5, 0.5]))
 
     def test_zero_padding_invariance(self) -> None:
         self.assertTrue(majorizes([0.5, 0.5, 0.0, 0.0], [0.5, 0.5]))
         self.assertTrue(majorizes([0.5, 0.5], [0.5, 0.5, 0.0]))
-        self.assertFalse(strictly_majorizes([0.5, 0.5, 0.0], [0.5, 0.5]))
+        self.assertFalse(strictlyMajorizes([0.5, 0.5, 0.0], [0.5, 0.5]))
 
     def test_sort_invariance(self) -> None:
         a = [0.7, 0.2, 0.1]
@@ -69,9 +69,9 @@ class TestMajorizesPredicate(unittest.TestCase):
         a = [1.0, 0.0, 0.0]
         b = [0.5, 0.5, 0.0]
         c = [1/3, 1/3, 1/3]
-        self.assertTrue(strictly_majorizes(a, b))
-        self.assertTrue(strictly_majorizes(b, c))
-        self.assertTrue(strictly_majorizes(a, c))
+        self.assertTrue(strictlyMajorizes(a, b))
+        self.assertTrue(strictlyMajorizes(b, c))
+        self.assertTrue(strictlyMajorizes(a, c))
 
     def test_unequal_total_mass_rejected(self) -> None:
         self.assertFalse(majorizes([1.0, 0.0], [0.5, 0.5, 0.5]))
@@ -95,16 +95,16 @@ class TestMajorizesPredicate(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
 class TestMajorizationPoset(unittest.TestCase):
-    """Pure-function tests on majorization_poset() and the Poset struct."""
+    """Pure-function tests on majorizationPoset() and the Poset struct."""
 
     def test_empty_input(self) -> None:
-        p = majorization_poset([])
-        self.assertEqual(p.n_nodes, 0)
+        p = majorizationPoset([])
+        self.assertEqual(p.getNodeCount, 0)
         self.assertEqual(p.covers, [])
 
     def test_single_node(self) -> None:
-        p = majorization_poset([[1.0]])
-        self.assertEqual(p.n_nodes, 1)
+        p = majorizationPoset([[1.0]])
+        self.assertEqual(p.getNodeCount, 1)
         self.assertEqual(p.covers, [])
 
     def test_canonical_chain_transitive_reduction(self) -> None:
@@ -113,23 +113,23 @@ class TestMajorizationPoset(unittest.TestCase):
             [0.5, 0.5],        # 1 — middle
             [1.0],             # 2 — most concentrated
         ]
-        p = majorization_poset(spectra)
-        self.assertEqual(p.n_nodes, 3)
+        p = majorizationPoset(spectra)
+        self.assertEqual(p.getNodeCount, 3)
         self.assertEqual(set(p.covers), {(2, 1), (1, 0)})
 
     def test_equivalent_spectra_no_strict_edges(self) -> None:
         # Three nodes with the same sorted-padded spectrum form an
         # equivalence class — no strict edges among them.
-        p = majorization_poset([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
+        p = majorizationPoset([[0.5, 0.5], [0.5, 0.5], [0.5, 0.5]])
         self.assertEqual(p.covers, [])
 
     def test_covers_only_have_in_range_indices(self) -> None:
-        p = majorization_poset([[1.0], [0.5, 0.5], [1/3]*3])
+        p = majorizationPoset([[1.0], [0.5, 0.5], [1/3]*3])
         for a, b in p.covers:
             self.assertGreaterEqual(a, 0)
-            self.assertLess(a, p.n_nodes)
+            self.assertLess(a, p.getNodeCount)
             self.assertGreaterEqual(b, 0)
-            self.assertLess(b, p.n_nodes)
+            self.assertLess(b, p.getNodeCount)
             self.assertNotEqual(a, b)
 
 
@@ -140,20 +140,20 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
     @staticmethod
     def _basic_config(N: int, m: float = 0.0, g: float = 1.0,
                       L0: float = 0.0,
-                      max_bond_dim: int = 32, n_sweeps: int = 8) -> "QuantumConfig":
+                      maxBondDim: int = 32, nSweeps: int = 8) -> "QuantumConfig":
         cfg = QuantumConfig()
         cfg.N = N; cfg.a = 1.0; cfg.g = g; cfg.m = m; cfg.L0 = L0
-        cfg.max_bond_dim = max_bond_dim; cfg.n_sweeps = n_sweeps
+        cfg.maxBondDim = maxBondDim; cfg.nSweeps = nSweeps
         return cfg
 
     def test_n6_pipeline_basic(self) -> None:
         cfg = self._basic_config(N=6)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
 
         # Ground-state field is just a GroundStateResult.
         self.assertEqual(r.spectra.N, 6)
-        self.assertLess(r.ground_state.energy, 0)  # sane sign
-        self.assertGreater(r.ground_state.bond_dim, 0)
+        self.assertLess(r.groundState.energy, 0)  # sane sign
+        self.assertGreater(r.groundState.bondDim, 0)
 
         # Schmidt: every contiguous interval [i, j] with 1 ≤ i ≤ j ≤ N
         # and (i, j) != (1, N) appears exactly once.
@@ -167,7 +167,7 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
 
     def test_spectra_normalize_to_one(self) -> None:
         cfg = self._basic_config(N=6)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
         for spec, iv in zip(r.spectra.spectra, r.spectra.intervals):
             total = sum(spec)
             self.assertAlmostEqual(
@@ -180,7 +180,7 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
         complementarity. With i = 1, the complement [j+1, N] is one
         contiguous block, so we can compare directly."""
         cfg = self._basic_config(N=6, m=0.0)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
         by_iv = {(iv.i, iv.j): spec for iv, spec
                  in zip(r.spectra.intervals, r.spectra.spectra)}
         # For each j in 1..N-1, [1, j] | rest and [j+1, N] | rest are
@@ -200,11 +200,11 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
         """At m → ∞ the GS is approximately a Néel product state, so every
         Schmidt spectrum should be (1, 0) up to O(1/m²) perturbative
         corrections from hopping. With m = 200 those corrections are at
-        the 1e-5 level — we pass tol = 1e-3 to majorization_poset so they
+        the 1e-5 level — we pass tol = 1e-3 to majorizationPoset so they
         get absorbed into the equivalence-class smoothing, leaving no
         Hasse cover edges."""
-        cfg = self._basic_config(N=4, m=200.0, max_bond_dim=32, n_sweeps=10)
-        r = compute_ground_state_majorization(cfg, tol=1e-3)
+        cfg = self._basic_config(N=4, m=200.0, maxBondDim=32, nSweeps=10)
+        r = computeGroundStateMajorization(cfg, tol=1e-3)
         # Largest entry of every spectrum should be ≈ 1.
         for spec, iv in zip(r.spectra.spectra, r.spectra.intervals):
             self.assertAlmostEqual(
@@ -212,7 +212,7 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
                 msg=f"product-state limit broken at [{iv.i}, {iv.j}]: {spec}")
         # With the wide tolerance, all spectra collapse to one
         # equivalence class — Hasse should be empty.
-        self.assertEqual(r.poset.n_nodes, len(r.spectra.spectra))
+        self.assertEqual(r.poset.getNodeCount, len(r.spectra.spectra))
         self.assertEqual(r.poset.covers, [])
 
     def test_poset_is_transitively_reduced(self) -> None:
@@ -220,13 +220,13 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
         intermediate c with covers (a, c) and (c, b) — that's the
         transitive-reduction guarantee."""
         cfg = self._basic_config(N=6)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
         # Build adjacency from cover list.
-        succ = {a: set() for a in range(r.poset.n_nodes)}
+        succ = {a: set() for a in range(r.poset.getNodeCount)}
         for a, b in r.poset.covers:
             succ[a].add(b)
         for (a, b) in r.poset.covers:
-            for c in range(r.poset.n_nodes):
+            for c in range(r.poset.getNodeCount):
                 if c == a or c == b:
                     continue
                 if c in succ[a] and b in succ[c]:
@@ -236,23 +236,23 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
 
     def test_poset_irreflexive(self) -> None:
         cfg = self._basic_config(N=6)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
         for a, b in r.poset.covers:
             self.assertNotEqual(a, b, "self-loop in Hasse diagram")
 
     def test_poset_acyclic(self) -> None:
         """Hasse cover edges form a DAG (no directed cycles)."""
         cfg = self._basic_config(N=6)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
 
         # Topological-sort attempt via Kahn's algorithm; if it fails to
         # consume every node, the graph has a cycle.
-        in_deg = {a: 0 for a in range(r.poset.n_nodes)}
-        succ   = {a: [] for a in range(r.poset.n_nodes)}
+        in_deg = {a: 0 for a in range(r.poset.getNodeCount)}
+        succ   = {a: [] for a in range(r.poset.getNodeCount)}
         for a, b in r.poset.covers:
             succ[a].append(b)
             in_deg[b] += 1
-        queue = [n for n in range(r.poset.n_nodes) if in_deg[n] == 0]
+        queue = [n for n in range(r.poset.getNodeCount) if in_deg[n] == 0]
         processed = 0
         while queue:
             n = queue.pop()
@@ -261,35 +261,35 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
                 in_deg[m] -= 1
                 if in_deg[m] == 0:
                     queue.append(m)
-        self.assertEqual(processed, r.poset.n_nodes,
+        self.assertEqual(processed, r.poset.getNodeCount,
                          "directed cycle present in Hasse cover edges")
 
     def test_consistency_with_separate_calls(self) -> None:
-        """compute_ground_state_majorization should agree with
-        compute_ground_state on the energy / bond_dim fields when run with
+        """computeGroundStateMajorization should agree with
+        computeGroundState on the energy / bondDim fields when run with
         the same config."""
-        from caset.quantum import compute_ground_state
+        from caset.quantum import computeGroundState
         cfg = self._basic_config(N=6, m=0.125)
-        r1 = compute_ground_state(cfg)
-        r2 = compute_ground_state_majorization(cfg)
-        self.assertAlmostEqual(r1.energy, r2.ground_state.energy, places=10)
-        self.assertAlmostEqual(r1.operator_energy,
-                               r2.ground_state.operator_energy, places=10)
-        self.assertEqual(r1.bond_dim, r2.ground_state.bond_dim)
+        r1 = computeGroundState(cfg)
+        r2 = computeGroundStateMajorization(cfg)
+        self.assertAlmostEqual(r1.energy, r2.groundState.energy, places=10)
+        self.assertAlmostEqual(r1.operatorEnergy,
+                               r2.groundState.operatorEnergy, places=10)
+        self.assertEqual(r1.bondDim, r2.groundState.bondDim)
 
 
 @unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
 class TestPosetRepr(unittest.TestCase):
     def test_repr(self) -> None:
-        p = majorization_poset([[1.0], [0.5, 0.5]])
+        p = majorizationPoset([[1.0], [0.5, 0.5]])
         text = repr(p)
         self.assertIn("Poset", text)
-        self.assertIn("n_nodes=2", text)
+        self.assertIn("getNodeCount=2", text)
         self.assertIn("edges", text)
 
     def test_interval_repr(self) -> None:
         cfg = TestComputeGroundStateMajorization._basic_config(N=4)
-        r = compute_ground_state_majorization(cfg)
+        r = computeGroundStateMajorization(cfg)
         text = repr(r.spectra.intervals[0])
         self.assertIn("Interval", text)
         self.assertIn("i=", text)

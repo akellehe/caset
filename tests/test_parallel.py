@@ -21,7 +21,7 @@
 
 """
 Tests for the parallelization features:
-  - sweep(n_sweeps, progress) API
+  - sweep(nSweeps, progress) API
   - GIL release on sweep/build/tune/thermalize
   - Thread-level parallelism via ThreadPoolExecutor
 """
@@ -47,11 +47,11 @@ def _make_cdt(n_simplices=50):
 
 
 # =====================================================================
-# sweep(n_sweeps, progress) API
+# sweep(nSweeps, progress) API
 # =====================================================================
 
 class TestSweepN(unittest.TestCase):
-    """Test the sweep(n_sweeps, progress) binding."""
+    """Test the sweep(nSweeps, progress) binding."""
 
     def test_sweep_default_one(self):
         """sweep() with no args runs 1 sweep and returns an int."""
@@ -126,7 +126,7 @@ class TestSweepProgress(unittest.TestCase):
         self.assertIsInstance(result, int)
 
     def test_progress_with_zero_sweeps(self):
-        """Progress should not be called when n_sweeps=0."""
+        """Progress should not be called when nSweeps=0."""
         cdt, _ = _make_cdt()
         calls = []
         cdt.sweep(0, progress=lambda i, n: calls.append((i, n)))
@@ -217,12 +217,12 @@ class TestThreadParallelism(unittest.TestCase):
         """Threaded execution should be faster than sequential for
         CPU-bound sweep work, confirming the GIL is actually released."""
         n_workers = 4
-        n_sweeps = 50
+        nSweeps = 50
         n_simplices = 200
 
         def work():
             cdt, _ = _make_cdt(n_simplices=n_simplices)
-            cdt.sweep(n_sweeps)
+            cdt.sweep(nSweeps)
 
         # Warmup to avoid JIT/cache effects
         work()
@@ -254,11 +254,11 @@ class TestThreadParallelism(unittest.TestCase):
     def test_no_data_corruption_under_threading(self):
         """Each thread's spacetime should be independent — no cross-talk."""
         n_workers = 4
-        n_sweeps = 30
+        nSweeps = 30
 
         def worker(wid, n_simplices):
             cdt, st = _make_cdt(n_simplices=n_simplices)
-            cdt.sweep(n_sweeps)
+            cdt.sweep(nSweeps)
             profile = cdt.getVolumeProfile()
             n41 = st.getN41()
             n32 = st.getN32()

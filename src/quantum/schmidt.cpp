@@ -38,14 +38,14 @@ std::vector<double> diag_squared(itensor::ITensor const& S) {
 
 } // namespace
 
-std::vector<double> schmidt_spectrum(itensor::MPS const& psi_in,
+std::vector<double> schmidtSpectrum(itensor::MPS const& psi_in,
                                      int i, int j) {
     using namespace itensor;
 
     const int N = length(psi_in);
     if (i < 1 || j > N || i > j) {
         throw std::invalid_argument(
-            "schmidt_spectrum: interval [i, j] must satisfy 1 ≤ i ≤ j ≤ N");
+            "schmidtSpectrum: interval [i, j] must satisfy 1 ≤ i ≤ j ≤ N");
     }
     if (i == 1 && j == N) {
         // Trivial bipartition (whole chain | empty); the reduced density
@@ -86,7 +86,7 @@ std::vector<double> schmidt_spectrum(itensor::MPS const& psi_in,
     return diag_squared(S);
 }
 
-SchmidtSpectra all_contiguous_spectra(itensor::MPS const& psi) {
+SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi) {
     const int N = itensor::length(psi);
     SchmidtSpectra out;
     out.N = N;
@@ -101,7 +101,7 @@ SchmidtSpectra all_contiguous_spectra(itensor::MPS const& psi) {
         for (int j = i; j <= N; ++j) {
             if (i == 1 && j == N) continue;
             out.intervals.push_back({i, j});
-            out.spectra.push_back(schmidt_spectrum(psi, i, j));
+            out.spectra.push_back(schmidtSpectrum(psi, i, j));
         }
     }
     return out;

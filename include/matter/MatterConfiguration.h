@@ -41,7 +41,7 @@ class MatterConfiguration {
     /// Assign energy density as a function of geodesic distance from a
     /// center vertex.
     void setRadialProfile(VertexPtr center,
-                          std::function<double(double)> rho_of_r);
+                          std::function<double(double)> rhoOfR);
 
     // ==================== Accessors ====================
 

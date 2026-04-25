@@ -101,7 +101,7 @@ class TestQuantumExecutables(unittest.TestCase):
 
     def test_phase3_majorization_poset(self) -> None:
         """Phase 3 acceptance (PLAN.md §5): full pipeline
-        all_contiguous_spectra() → majorization_poset() on product, GHZ,
+        allContiguousSpectra() → majorizationPoset() on product, GHZ,
         and Bell-vs-product inputs, matching the three acceptance criteria."""
         self._run("test_majorization_poset", "ALL PASS", timeout=60)
 
@@ -124,7 +124,7 @@ class TestQuantumExecutables(unittest.TestCase):
         """PLAN.md §7 trap: 'Verify by independent sum on N=4 before
         trusting the MPO.' Independent symbolic evaluation of the
         plan's H_m + H_E formula on every N=4 basis state, compared to
-        build_schwinger_dense to machine precision. Catches L_n²
+        buildSchwingerDense to machine precision. Catches L_n²
         expansion errors that MPO-vs-dense would miss."""
         self._run("test_schwinger_n4_hamiltonian", "ALL PASS", timeout=30)
 
@@ -141,5 +141,5 @@ class TestQuantumExecutables(unittest.TestCase):
         """Phase 5 acceptance: build the three partial orders
         (maj/LR/cs) on a TDVP snapshot history and verify the comparison
         statistics are sensible (Kendall-τ in [-1, 1], no NaNs,
-        v_LR-monotonicity holds)."""
+        vLr-monotonicity holds)."""
         self._run("test_causal_compare", "ALL PASS", timeout=180)

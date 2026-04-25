@@ -10,7 +10,7 @@ Runs the full caset.quantum Phase 5 pipeline:
   3. 2-site TDVP with per-step Schmidt-spectra recording
   4. Build three partial orders on the (cut, time) labels:
         ≼_maj  — strict majorization on the spectra (Phase 3, across time)
-        ≼_LR   — Lieb-Robinson cone with prescribed v_LR
+        ≼_LR   — Lieb-Robinson cone with prescribed vLr
         ≼_cs   — causet (time-only on regular chain; Phase 6 makes
                  this informative within a time slice too)
   5. Compute pairwise agreement statistics (Kendall-τ, discordant
@@ -34,7 +34,7 @@ References
 
   Hastings, Koma, *Spectral gap and exponential decay of correlations*,
   Comm. Math. Phys. 265, 781 (2006), arXiv:math-ph/0507008 — sharper
-  decay rates relevant for OTOC-based v_LR extraction.
+  decay rates relevant for OTOC-based vLr extraction.
 
   Bañuls et al., JHEP 11, 158 (2013), arXiv:1305.3765 — Schwinger MPS
   benchmarks underlying Phases 1-2.
@@ -64,7 +64,7 @@ import math
 import sys
 
 try:
-    from caset.quantum import TDVPConfig, compute_causal_comparison
+    from caset.quantum import TDVPConfig, computeCausalComparison
 except ImportError as e:
     print(f"caset.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: CASET_QUANTUM=1 pip install -e .", file=sys.stderr)
@@ -73,19 +73,19 @@ except ImportError as e:
 
 def _print_report(label: str, r) -> None:
     print(f"\n{label}")
-    print(f"  n_labels    = {r.n_labels}")
-    print(f"  n_snapshots = {r.n_snapshots}")
-    print(f"  v_LR        = {r.v_LR}")
+    print(f"  nLabels    = {r.nLabels}")
+    print(f"  nSnapshots = {r.nSnapshots}")
+    print(f"  vLr        = {r.vLr}")
     print(f"  {'pair':<12}  {'Kendall-τ':>10}  {'discord':>10}  "
           f"{'edit-dist':>10}  {'comparable':>11}")
-    for name, agr in (("maj_vs_lr", r.maj_vs_lr),
-                      ("maj_vs_cs", r.maj_vs_cs),
-                      ("lr_vs_cs",  r.lr_vs_cs)):
+    for name, agr in (("majVsLr", r.majVsLr),
+                      ("majVsCs", r.majVsCs),
+                      ("lrVsCs",  r.lrVsCs)):
         print(f"  {name:<12}  "
-              f"{agr.kendall_tau:>10.4f}  "
-              f"{agr.discordant_fraction:>10.4f}  "
-              f"{agr.hasse_edit_distance:>10.4f}  "
-              f"{agr.n_comparable_both:>11}")
+              f"{agr.kendallTau:>10.4f}  "
+              f"{agr.discordantFraction:>10.4f}  "
+              f"{agr.hasseEditDistance:>10.4f}  "
+              f"{agr.nComparableBoth:>11}")
 
 
 def _build_config(args) -> "TDVPConfig":
@@ -94,20 +94,20 @@ def _build_config(args) -> "TDVPConfig":
     cfg.a = 1.0; cfg.g = args.g
     cfg.m = args.m_over_g * args.g
     cfg.L0 = 0.0
-    cfg.dmrg_max_bond_dim = args.dmrg_bond
-    cfg.dmrg_n_sweeps     = 12
-    cfg.dmrg_krylov_dim   = 4
-    cfg.dmrg_cutoff       = 1e-12
+    cfg.dmrgMaxBondDim = args.dmrg_bond
+    cfg.dmrgNSweeps     = 12
+    cfg.dmrgKrylovDim   = 4
+    cfg.dmrgCutoff       = 1e-12
     cfg.i0 = args.i0
     cfg.d  = args.d
     cfg.dt = args.dt
     cfg.T  = args.T
-    cfg.max_bond_dim = args.max_bond_dim
+    cfg.maxBondDim = args.max_bond_dim
     cfg.cutoff = 1e-10
-    cfg.krylov_dim = 12
-    cfg.snapshot_every = args.snapshot_every
+    cfg.krylovDim = 12
+    cfg.snapshotEvery = args.snapshot_every
     cfg.quiet = True
-    cfg.conserve_qns = True
+    cfg.conserveQns = True
     return cfg
 
 
@@ -132,7 +132,7 @@ def main() -> None:
                    help="Lieb-Robinson velocity. Default 1.0 (free-fermion).")
     p.add_argument("--scan-vlr",     type=float, nargs="+", default=None,
                    metavar="V",
-                   help="Scan over v_LR values, printing one report per value.")
+                   help="Scan over vLr values, printing one report per value.")
     args = p.parse_args()
 
     cfg = _build_config(args)
@@ -141,11 +141,11 @@ def main() -> None:
 
     if args.scan_vlr is not None:
         for v in args.scan_vlr:
-            r = compute_causal_comparison(cfg, v_LR=v)
-            _print_report(f"=== v_LR = {v} ===", r)
+            r = computeCausalComparison(cfg, vLr=v)
+            _print_report(f"=== vLr = {v} ===", r)
     else:
-        r = compute_causal_comparison(cfg, v_LR=args.v_LR)
-        _print_report(f"=== v_LR = {args.v_LR} ===", r)
+        r = computeCausalComparison(cfg, vLr=args.v_LR)
+        _print_report(f"=== vLr = {args.v_LR} ===", r)
 
 
 if __name__ == "__main__":

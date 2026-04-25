@@ -1,4 +1,4 @@
-// Implementation of caset::Poset / OrderAgreement / compare_orders. See
+// Implementation of caset::Poset / OrderAgreement / compareOrders. See
 // include/Poset.h for the design.
 
 #include "Poset.h"
@@ -26,8 +26,8 @@ namespace {
 // adj[i][j] = true iff there's a directed path i → … → j in the strict
 // precedes-cover direction.
 std::vector<std::vector<char>>
-transitive_closure(Poset const& p, int n_labels) {
-    const int n = n_labels;
+transitive_closure(Poset const& p, int nLabels) {
+    const int n = nLabels;
     std::vector<std::vector<char>> M(static_cast<std::size_t>(n),
                                      std::vector<char>(static_cast<std::size_t>(n),
                                                        0));
@@ -54,60 +54,60 @@ transitive_closure(Poset const& p, int n_labels) {
 // ─── Poset ────────────────────────────────────────────────────────────────
 
 Poset::Poset(int n_nodes_) {
-    set_n_nodes(n_nodes_);
+    setNodeCount(n_nodes_);
 }
 
 Poset::Poset(Poset const& other) {
-    set_n_nodes(other.n_nodes());
-    set_covers(other.covers());
+    setNodeCount(other.getNodeCount());
+    setCovers(other.covers());
 }
 
 Poset& Poset::operator=(Poset const& other) {
     if (this != &other) {
         vertices_ = VertexList{};
         edges_ = EdgeList{};
-        set_n_nodes(other.n_nodes());
-        set_covers(other.covers());
+        setNodeCount(other.getNodeCount());
+        setCovers(other.covers());
     }
     return *this;
 }
 
-int Poset::n_nodes() const noexcept {
+int Poset::getNodeCount() const noexcept {
     return static_cast<int>(vertices_.size());
 }
 
-void Poset::set_n_nodes(int n) {
+void Poset::setNodeCount(int n) {
     if (n < 0) return;
-    const int current = n_nodes();
+    const int current = getNodeCount();
     for (int i = current; i < n; ++i) {
         vertices_.add(static_cast<std::uint64_t>(i));
     }
 }
 
-int Poset::n_covers() const noexcept {
+int Poset::getCoverCount() const noexcept {
     return static_cast<int>(edges_.size());
 }
 
-void Poset::add_cover(int a, int b) {
+void Poset::addCover(int a, int b) {
     if (a < 0 || b < 0) {
-        throw std::invalid_argument("Poset::add_cover: node indices must be ≥ 0");
+        throw std::invalid_argument("Poset::addCover: node indices must be ≥ 0");
     }
-    // Auto-resize so callers don't have to pre-call set_n_nodes — Phase 5
+    // Auto-resize so callers don't have to pre-call setNodeCount — Phase 5
     // computes covers and node counts in one pass.
     const int needed = std::max(a, b) + 1;
-    if (needed > n_nodes()) set_n_nodes(needed);
+    if (needed > getNodeCount()) setNodeCount(needed);
     auto* src = vertices_[static_cast<std::uint64_t>(a)];
     auto* dst = vertices_[static_cast<std::uint64_t>(b)];
     if (src == nullptr || dst == nullptr) {
-        throw std::runtime_error("Poset::add_cover: vertex lookup failed");
+        throw std::runtime_error("Poset::addCover: vertex lookup failed");
     }
     edges_.add(src, dst);
 }
 
-void Poset::set_covers(std::vector<std::pair<int, int>> const& new_covers) {
+void Poset::setCovers(std::vector<std::pair<int, int>> const& new_covers) {
     edges_ = EdgeList{};
     for (auto const& [a, b] : new_covers) {
-        add_cover(a, b);
+        addCover(a, b);
     }
 }
 
@@ -123,12 +123,12 @@ std::vector<std::pair<int, int>> Poset::covers() const {
     return out;
 }
 
-std::string Poset::to_dot() const {
+std::string Poset::toDot() const {
     std::ostringstream os;
     os << "digraph poset {\n";
     os << "  rankdir=BT;\n";
     os << "  node [shape=circle, style=filled, fillcolor=\"#eef\"];\n";
-    for (int i = 0; i < n_nodes(); ++i) os << "  " << i << ";\n";
+    for (int i = 0; i < getNodeCount(); ++i) os << "  " << i << ";\n";
     for (auto const& [a, b] : covers()) {
         os << "  " << a << " -> " << b << ";\n";
     }
@@ -136,7 +136,7 @@ std::string Poset::to_dot() const {
     return os.str();
 }
 
-Poset Poset::from_spacetime(Spacetime const& st) {
+Poset Poset::fromSpacetime(Spacetime const& st) {
     // Phase 6 (docs/source/quantum-plan.md §6) — inherit a partial order
     // from a caset::Spacetime by treating each timelike edge as a strict
     // precedes-relation oriented earliest-time → latest-time, then
@@ -239,21 +239,21 @@ Poset Poset::from_spacetime(Spacetime const& st) {
                 dominated = true;
             }
         }
-        if (!dominated) out.add_cover(a, b);
+        if (!dominated) out.addCover(a, b);
     }
     return out;
 }
 
-// ─── compare_orders ───────────────────────────────────────────────────────
+// ─── compareOrders ───────────────────────────────────────────────────────
 
-OrderAgreement compare_orders(Poset const& a, Poset const& b, int n_labels) {
-    auto a_clos = transitive_closure(a, n_labels);
-    auto b_clos = transitive_closure(b, n_labels);
+OrderAgreement compareOrders(Poset const& a, Poset const& b, int nLabels) {
+    auto a_clos = transitive_closure(a, nLabels);
+    auto b_clos = transitive_closure(b, nLabels);
 
     int concordant = 0, discordant = 0, comparable_both = 0;
     int only_a = 0, only_b = 0;
-    for (int i = 0; i < n_labels; ++i) {
-        for (int j = i + 1; j < n_labels; ++j) {
+    for (int i = 0; i < nLabels; ++i) {
+        for (int j = i + 1; j < nLabels; ++j) {
             const bool a_lt = a_clos[static_cast<std::size_t>(i)]
                                     [static_cast<std::size_t>(j)];
             const bool a_gt = a_clos[static_cast<std::size_t>(j)]
@@ -277,15 +277,15 @@ OrderAgreement compare_orders(Poset const& a, Poset const& b, int n_labels) {
     }
 
     OrderAgreement out;
-    out.n_concordant      = concordant;
-    out.n_discordant      = discordant;
-    out.n_comparable_both = comparable_both;
-    out.n_only_a          = only_a;
-    out.n_only_b          = only_b;
-    out.kendall_tau       = (comparable_both > 0)
+    out.nConcordant      = concordant;
+    out.nDiscordant      = discordant;
+    out.nComparableBoth = comparable_both;
+    out.nOnlyA          = only_a;
+    out.nOnlyB          = only_b;
+    out.kendallTau       = (comparable_both > 0)
         ? static_cast<double>(concordant - discordant) / comparable_both
         : 0.0;
-    out.discordant_fraction = (comparable_both > 0)
+    out.discordantFraction = (comparable_both > 0)
         ? static_cast<double>(discordant) / comparable_both
         : 0.0;
 
@@ -299,7 +299,7 @@ OrderAgreement compare_orders(Poset const& a, Poset const& b, int n_labels) {
     const int union_card = (static_cast<int>(edges_a.size()) +
                             static_cast<int>(edges_b.size()) +
                             sym_diff) / 2;
-    out.hasse_edit_distance = (union_card > 0)
+    out.hasseEditDistance = (union_card > 0)
         ? static_cast<double>(sym_diff) / union_card
         : 0.0;
     return out;

@@ -174,8 +174,8 @@ HingeType MatterConfiguration::classifyHinge(SimplexPtr hinge) {
 }
 
 void MatterConfiguration::setRadialProfile(
-    VertexPtr center, std::function<double(double)> rho_of_r) {
-    radialProfiles_.push_back({center, std::move(rho_of_r)});
+    VertexPtr center, std::function<double(double)> rhoOfR) {
+    radialProfiles_.push_back({center, std::move(rhoOfR)});
 }
 
 } // namespace caset

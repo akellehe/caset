@@ -9,7 +9,7 @@
 // callback that returns plain data (Phase 4's approach for TDVP snapshots).
 //
 // Docstrings here are deliberately verbose because they're the primary
-// user-facing documentation — `help(caset.quantum.compute_ground_state)`
+// user-facing documentation — `help(caset.quantum.computeGroundState)`
 // in a Python REPL or notebook should be enough to understand both the
 // API and the underlying physics conventions.
 
@@ -72,11 +72,11 @@ References
 Bundles the dimensional Hamiltonian parameters and the DMRG sweep
 settings into a single struct so calling code only hands one Python
 object across the C++ boundary. Default-constructed instances have
-N = 0 and must be filled in before passing to :func:`compute_ground_state`.
+N = 0 and must be filled in before passing to :func:`computeGroundState`.
 
 The dt and T fields are reserved for Phase 4 (real-time evolution
 after a quark/antiquark quench) and are ignored by
-:func:`compute_ground_state`.
+:func:`computeGroundState`.
 
 Attributes
 ----------
@@ -96,12 +96,12 @@ g : float
 L0 : float
     Background electric field on the link to the left of site 1.
     Default 0 puts us in the standard zero-background sector.
-max_bond_dim : int
+maxBondDim : int
     Cap on the MPS bond dimension during DMRG sweeps. Schwinger ground
     states at moderate (m, g, N) typically converge at bond dim ~10-30
-    even for N = 100+. Bond-dim-limited runs report ``bond_dim`` equal
+    even for N = 100+. Bond-dim-limited runs report ``bondDim`` equal
     to this value in the result.
-n_sweeps : int
+nSweeps : int
     Total number of DMRG sweeps. Energy convergence is exponential in
     sweep count once bond-dim is sufficient; 12 sweeps is plenty for
     moderate-N tests.
@@ -109,14 +109,14 @@ cutoff : float
     SVD truncation threshold per local solve. 1e-12 is conservative for
     these Hamiltonians and well below double-precision noise. Tighter
     cutoff costs sweep time without meaningful precision gain.
-krylov_dim : int
+krylovDim : int
     Lanczos / Krylov dimension per local 2-site solve. Default 4 is
     fine for gapped problems; raise for harder cases (small mass,
     near-critical points) where eigensolver convergence is slower.
 quiet : bool
     If True (default), suppress ITensor's per-sweep diagnostic prints.
     Set False to debug DMRG convergence.
-conserve_qns : bool
+conserveQns : bool
     If True (default), the SiteSet enforces total-Sz QN conservation
     on every MPS bond. The Néel initial state then pins DMRG to the
     Sz = 0 sector. Set False only when you need to apply σ^x / σ^y
@@ -124,9 +124,9 @@ conserve_qns : bool
     charge-conjugation test.
 dt : float
     *(Phase 4)* TDVP real-time step size. Unused by
-    compute_ground_state.
+    computeGroundState.
 T : float
-    *(Phase 4)* Total evolution time. Unused by compute_ground_state.
+    *(Phase 4)* Total evolution time. Unused by computeGroundState.
 
 Examples
 --------
@@ -137,8 +137,8 @@ Examples
 >>> cfg.g = 1.0
 >>> cfg.m = 0.0
 >>> cfg.L0 = 0.0
->>> cfg.max_bond_dim = 100
->>> cfg.n_sweeps = 12
+>>> cfg.maxBondDim = 100
+>>> cfg.nSweeps = 12
 )doc")
         .def(py::init<>())
         .def_readwrite("N",            &QuantumConfig::N,
@@ -151,30 +151,30 @@ Examples
             "Gauge coupling. g = 0 is the free-Dirac limit (allowed).")
         .def_readwrite("L0",           &QuantumConfig::L0,
             "Background electric field on the link left of site 1.")
-        .def_readwrite("max_bond_dim", &QuantumConfig::max_bond_dim,
+        .def_readwrite("maxBondDim", &QuantumConfig::maxBondDim,
             "Cap on MPS bond dimension during DMRG.")
-        .def_readwrite("n_sweeps",     &QuantumConfig::n_sweeps,
+        .def_readwrite("nSweeps",     &QuantumConfig::nSweeps,
             "Total DMRG sweep count.")
         .def_readwrite("cutoff",       &QuantumConfig::cutoff,
             "SVD truncation threshold per local solve.")
-        .def_readwrite("krylov_dim",   &QuantumConfig::krylov_dim,
+        .def_readwrite("krylovDim",   &QuantumConfig::krylovDim,
             "Lanczos / Krylov dimension per local solve.")
         .def_readwrite("quiet",        &QuantumConfig::quiet,
             "Suppress ITensor's per-sweep diagnostic output.")
-        .def_readwrite("conserve_qns", &QuantumConfig::conserve_qns,
+        .def_readwrite("conserveQns", &QuantumConfig::conserveQns,
             "U(1) total-Sz conservation on the SiteSet.")
         .def_readwrite("dt",           &QuantumConfig::dt,
-            "(Phase 4) Real-time step size; unused by compute_ground_state.")
+            "(Phase 4) Real-time step size; unused by computeGroundState.")
         .def_readwrite("T",            &QuantumConfig::T,
-            "(Phase 4) Total evolution time; unused by compute_ground_state.")
+            "(Phase 4) Total evolution time; unused by computeGroundState.")
         .def("__repr__", [](QuantumConfig const& c) {
             return "QuantumConfig(N=" + std::to_string(c.N) +
                    ", a=" + std::to_string(c.a) +
                    ", m=" + std::to_string(c.m) +
                    ", g=" + std::to_string(c.g) +
                    ", L0=" + std::to_string(c.L0) +
-                   ", max_bond_dim=" + std::to_string(c.max_bond_dim) +
-                   ", n_sweeps=" + std::to_string(c.n_sweeps) + ")";
+                   ", maxBondDim=" + std::to_string(c.maxBondDim) +
+                   ", nSweeps=" + std::to_string(c.nSweeps) + ")";
         });
 
     py::class_<GroundStateResult>(m, "GroundStateResult",
@@ -183,11 +183,11 @@ Examples
 The full physical energy is ``energy``. The other fields let callers
 sanity-check convergence:
 
-* ``operator_energy + constant`` should equal ``energy`` exactly
+* ``operatorEnergy + constant`` should equal ``energy`` exactly
   (assertable to ~1e-12).
-* ``bond_dim`` hitting ``config.max_bond_dim`` flags a bond-dim-limited
+* ``bondDim`` hitting ``config.maxBondDim`` flags a bond-dim-limited
   run — increase the cap and rerun if you need tighter convergence.
-* ``truncation_err`` is a conservative upper bound (the configured
+* ``truncationErr`` is a conservative upper bound (the configured
   cutoff). Real truncation is typically much smaller.
 
 Attributes
@@ -196,36 +196,36 @@ energy : float
     Full physical energy ⟨H⟩ + constant. Use this when comparing to
     Bañuls-style published numerics (after the dimensional rescaling
     E_W = (2/(ag²)) E_dim if you want their dimensionless W).
-operator_energy : float
+operatorEnergy : float
     ⟨H⟩ alone, as returned by ITensor's dmrg(). Use this for direct
     cross-checks against dense diagonalization of the operator-valued
     Hamiltonian (without the c-number L_n² shift).
 constant : float
     The c-number shift (g²a/2) Σ_n (c_n² + n/4) pulled out of L_n²
     when AutoMPO-encoding the electric term — see the derivation in
-    src/quantum/schwinger_model.cpp. ``operator_energy + constant ==
+    src/quantum/schwinger_model.cpp. ``operatorEnergy + constant ==
     energy`` by construction.
-bond_dim : int
+bondDim : int
     Largest bond dimension of the optimized MPS. Equals
-    ``config.max_bond_dim`` if the run was bond-dim-limited.
-truncation_err : float
+    ``config.maxBondDim`` if the run was bond-dim-limited.
+truncationErr : float
     Conservative upper bound on the SVD truncation error in the final
     sweep (currently equal to the configured ``cutoff``).
 )doc")
         .def_readonly("energy",          &GroundStateResult::energy,
             "Full physical energy ⟨H⟩ + constant.")
-        .def_readonly("operator_energy", &GroundStateResult::operator_energy,
+        .def_readonly("operatorEnergy", &GroundStateResult::operatorEnergy,
             "Operator part ⟨H⟩, matches ITensor's dmrg() return value.")
         .def_readonly("constant",        &GroundStateResult::constant,
             "C-number shift from L_n² expansion.")
-        .def_readonly("bond_dim",        &GroundStateResult::bond_dim,
+        .def_readonly("bondDim",        &GroundStateResult::bondDim,
             "Largest MPS bond dimension after the final sweep.")
-        .def_readonly("truncation_err",  &GroundStateResult::truncation_err,
+        .def_readonly("truncationErr",  &GroundStateResult::truncationErr,
             "Conservative upper bound on the truncation error.")
         .def("__repr__", [](GroundStateResult const& r) {
             return "GroundStateResult(energy=" + std::to_string(r.energy) +
-                   ", bond_dim=" + std::to_string(r.bond_dim) +
-                   ", truncation_err=" + std::to_string(r.truncation_err) + ")";
+                   ", bondDim=" + std::to_string(r.bondDim) +
+                   ", truncationErr=" + std::to_string(r.truncationErr) + ")";
         });
 
     // ─── Phase 3 types ──────────────────────────────────────────────────
@@ -233,7 +233,7 @@ truncation_err : float
             R"doc(1-based contiguous interval [i, j] on the spin chain.
 
 Used as a label on the Schmidt spectra returned by
-:func:`compute_ground_state_majorization`.
+:func:`computeGroundStateMajorization`.
 
 Attributes
 ----------
@@ -277,41 +277,41 @@ spectra : list[list[float]]
     py::class_<Poset>(m, "Poset",
             R"doc(Hasse / cover representation of a finite partial order.
 
-Nodes are integers 0 .. n_nodes - 1. ``covers`` lists the cover edges
+Nodes are integers 0 .. getNodeCount - 1. ``covers`` lists the cover edges
 (transitive reduction of the strict-majorization graph): each entry
 (a, b) means a ≻ b with no third node c satisfying a ≻ c ≻ b.
 
 Attributes
 ----------
-n_nodes : int
+getNodeCount : int
     Total node count.
 covers : list[tuple[int, int]]
     Hasse cover edges (a, b) with a ≻ b.
 )doc")
         .def(py::init<>())
-        // n_nodes and covers are accessed via getters/setters because the
+        // getNodeCount and covers are accessed via getters/setters because the
         // underlying caset::Poset stores them in VertexList/EdgeList rather
         // than as raw int + vector members. Python sees the same simple
-        // {n_nodes: int, covers: list[tuple[int,int]]} surface as before.
-        .def_property("n_nodes",
-            [](Poset const& p) { return p.n_nodes(); },
-            [](Poset& p, int n) { p.set_n_nodes(n); },
+        // {getNodeCount: int, covers: list[tuple[int,int]]} surface as before.
+        .def_property("getNodeCount",
+            [](Poset const& p) { return p.getNodeCount(); },
+            [](Poset& p, int n) { p.setNodeCount(n); },
             "Total node count.")
         .def_property("covers",
             [](Poset const& p) { return p.covers(); },
             [](Poset& p, std::vector<std::pair<int, int>> const& covers) {
-                p.set_covers(covers);
+                p.setCovers(covers);
             },
             "Hasse cover edges (a, b) with a strictly majorizes b.")
-        .def("to_dot", &Poset::to_dot,
+        .def("toDot", &Poset::toDot,
             "Graphviz DOT representation of the Hasse diagram.")
         // Phase 6 — Spacetime → Poset factory. Same py::object indirection
-        // as extract_causet_chain because Spacetime is registered in the
+        // as extractCausetChain because Spacetime is registered in the
         // top-level _caset module, not in this quantum sub-binding TU.
-        .def_static("from_spacetime",
+        .def_static("fromSpacetime",
             [](py::object spacetime_obj) {
                 auto const* st = spacetime_obj.cast<caset::Spacetime const*>();
-                return caset::Poset::from_spacetime(*st);
+                return caset::Poset::fromSpacetime(*st);
             }, py::arg("spacetime"),
             R"doc(Inherit a Hasse-cover Poset from a caset.Spacetime.
 
@@ -336,20 +336,20 @@ Returns
 Poset
 )doc")
         .def("__repr__", [](Poset const& p) {
-            return "Poset(n_nodes=" + std::to_string(p.n_nodes()) +
-                   ", covers=" + std::to_string(p.n_covers()) + " edges)";
+            return "Poset(getNodeCount=" + std::to_string(p.getNodeCount()) +
+                   ", covers=" + std::to_string(p.getCoverCount()) + " edges)";
         });
 
     py::class_<GroundStateMajorizationResult>(m, "GroundStateMajorizationResult",
-            R"doc(Result of :func:`compute_ground_state_majorization`.
+            R"doc(Result of :func:`computeGroundStateMajorization`.
 
 Bundles the scalar DMRG diagnostics with the Schmidt spectra of the
 optimized ground-state MPS and the majorization poset on those spectra.
 
 Attributes
 ----------
-ground_state : GroundStateResult
-    Same diagnostics returned by :func:`compute_ground_state`.
+groundState : GroundStateResult
+    Same diagnostics returned by :func:`computeGroundState`.
 spectra : SchmidtSpectra
     All contiguous-cut Schmidt spectra of the ground-state MPS,
     excluding the trivial full-chain cut.
@@ -359,7 +359,7 @@ poset : Poset
     ``spectra.spectra[a] ≻ spectra.spectra[b]`` with no intermediate
     spectrum.
 )doc")
-        .def_readonly("ground_state", &GroundStateMajorizationResult::ground_state)
+        .def_readonly("groundState", &GroundStateMajorizationResult::groundState)
         .def_readonly("spectra",      &GroundStateMajorizationResult::spectra)
         .def_readonly("poset",        &GroundStateMajorizationResult::poset);
 
@@ -388,8 +388,8 @@ bool
     True if μ majorizes λ.
 )doc");
 
-    m.def("strictly_majorizes",
-          &strictly_majorizes,
+    m.def("strictlyMajorizes",
+          &strictlyMajorizes,
           py::arg("mu"), py::arg("lambda_"), py::arg("tol") = 1e-12,
           R"doc(Test whether μ strictly majorizes λ.
 
@@ -397,8 +397,8 @@ Equivalent to ``majorizes(mu, lambda_) and not majorizes(lambda_, mu)``
 — the relation is proper, not just sorted-padded equality.
 )doc");
 
-    m.def("majorization_poset",
-          &majorization_poset,
+    m.def("majorizationPoset",
+          &majorizationPoset,
           py::arg("spectra"), py::arg("tol") = 1e-12,
           R"doc(Build the majorization poset on a list of spectra.
 
@@ -435,16 +435,16 @@ quench location / separation, and the real-time-evolution schedule.
 The parity constraint (PLAN.md §5 Phase 4 / quench.hpp): for the
 heavy-quark Néel vacuum to admit a non-trivial flux tube, ``i0`` must
 be odd (Up sublattice) and ``d`` must be odd. Set
-``quench_enforce_parity = False`` to override.
+``quenchEnforceParity = False`` to override.
 
 Attributes
 ----------
 N, a, m, g, L0 : Hamiltonian parameters (same as :class:`QuantumConfig`).
-dmrg_max_bond_dim, dmrg_n_sweeps, dmrg_krylov_dim, dmrg_cutoff :
+dmrgMaxBondDim, dmrgNSweeps, dmrgKrylovDim, dmrgCutoff :
     DMRG sweep settings for the initial ground state.
 i0, d : int
     First site of the q-qbar pair (1-based) and separation in lattice sites.
-quench_enforce_parity : bool
+quenchEnforceParity : bool
     If True, the quench raises an exception unless i0 and d satisfy the
     parity constraint above.
 dt : float
@@ -452,13 +452,13 @@ dt : float
     performs ``round(T / dt)`` TDVP steps.
 T : float
     Total real-time evolution time.
-max_bond_dim, krylov_dim, cutoff :
+maxBondDim, krylovDim, cutoff :
     TDVP sweep settings (per-step bond cap, Krylov dim, SVD cutoff).
-snapshot_every : int
+snapshotEvery : int
     Record observables every k steps (≥ 1). The initial snapshot at
     t = 0 (post-quench) is always recorded.
-quiet, conserve_qns : bool
-record_spectra, record_poset : bool
+quiet, conserveQns : bool
+recordSpectra, recordPoset : bool
     Optional per-snapshot recording of full Schmidt spectra and the
     majorization poset (O(N²) SVDs each — off by default).
 )doc")
@@ -468,23 +468,23 @@ record_spectra, record_poset : bool
         .def_readwrite("m",                       &TDVPConfig::m)
         .def_readwrite("g",                       &TDVPConfig::g)
         .def_readwrite("L0",                      &TDVPConfig::L0)
-        .def_readwrite("dmrg_max_bond_dim",       &TDVPConfig::dmrg_max_bond_dim)
-        .def_readwrite("dmrg_n_sweeps",           &TDVPConfig::dmrg_n_sweeps)
-        .def_readwrite("dmrg_krylov_dim",         &TDVPConfig::dmrg_krylov_dim)
-        .def_readwrite("dmrg_cutoff",             &TDVPConfig::dmrg_cutoff)
+        .def_readwrite("dmrgMaxBondDim",       &TDVPConfig::dmrgMaxBondDim)
+        .def_readwrite("dmrgNSweeps",           &TDVPConfig::dmrgNSweeps)
+        .def_readwrite("dmrgKrylovDim",         &TDVPConfig::dmrgKrylovDim)
+        .def_readwrite("dmrgCutoff",             &TDVPConfig::dmrgCutoff)
         .def_readwrite("i0",                      &TDVPConfig::i0)
         .def_readwrite("d",                       &TDVPConfig::d)
-        .def_readwrite("quench_enforce_parity",   &TDVPConfig::quench_enforce_parity)
+        .def_readwrite("quenchEnforceParity",   &TDVPConfig::quenchEnforceParity)
         .def_readwrite("dt",                      &TDVPConfig::dt)
         .def_readwrite("T",                       &TDVPConfig::T)
-        .def_readwrite("max_bond_dim",            &TDVPConfig::max_bond_dim)
-        .def_readwrite("krylov_dim",              &TDVPConfig::krylov_dim)
+        .def_readwrite("maxBondDim",            &TDVPConfig::maxBondDim)
+        .def_readwrite("krylovDim",              &TDVPConfig::krylovDim)
         .def_readwrite("cutoff",                  &TDVPConfig::cutoff)
-        .def_readwrite("snapshot_every",          &TDVPConfig::snapshot_every)
+        .def_readwrite("snapshotEvery",          &TDVPConfig::snapshotEvery)
         .def_readwrite("quiet",                   &TDVPConfig::quiet)
-        .def_readwrite("conserve_qns",            &TDVPConfig::conserve_qns)
-        .def_readwrite("record_spectra",          &TDVPConfig::record_spectra)
-        .def_readwrite("record_poset",            &TDVPConfig::record_poset);
+        .def_readwrite("conserveQns",            &TDVPConfig::conserveQns)
+        .def_readwrite("recordSpectra",          &TDVPConfig::recordSpectra)
+        .def_readwrite("recordPoset",            &TDVPConfig::recordPoset);
 
     py::class_<TDVPSnapshot>(m, "TDVPSnapshot",
             R"doc(Per-step diagnostics recorded during a TDVP run.
@@ -493,9 +493,9 @@ Always-populated fields:
 
     time : float            -- elapsed real time
     energy : float          -- ⟨ψ(t)|H|ψ(t)⟩ + constant
-    bond_dim : int          -- maxLinkDim of the MPS at this time
-    Z_profile : list[float] -- ⟨σ^z_n⟩ for n = 1..N
-    L_profile : list[float] -- ⟨L_n⟩  for n = 1..N-1
+    bondDim : int          -- maxLinkDim of the MPS at this time
+    zProfile : list[float] -- ⟨σ^z_n⟩ for n = 1..N
+    lProfile : list[float] -- ⟨L_n⟩  for n = 1..N-1
 
 Optional fields (populated only if the corresponding TDVPConfig flag is set):
 
@@ -504,30 +504,30 @@ Optional fields (populated only if the corresponding TDVPConfig flag is set):
 )doc")
         .def_readonly("time",       &TDVPSnapshot::time)
         .def_readonly("energy",     &TDVPSnapshot::energy)
-        .def_readonly("bond_dim",   &TDVPSnapshot::bond_dim)
-        .def_readonly("Z_profile",  &TDVPSnapshot::Z_profile)
-        .def_readonly("L_profile",  &TDVPSnapshot::L_profile)
+        .def_readonly("bondDim",   &TDVPSnapshot::bondDim)
+        .def_readonly("zProfile",  &TDVPSnapshot::zProfile)
+        .def_readonly("lProfile",  &TDVPSnapshot::lProfile)
         .def_readonly("spectra",    &TDVPSnapshot::spectra)
         .def_readonly("poset",      &TDVPSnapshot::poset)
         .def("__repr__", [](TDVPSnapshot const& s) {
             return "TDVPSnapshot(time=" + std::to_string(s.time) +
                    ", energy=" + std::to_string(s.energy) +
-                   ", bond_dim=" + std::to_string(s.bond_dim) + ")";
+                   ", bondDim=" + std::to_string(s.bondDim) + ")";
         });
 
     py::class_<QuenchResult>(m, "QuenchResult",
-            R"doc(Result of :func:`run_qqbar_quench`.
+            R"doc(Result of :func:`runQqbarQuench`.
 
 Attributes
 ----------
-ground_state : GroundStateResult
+groundState : GroundStateResult
     DMRG ground-state diagnostics for the pre-quench state.
 snapshots : list[TDVPSnapshot]
     Per-step diagnostics. ``snapshots[0]`` is the post-quench state at
-    t = 0; the rest are spaced every ``config.snapshot_every`` TDVP
+    t = 0; the rest are spaced every ``config.snapshotEvery`` TDVP
     steps. The final TDVP step is always recorded.
 )doc")
-        .def_readonly("ground_state", &QuenchResult::ground_state)
+        .def_readonly("groundState", &QuenchResult::groundState)
         .def_readonly("snapshots",    &QuenchResult::snapshots);
 
     // ─── Phase 5 types: causal-order comparison ─────────────────────────
@@ -540,19 +540,19 @@ physical time of that snapshot.
 
 Attributes
 ----------
-cut_idx : int
+cutIdx : int
     Index of the cut in the snapshot's spectra/intervals list.
-t_idx : int
+tIdx : int
     Index of the snapshot in the QuenchResult's snapshot list.
-interval_i, interval_j : int
-    The contiguous interval [interval_i, interval_j] (1-based).
+intervalI, intervalJ : int
+    The contiguous interval [intervalI, intervalJ] (1-based).
 time : float
     Physical time of the snapshot.
 )doc")
-        .def_readonly("cut_idx",     &LabelSpacetime::cut_idx)
-        .def_readonly("t_idx",       &LabelSpacetime::t_idx)
-        .def_readonly("interval_i",  &LabelSpacetime::interval_i)
-        .def_readonly("interval_j",  &LabelSpacetime::interval_j)
+        .def_readonly("cutIdx",     &LabelSpacetime::cutIdx)
+        .def_readonly("tIdx",       &LabelSpacetime::tIdx)
+        .def_readonly("intervalI",  &LabelSpacetime::intervalI)
+        .def_readonly("intervalJ",  &LabelSpacetime::intervalJ)
         .def_readonly("time",        &LabelSpacetime::time);
 
     py::class_<CausalOrders>(m, "CausalOrders",
@@ -566,7 +566,7 @@ maj : Poset
     Strict-majorization order from Phase 3, applied across cuts and times.
 lr : Poset
     Lieb-Robinson cone: (a, b) iff time_a < time_b and the
-    interval-distance is ≤ v_LR · (time_b - time_a).
+    interval-distance is ≤ vLr · (time_b - time_a).
 cs : Poset
     Causet order. On the regular chain (Phase 5), this is just the
     time-only order: (a, b) iff t_idx_a < t_idx_b.
@@ -587,76 +587,76 @@ Counted over unordered pairs (i, j) with i < j:
 * "only_a" / "only_b" — one poset relates the pair, the other does not.
 
 The five categories (concordant, discordant, only_a, only_b, neither)
-partition the C(n_labels, 2) unordered pairs.
+partition the C(nLabels, 2) unordered pairs.
 
 The strong-falsification probe (quantum-methodology.md §1.2 #1) reads
-off ``n_only_a`` when ``(a, b) = (≼_maj, ≼_LR)``: it's the count of
+off ``nOnlyA`` when ``(a, b) = (≼_maj, ≼_LR)``: it's the count of
 majorization-related pairs whose endpoints lie outside the Lieb–
 Robinson cone.
 
 Attributes
 ----------
-kendall_tau : float
-    (n_concordant - n_discordant) / n_comparable_both, in [-1, 1].
+kendallTau : float
+    (nConcordant - nDiscordant) / nComparableBoth, in [-1, 1].
     1 = perfect agreement; -1 = perfect disagreement.
-discordant_fraction : float
-    n_discordant / n_comparable_both, in [0, 1].
-hasse_edit_distance : float
+discordantFraction : float
+    nDiscordant / nComparableBoth, in [0, 1].
+hasseEditDistance : float
     |E_a △ E_b| / |E_a ∪ E_b| — symmetric difference of cover edges
     normalized by their union size, in [0, 1].
-n_concordant, n_discordant, n_comparable_both : int
-n_only_a, n_only_b : int
+nConcordant, nDiscordant, nComparableBoth : int
+nOnlyA, nOnlyB : int
     Pairs related by exactly one of the two posets.
 )doc")
-        .def_readonly("kendall_tau",         &OrderAgreement::kendall_tau)
-        .def_readonly("discordant_fraction", &OrderAgreement::discordant_fraction)
-        .def_readonly("hasse_edit_distance", &OrderAgreement::hasse_edit_distance)
-        .def_readonly("n_concordant",        &OrderAgreement::n_concordant)
-        .def_readonly("n_discordant",        &OrderAgreement::n_discordant)
-        .def_readonly("n_comparable_both",   &OrderAgreement::n_comparable_both)
-        .def_readonly("n_only_a",            &OrderAgreement::n_only_a)
-        .def_readonly("n_only_b",            &OrderAgreement::n_only_b);
+        .def_readonly("kendallTau",         &OrderAgreement::kendallTau)
+        .def_readonly("discordantFraction", &OrderAgreement::discordantFraction)
+        .def_readonly("hasseEditDistance", &OrderAgreement::hasseEditDistance)
+        .def_readonly("nConcordant",        &OrderAgreement::nConcordant)
+        .def_readonly("nDiscordant",        &OrderAgreement::nDiscordant)
+        .def_readonly("nComparableBoth",   &OrderAgreement::nComparableBoth)
+        .def_readonly("nOnlyA",            &OrderAgreement::nOnlyA)
+        .def_readonly("nOnlyB",            &OrderAgreement::nOnlyB);
 
     py::class_<CausalComparisonReport>(m, "CausalComparisonReport",
             R"doc(Pairwise agreement statistics across all three Phase 5 orders.
 
 Attributes
 ----------
-maj_vs_lr, maj_vs_cs, lr_vs_cs : OrderAgreement
+majVsLr, majVsCs, lrVsCs : OrderAgreement
     Pairwise comparisons of the three orders.
-n_labels : int
+nLabels : int
     Total number of (cut, time) labels.
-n_snapshots : int
+nSnapshots : int
     Number of TDVP snapshots used.
-v_LR : float
+vLr : float
     Lieb-Robinson velocity used to build ≼_LR.
 )doc")
-        .def_readonly("maj_vs_lr",   &CausalComparisonReport::maj_vs_lr)
-        .def_readonly("maj_vs_cs",   &CausalComparisonReport::maj_vs_cs)
-        .def_readonly("lr_vs_cs",    &CausalComparisonReport::lr_vs_cs)
-        .def_readonly("n_labels",    &CausalComparisonReport::n_labels)
-        .def_readonly("n_snapshots", &CausalComparisonReport::n_snapshots)
-        .def_readonly("v_LR",        &CausalComparisonReport::v_LR);
+        .def_readonly("majVsLr",   &CausalComparisonReport::majVsLr)
+        .def_readonly("majVsCs",   &CausalComparisonReport::majVsCs)
+        .def_readonly("lrVsCs",    &CausalComparisonReport::lrVsCs)
+        .def_readonly("nLabels",    &CausalComparisonReport::nLabels)
+        .def_readonly("nSnapshots", &CausalComparisonReport::nSnapshots)
+        .def_readonly("vLr",        &CausalComparisonReport::vLr);
 
-    m.def("compare_orders",
-          &compare_orders,
-          py::arg("a"), py::arg("b"), py::arg("n_labels"),
+    m.def("compareOrders",
+          &compareOrders,
+          py::arg("a"), py::arg("b"), py::arg("nLabels"),
           R"doc(Pairwise agreement statistics between two Posets on the same
-label set of size n_labels. Returns an :class:`OrderAgreement`.
+label set of size nLabels. Returns an :class:`OrderAgreement`.
 )doc");
 
-    m.def("compute_causal_comparison",
-          &compute_causal_comparison,
-          py::arg("config"), py::arg("v_LR") = 1.0,
+    m.def("computeCausalComparison",
+          &computeCausalComparison,
+          py::arg("config"), py::arg("vLr") = 1.0,
           R"doc(End-to-end Phase 5 pipeline: TDVP + causal-order comparison.
 
-Runs ``run_qqbar_quench`` (forcing ``record_spectra = True``), then
+Runs ``runQqbarQuench`` (forcing ``recordSpectra = True``), then
 builds the three partial orders on the (cut, time) label set:
 
 * ≼_maj from Phase 3 majorization on Schmidt spectra (across cuts AND
   times).
 * ≼_LR — Lieb-Robinson cone: a ≺ b iff time_a < time_b and
-  interval distance ≤ v_LR · (time_b - time_a).
+  interval distance ≤ vLr · (time_b - time_a).
 * ≼_cs — causet order; on the regular chain (Phase 5 scope) this is
   the time-only order. Phase 6 replaces the lattice with a non-trivial
   causet, at which point ≼_cs gains within-time-slice structure.
@@ -667,9 +667,9 @@ fraction, and the Hasse-graph edit distance.
 Parameters
 ----------
 config : TDVPConfig
-    Same as :func:`run_qqbar_quench`. ``record_spectra`` will be forced
+    Same as :func:`runQqbarQuench`. ``recordSpectra`` will be forced
     to ``True``.
-v_LR : float, optional
+vLr : float, optional
     Lieb-Robinson velocity in lattice units (sites / time). Default 1.0
     matches the free-fermion group velocity for our hopping coefficient.
 
@@ -678,8 +678,8 @@ Returns
 CausalComparisonReport
 )doc");
 
-    m.def("run_qqbar_quench",
-          &run_qqbar_quench,
+    m.def("runQqbarQuench",
+          &runQqbarQuench,
           py::arg("config"),
           R"doc(Run the Phase 4 q-qbar quench + TDVP pipeline.
 
@@ -690,7 +690,7 @@ Steps:
    string state) to flip two spins on opposite sublattices.
 3. Record the post-quench observables at t = 0.
 4. Step TDVP forward by ``config.dt`` for ``round(config.T / config.dt)``
-   steps. Record observables every ``config.snapshot_every`` steps.
+   steps. Record observables every ``config.snapshotEvery`` steps.
 5. Return a :class:`QuenchResult` containing the GS diagnostics and
    the snapshot list.
 
@@ -699,7 +699,7 @@ Parameters
 config : TDVPConfig
     Hamiltonian + quench + TDVP settings. ``config.N`` ≥ 2,
     ``config.a > 0``, ``config.dt > 0``, ``config.T > 0``. With
-    ``config.quench_enforce_parity = True`` (default) ``config.i0``
+    ``config.quenchEnforceParity = True`` (default) ``config.i0``
     must be odd and ``config.d`` must be odd as well.
 
 Returns
@@ -709,18 +709,18 @@ QuenchResult
 
 Examples
 --------
->>> from caset.quantum import TDVPConfig, run_qqbar_quench
+>>> from caset.quantum import TDVPConfig, runQqbarQuench
 >>> cfg = TDVPConfig()
 >>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark limit
 >>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
->>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshot_every = 5
->>> result = run_qqbar_quench(cfg)                  # doctest: +SKIP
->>> result.snapshots[0].L_profile[:3]               # doctest: +SKIP
+>>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshotEvery = 5
+>>> result = runQqbarQuench(cfg)                  # doctest: +SKIP
+>>> result.snapshots[0].lProfile[:3]               # doctest: +SKIP
 [-1.0, -0.0, -1.0]
 )doc");
 
-    m.def("compute_ground_state_majorization",
-          &compute_ground_state_majorization,
+    m.def("computeGroundStateMajorization",
+          &computeGroundStateMajorization,
           py::arg("config"), py::arg("tol") = 1e-12,
           R"doc(Run DMRG ground-state, then extract Schmidt spectra and poset.
 
@@ -728,7 +728,7 @@ Single-shot pipeline that performs all three Phase 3 steps in one C++
 call:
 
 1. Build the Schwinger MPO from ``config`` and run DMRG (same as
-   :func:`compute_ground_state`).
+   :func:`computeGroundState`).
 2. Compute the Schmidt spectrum of every contiguous bipartition of the
    optimized MPS, excluding the trivial full-chain cut.
 3. Build the majorization poset on those spectra (Hasse cover edges
@@ -737,7 +737,7 @@ call:
 Parameters
 ----------
 config : QuantumConfig
-    Hamiltonian + DMRG parameters; see :func:`compute_ground_state`.
+    Hamiltonian + DMRG parameters; see :func:`computeGroundState`.
 tol : float, optional
     Slack for the majorization comparisons used to build the poset.
 
@@ -748,11 +748,11 @@ GroundStateMajorizationResult
 
 Examples
 --------
->>> from caset.quantum import QuantumConfig, compute_ground_state_majorization
+>>> from caset.quantum import QuantumConfig, computeGroundStateMajorization
 >>> cfg = QuantumConfig()
 >>> cfg.N = 6; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
->>> cfg.max_bond_dim = 32; cfg.n_sweeps = 8
->>> r = compute_ground_state_majorization(cfg)
+>>> cfg.maxBondDim = 32; cfg.nSweeps = 8
+>>> r = computeGroundStateMajorization(cfg)
 >>> r.spectra.N
 6
 >>> all(abs(sum(s) - 1.0) < 1e-10 for s in r.spectra.spectra)
@@ -767,7 +767,7 @@ A flattened mapping from a :class:`caset._caset.Spacetime` (or a future
 inherited Hasse-cover :class:`Poset` on the lattice sites.
 
 For the simplest case where every time slice has a single vertex, this
-collapses to a regular chain and ``hopping_pairs == [(0,1), (1,2), …]``.
+collapses to a regular chain and ``hoppingPairs == [(0,1), (1,2), …]``.
 For non-trivial antichains the chain can still hold the state — but
 multi-site antichains may produce hopping pairs with stride > 1, which
 is the trigger for moving to a tree tensor network in the longer-term
@@ -775,7 +775,7 @@ plan (PLAN.md §6).
 
 Attributes
 ----------
-n_sites : int
+nSites : int
     Total number of lattice sites = sum over slices of antichain size.
 times : list[int]
     Sorted ascending list of integer time slices present in the
@@ -783,35 +783,35 @@ times : list[int]
 antichains : list[list[int]]
     ``antichains[s]`` is the ascending-ID list of Spacetime vertex IDs
     at ``times[s]``.
-vertex_ids : list[int]
+vertexIds : list[int]
     Flat lattice site → Spacetime vertex ID. Concatenation of all
     antichains in time order.
-hopping_pairs : list[tuple[int, int]]
+hoppingPairs : list[tuple[int, int]]
     Pairs ``(i, j)`` with ``i < j`` of flat lattice sites coupled by
     timelike causet edges that cross exactly one slice boundary.
-partial_order : Poset
-    Hasse cover Poset on the n_sites label set, inherited via
-    :func:`caset._caset.Poset.from_spacetime`.
+partialOrder : Poset
+    Hasse cover Poset on the nSites label set, inherited via
+    :func:`caset._caset.Poset.fromSpacetime`.
 )doc")
-        .def_readonly("n_sites",      &CausetChain::n_sites)
+        .def_readonly("nSites",      &CausetChain::nSites)
         .def_readonly("times",        &CausetChain::times)
         .def_readonly("antichains",   &CausetChain::antichains)
-        .def_readonly("vertex_ids",   &CausetChain::vertex_ids)
-        .def_readonly("hopping_pairs",&CausetChain::hopping_pairs)
-        .def_readonly("partial_order",&CausetChain::partial_order)
+        .def_readonly("vertexIds",   &CausetChain::vertexIds)
+        .def_readonly("hoppingPairs",&CausetChain::hoppingPairs)
+        .def_readonly("partialOrder",&CausetChain::partialOrder)
         .def("__repr__", [](CausetChain const& c) {
-            return "CausetChain(n_sites=" + std::to_string(c.n_sites) +
+            return "CausetChain(nSites=" + std::to_string(c.nSites) +
                    ", times=" + std::to_string(c.times.size()) +
-                   ", hops=" + std::to_string(c.hopping_pairs.size()) + ")";
+                   ", hops=" + std::to_string(c.hoppingPairs.size()) + ")";
         });
 
     // Spacetime is bound in the top-level _caset module (src/bindings.cpp),
     // not here, so pybind11 can't statically deduce its descriptor for a
     // raw Spacetime const& parameter. Take it through py::object and cast
     // at runtime — the registry lookup resolves to the same class object.
-    m.def("extract_causet_chain", [](py::object spacetime_obj) {
+    m.def("extractCausetChain", [](py::object spacetime_obj) {
               auto const* st = spacetime_obj.cast<caset::Spacetime const*>();
-              return extract_causet_chain(*st);
+              return extractCausetChain(*st);
           }, py::arg("spacetime"),
           R"doc(Phase 6 — extract a chain-of-antichains adapter from a Spacetime.
 
@@ -830,8 +830,8 @@ Walks the Spacetime's vertex list, groups vertices by integer time slice
 This is the data shape the Phase 6 causet-embedded Schwinger MPO
 construction would consume to replace the regular 1D lattice. For the
 trivial case where every time slice has a single vertex,
-``hopping_pairs`` reduces to ``[(0, 1), (1, 2), …]`` and the existing
-:func:`compute_ground_state` runs unchanged on top.
+``hoppingPairs`` reduces to ``[(0, 1), (1, 2), …]`` and the existing
+:func:`computeGroundState` runs unchanged on top.
 
 Parameters
 ----------
@@ -844,7 +844,7 @@ Returns
 CausetChain
 )doc");
 
-    m.def("compute_ground_state", &compute_ground_state,
+    m.def("computeGroundState", &computeGroundState,
           py::arg("config"),
           R"doc(Run DMRG to the Schwinger-model ground state.
 
@@ -882,21 +882,21 @@ Examples
 --------
 Reproduce the Phase 1 N=4, m/g=0 reference value::
 
-    >>> from caset.quantum import QuantumConfig, compute_ground_state
+    >>> from caset.quantum import QuantumConfig, computeGroundState
     >>> cfg = QuantumConfig()
     >>> cfg.N = 4
     >>> cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
-    >>> cfg.max_bond_dim = 32; cfg.n_sweeps = 8
-    >>> r = compute_ground_state(cfg)
-    >>> abs(r.operator_energy - (-1.738676174)) < 1e-8
+    >>> cfg.maxBondDim = 32; cfg.nSweeps = 8
+    >>> r = computeGroundState(cfg)
+    >>> abs(r.operatorEnergy - (-1.738676174)) < 1e-8
     True
 
 Scan the bond-dim cap to see variational descent::
 
     >>> energies = []
     >>> for D in (4, 8, 16, 32):
-    ...     cfg.max_bond_dim = D
-    ...     energies.append(compute_ground_state(cfg).operator_energy)
+    ...     cfg.maxBondDim = D
+    ...     energies.append(computeGroundState(cfg).operatorEnergy)
     >>> all(energies[i] >= energies[i+1] - 1e-10 for i in range(3))
     True
 
@@ -907,7 +907,7 @@ GroundStateResult : Output result struct.
 
 Notes
 -----
-For N ≳ 30 expect the run to take seconds; for N ≳ 100 with bond_dim
+For N ≳ 30 expect the run to take seconds; for N ≳ 100 with bondDim
 ≳ 100, tens of seconds. The CPU work is in BLAS/LAPACK calls inside
 ITensor — set OMP_NUM_THREADS to use multiple cores.
 )doc");

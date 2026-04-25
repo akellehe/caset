@@ -60,36 +60,36 @@ Quickstart
 
 Compute the ground state at the Phase 1 / PLAN.md spec parameters::
 
-    >>> from caset.quantum import QuantumConfig, compute_ground_state
+    >>> from caset.quantum import QuantumConfig, computeGroundState
     >>> cfg = QuantumConfig()
     >>> cfg.N = 20             # 1-based, even
     >>> cfg.a = 1.0; cfg.g = 1.0
     >>> cfg.m = 0.0            # massless
     >>> cfg.L0 = 0.0           # zero background field
-    >>> cfg.max_bond_dim = 100
-    >>> cfg.n_sweeps = 12
-    >>> result = compute_ground_state(cfg)
+    >>> cfg.maxBondDim = 100
+    >>> cfg.nSweeps = 12
+    >>> result = computeGroundState(cfg)
     >>> result.energy < 0
     True
 
 The returned object exposes diagnostics::
 
     >>> print(result)              # doctest: +SKIP
-    GroundStateResult(energy=-4.31..., bond_dim=..., truncation_err=...)
-    >>> # operator_energy + constant == energy by construction
-    >>> abs(result.energy - (result.operator_energy + result.constant)) < 1e-12
+    GroundStateResult(energy=-4.31..., bondDim=..., truncationErr=...)
+    >>> # operatorEnergy + constant == energy by construction
+    >>> abs(result.energy - (result.operatorEnergy + result.constant)) < 1e-12
     True
 
 Convergence checks
 ------------------
 
-The result's ``bond_dim`` field is the achieved MPS bond dimension. If
-it equals ``config.max_bond_dim``, the run was bond-dim-limited and
+The result's ``bondDim`` field is the achieved MPS bond dimension. If
+it equals ``config.maxBondDim``, the run was bond-dim-limited and
 the energy may not be fully converged. Bumping the cap and rerunning
 should give a (variationally) lower energy::
 
-    >>> cfg.max_bond_dim = 50; e1 = compute_ground_state(cfg).energy
-    >>> cfg.max_bond_dim = 100; e2 = compute_ground_state(cfg).energy
+    >>> cfg.maxBondDim = 50; e1 = computeGroundState(cfg).energy
+    >>> cfg.maxBondDim = 100; e2 = computeGroundState(cfg).energy
     >>> e2 <= e1 + 1e-10  # variational: more bond-dim → lower energy
     True
 
@@ -106,19 +106,19 @@ This is the hypothesis substrate for the methodology page
 
 The pure-function API works on plain Python lists::
 
-    >>> from caset.quantum import majorizes, strictly_majorizes, majorization_poset
+    >>> from caset.quantum import majorizes, strictlyMajorizes, majorizationPoset
     >>> majorizes([1.0, 0.0], [0.5, 0.5])     # (1, 0) ≻ (½, ½)
     True
-    >>> strictly_majorizes([0.5, 0.5], [1.0, 0.0])
+    >>> strictlyMajorizes([0.5, 0.5], [1.0, 0.0])
     False
-    >>> p = majorization_poset([[1/3]*3, [0.5, 0.5], [1.0]])
-    >>> p.n_nodes, sorted(p.covers)
+    >>> p = majorizationPoset([[1/3]*3, [0.5, 0.5], [1.0]])
+    >>> p.getNodeCount, sorted(p.covers)
     (3, [(1, 0), (2, 1)])
 
 The end-to-end pipeline (DMRG → Schmidt → poset) is one call::
 
-    >>> from caset.quantum import compute_ground_state_majorization
-    >>> r = compute_ground_state_majorization(cfg)  # cfg from above
+    >>> from caset.quantum import computeGroundStateMajorization
+    >>> r = computeGroundStateMajorization(cfg)  # cfg from above
     >>> r.spectra.N
     20
     >>> all(abs(sum(s) - 1.0) < 1e-10 for s in r.spectra.spectra)
@@ -131,7 +131,7 @@ total.
 Phase 4 — q-qbar quench and TDVP real-time evolution
 ----------------------------------------------------
 
-The `run_qqbar_quench(config)` function runs the full DMRG → quench →
+The `runQqbarQuench(config)` function runs the full DMRG → quench →
 TDVP pipeline in a single C++ call. The quench operator is
 
     U_qqbar(i0, d)  =  σ⁻_{i0} · σ⁺_{i0 + d}
@@ -144,13 +144,13 @@ and the bond dimension; optionally the full contiguous-cut Schmidt
 spectra and majorization poset (off by default — they cost O(N²) SVDs
 per snapshot). Example::
 
-    >>> from caset.quantum import TDVPConfig, run_qqbar_quench
+    >>> from caset.quantum import TDVPConfig, runQqbarQuench
     >>> cfg = TDVPConfig()
     >>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark
     >>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
-    >>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshot_every = 5
-    >>> r = run_qqbar_quench(cfg)
-    >>> r.snapshots[0].L_profile[:3]                   # +1 tube starts at link 3
+    >>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshotEvery = 5
+    >>> r = runQqbarQuench(cfg)
+    >>> r.snapshots[0].lProfile[:3]                   # +1 tube starts at link 3
     [-1.0, -0.0, -0.0]
 
 In the heavy-quark limit the flux tube is approximately stable for the
@@ -160,24 +160,24 @@ the reference to within 0.05 at t = T/2; |ΔE|/|E0| < 1e-3).
 Phase 5 — causal-order comparison
 ---------------------------------
 
-The `compute_causal_comparison(config, v_LR)` function ties Phases 1-4
+The `computeCausalComparison(config, vLr)` function ties Phases 1-4
 together: DMRG ground state → q-qbar quench → TDVP loop → build three
 partial orders on (cut, time) labels → compare. The orders are:
 
   ≼_maj: strict-majorization on Schmidt spectra (Phase 3, across time)
-  ≼_LR:  Lieb-Robinson cone, dist(A, B) ≤ v_LR · (t_B - t_A)
+  ≼_LR:  Lieb-Robinson cone, dist(A, B) ≤ vLr · (t_B - t_A)
   ≼_cs:  causet — time-only on regular chain (Phase 6 makes it richer)
 
 Each comparison reports Kendall-τ, discordant-pair fraction, and Hasse-
 graph edit distance. Example::
 
-    >>> from caset.quantum import TDVPConfig, compute_causal_comparison
+    >>> from caset.quantum import TDVPConfig, computeCausalComparison
     >>> cfg = TDVPConfig()
     >>> cfg.N = 10; cfg.m = 0.5; cfg.g = 1.0
     >>> cfg.i0 = 3; cfg.d = 3
-    >>> cfg.dt = 0.1; cfg.T = 1.0; cfg.snapshot_every = 1
-    >>> r = compute_causal_comparison(cfg, v_LR=1.0)
-    >>> r.lr_vs_cs.kendall_tau
+    >>> cfg.dt = 0.1; cfg.T = 1.0; cfg.snapshotEvery = 1
+    >>> r = computeCausalComparison(cfg, vLr=1.0)
+    >>> r.lrVsCs.kendallTau
     1.0
 
 The ≼_LR ⊂ ≼_cs invariant gives the strongest sanity check: τ = 1.0
@@ -230,31 +230,31 @@ docstrings for parameter / return-value documentation, and
 are pybind11-generated from the C++ types in ``include/quantum/``.
 
 Phase 2 — DMRG ground state:
-    QuantumConfig, GroundStateResult, compute_ground_state
+    QuantumConfig, GroundStateResult, computeGroundState
 
 Phase 3 — Schmidt spectra and majorization poset:
     Interval, SchmidtSpectra, Poset, GroundStateMajorizationResult,
-    majorizes, strictly_majorizes, majorization_poset,
-    compute_ground_state_majorization
+    majorizes, strictlyMajorizes, majorizationPoset,
+    computeGroundStateMajorization
 
 Phase 4 — TDVP q-qbar quench:
-    TDVPConfig, TDVPSnapshot, QuenchResult, run_qqbar_quench
+    TDVPConfig, TDVPSnapshot, QuenchResult, runQqbarQuench
 
 Phase 5 — causal-order comparison:
     LabelSpacetime, CausalOrders, OrderAgreement, CausalComparisonReport,
-    compare_orders, compute_causal_comparison
+    compareOrders, computeCausalComparison
 
 Implementation notes
 --------------------
 
 * The DMRG runs in the U(1) total-Sz = 0 sector by default
-  (``config.conserve_qns = True``). Set ``conserve_qns = False`` only
+  (``config.conserveQns = True``). Set ``conserveQns = False`` only
   when you need to apply non-Sz-conserving operators (σ^x, σ^y) to
   the resulting MPS.
 * The MPO is built via ITensor's ``AutoMPO`` from the operator
   expansion of L_n² (linear σ^z plus pair σ^z σ^z plus a c-number
   shift). The c-number shift is returned as ``result.constant`` so the
-  full physical energy is ``result.energy = operator_energy + constant``.
+  full physical energy is ``result.energy = operatorEnergy + constant``.
 * Bond dimension for the Schwinger MPO grows linearly with N (typical
   values: 5 for N ≤ 30, ~10 for N ≤ 100). The MPS bond dimension
   needed for ground-state convergence is also modest at small mass.
@@ -272,7 +272,7 @@ try:
     # Phase 2 — DMRG ground state.
     QuantumConfig         = _qm.QuantumConfig
     GroundStateResult     = _qm.GroundStateResult
-    compute_ground_state  = _qm.compute_ground_state
+    computeGroundState  = _qm.computeGroundState
 
     # Phase 3 — Schmidt spectra + majorization poset.
     Interval                            = _qm.Interval
@@ -280,27 +280,27 @@ try:
     Poset                               = _qm.Poset
     GroundStateMajorizationResult       = _qm.GroundStateMajorizationResult
     majorizes                           = _qm.majorizes
-    strictly_majorizes                  = _qm.strictly_majorizes
-    majorization_poset                  = _qm.majorization_poset
-    compute_ground_state_majorization   = _qm.compute_ground_state_majorization
+    strictlyMajorizes                  = _qm.strictlyMajorizes
+    majorizationPoset                  = _qm.majorizationPoset
+    computeGroundStateMajorization   = _qm.computeGroundStateMajorization
 
     # Phase 4 — TDVP real-time evolution after a q-qbar quench.
     TDVPConfig         = _qm.TDVPConfig
     TDVPSnapshot       = _qm.TDVPSnapshot
     QuenchResult       = _qm.QuenchResult
-    run_qqbar_quench   = _qm.run_qqbar_quench
+    runQqbarQuench   = _qm.runQqbarQuench
 
     # Phase 5 — causal-order comparison (maj vs LR vs caset).
     LabelSpacetime              = _qm.LabelSpacetime
     CausalOrders                = _qm.CausalOrders
     OrderAgreement              = _qm.OrderAgreement
     CausalComparisonReport      = _qm.CausalComparisonReport
-    compare_orders              = _qm.compare_orders
-    compute_causal_comparison   = _qm.compute_causal_comparison
+    compareOrders              = _qm.compareOrders
+    computeCausalComparison   = _qm.computeCausalComparison
 
     # Phase 6 — caset-Spacetime → chain-of-antichains adapter.
     CausetChain           = _qm.CausetChain
-    extract_causet_chain  = _qm.extract_causet_chain
+    extractCausetChain  = _qm.extractCausetChain
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "caset.quantum is unavailable: this caset build does not include "
@@ -313,29 +313,29 @@ __all__ = [
     # Phase 2
     "QuantumConfig",
     "GroundStateResult",
-    "compute_ground_state",
+    "computeGroundState",
     # Phase 3
     "Interval",
     "SchmidtSpectra",
     "Poset",
     "GroundStateMajorizationResult",
     "majorizes",
-    "strictly_majorizes",
-    "majorization_poset",
-    "compute_ground_state_majorization",
+    "strictlyMajorizes",
+    "majorizationPoset",
+    "computeGroundStateMajorization",
     # Phase 4
     "TDVPConfig",
     "TDVPSnapshot",
     "QuenchResult",
-    "run_qqbar_quench",
+    "runQqbarQuench",
     # Phase 5
     "LabelSpacetime",
     "CausalOrders",
     "OrderAgreement",
     "CausalComparisonReport",
-    "compare_orders",
-    "compute_causal_comparison",
+    "compareOrders",
+    "computeCausalComparison",
     # Phase 6
     "CausetChain",
-    "extract_causet_chain",
+    "extractCausetChain",
 ]

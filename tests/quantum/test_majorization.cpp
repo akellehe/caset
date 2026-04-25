@@ -37,7 +37,7 @@ bool reflexivity() {
                       "μ = (½, ½) majorizes itself");
     ok &= expect_true(majorizes({0.7, 0.2, 0.1}, {0.7, 0.2, 0.1}),
                       "μ = (0.7, 0.2, 0.1) majorizes itself");
-    ok &= expect_false(strictly_majorizes({0.5, 0.5}, {0.5, 0.5}),
+    ok &= expect_false(strictlyMajorizes({0.5, 0.5}, {0.5, 0.5}),
                        "(½,½) does NOT strictly majorize itself");
     return ok;
 }
@@ -49,7 +49,7 @@ bool the_canonical_strict_pair() {
                       "(1, 0) majorizes (½, ½)");
     ok &= expect_false(majorizes({0.5, 0.5}, {1.0, 0.0}),
                        "(½, ½) does NOT majorize (1, 0)");
-    ok &= expect_true(strictly_majorizes({1.0, 0.0}, {0.5, 0.5}),
+    ok &= expect_true(strictlyMajorizes({1.0, 0.0}, {0.5, 0.5}),
                       "(1, 0) STRICTLY majorizes (½, ½)");
     return ok;
 }
@@ -61,7 +61,7 @@ bool zero_padding_invariance() {
                       "padded (½, ½, 0, 0, 0) ~ (½, ½)");
     ok &= expect_true(majorizes({0.5, 0.5}, {0.5, 0.5, 0.0, 0.0}),
                       "(½, ½) ~ padded (½, ½, 0, 0)");
-    ok &= expect_false(strictly_majorizes({0.5, 0.5, 0.0}, {0.5, 0.5}),
+    ok &= expect_false(strictlyMajorizes({0.5, 0.5, 0.0}, {0.5, 0.5}),
                        "extra zeros do NOT introduce strict majorization");
     return ok;
 }
@@ -83,9 +83,9 @@ bool transitivity() {
     const std::vector<double> b = {0.5, 0.5, 0.0};
     const std::vector<double> c = {1.0/3, 1.0/3, 1.0/3};
     bool ok = true;
-    ok &= expect_true(strictly_majorizes(a, b), "(1,0,0) ≻ (½,½,0)");
-    ok &= expect_true(strictly_majorizes(b, c), "(½,½,0) ≻ (⅓,⅓,⅓)");
-    ok &= expect_true(strictly_majorizes(a, c),
+    ok &= expect_true(strictlyMajorizes(a, b), "(1,0,0) ≻ (½,½,0)");
+    ok &= expect_true(strictlyMajorizes(b, c), "(½,½,0) ≻ (⅓,⅓,⅓)");
+    ok &= expect_true(strictlyMajorizes(a, c),
                       "(1,0,0) ≻ (⅓,⅓,⅓) (transitive consequence)");
     return ok;
 }
@@ -121,11 +121,11 @@ bool small_poset_construction() {
         {0.5, 0.5},             // node 1  — middle
         {1.0},                  // node 2  — most concentrated (= (1, 0, 0))
     };
-    auto poset = majorization_poset(spectra);
+    auto poset = majorizationPoset(spectra);
     // Hasse cover relations should be 2 → 1 and 1 → 0; the direct edge
     // 2 → 0 should be REMOVED by transitive reduction.
     bool ok = true;
-    ok &= expect_true(poset.n_nodes() == 3, "n_nodes = 3");
+    ok &= expect_true(poset.getNodeCount() == 3, "getNodeCount = 3");
     ok &= expect_true(poset.covers().size() == 2, "exactly 2 cover edges");
     bool has_2_to_1 = false;
     bool has_1_to_0 = false;
@@ -144,12 +144,12 @@ bool small_poset_construction() {
 
 bool empty_input() {
     std::cout << "\nEdge cases — empty / single-node input\n";
-    auto p_empty = majorization_poset({});
-    auto p_one   = majorization_poset({{1.0}});
+    auto p_empty = majorizationPoset({});
+    auto p_one   = majorizationPoset({{1.0}});
     bool ok = true;
-    ok &= expect_true(p_empty.n_nodes() == 0,    "empty input → 0 nodes");
+    ok &= expect_true(p_empty.getNodeCount() == 0,    "empty input → 0 nodes");
     ok &= expect_true(p_empty.covers().empty(),  "empty input → 0 edges");
-    ok &= expect_true(p_one.n_nodes() == 1,      "single-node input → 1 node");
+    ok &= expect_true(p_one.getNodeCount() == 1,      "single-node input → 1 node");
     ok &= expect_true(p_one.covers().empty(),    "single-node input → 0 edges");
     return ok;
 }

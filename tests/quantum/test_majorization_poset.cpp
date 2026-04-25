@@ -12,8 +12,8 @@
 //       compared against a synthetic product-state spectrum (1, 0)
 //       we should see (1, 0) ≻ (½, ½) as a strict cover edge.
 //
-// These exercise the full pipeline: schmidt_spectrum() → vector of
-// spectra → majorization_poset() → Hasse cover edges.
+// These exercise the full pipeline: schmidtSpectrum() → vector of
+// spectra → majorizationPoset() → Hasse cover edges.
 
 #include "quantum/schmidt.hpp"
 #include "quantum/majorization.hpp"
@@ -35,8 +35,8 @@ bool acceptance_product_state() {
     auto sites = itensor::SpinHalf(N, {"ConserveQNs=", false});
     auto psi = product_up(sites);
 
-    auto cuts = all_contiguous_spectra(psi);
-    auto poset = majorization_poset(cuts.spectra);
+    auto cuts = allContiguousSpectra(psi);
+    auto poset = majorizationPoset(cuts.spectra);
 
     const bool ok = poset.covers().empty();
     std::cout << "  cuts=" << cuts.spectra.size()
@@ -59,8 +59,8 @@ bool acceptance_ghz_no_strict_edges() {
     // Every single-site spectrum and every contiguous-cut spectrum is
     // exactly (½, ½), so all pairwise comparisons are equality and the
     // strict-majorization graph is empty.
-    auto cuts = all_contiguous_spectra(psi);
-    auto poset = majorization_poset(cuts.spectra);
+    auto cuts = allContiguousSpectra(psi);
+    auto poset = majorizationPoset(cuts.spectra);
 
     const bool ok = poset.covers().empty();
     std::cout << "  cuts=" << cuts.spectra.size()
@@ -79,7 +79,7 @@ bool acceptance_bell_vs_product() {
         << "\nAcceptance #3 — Bell (½, ½) vs product (1, 0): (1, 0) ≻ (½, ½)\n";
     auto sites = itensor::SpinHalf(2, {"ConserveQNs=", false});
     auto psi = bell_phi_plus(sites);
-    auto bell_spec = schmidt_spectrum(psi, 1, 1);
+    auto bell_spec = schmidtSpectrum(psi, 1, 1);
 
     // Extra synthetic node injects a perfectly product-state spectrum
     // into the comparison set, so the poset is non-degenerate.
@@ -87,7 +87,7 @@ bool acceptance_bell_vs_product() {
         bell_spec,        // node 0 — Bell cut, expected (½, ½)
         {1.0, 0.0},       // node 1 — synthetic product cut
     };
-    auto poset = majorization_poset(spectra);
+    auto poset = majorizationPoset(spectra);
 
     bool ok = true;
     if (poset.covers().size() != 1) {
@@ -127,15 +127,15 @@ bool ghz_full_chain_includes_extreme() {
     auto psi_p = product_up(sites);
     auto psi_g = ghz(sites);
 
-    auto cuts_p = all_contiguous_spectra(psi_p);  // all (1, 0, 0)
-    auto cuts_g = all_contiguous_spectra(psi_g);  // all (½, ½, 0)
+    auto cuts_p = allContiguousSpectra(psi_p);  // all (1, 0, 0)
+    auto cuts_g = allContiguousSpectra(psi_g);  // all (½, ½, 0)
 
     std::vector<std::vector<double>> spectra;
     spectra.insert(spectra.end(), cuts_p.spectra.begin(), cuts_p.spectra.end());
     const std::size_t n_product = cuts_p.spectra.size();
     spectra.insert(spectra.end(), cuts_g.spectra.begin(), cuts_g.spectra.end());
 
-    auto poset = majorization_poset(spectra);
+    auto poset = majorizationPoset(spectra);
 
     // We expect: every GHZ node (index ≥ n_product) should be covered by
     // every product node (index < n_product), but transitive reduction

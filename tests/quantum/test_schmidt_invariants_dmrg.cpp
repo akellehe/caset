@@ -17,14 +17,14 @@
 //   (P2)  λ_α ∈ [0, 1] for all α          (probability + bounded)
 //   (P3)  λ_α monotone non-increasing     (sort convention; the public
 //                                          API documents descending order
-//                                          via Schmidt::all_contiguous_spectra)
+//                                          via Schmidt::allContiguousSpectra)
 //   (P4)  rank ≤ 2^min(w, N-w)            (Schmidt rank bound for a cut
 //                                          of width w on a chain of N
 //                                          spin-½ sites)
 //
 // These hold for every contiguous bipartition of any pure-state MPS,
 // regardless of the Hamiltonian or DMRG sweep schedule. A failure means
-// either schmidt_spectrum() or DMRG itself produced an unphysical state.
+// either schmidtSpectrum() or DMRG itself produced an unphysical state.
 //
 // We sweep a small parameter grid (N ∈ {6, 8}, m/g ∈ {0, 0.25, 1.0},
 // L₀ ∈ {0, 0.5}) — 12 ground states × O(N²) cuts each = O(100) spectra
@@ -111,7 +111,7 @@ bool spectrum_invariants(std::vector<double> const& spec,
 }
 
 bool sweep_one_config(QuantumConfig const& cfg) {
-    auto r = compute_ground_state_majorization(cfg, /*tol=*/1e-12);
+    auto r = computeGroundStateMajorization(cfg, /*tol=*/1e-12);
     InvariantStats stats;
     bool ok = true;
     for (std::size_t k = 0; k < r.spectra.spectra.size(); ++k) {
@@ -139,12 +139,12 @@ bool sweep_one_config(QuantumConfig const& cfg) {
 QuantumConfig make_config(int N, double m, double L0) {
     QuantumConfig c;
     c.N = N; c.a = 1.0; c.g = 1.0; c.m = m; c.L0 = L0;
-    c.max_bond_dim = 32;
-    c.n_sweeps = 8;
+    c.maxBondDim = 32;
+    c.nSweeps = 8;
     c.cutoff = 1e-12;
-    c.krylov_dim = 4;
+    c.krylovDim = 4;
     c.quiet = true;
-    c.conserve_qns = true;
+    c.conserveQns = true;
     return c;
 }
 

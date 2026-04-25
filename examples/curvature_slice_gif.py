@@ -233,7 +233,7 @@ def _render_2d_frame(pos, edge_idx, curvatures, center_idx, t,
 
 def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
                          *, fig_size=(6, 6), cmap_name="RdYlBu_r",
-                         layout_iters=200, frame_duration_ms=500,
+                         layoutIters=200, frame_duration_ms=500,
                          **_kwargs):
     """Render a GIF with one frame per time slice showing the spatial
     subgraph as a 2D radial embedding with curvature heat map.
@@ -269,7 +269,7 @@ def render_curvature_gif(st, solver, worldline, output_path="curvature.gif",
 
         pos, vid_to_idx, edge_idx, prev_angles = _radial_layout_2d(
             verts, edges, center.getId(), bfs_dist,
-            iters=layout_iters, prev_angles=prev_angles)
+            iters=layoutIters, prev_angles=prev_angles)
 
         curvatures = _vertex_curvatures(verts, solver, t)
         center_idx = vid_to_idx[center.getId()]
@@ -332,8 +332,8 @@ def main():
     solver = caset.ReggeSolver(st, matter)
     prog.phase("solving", total=args.max_iters)
     converged, F, iters = solver.solve(
-        tol=args.tol, max_iters=args.max_iters,
-        learning_rate=args.learning_rate)
+        tol=args.tol, maxIters=args.max_iters,
+        learningRate=args.learning_rate)
     print(f"{'Converged' if converged else 'Did not converge'} "
           f"after {iters} iters, F={F:.6f}")
 

@@ -12,7 +12,7 @@
 //      ends of the q-qbar pair (Phase 4 quench, see quench.hpp).
 //   3. Record the post-quench observables (snapshot at t = 0).
 //   4. Step TDVP forward by Δt for n_steps = T/Δt steps. After every
-//      `snapshot_every` steps record ⟨L_n⟩(t), ⟨σ^z_n⟩(t), bond_dim,
+//      `snapshotEvery` steps record ⟨L_n⟩(t), ⟨σ^z_n⟩(t), bondDim,
 //      and the energy ⟨ψ(t)|H|ψ(t)⟩ (constant if H is time-independent
 //      modulo Trotter / truncation error).
 //   5. Optionally compute Schmidt spectra + majorization poset per
@@ -45,33 +45,33 @@ struct TDVPConfig {
     double L0{0.0};
 
     // ─── DMRG ground-state setup ────────────────────────────────────────
-    int    dmrg_max_bond_dim{100};
-    int    dmrg_n_sweeps{12};
-    int    dmrg_krylov_dim{4};
-    double dmrg_cutoff{1e-12};
+    int    dmrgMaxBondDim{100};
+    int    dmrgNSweeps{12};
+    int    dmrgKrylovDim{4};
+    double dmrgCutoff{1e-12};
 
     // ─── q-qbar quench: σ⁻_{i0} · σ⁺_{i0+d} ─────────────────────────────
     int  i0{0};                // first site of the pair, 1-based
     int  d{0};                 // separation, must be odd for the heavy-
                                // quark Néel parity to align (see quench.hpp)
-    bool quench_enforce_parity{true};
+    bool quenchEnforceParity{true};
 
     // ─── TDVP loop ─────────────────────────────────────────────────────
     double dt{0.05};           // real-time step
     double T{1.0};             // total evolution time (sets n_steps = T/dt)
-    int    max_bond_dim{200};  // bond-dim cap during TDVP sweeps
-    int    krylov_dim{12};     // Krylov / Lanczos dimension per local solve
+    int    maxBondDim{200};  // bond-dim cap during TDVP sweeps
+    int    krylovDim{12};     // Krylov / Lanczos dimension per local solve
     double cutoff{1e-10};      // SVD truncation per local solve
-    int    snapshot_every{1};  // record observables every k steps (≥ 1)
+    int    snapshotEvery{1};  // record observables every k steps (≥ 1)
     bool   quiet{true};
-    bool   conserve_qns{true};
+    bool   conserveQns{true};
 
     // ─── Observable recording ──────────────────────────────────────────
-    // record_spectra = true is needed to have any spectra in snapshots;
-    // record_poset additionally builds the majorization poset on those
-    // spectra. record_poset implies record_spectra.
-    bool record_spectra{false};
-    bool record_poset{false};
+    // recordSpectra = true is needed to have any spectra in snapshots;
+    // recordPoset additionally builds the majorization poset on those
+    // spectra. recordPoset implies recordSpectra.
+    bool recordSpectra{false};
+    bool recordPoset{false};
 };
 
 // Per-step diagnostics. Schmidt spectra and poset are populated only when
@@ -79,22 +79,22 @@ struct TDVPConfig {
 struct TDVPSnapshot {
     double time{0.0};
     double energy{0.0};               // ⟨ψ|H|ψ⟩ + sm.constant
-    int    bond_dim{0};               // maxLinkDim(ψ) at this time
-    std::vector<double> Z_profile;    // ⟨σ^z_n⟩ for n = 1..N
-    std::vector<double> L_profile;    // ⟨L_n⟩  for n = 1..N-1
-    SchmidtSpectra      spectra;      // populated if cfg.record_spectra
-    Poset               poset;        // populated if cfg.record_poset
+    int    bondDim{0};               // maxLinkDim(ψ) at this time
+    std::vector<double> zProfile;    // ⟨σ^z_n⟩ for n = 1..N
+    std::vector<double> lProfile;    // ⟨L_n⟩  for n = 1..N-1
+    SchmidtSpectra      spectra;      // populated if cfg.recordSpectra
+    Poset               poset;        // populated if cfg.recordPoset
 };
 
 // Result bundle: GS diagnostics, then a vector of snapshots starting at
 // t=0 (post-quench, before any TDVP steps).
 struct QuenchResult {
-    GroundStateResult         ground_state;
+    GroundStateResult         groundState;
     std::vector<TDVPSnapshot> snapshots;
 };
 
 // End-to-end pipeline. Throws std::invalid_argument on bad config (out-
-// of-range i0, parity mismatch with quench_enforce_parity, etc.).
-QuenchResult run_qqbar_quench(TDVPConfig const& config);
+// of-range i0, parity mismatch with quenchEnforceParity, etc.).
+QuenchResult runQqbarQuench(TDVPConfig const& config);
 
 } // namespace caset::quantum

@@ -80,15 +80,15 @@ using itensor::InitState;
 
 namespace {
 
-double dmrg_groundstate_sz0(SchwingerMPO const& sm, int max_bond_dim, int n_sweeps) {
+double dmrg_groundstate_sz0(SchwingerMPO const& sm, int maxBondDim, int nSweeps) {
     auto state = InitState(sm.sites);
     for (int i = 1; i <= sm.params.N; ++i) {
         state.set(i, (i % 2 == 1) ? "Up" : "Dn");
     }
     auto psi0 = MPS(state);
 
-    auto sweeps = Sweeps(n_sweeps);
-    sweeps.maxdim() = 20, 40, 80, max_bond_dim, max_bond_dim;
+    auto sweeps = Sweeps(nSweeps);
+    sweeps.maxdim() = 20, 40, 80, maxBondDim, maxBondDim;
     sweeps.cutoff() = 1e-12;
     sweeps.niter() = 4;
     sweeps.noise() = 1e-7, 1e-8, 0.0;
@@ -115,7 +115,7 @@ bool check_free_fermion(int N) {
     SchwingerParams p;
     p.N = N; p.a = 1.0; p.g = 0.0; p.m = 0.0; p.L0 = 0.0;
 
-    auto mpo = build_schwinger_mpo(p);
+    auto mpo = buildSchwingerMpo(p);
     const double e_dmrg = dmrg_groundstate_sz0(mpo, 64, 10);
     const double e_total = e_dmrg + mpo.constant;
     const double e_analytic = free_fermion_half_filled_energy(N, p.a);
@@ -136,7 +136,7 @@ bool check_strong_coupling(int N, double m) {
     SchwingerParams p;
     p.N = N; p.a = 1.0; p.g = 1.0; p.m = m; p.L0 = 0.0;
 
-    auto mpo = build_schwinger_mpo(p);
+    auto mpo = buildSchwingerMpo(p);
     const double e_dmrg = dmrg_groundstate_sz0(mpo, 100, 14);
     const double e_total = e_dmrg + mpo.constant;
     // Leading-order asymptotic GS energy on |↑↓↑↓...⟩ for L0=0:

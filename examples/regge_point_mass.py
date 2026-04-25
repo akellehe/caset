@@ -149,8 +149,8 @@ def main():
 
     converged, F_final, iters = solver.solve(
         tol=args.tol,
-        max_iters=args.max_iters,
-        learning_rate=args.learning_rate,
+        maxIters=args.max_iters,
+        learningRate=args.learning_rate,
         progress=on_progress,
     )
 

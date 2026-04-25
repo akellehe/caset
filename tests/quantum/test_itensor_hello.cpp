@@ -66,7 +66,7 @@ Eigen::MatrixXd heisenberg_dense(int N) {
 //                            a small noise term in early sweeps to avoid
 //                            local minima. Cutoff 1e-12 is well below
 //                            double-precision noise on 256-state problems.
-double dmrg_heisenberg(int N, int max_bond, int n_sweeps) {
+double dmrg_heisenberg(int N, int max_bond, int nSweeps) {
     auto sites = SpinHalf(N, {"ConserveQNs=", true});
     auto ampo = AutoMPO(sites);
     for (int n = 1; n <= N - 1; ++n) {
@@ -82,7 +82,7 @@ double dmrg_heisenberg(int N, int max_bond, int n_sweeps) {
     }
     auto psi0 = MPS(state);
 
-    auto sweeps = Sweeps(n_sweeps);
+    auto sweeps = Sweeps(nSweeps);
     sweeps.maxdim() = 20, 40, max_bond, max_bond, max_bond;
     sweeps.cutoff() = 1e-12;
     sweeps.niter() = 4;
@@ -105,7 +105,7 @@ int main() {
     constexpr int N_small = 8;
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(heisenberg_dense(N_small));
     const double e_dense   = es.eigenvalues()(0);
-    const double e_dmrg_8  = dmrg_heisenberg(N_small, /*max_bond=*/64, /*n_sweeps=*/8);
+    const double e_dmrg_8  = dmrg_heisenberg(N_small, /*max_bond=*/64, /*nSweeps=*/8);
     const double diff_8 = std::abs(e_dense - e_dmrg_8);
     std::cout << "Heisenberg N=" << N_small
               << "  dense=" << e_dense
@@ -122,13 +122,13 @@ int main() {
     // The plan calls for "Heisenberg chain for N=20 to within 1e-6 of the
     // ITensor reference value". Dense ED at N=20 is too large (2^20×2^20),
     // so we replace "ITensor reference" with "DMRG converged at high
-    // bond dim": runs at bond_dim ∈ {30, 60, 120} should agree to 1e-6.
+    // bond dim": runs at bondDim ∈ {30, 60, 120} should agree to 1e-6.
     // If they don't, the run isn't converged and the underlying claim
     // ("DMRG matches a reference") is moot.
     constexpr int N_big = 20;
-    const double e_dmrg_30  = dmrg_heisenberg(N_big, /*max_bond=*/30,  /*n_sweeps=*/12);
-    const double e_dmrg_60  = dmrg_heisenberg(N_big, /*max_bond=*/60,  /*n_sweeps=*/12);
-    const double e_dmrg_120 = dmrg_heisenberg(N_big, /*max_bond=*/120, /*n_sweeps=*/12);
+    const double e_dmrg_30  = dmrg_heisenberg(N_big, /*max_bond=*/30,  /*nSweeps=*/12);
+    const double e_dmrg_60  = dmrg_heisenberg(N_big, /*max_bond=*/60,  /*nSweeps=*/12);
+    const double e_dmrg_120 = dmrg_heisenberg(N_big, /*max_bond=*/120, /*nSweeps=*/12);
     const double diff_30_60  = std::abs(e_dmrg_30  - e_dmrg_60);
     const double diff_60_120 = std::abs(e_dmrg_60  - e_dmrg_120);
     std::cout << "Heisenberg N=" << N_big << " bond-dim convergence:\n"

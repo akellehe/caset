@@ -78,7 +78,7 @@ inline double tail_sum_c(int k, int N, double L0) {
 
 } // namespace
 
-double schwinger_energy_constant(SchwingerParams const& p) {
+double schwingerEnergyConstant(SchwingerParams const& p) {
     // E_const = (g²a/2) Σ_{n=1..N-1} (c_n² + n/4)
     // First term tracks Σ c_n², second comes from the (σ^z)² = I diagonal of T_n².
     double s = 0.0;
@@ -95,15 +95,15 @@ namespace {
 // explicit hopping pair list. Used by both the chain (default-NN) builder
 // and the Phase 6 chain-causet builder.
 //
-// `hopping_pairs` is a vector of (i, j) with 0-based flat lattice indices
+// `hoppingPairs` is a vector of (i, j) with 0-based flat lattice indices
 // in [0, p.N − 1]. Both directions of σ⁺σ⁻ + σ⁻σ⁺ are added per pair so
 // the order of (i, j) within a pair is irrelevant — but to keep AutoMPO
 // from registering the same physical pair twice we ask the caller for a
 // deduplicated list.
 SchwingerMPO build_schwinger_mpo_impl(
     SchwingerParams const& p,
-    std::vector<std::pair<int, int>> const& hopping_pairs,
-    bool conserve_qns)
+    std::vector<std::pair<int, int>> const& hoppingPairs,
+    bool conserveQns)
 {
     if (p.N < 2)   throw std::invalid_argument("SchwingerParams.N must be >= 2");
     if (p.a <= 0)  throw std::invalid_argument("SchwingerParams.a must be positive");
@@ -120,7 +120,7 @@ SchwingerMPO build_schwinger_mpo_impl(
     //     "Sz"   = (1/2) σ^z   (eigenvalues ±1/2)
     //     "S+"   = σ⁺          (raises σ^z)
     //     "S-"   = σ⁻          (lowers σ^z)
-    auto sites = SpinHalf(p.N, {"ConserveQNs=", conserve_qns});
+    auto sites = SpinHalf(p.N, {"ConserveQNs=", conserveQns});
 
     auto ampo = AutoMPO(sites);
 
@@ -131,10 +131,10 @@ SchwingerMPO build_schwinger_mpo_impl(
     // wrong MPO via AutoMPO's index arithmetic.
     {
         const double t = 0.5 / p.a;
-        for (auto const& [i0, j0] : hopping_pairs) {
+        for (auto const& [i0, j0] : hoppingPairs) {
             if (i0 < 0 || j0 < 0 || i0 >= p.N || j0 >= p.N || i0 == j0) {
                 throw std::invalid_argument(
-                    "build_schwinger_mpo_chain: hopping pair out of range or "
+                    "buildSchwingerMpoChain: hopping pair out of range or "
                     "self-loop");
             }
             const int i = i0 + 1, j = j0 + 1;
@@ -179,7 +179,7 @@ SchwingerMPO build_schwinger_mpo_impl(
     out.params = p;
     out.sites = sites;
     out.H = toMPO(ampo);
-    out.constant = schwinger_energy_constant(p);
+    out.constant = schwingerEnergyConstant(p);
     return out;
 }
 
@@ -194,16 +194,16 @@ std::vector<std::pair<int, int>> chain_nn_hopping(int N) {
 
 } // namespace
 
-SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns) {
-    return build_schwinger_mpo_impl(p, chain_nn_hopping(p.N), conserve_qns);
+SchwingerMPO buildSchwingerMpo(SchwingerParams const& p, bool conserveQns) {
+    return build_schwinger_mpo_impl(p, chain_nn_hopping(p.N), conserveQns);
 }
 
-SchwingerMPO build_schwinger_mpo_chain(
+SchwingerMPO buildSchwingerMpoChain(
     SchwingerParams const& p,
-    std::vector<std::pair<int, int>> const& hopping_pairs,
-    bool conserve_qns)
+    std::vector<std::pair<int, int>> const& hoppingPairs,
+    bool conserveQns)
 {
-    return build_schwinger_mpo_impl(p, hopping_pairs, conserve_qns);
+    return build_schwinger_mpo_impl(p, hoppingPairs, conserveQns);
 }
 
 // ─── Dense reference Hamiltonian ──────────────────────────────────────────
@@ -240,7 +240,7 @@ inline double sigma_z(std::size_t state, int n, int N) {
 
 } // namespace
 
-SchwingerDense build_schwinger_dense(SchwingerParams const& p) {
+SchwingerDense buildSchwingerDense(SchwingerParams const& p) {
     if (p.N < 2)   throw std::invalid_argument("SchwingerParams.N must be >= 2");
     // Hard cap at 16 to keep us from accidentally allocating a multi-GB
     // matrix; in practice the MPO/DMRG path takes over above N ~ 12.
@@ -251,7 +251,7 @@ SchwingerDense build_schwinger_dense(SchwingerParams const& p) {
     out.params = p;
     out.H = Eigen::MatrixXd::Zero(static_cast<Eigen::Index>(dim),
                                   static_cast<Eigen::Index>(dim));
-    out.constant = schwinger_energy_constant(p);
+    out.constant = schwingerEnergyConstant(p);
 
     // Precompute A_k tail sums once; they get hit O(N) times below per state.
     std::vector<double> A(p.N + 1, 0.0);

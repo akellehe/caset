@@ -7,7 +7,7 @@
 // This file is that independent verification. We compute ⟨ψ|H|ψ⟩ on
 // every computational-basis state of an N=4 chain by evaluating the
 // PLAN.md §4 Hamiltonian formula symbolically (term-by-term, with no
-// MPO machinery) and confirm that build_schwinger_dense agrees to
+// MPO machinery) and confirm that buildSchwingerDense agrees to
 // machine precision. We also check a representative off-diagonal hopping
 // matrix element. If the L_n² expansion in src/quantum/schwinger_model.cpp
 // got a sign or coefficient wrong, this test catches it independently of
@@ -30,7 +30,7 @@ using namespace caset::quantum;
 namespace {
 
 // σ^z eigenvalue at 1-based site n in basis state s, MSB-first bit
-// convention matching build_schwinger_dense.
+// convention matching buildSchwingerDense.
 inline double sigma_z(std::uint64_t s, int n, int N) {
     return ((s >> (N - n)) & 1ull) == 0 ? +1.0 : -1.0;
 }
@@ -77,7 +77,7 @@ double H_diagonal_direct(std::uint64_t s, SchwingerParams const& p) {
 bool diagonal_test(SchwingerParams const& p, double tol) {
     std::cout << "  ⟨ψ|H|ψ⟩ on every basis state for N=" << p.N
               << ", m=" << p.m << ", L0=" << p.L0 << "\n";
-    auto sd = build_schwinger_dense(p);
+    auto sd = buildSchwingerDense(p);
     const std::size_t dim = static_cast<std::size_t>(sd.H.rows());
 
     bool ok = true;
@@ -105,7 +105,7 @@ bool off_diagonal_test(SchwingerParams const& p, double tol) {
     //   (1/(4a)) · ⟨s'|XX + YY|s⟩ = (1/(4a)) · 2 = 1/(2a)
     // for any such adjacent flip pair.
     std::cout << "  ⟨s'|H_hop|s⟩ off-diagonal coefficient at N=" << p.N << "\n";
-    auto sd = build_schwinger_dense(p);
+    auto sd = buildSchwingerDense(p);
 
     // s = |↑↓↑↑⟩ with bits 0010 at MSB-first → site 3 is Dn (bit 1).
     // After flipping the (n=2, n=3) pair: |↑↑↓↑⟩, which has bit 0100.

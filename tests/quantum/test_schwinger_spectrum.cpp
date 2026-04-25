@@ -80,7 +80,7 @@ double lowest_global(SchwingerDense const& sd) {
     return es.eigenvalues()(0);
 }
 
-double dmrg_groundstate_sz0(SchwingerMPO const& sm, int max_bond_dim, int n_sweeps) {
+double dmrg_groundstate_sz0(SchwingerMPO const& sm, int maxBondDim, int nSweeps) {
     auto state = InitState(sm.sites);
     for (int i = 1; i <= sm.params.N; ++i) {
         // Néel state lives in the Sz=0 sector, so DMRG stays charge-neutral.
@@ -88,8 +88,8 @@ double dmrg_groundstate_sz0(SchwingerMPO const& sm, int max_bond_dim, int n_swee
     }
     auto psi0 = MPS(state);
 
-    auto sweeps = Sweeps(n_sweeps);
-    sweeps.maxdim() = 20, 40, 80, max_bond_dim, max_bond_dim;
+    auto sweeps = Sweeps(nSweeps);
+    sweeps.maxdim() = 20, 40, 80, maxBondDim, maxBondDim;
     sweeps.cutoff() = 1e-12;
     sweeps.niter() = 4;
     sweeps.noise() = 1e-7, 1e-8, 0.0;
@@ -112,8 +112,8 @@ struct CaseResult {
 
 // Build the DMRG state and measure consistency observables on it.
 CaseResult run_small_case(SchwingerParams p) {
-    auto mpo = build_schwinger_mpo(p);
-    auto dense = build_schwinger_dense(p);
+    auto mpo = buildSchwingerMpo(p);
+    auto dense = buildSchwingerDense(p);
 
     CaseResult r;
     r.dense_global    = lowest_global(dense);
@@ -233,7 +233,7 @@ int main() {
         SchwingerParams p;
         p.N = 20; p.a = 1.0; p.g = 1.0; p.m = m_over_g; p.L0 = 0.0;
 
-        auto mpo = build_schwinger_mpo(p);
+        auto mpo = buildSchwingerMpo(p);
         const double e = dmrg_groundstate_sz0(mpo, /*max_bond=*/100, /*sweeps=*/12);
         std::cout
             << "  N=20 m/g=" << m_over_g

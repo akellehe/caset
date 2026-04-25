@@ -1,6 +1,6 @@
 // Phase 6 acceptance tests (docs/source/quantum-plan.md §6):
 //
-// caset::Poset::from_spacetime(Spacetime const&) inherits a partial order
+// caset::Poset::fromSpacetime(Spacetime const&) inherits a partial order
 // from a caset::Spacetime by treating timelike edges (Edge::getSquaredLength
 // < 0) as strict precedes-relations oriented earliest-time → latest-time,
 // then transitively reducing the resulting DAG to its Hasse covers.
@@ -14,7 +14,7 @@
 //   (3) Empty Spacetime — empty Poset.
 //   (4) Vertices with only spacelike edges — no covers (nodes still all
 //       present).
-//   (5) Self-comparison under compare_orders — Kendall-τ = 1, edit
+//   (5) Self-comparison under compareOrders — Kendall-τ = 1, edit
 //       distance = 0.
 //
 // We bypass the topology-driven `Spacetime::build()` path and use the
@@ -64,14 +64,14 @@ bool acceptance_two_slice_ladder() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v1, v3, -1.0);
 
-    auto p = caset::Poset::from_spacetime(st);
+    auto p = caset::Poset::fromSpacetime(st);
     const std::vector<std::pair<int, int>> want{
         {0, 2}, {0, 3}, {1, 2}, {1, 3}
     };
     const auto got = p.covers();
-    const bool ok = (p.n_nodes() == 4) && covers_equal(got, want);
+    const bool ok = (p.getNodeCount() == 4) && covers_equal(got, want);
 
-    std::cout << "  n_nodes=" << p.n_nodes()
+    std::cout << "  getNodeCount=" << p.getNodeCount()
               << " (want 4)  covers=" << got.size()
               << " (want " << want.size() << ")  "
               << (ok ? "PASS" : "FAIL") << "\n";
@@ -92,12 +92,12 @@ bool acceptance_three_slice_with_skip() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v0, v2, -1.0);
 
-    auto p = caset::Poset::from_spacetime(st);
+    auto p = caset::Poset::fromSpacetime(st);
     const std::vector<std::pair<int, int>> want{{0, 1}, {1, 2}};
     const auto got = p.covers();
-    const bool ok = (p.n_nodes() == 3) && covers_equal(got, want);
+    const bool ok = (p.getNodeCount() == 3) && covers_equal(got, want);
 
-    std::cout << "  n_nodes=" << p.n_nodes()
+    std::cout << "  getNodeCount=" << p.getNodeCount()
               << "  covers={ ";
     for (auto [a, b] : got) std::cout << "(" << a << "," << b << ") ";
     std::cout << "}  " << (ok ? "PASS" : "FAIL") << "\n";
@@ -107,9 +107,9 @@ bool acceptance_three_slice_with_skip() {
 bool acceptance_empty_spacetime() {
     std::cout << "Acceptance #3 — empty Spacetime → empty Poset\n";
     caset::Spacetime st;
-    auto p = caset::Poset::from_spacetime(st);
-    const bool ok = (p.n_nodes() == 0) && p.covers().empty();
-    std::cout << "  n_nodes=" << p.n_nodes()
+    auto p = caset::Poset::fromSpacetime(st);
+    const bool ok = (p.getNodeCount() == 0) && p.covers().empty();
+    std::cout << "  getNodeCount=" << p.getNodeCount()
               << "  covers=" << p.covers().size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
@@ -127,16 +127,16 @@ bool acceptance_only_spacelike_edges() {
     st.createEdge(v0, v1, +1.0);
     st.createEdge(v1, v2, +1.0);
 
-    auto p = caset::Poset::from_spacetime(st);
-    const bool ok = (p.n_nodes() == 3) && p.covers().empty();
-    std::cout << "  n_nodes=" << p.n_nodes()
+    auto p = caset::Poset::fromSpacetime(st);
+    const bool ok = (p.getNodeCount() == 3) && p.covers().empty();
+    std::cout << "  getNodeCount=" << p.getNodeCount()
               << "  covers=" << p.covers().size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }
 
 bool acceptance_self_comparison() {
-    std::cout << "Acceptance #5 — compare_orders(p, p) = perfect agreement\n";
+    std::cout << "Acceptance #5 — compareOrders(p, p) = perfect agreement\n";
 
     caset::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
@@ -148,16 +148,16 @@ bool acceptance_self_comparison() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v3, v2, -1.0);
 
-    auto p = caset::Poset::from_spacetime(st);
-    auto agree = caset::compare_orders(p, p, p.n_nodes());
+    auto p = caset::Poset::fromSpacetime(st);
+    auto agree = caset::compareOrders(p, p, p.getNodeCount());
 
-    const bool ok = (agree.kendall_tau == 1.0) &&
-                    (agree.discordant_fraction == 0.0) &&
-                    (agree.hasse_edit_distance == 0.0) &&
-                    (agree.n_discordant == 0);
-    std::cout << "  τ=" << agree.kendall_tau
-              << "  discordant_frac=" << agree.discordant_fraction
-              << "  edit_dist=" << agree.hasse_edit_distance
+    const bool ok = (agree.kendallTau == 1.0) &&
+                    (agree.discordantFraction == 0.0) &&
+                    (agree.hasseEditDistance == 0.0) &&
+                    (agree.nDiscordant == 0);
+    std::cout << "  τ=" << agree.kendallTau
+              << "  discordant_frac=" << agree.discordantFraction
+              << "  edit_dist=" << agree.hasseEditDistance
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     return ok;
 }
@@ -177,14 +177,14 @@ bool acceptance_dense_remap() {
     st.createEdge(v_md, v_hi, -1.0);
     st.createEdge(v_md, v_xx, -1.0);
 
-    auto p = caset::Poset::from_spacetime(st);
+    auto p = caset::Poset::fromSpacetime(st);
     // Ascending sort of {0, 5, 11, 13} → indices 0, 1, 2, 3. Covers
     // (0, 5)→(0, 1), (5, 11)→(1, 2), (5, 13)→(1, 3).
     const std::vector<std::pair<int, int>> want{{0, 1}, {1, 2}, {1, 3}};
     const auto got = p.covers();
-    const bool ok = (p.n_nodes() == 4) && covers_equal(got, want);
+    const bool ok = (p.getNodeCount() == 4) && covers_equal(got, want);
 
-    std::cout << "  n_nodes=" << p.n_nodes()
+    std::cout << "  getNodeCount=" << p.getNodeCount()
               << "  covers={ ";
     for (auto [a, b] : got) std::cout << "(" << a << "," << b << ") ";
     std::cout << "}  " << (ok ? "PASS" : "FAIL") << "\n";
@@ -192,14 +192,14 @@ bool acceptance_dense_remap() {
 }
 
 bool acceptance_to_dot_format() {
-    std::cout << "Acceptance #7 — to_dot() emits the cover edges\n";
+    std::cout << "Acceptance #7 — toDot() emits the cover edges\n";
     caset::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     st.createEdge(v0, v1, -1.0);
 
-    auto p = caset::Poset::from_spacetime(st);
-    const auto dot = p.to_dot();
+    auto p = caset::Poset::fromSpacetime(st);
+    const auto dot = p.toDot();
     const bool ok = (dot.find("digraph poset")  != std::string::npos) &&
                     (dot.find("0 -> 1")          != std::string::npos);
     std::cout << "  contains digraph header=" << (dot.find("digraph poset")  != std::string::npos)

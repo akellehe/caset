@@ -1,5 +1,5 @@
 """Phase 2 acceptance: re-run Phase 1's small-N cases through the
-caset.quantum.compute_ground_state Python API and confirm the energies
+caset.quantum.computeGroundState Python API and confirm the energies
 match the C++-side numbers (PLAN.md §5 Phase 2: "re-runs Phase 1 with the
 wrapper; numerics unchanged").
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 import unittest
 
 try:
-    from caset.quantum import QuantumConfig, compute_ground_state
+    from caset.quantum import QuantumConfig, computeGroundState
     HAVE_QUANTUM = True
 except ImportError:
     HAVE_QUANTUM = False
@@ -57,30 +57,30 @@ class TestComputeGroundState(unittest.TestCase):
             cfg.g = 1.0
             cfg.m = m_over_g          # since g=1, m_over_g IS m
             cfg.L0 = L0
-            cfg.max_bond_dim = 64
-            cfg.n_sweeps = 8
+            cfg.maxBondDim = 64
+            cfg.nSweeps = 8
 
-            result = compute_ground_state(cfg)
+            result = computeGroundState(cfg)
             self.assertAlmostEqual(
-                result.operator_energy,
+                result.operatorEnergy,
                 e_ref,
                 places=8,
-                msg=f"N={N} m/g={m_over_g} L0={L0}: got {result.operator_energy} expected {e_ref}",
+                msg=f"N={N} m/g={m_over_g} L0={L0}: got {result.operatorEnergy} expected {e_ref}",
             )
-            # Sanity: energy = operator_energy + constant by construction.
+            # Sanity: energy = operatorEnergy + constant by construction.
             self.assertAlmostEqual(
                 result.energy,
-                result.operator_energy + result.constant,
+                result.operatorEnergy + result.constant,
                 places=12,
             )
-            # bond_dim should never exceed what we asked for.
-            self.assertLessEqual(result.bond_dim, cfg.max_bond_dim)
+            # bondDim should never exceed what we asked for.
+            self.assertLessEqual(result.bondDim, cfg.maxBondDim)
 
     def test_n20_runs_and_returns_diagnostics(self) -> None:
         """N=20 from PLAN.md §5 Phase 1 spec — the converged DMRG energy
         is around -29.31 (operator-only) at m/g=0, but the precise value
         isn't published anywhere, so we just verify the run completes,
-        returns a sane bond_dim, and the operator energy + constant
+        returns a sane bondDim, and the operator energy + constant
         identity holds. This is the size at which Phase 4's TDVP loop
         will operate."""
         cfg = QuantumConfig()
@@ -89,23 +89,23 @@ class TestComputeGroundState(unittest.TestCase):
         cfg.g = 1.0
         cfg.m = 0.0
         cfg.L0 = 0.0
-        cfg.max_bond_dim = 100
-        cfg.n_sweeps = 12
+        cfg.maxBondDim = 100
+        cfg.nSweeps = 12
 
-        r = compute_ground_state(cfg)
+        r = computeGroundState(cfg)
         # Sign and order of magnitude: at this scale the GS is well below 0.
-        self.assertLess(r.operator_energy, -10.0)
-        self.assertGreater(r.bond_dim, 0)
-        self.assertLessEqual(r.bond_dim, cfg.max_bond_dim)
-        self.assertAlmostEqual(r.energy, r.operator_energy + r.constant, places=12)
+        self.assertLess(r.operatorEnergy, -10.0)
+        self.assertGreater(r.bondDim, 0)
+        self.assertLessEqual(r.bondDim, cfg.maxBondDim)
+        self.assertAlmostEqual(r.energy, r.operatorEnergy + r.constant, places=12)
 
     def test_skip_signal_without_quantum(self) -> None:
         """Make sure the API is at least importable when present — this
         sanity test guards against a partially-built module that imports
         but lacks classes."""
-        self.assertTrue(callable(compute_ground_state))
+        self.assertTrue(callable(computeGroundState))
         cfg = QuantumConfig()
-        # Default-constructed config has N=0; compute_ground_state must
-        # reject that (validation comes from build_schwinger_mpo).
+        # Default-constructed config has N=0; computeGroundState must
+        # reject that (validation comes from buildSchwingerMpo).
         with self.assertRaises(Exception):
-            compute_ground_state(cfg)
+            computeGroundState(cfg)
