@@ -1,0 +1,110 @@
+// Schmidt-spectrum extraction for contiguous-interval bipartitions of an
+// MPS. See include/quantum/schmidt.hpp for the header-level explanation
+// of what we're computing and why.
+
+#include "quantum/schmidt.hpp"
+
+#include <itensor/all.h>
+#include <itensor/decomp.h>
+
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+
+namespace caset::quantum {
+
+namespace {
+
+// Extract the non-increasing list of singular-values-squared from the
+// diagonal "S" tensor returned by ITensor's three-arg svd(). Squaring
+// turns Schmidt values σ into density-matrix eigenvalues λ = σ², which is
+// the convention used by the methodology page and by majorizes().
+std::vector<double> diag_squared(itensor::ITensor const& S) {
+    using namespace itensor;
+    auto inds = S.inds();
+    if (inds.size() != 2) {
+        throw std::runtime_error("schmidt: expected S to have rank 2");
+    }
+    const int rank = std::min(inds(1).dim(), inds(2).dim());
+    std::vector<double> out;
+    out.reserve(static_cast<std::size_t>(rank));
+    for (int k = 1; k <= rank; ++k) {
+        const double sigma = elt(S, k, k);
+        out.push_back(sigma * sigma);
+    }
+    std::sort(out.begin(), out.end(), std::greater<double>{});
+    return out;
+}
+
+} // namespace
+
+std::vector<double> schmidt_spectrum(itensor::MPS const& psi_in,
+                                     int i, int j) {
+    using namespace itensor;
+
+    const int N = length(psi_in);
+    if (i < 1 || j > N || i > j) {
+        throw std::invalid_argument(
+            "schmidt_spectrum: interval [i, j] must satisfy 1 ≤ i ≤ j ≤ N");
+    }
+    if (i == 1 && j == N) {
+        // Trivial bipartition (whole chain | empty); the reduced density
+        // matrix on the empty side has rank 1 with eigenvalue 1 (assuming
+        // the input MPS is normalized).
+        return {1.0};
+    }
+
+    // Bring the orthogonality center inside [i, j] (we put it at site i).
+    // After this call, sites 1..i-1 are left-canonical and sites i+1..N
+    // are right-canonical, so contractions outside [i, j] collapse to
+    // identities and the reduced density matrix on A is purely a function
+    // of the contracted T_i...T_j tensor — see the schmidt.hpp header.
+    MPS psi = psi_in;
+    psi.position(i);
+
+    // Contract sites i..j into a single tensor M whose indices are
+    //   (left bond α, site_i, site_{i+1}, …, site_j, right bond β)
+    ITensor M = psi(i);
+    for (int k = i + 1; k <= j; ++k) {
+        M *= psi(k);
+    }
+
+    // Collect the site indices of [i, j] for the U-side of the SVD. The
+    // V side then carries the bond indices (those are whatever's left).
+    std::vector<Index> site_inds;
+    site_inds.reserve(static_cast<std::size_t>(j - i + 1));
+    for (int k = i; k <= j; ++k) {
+        site_inds.push_back(siteIndex(psi, k));
+    }
+
+    // Disable cutoff truncation so we read the full spectrum (including
+    // small but nonzero values that the default SVD would drop). MaxDim
+    // is set generously — the actual rank is bounded by min(2^|A|, D²).
+    auto args = Args("Cutoff", 0.0, "MaxDim", 1 << 24);
+    auto [U, S, V] = svd(M, IndexSet(site_inds), args);
+
+    return diag_squared(S);
+}
+
+SchmidtSpectra all_contiguous_spectra(itensor::MPS const& psi) {
+    const int N = itensor::length(psi);
+    SchmidtSpectra out;
+    out.N = N;
+
+    // Reserve N(N+1)/2 - 1 slots: every contiguous interval [i, j] with
+    // 1 ≤ i ≤ j ≤ N, minus the trivial full-chain cut.
+    const int M = N * (N + 1) / 2 - 1;
+    out.intervals.reserve(static_cast<std::size_t>(std::max(M, 0)));
+    out.spectra.reserve(static_cast<std::size_t>(std::max(M, 0)));
+
+    for (int i = 1; i <= N; ++i) {
+        for (int j = i; j <= N; ++j) {
+            if (i == 1 && j == N) continue;
+            out.intervals.push_back({i, j});
+            out.spectra.push_back(schmidt_spectrum(psi, i, j));
+        }
+    }
+    return out;
+}
+
+} // namespace caset::quantum

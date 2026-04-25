@@ -1,12 +1,13 @@
 """caset.quantum -- Schwinger model on a Jordan-Wigner spin chain via DMRG.
 
-This subpackage implements Phase 2 of ``docs/source/quantum-plan.md``:
+This subpackage implements Phases 2-3 of ``docs/source/quantum-plan.md``:
 ground-state DMRG for the 1+1D Kogut-Susskind Schwinger model with U(1)
-total-charge conservation. The C++ backend is ITensor v3 vendored under
-``third_party/itensor``; this Python layer is a thin result viewer per
-the architectural principle in PLAN.md §1 ("minimize Python/C++
-crossings"). No MPS or MPO objects cross the language barrier — only
-scalar configs in and scalar diagnostics out.
+total-charge conservation, plus contiguous-cut Schmidt spectra and the
+majorization poset on those spectra. The C++ backend is ITensor v3
+vendored under ``third_party/itensor``; this Python layer is a thin
+result viewer per the architectural principle in PLAN.md §1 ("minimize
+Python/C++ crossings"). No MPS or MPO objects cross the language
+barrier — only scalar configs in and scalar / list diagnostics out.
 
 Availability
 ------------
@@ -86,6 +87,41 @@ should give a (variationally) lower energy::
     >>> e2 <= e1 + 1e-10  # variational: more bond-dim → lower energy
     True
 
+Phase 3 — Schmidt spectra and majorization poset
+------------------------------------------------
+
+For each contiguous interval A = [i, j] on the spin chain, the Schmidt
+spectrum λ_A is the list of eigenvalues of ρ_A = Tr_{Ā}|ψ⟩⟨ψ|, sorted
+non-increasingly. Majorization (μ ≼ λ iff "λ is at least as
+concentrated as μ") defines a partial order on the cuts; the Hasse
+diagram is the transitive reduction of the strict-majorization graph.
+This is the hypothesis substrate for the methodology page
+(``docs/source/quantum-methodology.md``).
+
+The pure-function API works on plain Python lists::
+
+    >>> from caset.quantum import majorizes, strictly_majorizes, majorization_poset
+    >>> majorizes([1.0, 0.0], [0.5, 0.5])     # (1, 0) ≻ (½, ½)
+    True
+    >>> strictly_majorizes([0.5, 0.5], [1.0, 0.0])
+    False
+    >>> p = majorization_poset([[1/3]*3, [0.5, 0.5], [1.0]])
+    >>> p.n_nodes, sorted(p.covers)
+    (3, [(1, 0), (2, 1)])
+
+The end-to-end pipeline (DMRG → Schmidt → poset) is one call::
+
+    >>> from caset.quantum import compute_ground_state_majorization
+    >>> r = compute_ground_state_majorization(cfg)  # cfg from above
+    >>> r.spectra.N
+    20
+    >>> all(abs(sum(s) - 1.0) < 1e-10 for s in r.spectra.spectra)
+    True
+
+Phase 3 cut family is contiguous intervals 1 ≤ i ≤ j ≤ N excluding the
+trivial full-chain bipartition [1, N] | ∅; this is N(N+1)/2 - 1 cuts
+total.
+
 Tested benchmarks
 -----------------
 
@@ -103,9 +139,14 @@ this implementation against:
 * Chiral condensate ⟨Σ̄Σ⟩: nonzero at m=0 (anomaly), saturated at
   large m.
 * Charge-conjugation parity ⟨S_R⟩ = ⟨σ^x_odd · T⁽¹⁾⟩ (Bañuls page 8).
+* Schmidt spectra of the Schwinger ground state at small N agree with
+  dense Eigen ED to 1e-9 across 8 (N, m, L0) parameter combos.
+* Majorization poset acceptance: product → 0 Hasse edges; GHZ → 0
+  strict edges; Bell vs. product → (1, 0) ≻ (½, ½) cover edge present.
 
-Phase 2's pytest layer (``tests/quantum/test_phase2_*.py``) reproduces
-the small-N reference values through this Python API to 1e-8.
+Phase 2-3's pytest layer (``tests/quantum/test_phase{2,3}_*.py``)
+reproduces the small-N reference values and Hasse-poset structure
+through this Python API.
 
 References
 ----------
@@ -126,6 +167,14 @@ API
     QuantumConfig
     GroundStateResult
     compute_ground_state
+    Interval
+    SchmidtSpectra
+    Poset
+    GroundStateMajorizationResult
+    majorizes
+    strictly_majorizes
+    majorization_poset
+    compute_ground_state_majorization
 
 Implementation notes
 --------------------
@@ -151,9 +200,21 @@ try:
     # module's __dict__ at import time; we just look it up.
     from caset import _caset
     _qm = _caset.quantum
-    QuantumConfig        = _qm.QuantumConfig
-    GroundStateResult    = _qm.GroundStateResult
-    compute_ground_state = _qm.compute_ground_state
+
+    # Phase 2 — DMRG ground state.
+    QuantumConfig         = _qm.QuantumConfig
+    GroundStateResult     = _qm.GroundStateResult
+    compute_ground_state  = _qm.compute_ground_state
+
+    # Phase 3 — Schmidt spectra + majorization poset.
+    Interval                            = _qm.Interval
+    SchmidtSpectra                      = _qm.SchmidtSpectra
+    Poset                               = _qm.Poset
+    GroundStateMajorizationResult       = _qm.GroundStateMajorizationResult
+    majorizes                           = _qm.majorizes
+    strictly_majorizes                  = _qm.strictly_majorizes
+    majorization_poset                  = _qm.majorization_poset
+    compute_ground_state_majorization   = _qm.compute_ground_state_majorization
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "caset.quantum is unavailable: this caset build does not include "
@@ -163,7 +224,17 @@ except (ImportError, AttributeError) as exc:
     ) from exc
 
 __all__ = [
+    # Phase 2
     "QuantumConfig",
     "GroundStateResult",
     "compute_ground_state",
+    # Phase 3
+    "Interval",
+    "SchmidtSpectra",
+    "Poset",
+    "GroundStateMajorizationResult",
+    "majorizes",
+    "strictly_majorizes",
+    "majorization_poset",
+    "compute_ground_state_majorization",
 ]

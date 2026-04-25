@@ -14,6 +14,9 @@
 // API and the underlying physics conventions.
 
 #include "quantum/dmrg_runner.hpp"
+#include "quantum/majorization.hpp"
+#include "quantum/pipeline.hpp"
+#include "quantum/schmidt.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -219,6 +222,198 @@ truncation_err : float
                    ", bond_dim=" + std::to_string(r.bond_dim) +
                    ", truncation_err=" + std::to_string(r.truncation_err) + ")";
         });
+
+    // ─── Phase 3 types ──────────────────────────────────────────────────
+    py::class_<Interval>(m, "Interval",
+            R"doc(1-based contiguous interval [i, j] on the spin chain.
+
+Used as a label on the Schmidt spectra returned by
+:func:`compute_ground_state_majorization`.
+
+Attributes
+----------
+i : int
+    First site of the interval (1-based).
+j : int
+    Last site of the interval (1-based, j ≥ i).
+)doc")
+        .def(py::init<>())
+        .def_readwrite("i", &Interval::i, "First site of the interval (1-based).")
+        .def_readwrite("j", &Interval::j, "Last site of the interval (1-based, j ≥ i).")
+        .def("__repr__", [](Interval const& iv) {
+            return "Interval(i=" + std::to_string(iv.i) +
+                   ", j=" + std::to_string(iv.j) + ")";
+        });
+
+    py::class_<SchmidtSpectra>(m, "SchmidtSpectra",
+            R"doc(All contiguous-cut Schmidt spectra of an MPS.
+
+Cuts are indexed 0 .. len(spectra)-1; ``intervals[k]`` is the
+:class:`Interval` label of ``spectra[k]``. The full-chain bipartition
+[1, N] | ∅ is excluded.
+
+Each spectrum is sorted non-increasingly and contains the eigenvalues of
+ρ_A (= squared Schmidt coefficients), with no zero-padding.
+
+Attributes
+----------
+N : int
+    Length of the spin chain.
+intervals : list[Interval]
+    Cut labels.
+spectra : list[list[float]]
+    ``spectra[k]`` is the entanglement spectrum of bipartition
+    ``intervals[k]`` | rest.
+)doc")
+        .def_readonly("N",         &SchmidtSpectra::N)
+        .def_readonly("intervals", &SchmidtSpectra::intervals)
+        .def_readonly("spectra",   &SchmidtSpectra::spectra);
+
+    py::class_<Poset>(m, "Poset",
+            R"doc(Hasse / cover representation of a finite partial order.
+
+Nodes are integers 0 .. n_nodes - 1. ``covers`` lists the cover edges
+(transitive reduction of the strict-majorization graph): each entry
+(a, b) means a ≻ b with no third node c satisfying a ≻ c ≻ b.
+
+Attributes
+----------
+n_nodes : int
+    Total node count.
+covers : list[tuple[int, int]]
+    Hasse cover edges (a, b) with a ≻ b.
+)doc")
+        .def(py::init<>())
+        .def_readwrite("n_nodes", &Poset::n_nodes, "Total node count.")
+        .def_readwrite("covers",  &Poset::covers,
+            "Hasse cover edges (a, b) with a strictly majorizes b.")
+        .def("__repr__", [](Poset const& p) {
+            return "Poset(n_nodes=" + std::to_string(p.n_nodes) +
+                   ", covers=" + std::to_string(p.covers.size()) + " edges)";
+        });
+
+    py::class_<GroundStateMajorizationResult>(m, "GroundStateMajorizationResult",
+            R"doc(Result of :func:`compute_ground_state_majorization`.
+
+Bundles the scalar DMRG diagnostics with the Schmidt spectra of the
+optimized ground-state MPS and the majorization poset on those spectra.
+
+Attributes
+----------
+ground_state : GroundStateResult
+    Same diagnostics returned by :func:`compute_ground_state`.
+spectra : SchmidtSpectra
+    All contiguous-cut Schmidt spectra of the ground-state MPS,
+    excluding the trivial full-chain cut.
+poset : Poset
+    Hasse cover edges of the strict-majorization order on
+    ``spectra.spectra``. Cover (a, b) means
+    ``spectra.spectra[a] ≻ spectra.spectra[b]`` with no intermediate
+    spectrum.
+)doc")
+        .def_readonly("ground_state", &GroundStateMajorizationResult::ground_state)
+        .def_readonly("spectra",      &GroundStateMajorizationResult::spectra)
+        .def_readonly("poset",        &GroundStateMajorizationResult::poset);
+
+    // ─── Phase 3 free functions ─────────────────────────────────────────
+    m.def("majorizes",
+          &majorizes,
+          py::arg("mu"), py::arg("lambda_"), py::arg("tol") = 1e-12,
+          R"doc(Test whether μ majorizes λ.
+
+Both vectors are sorted non-increasingly internally and zero-padded to
+the longer's length. μ majorizes λ iff every cumulative partial sum
+of the sorted-padded μ is at least as large as that of λ, AND the
+total masses match within ``tol``.
+
+Parameters
+----------
+mu, lambda_ : list[float]
+    Probability-like distributions (or any non-negative sequences with
+    equal total mass within ``tol``).
+tol : float, optional
+    Slack for partial-sum comparisons and total-mass equality.
+
+Returns
+-------
+bool
+    True if μ majorizes λ.
+)doc");
+
+    m.def("strictly_majorizes",
+          &strictly_majorizes,
+          py::arg("mu"), py::arg("lambda_"), py::arg("tol") = 1e-12,
+          R"doc(Test whether μ strictly majorizes λ.
+
+Equivalent to ``majorizes(mu, lambda_) and not majorizes(lambda_, mu)``
+— the relation is proper, not just sorted-padded equality.
+)doc");
+
+    m.def("majorization_poset",
+          &majorization_poset,
+          py::arg("spectra"), py::arg("tol") = 1e-12,
+          R"doc(Build the majorization poset on a list of spectra.
+
+``spectra[k]`` becomes node k; the resulting :class:`Poset` stores the
+Hasse cover edges only (transitive closure is implicit).
+
+Parameters
+----------
+spectra : list[list[float]]
+    Probability-like distributions, one per node.
+tol : float, optional
+    Slack passed to the underlying majorizes() comparisons.
+
+Returns
+-------
+Poset
+    Hasse cover representation of the strict-majorization order.
+
+Notes
+-----
+Complexity is O(M^3) where M = ``len(spectra)``, dominated by the
+transitive-reduction pass.
+)doc");
+
+    m.def("compute_ground_state_majorization",
+          &compute_ground_state_majorization,
+          py::arg("config"), py::arg("tol") = 1e-12,
+          R"doc(Run DMRG ground-state, then extract Schmidt spectra and poset.
+
+Single-shot pipeline that performs all three Phase 3 steps in one C++
+call:
+
+1. Build the Schwinger MPO from ``config`` and run DMRG (same as
+   :func:`compute_ground_state`).
+2. Compute the Schmidt spectrum of every contiguous bipartition of the
+   optimized MPS, excluding the trivial full-chain cut.
+3. Build the majorization poset on those spectra (Hasse cover edges
+   only).
+
+Parameters
+----------
+config : QuantumConfig
+    Hamiltonian + DMRG parameters; see :func:`compute_ground_state`.
+tol : float, optional
+    Slack for the majorization comparisons used to build the poset.
+
+Returns
+-------
+GroundStateMajorizationResult
+    Ground-state diagnostics, Schmidt spectra, and the Hasse poset.
+
+Examples
+--------
+>>> from caset.quantum import QuantumConfig, compute_ground_state_majorization
+>>> cfg = QuantumConfig()
+>>> cfg.N = 6; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
+>>> cfg.max_bond_dim = 32; cfg.n_sweeps = 8
+>>> r = compute_ground_state_majorization(cfg)
+>>> r.spectra.N
+6
+>>> all(abs(sum(s) - 1.0) < 1e-10 for s in r.spectra.spectra)
+True
+)doc");
 
     m.def("compute_ground_state", &compute_ground_state,
           py::arg("config"),

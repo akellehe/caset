@@ -84,3 +84,30 @@ class TestQuantumExecutables(unittest.TestCase):
         benchmark observable. Slow — geometric scan over x with finite-N
         DMRG runs scaling as N ~ 20·√x."""
         self._run("test_schwinger_paper", "ALL PASS", timeout=600)
+
+    def test_phase3_majorization(self) -> None:
+        """Phase 3 unit tests on the majorization predicate / poset:
+        reflexivity, transitivity, antisymmetry, the canonical (1,0)≻(½,½)
+        strict relation, and Hasse-diagram transitive reduction on a small
+        synthetic chain."""
+        self._run("test_majorization", "ALL PASS", timeout=30)
+
+    def test_phase3_schmidt_spectra(self) -> None:
+        """Phase 3 Schmidt-spectrum extraction on hand-checkable MPSes:
+        product |↑↑↑↑⟩ gives spectrum (1), N-qubit GHZ gives (½,½) at
+        every contiguous cut, Bell |Φ⁺⟩ and singlet give (½,½) at the
+        center cut, all spectra sum to 1."""
+        self._run("test_schmidt_spectra", "ALL PASS", timeout=60)
+
+    def test_phase3_majorization_poset(self) -> None:
+        """Phase 3 acceptance (PLAN.md §5): full pipeline
+        all_contiguous_spectra() → majorization_poset() on product, GHZ,
+        and Bell-vs-product inputs, matching the three acceptance criteria."""
+        self._run("test_majorization_poset", "ALL PASS", timeout=60)
+
+    def test_phase3_schwinger_schmidt_cross_check(self) -> None:
+        """Phase 3 cross-check: MPS-side Schmidt spectra against dense ED
+        of the Schwinger Hamiltonian for small N — verifies the spectra
+        extraction works on a non-trivial physical state, not just
+        product/GHZ/Bell."""
+        self._run("test_schwinger_schmidt_cross_check", "ALL PASS", timeout=120)
