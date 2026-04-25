@@ -83,9 +83,13 @@ function(caset_build_itensor)
 
     add_library(itensor STATIC ${_itensor_sources})
     # SYSTEM include hides ITensor's headers from -Wall on consumer code.
+    set(ITENSOR_TDVP_ROOT "${CMAKE_SOURCE_DIR}/third_party/itensor_tdvp")
     target_include_directories(itensor SYSTEM PUBLIC
         "${ITENSOR_ROOT}"        # for "itensor/all.h", "itensor/mps/dmrg.h", etc.
-        "${ITENSOR_GEN_DIR}")    # for the generated "itensor/config.h"
+        "${ITENSOR_GEN_DIR}"     # for the generated "itensor/config.h"
+        "${ITENSOR_TDVP_ROOT}")  # for "tdvp.h" — header-only TDVP add-on
+                                 # at https://github.com/ITensor/TDVP, since
+                                 # ITensor v3 core has no built-in TDVP.
     # ITensor v3 requires C++17; we propagate this PUBLIC so consumers
     # building against `itensor` get the floor automatically. (caset itself
     # uses C++20; the higher std subsumes the requirement.)

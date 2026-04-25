@@ -19,5 +19,7 @@ getting_started
 theory
 examples
 benchmarks
+quantum
+quantum-methodology
 cpp_api
 ```

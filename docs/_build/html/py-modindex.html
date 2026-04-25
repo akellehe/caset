@@ -2,12 +2,10 @@
 <html class="no-js" lang="en" data-content_root="./">
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Getting Started" href="getting_started.html">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html">
 
-    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>caset 0.1.0 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 --><title>Python Module Index - caset 0.1.0 documentation</title>
+<link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
     
@@ -161,7 +159,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">caset 0.1.0 documentation</div></a>
+      <a href="index.html"><div class="brand">caset 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -180,7 +178,7 @@
   <aside class="sidebar-drawer">
     <div class="sidebar-container">
       
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
   <span class="sidebar-brand-text">caset 0.1.0 documentation</span>
   
@@ -217,13 +215,7 @@
           <span>Back to top</span>
         </a>
         <div class="content-icon-container">
-          <div class="view-this-page">
-  <a class="muted-link" href="_sources/index.md.txt" title="View this page">
-    <svg><use href="#svg-eye"></use></svg>
-    <span class="visually-hidden">View this page</span>
-  </a>
-</div>
-<div class="theme-toggle-container theme-toggle-content">
+          <div class="theme-toggle-container theme-toggle-content">
             <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
               <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
               <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
@@ -236,114 +228,39 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="caset">
-<h1>caset<a class="headerlink" href="#caset" title="Link to this heading">¶</a></h1>
-<p>Caset is a package for experimenting with CAusal SETs and simplicial manifolds in C++. It provides a highly
-parallelizable interface to execute methods against a causally oriented simplicial Lorentzian (or Euclidean) manifold.
-Optional CUDA GPU acceleration is available for the Regge solver.</p>
-<p>The intention is to calculate things like holonomies and observables as co-chains over chain complexes within several of
-the most mature theories of discretized causal spacetime.</p>
-<p>Currently there is a C++ interface with bindings to python (which we use for unit testing). The C++ documentation
-extends to the python documentation, even though it doesn’t appear there natively. We provide a very tight set of
-bindings to move back and forth.</p>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#installation">Installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#quick-start-build-a-universe">Quick start: build a universe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#coupling-constants">Coupling constants</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#the-cdt-phase-diagram">The CDT phase diagram</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#visualizing-the-three-phases">Visualizing the three phases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#regge-calculus-discrete-general-relativity">Regge calculus: discrete general relativity</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#measuring-observables">Measuring observables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#wilson-loops">Wilson loops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#export-and-interop">Export and interop</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#parallelization">Parallelization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#running-tests">Running tests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="getting_started.html#what-next">What next</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#why-the-lorentzian-metric-is-important">Why the Lorentzian Metric is Important</a></li>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#path-integrals-and-wick-rotations">Path Integrals and Wick Rotations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#quantum-gravity">Quantum Gravity</a></li>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#lattice-gravity-approaches">Lattice Gravity Approaches</a></li>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#connections-between-theories">Connections Between Theories</a></li>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#incompatibilities">Incompatibilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="theory.html#improvements">Improvements</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#n-32-distribution-at-fixed-n-41"><span class="math notranslate nohighlight">\(N_{32}\)</span> Distribution at Fixed <span class="math notranslate nohighlight">\(N_{41}\)</span></a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#spectral-dimension">Spectral Dimension</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#effective-action-and-minisuperspace">Effective Action and Minisuperspace</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#volume-profiles-in-phases-a-b-c">Volume Profiles in Phases A, B, C</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#volume-volume-correlator-and-hausdorff-dimension">Volume-Volume Correlator and Hausdorff Dimension</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#phase-diagram">Phase Diagram</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#summary-of-confirmations">Summary of Confirmations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="examples.html#references">References</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#build-time-vs-complex-size">Build Time vs. Complex Size</a></li>
-<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#build-throughput">Build Throughput</a></li>
-<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#full-dashboard">Full Dashboard</a></li>
-<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#results-table">Results Table</a></li>
-<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#optimization-history">Optimization History</a></li>
-<li class="toctree-l2"><a class="reference internal" href="benchmarks.html#running-the-benchmark">Running the Benchmark</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#build">Build</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#hamiltonian">Hamiltonian</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#quickstart">Quickstart</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#convergence-checks">Convergence checks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#example-continuum-approach">Example: continuum approach</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#phase-3-schmidt-spectra-and-majorization-poset">Phase 3 — Schmidt spectra and majorization poset</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#phase-4-q-qbar-quench-and-tdvp-real-time-evolution">Phase 4 — q-qbar quench and TDVP real-time evolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#tested-benchmarks">Tested benchmarks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#module-caset.quantum">API reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#references">References</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum.html#see-also">See also</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#abstract">Abstract</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#hypothesis">1. Hypothesis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#limitations-and-scope-conditions">2. Limitations and scope conditions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#system-and-notation">3. System and notation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#methodology">4. Methodology</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#deliverables-and-reproducibility">5. Deliverables and reproducibility</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quantum-methodology.html#references">References</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cpp_api.html#core-spacetime">Core Spacetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cpp_api.html#simplicial-complex">Simplicial Complex</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cpp_api.html#simulations">Simulations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cpp_api.html#observables">Observables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cpp_api.html#topologies">Topologies</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cpp_api.html#constraints">Constraints</a></li>
-</ul>
-</li>
-</ul>
-</div>
+          
+<section class="domainindex-section">
+  <h1>Python Module Index</h1>
+  <div class="domainindex-jumpbox"><a href="#cap-c"><strong>c</strong></a></div>
 </section>
+<table class="domainindex-table">
+  <tr class="pcap">
+    <td></td><td>&#160;</td><td></td>
+  </tr>
+  <tr class="cap" id="cap-c">
+    <td></td><td><strong>c</strong></td><td></td>
+  </tr>
+  <tr>
+    <td><img src="_static/minus.png" class="toggler"
+              id="toggle-1" style="display: none" alt="-" /></td>
+    <td>
+        <code class="xref">caset</code></td><td>
+    <em></em></td>
+  </tr>
+  <tr class="cg-1">
+    <td></td>
+    <td>&#160;&#160;&#160;
+        <a href="quantum.html#module-caset.quantum"><code class="xref">caset.quantum</code></a></td><td>
+    <em></em></td>
+  </tr>
+</table>
 
         </article>
       </div>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="getting_started.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">Getting Started</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
+          
           
         </div>
         <div class="bottom-of-page">
@@ -373,7 +290,5 @@ bindings to move back and forth.</p>
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>
-    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     </body>
 </html>

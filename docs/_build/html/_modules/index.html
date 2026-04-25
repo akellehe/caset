@@ -1,15 +1,14 @@
 <!doctype html>
-<html class="no-js" lang="en" data-content_root="./">
+<html class="no-js" lang="en" data-content_root="../">
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Topology - caset 0.1.0 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+        <title>Overview: module code - caset 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
     
     
 
@@ -161,7 +160,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">caset 0.1.0 documentation</div></a>
+      <a href="../index.html"><div class="brand">caset 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -180,24 +179,24 @@
   <aside class="sidebar-drawer">
     <div class="sidebar-container">
       
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
   
   <span class="sidebar-brand-text">caset 0.1.0 documentation</span>
   
-</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
   <input type="hidden" name="check_keywords" value="yes">
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <ul>
-<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
-<li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">CDT Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Caset C++ API</a></li>
 </ul>
 
 </div>
@@ -217,13 +216,7 @@
           <span>Back to top</span>
         </a>
         <div class="content-icon-container">
-          <div class="view-this-page">
-  <a class="muted-link" href="_sources/simplices.md.txt" title="View this page">
-    <svg><use href="#svg-eye"></use></svg>
-    <span class="visually-hidden">View this page</span>
-  </a>
-</div>
-<div class="theme-toggle-container theme-toggle-content">
+          <div class="theme-toggle-container theme-toggle-content">
             <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
               <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
               <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
@@ -236,23 +229,9 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="topology">
-<h1>Topology<a class="headerlink" href="#topology" title="Link to this heading">¶</a></h1>
-</section>
-<section class="tex2jax_ignore mathjax_ignore" id="parity">
-<h1>Parity<a class="headerlink" href="#parity" title="Link to this heading">¶</a></h1>
-<p>This method should be used when you have two simplices and you want to find some Vertices at which to join one
-Simplex to the other. Two sets of ordered vertices, \f<span class="math notranslate nohighlight">\( \mathcal{V_i} \f\)</span> and \f<span class="math notranslate nohighlight">\( \mathcal{V_j} \f\)</span> “have parity”
-when there is an ordered subset, \f<span class="math notranslate nohighlight">\( V_i \f\)</span> and \f<span class="math notranslate nohighlight">\( V_j \f\)</span> for which Vertex::getTime returns the same value
-for each corresponding element. More specifically;</p>
-<p>Two sets of vertices “have parity” iff</p>
-<ul class="simple">
-<li><p>They have the same cardinality, \f<span class="math notranslate nohighlight">\( N \f\)</span></p></li>
-<li><p>There exists an element \f<span class="math notranslate nohighlight">\( v_m \memberof \f\)</span> V_i \f<span class="math notranslate nohighlight">\( for which there exists an an element
-\f\)</span> v_n \memberof V_j \f<span class="math notranslate nohighlight">\( such that \f\)</span> v_m::getTime() = v_n::getTime() \forall (m, n) s.t. m = n \f$.</p></li>
+          <h1>All modules for which code is available</h1>
+<ul><li><a href="caset/_caset/quantum.html">caset._caset.quantum</a></li>
 </ul>
-</section>
-
         </article>
       </div>
       <footer>
@@ -284,11 +263,9 @@ for each corresponding element. More specifically;</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=01f34227"></script>
-    <script src="_static/doctools.js?v=9bcbadda"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
-    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</div><script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     </body>
 </html>

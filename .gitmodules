@@ -1,3 +1,6 @@
 [submodule "third_party/itensor"]
 	path = third_party/itensor
 	url = https://github.com/ITensor/ITensor.git
+[submodule "third_party/itensor_tdvp"]
+	path = third_party/itensor_tdvp
+	url = https://github.com/ITensor/TDVP.git

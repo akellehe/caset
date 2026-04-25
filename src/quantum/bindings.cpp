@@ -16,7 +16,9 @@
 #include "quantum/dmrg_runner.hpp"
 #include "quantum/majorization.hpp"
 #include "quantum/pipeline.hpp"
+#include "quantum/quench.hpp"
 #include "quantum/schmidt.hpp"
+#include "quantum/tdvp_runner.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -373,6 +375,154 @@ Notes
 -----
 Complexity is O(M^3) where M = ``len(spectra)``, dominated by the
 transitive-reduction pass.
+)doc");
+
+    // ─── Phase 4 types: TDVP / quench ───────────────────────────────────
+    py::class_<TDVPConfig>(m, "TDVPConfig",
+            R"doc(Configuration for the Phase 4 q-qbar quench + TDVP run.
+
+Bundles the Hamiltonian parameters, the DMRG ground-state setup, the
+quench location / separation, and the real-time-evolution schedule.
+``i0`` and ``d`` describe the q-qbar pair: σ⁻ acts at site ``i0``,
+σ⁺ at site ``i0 + d``.
+
+The parity constraint (PLAN.md §5 Phase 4 / quench.hpp): for the
+heavy-quark Néel vacuum to admit a non-trivial flux tube, ``i0`` must
+be odd (Up sublattice) and ``d`` must be odd. Set
+``quench_enforce_parity = False`` to override.
+
+Attributes
+----------
+N, a, m, g, L0 : Hamiltonian parameters (same as :class:`QuantumConfig`).
+dmrg_max_bond_dim, dmrg_n_sweeps, dmrg_krylov_dim, dmrg_cutoff :
+    DMRG sweep settings for the initial ground state.
+i0, d : int
+    First site of the q-qbar pair (1-based) and separation in lattice sites.
+quench_enforce_parity : bool
+    If True, the quench raises an exception unless i0 and d satisfy the
+    parity constraint above.
+dt : float
+    Real-time step (units of 1/E_dim). Total evolution is ``T``; the loop
+    performs ``round(T / dt)`` TDVP steps.
+T : float
+    Total real-time evolution time.
+max_bond_dim, krylov_dim, cutoff :
+    TDVP sweep settings (per-step bond cap, Krylov dim, SVD cutoff).
+snapshot_every : int
+    Record observables every k steps (≥ 1). The initial snapshot at
+    t = 0 (post-quench) is always recorded.
+quiet, conserve_qns : bool
+record_spectra, record_poset : bool
+    Optional per-snapshot recording of full Schmidt spectra and the
+    majorization poset (O(N²) SVDs each — off by default).
+)doc")
+        .def(py::init<>())
+        .def_readwrite("N",                       &TDVPConfig::N)
+        .def_readwrite("a",                       &TDVPConfig::a)
+        .def_readwrite("m",                       &TDVPConfig::m)
+        .def_readwrite("g",                       &TDVPConfig::g)
+        .def_readwrite("L0",                      &TDVPConfig::L0)
+        .def_readwrite("dmrg_max_bond_dim",       &TDVPConfig::dmrg_max_bond_dim)
+        .def_readwrite("dmrg_n_sweeps",           &TDVPConfig::dmrg_n_sweeps)
+        .def_readwrite("dmrg_krylov_dim",         &TDVPConfig::dmrg_krylov_dim)
+        .def_readwrite("dmrg_cutoff",             &TDVPConfig::dmrg_cutoff)
+        .def_readwrite("i0",                      &TDVPConfig::i0)
+        .def_readwrite("d",                       &TDVPConfig::d)
+        .def_readwrite("quench_enforce_parity",   &TDVPConfig::quench_enforce_parity)
+        .def_readwrite("dt",                      &TDVPConfig::dt)
+        .def_readwrite("T",                       &TDVPConfig::T)
+        .def_readwrite("max_bond_dim",            &TDVPConfig::max_bond_dim)
+        .def_readwrite("krylov_dim",              &TDVPConfig::krylov_dim)
+        .def_readwrite("cutoff",                  &TDVPConfig::cutoff)
+        .def_readwrite("snapshot_every",          &TDVPConfig::snapshot_every)
+        .def_readwrite("quiet",                   &TDVPConfig::quiet)
+        .def_readwrite("conserve_qns",            &TDVPConfig::conserve_qns)
+        .def_readwrite("record_spectra",          &TDVPConfig::record_spectra)
+        .def_readwrite("record_poset",            &TDVPConfig::record_poset);
+
+    py::class_<TDVPSnapshot>(m, "TDVPSnapshot",
+            R"doc(Per-step diagnostics recorded during a TDVP run.
+
+Always-populated fields:
+
+    time : float            -- elapsed real time
+    energy : float          -- ⟨ψ(t)|H|ψ(t)⟩ + constant
+    bond_dim : int          -- maxLinkDim of the MPS at this time
+    Z_profile : list[float] -- ⟨σ^z_n⟩ for n = 1..N
+    L_profile : list[float] -- ⟨L_n⟩  for n = 1..N-1
+
+Optional fields (populated only if the corresponding TDVPConfig flag is set):
+
+    spectra : SchmidtSpectra
+    poset : Poset
+)doc")
+        .def_readonly("time",       &TDVPSnapshot::time)
+        .def_readonly("energy",     &TDVPSnapshot::energy)
+        .def_readonly("bond_dim",   &TDVPSnapshot::bond_dim)
+        .def_readonly("Z_profile",  &TDVPSnapshot::Z_profile)
+        .def_readonly("L_profile",  &TDVPSnapshot::L_profile)
+        .def_readonly("spectra",    &TDVPSnapshot::spectra)
+        .def_readonly("poset",      &TDVPSnapshot::poset)
+        .def("__repr__", [](TDVPSnapshot const& s) {
+            return "TDVPSnapshot(time=" + std::to_string(s.time) +
+                   ", energy=" + std::to_string(s.energy) +
+                   ", bond_dim=" + std::to_string(s.bond_dim) + ")";
+        });
+
+    py::class_<QuenchResult>(m, "QuenchResult",
+            R"doc(Result of :func:`run_qqbar_quench`.
+
+Attributes
+----------
+ground_state : GroundStateResult
+    DMRG ground-state diagnostics for the pre-quench state.
+snapshots : list[TDVPSnapshot]
+    Per-step diagnostics. ``snapshots[0]`` is the post-quench state at
+    t = 0; the rest are spaced every ``config.snapshot_every`` TDVP
+    steps. The final TDVP step is always recorded.
+)doc")
+        .def_readonly("ground_state", &QuenchResult::ground_state)
+        .def_readonly("snapshots",    &QuenchResult::snapshots);
+
+    m.def("run_qqbar_quench",
+          &run_qqbar_quench,
+          py::arg("config"),
+          R"doc(Run the Phase 4 q-qbar quench + TDVP pipeline.
+
+Steps:
+
+1. Build the Schwinger MPO and run DMRG to the ground state (Phase 2).
+2. Apply the q-qbar quench σ⁻_{i0} σ⁺_{i0+d} (Phase 4 / Buyens 2014
+   string state) to flip two spins on opposite sublattices.
+3. Record the post-quench observables at t = 0.
+4. Step TDVP forward by ``config.dt`` for ``round(config.T / config.dt)``
+   steps. Record observables every ``config.snapshot_every`` steps.
+5. Return a :class:`QuenchResult` containing the GS diagnostics and
+   the snapshot list.
+
+Parameters
+----------
+config : TDVPConfig
+    Hamiltonian + quench + TDVP settings. ``config.N`` ≥ 2,
+    ``config.a > 0``, ``config.dt > 0``, ``config.T > 0``. With
+    ``config.quench_enforce_parity = True`` (default) ``config.i0``
+    must be odd and ``config.d`` must be odd as well.
+
+Returns
+-------
+QuenchResult
+    Ground-state diagnostics + snapshot list.
+
+Examples
+--------
+>>> from caset.quantum import TDVPConfig, run_qqbar_quench
+>>> cfg = TDVPConfig()
+>>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark limit
+>>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
+>>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshot_every = 5
+>>> result = run_qqbar_quench(cfg)                  # doctest: +SKIP
+>>> result.snapshots[0].L_profile[:3]               # doctest: +SKIP
+[-1.0, -0.0, -1.0]
 )doc");
 
     m.def("compute_ground_state_majorization",

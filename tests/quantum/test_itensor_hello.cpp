@@ -97,28 +97,54 @@ double dmrg_heisenberg(int N, int max_bond, int n_sweeps) {
 } // namespace
 
 int main() {
+    // ── Test 1: N=8 dense-vs-DMRG sanity ──────────────────────────────
     // N=8 keeps the dense matrix at 256×256 (instant Eigen ED) while still
     // exercising a nontrivial DMRG run with truncation pressure on the
-    // central bond.
-    constexpr int N = 8;
-
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(heisenberg_dense(N));
-    const double e_dense = es.eigenvalues()(0);
-    const double e_dmrg  = dmrg_heisenberg(N, /*max_bond=*/64, /*n_sweeps=*/8);
-
-    const double diff = std::abs(e_dense - e_dmrg);
-    std::cout << "Heisenberg N=" << N
+    // central bond. This is the strongest correctness test of the
+    // ITensor build pipeline.
+    constexpr int N_small = 8;
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(heisenberg_dense(N_small));
+    const double e_dense   = es.eigenvalues()(0);
+    const double e_dmrg_8  = dmrg_heisenberg(N_small, /*max_bond=*/64, /*n_sweeps=*/8);
+    const double diff_8 = std::abs(e_dense - e_dmrg_8);
+    std::cout << "Heisenberg N=" << N_small
               << "  dense=" << e_dense
-              << "  dmrg="  << e_dmrg
-              << "  |Δ|="   << diff << "\n";
-
-    // 1e-6 is the bar in PLAN.md §5 Phase 0; we typically see ~1e-14
-    // because DMRG converges to machine precision on a problem this small.
-    constexpr double tol = 1e-6;
-    if (diff > tol) {
-        std::cerr << "FAIL: DMRG-vs-dense disagree by more than " << tol << "\n";
+              << "  dmrg="  << e_dmrg_8
+              << "  |Δ|="   << diff_8 << "\n";
+    constexpr double tol_small = 1e-6;
+    if (diff_8 > tol_small) {
+        std::cerr << "FAIL: N=" << N_small
+                  << " DMRG-vs-dense disagree by more than " << tol_small << "\n";
         return 1;
     }
+
+    // ── Test 2: N=20 bond-dim convergence (PLAN.md §5 Phase 0 spec) ───
+    // The plan calls for "Heisenberg chain for N=20 to within 1e-6 of the
+    // ITensor reference value". Dense ED at N=20 is too large (2^20×2^20),
+    // so we replace "ITensor reference" with "DMRG converged at high
+    // bond dim": runs at bond_dim ∈ {30, 60, 120} should agree to 1e-6.
+    // If they don't, the run isn't converged and the underlying claim
+    // ("DMRG matches a reference") is moot.
+    constexpr int N_big = 20;
+    const double e_dmrg_30  = dmrg_heisenberg(N_big, /*max_bond=*/30,  /*n_sweeps=*/12);
+    const double e_dmrg_60  = dmrg_heisenberg(N_big, /*max_bond=*/60,  /*n_sweeps=*/12);
+    const double e_dmrg_120 = dmrg_heisenberg(N_big, /*max_bond=*/120, /*n_sweeps=*/12);
+    const double diff_30_60  = std::abs(e_dmrg_30  - e_dmrg_60);
+    const double diff_60_120 = std::abs(e_dmrg_60  - e_dmrg_120);
+    std::cout << "Heisenberg N=" << N_big << " bond-dim convergence:\n"
+              << "  D=30  → " << e_dmrg_30  << "\n"
+              << "  D=60  → " << e_dmrg_60  << "\n"
+              << "  D=120 → " << e_dmrg_120 << "\n"
+              << "  |Δ_30→60|=" << diff_30_60
+              << "  |Δ_60→120|=" << diff_60_120 << "\n";
+    constexpr double tol_big = 1e-6;
+    if (diff_60_120 > tol_big) {
+        std::cerr << "FAIL: N=" << N_big
+                  << " DMRG not converged at D=120 (|Δ_60→120| > "
+                  << tol_big << ")\n";
+        return 1;
+    }
+
     std::cout << "PASS\n";
     return 0;
 }

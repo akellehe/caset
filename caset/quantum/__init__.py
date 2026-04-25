@@ -1,13 +1,17 @@
 """caset.quantum -- Schwinger model on a Jordan-Wigner spin chain via DMRG.
 
-This subpackage implements Phases 2-3 of ``docs/source/quantum-plan.md``:
+This subpackage implements Phases 2-4 of ``docs/source/quantum-plan.md``:
 ground-state DMRG for the 1+1D Kogut-Susskind Schwinger model with U(1)
-total-charge conservation, plus contiguous-cut Schmidt spectra and the
-majorization poset on those spectra. The C++ backend is ITensor v3
-vendored under ``third_party/itensor``; this Python layer is a thin
-result viewer per the architectural principle in PLAN.md §1 ("minimize
-Python/C++ crossings"). No MPS or MPO objects cross the language
-barrier — only scalar configs in and scalar / list diagnostics out.
+total-charge conservation, contiguous-cut Schmidt spectra and the
+majorization poset on those spectra, and a q-qbar quench + 2-site TDVP
+pipeline that produces real-time-evolution snapshots of every observable
+the methodology page (``docs/source/quantum-methodology.md``) targets.
+The C++ backend is ITensor v3 vendored under ``third_party/itensor``
+(plus the ITensor TDVP add-on under ``third_party/itensor_tdvp``);
+this Python layer is a thin result viewer per the architectural
+principle in PLAN.md §1 ("minimize Python/C++ crossings"). No MPS or
+MPO objects cross the language barrier — only scalar configs in and
+scalar / list diagnostics out.
 
 Availability
 ------------
@@ -122,6 +126,35 @@ Phase 3 cut family is contiguous intervals 1 ≤ i ≤ j ≤ N excluding the
 trivial full-chain bipartition [1, N] | ∅; this is N(N+1)/2 - 1 cuts
 total.
 
+Phase 4 — q-qbar quench and TDVP real-time evolution
+----------------------------------------------------
+
+The `run_qqbar_quench(config)` function runs the full DMRG → quench →
+TDVP pipeline in a single C++ call. The quench operator is
+
+    U_qqbar(i0, d)  =  σ⁻_{i0} · σ⁺_{i0 + d}
+
+which on the heavy-quark Néel vacuum ``|↑↓↑↓ … ⟩`` creates a +1 flux tube
+on the d links between sites i0 and i0+d (Buyens 2014 string state).
+The parity constraint i0 odd + d odd applies (PLAN.md §5 Phase 4 /
+quench.hpp). Each TDVP step records ⟨L_n⟩(t), ⟨σ^z_n⟩(t), the energy,
+and the bond dimension; optionally the full contiguous-cut Schmidt
+spectra and majorization poset (off by default — they cost O(N²) SVDs
+per snapshot). Example::
+
+    >>> from caset.quantum import TDVPConfig, run_qqbar_quench
+    >>> cfg = TDVPConfig()
+    >>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark
+    >>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
+    >>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshot_every = 5
+    >>> r = run_qqbar_quench(cfg)
+    >>> r.snapshots[0].L_profile[:3]                   # +1 tube starts at link 3
+    [-1.0, -0.0, -0.0]
+
+In the heavy-quark limit the flux tube is approximately stable for the
+duration of the run (PLAN.md §5 Phase 4 acceptance: ⟨L_n⟩(t) matches
+the reference to within 0.05 at t = T/2; |ΔE|/|E0| < 1e-3).
+
 Tested benchmarks
 -----------------
 
@@ -162,19 +195,21 @@ References
 API
 ---
 
-.. autosummary::
+The full API is the contents of ``__all__`` below — see the per-symbol
+docstrings for parameter / return-value documentation, and
+``docs/source/quantum.md`` for narrative usage. The Python signatures
+are pybind11-generated from the C++ types in ``include/quantum/``.
 
-    QuantumConfig
-    GroundStateResult
-    compute_ground_state
-    Interval
-    SchmidtSpectra
-    Poset
-    GroundStateMajorizationResult
-    majorizes
-    strictly_majorizes
-    majorization_poset
+Phase 2 — DMRG ground state:
+    QuantumConfig, GroundStateResult, compute_ground_state
+
+Phase 3 — Schmidt spectra and majorization poset:
+    Interval, SchmidtSpectra, Poset, GroundStateMajorizationResult,
+    majorizes, strictly_majorizes, majorization_poset,
     compute_ground_state_majorization
+
+Phase 4 — TDVP q-qbar quench:
+    TDVPConfig, TDVPSnapshot, QuenchResult, run_qqbar_quench
 
 Implementation notes
 --------------------
@@ -215,6 +250,12 @@ try:
     strictly_majorizes                  = _qm.strictly_majorizes
     majorization_poset                  = _qm.majorization_poset
     compute_ground_state_majorization   = _qm.compute_ground_state_majorization
+
+    # Phase 4 — TDVP real-time evolution after a q-qbar quench.
+    TDVPConfig         = _qm.TDVPConfig
+    TDVPSnapshot       = _qm.TDVPSnapshot
+    QuenchResult       = _qm.QuenchResult
+    run_qqbar_quench   = _qm.run_qqbar_quench
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "caset.quantum is unavailable: this caset build does not include "
@@ -237,4 +278,9 @@ __all__ = [
     "strictly_majorizes",
     "majorization_poset",
     "compute_ground_state_majorization",
+    # Phase 4
+    "TDVPConfig",
+    "TDVPSnapshot",
+    "QuenchResult",
+    "run_qqbar_quench",
 ]

@@ -111,3 +111,28 @@ class TestQuantumExecutables(unittest.TestCase):
         extraction works on a non-trivial physical state, not just
         product/GHZ/Bell."""
         self._run("test_schwinger_schmidt_cross_check", "ALL PASS", timeout=120)
+
+    @pytest.mark.slow
+    def test_phase4_tdvp_string(self) -> None:
+        """Phase 4 acceptance (PLAN.md §5): heavy-quark q-qbar flux-tube
+        preservation under 2-site TDVP. d=5, T=5.0 (chosen to match the
+        plan's "T = d·a" prescription with d odd for parity). Marked slow
+        because it runs ~100 TDVP sweeps at N=14."""
+        self._run("test_tdvp_string", "ALL PASS", timeout=300)
+
+    def test_phase1_n4_hamiltonian(self) -> None:
+        """PLAN.md §7 trap: 'Verify by independent sum on N=4 before
+        trusting the MPO.' Independent symbolic evaluation of the
+        plan's H_m + H_E formula on every N=4 basis state, compared to
+        build_schwinger_dense to machine precision. Catches L_n²
+        expansion errors that MPO-vs-dense would miss."""
+        self._run("test_schwinger_n4_hamiltonian", "ALL PASS", timeout=30)
+
+    def test_phase4_tdvp_vs_dense(self) -> None:
+        """Cross-check TDVP integrator against full e^{-iHt} dense
+        unitary evolution on the 2^N Hilbert space, for N ≤ 8 across
+        heavy / light / massless regimes. Guarantees the TDVP runner
+        reproduces exact dynamics to better than 1e-4 — far tighter
+        than the Phase 4 flux-tube acceptance, and over genuinely
+        time-dependent profiles (not just preserved plateaus)."""
+        self._run("test_tdvp_vs_dense", "ALL PASS", timeout=120)
