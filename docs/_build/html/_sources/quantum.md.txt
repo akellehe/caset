@@ -4,11 +4,11 @@ The `caset.quantum` subpackage extends caset with a tensor-network
 treatment of the 1+1D Kogut-Susskind Schwinger model — the simplest
 non-trivial gauge theory and a standard benchmark for lattice tensor-
 network methods. It implements the staged plan in
-`docs/source/quantum-plan.md`. As of this writing Phases 0-4 are
+`docs/source/quantum-plan.md`. As of this writing Phases 0-5 are
 complete (scaffolding, MPO + DMRG ground states, Python bindings,
-Schmidt spectra + majorization poset, q-qbar quench + 2-site TDVP);
-the remaining phase (causal-order comparison) builds on the same
-primitives.
+Schmidt spectra + majorization poset, q-qbar quench + 2-site TDVP,
+causal-order comparison); Phase 6 (caset-embedded chain) and
+Phase 7 (MERA / KAK / EML, research) remain.
 
 This page is the **user-facing** reference: how to build the subsystem,
 how to call the Python API, what each diagnostic field means. The two
@@ -75,7 +75,7 @@ at fixed $m/g$.
 ## Quickstart
 
 ```python
-from caset.quantum import QuantumConfig, compute_ground_state
+from caset.quantum import QuantumConfig, computeGroundState
 
 cfg = QuantumConfig()
 cfg.N = 20            # 1-based, even
@@ -83,28 +83,28 @@ cfg.a = 1.0
 cfg.g = 1.0
 cfg.m = 0.0           # massless
 cfg.L0 = 0.0          # zero background field
-cfg.max_bond_dim = 100
-cfg.n_sweeps = 12
+cfg.maxBondDim = 100
+cfg.nSweeps = 12
 
-result = compute_ground_state(cfg)
+result = computeGroundState(cfg)
 print(f"E = {result.energy:.6f}")
-print(f"   = {result.operator_energy:.6f} (operator) "
+print(f"   = {result.operatorEnergy:.6f} (operator) "
       f"+ {result.constant:.6f} (c-number)")
-print(f"bond_dim = {result.bond_dim}, "
-      f"trunc_err ≤ {result.truncation_err:.0e}")
+print(f"bondDim = {result.bondDim}, "
+      f"trunc_err ≤ {result.truncationErr:.0e}")
 ```
 
 ## Convergence checks
 
-`compute_ground_state` returns three diagnostic fields beyond the
+`computeGroundState` returns three diagnostic fields beyond the
 energy:
 
-* **`bond_dim`** — the achieved MPS bond dimension. If it equals
-  `config.max_bond_dim`, the run is bond-dim-limited; bumping the cap
+* **`bondDim`** — the achieved MPS bond dimension. If it equals
+  `config.maxBondDim`, the run is bond-dim-limited; bumping the cap
   and rerunning should give a (variationally) lower energy.
-* **`truncation_err`** — a conservative upper bound on the SVD
+* **`truncationErr`** — a conservative upper bound on the SVD
   truncation error in the final sweep (currently equal to `cutoff`).
-* **`operator_energy + constant`** must equal `energy` to ~1e-12. The
+* **`operatorEnergy + constant`** must equal `energy` to ~1e-12. The
   split is useful when comparing against published numerics that
   include or exclude the c-number L_n² shift.
 
@@ -119,7 +119,7 @@ descending toward Schwinger's exact value $\omega_0 = -1/\pi$:
 $ python examples/quantum/run_schwinger.py --scan-x 1 4 16 --N 80 --max-bond-dim 120
 
 Continuum approach: ω₀ → -1/π ≈ -0.318310 as x → ∞
-   N    m/g      x    L0        E_total        omega_0  bond_dim   trunc_err
+   N    m/g      x    L0        E_total        omega_0  bondDim   trunc_err
 --------------------------------------------------------------------------------
   80  0.000   1.00  0.00   -17.25453000    -0.21568163        13    1.00e-12
   80  0.000   4.00  0.00   -22.61543000    -0.28269000        29    1.00e-12
@@ -146,37 +146,37 @@ The majorization predicate and poset constructor are exposed as pure
 functions on plain Python lists:
 
 ```python
-from caset.quantum import majorizes, strictly_majorizes, majorization_poset
+from caset.quantum import majorizes, strictlyMajorizes, majorizationPoset
 
 assert majorizes([1.0, 0.0], [0.5, 0.5])      # (1, 0) ≻ (½, ½)
 assert not majorizes([0.5, 0.5], [1.0, 0.0])  # not the other way
 
-poset = majorization_poset([
+poset = majorizationPoset([
     [1.0/3, 1.0/3, 1.0/3],   # node 0  — most uniform
     [0.5, 0.5],              # node 1  — middle
     [1.0],                   # node 2  — most concentrated
 ])
-print(poset.n_nodes, poset.covers)
+print(poset.getNodeCount, poset.covers)
 # 3 [(2, 1), (1, 0)]
 # (the direct (2, 0) edge has been transitively reduced away)
 ```
 
 ### End-to-end pipeline
 
-`compute_ground_state_majorization(config)` runs DMRG, extracts every
+`computeGroundStateMajorization(config)` runs DMRG, extracts every
 contiguous-cut Schmidt spectrum, and builds the majorization poset in
 one call:
 
 ```python
-from caset.quantum import QuantumConfig, compute_ground_state_majorization
+from caset.quantum import QuantumConfig, computeGroundStateMajorization
 
 cfg = QuantumConfig()
 cfg.N = 10; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
-cfg.max_bond_dim = 64; cfg.n_sweeps = 10
+cfg.maxBondDim = 64; cfg.nSweeps = 10
 
-r = compute_ground_state_majorization(cfg)
+r = computeGroundStateMajorization(cfg)
 
-print(f"E_total = {r.ground_state.energy:.6f}")
+print(f"E_total = {r.groundState.energy:.6f}")
 print(f"Schmidt cuts: {len(r.spectra.intervals)}")
 for iv, spec in zip(r.spectra.intervals, r.spectra.spectra):
     print(f"  [{iv.i:>2}, {iv.j:>2}]  rank={len(spec)}  "
@@ -201,7 +201,7 @@ Schwinger ground state — N=8, m/g=0.0, x=1.0, L0=0.0
   E_total       = -1.62923162
   E_op          = -5.62923162
   E_const       = 4.00000000
-  bond_dim      = 13
+  bondDim      = 13
   n_intervals   = 35
   n_cover_edges = 91
 
@@ -248,50 +248,50 @@ This requires $i_0$ to be odd (Up site) and $i_0 + d$ to be even (Dn
 site), which forces $d$ to be **odd**. PLAN.md mentions $d=4$; the
 acceptance test uses $d=5$ as the closest odd value.
 
-### End-to-end pipeline: `run_qqbar_quench`
+### End-to-end pipeline: `runQqbarQuench`
 
-The `run_qqbar_quench(config)` Python function runs the full
+The `runQqbarQuench(config)` Python function runs the full
 DMRG → quench → TDVP loop in a single C++ call:
 
 ```python
-from caset.quantum import TDVPConfig, run_qqbar_quench
+from caset.quantum import TDVPConfig, runQqbarQuench
 
 cfg = TDVPConfig()
 cfg.N = 14; cfg.a = 1.0; cfg.g = 1.0
 cfg.m = 20.0                  # heavy-quark limit (m/g = 20)
 cfg.L0 = 0.0
-cfg.dmrg_max_bond_dim = 64; cfg.dmrg_n_sweeps = 12
+cfg.dmrgMaxBondDim = 64; cfg.dmrgNSweeps = 12
 cfg.i0 = 5; cfg.d = 5         # odd-odd: σ⁻ at site 5, σ⁺ at site 10
 cfg.dt = 0.05; cfg.T = 5.0    # 100 TDVP steps; T = d·a per PLAN.md
-cfg.max_bond_dim = 100
-cfg.snapshot_every = 5
-cfg.record_spectra = False    # ON for the Phase-5 majorization comparison
-cfg.record_poset   = False
+cfg.maxBondDim = 100
+cfg.snapshotEvery = 5
+cfg.recordSpectra = False    # ON for the Phase-5 majorization comparison
+cfg.recordPoset   = False
 
-result = run_qqbar_quench(cfg)
-print(f"GS energy:        {result.ground_state.energy:.6f}")
+result = runQqbarQuench(cfg)
+print(f"GS energy:        {result.groundState.energy:.6f}")
 print(f"Post-quench E:    {result.snapshots[0].energy:.6f}")
 print(f"Snapshots:        {len(result.snapshots)}")
-print(f"Final bond_dim:   {result.snapshots[-1].bond_dim}")
+print(f"Final bondDim:   {result.snapshots[-1].bondDim}")
 ```
 
-Each `TDVPSnapshot` carries `time`, `energy`, `bond_dim`, the per-site
-$\langle\sigma^z_n\rangle(t)$ (`Z_profile`), and the per-link
-$\langle L_n\rangle(t)$ (`L_profile`). With `record_spectra = True` the
-snapshot also gains the all-cuts Schmidt spectra; `record_poset = True`
+Each `TDVPSnapshot` carries `time`, `energy`, `bondDim`, the per-site
+$\langle\sigma^z_n\rangle(t)$ (`zProfile`), and the per-link
+$\langle L_n\rangle(t)$ (`lProfile`). With `recordSpectra = True` the
+snapshot also gains the all-cuts Schmidt spectra; `recordPoset = True`
 additionally builds the majorization poset of those spectra (each
 costs $O(N^2)$ SVDs, so they're off by default).
 
 ### Worked example: heavy-quark flux tube
 
-The script `examples/quantum/run_qqbar_quench.py` runs the pipeline and
+The script `examples/quantum/runQqbarQuench.py` runs the pipeline and
 prints the $\langle L_n\rangle(t)$ profile at every snapshot. In the
 heavy-quark limit the tube is rock-stable for the duration of the run:
 
 ```text
-$ python examples/quantum/run_qqbar_quench.py --N 12 --i0 3 --d 5 --T 2.0
+$ python examples/quantum/runQqbarQuench.py --N 12 --i0 3 --d 5 --T 2.0
 
-DMRG ground state: E = -117.068809, bond_dim = 3
+DMRG ground state: E = -117.068809, bondDim = 3
 
     time         energy  bond  ⟨L_n⟩ profile (links 1..N-1)
    0.000     -77.543965     3   -1.000  0.000  0.000  1.000  0.000  1.000  0.000  0.000 -1.000 -0.000 -1.000
@@ -311,6 +311,168 @@ At smaller $m/g$ (light-quark regime) the tube spreads / breaks
 within $T \sim 1/(m/g)$ — that's the string-breaking dynamics Buyens
 et al. study. Try ``--m-over-g 0.5 --T 4.0`` to see it in action.
 
+## Phase 5 — causal-order comparison
+
+Phase 5 ties Phases 1-4 together to test the methodology charter's
+hypothesis (`docs/source/quantum-methodology.md`): that on a
+TDVP-evolved Schwinger state, three independently-defined partial orders
+on the (cut, time) label set agree.
+
+### The three orders
+
+For a TDVP run of duration $T$ with snapshots at $t_0=0, t_1, \dots, t_K$
+and $\mathcal{F}$ the contiguous-interval cut family, the labels are
+$\mathcal{L} = \mathcal{F} \times \{t_0, \dots, t_K\}$. We define:
+
+* $(A, s) \preceq_{\mathrm{maj}} (B, t)$ — strict-majorization order on
+  the Schmidt spectra; the Phase 3 majorizationPoset extended across
+  cuts AND times.
+* $(A, s) \preceq_{\mathrm{LR}} (B, t)$ iff $s < t$ and the
+  interval-distance $d(A, B) \le v_{\mathrm{LR}} \cdot (t - s)$ —
+  the Lieb-Robinson cone.
+* $(A, s) \preceq_{\mathrm{cs}} (B, t)$ iff $s < t$ — the trivial
+  causet order on a regular chain (Phase 6 makes this informative
+  within a time slice too).
+
+Each order is stored as a Hasse-cover :class:`Poset` over a shared
+label list. Pairwise agreement is reported as Kendall-τ, the discordant
+fraction, and the Hasse-graph edit distance.
+
+### End-to-end pipeline
+
+```python
+from caset.quantum import TDVPConfig, computeCausalComparison
+
+cfg = TDVPConfig()
+cfg.N = 12; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.5; cfg.L0 = 0.0
+cfg.dmrgMaxBondDim = 64; cfg.dmrgNSweeps = 12
+cfg.i0 = 5; cfg.d = 3            # odd-odd parity
+cfg.dt = 0.1; cfg.T = 1.0        # 10 TDVP steps
+cfg.maxBondDim = 80
+cfg.snapshotEvery = 1
+
+report = computeCausalComparison(cfg, vLr=1.0)
+print(f"nLabels = {report.nLabels}")
+print(f"maj vs LR: τ = {report.majVsLr.kendallTau:.4f}")
+print(f"LR vs cs:  τ = {report.lrVsCs.kendallTau:.4f}  "
+      f"(must be 1.0; ≼_LR is a subset of ≼_cs by construction)")
+```
+
+The function forces ``recordSpectra = True`` regardless of the input,
+because the spectra are required to build ≼_maj. ``vLr`` defaults to
+1.0 (free-fermion group velocity for our hopping coefficient); the
+plan §7 mentions OTOC-based extraction for higher-precision use.
+
+### vLr-monotonicity sanity
+
+Larger $v_{\mathrm{LR}}$ ⇒ more pairs satisfy $d(A, B) \le v_{\mathrm{LR}}(t-s)$
+⇒ ≼_LR has at least as many cover edges. Because ≼_cs is fixed,
+``lrVsCs.nComparableBoth`` is monotone non-decreasing in $v_{\mathrm{LR}}$.
+This is asserted in the C++ acceptance test and the Python pytest.
+
+### Worked example
+
+The script `examples/quantum/run_causal_compare.py` runs the pipeline
+and prints all three pairwise comparisons:
+
+```bash
+$ python examples/quantum/run_causal_compare.py --N 8 --T 0.4 --scan-vlr 1.0 16.0
+
+=== vLr = 1.0 ===
+  nLabels    = 175
+  nSnapshots = 5
+  pair           Kendall-τ     discord   edit-dist   comparable
+  majVsLr         0.1577      0.4212      0.9724         5670
+  majVsCs         0.1525      0.4238      0.9704         6650
+  lrVsCs          1.0000      0.0000      0.3429        10564
+
+=== vLr = 16.0 ===
+  ... same maj_vs_*; lrVsCs.comparable larger (cone wider)
+```
+
+Key invariant: ``lrVsCs.kendallTau = 1.0`` exactly (≼_LR is a strict
+subset of ≼_cs by construction). Any deviation flags an implementation
+bug.
+
+## Phase 6 — caset-Spacetime → causet-embedded chain
+
+Phase 6 (`docs/source/quantum-plan.md` §6) replaces the regular 1D
+lattice with a "chain of antichains" sourced from a
+:class:`caset.Spacetime`. Two pieces of that integration have landed
+and are usable from Python today:
+
+1. **Inherited Hasse-cover Poset on the Spacetime vertex set**
+   — :meth:`caset.quantum.Poset.fromSpacetime` walks every timelike
+   edge in the Spacetime (an edge whose ``squaredLength < 0``),
+   orients it earliest-time → latest-time, transitively closes the
+   resulting DAG, and emits the cover edges (transitive reduction)
+   as a :class:`caset.quantum.Poset`. This is the natural "≼_cs" of
+   Phase 5 promoted to a non-trivial within-time-slice structure.
+
+2. **Chain-of-antichains adapter**
+   — :func:`caset.quantum.extractCausetChain` walks the Spacetime,
+   groups vertices by integer time slice (`Vertex.getTime()`
+   truncated to int), and packages four pieces of data:
+
+   * `antichains[s]` — the vertex IDs at time slice
+     `times[s]`, in ascending-ID order;
+   * `vertexIds[i]` — the flat lattice-site → Spacetime vertex ID
+     mapping (concatenation of antichains in time order);
+   * `hoppingPairs` — pairs `(i, j)` of flat-site indices coupled
+     by adjacent-slice timelike edges (this would replace the
+     `Σ_n (X_n X_{n+1} + Y_n Y_{n+1})` hopping term in `H_hop` on a
+     causet-embedded chain);
+   * `partialOrder` — the inherited Hasse-cover :class:`Poset` on
+     the same flat-lattice label set, equivalent to
+     ``Poset.fromSpacetime(spacetime)`` modulo the dense remap.
+
+```python
+import caset
+from caset.quantum import extractCausetChain, Poset
+
+# Tiny CDT spacetime as a stand-in for a causet — same APIs apply.
+metric = caset.Metric(True, caset.Signature(4, caset.Lorentzian))
+st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
+                     caset.PREFERRED, caset.Toroid())
+st.build(20)
+
+chain = extractCausetChain(st)
+print(f"nSites = {chain.nSites}")
+print(f"layers  = {[len(a) for a in chain.antichains]}")
+print(f"hops    = {len(chain.hoppingPairs)}")
+print(f"poset   = {chain.partialOrder}")
+```
+
+Sample output on a 20-simplex Toroid CDT::
+
+    nSites = 15
+    layers  = [5, 5, 5]
+    hops    = 30
+    poset   = Poset(getNodeCount=15, covers=30 edges)
+
+For the trivial case where every time slice has a single vertex,
+`hoppingPairs == [(0, 1), (1, 2), …]` and the existing
+:func:`computeGroundState` runs directly with `params.N =
+chain.nSites`. Multi-vertex antichains (genuine causet branching)
+still flatten to a 1D MPS layout, but the resulting hopping graph
+includes pairs with stride > 1; that's the trigger for moving to a
+tree-tensor-network MPO down the line. The MPO construction on top
+of `CausetChain` is left for a follow-up — this commit delivers the
+data extraction and the inherited partial order.
+
+### Visualisation
+
+`Poset.toDot()` renders the Hasse diagram in Graphviz DOT format,
+which makes the inherited causet structure straightforward to plot::
+
+    poset = Poset.fromSpacetime(st)
+    open("/tmp/causet.dot", "w").write(poset.toDot())
+    # then: dot -Tsvg /tmp/causet.dot -o /tmp/causet.svg
+
+Cover edges run from earlier-time vertex to later-time vertex (the
+strict-precedes direction); the diagram should layer cleanly when
+the underlying foliation is :data:`caset.PREFERRED`.
+
 ## Tested benchmarks
 
 The C++ and Python test suites cross-check every layer of the pipeline:
@@ -322,7 +484,7 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_schwinger_limits.cpp`   | Phase 1 | Free-fermion analytic limit ($g{=}m{=}0$) and strong-coupling vacuum ($m \to \infty$). |
 | `test_schwinger_paper.cpp`    | Phase 1 | Continuum trend $\omega_0 \to -1/\pi$, vector mass gap, chiral condensate, charge-conjugation parity. |
 | `test_phase2_compute_ground_state.py` | Phase 2 | Phase 1 numerics reproduced through the Python API to $10^{-8}$. |
-| `test_phase2_api_robustness.py` | Phase 2 | Validation, variational descent, reproducibility, conserve_qns flag, L0 dependence, doctests. |
+| `test_phase2_api_robustness.py` | Phase 2 | Validation, variational descent, reproducibility, conserveQns flag, L0 dependence, doctests. |
 | `test_majorization.cpp` | Phase 3 | Majorization predicate properties (reflexivity, transitivity, anti-symmetry, transitive reduction). |
 | `test_schmidt_spectra.cpp` | Phase 3 | Schmidt extraction on product, GHZ, Bell, singlet inputs. |
 | `test_majorization_poset.cpp` | Phase 3 | Acceptance: product → 0 Hasse edges, GHZ → 0 strict edges, Bell + product → $(1,0) \succ (\tfrac{1}{2},\tfrac{1}{2})$ edge present. |
@@ -330,6 +492,16 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_phase3_majorization_python.py` | Phase 3 | Pipeline reproduction through Python: majorization predicate, poset properties (acyclic, irreflexive, transitively reduced), complement symmetry, strong-mass collapse. |
 | `test_tdvp_string.cpp` | Phase 4 | Heavy-quark flux-tube test: $\langle L_n\rangle(t)$ matches +1-tube reference at $t=0$ and $t=T/2$ to within 0.05; $\|\Delta E\|/\|E_0\| < 10^{-3}$ over $T = d \cdot a$. |
 | `test_phase4_tdvp_python.py` | Phase 4 | Python pipeline tests: parity validation, snapshot schedule, energy conservation, total-charge conservation, optional spectra/poset recording. |
+| `test_tdvp_vs_dense.cpp` | Phase 4 | TDVP integrator vs $e^{-iHt}$ dense unitary evolution on the full $2^N$ Hilbert space, $N \le 8$, four parameter regimes — agreement to $3\times10^{-6}$. |
+| `test_schwinger_n4_hamiltonian.cpp` | Phase 1 | PLAN.md §7 trap: independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
+| `test_causal_compare.cpp` | Phase 5 | End-to-end three-order comparison; sanity checks on Kendall-τ ranges; vLr-monotonicity sanity. |
+| `test_phase5_causal_compare_python.py` | Phase 5 | Python pipeline: identical/reversed/disjoint pure compareOrders cases, end-to-end pipeline checks, ≼_LR ⊂ ≼_cs invariant (τ = 1.0 exactly), vLr monotonicity. |
+| `test_poset_from_spacetime.cpp` | Phase 6 | Hand-crafted Spacetimes (2-slice ladder, 3-slice chain with skip, empty, spacelike-only, sparse-ID, self-comparison, DOT export) — verifies `Poset::fromSpacetime` Hasse covers, transitive reduction, dense ID remapping. |
+| `test_causet_chain.cpp` | Phase 6 | `extractCausetChain` invariants on trivial chain, branching antichain, sparse IDs, slice-spanning skip edges. |
+| `test_phase6_causet_chain_python.py` | Phase 6 | Python-side self-consistency on a default CDT Spacetime: layer sizes, flat-index alignment, partialOrder ⊆ hoppingPairs invariant, DOT round-trip. |
+| `test_phase6_cdt_invariants.cpp` | Phase 6 | Foliated-CDT structural invariants (Ambjorn 2004): every Hasse cover spans exactly one slice; covers ≡ hoppingPairs (no transitive reduction on a foliated complex); Hasse height = num_layers − 1; total extraction; top-layer out-degree / bottom-layer in-degree both 0. |
+| `test_schwinger_paper.cpp::check_vector_mass_continuum_trend` | Phase 1 | Bañuls 2013 fig. 7a M_V/g continuum trend at $m/g = 0$: scan $(x, N) \in \{(4, 40), (16, 80)\}$, verify monotone descent of the first-excited-state gap toward $1/\sqrt{\pi}$ and $\Delta E/g$ in $[0.55, 0.75]$ at $1/\sqrt{x}=0.25$ (matching their published 0.61). |
+| `test_schmidt_invariants_dmrg.cpp` | Phase 1 / 3 | Universal density-matrix invariants on every contiguous-cut Schmidt spectrum of Schwinger DMRG ground states across $(N, m, L_0)$ grid: $\sum \lambda = 1$, $\lambda \in [0, 1]$, descending order, rank $\le 2^{\min(w, N-w)}$. 330 spectra validated to $\sim 10^{-15}$. |
 
 ## API reference
 

@@ -410,7 +410,7 @@ Bond dimension 100 is enough for this check.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">dmrg_runner.hpp</span></code>: thin wrapper around <code class="docutils literal notranslate"><span class="pre">ITensor::dmrg</span></code>.
 Inputs: <code class="docutils literal notranslate"><span class="pre">SchwingerMPO</span></code>, sweep schedule, max bond dim, noise, Krylov
 dim. Outputs: <code class="docutils literal notranslate"><span class="pre">MPS</span></code> ground state, converged energy, final bond dim.</p></li>
-<li><p>Expose <code class="docutils literal notranslate"><span class="pre">compute_ground_state(config)</span></code> through pybind11 returning
+<li><p>Expose <code class="docutils literal notranslate"><span class="pre">computeGroundState(config)</span></code> through pybind11 returning
 only <span class="math notranslate nohighlight">\((E_0, \text{bond\_dim}, \text{truncation\_err})\)</span>.</p></li>
 </ul>
 <p><strong>Acceptance</strong>: re-runs Phase 1 with the wrapper; numerics unchanged.</p>
@@ -510,14 +510,50 @@ seeds.</p></li>
 </section>
 <section id="phase-6-caset-integration-12-weeks-optional-for-v1">
 <h3>Phase 6 — caset integration (1–2 weeks, optional for v1)<a class="headerlink" href="#phase-6-caset-integration-12-weeks-optional-for-v1" title="Link to this heading">¶</a></h3>
+<p><strong>Status (as of 2026-04-25)</strong>: data-extraction layer landed; MPO
+rebuild on the extracted chain is the remaining piece.</p>
+<p>Done:</p>
 <ul class="simple">
-<li><p>Replace the regular 1D lattice with a chain of antichains sourced
-from <code class="docutils literal notranslate"><span class="pre">caset::CausalSet</span></code>.</p></li>
-<li><p>Hopping in <span class="math notranslate nohighlight">\(H_\text{hop}\)</span> follows causet links, not lattice neighbors.</p></li>
-<li><p>Rebuild MPO as a tree-tensor-network when the causet is not totally
-ordered across a time slice (ITensor has tree TN support; otherwise
-fall back to a chain with reindexing).</p></li>
-<li><p>Compare the three partial orders on the causet-embedded state.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">caset::Poset::fromSpacetime(Spacetime</span> <span class="pre">const&amp;)</span></code> — inherits a Hasse
+cover Poset from the timelike-edge subgraph of any
+<code class="docutils literal notranslate"><span class="pre">caset::Spacetime</span></code>. Uses transitive closure + reduction; preserves
+metric semantics by orienting earliest-time → latest-time and
+filtering on <code class="docutils literal notranslate"><span class="pre">Edge::getSquaredLength()</span> <span class="pre">&lt;</span> <span class="pre">0</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">caset::quantum::extractCausetChain(Spacetime</span> <span class="pre">const&amp;)</span></code> — packages
+the antichain layering, flat lattice ↔ Spacetime ID mapping,
+adjacent-slice timelike-edge hopping pairs, and the inherited
+partial-order Poset into a single <code class="docutils literal notranslate"><span class="pre">CausetChain</span></code>.</p></li>
+<li><p>Python bindings: <code class="docutils literal notranslate"><span class="pre">caset.quantum.Poset.fromSpacetime(st)</span></code> and
+<code class="docutils literal notranslate"><span class="pre">caset.quantum.extractCausetChain(st)</span></code> work on any
+<code class="docutils literal notranslate"><span class="pre">caset.Spacetime</span></code> instance (CDT-built, hand-crafted, or future
+<code class="docutils literal notranslate"><span class="pre">caset.CausalSet</span></code>).</p></li>
+<li><p>C++ acceptance: <code class="docutils literal notranslate"><span class="pre">tests/quantum/test_poset_from_spacetime.cpp</span></code> (7
+cases) and <code class="docutils literal notranslate"><span class="pre">tests/quantum/test_causet_chain.cpp</span></code> (5 cases). Python
+acceptance: <code class="docutils literal notranslate"><span class="pre">tests/quantum/test_phase6_causet_chain_python.py</span></code>.</p></li>
+</ul>
+<p>Remaining for v1 close-out (deferred):</p>
+<ul class="simple">
+<li><p>Rebuild the Schwinger MPO on the <code class="docutils literal notranslate"><span class="pre">CausetChain</span></code> so
+<code class="docutils literal notranslate"><span class="pre">H_hop</span></code> follows the extracted hopping pairs rather than uniform
+nearest-neighbour. For trivial chains (one vertex per slice) this
+is just <code class="docutils literal notranslate"><span class="pre">params.N</span> <span class="pre">=</span> <span class="pre">chain.nSites</span></code> and the existing
+<code class="docutils literal notranslate"><span class="pre">buildSchwingerMpo</span></code> runs as-is.</p></li>
+<li><p>For non-trivial antichains (causet branches), the chain layout
+produces hopping pairs with stride &gt; 1. Two paths:</p>
+<ol class="arabic simple">
+<li><p>Stay on a 1D MPS, accept the long-range hopping cost in the
+MPO bond dimension.</p></li>
+<li><p>Switch to ITensor’s tree-tensor-network support; tree TN
+handles branching antichains natively.
+Both paths are open work; pick after profiling the stride-1 case
+on a small CDT-derived chain.</p></li>
+</ol>
+</li>
+<li><p>Replace ≼_cs in <code class="docutils literal notranslate"><span class="pre">computeCausalComparison</span></code> with the inherited
+<code class="docutils literal notranslate"><span class="pre">partialOrder</span></code> on the cut/time label set, then re-run the Phase 5
+invariants (<code class="docutils literal notranslate"><span class="pre">lrVsCs.kendallTau</span> <span class="pre">==</span> <span class="pre">1.0</span></code> should still hold when
+the chain is totally ordered per slice; it may relax for branching
+causets, which is the Phase 6 hypothesis).</p></li>
 </ul>
 </section>
 <section id="phase-7-mera-kak-eml-research-not-v1">
@@ -539,23 +575,23 @@ Haegeman 2021 for Riemannian optimization; Odrzywołek 2026 for EML.</p>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;m&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">m</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;g&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">g</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;L0&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">L0</span><span class="p">)</span>
-<span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;max_bond_dim&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">max_bond_dim</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;maxBondDim&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">maxBondDim</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;dt&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">dt</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;T&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">T</span><span class="p">);</span>
 
 <span class="n">py</span><span class="o">::</span><span class="n">class_</span><span class="o">&lt;</span><span class="n">GroundStateResult</span><span class="o">&gt;</span><span class="p">(</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;GroundStateResult&quot;</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;energy&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">GroundStateResult</span><span class="o">::</span><span class="n">energy</span><span class="p">)</span>
-<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;bond_dim&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">GroundStateResult</span><span class="o">::</span><span class="n">bond_dim</span><span class="p">)</span>
-<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;truncation_err&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">GroundStateResult</span><span class="o">::</span><span class="n">truncation_err</span><span class="p">);</span>
+<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;bondDim&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">GroundStateResult</span><span class="o">::</span><span class="n">bondDim</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;truncationErr&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">GroundStateResult</span><span class="o">::</span><span class="n">truncationErr</span><span class="p">);</span>
 
 <span class="n">py</span><span class="o">::</span><span class="n">class_</span><span class="o">&lt;</span><span class="n">QuenchResult</span><span class="o">&gt;</span><span class="p">(</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;QuenchResult&quot;</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;times&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuenchResult</span><span class="o">::</span><span class="n">times</span><span class="p">)</span>
-<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;L_profile&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuenchResult</span><span class="o">::</span><span class="n">L_profile</span><span class="p">)</span><span class="w">  </span><span class="c1">// [t][n]</span>
-<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;Z_profile&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuenchResult</span><span class="o">::</span><span class="n">Z_profile</span><span class="p">)</span>
+<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;lProfile&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuenchResult</span><span class="o">::</span><span class="n">lProfile</span><span class="p">)</span><span class="w">  </span><span class="c1">// [t][n]</span>
+<span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;zProfile&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuenchResult</span><span class="o">::</span><span class="n">zProfile</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readonly</span><span class="p">(</span><span class="s">&quot;posets&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuenchResult</span><span class="o">::</span><span class="n">posets</span><span class="p">);</span><span class="w">       </span><span class="c1">// one per t</span>
 
-<span class="n">m</span><span class="p">.</span><span class="n">def</span><span class="p">(</span><span class="s">&quot;compute_ground_state&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">compute_ground_state</span><span class="p">);</span>
-<span class="n">m</span><span class="p">.</span><span class="n">def</span><span class="p">(</span><span class="s">&quot;run_qqbar_quench&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">run_qqbar_quench</span><span class="p">);</span>
+<span class="n">m</span><span class="p">.</span><span class="n">def</span><span class="p">(</span><span class="s">&quot;computeGroundState&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">computeGroundState</span><span class="p">);</span>
+<span class="n">m</span><span class="p">.</span><span class="n">def</span><span class="p">(</span><span class="s">&quot;runQqbarQuench&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">runQqbarQuench</span><span class="p">);</span>
 </pre></div>
 </div>
 <p>No MPS, MPO, or ITensor type crosses the barrier.</p>

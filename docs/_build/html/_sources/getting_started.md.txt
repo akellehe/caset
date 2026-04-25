@@ -26,7 +26,7 @@ import caset
 # Set up a 4D Lorentzian metric on a toroidal topology
 metric = caset.Metric(
     coordinateFree=True,
-    signature=caset.Signature(dimensions=4, signature_type=caset.Lorentzian),
+    signature=caset.Signature(dimensions=4, signatureType=caset.Lorentzian),
 )
 st = caset.Spacetime(
     metric=metric, spacetimeType=caset.CDT,
