@@ -79,14 +79,9 @@ struct CausalOrders {
 //
 // hasse_edit_distance is the symmetric difference of cover-edge sets,
 // normalized by the union size.
-struct OrderAgreement {
-    double kendall_tau{0.0};
-    double discordant_fraction{0.0};
-    double hasse_edit_distance{0.0};
-    int    n_concordant{0};
-    int    n_discordant{0};
-    int    n_comparable_both{0};
-};
+// OrderAgreement is defined at top-level caset (see include/Poset.h).
+// The using-alias in include/quantum/majorization.hpp keeps the old
+// `caset::quantum::OrderAgreement` spelling available.
 
 struct CausalComparisonReport {
     OrderAgreement maj_vs_lr;
@@ -104,9 +99,9 @@ struct CausalComparisonReport {
 CausalOrders build_causal_orders(std::vector<TDVPSnapshot> const& snapshots,
                                  double v_LR);
 
-// Pairwise agreement statistics between two posets that share a label
-// set of size n_labels.
-OrderAgreement compare_orders(Poset const& a, Poset const& b, int n_labels);
+// caset::compare_orders is the canonical implementation; the alias in
+// include/quantum/majorization.hpp re-exports it as
+// caset::quantum::compare_orders for back-compat.
 
 // End-to-end pipeline: DMRG ground state → q-qbar quench → TDVP loop with
 // per-step Schmidt spectra → build the three orders → compare. Forces

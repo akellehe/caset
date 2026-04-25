@@ -125,12 +125,12 @@ bool small_poset_construction() {
     // Hasse cover relations should be 2 → 1 and 1 → 0; the direct edge
     // 2 → 0 should be REMOVED by transitive reduction.
     bool ok = true;
-    ok &= expect_true(poset.n_nodes == 3, "n_nodes = 3");
-    ok &= expect_true(poset.covers.size() == 2, "exactly 2 cover edges");
+    ok &= expect_true(poset.n_nodes() == 3, "n_nodes = 3");
+    ok &= expect_true(poset.covers().size() == 2, "exactly 2 cover edges");
     bool has_2_to_1 = false;
     bool has_1_to_0 = false;
     bool has_2_to_0 = false;
-    for (auto [a, b] : poset.covers) {
+    for (auto [a, b] : poset.covers()) {
         if (a == 2 && b == 1) has_2_to_1 = true;
         if (a == 1 && b == 0) has_1_to_0 = true;
         if (a == 2 && b == 0) has_2_to_0 = true;
@@ -147,10 +147,10 @@ bool empty_input() {
     auto p_empty = majorization_poset({});
     auto p_one   = majorization_poset({{1.0}});
     bool ok = true;
-    ok &= expect_true(p_empty.n_nodes == 0,    "empty input → 0 nodes");
-    ok &= expect_true(p_empty.covers.empty(),  "empty input → 0 edges");
-    ok &= expect_true(p_one.n_nodes == 1,      "single-node input → 1 node");
-    ok &= expect_true(p_one.covers.empty(),    "single-node input → 0 edges");
+    ok &= expect_true(p_empty.n_nodes() == 0,    "empty input → 0 nodes");
+    ok &= expect_true(p_empty.covers().empty(),  "empty input → 0 edges");
+    ok &= expect_true(p_one.n_nodes() == 1,      "single-node input → 1 node");
+    ok &= expect_true(p_one.covers().empty(),    "single-node input → 0 edges");
     return ok;
 }
 

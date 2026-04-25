@@ -57,8 +57,7 @@ bool strictly_majorizes(std::vector<double> const& mu,
 Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
                          double tol) {
     const int N = static_cast<int>(spectra.size());
-    Poset out;
-    out.n_nodes = N;
+    Poset out(N);
     if (N == 0) return out;
 
     // Pre-compute the strict-majorization adjacency. We pay O(N^2) majorizes
@@ -75,9 +74,7 @@ Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
     }
 
     // Transitive reduction: an edge (i, j) in the strict graph survives
-    // iff there is no third node k with i ≻ k ≻ j. We test this directly
-    // by scanning k.
-    out.covers.reserve(static_cast<std::size_t>(N));
+    // iff there is no third node k with i ≻ k ≻ j.
     for (int i = 0; i < N; ++i) {
         for (int j = 0; j < N; ++j) {
             if (!strict[i][j]) continue;
@@ -90,7 +87,7 @@ Poset majorization_poset(std::vector<std::vector<double>> const& spectra,
                 }
             }
             if (!has_intermediate) {
-                out.covers.emplace_back(i, j);
+                out.add_cover(i, j);
             }
         }
     }

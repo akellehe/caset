@@ -38,12 +38,12 @@ bool acceptance_product_state() {
     auto cuts = all_contiguous_spectra(psi);
     auto poset = majorization_poset(cuts.spectra);
 
-    const bool ok = poset.covers.empty();
+    const bool ok = poset.covers().empty();
     std::cout << "  cuts=" << cuts.spectra.size()
-              << "  Hasse edges=" << poset.covers.size()
+              << "  Hasse edges=" << poset.covers().size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     if (!ok) {
-        for (auto [a, b] : poset.covers) {
+        for (auto [a, b] : poset.covers()) {
             std::cout << "    unexpected edge: " << a << " ≻ " << b << "\n";
         }
     }
@@ -62,12 +62,12 @@ bool acceptance_ghz_no_strict_edges() {
     auto cuts = all_contiguous_spectra(psi);
     auto poset = majorization_poset(cuts.spectra);
 
-    const bool ok = poset.covers.empty();
+    const bool ok = poset.covers().empty();
     std::cout << "  cuts=" << cuts.spectra.size()
-              << "  Hasse edges=" << poset.covers.size()
+              << "  Hasse edges=" << poset.covers().size()
               << "  " << (ok ? "PASS" : "FAIL") << "\n";
     if (!ok) {
-        for (auto [a, b] : poset.covers) {
+        for (auto [a, b] : poset.covers()) {
             std::cout << "    unexpected edge: " << a << " ≻ " << b << "\n";
         }
     }
@@ -90,12 +90,12 @@ bool acceptance_bell_vs_product() {
     auto poset = majorization_poset(spectra);
 
     bool ok = true;
-    if (poset.covers.size() != 1) {
+    if (poset.covers().size() != 1) {
         std::cout << "  expected exactly 1 Hasse edge, got "
-                  << poset.covers.size() << "  FAIL\n";
+                  << poset.covers().size() << "  FAIL\n";
         ok = false;
     } else {
-        auto [a, b] = poset.covers.front();
+        auto [a, b] = poset.covers().front();
         if (a == 1 && b == 0) {
             std::cout << "  edge (1, 0) → (½, ½) present  PASS\n";
         } else {
@@ -148,13 +148,13 @@ bool ghz_full_chain_includes_extreme() {
     std::cout << "  product cuts=" << n_product
               << "  GHZ cuts="     << cuts_g.spectra.size()
               << "  expected edges=" << expected
-              << "  got=" << poset.covers.size()
-              << "  " << (poset.covers.size() == expected ? "PASS" : "FAIL")
+              << "  got=" << poset.covers().size()
+              << "  " << (poset.covers().size() == expected ? "PASS" : "FAIL")
               << "\n";
 
     // Spot-check: pick one cover edge and verify it points from product to GHZ.
     bool direction_ok = true;
-    for (auto [a, b] : poset.covers) {
+    for (auto [a, b] : poset.covers()) {
         // a is the strict majorizer, should be a product node;
         // b is the majorized, should be a GHZ node.
         if (a >= static_cast<int>(n_product) ||
@@ -165,7 +165,7 @@ bool ghz_full_chain_includes_extreme() {
             break;
         }
     }
-    return poset.covers.size() == expected && direction_ok;
+    return poset.covers().size() == expected && direction_ok;
 }
 
 } // namespace

@@ -1,7 +1,11 @@
-// Majorization partial order on probability distributions, plus the Hasse-
-// diagram (transitive-reduction) construction we use to build the
-// majorization poset of Schmidt spectra of an MPS (Phase 3 of
-// docs/source/quantum-plan.md).
+// Majorization partial order on probability distributions, plus the
+// Hasse-diagram construction we use to build the majorization poset of
+// Schmidt spectra of an MPS (Phase 3 of docs/source/quantum-plan.md).
+//
+// The Poset / OrderAgreement / compare_orders types themselves live at
+// the top of caset (`include/Poset.h`) so they're shareable with non-
+// quantum analyses; this header re-exports them under
+// `caset::quantum::` for backward compatibility with Phase 3-5 code.
 //
 // ─── Majorization recap ───────────────────────────────────────────────────
 //
@@ -32,11 +36,20 @@
 
 #pragma once
 
+#include "Poset.h"  // top-level caset::Poset / OrderAgreement / compare_orders
+
 #include <cstddef>
 #include <utility>
 #include <vector>
 
 namespace caset::quantum {
+
+// Aliases keeping the Phase 3-5 code paths working unchanged. The
+// canonical types live in `caset::` so non-quantum analyses can use
+// them too.
+using Poset = ::caset::Poset;
+using OrderAgreement = ::caset::OrderAgreement;
+using ::caset::compare_orders;
 
 // Returns true iff μ majorizes λ. Both vectors are sorted non-increasingly
 // internally; the shorter is zero-padded to the longer's length.
@@ -55,20 +68,11 @@ bool strictly_majorizes(std::vector<double> const& mu,
                         std::vector<double> const& lambda,
                         double tol = 1e-12);
 
-// Hasse / cover representation of a partial order on a finite set of nodes.
-//
-// Nodes are integers 0 .. n_nodes-1. `covers` lists pairs (a, b) where a
-// strictly majorizes b AND no third node c sits between them — so this is
-// the transitive reduction of the strict-majorization graph.
-//
-// Equality classes (μ ≼ λ AND λ ≼ μ) are NOT given cover edges among
-// themselves: members of the same equivalence class share a single
-// "position" in the partial order.
-struct Poset {
-    int n_nodes{0};
-    std::vector<std::pair<int, int>> covers;  // (a, b) with a ≻ b and no
-                                              // intermediate node
-};
+// Poset, OrderAgreement, compare_orders are imported via `using` above —
+// see include/Poset.h for the canonical definitions. Cover edges are
+// (a, b) with a strictly majorizing b and no intermediate node;
+// equivalence classes (μ ≼ λ AND λ ≼ μ) get no cover edges among
+// themselves.
 
 // Construct the majorization poset on the given list of spectra.
 //

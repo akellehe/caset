@@ -14,12 +14,14 @@
 // API and the underlying physics conventions.
 
 #include "quantum/causal_compare.hpp"
+#include "quantum/causet_chain.hpp"
 #include "quantum/dmrg_runner.hpp"
 #include "quantum/majorization.hpp"
 #include "quantum/pipeline.hpp"
 #include "quantum/quench.hpp"
 #include "quantum/schmidt.hpp"
 #include "quantum/tdvp_runner.hpp"
+#include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -287,12 +289,55 @@ covers : list[tuple[int, int]]
     Hasse cover edges (a, b) with a ≻ b.
 )doc")
         .def(py::init<>())
-        .def_readwrite("n_nodes", &Poset::n_nodes, "Total node count.")
-        .def_readwrite("covers",  &Poset::covers,
+        // n_nodes and covers are accessed via getters/setters because the
+        // underlying caset::Poset stores them in VertexList/EdgeList rather
+        // than as raw int + vector members. Python sees the same simple
+        // {n_nodes: int, covers: list[tuple[int,int]]} surface as before.
+        .def_property("n_nodes",
+            [](Poset const& p) { return p.n_nodes(); },
+            [](Poset& p, int n) { p.set_n_nodes(n); },
+            "Total node count.")
+        .def_property("covers",
+            [](Poset const& p) { return p.covers(); },
+            [](Poset& p, std::vector<std::pair<int, int>> const& covers) {
+                p.set_covers(covers);
+            },
             "Hasse cover edges (a, b) with a strictly majorizes b.")
+        .def("to_dot", &Poset::to_dot,
+            "Graphviz DOT representation of the Hasse diagram.")
+        // Phase 6 — Spacetime → Poset factory. Same py::object indirection
+        // as extract_causet_chain because Spacetime is registered in the
+        // top-level _caset module, not in this quantum sub-binding TU.
+        .def_static("from_spacetime",
+            [](py::object spacetime_obj) {
+                auto const* st = spacetime_obj.cast<caset::Spacetime const*>();
+                return caset::Poset::from_spacetime(*st);
+            }, py::arg("spacetime"),
+            R"doc(Inherit a Hasse-cover Poset from a caset.Spacetime.
+
+Walks the Spacetime's edge list, takes every timelike edge
+(``Edge.getSquaredLength() < 0``) as a strict precedes-relation
+oriented earliest-time → latest-time, computes the transitive
+closure, and emits the cover edges (transitive reduction) as the
+Poset's cover list.
+
+Vertex IDs in the returned Poset are a dense 0..n-1 remapping of the
+Spacetime's ``Vertex.getId()`` values in ascending order. The
+remapping is monotonic, so a caller who sorts Spacetime vertex IDs
+ascending recovers the Poset node order trivially.
+
+Parameters
+----------
+spacetime : caset.Spacetime
+    Source spacetime.
+
+Returns
+-------
+Poset
+)doc")
         .def("__repr__", [](Poset const& p) {
-            return "Poset(n_nodes=" + std::to_string(p.n_nodes) +
-                   ", covers=" + std::to_string(p.covers.size()) + " edges)";
+            return "Poset(n_nodes=" + std::to_string(p.n_nodes()) +
+                   ", covers=" + std::to_string(p.n_covers()) + " edges)";
         });
 
     py::class_<GroundStateMajorizationResult>(m, "GroundStateMajorizationResult",
@@ -539,6 +584,15 @@ Counted over unordered pairs (i, j) with i < j:
 * "comparable in P" — transitive closure of P relates i to j.
 * "concordant" — both posets relate the pair, in the same direction.
 * "discordant" — both posets relate the pair, in opposite directions.
+* "only_a" / "only_b" — one poset relates the pair, the other does not.
+
+The five categories (concordant, discordant, only_a, only_b, neither)
+partition the C(n_labels, 2) unordered pairs.
+
+The strong-falsification probe (quantum-methodology.md §1.2 #1) reads
+off ``n_only_a`` when ``(a, b) = (≼_maj, ≼_LR)``: it's the count of
+majorization-related pairs whose endpoints lie outside the Lieb–
+Robinson cone.
 
 Attributes
 ----------
@@ -551,13 +605,17 @@ hasse_edit_distance : float
     |E_a △ E_b| / |E_a ∪ E_b| — symmetric difference of cover edges
     normalized by their union size, in [0, 1].
 n_concordant, n_discordant, n_comparable_both : int
+n_only_a, n_only_b : int
+    Pairs related by exactly one of the two posets.
 )doc")
         .def_readonly("kendall_tau",         &OrderAgreement::kendall_tau)
         .def_readonly("discordant_fraction", &OrderAgreement::discordant_fraction)
         .def_readonly("hasse_edit_distance", &OrderAgreement::hasse_edit_distance)
         .def_readonly("n_concordant",        &OrderAgreement::n_concordant)
         .def_readonly("n_discordant",        &OrderAgreement::n_discordant)
-        .def_readonly("n_comparable_both",   &OrderAgreement::n_comparable_both);
+        .def_readonly("n_comparable_both",   &OrderAgreement::n_comparable_both)
+        .def_readonly("n_only_a",            &OrderAgreement::n_only_a)
+        .def_readonly("n_only_b",            &OrderAgreement::n_only_b);
 
     py::class_<CausalComparisonReport>(m, "CausalComparisonReport",
             R"doc(Pairwise agreement statistics across all three Phase 5 orders.
@@ -699,6 +757,91 @@ Examples
 6
 >>> all(abs(sum(s) - 1.0) < 1e-10 for s in r.spectra.spectra)
 True
+)doc");
+
+    py::class_<CausetChain>(m, "CausetChain",
+            R"doc(Phase 6 — Spacetime-derived chain layout for the Schwinger MPO.
+
+A flattened mapping from a :class:`caset._caset.Spacetime` (or a future
+:class:`caset.Causet`) to a 1D lattice with hopping pairs, plus the
+inherited Hasse-cover :class:`Poset` on the lattice sites.
+
+For the simplest case where every time slice has a single vertex, this
+collapses to a regular chain and ``hopping_pairs == [(0,1), (1,2), …]``.
+For non-trivial antichains the chain can still hold the state — but
+multi-site antichains may produce hopping pairs with stride > 1, which
+is the trigger for moving to a tree tensor network in the longer-term
+plan (PLAN.md §6).
+
+Attributes
+----------
+n_sites : int
+    Total number of lattice sites = sum over slices of antichain size.
+times : list[int]
+    Sorted ascending list of integer time slices present in the
+    Spacetime.
+antichains : list[list[int]]
+    ``antichains[s]`` is the ascending-ID list of Spacetime vertex IDs
+    at ``times[s]``.
+vertex_ids : list[int]
+    Flat lattice site → Spacetime vertex ID. Concatenation of all
+    antichains in time order.
+hopping_pairs : list[tuple[int, int]]
+    Pairs ``(i, j)`` with ``i < j`` of flat lattice sites coupled by
+    timelike causet edges that cross exactly one slice boundary.
+partial_order : Poset
+    Hasse cover Poset on the n_sites label set, inherited via
+    :func:`caset._caset.Poset.from_spacetime`.
+)doc")
+        .def_readonly("n_sites",      &CausetChain::n_sites)
+        .def_readonly("times",        &CausetChain::times)
+        .def_readonly("antichains",   &CausetChain::antichains)
+        .def_readonly("vertex_ids",   &CausetChain::vertex_ids)
+        .def_readonly("hopping_pairs",&CausetChain::hopping_pairs)
+        .def_readonly("partial_order",&CausetChain::partial_order)
+        .def("__repr__", [](CausetChain const& c) {
+            return "CausetChain(n_sites=" + std::to_string(c.n_sites) +
+                   ", times=" + std::to_string(c.times.size()) +
+                   ", hops=" + std::to_string(c.hopping_pairs.size()) + ")";
+        });
+
+    // Spacetime is bound in the top-level _caset module (src/bindings.cpp),
+    // not here, so pybind11 can't statically deduce its descriptor for a
+    // raw Spacetime const& parameter. Take it through py::object and cast
+    // at runtime — the registry lookup resolves to the same class object.
+    m.def("extract_causet_chain", [](py::object spacetime_obj) {
+              auto const* st = spacetime_obj.cast<caset::Spacetime const*>();
+              return extract_causet_chain(*st);
+          }, py::arg("spacetime"),
+          R"doc(Phase 6 — extract a chain-of-antichains adapter from a Spacetime.
+
+Walks the Spacetime's vertex list, groups vertices by integer time slice
+(``Vertex.getTime()`` truncated to int), and produces a
+:class:`CausetChain` describing:
+
+* the antichain layering (one antichain per time slice, ordered by
+  ascending Spacetime vertex ID),
+* the flat lattice ↔ Spacetime ID mapping,
+* the adjacent-slice timelike-edge hopping pairs (with squaredLength
+  < 0 and time-slice index difference exactly 1; non-cover edges
+  spanning multiple slices are skipped),
+* the Hasse cover :class:`Poset` on the flat lattice sites.
+
+This is the data shape the Phase 6 causet-embedded Schwinger MPO
+construction would consume to replace the regular 1D lattice. For the
+trivial case where every time slice has a single vertex,
+``hopping_pairs`` reduces to ``[(0, 1), (1, 2), …]`` and the existing
+:func:`compute_ground_state` runs unchanged on top.
+
+Parameters
+----------
+spacetime : caset._caset.Spacetime
+    Source spacetime. Vertices must have at least 1D coordinates so
+    that ``Vertex.getTime()`` is well-defined.
+
+Returns
+-------
+CausetChain
 )doc");
 
     m.def("compute_ground_state", &compute_ground_state,

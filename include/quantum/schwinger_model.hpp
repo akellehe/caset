@@ -91,6 +91,38 @@ struct SchwingerMPO {
 // without symmetry tracking for that one measurement.
 SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns = true);
 
+// Phase 6.0 — chain-causet variant. Same Schwinger Hamiltonian, but the
+// hopping graph for H_hop is supplied externally as a list of
+// (site_i, site_j) pairs in 0-based flat lattice indexing. Mass and
+// electric-field terms remain the standard 1D formulas — they're
+// well-defined as long as the lattice has a linear ordering, which is
+// guaranteed when the underlying causet is a chain (one vertex per time
+// slice).
+//
+// The intended usage:
+//
+//   auto chain   = caset::quantum::extract_causet_chain(spacetime);
+//   SchwingerParams p; p.N = chain.n_sites; …;
+//   auto sm = build_schwinger_mpo_chain(p, chain.hopping_pairs);
+//
+// For a chain causet (every antichain has one vertex), `hopping_pairs`
+// is exactly `[(0,1), (1,2), …, (N-2, N-1)]` and the resulting MPO is
+// bit-for-bit identical to `build_schwinger_mpo(p)` — that's the Phase
+// 6.0 sanity equality.
+//
+// For a non-trivial antichain causet (Phase 6.1), `hopping_pairs` will
+// include strides > 1 in the flat lattice indexing; H_hop just absorbs
+// them via AutoMPO. The H_m and H_E reinterpretation issue surfaces at
+// 6.1 — for now we rely on the chain-causet linear ordering.
+//
+// Sites in `hopping_pairs` are 0-based flat indices and must be in
+// [0, p.N - 1]. ITensor's site indexing is 1-based internally; we
+// add 1 when feeding AutoMPO.
+SchwingerMPO build_schwinger_mpo_chain(
+    SchwingerParams const& p,
+    std::vector<std::pair<int, int>> const& hopping_pairs,
+    bool conserve_qns = true);
+
 // Dense 2^N×2^N reference Hamiltonian. No symmetry reduction; bit n of the
 // row index corresponds to spin n in the convention documented in the .cpp
 // file. Hard-capped at N=16 (= 2^16 × 2^16 = 32 GB of doubles, already too

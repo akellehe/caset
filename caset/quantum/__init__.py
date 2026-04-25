@@ -297,6 +297,10 @@ try:
     CausalComparisonReport      = _qm.CausalComparisonReport
     compare_orders              = _qm.compare_orders
     compute_causal_comparison   = _qm.compute_causal_comparison
+
+    # Phase 6 — caset-Spacetime → chain-of-antichains adapter.
+    CausetChain           = _qm.CausetChain
+    extract_causet_chain  = _qm.extract_causet_chain
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "caset.quantum is unavailable: this caset build does not include "
@@ -331,4 +335,7 @@ __all__ = [
     "CausalComparisonReport",
     "compare_orders",
     "compute_causal_comparison",
+    # Phase 6
+    "CausetChain",
+    "extract_causet_chain",
 ]

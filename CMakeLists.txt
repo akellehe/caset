@@ -76,25 +76,34 @@ endif()
 
 
 
-# ---- <Define Sources> ----
+# ---- <Define source partitions> ------------------------------------------
+# Two libraries:
+#   caset_core  — pybind-free C++ implementation: mesh primitives,
+#                 spacetime, observables, Poset infrastructure, etc.
+#                 Linked into _caset and (when enabled) caset_quantum.
+#   caset_quantum (when CASET_QUANTUM=ON) — Schwinger / DMRG / TDVP code,
+#                 also pybind-free, links caset_core PUBLIC for shared
+#                 mesh / Poset types.
+# Plus a thin pybind11 module:
+#   _caset       — bindings.cpp + quantum/bindings.cpp; links the two libs.
 file(GLOB_RECURSE CASET_SOURCES
         CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
-)
-# Quantum subsystem lives in its own library; exclude it from the core glob so
-# core caset still builds when ITensor / BLAS / LAPACK are not available.
-list(FILTER CASET_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
-# When CASET_QUANTUM=ON we re-add just the pybind11 binding TU so the quantum
-# Python API surface lives inside the same _caset module as the rest of caset.
-# The actual implementation is in libcaset_quantum.a (built below); we only
-# pull the bindings TU into _caset so it can call into that library and
-# expose a `quantum` submodule.
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
+
+# Quantum lives in its own static lib; exclude its sources from caset_core.
+set(CASET_CORE_SOURCES ${CASET_SOURCES})
+list(FILTER CASET_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+# bindings.cpp is the pybind11 entry point — goes into _caset, not caset_core.
+list(FILTER CASET_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
+
+# Sources for the pybind11 module. quantum bindings only when enabled.
+set(CASET_PYBIND_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp")
 if(CASET_QUANTUM)
-    list(APPEND CASET_SOURCES
+    list(APPEND CASET_PYBIND_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/bindings.cpp")
 endif()
-# ---- </Define Sources> ----
+# ---- </Define source partitions> -----------------------------------------
 
 # ---- <Build CUDA kernels as static library> ----
 if (CASET_CUDA)
@@ -116,75 +125,88 @@ if (CASET_CUDA)
     target_link_libraries(caset_cuda PRIVATE CUDA::cudart)
 endif()
 
-# ---- <Build the Python module> ----
-pybind11_add_module(_caset MODULE ${CASET_SOURCES})
+# ---- <caset_core static library> ----------------------------------------
+# Holds all the C++ implementation that has no pybind dependency. Both
+# the Python module (_caset) and the optional caset_quantum library link
+# this so we don't compile the same .cpp's twice.
+add_library(caset_core STATIC ${CASET_CORE_SOURCES})
+target_include_directories(caset_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(caset_core PUBLIC ZLIB::ZLIB)
+# caset_core is pybind-free: the binding code (which uses pybind11) lives
+# only in src/bindings.cpp and src/quantum/bindings.cpp, both compiled
+# directly into the _caset Python module. Earlier versions of caset had
+# stray `#include <pybind11/pybind11.h>` in mesh/spacetime headers that
+# served no purpose; those have been removed so caset_core no longer
+# needs Python at link time. Test executables linking caset_quantum →
+# caset_core get clean C++ symbols only.
+set_target_properties(caset_core PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON)
+
+# Compile definitions that must reach consumers (so #ifdef SOURCES_ROOT,
+# CASET_VERSION, CASET_VERBOSE, etc. work in the Python bindings TU and
+# in test executables).
+target_compile_definitions(caset_core PUBLIC
+    SOURCES_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+    CASET_VERSION="${CASET_VERSION}")
 
 if (CASET_CUDA)
     message(STATUS "CUDA acceleration turned ON.")
-    target_compile_definitions(_caset PRIVATE CASET_CUDA=1)
-    target_link_libraries(_caset PRIVATE caset_cuda CUDA::cudart)
+    target_compile_definitions(caset_core PUBLIC CASET_CUDA=1)
+    target_link_libraries(caset_core PUBLIC caset_cuda CUDA::cudart)
 else()
     message(STATUS "CUDA acceleration turned OFF.")
 endif()
 
 if(CASET_ASAN)
     message(STATUS "ASAN/UBSAN support ON")
-    target_compile_options(_caset PRIVATE
+    target_compile_options(caset_core PUBLIC
             -O1 -g3
             -fno-omit-frame-pointer
             -fsanitize=address,undefined
             -fno-sanitize-recover=address,undefined
-            -fno-optimize-sibling-calls
-    )
-    target_link_options(_caset PRIVATE
-            -fsanitize=address,undefined
-    )
-    # Optional: make ASan reports symbolize nicely
-    target_compile_definitions(_caset PRIVATE ASAN_ENABLED=1)
+            -fno-optimize-sibling-calls)
+    target_link_options(caset_core PUBLIC
+            -fsanitize=address,undefined)
+    target_compile_definitions(caset_core PUBLIC ASAN_ENABLED=1)
 else()
     message(STATUS "ASAN/UBSAN support OFF")
 endif()
 
-set(SOURCES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_definitions(_caset PRIVATE
-    SOURCES_ROOT="${SOURCES_ROOT}"
-    CASET_VERSION="${CASET_VERSION}"
-)
-
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CASET_PROFILE)
     message(STATUS "DEBUGGING (-O1, -g3) Support ON.")
-    target_compile_options(_caset PRIVATE -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
+    target_compile_options(caset_core PRIVATE
+        -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "DEBUGGING (-O1, -g3) Support OFF, will use -O3.")
-    target_compile_options(_caset PRIVATE -O3)
+    target_compile_options(caset_core PRIVATE -O3)
 endif()
 
 if (CASET_VERBOSE)
     message(STATUS "Logging turned ON.")
-    target_compile_definitions(_caset PRIVATE CASET_VERBOSE=1)
+    target_compile_definitions(caset_core PUBLIC CASET_VERBOSE=1)
 else()
     message(STATUS "Logging turned OFF.")
 endif()
 
 if (CASET_ASSERTIONS)
     message(STATUS "Assertions turned ON.")
-    target_compile_definitions(_caset PRIVATE CASET_ASSERTIONS=1)
+    target_compile_definitions(caset_core PUBLIC CASET_ASSERTIONS=1)
 else()
     message(STATUS "Assertions turned OFF.")
 endif()
+# ---- </caset_core static library> --------------------------------------
 
-
-target_include_directories(_caset
-        PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-target_link_libraries(_caset PRIVATE ZLIB::ZLIB)
+# ---- <Build the Python module> ----
+pybind11_add_module(_caset MODULE ${CASET_PYBIND_SOURCES})
+target_link_libraries(_caset PRIVATE caset_core)
 
 set_target_properties(_caset PROPERTIES
         CXX_VISIBILITY_PRESET default
-        VISIBILITY_INLINES_HIDDEN OFF
-)
+        VISIBILITY_INLINES_HIDDEN OFF)
 # ---- </Build the Python module> ----
 
 # Install the C extension inside the caset/ package directory
@@ -212,7 +234,10 @@ if(CASET_QUANTUM)
     target_include_directories(caset_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
     find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-    target_link_libraries(caset_quantum PUBLIC itensor Eigen3::Eigen)
+    # PUBLIC link to caset_core: caset::Poset / Vertex / EdgeList live in
+    # caset_core, and quantum's Poset-using headers expose them in their
+    # public API. PUBLIC propagates symbols to test executables too.
+    target_link_libraries(caset_quantum PUBLIC itensor Eigen3::Eigen caset_core)
     set_target_properties(caset_quantum PROPERTIES
             POSITION_INDEPENDENT_CODE ON
             CXX_STANDARD 20
@@ -225,6 +250,8 @@ if(CASET_QUANTUM)
     foreach(_test_src ${CASET_QUANTUM_TESTS})
         get_filename_component(_test_name "${_test_src}" NAME_WE)
         add_executable(${_test_name} "${_test_src}")
+        # caset_quantum PUBLIC-links caset_core, so tests get its symbols
+        # transitively without an explicit caset_core link here.
         target_link_libraries(${_test_name} PRIVATE caset_quantum)
         set_target_properties(${_test_name} PROPERTIES
                 CXX_STANDARD 20
@@ -232,10 +259,10 @@ if(CASET_QUANTUM)
         add_test(NAME ${_test_name} COMMAND ${_test_name})
     endforeach()
 
-    # Wire the quantum bindings TU (added to CASET_SOURCES above) into
-    # _caset by linking against the implementation library and flipping
-    # the CASET_QUANTUM compile flag so src/bindings.cpp registers the
-    # `quantum` submodule.
+    # Wire the quantum bindings TU (added to CASET_PYBIND_SOURCES above)
+    # into _caset by linking against the implementation library and
+    # flipping the CASET_QUANTUM compile flag so src/bindings.cpp
+    # registers the `quantum` submodule.
     target_link_libraries(_caset PRIVATE caset_quantum)
     target_compile_definitions(_caset PRIVATE CASET_QUANTUM=1)
 else()

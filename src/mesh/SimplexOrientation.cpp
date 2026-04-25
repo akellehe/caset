@@ -24,9 +24,10 @@
 //
 
 
-#include <pybind11/pybind11.h>
+// (was: #include <pybind11/pybind11.h> — removed; unreferenced.)
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <vector>
 

@@ -89,7 +89,22 @@ double schwinger_energy_constant(SchwingerParams const& p) {
     return 0.5 * p.g * p.g * p.a * s;
 }
 
-SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns) {
+namespace {
+
+// Shared core: build the AutoMPO for the Schwinger Hamiltonian given an
+// explicit hopping pair list. Used by both the chain (default-NN) builder
+// and the Phase 6 chain-causet builder.
+//
+// `hopping_pairs` is a vector of (i, j) with 0-based flat lattice indices
+// in [0, p.N − 1]. Both directions of σ⁺σ⁻ + σ⁻σ⁺ are added per pair so
+// the order of (i, j) within a pair is irrelevant — but to keep AutoMPO
+// from registering the same physical pair twice we ask the caller for a
+// deduplicated list.
+SchwingerMPO build_schwinger_mpo_impl(
+    SchwingerParams const& p,
+    std::vector<std::pair<int, int>> const& hopping_pairs,
+    bool conserve_qns)
+{
     if (p.N < 2)   throw std::invalid_argument("SchwingerParams.N must be >= 2");
     if (p.a <= 0)  throw std::invalid_argument("SchwingerParams.a must be positive");
     // We deliberately do NOT reject g = 0: that's the free-Dirac limit (gauge
@@ -109,12 +124,22 @@ SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns) {
 
     auto ampo = AutoMPO(sites);
 
-    // ── Hopping: (1/(4a)) Σ (X X + Y Y) = (1/(2a)) Σ (σ⁺σ⁻ + σ⁻σ⁺)
+    // ── Hopping: (1/(2a)) Σ_{(i,j)} (σ⁺_i σ⁻_j + σ⁻_i σ⁺_j)
+    //
+    // Pairs come in 0-based; AutoMPO uses 1-based, so we shift by 1.
+    // Reject pairs that go out-of-bounds — they'd silently produce a
+    // wrong MPO via AutoMPO's index arithmetic.
     {
         const double t = 0.5 / p.a;
-        for (int n = 1; n <= p.N - 1; ++n) {
-            ampo += t, "S+", n, "S-", n + 1;
-            ampo += t, "S-", n, "S+", n + 1;
+        for (auto const& [i0, j0] : hopping_pairs) {
+            if (i0 < 0 || j0 < 0 || i0 >= p.N || j0 >= p.N || i0 == j0) {
+                throw std::invalid_argument(
+                    "build_schwinger_mpo_chain: hopping pair out of range or "
+                    "self-loop");
+            }
+            const int i = i0 + 1, j = j0 + 1;
+            ampo += t, "S+", i, "S-", j;
+            ampo += t, "S-", i, "S+", j;
         }
     }
 
@@ -156,6 +181,29 @@ SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns) {
     out.H = toMPO(ampo);
     out.constant = schwinger_energy_constant(p);
     return out;
+}
+
+// Default nearest-neighbour hopping list for a 1D chain of N sites:
+// pairs (0, 1), (1, 2), …, (N − 2, N − 1) in 0-based flat indexing.
+std::vector<std::pair<int, int>> chain_nn_hopping(int N) {
+    std::vector<std::pair<int, int>> pairs;
+    pairs.reserve(static_cast<std::size_t>(std::max(N - 1, 0)));
+    for (int n = 0; n < N - 1; ++n) pairs.emplace_back(n, n + 1);
+    return pairs;
+}
+
+} // namespace
+
+SchwingerMPO build_schwinger_mpo(SchwingerParams const& p, bool conserve_qns) {
+    return build_schwinger_mpo_impl(p, chain_nn_hopping(p.N), conserve_qns);
+}
+
+SchwingerMPO build_schwinger_mpo_chain(
+    SchwingerParams const& p,
+    std::vector<std::pair<int, int>> const& hopping_pairs,
+    bool conserve_qns)
+{
+    return build_schwinger_mpo_impl(p, hopping_pairs, conserve_qns);
 }
 
 // ─── Dense reference Hamiltonian ──────────────────────────────────────────

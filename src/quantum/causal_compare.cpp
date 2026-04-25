@@ -22,38 +22,12 @@ int interval_distance(int i1, int j1, int i2, int j2) {
     return 0;                        // overlap or touch
 }
 
-// Floyd-Warshall transitive closure on the cover-edge DAG of a poset.
-// Returns adj[i][j] = true iff there's a directed path i → … → j (in
-// the strict-majorization-cover direction, i.e. node i strictly precedes
-// node j in the poset's underlying partial order).
-std::vector<std::vector<bool>> transitive_closure(Poset const& p) {
-    const int n = p.n_nodes;
-    std::vector<std::vector<bool>> M(static_cast<std::size_t>(n),
-                                     std::vector<bool>(static_cast<std::size_t>(n),
-                                                       false));
-    for (auto [a, b] : p.covers) {
-        M[static_cast<std::size_t>(a)][static_cast<std::size_t>(b)] = true;
-    }
-    for (int k = 0; k < n; ++k) {
-        for (int i = 0; i < n; ++i) {
-            if (!M[static_cast<std::size_t>(i)][static_cast<std::size_t>(k)]) continue;
-            for (int j = 0; j < n; ++j) {
-                if (M[static_cast<std::size_t>(k)][static_cast<std::size_t>(j)]) {
-                    M[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = true;
-                }
-            }
-        }
-    }
-    return M;
-}
-
 // Build a Poset from a directed boolean adjacency matrix `strict[i][j]`
 // of strict-precedes relations. Applies transitive reduction so the
 // returned Poset has Hasse cover edges only.
 Poset poset_from_strict(std::vector<std::vector<char>> const& strict) {
     const int n = static_cast<int>(strict.size());
-    Poset p;
-    p.n_nodes = n;
+    Poset p(n);
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             if (!strict[static_cast<std::size_t>(i)]
@@ -70,7 +44,7 @@ Poset poset_from_strict(std::vector<std::vector<char>> const& strict) {
                     break;
                 }
             }
-            if (!has_intermediate) p.covers.emplace_back(i, j);
+            if (!has_intermediate) p.add_cover(i, j);
         }
     }
     return p;
@@ -157,60 +131,9 @@ Poset build_cs_poset_regular_chain(std::vector<LabelSpacetime> const& labels) {
 
 } // namespace
 
-OrderAgreement compare_orders(Poset const& a_poset,
-                              Poset const& b_poset,
-                              int n_labels) {
-    auto a_clos = transitive_closure(a_poset);
-    auto b_clos = transitive_closure(b_poset);
-
-    int concordant = 0, discordant = 0, comparable_both = 0;
-    for (int i = 0; i < n_labels; ++i) {
-        for (int j = i + 1; j < n_labels; ++j) {
-            const bool a_lt = a_clos[static_cast<std::size_t>(i)]
-                                    [static_cast<std::size_t>(j)];
-            const bool a_gt = a_clos[static_cast<std::size_t>(j)]
-                                    [static_cast<std::size_t>(i)];
-            const bool b_lt = b_clos[static_cast<std::size_t>(i)]
-                                    [static_cast<std::size_t>(j)];
-            const bool b_gt = b_clos[static_cast<std::size_t>(j)]
-                                    [static_cast<std::size_t>(i)];
-            const bool a_comparable = a_lt || a_gt;
-            const bool b_comparable = b_lt || b_gt;
-            if (a_comparable && b_comparable) {
-                ++comparable_both;
-                if ((a_lt && b_lt) || (a_gt && b_gt)) ++concordant;
-                else                                  ++discordant;
-            }
-        }
-    }
-
-    OrderAgreement out;
-    out.n_concordant       = concordant;
-    out.n_discordant       = discordant;
-    out.n_comparable_both  = comparable_both;
-    out.kendall_tau        = (comparable_both > 0)
-        ? static_cast<double>(concordant - discordant) / comparable_both
-        : 0.0;
-    out.discordant_fraction = (comparable_both > 0)
-        ? static_cast<double>(discordant) / comparable_both
-        : 0.0;
-
-    // Hasse edit distance: |E_a △ E_b| / |E_a ∪ E_b|.
-    std::set<std::pair<int, int>> edges_a(a_poset.covers.begin(),
-                                          a_poset.covers.end());
-    std::set<std::pair<int, int>> edges_b(b_poset.covers.begin(),
-                                          b_poset.covers.end());
-    int sym_diff = 0;
-    for (auto const& e : edges_a) if (!edges_b.count(e)) ++sym_diff;
-    for (auto const& e : edges_b) if (!edges_a.count(e)) ++sym_diff;
-    const int union_card = (static_cast<int>(edges_a.size()) +
-                            static_cast<int>(edges_b.size()) +
-                            sym_diff) / 2;
-    out.hasse_edit_distance = (union_card > 0)
-        ? static_cast<double>(sym_diff) / union_card
-        : 0.0;
-    return out;
-}
+// compare_orders is implemented at top-level caset (see src/Poset.cpp);
+// the using-alias in include/quantum/majorization.hpp re-exports it as
+// caset::quantum::compare_orders for back-compat.
 
 CausalOrders build_causal_orders(std::vector<TDVPSnapshot> const& snapshots,
                                  double v_LR) {

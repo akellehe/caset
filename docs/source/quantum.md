@@ -394,6 +394,85 @@ Key invariant: ``lr_vs_cs.kendall_tau = 1.0`` exactly (≼_LR is a strict
 subset of ≼_cs by construction). Any deviation flags an implementation
 bug.
 
+## Phase 6 — caset-Spacetime → causet-embedded chain
+
+Phase 6 (`docs/source/quantum-plan.md` §6) replaces the regular 1D
+lattice with a "chain of antichains" sourced from a
+:class:`caset.Spacetime`. Two pieces of that integration have landed
+and are usable from Python today:
+
+1. **Inherited Hasse-cover Poset on the Spacetime vertex set**
+   — :meth:`caset.quantum.Poset.from_spacetime` walks every timelike
+   edge in the Spacetime (an edge whose ``squaredLength < 0``),
+   orients it earliest-time → latest-time, transitively closes the
+   resulting DAG, and emits the cover edges (transitive reduction)
+   as a :class:`caset.quantum.Poset`. This is the natural "≼_cs" of
+   Phase 5 promoted to a non-trivial within-time-slice structure.
+
+2. **Chain-of-antichains adapter**
+   — :func:`caset.quantum.extract_causet_chain` walks the Spacetime,
+   groups vertices by integer time slice (`Vertex.getTime()`
+   truncated to int), and packages four pieces of data:
+
+   * `antichains[s]` — the vertex IDs at time slice
+     `times[s]`, in ascending-ID order;
+   * `vertex_ids[i]` — the flat lattice-site → Spacetime vertex ID
+     mapping (concatenation of antichains in time order);
+   * `hopping_pairs` — pairs `(i, j)` of flat-site indices coupled
+     by adjacent-slice timelike edges (this would replace the
+     `Σ_n (X_n X_{n+1} + Y_n Y_{n+1})` hopping term in `H_hop` on a
+     causet-embedded chain);
+   * `partial_order` — the inherited Hasse-cover :class:`Poset` on
+     the same flat-lattice label set, equivalent to
+     ``Poset.from_spacetime(spacetime)`` modulo the dense remap.
+
+```python
+import caset
+from caset.quantum import extract_causet_chain, Poset
+
+# Tiny CDT spacetime as a stand-in for a causet — same APIs apply.
+metric = caset.Metric(True, caset.Signature(4, caset.Lorentzian))
+st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
+                     caset.PREFERRED, caset.Toroid())
+st.build(20)
+
+chain = extract_causet_chain(st)
+print(f"n_sites = {chain.n_sites}")
+print(f"layers  = {[len(a) for a in chain.antichains]}")
+print(f"hops    = {len(chain.hopping_pairs)}")
+print(f"poset   = {chain.partial_order}")
+```
+
+Sample output on a 20-simplex Toroid CDT::
+
+    n_sites = 15
+    layers  = [5, 5, 5]
+    hops    = 30
+    poset   = Poset(n_nodes=15, covers=30 edges)
+
+For the trivial case where every time slice has a single vertex,
+`hopping_pairs == [(0, 1), (1, 2), …]` and the existing
+:func:`compute_ground_state` runs directly with `params.N =
+chain.n_sites`. Multi-vertex antichains (genuine causet branching)
+still flatten to a 1D MPS layout, but the resulting hopping graph
+includes pairs with stride > 1; that's the trigger for moving to a
+tree-tensor-network MPO down the line. The MPO construction on top
+of `CausetChain` is left for a follow-up — this commit delivers the
+data extraction and the inherited partial order.
+
+### Visualisation
+
+`Poset.to_dot()` renders the Hasse diagram in Graphviz DOT format,
+which makes the inherited causet structure straightforward to plot::
+
+    poset = Poset.from_spacetime(st)
+    open("/tmp/causet.dot", "w").write(poset.to_dot())
+    # then: dot -Tsvg /tmp/causet.dot -o /tmp/causet.svg
+
+Cover edges run from earlier-time vertex to later-time vertex (the
+strict-precedes direction); the diagram should layer cleanly when
+the underlying foliation is :data:`caset.PREFERRED`.
+
 ## Tested benchmarks
 
 The C++ and Python test suites cross-check every layer of the pipeline:
@@ -417,6 +496,12 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_schwinger_n4_hamiltonian.cpp` | Phase 1 | PLAN.md §7 trap: independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
 | `test_causal_compare.cpp` | Phase 5 | End-to-end three-order comparison; sanity checks on Kendall-τ ranges; v_LR-monotonicity sanity. |
 | `test_phase5_causal_compare_python.py` | Phase 5 | Python pipeline: identical/reversed/disjoint pure compare_orders cases, end-to-end pipeline checks, ≼_LR ⊂ ≼_cs invariant (τ = 1.0 exactly), v_LR monotonicity. |
+| `test_poset_from_spacetime.cpp` | Phase 6 | Hand-crafted Spacetimes (2-slice ladder, 3-slice chain with skip, empty, spacelike-only, sparse-ID, self-comparison, DOT export) — verifies `Poset::from_spacetime` Hasse covers, transitive reduction, dense ID remapping. |
+| `test_causet_chain.cpp` | Phase 6 | `extract_causet_chain` invariants on trivial chain, branching antichain, sparse IDs, slice-spanning skip edges. |
+| `test_phase6_causet_chain_python.py` | Phase 6 | Python-side self-consistency on a default CDT Spacetime: layer sizes, flat-index alignment, partial_order ⊆ hopping_pairs invariant, DOT round-trip. |
+| `test_phase6_cdt_invariants.cpp` | Phase 6 | Foliated-CDT structural invariants (Ambjorn 2004): every Hasse cover spans exactly one slice; covers ≡ hopping_pairs (no transitive reduction on a foliated complex); Hasse height = num_layers − 1; total extraction; top-layer out-degree / bottom-layer in-degree both 0. |
+| `test_schwinger_paper.cpp::check_vector_mass_continuum_trend` | Phase 1 | Bañuls 2013 fig. 7a M_V/g continuum trend at $m/g = 0$: scan $(x, N) \in \{(4, 40), (16, 80)\}$, verify monotone descent of the first-excited-state gap toward $1/\sqrt{\pi}$ and $\Delta E/g$ in $[0.55, 0.75]$ at $1/\sqrt{x}=0.25$ (matching their published 0.61). |
+| `test_schmidt_invariants_dmrg.cpp` | Phase 1 / 3 | Universal density-matrix invariants on every contiguous-cut Schmidt spectrum of Schwinger DMRG ground states across $(N, m, L_0)$ grid: $\sum \lambda = 1$, $\lambda \in [0, 1]$, descending order, rank $\le 2^{\min(w, N-w)}$. 330 spectra validated to $\sim 10^{-15}$. |
 
 ## API reference
 

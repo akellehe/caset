@@ -26,7 +26,12 @@
 #ifndef CASET_SIMPLEXORIENTATION_H
 #define CASET_SIMPLEXORIENTATION_H
 
-#include <pybind11/pybind11.h>
+// Note: an old `#include <pybind11/pybind11.h>` was removed here. It was
+// unreferenced inside the file and was dragging Python.h into every TU
+// of the core mesh subsystem — including caset_core, which then forced
+// every consumer (test executables, caset_quantum) to link Python. None
+// of mesh / spacetime / observables actually use pybind11 — that's all
+// in src/bindings.cpp.
 
 #include <algorithm>
 #include <memory>

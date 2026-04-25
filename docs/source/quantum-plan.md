@@ -231,13 +231,48 @@ Bond dimension 100 is enough for this check.
 
 ### Phase 6 — caset integration (1–2 weeks, optional for v1)
 
-- Replace the regular 1D lattice with a chain of antichains sourced
-  from `caset::CausalSet`.
-- Hopping in $H_\text{hop}$ follows causet links, not lattice neighbors.
-- Rebuild MPO as a tree-tensor-network when the causet is not totally
-  ordered across a time slice (ITensor has tree TN support; otherwise
-  fall back to a chain with reindexing).
-- Compare the three partial orders on the causet-embedded state.
+**Status (as of 2026-04-25)**: data-extraction layer landed; MPO
+rebuild on the extracted chain is the remaining piece.
+
+Done:
+
+- `caset::Poset::from_spacetime(Spacetime const&)` — inherits a Hasse
+  cover Poset from the timelike-edge subgraph of any
+  `caset::Spacetime`. Uses transitive closure + reduction; preserves
+  metric semantics by orienting earliest-time → latest-time and
+  filtering on `Edge::getSquaredLength() < 0`.
+- `caset::quantum::extract_causet_chain(Spacetime const&)` — packages
+  the antichain layering, flat lattice ↔ Spacetime ID mapping,
+  adjacent-slice timelike-edge hopping pairs, and the inherited
+  partial-order Poset into a single `CausetChain`.
+- Python bindings: `caset.quantum.Poset.from_spacetime(st)` and
+  `caset.quantum.extract_causet_chain(st)` work on any
+  `caset.Spacetime` instance (CDT-built, hand-crafted, or future
+  `caset.CausalSet`).
+- C++ acceptance: `tests/quantum/test_poset_from_spacetime.cpp` (7
+  cases) and `tests/quantum/test_causet_chain.cpp` (5 cases). Python
+  acceptance: `tests/quantum/test_phase6_causet_chain_python.py`.
+
+Remaining for v1 close-out (deferred):
+
+- Rebuild the Schwinger MPO on the `CausetChain` so
+  `H_hop` follows the extracted hopping pairs rather than uniform
+  nearest-neighbour. For trivial chains (one vertex per slice) this
+  is just `params.N = chain.n_sites` and the existing
+  `build_schwinger_mpo` runs as-is.
+- For non-trivial antichains (causet branches), the chain layout
+  produces hopping pairs with stride > 1. Two paths:
+    1. Stay on a 1D MPS, accept the long-range hopping cost in the
+       MPO bond dimension.
+    2. Switch to ITensor's tree-tensor-network support; tree TN
+       handles branching antichains natively.
+  Both paths are open work; pick after profiling the stride-1 case
+  on a small CDT-derived chain.
+- Replace ≼_cs in `compute_causal_comparison` with the inherited
+  `partial_order` on the cut/time label set, then re-run the Phase 5
+  invariants (`lr_vs_cs.kendall_tau == 1.0` should still hold when
+  the chain is totally ordered per slice; it may relax for branching
+  causets, which is the Phase 6 hypothesis).
 
 ### Phase 7 — MERA / KAK / EML (research, not v1)
 

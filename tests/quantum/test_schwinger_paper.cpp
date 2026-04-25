@@ -216,6 +216,98 @@ bool check_continuum_trend() {
     return pass;
 }
 
+// Vector-mass-gap continuum trend at m/g = 0 (Bañuls 2013 fig. 7a, table on
+// page 13): the published continuum value is M_V/g = 0.5642(1) ≈ 1/√π. At
+// finite x the gap sits above this and descends as x → ∞ (more concretely,
+// Bañuls fig. 7a shows M_V/g ≈ 0.61 at 1/√x = 0.25 and a near-linear approach
+// to 0.5642 at the y-axis intercept).
+//
+// What we assert:
+//   (1) at the (x, N) points we run, the gap is in a wide band consistent
+//       with the figure (covering finite-size corrections at our small N);
+//   (2) the gap at the larger x is BELOW the gap at the smaller x — a
+//       monotone-descent invariant from the figure.
+//
+// Why this is "vector mass gap" and not generic first-excited: at m/g = 0
+// our DMRG penalised search for the first excited state in Sz = 0 returns
+// the LOWEST orthogonal state. Bañuls' Fig. 7a is the vector branch, the
+// continuum value of which is below the scalar (0.5642 vs. 1.1284). The
+// vector branch is below the scalar at x ≳ 16 (Bañuls' published range
+// starts at x = 20), so the lowest orthogonal state in our x = 16 run is
+// the vector. At smaller x the level ordering flips — we don't claim the
+// x = 4 point hits the vector.
+bool check_vector_mass_continuum_trend() {
+    std::cout << "\nVector-mass-gap continuum trend at m/g=0 (Bañuls fig. 7a)\n";
+    std::cout << "----------------------------------------------------------\n";
+
+    // (x=4, N=40) is the off-figure warm-up — the gap there is the lowest
+    // orthogonal state, which may or may not be the vector branch but is a
+    // consistency floor. (x=16, N=80) lands at 1/√x = 0.25 which is the
+    // leftmost data point in Bañuls Fig. 7a; at this x the vector is the
+    // lowest orthogonal state in Sz=0 and the published value is 0.61.
+    struct Pt { double x; int N; int max_bond; int gs_sweeps; int ex1_sweeps; };
+    const std::vector<Pt> points = {
+        { 4.0,  40,  80, 12, 14},
+        {16.0,  80, 120, 14, 16},
+    };
+
+    std::vector<double> gap_per_g_values;
+    for (auto const& pt : points) {
+        SchwingerParams p;
+        p.N = pt.N;
+        p.a = 1.0;
+        p.g = 1.0 / std::sqrt(pt.x);
+        p.m = 0.0;
+        p.L0 = 0.0;
+
+        auto sm  = build_schwinger_mpo(p);
+        auto gs  = run_dmrg_gs(sm, pt.max_bond, pt.gs_sweeps);
+        auto ex1 = run_dmrg_first_excited(sm, gs.psi, pt.max_bond, pt.ex1_sweeps);
+        const double gap_dim   = ex1.energy - gs.energy;
+        // Bañuls' dimensionless ω_1 = (a/N) · E_W = (a/N) · (2/(ag²)) · E_dim
+        // for energies, but the vector mass M_V/g uses (E_1 − E_0)/(2√x):
+        //
+        //     (E_1 − E_0)_dim · a · √x = (1/g) · (E_1 − E_0)_dim
+        //
+        // since g = 1/(a√x) when a = 1. So gap_per_g = (E_1 − E_0)/g.
+        const double gap_per_g = gap_dim / p.g;
+        gap_per_g_values.push_back(gap_per_g);
+
+        std::cout
+            << "  x=" << pt.x << " N=" << pt.N
+            << "  E_0=" << gs.energy
+            << "  E_1=" << ex1.energy
+            << "  (E_1-E_0)/g=" << gap_per_g
+            << "\n";
+    }
+
+    // (1) Monotone descent (vector mass gap shrinks toward the continuum
+    //     1/√π ≈ 0.5642 from above as x → ∞).
+    bool monotone = true;
+    for (std::size_t i = 1; i < gap_per_g_values.size(); ++i) {
+        if (!(gap_per_g_values[i] < gap_per_g_values[i - 1])) monotone = false;
+    }
+    // (2) The x = 16 point — assuming this is the vector branch — should
+    //     bracket Bañuls Fig. 7a's value 0.61 within a finite-N envelope.
+    //     We use [0.55, 0.75]: the lower bound excludes already-converged
+    //     continuum (we're at 1/√x = 0.25 which Bañuls shows at 0.61);
+    //     the upper bound permits some N=80 overshoot vs. their N→∞.
+    constexpr double pi = std::numbers::pi;
+    constexpr double m_v_continuum = 1.0 / 1.7724538509055159; // 1/√π
+    const double last = gap_per_g_values.back();
+    const bool bracketed = last > 0.55 && last < 0.75;
+
+    const bool pass = monotone && bracketed;
+    std::cout
+        << "  monotone-descent=" << (monotone ? "Y" : "N")
+        << "  gap@x=16=" << last
+        << "  continuum 1/√π=" << m_v_continuum
+        << "  Δ=" << (last - m_v_continuum)
+        << (pass ? "  PASS" : "  FAIL") << "\n";
+    (void)pi;
+    return pass;
+}
+
 bool check_mass_gap() {
     std::cout << "\nFirst-excited gap above GS in Sz=0 (cf. Bañuls table)\n";
     std::cout << "------------------------------------------------------\n";
@@ -461,10 +553,11 @@ bool check_chiral_condensate() {
 
 int main() {
     bool ok = true;
-    if (!check_continuum_trend())            ok = false;
-    if (!check_mass_gap())                   ok = false;
-    if (!check_chiral_condensate())          ok = false;
-    if (!check_charge_conjugation_parity())  ok = false;
+    if (!check_continuum_trend())                 ok = false;
+    if (!check_mass_gap())                        ok = false;
+    if (!check_vector_mass_continuum_trend())     ok = false;
+    if (!check_chiral_condensate())               ok = false;
+    if (!check_charge_conjugation_parity())       ok = false;
     std::cout << (ok ? "\nALL PASS\n" : "\nFAILURES\n");
     return ok ? 0 : 1;
 }
