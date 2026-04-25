@@ -38,6 +38,10 @@ option(CASET_PROFILE "Build with -g -O1 to keep symbol names for stack traces" $
 if (NOT CASET_PROFILE)
     set(CASET_PROFILE OFF)
 endif()
+option(CASET_QUANTUM "Build the Schwinger-model / MPS subsystem (requires BLAS+LAPACK)" $ENV{CASET_QUANTUM})
+if (NOT CASET_QUANTUM)
+    set(CASET_QUANTUM OFF)
+endif()
 
 # ---- Read version from pyproject.toml ----
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
@@ -78,6 +82,9 @@ file(GLOB_RECURSE CASET_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
 )
+# Quantum subsystem lives in its own library; exclude it from the core glob so
+# core caset still builds when ITensor / BLAS / LAPACK are not available.
+list(FILTER CASET_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
 # ---- </Define Sources> ----
 
 # ---- <Build CUDA kernels as static library> ----
@@ -178,6 +185,44 @@ install(TARGETS _caset
         ARCHIVE DESTINATION caset
         BUNDLE  DESTINATION caset
 )
+
+# ---- <Quantum subsystem (ITensor + Schwinger MPO)> ----
+if(CASET_QUANTUM)
+    message(STATUS "Quantum subsystem turned ON (ITensor + DMRG).")
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildITensor.cmake)
+    caset_build_itensor()
+
+    file(GLOB_RECURSE CASET_QUANTUM_SOURCES
+            CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/*.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/*.hpp")
+    add_library(caset_quantum STATIC ${CASET_QUANTUM_SOURCES})
+    target_include_directories(caset_quantum PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+    target_link_libraries(caset_quantum PUBLIC itensor Eigen3::Eigen)
+    set_target_properties(caset_quantum PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON)
+
+    enable_testing()
+    file(GLOB CASET_QUANTUM_TESTS
+            CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum/*.cpp")
+    foreach(_test_src ${CASET_QUANTUM_TESTS})
+        get_filename_component(_test_name "${_test_src}" NAME_WE)
+        add_executable(${_test_name} "${_test_src}")
+        target_link_libraries(${_test_name} PRIVATE caset_quantum)
+        set_target_properties(${_test_name} PROPERTIES
+                CXX_STANDARD 20
+                CXX_STANDARD_REQUIRED ON)
+        add_test(NAME ${_test_name} COMMAND ${_test_name})
+    endforeach()
+else()
+    message(STATUS "Quantum subsystem turned OFF (set CASET_QUANTUM=1 to enable).")
+endif()
+# ---- </Quantum subsystem> ----
 
 if(NOT CASET_ASAN)
 # --- Generate Python stubs for caset (.pyi) ---

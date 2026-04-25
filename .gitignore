@@ -2,6 +2,7 @@
 .idea/
 .idea/copilot*
 build
+build-quantum
 cmake-build-debug
 caset.cpython-313-darwin.so
 caset/_caset*.so
