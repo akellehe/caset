@@ -221,12 +221,13 @@ charge to the left of link $n$.
 \end{problem}
 
 \begin{problem}[$\star$]
-Let $Q = \sum_{n=1}^{N} \tfrac{1 - (-1)^n Z_n}{2}$ be the total
-staggered charge.  Show that $Q$ commutes with each of the three
-pieces of the Hamiltonian: $H_{\mathrm{hop}}$, $H_m$, and $H_E$.
-(For $H_{\mathrm{hop}}$: use $[Z_n, X_n] = 2iY_n$ and similar; you
-may use the fact that $X_n X_{n+1} + Y_n Y_{n+1}$ preserves the
-spin-flip-pair structure.)
+Let $M = \sum_{n=1}^{N} Z_n$ be the total magnetization (which by
+the Jordan--Wigner correspondence equals $N - 2\sum_n c^\dagger_n c_n$,
+so a conserved $M$ means a conserved total fermion number).  Show
+that $M$ commutes with each of the three pieces of the Hamiltonian:
+$H_{\mathrm{hop}}$, $H_m$, and $H_E$.  (For $H_{\mathrm{hop}}$ the
+key intermediate identity is $[Z_n + Z_{n+1},\, X_n X_{n+1} + Y_n Y_{n+1}] = 0$;
+prove it using $[Z_n, X_n] = 2iY_n$, $[Z_n, Y_n] = -2iX_n$.)
 \end{problem}
 
 % =====================================================================
@@ -324,7 +325,7 @@ criterion that they remain falsifiable and physically motivated.
 \textit{Reference: paper~\S8.  Requires \texttt{caset.quantum} build.}
 
 \begin{problem}
-Run \texttt{python examples/quantum/phase5\_scan.py} from the
+Run \texttt{python examples/quantum/lightcone\_vs\_majorization.py} from the
 \texttt{caset} repository root.  Verify that your output reproduces
 Table~1 of the paper to within run-to-run noise (Trotter and
 Krylov-subspace effects can shift $\tau$ values by a few times

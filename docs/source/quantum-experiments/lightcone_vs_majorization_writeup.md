@@ -1,4 +1,4 @@
-# Phase 5 hypothesis-test scan — 2026-04-25
+# Lightcone vs. majorization — first hypothesis-test scan
 
 First experimental run of `caset.quantum.computeCausalComparison`
 across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
@@ -64,8 +64,11 @@ Regime D — light quark (m/g=0.5), N=14, T=1.0
   16.00      0.2470     0.3765   0.975      0.2462           15666           32168
 ```
 
-(Reproducible: `python examples/quantum/phase5_scan.py`.
-Total runtime ~80 s on a single node.)
+(Reproducible: `python examples/quantum/lightcone_vs_majorization.py`.
+Total runtime ~80 s on a single node. The N-scaling and cone-overflow
+follow-up scans live in the same directory under
+`lightcone_vs_majorization_n_scaling.py` and
+`lightcone_vs_majorization_cone_overflow.py`.)
 
 ## Sanity checks
 

@@ -587,10 +587,12 @@ dynamics.
 
 Two symmetries are useful in the simulation:
 \begin{itemize}[nosep]
-  \item \emph{Total $U(1)$ charge conservation}: the staggered
-        fermion number $\sum_n \tfrac{1 - (-1)^n Z_n}{2}$ commutes
-        with $H$.  We restrict to the half-filling sector, which
-        contains the physical vacuum.
+  \item \emph{Total $U(1)$ charge conservation}: the total
+        magnetization $\sum_n Z_n$ commutes with $H$, equivalently the
+        total fermion number $\sum_n c^\dagger_n c_n = \sum_n \tfrac{1-Z_n}{2}$
+        in the Jordan--Wigner picture is conserved.  We restrict to
+        the half-filling sector $\sum_n \langle Z_n \rangle = 0$,
+        which contains the physical vacuum.
   \item \emph{Charge conjugation \& parity}: for the parameters
         we use, the ground state is in the trivial sector under
         these discrete symmetries.
@@ -945,8 +947,8 @@ We now describe the actual numerical experiment and report the data.
 Everything in this section is reproducible from two driver scripts in
 the source repository:
 \begin{itemize}[nosep]
-  \item \texttt{examples/quantum/phase5\_scan.py}, and
-  \item \texttt{examples/quantum/phase5\_scan\_strong\_falsification.py}.
+  \item \texttt{examples/quantum/lightcone\_vs\_majorization.py}, and
+  \item \texttt{examples/quantum/lightcone\_vs\_majorization\_cone\_overflow.py}.
 \end{itemize}
 
 \subsection{Setup}
@@ -1313,7 +1315,7 @@ f_{\maj \notin \LR} & The same count divided by $\abs{\preceq_{\maj}}$. \\
 \texttt{caset} repository under \texttt{caset.quantum}.  The two
 driver scripts that produced Tables~\ref{tab:scan} and
 \ref{tab:strong} are
-\texttt{examples/quantum/phase5\_scan.py} and
-\texttt{examples/quantum/phase5\_scan\_strong\_falsification.py}.}
+\texttt{examples/quantum/lightcone\_vs\_majorization.py} and
+\texttt{examples/quantum/lightcone\_vs\_majorization\_cone\_overflow.py}.}
 
 \end{document}

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Phase 5 hypothesis-test scan.
+"""Scan agreement between the Schmidt-majorization order ≼_maj and the
+Lieb-Robinson cone ≼_LR across (m/g, T, N) × vLr on a Schwinger TDVP run.
 
-Sweeps a small (m/g, T) × vLr grid using the existing
-caset.quantum.computeCausalComparison harness, plus a strong-
-falsification side probe via CausalOrders so we can count maj-pairs
-outside the LR cone — the criterion 1 in quantum-methodology.md §1.
+Sweeps a small parameter grid using the existing
+caset.quantum.computeCausalComparison harness; for each point, prints
+Kendall-τ, discordant fraction, and Hasse edit distance for the three
+pairwise comparisons (maj↔LR, maj↔cs, LR↔cs). The maj↔LR row is the
+substrate for the strong-falsification criterion in
+quantum-methodology.md §1; the cone-overflow companion script reports
+the explicit n_only metric.
 
 Output: a single tabulated report. No claims, just numbers.
 """
@@ -58,9 +62,9 @@ def scan_vlr(label: str, cfg: TDVPConfig, vlr_values: list[float]) -> None:
 
 
 if __name__ == "__main__":
-    print("Phase 5 hypothesis-test scan")
-    print("============================")
-    print("≼_maj — Schmidt-spectrum majorization order (Phase 3)")
+    print("Lightcone vs. majorization — causal-order agreement scan")
+    print("=========================================================")
+    print("≼_maj — Schmidt-spectrum majorization order")
     print("≼_LR  — Lieb–Robinson cone with prescribed vLr")
     print("≼_cs  — causet order (time-only on regular 1D chain)")
     print()

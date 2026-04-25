@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Phase 5 hypothesis-test scan with explicit strong-falsification metric.
+"""Lightcone-vs-majorization scan with explicit cone-overflow metric.
 
-Re-runs the (m/g, T, N) × vLr scan from phase5_scan.py with the new
-``nOnlyA / nOnlyB`` fields on OrderAgreement. For (a, b) = (≼_maj, ≼_LR),
-``nOnlyA`` is the count of majorization-related pairs whose endpoints
-lie OUTSIDE the Lieb-Robinson cone — the explicit criterion-1 metric of
+Re-runs the (m/g, T, N) × vLr scan from lightcone_vs_majorization.py
+with the ``nOnlyA / nOnlyB`` fields on OrderAgreement. For
+``(a, b) = (≼_maj, ≼_LR)``, ``nOnlyA`` is the count of majorization-
+related pairs whose endpoints lie OUTSIDE the Lieb-Robinson cone — the
+explicit criterion-1 (strong-falsification) metric of
 quantum-methodology.md §1.2.
 """
 from __future__ import annotations
@@ -69,7 +70,7 @@ def scan_vlr(label: str, cfg: TDVPConfig, vlr_values: list[float]) -> None:
 
 
 if __name__ == "__main__":
-    print("Phase 5 strong-falsification scan (criterion 1)")
+    print("Lightcone vs. majorization — cone-overflow scan (methodology §1.2 criterion 1)")
     print("================================================")
     print("n_maj∉LR : count of ≼_maj-related pairs OUTSIDE the LR cone.")
     print("         If > 0 at vLr ≥ 1.0 (free-fermion bound), criterion 1")
