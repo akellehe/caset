@@ -13,6 +13,7 @@
 // in a Python REPL or notebook should be enough to understand both the
 // API and the underlying physics conventions.
 
+#include "quantum/causal_compare.hpp"
 #include "quantum/dmrg_runner.hpp"
 #include "quantum/majorization.hpp"
 #include "quantum/pipeline.hpp"
@@ -483,6 +484,141 @@ snapshots : list[TDVPSnapshot]
 )doc")
         .def_readonly("ground_state", &QuenchResult::ground_state)
         .def_readonly("snapshots",    &QuenchResult::snapshots);
+
+    // ─── Phase 5 types: causal-order comparison ─────────────────────────
+    py::class_<LabelSpacetime>(m, "LabelSpacetime",
+            R"doc(One label in a (cut, time) spacetime.
+
+Used as a node in the Phase 5 causal-comparison posets. Carries the
+contiguous interval label, the snapshot index it belongs to, and the
+physical time of that snapshot.
+
+Attributes
+----------
+cut_idx : int
+    Index of the cut in the snapshot's spectra/intervals list.
+t_idx : int
+    Index of the snapshot in the QuenchResult's snapshot list.
+interval_i, interval_j : int
+    The contiguous interval [interval_i, interval_j] (1-based).
+time : float
+    Physical time of the snapshot.
+)doc")
+        .def_readonly("cut_idx",     &LabelSpacetime::cut_idx)
+        .def_readonly("t_idx",       &LabelSpacetime::t_idx)
+        .def_readonly("interval_i",  &LabelSpacetime::interval_i)
+        .def_readonly("interval_j",  &LabelSpacetime::interval_j)
+        .def_readonly("time",        &LabelSpacetime::time);
+
+    py::class_<CausalOrders>(m, "CausalOrders",
+            R"doc(Three Hasse-cover posets on a shared (cut, time) label set.
+
+Attributes
+----------
+labels : list[LabelSpacetime]
+    The shared node set. ``labels[k]`` is node k.
+maj : Poset
+    Strict-majorization order from Phase 3, applied across cuts and times.
+lr : Poset
+    Lieb-Robinson cone: (a, b) iff time_a < time_b and the
+    interval-distance is ≤ v_LR · (time_b - time_a).
+cs : Poset
+    Causet order. On the regular chain (Phase 5), this is just the
+    time-only order: (a, b) iff t_idx_a < t_idx_b.
+)doc")
+        .def_readonly("labels", &CausalOrders::labels)
+        .def_readonly("maj",    &CausalOrders::maj)
+        .def_readonly("lr",     &CausalOrders::lr)
+        .def_readonly("cs",     &CausalOrders::cs);
+
+    py::class_<OrderAgreement>(m, "OrderAgreement",
+            R"doc(Pairwise agreement statistics between two posets.
+
+Counted over unordered pairs (i, j) with i < j:
+
+* "comparable in P" — transitive closure of P relates i to j.
+* "concordant" — both posets relate the pair, in the same direction.
+* "discordant" — both posets relate the pair, in opposite directions.
+
+Attributes
+----------
+kendall_tau : float
+    (n_concordant - n_discordant) / n_comparable_both, in [-1, 1].
+    1 = perfect agreement; -1 = perfect disagreement.
+discordant_fraction : float
+    n_discordant / n_comparable_both, in [0, 1].
+hasse_edit_distance : float
+    |E_a △ E_b| / |E_a ∪ E_b| — symmetric difference of cover edges
+    normalized by their union size, in [0, 1].
+n_concordant, n_discordant, n_comparable_both : int
+)doc")
+        .def_readonly("kendall_tau",         &OrderAgreement::kendall_tau)
+        .def_readonly("discordant_fraction", &OrderAgreement::discordant_fraction)
+        .def_readonly("hasse_edit_distance", &OrderAgreement::hasse_edit_distance)
+        .def_readonly("n_concordant",        &OrderAgreement::n_concordant)
+        .def_readonly("n_discordant",        &OrderAgreement::n_discordant)
+        .def_readonly("n_comparable_both",   &OrderAgreement::n_comparable_both);
+
+    py::class_<CausalComparisonReport>(m, "CausalComparisonReport",
+            R"doc(Pairwise agreement statistics across all three Phase 5 orders.
+
+Attributes
+----------
+maj_vs_lr, maj_vs_cs, lr_vs_cs : OrderAgreement
+    Pairwise comparisons of the three orders.
+n_labels : int
+    Total number of (cut, time) labels.
+n_snapshots : int
+    Number of TDVP snapshots used.
+v_LR : float
+    Lieb-Robinson velocity used to build ≼_LR.
+)doc")
+        .def_readonly("maj_vs_lr",   &CausalComparisonReport::maj_vs_lr)
+        .def_readonly("maj_vs_cs",   &CausalComparisonReport::maj_vs_cs)
+        .def_readonly("lr_vs_cs",    &CausalComparisonReport::lr_vs_cs)
+        .def_readonly("n_labels",    &CausalComparisonReport::n_labels)
+        .def_readonly("n_snapshots", &CausalComparisonReport::n_snapshots)
+        .def_readonly("v_LR",        &CausalComparisonReport::v_LR);
+
+    m.def("compare_orders",
+          &compare_orders,
+          py::arg("a"), py::arg("b"), py::arg("n_labels"),
+          R"doc(Pairwise agreement statistics between two Posets on the same
+label set of size n_labels. Returns an :class:`OrderAgreement`.
+)doc");
+
+    m.def("compute_causal_comparison",
+          &compute_causal_comparison,
+          py::arg("config"), py::arg("v_LR") = 1.0,
+          R"doc(End-to-end Phase 5 pipeline: TDVP + causal-order comparison.
+
+Runs ``run_qqbar_quench`` (forcing ``record_spectra = True``), then
+builds the three partial orders on the (cut, time) label set:
+
+* ≼_maj from Phase 3 majorization on Schmidt spectra (across cuts AND
+  times).
+* ≼_LR — Lieb-Robinson cone: a ≺ b iff time_a < time_b and
+  interval distance ≤ v_LR · (time_b - time_a).
+* ≼_cs — causet order; on the regular chain (Phase 5 scope) this is
+  the time-only order. Phase 6 replaces the lattice with a non-trivial
+  causet, at which point ≼_cs gains within-time-slice structure.
+
+Pairwise agreement is reported as Kendall-τ, the discordant-pair
+fraction, and the Hasse-graph edit distance.
+
+Parameters
+----------
+config : TDVPConfig
+    Same as :func:`run_qqbar_quench`. ``record_spectra`` will be forced
+    to ``True``.
+v_LR : float, optional
+    Lieb-Robinson velocity in lattice units (sites / time). Default 1.0
+    matches the free-fermion group velocity for our hopping coefficient.
+
+Returns
+-------
+CausalComparisonReport
+)doc");
 
     m.def("run_qqbar_quench",
           &run_qqbar_quench,

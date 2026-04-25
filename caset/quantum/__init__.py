@@ -1,11 +1,13 @@
 """caset.quantum -- Schwinger model on a Jordan-Wigner spin chain via DMRG.
 
-This subpackage implements Phases 2-4 of ``docs/source/quantum-plan.md``:
+This subpackage implements Phases 2-5 of ``docs/source/quantum-plan.md``:
 ground-state DMRG for the 1+1D Kogut-Susskind Schwinger model with U(1)
 total-charge conservation, contiguous-cut Schmidt spectra and the
-majorization poset on those spectra, and a q-qbar quench + 2-site TDVP
-pipeline that produces real-time-evolution snapshots of every observable
-the methodology page (``docs/source/quantum-methodology.md``) targets.
+majorization poset on those spectra, a q-qbar quench + 2-site TDVP
+pipeline that produces real-time-evolution snapshots, and an end-to-end
+causal-order comparison between the majorization order, the Lieb-
+Robinson cone, and the (regular-chain) causet order — the experimental
+harness for the methodology page (``docs/source/quantum-methodology.md``).
 The C++ backend is ITensor v3 vendored under ``third_party/itensor``
 (plus the ITensor TDVP add-on under ``third_party/itensor_tdvp``);
 this Python layer is a thin result viewer per the architectural
@@ -155,6 +157,33 @@ In the heavy-quark limit the flux tube is approximately stable for the
 duration of the run (PLAN.md §5 Phase 4 acceptance: ⟨L_n⟩(t) matches
 the reference to within 0.05 at t = T/2; |ΔE|/|E0| < 1e-3).
 
+Phase 5 — causal-order comparison
+---------------------------------
+
+The `compute_causal_comparison(config, v_LR)` function ties Phases 1-4
+together: DMRG ground state → q-qbar quench → TDVP loop → build three
+partial orders on (cut, time) labels → compare. The orders are:
+
+  ≼_maj: strict-majorization on Schmidt spectra (Phase 3, across time)
+  ≼_LR:  Lieb-Robinson cone, dist(A, B) ≤ v_LR · (t_B - t_A)
+  ≼_cs:  causet — time-only on regular chain (Phase 6 makes it richer)
+
+Each comparison reports Kendall-τ, discordant-pair fraction, and Hasse-
+graph edit distance. Example::
+
+    >>> from caset.quantum import TDVPConfig, compute_causal_comparison
+    >>> cfg = TDVPConfig()
+    >>> cfg.N = 10; cfg.m = 0.5; cfg.g = 1.0
+    >>> cfg.i0 = 3; cfg.d = 3
+    >>> cfg.dt = 0.1; cfg.T = 1.0; cfg.snapshot_every = 1
+    >>> r = compute_causal_comparison(cfg, v_LR=1.0)
+    >>> r.lr_vs_cs.kendall_tau
+    1.0
+
+The ≼_LR ⊂ ≼_cs invariant gives the strongest sanity check: τ = 1.0
+exactly because every ≼_LR pair is also a ≼_cs pair in the same
+direction (LR adds a spatial constraint to time-only).
+
 Tested benchmarks
 -----------------
 
@@ -211,6 +240,10 @@ Phase 3 — Schmidt spectra and majorization poset:
 Phase 4 — TDVP q-qbar quench:
     TDVPConfig, TDVPSnapshot, QuenchResult, run_qqbar_quench
 
+Phase 5 — causal-order comparison:
+    LabelSpacetime, CausalOrders, OrderAgreement, CausalComparisonReport,
+    compare_orders, compute_causal_comparison
+
 Implementation notes
 --------------------
 
@@ -256,6 +289,14 @@ try:
     TDVPSnapshot       = _qm.TDVPSnapshot
     QuenchResult       = _qm.QuenchResult
     run_qqbar_quench   = _qm.run_qqbar_quench
+
+    # Phase 5 — causal-order comparison (maj vs LR vs caset).
+    LabelSpacetime              = _qm.LabelSpacetime
+    CausalOrders                = _qm.CausalOrders
+    OrderAgreement              = _qm.OrderAgreement
+    CausalComparisonReport      = _qm.CausalComparisonReport
+    compare_orders              = _qm.compare_orders
+    compute_causal_comparison   = _qm.compute_causal_comparison
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "caset.quantum is unavailable: this caset build does not include "
@@ -283,4 +324,11 @@ __all__ = [
     "TDVPSnapshot",
     "QuenchResult",
     "run_qqbar_quench",
+    # Phase 5
+    "LabelSpacetime",
+    "CausalOrders",
+    "OrderAgreement",
+    "CausalComparisonReport",
+    "compare_orders",
+    "compute_causal_comparison",
 ]

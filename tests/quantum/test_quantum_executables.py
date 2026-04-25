@@ -136,3 +136,10 @@ class TestQuantumExecutables(unittest.TestCase):
         than the Phase 4 flux-tube acceptance, and over genuinely
         time-dependent profiles (not just preserved plateaus)."""
         self._run("test_tdvp_vs_dense", "ALL PASS", timeout=120)
+
+    def test_phase5_causal_compare(self) -> None:
+        """Phase 5 acceptance: build the three partial orders
+        (maj/LR/cs) on a TDVP snapshot history and verify the comparison
+        statistics are sensible (Kendall-τ in [-1, 1], no NaNs,
+        v_LR-monotonicity holds)."""
+        self._run("test_causal_compare", "ALL PASS", timeout=180)

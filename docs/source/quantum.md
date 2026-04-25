@@ -4,11 +4,11 @@ The `caset.quantum` subpackage extends caset with a tensor-network
 treatment of the 1+1D Kogut-Susskind Schwinger model — the simplest
 non-trivial gauge theory and a standard benchmark for lattice tensor-
 network methods. It implements the staged plan in
-`docs/source/quantum-plan.md`. As of this writing Phases 0-4 are
+`docs/source/quantum-plan.md`. As of this writing Phases 0-5 are
 complete (scaffolding, MPO + DMRG ground states, Python bindings,
-Schmidt spectra + majorization poset, q-qbar quench + 2-site TDVP);
-the remaining phase (causal-order comparison) builds on the same
-primitives.
+Schmidt spectra + majorization poset, q-qbar quench + 2-site TDVP,
+causal-order comparison); Phase 6 (caset-embedded chain) and
+Phase 7 (MERA / KAK / EML, research) remain.
 
 This page is the **user-facing** reference: how to build the subsystem,
 how to call the Python API, what each diagnostic field means. The two
@@ -311,6 +311,89 @@ At smaller $m/g$ (light-quark regime) the tube spreads / breaks
 within $T \sim 1/(m/g)$ — that's the string-breaking dynamics Buyens
 et al. study. Try ``--m-over-g 0.5 --T 4.0`` to see it in action.
 
+## Phase 5 — causal-order comparison
+
+Phase 5 ties Phases 1-4 together to test the methodology charter's
+hypothesis (`docs/source/quantum-methodology.md`): that on a
+TDVP-evolved Schwinger state, three independently-defined partial orders
+on the (cut, time) label set agree.
+
+### The three orders
+
+For a TDVP run of duration $T$ with snapshots at $t_0=0, t_1, \dots, t_K$
+and $\mathcal{F}$ the contiguous-interval cut family, the labels are
+$\mathcal{L} = \mathcal{F} \times \{t_0, \dots, t_K\}$. We define:
+
+* $(A, s) \preceq_{\mathrm{maj}} (B, t)$ — strict-majorization order on
+  the Schmidt spectra; the Phase 3 majorization_poset extended across
+  cuts AND times.
+* $(A, s) \preceq_{\mathrm{LR}} (B, t)$ iff $s < t$ and the
+  interval-distance $d(A, B) \le v_{\mathrm{LR}} \cdot (t - s)$ —
+  the Lieb-Robinson cone.
+* $(A, s) \preceq_{\mathrm{cs}} (B, t)$ iff $s < t$ — the trivial
+  causet order on a regular chain (Phase 6 makes this informative
+  within a time slice too).
+
+Each order is stored as a Hasse-cover :class:`Poset` over a shared
+label list. Pairwise agreement is reported as Kendall-τ, the discordant
+fraction, and the Hasse-graph edit distance.
+
+### End-to-end pipeline
+
+```python
+from caset.quantum import TDVPConfig, compute_causal_comparison
+
+cfg = TDVPConfig()
+cfg.N = 12; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.5; cfg.L0 = 0.0
+cfg.dmrg_max_bond_dim = 64; cfg.dmrg_n_sweeps = 12
+cfg.i0 = 5; cfg.d = 3            # odd-odd parity
+cfg.dt = 0.1; cfg.T = 1.0        # 10 TDVP steps
+cfg.max_bond_dim = 80
+cfg.snapshot_every = 1
+
+report = compute_causal_comparison(cfg, v_LR=1.0)
+print(f"n_labels = {report.n_labels}")
+print(f"maj vs LR: τ = {report.maj_vs_lr.kendall_tau:.4f}")
+print(f"LR vs cs:  τ = {report.lr_vs_cs.kendall_tau:.4f}  "
+      f"(must be 1.0; ≼_LR is a subset of ≼_cs by construction)")
+```
+
+The function forces ``record_spectra = True`` regardless of the input,
+because the spectra are required to build ≼_maj. ``v_LR`` defaults to
+1.0 (free-fermion group velocity for our hopping coefficient); the
+plan §7 mentions OTOC-based extraction for higher-precision use.
+
+### v_LR-monotonicity sanity
+
+Larger $v_{\mathrm{LR}}$ ⇒ more pairs satisfy $d(A, B) \le v_{\mathrm{LR}}(t-s)$
+⇒ ≼_LR has at least as many cover edges. Because ≼_cs is fixed,
+``lr_vs_cs.n_comparable_both`` is monotone non-decreasing in $v_{\mathrm{LR}}$.
+This is asserted in the C++ acceptance test and the Python pytest.
+
+### Worked example
+
+The script `examples/quantum/run_causal_compare.py` runs the pipeline
+and prints all three pairwise comparisons:
+
+```bash
+$ python examples/quantum/run_causal_compare.py --N 8 --T 0.4 --scan-vlr 1.0 16.0
+
+=== v_LR = 1.0 ===
+  n_labels    = 175
+  n_snapshots = 5
+  pair           Kendall-τ     discord   edit-dist   comparable
+  maj_vs_lr         0.1577      0.4212      0.9724         5670
+  maj_vs_cs         0.1525      0.4238      0.9704         6650
+  lr_vs_cs          1.0000      0.0000      0.3429        10564
+
+=== v_LR = 16.0 ===
+  ... same maj_vs_*; lr_vs_cs.comparable larger (cone wider)
+```
+
+Key invariant: ``lr_vs_cs.kendall_tau = 1.0`` exactly (≼_LR is a strict
+subset of ≼_cs by construction). Any deviation flags an implementation
+bug.
+
 ## Tested benchmarks
 
 The C++ and Python test suites cross-check every layer of the pipeline:
@@ -330,6 +413,10 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_phase3_majorization_python.py` | Phase 3 | Pipeline reproduction through Python: majorization predicate, poset properties (acyclic, irreflexive, transitively reduced), complement symmetry, strong-mass collapse. |
 | `test_tdvp_string.cpp` | Phase 4 | Heavy-quark flux-tube test: $\langle L_n\rangle(t)$ matches +1-tube reference at $t=0$ and $t=T/2$ to within 0.05; $\|\Delta E\|/\|E_0\| < 10^{-3}$ over $T = d \cdot a$. |
 | `test_phase4_tdvp_python.py` | Phase 4 | Python pipeline tests: parity validation, snapshot schedule, energy conservation, total-charge conservation, optional spectra/poset recording. |
+| `test_tdvp_vs_dense.cpp` | Phase 4 | TDVP integrator vs $e^{-iHt}$ dense unitary evolution on the full $2^N$ Hilbert space, $N \le 8$, four parameter regimes — agreement to $3\times10^{-6}$. |
+| `test_schwinger_n4_hamiltonian.cpp` | Phase 1 | PLAN.md §7 trap: independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
+| `test_causal_compare.cpp` | Phase 5 | End-to-end three-order comparison; sanity checks on Kendall-τ ranges; v_LR-monotonicity sanity. |
+| `test_phase5_causal_compare_python.py` | Phase 5 | Python pipeline: identical/reversed/disjoint pure compare_orders cases, end-to-end pipeline checks, ≼_LR ⊂ ≼_cs invariant (τ = 1.0 exactly), v_LR monotonicity. |
 
 ## API reference
 
