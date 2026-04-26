@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_SPHERE_H
-#define CASET_SPHERE_H
+#ifndef TESSERA_SPHERE_H
+#define TESSERA_SPHERE_H
 
 #include "Topology.h"
 
-namespace caset {
+namespace tessera {
 
 /// # Spherical Topology \f$ S^{d-1} \f$
 ///
@@ -55,6 +55,6 @@ class Sphere : public Topology {
     void build(Spacetime *spacetime, int numSimplices) override;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_SPHERE_H
+#endif //TESSERA_SPHERE_H

@@ -23,13 +23,13 @@
 // Created by andrew on 10/22/25.
 //
 
-#ifndef CASET_SIGNATURE_H
-#define CASET_SIGNATURE_H
+#ifndef TESSERA_SIGNATURE_H
+#define TESSERA_SIGNATURE_H
 
 #include <vector>
 #include <cstdint>
 
-namespace caset {
+namespace tessera {
 
 /// The signature type of the spacetime metric tensor \f$ g_{\mu\nu} \f$.
 ///
@@ -79,6 +79,6 @@ class Signature {
 
     static inline const double c = 1.;
 };
-} // caset
+} // tessera
 
-#endif //CASET_SIGNATURE_H
+#endif //TESSERA_SIGNATURE_H

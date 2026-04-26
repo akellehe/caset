@@ -3,10 +3,10 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Theory" href="theory.html"><link rel="prev" title="caset" href="index.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Theory" href="theory.html"><link rel="prev" title="tessera" href="index.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Getting Started - caset 0.1.0 documentation</title>
+        <title>Getting Started - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">caset 0.1.0 documentation</div></a>
+      <a href="index.html"><div class="brand">tessera 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">caset 0.1.0 documentation</span>
+  <span class="sidebar-brand-text">tessera 0.1.0 documentation</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -197,7 +197,7 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
 </ul>
 
 </div>
@@ -245,30 +245,30 @@
 </pre></div>
 </div>
 <p>Verify:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import caset; print(&#39;caset OK&#39;)&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import tessera; print(&#39;tessera OK&#39;)&quot;</span>
 </pre></div>
 </div>
-<p>CUDA GPU acceleration is auto-detected. To force CPU-only: <code class="docutils literal notranslate"><span class="pre">CASET_CUDA=0</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">.</span></code></p>
+<p>CUDA GPU acceleration is auto-detected. To force CPU-only: <code class="docutils literal notranslate"><span class="pre">TESSERA_CUDA=0</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">.</span></code></p>
 </section>
 <section id="quick-start-build-a-universe">
 <h2>Quick start: build a universe<a class="headerlink" href="#quick-start-build-a-universe" title="Link to this heading">¶</a></h2>
 <p>Build a 4D Lorentzian spacetime, thermalize it with CDT Monte Carlo, and export a rotating GIF:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">caset</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">tessera</span>
 
 <span class="c1"># Set up a 4D Lorentzian metric on a toroidal topology</span>
-<span class="n">metric</span> <span class="o">=</span> <span class="n">caset</span><span class="o">.</span><span class="n">Metric</span><span class="p">(</span>
+<span class="n">metric</span> <span class="o">=</span> <span class="n">tessera</span><span class="o">.</span><span class="n">Metric</span><span class="p">(</span>
     <span class="n">coordinateFree</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">signature</span><span class="o">=</span><span class="n">caset</span><span class="o">.</span><span class="n">Signature</span><span class="p">(</span><span class="n">dimensions</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">signatureType</span><span class="o">=</span><span class="n">caset</span><span class="o">.</span><span class="n">Lorentzian</span><span class="p">),</span>
+    <span class="n">signature</span><span class="o">=</span><span class="n">tessera</span><span class="o">.</span><span class="n">Signature</span><span class="p">(</span><span class="n">dimensions</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">signatureType</span><span class="o">=</span><span class="n">tessera</span><span class="o">.</span><span class="n">Lorentzian</span><span class="p">),</span>
 <span class="p">)</span>
-<span class="n">st</span> <span class="o">=</span> <span class="n">caset</span><span class="o">.</span><span class="n">Spacetime</span><span class="p">(</span>
-    <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span> <span class="n">spacetimeType</span><span class="o">=</span><span class="n">caset</span><span class="o">.</span><span class="n">CDT</span><span class="p">,</span>
+<span class="n">st</span> <span class="o">=</span> <span class="n">tessera</span><span class="o">.</span><span class="n">Spacetime</span><span class="p">(</span>
+    <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span> <span class="n">spacetimeType</span><span class="o">=</span><span class="n">tessera</span><span class="o">.</span><span class="n">CDT</span><span class="p">,</span>
     <span class="n">alpha</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-    <span class="n">foliation</span><span class="o">=</span><span class="n">caset</span><span class="o">.</span><span class="n">PREFERRED</span><span class="p">,</span> <span class="n">topology</span><span class="o">=</span><span class="n">caset</span><span class="o">.</span><span class="n">Toroid</span><span class="p">(),</span>
+    <span class="n">foliation</span><span class="o">=</span><span class="n">tessera</span><span class="o">.</span><span class="n">PREFERRED</span><span class="p">,</span> <span class="n">topology</span><span class="o">=</span><span class="n">tessera</span><span class="o">.</span><span class="n">Toroid</span><span class="p">(),</span>
 <span class="p">)</span>
 <span class="n">st</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="mi">2000</span><span class="p">)</span>
 
 <span class="c1"># Run CDT Monte Carlo: tune coupling, then sweep</span>
-<span class="n">cdt</span> <span class="o">=</span> <span class="n">caset</span><span class="o">.</span><span class="n">CDTSimulation</span><span class="p">(</span>
+<span class="n">cdt</span> <span class="o">=</span> <span class="n">tessera</span><span class="o">.</span><span class="n">CDTSimulation</span><span class="p">(</span>
     <span class="n">spacetime</span><span class="o">=</span><span class="n">st</span><span class="p">,</span> <span class="n">k0</span><span class="o">=</span><span class="mf">2.2</span><span class="p">,</span> <span class="n">k4</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>
     <span class="n">epsilon</span><span class="o">=</span><span class="mf">0.02</span><span class="p">,</span> <span class="n">targetN41</span><span class="o">=</span><span class="n">st</span><span class="o">.</span><span class="n">getN41</span><span class="p">(),</span>
 <span class="p">)</span>
@@ -428,7 +428,7 @@ pytest<span class="w"> </span>tests/<span class="w"> </span>-v<span class="w"> <
 <ul class="simple">
 <li><p><a class="reference internal" href="theory.html"><span class="std std-doc">Theory background</span></a> – path integrals, CDT, and Regge calculus</p></li>
 <li><p><a class="reference internal" href="examples.html"><span class="std std-doc">Examples in depth</span></a> – detailed parameter guidance and output interpretation</p></li>
-<li><p><a class="reference internal" href="cpp_api.html"><span class="std std-doc">C++ API reference</span></a> – header-level documentation for extending caset</p></li>
+<li><p><a class="reference internal" href="cpp_api.html"><span class="std std-doc">C++ API reference</span></a> – header-level documentation for extending tessera</p></li>
 <li><p><a class="reference internal" href="benchmarks.html"><span class="std std-doc">Benchmarks</span></a> – build-time performance across dimensions and lattice sizes</p></li>
 </ul>
 </section>

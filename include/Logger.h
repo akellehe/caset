@@ -30,7 +30,7 @@
 #include <string_view>
 #include <cctype>
 
-#ifdef CASET_HAS_OSYNCSTREAM
+#ifdef TESSERA_HAS_OSYNCSTREAM
   #include <syncstream>   // C++20
 #endif
 
@@ -106,8 +106,8 @@ class Logger {
 
   static bool shouldColorize() {
     // Explicit overrides win.
-    if (envTruthy(std::getenv("CASET_LOG_COLOR"))) return true;
-    if (envFalsy(std::getenv("CASET_LOG_COLOR")))  return false;
+    if (envTruthy(std::getenv("TESSERA_LOG_COLOR"))) return true;
+    if (envFalsy(std::getenv("TESSERA_LOG_COLOR")))  return false;
 
     // Standards-ish opt-out.
     if (std::getenv("NO_COLOR")) return false;
@@ -145,7 +145,7 @@ inline void Logger::emit(short int level,
   const std::string ts = getTime();
   const std::string lvl = nameLevel(level);
 
-#if CASET_HAS_OSYNCSTREAM
+#if TESSERA_HAS_OSYNCSTREAM
   std::osyncstream out(std::cerr);
   if (color) out << levelStyle(level);
   out << ts << " [" << lvl << "] ";
@@ -165,7 +165,7 @@ inline void Logger::emit(short int level,
 
 }
 
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
   #define CLOG(level, ...) Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__)
 #else
   #define CLOG(level, ...) if ((level) == CRITICAL_LEVEL || (level) == ERROR_LEVEL) { Logger::log(level, __FILE__, __func__, __LINE__, __VA_ARGS__); }

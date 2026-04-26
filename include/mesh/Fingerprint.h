@@ -23,8 +23,8 @@
 // Created by Andrew Kelleher on 11/13/25.
 //
 
-#ifndef CASET_VERTEXFINGERPRINT_H
-#define CASET_VERTEXFINGERPRINT_H
+#ifndef TESSERA_VERTEXFINGERPRINT_H
+#define TESSERA_VERTEXFINGERPRINT_H
 
 #include <tuple>
 #include <cassert>
@@ -77,7 +77,7 @@
 /// - **Memory**: Fixed 64-element array + metadata ≈ 520 bytes per instance
 ///
 
-namespace caset {
+namespace tessera {
 
 // ========================================
 // Type Definitions
@@ -162,8 +162,8 @@ inline constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
 /// ```cpp
 /// namespace std {
 /// template<>
-/// struct hash<caset::Simplex> {
-///   size_t operator()(const caset::Simplex &s) const noexcept {
+/// struct hash<tessera::Simplex> {
+///   size_t operator()(const tessera::Simplex &s) const noexcept {
 ///     return std::hash<std::uint64_t>{}(s.fingerprint.fingerprint());
 ///   }
 /// };
@@ -603,7 +603,7 @@ struct FingerprintHash {
 ///
 /// - `nullptr == nullptr`: Returns true
 /// - `nullptr == non-null`: Returns false
-/// - When CASET_ASSERTIONS is defined: Some nullptr cases abort instead
+/// - When TESSERA_ASSERTIONS is defined: Some nullptr cases abort instead
 ///
 template<typename T>
 struct FingerprintEq {
@@ -658,7 +658,7 @@ struct FingerprintEq {
 
   /// Compare raw fingerprint to const shared_ptr (aborts on nullptr with assertions)
   bool operator()(uint64_t fp, const std::shared_ptr<const T> &a) const noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     if (a == nullptr) {
       CLOG(CRITICAL_LEVEL, "Nullptr in FingerprintEq");
       std::abort();
@@ -675,12 +675,12 @@ struct FingerprintEq {
 /// # Difference from FingerprintHash
 ///
 /// This variant assumes T is already a pointer type and performs stricter nullptr checking
-/// when CASET_ASSERTIONS is defined. Use this when you know you're working with pointers
+/// when TESSERA_ASSERTIONS is defined. Use this when you know you're working with pointers
 /// and want to catch nullptr bugs early in development.
 ///
 /// # Assertions
 ///
-/// When CASET_ASSERTIONS is defined, aborts if given a nullptr.
+/// When TESSERA_ASSERTIONS is defined, aborts if given a nullptr.
 /// In production builds (no assertions), behavior is undefined for nullptr.
 ///
 template<typename T>
@@ -689,7 +689,7 @@ struct FingerprintPtrHash {
 
   /// Hash a pointer (aborts on nullptr with assertions)
   size_t operator()(const T &s) const noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     if (s == nullptr) {
       CLOG(CRITICAL_LEVEL, "Nullptr in FingerprintPtrHash");
       std::abort();
@@ -710,7 +710,7 @@ struct FingerprintPtrHash {
 ///
 /// # Assertions
 ///
-/// When CASET_ASSERTIONS is defined, asserts that both pointers are non-null.
+/// When TESSERA_ASSERTIONS is defined, asserts that both pointers are non-null.
 /// Use this when nullptr should never occur and you want to catch bugs early.
 ///
 template<typename T>
@@ -719,7 +719,7 @@ struct FingerprintPtrEq {
 
   /// Compare two pointers by fingerprint (asserts non-null)
   bool operator()(const T &a, const T &b) const noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     assert(a != nullptr);
     assert(b != nullptr);
 #endif
@@ -728,7 +728,7 @@ struct FingerprintPtrEq {
 
   /// Compare pointer to raw fingerprint value
   bool operator()(const T &a, uint64_t fp) const noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     assert(a != nullptr);
 #endif
     return a->fingerprint.fingerprint() == fp;
@@ -736,7 +736,7 @@ struct FingerprintPtrEq {
 
   /// Compare raw fingerprint value to pointer
   bool operator()(uint64_t fp, const T &a) const noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     assert(a != nullptr);
 #endif
     return fp == a->fingerprint.fingerprint();
@@ -747,7 +747,7 @@ struct FingerprintPtrEq {
 // Debugging Utilities (Assertion Builds Only)
 // ========================================
 
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
 ///
 /// \brief Debug utility for detecting hash table corruption
 /// \tparam Ptr Pointer type stored in container (e.g., SimplexPtr)
@@ -756,7 +756,7 @@ struct FingerprintPtrEq {
 ///
 /// # Purpose
 ///
-/// During development with CASET_ASSERTIONS enabled, this class provides validation
+/// During development with TESSERA_ASSERTIONS enabled, this class provides validation
 /// methods to detect common hash table corruption issues:
 ///
 /// - **Nullptr entries**: Dangling pointers that weren't properly removed
@@ -768,7 +768,7 @@ struct FingerprintPtrEq {
 /// Call isCorrupted() or wouldDuplicate() before/after critical operations:
 ///
 /// ```cpp
-/// #ifdef CASET_ASSERTIONS
+/// #ifdef TESSERA_ASSERTIONS
 /// using Detector = CorruptionDetector<SimplexPtr, SimplexHash, SimplexEq>;
 /// if (Detector::isCorrupted(simplices)) {
 ///   // Log error, abort, or enter debugger
@@ -778,7 +778,7 @@ struct FingerprintPtrEq {
 ///
 /// # Performance Impact
 ///
-/// These checks are O(n) and only active when CASET_ASSERTIONS is defined.
+/// These checks are O(n) and only active when TESSERA_ASSERTIONS is defined.
 /// In release builds (no assertions), this entire class is compiled out.
 ///
 template<typename Ptr, typename PtrHash, typename PtrEq>
@@ -955,8 +955,8 @@ class CorruptionDetector {
       return container.contains(newElement) || container.contains(newKey);
     }
 };
-#endif  // CASET_ASSERTIONS
+#endif  // TESSERA_ASSERTIONS
 
 }
 
-#endif //CASET_VERTEXFINGERPRINT_H
+#endif //TESSERA_VERTEXFINGERPRINT_H

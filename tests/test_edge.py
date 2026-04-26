@@ -21,7 +21,7 @@
 
 import unittest
 
-from caset import Edge, Vertex, Spacetime
+from tessera import Edge, Vertex, Spacetime
 
 
 class TestEdge(unittest.TestCase):

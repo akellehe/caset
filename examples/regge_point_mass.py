@@ -15,9 +15,9 @@ Usage:
 """
 import argparse
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import SingleTaskProgress
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import SingleTaskProgress
 
 
 def main():
@@ -52,17 +52,17 @@ def main():
 
     # Build the triangulation
     prog.phase("building", extra=f"{args.n_simplices} simplices")
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(args.n_simplices)
     print(f"  Vertices: {st.getVertexCount()}, "
           f"Top simplices: {st.getSimplexCount()}")
 
     # Thermalize to get a more physical starting configuration
     target = st.getN41()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     prog.phase("tuning", total=20)
     cdt.tune(progress=prog.on_tick)
     prog.phase("thermalizing", total=10)
@@ -123,14 +123,14 @@ def main():
           f"slice t={peak_time}, degree={len(adj[center.getId()])}")
 
     # Configure matter: static point mass along worldline through all slices
-    matter = caset.MatterConfiguration()
-    worldline = caset.MatterConfiguration.buildWorldline(center, st)
+    matter = tessera.MatterConfiguration()
+    worldline = tessera.MatterConfiguration.buildWorldline(center, st)
     print(f"  Worldline: {len(worldline)} vertices across "
           f"{len(set(v.getTime() for v in worldline))} time slices")
     matter.setWorldlineMass(center, args.mass, st)
 
     # Create solver
-    solver = caset.ReggeSolver(st, matter)
+    solver = tessera.ReggeSolver(st, matter)
     S_grav = solver.reggeAction()
     S_matt = solver.matterAction()
     F0 = solver.actionGradientNorm()

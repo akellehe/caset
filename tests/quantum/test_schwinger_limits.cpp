@@ -72,7 +72,7 @@
 #include <stdexcept>
 #include <vector>
 
-using namespace caset::quantum;
+using namespace tessera::quantum;
 using itensor::dmrg;
 using itensor::Sweeps;
 using itensor::MPS;

@@ -5,7 +5,7 @@
 #include <cmath>
 #include <random>
 
-namespace caset {
+namespace tessera {
 
 std::vector<double> forceLayout3D(
     int n,
@@ -104,4 +104,4 @@ std::vector<double> forceLayout3D(
     return pos;
 }
 
-} // namespace caset
+} // namespace tessera

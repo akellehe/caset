@@ -1,6 +1,6 @@
 # Lightcone vs. majorization — first hypothesis-test scan
 
-First experimental run of `caset.quantum.computeCausalComparison`
+First experimental run of `tessera.quantum.computeCausalComparison`
 across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
 addresses the **strong falsification** criterion of
 `docs/source/quantum-methodology.md` §1.2:
@@ -11,7 +11,7 @@ addresses the **strong falsification** criterion of
 
 The **weak falsification** criterion (≼_maj vs non-trivial ≼_cs) is
 out of scope for this run — it requires Phase 6's MPO rebuild on a
-caset-derived chain. The **trivial-agreement** caveat applies to the
+tessera-derived chain. The **trivial-agreement** caveat applies to the
 ≼_cs column here: on a regular 1+1D chain, ≼_cs reduces to the
 time-only order, so ≼_LR ⊆ ≼_cs by construction (verified — `τ(LR, cs)
 = 1.0` exactly).
@@ -233,7 +233,7 @@ subset, but each has a piece the other doesn't see.
   Phase 5 acceptance) to put a confidence band on these τ values.
   Until that is done, the τ ranges above are point estimates only.
 - **Non-trivial ≼_cs.** All ≼_cs results above are time-only. The
-  weak-falsification test requires the Phase 6 caset-embedded chain
+  weak-falsification test requires the Phase 6 tessera-embedded chain
   with multi-vertex antichains, where ≼_cs has within-time-slice
   structure that ≼_LR does not.
 

@@ -1,8 +1,8 @@
 """Phase 5 Python tests — end-to-end causal-comparison pipeline through
-caset.quantum, plus low-level compareOrders() unit tests on hand-built
+tessera.quantum, plus low-level compareOrders() unit tests on hand-built
 posets.
 
-Skips cleanly when caset was built without CASET_QUANTUM=1.
+Skips cleanly when tessera was built without TESSERA_QUANTUM=1.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import unittest
 
 try:
-    from caset.quantum import (
+    from tessera.quantum import (
         QuantumConfig,
         TDVPConfig,
         Poset,
@@ -36,7 +36,7 @@ def _light_quark_config(N: int = 10, T: float = 0.4) -> "TDVPConfig":
     return cfg
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestCompareOrdersPure(unittest.TestCase):
     """Unit tests on compareOrders() without running TDVP."""
 
@@ -93,7 +93,7 @@ class TestCompareOrdersPure(unittest.TestCase):
         self.assertLessEqual(agr.discordantFraction, 1.0)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestComputeCausalComparison(unittest.TestCase):
     """End-to-end pipeline tests through computeCausalComparison."""
 
@@ -156,7 +156,7 @@ class TestComputeCausalComparison(unittest.TestCase):
         self.assertGreater(r.nLabels, 0)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestPipelineWithRecordedSpectra(unittest.TestCase):
     """Confirm that the pipeline stitches the per-snapshot spectra into
     one global majorization poset — i.e. the maj order has cross-time

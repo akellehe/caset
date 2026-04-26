@@ -16,15 +16,15 @@ References:
 """
 
 import unittest
-import caset
+import tessera
 
 
 def _make_spacetime():
     """Create a properly configured 4D Lorentzian spacetime."""
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     return st
 
 
@@ -51,7 +51,7 @@ def _is_valid_cdt_simplex(verts):
     times = {v.getTime() for v in verts}
     if len(times) != 2:
         return False
-    o = caset.SimplexOrientation(0, 0)  # dummy
+    o = tessera.SimplexOrientation(0, 0)  # dummy
     # Count vertices at each time
     time_list = sorted(times)
     ti_count = sum(1 for v in verts if v.getTime() == time_list[0])
@@ -370,7 +370,7 @@ class TestShiftForward(unittest.TestCase):
         st = _make_spacetime()
         st.build(200)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.sweep(200)
 
         before_n4 = st.getSimplexCount()
@@ -408,7 +408,7 @@ class TestShiftForward(unittest.TestCase):
         st = _make_spacetime()
         st.build(200)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.sweep(200)
 
         before_n4 = st.getSimplexCount()

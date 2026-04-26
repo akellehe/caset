@@ -36,7 +36,7 @@
 #include "mesh/Vertex.h"
 
 
-namespace caset {
+namespace tessera {
 SimplexOrientation::SimplexOrientation(uint8_t ti_, uint8_t tf_)
     : ti(ti_), tf(tf_), k(ti_ + tf_ - 1), fingerprint({ti_, tf_}) {
 }

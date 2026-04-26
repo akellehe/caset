@@ -4,7 +4,7 @@
 #include <vector>
 #include <utility>
 
-namespace caset {
+namespace tessera {
 
 /// Spring-electrical force-directed layout in 3D.
 ///
@@ -38,4 +38,4 @@ namespace caset {
     int repulsionCap = 200,
     int seed = 42);
 
-} // namespace caset
+} // namespace tessera

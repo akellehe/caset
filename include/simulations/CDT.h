@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_CDT_H
-#define CASET_CDT_H
+#ifndef TESSERA_CDT_H
+#define TESSERA_CDT_H
 
 #include "simulations/Simulation.h"
 #include "spacetime/Spacetime.h"
@@ -31,7 +31,7 @@
 #include <vector>
 #include <map>
 
-namespace caset {
+namespace tessera {
 
 /// # Causal Dynamical Triangulations (CDT) Simulation
 ///
@@ -301,6 +301,6 @@ class CDT : public Simulation {
     std::int64_t ishiftAttempts = 0, ishiftAccepted = 0;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_CDT_H
+#endif //TESSERA_CDT_H

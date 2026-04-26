@@ -51,31 +51,31 @@
 
 namespace py = pybind11;
 
-using namespace caset;
+using namespace tessera;
 
-#ifdef CASET_QUANTUM
+#ifdef TESSERA_QUANTUM
 // Defined in src/quantum/bindings.cpp. Conditionally compiled when the
-// CASET_QUANTUM CMake option is on — see CMakeLists.txt for the wiring.
+// TESSERA_QUANTUM CMake option is on — see CMakeLists.txt for the wiring.
 void register_quantum_bindings(py::module_ m);
 #endif
 
-PYBIND11_MODULE(_caset, m) {
+PYBIND11_MODULE(_tessera, m) {
   m.doc() = R"doc(
-caset -- Causal Set and CDT simulation library.
+tessera -- Causal Set and CDT simulation library.
 
 A C++ library (with Python bindings) for Causal Dynamical Triangulations
 (CDT) and causal set theory simulations in arbitrary dimension.
 
 Typical usage::
 
-    import caset
+    import tessera
 
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(500)
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
     cdt.tune()
     cdt.sweep(100)
 
@@ -413,10 +413,10 @@ building the initial triangulation and manipulating the complex.
 
 Typical construction::
 
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(500))doc")
       .def(py::init<
              std::shared_ptr<Metric>,
@@ -1033,16 +1033,16 @@ Args:
     repulsionCap: Max nodes for O(n^2) repulsion (default 200).
     seed: Random seed (default 42).)doc");
 
-#ifdef CASET_VERSION
-  m.attr("__version__") = CASET_VERSION;
+#ifdef TESSERA_VERSION
+  m.attr("__version__") = TESSERA_VERSION;
 #else
   m.attr("__version__") = "unknown";
 #endif
 
-#ifdef CASET_QUANTUM
+#ifdef TESSERA_QUANTUM
   // Register the Schwinger / DMRG bindings as a `quantum` submodule so users
-  // call them as `caset._caset.quantum.computeGroundState(...)` (typically
-  // routed through `caset.quantum` — see caset/quantum/__init__.py).
+  // call them as `tessera._tessera.quantum.computeGroundState(...)` (typically
+  // routed through `tessera.quantum` — see tessera/quantum/__init__.py).
   register_quantum_bindings(m.def_submodule("quantum",
       "Schwinger model + DMRG (Phase 2 of docs/source/quantum-plan.md)."));
 #endif

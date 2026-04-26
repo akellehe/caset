@@ -58,7 +58,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -309,4 +309,4 @@ SchwingerDense buildSchwingerDense(SchwingerParams const& p) {
     return out;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

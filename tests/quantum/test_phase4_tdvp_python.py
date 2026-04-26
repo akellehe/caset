@@ -2,7 +2,7 @@
 through the Python API, energy conservation, flux-tube formation, snapshot
 schedule. Mirrors the C++ test_tdvp_string.cpp at the binding layer.
 
-Skips cleanly when caset was built without CASET_QUANTUM=1.
+Skips cleanly when tessera was built without TESSERA_QUANTUM=1.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import math
 import unittest
 
 try:
-    from caset.quantum import (
+    from tessera.quantum import (
         TDVPConfig,
         TDVPSnapshot,
         QuenchResult,
@@ -57,7 +57,7 @@ def _expected_flux_tube_L(N: int, i0: int, d: int) -> list[float]:
     return v
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestTDVPConfigDefaults(unittest.TestCase):
     """Default TDVPConfig should fail validation; once set, the basic
     fields round-trip through the binding."""
@@ -80,7 +80,7 @@ class TestTDVPConfigDefaults(unittest.TestCase):
         self.assertEqual(cfg.snapshotEvery, 5)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestParityValidation(unittest.TestCase):
     """The σ⁻ σ⁺ quench requires odd i0 + odd d when enforce_parity is on
     (heavy-quark Néel parity argument from quench.hpp)."""
@@ -107,7 +107,7 @@ class TestParityValidation(unittest.TestCase):
         self.assertGreater(len(r.snapshots), 0)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestFluxTube(unittest.TestCase):
     """Phase 4 PLAN.md acceptance through the Python API: heavy-quark
     flux tube preserved during TDVP, energy conserved."""
@@ -159,7 +159,7 @@ class TestFluxTube(unittest.TestCase):
                             msg=f"t={snap.time}: total Sz = {total_sz}")
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestSnapshotSchedule(unittest.TestCase):
     """Snapshot schedule and times line up with config.dt × snapshotEvery."""
 
@@ -185,7 +185,7 @@ class TestSnapshotSchedule(unittest.TestCase):
         self.assertAlmostEqual(r.snapshots[0].time, 0.0)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestObservableRecording(unittest.TestCase):
     """recordSpectra / recordPoset toggles control optional fields."""
 
@@ -242,7 +242,7 @@ class TestObservableRecording(unittest.TestCase):
                     msg=f"t={snap.time} cut [{iv.i},{iv.j}] sums to {total}")
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestRepr(unittest.TestCase):
     def test_snapshot_repr(self) -> None:
         cfg = _heavy_quark_config(N=8, i0=1, d=3, T=0.1, dt=0.1,

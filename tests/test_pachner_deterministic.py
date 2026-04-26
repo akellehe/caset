@@ -21,7 +21,7 @@ References:
 """
 
 import unittest
-import caset
+import tessera
 
 
 # =====================================================================
@@ -36,14 +36,14 @@ def _build_small(n_simplices=10):
     the lattice from growing).  Individual move tests call the moves
     directly, bypassing acceptance.
     """
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(n_simplices)
     target = st.getN41()
     # epsilon=0 removes volume-fixing from acceptance (we call moves directly)
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, target)
     # Disable vertex relabeling so fingerprint-based before/after comparisons work
     cdt.setRelabelVertices(False)
     return cdt, st

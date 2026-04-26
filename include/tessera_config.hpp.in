@@ -1,0 +1,3 @@
+#pragma once
+
+//#define TESSERA_ALPHA @TESSERA_ALPHA@

@@ -1,4 +1,4 @@
-"""caset.quantum -- Schwinger model on a Jordan-Wigner spin chain via DMRG.
+"""tessera.quantum -- Schwinger model on a Jordan-Wigner spin chain via DMRG.
 
 This subpackage implements Phases 2-5 of ``docs/source/quantum-plan.md``:
 ground-state DMRG for the 1+1D Kogut-Susskind Schwinger model with U(1)
@@ -17,13 +17,13 @@ scalar / list diagnostics out.
 
 Availability
 ------------
-This module requires caset to be built with ``CASET_QUANTUM=1``::
+This module requires tessera to be built with ``TESSERA_QUANTUM=1``::
 
-    CASET_QUANTUM=1 pip install -e .
+    TESSERA_QUANTUM=1 pip install -e .
 
 Without that flag, importing this module raises :class:`ImportError`
-with the rebuild instruction. The default (CASET_QUANTUM=0) build of
-caset is unaffected.
+with the rebuild instruction. The default (TESSERA_QUANTUM=0) build of
+tessera is unaffected.
 
 Hamiltonian (PLAN.md §4 / Bañuls et al. 2013 eq. 2.6)
 -----------------------------------------------------
@@ -60,7 +60,7 @@ Quickstart
 
 Compute the ground state at the Phase 1 / PLAN.md spec parameters::
 
-    >>> from caset.quantum import QuantumConfig, computeGroundState
+    >>> from tessera.quantum import QuantumConfig, computeGroundState
     >>> cfg = QuantumConfig()
     >>> cfg.N = 20             # 1-based, even
     >>> cfg.a = 1.0; cfg.g = 1.0
@@ -106,7 +106,7 @@ This is the hypothesis substrate for the methodology page
 
 The pure-function API works on plain Python lists::
 
-    >>> from caset.quantum import majorizes, strictlyMajorizes, majorizationPoset
+    >>> from tessera.quantum import majorizes, strictlyMajorizes, majorizationPoset
     >>> majorizes([1.0, 0.0], [0.5, 0.5])     # (1, 0) ≻ (½, ½)
     True
     >>> strictlyMajorizes([0.5, 0.5], [1.0, 0.0])
@@ -117,7 +117,7 @@ The pure-function API works on plain Python lists::
 
 The end-to-end pipeline (DMRG → Schmidt → poset) is one call::
 
-    >>> from caset.quantum import computeGroundStateMajorization
+    >>> from tessera.quantum import computeGroundStateMajorization
     >>> r = computeGroundStateMajorization(cfg)  # cfg from above
     >>> r.spectra.N
     20
@@ -144,7 +144,7 @@ and the bond dimension; optionally the full contiguous-cut Schmidt
 spectra and majorization poset (off by default — they cost O(N²) SVDs
 per snapshot). Example::
 
-    >>> from caset.quantum import TDVPConfig, runQqbarQuench
+    >>> from tessera.quantum import TDVPConfig, runQqbarQuench
     >>> cfg = TDVPConfig()
     >>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark
     >>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
@@ -171,7 +171,7 @@ partial orders on (cut, time) labels → compare. The orders are:
 Each comparison reports Kendall-τ, discordant-pair fraction, and Hasse-
 graph edit distance. Example::
 
-    >>> from caset.quantum import TDVPConfig, computeCausalComparison
+    >>> from tessera.quantum import TDVPConfig, computeCausalComparison
     >>> cfg = TDVPConfig()
     >>> cfg.N = 10; cfg.m = 0.5; cfg.g = 1.0
     >>> cfg.i0 = 3; cfg.d = 3
@@ -262,12 +262,12 @@ Implementation notes
 """
 
 try:
-    # caset._caset is a single C extension (.so), not a Python package, so
+    # tessera._tessera is a single C extension (.so), not a Python package, so
     # the submodule is exposed as an attribute rather than a separate
     # importable module. Pybind11's def_submodule installs it on the parent
     # module's __dict__ at import time; we just look it up.
-    from caset import _caset
-    _qm = _caset.quantum
+    from tessera import _tessera
+    _qm = _tessera.quantum
 
     # Phase 2 — DMRG ground state.
     QuantumConfig         = _qm.QuantumConfig
@@ -290,7 +290,7 @@ try:
     QuenchResult       = _qm.QuenchResult
     runQqbarQuench   = _qm.runQqbarQuench
 
-    # Phase 5 — causal-order comparison (maj vs LR vs caset).
+    # Phase 5 — causal-order comparison (maj vs LR vs tessera).
     LabelSpacetime              = _qm.LabelSpacetime
     CausalOrders                = _qm.CausalOrders
     OrderAgreement              = _qm.OrderAgreement
@@ -298,14 +298,14 @@ try:
     compareOrders              = _qm.compareOrders
     computeCausalComparison   = _qm.computeCausalComparison
 
-    # Phase 6 — caset-Spacetime → chain-of-antichains adapter.
+    # Phase 6 — tessera-Spacetime → chain-of-antichains adapter.
     CausetChain           = _qm.CausetChain
     extractCausetChain  = _qm.extractCausetChain
 except (ImportError, AttributeError) as exc:
     raise ImportError(
-        "caset.quantum is unavailable: this caset build does not include "
-        "the quantum subsystem. Rebuild with CASET_QUANTUM=1 (e.g. "
-        "`CASET_QUANTUM=1 pip install -e .`) to enable it. "
+        "tessera.quantum is unavailable: this tessera build does not include "
+        "the quantum subsystem. Rebuild with TESSERA_QUANTUM=1 (e.g. "
+        "`TESSERA_QUANTUM=1 pip install -e .`) to enable it. "
         "See docs/source/quantum-plan.md for the broader plan."
     ) from exc
 

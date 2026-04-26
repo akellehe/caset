@@ -2,7 +2,7 @@
 
 These examples reproduce key experiments from the Causal Dynamical
 Triangulations literature.  Each script runs a Metropolis Monte Carlo
-simulation using the `caset` C++ library and produces plots that can be
+simulation using the `tessera` C++ library and produces plots that can be
 compared side-by-side with figures from the original papers.
 
 All scripts accept `--save <path.png>` to write output to disk, or display

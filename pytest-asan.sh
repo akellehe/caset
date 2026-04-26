@@ -1,8 +1,8 @@
 #!/bin/bash
 
-export CASET_ASAN=ON
-export CASET_ASSERTIONS=ON
-export CASET_VERBOSE=ON
+export TESSERA_ASAN=ON
+export TESSERA_ASSERTIONS=ON
+export TESSERA_VERBOSE=ON
 export CC=gcc
 export CXX=g++
 export ASAN="$(gcc -print-file-name=libasan.so)"

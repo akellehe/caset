@@ -31,7 +31,7 @@
 #include "quantum/majorization.hpp"
 #include "quantum/schmidt.hpp"
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Configuration for a complete DMRG-then-TDVP run. Hamiltonian fields
 // mirror QuantumConfig; the rest configure the quench, the TDVP loop,
@@ -97,4 +97,4 @@ struct QuenchResult {
 // of-range i0, parity mismatch with quenchEnforceParity, etc.).
 QuenchResult runQqbarQuench(TDVPConfig const& config);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

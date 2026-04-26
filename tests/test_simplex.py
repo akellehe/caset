@@ -21,7 +21,7 @@
 
 import unittest
 
-from caset import Vertex, Simplex, Metric, Spacetime, Signature, SignatureType
+from tessera import Vertex, Simplex, Metric, Spacetime, Signature, SignatureType
 
 
 class TestSimplex(unittest.TestCase):

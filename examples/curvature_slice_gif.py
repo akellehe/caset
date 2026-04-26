@@ -25,11 +25,11 @@ import matplotlib.colors
 from matplotlib.collections import LineCollection
 from PIL import Image
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.plot import (build_spacetime, time_slices, spatial_subgraph,
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.plot import (build_spacetime, time_slices, spatial_subgraph,
                               bfs_distances, save_gif)
-from caset.utils.progress import SingleTaskProgress
+from tessera.utils.progress import SingleTaskProgress
 
 
 # =========================================================================
@@ -49,7 +49,7 @@ def _vertex_curvatures(verts, solver, t):
             if not all(round(hv.getTime()) == t for hv in sv):
                 continue
             eps = solver.deficitAngle(s)
-            area = caset.ReggeSolver.hingeArea(s)
+            area = tessera.ReggeSolver.hingeArea(s)
             total += eps * area
             count += 1
         if count > 0:
@@ -325,11 +325,11 @@ def main():
     verts = st.getVertexList().toVector()
     center = max(verts, key=lambda v: v.degree())
 
-    matter = caset.MatterConfiguration()
-    worldline = caset.MatterConfiguration.buildWorldline(center, st)
+    matter = tessera.MatterConfiguration()
+    worldline = tessera.MatterConfiguration.buildWorldline(center, st)
     matter.setWorldlineMass(center, args.mass, st)
 
-    solver = caset.ReggeSolver(st, matter)
+    solver = tessera.ReggeSolver(st, matter)
     prog.phase("solving", total=args.max_iters)
     converged, F, iters = solver.solve(
         tol=args.tol, maxIters=args.max_iters,

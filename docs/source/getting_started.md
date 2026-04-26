@@ -11,32 +11,32 @@ pip install -e ".[dev]"
 Verify:
 
 ```bash
-python -c "import caset; print('caset OK')"
+python -c "import tessera; print('tessera OK')"
 ```
 
-CUDA GPU acceleration is auto-detected. To force CPU-only: `CASET_CUDA=0 pip install -e .`
+CUDA GPU acceleration is auto-detected. To force CPU-only: `TESSERA_CUDA=0 pip install -e .`
 
 ## Quick start: build a universe
 
 Build a 4D Lorentzian spacetime, thermalize it with CDT Monte Carlo, and export a rotating GIF:
 
 ```python
-import caset
+import tessera
 
 # Set up a 4D Lorentzian metric on a toroidal topology
-metric = caset.Metric(
+metric = tessera.Metric(
     coordinateFree=True,
-    signature=caset.Signature(dimensions=4, signatureType=caset.Lorentzian),
+    signature=tessera.Signature(dimensions=4, signatureType=tessera.Lorentzian),
 )
-st = caset.Spacetime(
-    metric=metric, spacetimeType=caset.CDT,
+st = tessera.Spacetime(
+    metric=metric, spacetimeType=tessera.CDT,
     alpha=1.0, a=1.0,
-    foliation=caset.PREFERRED, topology=caset.Toroid(),
+    foliation=tessera.PREFERRED, topology=tessera.Toroid(),
 )
 st.build(2000)
 
 # Run CDT Monte Carlo: tune coupling, then sweep
-cdt = caset.CDTSimulation(
+cdt = tessera.CDTSimulation(
     spacetime=st, k0=2.2, k4=0.5, delta=0.6,
     epsilon=0.02, targetN41=st.getN41(),
 )
@@ -179,5 +179,5 @@ pytest tests/ -v -m "not slow"        # fast subset (CI mode)
 
 - [Theory background](theory.md) -- path integrals, CDT, and Regge calculus
 - [Examples in depth](examples.md) -- detailed parameter guidance and output interpretation
-- [C++ API reference](cpp_api.md) -- header-level documentation for extending caset
+- [C++ API reference](cpp_api.md) -- header-level documentation for extending tessera
 - [Benchmarks](benchmarks.md) -- build-time performance across dimensions and lattice sizes

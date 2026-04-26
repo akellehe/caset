@@ -1,4 +1,4 @@
-"""Shared terminal progress display for caset examples.
+"""Shared terminal progress display for tessera examples.
 
 Provides two display classes:
 
@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 
-from caset.utils.eta import ETAEstimator, _fmt_duration
+from tessera.utils.eta import ETAEstimator, _fmt_duration
 
 try:
     import termios

@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_TOROID_H
-#define CASET_TOROID_H
+#ifndef TESSERA_TOROID_H
+#define TESSERA_TOROID_H
 
 #include "Topology.h"
 
-namespace caset {
+namespace tessera {
 class Spacetime;
 
 /// # Toroidal Topology \f$ T^{d-1} \f$
@@ -53,6 +53,6 @@ class Toroid : public Topology {
     void build(Spacetime *spacetime, int numSimplices) override;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_TOROID_H
+#endif //TESSERA_TOROID_H

@@ -53,7 +53,7 @@
 
 #include <cstddef>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Dimensional inputs to the Schwinger Hamiltonian. All in lattice units —
 // users wanting Bañuls' dimensionless x, μ should set a = 1 and choose
@@ -101,7 +101,7 @@ SchwingerMPO buildSchwingerMpo(SchwingerParams const& p, bool conserveQns = true
 //
 // The intended usage:
 //
-//   auto chain   = caset::quantum::extractCausetChain(spacetime);
+//   auto chain   = tessera::quantum::extractCausetChain(spacetime);
 //   SchwingerParams p; p.N = chain.nSites; …;
 //   auto sm = buildSchwingerMpoChain(p, chain.hoppingPairs);
 //
@@ -143,4 +143,4 @@ SchwingerDense buildSchwingerDense(SchwingerParams const& p);
 // (Derivation in the .cpp file.)
 double schwingerEnergyConstant(SchwingerParams const& p);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

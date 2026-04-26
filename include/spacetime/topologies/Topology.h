@@ -19,10 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_TOPOLOGY_H
-#define CASET_TOPOLOGY_H
+#ifndef TESSERA_TOPOLOGY_H
+#define TESSERA_TOPOLOGY_H
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -60,6 +60,6 @@ class Topology {
     virtual void build(Spacetime *spacetime, int numSimplices) = 0;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_TOPOLOGY_H
+#endif //TESSERA_TOPOLOGY_H

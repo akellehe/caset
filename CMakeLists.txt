@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.18)
-option(CASET_CUDA "Build with CUDA GPU acceleration for the Regge solver" ON)
-if (DEFINED ENV{CASET_CUDA} AND NOT "$ENV{CASET_CUDA}" STREQUAL "")
-    set(CASET_CUDA $ENV{CASET_CUDA})
+option(TESSERA_CUDA "Build with CUDA GPU acceleration for the Regge solver" ON)
+if (DEFINED ENV{TESSERA_CUDA} AND NOT "$ENV{TESSERA_CUDA}" STREQUAL "")
+    set(TESSERA_CUDA $ENV{TESSERA_CUDA})
 endif()
 
-if (CASET_CUDA)
+if (TESSERA_CUDA)
     # Help CMake find nvcc at the standard /usr/local/cuda path
     if (NOT CMAKE_CUDA_COMPILER AND EXISTS "/usr/local/cuda/bin/nvcc")
         set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
@@ -12,42 +12,42 @@ if (CASET_CUDA)
     include(CheckLanguage)
     check_language(CUDA)
     if (CMAKE_CUDA_COMPILER)
-        project(caset LANGUAGES CXX CUDA)
+        project(tessera LANGUAGES CXX CUDA)
     else()
         message(WARNING "CUDA requested but nvcc not found — falling back to CPU.")
-        set(CASET_CUDA OFF)
-        project(caset LANGUAGES CXX)
+        set(TESSERA_CUDA OFF)
+        project(tessera LANGUAGES CXX)
     endif()
 else()
-    project(caset LANGUAGES CXX)
+    project(tessera LANGUAGES CXX)
 endif()
 
-option(CASET_ASAN "Build caset with AddressSanitizer/UBSan" $ENV{CASET_ASAN})
-if(NOT CASET_ASAN)
-    set(CASET_ASAN OFF)
+option(TESSERA_ASAN "Build tessera with AddressSanitizer/UBSan" $ENV{TESSERA_ASAN})
+if(NOT TESSERA_ASAN)
+    set(TESSERA_ASAN OFF)
 endif()
-option(CASET_VERBOSE "Build caset with C++ level logging" $ENV{CASET_VERBOSE})
-if(NOT CASET_VERBOSE)
-    set(CASET_VERBOSE OFF)
+option(TESSERA_VERBOSE "Build tessera with C++ level logging" $ENV{TESSERA_VERBOSE})
+if(NOT TESSERA_VERBOSE)
+    set(TESSERA_VERBOSE OFF)
 endif()
-option(CASET_ASSERTIONS "Build with assertions all over the place to encourage early failures." $ENV{CASET_ASSERTIONS})
-if (NOT CASET_ASSERTIONS)
-    set(CASET_ASSERTIONS OFF)
+option(TESSERA_ASSERTIONS "Build with assertions all over the place to encourage early failures." $ENV{TESSERA_ASSERTIONS})
+if (NOT TESSERA_ASSERTIONS)
+    set(TESSERA_ASSERTIONS OFF)
 endif()
-option(CASET_PROFILE "Build with -g -O1 to keep symbol names for stack traces" $ENV{CASET_PROFILE})
-if (NOT CASET_PROFILE)
-    set(CASET_PROFILE OFF)
+option(TESSERA_PROFILE "Build with -g -O1 to keep symbol names for stack traces" $ENV{TESSERA_PROFILE})
+if (NOT TESSERA_PROFILE)
+    set(TESSERA_PROFILE OFF)
 endif()
-option(CASET_QUANTUM "Build the Schwinger-model / MPS subsystem (requires BLAS+LAPACK)" $ENV{CASET_QUANTUM})
-if (NOT CASET_QUANTUM)
-    set(CASET_QUANTUM OFF)
+option(TESSERA_QUANTUM "Build the Schwinger-model / MPS subsystem (requires BLAS+LAPACK)" $ENV{TESSERA_QUANTUM})
+if (NOT TESSERA_QUANTUM)
+    set(TESSERA_QUANTUM OFF)
 endif()
 
 # ---- Read version from pyproject.toml ----
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
 string(REGEX MATCH "version = \"([0-9]+\\.[0-9]+\\.[0-9]+[^\"]*)" _ "${PYPROJECT_CONTENTS}")
-set(CASET_VERSION "${CMAKE_MATCH_1}")
-message(STATUS "caset version: ${CASET_VERSION}")
+set(TESSERA_VERSION "${CMAKE_MATCH_1}")
+message(STATUS "tessera version: ${TESSERA_VERSION}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,225 +69,225 @@ check_cxx_source_compiles("
 " HAVE_STD_OSYNCSTREAM)
 
 if (HAVE_STD_OSYNCSTREAM)
-    add_compile_definitions(CASET_HAS_OSYNCSTREAM=1)
+    add_compile_definitions(TESSERA_HAS_OSYNCSTREAM=1)
 else()
-    add_compile_definitions(CASET_HAS_OSYNCSTREAM=0)
+    add_compile_definitions(TESSERA_HAS_OSYNCSTREAM=0)
 endif()
 
 
 
 # ---- <Define source partitions> ------------------------------------------
 # Two libraries:
-#   caset_core  — pybind-free C++ implementation: mesh primitives,
+#   tessera_core  — pybind-free C++ implementation: mesh primitives,
 #                 spacetime, observables, Poset infrastructure, etc.
-#                 Linked into _caset and (when enabled) caset_quantum.
-#   caset_quantum (when CASET_QUANTUM=ON) — Schwinger / DMRG / TDVP code,
-#                 also pybind-free, links caset_core PUBLIC for shared
+#                 Linked into _tessera and (when enabled) tessera_quantum.
+#   tessera_quantum (when TESSERA_QUANTUM=ON) — Schwinger / DMRG / TDVP code,
+#                 also pybind-free, links tessera_core PUBLIC for shared
 #                 mesh / Poset types.
 # Plus a thin pybind11 module:
-#   _caset       — bindings.cpp + quantum/bindings.cpp; links the two libs.
-file(GLOB_RECURSE CASET_SOURCES
+#   _tessera       — bindings.cpp + quantum/bindings.cpp; links the two libs.
+file(GLOB_RECURSE TESSERA_SOURCES
         CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
 
-# Quantum lives in its own static lib; exclude its sources from caset_core.
-set(CASET_CORE_SOURCES ${CASET_SOURCES})
-list(FILTER CASET_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
-# bindings.cpp is the pybind11 entry point — goes into _caset, not caset_core.
-list(FILTER CASET_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
+# Quantum lives in its own static lib; exclude its sources from tessera_core.
+set(TESSERA_CORE_SOURCES ${TESSERA_SOURCES})
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+# bindings.cpp is the pybind11 entry point — goes into _tessera, not tessera_core.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
 
 # Sources for the pybind11 module. quantum bindings only when enabled.
-set(CASET_PYBIND_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp")
-if(CASET_QUANTUM)
-    list(APPEND CASET_PYBIND_SOURCES
+set(TESSERA_PYBIND_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp")
+if(TESSERA_QUANTUM)
+    list(APPEND TESSERA_PYBIND_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/bindings.cpp")
 endif()
 # ---- </Define source partitions> -----------------------------------------
 
 # ---- <Build CUDA kernels as static library> ----
-if (CASET_CUDA)
-    file(GLOB_RECURSE CASET_CUDA_SOURCES
+if (TESSERA_CUDA)
+    file(GLOB_RECURSE TESSERA_CUDA_SOURCES
             CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu"
     )
-    add_library(caset_cuda STATIC ${CASET_CUDA_SOURCES})
-    set_target_properties(caset_cuda PROPERTIES
+    add_library(tessera_cuda STATIC ${TESSERA_CUDA_SOURCES})
+    set_target_properties(tessera_cuda PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         POSITION_INDEPENDENT_CODE ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
     )
-    target_include_directories(caset_cuda PRIVATE
+    target_include_directories(tessera_cuda PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     find_package(CUDAToolkit REQUIRED)
-    target_link_libraries(caset_cuda PRIVATE CUDA::cudart)
+    target_link_libraries(tessera_cuda PRIVATE CUDA::cudart)
 endif()
 
-# ---- <caset_core static library> ----------------------------------------
+# ---- <tessera_core static library> ----------------------------------------
 # Holds all the C++ implementation that has no pybind dependency. Both
-# the Python module (_caset) and the optional caset_quantum library link
+# the Python module (_tessera) and the optional tessera_quantum library link
 # this so we don't compile the same .cpp's twice.
-add_library(caset_core STATIC ${CASET_CORE_SOURCES})
-target_include_directories(caset_core PUBLIC
+add_library(tessera_core STATIC ${TESSERA_CORE_SOURCES})
+target_include_directories(tessera_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(caset_core PUBLIC ZLIB::ZLIB)
-# caset_core is pybind-free: the binding code (which uses pybind11) lives
+target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB)
+# tessera_core is pybind-free: the binding code (which uses pybind11) lives
 # only in src/bindings.cpp and src/quantum/bindings.cpp, both compiled
-# directly into the _caset Python module. Earlier versions of caset had
+# directly into the _tessera Python module. Earlier versions of tessera had
 # stray `#include <pybind11/pybind11.h>` in mesh/spacetime headers that
-# served no purpose; those have been removed so caset_core no longer
-# needs Python at link time. Test executables linking caset_quantum →
-# caset_core get clean C++ symbols only.
-set_target_properties(caset_core PROPERTIES
+# served no purpose; those have been removed so tessera_core no longer
+# needs Python at link time. Test executables linking tessera_quantum →
+# tessera_core get clean C++ symbols only.
+set_target_properties(tessera_core PROPERTIES
     POSITION_INDEPENDENT_CODE ON
     CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON)
 
 # Compile definitions that must reach consumers (so #ifdef SOURCES_ROOT,
-# CASET_VERSION, CASET_VERBOSE, etc. work in the Python bindings TU and
+# TESSERA_VERSION, TESSERA_VERBOSE, etc. work in the Python bindings TU and
 # in test executables).
-target_compile_definitions(caset_core PUBLIC
+target_compile_definitions(tessera_core PUBLIC
     SOURCES_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
-    CASET_VERSION="${CASET_VERSION}")
+    TESSERA_VERSION="${TESSERA_VERSION}")
 
-if (CASET_CUDA)
+if (TESSERA_CUDA)
     message(STATUS "CUDA acceleration turned ON.")
-    target_compile_definitions(caset_core PUBLIC CASET_CUDA=1)
-    target_link_libraries(caset_core PUBLIC caset_cuda CUDA::cudart)
+    target_compile_definitions(tessera_core PUBLIC TESSERA_CUDA=1)
+    target_link_libraries(tessera_core PUBLIC tessera_cuda CUDA::cudart)
 else()
     message(STATUS "CUDA acceleration turned OFF.")
 endif()
 
-if(CASET_ASAN)
+if(TESSERA_ASAN)
     message(STATUS "ASAN/UBSAN support ON")
-    target_compile_options(caset_core PUBLIC
+    target_compile_options(tessera_core PUBLIC
             -O1 -g3
             -fno-omit-frame-pointer
             -fsanitize=address,undefined
             -fno-sanitize-recover=address,undefined
             -fno-optimize-sibling-calls)
-    target_link_options(caset_core PUBLIC
+    target_link_options(tessera_core PUBLIC
             -fsanitize=address,undefined)
-    target_compile_definitions(caset_core PUBLIC ASAN_ENABLED=1)
+    target_compile_definitions(tessera_core PUBLIC ASAN_ENABLED=1)
 else()
     message(STATUS "ASAN/UBSAN support OFF")
 endif()
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CASET_PROFILE)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR TESSERA_PROFILE)
     message(STATUS "DEBUGGING (-O1, -g3) Support ON.")
-    target_compile_options(caset_core PRIVATE
+    target_compile_options(tessera_core PRIVATE
         -O1 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "DEBUGGING (-O1, -g3) Support OFF, will use -O3.")
-    target_compile_options(caset_core PRIVATE -O3)
+    target_compile_options(tessera_core PRIVATE -O3)
 endif()
 
-if (CASET_VERBOSE)
+if (TESSERA_VERBOSE)
     message(STATUS "Logging turned ON.")
-    target_compile_definitions(caset_core PUBLIC CASET_VERBOSE=1)
+    target_compile_definitions(tessera_core PUBLIC TESSERA_VERBOSE=1)
 else()
     message(STATUS "Logging turned OFF.")
 endif()
 
-if (CASET_ASSERTIONS)
+if (TESSERA_ASSERTIONS)
     message(STATUS "Assertions turned ON.")
-    target_compile_definitions(caset_core PUBLIC CASET_ASSERTIONS=1)
+    target_compile_definitions(tessera_core PUBLIC TESSERA_ASSERTIONS=1)
 else()
     message(STATUS "Assertions turned OFF.")
 endif()
-# ---- </caset_core static library> --------------------------------------
+# ---- </tessera_core static library> --------------------------------------
 
 # ---- <Build the Python module> ----
-pybind11_add_module(_caset MODULE ${CASET_PYBIND_SOURCES})
-target_link_libraries(_caset PRIVATE caset_core)
+pybind11_add_module(_tessera MODULE ${TESSERA_PYBIND_SOURCES})
+target_link_libraries(_tessera PRIVATE tessera_core)
 
-set_target_properties(_caset PROPERTIES
+set_target_properties(_tessera PROPERTIES
         CXX_VISIBILITY_PRESET default
         VISIBILITY_INLINES_HIDDEN OFF)
 # ---- </Build the Python module> ----
 
-# Install the C extension inside the caset/ package directory
-install(TARGETS _caset
-        LIBRARY DESTINATION caset
-        RUNTIME DESTINATION caset
-        ARCHIVE DESTINATION caset
-        BUNDLE  DESTINATION caset
+# Install the C extension inside the tessera/ package directory
+install(TARGETS _tessera
+        LIBRARY DESTINATION tessera
+        RUNTIME DESTINATION tessera
+        ARCHIVE DESTINATION tessera
+        BUNDLE  DESTINATION tessera
 )
 
 # ---- <Quantum subsystem (ITensor + Schwinger MPO)> ----
-if(CASET_QUANTUM)
+if(TESSERA_QUANTUM)
     message(STATUS "Quantum subsystem turned ON (ITensor + DMRG).")
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildITensor.cmake)
-    caset_build_itensor()
+    tessera_build_itensor()
 
-    file(GLOB_RECURSE CASET_QUANTUM_SOURCES
+    file(GLOB_RECURSE TESSERA_QUANTUM_SOURCES
             CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/*.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/*.hpp")
-    # bindings.cpp uses pybind11 + Python.h and goes into _caset, not the
+    # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
     # pybind-free static lib.
-    list(FILTER CASET_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/bindings\\.cpp$")
-    add_library(caset_quantum STATIC ${CASET_QUANTUM_SOURCES})
-    target_include_directories(caset_quantum PUBLIC
+    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/bindings\\.cpp$")
+    add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
+    target_include_directories(tessera_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
     find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-    # PUBLIC link to caset_core: caset::Poset / Vertex / EdgeList live in
-    # caset_core, and quantum's Poset-using headers expose them in their
+    # PUBLIC link to tessera_core: tessera::Poset / Vertex / EdgeList live in
+    # tessera_core, and quantum's Poset-using headers expose them in their
     # public API. PUBLIC propagates symbols to test executables too.
-    target_link_libraries(caset_quantum PUBLIC itensor Eigen3::Eigen caset_core)
-    set_target_properties(caset_quantum PROPERTIES
+    target_link_libraries(tessera_quantum PUBLIC itensor Eigen3::Eigen tessera_core)
+    set_target_properties(tessera_quantum PROPERTIES
             POSITION_INDEPENDENT_CODE ON
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON)
 
     enable_testing()
-    file(GLOB CASET_QUANTUM_TESTS
+    file(GLOB TESSERA_QUANTUM_TESTS
             CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum/*.cpp")
-    foreach(_test_src ${CASET_QUANTUM_TESTS})
+    foreach(_test_src ${TESSERA_QUANTUM_TESTS})
         get_filename_component(_test_name "${_test_src}" NAME_WE)
         add_executable(${_test_name} "${_test_src}")
-        # caset_quantum PUBLIC-links caset_core, so tests get its symbols
-        # transitively without an explicit caset_core link here.
-        target_link_libraries(${_test_name} PRIVATE caset_quantum)
+        # tessera_quantum PUBLIC-links tessera_core, so tests get its symbols
+        # transitively without an explicit tessera_core link here.
+        target_link_libraries(${_test_name} PRIVATE tessera_quantum)
         set_target_properties(${_test_name} PROPERTIES
                 CXX_STANDARD 20
                 CXX_STANDARD_REQUIRED ON)
         add_test(NAME ${_test_name} COMMAND ${_test_name})
     endforeach()
 
-    # Wire the quantum bindings TU (added to CASET_PYBIND_SOURCES above)
-    # into _caset by linking against the implementation library and
-    # flipping the CASET_QUANTUM compile flag so src/bindings.cpp
+    # Wire the quantum bindings TU (added to TESSERA_PYBIND_SOURCES above)
+    # into _tessera by linking against the implementation library and
+    # flipping the TESSERA_QUANTUM compile flag so src/bindings.cpp
     # registers the `quantum` submodule.
-    target_link_libraries(_caset PRIVATE caset_quantum)
-    target_compile_definitions(_caset PRIVATE CASET_QUANTUM=1)
+    target_link_libraries(_tessera PRIVATE tessera_quantum)
+    target_compile_definitions(_tessera PRIVATE TESSERA_QUANTUM=1)
 else()
-    message(STATUS "Quantum subsystem turned OFF (set CASET_QUANTUM=1 to enable).")
+    message(STATUS "Quantum subsystem turned OFF (set TESSERA_QUANTUM=1 to enable).")
 endif()
 # ---- </Quantum subsystem> ----
 
-if(NOT CASET_ASAN)
-# --- Generate Python stubs for caset (.pyi) ---
+if(NOT TESSERA_ASAN)
+# --- Generate Python stubs for tessera (.pyi) ---
 set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
 
 add_custom_command(
-        TARGET _caset POST_BUILD
-        BYPRODUCTS "${STUB_OUT_DIR}/_caset.pyi"
+        TARGET _tessera POST_BUILD
+        BYPRODUCTS "${STUB_OUT_DIR}/_tessera.pyi"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${STUB_OUT_DIR}"
         # Make the just-built module importable:
         COMMAND ${Python_EXECUTABLE} -c
             "import pybind11_stubgen" && ${CMAKE_COMMAND} -E env
-            PYTHONPATH=$<TARGET_FILE_DIR:_caset>
-            ${Python_EXECUTABLE} -m pybind11_stubgen _caset -o "${STUB_OUT_DIR}"
-                --ignore-invalid-expressions="caset::.*"
+            PYTHONPATH=$<TARGET_FILE_DIR:_tessera>
+            ${Python_EXECUTABLE} -m pybind11_stubgen _tessera -o "${STUB_OUT_DIR}"
+                --ignore-invalid-expressions="tessera::.*"
             || ${CMAKE_COMMAND} -E echo "Warning: pybind11_stubgen not found, skipping stub generation"
-        COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/_caset.pyi"
+        COMMENT "Generating pybind11 stubs -> ${STUB_OUT_DIR}/_tessera.pyi"
 )
 
 # Install the stub next to the extension in the package
-install(FILES "${STUB_OUT_DIR}/_caset.pyi" DESTINATION caset OPTIONAL)
+install(FILES "${STUB_OUT_DIR}/_tessera.pyi" DESTINATION tessera OPTIONAL)
 endif()

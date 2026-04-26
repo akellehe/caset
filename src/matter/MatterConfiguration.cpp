@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace caset {
+namespace tessera {
 
 void MatterConfiguration::setWorldlineMass(VertexPtr center, double mass,
                                             const Spacetime &st) {
@@ -178,4 +178,4 @@ void MatterConfiguration::setRadialProfile(
     radialProfiles_.push_back({center, std::move(rhoOfR)});
 }
 
-} // namespace caset
+} // namespace tessera

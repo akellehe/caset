@@ -1,4 +1,4 @@
-// Implementation of caset::Poset / OrderAgreement / compareOrders. See
+// Implementation of tessera::Poset / OrderAgreement / compareOrders. See
 // include/Poset.h for the design.
 
 #include "Poset.h"
@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 
 namespace {
 
@@ -138,7 +138,7 @@ std::string Poset::toDot() const {
 
 Poset Poset::fromSpacetime(Spacetime const& st) {
     // Phase 6 (docs/source/quantum-plan.md §6) — inherit a partial order
-    // from a caset::Spacetime by treating each timelike edge as a strict
+    // from a tessera::Spacetime by treating each timelike edge as a strict
     // precedes-relation oriented earliest-time → latest-time, then
     // transitively reducing the resulting DAG to its Hasse covers.
     //
@@ -305,4 +305,4 @@ OrderAgreement compareOrders(Poset const& a, Poset const& b, int nLabels) {
     return out;
 }
 
-} // namespace caset
+} // namespace tessera

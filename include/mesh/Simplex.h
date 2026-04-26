@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_SIMPLEX_H
-#define CASET_SIMPLEX_H
+#ifndef TESSERA_SIMPLEX_H
+#define TESSERA_SIMPLEX_H
 
 #include "mesh/ForwardDeclarations.h"
 #include <memory>
@@ -33,7 +33,7 @@
 #include "mesh/SimplexOrientation.h"
 #include "utils.h"
 
-namespace caset {
+namespace tessera {
 
 /// # Simplex Class
 ///
@@ -74,7 +74,7 @@ class Simplex {
     void initialize(Simplex* simplex);
 
     // ==================== String Representation ====================
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
     std::string toString() const noexcept;
 #else
     std::string toString() const noexcept {
@@ -290,7 +290,7 @@ class Simplex {
     std::uint32_t poolSlot_{UINT32_MAX};  // index in Spacetime::simplexPool_
     std::uint32_t topVecIdx_{UINT32_MAX}; // index in Spacetime::topSimplicesVec
 
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     OwnershipManager<IdType, SimplexPtr, SimplexPtrHash, SimplexPtrEq> ownershipManager{};
 #endif
 
@@ -375,4 +375,4 @@ class Simplex {
 
 }
 
-#endif //CASET_SIMPLEX_H
+#endif //TESSERA_SIMPLEX_H

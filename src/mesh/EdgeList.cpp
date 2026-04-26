@@ -2,7 +2,7 @@
 #include "mesh/EdgeList.h"
 #include "mesh/Vertex.h"
 
-namespace caset {
+namespace tessera {
 
 std::uint32_t EdgeList::allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength) {
   std::uint32_t slot;
@@ -100,4 +100,4 @@ void EdgeList::reserve(std::size_t nSimplices) {
   fpToSlot_.reserve(nSimplices);
 }
 
-} // caset
+} // tessera

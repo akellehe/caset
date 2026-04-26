@@ -23,15 +23,15 @@
 // Created by Andrew Kelleher on 12/21/25.
 //
 
-#ifndef CASET_FOLIATION_H
-#define CASET_FOLIATION_H
+#ifndef TESSERA_FOLIATION_H
+#define TESSERA_FOLIATION_H
 #include <cstdint>
 
-namespace caset {
+namespace tessera {
 enum class Foliation : std::uint8_t {
   NONE = 0,
   PREFERRED = 1
 };
-} // caset
+} // tessera
 
-#endif //CASET_FOLIATION_H
+#endif //TESSERA_FOLIATION_H

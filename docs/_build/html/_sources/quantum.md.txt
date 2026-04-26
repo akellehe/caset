@@ -1,13 +1,13 @@
 # Quantum subsystem (Schwinger MPS / DMRG)
 
-The `caset.quantum` subpackage extends caset with a tensor-network
+The `tessera.quantum` subpackage extends tessera with a tensor-network
 treatment of the 1+1D Kogut-Susskind Schwinger model — the simplest
 non-trivial gauge theory and a standard benchmark for lattice tensor-
 network methods. It implements the staged plan in
 `docs/source/quantum-plan.md`. As of this writing Phases 0-5 are
 complete (scaffolding, MPO + DMRG ground states, Python bindings,
 Schmidt spectra + majorization poset, q-qbar quench + 2-site TDVP,
-causal-order comparison); Phase 6 (caset-embedded chain) and
+causal-order comparison); Phase 6 (tessera-embedded chain) and
 Phase 7 (MERA / KAK / EML, research) remain.
 
 This page is the **user-facing** reference: how to build the subsystem,
@@ -29,18 +29,18 @@ out — no MPS or MPO objects cross the language barrier.
 ## Build
 
 The quantum subsystem is opt-in via a CMake flag. Default builds of
-caset are unaffected:
+tessera are unaffected:
 
 ```bash
 # Full build with quantum support:
-CASET_QUANTUM=1 pip install -e ".[dev]"
+TESSERA_QUANTUM=1 pip install -e ".[dev]"
 
 # Or for raw cmake:
-cmake -S . -B build -DCASET_QUANTUM=ON
+cmake -S . -B build -DTESSERA_QUANTUM=ON
 cmake --build build
 ```
 
-Importing `caset.quantum` from a build without the flag raises a
+Importing `tessera.quantum` from a build without the flag raises a
 clear `ImportError` with the rebuild instruction.
 
 ## Hamiltonian
@@ -75,7 +75,7 @@ at fixed $m/g$.
 ## Quickstart
 
 ```python
-from caset.quantum import QuantumConfig, computeGroundState
+from tessera.quantum import QuantumConfig, computeGroundState
 
 cfg = QuantumConfig()
 cfg.N = 20            # 1-based, even
@@ -146,7 +146,7 @@ The majorization predicate and poset constructor are exposed as pure
 functions on plain Python lists:
 
 ```python
-from caset.quantum import majorizes, strictlyMajorizes, majorizationPoset
+from tessera.quantum import majorizes, strictlyMajorizes, majorizationPoset
 
 assert majorizes([1.0, 0.0], [0.5, 0.5])      # (1, 0) ≻ (½, ½)
 assert not majorizes([0.5, 0.5], [1.0, 0.0])  # not the other way
@@ -168,7 +168,7 @@ contiguous-cut Schmidt spectrum, and builds the majorization poset in
 one call:
 
 ```python
-from caset.quantum import QuantumConfig, computeGroundStateMajorization
+from tessera.quantum import QuantumConfig, computeGroundStateMajorization
 
 cfg = QuantumConfig()
 cfg.N = 10; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
@@ -254,7 +254,7 @@ The `runQqbarQuench(config)` Python function runs the full
 DMRG → quench → TDVP loop in a single C++ call:
 
 ```python
-from caset.quantum import TDVPConfig, runQqbarQuench
+from tessera.quantum import TDVPConfig, runQqbarQuench
 
 cfg = TDVPConfig()
 cfg.N = 14; cfg.a = 1.0; cfg.g = 1.0
@@ -341,7 +341,7 @@ fraction, and the Hasse-graph edit distance.
 ### End-to-end pipeline
 
 ```python
-from caset.quantum import TDVPConfig, computeCausalComparison
+from tessera.quantum import TDVPConfig, computeCausalComparison
 
 cfg = TDVPConfig()
 cfg.N = 12; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.5; cfg.L0 = 0.0
@@ -394,23 +394,23 @@ Key invariant: ``lrVsCs.kendallTau = 1.0`` exactly (≼_LR is a strict
 subset of ≼_cs by construction). Any deviation flags an implementation
 bug.
 
-## Phase 6 — caset-Spacetime → causet-embedded chain
+## Phase 6 — tessera-Spacetime → causet-embedded chain
 
 Phase 6 (`docs/source/quantum-plan.md` §6) replaces the regular 1D
 lattice with a "chain of antichains" sourced from a
-:class:`caset.Spacetime`. Two pieces of that integration have landed
+:class:`tessera.Spacetime`. Two pieces of that integration have landed
 and are usable from Python today:
 
 1. **Inherited Hasse-cover Poset on the Spacetime vertex set**
-   — :meth:`caset.quantum.Poset.fromSpacetime` walks every timelike
+   — :meth:`tessera.quantum.Poset.fromSpacetime` walks every timelike
    edge in the Spacetime (an edge whose ``squaredLength < 0``),
    orients it earliest-time → latest-time, transitively closes the
    resulting DAG, and emits the cover edges (transitive reduction)
-   as a :class:`caset.quantum.Poset`. This is the natural "≼_cs" of
+   as a :class:`tessera.quantum.Poset`. This is the natural "≼_cs" of
    Phase 5 promoted to a non-trivial within-time-slice structure.
 
 2. **Chain-of-antichains adapter**
-   — :func:`caset.quantum.extractCausetChain` walks the Spacetime,
+   — :func:`tessera.quantum.extractCausetChain` walks the Spacetime,
    groups vertices by integer time slice (`Vertex.getTime()`
    truncated to int), and packages four pieces of data:
 
@@ -427,13 +427,13 @@ and are usable from Python today:
      ``Poset.fromSpacetime(spacetime)`` modulo the dense remap.
 
 ```python
-import caset
-from caset.quantum import extractCausetChain, Poset
+import tessera
+from tessera.quantum import extractCausetChain, Poset
 
 # Tiny CDT spacetime as a stand-in for a causet — same APIs apply.
-metric = caset.Metric(True, caset.Signature(4, caset.Lorentzian))
-st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
-                     caset.PREFERRED, caset.Toroid())
+metric = tessera.Metric(True, tessera.Signature(4, tessera.Lorentzian))
+st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                     tessera.PREFERRED, tessera.Toroid())
 st.build(20)
 
 chain = extractCausetChain(st)
@@ -471,7 +471,7 @@ which makes the inherited causet structure straightforward to plot::
 
 Cover edges run from earlier-time vertex to later-time vertex (the
 strict-precedes direction); the diagram should layer cleanly when
-the underlying foliation is :data:`caset.PREFERRED`.
+the underlying foliation is :data:`tessera.PREFERRED`.
 
 ## Tested benchmarks
 
@@ -506,7 +506,7 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 ## API reference
 
 ```{eval-rst}
-.. automodule:: caset.quantum
+.. automodule:: tessera.quantum
     :members:
     :undoc-members:
     :show-inheritance:

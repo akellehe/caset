@@ -23,8 +23,8 @@
 // Created by andrew on 12/12/25.
 //
 
-#ifndef CASET_EDGEKEY_H
-#define CASET_EDGEKEY_H
+#ifndef TESSERA_EDGEKEY_H
+#define TESSERA_EDGEKEY_H
 
 #include "mesh/ForwardDeclarations.h"
 #include <unordered_set>
@@ -33,7 +33,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace caset {
+namespace tessera {
 class EdgeKey {
   public:
     IdType first{0};
@@ -44,7 +44,7 @@ class EdgeKey {
     bool operator==(const EdgeKey &other) const;
 
     [[nodiscard]] std::uint64_t hash() const;
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
     std::string toString() const noexcept;
 #else
     std::string toString() const noexcept;
@@ -53,6 +53,6 @@ class EdgeKey {
 
     Fingerprint fingerprint;
 };
-} // caset
+} // tessera
 
-#endif //CASET_EDGEKEY_H
+#endif //TESSERA_EDGEKEY_H

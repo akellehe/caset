@@ -56,13 +56,13 @@ import sys
 from typing import Iterable
 
 try:
-    from caset.quantum import (
+    from tessera.quantum import (
         QuantumConfig,
         computeGroundStateMajorization,
     )
 except ImportError as e:
-    print(f"caset.quantum unavailable: {e}", file=sys.stderr)
-    print("\nRebuild with: CASET_QUANTUM=1 pip install -e .", file=sys.stderr)
+    print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
+    print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
     sys.exit(1)
 
 

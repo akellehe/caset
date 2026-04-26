@@ -4,8 +4,8 @@
 build
 build-quantum
 cmake-build-debug
-caset.cpython-313-darwin.so
-caset/_caset*.so
+tessera.cpython-313-darwin.so
+tessera/_tessera*.so
 dist
 docs/_doxygen
 vendor/libtorch*

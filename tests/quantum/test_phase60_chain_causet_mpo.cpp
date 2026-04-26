@@ -41,7 +41,7 @@
 #include <utility>
 #include <vector>
 
-using namespace caset::quantum;
+using namespace tessera::quantum;
 using itensor::dmrg;
 using itensor::Sweeps;
 using itensor::MPS;
@@ -119,11 +119,11 @@ bool acceptance_spacetime_chain_extraction() {
 
     // Build a 1D chain spacetime: each time slice has one vertex,
     // linked to the next by a timelike edge. Mimics what a properly-
-    // built `caset::CausalSet` chain would produce. Use 8 slices for
+    // built `tessera::CausalSet` chain would produce. Use 8 slices for
     // N=8 lattice sites total.
     constexpr int N = 8;
-    caset::Spacetime st;
-    std::vector<caset::VertexPtr> verts;
+    tessera::Spacetime st;
+    std::vector<tessera::VertexPtr> verts;
     verts.reserve(static_cast<std::size_t>(N));
     for (int t = 0; t < N; ++t) {
         verts.push_back(st.createVertex(static_cast<std::uint64_t>(t),
@@ -135,7 +135,7 @@ bool acceptance_spacetime_chain_extraction() {
                       -1.0);   // squaredLength < 0 ⇒ timelike
     }
 
-    auto chain = caset::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::extractCausetChain(st);
     if (chain.nSites != N) {
         std::cout << "  FAIL: chain.nSites=" << chain.nSites
                   << " expected " << N << "\n";

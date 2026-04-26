@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diagnose CUDA setup for caset.
+"""Diagnose CUDA setup for tessera.
 
 Checks whether CUDA is installed and configured correctly for CMake's
 find_package(CUDAToolkit) to work.  Suggests fixes for common problems.
@@ -131,7 +131,7 @@ def check_cmake_finds_cuda():
 
 
 def main():
-    print(f"{BOLD}caset CUDA Diagnostic{RESET}")
+    print(f"{BOLD}tessera CUDA Diagnostic{RESET}")
     print("=" * 50)
     issues = []
     fixes = []
@@ -241,7 +241,7 @@ def main():
     header("Summary")
     if not issues:
         print(f"\n  {GREEN}{BOLD}Everything looks good!{RESET}")
-        print("  caset should build with CUDA support (CASET_CUDA=ON).\n")
+        print("  tessera should build with CUDA support (TESSERA_CUDA=ON).\n")
     else:
         print(f"\n  {RED}{BOLD}Found {len(issues)} issue(s):{RESET}")
         for i, issue in enumerate(issues, 1):

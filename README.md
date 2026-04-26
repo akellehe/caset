@@ -1,15 +1,15 @@
-# caset
+# tessera
 
-[![Build & Deploy Docs](https://github.com/akellehe/caset/actions/workflows/pages.yml/badge.svg)](https://github.com/akellehe/caset/actions/workflows/pages.yml)
-[![Deploy static content](https://github.com/akellehe/caset/actions/workflows/static.yml/badge.svg)](https://github.com/akellehe/caset/actions/workflows/static.yml)
+[![Build & Deploy Docs](https://github.com/akellehe/tessera/actions/workflows/pages.yml/badge.svg)](https://github.com/akellehe/tessera/actions/workflows/pages.yml)
+[![Deploy static content](https://github.com/akellehe/tessera/actions/workflows/static.yml/badge.svg)](https://github.com/akellehe/tessera/actions/workflows/static.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**[Documentation](https://akellehe.github.io/caset/)**
+**[Documentation](https://akellehe.github.io/tessera/)**
 
 A computational test bed for non-perturbative quantum gravity. Build triangulated spacetimes, run Monte Carlo simulations, solve the discrete Einstein equations, and visualize the results -- all from Python, with C++/CUDA under the hood.
 
-caset supports multiple approaches to quantum gravity on the same simplicial mesh infrastructure:
+tessera supports multiple approaches to quantum gravity on the same simplicial mesh infrastructure:
 
 - **Causal Dynamical Triangulations (CDT)** -- Monte Carlo path integral over geometries with a causal foliation
 - **Regge Calculus** -- discrete general relativity via deficit angles and edge-length dynamics
@@ -26,30 +26,30 @@ pip install -e ".[dev]"
 Verify:
 
 ```bash
-python -c "import caset; print('caset OK')"
+python -c "import tessera; print('tessera OK')"
 ```
 
-CUDA GPU acceleration is auto-detected. To force it off: `CASET_CUDA=0 pip install -e .`
+CUDA GPU acceleration is auto-detected. To force it off: `TESSERA_CUDA=0 pip install -e .`
 
 ## Quick start
 
 Build a 4D Lorentzian spacetime, thermalize it with CDT, and export a rotating GIF:
 
 ```python
-import caset
+import tessera
 
-metric = caset.Metric(
+metric = tessera.Metric(
     coordinateFree=True,
-    signature=caset.Signature(dimensions=4, signature_type=caset.Lorentzian),
+    signature=tessera.Signature(dimensions=4, signature_type=tessera.Lorentzian),
 )
-st = caset.Spacetime(
-    metric=metric, spacetimeType=caset.CDT,
+st = tessera.Spacetime(
+    metric=metric, spacetimeType=tessera.CDT,
     alpha=1.0, a=1.0,
-    foliation=caset.PREFERRED, topology=caset.Toroid(),
+    foliation=tessera.PREFERRED, topology=tessera.Toroid(),
 )
 st.build(500)
 
-cdt = caset.CDTSimulation(
+cdt = tessera.CDTSimulation(
     spacetime=st, k0=2.2, k4=0.5, delta=0.6,
     epsilon=0.02, targetN41=st.getN41(),
 )
@@ -83,10 +83,10 @@ python examples/volume_profile_phases.py # visualize blob/crumpled/polymer shape
 Solve the discrete Einstein equations by minimizing the Regge action gradient. Add point-mass matter via the proper-time action and watch curvature concentrate around the source.
 
 ```python
-matter = caset.MatterConfiguration()
+matter = tessera.MatterConfiguration()
 matter.setWorldlineMass(center_vertex, mass=1.0, spacetime=st)
 
-solver = caset.ReggeSolver(st, matter)
+solver = tessera.ReggeSolver(st, matter)
 converged, F, iters = solver.solve(tol=1e-8, max_iters=5000)
 ```
 
@@ -118,25 +118,25 @@ Each script includes the paper's coupling constants (k_0=2.2, delta=0.6) and pri
 Three spatial topologies for the foliated slices. Just swap the last argument to the `Spacetime` constructor:
 
 ```python
-metric = caset.Metric(
+metric = tessera.Metric(
     coordinateFree=True,
-    signature=caset.Signature(dimensions=4, signature_type=caset.Lorentzian),
+    signature=tessera.Signature(dimensions=4, signature_type=tessera.Lorentzian),
 )
 
 # Toroid (T^3 x S^1) -- periodic in space and time, default
-st = caset.Spacetime(metric=metric, spacetimeType=caset.CDT,
-                     alpha=1.0, a=1.0, foliation=caset.PREFERRED,
-                     topology=caset.Toroid())
+st = tessera.Spacetime(metric=metric, spacetimeType=tessera.CDT,
+                     alpha=1.0, a=1.0, foliation=tessera.PREFERRED,
+                     topology=tessera.Toroid())
 
 # Sphere (S^3 x S^1) -- natural for de Sitter cosmology
-st = caset.Spacetime(metric=metric, spacetimeType=caset.CDT,
-                     alpha=1.0, a=1.0, foliation=caset.PREFERRED,
-                     topology=caset.Sphere())
+st = tessera.Spacetime(metric=metric, spacetimeType=tessera.CDT,
+                     alpha=1.0, a=1.0, foliation=tessera.PREFERRED,
+                     topology=tessera.Sphere())
 
 # Cylinder (Sigma x [0,T]) -- open time boundaries for transition amplitudes
-st = caset.Spacetime(metric=metric, spacetimeType=caset.CDT,
-                     alpha=1.0, a=1.0, foliation=caset.PREFERRED,
-                     topology=caset.Cylinder())
+st = tessera.Spacetime(metric=metric, spacetimeType=tessera.CDT,
+                     alpha=1.0, a=1.0, foliation=tessera.PREFERRED,
+                     topology=tessera.Cylinder())
 ```
 
 ### Visualization
@@ -170,10 +170,10 @@ pytest tests/ -v
 Build options via environment variables:
 
 ```bash
-CASET_CUDA=0       pip install -e .     # CPU-only build
-CASET_ASAN=1       pytest tests/        # AddressSanitizer + UBSan
-CASET_VERBOSE=1    pytest tests/        # C++ logging
-CASET_ASSERTIONS=1 pytest tests/        # extra invariant checks
+TESSERA_CUDA=0       pip install -e .     # CPU-only build
+TESSERA_ASAN=1       pytest tests/        # AddressSanitizer + UBSan
+TESSERA_VERBOSE=1    pytest tests/        # C++ logging
+TESSERA_ASSERTIONS=1 pytest tests/        # extra invariant checks
 ```
 
 ## Building documentation

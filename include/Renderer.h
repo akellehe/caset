@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -33,4 +33,4 @@ void renderSpacetime(const Spacetime &st, const std::string &path,
                      int precession = 1, int nFrames = 36,
                      int delayCentiseconds = 15);
 
-} // namespace caset
+} // namespace tessera

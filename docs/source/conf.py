@@ -31,8 +31,8 @@ with open(REPO_ROOT / "pyproject.toml", "rb") as f:
 version = _pyproject["project"]["version"]
 release = version
 
-project = "caset"
-author = "caset contributors"
+project = "tessera"
+author = "tessera contributors"
 
 extensions = [
     "myst_parser",
@@ -66,8 +66,8 @@ mathjax3_config = {
     }
 }
 
-breathe_projects = {"caset": str((pathlib.Path(__file__).parent.parent / "_doxygen" / "xml").resolve())}
-breathe_default_project = "caset"
+breathe_projects = {"tessera": str((pathlib.Path(__file__).parent.parent / "_doxygen" / "xml").resolve())}
+breathe_default_project = "tessera"
 
 templates_path = ["_templates"]
 exclude_patterns = []

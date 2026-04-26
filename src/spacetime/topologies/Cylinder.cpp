@@ -8,7 +8,7 @@
 #include <deque>
 #include <cmath>
 
-namespace caset {
+namespace tessera {
 void Cylinder::build(Spacetime *spacetime, int nSimplices) {
   auto dimensions = spacetime->getMetric()->getSignature()->getDimensions();
   SimplexOrientation orientation{1, static_cast<std::uint8_t>(dimensions)};

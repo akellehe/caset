@@ -73,10 +73,10 @@ import math
 import sys
 
 try:
-    from caset.quantum import TDVPConfig, runQqbarQuench
+    from tessera.quantum import TDVPConfig, runQqbarQuench
 except ImportError as e:
-    print(f"caset.quantum unavailable: {e}", file=sys.stderr)
-    print("\nRebuild with: CASET_QUANTUM=1 pip install -e .", file=sys.stderr)
+    print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
+    print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
     sys.exit(1)
 
 

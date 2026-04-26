@@ -21,10 +21,10 @@
 
 #include "observables/Observable.h"
 
-namespace caset {
+namespace tessera {
 
 double Observable::compute(const std::shared_ptr<Spacetime> &spacetime) { return 0.0; }
 double Observable::update(const std::shared_ptr<Spacetime> &spacetime) { return 0.0; }
 
-} // caset
+} // tessera
 

@@ -8,7 +8,7 @@
 #include <cmath>
 #include <numeric>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -94,4 +94,4 @@ Poset majorizationPoset(std::vector<std::vector<double>> const& spectra,
     return out;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

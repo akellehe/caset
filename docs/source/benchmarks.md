@@ -1,7 +1,7 @@
 # Benchmarks
 
 ```{note}
-Results on this page were generated with **caset {{version}}**.
+Results on this page were generated with **tessera {{version}}**.
 The benchmark JSON log records the exact version, platform, and Python
 version for each run so results can be compared across releases.
 ```

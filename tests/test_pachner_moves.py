@@ -15,19 +15,19 @@ References:
 """
 
 import unittest
-import caset
+import tessera
 import numpy as np
 
 
 def _make_cdt(n_simplices=200, k0=2.2, delta=0.6, epsilon=0.02):
     """Build spacetime + CDT."""
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(n_simplices)
     target = st.getN41()
-    cdt = caset.CDTSimulation(st, k0, 0.5, delta, epsilon, target)
+    cdt = tessera.CDTSimulation(st, k0, 0.5, delta, epsilon, target)
     return cdt, st
 
 
@@ -362,7 +362,7 @@ class TestActionConsistency(unittest.TestCase):
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.02
         cdt, st = _make_cdt(n_simplices=100)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target)
+        cdt = tessera.CDTSimulation(st, k0, k4, delta, eps, target)
 
         action = cdt.computeAction()
 
@@ -382,7 +382,7 @@ class TestActionConsistency(unittest.TestCase):
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.02
         cdt, st = _make_cdt(n_simplices=100)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target)
+        cdt = tessera.CDTSimulation(st, k0, k4, delta, eps, target)
         cdt.tune()
         k4 = cdt.getK4()  # tune changes k4
         cdt.sweep(50)
@@ -413,7 +413,7 @@ class TestSimplexOrientation(unittest.TestCase):
         Stores the Spacetime on self to keep it alive — the simplex
         holds raw pointers to vertices/edges owned by the Spacetime.
         """
-        self._st = caset.Spacetime()
+        self._st = tessera.Spacetime()
         verts = []
         for i, t in enumerate(times):
             v = self._st.createVertex(i, [float(t)])
@@ -467,10 +467,10 @@ class TestSimplexOrientation(unittest.TestCase):
     def test_facet_count_in_4simplex(self):
         """A 4-simplex should have C(5,4) = 5 facets (3-simplices)."""
         # Use a full spacetime (not bare) so getFacets() can create sub-simplices
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
-                             caset.PREFERRED, caset.Toroid())
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                             tessera.PREFERRED, tessera.Toroid())
         st.build(5)
         # Get any top simplex
         for s in st.getSimplices():

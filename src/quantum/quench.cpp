@@ -7,7 +7,7 @@
 
 #include <stdexcept>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 itensor::MPS applyQqbarQuench(itensor::MPS const& psi_in,
                                 itensor::SpinHalf const& sites,
@@ -60,4 +60,4 @@ itensor::MPS applyQqbarQuench(itensor::MPS const& psi_in,
     return psi;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

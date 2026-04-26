@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_SPACETIME_H
-#define CASET_SPACETIME_H
+#ifndef TESSERA_SPACETIME_H
+#define TESSERA_SPACETIME_H
 
 #include <memory>
 #include <optional>
@@ -40,7 +40,7 @@
 #include "mesh/Simplex.h"
 #include "mesh/FlatHashMap.h"
 
-namespace caset {
+namespace tessera {
 enum class SpacetimeType : uint8_t {
   CDT = 0,
   REGGE = 1,
@@ -409,6 +409,6 @@ class Spacetime {
 
     std::vector<std::shared_ptr<Observable> > observables{};
 };
-} // caset
+} // tessera
 
-#endif //CASET_SPACETIME_H
+#endif //TESSERA_SPACETIME_H

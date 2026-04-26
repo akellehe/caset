@@ -1,5 +1,5 @@
 """Phase 2 acceptance: re-run Phase 1's small-N cases through the
-caset.quantum.computeGroundState Python API and confirm the energies
+tessera.quantum.computeGroundState Python API and confirm the energies
 match the C++-side numbers (PLAN.md §5 Phase 2: "re-runs Phase 1 with the
 wrapper; numerics unchanged").
 
@@ -9,7 +9,7 @@ which were themselves cross-checked against dense Eigen ED to 1e-8 — so
 agreeing with these values is equivalent to passing the original Phase 1
 acceptance via the Python boundary.
 
-Skips cleanly if caset.quantum isn't available (CASET_QUANTUM=0 build).
+Skips cleanly if tessera.quantum isn't available (TESSERA_QUANTUM=0 build).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from __future__ import annotations
 import unittest
 
 try:
-    from caset.quantum import QuantumConfig, computeGroundState
+    from tessera.quantum import QuantumConfig, computeGroundState
     HAVE_QUANTUM = True
 except ImportError:
     HAVE_QUANTUM = False
@@ -43,7 +43,7 @@ PHASE1_REFERENCE = {
 }
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestComputeGroundState(unittest.TestCase):
     def test_phase1_reference_match(self) -> None:
         """Each (N, m/g, L0) in the Phase 1 sweep matches its reference

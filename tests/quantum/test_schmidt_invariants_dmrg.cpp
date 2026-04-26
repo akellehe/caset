@@ -40,7 +40,7 @@
 #include <numeric>
 #include <vector>
 
-using namespace caset::quantum;
+using namespace tessera::quantum;
 
 namespace {
 

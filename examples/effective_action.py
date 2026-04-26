@@ -65,9 +65,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay, SingleTaskProgress, make_tune_cb
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import ProgressDisplay, SingleTaskProgress, make_tune_cb
 
 
 def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
@@ -81,14 +81,14 @@ def _collect_worker(worker_id, n_simplices, n_therm, n_meas, interval,
     _ph = lambda p, done=0, total=0: phase_cb(worker_id, p, done, total) if phase_cb else None
 
     _ph("building")
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
     st.build(min(n_simplices, max_build))
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
     cdt.tune(progress=make_tune_cb(phase_cb, worker_id))
@@ -319,13 +319,13 @@ def main():
     # de Sitter, then track action evolution in equilibrium.
     ax_action = axes[1, 1]
 
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(args.n_simplices)
     target = st.getN41()  # [RU] eq. 6: volume-fix targets N41
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     n_track = max(100, args.n_therm * 2)
     actions = []

@@ -1,5 +1,5 @@
-// Phase 6 acceptance tests for caset::quantum::extractCausetChain
-// (docs/source/quantum-plan.md §6 — caset-embedded Schwinger lattice
+// Phase 6 acceptance tests for tessera::quantum::extractCausetChain
+// (docs/source/quantum-plan.md §6 — tessera-embedded Schwinger lattice
 // extraction).
 //
 // These tests exercise:
@@ -38,7 +38,7 @@
 
 namespace {
 
-caset::VertexPtr make_vertex(caset::Spacetime& st, std::uint64_t id, int t) {
+tessera::VertexPtr make_vertex(tessera::Spacetime& st, std::uint64_t id, int t) {
     return st.createVertex(id, std::vector<double>{static_cast<double>(t)});
 }
 
@@ -52,7 +52,7 @@ bool pairs_equal(std::vector<std::pair<int, int>> got,
 bool acceptance_trivial_chain() {
     std::cout << "Acceptance #1 — N=4 trivial chain → uniform 1D lattice\n";
 
-    caset::Spacetime st;
+    tessera::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 2);
@@ -61,7 +61,7 @@ bool acceptance_trivial_chain() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v2, v3, -1.0);
 
-    auto chain = caset::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::extractCausetChain(st);
 
     const std::vector<std::pair<int, int>> want_hops{
         {0, 1}, {1, 2}, {2, 3}
@@ -84,14 +84,14 @@ bool acceptance_trivial_chain() {
 bool acceptance_branching_antichain() {
     std::cout << "Acceptance #2 — branching causet (1 root, 2 leaves)\n";
 
-    caset::Spacetime st;
+    tessera::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 1);
     st.createEdge(v0, v1, -1.0);
     st.createEdge(v0, v2, -1.0);
 
-    auto chain = caset::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::extractCausetChain(st);
 
     bool ok = true;
     ok &= (chain.nSites == 3);
@@ -119,8 +119,8 @@ bool acceptance_branching_antichain() {
 bool acceptance_empty_spacetime() {
     std::cout << "Acceptance #3 — empty Spacetime → empty CausetChain\n";
 
-    caset::Spacetime st;
-    auto chain = caset::quantum::extractCausetChain(st);
+    tessera::Spacetime st;
+    auto chain = tessera::quantum::extractCausetChain(st);
 
     bool ok = (chain.nSites == 0)
             && chain.times.empty()
@@ -138,14 +138,14 @@ bool acceptance_empty_spacetime() {
 bool acceptance_sparse_ids() {
     std::cout << "Acceptance #4 — sparse Spacetime IDs → dense flat indices\n";
 
-    caset::Spacetime st;
+    tessera::Spacetime st;
     auto va = make_vertex(st, 7,  0);
     auto vb = make_vertex(st, 11, 1);
     auto vc = make_vertex(st, 19, 2);
     st.createEdge(va, vb, -1.0);
     st.createEdge(vb, vc, -1.0);
 
-    auto chain = caset::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::extractCausetChain(st);
 
     // Sorted ascending IDs: 7 → site 0, 11 → site 1, 19 → site 2.
     bool ok = true;
@@ -168,7 +168,7 @@ bool acceptance_sparse_ids() {
 bool acceptance_skipping_edge_dropped() {
     std::cout << "Acceptance #5 — skipping (t=0 → t=2) timelike edge dropped\n";
 
-    caset::Spacetime st;
+    tessera::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 2);
@@ -176,7 +176,7 @@ bool acceptance_skipping_edge_dropped() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v0, v2, -1.0);  // skips t=1 — should NOT be a hop
 
-    auto chain = caset::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::extractCausetChain(st);
 
     const std::vector<std::pair<int, int>> want_hops{{0, 1}, {1, 2}};
     bool ok = pairs_equal(chain.hoppingPairs, want_hops);

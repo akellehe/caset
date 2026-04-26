@@ -50,7 +50,7 @@
 
 #include <itensor/all.h>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Apply the q-qbar quench operator σ⁻_{i0} σ⁺_{i0+d} to a normalized
 // MPS, return a fresh normalized MPS in the same SiteSet.
@@ -65,4 +65,4 @@ itensor::MPS applyQqbarQuench(itensor::MPS const& psi,
                                 int d,
                                 bool enforce_parity = true);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

@@ -23,8 +23,8 @@
 // Created by andrew on 12/17/25.
 //
 
-#ifndef CASET_UTILS_H
-#define CASET_UTILS_H
+#ifndef TESSERA_UTILS_H
+#define TESSERA_UTILS_H
 
 #include <unordered_map>
 #include <clocale>
@@ -322,4 +322,4 @@ class OwnershipManager {
     }
 };
 
-#endif //CASET_UTILS_H
+#endif //TESSERA_UTILS_H

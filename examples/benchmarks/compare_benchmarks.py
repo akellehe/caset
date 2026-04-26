@@ -212,12 +212,12 @@ def main():
 
     # --- 4-panel comparison figure ---
     fig, axes = plt.subplots(2, 2, figsize=(16, 13))
-    before_ver = meta_before.get("caset_version", "?")
-    after_ver = meta_after.get("caset_version", "?")
+    before_ver = meta_before.get("tessera_version", "?")
+    after_ver = meta_after.get("tessera_version", "?")
     if before_ver == after_ver:
-        title = f"caset v{after_ver} Build Benchmark Comparison"
+        title = f"tessera v{after_ver} Build Benchmark Comparison"
     else:
-        title = f"caset Build Benchmark: v{before_ver} vs. v{after_ver}"
+        title = f"tessera Build Benchmark: v{before_ver} vs. v{after_ver}"
     fig.suptitle(title, fontsize=16, fontweight="bold", y=0.98)
 
     plot_time_comparison(before, after, axes[0, 0])

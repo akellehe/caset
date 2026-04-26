@@ -45,7 +45,7 @@
 
 #include <vector>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // One node in the (cut, time) label set.
 struct LabelSpacetime {
@@ -79,9 +79,9 @@ struct CausalOrders {
 //
 // hasseEditDistance is the symmetric difference of cover-edge sets,
 // normalized by the union size.
-// OrderAgreement is defined at top-level caset (see include/Poset.h).
+// OrderAgreement is defined at top-level tessera (see include/Poset.h).
 // The using-alias in include/quantum/majorization.hpp keeps the old
-// `caset::quantum::OrderAgreement` spelling available.
+// `tessera::quantum::OrderAgreement` spelling available.
 
 struct CausalComparisonReport {
     OrderAgreement majVsLr;
@@ -99,9 +99,9 @@ struct CausalComparisonReport {
 CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
                                  double vLr);
 
-// caset::compareOrders is the canonical implementation; the alias in
+// tessera::compareOrders is the canonical implementation; the alias in
 // include/quantum/majorization.hpp re-exports it as
-// caset::quantum::compareOrders for back-compat.
+// tessera::quantum::compareOrders for back-compat.
 
 // End-to-end pipeline: DMRG ground state → q-qbar quench → TDVP loop with
 // per-step Schmidt spectra → build the three orders → compare. Forces
@@ -113,4 +113,4 @@ CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
 CausalComparisonReport
 computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr = 1.0);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

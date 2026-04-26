@@ -7,15 +7,15 @@
 // Keys are already well-mixed (via Fingerprint::mix64), so we use
 // an identity hash — no re-hashing overhead.
 
-#ifndef CASET_FLAT_HASH_MAP_H
-#define CASET_FLAT_HASH_MAP_H
+#ifndef TESSERA_FLAT_HASH_MAP_H
+#define TESSERA_FLAT_HASH_MAP_H
 
 #include <cstdint>
 #include <cstring>
 #include <utility>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 
 /// Identity hash for uint64_t keys that are already well-distributed
 /// (e.g. fingerprints produced by mix64).
@@ -158,6 +158,6 @@ class FlatHashMap {
     void grow() { resize(cap_ * 2); }
 };
 
-} // namespace caset
+} // namespace tessera
 
-#endif // CASET_FLAT_HASH_MAP_H
+#endif // TESSERA_FLAT_HASH_MAP_H

@@ -13,8 +13,8 @@
 #include <cmath>
 #include <iostream>
 
-using namespace caset::quantum;
-using namespace caset::test_helpers;
+using namespace tessera::quantum;
+using namespace tessera::test_helpers;
 
 namespace {
 

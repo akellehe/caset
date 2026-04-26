@@ -20,7 +20,7 @@
 # SOFTWARE.
 
 import unittest
-from caset import Edge, EdgeList, Vertex
+from tessera import Edge, EdgeList, Vertex
 
 class TestEdgeList(unittest.TestCase):
 

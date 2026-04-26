@@ -30,7 +30,7 @@
     } \
 } while (0)
 
-namespace caset {
+namespace tessera {
 namespace cuda {
 
 // =====================================================================
@@ -841,4 +841,4 @@ void compute_step_gpu(const GpuMeshData &mesh,
 }
 
 } // namespace cuda
-} // namespace caset
+} // namespace tessera

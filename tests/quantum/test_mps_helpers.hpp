@@ -10,7 +10,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace caset::test_helpers {
+namespace tessera::test_helpers {
 
 // |↑↑ … ↑⟩ product state on a SpinHalf SiteSet. Schmidt spectrum across
 // any contiguous bipartition is (1) — this is the trivial product-state
@@ -95,4 +95,4 @@ inline itensor::MPS bell_singlet(itensor::SpinHalf const& sites) {
     return psi;
 }
 
-} // namespace caset::test_helpers
+} // namespace tessera::test_helpers

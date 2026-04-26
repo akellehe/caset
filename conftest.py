@@ -29,10 +29,10 @@ import tomllib
 import platform
 
 
-CASET_ASSERTIONS = os.environ.get("CASET_ASSERTIONS")
-CASET_VERBOSE = os.environ.get("CASET_VERBOSE")
-CASET_ASAN = os.environ.get("CASET_ASAN")
-CASET_CUDA = os.environ.get("CASET_CUDA")
+TESSERA_ASSERTIONS = os.environ.get("TESSERA_ASSERTIONS")
+TESSERA_VERBOSE = os.environ.get("TESSERA_VERBOSE")
+TESSERA_ASAN = os.environ.get("TESSERA_ASAN")
+TESSERA_CUDA = os.environ.get("TESSERA_CUDA")
 LD_PRELOAD = os.environ.get("LD_PRELOAD")
 CMAKE_BUILD_TYPE = os.environ.get("CMAKE_BUILD_TYPE", "Debug")
 
@@ -63,22 +63,22 @@ def get_configure_command(build_dir):
     cmd = ["cmake", "-S", ".", "-B", str(build_dir), "-G", "Ninja"]
     if CMAKE_BUILD_TYPE:
         cmd.append(f"-DCMAKE_BUILD_TYPE={CMAKE_BUILD_TYPE}")
-    if CASET_ASAN:
-        cmd.append("-DCASET_ASAN=ON")
-    if CASET_VERBOSE:
-        cmd.append("-DCASET_VERBOSE=ON")
-    if CASET_ASSERTIONS:
-        cmd.append("-DCASET_ASSERTIONS=ON")
-    if CASET_CUDA is not None:
-        cmd.append(f"-DCASET_CUDA={'ON' if CASET_CUDA else 'OFF'}")
+    if TESSERA_ASAN:
+        cmd.append("-DTESSERA_ASAN=ON")
+    if TESSERA_VERBOSE:
+        cmd.append("-DTESSERA_VERBOSE=ON")
+    if TESSERA_ASSERTIONS:
+        cmd.append("-DTESSERA_ASSERTIONS=ON")
+    if TESSERA_CUDA is not None:
+        cmd.append(f"-DTESSERA_CUDA={'ON' if TESSERA_CUDA else 'OFF'}")
     return cmd
 
 def pytest_sessionstart(session):
-    # Skip cmake rebuild if caset._caset (the C extension) is already importable
+    # Skip cmake rebuild if tessera._tessera (the C extension) is already importable
     # (e.g. from pip install -e .)
     try:
-        from caset import _caset
-        if hasattr(_caset, '__file__') and _caset.__file__:
+        from tessera import _tessera
+        if hasattr(_tessera, '__file__') and _tessera.__file__:
             return  # already available, no rebuild needed
     except ImportError:
         pass
@@ -90,34 +90,34 @@ def pytest_sessionstart(session):
         subprocess.run(get_configure_command(build_dir), check=True, env=env)
     subprocess.run(get_build_command(build_dir), check=True, env=env)
 
-    # cmake --build leaves _caset*.so at the build-dir root. caset/__init__.py
-    # imports it as ``caset._caset``, which requires the .so to live inside
-    # the caset/ package directory that Python resolves first on sys.path —
-    # that's the source-tree caset/ here, since pytest puts the repo root
+    # cmake --build leaves _tessera*.so at the build-dir root. tessera/__init__.py
+    # imports it as ``tessera._tessera``, which requires the .so to live inside
+    # the tessera/ package directory that Python resolves first on sys.path —
+    # that's the source-tree tessera/ here, since pytest puts the repo root
     # ahead of site-packages. Copy the fresh .so in so the submodule exists.
-    pkg_dir = Path(__file__).resolve().parent / "caset"
-    for so_src in build_dir.glob("_caset*.so"):
+    pkg_dir = Path(__file__).resolve().parent / "tessera"
+    for so_src in build_dir.glob("_tessera*.so"):
         shutil.copy2(so_src, pkg_dir / so_src.name)
     importlib.invalidate_caches()
-    sys.modules.pop("caset", None)
-    sys.modules.pop("caset._caset", None)
+    sys.modules.pop("tessera", None)
+    sys.modules.pop("tessera._tessera", None)
 
-    # If caset is editable-installed (pip install -e .), the module in
+    # If tessera is editable-installed (pip install -e .), the module in
     # site-packages is kept in sync with the build dir by scikit-build-core.
     # Only warn when the module appears to come from a non-editable install.
-    spec = importlib.util.find_spec("caset._caset")
+    spec = importlib.util.find_spec("tessera._tessera")
     if spec is not None and "site-packages" in (spec.origin or ""):
         # Check whether this is an editable install
         try:
             from importlib.metadata import distribution
-            dist = distribution("caset")
+            dist = distribution("tessera")
             direct_url = dist.read_text("direct_url.json")
             is_editable = direct_url is not None and "editable" in (direct_url or "")
         except Exception:
             is_editable = False
         if not is_editable:
             raise RuntimeError(
-                f"Refusing to use caset._caset from site-packages: {spec.origin}\n"
+                f"Refusing to use tessera._tessera from site-packages: {spec.origin}\n"
                 f"Expected to load from: {build_dir}\n"
-                "Uninstall via python3 -m pip uninstall caset before running tests."
+                "Uninstall via python3 -m pip uninstall tessera before running tests."
             )

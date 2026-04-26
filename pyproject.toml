@@ -10,7 +10,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "caset"
+name = "tessera"
 version = "0.1.0"
 description = "C++/pybind11 extension for lattice spacetime experiments"
 authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
@@ -26,7 +26,7 @@ optional-dependencies.examples = [
     "tqdm>=4.66",
 ]
 optional-dependencies.dev = [
-    "caset[examples]",
+    "tessera[examples]",
     "pytest",
     "scikit-build-core>=0.9",
     "cmake>=3.22",
@@ -48,7 +48,7 @@ markers = [
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"
 cmake.build-type = "Release"
-wheel.packages = ["caset"]
+wheel.packages = ["tessera"]
 
 [tool.scikit-build.cmake.define]
 Python_EXECUTABLE = "${python.executable}"

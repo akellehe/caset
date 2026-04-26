@@ -1,6 +1,6 @@
 """Phase 3 Python-level tests: pure majorization predicate, Poset
 construction, and the end-to-end computeGroundStateMajorization
-pipeline through the caset.quantum API.
+pipeline through the tessera.quantum API.
 
 These mirror the C++-side tests in test_majorization.cpp,
 test_schmidt_spectra.cpp, test_majorization_poset.cpp, and
@@ -9,7 +9,7 @@ binding-level bug (wrong type registration, lost copies, off-by-one
 indexing on returned lists) shows up here without needing to rebuild
 the C++ tests.
 
-Skips cleanly when caset was built without CASET_QUANTUM=1.
+Skips cleanly when tessera was built without TESSERA_QUANTUM=1.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import unittest
 from itertools import permutations
 
 try:
-    from caset.quantum import (
+    from tessera.quantum import (
         QuantumConfig,
         Interval,
         SchmidtSpectra,
@@ -39,7 +39,7 @@ except ImportError:
 TOL = 1e-10
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestMajorizesPredicate(unittest.TestCase):
     """Pure-function tests on majorizes() / strictlyMajorizes()."""
 
@@ -93,7 +93,7 @@ class TestMajorizesPredicate(unittest.TestCase):
         self.assertTrue(majorizes(b, a, tol=1e-10))
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestMajorizationPoset(unittest.TestCase):
     """Pure-function tests on majorizationPoset() and the Poset struct."""
 
@@ -133,7 +133,7 @@ class TestMajorizationPoset(unittest.TestCase):
             self.assertNotEqual(a, b)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestComputeGroundStateMajorization(unittest.TestCase):
     """End-to-end pipeline tests: DMRG → Schmidt → Poset all via Python."""
 
@@ -268,7 +268,7 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
         """computeGroundStateMajorization should agree with
         computeGroundState on the energy / bondDim fields when run with
         the same config."""
-        from caset.quantum import computeGroundState
+        from tessera.quantum import computeGroundState
         cfg = self._basic_config(N=6, m=0.125)
         r1 = computeGroundState(cfg)
         r2 = computeGroundStateMajorization(cfg)
@@ -278,7 +278,7 @@ class TestComputeGroundStateMajorization(unittest.TestCase):
         self.assertEqual(r1.bondDim, r2.groundState.bondDim)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestPosetRepr(unittest.TestCase):
     def test_repr(self) -> None:
         p = majorizationPoset([[1.0], [0.5, 0.5]])

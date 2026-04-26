@@ -23,14 +23,14 @@
 // Created by andrew on 10/23/25.
 //
 
-#ifndef CASET_METRIC_H
-#define CASET_METRIC_H
+#ifndef TESSERA_METRIC_H
+#define TESSERA_METRIC_H
 
 #include <memory>
 
 #include "spacetime/Signature.h"
 
-namespace caset {
+namespace tessera {
 /// # The Metric
 ///
 class Metric {
@@ -72,6 +72,6 @@ class Metric {
     std::shared_ptr<Signature> signature;
     bool coordinateFree;
 };
-} // caset
+} // tessera
 
-#endif //CASET_METRIC_H
+#endif //TESSERA_METRIC_H

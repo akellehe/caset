@@ -36,7 +36,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace caset::quantum;
+using namespace tessera::quantum;
 
 namespace {
 

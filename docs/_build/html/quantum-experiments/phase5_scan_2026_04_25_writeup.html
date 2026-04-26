@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Phase 5 hypothesis-test scan — 2026-04-25 - caset 0.1.0 documentation</title>
+        <title>Phase 5 hypothesis-test scan — 2026-04-25 - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../index.html"><div class="brand">caset 0.1.0 documentation</div></a>
+      <a href="../index.html"><div class="brand">tessera 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
   
-  <span class="sidebar-brand-text">caset 0.1.0 documentation</span>
+  <span class="sidebar-brand-text">tessera 0.1.0 documentation</span>
   
 </a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -197,7 +197,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Caset C++ API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Tessera C++ API</a></li>
 </ul>
 
 </div>
@@ -238,7 +238,7 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="phase-5-hypothesis-test-scan-2026-04-25">
 <h1>Phase 5 hypothesis-test scan — 2026-04-25<a class="headerlink" href="#phase-5-hypothesis-test-scan-2026-04-25" title="Link to this heading">¶</a></h1>
-<p>First experimental run of <code class="docutils literal notranslate"><span class="pre">caset.quantum.computeCausalComparison</span></code>
+<p>First experimental run of <code class="docutils literal notranslate"><span class="pre">tessera.quantum.computeCausalComparison</span></code>
 across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
 addresses the <strong>strong falsification</strong> criterion of
 <code class="docutils literal notranslate"><span class="pre">docs/source/quantum-methodology.md</span></code> §1.2:</p>
@@ -249,7 +249,7 @@ the hypothesis is wrong.</p>
 </div></blockquote>
 <p>The <strong>weak falsification</strong> criterion (≼_maj vs non-trivial ≼_cs) is
 out of scope for this run — it requires Phase 6’s MPO rebuild on a
-caset-derived chain. The <strong>trivial-agreement</strong> caveat applies to the
+tessera-derived chain. The <strong>trivial-agreement</strong> caveat applies to the
 ≼_cs column here: on a regular 1+1D chain, ≼_cs reduces to the
 time-only order, so ≼_LR ⊆ ≼_cs by construction (verified — <code class="docutils literal notranslate"><span class="pre">τ(LR,</span> <span class="pre">cs)</span> <span class="pre">=</span> <span class="pre">1.0</span></code> exactly).</p>
 <section id="setup">
@@ -462,7 +462,7 @@ bootstrap-over-Trotter-seeds (<code class="docutils literal notranslate"><span c
 Phase 5 acceptance) to put a confidence band on these τ values.
 Until that is done, the τ ranges above are point estimates only.</p></li>
 <li><p><strong>Non-trivial ≼_cs.</strong> All ≼_cs results above are time-only. The
-weak-falsification test requires the Phase 6 caset-embedded chain
+weak-falsification test requires the Phase 6 tessera-embedded chain
 with multi-vertex antichains, where ≼_cs has within-time-slice
 structure that ≼_LR does not.</p></li>
 </ul>

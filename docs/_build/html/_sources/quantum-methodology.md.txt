@@ -164,7 +164,7 @@ Expanding $L_n^2$ produces a Hamiltonian with $\mathcal{O}(N^2)$ long-range
 $Z_m Z_{m'}$ terms; the resulting MPO bond dimension grows accordingly and is
 handled with the AutoMPO machinery described below.
 
-This is the same Hamiltonian implemented by `caset.quantum`; see
+This is the same Hamiltonian implemented by `tessera.quantum`; see
 [quantum.md](quantum.md) for the API surface and convention details, and
 `include/quantum/schwinger_model.hpp` for the algebraic expansion of
 $L_n^2$ into operator and c-number pieces.
@@ -239,7 +239,7 @@ build / acceptance status of each phase.
   - {cite}`LiebRobinson1972, HastingsKoma2006`
 * - 8
   - Causet order (optional)
-  - Inherited from caset adjacency on a non-regular causet embedding
+  - Inherited from tessera adjacency on a non-regular causet embedding
   - {cite}`Ambjorn2004CDT, Regge1961`
 * - 9
   - Comparison

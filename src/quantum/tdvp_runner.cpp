@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -182,4 +182,4 @@ QuenchResult runQqbarQuench(TDVPConfig const& cfg) {
     return result;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

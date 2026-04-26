@@ -27,7 +27,7 @@
 #include <iomanip>
 #include <iostream>
 
-using namespace caset::quantum;
+using namespace tessera::quantum;
 
 namespace {
 

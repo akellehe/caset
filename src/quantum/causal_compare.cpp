@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -131,9 +131,9 @@ Poset build_cs_poset_regular_chain(std::vector<LabelSpacetime> const& labels) {
 
 } // namespace
 
-// compareOrders is implemented at top-level caset (see src/Poset.cpp);
+// compareOrders is implemented at top-level tessera (see src/Poset.cpp);
 // the using-alias in include/quantum/majorization.hpp re-exports it as
-// caset::quantum::compareOrders for back-compat.
+// tessera::quantum::compareOrders for back-compat.
 
 CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
                                  double vLr) {
@@ -168,4 +168,4 @@ computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr) {
     return report;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

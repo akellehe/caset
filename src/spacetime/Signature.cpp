@@ -28,7 +28,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace caset {
+namespace tessera {
 Signature::Signature(int dimensions_, SignatureType signatureType_) {
   dimensions = dimensions_;
   signatureType = signatureType_;
@@ -50,4 +50,4 @@ Signature::Signature(int dimensions_, SignatureType signatureType_) {
 [[nodiscard]] SignatureType Signature::getSignatureType() const noexcept {
   return signatureType;
 }
-} // caset
+} // tessera

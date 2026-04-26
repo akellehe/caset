@@ -125,7 +125,7 @@ for line in r.stdout.splitlines():
 # Should show: "-- CUDA acceleration turned ON."
 ```
 
-## Verifying the caset build
+## Verifying the tessera build
 
 ```bash
 # Clean rebuild
@@ -149,7 +149,7 @@ python examples/regge_point_mass.py --save point_mass.gif
   This usually means a broken or partial install.  Use Option A (symlink)
   or Option B (clean install).
 
-**Build succeeds but `import caset` crashes with "libcudart.so not found"**
+**Build succeeds but `import tessera` crashes with "libcudart.so not found"**
 → Add the CUDA lib directory to `LD_LIBRARY_PATH`:
 ```bash
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH

@@ -23,8 +23,8 @@
 // Created by Andrew Kelleher on 10/19/25.
 //
 
-#ifndef CASET_CASET_SRC_VERTEX_H_
-#define CASET_CASET_SRC_VERTEX_H_
+#ifndef TESSERA_TESSERA_SRC_VERTEX_H_
+#define TESSERA_TESSERA_SRC_VERTEX_H_
 
 #include <vector>
 #include <memory>
@@ -32,7 +32,7 @@
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/Fingerprint.h"
 
-namespace caset {
+namespace tessera {
 
 ///
 /// \brief Represents a vertex in a causal set (causet) spacetime discretization
@@ -232,7 +232,7 @@ class Vertex {
         /// 2. Removes the edge from this vertex's inEdges set
         /// 3. Returns affected simplices for caller to handle (e.g., re-validation)
         ///
-        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// **Assertions**: When TESSERA_ASSERTIONS is defined:
         /// - Aborts if edge is nullptr
         /// - Aborts if edge is not in inEdges
         ///
@@ -244,7 +244,7 @@ class Vertex {
         ///
         /// Symmetric to removeInEdge() but operates on outEdges.
         ///
-        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// **Assertions**: When TESSERA_ASSERTIONS is defined:
         /// - Aborts if edge is nullptr
         /// - Aborts if edge is not in outEdges
         ///
@@ -270,7 +270,7 @@ class Vertex {
         ///
         /// # Duplicate Detection
         ///
-        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// **Assertions**: When TESSERA_ASSERTIONS is defined:
         /// - Checks for null simplex pointer
         /// - Checks for null 'this' pointer
         /// - Calls checkDuplicates() before and after insertion
@@ -296,7 +296,7 @@ class Vertex {
         /// \brief Debug utility to detect duplicate simplices
         /// \param msg Error message to log/throw if duplicates found
         ///
-        /// **Assertions Only**: Only performs checks when CASET_ASSERTIONS is defined.
+        /// **Assertions Only**: Only performs checks when TESSERA_ASSERTIONS is defined.
         /// Scans all registered simplices and checks for duplicate fingerprints.
         /// Logs at CRITICAL_LEVEL and throws std::runtime_error if duplicates exist.
         ///
@@ -323,7 +323,7 @@ class Vertex {
         /// This is equivalent to "redirecting" all edges to point to/from the new vertex
         /// while preserving edge properties (e.g., squared length).
         ///
-        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// **Assertions**: When TESSERA_ASSERTIONS is defined:
         /// - Throws std::runtime_error if spacetime is nullptr
         ///
         /// \see moveInEdgesTo(), moveOutEdgesTo()
@@ -343,7 +343,7 @@ class Vertex {
         ///
         /// The source vertices remain unchanged; only the target is redirected.
         ///
-        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// **Assertions**: When TESSERA_ASSERTIONS is defined:
         /// - Throws std::runtime_error if spacetime is nullptr
         /// - Verifies sourceVertex != this (logic error if violated)
         ///
@@ -362,7 +362,7 @@ class Vertex {
         ///
         /// The target vertices remain unchanged; only the source is redirected.
         ///
-        /// **Assertions**: When CASET_ASSERTIONS is defined:
+        /// **Assertions**: When TESSERA_ASSERTIONS is defined:
         /// - Throws std::runtime_error if spacetime is nullptr
         /// - Verifies targetVertex != this (logic error if violated)
         ///
@@ -388,13 +388,13 @@ class Vertex {
         ///
         /// # Format
         ///
-        /// When CASET_VERBOSE is defined:
+        /// When TESSERA_VERBOSE is defined:
         /// - Shows vertex ID, in-degree, out-degree, and time
         /// - Example: \f$ V_{42}^{in=3} _{out=5}~(t=1.0) \f$
         ///
         /// When not defined: returns empty string for performance
         ///
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
         std::string toString() const noexcept;
 #else
         std::string toString() const noexcept {
@@ -448,7 +448,7 @@ class Vertex {
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };
 
-}  // namespace caset
+}  // namespace tessera
 
 // ========================================
 // Standard Library Specializations
@@ -457,7 +457,7 @@ class Vertex {
 namespace std {
 
 ///
-/// \brief Hash function specialization for caset::Vertex
+/// \brief Hash function specialization for tessera::Vertex
 ///
 /// Enables Vertex objects to be used as keys in std::unordered_set and std::unordered_map.
 /// The hash is computed from the vertex ID, ensuring consistent hashing across equal vertices.
@@ -466,14 +466,14 @@ namespace std {
 /// O(1) - delegates to std::hash<std::uint64_t>
 ///
 template<>
-struct hash<caset::Vertex> {
-    size_t operator()(const caset::Vertex &vertex) const noexcept {
+struct hash<tessera::Vertex> {
+    size_t operator()(const tessera::Vertex &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex.getId());
     }
 };
 
 ///
-/// \brief Hash function specialization for caset::Vertex*
+/// \brief Hash function specialization for tessera::Vertex*
 ///
 /// Enables VertexPtr (Vertex*) to be used as keys in hash tables.
 /// Hashes the underlying vertex ID, not the pointer address.
@@ -483,14 +483,14 @@ struct hash<caset::Vertex> {
 /// even if they are different pointer instances.
 ///
 template<>
-struct hash<caset::Vertex*> {
-    size_t operator()(caset::Vertex* const &vertex) const noexcept {
+struct hash<tessera::Vertex*> {
+    size_t operator()(tessera::Vertex* const &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex->getId());
     }
 };
 
 ///
-/// \brief Equality comparison specialization for caset::Vertex
+/// \brief Equality comparison specialization for tessera::Vertex
 ///
 /// Used by standard library containers to compare Vertex objects.
 /// Two vertices are equal iff they have the same ID.
@@ -499,25 +499,25 @@ struct hash<caset::Vertex*> {
 /// This is consistent with the hash specialization above.
 ///
 template<>
-struct equal_to<caset::Vertex> {
-    size_t operator()(const caset::Vertex &a, const caset::Vertex &b) const noexcept {
+struct equal_to<tessera::Vertex> {
+    size_t operator()(const tessera::Vertex &a, const tessera::Vertex &b) const noexcept {
         return a.getId() == b.getId();
     }
 };
 
 ///
-/// \brief Equality comparison specialization for caset::Vertex*
+/// \brief Equality comparison specialization for tessera::Vertex*
 ///
 /// Compares vertices by ID, not by pointer address.
 /// Consistent with the hash specialization for Vertex*.
 ///
 template<>
-struct equal_to<caset::Vertex*> {
-    size_t operator()(caset::Vertex* const &a, caset::Vertex* const &b) const noexcept {
+struct equal_to<tessera::Vertex*> {
+    size_t operator()(tessera::Vertex* const &a, tessera::Vertex* const &b) const noexcept {
         return a->getId() == b->getId();
     }
 };
 
 }  // namespace std
-#endif //CASET_CASET_SRC_VERTEX_H_
+#endif //TESSERA_TESSERA_SRC_VERTEX_H_
 

@@ -14,7 +14,7 @@ References:
 
 import math
 import unittest
-import caset
+import tessera
 
 
 # =====================================================================
@@ -23,10 +23,10 @@ import caset
 
 def _make_spacetime(d=4):
     """Create a d-dimensional Lorentzian CDT spacetime (no initial complex)."""
-    sig = caset.Signature(d, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    return caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                           caset.Toroid())
+    sig = tessera.Signature(d, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    return tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                           tessera.Toroid())
 
 
 def _build_closed_cdt_lattice(d=4):
@@ -77,7 +77,7 @@ class TestReggeAction(unittest.TestCase):
         st.build(50)
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.02
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target, True)
+        cdt = tessera.CDTSimulation(st, k0, k4, delta, eps, target, True)
 
         n0 = st.getVertexCount()
         n41 = st.getN41()
@@ -98,7 +98,7 @@ class TestReggeAction(unittest.TestCase):
         st.build(50)
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.02
         target = st.getN41() + 5  # offset so volume-fix is nonzero
-        cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target, False)
+        cdt = tessera.CDTSimulation(st, k0, k4, delta, eps, target, False)
 
         n0 = st.getVertexCount()
         n41 = st.getN41()
@@ -117,7 +117,7 @@ class TestReggeAction(unittest.TestCase):
         st.build(100)
         k0, delta, eps = 2.2, 0.6, 0.02
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, k0, 0.5, delta, eps, target)
+        cdt = tessera.CDTSimulation(st, k0, 0.5, delta, eps, target)
         cdt.tune()
         k4 = cdt.getK4()
         cdt.sweep(50)
@@ -152,7 +152,7 @@ class TestVolumeFixTarget(unittest.TestCase):
         st.build(50)
         k0, k4, delta, eps = 2.2, 0.5, 0.6, 0.1
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, k0, k4, delta, eps, target)
+        cdt = tessera.CDTSimulation(st, k0, k4, delta, eps, target)
 
         # Compute action; the volume-fix part should be eps*(N41-target)^2 = 0
         # since target == N41
@@ -189,7 +189,7 @@ class TestAcceptanceCriterion(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
 
         for _ in range(20):
@@ -207,7 +207,7 @@ class TestAcceptanceCriterion(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
         cdt.sweep(200)
 
@@ -236,7 +236,7 @@ class TestAddMovePrefactor(unittest.TestCase):
         n41_before = st.getN41()
         n0_before = st.getVertexCount()
         # Use k4 that makes add favorable
-        cdt = caset.CDTSimulation(st, 2.2, -0.3, 0.6, 0.0, n41_before)
+        cdt = tessera.CDTSimulation(st, 2.2, -0.3, 0.6, 0.0, n41_before)
         for _ in range(500):
             if cdt.add():
                 return st, cdt, n41_before, n0_before
@@ -307,7 +307,7 @@ class TestRemoveMovePrefactor(unittest.TestCase):
         st = _build_closed_cdt_lattice()
         n41_start = st.getN41()
         n0_start = st.getVertexCount()
-        cdt = caset.CDTSimulation(st, 2.2, -0.3, 0.6, 0.0, n41_start)
+        cdt = tessera.CDTSimulation(st, 2.2, -0.3, 0.6, 0.0, n41_start)
 
         for _ in range(500):
             if cdt.add():
@@ -334,7 +334,7 @@ class TestRemoveMovePrefactor(unittest.TestCase):
         Pick random vertex with prob 1/N0, check if order == 2d.
         """
         st = _build_closed_cdt_lattice()
-        cdt = caset.CDTSimulation(st, 2.2, -0.3, 0.6, 0.0, st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, -0.3, 0.6, 0.0, st.getN41())
 
         # Do an add to create a removable vertex
         for _ in range(500):
@@ -377,7 +377,7 @@ class TestFlipMoves(unittest.TestCase):
         """Flip does not change N0."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
         n0 = st.getVertexCount()
 
         for _ in range(2000):
@@ -390,7 +390,7 @@ class TestFlipMoves(unittest.TestCase):
         """(2,d) flip: dN4 = d - 2 = +2 in 4D."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
         n4 = st.getSimplexCount()
 
         for _ in range(2000):
@@ -410,7 +410,7 @@ class TestFlipMoves(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(500)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
 
         # Do sweeps to diversify topology, then flips to create iflip-able configs.
         # Iflips require exactly d top-simplices sharing an edge, which needs
@@ -431,7 +431,7 @@ class TestFlipMoves(unittest.TestCase):
         """Flip then iflip: N4 should return to original."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
         n4_start = st.getSimplexCount()
 
         flipped = False
@@ -460,7 +460,7 @@ class TestFlipMoves(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.0, st.getN41())
 
         for _ in range(2000):
             if cdt.flip():
@@ -488,7 +488,7 @@ class TestShiftMove(unittest.TestCase):
         """(3,3) shift: dN0 = 0, dN4 = 0."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.sweep(50)  # diversify topology
 
         n0 = st.getVertexCount()
@@ -508,7 +508,7 @@ class TestShiftMove(unittest.TestCase):
         """The (3,3) move is self-inverse; ishift == shift."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.sweep(50)
 
         n0 = st.getVertexCount()
@@ -536,7 +536,7 @@ class TestSweepStructure(unittest.TestCase):
     def test_sweep_returns_accepted_count(self):
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         accepted = cdt.sweep(1)
         self.assertIsInstance(accepted, int)
         self.assertGreaterEqual(accepted, 0)
@@ -545,7 +545,7 @@ class TestSweepStructure(unittest.TestCase):
         """Sweep should attempt all 5 move types."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.sweep(10)
         rates = cdt.getAcceptanceRates()
         for move_type in ["add", "remove", "flip", "iflip", "shift"]:
@@ -559,7 +559,7 @@ class TestSweepStructure(unittest.TestCase):
         """
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
 
         for step in range(20):
@@ -596,7 +596,7 @@ class TestVolumeFixModes(unittest.TestCase):
         st = _make_spacetime()
         st.build(50)
         target = st.getN41() + 10  # offset for nonzero fix
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.1, target)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.1, target)
 
         n41 = st.getN41()
         n0 = st.getVertexCount()
@@ -615,7 +615,7 @@ class TestVolumeFixModes(unittest.TestCase):
         st = _make_spacetime()
         st.build(50)
         target = st.getN41() + 10
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 0.1, target, False)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.1, target, False)
 
         n41 = st.getN41()
         n0 = st.getVertexCount()
@@ -636,8 +636,8 @@ class TestVolumeFixModes(unittest.TestCase):
         target = st.getN41() + 5
         eps = 0.1
 
-        cdt_q = caset.CDTSimulation(st, 2.2, 0.5, 0.6, eps, target, True)
-        cdt_l = caset.CDTSimulation(st, 2.2, 0.5, 0.6, eps, target, False)
+        cdt_q = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, eps, target, True)
+        cdt_l = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, eps, target, False)
 
         self.assertNotAlmostEqual(cdt_q.computeAction(),
                                   cdt_l.computeAction(), places=2,
@@ -660,7 +660,7 @@ class TestManifoldPreservation(unittest.TestCase):
         """500 sweeps should produce no (5,0) or other invalid types."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
         cdt.sweep(500)
 
@@ -674,7 +674,7 @@ class TestManifoldPreservation(unittest.TestCase):
         """Every top simplex must have vertices at exactly 2 distinct times."""
         st = _make_spacetime()
         st.build(200)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         cdt.tune()
         cdt.sweep(500)
 
@@ -698,7 +698,7 @@ class TestTuning(unittest.TestCase):
         """tune() should modify k4 from its initial value."""
         st = _make_spacetime()
         st.build(100)
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(st.getN41(), 1), st.getN41())
         k4_before = cdt.getK4()
         cdt.tune()
         k4_after = cdt.getK4()
@@ -713,7 +713,7 @@ class TestTuning(unittest.TestCase):
         st = _make_spacetime()
         st.build(100)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.tune()
         # After tuning with feedback sweeps, N41 should still be
         # in the vicinity of the target (not wildly off)

@@ -10,7 +10,7 @@ quantum-methodology.md §1.2.
 """
 from __future__ import annotations
 import time
-from caset.quantum import TDVPConfig, computeCausalComparison
+from tessera.quantum import TDVPConfig, computeCausalComparison
 
 
 def make_cfg(N: int, m_over_g: float, T: float,

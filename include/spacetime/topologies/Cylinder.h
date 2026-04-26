@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_CYLINDER_H
-#define CASET_CYLINDER_H
+#ifndef TESSERA_CYLINDER_H
+#define TESSERA_CYLINDER_H
 
 #include "Topology.h"
 
-namespace caset {
+namespace tessera {
 class Spacetime;
 
 /// # Cylindrical Topology \f$ \Sigma \times [0, T] \f$
@@ -52,6 +52,6 @@ class Cylinder : public Topology {
     void build(Spacetime *spacetime, int numSimplices) override;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_CYLINDER_H
+#endif //TESSERA_CYLINDER_H

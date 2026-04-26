@@ -30,17 +30,17 @@ References:
 """
 
 import unittest
-import caset
+import tessera
 
 
 class TestCDTAction(unittest.TestCase):
     """[RU] eq. 2: Test the Regge action computation for 4D CDT."""
 
     def _make_spacetime(self, topology=None, n_simplices=10):
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        topo = topology if topology else caset.Toroid()
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, topo)
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        topo = topology if topology else tessera.Toroid()
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, topo)
         st.build(n_simplices)
         return st
 
@@ -53,7 +53,7 @@ class TestCDTAction(unittest.TestCase):
         k0, k4, delta, epsilon = 2.0, 0.5, 0.6, 0.02
         target = st.getN41()
 
-        cdt = caset.CDTSimulation(st, k0, k4, delta, epsilon, target)
+        cdt = tessera.CDTSimulation(st, k0, k4, delta, epsilon, target)
         action = cdt.computeAction()
 
         # Compute expected action from counts
@@ -70,8 +70,8 @@ class TestCDTAction(unittest.TestCase):
     def test_action_changes_with_couplings(self):
         """Action should change when coupling constants change."""
         st = self._make_spacetime(n_simplices=5)
-        cdt1 = caset.CDTSimulation(st, 1.0, 0.5, 0.3, 0.01, 50)
-        cdt2 = caset.CDTSimulation(st, 5.0, 0.5, 0.3, 0.01, 50)
+        cdt1 = tessera.CDTSimulation(st, 1.0, 0.5, 0.3, 0.01, 50)
+        cdt2 = tessera.CDTSimulation(st, 5.0, 0.5, 0.3, 0.01, 50)
         self.assertNotAlmostEqual(cdt1.computeAction(), cdt2.computeAction())
 
 
@@ -79,12 +79,12 @@ class TestCDTMoves(unittest.TestCase):
     """[BGL] Sec. 2.3: Test individual Pachner moves."""
 
     def _make_cdt(self, n_simplices=20, topology=None):
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        topo = topology if topology else caset.Toroid()
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, topo)
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        topo = topology if topology else tessera.Toroid()
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, topo)
         st.build(n_simplices)
-        return caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.0, 10000), st
+        return tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 0.0, 10000), st
 
     def test_add_move_changes_counts(self):
         """The add move should increase simplex and vertex counts."""
@@ -137,26 +137,26 @@ class TestCDTTopologies(unittest.TestCase):
     """[RU] Sec. 3: Test that each topology builds and supports CDT simulation."""
 
     def _test_topology_builds_and_simulates(self, topology):
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, topology)
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, topology)
         st.build(10)
         self.assertGreater(st.getSimplexCount(), 0, "Topology should produce simplices")
         self.assertGreater(st.getVertexCount(), 0, "Topology should produce vertices")
 
         # Run a sweep
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         accepted = cdt.sweep()
         self.assertIsInstance(accepted, int)
 
     def test_toroid_topology(self):
-        self._test_topology_builds_and_simulates(caset.Toroid())
+        self._test_topology_builds_and_simulates(tessera.Toroid())
 
     def test_cylinder_topology(self):
-        self._test_topology_builds_and_simulates(caset.Cylinder())
+        self._test_topology_builds_and_simulates(tessera.Cylinder())
 
     def test_sphere_topology(self):
-        self._test_topology_builds_and_simulates(caset.Sphere())
+        self._test_topology_builds_and_simulates(tessera.Sphere())
 
 
 class TestCDTVolumeProfile(unittest.TestCase):
@@ -164,24 +164,24 @@ class TestCDTVolumeProfile(unittest.TestCase):
 
     def test_volume_profile_nonempty(self):
         """Volume profile should be non-empty after building a spacetime."""
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid())
         st.build(15)
 
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         profile = cdt.getVolumeProfile()
         self.assertGreater(len(profile), 0, "Volume profile should not be empty")
         self.assertGreater(sum(profile), 0, "Total volume should be positive")
 
     def test_volume_profile_sums_to_total(self):
         """Volume profile entries should sum to the total simplex count."""
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid())
         st.build(15)
 
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         profile = cdt.getVolumeProfile()
         self.assertEqual(sum(profile), st.getSimplexCount(),
                          "Volume profile should sum to total simplex count")
@@ -192,12 +192,12 @@ class TestCDTAcceptanceRates(unittest.TestCase):
 
     def test_acceptance_rates_reported(self):
         """Acceptance rates should be a dict with all move types."""
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid())
         st.build(20)
 
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(100, 1), 100)
         cdt.sweep()
         rates = cdt.getAcceptanceRates()
 
@@ -211,9 +211,9 @@ class TestSpacetimeCounting(unittest.TestCase):
     """[RU] eq. 2: Test Spacetime counting methods."""
 
     def test_counts_after_build(self):
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid())
         st.build(10)
 
         self.assertGreater(st.getSimplexCount(), 0)
@@ -223,9 +223,9 @@ class TestSpacetimeCounting(unittest.TestCase):
                          "N4 should equal N41 + N32")
 
     def test_random_simplex(self):
-        sig = caset.Signature(4, caset.Lorentzian)
-        metric = caset.Metric(True, sig)
-        st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid())
         st.build(10)
 
         simplex = st.getRandomSimplex()

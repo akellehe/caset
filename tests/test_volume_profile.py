@@ -36,14 +36,14 @@ Papers referenced:
 
 import unittest
 import numpy as np
-import caset
+import tessera
 
 
 def make_spacetime(topology=None, n_simplices=100):
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    topo = topology if topology else caset.Toroid()
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, topo)
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    topo = topology if topology else tessera.Toroid()
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, topo)
     st.build(n_simplices)
     return st
 
@@ -66,7 +66,7 @@ class TestVolumeStability(unittest.TestCase):
         """
         st = make_spacetime(n_simplices=50)
         target = st.getSimplexCount()
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 0.05, target)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 0.05, target)
 
         # Run tuning sweeps
         cdt.tune()
@@ -109,7 +109,7 @@ class TestVolumeProfileShape(unittest.TestCase):
         """
         st = make_spacetime(n_simplices=500)
         target = st.getSimplexCount()
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(target, 1), target)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(target, 1), target)
 
         # Thermalize
         for _ in range(50):
@@ -170,7 +170,7 @@ class TestPhaseStructure(unittest.TestCase):
         """
         st = make_spacetime(n_simplices=500)
         # Phase B: low k0, low delta
-        cdt = caset.CDTSimulation(st, 0.5, 0.5, 0.1, 0.01, 500)
+        cdt = tessera.CDTSimulation(st, 0.5, 0.5, 0.1, 0.01, 500)
 
         for _ in range(50):
             cdt.sweep()
@@ -203,7 +203,7 @@ class TestPhaseStructure(unittest.TestCase):
         profiles = {}
         for name, k0, delta in [("B", 0.5, 0.1), ("C_dS", 2.0, 0.6), ("A", 5.0, 2.0)]:
             st = make_spacetime(n_simplices=200)
-            cdt = caset.CDTSimulation(st, k0, 0.5, delta, 1.0 / max(200, 1), 200)
+            cdt = tessera.CDTSimulation(st, k0, 0.5, delta, 1.0 / max(200, 1), 200)
 
             for _ in range(30):
                 cdt.sweep()
@@ -228,7 +228,7 @@ class TestEachTopologySimulates(unittest.TestCase):
 
     def _run_simulation(self, topology, name):
         st = make_spacetime(topology=topology, n_simplices=20)
-        cdt = caset.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(50, 1), 50)
+        cdt = tessera.CDTSimulation(st, 2.0, 0.5, 0.6, 1.0 / max(50, 1), 50)
 
         initial_count = st.getSimplexCount()
         total_accepted = 0
@@ -242,10 +242,10 @@ class TestEachTopologySimulates(unittest.TestCase):
                            f"{name}: Total volume should be positive")
 
     def test_toroid_simulation(self):
-        self._run_simulation(caset.Toroid(), "Toroid")
+        self._run_simulation(tessera.Toroid(), "Toroid")
 
     def test_cylinder_simulation(self):
-        self._run_simulation(caset.Sphere(), "Cylinder")
+        self._run_simulation(tessera.Sphere(), "Cylinder")
 
     def test_sphere_simulation(self):
-        self._run_simulation(caset.Sphere(), "Sphere")
+        self._run_simulation(tessera.Sphere(), "Sphere")

@@ -15,7 +15,7 @@
 #include "quantum/schmidt.hpp"
 #include "quantum/majorization.hpp"
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Result struct for computeGroundStateMajorization. Bundles the same
 // scalar diagnostics that computeGroundState returns with the Schmidt
@@ -40,4 +40,4 @@ GroundStateMajorizationResult
 computeGroundStateMajorization(QuantumConfig const& config,
                                   double tol = 1e-12);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

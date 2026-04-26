@@ -30,7 +30,7 @@
 #include "spacetime/Signature.h"
 #include "Logger.h"
 
-namespace caset {
+namespace tessera {
 
     Metric::Metric(bool coordinateFree_, const Signature &signature_) : signature(std::make_shared<Signature>(signature_)), coordinateFree(coordinateFree_) {
     }

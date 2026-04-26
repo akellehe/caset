@@ -23,13 +23,13 @@
 // Created by Andrew Kelleher on 11/10/25.
 //
 
-#ifndef CASET_SPACETIMEVOLUME_H
-#define CASET_SPACETIMEVOLUME_H
+#ifndef TESSERA_SPACETIMEVOLUME_H
+#define TESSERA_SPACETIMEVOLUME_H
 
 #include <memory>
 #include "Observable.h"
 
-namespace caset {
+namespace tessera {
 class Spacetime;
 class SpacetimeVolume : public Observable {
   public:
@@ -38,4 +38,4 @@ class SpacetimeVolume : public Observable {
 };
 }
 
-#endif //CASET_SPACETIMEVOLUME_H
+#endif //TESSERA_SPACETIMEVOLUME_H

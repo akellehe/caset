@@ -1,6 +1,6 @@
-# caset
+# tessera
 
-Caset is a package for experimenting with CAusal SETs and simplicial manifolds in C++. It provides a highly
+Tessera is a package for experimenting with CAusal SETs and simplicial manifolds in C++. It provides a highly
 parallelizable interface to execute methods against a causally oriented simplicial Lorentzian (or Euclidean) manifold.
 Optional CUDA GPU acceleration is available for the Regge solver.
 

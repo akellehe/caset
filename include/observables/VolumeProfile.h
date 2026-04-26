@@ -19,15 +19,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_VOLUMEPROFILE_H
-#define CASET_VOLUMEPROFILE_H
+#ifndef TESSERA_VOLUMEPROFILE_H
+#define TESSERA_VOLUMEPROFILE_H
 
 #include "observables/Observable.h"
 #include "spacetime/Spacetime.h"
 #include <vector>
 #include <map>
 
-namespace caset {
+namespace tessera {
 
 /// # Volume Profile Observable
 ///
@@ -93,6 +93,6 @@ class VolumeProfile : public Observable {
     std::vector<std::vector<int>> measurements; ///< History of profiles for averaging
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_VOLUMEPROFILE_H
+#endif //TESSERA_VOLUMEPROFILE_H

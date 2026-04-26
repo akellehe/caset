@@ -1,4 +1,4 @@
-"""Phase 2 robustness and API surface tests for caset.quantum.
+"""Phase 2 robustness and API surface tests for tessera.quantum.
 
 These tests exercise the Python API beyond the Phase 1 reference-value
 matching covered in test_phase2_compute_ground_state.py — they verify
@@ -6,7 +6,7 @@ validation errors, variational descent, reproducibility, the
 conserveQns flag, L0 dependence, repr formatting, and analytic limits
 through the Python boundary.
 
-Skip cleanly when caset was built without CASET_QUANTUM=1.
+Skip cleanly when tessera was built without TESSERA_QUANTUM=1.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import math
 import unittest
 
 try:
-    from caset.quantum import (
+    from tessera.quantum import (
         QuantumConfig,
         GroundStateResult,
         computeGroundState,
@@ -39,7 +39,7 @@ def _basic_config(N: int = 4, m: float = 0.0, g: float = 1.0,
     return cfg
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestQuantumConfigDefaults(unittest.TestCase):
     """Default-constructed QuantumConfig should have documented defaults."""
 
@@ -70,7 +70,7 @@ class TestQuantumConfigDefaults(unittest.TestCase):
         self.assertIn("maxBondDim=", text)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestValidation(unittest.TestCase):
     """computeGroundState should reject configs the C++ side can't build."""
 
@@ -106,7 +106,7 @@ class TestValidation(unittest.TestCase):
         self.assertAlmostEqual(result.energy, e_analytic, places=8)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestEnergyIdentities(unittest.TestCase):
     """The result fields should satisfy basic algebraic identities."""
 
@@ -133,7 +133,7 @@ class TestEnergyIdentities(unittest.TestCase):
         self.assertAlmostEqual(c1, c2, places=12)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestVariationalDescent(unittest.TestCase):
     """DMRG is a variational method: enlarging the search space (more bond
     dimension, more sweeps) can only lower (or hold) the energy."""
@@ -163,7 +163,7 @@ class TestVariationalDescent(unittest.TestCase):
         self.assertLessEqual(e16, e4 + 1e-10)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestReproducibility(unittest.TestCase):
     """Same config in → same result out (DMRG with our schedule is
     deterministic; both runs use the same Néel initial state and the same
@@ -178,7 +178,7 @@ class TestReproducibility(unittest.TestCase):
         self.assertEqual(a.bondDim, b.bondDim)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestConserveQNsFlag(unittest.TestCase):
     """Toggling conserveQns must not change the GS energy: total Sz is
     conserved by the Hamiltonian itself, so the U(1) restriction is just
@@ -198,7 +198,7 @@ class TestConserveQNsFlag(unittest.TestCase):
         self.assertAlmostEqual(e_qn, e_noqn, places=6)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestL0Dependence(unittest.TestCase):
     """The c-number constant depends on L0 quadratically; the operator
     part depends on L0 linearly. Verify both directions."""
@@ -231,7 +231,7 @@ class TestL0Dependence(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestAnalyticLimits(unittest.TestCase):
     """Cross-check the Python wrapper against the same analytic limits the
     C++ test_schwinger_limits.cpp covers, but reached through the Python
@@ -268,7 +268,7 @@ class TestAnalyticLimits(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestResultRepr(unittest.TestCase):
     """The repr of a GroundStateResult should be informative for pytest
     failure messages and notebook output."""
@@ -283,17 +283,17 @@ class TestResultRepr(unittest.TestCase):
         self.assertIn("truncationErr=", text)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestDocstrings(unittest.TestCase):
     """Make sure each public symbol carries a non-empty docstring so help()
     in a Python REPL gives the user something to read."""
 
     def test_module_docstring(self) -> None:
-        import caset.quantum
-        self.assertIsNotNone(caset.quantum.__doc__)
-        self.assertGreater(len(caset.quantum.__doc__), 200)
+        import tessera.quantum
+        self.assertIsNotNone(tessera.quantum.__doc__)
+        self.assertGreater(len(tessera.quantum.__doc__), 200)
         # The header should mention Bañuls (primary reference).
-        self.assertIn("Bañuls", caset.quantum.__doc__)
+        self.assertIn("Bañuls", tessera.quantum.__doc__)
 
     def test_quantum_config_docstring(self) -> None:
         self.assertIsNotNone(QuantumConfig.__doc__)
@@ -308,7 +308,7 @@ class TestDocstrings(unittest.TestCase):
         self.assertIn("DMRG", computeGroundState.__doc__)
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestSchwingerExampleScript(unittest.TestCase):
     """Smoke-test the example script — guards against import / API drift."""
 

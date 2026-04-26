@@ -1,4 +1,4 @@
-# PLAN.md — Schwinger-Model Majorization Poset Extension for `caset`
+# PLAN.md — Schwinger-Model Majorization Poset Extension for `tessera`
 
 Hand this file to Claude Code as the working spec. Each phase has a
 concrete deliverable, a file layout, and an acceptance test. Do not
@@ -11,7 +11,7 @@ documentation for what's built so far is in [quantum.md](quantum.md).
 
 ## 0. Goal and scope
 
-Extend `caset` with a C++ subsystem that:
+Extend `tessera` with a C++ subsystem that:
 
 1. Represents the 1+1D Kogut–Susskind Schwinger-model Hamiltonian as
    a Matrix Product Operator (MPO) on a Jordan–Wigner'd spin chain.
@@ -50,27 +50,27 @@ callbacks inside the time loop.
 | Purpose | Library | Why |
 |---|---|---|
 | MPS/MPO, DMRG, TDVP | **ITensor (C++)** v3 | Mature, header-heavy C++, built-in DMRG+TDVP, handles quantum-number conservation |
-| Linear algebra (small ops outside ITensor) | Eigen 3 | already likely in caset's toolchain |
+| Linear algebra (small ops outside ITensor) | Eigen 3 | already likely in tessera's toolchain |
 | Graph / poset | Boost.Graph | Hasse diagram, transitive reduction |
-| Python bindings | pybind11 | already in caset |
-| Tests | Catch2 or doctest | whichever caset already uses |
+| Python bindings | pybind11 | already in tessera |
+| Tests | Catch2 or doctest | whichever tessera already uses |
 
 Add ITensor as a git submodule under `third_party/itensor` and wire
 via CMake `add_subdirectory`. ITensor depends on BLAS/LAPACK — reuse
-what caset already has. Do not pull ITensor through a package manager;
+what tessera already has. Do not pull ITensor through a package manager;
 pin a known-good commit.
 
 ## 3. File layout
 
 ```
-caset/
-  include/caset/quantum/
+tessera/
+  include/tessera/quantum/
     schwinger_model.hpp        # MPO construction
     dmrg_runner.hpp            # ground-state driver
     tdvp_runner.hpp            # real-time driver
     schmidt.hpp                # spectrum extraction
     majorization.hpp           # partial order, poset
-    causal_compare.hpp         # LR / caset comparison
+    causal_compare.hpp         # LR / tessera comparison
   src/quantum/
     schwinger_model.cpp
     dmrg_runner.cpp
@@ -83,7 +83,7 @@ caset/
     test_majorization.cpp         # Phase 3 acceptance
     test_tdvp_string.cpp          # Phase 4 acceptance
     test_causal_compare.cpp       # Phase 5 acceptance
-  python/caset/quantum/
+  python/tessera/quantum/
     __init__.py
     _bindings.cpp              # pybind11, only exports final data
   examples/quantum/
@@ -117,7 +117,7 @@ Reference for all numerics: Bañuls, Cichy, Cirac, Jansen,
 ### Phase 0 — scaffolding (≤ 2 days)
 
 - Add ITensor submodule; CMake build verifies with ITensor's own
-  `sample/dmrg.cc` compiled against the caset toolchain.
+  `sample/dmrg.cc` compiled against the tessera toolchain.
 - Create the directory layout above with empty stubs.
 - CI runs on each PR.
 
@@ -168,7 +168,7 @@ Bond dimension 100 is enough for this check.
 - Build a DAG whose nodes are intervals `[i,j]` and edges represent
   the majorization relation; apply Boost.Graph transitive reduction
   to obtain the Hasse diagram.
-- Store as `caset::Poset` (define this type; reuse caset's existing
+- Store as `tessera::Poset` (define this type; reuse tessera's existing
   causet adjacency structure if the API fits).
 
 **Acceptance** (`test_majorization.cpp`):
@@ -213,8 +213,8 @@ Bond dimension 100 is enough for this check.
   2. $\prec_\text{LR}$: from the Lieb–Robinson velocity $v_\text{LR}$
      extracted by fitting OTOC ($\langle [\sigma^+_i(t), \sigma^-_j]^\dagger
      [\sigma^+_i(t), \sigma^-_j]\rangle$) front propagation.
-  3. $\prec_\text{caset}$: if the chain is embedded in a causet, inherit
-     from caset's existing causal order.
+  3. $\prec_\text{tessera}$: if the chain is embedded in a causet, inherit
+     from tessera's existing causal order.
 - Compute agreement statistics: Kendall-$\tau$, fraction of discordant
   pairs, graph edit distance on Hasse diagrams.
 - Output: a single struct
@@ -224,31 +224,31 @@ Bond dimension 100 is enough for this check.
 
 - On a regular (total-order) causet chain: $\prec_\text{maj}$ agrees
   with $\prec_\text{LR}$ above some $v_E \leq v_\text{LR}$; both agree
-  with $\prec_\text{caset}$ since the causet is trivially totally
+  with $\prec_\text{tessera}$ since the causet is trivially totally
   ordered per time slice.
 - Agreement rate quoted with uncertainty from bootstrap over Trotter
   seeds.
 
-### Phase 6 — caset integration (1–2 weeks, optional for v1)
+### Phase 6 — tessera integration (1–2 weeks, optional for v1)
 
 **Status (as of 2026-04-25)**: data-extraction layer landed; MPO
 rebuild on the extracted chain is the remaining piece.
 
 Done:
 
-- `caset::Poset::fromSpacetime(Spacetime const&)` — inherits a Hasse
+- `tessera::Poset::fromSpacetime(Spacetime const&)` — inherits a Hasse
   cover Poset from the timelike-edge subgraph of any
-  `caset::Spacetime`. Uses transitive closure + reduction; preserves
+  `tessera::Spacetime`. Uses transitive closure + reduction; preserves
   metric semantics by orienting earliest-time → latest-time and
   filtering on `Edge::getSquaredLength() < 0`.
-- `caset::quantum::extractCausetChain(Spacetime const&)` — packages
+- `tessera::quantum::extractCausetChain(Spacetime const&)` — packages
   the antichain layering, flat lattice ↔ Spacetime ID mapping,
   adjacent-slice timelike-edge hopping pairs, and the inherited
   partial-order Poset into a single `CausetChain`.
-- Python bindings: `caset.quantum.Poset.fromSpacetime(st)` and
-  `caset.quantum.extractCausetChain(st)` work on any
-  `caset.Spacetime` instance (CDT-built, hand-crafted, or future
-  `caset.CausalSet`).
+- Python bindings: `tessera.quantum.Poset.fromSpacetime(st)` and
+  `tessera.quantum.extractCausetChain(st)` work on any
+  `tessera.Spacetime` instance (CDT-built, hand-crafted, or future
+  `tessera.CausalSet`).
 - C++ acceptance: `tests/quantum/test_poset_from_spacetime.cpp` (7
   cases) and `tests/quantum/test_causet_chain.cpp` (5 cases). Python
   acceptance: `tests/quantum/test_phase6_causet_chain_python.py`.
@@ -284,7 +284,7 @@ Haegeman 2021 for Riemannian optimization; Odrzywołek 2026 for EML.
 
 ## 6. Python layer (minimal)
 
-`python/caset/quantum/_bindings.cpp` exposes exactly:
+`python/tessera/quantum/_bindings.cpp` exposes exactly:
 
 ```cpp
 py::class_<QuantumConfig>(m, "QuantumConfig")
@@ -335,7 +335,7 @@ No MPS, MPO, or ITensor type crosses the barrier.
 
 ## 8. First week targets
 
-- Day 1–2: Phase 0 done, ITensor builds inside caset's CMake tree.
+- Day 1–2: Phase 0 done, ITensor builds inside tessera's CMake tree.
 - Day 3–4: Phase 1 MPO constructed; matches Bañuls 2013 values.
 - Day 5–6: Phase 2 wrapper; Phase 3 majorization infrastructure on
   trivial and GHZ test states.

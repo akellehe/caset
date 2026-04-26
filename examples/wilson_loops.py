@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from PIL import Image
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import SingleTaskProgress
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import SingleTaskProgress
 
 
 # =========================================================================
@@ -297,13 +297,13 @@ def main():
 
     # Build spacetime
     prog.phase("building", extra=f"{args.n_simplices} simplices")
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(args.n_simplices)
     target = st.getN41()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     prog.phase("tuning", total=20)
     cdt.tune(progress=prog.on_tick)
     prog.phase("thermalizing", total=10)
@@ -312,7 +312,7 @@ def main():
           f"Top simplices: {st.getSimplexCount()}")
 
     # Create WilsonLoop
-    wl = caset.WilsonLoop(st)
+    wl = tessera.WilsonLoop(st)
 
     # Find the hinge with the largest fan (most top-simplices around it)
     hinge = None
@@ -353,9 +353,9 @@ def main():
 
     # Evaluate and print results
     modes = [
-        ("COMBINATORIAL", caset.WilsonMode.COMBINATORIAL),
-        ("DEFICIT_ANGLE", caset.WilsonMode.DEFICIT_ANGLE),
-        ("CAUSAL",        caset.WilsonMode.CAUSAL),
+        ("COMBINATORIAL", tessera.WilsonMode.COMBINATORIAL),
+        ("DEFICIT_ANGLE", tessera.WilsonMode.DEFICIT_ANGLE),
+        ("CAUSAL",        tessera.WilsonMode.CAUSAL),
     ]
 
     print(f"\n{'Loop':<15} {'Mode':<16} {'Value':>8} {'Size':>5} "
@@ -369,7 +369,7 @@ def main():
                   f"{r.causalWindingNumber:>8}")
 
     # Measure all hinge loops for area-law plot
-    wl.measureAllHinges(caset.WilsonMode.DEFICIT_ANGLE)
+    wl.measureAllHinges(tessera.WilsonMode.DEFICIT_ANGLE)
     measurements = wl.getMeasurements()
     avg = wl.getAverageBySize()
     if avg:
@@ -388,7 +388,7 @@ def main():
     azimuths = list(range(0, 360, 1))
 
     for loop_name, loop in loops.items():
-        r = wl.evaluate(loop, caset.WilsonMode.DEFICIT_ANGLE)
+        r = wl.evaluate(loop, tessera.WilsonMode.DEFICIT_ANGLE)
         title = (f"{loop_name} loop (size={r.loopSize}, "
                  f"W={r.value:.3f})")
         lidx = _loop_indices(loop, key_to_idx)

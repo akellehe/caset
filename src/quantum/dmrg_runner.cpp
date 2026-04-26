@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -77,4 +77,4 @@ GroundStateResult computeGroundState(QuantumConfig const& cfg) {
     return r;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

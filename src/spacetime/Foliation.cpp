@@ -25,5 +25,5 @@
 
 #include "spacetime/Foliation.h"
 
-namespace caset {
-} // caset
+namespace tessera {
+} // tessera

@@ -29,7 +29,7 @@
 #include <memory>
 
 
-namespace caset {
+namespace tessera {
 
 class Simplex;
 
@@ -60,7 +60,7 @@ class Simplex;
       return squaredLength;
     }
 
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
     [[nodiscard]] std::string Edge::toString() const noexcept {
       return source->toString() + "->" + target->toString();
     }

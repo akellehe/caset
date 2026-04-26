@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Fixing CUDA for CMake - caset 0.1.0 documentation</title>
+        <title>Fixing CUDA for CMake - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">caset 0.1.0 documentation</div></a>
+      <a href="index.html"><div class="brand">tessera 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">caset 0.1.0 documentation</span>
+  <span class="sidebar-brand-text">tessera 0.1.0 documentation</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -197,7 +197,7 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
 </ul>
 
 </div>
@@ -350,8 +350,8 @@ python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;
 </div>
 </section>
 </section>
-<section id="verifying-the-caset-build">
-<h2>Verifying the caset build<a class="headerlink" href="#verifying-the-caset-build" title="Link to this heading">¶</a></h2>
+<section id="verifying-the-tessera-build">
+<h2>Verifying the tessera build<a class="headerlink" href="#verifying-the-tessera-build" title="Link to this heading">¶</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clean rebuild</span>
 rm<span class="w"> </span>-rf<span class="w"> </span>cmake-build-debug
 pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
@@ -372,7 +372,7 @@ python<span class="w"> </span>examples/regge_point_mass.py<span class="w"> </spa
 → CMake found CUDA metadata but the include directory doesn’t exist.
 This usually means a broken or partial install.  Use Option A (symlink)
 or Option B (clean install).</p>
-<p><strong>Build succeeds but <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">caset</span></code> crashes with “libcudart.so not found”</strong>
+<p><strong>Build succeeds but <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">tessera</span></code> crashes with “libcudart.so not found”</strong>
 → Add the CUDA lib directory to <code class="docutils literal notranslate"><span class="pre">LD_LIBRARY_PATH</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">LD_LIBRARY_PATH</span><span class="o">=</span>/usr/local/cuda/lib64:<span class="nv">$LD_LIBRARY_PATH</span>
 </pre></div>
@@ -434,7 +434,7 @@ GPU’s compute capability to CMakeLists.txt:</p>
 <li><a class="reference internal" href="#step-5-verify">Step 5: Verify</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#verifying-the-caset-build">Verifying the caset build</a></li>
+<li><a class="reference internal" href="#verifying-the-tessera-build">Verifying the tessera build</a></li>
 <li><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>

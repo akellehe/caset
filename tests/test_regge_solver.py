@@ -2,14 +2,14 @@
 import math
 import unittest
 
-import caset
+import tessera
 
 
 def _make_spacetime(n_simplices=200):
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(n_simplices)
     return st
 
@@ -19,8 +19,8 @@ class TestDihedralAngles(unittest.TestCase):
 
     def test_dihedral_angles_are_positive(self):
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
-        solver = caset.ReggeSolver(st, matter)
+        matter = tessera.MatterConfiguration()
+        solver = tessera.ReggeSolver(st, matter)
 
         # Find a top-simplex and one of its hinges (triangles, 3 verts)
         for s in st.getSimplices():
@@ -38,8 +38,8 @@ class TestDihedralAngles(unittest.TestCase):
 
     def test_deficit_angles_exist(self):
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
-        solver = caset.ReggeSolver(st, matter)
+        matter = tessera.MatterConfiguration()
+        solver = tessera.ReggeSolver(st, matter)
 
         # Find a hinge and compute its deficit angle
         for s in st.getSimplices():
@@ -56,8 +56,8 @@ class TestReggeAction(unittest.TestCase):
 
     def test_regge_action_is_finite(self):
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
-        solver = caset.ReggeSolver(st, matter)
+        matter = tessera.MatterConfiguration()
+        solver = tessera.ReggeSolver(st, matter)
         S = solver.reggeAction()
         self.assertTrue(math.isfinite(S), f"Regge action should be finite, got {S}")
 
@@ -67,16 +67,16 @@ class TestActionGradientNorm(unittest.TestCase):
 
     def test_vacuum_gradient_norm_is_nonnegative(self):
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()  # no matter = vacuum
-        solver = caset.ReggeSolver(st, matter)
+        matter = tessera.MatterConfiguration()  # no matter = vacuum
+        solver = tessera.ReggeSolver(st, matter)
         F = solver.actionGradientNorm()
         self.assertGreaterEqual(F, 0.0)
 
     def test_solver_reduces_gradient_norm(self):
         """A few gradient steps should reduce (or not increase) ||∇S||²."""
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
-        solver = caset.ReggeSolver(st, matter)
+        matter = tessera.MatterConfiguration()
+        solver = tessera.ReggeSolver(st, matter)
         F0 = solver.actionGradientNorm()
         if F0 < 1e-12:
             self.skipTest("Already at stationary point")
@@ -93,10 +93,10 @@ class TestMatterConfiguration(unittest.TestCase):
 
     def test_worldline_mass_creates_nonzero_gradient(self):
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
+        matter = tessera.MatterConfiguration()
         v = st.getVertexList().toVector()[0]
         matter.setWorldlineMass(v, 1.0, st)
-        solver = caset.ReggeSolver(st, matter)
+        solver = tessera.ReggeSolver(st, matter)
         # With matter, gradient norm should be nonzero (not at solution yet)
         F = solver.actionGradientNorm()
         self.assertGreater(F, 0.0)
@@ -104,23 +104,23 @@ class TestMatterConfiguration(unittest.TestCase):
     def test_matter_action_is_negative(self):
         """S_matter = -M Σ √(-ℓ²) should be negative for positive mass."""
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
+        matter = tessera.MatterConfiguration()
         v = st.getVertexList().toVector()[0]
         matter.setWorldlineMass(v, 1.0, st)
-        solver = caset.ReggeSolver(st, matter)
+        solver = tessera.ReggeSolver(st, matter)
         S_matter = solver.matterAction()
         self.assertLess(S_matter, 0.0,
             "Proper-time matter action should be negative for positive mass")
 
     def test_radial_profile(self):
         st = _make_spacetime(20)
-        matter = caset.MatterConfiguration()
+        matter = tessera.MatterConfiguration()
         v = st.getVertexList().toVector()[0]
         # Exponential profile: ρ(r) = exp(-r)
         matter.setRadialProfile(v, lambda r: math.exp(-r))
         # Radial profiles don't contribute to proper-time action,
         # so just check that it doesn't crash
-        solver = caset.ReggeSolver(st, matter)
+        solver = tessera.ReggeSolver(st, matter)
         S = solver.totalAction()
         self.assertTrue(math.isfinite(S))
 
@@ -129,11 +129,11 @@ class TestHingeArea(unittest.TestCase):
     def test_hinge_area_positive(self):
         st = _make_spacetime(20)
         # Creating a ReggeSolver registers hinges (triangles) via getFacets()
-        matter = caset.MatterConfiguration()
-        caset.ReggeSolver(st, matter)
+        matter = tessera.MatterConfiguration()
+        tessera.ReggeSolver(st, matter)
         for s in st.getSimplices():
             if len(s.getVertices()) == 3 and len(s.getEdges()) >= 3:
-                area = caset.ReggeSolver.hingeArea(s)
+                area = tessera.ReggeSolver.hingeArea(s)
                 self.assertGreaterEqual(area, 0.0)
                 return
         self.skipTest("No triangle found")

@@ -32,7 +32,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace caset {
+namespace tessera {
 Vertex::Vertex() noexcept : id(0) { }
 Vertex::Vertex(const std::uint64_t id_, const std::vector<double> &coords) noexcept : id(id_), coordinates(coords),
   fingerprint({id_}) { }
@@ -109,7 +109,7 @@ Vertex::moveEdgesToImpl(
   Spacetime *spacetime,
   EdgeDirection direction
 ) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   if (spacetime == nullptr) {
     throw std::runtime_error("Spacetime was null in vertex.cpp");
   }
@@ -128,12 +128,12 @@ Vertex::moveEdgesToImpl(
     const auto &sourceVertex = oldEdge->getSource();
 
     if (direction == EdgeDirection::In) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
       if (sourceVertex == this) throw std::runtime_error("sourceVertex was this");
 #endif
       sourceVertex->removeOutEdge(oldEdge);
     } else if (direction == EdgeDirection::Out) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
       if (targetVertex == this) throw std::runtime_error("targetVertex was this");
 #endif
       targetVertex->removeInEdge(oldEdge);
@@ -163,7 +163,7 @@ Vertex::moveInEdgesTo(
 
 std::pair<EdgePtrSet, EdgePtrSet>
 Vertex::moveEdgesTo(const VertexPtr &vertex, Spacetime *spacetime) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   if (spacetime == nullptr) {
     throw std::runtime_error("Spacetime was null in vertex.cpp (2)");
   }
@@ -196,7 +196,7 @@ void Vertex::checkDuplicates(const std::string &msg) const {
 }
 
 bool Vertex::addSimplex(const SimplexPtr &simplex) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (simplex == nullptr) {
     CLOG(CRITICAL_LEVEL, "You passed a null simplex!");
     throw std::runtime_error("You passed a null simplex!");
@@ -208,7 +208,7 @@ bool Vertex::addSimplex(const SimplexPtr &simplex) {
     if (s->fingerprint.fingerprint() == fp) return false;
   }
   simplices.push_back(simplex);
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   checkDuplicates("Duplicated after emplacing a new simplex.");
 #endif
   return true;
@@ -232,7 +232,7 @@ Vertex::getSimplices() const noexcept {
   return simplices;
 }
 
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
 std::string Vertex::toString() const noexcept {
   std::stringstream ss;
   ss << "<V" << "_{" << std::to_string(getId()) << "}";
@@ -260,7 +260,7 @@ void Vertex::addOutEdge(const EdgePtr &edge) noexcept {
 }
 
 void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   if (edge == nullptr) {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an in edge! Refusing.");
     std::abort();
@@ -282,7 +282,7 @@ void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
 }
 
 void Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   if (edge == nullptr) {
     CLOG(WARN_LEVEL, "You passed a null pointer to remove an out edge! Refusing.");
     std::abort();

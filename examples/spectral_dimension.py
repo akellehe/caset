@@ -56,9 +56,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import sparse
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay, make_tune_cb
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import ProgressDisplay, make_tune_cb
 
 
 # ---------------------------------------------------------------------------
@@ -134,10 +134,10 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     _ph = lambda p, done=0, total=0: phase_cb(cfg_id, p, done, total) if phase_cb else None
 
     _ph("building")
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     # Toroid::build creates n_simplices/(d*(d+1)) = n_simplices/20 time
     # slabs at d=4, each only ~5 spatial vertices wide. Building the full
     # size directly yields a long thin tube (~1D dual graph), which traps
@@ -147,7 +147,7 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
     max_build = 80 * 20  # 80 time slabs x 20 simplices/slab in d=4
     st.build(min(n_simplices, max_build))
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
     cdt.tune(progress=make_tune_cb(phase_cb, cfg_id))

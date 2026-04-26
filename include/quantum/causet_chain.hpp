@@ -4,7 +4,7 @@
 // The vanilla Schwinger MPO (include/quantum/schwinger_model.hpp) lives
 // on a regular 1D lattice with N sites and nearest-neighbour hopping
 // pairs (n, n+1). Phase 6 generalises that lattice: replace it with a
-// "chain of antichains" sourced from a caset::Spacetime, where each
+// "chain of antichains" sourced from a tessera::Spacetime, where each
 // antichain is the set of vertices at a fixed integer time slice and
 // hopping follows the timelike causet edges that connect adjacent
 // slices.
@@ -37,11 +37,11 @@
 #include <utility>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 class Spacetime;
 }
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Spacetime → 1D lattice adapter.
 //
@@ -67,7 +67,7 @@ namespace caset::quantum {
 //
 // `partialOrder` is the Hasse-cover Poset on flat-lattice-site IDs,
 // inherited from Spacetime via Poset::fromSpacetime. It's one of the
-// three orders compareOrders() measures (the "≺_caset" entry from
+// three orders compareOrders() measures (the "≺_tessera" entry from
 // Phase 5).
 struct CausetChain {
     int nSites{0};
@@ -75,7 +75,7 @@ struct CausetChain {
     std::vector<std::vector<std::uint64_t>> antichains;     // [tIdx][pos]
     std::vector<std::uint64_t> vertexIds;                  // [flat_idx]
     std::vector<std::pair<int, int>> hoppingPairs;         // [k] = (i, j) i<j
-    caset::Poset partialOrder;
+    tessera::Poset partialOrder;
 };
 
 // Walk the Spacetime's vertex list, group by integer time slice
@@ -97,6 +97,6 @@ struct CausetChain {
 // are any timelike edges with src.time == tgt.time (a metric
 // inconsistency — defensively skipped, never expected from a valid
 // Spacetime).
-CausetChain extractCausetChain(caset::Spacetime const& st);
+CausetChain extractCausetChain(tessera::Spacetime const& st);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

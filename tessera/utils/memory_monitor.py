@@ -1,4 +1,4 @@
-"""Memory monitor for caset examples.
+"""Memory monitor for tessera examples.
 
 Spawns a daemon thread that periodically checks:
   1. The RSS (resident set size) of the current process.

@@ -1,4 +1,4 @@
-# Doxygen configuration for caset
+# Doxygen configuration for tessera
 
 AUTOLINK_SUPPORT       = YES
 EXTRACT_ALL            = NO
@@ -16,7 +16,7 @@ INTERNAL_DOCS          = NO
 JAVADOC_AUTOBRIEF      = YES
 MARKDOWN_SUPPORT       = YES
 OUTPUT_DIRECTORY       = _doxygen
-PROJECT_NAME           = "caset"
+PROJECT_NAME           = "tessera"
 RECURSIVE              = YES
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES

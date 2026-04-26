@@ -40,7 +40,7 @@ struct StackVec {
 };
 } // anon
 
-namespace caset {
+namespace tessera {
 
 CDT::CDT(std::shared_ptr<Spacetime> spacetime_, double k0_, double k4_, double delta_,
          double epsilon_, std::size_t targetN41_, bool quadraticVolumeFix_)
@@ -806,4 +806,4 @@ double CDT::getK0() const noexcept { return k0; }
 double CDT::getK4() const noexcept { return k4; }
 double CDT::getDelta() const noexcept { return delta; }
 
-} // caset
+} // tessera

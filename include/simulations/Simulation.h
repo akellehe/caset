@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_SIMULATION_H
-#define CASET_SIMULATION_H
+#ifndef TESSERA_SIMULATION_H
+#define TESSERA_SIMULATION_H
 
 #include <functional>
 
-namespace caset {
+namespace tessera {
 
 /// # Simulation Base Class
 ///
@@ -67,6 +67,6 @@ class Simulation {
     virtual void thermalize();
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_SIMULATION_H
+#endif //TESSERA_SIMULATION_H

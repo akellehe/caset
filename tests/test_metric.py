@@ -21,7 +21,7 @@
 
 import unittest
 
-from caset import Edge, Vertex, Metric, Signature, SignatureType
+from tessera import Edge, Vertex, Metric, Signature, SignatureType
 
 
 class TestMetric(unittest.TestCase):

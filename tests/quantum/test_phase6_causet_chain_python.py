@@ -1,35 +1,35 @@
 """Phase 6 Python tests — Spacetime → causet-chain extraction (the
-``caset.quantum.extractCausetChain`` adapter) plus the underlying
-``caset.Poset.fromSpacetime`` static method exposed in the same
+``tessera.quantum.extractCausetChain`` adapter) plus the underlying
+``tessera.Poset.fromSpacetime`` static method exposed in the same
 module's :class:`Poset`.
 
-Skips cleanly when caset was built without CASET_QUANTUM=1.
+Skips cleanly when tessera was built without TESSERA_QUANTUM=1.
 """
 
 from __future__ import annotations
 
 import unittest
 
-import caset
+import tessera
 
 try:
-    from caset.quantum import CausetChain, Poset, extractCausetChain
+    from tessera.quantum import CausetChain, Poset, extractCausetChain
     HAVE_QUANTUM = True
 except ImportError:
     HAVE_QUANTUM = False
 
 
-def _build_default_cdt(num_simplices: int = 20) -> "caset.Spacetime":
+def _build_default_cdt(num_simplices: int = 20) -> "tessera.Spacetime":
     """Tiny default-CDT Spacetime for testing — toroidal, alpha=1, a=1."""
-    metric = caset.Metric(True, caset.Signature(4, caset.Lorentzian))
-    st = caset.Spacetime(
-        metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid()
+    metric = tessera.Metric(True, tessera.Signature(4, tessera.Lorentzian))
+    st = tessera.Spacetime(
+        metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid()
     )
     st.build(num_simplices)
     return st
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestExtractCausetChain(unittest.TestCase):
     """The extractor produces a self-consistent CausetChain on a built CDT.
 
@@ -93,9 +93,9 @@ class TestExtractCausetChain(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(HAVE_QUANTUM, "caset built without CASET_QUANTUM=1")
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestPosetFromSpacetimePython(unittest.TestCase):
-    """Direct Python access to caset.Poset.fromSpacetime.
+    """Direct Python access to tessera.Poset.fromSpacetime.
 
     The Phase 6 integration is most useful via extractCausetChain
     (which packages partialOrder alongside lattice metadata) but the

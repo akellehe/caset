@@ -9,11 +9,11 @@
 #include <unordered_map>
 #include <vector>
 
-#ifdef CASET_CUDA
+#ifdef TESSERA_CUDA
 #include "cuda/regge_cuda.h"
 #endif
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -114,11 +114,11 @@ class ReggeSolver {
     /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
     [[nodiscard]] std::vector<double> actionGradient() const;
 
-#ifdef CASET_CUDA
+#ifdef TESSERA_CUDA
     /// Flatten mesh topology into GPU-friendly arrays.
     [[nodiscard]] cuda::GpuMeshData flattenMeshForGpu() const;
 #endif
 
 };
 
-} // namespace caset
+} // namespace tessera

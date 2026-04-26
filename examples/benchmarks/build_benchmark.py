@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # MIT License -- Copyright (c) 2025 Andrew Kelleher
 """
-Build-time benchmarks for caset simplicial complexes.
+Build-time benchmarks for tessera simplicial complexes.
 
 Measures wall-clock time to build CDT triangulations across dimensions
 (1D through 4D) and a range of target sizes.  Results are written to a
@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from tqdm import tqdm
 
-import caset
+import tessera
 
 
 # ---------------------------------------------------------------------------
@@ -48,10 +48,10 @@ DIMENSION_MARKERS = {1: "s", 2: "o", 3: "D", 4: "^"}
 
 def build_once(dim, target_n):
     """Build a single triangulation, return timing and stats."""
-    sig = caset.Signature(dim, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
-                         caset.PREFERRED, caset.Toroid())
+    sig = tessera.Signature(dim, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                         tessera.PREFERRED, tessera.Toroid())
 
     t0 = time.perf_counter()
     st.build(target_n)
@@ -237,8 +237,8 @@ def create_all_plots(results, save_dir=None):
     """Generate the full benchmark figure set."""
     # --- Main 4-panel figure ---
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    ver = getattr(caset, "__version__", "?")
-    fig.suptitle(f"caset v{ver} Build Benchmarks", fontsize=16,
+    ver = getattr(tessera, "__version__", "?")
+    fig.suptitle(f"tessera v{ver} Build Benchmarks", fontsize=16,
                  fontweight="bold", y=0.98)
 
     plot_build_time(results, axes[0, 0])
@@ -297,7 +297,7 @@ def build_log(results):
             "platform": platform.platform(),
             "processor": platform.processor(),
             "machine": platform.machine(),
-            "caset_version": getattr(caset, "__version__", "unknown"),
+            "tessera_version": getattr(tessera, "__version__", "unknown"),
             "repeats_per_point": len(results[0]["trials"]) if results else 0,
         },
         "results": summary,
@@ -311,7 +311,7 @@ def build_log(results):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build-time benchmarks for caset simplicial complexes")
+        description="Build-time benchmarks for tessera simplicial complexes")
     parser.add_argument("--save", type=str, default=None,
                         help="Directory to save plots and JSON log")
     parser.add_argument("--repeats", type=int, default=REPEATS,
@@ -322,7 +322,7 @@ def main():
     repeats = args.repeats
 
     print("=" * 64)
-    print("  caset Build Benchmarks")
+    print("  tessera Build Benchmarks")
     print(f"  Dimensions: {DIMENSIONS}")
     print(f"  Sizes:      {[f'{s:,}' for s in SIZES]}")
     print(f"  Repeats:    {repeats}")

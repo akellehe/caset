@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_CONSTRAINT_H
-#define CASET_CONSTRAINT_H
+#ifndef TESSERA_CONSTRAINT_H
+#define TESSERA_CONSTRAINT_H
 
 #include <memory>
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -68,6 +68,6 @@ class Constraint {
     virtual bool applies(const std::shared_ptr<Spacetime> &spacetime, const ConstraintType &type_) = 0;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_CONSTRAINT_H
+#endif //TESSERA_CONSTRAINT_H

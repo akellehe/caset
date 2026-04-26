@@ -1,6 +1,6 @@
 """Pytest wrappers for the C++ quantum acceptance executables.
 
-Each test invokes a standalone C++ binary built when ``CASET_QUANTUM=ON`` is
+Each test invokes a standalone C++ binary built when ``TESSERA_QUANTUM=ON`` is
 passed to CMake. The binaries cross-check ITensor's DMRG output against
 independent dense diagonalizations (Phase 0 Heisenberg, Phase 1 Schwinger).
 
@@ -45,8 +45,8 @@ class TestQuantumExecutables(unittest.TestCase):
         exe = _find_executable(exe_name)
         if exe is None:
             self.skipTest(
-                f"{exe_name} not found — build with `cmake -DCASET_QUANTUM=ON` "
-                "or set the env var CASET_QUANTUM=1 before running pytest"
+                f"{exe_name} not found — build with `cmake -DTESSERA_QUANTUM=ON` "
+                "or set the env var TESSERA_QUANTUM=1 before running pytest"
             )
         result = subprocess.run(
             [str(exe)],

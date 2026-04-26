@@ -98,15 +98,15 @@ make sense of it, though.
 
 ### Lorentzian Spin Foams
 
-*Not yet implemented in caset.*
+*Not yet implemented in tessera.*
 
 ### Loop Quantum Gravity on Graphs
 
-*Not yet implemented in caset.*
+*Not yet implemented in tessera.*
 
 ### Picard-Lefschetz Theory
 
-*Not yet implemented in caset.*
+*Not yet implemented in tessera.*
 
 ### Regge Calculus
 

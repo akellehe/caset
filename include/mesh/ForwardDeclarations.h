@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_FORWARD_DECLARATIONS_H
-#define CASET_FORWARD_DECLARATIONS_H
+#ifndef TESSERA_FORWARD_DECLARATIONS_H
+#define TESSERA_FORWARD_DECLARATIONS_H
 
 #include <memory>
 #include <vector>
@@ -30,7 +30,7 @@
 #include "mesh/Fingerprint.h"
 #include <optional>
 
-namespace caset {
+namespace tessera {
 
 // Basic types
 using IdType = std::uint64_t;
@@ -104,6 +104,6 @@ using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrie
 
 class Spacetime;
 
-} // namespace caset
+} // namespace tessera
 
-#endif // CASET_FORWARD_DECLARATIONS_H
+#endif // TESSERA_FORWARD_DECLARATIONS_H

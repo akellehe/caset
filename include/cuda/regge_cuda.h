@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace caset {
+namespace tessera {
 namespace cuda {
 
 /// Maximum Cayley-Menger matrix dimension (d+2 for d-simplices).
@@ -83,4 +83,4 @@ void compute_step_gpu(const GpuMeshData &mesh,
                       double *h_dF);
 
 } // namespace cuda
-} // namespace caset
+} // namespace tessera

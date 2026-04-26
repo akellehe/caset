@@ -11,7 +11,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -107,4 +107,4 @@ SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi) {
     return out;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

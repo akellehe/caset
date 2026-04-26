@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -75,4 +75,4 @@ class MatterConfiguration {
     std::vector<RadialProfile> radialProfiles_;
 };
 
-} // namespace caset
+} // namespace tessera

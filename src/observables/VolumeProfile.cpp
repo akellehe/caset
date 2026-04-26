@@ -22,7 +22,7 @@
 #include "observables/VolumeProfile.h"
 #include <algorithm>
 
-namespace caset {
+namespace tessera {
 
 double VolumeProfile::compute(const std::shared_ptr<Spacetime> &spacetime) {
   int topSize = spacetime->getMetric()->getSignature()->getDimensions() + 1;
@@ -79,4 +79,4 @@ void VolumeProfile::reset() {
   measurements.clear();
 }
 
-} // caset
+} // tessera

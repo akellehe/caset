@@ -23,13 +23,13 @@
 // Created by andrew on 12/14/25.
 //
 
-#ifndef CASET_SIMPLEXORIENTATION_H
-#define CASET_SIMPLEXORIENTATION_H
+#ifndef TESSERA_SIMPLEXORIENTATION_H
+#define TESSERA_SIMPLEXORIENTATION_H
 
 // Note: an old `#include <pybind11/pybind11.h>` was removed here. It was
 // unreferenced inside the file and was dragging Python.h into every TU
-// of the core mesh subsystem — including caset_core, which then forced
-// every consumer (test executables, caset_quantum) to link Python. None
+// of the core mesh subsystem — including tessera_core, which then forced
+// every consumer (test executables, tessera_quantum) to link Python. None
 // of mesh / spacetime / observables actually use pybind11 — that's all
 // in src/bindings.cpp.
 
@@ -39,7 +39,7 @@
 
 #include "mesh/ForwardDeclarations.h"
 
-namespace caset {
+namespace tessera {
 
 ///
 ///
@@ -90,4 +90,4 @@ class SimplexOrientation {
 
 }
 
-#endif //CASET_SIMPLEXORIENTATION_H
+#endif //TESSERA_SIMPLEXORIENTATION_H

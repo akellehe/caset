@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import argparse
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import SingleTaskProgress
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import SingleTaskProgress
 
 
 def main():
@@ -50,14 +50,14 @@ def main():
     prog = SingleTaskProgress(memory_monitor=monitor)
     prog.phase("building", extra=f"{args.n_simplices} simplices")
 
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED, caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED, tessera.Toroid())
     st.build(args.n_simplices)
 
     target = args.targetN41 if args.targetN41 is not None else st.getN41()
     eps = args.epsilon if args.epsilon is not None else 1.0 / max(target, 1)
-    cdt = caset.CDTSimulation(st, args.k0, args.k4, args.delta, eps,
+    cdt = tessera.CDTSimulation(st, args.k0, args.k4, args.delta, eps,
                               target, args.quadraticVolume)
 
     prog.phase("tuning", total=20)

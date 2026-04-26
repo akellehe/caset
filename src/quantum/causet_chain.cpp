@@ -1,4 +1,4 @@
-// Implementation of caset::quantum::extractCausetChain — see
+// Implementation of tessera::quantum::extractCausetChain — see
 // include/quantum/causet_chain.hpp for the design.
 
 #include "quantum/causet_chain.hpp"
@@ -15,9 +15,9 @@
 #include <map>
 #include <unordered_map>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
-CausetChain extractCausetChain(caset::Spacetime const& st) {
+CausetChain extractCausetChain(tessera::Spacetime const& st) {
     CausetChain out;
 
     auto const& vlist = st.getVertexList();
@@ -112,8 +112,8 @@ CausetChain extractCausetChain(caset::Spacetime const& st) {
     // vertex has a unique time slice. When several vertices share a
     // time slice, the per-slice ascending-ID order also matches, so
     // the two index spaces stay aligned.
-    out.partialOrder = caset::Poset::fromSpacetime(st);
+    out.partialOrder = tessera::Poset::fromSpacetime(st);
     return out;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

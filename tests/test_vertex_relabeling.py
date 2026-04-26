@@ -16,15 +16,15 @@ References:
 """
 
 import unittest
-import caset
+import tessera
 
 
 def _make_spacetime(d=4):
     """Create a d-dimensional Lorentzian CDT spacetime."""
-    sig = caset.Signature(d, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    return caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                           caset.Toroid())
+    sig = tessera.Signature(d, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    return tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                           tessera.Toroid())
 
 
 def _top_simplices(st, d=4):
@@ -329,7 +329,7 @@ class TestSwapInvariants(unittest.TestCase):
         st = _make_spacetime()
         st.build(50)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
 
         v0 = st.getVertexList().get(0)
         v1 = st.getVertexList().get(1)
@@ -398,7 +398,7 @@ class TestSwapStress(unittest.TestCase):
         st = _make_spacetime()
         st.build(100)
         target = st.getN41()
-        cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
+        cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
         cdt.tune()
 
         import random

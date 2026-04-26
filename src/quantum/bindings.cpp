@@ -1,7 +1,7 @@
-// Pybind11 bindings for the quantum subsystem. Lives outside libcaset_quantum
+// Pybind11 bindings for the quantum subsystem. Lives outside libtessera_quantum
 // (which is pybind-free) so the static library can be reused without pulling
-// in the Python dependency. This translation unit is added to _caset's
-// sources only when CASET_QUANTUM=ON in CMakeLists.txt.
+// in the Python dependency. This translation unit is added to _tessera's
+// sources only when TESSERA_QUANTUM=ON in CMakeLists.txt.
 //
 // Surface area is deliberately minimal per PLAN.md §1: scalars in, scalars
 // out. No MPS / MPO / ITensor types cross the Python boundary. If callers
@@ -9,7 +9,7 @@
 // callback that returns plain data (Phase 4's approach for TDVP snapshots).
 //
 // Docstrings here are deliberately verbose because they're the primary
-// user-facing documentation — `help(caset.quantum.computeGroundState)`
+// user-facing documentation — `help(tessera.quantum.computeGroundState)`
 // in a Python REPL or notebook should be enough to understand both the
 // API and the underlying physics conventions.
 
@@ -29,7 +29,7 @@
 namespace py = pybind11;
 
 void register_quantum_bindings(py::module_ m) {
-    using namespace caset::quantum;
+    using namespace tessera::quantum;
 
     m.doc() = R"doc(
 Schwinger model + DMRG (Phase 2 of docs/source/quantum-plan.md).
@@ -130,7 +130,7 @@ T : float
 
 Examples
 --------
->>> from caset.quantum import QuantumConfig
+>>> from tessera.quantum import QuantumConfig
 >>> cfg = QuantumConfig()
 >>> cfg.N = 20
 >>> cfg.a = 1.0
@@ -290,7 +290,7 @@ covers : list[tuple[int, int]]
 )doc")
         .def(py::init<>())
         // getNodeCount and covers are accessed via getters/setters because the
-        // underlying caset::Poset stores them in VertexList/EdgeList rather
+        // underlying tessera::Poset stores them in VertexList/EdgeList rather
         // than as raw int + vector members. Python sees the same simple
         // {getNodeCount: int, covers: list[tuple[int,int]]} surface as before.
         .def_property("getNodeCount",
@@ -307,13 +307,13 @@ covers : list[tuple[int, int]]
             "Graphviz DOT representation of the Hasse diagram.")
         // Phase 6 — Spacetime → Poset factory. Same py::object indirection
         // as extractCausetChain because Spacetime is registered in the
-        // top-level _caset module, not in this quantum sub-binding TU.
+        // top-level _tessera module, not in this quantum sub-binding TU.
         .def_static("fromSpacetime",
             [](py::object spacetime_obj) {
-                auto const* st = spacetime_obj.cast<caset::Spacetime const*>();
-                return caset::Poset::fromSpacetime(*st);
+                auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
+                return tessera::Poset::fromSpacetime(*st);
             }, py::arg("spacetime"),
-            R"doc(Inherit a Hasse-cover Poset from a caset.Spacetime.
+            R"doc(Inherit a Hasse-cover Poset from a tessera.Spacetime.
 
 Walks the Spacetime's edge list, takes every timelike edge
 (``Edge.getSquaredLength() < 0``) as a strict precedes-relation
@@ -328,7 +328,7 @@ ascending recovers the Poset node order trivially.
 
 Parameters
 ----------
-spacetime : caset.Spacetime
+spacetime : tessera.Spacetime
     Source spacetime.
 
 Returns
@@ -709,7 +709,7 @@ QuenchResult
 
 Examples
 --------
->>> from caset.quantum import TDVPConfig, runQqbarQuench
+>>> from tessera.quantum import TDVPConfig, runQqbarQuench
 >>> cfg = TDVPConfig()
 >>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark limit
 >>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
@@ -748,7 +748,7 @@ GroundStateMajorizationResult
 
 Examples
 --------
->>> from caset.quantum import QuantumConfig, computeGroundStateMajorization
+>>> from tessera.quantum import QuantumConfig, computeGroundStateMajorization
 >>> cfg = QuantumConfig()
 >>> cfg.N = 6; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
 >>> cfg.maxBondDim = 32; cfg.nSweeps = 8
@@ -762,8 +762,8 @@ True
     py::class_<CausetChain>(m, "CausetChain",
             R"doc(Phase 6 — Spacetime-derived chain layout for the Schwinger MPO.
 
-A flattened mapping from a :class:`caset._caset.Spacetime` (or a future
-:class:`caset.Causet`) to a 1D lattice with hopping pairs, plus the
+A flattened mapping from a :class:`tessera._tessera.Spacetime` (or a future
+:class:`tessera.Causet`) to a 1D lattice with hopping pairs, plus the
 inherited Hasse-cover :class:`Poset` on the lattice sites.
 
 For the simplest case where every time slice has a single vertex, this
@@ -791,7 +791,7 @@ hoppingPairs : list[tuple[int, int]]
     timelike causet edges that cross exactly one slice boundary.
 partialOrder : Poset
     Hasse cover Poset on the nSites label set, inherited via
-    :func:`caset._caset.Poset.fromSpacetime`.
+    :func:`tessera._tessera.Poset.fromSpacetime`.
 )doc")
         .def_readonly("nSites",      &CausetChain::nSites)
         .def_readonly("times",        &CausetChain::times)
@@ -805,12 +805,12 @@ partialOrder : Poset
                    ", hops=" + std::to_string(c.hoppingPairs.size()) + ")";
         });
 
-    // Spacetime is bound in the top-level _caset module (src/bindings.cpp),
+    // Spacetime is bound in the top-level _tessera module (src/bindings.cpp),
     // not here, so pybind11 can't statically deduce its descriptor for a
     // raw Spacetime const& parameter. Take it through py::object and cast
     // at runtime — the registry lookup resolves to the same class object.
     m.def("extractCausetChain", [](py::object spacetime_obj) {
-              auto const* st = spacetime_obj.cast<caset::Spacetime const*>();
+              auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
               return extractCausetChain(*st);
           }, py::arg("spacetime"),
           R"doc(Phase 6 — extract a chain-of-antichains adapter from a Spacetime.
@@ -835,7 +835,7 @@ trivial case where every time slice has a single vertex,
 
 Parameters
 ----------
-spacetime : caset._caset.Spacetime
+spacetime : tessera._tessera.Spacetime
     Source spacetime. Vertices must have at least 1D coordinates so
     that ``Vertex.getTime()`` is well-defined.
 
@@ -882,7 +882,7 @@ Examples
 --------
 Reproduce the Phase 1 N=4, m/g=0 reference value::
 
-    >>> from caset.quantum import QuantumConfig, computeGroundState
+    >>> from tessera.quantum import QuantumConfig, computeGroundState
     >>> cfg = QuantumConfig()
     >>> cfg.N = 4
     >>> cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0

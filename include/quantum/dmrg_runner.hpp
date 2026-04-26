@@ -21,7 +21,7 @@
 
 #include "quantum/schwinger_model.hpp"
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Flat, Python-friendly configuration. Holds Hamiltonian parameters plus
 // DMRG sweep settings. Defaults are tuned for the small / moderate N runs
@@ -67,4 +67,4 @@ struct GroundStateResult {
 // from buildSchwingerMpo).
 GroundStateResult computeGroundState(QuantumConfig const& config);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>PLAN.md — Schwinger-Model Majorization Poset Extension for caset - caset 0.1.0 documentation</title>
+        <title>PLAN.md — Schwinger-Model Majorization Poset Extension for tessera - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -161,7 +161,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="index.html"><div class="brand">caset 0.1.0 documentation</div></a>
+      <a href="index.html"><div class="brand">tessera 0.1.0 documentation</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -182,7 +182,7 @@
       
       <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
-  <span class="sidebar-brand-text">caset 0.1.0 documentation</span>
+  <span class="sidebar-brand-text">tessera 0.1.0 documentation</span>
   
 </a><form class="sidebar-search-container" method="get" action="search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -197,7 +197,7 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Caset C++ API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
 </ul>
 
 </div>
@@ -236,8 +236,8 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="plan-md-schwinger-model-majorization-poset-extension-for-caset">
-<h1>PLAN.md — Schwinger-Model Majorization Poset Extension for <code class="docutils literal notranslate"><span class="pre">caset</span></code><a class="headerlink" href="#plan-md-schwinger-model-majorization-poset-extension-for-caset" title="Link to this heading">¶</a></h1>
+          <section class="tex2jax_ignore mathjax_ignore" id="plan-md-schwinger-model-majorization-poset-extension-for-tessera">
+<h1>PLAN.md — Schwinger-Model Majorization Poset Extension for <code class="docutils literal notranslate"><span class="pre">tessera</span></code><a class="headerlink" href="#plan-md-schwinger-model-majorization-poset-extension-for-tessera" title="Link to this heading">¶</a></h1>
 <p>Hand this file to Claude Code as the working spec. Each phase has a
 concrete deliverable, a file layout, and an acceptance test. Do not
 skip acceptance tests; every phase gates the next.</p>
@@ -247,7 +247,7 @@ limitations, and bibliographic context, are in
 documentation for what’s built so far is in <a class="reference internal" href="quantum.html"><span class="std std-doc">quantum.md</span></a>.</p>
 <section id="goal-and-scope">
 <h2>0. Goal and scope<a class="headerlink" href="#goal-and-scope" title="Link to this heading">¶</a></h2>
-<p>Extend <code class="docutils literal notranslate"><span class="pre">caset</span></code> with a C++ subsystem that:</p>
+<p>Extend <code class="docutils literal notranslate"><span class="pre">tessera</span></code> with a C++ subsystem that:</p>
 <ol class="arabic simple">
 <li><p>Represents the 1+1D Kogut–Susskind Schwinger-model Hamiltonian as
 a Matrix Product Operator (MPO) on a Jordan–Wigner’d spin chain.</p></li>
@@ -297,7 +297,7 @@ callbacks inside the time loop.</p>
 </tr>
 <tr class="row-odd"><td><p>Linear algebra (small ops outside ITensor)</p></td>
 <td><p>Eigen 3</p></td>
-<td><p>already likely in caset’s toolchain</p></td>
+<td><p>already likely in tessera’s toolchain</p></td>
 </tr>
 <tr class="row-even"><td><p>Graph / poset</p></td>
 <td><p>Boost.Graph</p></td>
@@ -305,30 +305,30 @@ callbacks inside the time loop.</p>
 </tr>
 <tr class="row-odd"><td><p>Python bindings</p></td>
 <td><p>pybind11</p></td>
-<td><p>already in caset</p></td>
+<td><p>already in tessera</p></td>
 </tr>
 <tr class="row-even"><td><p>Tests</p></td>
 <td><p>Catch2 or doctest</p></td>
-<td><p>whichever caset already uses</p></td>
+<td><p>whichever tessera already uses</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <p>Add ITensor as a git submodule under <code class="docutils literal notranslate"><span class="pre">third_party/itensor</span></code> and wire
 via CMake <code class="docutils literal notranslate"><span class="pre">add_subdirectory</span></code>. ITensor depends on BLAS/LAPACK — reuse
-what caset already has. Do not pull ITensor through a package manager;
+what tessera already has. Do not pull ITensor through a package manager;
 pin a known-good commit.</p>
 </section>
 <section id="file-layout">
 <h2>3. File layout<a class="headerlink" href="#file-layout" title="Link to this heading">¶</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">caset</span><span class="o">/</span>
-  <span class="n">include</span><span class="o">/</span><span class="n">caset</span><span class="o">/</span><span class="n">quantum</span><span class="o">/</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">tessera</span><span class="o">/</span>
+  <span class="n">include</span><span class="o">/</span><span class="n">tessera</span><span class="o">/</span><span class="n">quantum</span><span class="o">/</span>
     <span class="n">schwinger_model</span><span class="o">.</span><span class="n">hpp</span>        <span class="c1"># MPO construction</span>
     <span class="n">dmrg_runner</span><span class="o">.</span><span class="n">hpp</span>            <span class="c1"># ground-state driver</span>
     <span class="n">tdvp_runner</span><span class="o">.</span><span class="n">hpp</span>            <span class="c1"># real-time driver</span>
     <span class="n">schmidt</span><span class="o">.</span><span class="n">hpp</span>                <span class="c1"># spectrum extraction</span>
     <span class="n">majorization</span><span class="o">.</span><span class="n">hpp</span>           <span class="c1"># partial order, poset</span>
-    <span class="n">causal_compare</span><span class="o">.</span><span class="n">hpp</span>         <span class="c1"># LR / caset comparison</span>
+    <span class="n">causal_compare</span><span class="o">.</span><span class="n">hpp</span>         <span class="c1"># LR / tessera comparison</span>
   <span class="n">src</span><span class="o">/</span><span class="n">quantum</span><span class="o">/</span>
     <span class="n">schwinger_model</span><span class="o">.</span><span class="n">cpp</span>
     <span class="n">dmrg_runner</span><span class="o">.</span><span class="n">cpp</span>
@@ -341,7 +341,7 @@ pin a known-good commit.</p>
     <span class="n">test_majorization</span><span class="o">.</span><span class="n">cpp</span>         <span class="c1"># Phase 3 acceptance</span>
     <span class="n">test_tdvp_string</span><span class="o">.</span><span class="n">cpp</span>          <span class="c1"># Phase 4 acceptance</span>
     <span class="n">test_causal_compare</span><span class="o">.</span><span class="n">cpp</span>       <span class="c1"># Phase 5 acceptance</span>
-  <span class="n">python</span><span class="o">/</span><span class="n">caset</span><span class="o">/</span><span class="n">quantum</span><span class="o">/</span>
+  <span class="n">python</span><span class="o">/</span><span class="n">tessera</span><span class="o">/</span><span class="n">quantum</span><span class="o">/</span>
     <span class="fm">__init__</span><span class="o">.</span><span class="n">py</span>
     <span class="n">_bindings</span><span class="o">.</span><span class="n">cpp</span>              <span class="c1"># pybind11, only exports final data</span>
   <span class="n">examples</span><span class="o">/</span><span class="n">quantum</span><span class="o">/</span>
@@ -383,7 +383,7 @@ natively — use it, do not roll a hand-built MPO.</p>
 <h3>Phase 0 — scaffolding (≤ 2 days)<a class="headerlink" href="#phase-0-scaffolding-2-days" title="Link to this heading">¶</a></h3>
 <ul class="simple">
 <li><p>Add ITensor submodule; CMake build verifies with ITensor’s own
-<code class="docutils literal notranslate"><span class="pre">sample/dmrg.cc</span></code> compiled against the caset toolchain.</p></li>
+<code class="docutils literal notranslate"><span class="pre">sample/dmrg.cc</span></code> compiled against the tessera toolchain.</p></li>
 <li><p>Create the directory layout above with empty stubs.</p></li>
 <li><p>CI runs on each PR.</p></li>
 </ul>
@@ -436,7 +436,7 @@ only <span class="math notranslate nohighlight">\((E_0, \text{bond\_dim}, \text{
 <li><p>Build a DAG whose nodes are intervals <code class="docutils literal notranslate"><span class="pre">[i,j]</span></code> and edges represent
 the majorization relation; apply Boost.Graph transitive reduction
 to obtain the Hasse diagram.</p></li>
-<li><p>Store as <code class="docutils literal notranslate"><span class="pre">caset::Poset</span></code> (define this type; reuse caset’s existing
+<li><p>Store as <code class="docutils literal notranslate"><span class="pre">tessera::Poset</span></code> (define this type; reuse tessera’s existing
 causet adjacency structure if the API fits).</p></li>
 </ul>
 <p><strong>Acceptance</strong> (<code class="docutils literal notranslate"><span class="pre">test_majorization.cpp</span></code>):</p>
@@ -489,8 +489,8 @@ between <span class="math notranslate nohighlight">\(i_0\)</span> and <span clas
 <li><p><span class="math notranslate nohighlight">\(\prec_\text{LR}\)</span>: from the Lieb–Robinson velocity <span class="math notranslate nohighlight">\(v_\text{LR}\)</span>
 extracted by fitting OTOC (<span class="math notranslate nohighlight">\(\langle [\sigma^+_i(t), \sigma^-_j]^\dagger
 [\sigma^+_i(t), \sigma^-_j]\rangle\)</span>) front propagation.</p></li>
-<li><p><span class="math notranslate nohighlight">\(\prec_\text{caset}\)</span>: if the chain is embedded in a causet, inherit
-from caset’s existing causal order.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\prec_\text{tessera}\)</span>: if the chain is embedded in a causet, inherit
+from tessera’s existing causal order.</p></li>
 </ol>
 </li>
 <li><p>Compute agreement statistics: Kendall-<span class="math notranslate nohighlight">\(\tau\)</span>, fraction of discordant
@@ -502,31 +502,31 @@ pairs, graph edit distance on Hasse diagrams.</p></li>
 <ul class="simple">
 <li><p>On a regular (total-order) causet chain: <span class="math notranslate nohighlight">\(\prec_\text{maj}\)</span> agrees
 with <span class="math notranslate nohighlight">\(\prec_\text{LR}\)</span> above some <span class="math notranslate nohighlight">\(v_E \leq v_\text{LR}\)</span>; both agree
-with <span class="math notranslate nohighlight">\(\prec_\text{caset}\)</span> since the causet is trivially totally
+with <span class="math notranslate nohighlight">\(\prec_\text{tessera}\)</span> since the causet is trivially totally
 ordered per time slice.</p></li>
 <li><p>Agreement rate quoted with uncertainty from bootstrap over Trotter
 seeds.</p></li>
 </ul>
 </section>
-<section id="phase-6-caset-integration-12-weeks-optional-for-v1">
-<h3>Phase 6 — caset integration (1–2 weeks, optional for v1)<a class="headerlink" href="#phase-6-caset-integration-12-weeks-optional-for-v1" title="Link to this heading">¶</a></h3>
+<section id="phase-6-tessera-integration-12-weeks-optional-for-v1">
+<h3>Phase 6 — tessera integration (1–2 weeks, optional for v1)<a class="headerlink" href="#phase-6-tessera-integration-12-weeks-optional-for-v1" title="Link to this heading">¶</a></h3>
 <p><strong>Status (as of 2026-04-25)</strong>: data-extraction layer landed; MPO
 rebuild on the extracted chain is the remaining piece.</p>
 <p>Done:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">caset::Poset::fromSpacetime(Spacetime</span> <span class="pre">const&amp;)</span></code> — inherits a Hasse
+<li><p><code class="docutils literal notranslate"><span class="pre">tessera::Poset::fromSpacetime(Spacetime</span> <span class="pre">const&amp;)</span></code> — inherits a Hasse
 cover Poset from the timelike-edge subgraph of any
-<code class="docutils literal notranslate"><span class="pre">caset::Spacetime</span></code>. Uses transitive closure + reduction; preserves
+<code class="docutils literal notranslate"><span class="pre">tessera::Spacetime</span></code>. Uses transitive closure + reduction; preserves
 metric semantics by orienting earliest-time → latest-time and
 filtering on <code class="docutils literal notranslate"><span class="pre">Edge::getSquaredLength()</span> <span class="pre">&lt;</span> <span class="pre">0</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">caset::quantum::extractCausetChain(Spacetime</span> <span class="pre">const&amp;)</span></code> — packages
+<li><p><code class="docutils literal notranslate"><span class="pre">tessera::quantum::extractCausetChain(Spacetime</span> <span class="pre">const&amp;)</span></code> — packages
 the antichain layering, flat lattice ↔ Spacetime ID mapping,
 adjacent-slice timelike-edge hopping pairs, and the inherited
 partial-order Poset into a single <code class="docutils literal notranslate"><span class="pre">CausetChain</span></code>.</p></li>
-<li><p>Python bindings: <code class="docutils literal notranslate"><span class="pre">caset.quantum.Poset.fromSpacetime(st)</span></code> and
-<code class="docutils literal notranslate"><span class="pre">caset.quantum.extractCausetChain(st)</span></code> work on any
-<code class="docutils literal notranslate"><span class="pre">caset.Spacetime</span></code> instance (CDT-built, hand-crafted, or future
-<code class="docutils literal notranslate"><span class="pre">caset.CausalSet</span></code>).</p></li>
+<li><p>Python bindings: <code class="docutils literal notranslate"><span class="pre">tessera.quantum.Poset.fromSpacetime(st)</span></code> and
+<code class="docutils literal notranslate"><span class="pre">tessera.quantum.extractCausetChain(st)</span></code> work on any
+<code class="docutils literal notranslate"><span class="pre">tessera.Spacetime</span></code> instance (CDT-built, hand-crafted, or future
+<code class="docutils literal notranslate"><span class="pre">tessera.CausalSet</span></code>).</p></li>
 <li><p>C++ acceptance: <code class="docutils literal notranslate"><span class="pre">tests/quantum/test_poset_from_spacetime.cpp</span></code> (7
 cases) and <code class="docutils literal notranslate"><span class="pre">tests/quantum/test_causet_chain.cpp</span></code> (5 cases). Python
 acceptance: <code class="docutils literal notranslate"><span class="pre">tests/quantum/test_phase6_causet_chain_python.py</span></code>.</p></li>
@@ -567,7 +567,7 @@ Haegeman 2021 for Riemannian optimization; Odrzywołek 2026 for EML.</p>
 </section>
 <section id="python-layer-minimal">
 <h2>6. Python layer (minimal)<a class="headerlink" href="#python-layer-minimal" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">python/caset/quantum/_bindings.cpp</span></code> exposes exactly:</p>
+<p><code class="docutils literal notranslate"><span class="pre">python/tessera/quantum/_bindings.cpp</span></code> exposes exactly:</p>
 <div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="n">py</span><span class="o">::</span><span class="n">class_</span><span class="o">&lt;</span><span class="n">QuantumConfig</span><span class="o">&gt;</span><span class="p">(</span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;QuantumConfig&quot;</span><span class="p">)</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def</span><span class="p">(</span><span class="n">py</span><span class="o">::</span><span class="n">init</span><span class="o">&lt;&gt;</span><span class="p">())</span>
 <span class="w">    </span><span class="p">.</span><span class="n">def_readwrite</span><span class="p">(</span><span class="s">&quot;N&quot;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">QuantumConfig</span><span class="o">::</span><span class="n">N</span><span class="p">)</span>
@@ -619,7 +619,7 @@ not run every step.</p></li>
 <section id="first-week-targets">
 <h2>8. First week targets<a class="headerlink" href="#first-week-targets" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Day 1–2: Phase 0 done, ITensor builds inside caset’s CMake tree.</p></li>
+<li><p>Day 1–2: Phase 0 done, ITensor builds inside tessera’s CMake tree.</p></li>
 <li><p>Day 3–4: Phase 1 MPO constructed; matches Bañuls 2013 values.</p></li>
 <li><p>Day 5–6: Phase 2 wrapper; Phase 3 majorization infrastructure on
 trivial and GHZ test states.</p></li>
@@ -691,7 +691,7 @@ that is the full v1 scope.</p></li>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">PLAN.md — Schwinger-Model Majorization Poset Extension for <code class="docutils literal notranslate"><span class="pre">caset</span></code></a><ul>
+<li><a class="reference internal" href="#">PLAN.md — Schwinger-Model Majorization Poset Extension for <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a><ul>
 <li><a class="reference internal" href="#goal-and-scope">0. Goal and scope</a></li>
 <li><a class="reference internal" href="#architectural-principle-minimize-python-c-crossings">1. Architectural principle — minimize Python/C++ crossings</a></li>
 <li><a class="reference internal" href="#dependencies">2. Dependencies</a></li>
@@ -704,7 +704,7 @@ that is the full v1 scope.</p></li>
 <li><a class="reference internal" href="#phase-3-schmidt-spectra-and-majorization-poset-3-days">Phase 3 — Schmidt spectra and majorization poset (3 days)</a></li>
 <li><a class="reference internal" href="#phase-4-tdvp-with-q-bar-q-quench-4-days">Phase 4 — TDVP with <span class="math notranslate nohighlight">\(q\bar{q}\)</span> quench (4 days)</a></li>
 <li><a class="reference internal" href="#phase-5-causal-order-comparison-3-days">Phase 5 — causal-order comparison (3 days)</a></li>
-<li><a class="reference internal" href="#phase-6-caset-integration-12-weeks-optional-for-v1">Phase 6 — caset integration (1–2 weeks, optional for v1)</a></li>
+<li><a class="reference internal" href="#phase-6-tessera-integration-12-weeks-optional-for-v1">Phase 6 — tessera integration (1–2 weeks, optional for v1)</a></li>
 <li><a class="reference internal" href="#phase-7-mera-kak-eml-research-not-v1">Phase 7 — MERA / KAK / EML (research, not v1)</a></li>
 </ul>
 </li>

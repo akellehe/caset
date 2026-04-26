@@ -36,7 +36,7 @@
 #include "mesh/Edge.h"
 #include "spacetime/topologies/Toroid.h"
 
-namespace caset {
+namespace tessera {
 
 // ========================================
 // Constructors
@@ -79,7 +79,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   }
   auto *found = simplexIndex_.find(hash);
   if (found) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     CLOG(DEBUG_LEVEL, "You attempted to create a simplex that already exists: ", (*found)->toString());
 #endif
     return {*found, false};
@@ -216,7 +216,7 @@ EdgePtr Spacetime::createEdge(
   const VertexPtr &tgt,
   double squaredLength
 ) const noexcept {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   if (src->getTime() == tgt->getTime() && squaredLength <= 0) {
     CLOG(INFO_LEVEL, "You attempted to create a same-time (spacelike) edge with non-positive squared length");
     std::abort();
@@ -584,7 +584,7 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
 void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
   auto vecIdx = simplex->vecIdx_;
   if (vecIdx == UINT32_MAX) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
     CLOG(CRITICAL_LEVEL, "You attempted to unregister a simplex that does not exist!");
 #endif
     return;
@@ -720,4 +720,4 @@ void Spacetime::removeSimplex(const SimplexPtr &simplex) {
   unregisterSimplex(simplex);
 }
 
-} // caset
+} // tessera

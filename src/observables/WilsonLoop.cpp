@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace caset {
+namespace tessera {
 
 // =====================================================================
 // Construction
@@ -399,4 +399,4 @@ std::map<int, double> WilsonLoop::getAverageBySize() const {
     return avg;
 }
 
-} // namespace caset
+} // namespace tessera

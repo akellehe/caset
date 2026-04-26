@@ -32,22 +32,22 @@
 #include <numbers>
 #include <unordered_map>
 
-namespace caset {
+namespace tessera {
 bool Simplex::hasFacets() const {
   return !facets.empty();
 }
 
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
 class SimplexCorruptionDetector : public CorruptionDetector<SimplexPtr, SimplexPtrHash, SimplexPtrEq> {
 };
 #endif
 
 const std::vector<SimplexPtr> &Simplex::getFacets() {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
 #endif
   if (getVertices().size() == 1) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
     validate();
 #endif
     return facets;
@@ -90,7 +90,7 @@ const std::vector<SimplexPtr> &Simplex::getFacets() {
       facets.push_back(facet);
     }
   }
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   for (const auto &f : facets) {
     if (!isCofaceTo(f)) {
       CLOG(DEBUG_LEVEL, toString(), " is not a coface to ", f->toString());
@@ -111,7 +111,7 @@ Simplex::Simplex(
 ) : spacetime(spacetime_), orientation(SimplexOrientation::orientationOf(vertices_)), vertices(vertices_),
     edges(std::move(edges_)),
     fingerprint({0}) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
 }
@@ -127,13 +127,13 @@ Simplex::Simplex(
     fingerprint.addId(v->getId());
   }
   fingerprint.refresh();
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
 }
 
 Simplex* Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
   Simplex* simplex = new Simplex(spacetime_, vertices_, edges_);
@@ -150,7 +150,7 @@ Simplex* Simplex::create(Spacetime *spacetime_,
                            const VertexPtrs &vertices_,
                            const Edges &edges_,
                            const SimplexOrientation &orientation_) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
   Simplex* simplex = new Simplex(spacetime_, vertices_, edges_, orientation_);
@@ -159,7 +159,7 @@ Simplex* Simplex::create(Spacetime *spacetime_,
 }
 
 void Simplex::initialize(Simplex* simplex) {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   if (simplex->initialized) {
     CLOG(DEBUG_LEVEL, "You attempted to re-initialize a simplex! Behavior is undefined.");
     std::abort();
@@ -194,7 +194,7 @@ void Simplex::registerToVertices(Simplex* simplex) {
   }
 }
 
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
 std::string Simplex::toString() const noexcept {
   std::stringstream sigmaLabel;
   sigmaLabel << std::to_string(getOrientation().getK()) << "-";
@@ -272,7 +272,7 @@ std::size_t Simplex::getNumberOfEdges() const {
 }
 
 void Simplex::addCoface(SimplexPtr coface) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
   if (coface == nullptr) {
     CLOG(DEBUG_LEVEL, "Coface was null");
     std::abort();
@@ -328,7 +328,7 @@ void Simplex::removeCoface(SimplexPtr coface) {
 }
 
 void Simplex::validate() const {
-#ifdef CASET_ASSERTIONS
+#ifdef TESSERA_ASSERTIONS
   for (const auto &e : getEdges()) {
     if (!hasVertex(e->getSource())) {
       CLOG(ERROR_LEVEL, "Missing source for one of its edges: ", e->toString());
@@ -433,7 +433,7 @@ std::size_t Simplex::maxKPlusOneCofaces() const {
 bool Simplex::replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex) {
   // TODO: Probably make this cascade, but we should just go to the Vertex for things to cascade to.
   if (hasVertex(newVertex)) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
     validate();
 #endif
     return false;

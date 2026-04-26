@@ -20,7 +20,7 @@ References:
 """
 
 import unittest
-import caset
+import tessera
 
 
 # =====================================================================
@@ -29,10 +29,10 @@ import caset
 
 def _make_spacetime(d):
     """Create a d-dimensional Lorentzian CDT spacetime (no initial complex)."""
-    sig = caset.Signature(d, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    return caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                           caset.Toroid())
+    sig = tessera.Signature(d, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    return tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                           tessera.Toroid())
 
 
 def _vids(simplex):

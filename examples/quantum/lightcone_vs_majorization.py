@@ -3,7 +3,7 @@
 Lieb-Robinson cone ≼_LR across (m/g, T, N) × vLr on a Schwinger TDVP run.
 
 Sweeps a small parameter grid using the existing
-caset.quantum.computeCausalComparison harness; for each point, prints
+tessera.quantum.computeCausalComparison harness; for each point, prints
 Kendall-τ, discordant fraction, and Hasse edit distance for the three
 pairwise comparisons (maj↔LR, maj↔cs, LR↔cs). The maj↔LR row is the
 substrate for the strong-falsification criterion in
@@ -14,7 +14,7 @@ Output: a single tabulated report. No claims, just numbers.
 """
 from __future__ import annotations
 import time
-from caset.quantum import (
+from tessera.quantum import (
     TDVPConfig, computeCausalComparison, runQqbarQuench,
 )
 

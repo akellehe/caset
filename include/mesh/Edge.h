@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_CASET_SRC_EDGE_H_
-#define CASET_CASET_SRC_EDGE_H_
+#ifndef TESSERA_TESSERA_SRC_EDGE_H_
+#define TESSERA_TESSERA_SRC_EDGE_H_
 
 #include "mesh/Fingerprint.h"
 #include "mesh/ForwardDeclarations.h"
@@ -30,7 +30,7 @@
 #include <memory>
 
 
-namespace caset {
+namespace tessera {
 /// # Edge Disposition
 ///
 /// There are two things that determine the disposition (spacelike, timelike, light/null-like). The first is the squared
@@ -93,7 +93,7 @@ class Edge {
     /// @return The square of the length of the edge.
     [[nodiscard]] double getSquaredLength() const noexcept;
 
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
     [[nodiscard]] std::string toString() const noexcept;
 #else
     [[nodiscard]] std::string toString() const noexcept {
@@ -155,4 +155,4 @@ class Edge {
 
 }
 
-#endif //CASET_CASET_SRC_EDGE_H_
+#endif //TESSERA_TESSERA_SRC_EDGE_H_

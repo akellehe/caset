@@ -27,7 +27,7 @@
 #include <cmath>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 
 /// Build a CDT triangulation using the staircase product triangulation.
 ///
@@ -115,4 +115,4 @@ void Toroid::build(Spacetime *spacetime, int nSimplices) {
   }
 }
 
-} // caset
+} // tessera

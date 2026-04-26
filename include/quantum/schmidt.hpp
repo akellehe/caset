@@ -32,7 +32,7 @@
 
 #include <vector>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // 1-based contiguous interval [i, j] with i ≤ j on a chain of N sites.
 struct Interval {
@@ -75,4 +75,4 @@ struct SchmidtSpectra {
 
 SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

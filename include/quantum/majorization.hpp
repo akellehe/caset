@@ -3,9 +3,9 @@
 // Schmidt spectra of an MPS (Phase 3 of docs/source/quantum-plan.md).
 //
 // The Poset / OrderAgreement / compareOrders types themselves live at
-// the top of caset (`include/Poset.h`) so they're shareable with non-
+// the top of tessera (`include/Poset.h`) so they're shareable with non-
 // quantum analyses; this header re-exports them under
-// `caset::quantum::` for backward compatibility with Phase 3-5 code.
+// `tessera::quantum::` for backward compatibility with Phase 3-5 code.
 //
 // ─── Majorization recap ───────────────────────────────────────────────────
 //
@@ -36,20 +36,20 @@
 
 #pragma once
 
-#include "Poset.h"  // top-level caset::Poset / OrderAgreement / compareOrders
+#include "Poset.h"  // top-level tessera::Poset / OrderAgreement / compareOrders
 
 #include <cstddef>
 #include <utility>
 #include <vector>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 // Aliases keeping the Phase 3-5 code paths working unchanged. The
-// canonical types live in `caset::` so non-quantum analyses can use
+// canonical types live in `tessera::` so non-quantum analyses can use
 // them too.
-using Poset = ::caset::Poset;
-using OrderAgreement = ::caset::OrderAgreement;
-using ::caset::compareOrders;
+using Poset = ::tessera::Poset;
+using OrderAgreement = ::tessera::OrderAgreement;
+using ::tessera::compareOrders;
 
 // Returns true iff μ majorizes λ. Both vectors are sorted non-increasingly
 // internally; the shorter is zero-padded to the longer's length.
@@ -85,4 +85,4 @@ bool strictlyMajorizes(std::vector<double> const& mu,
 Poset majorizationPoset(std::vector<std::vector<double>> const& spectra,
                          double tol = 1e-12);
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

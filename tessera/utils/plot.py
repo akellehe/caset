@@ -1,4 +1,4 @@
-"""Shared utilities for caset example scripts.
+"""Shared utilities for tessera example scripts.
 
 Thin Python wrappers over C++ internals for spacetime construction,
 graph analysis, and force-directed layout — plus matplotlib helpers
@@ -6,8 +6,8 @@ for 3D rendering and GIF assembly.
 
 Usage::
 
-    from caset.utils.plot import build_spacetime, spatial_subgraph, force_layout_3d
-    from caset.utils.plot import render_frame, draw_edges, save_gif
+    from tessera.utils.plot import build_spacetime, spatial_subgraph, force_layout_3d
+    from tessera.utils.plot import render_frame, draw_edges, save_gif
 """
 import math
 
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from PIL import Image
 
-import caset
+import tessera
 
 
 # =========================================================================
@@ -34,16 +34,16 @@ def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
 
     Returns (spacetime, cdt_simulation).
     """
-    metric = caset.Metric(
+    metric = tessera.Metric(
         coordinateFree=True,
-        signature=caset.Signature(dimensions=4,
-                                  signatureType=caset.Lorentzian),
+        signature=tessera.Signature(dimensions=4,
+                                  signatureType=tessera.Lorentzian),
     )
-    topo = topology or caset.Toroid()
-    st = caset.Spacetime(
-        metric=metric, spacetimeType=caset.CDT,
+    topo = topology or tessera.Toroid()
+    st = tessera.Spacetime(
+        metric=metric, spacetimeType=tessera.CDT,
         alpha=1.0, a=1.0,
-        foliation=caset.PREFERRED, topology=topo,
+        foliation=tessera.PREFERRED, topology=topo,
     )
     # Cap at ~80 time slices so spatial volume per slice is large enough
     # for meaningful geometry.  The staircase product creates d*(d+1)=20
@@ -54,7 +54,7 @@ def build_spacetime(n_simplices, *, k0=2.2, k4=0.5, delta=0.6,
     target = st.getN41() if n_simplices <= max_build else n_simplices // 2
     if epsilon is None:
         epsilon = 1.0 / max(target, 1)
-    cdt = caset.CDTSimulation(
+    cdt = tessera.CDTSimulation(
         spacetime=st, k0=k0, k4=k4, delta=delta,
         epsilon=epsilon, targetN41=target,
     )
@@ -96,7 +96,7 @@ def bfs_distances(center, st_or_verts=None, edges=None, *, max_depth=None):
 
     falls back to a Python BFS.
     """
-    if isinstance(st_or_verts, caset.Spacetime):
+    if isinstance(st_or_verts, tessera.Spacetime):
         return st_or_verts.bfsDistances(center,
                                         -1 if max_depth is None else max_depth)
     # Legacy path: explicit verts + edges
@@ -130,11 +130,11 @@ def force_layout_3d(n, edges, *, center_idx=None, init_pos=None,
                     seed=42):
     """Spring-electrical force-directed layout in 3D.
 
-    Delegates to ``caset.forceLayout3D`` (C++) for performance.
+    Delegates to ``tessera.forceLayout3D`` (C++) for performance.
 
     Returns an ``(n, 3)`` numpy array of positions.
     """
-    flat = caset.forceLayout3D(
+    flat = tessera.forceLayout3D(
         n=n,
         edges=edges,
         centerIdx=center_idx if center_idx is not None else -1,

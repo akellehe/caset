@@ -56,9 +56,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay, make_tune_cb
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import ProgressDisplay, make_tune_cb
 
 
 # =====================================================================
@@ -83,14 +83,14 @@ def run_point(k0, delta, n_simplices, nSweeps,
     _ph = lambda p, done=0, total=0: phase_cb(point_id, p, done, total) if phase_cb and point_id is not None else None
 
     _ph("building")
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric=metric,
-                         spacetimeType=caset.CDT,
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric=metric,
+                         spacetimeType=tessera.CDT,
                          alpha=1.0,
                          a=1.0,
-                         foliation=caset.PREFERRED,
-                         topology=caset.Toroid()
+                         foliation=tessera.PREFERRED,
+                         topology=tessera.Toroid()
                          )
 
     # Build a small initial lattice: cap at ~40 time slices so spatial
@@ -102,7 +102,7 @@ def run_point(k0, delta, n_simplices, nSweeps,
     d = 4 # Hardcoded dimensions
     k4 = (k0 + 6 * delta) / (2 * d - 2) - 2 * delta
     epsilon = 1. / target
-    cdt = caset.CDTSimulation(spacetime=st, k0=k0, k4=k4, delta=delta, epsilon=epsilon, targetN41=target)
+    cdt = tessera.CDTSimulation(spacetime=st, k0=k0, k4=k4, delta=delta, epsilon=epsilon, targetN41=target)
 
     # tune() adjusts k4 to the pseudo-critical value for this (k0,delta)
     # and runs 20 feedback sweeps during which the system grows to target.

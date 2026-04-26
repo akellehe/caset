@@ -7,7 +7,7 @@
 #include "mesh/EdgeList.h"
 #include "mesh/Fingerprint.h"
 
-#ifdef CASET_CUDA
+#ifdef TESSERA_CUDA
 #include "cuda/regge_cuda.h"
 #endif
 
@@ -16,7 +16,7 @@
 #include <numbers>
 #include <set>
 
-namespace caset {
+namespace tessera {
 
 // =====================================================================
 // Construction
@@ -152,7 +152,7 @@ double ReggeSolver::actionGradientNorm() const {
 // GPU mesh flattening (CUDA path)
 // =====================================================================
 
-#ifdef CASET_CUDA
+#ifdef TESSERA_CUDA
 cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
     cuda::GpuMeshData mesh;
     int d = spacetime_->getMetric()->getSignature()->getDimensions();
@@ -390,7 +390,7 @@ double ReggeSolver::step(double learningRate) {
     // F ≥ 0 and F = 0 exactly at a stationary point of S (= Regge equations).
     // We cannot minimize S directly because it is unbounded below.
 
-#ifdef CASET_CUDA
+#ifdef TESSERA_CUDA
     // GPU path: 2 kernel launches total.
     //   1. Base action gradient ∂S/∂W_e  (one thread per edge)
     //   2. Fused ∂F/∂W_j  (one thread per edge, using edge neighborhoods)
@@ -462,4 +462,4 @@ std::tuple<bool, double, int> ReggeSolver::solve(
     return {false, F, maxIters};
 }
 
-} // namespace caset
+} // namespace tessera

@@ -39,23 +39,23 @@ namespace {
 
 // Build a small foliated 4D-Lorentzian Toroid CDT for the invariants
 // to apply to. Default Toroid produces dPlus1=5 vertices per layer.
-caset::Spacetime build_toroid_cdt(int n_simplices = 40) {
-    caset::Signature sig(4, caset::SignatureType::Lorentzian);
-    auto metric = std::make_shared<caset::Metric>(true, sig);
-    auto topology = std::static_pointer_cast<caset::Topology>(
-        std::make_shared<caset::Toroid>());
-    caset::Spacetime st(metric,
-                        caset::SpacetimeType::CDT,
+tessera::Spacetime build_toroid_cdt(int n_simplices = 40) {
+    tessera::Signature sig(4, tessera::SignatureType::Lorentzian);
+    auto metric = std::make_shared<tessera::Metric>(true, sig);
+    auto topology = std::static_pointer_cast<tessera::Topology>(
+        std::make_shared<tessera::Toroid>());
+    tessera::Spacetime st(metric,
+                        tessera::SpacetimeType::CDT,
                         std::optional<double>{1.0},
                         std::optional<double>{1.0},
-                        caset::Foliation::PREFERRED,
-                        std::optional<std::shared_ptr<caset::Topology>>{topology});
+                        tessera::Foliation::PREFERRED,
+                        std::optional<std::shared_ptr<tessera::Topology>>{topology});
     st.build(n_simplices);
     return st;
 }
 
 bool acceptance_covers_span_adjacent_layers(
-    caset::quantum::CausetChain const& chain) {
+    tessera::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #1 — every cover spans adjacent time slices\n";
 
     auto const& poset = chain.partialOrder;
@@ -87,7 +87,7 @@ bool acceptance_covers_span_adjacent_layers(
 }
 
 bool acceptance_covers_match_hopping_pairs(
-    caset::quantum::CausetChain const& chain) {
+    tessera::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #2 — covers == hoppingPairs on a foliated CDT\n";
 
     auto cov = chain.partialOrder.covers();
@@ -106,7 +106,7 @@ bool acceptance_covers_match_hopping_pairs(
 // dynamic programming on the cover-DAG. Equivalent to the rank function:
 // rank(u) = max over predecessors p of rank(p) + 1, with rank of minimal
 // elements = 0.
-int longest_chain_length(caset::Poset const& p) {
+int longest_chain_length(tessera::Poset const& p) {
     const int n = p.getNodeCount();
     if (n == 0) return 0;
     // Adjacency: incoming covers per node.
@@ -134,7 +134,7 @@ int longest_chain_length(caset::Poset const& p) {
 }
 
 bool acceptance_height_equals_num_slices_minus_one(
-    caset::quantum::CausetChain const& chain) {
+    tessera::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #3 — Hasse height = num_time_slices - 1\n";
 
     const int height = longest_chain_length(chain.partialOrder);
@@ -147,8 +147,8 @@ bool acceptance_height_equals_num_slices_minus_one(
     return ok;
 }
 
-bool acceptance_total_extraction(caset::Spacetime const& st,
-                                 caset::quantum::CausetChain const& chain) {
+bool acceptance_total_extraction(tessera::Spacetime const& st,
+                                 tessera::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #4 — every Spacetime vertex appears in the Poset\n";
 
     auto const& vlist = st.getVertexList();
@@ -161,7 +161,7 @@ bool acceptance_total_extraction(caset::Spacetime const& st,
 }
 
 bool acceptance_layer_indegree_outdegree(
-    caset::quantum::CausetChain const& chain) {
+    tessera::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #5 — top-layer has out-degree 0; bottom in-degree 0\n";
 
     const int n = chain.nSites;
@@ -208,7 +208,7 @@ int main() {
     // Spacetime instance avoids any subtle move-construction effects on
     // the VertexList / EdgeList / simplexPool ownership semantics.
     auto st = build_toroid_cdt(60);
-    auto chain = caset::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::extractCausetChain(st);
 
     bool ok = true;
     ok &= acceptance_covers_span_adjacent_layers(chain);

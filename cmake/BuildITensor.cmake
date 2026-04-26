@@ -1,5 +1,5 @@
 # Build ITensor v3 (third_party/itensor) as a static library that the rest of
-# caset can link against. Mirrors what third_party/itensor/itensor/Makefile
+# tessera can link against. Mirrors what third_party/itensor/itensor/Makefile
 # does, but in CMake.
 #
 # ITensor's upstream build:
@@ -19,7 +19,7 @@
 # (no untracked file inside it) and lets multiple build configurations
 # coexist by writing to their own build dirs.
 
-function(caset_build_itensor)
+function(tessera_build_itensor)
     set(ITENSOR_ROOT "${CMAKE_SOURCE_DIR}/third_party/itensor")
     if(NOT EXISTS "${ITENSOR_ROOT}/itensor/itensor.h")
         message(FATAL_ERROR
@@ -91,11 +91,11 @@ function(caset_build_itensor)
                                  # at https://github.com/ITensor/TDVP, since
                                  # ITensor v3 core has no built-in TDVP.
     # ITensor v3 requires C++17; we propagate this PUBLIC so consumers
-    # building against `itensor` get the floor automatically. (caset itself
+    # building against `itensor` get the floor automatically. (tessera itself
     # uses C++20; the higher std subsumes the requirement.)
     target_compile_features(itensor PUBLIC cxx_std_17)
     set_target_properties(itensor PROPERTIES
-        POSITION_INDEPENDENT_CODE ON  # static lib will link into _caset.so
+        POSITION_INDEPENDENT_CODE ON  # static lib will link into _tessera.so
         CXX_EXTENSIONS OFF)
     target_compile_definitions(itensor PUBLIC
         "PLATFORM_${ITENSOR_PLATFORM}"
@@ -104,7 +104,7 @@ function(caset_build_itensor)
     # ITensor's own source has minor compiler-warning noise (deprecated
     # `register`, unused warnings inside its template machinery). PRIVATE
     # silences them only while compiling ITensor — consumer warnings on
-    # caset code are unaffected.
+    # tessera code are unaffected.
     target_compile_options(itensor PRIVATE
         -Wno-deprecated-declarations
         -Wno-unused-but-set-variable

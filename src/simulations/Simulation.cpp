@@ -3,9 +3,9 @@
 
 #include "simulations/Simulation.h"
 
-namespace caset {
+namespace tessera {
 
 void Simulation::tune(std::function<void(int,int)> /*progress*/) {}
 void Simulation::thermalize() {}
 
-} // caset
+} // tessera

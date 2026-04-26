@@ -18,8 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_EDGELIST_H
-#define CASET_EDGELIST_H
+#ifndef TESSERA_EDGELIST_H
+#define TESSERA_EDGELIST_H
 
 #include <cstdint>
 #include <deque>
@@ -29,7 +29,7 @@
 #include "mesh/Edge.h"
 #include "Logger.h"
 
-namespace caset {
+namespace tessera {
 
 /// Flat-pool edge container.
 ///
@@ -78,6 +78,6 @@ class EdgeList {
     EdgePtr getOrInsert(const VertexPtr &source, const VertexPtr &target, double squaredLength);
     std::uint32_t allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength);
 };
-} // caset
+} // tessera
 
-#endif //CASET_EDGELIST_H
+#endif //TESSERA_EDGELIST_H

@@ -22,7 +22,7 @@
 #include "observables/SpacetimeVolume.h"
 #include "spacetime/Spacetime.h"
 
-namespace caset {
+namespace tessera {
 
 double SpacetimeVolume::compute(const std::shared_ptr<Spacetime> &spacetime) {
   return static_cast<double>(spacetime->getSimplexCount());
@@ -32,4 +32,4 @@ double SpacetimeVolume::update(const std::shared_ptr<Spacetime> &spacetime) {
   return compute(spacetime);
 }
 
-} // caset
+} // tessera

@@ -15,7 +15,7 @@
 
 #include <algorithm>
 
-namespace caset::quantum {
+namespace tessera::quantum {
 
 namespace {
 
@@ -74,4 +74,4 @@ computeGroundStateMajorization(QuantumConfig const& cfg,
     return out;
 }
 
-} // namespace caset::quantum
+} // namespace tessera::quantum

@@ -30,11 +30,11 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace caset {
+namespace tessera {
 
 
     EdgeKey::EdgeKey(IdType sourceId_, IdType targetId_) : first(sourceId_), second(targetId_), fingerprint({sourceId_, targetId_}) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
       if (sourceId_ == targetId_) throw std::runtime_error("You can't create a self-reference.");
 #endif
     }
@@ -49,7 +49,7 @@ namespace caset {
       return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
     }
 
-#ifdef CASET_VERBOSE
+#ifdef TESSERA_VERBOSE
     std::string EdgeKey::toString() const noexcept {
       return "(" + std::to_string(first) + ", " + std::to_string(second) + ")";
     }
@@ -60,4 +60,4 @@ std::string EdgeKey::toString() const noexcept {
 #endif
 
 
-} // caset
+} // tessera

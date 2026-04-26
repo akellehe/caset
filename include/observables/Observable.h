@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef CASET_OBSERVABLE_H
-#define CASET_OBSERVABLE_H
+#ifndef TESSERA_OBSERVABLE_H
+#define TESSERA_OBSERVABLE_H
 
 #include <memory>
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -63,6 +63,6 @@ class Observable {
     virtual ~Observable() = default;
 };
 
-} // caset
+} // tessera
 
-#endif //CASET_OBSERVABLE_H
+#endif //TESSERA_OBSERVABLE_H

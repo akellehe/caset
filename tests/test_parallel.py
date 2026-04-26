@@ -31,18 +31,18 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import caset
+import tessera
 
 
 def _make_cdt(n_simplices=50):
     """Build a spacetime + CDT simulation for testing."""
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(n_simplices)
     target = st.getSimplexCount()
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / max(target, 1), target)
     return cdt, st
 
 
@@ -163,10 +163,10 @@ class TestGILRelease(unittest.TestCase):
 
     def test_build_releases_gil(self):
         def build_spacetime():
-            sig = caset.Signature(4, caset.Lorentzian)
-            metric = caset.Metric(True, sig)
-            st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0,
-                                 caset.PREFERRED, caset.Toroid())
+            sig = tessera.Signature(4, tessera.Lorentzian)
+            metric = tessera.Metric(True, sig)
+            st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                                 tessera.PREFERRED, tessera.Toroid())
             st.build(200)
 
         self._assert_gil_released(build_spacetime, "build()")

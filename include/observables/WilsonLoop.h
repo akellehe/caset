@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;
 
@@ -106,4 +106,4 @@ class WilsonLoop {
 
 };
 
-} // namespace caset
+} // namespace tessera

@@ -23,8 +23,8 @@
 // Created by andrew on 10/23/25.
 //
 
-#ifndef CASET_VERTEXLIST_H
-#define CASET_VERTEXLIST_H
+#ifndef TESSERA_VERTEXLIST_H
+#define TESSERA_VERTEXLIST_H
 
 #include <cstdint>
 #include <deque>
@@ -33,7 +33,7 @@
 
 #include "mesh/Vertex.h"
 
-namespace caset {
+namespace tessera {
 
 /// Flat-pool vertex container.
 ///
@@ -85,7 +85,7 @@ class VertexList {
     }
 
     void replace(Vertex* toRemove, Vertex* toAdd) {
-#if CASET_ASSERTIONS
+#if TESSERA_ASSERTIONS
       if (toAdd == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
       if (toRemove == nullptr) throw std::invalid_argument("Cannot remove a nullptr vertex");
 #endif
@@ -153,6 +153,6 @@ class VertexList {
     std::unordered_map<std::uint64_t, std::uint32_t> idToIndex_; ///< vertex ID → pool slot
     std::vector<Vertex*> liveVec_;                             ///< Flat array of live vertices
 };
-} // caset
+} // tessera
 
-#endif //CASET_VERTEXLIST_H
+#endif //TESSERA_VERTEXLIST_H

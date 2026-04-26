@@ -1,9 +1,9 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 //
 // Hasse-cover representation of a finite partial order over integer-
-// indexed nodes. Storage uses caset's standard mesh primitives
-// (caset::VertexList, caset::EdgeList) so Poset instances interoperate
-// with the rest of caset's graph machinery — rendering, GraphML / dot
+// indexed nodes. Storage uses tessera's standard mesh primitives
+// (tessera::VertexList, tessera::EdgeList) so Poset instances interoperate
+// with the rest of tessera's graph machinery — rendering, GraphML / dot
 // export, and the Phase 6 causet inheritance share the same Vertex /
 // Edge types we already use for the simplicial spacetime.
 //
@@ -30,14 +30,14 @@
 #include <utility>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 
 class Spacetime;  // forward decl for Poset::fromSpacetime (Phase 6)
 
 // Hasse-cover representation of a partial order on integer-indexed nodes.
 //
 // Internally stores a VertexList (one Vertex per node, no coordinates) and
-// an EdgeList of cover edges. Cover edges are caset::Edge objects; their
+// an EdgeList of cover edges. Cover edges are tessera::Edge objects; their
 // `squaredLength` and `disposition` fields are unused by the partial-order
 // semantics and stay at their default values. (See note at the bottom of
 // this header about the "compiler flag to pare them down" idea — currently
@@ -90,7 +90,7 @@ public:
     // EdgeList may re-order on free-slot reuse).
     std::vector<std::pair<int, int>> covers() const;
 
-    // Underlying mesh primitives — exposed for caset interop
+    // Underlying mesh primitives — exposed for tessera interop
     // (visualization, GraphML export, future Spacetime-aware analyses).
     // Mutating via these handles bypasses Poset's invariants; treat as
     // read-only.
@@ -101,7 +101,7 @@ public:
 
     // ─── Factories ─────────────────────────────────────────────────────
 
-    // Build the causet partial order on the vertices of a caset Spacetime
+    // Build the causet partial order on the vertices of a tessera Spacetime
     // using the directed-edge / timelike-edge subgraph as the strict
     // precedes-relation, then transitively-reducing to cover edges.
     //
@@ -158,14 +158,14 @@ OrderAgreement compareOrders(Poset const& a,
                               Poset const& b,
                               int nLabels);
 
-} // namespace caset
+} // namespace tessera
 
 // ─── Notes ─────────────────────────────────────────────────────────────────
 //
 // "compiler flags to pare it down" (per architectural discussion):
-// caset::Edge currently carries `squaredLength` (8 B) and `disposition`
+// tessera::Edge currently carries `squaredLength` (8 B) and `disposition`
 // (1 B + padding) which are unused for Poset cover edges. A future
-// CASET_LIGHTWEIGHT_EDGES build flag could conditionally drop those
+// TESSERA_LIGHTWEIGHT_EDGES build flag could conditionally drop those
 // fields (and make the Edge struct ~16 B instead of ~32 B), halving the
 // per-cover memory cost in large posets. Not implemented yet — current
 // per-cover overhead (~70 B counting EdgeList map entry) is acceptable

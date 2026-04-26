@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace caset {
+namespace tessera {
 namespace {
 
 // =====================================================================
@@ -807,4 +807,4 @@ void renderSpacetime(const Spacetime &st, const std::string &path,
     }
 }
 
-} // namespace caset
+} // namespace tessera

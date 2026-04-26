@@ -43,9 +43,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import matplotlib.pyplot as plt
 
-import caset
-from caset.utils.memory_monitor import MemoryMonitor
-from caset.utils.progress import ProgressDisplay, make_tune_cb
+import tessera
+from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.progress import ProgressDisplay, make_tune_cb
 
 
 def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
@@ -60,13 +60,13 @@ def _volume_worker(vol_id, target_n41, n_therm, n_meas, meas_interval,
     _ph("building")
     n_build = target_n41 * 2
     max_build = 80 * 20  # cap at ~80 time slices (20 simplices/slab in 4D)
-    sig = caset.Signature(4, caset.Lorentzian)
-    metric = caset.Metric(True, sig)
-    st = caset.Spacetime(metric, caset.CDT, 1.0, 1.0, caset.PREFERRED,
-                         caset.Toroid())
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
     st.build(min(n_build, max_build))
     target = st.getN41() if n_build <= max_build else target_n41
-    cdt = caset.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
+    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
 
     _ph("tuning")
     cdt.tune(progress=make_tune_cb(phase_cb, vol_id))

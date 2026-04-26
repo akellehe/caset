@@ -3,7 +3,7 @@
 """
 Phase 5: causal-order comparison on a TDVP q-qbar quench.
 
-Runs the full caset.quantum Phase 5 pipeline:
+Runs the full tessera.quantum Phase 5 pipeline:
 
   1. DMRG ground state of the Schwinger Hamiltonian
   2. q-qbar quench (creates a flux tube on d links)
@@ -64,10 +64,10 @@ import math
 import sys
 
 try:
-    from caset.quantum import TDVPConfig, computeCausalComparison
+    from tessera.quantum import TDVPConfig, computeCausalComparison
 except ImportError as e:
-    print(f"caset.quantum unavailable: {e}", file=sys.stderr)
-    print("\nRebuild with: CASET_QUANTUM=1 pip install -e .", file=sys.stderr)
+    print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
+    print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
     sys.exit(1)
 
 
