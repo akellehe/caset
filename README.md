@@ -7,9 +7,9 @@
 
 **[Documentation](https://akellehe.github.io/tessera/)**
 
-A computational test bed for non-perturbative quantum gravity. Build triangulated spacetimes, run Monte Carlo simulations, solve the discrete Einstein equations, and visualize the results -- all from Python, with C++/CUDA under the hood.
+A personal sandbox for triangulated spacetimes and discrete-geometry experiments — building simplicial meshes, sampling them by Monte Carlo, solving the discrete Einstein equations, and rendering the results. Python on top, C++/CUDA underneath.
 
-tessera supports multiple approaches to quantum gravity on the same simplicial mesh infrastructure:
+tessera bundles several discrete-geometry formulations on a shared simplicial mesh:
 
 - **Causal Dynamical Triangulations (CDT)** -- Monte Carlo path integral over geometries with a causal foliation
 - **Regge Calculus** -- discrete general relativity via deficit angles and edge-length dynamics
