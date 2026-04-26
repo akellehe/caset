@@ -83,6 +83,7 @@ bool strictlyMajorizes(std::vector<double> const& mu,
 // reduction pass. Each pair-of-spectra majorizes() call is O(L log L) on
 // the spectrum lengths L; for our use case L ≤ MPS bond dimension squared.
 Poset majorizationPoset(std::vector<std::vector<double>> const& spectra,
-                         double tol = 1e-12);
+                         double tol = 1e-12,
+                         MajorizationKind kind = MajorizationKind::Standard);
 
 } // namespace tessera::quantum
