@@ -43,6 +43,7 @@
 #include "quantum/schmidt.hpp"
 #include "quantum/tdvp_runner.hpp"
 
+#include <string>
 #include <vector>
 
 namespace tessera::quantum {
@@ -89,15 +90,35 @@ struct CausalComparisonReport {
     OrderAgreement lrVsCs;
     int nLabels{0};
     int nSnapshots{0};
-    double vLr{0.0};   // Lieb-Robinson velocity used to build ≼_LR
+    double      vLr{0.0};        // Lieb-Robinson velocity used to build ≼_LR
+    std::string majKind{"standard"};  // MajorizationPredicate::name() of the
+                                       // variant used for ≼_maj.
 };
+
+// ─── Pipeline overloads ──────────────────────────────────────────────────
+//
+// We provide both a backward-compatible "classical-majorization" form
+// and a predicate-explicit form for each of the two pipeline functions.
+// The classical-majorization forms simply delegate to the explicit
+// forms with a `StandardMajorization{1e-12}` predicate.
 
 // Build the cross-time majorization poset from a list of snapshots
 // (which must have been recorded with recordSpectra=true). The first
 // dim labels in the returned CausalOrders are from snapshots[0], the
-// next from snapshots[1], etc.
+// next from snapshots[1], etc.  This overload uses
+// `StandardMajorization` for ≼_maj — the classical Nielsen 1999
+// majorization.
 CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
                                  double vLr);
+
+// As above, but with an explicit `MajorizationPredicate` controlling
+// the ≼_maj construction. The ≼_LR and ≼_cs orders are independent of
+// the predicate; only ≼_maj changes.  See
+// `include/quantum/majorization.hpp` for the available variants and
+// the bibliographic references.
+CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
+                                 double vLr,
+                                 MajorizationPredicate const& predicate);
 
 // tessera::compareOrders is the canonical implementation; the alias in
 // include/quantum/majorization.hpp re-exports it as
@@ -110,7 +131,17 @@ CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
 // `vLr` is the Lieb-Robinson velocity in lattice units (sites / time).
 // Default 1.0 corresponds to the free-fermion group velocity for our
 // hopping coefficient.
+//
+// The classical-majorization form below uses
+// `StandardMajorization{1e-12}` for ≼_maj. Use the predicate-explicit
+// overload for the variants studied in the
+// `lightcone_vs_majorization_variants` follow-up to Phase 5
+// (LogConcave, PeakRadial).
 CausalComparisonReport
 computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr = 1.0);
+
+CausalComparisonReport
+computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr,
+                        MajorizationPredicate const& predicate);
 
 } // namespace tessera::quantum
