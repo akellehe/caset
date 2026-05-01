@@ -284,6 +284,15 @@ try:
     majorizationPoset                  = _qm.majorizationPoset
     computeGroundStateMajorization   = _qm.computeGroundStateMajorization
 
+    # Phase 5b — MajorizationPredicate variants studied in the
+    # lightcone_vs_majorization_variants follow-up. See
+    # include/quantum/majorization.hpp for definitions and references
+    # (Nielsen 1999, Brändén 2015, Aubrun-Nechita 2008).
+    MajorizationPredicate    = _qm.MajorizationPredicate
+    StandardMajorization     = _qm.StandardMajorization
+    LogConcaveMajorization   = _qm.LogConcaveMajorization
+    PeakRadialMajorization   = _qm.PeakRadialMajorization
+
     # Phase 4 — TDVP real-time evolution after a q-qbar quench.
     TDVPConfig         = _qm.TDVPConfig
     TDVPSnapshot       = _qm.TDVPSnapshot
@@ -323,6 +332,11 @@ __all__ = [
     "strictlyMajorizes",
     "majorizationPoset",
     "computeGroundStateMajorization",
+    # Phase 5b
+    "MajorizationPredicate",
+    "StandardMajorization",
+    "LogConcaveMajorization",
+    "PeakRadialMajorization",
     # Phase 4
     "TDVPConfig",
     "TDVPSnapshot",

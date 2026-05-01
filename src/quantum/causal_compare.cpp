@@ -135,15 +135,25 @@ Poset build_cs_poset_regular_chain(std::vector<LabelSpacetime> const& labels) {
 // the using-alias in include/quantum/majorization.hpp re-exports it as
 // tessera::quantum::compareOrders for back-compat.
 
+// Classical-majorization overload: delegates to the predicate-explicit
+// form below with a `StandardMajorization{1e-12}` predicate
+// ({N1999} eq. (1)).
 CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
                                  double vLr) {
+    return buildCausalOrders(snapshots, vLr,
+                               StandardMajorization{1e-12});
+}
+
+CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
+                                 double vLr,
+                                 MajorizationPredicate const& predicate) {
     auto flat = flatten_snapshots(snapshots);
 
     CausalOrders out;
     out.labels = std::move(flat.labels);
-    // Majorization across the full flat label set — this is the same
-    // routine used by Phase 3, just on a wider input.
-    out.maj = majorizationPoset(flat.spectra, /*tol=*/1e-12);
+    // Majorization across the full flat label set — same routine as
+    // Phase 3 on a wider input, parameterised by the predicate.
+    out.maj = majorizationPoset(flat.spectra, predicate);
     out.lr  = build_lr_poset(out.labels, vLr);
     out.cs  = build_cs_poset_regular_chain(out.labels);
     return out;
@@ -151,17 +161,25 @@ CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
 
 CausalComparisonReport
 computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr) {
+    return computeCausalComparison(tdvp_cfg, vLr,
+                                     StandardMajorization{1e-12});
+}
+
+CausalComparisonReport
+computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr,
+                        MajorizationPredicate const& predicate) {
     TDVPConfig cfg = tdvp_cfg;
     cfg.recordSpectra = true;     // mandatory for spectra extraction
     cfg.recordPoset   = false;    // we build cross-time posets ourselves
 
     const auto quench = runQqbarQuench(cfg);
-    auto orders = buildCausalOrders(quench.snapshots, vLr);
+    auto orders = buildCausalOrders(quench.snapshots, vLr, predicate);
 
     CausalComparisonReport report;
     report.nLabels    = static_cast<int>(orders.labels.size());
     report.nSnapshots = static_cast<int>(quench.snapshots.size());
     report.vLr        = vLr;
+    report.majKind   = predicate.name();
     report.majVsLr   = compareOrders(orders.maj, orders.lr, report.nLabels);
     report.majVsCs   = compareOrders(orders.maj, orders.cs, report.nLabels);
     report.lrVsCs    = compareOrders(orders.lr,  orders.cs, report.nLabels);

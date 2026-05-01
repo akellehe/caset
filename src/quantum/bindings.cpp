@@ -397,13 +397,133 @@ Equivalent to ``majorizes(mu, lambda_) and not majorizes(lambda_, mu)``
 — the relation is proper, not just sorted-padded equality.
 )doc");
 
-    m.def("majorizationPoset",
-          &majorizationPoset,
-          py::arg("spectra"), py::arg("tol") = 1e-12,
-          R"doc(Build the majorization poset on a list of spectra.
+    // ─── MajorizationPredicate variants (lightcone_vs_majorization
+    //     follow-up to Phase 5) ────────────────────────────────────────
+    //
+    // Abstract base class plus three concrete variants. See
+    // include/quantum/majorization.hpp for the partial-order axioms,
+    // the bibliographic anchors (Nielsen 1999, Brändén 2015,
+    // Aubrun-Nechita 2008), and the physical motivation for each
+    // variant.
 
-``spectra[k]`` becomes node k; the resulting :class:`Poset` stores the
-Hasse cover edges only (transitive closure is implicit).
+    py::class_<MajorizationPredicate>(m, "MajorizationPredicate",
+            R"doc(Abstract base class for variants of the majorization predicate.
+
+Concrete subclasses ship in this module:
+
+* :class:`StandardMajorization` -- classical, Nielsen 1999 PRL 83, 436 eq. (1).
+* :class:`LogConcaveMajorization` -- gated on log-concave spectra, Brändén 2015 §1.
+* :class:`PeakRadialMajorization` -- peak-relative entrywise dominance.
+
+Functions that take a predicate -- :func:`majorizationPoset` and
+:func:`computeCausalComparison` -- accept any concrete subclass
+instance interchangeably; the variant identifies itself via the
+``name`` property.
+)doc")
+        .def("majorizes",
+             &MajorizationPredicate::majorizes,
+             py::arg("mu"), py::arg("lambda_"),
+             "True iff μ majorizes λ under this variant.")
+        .def("strictlyMajorizes",
+             &MajorizationPredicate::strictlyMajorizes,
+             py::arg("mu"), py::arg("lambda_"),
+             "True iff μ strictly majorizes λ under this variant.")
+        .def_property_readonly("name",
+             &MajorizationPredicate::name,
+             "Short identifier of the variant ('standard', 'log-concave', 'peak-radial').");
+
+    py::class_<StandardMajorization, MajorizationPredicate>(
+            m, "StandardMajorization",
+            R"doc(Classical Nielsen-1999 majorization.
+
+μ ≻ λ iff for every k,
+
+    sum_{i=1..k} μ_i^↓  ≥  sum_{i=1..k} λ_i^↓
+
+with equality at the total-mass step (Nielsen 1999 PRL 83, 436, eq. 1).
+This is the partial order under which deterministic LOCC convertibility
+|α⟩ → |β⟩ holds, with μ, λ replaced by the Schmidt spectra of |α⟩,
+|β⟩. The baseline used through Phase 5.
+
+Parameters
+----------
+tol : float, optional
+    Numerical slack on partial-sum and total-mass comparisons.
+    Default 1e-12.
+)doc")
+        .def(py::init<double>(), py::arg("tol") = 1e-12)
+        .def_property_readonly("tol", &StandardMajorization::tol);
+
+    py::class_<LogConcaveMajorization, StandardMajorization>(
+            m, "LogConcaveMajorization",
+            R"doc(Standard majorization, restricted to log-concave spectra.
+
+The relation ``StandardMajorization`` gated on both inputs being
+log-concave on their support: λ_i² ≥ λ_{i-1} · λ_{i+1} for every
+interior i (Brändén 2015 arXiv:1410.6601 §1; Stanley 1989). Pairs
+where either spectrum fails log-concavity are declared incomparable,
+making this a strict sub-relation of ``StandardMajorization``.
+
+Motivation: filter out comparisons between unimodal "single-peak" and
+multimodal "plateau" spectra, hypothesised to dilute the entanglement-
+causality alignment in Phase 5 (see
+``docs/source/quantum-experiments/lightcone_vs_majorization_writeup.md``).
+
+Parameters
+----------
+tol : float, optional
+    Numerical slack on log-concavity AND majorization comparisons.
+    Default 1e-12.
+)doc")
+        .def(py::init<double>(), py::arg("tol") = 1e-12)
+        .def_static("isLogConcave",
+                    &LogConcaveMajorization::isLogConcave,
+                    py::arg("v"), py::arg("tol") = 1e-12,
+                    R"doc(True iff the spectrum is log-concave on its support.
+
+Sorts ``v`` descending and strips trailing zeros; then requires
+s_i² ≥ s_{i-1} · s_{i+1} for every interior i. Spectra of length
+≤ 2 are trivially log-concave.
+)doc");
+
+    py::class_<PeakRadialMajorization, MajorizationPredicate>(
+            m, "PeakRadialMajorization",
+            R"doc(Peak-radial dominance: relative-to-peak entrywise majorization.
+
+μ ≻ λ iff, after sorting both descending and zero-padding,
+
+    λ_i / λ_1  ≤  μ_i / μ_1     for every i.
+
+Equivalently λ_i · μ_1 ≤ μ_i · λ_1 (the implementation cross-
+multiplies for numerical stability with small peaks). Strictly
+stronger than ``StandardMajorization``: every entrywise
+relative-to-peak dominance implies cumulative-sum dominance, but not
+vice versa.
+
+Structurally analogous to L^p-norm dominance characterisations of
+catalytic majorization (Aubrun-Nechita 2008 Comm. Math. Phys. 278, 133,
+arXiv:0707.0211, Theorem 1.1 / Proposition 2.5) -- though catalytic
+majorization is a *weakening* of classical, while peak-radial is a
+*strengthening*.
+
+Parameters
+----------
+tol : float, optional
+    Numerical slack on entrywise comparisons. Default 1e-12.
+)doc")
+        .def(py::init<double>(), py::arg("tol") = 1e-12)
+        .def_property_readonly("tol", &PeakRadialMajorization::tol);
+
+    m.def("majorizationPoset",
+          py::overload_cast<std::vector<std::vector<double>> const&,
+                            double>(&majorizationPoset),
+          py::arg("spectra"), py::arg("tol") = 1e-12,
+          R"doc(Build the classical majorization poset on a list of spectra.
+
+Convenience overload equivalent to
+``majorizationPoset(spectra, StandardMajorization(tol))``. ``spectra[k]``
+becomes node k; the returned :class:`Poset` stores Hasse cover edges
+only (transitive closure is implicit).
 
 Parameters
 ----------
@@ -419,8 +539,31 @@ Poset
 
 Notes
 -----
-Complexity is O(M^3) where M = ``len(spectra)``, dominated by the
+Complexity is O(M³) where M = ``len(spectra)``, dominated by the
 transitive-reduction pass.
+)doc");
+
+    m.def("majorizationPoset",
+          py::overload_cast<std::vector<std::vector<double>> const&,
+                            MajorizationPredicate const&>(&majorizationPoset),
+          py::arg("spectra"), py::arg("predicate"),
+          R"doc(Build the majorization poset under an explicit predicate variant.
+
+Same Hasse-cover construction as the classical overload, with
+``predicate`` controlling which pairs are related.
+
+Parameters
+----------
+spectra : list[list[float]]
+    Probability-like distributions, one per node.
+predicate : MajorizationPredicate
+    Any concrete instance: :class:`StandardMajorization`,
+    :class:`LogConcaveMajorization`, or :class:`PeakRadialMajorization`.
+
+Returns
+-------
+Poset
+    Hasse cover representation of the strict relation.
 )doc");
 
     // ─── Phase 4 types: TDVP / quench ───────────────────────────────────
@@ -631,12 +774,14 @@ nSnapshots : int
 vLr : float
     Lieb-Robinson velocity used to build ≼_LR.
 )doc")
-        .def_readonly("majVsLr",   &CausalComparisonReport::majVsLr)
-        .def_readonly("majVsCs",   &CausalComparisonReport::majVsCs)
-        .def_readonly("lrVsCs",    &CausalComparisonReport::lrVsCs)
+        .def_readonly("majVsLr",    &CausalComparisonReport::majVsLr)
+        .def_readonly("majVsCs",    &CausalComparisonReport::majVsCs)
+        .def_readonly("lrVsCs",     &CausalComparisonReport::lrVsCs)
         .def_readonly("nLabels",    &CausalComparisonReport::nLabels)
         .def_readonly("nSnapshots", &CausalComparisonReport::nSnapshots)
-        .def_readonly("vLr",        &CausalComparisonReport::vLr);
+        .def_readonly("vLr",        &CausalComparisonReport::vLr)
+        .def_readonly("majKind",    &CausalComparisonReport::majKind,
+                       "MajorizationPredicate::name() of the variant used for ≼_maj.");
 
     m.def("compareOrders",
           &compareOrders,
@@ -646,17 +791,18 @@ label set of size nLabels. Returns an :class:`OrderAgreement`.
 )doc");
 
     m.def("computeCausalComparison",
-          &computeCausalComparison,
+          py::overload_cast<TDVPConfig const&, double>(&computeCausalComparison),
           py::arg("config"), py::arg("vLr") = 1.0,
-          R"doc(End-to-end Phase 5 pipeline: TDVP + causal-order comparison.
+          R"doc(End-to-end Phase 5 pipeline with classical majorization.
 
-Runs ``runQqbarQuench`` (forcing ``recordSpectra = True``), then
-builds the three partial orders on the (cut, time) label set:
+Convenience overload that uses :class:`StandardMajorization` (the
+Nielsen 1999 classical order, eq. 1) for ≼_maj. Runs
+``runQqbarQuench`` (forcing ``recordSpectra = True``), then builds
+the three partial orders on the (cut, time) label set:
 
-* ≼_maj from Phase 3 majorization on Schmidt spectra (across cuts AND
-  times).
-* ≼_LR — Lieb-Robinson cone: a ≺ b iff time_a < time_b and
-  interval distance ≤ vLr · (time_b - time_a).
+* ≼_maj — classical majorization on Schmidt spectra (across cuts AND times).
+* ≼_LR — Lieb-Robinson cone: a ≺ b iff time_a < time_b and interval
+  distance ≤ vLr · (time_b - time_a).
 * ≼_cs — causet order; on the regular chain (Phase 5 scope) this is
   the time-only order. Phase 6 replaces the lattice with a non-trivial
   causet, at which point ≼_cs gains within-time-slice structure.
@@ -676,6 +822,37 @@ vLr : float, optional
 Returns
 -------
 CausalComparisonReport
+    With ``majKind = 'standard'``.
+)doc");
+
+    m.def("computeCausalComparison",
+          py::overload_cast<TDVPConfig const&, double,
+                            MajorizationPredicate const&>(&computeCausalComparison),
+          py::arg("config"), py::arg("vLr"), py::arg("predicate"),
+          R"doc(End-to-end Phase 5 pipeline with an explicit MajorizationPredicate variant.
+
+Same as the classical overload, but ≼_maj is built using ``predicate``
+rather than the default :class:`StandardMajorization`. The
+``CausalComparisonReport.majKind`` field records ``predicate.name()``
+so reports are self-describing.
+
+Parameters
+----------
+config : TDVPConfig
+    Same as :func:`runQqbarQuench`. ``recordSpectra`` will be forced
+    to ``True``.
+vLr : float
+    Lieb-Robinson velocity in lattice units (sites / time).
+predicate : MajorizationPredicate
+    Any concrete subclass instance:
+    :class:`StandardMajorization`,
+    :class:`LogConcaveMajorization`, or
+    :class:`PeakRadialMajorization`.
+
+Returns
+-------
+CausalComparisonReport
+    With ``majKind = predicate.name()``.
 )doc");
 
     m.def("runQqbarQuench",

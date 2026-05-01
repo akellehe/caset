@@ -1,7 +1,7 @@
 # Theory
 
-This package is intended to provide a test bed with great unit test coverage for researchers and enthusiasts to 
-implement ideas with respect to the latest in the field of lattice quantum gravity.
+This page is background reading for the rest of the docs — a personal-tour summary of the lattice-spacetime ideas
+the package plays with, with enough test coverage on the implementation that the experiments are reproducible.
 
 Since Tullio Regge's work in the 1960s there's been a ton of interest in implementing GR
 in such a way that it's compatible with quantum mechanics, quantum field theory (QFT), and quantum chromodynamics (QCD).
