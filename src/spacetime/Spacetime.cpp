@@ -30,6 +30,7 @@
 #include <queue>
 #include <set>
 #include "spacetime/Spacetime.h"
+#include "observables/SparseGraph.h"
 #include "mesh/SimplexOrientation.h"
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/EdgeList.h"
@@ -92,19 +93,42 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   const VertexPtrs &vertices
 ) {
-  std::vector<EdgePtr> edges_{};
-  bool isLorentzian = metric->getSignature()->getSignatureType() == SignatureType::Lorentzian;
-  for (std::size_t i=0; i<vertices.size()-1; i++) {
-    for (std::size_t j=i+1; j<vertices.size(); j++) {
+  auto r = createSimplexTracked(vertices);
+  return {r.simplex, r.created};
+}
+
+Spacetime::CreateSimplexResult Spacetime::createSimplexTracked(
+  const VertexPtrs &vertices
+) {
+  CreateSimplexResult result;
+  Edges edges_{};
+  bool isLorentzian =
+    metric->getSignature()->getSignatureType() == SignatureType::Lorentzian;
+  for (std::size_t i = 0; i < vertices.size() - 1; i++) {
+    for (std::size_t j = i + 1; j < vertices.size(); j++) {
       double squaredLen = a;  // spacelike: ℓ² = a
       if (isLorentzian && vertices[i]->getTime() != vertices[j]->getTime()) {
         squaredLen = -alpha * a;  // timelike: ℓ² = -α·a
       }
-      EdgePtr edge = createEdge(vertices[i], vertices[j], squaredLen);
+      auto [edge, inserted] =
+        edgeList->tryAdd(vertices[i], vertices[j], squaredLen);
+      // Mirror createEdge: register the edge on the endpoints'
+      // adjacency lists.  addOutEdge/addInEdge dedupe internally so
+      // calling them on a pre-existing edge is a no-op.
+      vertices[i]->addOutEdge(edge);
+      vertices[j]->addInEdge(edge);
       edges_.push_back(edge);
+      if (inserted) result.newEdges.push_back(edge);
     }
   }
-  return createSimplex(vertices, edges_);
+  auto [simplex, created] = createSimplex(vertices, edges_);
+  result.simplex = simplex;
+  result.created = created;
+  // If the simplex already existed, every edge we touched was also
+  // already there — tryAdd returned inserted=false for each — so
+  // newEdges is empty.  Belt-and-braces:
+  if (!created) result.newEdges.clear();
+  return result;
 }
 
 std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, uint8_t> &numericOrientation) {
@@ -704,6 +728,74 @@ void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) 
   else if ((ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1)) {
     n32Count += delta;
   }
+}
+
+SparseGraph Spacetime::getDualGraph() const {
+  auto [rows, cols, n] = getDualAdjacency();
+  return SparseGraph::fromCOO(rows, cols, n);
+}
+
+double Spacetime::modularityOnSkeleton(int M) const {
+  if (M < 1) return 0.0;
+  std::size_t n = getVertexCount();
+  if (n == 0) return 0.0;
+
+  // Per-vertex degree and label.
+  std::vector<std::uint32_t> deg(0);
+  std::vector<int> label(0);
+  // Build a vertex-id → contiguous-index map so we can index into
+  // arrays of size n.  (Vertex IDs aren't necessarily dense.)
+  std::unordered_map<std::uint64_t, std::uint32_t> idToIdx;
+  idToIdx.reserve(n);
+  std::vector<std::uint64_t> idsByIdx;
+  idsByIdx.reserve(n);
+  for (const auto &v : vertexList->toVector()) {
+    auto id = v->getId();
+    idToIdx.emplace(id, static_cast<std::uint32_t>(idsByIdx.size()));
+    idsByIdx.push_back(id);
+  }
+  deg.assign(idsByIdx.size(), 0);
+  label.assign(idsByIdx.size(), 0);
+  for (std::size_t i = 0; i < idsByIdx.size(); ++i) {
+    label[i] = static_cast<int>(idsByIdx[i] % static_cast<std::uint64_t>(M));
+  }
+
+  std::size_t m = edgeList->size();
+  if (m == 0) return 0.0;
+
+  // L_c (intra-community edge count) and D_c (sum of degrees) per
+  // community label.
+  std::unordered_map<int, double> L_c;
+  std::unordered_map<int, double> D_c;
+  for (const auto &e : edgeList->toVector()) {
+    auto srcId = e->getSource()->getId();
+    auto tgtId = e->getTarget()->getId();
+    auto si = idToIdx[srcId];
+    auto ti = idToIdx[tgtId];
+    deg[si]++;
+    deg[ti]++;
+    if (label[si] == label[ti]) {
+      // Each within-community edge contributes 2 to ``L_c`` in the
+      // canonical formula (sum over ordered pairs).  We mirror
+      // examples/modularity.py which uses
+      // ``A[np.ix_(nodes, nodes)].sum()`` — that double-counts each
+      // within-edge — so we add 2 here.
+      L_c[label[si]] += 2.0;
+    }
+  }
+  for (std::size_t i = 0; i < deg.size(); ++i) {
+    D_c[label[i]] += deg[i];
+  }
+
+  double m2 = 2.0 * static_cast<double>(m);
+  double Q = 0.0;
+  for (const auto &[c, dc] : D_c) {
+    double lc = 0.0;
+    auto it = L_c.find(c);
+    if (it != L_c.end()) lc = it->second;
+    Q += lc / m2 - (dc / m2) * (dc / m2);
+  }
+  return Q;
 }
 
 void Spacetime::removeSimplex(const SimplexPtr &simplex) {

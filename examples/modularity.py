@@ -421,122 +421,164 @@ class Graph:
 
     # --- random walk / spectral dimension -----------------------------
 
-    def transition_matrix(self):
-        """Build the column-stochastic random-walk transition matrix.
+    def random_walk_laplacian(self):
+        """Build the random-walk Laplacian ``L_rw = I - T``.
 
-        ``T[i, j] = A[i, j] / deg(j)``.  Each column for a node with
-        ``deg > 0`` sums to 1.  Isolated-node columns are all zero
-        (we substitute ``deg = 1`` to avoid division by zero, which
-        leaves the zero column untouched -- the walker has no out-mass
-        and stays put, which is the semantically correct behavior).
+        ``T[i, j] = A[i, j] / deg(j)`` is the column-stochastic
+        transition matrix; ``L_rw`` has eigenvalues in ``[0, 2]`` with
+        the constant eigenvector at ``λ = 0``.  The continuous-time
+        random walk is the matrix exponential ``e^{-t L_rw}`` (it
+        coincides with a discrete-step walk that waits ``Exp(1)`` time
+        at each node before jumping according to ``T``).  Isolated
+        nodes get a zero column (we substitute ``deg = 1`` to avoid
+        division by zero), which leaves them as fixed points of the
+        walk -- the correct behavior.
 
         Returns
         -------
         scipy.sparse.csc_matrix or None
             ``None`` if the graph has no nodes; otherwise the
-            ``(n, n)`` transition matrix.
+            ``(n, n)`` random-walk Laplacian.
         """
         if self.n_nodes == 0:
             return None
         deg = self.degree.astype(float)
         deg[deg == 0] = 1.0
-        return (self._A @ sparse.diags(1.0 / deg)).tocsc()
+        T = self._A @ sparse.diags(1.0 / deg)
+        n = self.n_nodes
+        return (sparse.eye(n, format='csc') - T).tocsc()
 
-    def diffuse(self, starts, max_sigma):
-        """Run discrete random-walk diffusion from each start node.
+    def diffuse(self, starts, times):
+        """Continuous-time random-walk return probability via the
+        heat kernel ``K(t) = e^{-t L_rw}``.
 
-        For each ``start`` index, computes the return probability
-        ``P(sigma) = (T^sigma)[start, start]`` for every
-        ``sigma in {0, 1, ..., max_sigma}`` by successive sparse
-        matrix-vector products.  ``P(0) = 1`` by definition.
+        For each ``start``, evaluates ``K(t)[start, start]`` at every
+        ``t`` in ``times`` by Krylov-subspace evaluation of the matrix
+        exponential applied to an indicator vector
+        (``scipy.sparse.linalg.expm_multiply``).  Cost per ``t`` is
+        ``O(k * nnz)`` where ``k`` is the Krylov dimension at default
+        tolerance (~30); the sparse adjacency is never densified, so
+        this scales to graphs with millions of nodes.
+
+        Continuous time eliminates the discrete walker's bipartite
+        parity zeros: ``K(t)`` is strictly positive and smooth on
+        ``t > 0`` for any connected graph, so the centered-difference
+        D_S estimator is well-conditioned even on trees.
 
         Parameters
         ----------
-        starts : numpy.ndarray of int
+        starts : array-like of int
             Indices of the start nodes; one diffusion process per
             start.  Shape ``(n_diffusion_walks,)``.
-        max_sigma : int
-            Maximum diffusion time (inclusive).
+        times : array-like of float
+            Diffusion times to evaluate.  Must be strictly positive.
+            Spacing is unconstrained -- per-time Krylov solves are
+            issued, so log-spaced ``times`` (the natural choice for
+            log-log slope extraction) cost the same per sample as
+            linearly-spaced.
 
         Returns
         -------
         numpy.ndarray of float
             Return probabilities, shape
-            ``(n_diffusion_walks, max_sigma + 1)``.  Entry
-            ``[w, sigma]`` is ``P_w(sigma)``.
+            ``(n_diffusion_walks, len(times))``.  Entry ``[w, j]`` is
+            ``K(times[j])[starts[w], starts[w]]``.
         """
-        T = self.transition_matrix()
-        n_diffusion_walks = len(starts)
-        rp = np.zeros((n_diffusion_walks, max_sigma + 1))
-        rp[:, 0] = 1.0
-        if T is None:
-            return rp
-        prob = np.zeros((T.shape[0], n_diffusion_walks))
-        prob[starts, np.arange(n_diffusion_walks)] = 1.0
-        for sigma in range(1, max_sigma + 1):
-            prob = T @ prob
-            rp[:, sigma] = prob[starts, np.arange(n_diffusion_walks)]
-        return rp
+        n = self.n_nodes
+        starts = np.asarray(starts, dtype=int)
+        times = np.asarray(times, dtype=float)
+        n_starts = len(starts)
+        n_t = len(times)
+
+        if n == 0 or n_starts == 0:
+            return np.zeros((n_starts, n_t))
+        if not np.all(times > 0):
+            raise ValueError("times must be strictly positive")
+        if self._A.nnz == 0:
+            # No edges: walker stays at its start, K(t)[i, i] = 1 for all t.
+            return np.ones((n_starts, n_t))
+
+        L_rw = self.random_walk_laplacian()
+
+        B = np.zeros((n, n_starts))
+        B[starts, np.arange(n_starts)] = 1.0
+
+        K_diag = np.empty((n_starts, n_t))
+        for j, t in enumerate(times):
+            Kt = sparse.linalg.expm_multiply(-float(t) * L_rw, B)
+            K_diag[:, j] = Kt[starts, np.arange(n_starts)]
+        return K_diag
 
     def spectral_dimension(self, n_diffusion_walks, max_sigma, rng,
-                           tail_fraction=0.2):
-        """Estimate the spectral dimension at small and large sigma.
+                           tail_fraction=0.2, n_times=40, t_min=0.5):
+        """Estimate the spectral dimension at small and large diffusion
+        times via the continuous-time heat kernel.
 
-        The spectral dimension is
+        ``D_S(t) = -2 * d log K(t) / d log t`` where
+        ``K(t) = (e^{-t L_rw})[start, start]`` averaged over random
+        starts.  We sample ``t`` log-uniformly in ``[t_min, max_sigma]``
+        (so log-log slope extraction has uniform precision across the
+        range), take centered finite differences on
+        ``(log t, log K)``, and return the means over the first
+        ``tail_fraction`` (small ``t`` -- local geometry) and last
+        ``tail_fraction`` (large ``t`` -- global geometry) of the
+        resulting D_S array.
 
-            ``D_S(sigma) = -2 * d log P(sigma) / d log sigma``
-
-        We diffuse from ``n_diffusion_walks`` randomly-chosen start
-        nodes, average their return probabilities, extract D_S(sigma)
-        by centered finite differences on log-log data (with one-sided
-        formulas at the endpoints), and return the means over the
-        first ``tail_fraction`` and last ``tail_fraction`` of valid
-        sigma values.
+        Continuous time avoids the bipartite parity zeros that the
+        discrete-step variant exhibits on trees / chains, so the
+        centered-difference estimator is robust on every graph in the
+        catalog (no thermalize-and-retry safety net needed for the D_S
+        extraction itself).
 
         Parameters
         ----------
         n_diffusion_walks : int
-            Number of starts.  Capped at ``self.n_nodes`` if larger.
-        max_sigma : int
-            Maximum diffusion time.
+            Number of starts (capped at ``self.n_nodes``).
+        max_sigma : int or float
+            Upper bound of the log-spaced time grid.  Argument name
+            kept for backward compatibility with the discrete-walk
+            interface; in continuous-time semantics, ``σ -> t``.
         rng : numpy.random.Generator
-            Random source for choosing start nodes.
+            Random source for choosing starts.
         tail_fraction : float, optional
-            Fraction of valid sigmas at each end to average over.  Must
-            lie in ``(0, 0.5]``.  Default ``0.2``.
+            Fraction of grid points at each end to average into
+            D_S(small) and D_S(large).  Must lie in ``(0, 0.5]``.
+            Default ``0.2``.
+        n_times : int, optional
+            Number of log-spaced ``t`` samples.  Default ``40``.
+        t_min : float, optional
+            Lower bound of the log-spaced time grid.  Default ``0.5``.
+            Below ``t ~ 1`` the walker is in a transient (non-power-
+            law) regime; this default puts the small-``t`` tail just
+            into the diffusion regime for typical graphs.
 
         Returns
         -------
         D_S_small : float
-            Mean D_S over the first tail (short-time / local geometry).
-            ``NaN`` if A is empty or no valid sigma points.
+            Mean D_S over the first ``tail_fraction`` of grid points.
+            ``NaN`` if the graph is empty or has too few valid points.
         D_S_large : float
-            Mean D_S over the last tail (long-time / global geometry).
+            Mean D_S over the last ``tail_fraction`` of grid points.
             ``NaN`` in the same conditions.
-
-        Notes
-        -----
-        Centered differences at the endpoints can amplify tail noise
-        (small log-sigma denominator), and bipartite oscillations of
-        P(sigma) can poison the slope.  For long-time D_S extraction
-        on near-bipartite or fragmented graphs, a log-log linear
-        regression over a fixed window is more robust.
         """
         if self.n_nodes == 0:
             return float('nan'), float('nan')
         n = min(n_diffusion_walks, self.n_nodes)
         starts = rng.choice(self.n_nodes, size=n, replace=False)
-        rp = self.diffuse(starts, max_sigma).mean(axis=0)
-        sigma = np.arange(len(rp))
-        valid = (sigma > 1) & (rp > 0)
-        s, p = sigma[valid].astype(float), rp[valid]
-        if len(s) < 2:
+
+        times = np.geomspace(t_min, float(max_sigma), n_times)
+        K_avg = self.diffuse(starts, times).mean(axis=0)
+
+        valid = (K_avg > 0) & np.isfinite(K_avg)
+        if valid.sum() < 2:
             return float('nan'), float('nan')
-        log_s, log_p = np.log(s), np.log(p)
-        ds = np.empty(len(log_s))
-        ds[1:-1] = (log_p[2:] - log_p[:-2]) / (log_s[2:] - log_s[:-2])
-        ds[0] = (log_p[1] - log_p[0]) / (log_s[1] - log_s[0])
-        ds[-1] = (log_p[-1] - log_p[-2]) / (log_s[-1] - log_s[-2])
+
+        log_t = np.log(times[valid])
+        log_K = np.log(K_avg[valid])
+        ds = np.empty(len(log_t))
+        ds[1:-1] = (log_K[2:] - log_K[:-2]) / (log_t[2:] - log_t[:-2])
+        ds[0] = (log_K[1] - log_K[0]) / (log_t[1] - log_t[0])
+        ds[-1] = (log_K[-1] - log_K[-2]) / (log_t[-1] - log_t[-2])
         D_S = -2.0 * ds
         n_tail = max(1, int(len(D_S) * tail_fraction))
         return float(np.mean(D_S[:n_tail])), float(np.mean(D_S[-n_tail:]))
@@ -1228,6 +1270,10 @@ def _make_parser():
                          help='Up-sweep early-exit tolerance: stop when '
                               'Q is within this absolute distance of '
                               'the theoretical max 1-1/M.  0 disables.')
+    g_sweep.add_argument('--sweep-modules', action='store_true',
+                         help='Run separate sweeps for M = 2, 3, ..., '
+                              '--target-n-modules and overlay all of '
+                              'them on the output plot.')
 
     g_meas = parser.add_argument_group("D_S measurement")
     g_meas.add_argument('--n-diffusion-walks', type=int, default=80,
@@ -1323,6 +1369,77 @@ def _plot(measurements, label, direction, save_path, n_modules):
     fig.savefig(save_path, dpi=150)
 
 
+def _run_one_M(initial, M, direction, config, rng):
+    """Run sweep(s) for a single M value and return the combined
+    measurement list (up + down deduped if both)."""
+    labels = [v % M for v in range(initial.n_nodes)]
+    optimizer = Optimizer(config, rng, labels=labels)
+    measurements: list[Measurement] = []
+    if direction in ('up', 'both'):
+        measurements.extend(optimizer.sweep(initial, direction='up'))
+    if direction in ('down', 'both'):
+        down = optimizer.sweep(initial, direction='down')
+        measurements.extend(down[1:] if direction == 'both' else down)
+    return measurements
+
+
+def _plot_module_sweep(measurements_by_m, label, direction, save_path):
+    """Render a multi-M overlay plot.
+
+    Two panels: ``D_S(large sigma)`` and ``D_S(small sigma)`` against
+    ``Q``.  One line per M, color-coded along the viridis colormap so
+    larger M is brighter.  Up- and down-sweep measurements for a
+    given M are combined and sorted by Q, since both extend a single
+    Q-vs-D_S curve from the same initial graph.
+
+    Parameters
+    ----------
+    measurements_by_m : dict[int, list[Measurement]]
+        Per-M measurement lists.
+    label : str
+        Initial-graph description for the plot title.
+    direction : str
+        ``'up'``, ``'down'``, or ``'both'``; for the title only.
+    save_path : str
+        Output PNG path.
+    """
+    Ms = sorted(m for m, meas in measurements_by_m.items() if meas)
+    if not Ms:
+        return
+
+    cmap = plt.get_cmap('viridis')
+    norm = plt.Normalize(vmin=Ms[0], vmax=Ms[-1] if len(Ms) > 1 else Ms[0] + 1)
+
+    fig, (ax_l, ax_s) = plt.subplots(1, 2, figsize=(13, 5))
+    for M in Ms:
+        meas = measurements_by_m[M]
+        Q = np.array([m.Q for m in meas])
+        Dl = np.array([m.ds_large for m in meas])
+        Ds = np.array([m.ds_small for m in meas])
+        order = np.argsort(Q)
+        color = cmap(norm(M))
+        ax_l.plot(Q[order], Dl[order], color=color, marker='o',
+                  linestyle='-', linewidth=1.3, markersize=4,
+                  label=f'M={M}')
+        ax_s.plot(Q[order], Ds[order], color=color, marker='s',
+                  linestyle='-', linewidth=1.3, markersize=4,
+                  label=f'M={M}')
+
+    for ax, ds_label in [(ax_l, r'$D_S$ (large $\sigma$)'),
+                          (ax_s, r'$D_S$ (small $\sigma$)')]:
+        ax.set_xlabel(r'Newman-Girvan $Q$ (M-modulo partition)',
+                      fontsize=13)
+        ax.set_ylabel(ds_label, fontsize=13)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9, ncol=2 if len(Ms) > 6 else 1)
+
+    fig.suptitle(f'Spectral dimension vs modularity ({label}, '
+                 f'M={Ms[0]}..{Ms[-1]}, {direction}-directed swap)',
+                 fontsize=12)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+
+
 def main():
     args = _make_parser().parse_args()
     logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -1330,20 +1447,19 @@ def main():
     if args.target_n_modules < 1:
         raise ValueError(
             f"--target-n-modules must be >= 1, got {args.target_n_modules}")
+    if args.sweep_modules and args.target_n_modules < 2:
+        raise ValueError(
+            "--sweep-modules requires --target-n-modules >= 2 "
+            f"(got {args.target_n_modules})")
 
     rng = np.random.default_rng(args.seed)
     initial, label = _build_initial(args, rng)
-    M = args.target_n_modules
-    labels = [v % M for v in range(initial.n_nodes)]
-
     logger.info("Initial: %s, %d edges", label, initial.n_edges)
     if args.thermalization > 0:
         initial = initial.thermalize(args.thermalization, rng)
         logger.info("Thermalized: %d swaps (%d edges, bipartite=%s)",
                     args.thermalization, initial.n_edges,
                     initial.is_bipartite())
-    logger.info("Module-targeted sweep (%s): M=%d, dq=%.4f, max_iter=%d",
-                args.direction, M, args.target_dq, args.max_iterations)
 
     config = OptimizerConfig(
         target_dq=args.target_dq,
@@ -1355,19 +1471,34 @@ def main():
         negative_retry_max=args.negative_retry_max,
         epsilon_q_max=args.epsilon_q_max,
     )
-    optimizer = Optimizer(config, rng, labels=labels)
 
     t0 = time.time()
-    measurements: list[Measurement] = []
-    if args.direction in ('up', 'both'):
-        measurements.extend(optimizer.sweep(initial, direction='up'))
-    if args.direction in ('down', 'both'):
-        down = optimizer.sweep(initial, direction='down')
-        measurements.extend(down[1:] if args.direction == 'both' else down)
-    elapsed = time.time() - t0
-    logger.info("Done in %.1fs, %d measurements", elapsed, len(measurements))
-
-    _plot(measurements, label, args.direction, args.save, M)
+    if args.sweep_modules:
+        Ms = list(range(2, args.target_n_modules + 1))
+        logger.info("Module sweep (%s): M=2..%d, dq=%.4f, max_iter=%d",
+                    args.direction, args.target_n_modules,
+                    args.target_dq, args.max_iterations)
+        measurements_by_m: dict[int, list[Measurement]] = {}
+        for M in Ms:
+            logger.info("--- M=%d ---", M)
+            measurements_by_m[M] = _run_one_M(
+                initial, M, args.direction, config, rng)
+        elapsed = time.time() - t0
+        n_total = sum(len(v) for v in measurements_by_m.values())
+        logger.info("Done in %.1fs across %d M values, "
+                    "%d measurements total", elapsed, len(Ms), n_total)
+        _plot_module_sweep(measurements_by_m, label, args.direction,
+                           args.save)
+    else:
+        M = args.target_n_modules
+        logger.info("Module-targeted sweep (%s): M=%d, dq=%.4f, "
+                    "max_iter=%d", args.direction, M, args.target_dq,
+                    args.max_iterations)
+        measurements = _run_one_M(initial, M, args.direction, config, rng)
+        elapsed = time.time() - t0
+        logger.info("Done in %.1fs, %d measurements",
+                    elapsed, len(measurements))
+        _plot(measurements, label, args.direction, args.save, M)
     logger.info("Saved %s", args.save)
 
 

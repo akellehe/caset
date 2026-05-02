@@ -1,0 +1,216 @@
+// MIT License
+// Copyright (c) 2025 Andrew Kelleher
+
+#include "spacetime/pachner/AddMove.h"
+
+#include <cmath>
+
+#include "mesh/Edge.h"
+#include "mesh/Simplex.h"
+#include "mesh/SimplexOrientation.h"
+#include "mesh/Vertex.h"
+
+namespace tessera {
+
+AddMove::AddMove(Spacetime *st, std::mt19937 *rng, bool relabelEnabled)
+    : st_(st), ownedRng_(nullptr), rng_(rng),
+      relabelEnabled_(relabelEnabled) {}
+
+AddMove::AddMove(Spacetime *st, std::uint64_t seed, bool relabelEnabled)
+    : st_(st),
+      ownedRng_(std::make_unique<std::mt19937>(seed)),
+      rng_(ownedRng_.get()),
+      relabelEnabled_(relabelEnabled) {}
+
+bool AddMove::propose() {
+  if (proposed_) return false;
+  using namespace pachner_detail;
+  const int d = spacetimeDim(*st_);
+  const int dPlus1 = d + 1;
+
+  // Pick an N41 top simplex.  Mirrors CDT::getRandomN41Simplex
+  // (rejection-sample with linear-scan fallback).
+  SimplexPtr sigma = nullptr;
+  for (int attempt = 0; attempt < 100; ++attempt) {
+    auto s = st_->getRandomTopSimplex();
+    if (s && static_cast<int>(s->size()) == dPlus1 && isN41Type(s, d)) {
+      sigma = s;
+      break;
+    }
+  }
+  if (!sigma) {
+    // Fallback linear scan.
+    std::vector<SimplexPtr> matches;
+    for (const auto &s : st_->getSimplices()) {
+      if (static_cast<int>(s->size()) == dPlus1 && isN41Type(s, d))
+        matches.push_back(s);
+    }
+    if (matches.empty()) return false;
+    std::uniform_int_distribution<std::size_t> dist(0, matches.size() - 1);
+    sigma = matches[dist(*rng_)];
+  }
+
+  // Find the spatial facet (vertices all at same time).
+  SimplexPtr spatialFacet = nullptr;
+  for (const auto &f : sigma->getFacets()) {
+    if (f->isSpatial()) { spatialFacet = f; break; }
+  }
+  if (!spatialFacet) return false;
+
+  // Adjacent simplex sharing this facet, of opposite orientation.
+  SimplexPtr sigmaAdj = nullptr;
+  for (const auto &cf : spatialFacet->getCofaces()) {
+    if (static_cast<int>(cf->size()) == dPlus1 && cf != sigma) {
+      sigmaAdj = cf;
+      break;
+    }
+  }
+  if (!sigmaAdj) return false;
+  if (!isN41Type(sigmaAdj, d)) return false;
+
+  // Identify the non-spatial ("top" and "bottom") vertices.
+  VertexPtr vertA = nullptr, vertB = nullptr;
+  for (const auto &v : sigma->getVertices()) {
+    if (!spatialFacet->hasVertex(v)) { vertA = v; break; }
+  }
+  for (const auto &v : sigmaAdj->getVertices()) {
+    if (!spatialFacet->hasVertex(v)) { vertB = v; break; }
+  }
+  if (!vertA || !vertB) return false;
+
+  // Combinatorial deltas: (2,2d) add adds 2d simplices and removes 2.
+  dN41_ = 2 * d - 2;
+
+  // Combinatorial prefactor: log(N41 / (N0 + 1))
+  // (matches CDT::add).
+  double N41 = static_cast<double>(st_->getN41());
+  double N0 = static_cast<double>(st_->getVertexCount());
+  logPrefactor_ = std::log(N41) - std::log(N0 + 1.0);
+
+  // Capture state for apply.
+  sigma_ = sigma;
+  sigmaAdj_ = sigmaAdj;
+  spatialFacet_ = spatialFacet;
+  vertA_ = vertA;
+  vertB_ = vertB;
+  // Capture vertex tuples for old simplices (for rollback).
+  {
+    const auto &sv = sigma_->getVertices();
+    sigmaVerts_.assign(sv.begin(), sv.end());
+    const auto &av = sigmaAdj_->getVertices();
+    sigmaAdjVerts_.assign(av.begin(), av.end());
+  }
+  // Capture spatial vertices (used to build new simplices).
+  {
+    const auto &sv = spatialFacet_->getVertices();
+    spatialVerts_.assign(sv.begin(), sv.end());
+  }
+  spatialTime_ = spatialFacet_->getTi();
+
+  // Touched vertices: the d+2 around the bipyramid (d spatial + vertA
+  // + vertB).  The new vertex doesn't exist yet so isn't included.
+  touchedIds_.reserve(d + 2);
+  for (const auto &v : spatialVerts_) touchedIds_.push_back(v->getId());
+  touchedIds_.push_back(vertA_->getId());
+  touchedIds_.push_back(vertB_->getId());
+
+  proposed_ = true;
+  return true;
+}
+
+bool AddMove::apply() {
+  if (!proposed_ || applied_) return false;
+  const int d = pachner_detail::spacetimeDim(*st_);
+
+  // 1. Create the new vertex at the shared spatial time slice.
+  newVert_ = st_->createVertex(std::vector<double>{spatialTime_});
+
+  // 2. Remove the 2 old simplices.
+  st_->removeSimplex(sigma_);
+  st_->removeSimplex(sigmaAdj_);
+
+  // 3. Build 2d new simplices.  For each spatial sub-face (drop one
+  // spatial vertex), create 2 new simplices: one with vertA and one
+  // with vertB, both anchored at newVert.
+  for (int skip = 0; skip < d; ++skip) {
+    VertexPtrs verts1, verts2;
+    verts1.reserve(d + 1);
+    verts2.reserve(d + 1);
+    for (int i = 0; i < d; ++i) {
+      if (i != skip) {
+        verts1.push_back(spatialVerts_[i]);
+        verts2.push_back(spatialVerts_[i]);
+      }
+    }
+    verts1.push_back(newVert_);
+    verts1.push_back(vertA_);
+    verts2.push_back(newVert_);
+    verts2.push_back(vertB_);
+
+    auto r1 = st_->createSimplexTracked(verts1);
+    if (r1.created) createdSimplices_.push_back(r1.simplex);
+    for (const auto &e : r1.newEdges) createdEdges_.push_back(e);
+
+    auto r2 = st_->createSimplexTracked(verts2);
+    if (r2.created) createdSimplices_.push_back(r2.simplex);
+    for (const auto &e : r2.newEdges) createdEdges_.push_back(e);
+  }
+
+  // 4. Optional vertex relabeling.  Save the swap partner so rollback
+  // can un-swap.
+  if (relabelEnabled_) {
+    VertexPtr partner = st_->getRandomVertex();
+    if (partner && partner->getId() != newVert_->getId()) {
+      st_->swapVertexLabels(newVert_, partner);
+      swapPartner_ = partner;
+    }
+  }
+
+  applied_ = true;
+  return true;
+}
+
+void AddMove::rollback() {
+  if (!applied_) return;
+
+  // 1. Reverse the label swap (if any).  ``swapVertexLabels`` is its
+  // own inverse — calling it again restores both vertices to their
+  // pre-swap IDs and rekeys all dependent fingerprints (edges,
+  // simplices) back to their pre-swap state.
+  if (swapPartner_ != nullptr) {
+    st_->swapVertexLabels(newVert_, swapPartner_);
+    swapPartner_ = nullptr;
+  }
+
+  // 2. Remove the 2d created simplices.  Their fingerprints are now
+  // back to the pre-swap state (involving newVert's auto-assigned ID).
+  for (const auto &s : createdSimplices_) st_->removeSimplex(s);
+  createdSimplices_.clear();
+
+  // 3. Remove the freshly-inserted edges (mostly: edges from newVert
+  // to spatial vertices and to vertA/vertB).
+  for (const auto &e : createdEdges_) {
+    e->getSource()->removeOutEdge(e);
+    e->getTarget()->removeInEdge(e);
+    st_->getEdgeList()->remove(e);
+  }
+  createdEdges_.clear();
+
+  // 4. Remove the new vertex.
+  if (newVert_ != nullptr) {
+    st_->removeIfIsolated(newVert_);
+    newVert_ = nullptr;
+  }
+
+  // 5. Recreate the 2 old simplices from their captured vertex tuples.
+  st_->createSimplexTracked(sigmaVerts_);
+  st_->createSimplexTracked(sigmaAdjVerts_);
+
+  applied_ = false;
+}
+
+std::vector<std::uint64_t> AddMove::touchedVertexIds() const {
+  return touchedIds_;
+}
+
+}  // namespace tessera

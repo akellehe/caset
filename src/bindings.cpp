@@ -31,8 +31,16 @@
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
 #include "simulations/CDT.h"
+#include "spacetime/PachnerMove.h"
+#include "spacetime/pachner/AddMove.h"
+#include "spacetime/pachner/FlipMove.h"
+#include "spacetime/pachner/IFlipMove.h"
+#include "spacetime/pachner/RemoveMove.h"
+#include "spacetime/pachner/ShiftMove.h"
 #include "simulations/ReggeSolver.h"
 #include "matter/MatterConfiguration.h"
+#include "observables/ModularityOptimizer.h"
+#include "observables/SparseGraph.h"
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
 #include "spacetime/Spacetime.h"
@@ -214,6 +222,15 @@ and containing simplices.)doc")
            py::arg("source"), py::arg("target"),
            py::return_value_policy::reference,
            "Add an edge with auto-computed squared length, or return existing if duplicate.")
+      .def("tryAdd", &EdgeList::tryAdd,
+           py::arg("source"), py::arg("target"), py::arg("squaredLength"),
+           py::return_value_policy::reference,
+           R"doc(Insert if absent, otherwise return the existing edge.
+
+Returns ``(edge, inserted)`` where ``inserted`` is ``True`` on a fresh
+insert and ``False`` on a dedupe-hit.  Used by transactional Pachner
+moves to record which edges they freshly created (so rollback knows
+which to remove).)doc")
       .def("remove", py::overload_cast<const EdgePtr &>(&EdgeList::remove), py::arg("edge"),
            "Remove an edge from the list.")
       .def("size", &EdgeList::size,
@@ -463,6 +480,17 @@ internal top-simplex array and N is the number of top simplices.
 
 This is much faster than iterating over simplices/facets/cofaces from
 Python because it makes a single C++ call instead of O(N) round trips.)doc")
+      .def("getDualGraph", &Spacetime::getDualGraph,
+           R"doc(Return the dual graph as a SparseGraph.
+
+Equivalent to ``SparseGraph::fromCOO(*getDualAdjacency())`` but
+avoids the intermediate Python conversion.)doc")
+      .def("modularityOnSkeleton", &Spacetime::modularityOnSkeleton,
+           py::arg("M"),
+           R"doc(Newman-Girvan modularity Q on the vertex/edge 1-skeleton.
+
+Implicit labels: ``label(v) = v.id() % M``.  Returns 0 if M < 2,
+the graph has no edges, or the spacetime has no vertices.)doc")
       .def("getTimeSlices", &Spacetime::getTimeSlices,
            "Return sorted list of integer time values in the triangulation.")
       .def("getVerticesAtTime", &Spacetime::getVerticesAtTime,
@@ -520,6 +548,24 @@ may differ slightly due to slab quantization.)doc")
 
 Returns (simplex, created) where created is True if the simplex was
 new, False if it already existed (dedup by fingerprint).)doc")
+      .def("createSimplexTracked",
+           [](Spacetime &self, const std::vector<VertexPtr> &vertices) {
+               auto r = self.createSimplexTracked(vertices);
+               return py::make_tuple(r.simplex, r.created, r.newEdges);
+           },
+           py::arg("vertices"),
+           py::return_value_policy::reference,
+           R"doc(Like createSimplex(vertices) but also returns the edges
+that this call freshly inserted into the EdgeList.
+
+Returns (simplex, created, newEdges) where:
+  - simplex: SimplexPtr (existing or freshly created)
+  - created: True if newly created, False if found existing
+  - newEdges: list of edges this call freshly inserted (empty when
+              created=False, or when all needed edges already existed)
+
+Used by transactional Pachner moves so rollback can undo edge
+insertions.)doc")
       .def("createSimplex",
            py::overload_cast<const std::vector<VertexPtr> &, const std::vector<EdgePtr> &>(
              &Spacetime::createSimplex),
@@ -614,6 +660,131 @@ Args:
     delayCs: Frame delay in centiseconds (default 7).)doc");
 
   // ========================================
+  // PachnerMove (transactional Pachner moves)
+  // ========================================
+  py::class_<PachnerMove>(m, "PachnerMove",
+      R"doc(Abstract base class for transactional Pachner moves.
+
+Each subclass (ShiftMove, FlipMove, IFlipMove, AddMove, RemoveMove)
+exposes a propose / apply / rollback lifecycle:
+
+  - propose():  read-only target selection + validation.  Returns
+                False if no eligible target is found.
+  - apply():    commits the move; builds an internal undo log.
+  - rollback(): replays the undo log; restores the spacetime to its
+                pre-apply state.  Idempotent.
+
+After a successful propose(), the move publishes its combinatorial
+deltas (dN0, dN41, dN32) and Metropolis log prefactor so callers can
+plug them into action-based acceptance criteria.
+
+See ``docs/source/modularity-plan.md`` for the design rationale.)doc")
+      .def("propose", &PachnerMove::propose,
+           "Pick a target and validate.  No state change.  Returns "
+           "True on success.")
+      .def("apply", &PachnerMove::apply,
+           "Commit the proposed move; build the undo log.  Returns "
+           "True on success.")
+      .def("rollback", &PachnerMove::rollback,
+           "Restore the spacetime to its pre-apply state.  Idempotent.")
+      .def("isApplied", &PachnerMove::isApplied,
+           "True iff apply() has been called and not rolled back.")
+      .def("dN0", &PachnerMove::dN0,
+           "Combinatorial change in vertex count.")
+      .def("dN41", &PachnerMove::dN41,
+           "Combinatorial change in N41-type top-simplex count.")
+      .def("dN32", &PachnerMove::dN32,
+           "Combinatorial change in N32-type top-simplex count.")
+      .def("metropolisLogPrefactor", &PachnerMove::metropolisLogPrefactor,
+           "log of the Metropolis combinatorial prefactor.")
+      .def("touchedVertexIds", &PachnerMove::touchedVertexIds,
+           "IDs of the vertices whose neighborhood the move re-arranges. "
+           "Used for informed (community-aware) proposals.")
+      .def("moveType", &PachnerMove::moveType,
+           "Move-type tag: one of 'add', 'remove', 'flip', 'iflip', "
+           "'shift'.");
+
+  py::class_<AddMove, PachnerMove>(m, "AddMove",
+      R"doc(Transactional (2,2d) add (vertex insertion) move.
+
+Picks a random N41 simplex, finds its spatial face and the adjacent
+simplex of opposite orientation, and inserts a new vertex at the
+spatial time slice.  ``dN0 = +1``; ``dN41 = +(2d-2) = +6`` in 4D;
+``dN32 = 0``.
+
+Vertex relabeling (per [BGL] Sec. 2.2.1) is enabled by default.
+Pass ``relabel=False`` to disable for tests that need stable
+fingerprints across moves.)doc")
+      .def(py::init<Spacetime *, std::uint64_t, bool>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::arg("relabel") = true,
+           py::keep_alive<1, 2>(),
+           "Construct an add move bound to ``spacetime`` with a fresh "
+           "RNG seeded from ``seed``.  ``relabel`` controls whether the "
+           "new vertex's ID is swap-relabeled with a random existing "
+           "vertex on apply().");
+
+  py::class_<FlipMove, PachnerMove>(m, "FlipMove",
+      R"doc(Transactional (2,d) flip move.
+
+Removes 2 d-simplices sharing a (d-1)-face and creates d new
+d-simplices sharing an edge.  ``dN0 = 0``; ``ΔN4 = d - 2 = +2`` in 4D.
+Inverse: :class:`IFlipMove`.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           "Construct a (2,d) flip move bound to ``spacetime`` with a "
+           "fresh ``std::mt19937`` seeded with ``seed``.");
+
+  py::class_<RemoveMove, PachnerMove>(m, "RemoveMove",
+      R"doc(Transactional (2d, 2) remove (vertex deletion) move.
+
+Picks a random vertex with order 2d, removes the 2d incident
+N41-type simplices and the vertex, and creates 2 replacement
+simplices.  ``dN0 = -1``; ``dN41 = -(2d-2) = -6`` in 4D;
+``dN32 = 0``.  Inverse: :class:`AddMove`.
+
+Rollback recreates the deleted vertex (with original ID and
+coordinates), reinserts its incident edges (with original squared
+lengths), and recreates the 2d removed simplices.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           "Construct a remove move bound to ``spacetime`` with a fresh "
+           "RNG seeded from ``seed``.");
+
+  py::class_<IFlipMove, PachnerMove>(m, "IFlipMove",
+      R"doc(Transactional inverse (d, 2) flip move.
+
+Removes d d-simplices sharing an edge and creates 2 new d-simplices
+sharing a (d-1)-face.  ``dN0 = 0``; ``ΔN4 = -(d - 2) = -2`` in 4D.
+Inverse: :class:`FlipMove`.
+
+Includes a manifold-preservation check in propose() — rejects if
+either new simplex would already exist in the lattice.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           "Construct an inverse flip bound to ``spacetime`` with a "
+           "fresh ``std::mt19937`` seeded with ``seed``.");
+
+  py::class_<ShiftMove, PachnerMove>(m, "ShiftMove",
+      R"doc(Transactional (3,3) shift move.
+
+Picks a random top simplex and a random (d-2)-face.  If exactly d-1
+top simplices share that face, replaces them with d-1 new simplices
+sharing the complementary (d-2)-face.  Self-inverse — dN0 = 0 and
+dN41 + dN32 = 0.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           R"doc(Construct a shift move bound to ``spacetime``, using a
+fresh ``std::mt19937`` seeded with ``seed`` for the proposal.
+
+For sweeps that share a single Markov chain across many moves, drive
+moves via ``CDT.proposeShift()`` (added in Phase 3) instead.)doc");
+
+  // ========================================
   // CDTSimulation
   // ========================================
   py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation",
@@ -684,6 +855,19 @@ sharing the complementary (d-2)-face.  Self-inverse: dN0 = 0, dN4 = 0.
 Combinatorial prefactor is 1 (symmetric selection).
 
 Returns True if accepted, False if rejected.)doc")
+      .def("proposeAdd", &CDT::proposeAdd,
+           R"doc(Construct a transactional AddMove bound to this
+simulation's spacetime + RNG, with propose() already called.  Returns
+None if no eligible target.  Caller drives apply()/rollback().  Does
+NOT update acceptance counters.)doc")
+      .def("proposeRemove", &CDT::proposeRemove,
+           "Like proposeAdd() for the (2d,2) remove move.")
+      .def("proposeFlip", &CDT::proposeFlip,
+           "Like proposeAdd() for the (2,d) flip move.")
+      .def("proposeIflip", &CDT::proposeIflip,
+           "Like proposeAdd() for the (d,2) inverse-flip move.")
+      .def("proposeShift", &CDT::proposeShift,
+           "Like proposeAdd() for the (3,3) shift move.")
       .def("ishift", &CDT::ishift,
            R"doc(Attempt one inverse shift move (same as shift, since (3,3) is self-inverse).
 
@@ -773,6 +957,137 @@ Values: fraction of attempts accepted (0.0 to 1.0).)doc")
 
 Enabled by default per [BGL] Sec. 2.2.1.  Disable for deterministic
 tests that compare simplex fingerprints before and after moves.)doc");
+
+  // ========================================
+  // SparseGraph (for modularity / spectral dimension)
+  // ========================================
+  py::class_<SparseGraph>(m, "SparseGraph",
+      R"doc(Undirected sparse graph in CSR form.
+
+Built from the COO output of ``Spacetime.getDualAdjacency`` (or
+similar).  Used by the modularity sweep to compute spectral
+dimension on the dual graph.)doc")
+      .def_static("fromCOO", &SparseGraph::fromCOO,
+                  py::arg("rows"), py::arg("cols"), py::arg("n"),
+                  "Construct from COO arrays + node count.")
+      .def("nNodes", &SparseGraph::nNodes,
+           "Number of nodes.")
+      .def("nEdges", &SparseGraph::nEdges,
+           "Number of undirected edges.")
+      .def("isBipartite", &SparseGraph::isBipartite,
+           "True iff the graph is 2-colorable (no odd cycle).")
+      .def("diagonalHeatKernel",
+           [](const SparseGraph &self,
+              const std::vector<std::uint32_t> &starts,
+              const std::vector<double> &times,
+              int krylovDim) {
+             auto flat = self.diagonalHeatKernel(starts, times, krylovDim);
+             // Reshape to list-of-lists for Python convenience.
+             std::vector<std::vector<double>> out(starts.size(),
+                                                   std::vector<double>(times.size()));
+             for (std::size_t s = 0; s < starts.size(); ++s) {
+               for (std::size_t j = 0; j < times.size(); ++j) {
+                 out[s][j] = flat[s * times.size() + j];
+               }
+             }
+             return out;
+           },
+           py::arg("starts"), py::arg("times"), py::arg("krylovDim") = 30,
+           R"doc(Diagonal of the heat kernel ``e^{-t L_sym}`` for each
+(start, t) pair.  Returns a list of lists with shape
+(len(starts), len(times)).)doc")
+      .def("spectralDimension",
+           [](const SparseGraph &self, int nWalks, double maxSigma,
+              std::uint64_t seed, double tailFraction, int nTimes,
+              double tMin, int krylovDim) {
+             std::mt19937 rng(seed);
+             return self.spectralDimension(nWalks, maxSigma, &rng,
+                                           tailFraction, nTimes, tMin,
+                                           krylovDim);
+           },
+           py::arg("nWalks"), py::arg("maxSigma"), py::arg("seed") = 0,
+           py::arg("tailFraction") = 0.2, py::arg("nTimes") = 40,
+           py::arg("tMin") = 0.5, py::arg("krylovDim") = 30,
+           R"doc(Estimate spectral dimension at small / large diffusion times.
+
+Returns ``(D_S_small, D_S_large)``.  Mirrors the Python implementation
+in ``examples/modularity.py:Graph.spectral_dimension``.)doc");
+
+  // ========================================
+  // ModularityOptimizer
+  // ========================================
+  py::class_<ModularityMeasurement>(m, "ModularityMeasurement",
+      R"doc(One recorded point on the (Q, D_S) trajectory.
+
+Mirrors examples/modularity.py:Measurement.)doc")
+      .def_readonly("Q", &ModularityMeasurement::Q)
+      .def_readonly("dsSmall", &ModularityMeasurement::dsSmall)
+      .def_readonly("dsLarge", &ModularityMeasurement::dsLarge)
+      .def_readonly("nVertices", &ModularityMeasurement::nVertices)
+      .def_readonly("nEdges", &ModularityMeasurement::nEdges)
+      .def_readonly("nSimplices", &ModularityMeasurement::nSimplices)
+      .def_readonly("iter", &ModularityMeasurement::iter)
+      .def_readonly("direction", &ModularityMeasurement::direction);
+
+  py::class_<ModularityOptimizerConfig>(m, "ModularityOptimizerConfig")
+      .def(py::init<>())
+      .def_readwrite("targetDq", &ModularityOptimizerConfig::targetDq)
+      .def_readwrite("maxIterations",
+                     &ModularityOptimizerConfig::maxIterations)
+      .def_readwrite("nDiffusionWalks",
+                     &ModularityOptimizerConfig::nDiffusionWalks)
+      .def_readwrite("maxSigma", &ModularityOptimizerConfig::maxSigma)
+      .def_readwrite("negativeRetryMax",
+                     &ModularityOptimizerConfig::negativeRetryMax)
+      .def_readwrite("epsilonQMax",
+                     &ModularityOptimizerConfig::epsilonQMax)
+      .def_readwrite("krylovDim", &ModularityOptimizerConfig::krylovDim)
+      .def_readwrite("targetNModules",
+                     &ModularityOptimizerConfig::targetNModules);
+
+  py::class_<ModularityOptimizer>(m, "ModularityOptimizer",
+      R"doc(Modularity sweep on a CDT spacetime, driven by transactional
+Pachner moves with Q-direction acceptance.
+
+Each iteration:
+  1. Picks a random move type from {add, remove, flip, iflip, shift}.
+  2. Calls cdt.proposeXxx() — if no eligible target, tries another type.
+  3. Snapshots Q on the spacetime 1-skeleton.
+  4. Calls move.apply() to commit the move.
+  5. Computes new Q.  If direction matches, keeps the move; else
+     calls move.rollback().
+  6. If Q crossed the next target_dq threshold, builds the dual graph
+     and measures D_S.
+
+See docs/source/modularity-plan.md for the design rationale.)doc")
+      .def(py::init<ModularityOptimizerConfig, std::uint64_t>(),
+           py::arg("config"), py::arg("seed") = 0)
+      .def("sweep",
+           [](ModularityOptimizer &self, CDT &cdt,
+              const std::string &direction, py::object progress) {
+             ModularityOptimizer::ProgressCallback cb = nullptr;
+             if (!progress.is_none()) {
+               cb = [&progress](int it, int maxIt, double q,
+                                std::size_t n) {
+                 py::gil_scoped_acquire acquire;
+                 progress(it, maxIt, q, n);
+               };
+             }
+             py::gil_scoped_release release;
+             return self.sweep(cdt, direction, cb);
+           },
+           py::arg("cdt"), py::arg("direction"),
+           py::arg("progress") = py::none(),
+           "Drive `cdt` to walk Q in direction ('up' or 'down'). "
+           "Returns list of ModularityMeasurement.")
+      .def("getNAccepted", &ModularityOptimizer::getNAccepted,
+           "Number of moves applied + kept (since the last sweep).")
+      .def("getNRolledBack", &ModularityOptimizer::getNRolledBack,
+           "Number of moves applied then rolled back.")
+      .def("getNNoMove", &ModularityOptimizer::getNNoMove,
+           "Number of iterations with no eligible move.")
+      .def("getNMeasurements", &ModularityOptimizer::getNMeasurements,
+           "Number of D_S measurements taken.");
 
   // ========================================
   // VolumeProfile

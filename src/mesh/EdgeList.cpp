@@ -31,6 +31,14 @@ EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target, double s
   return getOrInsert(source, target, squaredLength);
 }
 
+std::pair<EdgePtr, bool> EdgeList::tryAdd(const VertexPtr &source, const VertexPtr &target,
+                                          double squaredLength) {
+  std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
+  auto it = fpToSlot_.find(fp);
+  if (it != fpToSlot_.end()) return {&pool_[it->second], false};
+  return {getOrInsert(source, target, squaredLength), true};
+}
+
 EdgePtr EdgeList::getOrInsert(const VertexPtr &source, const VertexPtr &target, double squaredLength) {
   if (source->getId() == target->getId()) {
     throw std::runtime_error("You cannot create an edge from a vertex to itself.");

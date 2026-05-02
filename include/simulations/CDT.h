@@ -195,6 +195,18 @@ class CDT : public Simulation {
     /// Deprecated alias for shift(). The \f$(3,3)\f$ move is self-inverse.
     bool ishift();
 
+    /// Construct a transactional :class:`AddMove` bound to this
+    /// simulation's spacetime + RNG.  Caller drives propose() / apply()
+    /// / rollback() directly.  Useful for the modularity sweep
+    /// optimizer in observables/ModularityOptimizer.h, which layers
+    /// custom acceptance (Q-direction filter) on top of the bare
+    /// move mechanics.  Does *not* update CDT's acceptance counters.
+    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeAdd();
+    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeRemove();
+    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeFlip();
+    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeIflip();
+    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeShift();
+
     /// Adjust the cosmological coupling \f$ k_4 \f$ to drive the total four-volume
     /// \f$ N_4 \f$ toward the target \f$ \bar{N}_4 \f$. Uses a proportional controller
     /// that increases \f$ k_4 \f$ when volume exceeds the target (making growth

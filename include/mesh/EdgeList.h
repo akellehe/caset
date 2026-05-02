@@ -43,6 +43,12 @@ class EdgeList {
 
     EdgePtr add(const VertexPtr &source, const VertexPtr &target);
     EdgePtr add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept;
+    /// Insert if absent, otherwise return the existing edge.
+    /// Returns {ptr, true} on fresh insert, {ptr, false} on dedupe-hit.
+    /// Used by transactional Pachner moves to record which edges they
+    /// freshly created (so rollback knows which to remove).
+    std::pair<EdgePtr, bool> tryAdd(const VertexPtr &source, const VertexPtr &target,
+                                    double squaredLength);
     EdgePtr get(const std::uint64_t &fingerprint);
     void remove(const EdgePtr &edge) noexcept;
     void replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept;

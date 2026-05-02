@@ -100,6 +100,26 @@ class Spacetime {
 
     std::pair<SimplexPtr, bool> createSimplex(const VertexPtrs &vertices);
 
+    /// Result of a tracked simplex creation that records freshly-inserted
+    /// edges, used by the transactional Pachner-move infrastructure to
+    /// know what to undo on rollback.
+    struct CreateSimplexResult {
+      /// The simplex (existing or freshly created).
+      SimplexPtr simplex;
+      /// True if the simplex was newly created; false if it already existed.
+      bool created;
+      /// Edges that this call freshly inserted into the EdgeList (i.e.
+      /// where ``EdgeList::tryAdd`` returned ``inserted=true``).
+      /// Empty when ``created`` is false (no edges were touched).
+      Edges newEdges;
+    };
+
+    /// Like ``createSimplex(vertices)`` but also reports the edges this
+    /// call freshly inserted into the EdgeList — those that were
+    /// auto-created from scratch rather than found existing.  Caller can
+    /// use this to undo edge insertions on rollback.
+    CreateSimplexResult createSimplexTracked(const VertexPtrs &vertices);
+
     /// Creates a simplex \f$ \sigma^k \f$ from explicit vertices and edges.
     /// @param vertices The vertices \f$ \{v_0, \ldots, v_k\} \f$ of the simplex
     /// @param edges The edges \f$ \{e_{ij}\} \f$ connecting the vertices
@@ -272,6 +292,24 @@ class Spacetime {
                              std::vector<std::uint32_t>,
                              std::uint32_t>
     getDualAdjacency() const;
+
+    /// Convenience: build a :class:`SparseGraph` of the dual
+    /// triangulation in one call.  Equivalent to
+    /// ``SparseGraph::fromCOO(*getDualAdjacency())`` but avoids the
+    /// intermediate Python-side conversion.
+    [[nodiscard]] class SparseGraph getDualGraph() const;
+
+    /// Newman-Girvan modularity Q on the vertex/edge 1-skeleton, with
+    /// implicit labels ``label(v) = v.id() % M``.
+    ///
+    /// ``Q = sum_c [L_c / m - (D_c / 2m)^2]`` where ``L_c`` is the
+    /// number of edges within community c, ``D_c`` the sum of degrees
+    /// of nodes in c, and ``m = |E|``.
+    ///
+    /// Returns 0 if M < 2, the graph has no edges, or the spacetime
+    /// has no vertices.  See ``examples/modularity.py:modularity``
+    /// for the reference Python implementation.
+    [[nodiscard]] double modularityOnSkeleton(int M) const;
 
     /// Computes the connected components of the vertex graph.
     ///

@@ -21,6 +21,11 @@
 
 #include "simulations/CDT.h"
 #include "Logger.h"
+#include "spacetime/pachner/AddMove.h"
+#include "spacetime/pachner/FlipMove.h"
+#include "spacetime/pachner/IFlipMove.h"
+#include "spacetime/pachner/RemoveMove.h"
+#include "spacetime/pachner/ShiftMove.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -124,113 +129,11 @@ double CDT::computeAction() const {
 // ========================================
 bool CDT::add() {
   addAttempts++;
-  int d = getDim(spacetime);
-  int dPlus1 = d + 1;
-
-  // Select a random N41-type top simplex. The prefactor N41/(N0+1) requires
-  // the selection probability to be 1/N41 (Brunekreef Sec. 2.3.1).
-  // We must NOT select from all N4 top simplices, as that would give
-  // selection probability 1/N4, violating detailed balance.
-  SimplexPtr sigma = getRandomN41Simplex(d);
-  if (!sigma) return false;
-
-  auto [sti, stf] = sigma->getOrientation().numeric();
-
-  // Find the spatial facet: the one where all vertices are at the same time.
-  // For (d,1): skip the 1 vertex at tf → spatial face has d vertices at ti.
-  // For (1,d): skip the 1 vertex at ti → spatial face has d vertices at tf.
-  SimplexPtr spatialFacet = nullptr;
-  for (const auto &f : sigma->getFacets()) {
-    if (f->isSpatial()) {
-      spatialFacet = f;
-      break;
-    }
-  }
-  if (!spatialFacet) return false;
-
-  // Find the adjacent simplex sharing this spatial facet (opposite orientation)
-  SimplexPtr sigmaAdj = nullptr;
-  for (const auto &cf : spatialFacet->getCofaces()) {
-    if (static_cast<int>(cf->size()) == dPlus1 && cf != sigma) {
-      sigmaAdj = cf;
-      break;
-    }
-  }
-  if (!sigmaAdj) return false;
-
-  // The adjacent simplex should be N41-type (opposite orientation)
-  auto [ati, atf] = sigmaAdj->getOrientation().numeric();
-  bool adjIsN41 = (ati == d && atf == 1) || (ati == 1 && atf == d);
-  if (!adjIsN41) return false;
-
-  // Identify the non-spatial ("top" and "bottom") vertices
-  VertexPtr vertA = nullptr, vertB = nullptr;
-  for (const auto &v : sigma->getVertices()) {
-    if (!spatialFacet->hasVertex(v)) { vertA = v; break; }
-  }
-  for (const auto &v : sigmaAdj->getVertices()) {
-    if (!spatialFacet->hasVertex(v)) { vertB = v; break; }
-  }
-  if (!vertA || !vertB) return false;
-
-  // Action change: dN0=+1, dN41=+(2d-2), dN32=0
-  // We remove 2 N41 simplices and create 2d N41 simplices → net +(2d-2)
-  int dN0 = 1;
-  int dN41 = 2 * d - 2;
-  int dN32 = 0;
-
-  double deltaS = computeDeltaAction(dN0, dN41, dN32);
-
-  // Combinatorial prefactor: N41/(N0+1)
-  // From Brunekreef eq 26 pattern: selection 1/N41, relabeling 1/(N0+1),
-  // reverse selection 1/(N0+1)
-  double N41 = static_cast<double>(spacetime->getN41());
-  double N0 = static_cast<double>(spacetime->getVertexCount());
-  double logPrefactor = std::log(N41) - std::log(N0 + 1.0);
-
-  if (!accept(deltaS, logPrefactor)) return false;
-
-  // Execute: create new vertex at the spatial time slice
-  double spatialTime = spatialFacet->getTi();  // all verts at same time
-  VertexPtr newVert = spacetime->createVertex(std::vector<double>{spatialTime});
-
-  // Save spatial vertices before removing simplices
-  VertexPtrs spatialVerts(spatialFacet->getVertices().begin(),
-                          spatialFacet->getVertices().end());
-
-  // Remove the 2 old simplices
-  spacetime->removeSimplex(sigma);
-  spacetime->removeSimplex(sigmaAdj);
-
-  // Create 2d new simplices: for each of d sub-faces (drop one spatial vertex, add newVert)
-  for (int skip = 0; skip < d; ++skip) {
-    VertexPtrs verts1, verts2;
-    for (int i = 0; i < d; ++i) {
-      if (i != skip) {
-        verts1.push_back(spatialVerts[i]);
-        verts2.push_back(spatialVerts[i]);
-      }
-    }
-    verts1.push_back(newVert);
-    verts1.push_back(vertA);
-    verts2.push_back(newVert);
-    verts2.push_back(vertB);
-
-    spacetime->createSimplex(verts1);
-    spacetime->createSimplex(verts2);
-  }
-
-  // Vertex relabeling ([BGL] Sec. 2.2.1/2.3.1): swap the new vertex's label
-  // with a uniformly chosen existing vertex. This implements the 1/(N0+1)
-  // factor in the acceptance prefactor. Observables are label-invariant, so
-  // this is physically neutral but ensures correct detailed balance.
-  if (relabelVertices_) {
-    VertexPtr randomVert = spacetime->getRandomVertex();
-    if (randomVert && randomVert->getId() != newVert->getId()) {
-      spacetime->swapVertexLabels(newVert, randomVert);
-    }
-  }
-
+  AddMove move(spacetime.get(), &rng, relabelVertices_);
+  if (!move.propose()) return false;
+  double deltaS = computeDeltaAction(move.dN0(), move.dN41(), move.dN32());
+  if (!accept(deltaS, move.metropolisLogPrefactor())) return false;
+  if (!move.apply()) return false;
   addAccepted++;
   return true;
 }
@@ -240,112 +143,11 @@ bool CDT::add() {
 // ========================================
 bool CDT::remove() {
   removeAttempts++;
-  int d = getDim(spacetime);
-  int dPlus1 = d + 1;
-  int requiredOrder = 2 * d;
-
-  // Pick a random vertex (blind guessing, Brunekreef Sec 2.3.1)
-  VertexPtr v = spacetime->getRandomVertex();
-  if (!v) return false;
-
-  // Count top simplices incident to this vertex; require exactly 2d
-  std::vector<SimplexPtr> incident;
-  for (const auto &s : v->getSimplices()) {
-    if (static_cast<int>(s->size()) == dPlus1) incident.push_back(s);
-  }
-  if (static_cast<int>(incident.size()) != requiredOrder) return false;
-
-  // Verify structure: all incident simplices must be N41-type,
-  // and they must share exactly d spatial vertices (besides v)
-  // plus 2 non-spatial vertices (one "top", one "bottom")
-  VertexPtr vertA = nullptr, vertB = nullptr;
-  VertexPtrs spatialVerts;
-
-  // Collect all vertices across incident simplices (besides v)
-  std::map<std::uint64_t, VertexPtr> otherVerts;
-  std::map<std::uint64_t, int> vertCounts;
-  for (const auto &s : incident) {
-    // All must be N41-type
-    auto [sti, stf] = s->getOrientation().numeric();
-    bool isN41 = (sti == d && stf == 1) || (sti == 1 && stf == d);
-    if (!isN41) return false;
-
-    for (const auto &vert : s->getVertices()) {
-      if (vert->getId() == v->getId()) continue;
-      otherVerts[vert->getId()] = vert;
-      vertCounts[vert->getId()]++;
-    }
-  }
-
-  // Should have d+2 other vertices: d spatial (each in 2(d-1) simplices) + 2 non-spatial (each in d)
-  if (static_cast<int>(otherVerts.size()) != d + 2) return false;
-
-  // Spatial vertices appear in all 2d incident simplices minus those that skip them.
-  // Each spatial vertex appears in 2(d-1) of the 2d simplices.
-  // The "top" and "bottom" vertices each appear in exactly d simplices.
-  for (const auto &[vid, count] : vertCounts) {
-    if (count == d) {
-      if (!vertA) vertA = otherVerts[vid];
-      else if (!vertB) vertB = otherVerts[vid];
-      else return false;  // more than 2 non-spatial vertices
-    } else if (count == 2 * (d - 1)) {
-      spatialVerts.push_back(otherVerts[vid]);
-    } else {
-      return false;  // unexpected structure
-    }
-  }
-  if (!vertA || !vertB || static_cast<int>(spatialVerts.size()) != d) return false;
-
-  // Action change: dN0=-1, dN41=-(2d-2), dN32=0
-  int dN0 = -1;
-  int dN41_change = -(2 * d - 2);
-  int dN32 = 0;
-
-  double deltaS = computeDeltaAction(dN0, dN41_change, dN32);
-
-  // Combinatorial prefactor: N0 / (N41 - (2d-2))
-  // Inverse of add: reverse add from T' would select from N41'=N41-(2d-2)
-  double N41 = static_cast<double>(spacetime->getN41());
-  double N0 = static_cast<double>(spacetime->getVertexCount());
-  double N41after = N41 + dN41_change;
-  if (N41after <= 0) return false;
-  double logPrefactor = std::log(N0) - std::log(N41after);
-
-  if (!accept(deltaS, logPrefactor)) return false;
-
-  // Execute: remove 2d simplices
-  for (const auto &s : incident) {
-    spacetime->removeSimplex(s);
-  }
-
-  // Remove all edges incident to v from both endpoints and the global edge list.
-  // Process in-edges and out-edges separately to avoid redundant scans:
-  // an in-edge (other→v) is outEdge on other; an out-edge (v→other) is inEdge on other.
-  {
-    Edges inCopy(v->getInEdges().begin(), v->getInEdges().end());
-    for (const auto &e : inCopy) {
-      e->getSource()->removeOutEdge(e);
-      v->removeInEdge(e);
-      spacetime->getEdgeList()->remove(e);
-    }
-    Edges outCopy(v->getOutEdges().begin(), v->getOutEdges().end());
-    for (const auto &e : outCopy) {
-      e->getTarget()->removeInEdge(e);
-      v->removeOutEdge(e);
-      spacetime->getEdgeList()->remove(e);
-    }
-  }
-  (void)spacetime->removeIfIsolated(v);
-
-  // Create 2 replacement simplices: {spatialVerts + vertA} and {spatialVerts + vertB}
-  VertexPtrs verts1(spatialVerts.begin(), spatialVerts.end());
-  verts1.push_back(vertA);
-  VertexPtrs verts2(spatialVerts.begin(), spatialVerts.end());
-  verts2.push_back(vertB);
-
-  spacetime->createSimplex(verts1);
-  spacetime->createSimplex(verts2);
-
+  RemoveMove move(spacetime.get(), &rng);
+  if (!move.propose()) return false;
+  double deltaS = computeDeltaAction(move.dN0(), move.dN41(), move.dN32());
+  if (!accept(deltaS, move.metropolisLogPrefactor())) return false;
+  if (!move.apply()) return false;
   removeAccepted++;
   return true;
 }
@@ -355,104 +157,11 @@ bool CDT::remove() {
 // ========================================
 bool CDT::flip() {
   flipAttempts++;
-  int d = getDim(spacetime);
-  int dPlus1 = d + 1;
-
-  SimplexPtr sigma = spacetime->getRandomTopSimplex();
-  if (!sigma) return false;
-
-  // Get facets and pick a random one
-  const auto &facets = sigma->getFacets();
-  if (facets.empty()) return false;
-
-  std::uniform_int_distribution<std::size_t> facetDist(0, facets.size() - 1);
-  SimplexPtr facet = facets[facetDist(rng)];
-
-  // Need exactly 2 d-simplex cofaces
-  StackVec<SimplexPtr> topCofaces;
-  for (const auto &cf : facet->getCofaces()) {
-    if (static_cast<int>(cf->size()) == dPlus1) topCofaces.push_back(cf);
-  }
-  if (topCofaces.size() != 2) return false;
-
-  SimplexPtr s1 = topCofaces[0];
-  SimplexPtr s2 = topCofaces[1];
-
-  // Collect unique vertices: should be d+2 total (d shared + 2 unique)
-  StackVec<VertexPtr> allVerts;
-  for (const auto &v : s1->getVertices()) allVerts.push_back(v);
-  for (const auto &v : s2->getVertices()) {
-    bool dup = false;
-    for (std::size_t i = 0; i < allVerts.size(); ++i) {
-      if (allVerts[i]->getId() == v->getId()) { dup = true; break; }
-    }
-    if (!dup) allVerts.push_back(v);
-  }
-  if (static_cast<int>(allVerts.size()) != d + 2) return false;
-
-  StackVec<VertexPtr> shared, unique;
-  for (std::size_t i = 0; i < allVerts.size(); ++i) {
-    auto v = allVerts[i];
-    if (s1->hasVertex(v) && s2->hasVertex(v)) shared.push_back(v);
-    else unique.push_back(v);
-  }
-  if (static_cast<int>(shared.size()) != d || unique.size() != 2) return false;
-
-  // Count old orientations
-  int old_n41 = 0, old_n32 = 0;
-  for (const auto &s : {s1, s2}) {
-    auto [sti, stf] = s->getOrientation().numeric();
-    if ((sti == d && stf == 1) || (sti == 1 && stf == d)) old_n41++;
-    else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) old_n32++;
-  }
-
-  // Create d new simplices: each has both unique + (d-1) of d shared
-  std::vector<VertexPtrs> newSimplexVerts;
-  for (int skip = 0; skip < d; ++skip) {
-    VertexPtrs nv;
-    for (int i = 0; i < d; ++i) {
-      if (i != skip) nv.push_back(shared[i]);
-    }
-    nv.push_back(unique[0]);
-    nv.push_back(unique[1]);
-    if (static_cast<int>(nv.size()) != dPlus1) return false;
-    newSimplexVerts.push_back(nv);
-  }
-
-  // Reject if any new simplex would have a non-CDT orientation
-  for (const auto &nv : newSimplexVerts) {
-    if (!isValidCDTOrientation(nv, d)) return false;
-  }
-
-  // Count new orientations
-  int new_n41 = 0, new_n32 = 0;
-  for (const auto &nv : newSimplexVerts) {
-    auto orient = SimplexOrientation::orientationOf(nv);
-    auto [oti, otf] = orient.numeric();
-    if ((oti == d && otf == 1) || (oti == 1 && otf == d)) new_n41++;
-    else if ((oti == d - 1 && otf == 2) || (oti == 2 && otf == d - 1)) new_n32++;
-  }
-
-  int dN0 = 0;
-  int dN41 = new_n41 - old_n41;
-  int dN32 = new_n32 - old_n32;
-  double deltaS = computeDeltaAction(dN0, dN41, dN32);
-
-  // Combinatorial prefactor: q(T'→T)/q(T→T') = N4/N4'.
-  // Both flip and iflip proposals have total probability 2/(N×(d+1))
-  // (flip: 2 simplices × 1 facet; iflip: d simplices × 1 edge ×
-  // 2/(d(d+1)) = 2/(N(d+1))), so the ratio is simply N4/N4'.
-  double N4 = static_cast<double>(spacetime->getSimplexCount());
-  double logPrefactor = std::log(N4) - std::log(N4 + d - 2);
-
-  if (!accept(deltaS, logPrefactor)) return false;
-
-  spacetime->removeSimplex(s1);
-  spacetime->removeSimplex(s2);
-  for (const auto &nv : newSimplexVerts) {
-    spacetime->createSimplex(nv);
-  }
-
+  FlipMove move(spacetime.get(), &rng);
+  if (!move.propose()) return false;
+  double deltaS = computeDeltaAction(move.dN0(), move.dN41(), move.dN32());
+  if (!accept(deltaS, move.metropolisLogPrefactor())) return false;
+  if (!move.apply()) return false;
   flipAccepted++;
   return true;
 }
@@ -462,125 +171,11 @@ bool CDT::flip() {
 // ========================================
 bool CDT::iflip() {
   iflipAttempts++;
-  int d = getDim(spacetime);
-  int dPlus1 = d + 1;
-
-  SimplexPtr sigma = spacetime->getRandomTopSimplex();
-  if (!sigma) return false;
-
-  // Pick a random edge of sigma
-  const auto &edges = sigma->getEdges();
-  if (edges.empty()) return false;
-  std::uniform_int_distribution<std::size_t> edgeDist(0, edges.size() - 1);
-  EdgePtr edge = edges[edgeDist(rng)];
-
-  VertexPtr v1 = edge->getSource();
-  VertexPtr v2 = edge->getTarget();
-
-  // Find all top simplices containing both endpoints
-  StackVec<SimplexPtr> sharing;
-  for (const auto &s : v1->getSimplices()) {
-    if (static_cast<int>(s->size()) == dPlus1 && s->hasVertex(v2)) {
-      sharing.push_back(s);
-    }
-  }
-  if (static_cast<int>(sharing.size()) != d) return false;
-
-  // Collect all vertices across the d simplices: should be d+2 total
-  StackVec<VertexPtr> allVerts;
-  for (std::size_t si = 0; si < sharing.size(); ++si) {
-    for (const auto &v : sharing[si]->getVertices()) {
-      bool dup = false;
-      for (std::size_t ai = 0; ai < allVerts.size(); ++ai) {
-        if (allVerts[ai]->getId() == v->getId()) { dup = true; break; }
-      }
-      if (!dup) allVerts.push_back(v);
-    }
-  }
-  if (static_cast<int>(allVerts.size()) != d + 2) return false;
-
-  // Separate shared (the 2 edge endpoints) and unique (d vertices)
-  StackVec<VertexPtr> shared, unique;
-  for (std::size_t i = 0; i < allVerts.size(); ++i) {
-    auto v = allVerts[i];
-    if (v->getId() == v1->getId() || v->getId() == v2->getId()) shared.push_back(v);
-    else unique.push_back(v);
-  }
-  if (shared.size() != 2 || static_cast<int>(unique.size()) != d) return false;
-
-  // Manifold condition: the iflip creates two new simplices, each containing
-  // all d unique vertices plus one shared vertex. Check that neither proposed
-  // simplex already exists by verifying no top-simplex currently contains
-  // {unique[0..d-1], shared[i]}. We check this by looking for a top-simplex
-  // incident to unique[0] that contains all other unique vertices plus a shared
-  // vertex but is NOT one of the d simplices we're about to remove.
-  for (int i = 0; i < 2; ++i) {
-    for (const auto &s : unique[0]->getSimplices()) {
-      if (static_cast<int>(s->size()) != dPlus1) continue;
-      // Skip the d simplices we're removing
-      bool isSharing = false;
-      for (const auto &sh : sharing) {
-        if (s == sh) { isSharing = true; break; }
-      }
-      if (isSharing) continue;
-      // Check if s contains all unique vertices and shared[i]
-      if (!s->hasVertex(shared[i])) continue;
-      bool hasAll = true;
-      for (const auto &u : unique) {
-        if (!s->hasVertex(u)) { hasAll = false; break; }
-      }
-      if (hasAll) return false; // would create duplicate simplex
-    }
-  }
-
-  // Count old orientations
-  int old_n41 = 0, old_n32 = 0;
-  for (const auto &s : sharing) {
-    auto [sti, stf] = s->getOrientation().numeric();
-    if ((sti == d && stf == 1) || (sti == 1 && stf == d)) old_n41++;
-    else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) old_n32++;
-  }
-
-  // Create 2 new simplices: each has all d unique + 1 of 2 shared
-  std::vector<VertexPtrs> newSimplexVerts;
-  for (int i = 0; i < 2; ++i) {
-    VertexPtrs nv(unique.begin(), unique.end());
-    nv.push_back(shared[i]);
-    if (static_cast<int>(nv.size()) != dPlus1) return false;
-    newSimplexVerts.push_back(nv);
-  }
-
-  // Reject if any new simplex would have a non-CDT orientation
-  for (const auto &nv : newSimplexVerts) {
-    if (!isValidCDTOrientation(nv, d)) return false;
-  }
-
-  // Count new orientations
-  int new_n41 = 0, new_n32 = 0;
-  for (const auto &nv : newSimplexVerts) {
-    auto orient = SimplexOrientation::orientationOf(nv);
-    auto [oti, otf] = orient.numeric();
-    if ((oti == d && otf == 1) || (oti == 1 && otf == d)) new_n41++;
-    else if ((oti == d - 1 && otf == 2) || (oti == 2 && otf == d - 1)) new_n32++;
-  }
-
-  int dN0 = 0;
-  int dN41 = new_n41 - old_n41;
-  int dN32 = new_n32 - old_n32;
-  double deltaS = computeDeltaAction(dN0, dN41, dN32);
-
-  // Combinatorial prefactor: q(T'→T)/q(T→T') = N4/N4'.
-  // See flip() comment for derivation.
-  double N4 = static_cast<double>(spacetime->getSimplexCount());
-  double logPrefactor = std::log(N4) - std::log(N4 - d + 2);
-
-  if (!accept(deltaS, logPrefactor)) return false;
-
-  for (const auto &s : sharing) spacetime->removeSimplex(s);
-  for (const auto &nv : newSimplexVerts) {
-    spacetime->createSimplex(nv);
-  }
-
+  IFlipMove move(spacetime.get(), &rng);
+  if (!move.propose()) return false;
+  double deltaS = computeDeltaAction(move.dN0(), move.dN41(), move.dN32());
+  if (!accept(deltaS, move.metropolisLogPrefactor())) return false;
+  if (!move.apply()) return false;
   iflipAccepted++;
   return true;
 }
@@ -607,104 +202,52 @@ bool CDT::ishift() {
 }
 
 bool CDT::shiftImpl() {
-  int d = getDim(spacetime);
-  int dPlus1 = d + 1;
+  ShiftMove move(spacetime.get(), &rng);
+  if (!move.propose()) return false;
+  double deltaS = computeDeltaAction(move.dN0(), move.dN41(), move.dN32());
+  if (!accept(deltaS, move.metropolisLogPrefactor())) return false;
+  return move.apply();
+}
 
-  SimplexPtr sigma = spacetime->getRandomTopSimplex();
-  if (!sigma) return false;
+// ========================================
+// Transactional move factories
+// ========================================
+//
+// These hand the caller a fresh PachnerMove already bound to this
+// simulation's spacetime and Markov-chain RNG.  Useful for the
+// modularity-sweep optimizer (observables/ModularityOptimizer.h),
+// which needs to layer custom acceptance (Q-direction filter) on top
+// of the bare move mechanics.  Each factory calls ``propose()``;
+// returns nullptr if no eligible target.
 
-  // Pick (d-1) random vertices from sigma to form a candidate (d-2)-face
-  int hingeSize = d - 1;  // number of vertices in a (d-2)-simplex
-  const auto &sigmaVertsRef = sigma->getVertices();
-  if (static_cast<int>(sigmaVertsRef.size()) < hingeSize) return false;
-  VertexPtrs sigmaVerts(sigmaVertsRef.begin(), sigmaVertsRef.end());
-  std::shuffle(sigmaVerts.begin(), sigmaVerts.end(), rng);
-  VertexPtrs faceVerts(sigmaVerts.begin(), sigmaVerts.begin() + hingeSize);
+std::unique_ptr<PachnerMove> CDT::proposeAdd() {
+  auto m = std::make_unique<AddMove>(spacetime.get(), &rng, relabelVertices_);
+  if (!m->propose()) return nullptr;
+  return m;
+}
 
-  // Find all d-simplices containing all (d-1) face vertices
-  StackVec<SimplexPtr> sharing;
-  for (const auto &s : faceVerts[0]->getSimplices()) {
-    if (static_cast<int>(s->size()) != dPlus1) continue;
-    bool containsAll = true;
-    for (int i = 1; i < hingeSize; ++i) {
-      if (!s->hasVertex(faceVerts[i])) { containsAll = false; break; }
-    }
-    if (containsAll) sharing.push_back(s);
-  }
-  if (static_cast<int>(sharing.size()) != hingeSize) return false;
+std::unique_ptr<PachnerMove> CDT::proposeRemove() {
+  auto m = std::make_unique<RemoveMove>(spacetime.get(), &rng);
+  if (!m->propose()) return nullptr;
+  return m;
+}
 
-  // Collect unique vertices (should be d+2)
-  StackVec<VertexPtr> allVerts;
-  for (std::size_t si = 0; si < sharing.size(); ++si) {
-    for (const auto &v : sharing[si]->getVertices()) {
-      bool dup = false;
-      for (std::size_t ai = 0; ai < allVerts.size(); ++ai) {
-        if (allVerts[ai]->getId() == v->getId()) { dup = true; break; }
-      }
-      if (!dup) allVerts.push_back(v);
-    }
-  }
-  if (static_cast<int>(allVerts.size()) != d + 2) return false;
+std::unique_ptr<PachnerMove> CDT::proposeFlip() {
+  auto m = std::make_unique<FlipMove>(spacetime.get(), &rng);
+  if (!m->propose()) return nullptr;
+  return m;
+}
 
-  // Separate shared (in all 3) and unique vertices
-  StackVec<VertexPtr> sharedVerts, uniqueVerts;
-  for (std::size_t i = 0; i < allVerts.size(); ++i) {
-    auto v = allVerts[i];
-    bool inAll = true;
-    for (std::size_t si = 0; si < sharing.size(); ++si) {
-      if (!sharing[si]->hasVertex(v)) { inAll = false; break; }
-    }
-    if (inAll) sharedVerts.push_back(v);
-    else uniqueVerts.push_back(v);
-  }
-  if (static_cast<int>(sharedVerts.size()) != hingeSize ||
-      static_cast<int>(uniqueVerts.size()) != hingeSize) return false;
+std::unique_ptr<PachnerMove> CDT::proposeIflip() {
+  auto m = std::make_unique<IFlipMove>(spacetime.get(), &rng);
+  if (!m->propose()) return nullptr;
+  return m;
+}
 
-  // Count old orientations
-  int old_n41 = 0, old_n32 = 0;
-  for (std::size_t si = 0; si < sharing.size(); ++si) {
-    auto [sti, stf] = sharing[si]->getOrientation().numeric();
-    if ((sti == d && stf == 1) || (sti == 1 && stf == d)) old_n41++;
-    else if ((sti == d - 1 && stf == 2) || (sti == 2 && stf == d - 1)) old_n32++;
-  }
-
-  // (d-1,d-1) move: each new simplex has all unique + (hingeSize-1) shared
-  std::vector<VertexPtrs> newSimplexVerts;
-  for (int skip = 0; skip < hingeSize; ++skip) {
-    VertexPtrs nv;
-    for (int i = 0; i < hingeSize; ++i) {
-      if (i != skip) nv.push_back(sharedVerts[i]);
-    }
-    for (const auto &u : uniqueVerts) nv.push_back(u);
-    if (static_cast<int>(nv.size()) != dPlus1) return false;
-    newSimplexVerts.push_back(nv);
-  }
-
-  // Reject if any new simplex would have a non-CDT orientation
-  for (const auto &nv : newSimplexVerts) {
-    if (!isValidCDTOrientation(nv, d)) return false;
-  }
-
-  int new_n41 = 0, new_n32 = 0;
-  for (const auto &nv : newSimplexVerts) {
-    auto orient = SimplexOrientation::orientationOf(nv);
-    auto [oti, otf] = orient.numeric();
-    if ((oti == d && otf == 1) || (oti == 1 && otf == d)) new_n41++;
-    else if ((oti == d - 1 && otf == 2) || (oti == 2 && otf == d - 1)) new_n32++;
-  }
-
-  int dN0 = 0;
-  int dN41 = new_n41 - old_n41;
-  int dN32 = new_n32 - old_n32;
-  double deltaS = computeDeltaAction(dN0, dN41, dN32);
-
-  // (3,3) is self-inverse with symmetric selection: no prefactor
-  if (!accept(deltaS, 0.0)) return false;
-
-  for (const auto &s : sharing) spacetime->removeSimplex(s);
-  for (const auto &nv : newSimplexVerts) spacetime->createSimplex(nv);
-
-  return true;
+std::unique_ptr<PachnerMove> CDT::proposeShift() {
+  auto m = std::make_unique<ShiftMove>(spacetime.get(), &rng);
+  if (!m->propose()) return nullptr;
+  return m;
 }
 
 // ========================================
