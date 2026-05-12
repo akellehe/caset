@@ -772,9 +772,8 @@ each carries a different physical meaning.
       $\preceq_{\cs}$ on a non-vanishing fraction of pairs even when
       $\preceq_{\cs}$ has non-trivial structure (irregular slicing),
       the prescribed causet does not control the emergent order.
-      This is the test that requires Phase~6 of the implementation
-      plan; it is out of scope for the experiment of
-      Section~\ref{sec:results}.
+      This test requires a non-regular causet, and is out of scope
+      for the experiment of Section~\ref{sec:results}.
 \item \textbf{Trivial agreement.} If $\preceq_{\cs}$ is forced to
       coincide with $\preceq_{\LR}$ by lattice regularity (as on the
       regular chain), agreement between $\preceq_{\maj}$ and
@@ -783,10 +782,10 @@ each carries a different physical meaning.
       interpreting Kendall $\tau$ involving $\preceq_{\cs}$.
 \end{enumerate}
 
-The Phase~5 experiment we will report on tests criterion 1 (strong
-falsification) on a regular chain.  Criterion 2 awaits a re-build of
-the Hamiltonian on a non-regular causet, which is in progress at the
-time of writing.
+The experiment reported below tests criterion 1 (strong falsification)
+on a regular chain.  Criterion 2 requires a re-build of the
+Hamiltonian on a non-regular causet, which is outside the present
+scope.
 
 % =====================================================================
 \section{Tensor-network machinery}\label{sec:tn}
@@ -1045,7 +1044,7 @@ $8.0$ & $0.254$ & $0.373$ & $0.973$ & $0.246$ \\
 $16.0$ & $0.247$ & $0.377$ & $0.975$ & $0.246$ \\
 \bottomrule
 \end{tabular}
-\caption{Phase~5 scan: Kendall $\tau$ between
+\caption{Scan: Kendall $\tau$ between
 $\preceq_{\maj}$, $\preceq_{\LR}$, and $\preceq_{\cs}$ on a regular
 $1{+}1$D Schwinger chain after a $q\bar q$ quench.  Discordant
 fraction is on the both-comparable subset; Hasse edit distance is
@@ -1207,8 +1206,8 @@ a richer reference order, would show much higher $\tau$.
 
 The two readings are not exclusive --- the truth might be a
 combination --- but they are operationally distinguishable: rebuild
-the same state on a non-regular causet and recompute the table.  This
-is Phase~6 of the implementation plan.
+the same state on a non-regular causet and recompute the table.  That
+remains the next test.
 
 \subsection{Caveats}
 
@@ -1269,7 +1268,8 @@ state and quench match independent benchmarks (energy and
 string-plateau values, not detailed here), and that the agreement
 metric is sensitive enough to register a difference between the
 three orders.  It does not yet decide between readings 1 and 2 of
-the hypothesis.  Phase~6 is the test that does.
+the hypothesis.  A re-build on a non-regular causet is the test
+that does.
 
 % =====================================================================
 \appendix

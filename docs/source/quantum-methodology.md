@@ -16,12 +16,8 @@ myst:
 ```
 
 This page is the scientific charter for the [Schwinger / DMRG / TDVP
-subsystem](quantum.md). The implementation tracker is in
-[quantum-plan.md](quantum-plan.md); user-facing API and quickstart
-material is in [quantum.md](quantum.md). All three should be read
-together — this page states *what the project is trying to learn*; the
-plan tracks *what is currently built*; the API page documents *how to
-drive the bits that are built*.
+subsystem](quantum.md). It states *what the question is*; the API page
+documents *how to drive the code that answers it*.
 
 ## Abstract
 
@@ -198,16 +194,13 @@ this pipeline).
 ### 4.1 Numerical pipeline
 
 The simulation is structured as a single C++ pipeline using ITensor v3 for
-all tensor-network operations; Python serves only as a result viewer. The
-phases below correspond to the implementation plan accompanying this
-document — see [quantum-plan.md](quantum-plan.md) for the current
-build / acceptance status of each phase.
+all tensor-network operations; Python serves only as a result viewer.
 
 ```{list-table}
 :header-rows: 1
 :widths: 18 22 35 25
 
-* - Phase
+* - Step
   - Object
   - Operation
   - Reference

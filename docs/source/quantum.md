@@ -3,23 +3,17 @@
 The `tessera.quantum` subpackage extends tessera with a tensor-network
 treatment of the 1+1D Kogut-Susskind Schwinger model — the simplest
 non-trivial gauge theory and a standard benchmark for lattice tensor-
-network methods. The features below ship today: MPO + DMRG ground
-states, Python bindings, Schmidt spectra and the majorization poset,
-the q-qbar quench + 2-site TDVP pipeline, the causal-order comparison
-harness, and the tessera-spacetime → causet-chain adapter. Tree-
-tensor-network and MERA / KAK / EML extensions are research targets,
-not in this build.
+network methods. It exposes MPO + DMRG ground states, Schmidt spectra
+and the majorization poset, the q-qbar quench + 2-site TDVP pipeline,
+the causal-order comparison harness, and the tessera-spacetime →
+causet-chain adapter.
 
 This page is the **user-facing** reference: how to build the subsystem,
-how to call the Python API, what each diagnostic field means. The two
-companion documents are:
-
-* [quantum-methodology.md](quantum-methodology.md) — the scientific
-  charter: the hypothesis being tested (majorization order vs.
-  Lieb–Robinson cone vs. causet order), the falsification criteria,
-  scope and limitations.
-* [quantum-plan.md](quantum-plan.md) — implementation tracker:
-  per-feature deliverables, file layout, acceptance tests.
+how to call the Python API, what each diagnostic field means.
+[quantum-methodology.md](quantum-methodology.md) is the scientific
+charter — the hypothesis being tested (majorization order vs.
+Lieb–Robinson cone vs. causet order), the falsification criteria,
+and the scope and limitations.
 
 The C++ backend is [ITensor v3](https://itensor.org), vendored as a git
 submodule under `third_party/itensor/`. The Python layer is a thin
@@ -45,9 +39,9 @@ clear `ImportError` with the rebuild instruction.
 
 ## Hamiltonian
 
-We implement the dimensional spin Hamiltonian from PLAN.md §4 (1-based
-site indexing $n = 1\ldots N$), unitarily equivalent to Bañuls et al.
-(2013) eq. 2.6 at $L_0 = 0$:
+The dimensional spin Hamiltonian (1-based site indexing
+$n = 1\ldots N$) is unitarily equivalent to Bañuls et al. (2013) eq. 2.6
+at $L_0 = 0$:
 
 $$
 H = H_\text{hop} + H_m + H_E
@@ -253,8 +247,7 @@ interval unchanged — i.e. they create a +1 flux tube of length $d$.
 two ends of the pair land on opposite sublattices of the heavy-quark
 Néel vacuum $|\!\uparrow\downarrow\uparrow\downarrow\ldots\rangle$.
 This requires $i_0$ to be odd (Up site) and $i_0 + d$ to be even (Dn
-site), which forces $d$ to be **odd**. PLAN.md mentions $d=4$; the
-acceptance test uses $d=5$ as the closest odd value.
+site), which forces $d$ to be **odd**.
 
 ### End-to-end pipeline: `SchwingerQuench.evolve`
 
@@ -270,10 +263,10 @@ cfg.m = 20.0                  # heavy-quark limit (m/g = 20)
 cfg.L0 = 0.0
 cfg.dmrgMaxBondDim = 64; cfg.dmrgNSweeps = 12
 cfg.i0 = 5; cfg.d = 5         # odd-odd: σ⁻ at site 5, σ⁺ at site 10
-cfg.dt = 0.05; cfg.T = 5.0    # 100 TDVP steps; T = d·a per PLAN.md
+cfg.dt = 0.05; cfg.T = 5.0    # 100 TDVP steps; T = d·a
 cfg.maxBondDim = 100
 cfg.snapshotEvery = 5
-cfg.recordSpectra = False    # ON for the Phase-5 majorization comparison
+cfg.recordSpectra = False    # ON for the majorization comparison
 cfg.recordPoset   = False
 
 result = SchwingerQuench(cfg).evolve()
@@ -519,6 +512,14 @@ The companion script
 plots $D_S(\sigma)$ side-by-side with $P(\sigma)$, and runs the
 falsification checks from the charter §1.
 
+The first experimental run with hypothesis-check, convergence sweep,
+and plots is written up in
+[quantum-experiments/emergent_spectral_dimension_writeup.md](quantum-experiments/emergent_spectral_dimension_writeup.md).
+Headline: $D_S(\sigma)$ peaks at ≈ 2.1 in the light-quark regime
+($m/g = 0.25$) and falls to a small-world plateau at long σ, with
+strong $m/g$ sensitivity — all five hypothesis falsification criteria
+pass.
+
 The (site, time) graph is built from both **spatial MI** (per
 snapshot, all-pairs) and **temporal MI** (Choi state of the Schwinger
 propagator on an interleaved doubled chain). The Schwinger Hamiltonian
@@ -539,7 +540,7 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_itensor_hello.cpp` | ITensor smoke | Heisenberg $N{=}8$ DMRG vs. dense Eigen ED ($\sim$1e-14). |
 | `test_schwinger_spectrum.cpp` | Schwinger MPO | DMRG vs. dense Eigen ED on the full $2^N$ basis, $N \in \{4,6,8\}$, $m/g \in \{0, 0.125, 0.25\}$, $L_0 \in \{0, 0.5\}$ — agreement to $10^{-12}$. |
 | `test_schwinger_limits.cpp` | Schwinger MPO | Free-fermion analytic limit ($g{=}m{=}0$) and strong-coupling vacuum ($m \to \infty$). |
-| `test_schwinger_n4_hamiltonian.cpp` | Schwinger MPO | PLAN.md §7 trap: independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
+| `test_schwinger_n4_hamiltonian.cpp` | Schwinger MPO | Independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
 | `test_schwinger_paper.cpp` | Schwinger MPO | Continuum trend $\omega_0 \to -1/\pi$, vector mass gap, chiral condensate, charge-conjugation parity. |
 | `test_schwinger_ground_state_python.py` | Schwinger MPO | C++ reference energies reproduced through the Python API to $10^{-8}$. |
 | `test_schwinger_model_robustness_python.py` | Schwinger MPO | Validation, variational descent, reproducibility, conserveQns flag, L0 dependence, doctests. |
@@ -562,7 +563,7 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_class_api.py` | All | Class semantics: config introspection, stateless reuse, static-class non-instantiability, predicate hierarchy, `Majorization.posetOf` predicate variants, `CausalOrders.fromSnapshots` factory. |
 | `test_mutual_information_python.py` | Holography | Von Neumann entropy on Bell, product, maximally-mixed marginals; `edgeLength` cutoff behaviour. |
 | `test_holography_python.py` | Holography | `HolographyConfig` validation; `MutualInformationProfile` symmetry / non-negativity / diagonal-is-zero; `EmergentGraph` Laplacian symmetry, row-sums = 0, monotone $P(\sigma)$; `AmbjornLollFit` exact recovery on noiseless data; m/g sensitivity of the full pipeline. |
-| `test_choi_state_python.py` | Holography | Identity-channel temporal MI = $2 \ln 2$ on diagonal, $0$ off-diagonal (spec §H2 #1/#2, to $10^{-15}$). Off-diagonal entries grow with duration as expected. Pipeline edge count and peak $D_S(\sigma)$ both rise when `includeTemporal` flips on. |
+| `test_choi_state_python.py` | Holography | Identity-channel temporal MI = $2 \ln 2$ on diagonal, $0$ off-diagonal (to $10^{-15}$). Off-diagonal entries grow with duration as expected. Pipeline edge count and peak $D_S(\sigma)$ both rise when `includeTemporal` flips on. |
 
 ## API reference
 
@@ -606,11 +607,8 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 
 ## See also
 
-* [`docs/source/quantum-plan.md`](quantum-plan.md) — feature-by-feature
-  implementation plan for the Schwinger pipeline.
 * [`docs/source/quantum-methodology.md`](quantum-methodology.md) — the
   scientific charter for the entanglement → causal-order programme.
 * [`docs/source/holography-causal-ordering-emergent-dimension.md`](holography-causal-ordering-emergent-dimension.md)
-  — scientific charter and implementation plan for the emergent
-  spectral-dimension observable, implemented in
-  :mod:`tessera.quantum.holography`.
+  — scientific charter for the emergent spectral-dimension observable,
+  exposed by :mod:`tessera.quantum.holography`.

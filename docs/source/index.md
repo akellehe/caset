@@ -22,5 +22,6 @@ benchmarks
 quantum
 quantum-methodology
 holography-causal-ordering-emergent-dimension
+quantum-experiments/index
 cpp_api
 ```

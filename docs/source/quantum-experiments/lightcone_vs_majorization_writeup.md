@@ -10,11 +10,11 @@ addresses the **strong falsification** criterion of
 > the hypothesis is wrong.
 
 The **weak falsification** criterion (≼_maj vs non-trivial ≼_cs) is
-out of scope for this run — it requires the causet-embedded MPO
-rebuild on a tessera-derived chain. The **trivial-agreement** caveat applies to the
-≼_cs column here: on a regular 1+1D chain, ≼_cs reduces to the
-time-only order, so ≼_LR ⊆ ≼_cs by construction (verified — `τ(LR, cs)
-= 1.0` exactly).
+not addressed by this run — it would require a causet-embedded
+MPO on a tessera-derived chain. The **trivial-agreement** caveat
+applies to the ≼_cs column here: on a regular 1+1D chain, ≼_cs reduces
+to the time-only order, so ≼_LR ⊆ ≼_cs by construction (verified —
+`τ(LR, cs) = 1.0` exactly).
 
 ## Setup
 
@@ -224,9 +224,8 @@ subset, but each has a piece the other doesn't see.
   means `|≼_maj|` is the count of *strict* majorization relations,
   not all comparable pairs.
 - **Single Trotter seed.** All values above are point estimates from
-  one DMRG/TDVP trajectory per regime. Bootstrap-over-seeds is the
-  proper next step before quoting these numbers in any external
-  context.
+  one DMRG/TDVP trajectory per regime. Bootstrapping over seeds would
+  be needed before quoting these numbers in any external context.
 - **Trotter / bond-dim sensitivity.** Single-seed run, fixed
   bond-dim 80, fixed dt 0.1. The methodology page calls for
   bootstrap-over-Trotter-seeds to put a confidence band on these τ
@@ -253,35 +252,5 @@ relations — recovering the τ ≈ 1 signal.
 
 Reading 2 is the interesting one because it would *vindicate* the
 hypothesis as a non-trivial claim about causet-embedded entanglement
-flow. Reading 1 would refute it. Either way, **the causet-embedded
-re-run is the test that distinguishes them.**
-
-## Recommended next steps before the causet-embedded build-out
-
-A — Quick (under a day):
-
-- Add `nOnlyA`, `nOnlyB` to `OrderAgreement` so we can directly
-  count maj-pairs outside the LR cone.
-- Bind `CausalOrders.fromSnapshots` to Python so a follow-up scan can
-  dump the actual maj-cover edges that are outside the cone.
-- Re-run the scan with a Trotter-bootstrap (5-10 seeds per regime)
-  to put error bars on τ.
-
-B — Medium (1-3 days):
-
-- Causet-chain MPO re-run: `SchwingerHamiltonian::mpoChain` already
-  accepts a `CausetChain` hopping pattern; for chain causets
-  (1 vertex per slice) it reduces to the default MPO. Run a second
-  scan with the chain-causet ≼_cs replacing the time-only ≼_cs.
-  Compare τ(maj, cs) before and after.
-
-C — Long (1-2 weeks):
-
-- Re-run with a non-trivial CDT spacetime (multi-vertex antichains).
-  Either accept long-range hopping in the MPO bond dim or switch to
-  ITensor tree TN. This is the proper weak-falsification test.
-
-The most informative next move is A → B → C in that order; A produces
-the strong-falsification numbers (the criterion 1 piece) on the data
-we already have, B ports the existing apparatus to the chain causet
-without a major rebuild, C is the actual hypothesis test.
+flow. Reading 1 would refute it. Either way, the causet-embedded
+re-run is the test that distinguishes them.

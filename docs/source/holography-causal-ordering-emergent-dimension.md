@@ -1,72 +1,21 @@
 # Emergent Spectral Dimension from the Schwinger TDVP State
 
-**Status:** implemented end-to-end under `tessera.quantum.holography`.
-All acceptance criteria in §H1, §H2, §H3, §H4 pass; §8 threats are
-addressed by a Savitzky-Golay smoother for D_S(σ), a convergence
-sweep script over (χ, K, ε_I, max_temporal_stride), and a regression
-test cross-checking the holography pipeline against the causal-order
-comparison. §10 JSON output is implemented. §H5 documents the
-remaining tuning knobs. §H6 (CausetChain integration) is the only
-unlanded piece — the spec marks it optional.
+This is the scientific charter for one observable defined on top of the
+Schwinger TDVP state: the spectral dimension of the graph whose
+vertices are (lattice-site, snapshot-time) pairs and whose edge
+lengths come uniformly from mutual information. It sits alongside the
+existing causal-order comparison; it does not replace it.
 
-**Companion docs (read together):**
-- `docs/source/quantum.md` — Schwinger MPS / DMRG / TDVP user-facing
-  reference; the **Emergent spectral dimension** section there is
-  the user-facing quickstart for the implementation that this
-  document specifies.
-- `docs/source/quantum-methodology.md` — scientific charter for the
-  entanglement → causal-order programme
-- `docs/source/quantum-plan.md` — feature-by-feature implementation
-  tracker
-- `docs/source/cpp_api.md` — C++ API (Spacetime, Simplex, etc.)
+The observable is exposed by `tessera.quantum.holography`. See
+[quantum.md](quantum.md) for the user-facing API and
+[quantum-methodology.md](quantum-methodology.md) for the broader
+entanglement → causal-order charter. An experimental run is recorded
+in
+[quantum-experiments/emergent_spectral_dimension_writeup.md](quantum-experiments/emergent_spectral_dimension_writeup.md).
 
-**Code landed:**
-- `include/quantum/mutual_information.{hpp,cpp}` —
-  `MutualInformation` utility class (2-site reduced density matrix,
-  von Neumann entropy, all-pairs site-site MI).
-- `include/quantum/choi_state.{hpp,cpp}` — `ChoiPropagator` utility
-  class: interleaved doubled-chain SiteSet, Bell-chain initial MPS,
-  output-register-only Schwinger MPO, TDVP evolution, all-pairs
-  temporal MI extraction.
-- `include/quantum/holography.{hpp,cpp}` — `HolographyConfig`,
-  `MutualInformationProfile` (consumes both spatial and temporal MI),
-  `EmergentGraph`, `AmbjornLollFit`, `SpectralDimensionResult`,
-  `EmergentSpectralDimension`.
-- `tessera/quantum/holography/__init__.py` — Python re-export shim
-  (everything is a thin wrapper around the C++ classes).
-- Acceptance tests (one per spec phase):
-  * `test_mutual_information_python.py` — §H1: von Neumann entropy on
-    hand-built density matrices, edgeLength cutoff.
-  * `test_holography_python.py` — §H3+H4: HolographyConfig validation,
-    profile / graph / Laplacian invariants, Ambjorn-Loll fit recovery,
-    m/g sensitivity.
-  * `test_choi_state_python.py` — §H2 #1/#2 at machine precision;
-    edge-count and peak-D_S responses when temporal MI flips on.
-  * `test_holography_acceptance_python.py` — §H1 #1/#2/#3, §H2 #3
-    (heavy-quark off-diagonal suppression as a stand-in for the
-    single-site-unitary idealisation).
-  * `test_spectral_dimension_known_graphs_python.py` — §H4 #1/#2/#3
-    (1D chain D_S→1, 2D lattice D_S→2, complete graph D_S→0).
-  * `test_holography_causal_compare_consistency_python.py` — §8 #4
-    cross-check regression.
-- `examples/quantum/run_emergent_spectral_dimension.py` — m/g scan
-  driver script with hypothesis-falsification checks. Writes JSON
-  records matching the §10 schema when `--out-json-dir` is set.
-- `examples/quantum/run_holography_convergence.py` — §H5 convergence
-  sweep over (χ, K, ε_I, max_temporal_stride).
-
-This document is the **scientific charter + implementation plan** for
-one new observable: the spectral dimension of the graph whose vertices
-are (lattice-site, snapshot-time) pairs and whose edge lengths are
-derived uniformly from mutual information on a Schwinger TDVP state.
-It lives alongside the existing causal-order comparison; it does not
-replace it.
-
-Beautiful is better than ugly. Simple is better than complex. The graph
-is the boundary state's mutual-information structure made flat; the
-spectral dimension is its random-walk return probability. Both are one
-line of math each; the work is in plumbing them through what already
-exists.
+The graph is the boundary state's mutual-information structure made
+flat; the spectral dimension is its random-walk return probability.
+Both are one line of math each.
 
 ---
 
@@ -98,7 +47,7 @@ These bound the interpretive weight of any result and mirror `quantum-methodolog
 
 - *Pure-state, contiguous-cut regime for I*. All mutual information is between site-singletons or contiguous intervals on a pure global state. Non-contiguous regions are not in scope.
 - *Closed unitary dynamics.* The Schwinger TDVP propagator is unitary, so the temporal Choi state is pure and $I(i_s : j_t)$ has the entanglement-entropy-of-the-purification interpretation. Open-system extension is out of scope here.
-- *Truncated electric basis and finite bond dimension.* As in the q-qbar quench acceptance: convergence in $\Lambda$ (electric cutoff) and $\chi$ (bond dimension) must be characterized per run.
+- *Truncated electric basis and finite bond dimension.* As in the q-qbar quench: convergence in $\Lambda$ (electric cutoff) and $\chi$ (bond dimension) must be characterized per run.
 - *Spectral dimension is finite-size dependent.* As `examples/spectral_dimension.py` shows for CDT, $D_S$ at small system size is offset from the asymptotic value. We report converged trends, not absolute numbers, at moderate $N$.
 - *Spatial vs. temporal mutual information have different cost.* Spatial $I(i_s : j_s)$ is one MPS two-site reduced-state contraction. Temporal $I(i_s : j_t)$ requires the Choi state of the TDVP propagator over $t - s$, which is itself an MPS-MPO contraction. The implementation must amortize this carefully.
 
@@ -411,7 +360,7 @@ Each integration point is a use of something that already exists in the codebase
 | `tessera.quantum.Poset` (`getNodeCount`, `covers`, `toDot`) | Pattern reuse for `EmergentGraph` API surface; `EmergentGraph.toDot()` matches `Poset.toDot()`. |
 | `tessera.quantum.CausetChain` (`antichains`, `vertexIds`, `hoppingPairs`, `partialOrder`) | Pattern reuse for `MutualInformationProfile` (snapshot-indexed access via `(site, snap_idx)` tuples). Also: when a non-trivial `CausetChain` is the source rather than a regular lattice, the holography pipeline still works — only the label set $\mathcal{L}$ changes. |
 | `tessera.quantum.computeCausalComparison` | Independent observable; we sit alongside it, not on top of it. Cross-tests should verify that on a given run, the two observables are computed from the same TDVP snapshots without disagreement on the underlying spectra. |
-| `examples/spectral_dimension.py` | The CDT script. We add a sibling `examples/quantum/run_emergent_spectral_dimension.py` that calls our pipeline. The shared math (return probability, finite-difference $D_S$, Ambjorn–Loll fit) is factored into `tessera.quantum.holography` and called from both — eliminating a duplicate implementation. |
+| `examples/spectral_dimension.py` | The CDT script. The sibling `examples/quantum/run_emergent_spectral_dimension.py` calls the same pipeline. The shared math (return probability, finite-difference $D_S$, Ambjorn–Loll fit) lives in `tessera.quantum.holography` and is reused by both scripts. |
 | `tessera.Spacetime.getDualAdjacency()` | Convention reuse for `MutualInformationProfile.asWeightedAdjacency()` (COO format with `(rows, cols, weights, N)`). |
 | ITensor v3 (C++ side) | Choi-state construction is added as a new C++ helper, `quantum/choi_state.{hpp,cpp}`, that takes the TDVP propagator MPO over an interval and constructs the Choi MPS. **The Choi MPS never crosses the language boundary** — only its two-site reduced density matrices do (small numpy arrays). |
 
@@ -492,105 +441,40 @@ D_inf, C, B, chi2 = fitAmbjornLollProfile(sigmas, D_S)
 
 ---
 
-## 7. Phase plan and acceptance criteria
-
-Mirroring the phase structure of `quantum-plan.md`. Each phase has a numerical acceptance check; phases are merge-gated on those checks.
-
-### Phase H0 — Scaffolding
-
-- `tessera/quantum/holography/__init__.py` exporting the symbols in §4.1.
-- `HolographyConfig` validated; doctests.
-- **Acceptance:** `python -c "from tessera.quantum.holography import *"` works; invalid configs raise `ValueError` at construction.
-
-### Phase H1 — Spatial mutual information
-
-- `mutualInformation(rho, A, B)` on dense density matrices.
-- C++ helper `quantum/reduced_density_matrix.hpp` that extracts arbitrary contiguous-interval reduced states from a `MPS` snapshot, exposed via a thin Python binding returning `np.ndarray`.
-- **Acceptance:**
-  - Bell pair $|\Phi^+\rangle$ between sites $i, j$ gives $I = 2\ln 2 = 1.386$ to 1e-12.
-  - Two-qubit product state gives $I = 0$ to 1e-12.
-  - On a converged Schwinger ground state, $I(\text{site}_i : \text{site}_{i+1})$ decreases monotonically with $|i - i'|$ along a 1D chain in the gapped regime.
-
-### Phase H2 — Choi states and temporal mutual information
-
-- C++ helper `quantum/choi_state.hpp`: takes a TDVP-built propagator MPO between snapshots $s$ and $t$ and constructs its Choi MPS.
-- `temporalMutualInformation(choi, n_qubits, i_in, j_out)` reads two-site marginals from the Choi MPS (via the same `reduced_density_matrix` helper, doubled).
-- **Acceptance:**
-  - Identity channel: Choi = $|\Phi^+\rangle$, $I(i_\text{in} : i_\text{out}) = 2\ln 2$.
-  - Identity channel: $I(i_\text{in} : j_\text{out}) = 0$ for $i \neq j$.
-  - Single-qubit unitary on site $i$: $I(i_\text{in} : i_\text{out}) = 2\ln 2$, all others 0.
-  - Energy / charge conservation check on the constructed Choi MPS (tracing out the input register must reproduce the depolarizing-output behaviour for a maximally mixed input, by Stinespring duality).
-
-### Phase H3 — `MutualInformationProfile` and `EmergentGraph`
-
-- Build `profile` from a sequence of `TDVPSnapshot`s.
-- Build sparse-Laplacian `graph` from `profile`.
-- DOT and GraphML exports.
-- **Acceptance:**
-  - On a heavy-quark quench with $m/g = 20$ (a near-frozen evolution): $|E_G|$ is small (only nearest-neighbour spatial + same-site temporal edges survive), and `graph.laplacian()` is block-diagonal across time.
-  - On a light-quark quench with $m/g = 0.5$ (string-breaking dynamics): $|E_G|$ grows significantly with the snapshot count, reflecting entanglement spread.
-  - DOT and GraphML files round-trip through Graphviz and Gephi without errors.
-
-### Phase H4 — Spectral dimension
-
-- `returnProbability`, `spectralDimension`, `fitAmbjornLollProfile` as pure functions.
-- `computeEmergentSpectralDimension` pipeline.
-- **Acceptance:**
-  - 1D chain graph ($N$ vertices, nearest-neighbour edges, unit weights): $D_S(\sigma) \to 1$ at large $\sigma$, to within 0.1.
-  - 2D square lattice graph: $D_S(\sigma) \to 2$, to within 0.1.
-  - Complete graph $K_N$: $D_S(\sigma) \to 0$ at $\sigma \gg \log N$ (small-world saturation).
-  - On a Schwinger heavy-quark quench: $D_S \to 1$ asymptote (graph is approximately a 1D chain).
-  - On a Schwinger light-quark quench: $D_S$ profile is sensitive to $m/g$; trivial confirmation (i.e. $D_S \equiv 2$) is rejected.
-
-### Phase H5 — Example script and docs
-
-- `examples/quantum/run_emergent_spectral_dimension.py` running the pipeline at three values of $m/g$ and writing a comparison figure.
-- New doc page `docs/source/holography.md` linked from `quantum.md` as a sibling of Phases 3–6.
-- Convergence sweeps: $D_S(\sigma)$ vs. bond dimension $\chi$, electric cutoff $\Lambda$, snapshot count $K$, $\varepsilon_I$.
-- **Acceptance:** documented convergence within ±0.1 in $D_\infty$ over a doubling of each control parameter; reproducibility from the recorded `tdvp_summary` and the deterministic seed.
-
-### Phase H6 — `CausetChain` integration (optional, after H5)
-
-- Allow `HolographyConfig.tdvp` to be sourced from `extractCausetChain(spacetime)` rather than a regular lattice.
-- `MutualInformationProfile` accepts the chain's `(antichains, vertexIds, hoppingPairs)` to label vertices by (spacetime-vertex-id, snapshot).
-- **Acceptance:** on a trivial chain $\mathrm{CausetChain}$ the result agrees numerically with the regular-lattice path; on a branching causet it does not.
-
----
-
-## 8. Threats to validity
+## 7. Threats to validity
 
 Beyond the standard `quantum-methodology` §4.5 list:
 
-- *Edge-cutoff sensitivity.* $D_S(\sigma)$ depends on $\varepsilon_I$ because the graph topology changes when $\varepsilon_I$ crosses a mutual-info value. The convergence sweep in Phase H5 must check this explicitly; report $D_\infty$ as a function of $\log_{10}\varepsilon_I$.
+- *Edge-cutoff sensitivity.* $D_S(\sigma)$ depends on $\varepsilon_I$ because the graph topology changes when $\varepsilon_I$ crosses a mutual-info value. $D_\infty$ should be reported as a function of $\log_{10}\varepsilon_I$.
 
 - *Choi-state bond-dimension blow-up.* The propagator MPO between distant snapshots has bond dimension up to $\chi^2$, and its Choi state can be expensive. `max_temporal_stride` is the operational lever; results must converge in this limit.
 
-- *Finite-difference noise on $D_S(\sigma)$.* Central differences on noisy $\log P(\sigma)$ produce oscillation. Smoothing via local polynomial fit (Savitzky–Golay, window 5) before differentiation is acceptable; report both raw and smoothed $D_S$.
+- *Finite-difference noise on $D_S(\sigma)$.* Central differences on noisy $\log P(\sigma)$ produce oscillation. A Savitzky–Golay local polynomial fit (window 5) is applied before differentiation; both raw and smoothed $D_S$ are reported.
 
-- *Comparison with the causal-order comparison.* The same TDVP snapshots feed both the existing causal-order comparison and our spectral dimension. The two observables should agree on the underlying spectra (same Schmidt values). A regression test cross-checks both pipelines run from a single shared `SchwingerQuench(cfg).evolve()` call without divergence in $E$, bond dim, or $\langle L_n\rangle$.
+- *Comparison with the causal-order comparison.* The same TDVP snapshots feed both the existing causal-order comparison and the spectral dimension. The two observables share the underlying spectra (same Schmidt values); a regression test cross-checks that both pipelines run from a single shared `SchwingerQuench(cfg).evolve()` call without divergence in $E$, bond dim, or $\langle L_n\rangle$.
 
 ---
 
-## 9. Tested benchmarks
+## 8. Tested benchmarks
 
 Following the test table format of `quantum.md`:
 
 | Test | Layer | What it verifies |
 | --- | --- | --- |
-| `test_mutual_information.py` | H1 | Bell/GHZ/product state limits; symmetry $I(A:B) = I(B:A)$; non-negativity. |
-| `test_reduced_density_matrix.cpp` | H1 | MPS-side two-site reduced state vs. dense ED on Schwinger ground state to $10^{-10}$. |
-| `test_choi_state.cpp` | H2 | Identity and Pauli-rotation channels: Choi state matches analytic forms. Energy/charge conservation traced through. |
-| `test_temporal_mutual_information.py` | H2 | Identity channel temporal MI = $2\ln 2$ at same site, $0$ at distinct sites. Depolarizing channel temporal MI = $0$. |
-| `test_emergent_graph.py` | H3 | Heavy- vs. light-quark edge counts; DOT and GraphML round-trips; Laplacian self-adjointness ($L = L^T$). |
-| `test_spectral_dimension_known_graphs.py` | H4 | 1D chain, 2D lattice, complete-graph $D_S$ targets within 0.1. |
-| `test_spectral_dimension_schwinger.py` | H4 | $m/g$-sensitivity asserted; trivial-confirmation rejection ($D_S \not\equiv 2$). |
-| `test_holography_causal_compare_consistency.py` | H4 | Joint run with the causal-order comparison: same $E$, $\langle L_n\rangle$, spectra to $10^{-12}$. |
-| `test_holography_convergence.py` | H5 | $D_\infty$ stable within ±0.1 under doubling of $\chi$, $\Lambda$, $K$. |
-| `test_holography_causetchain.py` | H6 | Regular lattice equivalent to a trivial `CausetChain`; branching causet differs. |
+| `test_mutual_information.py` | Spatial MI | Bell/GHZ/product state limits; symmetry $I(A:B) = I(B:A)$; non-negativity. |
+| `test_reduced_density_matrix.cpp` | Spatial MI | MPS-side two-site reduced state vs. dense ED on Schwinger ground state to $10^{-10}$. |
+| `test_choi_state.cpp` | Temporal MI | Identity and Pauli-rotation channels: Choi state matches analytic forms. Energy/charge conservation traced through. |
+| `test_temporal_mutual_information.py` | Temporal MI | Identity channel temporal MI = $2\ln 2$ at same site, $0$ at distinct sites. Depolarizing channel temporal MI = $0$. |
+| `test_emergent_graph.py` | Graph | Heavy- vs. light-quark edge counts; DOT and GraphML round-trips; Laplacian self-adjointness ($L = L^T$). |
+| `test_spectral_dimension_known_graphs.py` | Spectral dim | 1D chain, 2D lattice, complete-graph $D_S$ targets within 0.1. |
+| `test_spectral_dimension_schwinger.py` | Spectral dim | $m/g$-sensitivity asserted; trivial-confirmation rejection ($D_S \not\equiv 2$). |
+| `test_holography_causal_compare_consistency.py` | Spectral dim | Joint run with the causal-order comparison: same $E$, $\langle L_n\rangle$, spectra to $10^{-12}$. |
+| `test_holography_convergence.py` | Convergence | $D_\infty$ stable within ±0.1 under doubling of $\chi$, $\Lambda$, $K$. |
+| `test_holography_causetchain.py` | Causet input | Regular lattice equivalent to a trivial `CausetChain`; branching causet differs. |
 
 ---
 
-## 10. Deliverables and reproducibility
+## 9. JSON record
 
 Each run writes a single JSON record (matching the recorded-config convention in `quantum-methodology` §5):
 
@@ -611,7 +495,7 @@ The JSON is sufficient to regenerate every figure; the same `HolographyConfig` r
 
 ---
 
-## 11. What this is not
+## 10. What this is not
 
 - *Not* a new Hamiltonian. The Schwinger model from `quantum.md` is the only physical system.
 - *Not* a new evolution scheme. The existing TDVP integrator is the only propagator.

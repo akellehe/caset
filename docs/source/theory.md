@@ -96,18 +96,6 @@ make sense of it, though.
 
 ## Lattice Gravity Approaches
 
-### Lorentzian Spin Foams
-
-*Not yet implemented in tessera.*
-
-### Loop Quantum Gravity on Graphs
-
-*Not yet implemented in tessera.*
-
-### Picard-Lefschetz Theory
-
-*Not yet implemented in tessera.*
-
 ### Regge Calculus
 
 Regge Calculus allows for edge lengths to vary, providing a discrete approximation to General Relativity. In this 
