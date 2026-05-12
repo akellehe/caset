@@ -810,8 +810,36 @@ Wrap in scipy.sparse for downstream use::
         .def_static("spectralDimension", &EmergentGraph::spectralDimension,
              py::arg("sigmas"), py::arg("P"),
              R"doc(D_S(σ) = -2 d log P / d log σ via centered finite differences.)doc")
+        .def_static("spectralDimensionSmoothed",
+             &EmergentGraph::spectralDimensionSmoothed,
+             py::arg("sigmas"), py::arg("P"),
+             py::arg("windowSize") = 5, py::arg("polyOrder") = 2,
+             R"doc(D_S(σ) via local-polynomial fit on (log σ, log P).
+
+Savitzky-Golay-style smoothing per spec §8: for each grid point, fit
+a degree-`polyOrder` polynomial in (log σ, log P) over a centered
+window of size `windowSize`, then read the slope at that point.
+Defaults match the spec's recommendation (window 5, poly order 2).
+)doc")
         .def("toDot", &EmergentGraph::toDot,
-             R"doc(Graphviz DOT export. Mirrors Poset.toDot().)doc");
+             R"doc(Graphviz DOT export. Mirrors Poset.toDot().)doc")
+        .def("toGraphML", &EmergentGraph::toGraphML,
+             R"doc(GraphML export string; suitable for Gephi / yEd.
+
+Mirrors `tessera.Spacetime.save("*.graphml")`. Edge weights are
+exported under the `weight` attribute.
+)doc")
+        .def_static("fromWeightedEdges",
+            [](int n, std::vector<std::tuple<int, int, double>> const& edges) {
+                return EmergentGraph::fromWeightedEdges(n, edges);
+            },
+            py::arg("n"), py::arg("edges"),
+            R"doc(Construct an EmergentGraph from a weighted edge list.
+
+`edges` is a list of (u, v, weight) tuples; each undirected edge
+should appear once. Used for known-graph acceptance tests (1D chain,
+2D lattice, complete graph) per the holography spec §H4.
+)doc");
 
     py::class_<AmbjornLollFit::Result>(holo, "AmbjornLollFitResult")
         .def_readonly("dInfinity",  &AmbjornLollFit::Result::dInfinity)
@@ -839,6 +867,7 @@ container, no MPS/MPO state crosses the boundary.
         .def_readonly("sigmas",           &SpectralDimensionResult::sigmas)
         .def_readonly("P",                &SpectralDimensionResult::P)
         .def_readonly("dS",               &SpectralDimensionResult::dS)
+        .def_readonly("dSSmoothed",       &SpectralDimensionResult::dSSmoothed)
         .def_readonly("dInfinity",        &SpectralDimensionResult::dInfinity)
         .def_readonly("C",                &SpectralDimensionResult::C)
         .def_readonly("B",                &SpectralDimensionResult::B)
@@ -847,7 +876,18 @@ container, no MPS/MPO state crosses the boundary.
         .def_readonly("graphNEdges",      &SpectralDimensionResult::graphNEdges)
         .def_readonly("snapshotTimes",    &SpectralDimensionResult::snapshotTimes)
         .def_readonly("snapshotBondDims", &SpectralDimensionResult::snapshotBondDims)
-        .def_readonly("snapshotEnergies", &SpectralDimensionResult::snapshotEnergies);
+        .def_readonly("snapshotEnergies", &SpectralDimensionResult::snapshotEnergies)
+        .def("toJson",
+            [](SpectralDimensionResult const& r, HolographyConfig const& cfg) {
+                return r.toJson(cfg);
+            },
+            py::arg("config"),
+            R"doc(Single JSON record matching the schema in spec §10.
+
+Includes the bound config, the TDVP summary, the graph diagnostics,
+both raw and smoothed D_S(σ), the Ambjorn-Loll fit, and a provenance
+block. Suitable for archiving alongside the experiment results.
+)doc");
 
     // ─── ChoiPropagator (temporal MI engine) ──────────────────────────
     //

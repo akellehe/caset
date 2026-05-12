@@ -186,6 +186,9 @@ def main() -> None:
     p.add_argument("--out-png", type=str,
                    default="/tmp/emergent_spectral_dimension.png",
                    help="Plot output path (skipped if matplotlib unavailable).")
+    p.add_argument("--out-json-dir", type=str, default="",
+                   help="Directory to write per-(m/g) JSON results "
+                        "(matches the spec §10 schema). Empty = no output.")
     args = p.parse_args()
 
     print(f"Emergent spectral dimension — scan over m/g")
@@ -210,6 +213,14 @@ def main() -> None:
         )
         result = EmergentSpectralDimension(cfg).compute()
         _report_profile(f"m/g = {mg}", result)
+
+        if args.out_json_dir:
+            import os
+            os.makedirs(args.out_json_dir, exist_ok=True)
+            path = os.path.join(args.out_json_dir, f"mg_{mg:g}.json")
+            with open(path, "w") as f:
+                f.write(result.toJson(cfg))
+            print(f"  wrote {path}")
         profiles[mg]    = list(result.dS)
         fit_summary[mg] = {
             "D_inf":     result.dInfinity,

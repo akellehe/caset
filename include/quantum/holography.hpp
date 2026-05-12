@@ -139,6 +139,15 @@ class EmergentGraph {
 public:
     explicit EmergentGraph(MutualInformationProfile const& profile);
 
+    // Direct construction from a weighted edge list. Each undirected
+    // edge (u, v) with weight w should appear once; the constructor
+    // installs both (u → v) and (v → u) into the CSR adjacency.
+    // `n` is the total vertex count. Used for the §H4 known-graph
+    // acceptance tests (1D chain, 2D lattice, complete graph).
+    [[nodiscard]] static EmergentGraph
+    fromWeightedEdges(int n,
+                       std::vector<std::tuple<int, int, double>> const& edges);
+
     [[nodiscard]] int nVertices() const noexcept { return n_; }
     [[nodiscard]] int nEdges()    const noexcept { return nEdges_; }
 
@@ -167,11 +176,39 @@ public:
     spectralDimension(std::vector<double> const& sigmas,
                        std::vector<double> const& P);
 
+    // Savitzky-Golay smoothed D_S(σ): for each interior point, fit a
+    // local polynomial in (log σ, log P) over a centered window of
+    // size `windowSize` and read off the slope at that σ. Endpoints
+    // use a one-sided window. Returns -2 · slope at each grid point.
+    //
+    // Per spec §8: "Smoothing via local polynomial fit
+    // (Savitzky-Golay, window 5) before differentiation is acceptable;
+    // report both raw and smoothed D_S."
+    //
+    // windowSize must be odd and >= polyOrder + 1. Default (window 5,
+    // poly order 2) matches the spec recommendation.
+    [[nodiscard]] static std::vector<double>
+    spectralDimensionSmoothed(std::vector<double> const& sigmas,
+                               std::vector<double> const& P,
+                               int windowSize = 5,
+                               int polyOrder = 2);
+
     // Graphviz DOT representation. Mirrors Poset::toDot. Edge labels
     // are I(v,w) to 3 significant digits. Suitable for `dot -Tsvg`.
     [[nodiscard]] std::string toDot() const;
 
+    // GraphML export. Suitable for import into Gephi or yEd. Mirrors
+    // the `tessera.Spacetime.save("*.graphml")` pattern; the edge
+    // weight is exported as a "weight" attribute on each edge.
+    [[nodiscard]] std::string toGraphML() const;
+
 private:
+    EmergentGraph() = default;
+    void buildFromCOO_(int n,
+                        std::vector<int> const& rows,
+                        std::vector<int> const& cols,
+                        std::vector<double> const& weights);
+
     int n_{0};
     int nEdges_{0};
     // CSR weighted adjacency: indptr[v]..indptr[v+1] points into
@@ -215,13 +252,27 @@ public:
 
 // ─── Result ──────────────────────────────────────────────────────────
 
+struct SpectralDimensionResult;
+
+namespace detail {
+// Tiny self-contained JSON writer for SpectralDimensionResult — keeps
+// the header free of an external JSON dependency. Defined in
+// holography.cpp.
+[[nodiscard]] std::string
+serialiseResultToJson(SpectralDimensionResult const& result,
+                       HolographyConfig const& config);
+} // namespace detail
+
 struct SpectralDimensionResult {
     // σ-grid and the heat-kernel observable.
     std::vector<double> sigmas;
     std::vector<double> P;
-    std::vector<double> dS;
+    std::vector<double> dS;          // centered finite differences (raw)
+    std::vector<double> dSSmoothed;  // Savitzky-Golay smoothed (window 5, poly 2)
 
-    // Ambjorn-Loll fit.
+    // Ambjorn-Loll fit on the smoothed D_S(σ) — the raw signal has
+    // grid-spacing noise that the fit can latch onto. Spec §8
+    // recommends reporting both.
     double dInfinity{0.0};
     double C{0.0};
     double B{0.0};
@@ -235,6 +286,14 @@ struct SpectralDimensionResult {
     std::vector<double> snapshotTimes;
     std::vector<int>    snapshotBondDims;
     std::vector<double> snapshotEnergies;
+
+    // Reproducibility serialisation per spec §10 — emit a single JSON
+    // record with config, tdvp_summary, graph, spectral_dimension,
+    // and a small provenance block.
+    [[nodiscard]] std::string
+    toJson(HolographyConfig const& config) const {
+        return detail::serialiseResultToJson(*this, config);
+    }
 };
 
 // ─── Pipeline ────────────────────────────────────────────────────────

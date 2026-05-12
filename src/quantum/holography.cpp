@@ -21,6 +21,114 @@
 
 namespace tessera::quantum {
 
+namespace detail {
+
+// Minimal JSON formatting — the holography spec §10 schema uses only
+// scalar / array primitives, so a small hand-rolled writer beats
+// pulling in nlohmann_json or rapidjson.
+void writeArray(std::ostringstream& os,
+                 std::vector<double> const& xs) {
+    os << "[";
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i) os << ", ";
+        os << xs[i];
+    }
+    os << "]";
+}
+
+void writeArrayInt(std::ostringstream& os,
+                    std::vector<int> const& xs) {
+    os << "[";
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i) os << ", ";
+        os << xs[i];
+    }
+    os << "]";
+}
+
+std::string
+serialiseResultToJson(SpectralDimensionResult const& r,
+                       HolographyConfig const& cfg) {
+    std::ostringstream os;
+    os << std::scientific;
+    os.precision(12);
+
+    os << "{\n";
+    // ── config block ────────────────────────────────────────────────
+    os << "  \"config\": {\n";
+    os << "    \"tdvp\": {\n";
+    os << "      \"N\":              " << cfg.tdvp.N             << ",\n";
+    os << "      \"a\":              " << cfg.tdvp.a             << ",\n";
+    os << "      \"m\":              " << cfg.tdvp.m             << ",\n";
+    os << "      \"g\":              " << cfg.tdvp.g             << ",\n";
+    os << "      \"L0\":             " << cfg.tdvp.L0            << ",\n";
+    os << "      \"i0\":             " << cfg.tdvp.i0            << ",\n";
+    os << "      \"d\":              " << cfg.tdvp.d             << ",\n";
+    os << "      \"dt\":             " << cfg.tdvp.dt            << ",\n";
+    os << "      \"T\":              " << cfg.tdvp.T             << ",\n";
+    os << "      \"snapshotEvery\":  " << cfg.tdvp.snapshotEvery << ",\n";
+    os << "      \"maxBondDim\":     " << cfg.tdvp.maxBondDim    << ",\n";
+    os << "      \"cutoff\":         " << cfg.tdvp.cutoff        << "\n";
+    os << "    },\n";
+    os << "    \"sigmaMin\":          " << cfg.sigmaMin          << ",\n";
+    os << "    \"sigmaMax\":          " << cfg.sigmaMax          << ",\n";
+    os << "    \"sigmaCount\":        " << cfg.sigmaCount        << ",\n";
+    os << "    \"epsilonI\":          " << cfg.epsilonI          << ",\n";
+    os << "    \"includeTemporal\":   "
+       << (cfg.includeTemporal ? "true" : "false")               << ",\n";
+    os << "    \"maxTemporalStride\": " << cfg.maxTemporalStride << ",\n";
+    os << "    \"krylovDim\":         " << cfg.krylovDim         << ",\n";
+    os << "    \"seed\":              " << cfg.seed              << "\n";
+    os << "  },\n";
+
+    // ── tdvp_summary ────────────────────────────────────────────────
+    os << "  \"tdvp_summary\": {\n";
+    os << "    \"snapshot_times\": "; writeArray(os, r.snapshotTimes); os << ",\n";
+    os << "    \"bond_dims\":      "; writeArrayInt(os, r.snapshotBondDims); os << ",\n";
+    os << "    \"energies\":       "; writeArray(os, r.snapshotEnergies); os << "\n";
+    os << "  },\n";
+
+    // ── graph diagnostics ───────────────────────────────────────────
+    os << "  \"graph\": {\n";
+    os << "    \"n_vertices\":   " << r.graphNVertices << ",\n";
+    os << "    \"n_edges\":      " << r.graphNEdges    << ",\n";
+    const double density = r.graphNVertices > 1
+        ? (2.0 * r.graphNEdges) /
+          (static_cast<double>(r.graphNVertices) * (r.graphNVertices - 1))
+        : 0.0;
+    os << "    \"edge_density\": " << density << "\n";
+    os << "  },\n";
+
+    // ── spectral dimension ──────────────────────────────────────────
+    os << "  \"spectral_dimension\": {\n";
+    os << "    \"sigmas\":      "; writeArray(os, r.sigmas);     os << ",\n";
+    os << "    \"P\":           "; writeArray(os, r.P);          os << ",\n";
+    os << "    \"D_S\":         "; writeArray(os, r.dS);         os << ",\n";
+    os << "    \"D_S_smoothed\":"; writeArray(os, r.dSSmoothed); os << ",\n";
+    os << "    \"fit\": {\n";
+    os << "      \"D_infinity\":   " << r.dInfinity     << ",\n";
+    os << "      \"C\":            " << r.C             << ",\n";
+    os << "      \"B\":            " << r.B             << ",\n";
+    os << "      \"chi_squared\":  " << r.fitChiSquared << "\n";
+    os << "    }\n";
+    os << "  },\n";
+
+    // ── provenance ──────────────────────────────────────────────────
+    os << "  \"provenance\": {\n";
+#ifdef TESSERA_VERSION
+    os << "    \"tessera_version\": \"" << TESSERA_VERSION << "\",\n";
+#else
+    os << "    \"tessera_version\": \"unknown\",\n";
+#endif
+    os << "    \"seed\":            " << cfg.seed << "\n";
+    os << "  }\n";
+
+    os << "}\n";
+    return os.str();
+}
+
+} // namespace detail
+
 // ─── HolographyConfig ────────────────────────────────────────────────
 
 void HolographyConfig::validate() const {
@@ -209,32 +317,60 @@ MutualInformationProfile::weightedAdjacency() const {
 
 // ─── EmergentGraph ───────────────────────────────────────────────────
 
-EmergentGraph::EmergentGraph(MutualInformationProfile const& profile)
-    : n_(profile.nLabels()) {
-    // Build CSR weighted adjacency from the profile's COO.
+EmergentGraph::EmergentGraph(MutualInformationProfile const& profile) {
     auto coo = profile.weightedAdjacency();
     // coo lists each undirected edge twice (v→w and w→v) already.
+    buildFromCOO_(profile.nLabels(), coo.rows, coo.cols, coo.weights);
     nEdges_ = static_cast<int>(coo.rows.size()) / 2;
+}
 
-    // Bucket edges by source vertex to build CSR.
+EmergentGraph
+EmergentGraph::fromWeightedEdges(
+    int n,
+    std::vector<std::tuple<int, int, double>> const& edges) {
+    std::vector<int>    rows;
+    std::vector<int>    cols;
+    std::vector<double> weights;
+    rows.reserve(edges.size() * 2);
+    cols.reserve(edges.size() * 2);
+    weights.reserve(edges.size() * 2);
+    for (auto const& [u, v, w] : edges) {
+        if (u < 0 || v < 0 || u >= n || v >= n || u == v) {
+            throw std::invalid_argument(
+                "EmergentGraph::fromWeightedEdges: edge endpoints out of "
+                "range or self-loop");
+        }
+        rows.push_back(u); cols.push_back(v); weights.push_back(w);
+        rows.push_back(v); cols.push_back(u); weights.push_back(w);
+    }
+    EmergentGraph g;
+    g.buildFromCOO_(n, rows, cols, weights);
+    g.nEdges_ = static_cast<int>(edges.size());
+    return g;
+}
+
+void EmergentGraph::buildFromCOO_(int n,
+                                    std::vector<int> const& rows,
+                                    std::vector<int> const& cols,
+                                    std::vector<double> const& weights) {
+    n_ = n;
     std::vector<int> rowCount(static_cast<std::size_t>(n_) + 1, 0);
-    for (auto r : coo.rows) ++rowCount[static_cast<std::size_t>(r) + 1];
+    for (auto r : rows) ++rowCount[static_cast<std::size_t>(r) + 1];
     std::partial_sum(rowCount.begin(), rowCount.end(), rowCount.begin());
     indptr_ = std::move(rowCount);
-    indices_.assign(coo.rows.size(), 0);
-    weights_.assign(coo.rows.size(), 0.0);
+    indices_.assign(rows.size(), 0);
+    weights_.assign(rows.size(), 0.0);
 
     std::vector<int> cursor(static_cast<std::size_t>(n_), 0);
-    for (std::size_t k = 0; k < coo.rows.size(); ++k) {
-        const int r = coo.rows[k];
+    for (std::size_t k = 0; k < rows.size(); ++k) {
+        const int r = rows[k];
         const std::size_t pos =
             static_cast<std::size_t>(indptr_[static_cast<std::size_t>(r)]) +
             static_cast<std::size_t>(cursor[static_cast<std::size_t>(r)]++);
-        indices_[pos] = coo.cols[k];
-        weights_[pos] = coo.weights[k];
+        indices_[pos] = cols[k];
+        weights_[pos] = weights[k];
     }
 
-    // Weighted degree per vertex.
     degrees_.assign(static_cast<std::size_t>(n_), 0.0);
     for (int v = 0; v < n_; ++v) {
         const int lo = indptr_[static_cast<std::size_t>(v)];
@@ -468,6 +604,128 @@ EmergentGraph::spectralDimension(std::vector<double> const& sigmas,
     return dS;
 }
 
+std::vector<double>
+EmergentGraph::spectralDimensionSmoothed(std::vector<double> const& sigmas,
+                                          std::vector<double> const& P,
+                                          int windowSize,
+                                          int polyOrder) {
+    const int n = static_cast<int>(sigmas.size());
+    std::vector<double> dS(static_cast<std::size_t>(n),
+                            std::numeric_limits<double>::quiet_NaN());
+    if (n < 2 || static_cast<int>(P.size()) != n) return dS;
+    if (windowSize < 3 || (windowSize % 2) == 0 ||
+        polyOrder < 1 || polyOrder + 1 > windowSize) {
+        throw std::invalid_argument(
+            "EmergentGraph::spectralDimensionSmoothed: require windowSize "
+            "odd >= 3, polyOrder >= 1, polyOrder + 1 <= windowSize");
+    }
+    const int half = windowSize / 2;
+
+    // Pre-compute log σ and log P, marking non-finite points so the
+    // local fits can skip them.
+    std::vector<double> logSig(static_cast<std::size_t>(n));
+    std::vector<double> logP(static_cast<std::size_t>(n));
+    std::vector<bool>   ok(static_cast<std::size_t>(n), false);
+    for (int i = 0; i < n; ++i) {
+        const double s = sigmas[static_cast<std::size_t>(i)];
+        const double p = P[static_cast<std::size_t>(i)];
+        if (s > 0.0 && p > 0.0) {
+            logSig[static_cast<std::size_t>(i)] = std::log(s);
+            logP[static_cast<std::size_t>(i)]   = std::log(p);
+            ok[static_cast<std::size_t>(i)]     = true;
+        }
+    }
+
+    // Local-polynomial slope estimator: for each grid point i, fit a
+    // degree-`polyOrder` polynomial p(x) = Σ_k a_k (x − x_i)^k to the
+    // (log σ, log P) data in a centered window, then the slope at x_i
+    // is a_1.
+    for (int i = 0; i < n; ++i) {
+        if (!ok[static_cast<std::size_t>(i)]) continue;
+
+        // Build a window centered on i, clipped to the grid boundary.
+        int lo = std::max(0, i - half);
+        int hi = std::min(n - 1, i + half);
+        // For very narrow effective windows (short P arrays), fall
+        // back to centered finite difference.
+        if (hi - lo + 1 < polyOrder + 1) {
+            const auto& Sig = logSig;
+            const auto& Lp  = logP;
+            double slope = 0.0;
+            if (i == 0 || i == n - 1) {
+                int a = (i == 0) ? 0 : n - 2;
+                int b = a + 1;
+                if (ok[a] && ok[b] && Sig[b] != Sig[a]) {
+                    slope = (Lp[b] - Lp[a]) / (Sig[b] - Sig[a]);
+                }
+            } else {
+                if (ok[i - 1] && ok[i + 1] && Sig[i + 1] != Sig[i - 1]) {
+                    slope = (Lp[i + 1] - Lp[i - 1]) /
+                            (Sig[i + 1] - Sig[i - 1]);
+                }
+            }
+            dS[static_cast<std::size_t>(i)] = -2.0 * slope;
+            continue;
+        }
+
+        // Assemble the local least-squares system (V · a = y).
+        const int win = hi - lo + 1;
+        Eigen::MatrixXd V(win, polyOrder + 1);
+        Eigen::VectorXd y(win);
+        const double xCenter = logSig[static_cast<std::size_t>(i)];
+        int row = 0;
+        for (int k = lo; k <= hi; ++k) {
+            if (!ok[static_cast<std::size_t>(k)]) continue;
+            const double dx =
+                logSig[static_cast<std::size_t>(k)] - xCenter;
+            double pow = 1.0;
+            for (int p = 0; p <= polyOrder; ++p) {
+                V(row, p) = pow;
+                pow *= dx;
+            }
+            y(row) = logP[static_cast<std::size_t>(k)];
+            ++row;
+        }
+        if (row < polyOrder + 1) continue;
+
+        Eigen::VectorXd coeffs = V.topRows(row).householderQr().solve(y.head(row));
+        // a_1 is the slope at the window center.
+        const double slope = coeffs(1);
+        dS[static_cast<std::size_t>(i)] = -2.0 * slope;
+    }
+    return dS;
+}
+
+std::string EmergentGraph::toGraphML() const {
+    std::ostringstream os;
+    os << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+    os << "<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\">\n";
+    os << "  <key id=\"w\" for=\"edge\" attr.name=\"weight\" attr.type=\"double\"/>\n";
+    os << "  <graph id=\"emergent\" edgedefault=\"undirected\">\n";
+    for (int v = 0; v < n_; ++v) {
+        os << "    <node id=\"n" << v << "\"/>\n";
+    }
+    int eId = 0;
+    for (int v = 0; v < n_; ++v) {
+        const int lo = indptr_[static_cast<std::size_t>(v)];
+        const int hi = indptr_[static_cast<std::size_t>(v) + 1];
+        for (int k = lo; k < hi; ++k) {
+            const int w = indices_[static_cast<std::size_t>(k)];
+            if (w <= v) continue;  // each undirected edge once
+            os << "    <edge id=\"e" << eId++
+               << "\" source=\"n" << v
+               << "\" target=\"n" << w << "\">\n";
+            os << std::scientific << std::setprecision(8)
+               << "      <data key=\"w\">"
+               << weights_[static_cast<std::size_t>(k)] << "</data>\n";
+            os << "    </edge>\n";
+        }
+    }
+    os << "  </graph>\n";
+    os << "</graphml>\n";
+    return os.str();
+}
+
 std::string EmergentGraph::toDot() const {
     std::ostringstream os;
     os << "graph emergent {\n";
@@ -610,11 +868,16 @@ EmergentSpectralDimension::computeFromSnapshots(QuenchResult const& quench) cons
     // (3) P(σ) via the heat-kernel trace estimator.
     result.P  = graph.returnProbability(sigmas, config_.krylovDim);
 
-    // (4) D_S(σ) via centered finite differences.
-    result.dS = EmergentGraph::spectralDimension(sigmas, result.P);
+    // (4) D_S(σ) via centered finite differences (raw) and a
+    // Savitzky-Golay local-polynomial fit (smoothed). The spec §8
+    // calls for both to be reported.
+    result.dS         = EmergentGraph::spectralDimension(sigmas, result.P);
+    result.dSSmoothed = EmergentGraph::spectralDimensionSmoothed(
+        sigmas, result.P, /*windowSize=*/5, /*polyOrder=*/2);
 
-    // (5) Ambjorn–Loll three-parameter fit on the full grid.
-    auto fit = AmbjornLollFit::fit(sigmas, result.dS);
+    // (5) Ambjorn–Loll three-parameter fit on the smoothed D_S — the
+    // finite-difference signal can latch onto grid-spacing noise.
+    auto fit = AmbjornLollFit::fit(sigmas, result.dSSmoothed);
     result.dInfinity     = fit.dInfinity;
     result.C             = fit.C;
     result.B             = fit.B;

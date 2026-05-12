@@ -1,11 +1,13 @@
 # Emergent Spectral Dimension from the Schwinger TDVP State
 
 **Status:** implemented end-to-end under `tessera.quantum.holography`.
-Spatial MI (per-snapshot all-pairs site-site) and temporal MI (Choi
-state of the Schwinger propagator) both build the (site, time) graph
-and feed the heat-kernel trace estimator. Acceptance §H2 #1 / #2 pass
-to machine precision; the m/g scan in §1 falsification criteria shows
-a peak D_S near 2 at intermediate σ for light quark.
+All acceptance criteria in §H1, §H2, §H3, §H4 pass; §8 threats are
+addressed by a Savitzky-Golay smoother for D_S(σ), a convergence
+sweep script over (χ, K, ε_I, max_temporal_stride), and a regression
+test cross-checking the holography pipeline against the causal-order
+comparison. §10 JSON output is implemented. §H5 documents the
+remaining tuning knobs. §H6 (CausetChain integration) is the only
+unlanded piece — the spec marks it optional.
 
 **Companion docs (read together):**
 - `docs/source/quantum.md` — Schwinger MPS / DMRG / TDVP user-facing
@@ -32,14 +34,26 @@ a peak D_S near 2 at intermediate σ for light quark.
   `EmergentSpectralDimension`.
 - `tessera/quantum/holography/__init__.py` — Python re-export shim
   (everything is a thin wrapper around the C++ classes).
-- `tests/quantum/test_mutual_information_python.py`,
-  `tests/quantum/test_holography_python.py`,
-  `tests/quantum/test_choi_state_python.py` — acceptance tests
-  (identity-channel #1/#2 at machine precision; m/g sensitivity,
-  edge-count growth with temporal MI on, peak-D_S rises).
+- Acceptance tests (one per spec phase):
+  * `test_mutual_information_python.py` — §H1: von Neumann entropy on
+    hand-built density matrices, edgeLength cutoff.
+  * `test_holography_python.py` — §H3+H4: HolographyConfig validation,
+    profile / graph / Laplacian invariants, Ambjorn-Loll fit recovery,
+    m/g sensitivity.
+  * `test_choi_state_python.py` — §H2 #1/#2 at machine precision;
+    edge-count and peak-D_S responses when temporal MI flips on.
+  * `test_holography_acceptance_python.py` — §H1 #1/#2/#3, §H2 #3
+    (heavy-quark off-diagonal suppression as a stand-in for the
+    single-site-unitary idealisation).
+  * `test_spectral_dimension_known_graphs_python.py` — §H4 #1/#2/#3
+    (1D chain D_S→1, 2D lattice D_S→2, complete graph D_S→0).
+  * `test_holography_causal_compare_consistency_python.py` — §8 #4
+    cross-check regression.
 - `examples/quantum/run_emergent_spectral_dimension.py` — m/g scan
-  driver script + plot, with hypothesis-falsification checks aligned
-  to §1.
+  driver script with hypothesis-falsification checks. Writes JSON
+  records matching the §10 schema when `--out-json-dir` is set.
+- `examples/quantum/run_holography_convergence.py` — §H5 convergence
+  sweep over (χ, K, ε_I, max_temporal_stride).
 
 This document is the **scientific charter + implementation plan** for
 one new observable: the spectral dimension of the graph whose vertices
