@@ -1,4 +1,4 @@
-// Phase 6 acceptance tests for tessera::quantum::extractCausetChain
+// Phase 6 acceptance tests for tessera::quantum::Causet::chainFrom
 // (docs/source/quantum-plan.md §6 — tessera-embedded Schwinger lattice
 // extraction).
 //
@@ -61,7 +61,7 @@ bool acceptance_trivial_chain() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v2, v3, -1.0);
 
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
 
     const std::vector<std::pair<int, int>> want_hops{
         {0, 1}, {1, 2}, {2, 3}
@@ -91,7 +91,7 @@ bool acceptance_branching_antichain() {
     st.createEdge(v0, v1, -1.0);
     st.createEdge(v0, v2, -1.0);
 
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
 
     bool ok = true;
     ok &= (chain.nSites == 3);
@@ -120,7 +120,7 @@ bool acceptance_empty_spacetime() {
     std::cout << "Acceptance #3 — empty Spacetime → empty CausetChain\n";
 
     tessera::Spacetime st;
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
 
     bool ok = (chain.nSites == 0)
             && chain.times.empty()
@@ -145,7 +145,7 @@ bool acceptance_sparse_ids() {
     st.createEdge(va, vb, -1.0);
     st.createEdge(vb, vc, -1.0);
 
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
 
     // Sorted ascending IDs: 7 → site 0, 11 → site 1, 19 → site 2.
     bool ok = true;
@@ -176,7 +176,7 @@ bool acceptance_skipping_edge_dropped() {
     st.createEdge(v1, v2, -1.0);
     st.createEdge(v0, v2, -1.0);  // skips t=1 — should NOT be a hop
 
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
 
     const std::vector<std::pair<int, int>> want_hops{{0, 1}, {1, 2}};
     bool ok = pairs_equal(chain.hoppingPairs, want_hops);

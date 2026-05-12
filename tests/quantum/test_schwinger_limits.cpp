@@ -115,7 +115,7 @@ bool check_free_fermion(int N) {
     SchwingerParams p;
     p.N = N; p.a = 1.0; p.g = 0.0; p.m = 0.0; p.L0 = 0.0;
 
-    auto mpo = buildSchwingerMpo(p);
+    auto mpo = SchwingerHamiltonian{p}.mpo();
     const double e_dmrg = dmrg_groundstate_sz0(mpo, 64, 10);
     const double e_total = e_dmrg + mpo.constant;
     const double e_analytic = free_fermion_half_filled_energy(N, p.a);
@@ -136,7 +136,7 @@ bool check_strong_coupling(int N, double m) {
     SchwingerParams p;
     p.N = N; p.a = 1.0; p.g = 1.0; p.m = m; p.L0 = 0.0;
 
-    auto mpo = buildSchwingerMpo(p);
+    auto mpo = SchwingerHamiltonian{p}.mpo();
     const double e_dmrg = dmrg_groundstate_sz0(mpo, 100, 14);
     const double e_total = e_dmrg + mpo.constant;
     // Leading-order asymptotic GS energy on |↑↓↑↓...⟩ for L0=0:

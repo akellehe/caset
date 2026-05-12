@@ -13,21 +13,16 @@
 // that generalisation. It does NOT itself rebuild an MPO on the
 // chain — for the simplest case where every antichain has exactly one
 // vertex the chain-of-antichains coincides with the existing 1D
-// lattice and `buildSchwingerMpo` in schwinger_model.hpp can run
-// directly with `params.N = chain.nSites` and a remapping of hopping
-// pairs. For non-trivial antichains (causet branches), the MPS chain
-// layout still works as long as we order sites so that every hopping
-// pair (i, j) has |i - j| reasonably small; otherwise ITensor's tree
-// tensor network support is the long-term path. That MPO construction
-// is left for a future commit; this file delivers the data so callers
-// can wire either path.
+// lattice, and `SchwingerHamiltonian::mpoChain(...)` in
+// schwinger_model.hpp can run directly with `params.N = chain.nSites`
+// and `chain.hoppingPairs` as the hopping graph.
 //
 // ─── What this provides ───────────────────────────────────────────────
 //
-// • CausetChain     — flattened (lattice site → spacetime vertex ID)
-//                     mapping plus the hopping pairs and the inherited
-//                     Hasse-cover Poset.
-// • extractCausetChain(Spacetime) — the extractor.
+// • CausetChain — flattened (lattice site → spacetime vertex ID)
+//                 mapping plus the hopping pairs and the inherited
+//                 Hasse-cover Poset.
+// • Causet — coarse-grained adapter façade (static methods only).
 
 #pragma once
 
@@ -43,7 +38,7 @@ class Spacetime;
 
 namespace tessera::quantum {
 
-// Spacetime → 1D lattice adapter.
+// Spacetime → 1D lattice adapter (data class).
 //
 // `antichains[s]` is the sorted list of Spacetime vertex IDs at
 // `times[s]`, where `times` is ascending-sorted. The flat lattice
@@ -58,17 +53,15 @@ namespace tessera::quantum {
 // `hoppingPairs` lists the (i, j) flat-lattice-site pairs coupled
 // by adjacent-time-slice timelike edges: this is what would replace
 // the "Σ_n (X_n X_{n+1} + Y_n Y_{n+1})" sum in H_hop on the causet.
-// Pairs are stored once with i < j (the adjacency is symmetric); the
-// MPO builder applies σ⁺σ⁻ + σ⁻σ⁺ symmetrically per pair.
-//
-// Edges that span non-adjacent slices (skipping a layer) are skipped
-// here — they're transitively reduced out by Poset::fromSpacetime
+// Pairs are stored once with i < j; the MPO builder applies σ⁺σ⁻ +
+// σ⁻σ⁺ symmetrically per pair. Edges that span non-adjacent slices
+// are skipped — they're transitively reduced out by Poset::fromSpacetime
 // and would not contribute a physical hopping term anyway.
 //
 // `partialOrder` is the Hasse-cover Poset on flat-lattice-site IDs,
 // inherited from Spacetime via Poset::fromSpacetime. It's one of the
-// three orders compareOrders() measures (the "≺_tessera" entry from
-// Phase 5).
+// three orders compared in the Phase 5 causal-comparison machinery
+// (the "≼_cs" entry).
 struct CausetChain {
     int nSites{0};
     std::vector<int> times;                                 // ascending
@@ -78,25 +71,32 @@ struct CausetChain {
     tessera::Poset partialOrder;
 };
 
-// Walk the Spacetime's vertex list, group by integer time slice
-// (Vertex::getTime() truncated to int), and extract:
-//
-//   • the antichain layering (antichains, times),
-//   • the flat lattice ↔ spacetime ID mapping (vertexIds),
-//   • the adjacent-slice timelike-edge hopping pairs,
-//   • the Hasse cover Poset on flat lattice IDs.
-//
-// All four outputs share the same flat-index labelling, so a caller
-// can interchangeably feed them to compareOrders, an MPO builder, or
-// a visualisation backend.
-//
-// Antichain ordering inside a slice is by ascending Spacetime vertex
-// ID — stable and deterministic.
-//
-// Edges with squaredLength >= 0 (spacelike or null) are ignored, as
-// are any timelike edges with src.time == tgt.time (a metric
-// inconsistency — defensively skipped, never expected from a valid
-// Spacetime).
-CausetChain extractCausetChain(tessera::Spacetime const& st);
+// Coarse-grained façade for tessera::Spacetime → causet adapters.
+// Stateless; not instantiable.
+class Causet {
+public:
+    Causet() = delete;
+    Causet(Causet const&) = delete;
+    Causet& operator=(Causet const&) = delete;
+
+    // Walk the Spacetime's vertex list, group by integer time slice
+    // (Vertex::getTime() truncated to int), and extract:
+    //
+    //   • the antichain layering (antichains, times),
+    //   • the flat lattice ↔ spacetime ID mapping (vertexIds),
+    //   • the adjacent-slice timelike-edge hopping pairs,
+    //   • the Hasse cover Poset on flat lattice IDs.
+    //
+    // All four outputs share the same flat-index labelling, so a
+    // caller can interchangeably feed them to Majorization::agreement,
+    // an MPO builder, or a visualisation backend.
+    //
+    // Antichain ordering inside a slice is by ascending Spacetime
+    // vertex ID — stable and deterministic. Edges with squaredLength
+    // ≥ 0 (spacelike or null) are ignored, as are any timelike edges
+    // with src.time == tgt.time.
+    [[nodiscard]] static CausetChain
+    chainFrom(tessera::Spacetime const& st);
+};
 
 } // namespace tessera::quantum

@@ -64,7 +64,7 @@ import math
 import sys
 
 try:
-    from tessera.quantum import TDVPConfig, computeCausalComparison
+    from tessera.quantum import TDVPConfig, SchwingerQuench
 except ImportError as e:
     print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
@@ -141,10 +141,10 @@ def main() -> None:
 
     if args.scan_vlr is not None:
         for v in args.scan_vlr:
-            r = computeCausalComparison(cfg, vLr=v)
+            r = SchwingerQuench(cfg).compareCausalOrders(vLr=v)
             _print_report(f"=== vLr = {v} ===", r)
     else:
-        r = computeCausalComparison(cfg, vLr=args.v_LR)
+        r = SchwingerQuench(cfg).compareCausalOrders(vLr=args.v_LR)
         _print_report(f"=== vLr = {args.v_LR} ===", r)
 
 

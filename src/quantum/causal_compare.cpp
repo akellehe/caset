@@ -1,11 +1,12 @@
-// Implementation of the Phase 5 causal-order comparison. See
-// include/quantum/causal_compare.hpp for the design.
+// Implementation of CausalOrders::fromSnapshots — the Phase 5 cross-time
+// poset construction. See include/quantum/causal_compare.hpp for the
+// design and the three-order definitions.
 
 #include "quantum/causal_compare.hpp"
+#include "quantum/tdvp_runner.hpp"   // full definition of TDVPSnapshot
 
 #include <algorithm>
 #include <cmath>
-#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -16,35 +17,34 @@ namespace {
 // Closest-pair distance between contiguous intervals A = [i1, j1] and
 // B = [i2, j2]. Returns 0 if they overlap, otherwise the integer gap
 // between the disjoint ranges.
-int interval_distance(int i1, int j1, int i2, int j2) {
-    if (j1 < i2) return i2 - j1;     // B is strictly to the right of A
-    if (j2 < i1) return i1 - j2;     // A is strictly to the right of B
-    return 0;                        // overlap or touch
+int intervalDistance(int i1, int j1, int i2, int j2) {
+    if (j1 < i2) return i2 - j1;
+    if (j2 < i1) return i1 - j2;
+    return 0;
 }
 
 // Build a Poset from a directed boolean adjacency matrix `strict[i][j]`
 // of strict-precedes relations. Applies transitive reduction so the
 // returned Poset has Hasse cover edges only.
-Poset poset_from_strict(std::vector<std::vector<char>> const& strict) {
+Poset posetFromStrict(std::vector<std::vector<char>> const& strict) {
     const int n = static_cast<int>(strict.size());
     Poset p(n);
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             if (!strict[static_cast<std::size_t>(i)]
                        [static_cast<std::size_t>(j)]) continue;
-            // Cover iff no intermediate k.
-            bool has_intermediate = false;
+            bool hasIntermediate = false;
             for (int k = 0; k < n; ++k) {
                 if (k == i || k == j) continue;
                 if (strict[static_cast<std::size_t>(i)]
                           [static_cast<std::size_t>(k)] &&
                     strict[static_cast<std::size_t>(k)]
                           [static_cast<std::size_t>(j)]) {
-                    has_intermediate = true;
+                    hasIntermediate = true;
                     break;
                 }
             }
-            if (!has_intermediate) p.addCover(i, j);
+            if (!hasIntermediate) p.addCover(i, j);
         }
     }
     return p;
@@ -52,20 +52,21 @@ Poset poset_from_strict(std::vector<std::vector<char>> const& strict) {
 
 // Aggregate every (cut, time) into a flat label list, plus collect the
 // corresponding spectrum into a flat vector-of-vectors so we can call
-// majorizationPoset() once.
+// Majorization::posetOf once.
 struct Flattened {
     std::vector<LabelSpacetime>          labels;
     std::vector<std::vector<double>>     spectra;
 };
 
-Flattened flatten_snapshots(std::vector<TDVPSnapshot> const& snapshots) {
+Flattened flattenSnapshots(std::vector<TDVPSnapshot> const& snapshots) {
     Flattened out;
     for (int tIdx = 0;
          tIdx < static_cast<int>(snapshots.size()); ++tIdx) {
         auto const& snap = snapshots[static_cast<std::size_t>(tIdx)];
         if (snap.spectra.spectra.empty()) {
             throw std::runtime_error(
-                "buildCausalOrders: snapshots must have recordSpectra=true");
+                "CausalOrders::fromSnapshots: snapshots must have "
+                "recordSpectra=true");
         }
         for (int k = 0;
              k < static_cast<int>(snap.spectra.spectra.size()); ++k) {
@@ -73,17 +74,18 @@ Flattened flatten_snapshots(std::vector<TDVPSnapshot> const& snapshots) {
                 snap.spectra.intervals[static_cast<std::size_t>(k)].i,
                 snap.spectra.intervals[static_cast<std::size_t>(k)].j,
                 snap.time});
-            out.spectra.push_back(snap.spectra.spectra[static_cast<std::size_t>(k)]);
+            out.spectra.push_back(
+                snap.spectra.spectra[static_cast<std::size_t>(k)]);
         }
     }
     return out;
 }
 
-// Build the LR-cone Hasse poset:
+// Lieb-Robinson cone Hasse poset:
 //   (a, b) is a strict-LR edge iff
 //       labels[a].time < labels[b].time AND
-//       interval_distance(A, B)  ≤  vLr · (labels[b].time - labels[a].time)
-Poset build_lr_poset(std::vector<LabelSpacetime> const& labels, double vLr) {
+//       intervalDistance(A, B)  ≤  vLr · (labels[b].time - labels[a].time)
+Poset buildLrPoset(std::vector<LabelSpacetime> const& labels, double vLr) {
     const int n = static_cast<int>(labels.size());
     std::vector<std::vector<char>> strict(static_cast<std::size_t>(n),
                                           std::vector<char>(
@@ -93,9 +95,9 @@ Poset build_lr_poset(std::vector<LabelSpacetime> const& labels, double vLr) {
             if (i == j) continue;
             const auto& A = labels[static_cast<std::size_t>(i)];
             const auto& B = labels[static_cast<std::size_t>(j)];
-            if (A.time >= B.time) continue;       // strictly cross-time
+            if (A.time >= B.time) continue;
             const double dt = B.time - A.time;
-            const int    d  = interval_distance(A.intervalI, A.intervalJ,
+            const int    d  = intervalDistance(A.intervalI, A.intervalJ,
                                                 B.intervalI, B.intervalJ);
             if (static_cast<double>(d) <= vLr * dt) {
                 strict[static_cast<std::size_t>(i)]
@@ -103,16 +105,12 @@ Poset build_lr_poset(std::vector<LabelSpacetime> const& labels, double vLr) {
             }
         }
     }
-    return poset_from_strict(strict);
+    return posetFromStrict(strict);
 }
 
-// Build the regular-chain causet Hasse poset:
+// Regular-chain causet Hasse poset:
 //   (a, b) is strict iff labels[a].tIdx < labels[b].tIdx.
-// On the regular chain there's no spatial structure to add — the causet
-// reduces to the time-slice ordering. Phase 6 (causet-embedded chain)
-// is where this becomes interesting; this stub gives a useful baseline
-// for the comparison pipeline.
-Poset build_cs_poset_regular_chain(std::vector<LabelSpacetime> const& labels) {
+Poset buildCsPosetRegularChain(std::vector<LabelSpacetime> const& labels) {
     const int n = static_cast<int>(labels.size());
     std::vector<std::vector<char>> strict(static_cast<std::size_t>(n),
                                           std::vector<char>(
@@ -126,64 +124,32 @@ Poset build_cs_poset_regular_chain(std::vector<LabelSpacetime> const& labels) {
             }
         }
     }
-    return poset_from_strict(strict);
+    return posetFromStrict(strict);
 }
 
 } // namespace
 
-// compareOrders is implemented at top-level tessera (see src/Poset.cpp);
-// the using-alias in include/quantum/majorization.hpp re-exports it as
-// tessera::quantum::compareOrders for back-compat.
+CausalOrders CausalOrders::fromSnapshots(
+    std::vector<TDVPSnapshot> const& snapshots,
+    double vLr,
+    MajorizationPredicate const* predicate)
+{
+    auto flat = flattenSnapshots(snapshots);
 
-// Classical-majorization overload: delegates to the predicate-explicit
-// form below with a `StandardMajorization{1e-12}` predicate
-// ({N1999} eq. (1)).
-CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
-                                 double vLr) {
-    return buildCausalOrders(snapshots, vLr,
-                               StandardMajorization{1e-12});
-}
-
-CausalOrders buildCausalOrders(std::vector<TDVPSnapshot> const& snapshots,
-                                 double vLr,
-                                 MajorizationPredicate const& predicate) {
-    auto flat = flatten_snapshots(snapshots);
+    // Materialize a default StandardMajorization{1e-12} when no predicate
+    // is supplied. The lifetime of `defaultPredicate` extends to the end
+    // of this function, which is enough — Majorization::posetOf only
+    // needs it during the call.
+    StandardMajorization defaultPredicate{1e-12};
+    MajorizationPredicate const& effectivePredicate =
+        predicate ? *predicate : defaultPredicate;
 
     CausalOrders out;
     out.labels = std::move(flat.labels);
-    // Majorization across the full flat label set — same routine as
-    // Phase 3 on a wider input, parameterised by the predicate.
-    out.maj = majorizationPoset(flat.spectra, predicate);
-    out.lr  = build_lr_poset(out.labels, vLr);
-    out.cs  = build_cs_poset_regular_chain(out.labels);
+    out.maj = Majorization::posetOf(flat.spectra, effectivePredicate);
+    out.lr  = buildLrPoset(out.labels, vLr);
+    out.cs  = buildCsPosetRegularChain(out.labels);
     return out;
-}
-
-CausalComparisonReport
-computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr) {
-    return computeCausalComparison(tdvp_cfg, vLr,
-                                     StandardMajorization{1e-12});
-}
-
-CausalComparisonReport
-computeCausalComparison(TDVPConfig const& tdvp_cfg, double vLr,
-                        MajorizationPredicate const& predicate) {
-    TDVPConfig cfg = tdvp_cfg;
-    cfg.recordSpectra = true;     // mandatory for spectra extraction
-    cfg.recordPoset   = false;    // we build cross-time posets ourselves
-
-    const auto quench = runQqbarQuench(cfg);
-    auto orders = buildCausalOrders(quench.snapshots, vLr, predicate);
-
-    CausalComparisonReport report;
-    report.nLabels    = static_cast<int>(orders.labels.size());
-    report.nSnapshots = static_cast<int>(quench.snapshots.size());
-    report.vLr        = vLr;
-    report.majKind   = predicate.name();
-    report.majVsLr   = compareOrders(orders.maj, orders.lr, report.nLabels);
-    report.majVsCs   = compareOrders(orders.maj, orders.cs, report.nLabels);
-    report.lrVsCs    = compareOrders(orders.lr,  orders.cs, report.nLabels);
-    return report;
 }
 
 } // namespace tessera::quantum

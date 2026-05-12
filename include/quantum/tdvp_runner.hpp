@@ -1,11 +1,13 @@
-// Real-time evolution of a quenched Schwinger-model state via 2-site
-// TDVP. PLAN.md §5 Phase 4: thin wrapper around ITensor's tdvp() (from
-// the `third_party/itensor_tdvp` submodule), with a per-step observables
-// callback that records ⟨L_n⟩(t), ⟨σ^z_n⟩(t), and optionally the full
-// Schmidt-spectrum / majorization-poset data the methodology page
-// (docs/source/quantum-methodology.md) targets.
+// SchwingerQuench — coarse-grained q-qbar quench + TDVP real-time
+// evolution pipeline for the Schwinger model.
 //
-// ─── End-to-end pipeline ──────────────────────────────────────────────────
+// PLAN.md §5 Phase 4: a self-contained DMRG → quench → TDVP driver
+// that takes a flat config struct and returns a list of per-snapshot
+// scalar diagnostics. PLAN.md §5 Phase 5 / §1: the same model can also
+// run the causal-order comparison pipeline (DMRG → quench → TDVP →
+// build the three orders → compare).
+//
+// ─── End-to-end pipeline (SchwingerQuench::evolve) ────────────────────────
 //
 //   1. Build the Schwinger MPO (Phase 1) and run DMRG to the GS (Phase 2).
 //   2. Apply the σ⁻_{i0} · σ⁺_{i0+d} quench to flip the spins at the
@@ -13,23 +15,25 @@
 //   3. Record the post-quench observables (snapshot at t = 0).
 //   4. Step TDVP forward by Δt for n_steps = T/Δt steps. After every
 //      `snapshotEvery` steps record ⟨L_n⟩(t), ⟨σ^z_n⟩(t), bondDim,
-//      and the energy ⟨ψ(t)|H|ψ(t)⟩ (constant if H is time-independent
-//      modulo Trotter / truncation error).
+//      and the energy ⟨ψ(t)|H|ψ(t)⟩.
 //   5. Optionally compute Schmidt spectra + majorization poset per
-//      snapshot — expensive (O(N^2) SVDs each), so off by default.
+//      snapshot — expensive (O(N²) SVDs each), so off by default.
 //
-// ─── Acceptance (PLAN.md §5 Phase 4) ──────────────────────────────────────
+// ─── Causal-order comparison (SchwingerQuench::compareCausalOrders) ──────
 //
-//   * Heavy-quark m/g ≫ 1, d odd (e.g. 5), T = d·a:
-//     ⟨L_n⟩(t) is approximately +1 (above vacuum) inside the q-qbar
-//     interval and 0 outside, to within 0.05 after t = T/2.
-//   * Energy conservation: |ΔE|/|E| < 1e-3 over the run.
+// Phase 5: build three partial orders on the (cut, time) labels
+// produced by `evolve()` (with recordSpectra forced on) and report
+// pairwise agreement statistics. See causal_compare.hpp for the
+// definitions of the three orders.
 
 #pragma once
 
-#include "quantum/dmrg_runner.hpp"
-#include "quantum/majorization.hpp"
-#include "quantum/schmidt.hpp"
+#include "quantum/causal_compare.hpp"   // CausalComparisonReport
+#include "quantum/dmrg_runner.hpp"      // GroundStateResult
+#include "quantum/majorization.hpp"     // MajorizationPredicate, Poset
+#include "quantum/schmidt.hpp"          // SchmidtSpectra
+
+#include <vector>
 
 namespace tessera::quantum {
 
@@ -59,7 +63,7 @@ struct TDVPConfig {
     // ─── TDVP loop ─────────────────────────────────────────────────────
     double dt{0.05};           // real-time step
     double T{1.0};             // total evolution time (sets n_steps = T/dt)
-    int    maxBondDim{200};  // bond-dim cap during TDVP sweeps
+    int    maxBondDim{200};   // bond-dim cap during TDVP sweeps
     int    krylovDim{12};     // Krylov / Lanczos dimension per local solve
     double cutoff{1e-10};      // SVD truncation per local solve
     int    snapshotEvery{1};  // record observables every k steps (≥ 1)
@@ -74,8 +78,8 @@ struct TDVPConfig {
     bool recordPoset{false};
 };
 
-// Per-step diagnostics. Schmidt spectra and poset are populated only when
-// the corresponding TDVPConfig flags are set.
+// Per-step diagnostics. Schmidt spectra and poset are populated only
+// when the corresponding TDVPConfig flags are set.
 struct TDVPSnapshot {
     double time{0.0};
     double energy{0.0};               // ⟨ψ|H|ψ⟩ + sm.constant
@@ -86,15 +90,48 @@ struct TDVPSnapshot {
     Poset               poset;        // populated if cfg.recordPoset
 };
 
-// Result bundle: GS diagnostics, then a vector of snapshots starting at
-// t=0 (post-quench, before any TDVP steps).
+// Result bundle from SchwingerQuench::evolve: GS diagnostics, then a
+// vector of snapshots starting at t=0 (post-quench, before any TDVP
+// steps).
 struct QuenchResult {
     GroundStateResult         groundState;
     std::vector<TDVPSnapshot> snapshots;
 };
 
-// End-to-end pipeline. Throws std::invalid_argument on bad config (out-
-// of-range i0, parity mismatch with quenchEnforceParity, etc.).
-QuenchResult runQqbarQuench(TDVPConfig const& config);
+// Coarse-grained Schwinger-model quench + dynamics pipeline.
+//
+// One instance binds a TDVPConfig; the methods run the full DMRG →
+// quench → TDVP loop (`evolve`) or that loop followed by a Phase 5
+// causal-order comparison (`compareCausalOrders`). The model is
+// stateless beyond its config — every method runs the underlying
+// pipeline from scratch.
+class SchwingerQuench {
+public:
+    explicit SchwingerQuench(TDVPConfig config) noexcept;
+
+    [[nodiscard]] TDVPConfig const& config() const noexcept { return config_; }
+
+    // Run the full DMRG → quench → TDVP pipeline. Throws
+    // std::invalid_argument on bad config (out-of-range i0, parity
+    // mismatch with quenchEnforceParity, etc.).
+    [[nodiscard]] QuenchResult evolve() const;
+
+    // End-to-end Phase 5 pipeline: evolve(), then build three partial
+    // orders on the (cut, time) labels and compare. Forces
+    // `cfg.recordSpectra = true` regardless of the input.
+    //
+    // `vLr` is the Lieb-Robinson velocity in lattice units (sites /
+    // time). Default 1.0 corresponds to the free-fermion group velocity
+    // for our hopping coefficient.
+    //
+    // `predicate` selects the majorization variant for ≼_maj. nullptr
+    // means classical {N1999} majorization (StandardMajorization{1e-12}).
+    [[nodiscard]] CausalComparisonReport compareCausalOrders(
+        double vLr = 1.0,
+        MajorizationPredicate const* predicate = nullptr) const;
+
+private:
+    TDVPConfig config_;
+};
 
 } // namespace tessera::quantum

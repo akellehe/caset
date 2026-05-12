@@ -15,7 +15,7 @@
 //      using the eigendecomposition. This is exact unitary evolution.
 //   5. From the dense state, compute ⟨σ^z_n⟩(t) for every site, and
 //      then ⟨L_n⟩(t) via the same closed form as tdvp_runner.cpp.
-//   6. Run runQqbarQuench() through the C++ pipeline at the same
+//   6. Run SchwingerQuench::evolve() through the C++ pipeline at the same
 //      parameters and compare snapshot-by-snapshot to the dense
 //      reference.
 //
@@ -46,7 +46,7 @@ using VecRe  = Eigen::VectorXd;
 using MatRe  = Eigen::MatrixXd;
 
 // σ^z eigenvalue on basis state s at 1-based site n. Same MSB-first bit
-// layout as buildSchwingerDense.
+// layout as SchwingerHamiltonian::denseMatrix.
 inline double sigma_z(std::uint64_t s, int n, int N) {
     return ((s >> (N - n)) & 1ull) == 0 ? +1.0 : -1.0;
 }
@@ -80,7 +80,7 @@ struct DenseDecomp {
     VecCx gs_sz0;
 };
 DenseDecomp dense_decomp_with_gs(SchwingerParams const& p) {
-    auto sd = buildSchwingerDense(p);
+    auto sd = SchwingerHamiltonian{p}.denseMatrix();
     Eigen::SelfAdjointEigenSolver<MatRe> es(sd.H);
 
     // Find the lowest-energy eigenvector with Sz_total = 0
@@ -188,7 +188,7 @@ bool case_test(int N, int i0, int d, double m,
     cfg.quiet = true;
     cfg.conserveQns = true;
 
-    auto result = runQqbarQuench(cfg);
+    auto result = SchwingerQuench{cfg}.evolve();
 
     // Compare each TDVP snapshot to the dense evolution at the same time.
     bool ok = true;

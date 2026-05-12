@@ -1,7 +1,7 @@
 // Schmidt-spectrum extraction for contiguous-interval bipartitions of an
-// MPS. PLAN.md §5 Phase 3 calls out exactly this: given an MPS and a
-// contiguous interval [i, j], return the Schmidt spectrum of the
-// bipartition A = [i, j] vs. its complement.
+// MPS. PLAN.md §5 Phase 3: given an MPS and a contiguous interval [i, j],
+// return the Schmidt spectrum of the bipartition A = [i, j] vs. its
+// complement.
 //
 // ─── What we compute ──────────────────────────────────────────────────────
 //
@@ -14,16 +14,14 @@
 //
 //     ρ_A^{ s, s' }  =  Σ_{α, β}  M_{αβ}^{s} (M^*)_{αβ}^{s'}
 //
-// and so the entries of the *Schmidt spectrum* — the eigenvalues of ρ_A —
+// and so the entries of the Schmidt spectrum — the eigenvalues of ρ_A —
 // are the squared singular values of M reshaped as
 // (sites = rows) × (bonds = cols). Equivalently they are the squares of
 // the Schmidt coefficients in the decomposition |ψ⟩ = Σ_α λ_α |α⟩_A ⊗
-// |α⟩_{Ā} (which is why we call them "values" interchangeably below; the
-// methodology page docs/source/quantum-methodology.md fixes the squared
-// convention with normalization Σ_α λ_α = 1).
+// |α⟩_{Ā}.
 //
-// We use the convention λ_α = σ_α^2 throughout (the eigenvalues of ρ_A,
-// summing to 1 for a normalized state) so that downstream majorizes()
+// We use the convention λ_α = σ_α² throughout (the eigenvalues of ρ_A,
+// summing to 1 for a normalized state) so that downstream majorization
 // calls behave as the methodology page specifies.
 
 #pragma once
@@ -40,31 +38,7 @@ struct Interval {
     int j{0};  // last  site, 1-based, j ≥ i
 };
 
-// Schmidt spectrum across the bipartition [i, j] | rest of an MPS `psi`.
-//
-// Returns the eigenvalues of ρ_A (= squared Schmidt coefficients), sorted
-// non-increasingly, with no zero-padding (the caller's majorizes() call
-// pads as needed).
-//
-// Special cases:
-//   • i == j == 1 or i == 1 && j == N-1 etc.: bipartitions with one
-//     contiguous component on the bar side; handled by the same SVD path.
-//   • i == 1 && j == N: the whole chain | empty; returns {1.0}, the
-//     spectrum of a 1-dimensional reduced density matrix.
-//
-// Throws std::invalid_argument if the interval is out of range or i > j.
-//
-// Complexity: an SVD of a tensor whose dimensions are at most
-//   ( min(2^|A|, D_left · D_right) ) × ( D_left · D_right )
-// where D_* are the MPS bond dimensions adjacent to the interval. For the
-// MPSes we work with (bond dim ~10 — 100, |A| ≤ N/2 in practice) this is
-// fast; for very large intervals on long chains the memory may dominate
-// and a complement-side computation would be preferable, but Phase 3's
-// acceptance tests stay well below that regime.
-std::vector<double> schmidtSpectrum(itensor::MPS const& psi,
-                                     int i, int j);
-
-// All-contiguous-cut Schmidt spectra of `psi`, excluding the trivial
+// All-contiguous-cut Schmidt spectra of an MPS, excluding the trivial
 // full-chain bipartition [1, N] | ∅. PLAN.md §5 Phase 3 specifies exactly
 // this set as the cut family $\mathcal{F}$.
 struct SchmidtSpectra {
@@ -73,6 +47,35 @@ struct SchmidtSpectra {
     std::vector<std::vector<double>> spectra; // spectra[k] for intervals[k]
 };
 
-SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi);
+// Coarse-grained interface for Schmidt-spectrum extraction. Stateless;
+// not instantiable. Call the static methods on the class.
+class Schmidt {
+public:
+    Schmidt() = delete;
+    Schmidt(Schmidt const&) = delete;
+    Schmidt& operator=(Schmidt const&) = delete;
+
+    // Schmidt spectrum across the bipartition [i, j] | rest of an MPS
+    // `psi`. Returns the eigenvalues of ρ_A (= squared Schmidt
+    // coefficients), sorted non-increasingly, with no zero-padding.
+    //
+    // Special cases:
+    //   • i == j: single-site cuts.
+    //   • i == 1 && j == N: the whole chain | empty; returns {1.0}.
+    //
+    // Throws std::invalid_argument if the interval is out of range or
+    // i > j.
+    //
+    // Complexity: an SVD of a tensor whose dimensions are at most
+    //   ( min(2^|A|, D_left · D_right) ) × ( D_left · D_right )
+    // where D_* are the MPS bond dimensions adjacent to the interval.
+    [[nodiscard]] static std::vector<double>
+    of(itensor::MPS const& psi, int i, int j);
+
+    // Every contiguous-cut Schmidt spectrum (1 ≤ i ≤ j ≤ N) excluding
+    // the trivial full-chain cut. For an N-site MPS this is
+    // N(N+1)/2 - 1 spectra.
+    [[nodiscard]] static SchmidtSpectra allOf(itensor::MPS const& psi);
+};
 
 } // namespace tessera::quantum

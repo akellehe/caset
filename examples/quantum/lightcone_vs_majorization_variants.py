@@ -41,7 +41,7 @@ import time
 
 from tessera.quantum import (
     TDVPConfig,
-    computeCausalComparison,
+    SchwingerQuench,
     StandardMajorization,
     LogConcaveMajorization,
     PeakRadialMajorization,
@@ -56,7 +56,7 @@ def make_cfg(N: int, m_over_g: float, T: float,
     Keeping the parameters in lock-step with the classical scan is
     important: the only thing that changes between scripts is the
     ``MajorizationPredicate`` instance handed to
-    ``computeCausalComparison``. Comparing rows across the two scans
+    ``SchwingerQuench.compareCausalOrders``. Comparing rows across the two scans
     therefore measures the *predicate sensitivity* of the
     causal-order agreement in isolation.
     """
@@ -100,7 +100,7 @@ def scan_regime(label: str, cfg: TDVPConfig, vlr_values: list[float]) -> None:
     for v in vlr_values:
         for pred in PREDICATES:
             t0 = time.time()
-            r = computeCausalComparison(cfg, v, pred)
+            r = SchwingerQuench(cfg).compareCausalOrders(vLr=v, predicate=pred)
             dt_run = time.time() - t0
             a = r.majVsLr
             n_maj_total = a.nConcordant + a.nDiscordant + a.nOnlyA

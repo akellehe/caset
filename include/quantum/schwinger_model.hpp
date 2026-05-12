@@ -19,31 +19,31 @@
 //     H_E   = (g²a/2) Σ_{n=1..N-1}   L_n²
 //
 //     L_n   = L₀ + Σ_{k=1..n} [(1 - σ^z_k)/2  -  (1 - (-1)^k)/2]
-//           = c_n - (1/2) Σ_{k=1..n} σ^z_k         (after simplifying)
+//           = c_n - (1/2) Σ_{k=1..n} σ^z_k
 //
-//     c_n   = L₀ + ((-1)^n - 1)/4                  (a c-number per link n)
+//     c_n   = L₀ + ((-1)^n - 1)/4
 //
-// Bañuls' dimensionless parameters are x = 1/(g²a²) and μ = 2m/(g²a). Our
+// Bañuls' dimensionless parameters are x = 1/(g²a²) and μ = 2m/(g²a). The
 // dimensional energy E_dim relates to their dimensionless eigenvalue E_W as
 // E_W = (2/(ag²)) E_dim.
 //
 // ─── What this header exposes ─────────────────────────────────────────────
 //
-// • SchwingerParams — dimensional inputs (N, a, m, g, L₀).
-// • SchwingerMPO    — ITensor MPO + the SiteSet it lives on, plus an
-//                     additive c-number `constant` that is the part of L_n²
-//                     that's pure-identity. The MPO encodes only operator-
-//                     valued terms; full physical energy = ⟨H_MPO⟩ + constant.
+// • SchwingerParams — dimensional inputs (data class).
+// • SchwingerMPO    — ITensor MPO + the SiteSet plus the c-number constant
+//                     (data class).
 // • SchwingerDense  — same Hamiltonian as a 2^N×2^N real-symmetric matrix
-//                     (no symmetry reduction). Used for small-N cross-checks
-//                     against the MPO/DMRG path.
+//                     (data class).
+// • SchwingerHamiltonian — coarse-grained builder that bundles a
+//                     SchwingerParams with the various Hamiltonian
+//                     representations downstream code consumes (MPO for
+//                     DMRG / TDVP, dense matrix for small-N cross-checks).
 //
 // Why split off `constant`: AutoMPO encodes only operator-valued terms; the
 // pure-identity part of L_n² is a c-number (E_const, see schwinger_model.cpp)
-// that a callers needs to add back to compare against any reference value.
-// Returning it as a separate field lets callers compute either the operator
-// spectrum (matches the MPO eigenvalues directly) or the full physical
-// energy (matches Bañuls' published values after the dimensional rescaling).
+// that callers need to add back to compare against any reference value.
+// SchwingerMPO and SchwingerDense expose it as a member so callers can
+// recover the full physical energy (= ⟨H⟩ + constant) without rebuilding.
 
 #pragma once
 
@@ -52,6 +52,8 @@
 #include <Eigen/Dense>
 
 #include <cstddef>
+#include <utility>
+#include <vector>
 
 namespace tessera::quantum {
 
@@ -76,71 +78,75 @@ struct SchwingerMPO {
     double constant{0.0};     // c-number shift from expanding L_n² (see .cpp)
 };
 
-// Build the Schwinger MPO via ITensor's AutoMPO.
-//
-// `conserveQns = true` (default) makes the bond indices carry total Sz, i.e.
-// total electric charge after JW. This blocks the MPO/MPS into U(1) sectors,
-// makes DMRG converge faster in the charge-neutral sector, and lets us pin
-// the GS sector via a Néel initial state.
-//
-// Pass `conserveQns = false` for measurements with operators that don't
-// preserve Sz (e.g. σ^x, the building block of the lattice charge-conjugation
-// S_R = σ^x_odd · T⁽¹⁾ on Bañuls page 8). With QNs enabled, applying σ^x to
-// an MPS would require ITensor to handle indefinite-flux tensors, which it
-// doesn't cleanly support; the path of least resistance is to rebuild H
-// without symmetry tracking for that one measurement.
-SchwingerMPO buildSchwingerMpo(SchwingerParams const& p, bool conserveQns = true);
-
-// Phase 6.0 — chain-causet variant. Same Schwinger Hamiltonian, but the
-// hopping graph for H_hop is supplied externally as a list of
-// (site_i, site_j) pairs in 0-based flat lattice indexing. Mass and
-// electric-field terms remain the standard 1D formulas — they're
-// well-defined as long as the lattice has a linear ordering, which is
-// guaranteed when the underlying causet is a chain (one vertex per time
-// slice).
-//
-// The intended usage:
-//
-//   auto chain   = tessera::quantum::extractCausetChain(spacetime);
-//   SchwingerParams p; p.N = chain.nSites; …;
-//   auto sm = buildSchwingerMpoChain(p, chain.hoppingPairs);
-//
-// For a chain causet (every antichain has one vertex), `hoppingPairs`
-// is exactly `[(0,1), (1,2), …, (N-2, N-1)]` and the resulting MPO is
-// bit-for-bit identical to `buildSchwingerMpo(p)` — that's the Phase
-// 6.0 sanity equality.
-//
-// For a non-trivial antichain causet (Phase 6.1), `hoppingPairs` will
-// include strides > 1 in the flat lattice indexing; H_hop just absorbs
-// them via AutoMPO. The H_m and H_E reinterpretation issue surfaces at
-// 6.1 — for now we rely on the chain-causet linear ordering.
-//
-// Sites in `hoppingPairs` are 0-based flat indices and must be in
-// [0, p.N - 1]. ITensor's site indexing is 1-based internally; we
-// add 1 when feeding AutoMPO.
-SchwingerMPO buildSchwingerMpoChain(
-    SchwingerParams const& p,
-    std::vector<std::pair<int, int>> const& hoppingPairs,
-    bool conserveQns = true);
-
-// Dense 2^N×2^N reference Hamiltonian. No symmetry reduction; bit n of the
+// Dense 2^N × 2^N reference Hamiltonian. No symmetry reduction; bit n of the
 // row index corresponds to spin n in the convention documented in the .cpp
-// file. Hard-capped at N=16 (= 2^16 × 2^16 = 32 GB of doubles, already too
-// big — practical use is N ≤ 12).
+// file. Hard-capped at N=16; practical use is N ≤ 12.
 struct SchwingerDense {
     SchwingerParams params;
     Eigen::MatrixXd H;     // 2^N × 2^N, real symmetric
     double constant{0.0};  // same c-number shift as in SchwingerMPO
 };
-SchwingerDense buildSchwingerDense(SchwingerParams const& p);
 
-// The c-number part of L_n² accumulated over n = 1..N-1, multiplied by the
-// (g²a/2) prefactor in front of H_E. Returned alongside the MPO/dense H so
-// callers can recover the full physical energy by adding it to ⟨H⟩.
+// Coarse-grained interface for Schwinger-Hamiltonian construction.
 //
-//   constant = (g²a/2) Σ_{n=1..N-1} (c_n² + n/4)
+// One instance binds a SchwingerParams; the methods build the various
+// Hamiltonian representations downstream code consumes (MPO for DMRG /
+// TDVP, dense matrix for small-N cross-checks). The builder is stateless
+// beyond its parameters — every method returns a freshly assembled
+// representation.
 //
-// (Derivation in the .cpp file.)
-double schwingerEnergyConstant(SchwingerParams const& p);
+// `conserveQns = true` (default on `mpo()` / `mpoChain()`) makes the bond
+// indices carry total Sz, i.e. total electric charge after JW. This blocks
+// the MPO/MPS into U(1) sectors, makes DMRG converge faster in the
+// charge-neutral sector, and lets us pin the GS sector via a Néel initial
+// state. Pass false for measurements with operators that don't preserve
+// Sz (e.g. σ^x, the building block of the lattice charge-conjugation
+// operator on Bañuls page 8).
+class SchwingerHamiltonian {
+public:
+    explicit SchwingerHamiltonian(SchwingerParams params) noexcept;
+
+    [[nodiscard]] SchwingerParams const& params() const noexcept { return params_; }
+
+    // Build the operator-valued MPO via ITensor's AutoMPO, with the
+    // standard 1D nearest-neighbour hopping graph.
+    [[nodiscard]] SchwingerMPO mpo(bool conserveQns = true) const;
+
+    // Phase 6.0 chain-causet variant. The hopping graph for H_hop is
+    // supplied externally as a list of (site_i, site_j) pairs in 0-based
+    // flat lattice indexing. Mass and electric-field terms remain the
+    // standard 1D formulas — they're well-defined as long as the lattice
+    // has a linear ordering, which is guaranteed when the underlying
+    // causet is a chain (one vertex per time slice).
+    //
+    // For a chain causet (every antichain has one vertex), `hoppingPairs`
+    // is exactly `[(0,1), (1,2), …, (N-2, N-1)]` and the resulting MPO
+    // is bit-for-bit identical to `mpo(conserveQns)` — that's the
+    // Phase 6.0 sanity equality.
+    //
+    // Sites in `hoppingPairs` are 0-based flat indices and must be in
+    // [0, p.N - 1]. ITensor's site indexing is 1-based internally; we
+    // add 1 when feeding AutoMPO.
+    [[nodiscard]] SchwingerMPO mpoChain(
+        std::vector<std::pair<int, int>> const& hoppingPairs,
+        bool conserveQns = true) const;
+
+    // Dense 2^N × 2^N Hamiltonian, no symmetry reduction. Throws
+    // std::invalid_argument when N < 2 or N > 16.
+    [[nodiscard]] SchwingerDense denseMatrix() const;
+
+    // The c-number part of L_n² accumulated over n = 1..N-1, multiplied
+    // by the (g²a/2) prefactor in front of H_E. Returned alongside the
+    // MPO/dense H so callers can recover the full physical energy by
+    // adding it to ⟨H⟩.
+    //
+    //   constant = (g²a/2) Σ_{n=1..N-1} (c_n² + n/4)
+    //
+    // (Derivation in the .cpp file.)
+    [[nodiscard]] double constant() const;
+
+private:
+    SchwingerParams params_;
+};
 
 } // namespace tessera::quantum

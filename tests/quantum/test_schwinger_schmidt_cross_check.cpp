@@ -1,4 +1,4 @@
-// Cross-check schmidtSpectrum() (MPS path) against an independent dense
+// Cross-check Schmidt::of (MPS path) against an independent dense
 // Schmidt decomposition for the Schwinger ground state at small N.
 //
 // The Phase 3 product / GHZ / Bell tests in test_schmidt_spectra.cpp use
@@ -8,13 +8,13 @@
 // MPS-side Schmidt extraction would diverge from the dense reference.
 //
 // Pipeline:
-//   1. Build the dense Schwinger Hamiltonian (buildSchwingerDense).
+//   1. Build the dense Schwinger Hamiltonian (SchwingerHamiltonian::denseMatrix).
 //   2. Diagonalize and pick the GS eigenvector in the Sz=0 sector
 //      (charge-neutral, our DMRG sector).
 //   3. For each contiguous bipartition [i, j] | rest, reshape the GS
 //      vector into a (sites_in_A) × (sites_in_bar_A) matrix and SVD.
 //      The squared singular values are the reference Schmidt spectrum.
-//   4. Compare against schmidtSpectrum() applied to a DMRG-optimized
+//   4. Compare against Schmidt::of applied to a DMRG-optimized
 //      MPS at the same parameters; agreement to ~1e-10 is expected
 //      (dense ED is exact, DMRG converges to machine precision at this
 //      size).
@@ -142,17 +142,18 @@ bool run_case(int N, double m, double L0) {
     p.N = N; p.a = 1.0; p.g = 1.0; p.m = m; p.L0 = L0;
 
     // Dense reference: full ED of the Schwinger H.
-    auto sd = buildSchwingerDense(p);
+    SchwingerHamiltonian H{p};
+    auto sd = H.denseMatrix();
     auto psi_dense = dense_gs_sz0(sd);
 
-    // MPS path: DMRG to convergence, then schmidtSpectrum().
+    // MPS path: DMRG to convergence, then Schmidt::of().
     QuantumConfig cfg;
     cfg.N = N; cfg.a = p.a; cfg.g = p.g; cfg.m = p.m; cfg.L0 = p.L0;
     cfg.maxBondDim = 64;
     cfg.nSweeps = 12;
     cfg.cutoff = 1e-14;
 
-    auto sm = buildSchwingerMpo(p, /*conserveQns=*/true);
+    auto sm = H.mpo(/*conserveQns=*/true);
     auto state = itensor::InitState(sm.sites);
     for (int i = 1; i <= N; ++i) {
         state.set(i, (i % 2 == 1) ? "Up" : "Dn");
@@ -175,7 +176,7 @@ bool run_case(int N, double m, double L0) {
             if (i == 1 && j == N) continue;
             const std::uint64_t mask = contiguous_mask(N, i, j);
             const auto ref = dense_schmidt_spectrum_subset(psi_dense, N, mask);
-            const auto mps = schmidtSpectrum(psi_mps, i, j);
+            const auto mps = Schmidt::of(psi_mps, i, j);
             if (!spectra_close(ref, mps, tol)) {
                 ok = false;
                 std::cout << "  FAIL [" << i << "," << j << "]"

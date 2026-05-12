@@ -56,10 +56,7 @@ import sys
 from typing import Iterable
 
 try:
-    from tessera.quantum import (
-        QuantumConfig,
-        computeGroundStateMajorization,
-    )
+    from tessera.quantum import QuantumConfig, SchwingerModel
 except ImportError as e:
     print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
@@ -150,7 +147,7 @@ def main() -> None:
     cfg.krylovDim   = 4
     cfg.quiet        = True
 
-    r = computeGroundStateMajorization(cfg, tol=args.tol)
+    r = SchwingerModel(cfg).solveWithMajorization(tol=args.tol)
 
     print(f"Schwinger ground state — N={args.N}, m/g={args.m_over_g}, "
           f"x={args.x}, L0={args.L0}")

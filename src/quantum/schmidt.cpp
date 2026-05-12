@@ -18,7 +18,7 @@ namespace {
 // Extract the non-increasing list of singular-values-squared from the
 // diagonal "S" tensor returned by ITensor's three-arg svd(). Squaring
 // turns Schmidt values σ into density-matrix eigenvalues λ = σ², which is
-// the convention used by the methodology page and by majorizes().
+// the convention used by the methodology page and by Majorization::posetOf.
 std::vector<double> diag_squared(itensor::ITensor const& S) {
     using namespace itensor;
     auto inds = S.inds();
@@ -38,14 +38,13 @@ std::vector<double> diag_squared(itensor::ITensor const& S) {
 
 } // namespace
 
-std::vector<double> schmidtSpectrum(itensor::MPS const& psi_in,
-                                     int i, int j) {
+std::vector<double> Schmidt::of(itensor::MPS const& psi_in, int i, int j) {
     using namespace itensor;
 
     const int N = length(psi_in);
     if (i < 1 || j > N || i > j) {
         throw std::invalid_argument(
-            "schmidtSpectrum: interval [i, j] must satisfy 1 ≤ i ≤ j ≤ N");
+            "Schmidt::of: interval [i, j] must satisfy 1 ≤ i ≤ j ≤ N");
     }
     if (i == 1 && j == N) {
         // Trivial bipartition (whole chain | empty); the reduced density
@@ -70,7 +69,7 @@ std::vector<double> schmidtSpectrum(itensor::MPS const& psi_in,
     }
 
     // Collect the site indices of [i, j] for the U-side of the SVD. The
-    // V side then carries the bond indices (those are whatever's left).
+    // V side then carries the bond indices (whatever's left).
     std::vector<Index> site_inds;
     site_inds.reserve(static_cast<std::size_t>(j - i + 1));
     for (int k = i; k <= j; ++k) {
@@ -86,7 +85,7 @@ std::vector<double> schmidtSpectrum(itensor::MPS const& psi_in,
     return diag_squared(S);
 }
 
-SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi) {
+SchmidtSpectra Schmidt::allOf(itensor::MPS const& psi) {
     const int N = itensor::length(psi);
     SchmidtSpectra out;
     out.N = N;
@@ -101,7 +100,7 @@ SchmidtSpectra allContiguousSpectra(itensor::MPS const& psi) {
         for (int j = i; j <= N; ++j) {
             if (i == 1 && j == N) continue;
             out.intervals.push_back({i, j});
-            out.spectra.push_back(schmidtSpectrum(psi, i, j));
+            out.spectra.push_back(Schmidt::of(psi, i, j));
         }
     }
     return out;

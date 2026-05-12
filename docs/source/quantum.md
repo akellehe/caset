@@ -75,7 +75,7 @@ at fixed $m/g$.
 ## Quickstart
 
 ```python
-from tessera.quantum import QuantumConfig, computeGroundState
+from tessera.quantum import QuantumConfig, SchwingerModel
 
 cfg = QuantumConfig()
 cfg.N = 20            # 1-based, even
@@ -86,7 +86,7 @@ cfg.L0 = 0.0          # zero background field
 cfg.maxBondDim = 100
 cfg.nSweeps = 12
 
-result = computeGroundState(cfg)
+result = SchwingerModel(cfg).solve()
 print(f"E = {result.energy:.6f}")
 print(f"   = {result.operatorEnergy:.6f} (operator) "
       f"+ {result.constant:.6f} (c-number)")
@@ -96,7 +96,7 @@ print(f"bondDim = {result.bondDim}, "
 
 ## Convergence checks
 
-`computeGroundState` returns three diagnostic fields beyond the
+`SchwingerModel.solve()` returns three diagnostic fields beyond the
 energy:
 
 * **`bondDim`** — the achieved MPS bond dimension. If it equals
@@ -140,18 +140,20 @@ least as concentrated as $A$") defines a partial order on the cuts, and
 its Hasse diagram is the transitive reduction of the strict-majorization
 relation.
 
-### Pure-function API
+### Predicate + poset API
 
-The majorization predicate and poset constructor are exposed as pure
-functions on plain Python lists:
+The classical majorization order lives on the
+:class:`StandardMajorization` predicate; the Hasse-cover poset of a
+list of spectra is built via :meth:`Majorization.posetOf`.
 
 ```python
-from tessera.quantum import majorizes, strictlyMajorizes, majorizationPoset
+from tessera.quantum import Majorization, StandardMajorization
 
-assert majorizes([1.0, 0.0], [0.5, 0.5])      # (1, 0) ≻ (½, ½)
-assert not majorizes([0.5, 0.5], [1.0, 0.0])  # not the other way
+cl = StandardMajorization()
+assert cl.majorizes([1.0, 0.0], [0.5, 0.5])      # (1, 0) ≻ (½, ½)
+assert not cl.majorizes([0.5, 0.5], [1.0, 0.0])  # not the other way
 
-poset = majorizationPoset([
+poset = Majorization.posetOf([
     [1.0/3, 1.0/3, 1.0/3],   # node 0  — most uniform
     [0.5, 0.5],              # node 1  — middle
     [1.0],                   # node 2  — most concentrated
@@ -161,20 +163,26 @@ print(poset.getNodeCount, poset.covers)
 # (the direct (2, 0) edge has been transitively reduced away)
 ```
 
+Other predicates (:class:`LogConcaveMajorization`,
+:class:`PeakRadialMajorization`) plug into the same
+:meth:`Majorization.posetOf(spectra, predicate)` overload — see
+``include/quantum/majorization.hpp`` for the variant references
+(Brändén 2015, Aubrun–Nechita 2008).
+
 ### End-to-end pipeline
 
-`computeGroundStateMajorization(config)` runs DMRG, extracts every
+:meth:`SchwingerModel.solveWithMajorization` runs DMRG, extracts every
 contiguous-cut Schmidt spectrum, and builds the majorization poset in
 one call:
 
 ```python
-from tessera.quantum import QuantumConfig, computeGroundStateMajorization
+from tessera.quantum import QuantumConfig, SchwingerModel
 
 cfg = QuantumConfig()
 cfg.N = 10; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
 cfg.maxBondDim = 64; cfg.nSweeps = 10
 
-r = computeGroundStateMajorization(cfg)
+r = SchwingerModel(cfg).solveWithMajorization()
 
 print(f"E_total = {r.groundState.energy:.6f}")
 print(f"Schmidt cuts: {len(r.spectra.intervals)}")
@@ -248,13 +256,13 @@ This requires $i_0$ to be odd (Up site) and $i_0 + d$ to be even (Dn
 site), which forces $d$ to be **odd**. PLAN.md mentions $d=4$; the
 acceptance test uses $d=5$ as the closest odd value.
 
-### End-to-end pipeline: `runQqbarQuench`
+### End-to-end pipeline: `SchwingerQuench.evolve`
 
-The `runQqbarQuench(config)` Python function runs the full
-DMRG → quench → TDVP loop in a single C++ call:
+:meth:`SchwingerQuench.evolve` runs the full DMRG → quench → TDVP loop
+in a single C++ call:
 
 ```python
-from tessera.quantum import TDVPConfig, runQqbarQuench
+from tessera.quantum import TDVPConfig, SchwingerQuench
 
 cfg = TDVPConfig()
 cfg.N = 14; cfg.a = 1.0; cfg.g = 1.0
@@ -268,7 +276,7 @@ cfg.snapshotEvery = 5
 cfg.recordSpectra = False    # ON for the Phase-5 majorization comparison
 cfg.recordPoset   = False
 
-result = runQqbarQuench(cfg)
+result = SchwingerQuench(cfg).evolve()
 print(f"GS energy:        {result.groundState.energy:.6f}")
 print(f"Post-quench E:    {result.snapshots[0].energy:.6f}")
 print(f"Snapshots:        {len(result.snapshots)}")
@@ -325,7 +333,7 @@ and $\mathcal{F}$ the contiguous-interval cut family, the labels are
 $\mathcal{L} = \mathcal{F} \times \{t_0, \dots, t_K\}$. We define:
 
 * $(A, s) \preceq_{\mathrm{maj}} (B, t)$ — strict-majorization order on
-  the Schmidt spectra; the Phase 3 majorizationPoset extended across
+  the Schmidt spectra; the Phase 3 :meth:`Majorization.posetOf` extended across
   cuts AND times.
 * $(A, s) \preceq_{\mathrm{LR}} (B, t)$ iff $s < t$ and the
   interval-distance $d(A, B) \le v_{\mathrm{LR}} \cdot (t - s)$ —
@@ -341,7 +349,7 @@ fraction, and the Hasse-graph edit distance.
 ### End-to-end pipeline
 
 ```python
-from tessera.quantum import TDVPConfig, computeCausalComparison
+from tessera.quantum import TDVPConfig, SchwingerQuench
 
 cfg = TDVPConfig()
 cfg.N = 12; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.5; cfg.L0 = 0.0
@@ -351,7 +359,7 @@ cfg.dt = 0.1; cfg.T = 1.0        # 10 TDVP steps
 cfg.maxBondDim = 80
 cfg.snapshotEvery = 1
 
-report = computeCausalComparison(cfg, vLr=1.0)
+report = SchwingerQuench(cfg).compareCausalOrders(vLr=1.0)
 print(f"nLabels = {report.nLabels}")
 print(f"maj vs LR: τ = {report.majVsLr.kendallTau:.4f}")
 print(f"LR vs cs:  τ = {report.lrVsCs.kendallTau:.4f}  "
@@ -410,7 +418,7 @@ and are usable from Python today:
    Phase 5 promoted to a non-trivial within-time-slice structure.
 
 2. **Chain-of-antichains adapter**
-   — :func:`tessera.quantum.extractCausetChain` walks the Spacetime,
+   — :meth:`tessera.quantum.Causet.chainFrom` walks the Spacetime,
    groups vertices by integer time slice (`Vertex.getTime()`
    truncated to int), and packages four pieces of data:
 
@@ -428,7 +436,7 @@ and are usable from Python today:
 
 ```python
 import tessera
-from tessera.quantum import extractCausetChain, Poset
+from tessera.quantum import Causet, Poset
 
 # Tiny CDT spacetime as a stand-in for a causet — same APIs apply.
 metric = tessera.Metric(True, tessera.Signature(4, tessera.Lorentzian))
@@ -436,7 +444,7 @@ st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                      tessera.PREFERRED, tessera.Toroid())
 st.build(20)
 
-chain = extractCausetChain(st)
+chain = Causet.chainFrom(st)
 print(f"nSites = {chain.nSites}")
 print(f"layers  = {[len(a) for a in chain.antichains]}")
 print(f"hops    = {len(chain.hoppingPairs)}")
@@ -451,9 +459,9 @@ Sample output on a 20-simplex Toroid CDT::
     poset   = Poset(getNodeCount=15, covers=30 edges)
 
 For the trivial case where every time slice has a single vertex,
-`hoppingPairs == [(0, 1), (1, 2), …]` and the existing
-:func:`computeGroundState` runs directly with `params.N =
-chain.nSites`. Multi-vertex antichains (genuine causet branching)
+`hoppingPairs == [(0, 1), (1, 2), …]` and :meth:`SchwingerModel.solve`
+runs directly with `cfg.N = chain.nSites`. Multi-vertex antichains
+(genuine causet branching)
 still flatten to a 1D MPS layout, but the resulting hopping graph
 includes pairs with stride > 1; that's the trigger for moving to a
 tree-tensor-network MPO down the line. The MPO construction on top
@@ -497,7 +505,7 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_causal_compare.cpp` | Phase 5 | End-to-end three-order comparison; sanity checks on Kendall-τ ranges; vLr-monotonicity sanity. |
 | `test_phase5_causal_compare_python.py` | Phase 5 | Python pipeline: identical/reversed/disjoint pure compareOrders cases, end-to-end pipeline checks, ≼_LR ⊂ ≼_cs invariant (τ = 1.0 exactly), vLr monotonicity. |
 | `test_poset_from_spacetime.cpp` | Phase 6 | Hand-crafted Spacetimes (2-slice ladder, 3-slice chain with skip, empty, spacelike-only, sparse-ID, self-comparison, DOT export) — verifies `Poset::fromSpacetime` Hasse covers, transitive reduction, dense ID remapping. |
-| `test_causet_chain.cpp` | Phase 6 | `extractCausetChain` invariants on trivial chain, branching antichain, sparse IDs, slice-spanning skip edges. |
+| `test_causet_chain.cpp` | Phase 6 | `Causet::chainFrom` invariants on trivial chain, branching antichain, sparse IDs, slice-spanning skip edges. |
 | `test_phase6_causet_chain_python.py` | Phase 6 | Python-side self-consistency on a default CDT Spacetime: layer sizes, flat-index alignment, partialOrder ⊆ hoppingPairs invariant, DOT round-trip. |
 | `test_phase6_cdt_invariants.cpp` | Phase 6 | Foliated-CDT structural invariants (Ambjorn 2004): every Hasse cover spans exactly one slice; covers ≡ hoppingPairs (no transitive reduction on a foliated complex); Hasse height = num_layers − 1; total extraction; top-layer out-degree / bottom-layer in-degree both 0. |
 | `test_schwinger_paper.cpp::check_vector_mass_continuum_trend` | Phase 1 | Bañuls 2013 fig. 7a M_V/g continuum trend at $m/g = 0$: scan $(x, N) \in \{(4, 40), (16, 80)\}$, verify monotone descent of the first-excited-state gap toward $1/\sqrt{\pi}$ and $\Delta E/g$ in $[0.55, 0.75]$ at $1/\sqrt{x}=0.25$ (matching their published 0.61). |

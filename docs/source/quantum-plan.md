@@ -142,7 +142,7 @@ Bond dimension 100 is enough for this check.
 - `dmrg_runner.hpp`: thin wrapper around `ITensor::dmrg`.
   Inputs: `SchwingerMPO`, sweep schedule, max bond dim, noise, Krylov
   dim. Outputs: `MPS` ground state, converged energy, final bond dim.
-- Expose `computeGroundState(config)` through pybind11 returning
+- Expose `SchwingerModel(config).solve()` through pybind11 returning
   only $(E_0, \text{bond\_dim}, \text{truncation\_err})$.
 
 **Acceptance**: re-runs Phase 1 with the wrapper; numerics unchanged.
@@ -160,9 +160,15 @@ Bond dimension 100 is enough for this check.
   // lambda <_maj mu iff, with both sorted descending, zero-padded,
   //   sum_{i=1..k} lambda_i  <=  sum_{i=1..k} mu_i   for all k,
   //   and total probability equal (trivially 1 here).
-  bool majorizes(const std::vector<double>& mu,
-                 const std::vector<double>& lambda,
-                 double tol = 1e-12);
+  class MajorizationPredicate {
+    virtual bool majorizes(std::vector<double> const& mu,
+                            std::vector<double> const& lambda) const = 0;
+    virtual bool strictlyMajorizes(std::vector<double> const& mu,
+                                     std::vector<double> const& lambda) const;
+    virtual std::string name() const = 0;
+  };
+  class StandardMajorization : public MajorizationPredicate { ... };
+  // Plus LogConcaveMajorization, PeakRadialMajorization subclasses.
   ```
 
 - Build a DAG whose nodes are intervals `[i,j]` and edges represent
@@ -241,12 +247,12 @@ Done:
   `tessera::Spacetime`. Uses transitive closure + reduction; preserves
   metric semantics by orienting earliest-time → latest-time and
   filtering on `Edge::getSquaredLength() < 0`.
-- `tessera::quantum::extractCausetChain(Spacetime const&)` — packages
+- `tessera::quantum::Causet::chainFrom(Spacetime const&)` — packages
   the antichain layering, flat lattice ↔ Spacetime ID mapping,
   adjacent-slice timelike-edge hopping pairs, and the inherited
   partial-order Poset into a single `CausetChain`.
 - Python bindings: `tessera.quantum.Poset.fromSpacetime(st)` and
-  `tessera.quantum.extractCausetChain(st)` work on any
+  `tessera.quantum.Causet.chainFrom(st)` work on any
   `tessera.Spacetime` instance (CDT-built, hand-crafted, or future
   `tessera.CausalSet`).
 - C++ acceptance: `tests/quantum/test_poset_from_spacetime.cpp` (7
@@ -259,7 +265,8 @@ Remaining for v1 close-out (deferred):
   `H_hop` follows the extracted hopping pairs rather than uniform
   nearest-neighbour. For trivial chains (one vertex per slice) this
   is just `params.N = chain.nSites` and the existing
-  `buildSchwingerMpo` runs as-is.
+  `SchwingerHamiltonian::mpoChain` (or `::mpo` with default NN
+  hopping) runs as-is.
 - For non-trivial antichains (causet branches), the chain layout
   produces hopping pairs with stride > 1. Two paths:
     1. Stay on a 1D MPS, accept the long-range hopping cost in the
@@ -268,7 +275,7 @@ Remaining for v1 close-out (deferred):
        handles branching antichains natively.
   Both paths are open work; pick after profiling the stride-1 case
   on a small CDT-derived chain.
-- Replace ≼_cs in `computeCausalComparison` with the inherited
+- Replace ≼_cs in `SchwingerQuench::compareCausalOrders` with the inherited
   `partialOrder` on the cut/time label set, then re-run the Phase 5
   invariants (`lrVsCs.kendallTau == 1.0` should still hold when
   the chain is totally ordered per slice; it may relax for branching
@@ -309,8 +316,12 @@ py::class_<QuenchResult>(m, "QuenchResult")
     .def_readonly("zProfile", &QuenchResult::zProfile)
     .def_readonly("posets", &QuenchResult::posets);       // one per t
 
-m.def("computeGroundState", &computeGroundState);
-m.def("runQqbarQuench", &runQqbarQuench);
+py::class_<SchwingerModel>(m, "SchwingerModel")
+    .def(py::init<QuantumConfig>())
+    .def("solve", &SchwingerModel::solve);
+py::class_<SchwingerQuench>(m, "SchwingerQuench")
+    .def(py::init<TDVPConfig>())
+    .def("evolve", &SchwingerQuench::evolve);
 ```
 
 No MPS, MPO, or ITensor type crosses the barrier.

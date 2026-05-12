@@ -93,7 +93,7 @@ bool flux_tube_test() {
     cfg.recordSpectra  = false;
     cfg.recordPoset    = false;
 
-    auto result = runQqbarQuench(cfg);
+    auto result = SchwingerQuench{cfg}.evolve();
 
     // Sanity: we always get an initial snapshot (t = 0) and at least
     // one mid-run snapshot before the final.

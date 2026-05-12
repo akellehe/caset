@@ -18,6 +18,19 @@ using namespace tessera::quantum;
 
 namespace {
 
+// Tests target the classical Nielsen-1999 majorization throughout, so we
+// thread one StandardMajorization through every call site. Local
+// shorthand keeps the assertion lines below readable.
+const StandardMajorization classical{1e-12};
+auto majorizes = [](std::vector<double> const& mu,
+                    std::vector<double> const& lambda) {
+    return classical.majorizes(mu, lambda);
+};
+auto strictlyMajorizes = [](std::vector<double> const& mu,
+                            std::vector<double> const& lambda) {
+    return classical.strictlyMajorizes(mu, lambda);
+};
+
 bool expect_true(bool cond, const char* desc) {
     std::cout << "  " << desc << " ... " << (cond ? "PASS" : "FAIL") << "\n";
     return cond;
@@ -121,7 +134,7 @@ bool small_poset_construction() {
         {0.5, 0.5},             // node 1  — middle
         {1.0},                  // node 2  — most concentrated (= (1, 0, 0))
     };
-    auto poset = majorizationPoset(spectra);
+    auto poset = Majorization::posetOf(spectra);
     // Hasse cover relations should be 2 → 1 and 1 → 0; the direct edge
     // 2 → 0 should be REMOVED by transitive reduction.
     bool ok = true;
@@ -144,8 +157,8 @@ bool small_poset_construction() {
 
 bool empty_input() {
     std::cout << "\nEdge cases — empty / single-node input\n";
-    auto p_empty = majorizationPoset({});
-    auto p_one   = majorizationPoset({{1.0}});
+    auto p_empty = Majorization::posetOf({});
+    auto p_one   = Majorization::posetOf({{1.0}});
     bool ok = true;
     ok &= expect_true(p_empty.getNodeCount() == 0,    "empty input → 0 nodes");
     ok &= expect_true(p_empty.covers().empty(),  "empty input → 0 edges");

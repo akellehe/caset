@@ -1,13 +1,11 @@
 """Phase 2 acceptance: re-run Phase 1's small-N cases through the
-tessera.quantum.computeGroundState Python API and confirm the energies
-match the C++-side numbers (PLAN.md §5 Phase 2: "re-runs Phase 1 with the
-wrapper; numerics unchanged").
+:class:`tessera.quantum.SchwingerModel` Python API and confirm the
+energies match the C++-side numbers (PLAN.md §5 Phase 2: "re-runs Phase 1
+with the wrapper; numerics unchanged").
 
 Reference values are the (operator-only) ground-state energies produced
 by tests/quantum/test_schwinger_spectrum.cpp at the same parameters,
-which were themselves cross-checked against dense Eigen ED to 1e-8 — so
-agreeing with these values is equivalent to passing the original Phase 1
-acceptance via the Python boundary.
+which were themselves cross-checked against dense Eigen ED to 1e-8.
 
 Skips cleanly if tessera.quantum isn't available (TESSERA_QUANTUM=0 build).
 """
@@ -17,7 +15,7 @@ from __future__ import annotations
 import unittest
 
 try:
-    from tessera.quantum import QuantumConfig, computeGroundState
+    from tessera.quantum import QuantumConfig, SchwingerModel
     HAVE_QUANTUM = True
 except ImportError:
     HAVE_QUANTUM = False
@@ -44,12 +42,10 @@ PHASE1_REFERENCE = {
 
 
 @unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
-class TestComputeGroundState(unittest.TestCase):
+class TestSchwingerModelSolve(unittest.TestCase):
     def test_phase1_reference_match(self) -> None:
         """Each (N, m/g, L0) in the Phase 1 sweep matches its reference
-        operator-only energy to within 1e-6 (DMRG noise floor on these
-        small cases is ~1e-12, but we leave headroom for the Krylov
-        scheduler picking slightly different tolerances)."""
+        operator-only energy to within 1e-6."""
         for (N, m_over_g, L0), e_ref in PHASE1_REFERENCE.items():
             cfg = QuantumConfig()
             cfg.N = N
@@ -60,7 +56,7 @@ class TestComputeGroundState(unittest.TestCase):
             cfg.maxBondDim = 64
             cfg.nSweeps = 8
 
-            result = computeGroundState(cfg)
+            result = SchwingerModel(cfg).solve()
             self.assertAlmostEqual(
                 result.operatorEnergy,
                 e_ref,
@@ -77,12 +73,9 @@ class TestComputeGroundState(unittest.TestCase):
             self.assertLessEqual(result.bondDim, cfg.maxBondDim)
 
     def test_n20_runs_and_returns_diagnostics(self) -> None:
-        """N=20 from PLAN.md §5 Phase 1 spec — the converged DMRG energy
-        is around -29.31 (operator-only) at m/g=0, but the precise value
-        isn't published anywhere, so we just verify the run completes,
+        """N=20 from PLAN.md §5 Phase 1 spec — verify the run completes,
         returns a sane bondDim, and the operator energy + constant
-        identity holds. This is the size at which Phase 4's TDVP loop
-        will operate."""
+        identity holds."""
         cfg = QuantumConfig()
         cfg.N = 20
         cfg.a = 1.0
@@ -92,20 +85,22 @@ class TestComputeGroundState(unittest.TestCase):
         cfg.maxBondDim = 100
         cfg.nSweeps = 12
 
-        r = computeGroundState(cfg)
+        r = SchwingerModel(cfg).solve()
         # Sign and order of magnitude: at this scale the GS is well below 0.
         self.assertLess(r.operatorEnergy, -10.0)
         self.assertGreater(r.bondDim, 0)
         self.assertLessEqual(r.bondDim, cfg.maxBondDim)
         self.assertAlmostEqual(r.energy, r.operatorEnergy + r.constant, places=12)
 
-    def test_skip_signal_without_quantum(self) -> None:
-        """Make sure the API is at least importable when present — this
-        sanity test guards against a partially-built module that imports
-        but lacks classes."""
-        self.assertTrue(callable(computeGroundState))
+    def test_default_config_rejected(self) -> None:
+        """SchwingerModel.solve must reject a default-constructed config
+        (N=0 is invalid)."""
         cfg = QuantumConfig()
-        # Default-constructed config has N=0; computeGroundState must
-        # reject that (validation comes from buildSchwingerMpo).
         with self.assertRaises(Exception):
-            computeGroundState(cfg)
+            SchwingerModel(cfg).solve()
+
+    def test_config_is_readable(self) -> None:
+        cfg = QuantumConfig()
+        cfg.N = 8
+        m = SchwingerModel(cfg)
+        self.assertEqual(m.config.N, 8)

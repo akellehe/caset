@@ -100,7 +100,7 @@ bool monotonicity_test() {
     bool ok = true;
     int prev_n = -1;
     for (double v : {0.5, 1.0, 2.0, 4.0, 16.0}) {
-        auto r = computeCausalComparison(cfg, v);
+        auto r = SchwingerQuench{cfg}.compareCausalOrders(v);
         std::cout << "  vLr=" << std::setw(5) << v
                   << "  lrVsCs.n_both=" << r.lrVsCs.nComparableBoth
                   << "  edit=" << r.lrVsCs.hasseEditDistance
@@ -132,7 +132,7 @@ bool acceptance() {
     cfg.quiet = true; cfg.conserveQns = true;
 
     const double vLr = 1.0;       // free-fermion group velocity scale
-    auto report = computeCausalComparison(cfg, vLr);
+    auto report = SchwingerQuench{cfg}.compareCausalOrders(vLr);
 
     bool ok = sanity_check(report, "Light-quark m=0.5, N=12, T=1, dt=0.1");
 

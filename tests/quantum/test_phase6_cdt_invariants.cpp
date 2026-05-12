@@ -208,7 +208,7 @@ int main() {
     // Spacetime instance avoids any subtle move-construction effects on
     // the VertexList / EdgeList / simplexPool ownership semantics.
     auto st = build_toroid_cdt(60);
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
 
     bool ok = true;
     ok &= acceptance_covers_span_adjacent_layers(chain);

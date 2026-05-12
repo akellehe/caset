@@ -4,21 +4,27 @@
 // sources only when TESSERA_QUANTUM=ON in CMakeLists.txt.
 //
 // Surface area is deliberately minimal per PLAN.md §1: scalars in, scalars
-// out. No MPS / MPO / ITensor types cross the Python boundary. If callers
-// need the wave function itself they should add a C++-side observable
-// callback that returns plain data (Phase 4's approach for TDVP snapshots).
+// out. No MPS / MPO / ITensor types cross the Python boundary.
 //
-// Docstrings here are deliberately verbose because they're the primary
-// user-facing documentation — `help(tessera.quantum.computeGroundState)`
-// in a Python REPL or notebook should be enough to understand both the
-// API and the underlying physics conventions.
+// API style: every Python-visible operation is a method on a coarse-grained
+// class — there are no free functions in tessera.quantum. The four user-
+// facing classes are:
+//
+//   • SchwingerModel(config)    — Phase 2/3 ground-state pipeline.
+//   • SchwingerQuench(config)   — Phase 4/5 quench + dynamics pipeline.
+//   • Majorization              — static utility for predicate-driven
+//                                 poset construction and pairwise
+//                                 order-agreement statistics.
+//   • Causet                    — static utility for tessera.Spacetime
+//                                 → causet adapters.
+//
+// Plus the existing data classes (QuantumConfig, GroundStateResult,
+// SchmidtSpectra, …) and the MajorizationPredicate hierarchy.
 
 #include "quantum/causal_compare.hpp"
 #include "quantum/causet_chain.hpp"
 #include "quantum/dmrg_runner.hpp"
 #include "quantum/majorization.hpp"
-#include "quantum/pipeline.hpp"
-#include "quantum/quench.hpp"
 #include "quantum/schmidt.hpp"
 #include "quantum/tdvp_runner.hpp"
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
@@ -32,13 +38,22 @@ void register_quantum_bindings(py::module_ m) {
     using namespace tessera::quantum;
 
     m.doc() = R"doc(
-Schwinger model + DMRG (Phase 2 of docs/source/quantum-plan.md).
+Schwinger model + DMRG + TDVP + causal-order analysis.
 
-This submodule exposes a single end-to-end pipeline: feed in a
-:class:`QuantumConfig` describing the dimensional Hamiltonian and DMRG
-sweep schedule; get back a :class:`GroundStateResult` with the converged
-ground-state energy and the bond-dim/truncation diagnostics needed to
-judge convergence.
+The user-facing API is exclusively class-based:
+
+* :class:`SchwingerModel`  — DMRG ground-state pipeline (Phases 2 / 3).
+* :class:`SchwingerQuench` — q-qbar quench + TDVP + causal-order
+                              comparison (Phases 4 / 5).
+* :class:`Majorization`    — static utility: poset construction and
+                              pairwise order-agreement statistics.
+* :class:`Causet`          — static utility: tessera.Spacetime → causet
+                              adapter (Phase 6).
+
+Plus the data classes (QuantumConfig, GroundStateResult, SchmidtSpectra,
+TDVPConfig, …) and the MajorizationPredicate hierarchy
+(StandardMajorization, LogConcaveMajorization, PeakRadialMajorization)
+that callers configure the workflow with.
 
 The Hamiltonian is the staggered Kogut-Susskind Schwinger model after
 Jordan-Wigner mapping and Gauss's-law elimination, expressed as a spin
@@ -56,8 +71,6 @@ chain (PLAN.md §4 / Bañuls et al., JHEP 11, 158 (2013), eq. 2.6):
     H_E   = \frac{g^2 a}{2} \sum_{n=1}^{N-1} L_n^2,
             \quad L_n = L_0 + \sum_{k=1}^{n}\bigl[(1-\sigma^z_k)/2 - (1-(-1)^k)/2\bigr]
 
-The DMRG runs on the U(1) charge-neutral (total Sz = 0) sector by default.
-
 References
 ----------
 * Bañuls, Cichy, Cirac, Jansen, *JHEP* **11**, 158 (2013),
@@ -66,107 +79,71 @@ References
 * Coleman, *Ann. Phys.* **101**, 239 (1976) — massive Schwinger model.
 )doc";
 
+    // ─── Phase 2 data classes ───────────────────────────────────────────
     py::class_<QuantumConfig>(m, "QuantumConfig",
             R"doc(Configuration for a Schwinger-model DMRG ground-state run.
 
 Bundles the dimensional Hamiltonian parameters and the DMRG sweep
 settings into a single struct so calling code only hands one Python
 object across the C++ boundary. Default-constructed instances have
-N = 0 and must be filled in before passing to :func:`computeGroundState`.
+N = 0 and must be filled in before passing to :class:`SchwingerModel`.
 
 The dt and T fields are reserved for Phase 4 (real-time evolution
-after a quark/antiquark quench) and are ignored by
-:func:`computeGroundState`.
+after a quark/antiquark quench) and are ignored by SchwingerModel.
 
 Attributes
 ----------
 N : int
     Staggered sites, 1-based indexing. Must be ≥ 2; even N is required
-    if you want the global GS to live in the Sz = 0 sector (which is
-    the standard Bañuls 2013 convention).
+    if you want the global GS to live in the Sz = 0 sector.
 a : float
-    Lattice spacing. Sets the units of the Hamiltonian — values in the
-    output are in those same units. Must be positive. Default 1.0.
+    Lattice spacing. Must be positive. Default 1.0.
 m : float
-    Bare staggered-fermion mass. Sign matters: positive m with our
-    (-1)^n convention favours the Néel pattern with σ^z_n = (-1)^(n+1).
+    Bare staggered-fermion mass.
 g : float
     Gauge coupling. May be 0 (free-Dirac limit, gauge field decouples).
-    Bañuls' dimensionless coupling is x = 1/(g²a²).
 L0 : float
     Background electric field on the link to the left of site 1.
-    Default 0 puts us in the standard zero-background sector.
 maxBondDim : int
-    Cap on the MPS bond dimension during DMRG sweeps. Schwinger ground
-    states at moderate (m, g, N) typically converge at bond dim ~10-30
-    even for N = 100+. Bond-dim-limited runs report ``bondDim`` equal
-    to this value in the result.
+    Cap on the MPS bond dimension during DMRG sweeps.
 nSweeps : int
-    Total number of DMRG sweeps. Energy convergence is exponential in
-    sweep count once bond-dim is sufficient; 12 sweeps is plenty for
-    moderate-N tests.
+    Total number of DMRG sweeps.
 cutoff : float
-    SVD truncation threshold per local solve. 1e-12 is conservative for
-    these Hamiltonians and well below double-precision noise. Tighter
-    cutoff costs sweep time without meaningful precision gain.
+    SVD truncation threshold per local solve.
 krylovDim : int
-    Lanczos / Krylov dimension per local 2-site solve. Default 4 is
-    fine for gapped problems; raise for harder cases (small mass,
-    near-critical points) where eigensolver convergence is slower.
+    Lanczos / Krylov dimension per local 2-site solve.
 quiet : bool
     If True (default), suppress ITensor's per-sweep diagnostic prints.
-    Set False to debug DMRG convergence.
 conserveQns : bool
-    If True (default), the SiteSet enforces total-Sz QN conservation
-    on every MPS bond. The Néel initial state then pins DMRG to the
-    Sz = 0 sector. Set False only when you need to apply σ^x / σ^y
-    later (these change Sz) — currently exercised by Phase 1's
-    charge-conjugation test.
+    If True (default), enforce U(1) total-Sz conservation on the SiteSet.
 dt : float
-    *(Phase 4)* TDVP real-time step size. Unused by
-    computeGroundState.
+    *(Phase 4)* TDVP real-time step size. Unused by SchwingerModel.
 T : float
-    *(Phase 4)* Total evolution time. Unused by computeGroundState.
+    *(Phase 4)* Total evolution time. Unused by SchwingerModel.
 
 Examples
 --------
->>> from tessera.quantum import QuantumConfig
+>>> from tessera.quantum import QuantumConfig, SchwingerModel
 >>> cfg = QuantumConfig()
 >>> cfg.N = 20
->>> cfg.a = 1.0
->>> cfg.g = 1.0
->>> cfg.m = 0.0
->>> cfg.L0 = 0.0
->>> cfg.maxBondDim = 100
->>> cfg.nSweeps = 12
+>>> cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
+>>> cfg.maxBondDim = 100; cfg.nSweeps = 12
+>>> result = SchwingerModel(cfg).solve()
 )doc")
         .def(py::init<>())
-        .def_readwrite("N",            &QuantumConfig::N,
-            "Staggered sites, 1-based; must be ≥ 2.")
-        .def_readwrite("a",            &QuantumConfig::a,
-            "Lattice spacing. Must be positive. Default 1.0.")
-        .def_readwrite("m",            &QuantumConfig::m,
-            "Bare fermion mass.")
-        .def_readwrite("g",            &QuantumConfig::g,
-            "Gauge coupling. g = 0 is the free-Dirac limit (allowed).")
-        .def_readwrite("L0",           &QuantumConfig::L0,
-            "Background electric field on the link left of site 1.")
-        .def_readwrite("maxBondDim", &QuantumConfig::maxBondDim,
-            "Cap on MPS bond dimension during DMRG.")
-        .def_readwrite("nSweeps",     &QuantumConfig::nSweeps,
-            "Total DMRG sweep count.")
-        .def_readwrite("cutoff",       &QuantumConfig::cutoff,
-            "SVD truncation threshold per local solve.")
-        .def_readwrite("krylovDim",   &QuantumConfig::krylovDim,
-            "Lanczos / Krylov dimension per local solve.")
-        .def_readwrite("quiet",        &QuantumConfig::quiet,
-            "Suppress ITensor's per-sweep diagnostic output.")
-        .def_readwrite("conserveQns", &QuantumConfig::conserveQns,
-            "U(1) total-Sz conservation on the SiteSet.")
-        .def_readwrite("dt",           &QuantumConfig::dt,
-            "(Phase 4) Real-time step size; unused by computeGroundState.")
-        .def_readwrite("T",            &QuantumConfig::T,
-            "(Phase 4) Total evolution time; unused by computeGroundState.")
+        .def_readwrite("N",            &QuantumConfig::N)
+        .def_readwrite("a",            &QuantumConfig::a)
+        .def_readwrite("m",            &QuantumConfig::m)
+        .def_readwrite("g",            &QuantumConfig::g)
+        .def_readwrite("L0",           &QuantumConfig::L0)
+        .def_readwrite("maxBondDim",   &QuantumConfig::maxBondDim)
+        .def_readwrite("nSweeps",      &QuantumConfig::nSweeps)
+        .def_readwrite("cutoff",       &QuantumConfig::cutoff)
+        .def_readwrite("krylovDim",    &QuantumConfig::krylovDim)
+        .def_readwrite("quiet",        &QuantumConfig::quiet)
+        .def_readwrite("conserveQns",  &QuantumConfig::conserveQns)
+        .def_readwrite("dt",           &QuantumConfig::dt)
+        .def_readwrite("T",            &QuantumConfig::T)
         .def("__repr__", [](QuantumConfig const& c) {
             return "QuantumConfig(N=" + std::to_string(c.N) +
                    ", a=" + std::to_string(c.a) +
@@ -178,98 +155,46 @@ Examples
         });
 
     py::class_<GroundStateResult>(m, "GroundStateResult",
-            R"doc(Result of a Schwinger-model DMRG ground-state run.
-
-The full physical energy is ``energy``. The other fields let callers
-sanity-check convergence:
-
-* ``operatorEnergy + constant`` should equal ``energy`` exactly
-  (assertable to ~1e-12).
-* ``bondDim`` hitting ``config.maxBondDim`` flags a bond-dim-limited
-  run — increase the cap and rerun if you need tighter convergence.
-* ``truncationErr`` is a conservative upper bound (the configured
-  cutoff). Real truncation is typically much smaller.
+            R"doc(Result of :meth:`SchwingerModel.solve`.
 
 Attributes
 ----------
 energy : float
-    Full physical energy ⟨H⟩ + constant. Use this when comparing to
-    Bañuls-style published numerics (after the dimensional rescaling
-    E_W = (2/(ag²)) E_dim if you want their dimensionless W).
+    Full physical energy ⟨H⟩ + constant.
 operatorEnergy : float
-    ⟨H⟩ alone, as returned by ITensor's dmrg(). Use this for direct
-    cross-checks against dense diagonalization of the operator-valued
-    Hamiltonian (without the c-number L_n² shift).
+    ⟨H⟩ alone, as returned by ITensor's dmrg().
 constant : float
     The c-number shift (g²a/2) Σ_n (c_n² + n/4) pulled out of L_n²
-    when AutoMPO-encoding the electric term — see the derivation in
-    src/quantum/schwinger_model.cpp. ``operatorEnergy + constant ==
-    energy`` by construction.
+    when AutoMPO-encoding the electric term.
 bondDim : int
-    Largest bond dimension of the optimized MPS. Equals
-    ``config.maxBondDim`` if the run was bond-dim-limited.
+    Largest bond dimension of the optimized MPS.
 truncationErr : float
-    Conservative upper bound on the SVD truncation error in the final
-    sweep (currently equal to the configured ``cutoff``).
+    Conservative upper bound on the SVD truncation error.
 )doc")
-        .def_readonly("energy",          &GroundStateResult::energy,
-            "Full physical energy ⟨H⟩ + constant.")
-        .def_readonly("operatorEnergy", &GroundStateResult::operatorEnergy,
-            "Operator part ⟨H⟩, matches ITensor's dmrg() return value.")
-        .def_readonly("constant",        &GroundStateResult::constant,
-            "C-number shift from L_n² expansion.")
-        .def_readonly("bondDim",        &GroundStateResult::bondDim,
-            "Largest MPS bond dimension after the final sweep.")
-        .def_readonly("truncationErr",  &GroundStateResult::truncationErr,
-            "Conservative upper bound on the truncation error.")
+        .def_readonly("energy",          &GroundStateResult::energy)
+        .def_readonly("operatorEnergy",  &GroundStateResult::operatorEnergy)
+        .def_readonly("constant",        &GroundStateResult::constant)
+        .def_readonly("bondDim",         &GroundStateResult::bondDim)
+        .def_readonly("truncationErr",   &GroundStateResult::truncationErr)
         .def("__repr__", [](GroundStateResult const& r) {
             return "GroundStateResult(energy=" + std::to_string(r.energy) +
                    ", bondDim=" + std::to_string(r.bondDim) +
                    ", truncationErr=" + std::to_string(r.truncationErr) + ")";
         });
 
-    // ─── Phase 3 types ──────────────────────────────────────────────────
+    // ─── Phase 3 data classes ───────────────────────────────────────────
     py::class_<Interval>(m, "Interval",
-            R"doc(1-based contiguous interval [i, j] on the spin chain.
-
-Used as a label on the Schmidt spectra returned by
-:func:`computeGroundStateMajorization`.
-
-Attributes
-----------
-i : int
-    First site of the interval (1-based).
-j : int
-    Last site of the interval (1-based, j ≥ i).
-)doc")
+            R"doc(1-based contiguous interval [i, j] on the spin chain.)doc")
         .def(py::init<>())
-        .def_readwrite("i", &Interval::i, "First site of the interval (1-based).")
-        .def_readwrite("j", &Interval::j, "Last site of the interval (1-based, j ≥ i).")
+        .def_readwrite("i", &Interval::i)
+        .def_readwrite("j", &Interval::j)
         .def("__repr__", [](Interval const& iv) {
             return "Interval(i=" + std::to_string(iv.i) +
                    ", j=" + std::to_string(iv.j) + ")";
         });
 
     py::class_<SchmidtSpectra>(m, "SchmidtSpectra",
-            R"doc(All contiguous-cut Schmidt spectra of an MPS.
-
-Cuts are indexed 0 .. len(spectra)-1; ``intervals[k]`` is the
-:class:`Interval` label of ``spectra[k]``. The full-chain bipartition
-[1, N] | ∅ is excluded.
-
-Each spectrum is sorted non-increasingly and contains the eigenvalues of
-ρ_A (= squared Schmidt coefficients), with no zero-padding.
-
-Attributes
-----------
-N : int
-    Length of the spin chain.
-intervals : list[Interval]
-    Cut labels.
-spectra : list[list[float]]
-    ``spectra[k]`` is the entanglement spectrum of bipartition
-    ``intervals[k]`` | rest.
-)doc")
+            R"doc(All contiguous-cut Schmidt spectra of an MPS.)doc")
         .def_readonly("N",         &SchmidtSpectra::N)
         .def_readonly("intervals", &SchmidtSpectra::intervals)
         .def_readonly("spectra",   &SchmidtSpectra::spectra);
@@ -277,148 +202,62 @@ spectra : list[list[float]]
     py::class_<Poset>(m, "Poset",
             R"doc(Hasse / cover representation of a finite partial order.
 
-Nodes are integers 0 .. getNodeCount - 1. ``covers`` lists the cover edges
-(transitive reduction of the strict-majorization graph): each entry
-(a, b) means a ≻ b with no third node c satisfying a ≻ c ≻ b.
-
-Attributes
-----------
-getNodeCount : int
-    Total node count.
-covers : list[tuple[int, int]]
-    Hasse cover edges (a, b) with a ≻ b.
+Nodes are integers 0 .. getNodeCount - 1. ``covers`` lists the cover
+edges: each entry (a, b) means a ≻ b with no intermediate node.
 )doc")
         .def(py::init<>())
-        // getNodeCount and covers are accessed via getters/setters because the
-        // underlying tessera::Poset stores them in VertexList/EdgeList rather
-        // than as raw int + vector members. Python sees the same simple
-        // {getNodeCount: int, covers: list[tuple[int,int]]} surface as before.
         .def_property("getNodeCount",
             [](Poset const& p) { return p.getNodeCount(); },
-            [](Poset& p, int n) { p.setNodeCount(n); },
-            "Total node count.")
+            [](Poset& p, int n) { p.setNodeCount(n); })
         .def_property("covers",
             [](Poset const& p) { return p.covers(); },
             [](Poset& p, std::vector<std::pair<int, int>> const& covers) {
                 p.setCovers(covers);
-            },
-            "Hasse cover edges (a, b) with a strictly majorizes b.")
+            })
         .def("toDot", &Poset::toDot,
             "Graphviz DOT representation of the Hasse diagram.")
-        // Phase 6 — Spacetime → Poset factory. Same py::object indirection
-        // as extractCausetChain because Spacetime is registered in the
-        // top-level _tessera module, not in this quantum sub-binding TU.
         .def_static("fromSpacetime",
             [](py::object spacetime_obj) {
                 auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
                 return tessera::Poset::fromSpacetime(*st);
             }, py::arg("spacetime"),
-            R"doc(Inherit a Hasse-cover Poset from a tessera.Spacetime.
-
-Walks the Spacetime's edge list, takes every timelike edge
-(``Edge.getSquaredLength() < 0``) as a strict precedes-relation
-oriented earliest-time → latest-time, computes the transitive
-closure, and emits the cover edges (transitive reduction) as the
-Poset's cover list.
-
-Vertex IDs in the returned Poset are a dense 0..n-1 remapping of the
-Spacetime's ``Vertex.getId()`` values in ascending order. The
-remapping is monotonic, so a caller who sorts Spacetime vertex IDs
-ascending recovers the Poset node order trivially.
-
-Parameters
-----------
-spacetime : tessera.Spacetime
-    Source spacetime.
-
-Returns
--------
-Poset
-)doc")
+            R"doc(Inherit a Hasse-cover Poset from a tessera.Spacetime.)doc")
         .def("__repr__", [](Poset const& p) {
             return "Poset(getNodeCount=" + std::to_string(p.getNodeCount()) +
                    ", covers=" + std::to_string(p.getCoverCount()) + " edges)";
         });
 
     py::class_<GroundStateMajorizationResult>(m, "GroundStateMajorizationResult",
-            R"doc(Result of :func:`computeGroundStateMajorization`.
-
-Bundles the scalar DMRG diagnostics with the Schmidt spectra of the
-optimized ground-state MPS and the majorization poset on those spectra.
+            R"doc(Result of :meth:`SchwingerModel.solveWithMajorization`.
 
 Attributes
 ----------
 groundState : GroundStateResult
-    Same diagnostics returned by :func:`computeGroundState`.
+    Same diagnostics returned by :meth:`SchwingerModel.solve`.
 spectra : SchmidtSpectra
-    All contiguous-cut Schmidt spectra of the ground-state MPS,
-    excluding the trivial full-chain cut.
+    All contiguous-cut Schmidt spectra of the ground-state MPS.
 poset : Poset
     Hasse cover edges of the strict-majorization order on
-    ``spectra.spectra``. Cover (a, b) means
-    ``spectra.spectra[a] ≻ spectra.spectra[b]`` with no intermediate
-    spectrum.
+    ``spectra.spectra``.
 )doc")
         .def_readonly("groundState", &GroundStateMajorizationResult::groundState)
-        .def_readonly("spectra",      &GroundStateMajorizationResult::spectra)
-        .def_readonly("poset",        &GroundStateMajorizationResult::poset);
+        .def_readonly("spectra",     &GroundStateMajorizationResult::spectra)
+        .def_readonly("poset",       &GroundStateMajorizationResult::poset);
 
-    // ─── Phase 3 free functions ─────────────────────────────────────────
-    m.def("majorizes",
-          &majorizes,
-          py::arg("mu"), py::arg("lambda_"), py::arg("tol") = 1e-12,
-          R"doc(Test whether μ majorizes λ.
-
-Both vectors are sorted non-increasingly internally and zero-padded to
-the longer's length. μ majorizes λ iff every cumulative partial sum
-of the sorted-padded μ is at least as large as that of λ, AND the
-total masses match within ``tol``.
-
-Parameters
-----------
-mu, lambda_ : list[float]
-    Probability-like distributions (or any non-negative sequences with
-    equal total mass within ``tol``).
-tol : float, optional
-    Slack for partial-sum comparisons and total-mass equality.
-
-Returns
--------
-bool
-    True if μ majorizes λ.
-)doc");
-
-    m.def("strictlyMajorizes",
-          &strictlyMajorizes,
-          py::arg("mu"), py::arg("lambda_"), py::arg("tol") = 1e-12,
-          R"doc(Test whether μ strictly majorizes λ.
-
-Equivalent to ``majorizes(mu, lambda_) and not majorizes(lambda_, mu)``
-— the relation is proper, not just sorted-padded equality.
-)doc");
-
-    // ─── MajorizationPredicate variants (lightcone_vs_majorization
-    //     follow-up to Phase 5) ────────────────────────────────────────
-    //
-    // Abstract base class plus three concrete variants. See
-    // include/quantum/majorization.hpp for the partial-order axioms,
-    // the bibliographic anchors (Nielsen 1999, Brändén 2015,
-    // Aubrun-Nechita 2008), and the physical motivation for each
-    // variant.
-
+    // ─── MajorizationPredicate hierarchy ────────────────────────────────
     py::class_<MajorizationPredicate>(m, "MajorizationPredicate",
             R"doc(Abstract base class for variants of the majorization predicate.
 
-Concrete subclasses ship in this module:
+Concrete subclasses:
 
-* :class:`StandardMajorization` -- classical, Nielsen 1999 PRL 83, 436 eq. (1).
-* :class:`LogConcaveMajorization` -- gated on log-concave spectra, Brändén 2015 §1.
+* :class:`StandardMajorization` -- classical Nielsen 1999 PRL 83, 436 eq. (1).
+* :class:`LogConcaveMajorization` -- gated on log-concave spectra
+  (Brändén 2015 §1).
 * :class:`PeakRadialMajorization` -- peak-relative entrywise dominance.
 
-Functions that take a predicate -- :func:`majorizationPoset` and
-:func:`computeCausalComparison` -- accept any concrete subclass
-instance interchangeably; the variant identifies itself via the
-``name`` property.
+Methods that take a predicate -- :meth:`Majorization.posetOf` and
+:meth:`SchwingerQuench.compareCausalOrders` -- accept any concrete
+subclass instance.
 )doc")
         .def("majorizes",
              &MajorizationPredicate::majorizes,
@@ -430,180 +269,50 @@ instance interchangeably; the variant identifies itself via the
              "True iff μ strictly majorizes λ under this variant.")
         .def_property_readonly("name",
              &MajorizationPredicate::name,
-             "Short identifier of the variant ('standard', 'log-concave', 'peak-radial').");
+             "Short identifier of the variant.");
 
     py::class_<StandardMajorization, MajorizationPredicate>(
             m, "StandardMajorization",
             R"doc(Classical Nielsen-1999 majorization.
 
-μ ≻ λ iff for every k,
-
-    sum_{i=1..k} μ_i^↓  ≥  sum_{i=1..k} λ_i^↓
-
+μ ≻ λ iff for every k, sum of the top-k of μ ≥ sum of the top-k of λ,
 with equality at the total-mass step (Nielsen 1999 PRL 83, 436, eq. 1).
-This is the partial order under which deterministic LOCC convertibility
-|α⟩ → |β⟩ holds, with μ, λ replaced by the Schmidt spectra of |α⟩,
-|β⟩. The baseline used through Phase 5.
-
-Parameters
-----------
-tol : float, optional
-    Numerical slack on partial-sum and total-mass comparisons.
-    Default 1e-12.
 )doc")
         .def(py::init<double>(), py::arg("tol") = 1e-12)
         .def_property_readonly("tol", &StandardMajorization::tol);
 
     py::class_<LogConcaveMajorization, StandardMajorization>(
             m, "LogConcaveMajorization",
-            R"doc(Standard majorization, restricted to log-concave spectra.
-
-The relation ``StandardMajorization`` gated on both inputs being
-log-concave on their support: λ_i² ≥ λ_{i-1} · λ_{i+1} for every
-interior i (Brändén 2015 arXiv:1410.6601 §1; Stanley 1989). Pairs
-where either spectrum fails log-concavity are declared incomparable,
-making this a strict sub-relation of ``StandardMajorization``.
-
-Motivation: filter out comparisons between unimodal "single-peak" and
-multimodal "plateau" spectra, hypothesised to dilute the entanglement-
-causality alignment in Phase 5 (see
-``docs/source/quantum-experiments/lightcone_vs_majorization_writeup.md``).
-
-Parameters
-----------
-tol : float, optional
-    Numerical slack on log-concavity AND majorization comparisons.
-    Default 1e-12.
+            R"doc(Standard majorization, restricted to log-concave spectra
+(Brändén 2015 arXiv:1410.6601 §1).
 )doc")
         .def(py::init<double>(), py::arg("tol") = 1e-12)
         .def_static("isLogConcave",
                     &LogConcaveMajorization::isLogConcave,
                     py::arg("v"), py::arg("tol") = 1e-12,
-                    R"doc(True iff the spectrum is log-concave on its support.
-
-Sorts ``v`` descending and strips trailing zeros; then requires
-s_i² ≥ s_{i-1} · s_{i+1} for every interior i. Spectra of length
-≤ 2 are trivially log-concave.
-)doc");
+                    "True iff the spectrum is log-concave on its support.");
 
     py::class_<PeakRadialMajorization, MajorizationPredicate>(
             m, "PeakRadialMajorization",
             R"doc(Peak-radial dominance: relative-to-peak entrywise majorization.
-
-μ ≻ λ iff, after sorting both descending and zero-padding,
-
-    λ_i / λ_1  ≤  μ_i / μ_1     for every i.
-
-Equivalently λ_i · μ_1 ≤ μ_i · λ_1 (the implementation cross-
-multiplies for numerical stability with small peaks). Strictly
-stronger than ``StandardMajorization``: every entrywise
-relative-to-peak dominance implies cumulative-sum dominance, but not
-vice versa.
-
-Structurally analogous to L^p-norm dominance characterisations of
-catalytic majorization (Aubrun-Nechita 2008 Comm. Math. Phys. 278, 133,
-arXiv:0707.0211, Theorem 1.1 / Proposition 2.5) -- though catalytic
-majorization is a *weakening* of classical, while peak-radial is a
-*strengthening*.
-
-Parameters
-----------
-tol : float, optional
-    Numerical slack on entrywise comparisons. Default 1e-12.
+Strictly stronger than classical majorization.
 )doc")
         .def(py::init<double>(), py::arg("tol") = 1e-12)
         .def_property_readonly("tol", &PeakRadialMajorization::tol);
 
-    m.def("majorizationPoset",
-          py::overload_cast<std::vector<std::vector<double>> const&,
-                            double>(&majorizationPoset),
-          py::arg("spectra"), py::arg("tol") = 1e-12,
-          R"doc(Build the classical majorization poset on a list of spectra.
-
-Convenience overload equivalent to
-``majorizationPoset(spectra, StandardMajorization(tol))``. ``spectra[k]``
-becomes node k; the returned :class:`Poset` stores Hasse cover edges
-only (transitive closure is implicit).
-
-Parameters
-----------
-spectra : list[list[float]]
-    Probability-like distributions, one per node.
-tol : float, optional
-    Slack passed to the underlying majorizes() comparisons.
-
-Returns
--------
-Poset
-    Hasse cover representation of the strict-majorization order.
-
-Notes
------
-Complexity is O(M³) where M = ``len(spectra)``, dominated by the
-transitive-reduction pass.
-)doc");
-
-    m.def("majorizationPoset",
-          py::overload_cast<std::vector<std::vector<double>> const&,
-                            MajorizationPredicate const&>(&majorizationPoset),
-          py::arg("spectra"), py::arg("predicate"),
-          R"doc(Build the majorization poset under an explicit predicate variant.
-
-Same Hasse-cover construction as the classical overload, with
-``predicate`` controlling which pairs are related.
-
-Parameters
-----------
-spectra : list[list[float]]
-    Probability-like distributions, one per node.
-predicate : MajorizationPredicate
-    Any concrete instance: :class:`StandardMajorization`,
-    :class:`LogConcaveMajorization`, or :class:`PeakRadialMajorization`.
-
-Returns
--------
-Poset
-    Hasse cover representation of the strict relation.
-)doc");
-
-    // ─── Phase 4 types: TDVP / quench ───────────────────────────────────
+    // ─── Phase 4 data classes ───────────────────────────────────────────
     py::class_<TDVPConfig>(m, "TDVPConfig",
             R"doc(Configuration for the Phase 4 q-qbar quench + TDVP run.
 
 Bundles the Hamiltonian parameters, the DMRG ground-state setup, the
 quench location / separation, and the real-time-evolution schedule.
 ``i0`` and ``d`` describe the q-qbar pair: σ⁻ acts at site ``i0``,
-σ⁺ at site ``i0 + d``.
+σ⁺ at site ``i0 + d``. With ``quenchEnforceParity = True`` (default)
+``i0`` must be odd and ``d`` must be odd.
 
-The parity constraint (PLAN.md §5 Phase 4 / quench.hpp): for the
-heavy-quark Néel vacuum to admit a non-trivial flux tube, ``i0`` must
-be odd (Up sublattice) and ``d`` must be odd. Set
-``quenchEnforceParity = False`` to override.
-
-Attributes
-----------
-N, a, m, g, L0 : Hamiltonian parameters (same as :class:`QuantumConfig`).
-dmrgMaxBondDim, dmrgNSweeps, dmrgKrylovDim, dmrgCutoff :
-    DMRG sweep settings for the initial ground state.
-i0, d : int
-    First site of the q-qbar pair (1-based) and separation in lattice sites.
-quenchEnforceParity : bool
-    If True, the quench raises an exception unless i0 and d satisfy the
-    parity constraint above.
-dt : float
-    Real-time step (units of 1/E_dim). Total evolution is ``T``; the loop
-    performs ``round(T / dt)`` TDVP steps.
-T : float
-    Total real-time evolution time.
-maxBondDim, krylovDim, cutoff :
-    TDVP sweep settings (per-step bond cap, Krylov dim, SVD cutoff).
-snapshotEvery : int
-    Record observables every k steps (≥ 1). The initial snapshot at
-    t = 0 (post-quench) is always recorded.
-quiet, conserveQns : bool
-recordSpectra, recordPoset : bool
-    Optional per-snapshot recording of full Schmidt spectra and the
-    majorization poset (O(N²) SVDs each — off by default).
+The pipeline runs through :meth:`SchwingerQuench.evolve` (or
+:meth:`SchwingerQuench.compareCausalOrders` for the Phase 5
+extension).
 )doc")
         .def(py::init<>())
         .def_readwrite("N",                       &TDVPConfig::N)
@@ -611,47 +320,38 @@ recordSpectra, recordPoset : bool
         .def_readwrite("m",                       &TDVPConfig::m)
         .def_readwrite("g",                       &TDVPConfig::g)
         .def_readwrite("L0",                      &TDVPConfig::L0)
-        .def_readwrite("dmrgMaxBondDim",       &TDVPConfig::dmrgMaxBondDim)
-        .def_readwrite("dmrgNSweeps",           &TDVPConfig::dmrgNSweeps)
-        .def_readwrite("dmrgKrylovDim",         &TDVPConfig::dmrgKrylovDim)
-        .def_readwrite("dmrgCutoff",             &TDVPConfig::dmrgCutoff)
+        .def_readwrite("dmrgMaxBondDim",          &TDVPConfig::dmrgMaxBondDim)
+        .def_readwrite("dmrgNSweeps",             &TDVPConfig::dmrgNSweeps)
+        .def_readwrite("dmrgKrylovDim",           &TDVPConfig::dmrgKrylovDim)
+        .def_readwrite("dmrgCutoff",              &TDVPConfig::dmrgCutoff)
         .def_readwrite("i0",                      &TDVPConfig::i0)
         .def_readwrite("d",                       &TDVPConfig::d)
-        .def_readwrite("quenchEnforceParity",   &TDVPConfig::quenchEnforceParity)
+        .def_readwrite("quenchEnforceParity",     &TDVPConfig::quenchEnforceParity)
         .def_readwrite("dt",                      &TDVPConfig::dt)
         .def_readwrite("T",                       &TDVPConfig::T)
-        .def_readwrite("maxBondDim",            &TDVPConfig::maxBondDim)
-        .def_readwrite("krylovDim",              &TDVPConfig::krylovDim)
+        .def_readwrite("maxBondDim",              &TDVPConfig::maxBondDim)
+        .def_readwrite("krylovDim",               &TDVPConfig::krylovDim)
         .def_readwrite("cutoff",                  &TDVPConfig::cutoff)
-        .def_readwrite("snapshotEvery",          &TDVPConfig::snapshotEvery)
+        .def_readwrite("snapshotEvery",           &TDVPConfig::snapshotEvery)
         .def_readwrite("quiet",                   &TDVPConfig::quiet)
-        .def_readwrite("conserveQns",            &TDVPConfig::conserveQns)
-        .def_readwrite("recordSpectra",          &TDVPConfig::recordSpectra)
-        .def_readwrite("recordPoset",            &TDVPConfig::recordPoset);
+        .def_readwrite("conserveQns",             &TDVPConfig::conserveQns)
+        .def_readwrite("recordSpectra",           &TDVPConfig::recordSpectra)
+        .def_readwrite("recordPoset",             &TDVPConfig::recordPoset);
 
     py::class_<TDVPSnapshot>(m, "TDVPSnapshot",
             R"doc(Per-step diagnostics recorded during a TDVP run.
 
-Always-populated fields:
-
-    time : float            -- elapsed real time
-    energy : float          -- ⟨ψ(t)|H|ψ(t)⟩ + constant
-    bondDim : int          -- maxLinkDim of the MPS at this time
-    zProfile : list[float] -- ⟨σ^z_n⟩ for n = 1..N
-    lProfile : list[float] -- ⟨L_n⟩  for n = 1..N-1
-
-Optional fields (populated only if the corresponding TDVPConfig flag is set):
-
-    spectra : SchmidtSpectra
-    poset : Poset
+Always-populated fields: time, energy, bondDim, zProfile, lProfile.
+Optional fields (populated only if the corresponding TDVPConfig flag
+is set): spectra, poset.
 )doc")
-        .def_readonly("time",       &TDVPSnapshot::time)
-        .def_readonly("energy",     &TDVPSnapshot::energy)
+        .def_readonly("time",      &TDVPSnapshot::time)
+        .def_readonly("energy",    &TDVPSnapshot::energy)
         .def_readonly("bondDim",   &TDVPSnapshot::bondDim)
         .def_readonly("zProfile",  &TDVPSnapshot::zProfile)
         .def_readonly("lProfile",  &TDVPSnapshot::lProfile)
-        .def_readonly("spectra",    &TDVPSnapshot::spectra)
-        .def_readonly("poset",      &TDVPSnapshot::poset)
+        .def_readonly("spectra",   &TDVPSnapshot::spectra)
+        .def_readonly("poset",     &TDVPSnapshot::poset)
         .def("__repr__", [](TDVPSnapshot const& s) {
             return "TDVPSnapshot(time=" + std::to_string(s.time) +
                    ", energy=" + std::to_string(s.energy) +
@@ -659,120 +359,70 @@ Optional fields (populated only if the corresponding TDVPConfig flag is set):
         });
 
     py::class_<QuenchResult>(m, "QuenchResult",
-            R"doc(Result of :func:`runQqbarQuench`.
+            R"doc(Result of :meth:`SchwingerQuench.evolve`.
 
 Attributes
 ----------
 groundState : GroundStateResult
     DMRG ground-state diagnostics for the pre-quench state.
 snapshots : list[TDVPSnapshot]
-    Per-step diagnostics. ``snapshots[0]`` is the post-quench state at
-    t = 0; the rest are spaced every ``config.snapshotEvery`` TDVP
-    steps. The final TDVP step is always recorded.
+    Per-step diagnostics; ``snapshots[0]`` is the post-quench state.
 )doc")
         .def_readonly("groundState", &QuenchResult::groundState)
-        .def_readonly("snapshots",    &QuenchResult::snapshots);
+        .def_readonly("snapshots",   &QuenchResult::snapshots);
 
-    // ─── Phase 5 types: causal-order comparison ─────────────────────────
+    // ─── Phase 5 data classes ───────────────────────────────────────────
     py::class_<LabelSpacetime>(m, "LabelSpacetime",
-            R"doc(One label in a (cut, time) spacetime.
-
-Used as a node in the Phase 5 causal-comparison posets. Carries the
-contiguous interval label, the snapshot index it belongs to, and the
-physical time of that snapshot.
-
-Attributes
-----------
-cutIdx : int
-    Index of the cut in the snapshot's spectra/intervals list.
-tIdx : int
-    Index of the snapshot in the QuenchResult's snapshot list.
-intervalI, intervalJ : int
-    The contiguous interval [intervalI, intervalJ] (1-based).
-time : float
-    Physical time of the snapshot.
-)doc")
-        .def_readonly("cutIdx",     &LabelSpacetime::cutIdx)
-        .def_readonly("tIdx",       &LabelSpacetime::tIdx)
-        .def_readonly("intervalI",  &LabelSpacetime::intervalI)
-        .def_readonly("intervalJ",  &LabelSpacetime::intervalJ)
-        .def_readonly("time",        &LabelSpacetime::time);
+            R"doc(One label in a (cut, time) spacetime.)doc")
+        .def_readonly("cutIdx",    &LabelSpacetime::cutIdx)
+        .def_readonly("tIdx",      &LabelSpacetime::tIdx)
+        .def_readonly("intervalI", &LabelSpacetime::intervalI)
+        .def_readonly("intervalJ", &LabelSpacetime::intervalJ)
+        .def_readonly("time",      &LabelSpacetime::time);
 
     py::class_<CausalOrders>(m, "CausalOrders",
             R"doc(Three Hasse-cover posets on a shared (cut, time) label set.
 
-Attributes
-----------
-labels : list[LabelSpacetime]
-    The shared node set. ``labels[k]`` is node k.
-maj : Poset
-    Strict-majorization order from Phase 3, applied across cuts and times.
-lr : Poset
-    Lieb-Robinson cone: (a, b) iff time_a < time_b and the
-    interval-distance is ≤ vLr · (time_b - time_a).
-cs : Poset
-    Causet order. On the regular chain (Phase 5), this is just the
-    time-only order: (a, b) iff t_idx_a < t_idx_b.
+Build via :meth:`CausalOrders.fromSnapshots` (which delegates to the
+underlying SchwingerQuench pipeline; most users go through
+:meth:`SchwingerQuench.compareCausalOrders` instead).
 )doc")
         .def_readonly("labels", &CausalOrders::labels)
         .def_readonly("maj",    &CausalOrders::maj)
         .def_readonly("lr",     &CausalOrders::lr)
-        .def_readonly("cs",     &CausalOrders::cs);
+        .def_readonly("cs",     &CausalOrders::cs)
+        .def_static("fromSnapshots",
+            [](std::vector<TDVPSnapshot> const& snapshots,
+               double vLr,
+               MajorizationPredicate const* predicate) {
+                return CausalOrders::fromSnapshots(snapshots, vLr, predicate);
+            },
+            py::arg("snapshots"), py::arg("vLr"), py::arg("predicate") = nullptr,
+            R"doc(Build the three orders from a list of TDVP snapshots.)doc");
 
     py::class_<OrderAgreement>(m, "OrderAgreement",
             R"doc(Pairwise agreement statistics between two posets.
 
 Counted over unordered pairs (i, j) with i < j:
+* concordant — both orders relate the pair, in the same direction.
+* discordant — both orders relate the pair, in opposite directions.
+* only_a / only_b — exactly one order relates the pair.
 
-* "comparable in P" — transitive closure of P relates i to j.
-* "concordant" — both posets relate the pair, in the same direction.
-* "discordant" — both posets relate the pair, in opposite directions.
-* "only_a" / "only_b" — one poset relates the pair, the other does not.
-
-The five categories (concordant, discordant, only_a, only_b, neither)
-partition the C(nLabels, 2) unordered pairs.
-
-The strong-falsification probe (quantum-methodology.md §1.2 #1) reads
-off ``nOnlyA`` when ``(a, b) = (≼_maj, ≼_LR)``: it's the count of
-majorization-related pairs whose endpoints lie outside the Lieb–
-Robinson cone.
-
-Attributes
-----------
-kendallTau : float
-    (nConcordant - nDiscordant) / nComparableBoth, in [-1, 1].
-    1 = perfect agreement; -1 = perfect disagreement.
-discordantFraction : float
-    nDiscordant / nComparableBoth, in [0, 1].
-hasseEditDistance : float
-    |E_a △ E_b| / |E_a ∪ E_b| — symmetric difference of cover edges
-    normalized by their union size, in [0, 1].
-nConcordant, nDiscordant, nComparableBoth : int
-nOnlyA, nOnlyB : int
-    Pairs related by exactly one of the two posets.
+Build via :meth:`Majorization.agreement(a, b, n_labels)`.
 )doc")
         .def_readonly("kendallTau",         &OrderAgreement::kendallTau)
         .def_readonly("discordantFraction", &OrderAgreement::discordantFraction)
-        .def_readonly("hasseEditDistance", &OrderAgreement::hasseEditDistance)
+        .def_readonly("hasseEditDistance",  &OrderAgreement::hasseEditDistance)
         .def_readonly("nConcordant",        &OrderAgreement::nConcordant)
         .def_readonly("nDiscordant",        &OrderAgreement::nDiscordant)
-        .def_readonly("nComparableBoth",   &OrderAgreement::nComparableBoth)
-        .def_readonly("nOnlyA",            &OrderAgreement::nOnlyA)
-        .def_readonly("nOnlyB",            &OrderAgreement::nOnlyB);
+        .def_readonly("nComparableBoth",    &OrderAgreement::nComparableBoth)
+        .def_readonly("nOnlyA",             &OrderAgreement::nOnlyA)
+        .def_readonly("nOnlyB",             &OrderAgreement::nOnlyB);
 
     py::class_<CausalComparisonReport>(m, "CausalComparisonReport",
             R"doc(Pairwise agreement statistics across all three Phase 5 orders.
 
-Attributes
-----------
-majVsLr, majVsCs, lrVsCs : OrderAgreement
-    Pairwise comparisons of the three orders.
-nLabels : int
-    Total number of (cut, time) labels.
-nSnapshots : int
-    Number of TDVP snapshots used.
-vLr : float
-    Lieb-Robinson velocity used to build ≼_LR.
+Build via :meth:`SchwingerQuench.compareCausalOrders`.
 )doc")
         .def_readonly("majVsLr",    &CausalComparisonReport::majVsLr)
         .def_readonly("majVsCs",    &CausalComparisonReport::majVsCs)
@@ -780,269 +430,72 @@ vLr : float
         .def_readonly("nLabels",    &CausalComparisonReport::nLabels)
         .def_readonly("nSnapshots", &CausalComparisonReport::nSnapshots)
         .def_readonly("vLr",        &CausalComparisonReport::vLr)
-        .def_readonly("majKind",    &CausalComparisonReport::majKind,
-                       "MajorizationPredicate::name() of the variant used for ≼_maj.");
+        .def_readonly("majKind",    &CausalComparisonReport::majKind);
 
-    m.def("compareOrders",
-          &compareOrders,
-          py::arg("a"), py::arg("b"), py::arg("nLabels"),
-          R"doc(Pairwise agreement statistics between two Posets on the same
-label set of size nLabels. Returns an :class:`OrderAgreement`.
-)doc");
-
-    m.def("computeCausalComparison",
-          py::overload_cast<TDVPConfig const&, double>(&computeCausalComparison),
-          py::arg("config"), py::arg("vLr") = 1.0,
-          R"doc(End-to-end Phase 5 pipeline with classical majorization.
-
-Convenience overload that uses :class:`StandardMajorization` (the
-Nielsen 1999 classical order, eq. 1) for ≼_maj. Runs
-``runQqbarQuench`` (forcing ``recordSpectra = True``), then builds
-the three partial orders on the (cut, time) label set:
-
-* ≼_maj — classical majorization on Schmidt spectra (across cuts AND times).
-* ≼_LR — Lieb-Robinson cone: a ≺ b iff time_a < time_b and interval
-  distance ≤ vLr · (time_b - time_a).
-* ≼_cs — causet order; on the regular chain (Phase 5 scope) this is
-  the time-only order. Phase 6 replaces the lattice with a non-trivial
-  causet, at which point ≼_cs gains within-time-slice structure.
-
-Pairwise agreement is reported as Kendall-τ, the discordant-pair
-fraction, and the Hasse-graph edit distance.
-
-Parameters
-----------
-config : TDVPConfig
-    Same as :func:`runQqbarQuench`. ``recordSpectra`` will be forced
-    to ``True``.
-vLr : float, optional
-    Lieb-Robinson velocity in lattice units (sites / time). Default 1.0
-    matches the free-fermion group velocity for our hopping coefficient.
-
-Returns
--------
-CausalComparisonReport
-    With ``majKind = 'standard'``.
-)doc");
-
-    m.def("computeCausalComparison",
-          py::overload_cast<TDVPConfig const&, double,
-                            MajorizationPredicate const&>(&computeCausalComparison),
-          py::arg("config"), py::arg("vLr"), py::arg("predicate"),
-          R"doc(End-to-end Phase 5 pipeline with an explicit MajorizationPredicate variant.
-
-Same as the classical overload, but ≼_maj is built using ``predicate``
-rather than the default :class:`StandardMajorization`. The
-``CausalComparisonReport.majKind`` field records ``predicate.name()``
-so reports are self-describing.
-
-Parameters
-----------
-config : TDVPConfig
-    Same as :func:`runQqbarQuench`. ``recordSpectra`` will be forced
-    to ``True``.
-vLr : float
-    Lieb-Robinson velocity in lattice units (sites / time).
-predicate : MajorizationPredicate
-    Any concrete subclass instance:
-    :class:`StandardMajorization`,
-    :class:`LogConcaveMajorization`, or
-    :class:`PeakRadialMajorization`.
-
-Returns
--------
-CausalComparisonReport
-    With ``majKind = predicate.name()``.
-)doc");
-
-    m.def("runQqbarQuench",
-          &runQqbarQuench,
-          py::arg("config"),
-          R"doc(Run the Phase 4 q-qbar quench + TDVP pipeline.
-
-Steps:
-
-1. Build the Schwinger MPO and run DMRG to the ground state (Phase 2).
-2. Apply the q-qbar quench σ⁻_{i0} σ⁺_{i0+d} (Phase 4 / Buyens 2014
-   string state) to flip two spins on opposite sublattices.
-3. Record the post-quench observables at t = 0.
-4. Step TDVP forward by ``config.dt`` for ``round(config.T / config.dt)``
-   steps. Record observables every ``config.snapshotEvery`` steps.
-5. Return a :class:`QuenchResult` containing the GS diagnostics and
-   the snapshot list.
-
-Parameters
-----------
-config : TDVPConfig
-    Hamiltonian + quench + TDVP settings. ``config.N`` ≥ 2,
-    ``config.a > 0``, ``config.dt > 0``, ``config.T > 0``. With
-    ``config.quenchEnforceParity = True`` (default) ``config.i0``
-    must be odd and ``config.d`` must be odd as well.
-
-Returns
--------
-QuenchResult
-    Ground-state diagnostics + snapshot list.
-
-Examples
---------
->>> from tessera.quantum import TDVPConfig, runQqbarQuench
->>> cfg = TDVPConfig()
->>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0          # heavy-quark limit
->>> cfg.i0 = 5; cfg.d = 5                           # odd-odd parity
->>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshotEvery = 5
->>> result = runQqbarQuench(cfg)                  # doctest: +SKIP
->>> result.snapshots[0].lProfile[:3]               # doctest: +SKIP
-[-1.0, -0.0, -1.0]
-)doc");
-
-    m.def("computeGroundStateMajorization",
-          &computeGroundStateMajorization,
-          py::arg("config"), py::arg("tol") = 1e-12,
-          R"doc(Run DMRG ground-state, then extract Schmidt spectra and poset.
-
-Single-shot pipeline that performs all three Phase 3 steps in one C++
-call:
-
-1. Build the Schwinger MPO from ``config`` and run DMRG (same as
-   :func:`computeGroundState`).
-2. Compute the Schmidt spectrum of every contiguous bipartition of the
-   optimized MPS, excluding the trivial full-chain cut.
-3. Build the majorization poset on those spectra (Hasse cover edges
-   only).
-
-Parameters
-----------
-config : QuantumConfig
-    Hamiltonian + DMRG parameters; see :func:`computeGroundState`.
-tol : float, optional
-    Slack for the majorization comparisons used to build the poset.
-
-Returns
--------
-GroundStateMajorizationResult
-    Ground-state diagnostics, Schmidt spectra, and the Hasse poset.
-
-Examples
---------
->>> from tessera.quantum import QuantumConfig, computeGroundStateMajorization
->>> cfg = QuantumConfig()
->>> cfg.N = 6; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
->>> cfg.maxBondDim = 32; cfg.nSweeps = 8
->>> r = computeGroundStateMajorization(cfg)
->>> r.spectra.N
-6
->>> all(abs(sum(s) - 1.0) < 1e-10 for s in r.spectra.spectra)
-True
-)doc");
-
+    // ─── Phase 6 data classes ───────────────────────────────────────────
     py::class_<CausetChain>(m, "CausetChain",
             R"doc(Phase 6 — Spacetime-derived chain layout for the Schwinger MPO.
 
-A flattened mapping from a :class:`tessera._tessera.Spacetime` (or a future
-:class:`tessera.Causet`) to a 1D lattice with hopping pairs, plus the
-inherited Hasse-cover :class:`Poset` on the lattice sites.
-
-For the simplest case where every time slice has a single vertex, this
-collapses to a regular chain and ``hoppingPairs == [(0,1), (1,2), …]``.
-For non-trivial antichains the chain can still hold the state — but
-multi-site antichains may produce hopping pairs with stride > 1, which
-is the trigger for moving to a tree tensor network in the longer-term
-plan (PLAN.md §6).
+Build via :meth:`Causet.chainFrom`.
 
 Attributes
 ----------
 nSites : int
-    Total number of lattice sites = sum over slices of antichain size.
+    Total number of lattice sites.
 times : list[int]
-    Sorted ascending list of integer time slices present in the
-    Spacetime.
+    Sorted ascending list of integer time slices.
 antichains : list[list[int]]
-    ``antichains[s]`` is the ascending-ID list of Spacetime vertex IDs
-    at ``times[s]``.
+    ``antichains[s]`` is the ascending-ID list of vertex IDs at
+    ``times[s]``.
 vertexIds : list[int]
-    Flat lattice site → Spacetime vertex ID. Concatenation of all
-    antichains in time order.
+    Flat lattice site → Spacetime vertex ID.
 hoppingPairs : list[tuple[int, int]]
-    Pairs ``(i, j)`` with ``i < j`` of flat lattice sites coupled by
-    timelike causet edges that cross exactly one slice boundary.
+    Pairs ``(i, j)`` of flat lattice sites coupled by adjacent-slice
+    timelike causet edges.
 partialOrder : Poset
-    Hasse cover Poset on the nSites label set, inherited via
-    :func:`tessera._tessera.Poset.fromSpacetime`.
+    Hasse cover Poset on the nSites label set.
 )doc")
-        .def_readonly("nSites",      &CausetChain::nSites)
+        .def_readonly("nSites",       &CausetChain::nSites)
         .def_readonly("times",        &CausetChain::times)
         .def_readonly("antichains",   &CausetChain::antichains)
-        .def_readonly("vertexIds",   &CausetChain::vertexIds)
-        .def_readonly("hoppingPairs",&CausetChain::hoppingPairs)
-        .def_readonly("partialOrder",&CausetChain::partialOrder)
+        .def_readonly("vertexIds",    &CausetChain::vertexIds)
+        .def_readonly("hoppingPairs", &CausetChain::hoppingPairs)
+        .def_readonly("partialOrder", &CausetChain::partialOrder)
         .def("__repr__", [](CausetChain const& c) {
             return "CausetChain(nSites=" + std::to_string(c.nSites) +
                    ", times=" + std::to_string(c.times.size()) +
                    ", hops=" + std::to_string(c.hoppingPairs.size()) + ")";
         });
 
-    // Spacetime is bound in the top-level _tessera module (src/bindings.cpp),
-    // not here, so pybind11 can't statically deduce its descriptor for a
-    // raw Spacetime const& parameter. Take it through py::object and cast
-    // at runtime — the registry lookup resolves to the same class object.
-    m.def("extractCausetChain", [](py::object spacetime_obj) {
-              auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
-              return extractCausetChain(*st);
-          }, py::arg("spacetime"),
-          R"doc(Phase 6 — extract a chain-of-antichains adapter from a Spacetime.
+    // ─── Coarse-grained workflow classes ────────────────────────────────
 
-Walks the Spacetime's vertex list, groups vertices by integer time slice
-(``Vertex.getTime()`` truncated to int), and produces a
-:class:`CausetChain` describing:
+    py::class_<SchwingerModel>(m, "SchwingerModel",
+            R"doc(Schwinger-model DMRG ground-state pipeline.
 
-* the antichain layering (one antichain per time slice, ordered by
-  ascending Spacetime vertex ID),
-* the flat lattice ↔ Spacetime ID mapping,
-* the adjacent-slice timelike-edge hopping pairs (with squaredLength
-  < 0 and time-slice index difference exactly 1; non-cover edges
-  spanning multiple slices are skipped),
-* the Hasse cover :class:`Poset` on the flat lattice sites.
+Coarse-grained interface for the Phase 2/3 ground-state workflow:
+bundle a :class:`QuantumConfig` and call :meth:`solve` for the bare
+DMRG diagnostics or :meth:`solveWithMajorization` for the full Schmidt
++ majorization-poset bundle.
 
-This is the data shape the Phase 6 causet-embedded Schwinger MPO
-construction would consume to replace the regular 1D lattice. For the
-trivial case where every time slice has a single vertex,
-``hoppingPairs`` reduces to ``[(0, 1), (1, 2), …]`` and the existing
-:func:`computeGroundState` runs unchanged on top.
+The model is stateless beyond its config — every method runs the
+underlying ITensor pipeline from scratch.
 
-Parameters
-----------
-spacetime : tessera._tessera.Spacetime
-    Source spacetime. Vertices must have at least 1D coordinates so
-    that ``Vertex.getTime()`` is well-defined.
-
-Returns
--------
-CausetChain
-)doc");
-
-    m.def("computeGroundState", &computeGroundState,
-          py::arg("config"),
-          R"doc(Run DMRG to the Schwinger-model ground state.
-
-Builds the MPO Hamiltonian from ``config`` (using the dimensional H
-described in the module docstring), initialises a Néel |↑↓↑↓…⟩ MPS
-in the Sz = 0 sector, and runs ITensor's two-site DMRG with the
-sweep schedule encoded in ``config``. Returns a
-:class:`GroundStateResult` with the converged energy plus structural
-diagnostics.
-
-The DMRG schedule ramps the bond-dim cap (20 → 40 → 80 → max) over
-the first sweeps so early iterations don't commit truncation errors
-that later sweeps have to undo, and injects a small noise term
-(1e-7 → 1e-8 → 0) in the first two sweeps to escape local minima.
-
-Parameters
-----------
-config : QuantumConfig
-    Hamiltonian parameters and DMRG sweep settings. ``config.N`` must
-    be ≥ 2; ``config.a`` must be positive. Other fields have working
-    defaults.
+Examples
+--------
+>>> from tessera.quantum import QuantumConfig, SchwingerModel
+>>> cfg = QuantumConfig()
+>>> cfg.N = 4; cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
+>>> cfg.maxBondDim = 32; cfg.nSweeps = 8
+>>> r = SchwingerModel(cfg).solve()
+>>> abs(r.operatorEnergy - (-1.738676174)) < 1e-8
+True
+)doc")
+        .def(py::init<QuantumConfig>(), py::arg("config"))
+        .def_property_readonly("config",
+            [](SchwingerModel const& m) { return m.config(); },
+            "The bound QuantumConfig (read-only).")
+        .def("solve", &SchwingerModel::solve,
+            R"doc(Run DMRG to the Schwinger ground state.
 
 Returns
 -------
@@ -1052,40 +505,147 @@ GroundStateResult
 Raises
 ------
 RuntimeError or ValueError
-    If ``config.N < 2`` or ``config.a <= 0`` (validation forwarded
-    from the underlying SchwingerMPO builder).
+    If config.N < 2 or config.a <= 0.
+)doc")
+        .def("solveWithMajorization",
+            &SchwingerModel::solveWithMajorization,
+            py::arg("tol") = 1e-12,
+            R"doc(Run DMRG, then extract Schmidt spectra and majorization poset.
+
+Single-shot Phase 3 pipeline:
+1. DMRG ground state of the Schwinger MPO.
+2. Schmidt spectrum of every contiguous bipartition (excluding the
+   trivial full-chain cut).
+3. Majorization poset on those spectra (Hasse cover edges only).
+
+Parameters
+----------
+tol : float, optional
+    Slack for the majorization comparisons. Default 1e-12.
+
+Returns
+-------
+GroundStateMajorizationResult
+)doc");
+
+    py::class_<SchwingerQuench>(m, "SchwingerQuench",
+            R"doc(Schwinger-model q-qbar quench + TDVP pipeline.
+
+Coarse-grained interface for the Phase 4/5 dynamics workflow: bundle
+a :class:`TDVPConfig` and call :meth:`evolve` for the snapshot
+trajectory or :meth:`compareCausalOrders` for the Phase 5 causal-order
+comparison. The model is stateless beyond its config.
 
 Examples
 --------
-Reproduce the Phase 1 N=4, m/g=0 reference value::
+>>> from tessera.quantum import TDVPConfig, SchwingerQuench
+>>> cfg = TDVPConfig()
+>>> cfg.N = 14; cfg.m = 20.0; cfg.g = 1.0
+>>> cfg.i0 = 5; cfg.d = 5
+>>> cfg.dt = 0.05; cfg.T = 5.0; cfg.snapshotEvery = 5
+>>> r = SchwingerQuench(cfg).evolve()  # doctest: +SKIP
+>>> r.snapshots[0].lProfile[:3]        # doctest: +SKIP
+[-1.0, -0.0, -0.0]
+)doc")
+        .def(py::init<TDVPConfig>(), py::arg("config"))
+        .def_property_readonly("config",
+            [](SchwingerQuench const& q) { return q.config(); },
+            "The bound TDVPConfig (read-only).")
+        .def("evolve", &SchwingerQuench::evolve,
+            R"doc(Run the full DMRG → quench → TDVP pipeline.
 
-    >>> from tessera.quantum import QuantumConfig, computeGroundState
-    >>> cfg = QuantumConfig()
-    >>> cfg.N = 4
-    >>> cfg.a = 1.0; cfg.g = 1.0; cfg.m = 0.0; cfg.L0 = 0.0
-    >>> cfg.maxBondDim = 32; cfg.nSweeps = 8
-    >>> r = computeGroundState(cfg)
-    >>> abs(r.operatorEnergy - (-1.738676174)) < 1e-8
-    True
+Returns
+-------
+QuenchResult
+    Ground-state diagnostics + snapshot list.
+)doc")
+        .def("compareCausalOrders",
+            [](SchwingerQuench const& q,
+               double vLr,
+               MajorizationPredicate const* predicate) {
+                return q.compareCausalOrders(vLr, predicate);
+            },
+            py::arg("vLr") = 1.0,
+            py::arg("predicate") = nullptr,
+            R"doc(End-to-end Phase 5 causal-order comparison.
 
-Scan the bond-dim cap to see variational descent::
+Runs :meth:`evolve` (forcing recordSpectra=True), builds three
+partial orders on the (cut, time) label set:
 
-    >>> energies = []
-    >>> for D in (4, 8, 16, 32):
-    ...     cfg.maxBondDim = D
-    ...     energies.append(computeGroundState(cfg).operatorEnergy)
-    >>> all(energies[i] >= energies[i+1] - 1e-10 for i in range(3))
-    True
+* ≼_maj — strict-majorization on Schmidt spectra (across cuts AND times).
+* ≼_LR  — Lieb-Robinson cone: dist(A, B) ≤ vLr · (t_B - t_A).
+* ≼_cs  — causet (time-only on regular chain).
 
-See Also
---------
-QuantumConfig : Input configuration struct.
-GroundStateResult : Output result struct.
+Pairwise agreement is reported as Kendall-τ, the discordant-pair
+fraction, and the Hasse-graph edit distance.
 
-Notes
------
-For N ≳ 30 expect the run to take seconds; for N ≳ 100 with bondDim
-≳ 100, tens of seconds. The CPU work is in BLAS/LAPACK calls inside
-ITensor — set OMP_NUM_THREADS to use multiple cores.
+Parameters
+----------
+vLr : float, optional
+    Lieb-Robinson velocity in lattice units. Default 1.0.
+predicate : MajorizationPredicate, optional
+    Majorization variant for ≼_maj. None = StandardMajorization (default).
+
+Returns
+-------
+CausalComparisonReport
+)doc");
+
+    py::class_<Majorization>(m, "Majorization",
+            R"doc(Static utility for majorization-poset construction and pairwise
+order-agreement statistics. Not instantiable; call methods on the class.
+
+>>> from tessera.quantum import Majorization, StandardMajorization
+>>> p = Majorization.posetOf([[1.0], [0.5, 0.5], [1/3]*3])
+>>> sorted(p.covers)
+[(0, 1), (1, 2)]
+)doc")
+        // Two static overloads of `posetOf` (one with predicate, one with
+        // tol). Spelled out explicitly because pybind11 needs help selecting
+        // between them.
+        .def_static("posetOf",
+            [](std::vector<std::vector<double>> const& spectra,
+               MajorizationPredicate const& predicate) {
+                return Majorization::posetOf(spectra, predicate);
+            },
+            py::arg("spectra"), py::arg("predicate"),
+            R"doc(Build the majorization poset under an explicit predicate.)doc")
+        .def_static("posetOf",
+            [](std::vector<std::vector<double>> const& spectra, double tol) {
+                return Majorization::posetOf(spectra, tol);
+            },
+            py::arg("spectra"), py::arg("tol") = 1e-12,
+            R"doc(Build the classical {N1999} majorization poset at the given tolerance.)doc")
+        .def_static("agreement",
+            &Majorization::agreement,
+            py::arg("a"), py::arg("b"), py::arg("nLabels"),
+            R"doc(Pairwise agreement statistics between two Posets on the same
+label set of size nLabels. Returns an :class:`OrderAgreement`.
+)doc");
+
+    py::class_<Causet>(m, "Causet",
+            R"doc(Static utility for tessera.Spacetime → causet adapters
+(Phase 6). Not instantiable; call methods on the class.
+)doc")
+        .def_static("chainFrom",
+            [](py::object spacetime_obj) {
+                auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
+                return Causet::chainFrom(*st);
+            }, py::arg("spacetime"),
+            R"doc(Extract a chain-of-antichains adapter from a Spacetime.
+
+Walks the Spacetime's vertex list, groups vertices by integer time
+slice, and packages the antichain layering, the flat-lattice ↔
+Spacetime ID mapping, the adjacent-slice timelike-edge hopping pairs,
+and the inherited Hasse cover :class:`Poset`.
+
+Parameters
+----------
+spacetime : tessera.Spacetime
+    Source spacetime.
+
+Returns
+-------
+CausetChain
 )doc");
 }

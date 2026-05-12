@@ -1,6 +1,6 @@
-// Phase 6.0 acceptance — `buildSchwingerMpoChain` reproduces
-// `buildSchwingerMpo` exactly on a chain causet (one vertex per
-// time slice).
+// Phase 6.0 acceptance — `SchwingerHamiltonian::mpoChain` reproduces
+// `SchwingerHamiltonian::mpo` exactly on a chain causet (one vertex
+// per time slice).
 //
 // The test does two equivalence checks plus a robustness probe:
 //
@@ -8,10 +8,10 @@
 //       The chain MPO ground-state energy should equal the standard
 //       MPO's to ~1e-12 (DMRG-side numerical noise).
 //
-//   (2) Spacetime-derived chain causet via extractCausetChain. We
-//       build a 1+1D toy spacetime where each time slice has a single
-//       vertex linked to the next slice's vertex by a timelike edge.
-//       extractCausetChain returns hoppingPairs = [(0,1), (1,2), …]
+//   (2) Spacetime-derived chain causet via Causet::chainFrom. We build
+//       a 1+1D toy spacetime where each time slice has a single vertex
+//       linked to the next slice's vertex by a timelike edge.
+//       Causet::chainFrom returns hoppingPairs = [(0,1), (1,2), …]
 //       and the MPO from those pairs should ALSO equal the standard
 //       MPO.
 //
@@ -95,10 +95,11 @@ bool acceptance_synthetic_chain_pairs() {
     SchwingerParams p;
     p.N = 8; p.a = 1.0; p.g = 1.0; p.m = 0.5; p.L0 = 0.0;
 
-    auto std_mpo = buildSchwingerMpo(p);
+    SchwingerHamiltonian H{p};
+    auto std_mpo = H.mpo();
     std::vector<std::pair<int, int>> nn_pairs;
     for (int n = 0; n < p.N - 1; ++n) nn_pairs.emplace_back(n, n + 1);
-    auto chain_mpo = buildSchwingerMpoChain(p, nn_pairs);
+    auto chain_mpo = H.mpoChain(nn_pairs);
 
     const double E_std   = dmrg_gs_energy(std_mpo);
     const double E_chain = dmrg_gs_energy(chain_mpo);
@@ -135,7 +136,7 @@ bool acceptance_spacetime_chain_extraction() {
                       -1.0);   // squaredLength < 0 ⇒ timelike
     }
 
-    auto chain = tessera::quantum::extractCausetChain(st);
+    auto chain = tessera::quantum::Causet::chainFrom(st);
     if (chain.nSites != N) {
         std::cout << "  FAIL: chain.nSites=" << chain.nSites
                   << " expected " << N << "\n";
@@ -145,8 +146,9 @@ bool acceptance_spacetime_chain_extraction() {
     SchwingerParams p;
     p.N = chain.nSites; p.a = 1.0; p.g = 1.0; p.m = 0.5; p.L0 = 0.0;
 
-    auto std_mpo   = buildSchwingerMpo(p);
-    auto chain_mpo = buildSchwingerMpoChain(p, chain.hoppingPairs);
+    SchwingerHamiltonian H{p};
+    auto std_mpo   = H.mpo();
+    auto chain_mpo = H.mpoChain(chain.hoppingPairs);
 
     const double E_std   = dmrg_gs_energy(std_mpo);
     const double E_chain = dmrg_gs_energy(chain_mpo);
@@ -169,8 +171,9 @@ bool acceptance_dense_agreement() {
 
     std::vector<std::pair<int, int>> nn_pairs;
     for (int n = 0; n < p.N - 1; ++n) nn_pairs.emplace_back(n, n + 1);
-    auto chain_mpo = buildSchwingerMpoChain(p, nn_pairs);
-    auto dense     = buildSchwingerDense(p);
+    SchwingerHamiltonian H{p};
+    auto chain_mpo = H.mpoChain(nn_pairs);
+    auto dense     = H.denseMatrix();
 
     const double E_chain_op = dmrg_gs_energy(chain_mpo);
     const double E_chain    = E_chain_op + chain_mpo.constant;
@@ -194,10 +197,12 @@ bool acceptance_rejects_invalid_pairs() {
 
     bool ok = true;
 
+    SchwingerHamiltonian H{p};
+
     // Out-of-range index.
     try {
         std::vector<std::pair<int, int>> bad{{0, 1}, {1, 99}};
-        buildSchwingerMpoChain(p, bad);
+        [[maybe_unused]] auto _ = H.mpoChain(bad);
         std::cout << "  FAIL: out-of-range index NOT rejected\n";
         ok = false;
     } catch (std::invalid_argument const&) { /* expected */ }
@@ -205,7 +210,7 @@ bool acceptance_rejects_invalid_pairs() {
     // Self-loop.
     try {
         std::vector<std::pair<int, int>> bad{{0, 1}, {2, 2}};
-        buildSchwingerMpoChain(p, bad);
+        [[maybe_unused]] auto _ = H.mpoChain(bad);
         std::cout << "  FAIL: self-loop NOT rejected\n";
         ok = false;
     } catch (std::invalid_argument const&) { /* expected */ }

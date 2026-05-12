@@ -1,7 +1,10 @@
-// Implementation of runQqbarQuench (Phase 4 end-to-end pipeline).
-// See include/quantum/tdvp_runner.hpp for the architectural narrative.
+// Implementation of SchwingerQuench — the q-qbar-quench + TDVP pipeline
+// (Phase 4) and the causal-order comparison (Phase 5). See
+// include/quantum/tdvp_runner.hpp for the architectural narrative.
 
 #include "quantum/tdvp_runner.hpp"
+
+#include "quantum/causal_compare.hpp"
 #include "quantum/quench.hpp"
 #include "quantum/schwinger_model.hpp"
 
@@ -21,9 +24,7 @@ namespace {
 // ⟨σ^z_n⟩ for every site n = 1..N. Uses the standard ITensor pattern of
 // orthogonalising at site n and contracting bra × Sz × ket; multiplies
 // the result by 2 to convert from ITensor's "Sz" (= ½ σ^z) to bare σ^z.
-// Result is real because σ^z is Hermitian and the wavefunction stays
-// normalised under TDVP (we drop the imaginary noise via .real()).
-std::vector<double> sigma_z_profile(itensor::MPS const& psi_in,
+std::vector<double> sigmaZProfile(itensor::MPS const& psi_in,
                                     itensor::SpinHalf const& sites) {
     using namespace itensor;
     auto psi = psi_in;
@@ -43,8 +44,7 @@ std::vector<double> sigma_z_profile(itensor::MPS const& psi_in,
 // ⟨L_n⟩ for every link n = 1..N-1 from the σ^z profile. Closed form:
 //   ⟨L_n⟩  =  c_n  -  ½ Σ_{k=1..n} ⟨σ^z_k⟩
 // with c_n = L0 + ((-1)^n - 1)/4 (matches schwinger_model.cpp).
-std::vector<double> L_profile_from_sz(std::vector<double> const& sz,
-                                      double L0) {
+std::vector<double> lProfileFromSz(std::vector<double> const& sz, double L0) {
     const int N = static_cast<int>(sz.size());
     std::vector<double> L(static_cast<std::size_t>(std::max(N - 1, 0)), 0.0);
     double cum = 0.0;
@@ -56,12 +56,12 @@ std::vector<double> L_profile_from_sz(std::vector<double> const& sz,
     return L;
 }
 
-double compute_energy(itensor::MPS const& psi, itensor::MPO const& H,
-                      double constant_shift) {
-    return std::real(itensor::innerC(psi, H, psi)) + constant_shift;
+double computeEnergy(itensor::MPS const& psi, itensor::MPO const& H,
+                     double constantShift) {
+    return std::real(itensor::innerC(psi, H, psi)) + constantShift;
 }
 
-TDVPSnapshot make_snapshot(double t,
+TDVPSnapshot makeSnapshot(double t,
                            itensor::MPS const& psi,
                            SchwingerMPO const& sm,
                            SchwingerParams const& p,
@@ -69,45 +69,41 @@ TDVPSnapshot make_snapshot(double t,
                            bool recordPoset) {
     TDVPSnapshot snap;
     snap.time      = t;
-    snap.energy    = compute_energy(psi, sm.H, sm.constant);
+    snap.energy    = computeEnergy(psi, sm.H, sm.constant);
     snap.bondDim  = itensor::maxLinkDim(psi);
-    snap.zProfile = sigma_z_profile(psi, sm.sites);
-    snap.lProfile = L_profile_from_sz(snap.zProfile, p.L0);
+    snap.zProfile = sigmaZProfile(psi, sm.sites);
+    snap.lProfile = lProfileFromSz(snap.zProfile, p.L0);
     if (recordSpectra || recordPoset) {
-        snap.spectra = allContiguousSpectra(psi);
+        snap.spectra = Schmidt::allOf(psi);
         if (recordPoset) {
-            snap.poset = majorizationPoset(snap.spectra.spectra);
+            snap.poset = Majorization::posetOf(snap.spectra.spectra);
         }
     }
     return snap;
 }
 
-// ─── DMRG / TDVP sweep schedules ──────────────────────────────────────────
-
-itensor::Sweeps make_dmrg_sweeps(int max_bond, int nSweeps,
-                                 int krylov, double cutoff) {
+itensor::Sweeps makeDmrgSweeps(int maxBond, int nSweeps,
+                                int krylov, double cutoff) {
     auto sweeps = itensor::Sweeps(nSweeps);
-    sweeps.maxdim() = std::min(20, max_bond),
-                      std::min(40, max_bond),
-                      std::min(80, max_bond),
-                      max_bond, max_bond;
+    sweeps.maxdim() = std::min(20, maxBond),
+                      std::min(40, maxBond),
+                      std::min(80, maxBond),
+                      maxBond, maxBond;
     sweeps.cutoff() = cutoff;
     sweeps.niter()  = krylov;
     sweeps.noise()  = 1e-7, 1e-8, 0.0;
     return sweeps;
 }
 
-itensor::Sweeps make_tdvp_sweeps(int max_bond, int krylov, double cutoff) {
-    // 1 sweep per call to tdvp() — we drive the schedule externally by
-    // calling tdvp() once per Δt step.
+itensor::Sweeps makeTdvpSweeps(int maxBond, int krylov, double cutoff) {
     auto sweeps = itensor::Sweeps(1);
-    sweeps.maxdim() = max_bond;
+    sweeps.maxdim() = maxBond;
     sweeps.cutoff() = cutoff;
     sweeps.niter()  = krylov;
     return sweeps;
 }
 
-itensor::MPS neel_init(itensor::SpinHalf const& sites, int N) {
+itensor::MPS neelInit(itensor::SpinHalf const& sites, int N) {
     auto state = itensor::InitState(sites);
     for (int i = 1; i <= N; ++i) {
         state.set(i, (i % 2 == 1) ? "Up" : "Dn");
@@ -117,69 +113,97 @@ itensor::MPS neel_init(itensor::SpinHalf const& sites, int N) {
 
 } // namespace
 
-QuenchResult runQqbarQuench(TDVPConfig const& cfg) {
-    // (1) Build the Schwinger MPO and run DMRG to the GS — same setup
-    // as computeGroundState(), reproduced here so the runner is self-
-    // contained.
+SchwingerQuench::SchwingerQuench(TDVPConfig config) noexcept
+    : config_(config) {}
+
+QuenchResult SchwingerQuench::evolve() const {
+    auto const& cfg = config_;
+
+    // (1) Build the Schwinger MPO and run DMRG to the GS.
     SchwingerParams p;
     p.N = cfg.N; p.a = cfg.a; p.m = cfg.m; p.g = cfg.g; p.L0 = cfg.L0;
 
-    auto sm = buildSchwingerMpo(p, cfg.conserveQns);
-    auto psi0 = neel_init(sm.sites, cfg.N);
-    auto sweeps_dmrg = make_dmrg_sweeps(
+    auto sm = SchwingerHamiltonian{p}.mpo(cfg.conserveQns);
+    auto psi0 = neelInit(sm.sites, cfg.N);
+    auto sweepsDmrg = makeDmrgSweeps(
         cfg.dmrgMaxBondDim, cfg.dmrgNSweeps,
         cfg.dmrgKrylovDim, cfg.dmrgCutoff);
-    auto [E_gs, psi_gs] = itensor::dmrg(
-        sm.H, psi0, sweeps_dmrg,
+    auto [E_gs, psiGs] = itensor::dmrg(
+        sm.H, psi0, sweepsDmrg,
         itensor::Args("Silent", cfg.quiet));
 
     QuenchResult result;
     result.groundState.operatorEnergy = E_gs;
     result.groundState.constant        = sm.constant;
     result.groundState.energy          = E_gs + sm.constant;
-    result.groundState.bondDim        = itensor::maxLinkDim(psi_gs);
+    result.groundState.bondDim        = itensor::maxLinkDim(psiGs);
     result.groundState.truncationErr  = cfg.dmrgCutoff;
 
     // (2) Apply the q-qbar quench (Phase 4 ≈ Buyens 2014 string state).
-    auto psi = applyQqbarQuench(psi_gs, sm.sites, cfg.i0, cfg.d,
-                                  cfg.quenchEnforceParity);
+    auto psi = QqbarQuench{cfg.i0, cfg.d, cfg.quenchEnforceParity}
+                   .apply(psiGs, sm.sites);
 
     // (3) Initial snapshot: t = 0 means "right after the quench, before
     // any TDVP step". Energy here is generally above the GS energy by
     // the quench excitation cost.
-    result.snapshots.push_back(make_snapshot(
+    result.snapshots.push_back(makeSnapshot(
         /*t=*/0.0, psi, sm, p,
         cfg.recordSpectra, cfg.recordPoset));
 
     // (4) TDVP loop. Real-time evolution e^{-i H Δt} corresponds to
     // ITensor's tdvp(...) with the time argument t = -i Δt.
-    auto sweeps_tdvp = make_tdvp_sweeps(
+    auto sweepsTdvp = makeTdvpSweeps(
         cfg.maxBondDim, cfg.krylovDim, cfg.cutoff);
-    const itensor::Cplx t_step{0.0, -cfg.dt};
-    const auto tdvp_args = itensor::Args(
+    const itensor::Cplx tStep{0.0, -cfg.dt};
+    const auto tdvpArgs = itensor::Args(
         "Truncate",     true,
         "DoNormalize",  true,
-        // "Silent" implies Quiet + PrintEigs=false in TDVPWorker (see
-        // third_party/itensor_tdvp/tdvp.h) — needed to suppress the
-        // per-sweep "vN Entropy" diagnostic that "Quiet" alone leaves on.
         "Silent",       cfg.quiet,
-        "NumCenter",    2,        // 2-site TDVP — grows bond dim adaptively
+        "NumCenter",    2,
         "ErrGoal",      1e-7);
 
-    const int n_steps = static_cast<int>(std::round(cfg.T / cfg.dt));
-    for (int step = 1; step <= n_steps; ++step) {
-        itensor::tdvp(psi, sm.H, t_step, sweeps_tdvp, tdvp_args);
-        // Take a snapshot every `snapshotEvery` steps and always at the
-        // very last step so callers see the final state.
-        if (step % cfg.snapshotEvery == 0 || step == n_steps) {
-            const double current_t = step * cfg.dt;
-            result.snapshots.push_back(make_snapshot(
-                current_t, psi, sm, p,
+    const int nSteps = static_cast<int>(std::round(cfg.T / cfg.dt));
+    for (int step = 1; step <= nSteps; ++step) {
+        itensor::tdvp(psi, sm.H, tStep, sweepsTdvp, tdvpArgs);
+        if (step % cfg.snapshotEvery == 0 || step == nSteps) {
+            const double currentT = step * cfg.dt;
+            result.snapshots.push_back(makeSnapshot(
+                currentT, psi, sm, p,
                 cfg.recordSpectra, cfg.recordPoset));
         }
     }
 
     return result;
+}
+
+CausalComparisonReport SchwingerQuench::compareCausalOrders(
+    double vLr,
+    MajorizationPredicate const* predicate) const
+{
+    // Force spectra recording — the cross-time majorization poset needs
+    // them. recordPoset is left off because we build per-time-and-cut
+    // posets ourselves.
+    TDVPConfig cfg = config_;
+    cfg.recordSpectra = true;
+    cfg.recordPoset   = false;
+
+    const auto quench = SchwingerQuench{cfg}.evolve();
+    auto orders = CausalOrders::fromSnapshots(
+        quench.snapshots, vLr, predicate);
+
+    StandardMajorization defaultPredicate{1e-12};
+    MajorizationPredicate const& effectivePredicate =
+        predicate ? *predicate : defaultPredicate;
+
+    CausalComparisonReport report;
+    report.nLabels    = static_cast<int>(orders.labels.size());
+    report.nSnapshots = static_cast<int>(quench.snapshots.size());
+    report.vLr        = vLr;
+    report.majKind    = effectivePredicate.name();
+    report.majVsLr    = Majorization::agreement(orders.maj, orders.lr, report.nLabels);
+    report.majVsCs    = Majorization::agreement(orders.maj, orders.cs, report.nLabels);
+    report.lrVsCs     = Majorization::agreement(orders.lr,  orders.cs, report.nLabels);
+    return report;
 }
 
 } // namespace tessera::quantum

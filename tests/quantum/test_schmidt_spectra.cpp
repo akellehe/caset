@@ -1,5 +1,5 @@
 // Schmidt-spectrum extraction tests on simple, hand-checkable MPSes.
-// Verifies that schmidtSpectrum() and allContiguousSpectra() return
+// Verifies that Schmidt::of and Schmidt::allOf return
 // the textbook values for product, GHZ, and Bell states — the inputs we
 // also feed into the Phase 3 majorization-poset acceptance test, but
 // here we check only the spectra in isolation, before the poset layer
@@ -41,7 +41,7 @@ bool product_state_all_trivial() {
     auto sites = itensor::SpinHalf(N, {"ConserveQNs=", false});
     auto psi = product_up(sites);
 
-    auto cuts = allContiguousSpectra(psi);
+    auto cuts = Schmidt::allOf(psi);
     bool ok = true;
     int n_checked = 0;
     for (std::size_t k = 0; k < cuts.spectra.size(); ++k) {
@@ -69,7 +69,7 @@ bool ghz_single_site_half_half() {
 
     bool ok = true;
     for (int k = 1; k <= N; ++k) {
-        auto spec = schmidtSpectrum(psi, k, k);
+        auto spec = Schmidt::of(psi, k, k);
         const bool match = spectrum_is(spec, {0.5, 0.5});
         if (!match) {
             std::cout << "  site " << k << " spec=";
@@ -89,7 +89,7 @@ bool ghz_all_cuts_half_half() {
     auto sites = itensor::SpinHalf(N, {"ConserveQNs=", false});
     auto psi = ghz(sites);
 
-    auto cuts = allContiguousSpectra(psi);
+    auto cuts = Schmidt::allOf(psi);
     bool ok = true;
     for (std::size_t k = 0; k < cuts.spectra.size(); ++k) {
         const auto& spec = cuts.spectra[k];
@@ -110,7 +110,7 @@ bool bell_phi_plus_center() {
     std::cout << "\nBell |Φ⁺⟩ on N=2 — center cut spectrum is (½, ½)\n";
     auto sites = itensor::SpinHalf(2, {"ConserveQNs=", false});
     auto psi = bell_phi_plus(sites);
-    auto spec = schmidtSpectrum(psi, 1, 1);
+    auto spec = Schmidt::of(psi, 1, 1);
     const bool ok = spectrum_is(spec, {0.5, 0.5});
     std::cout << "  spec[1,1]=";
     for (double s : spec) std::cout << s << " ";
@@ -122,7 +122,7 @@ bool bell_singlet_center() {
     std::cout << "\nSinglet (|↑↓⟩−|↓↑⟩)/√2 on N=2 — same (½, ½) spectrum\n";
     auto sites = itensor::SpinHalf(2, {"ConserveQNs=", false});
     auto psi = bell_singlet(sites);
-    auto spec = schmidtSpectrum(psi, 1, 1);
+    auto spec = Schmidt::of(psi, 1, 1);
     const bool ok = spectrum_is(spec, {0.5, 0.5});
     std::cout << "  spec[1,1]=";
     for (double s : spec) std::cout << s << " ";
@@ -135,7 +135,7 @@ bool spectra_normalize_to_one() {
     constexpr int N = 5;
     auto sites = itensor::SpinHalf(N, {"ConserveQNs=", false});
     auto psi = ghz(sites);
-    auto cuts = allContiguousSpectra(psi);
+    auto cuts = Schmidt::allOf(psi);
     bool ok = true;
     for (std::size_t k = 0; k < cuts.spectra.size(); ++k) {
         double total = 0.0;
@@ -155,7 +155,7 @@ bool spectra_normalize_to_one() {
 bool single_site_equals_left_bond() {
     // Cross-check: for a left-edge cut [1, 1], the entanglement spectrum
     // is exactly the bond-1 SVD of the MPS. For a 4-site GHZ that's
-    // (½, ½) — but the more useful sanity check is that schmidtSpectrum
+    // (½, ½) — but the more useful sanity check is that Schmidt::of
     // and ITensor's built-in bond singular values agree.
     std::cout << "\nLeft-edge cut [1,1] vs ITensor bond SVD on N=4 GHZ\n";
     constexpr int N = 4;
@@ -164,7 +164,7 @@ bool single_site_equals_left_bond() {
     auto psi = psi_in;
     psi.position(1);
 
-    auto our_spec = schmidtSpectrum(psi, 1, 1);
+    auto our_spec = Schmidt::of(psi, 1, 1);
 
     // ITensor's bond-1 SVD: split MPS into A_1 and the rest.
     using namespace itensor;

@@ -1,6 +1,6 @@
 # Lightcone vs. majorization — first hypothesis-test scan
 
-First experimental run of `tessera.quantum.computeCausalComparison`
+First experimental run of `tessera.quantum.SchwingerQuench.compareCausalOrders`
 across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
 addresses the **strong falsification** criterion of
 `docs/source/quantum-methodology.md` §1.2:

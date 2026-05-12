@@ -50,7 +50,7 @@ import sys
 from typing import Iterable
 
 try:
-    from tessera.quantum import QuantumConfig, computeGroundState
+    from tessera.quantum import QuantumConfig, SchwingerModel
 except ImportError as e:
     print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
@@ -96,7 +96,7 @@ def _print_row(N: int, m_over_g: float, x: float, L0: float,
 def _run_one(N: int, m_over_g: float, x: float, L0: float,
              maxBondDim: int, nSweeps: int) -> None:
     cfg = _config_for(N, m_over_g, x, L0, maxBondDim, nSweeps)
-    result = computeGroundState(cfg)
+    result = SchwingerModel(cfg).solve()
     _print_row(N, m_over_g, x, L0, result)
 
 

@@ -3,7 +3,7 @@
 Lieb-Robinson cone ≼_LR across (m/g, T, N) × vLr on a Schwinger TDVP run.
 
 Sweeps a small parameter grid using the existing
-tessera.quantum.computeCausalComparison harness; for each point, prints
+SchwingerQuench.compareCausalOrders harness; for each point, prints
 Kendall-τ, discordant fraction, and Hasse edit distance for the three
 pairwise comparisons (maj↔LR, maj↔cs, LR↔cs). The maj↔LR row is the
 substrate for the strong-falsification criterion in
@@ -14,9 +14,7 @@ Output: a single tabulated report. No claims, just numbers.
 """
 from __future__ import annotations
 import time
-from tessera.quantum import (
-    TDVPConfig, computeCausalComparison, runQqbarQuench,
-)
+from tessera.quantum import TDVPConfig, SchwingerQuench
 
 
 def make_cfg(N: int, m_over_g: float, T: float, dt: float = 0.1,
@@ -49,7 +47,7 @@ def scan_vlr(label: str, cfg: TDVPConfig, vlr_values: list[float]) -> None:
           f"{'n_comp(LR,cs)':>14}")
     for v in vlr_values:
         t0 = time.time()
-        r = computeCausalComparison(cfg, vLr=v)
+        r = SchwingerQuench(cfg).compareCausalOrders(vLr=v)
         dt_run = time.time() - t0
         print(f"  {v:>5.2f}  "
               f"{r.majVsLr.kendallTau:>10.4f}  "

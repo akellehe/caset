@@ -10,35 +10,25 @@
 //     L_n  =  L_0  +  Σ_{k=1..n} [ (1 - σ^z_k)/2  -  (1 - (-1)^k)/2 ]
 //          =  c_n  -  ½ Σ_{k=1..n} σ^z_k
 //
-// (see include/quantum/schwinger_model.hpp). So flipping σ^z at a site k
-// shifts L_n on every link n ≥ k. Flipping σ^z at TWO sites (k1, k2) with
-// k1 < k2 in opposite directions produces a "flux tube" — L_n shifts by
-// +1 (or −1) on links in [k1, k2 − 1] and goes back to vacuum elsewhere.
+// (see include/quantum/schwinger_model.hpp). Flipping σ^z at TWO sites
+// (k1, k2) with k1 < k2 in opposite directions produces a "flux tube" —
+// L_n shifts by +1 (or −1) on links in [k1, k2 − 1] and goes back to
+// vacuum elsewhere.
 //
 // To create a +1-flux tube on links [i0, i0+d-1], we need to flip σ^z by
 // −2 at site i0 (Up → Dn) and by +2 at site i0+d (Dn → Up):
 //
 //     U_qq̄(i0, d)  =  σ⁻_{i0}  ·  σ⁺_{i0+d}
 //
-// (PLAN.md writes "σ⁺ σ⁻"; the conjugate σ⁻ σ⁺ is what actually flips the
-// vacuum's Up→Dn at i0 and Dn→Up at i0+d. Either form creates a flux
-// tube; the sign of the tube is opposite. We use σ⁻ σ⁺ for the +1 tube.)
-//
 // ─── Parity constraint ────────────────────────────────────────────────────
 //
-// Both σ⁻ and σ⁺ kill on-shell sites in the wrong direction. For our
-// heavy-quark vacuum |↑↓↑↓ … ⟩ (Up at odd 1-based, Dn at even 1-based):
+// For the heavy-quark vacuum |↑↓↑↓ … ⟩ (Up at odd 1-based, Dn at even):
 //
 //   * σ⁻_{i0} acts non-trivially  ⇔  i0 is odd  (Up sublattice)
 //   * σ⁺_{i0+d} acts non-trivially ⇔ i0+d is even (Dn sublattice)
 //
 // So d must be ODD. PLAN.md mentions d=4; we use d=5 in the heavy-quark
-// acceptance test for the same physical reason (5-site separation flux
-// tube on 5 links).
-//
-// At finite m the GS isn't a perfect Néel and the operator never strictly
-// vanishes — only a small amplitude is killed by the off-diagonal piece —
-// but for clean testing we still want the parity to align.
+// acceptance test for the same physical reason.
 //
 // ─── Sz preservation ──────────────────────────────────────────────────────
 //
@@ -52,17 +42,34 @@
 
 namespace tessera::quantum {
 
-// Apply the q-qbar quench operator σ⁻_{i0} σ⁺_{i0+d} to a normalized
-// MPS, return a fresh normalized MPS in the same SiteSet.
-//
-// Throws std::invalid_argument when (i0, d) are out of range or violate
-// the parity constraint described in this header. Pass `enforce_parity =
-// false` to skip the parity check (e.g. for the broader-mass regime
-// where the GS pattern shifts).
-itensor::MPS applyQqbarQuench(itensor::MPS const& psi,
-                                itensor::SpinHalf const& sites,
-                                int i0,
-                                int d,
-                                bool enforce_parity = true);
+// Coarse-grained interface for the q-qbar quench operator. One instance
+// binds the operator's intrinsic parameters (location i0, separation d,
+// parity check); the `apply` method takes a state and returns the
+// quenched state.
+class QqbarQuench {
+public:
+    // Construct a quench operator with σ⁻ acting at site `i0` and σ⁺ at
+    // site `i0 + d` (both 1-based). Enforce the heavy-quark Néel parity
+    // constraint (i0 odd, d odd) by default; pass `enforceParity = false`
+    // to override (e.g. for the broader-mass regime where the GS pattern
+    // shifts).
+    QqbarQuench(int i0, int d, bool enforceParity = true) noexcept;
+
+    [[nodiscard]] int  i0() const noexcept             { return i0_; }
+    [[nodiscard]] int  d()  const noexcept             { return d_;  }
+    [[nodiscard]] bool enforceParity() const noexcept  { return enforceParity_; }
+
+    // Apply σ⁻_{i0} σ⁺_{i0+d} to a normalized MPS, return a fresh
+    // normalized MPS in the same SiteSet. Throws std::invalid_argument
+    // when (i0, d) are out of range or violate the parity constraint
+    // (only when enforceParity is true).
+    [[nodiscard]] itensor::MPS
+    apply(itensor::MPS const& psi, itensor::SpinHalf const& sites) const;
+
+private:
+    int  i0_;
+    int  d_;
+    bool enforceParity_;
+};
 
 } // namespace tessera::quantum

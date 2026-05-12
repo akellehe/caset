@@ -1,25 +1,41 @@
-// Thin wrapper around ITensor's dmrg() for the Schwinger model.
+// SchwingerModel — coarse-grained ground-state pipeline for the
+// Schwinger model on a Jordan-Wigner spin chain.
 //
-// PLAN.md §5 Phase 2: a self-contained ground-state driver that takes a
-// flat config struct and returns the bare numbers we want to expose to
-// Python — no MPS, no MPO, no ITensor types cross the API boundary. This
-// keeps the Python side a pure result viewer in line with the architectural
-// principle in PLAN.md §1 ("minimize Python/C++ crossings").
+// PLAN.md §5 Phase 2 / §1: a self-contained ground-state driver that
+// takes a flat config struct and returns the bare numbers we want to
+// expose to Python — no MPS, no MPO, no ITensor types cross the API
+// boundary. This keeps the Python side a pure result viewer in line
+// with the architectural principle in PLAN.md §1 ("minimize Python/C++
+// crossings").
 //
-// What this wrapper does:
-//   1. Builds the SchwingerMPO from the dimensional parameters in
-//      QuantumConfig (delegating to schwinger_model.cpp).
-//   2. Sets up a Néel |↑↓↑↓…⟩ initial MPS in the Sz=0 sector so DMRG stays
-//      charge-neutral when QN conservation is enabled.
-//   3. Runs ITensor's dmrg() with a sweep schedule built from QuantumConfig
-//      (max bond dim, number of sweeps, truncation cutoff, Krylov dim).
-//   4. Reads back the final operator energy ⟨H⟩, the c-number constant
+// What this header exposes:
+//
+// • QuantumConfig                   — Hamiltonian + DMRG sweep settings (data class).
+// • GroundStateResult               — DMRG diagnostics (data class).
+// • GroundStateMajorizationResult   — DMRG + Schmidt + majorization-poset
+//                                     bundle (data class).
+// • SchwingerModel                  — coarse-grained façade. Holds a
+//                                     QuantumConfig; methods run the
+//                                     DMRG and (optionally) the Phase 3
+//                                     Schmidt + majorization extension.
+//
+// What SchwingerModel methods do internally:
+//   1. Build the SchwingerMPO from the dimensional parameters.
+//   2. Set up a Néel |↑↓↑↓…⟩ initial MPS in the Sz=0 sector.
+//   3. Run ITensor's two-site dmrg() with a sweep schedule built from
+//      the QuantumConfig (max bond dim, sweep count, cutoff, Krylov dim).
+//   4. Read back the final operator energy ⟨H⟩, the c-number constant
 //      from L_n² expansion, the achieved bond dim, and the largest
 //      truncation error reported by the last sweep.
+//   5. (solveWithMajorization only) compute every contiguous-cut Schmidt
+//      spectrum of the optimized MPS and build the strict-majorization
+//      Hasse poset on those spectra.
 
 #pragma once
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/majorization.hpp"     // Poset
+#include "quantum/schmidt.hpp"          // SchmidtSpectra
+#include "quantum/schwinger_model.hpp"  // SchwingerHamiltonian, SchwingerParams
 
 namespace tessera::quantum {
 
@@ -36,20 +52,20 @@ struct QuantumConfig {
     double L0{0.0};    // background electric field on the link left of site 1
 
     // ─── DMRG ──────────────────────────────────────────────────────────
-    int    maxBondDim{100};  // cap on MPS bond dim during sweeps
-    int    nSweeps{12};       // total sweep count
-    double cutoff{1e-12};      // SVD truncation threshold per local solve
-    int    krylovDim{4};      // Lanczos / Krylov dimension per local solve
-    bool   quiet{true};        // suppress ITensor's per-sweep diagnostics
-    bool   conserveQns{true}; // U(1) total-Sz conservation on the SiteSet
+    int    maxBondDim{100};   // cap on MPS bond dim during sweeps
+    int    nSweeps{12};        // total sweep count
+    double cutoff{1e-12};       // SVD truncation threshold per local solve
+    int    krylovDim{4};       // Lanczos / Krylov dimension per local solve
+    bool   quiet{true};         // suppress ITensor's per-sweep diagnostics
+    bool   conserveQns{true};  // U(1) total-Sz conservation on the SiteSet
 
-    // ─── Phase 4 (TDVP / quench) parameters; unused by computeGroundState.
+    // ─── Phase 4 (TDVP / quench) parameters; unused by SchwingerModel.
     // Carried in this struct to match PLAN.md §6's exposed API surface.
     double dt{0.01};   // real-time step size
     double T{1.0};     // total evolution time
 };
 
-// What computeGroundState returns. PLAN.md §6 specifies just
+// What SchwingerModel::solve() returns. PLAN.md §6 specifies just
 // (energy, bondDim, truncationErr); we additionally expose `constant`
 // and `operatorEnergy` because callers comparing against published
 // numerics need to know whether the value they have is the operator-only
@@ -62,9 +78,41 @@ struct GroundStateResult {
     double truncationErr{0.0};  // largest truncation error in the final sweep
 };
 
-// Run DMRG to the ground state at the parameters in `config`. Throws
-// std::invalid_argument for invalid Hamiltonian parameters (forwarded
-// from buildSchwingerMpo).
-GroundStateResult computeGroundState(QuantumConfig const& config);
+// What SchwingerModel::solveWithMajorization() returns. Bundles the same
+// scalar diagnostics that solve() returns with the Schmidt spectra and
+// the majorization poset of those spectra.
+struct GroundStateMajorizationResult {
+    GroundStateResult groundState;  // energy, bondDim, truncationErr …
+    SchmidtSpectra    spectra;       // labelled contiguous-cut spectra
+    Poset             poset;         // Hasse cover edges of strict majorization
+};
+
+// Coarse-grained Schwinger-model ground-state pipeline.
+//
+// One instance binds a QuantumConfig; the methods run either the bare
+// DMRG ground state (Phase 2) or the DMRG + Schmidt + majorization-poset
+// pipeline (Phase 3). The model is stateless beyond its config — every
+// method runs the underlying ITensor pipeline from scratch.
+class SchwingerModel {
+public:
+    explicit SchwingerModel(QuantumConfig config) noexcept;
+
+    [[nodiscard]] QuantumConfig const& config() const noexcept { return config_; }
+
+    // Run DMRG to the ground state. Throws std::invalid_argument when the
+    // Hamiltonian parameters are invalid (forwarded from
+    // SchwingerHamiltonian::mpo's validation: N ≥ 2, a > 0).
+    [[nodiscard]] GroundStateResult solve() const;
+
+    // Run DMRG, then extract every contiguous-cut Schmidt spectrum of the
+    // optimized MPS and build the strict-majorization Hasse poset on those
+    // spectra (Phase 3 pipeline). `tol` is the slack on the majorization
+    // comparisons.
+    [[nodiscard]] GroundStateMajorizationResult
+    solveWithMajorization(double tol = 1e-12) const;
+
+private:
+    QuantumConfig config_;
+};
 
 } // namespace tessera::quantum

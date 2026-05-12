@@ -10,7 +10,7 @@ quantum-methodology.md §1.2.
 """
 from __future__ import annotations
 import time
-from tessera.quantum import TDVPConfig, computeCausalComparison
+from tessera.quantum import TDVPConfig, SchwingerQuench
 
 
 def make_cfg(N: int, m_over_g: float, T: float,
@@ -55,7 +55,7 @@ def scan_vlr(label: str, cfg: TDVPConfig, vlr_values: list[float]) -> None:
           f"{'n_LR∉maj':>10}  {'|≼_maj|':>10}")
     for v in vlr_values:
         t0 = time.time()
-        r = computeCausalComparison(cfg, vLr=v)
+        r = SchwingerQuench(cfg).compareCausalOrders(vLr=v)
         dt_run = time.time() - t0
         a = r.majVsLr
         n_maj_total = a.nConcordant + a.nDiscordant + a.nOnlyA

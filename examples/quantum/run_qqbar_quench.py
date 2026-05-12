@@ -73,7 +73,7 @@ import math
 import sys
 
 try:
-    from tessera.quantum import TDVPConfig, runQqbarQuench
+    from tessera.quantum import TDVPConfig, SchwingerQuench
 except ImportError as e:
     print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
@@ -153,7 +153,7 @@ def main() -> None:
           f"bondDim≤{cfg.maxBondDim}")
     print()
 
-    result = runQqbarQuench(cfg)
+    result = SchwingerQuench(cfg).evolve()
     print(f"DMRG ground state: E = {result.groundState.energy:.6f}, "
           f"bondDim = {result.groundState.bondDim}")
     print()

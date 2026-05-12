@@ -112,8 +112,9 @@ struct CaseResult {
 
 // Build the DMRG state and measure consistency observables on it.
 CaseResult run_small_case(SchwingerParams p) {
-    auto mpo = buildSchwingerMpo(p);
-    auto dense = buildSchwingerDense(p);
+    SchwingerHamiltonian H{p};
+    auto mpo = H.mpo();
+    auto dense = H.denseMatrix();
 
     CaseResult r;
     r.dense_global    = lowest_global(dense);
@@ -233,7 +234,7 @@ int main() {
         SchwingerParams p;
         p.N = 20; p.a = 1.0; p.g = 1.0; p.m = m_over_g; p.L0 = 0.0;
 
-        auto mpo = buildSchwingerMpo(p);
+        auto mpo = SchwingerHamiltonian{p}.mpo();
         const double e = dmrg_groundstate_sz0(mpo, /*max_bond=*/100, /*sweeps=*/12);
         std::cout
             << "  N=20 m/g=" << m_over_g

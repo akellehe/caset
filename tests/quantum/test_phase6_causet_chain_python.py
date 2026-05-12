@@ -1,7 +1,6 @@
-"""Phase 6 Python tests — Spacetime → causet-chain extraction (the
-``tessera.quantum.extractCausetChain`` adapter) plus the underlying
-``tessera.Poset.fromSpacetime`` static method exposed in the same
-module's :class:`Poset`.
+"""Phase 6 Python tests — :meth:`Causet.chainFrom` (Spacetime → causet-
+chain extractor) plus the underlying :meth:`Poset.fromSpacetime`
+factory exposed in the same module.
 
 Skips cleanly when tessera was built without TESSERA_QUANTUM=1.
 """
@@ -13,7 +12,7 @@ import unittest
 import tessera
 
 try:
-    from tessera.quantum import CausetChain, Poset, extractCausetChain
+    from tessera.quantum import CausetChain, Poset, Causet
     HAVE_QUANTUM = True
 except ImportError:
     HAVE_QUANTUM = False
@@ -30,25 +29,12 @@ def _build_default_cdt(num_simplices: int = 20) -> "tessera.Spacetime":
 
 
 @unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
-class TestExtractCausetChain(unittest.TestCase):
-    """The extractor produces a self-consistent CausetChain on a built CDT.
-
-    These don't hand-pick exact hop counts (those depend on the toroidal
-    Topology's gluing pattern) — instead they assert structural
-    invariants that have to hold for any valid extraction:
-
-    * antichain sizes sum to nSites,
-    * vertexIds has length nSites and covers exactly the union of
-      antichains in time order,
-    * every hopping pair (i, j) has i < j and connects sites in
-      adjacent antichain layers,
-    * partialOrder is a valid Poset whose covers are a subset of the
-      hopping pairs (covers can be reduced; hops are not).
-    """
+class TestCausetChainFrom(unittest.TestCase):
+    """The extractor produces a self-consistent CausetChain on a built CDT."""
 
     def test_default_cdt_self_consistent(self) -> None:
         st = _build_default_cdt(num_simplices=20)
-        chain = extractCausetChain(st)
+        chain = Causet.chainFrom(st)
 
         # nSites == sum of antichain sizes == len(vertexIds).
         self.assertEqual(
@@ -60,7 +46,7 @@ class TestExtractCausetChain(unittest.TestCase):
         self.assertEqual(list(chain.times), sorted(set(chain.times)))
 
         # Flat layout: vertexIds is the concatenation of antichains
-        # in time order (per docstring of CausetChain).
+        # in time order.
         flat = [vid for ac in chain.antichains for vid in ac]
         self.assertEqual(list(chain.vertexIds), flat)
 
@@ -81,9 +67,7 @@ class TestExtractCausetChain(unittest.TestCase):
             )
 
         # partialOrder Poset has nSites nodes and its covers are a
-        # subset of the hopping pairs (covers may be reduced when there
-        # are alternative paths; hops include all adjacent-slice
-        # timelike edges that survived the cover reduction).
+        # subset of the hopping pairs.
         self.assertEqual(chain.partialOrder.getNodeCount, chain.nSites)
         cover_set = set(chain.partialOrder.covers)
         hop_set = set(chain.hoppingPairs)
@@ -95,19 +79,12 @@ class TestExtractCausetChain(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestPosetFromSpacetimePython(unittest.TestCase):
-    """Direct Python access to tessera.Poset.fromSpacetime.
-
-    The Phase 6 integration is most useful via extractCausetChain
-    (which packages partialOrder alongside lattice metadata) but the
-    raw ``Poset.fromSpacetime`` is also Python-callable and forms the
-    basis of the chain extractor.
-    """
+    """Direct Python access to tessera.quantum.Poset.fromSpacetime."""
 
     def test_from_spacetime_returns_valid_poset(self) -> None:
         st = _build_default_cdt(num_simplices=20)
         poset = Poset.fromSpacetime(st)
         self.assertEqual(poset.getNodeCount, st.getVertexList().toVector().__len__())
-        # Hasse covers can't have self-loops or duplicates.
         covers = poset.covers
         self.assertEqual(len(set(covers)), len(covers))
         for a, b in covers:
@@ -122,7 +99,6 @@ class TestPosetFromSpacetimePython(unittest.TestCase):
         poset = Poset.fromSpacetime(st)
         dot = poset.toDot()
         self.assertIn("digraph poset", dot)
-        # Every cover should appear as an edge in the DOT output.
         for a, b in poset.covers:
             self.assertIn(f"{a} -> {b}", dot)
 
