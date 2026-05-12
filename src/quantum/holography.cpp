@@ -164,7 +164,8 @@ MutualInformationProfile::MutualInformationProfile(
     std::vector<TDVPSnapshot> const& snapshots,
     HolographyConfig const& config)
     : nSnapshots_(static_cast<int>(snapshots.size())),
-      epsilonI_(config.epsilonI) {
+      epsilonI_(config.epsilonI),
+      vertexIds_(config.vertexIds) {
     if (nSnapshots_ == 0) {
         throw std::invalid_argument(
             "MutualInformationProfile: snapshot list is empty");
@@ -184,6 +185,13 @@ MutualInformationProfile::MutualInformationProfile(
             "MutualInformationProfile: snapshot MI buffer is not N×N");
     }
     nSites_ = N;
+
+    if (!vertexIds_.empty() &&
+        static_cast<int>(vertexIds_.size()) != nSites_) {
+        throw std::invalid_argument(
+            "MutualInformationProfile: config.vertexIds length must "
+            "equal nSites or be empty");
+    }
 
     const int nLabels = nSites_ * nSnapshots_;
     mi_.assign(static_cast<std::size_t>(nLabels) * nLabels, 0.0);

@@ -30,6 +30,7 @@
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -69,6 +70,15 @@ struct HolographyConfig {
     // Hutchinson-style trace estimator and any future stochastic
     // steps).
     int    seed{0};
+
+    // Optional: spacetime-vertex labels for the site axis of the
+    // (site, time) graph. Defaults to an empty vector, which means
+    // "use flat-lattice indices 0..N−1 as labels". When sourced from
+    // a tessera::quantum::Causet::chainFrom(spacetime), each entry
+    // is the spacetime vertex ID at that flat-lattice site — so
+    // graph vertices can be looked up as (spacetime-vertex-id,
+    // snapshot) per the holography spec §H6.
+    std::vector<std::uint64_t> vertexIds;
 
     // Throws std::invalid_argument on contradictions:
     //   sigmaMin <= 0, sigmaMax <= sigmaMin, sigmaCount < 8,
@@ -111,6 +121,17 @@ public:
     [[nodiscard]] int siteOf(int label)     const noexcept { return label % nSites_; }
     [[nodiscard]] int snapshotOf(int label) const noexcept { return label / nSites_; }
 
+    // Spacetime-vertex ID for a flat site index. Returns the site
+    // index itself (cast to uint64) when the profile was built from
+    // a regular-lattice run; returns the corresponding CausetChain
+    // vertexId when one was supplied.
+    [[nodiscard]] std::uint64_t
+    vertexId(int site) const noexcept {
+        if (site < 0 || site >= nSites_) return 0;
+        if (vertexIds_.empty()) return static_cast<std::uint64_t>(site);
+        return vertexIds_[static_cast<std::size_t>(site)];
+    }
+
     // COO arrays for the edge set with I > epsilon_I. Symmetric — each
     // edge appears twice (rows[k]=i, cols[k]=j AND rows[k']=j, cols[k']=i).
     struct COO {
@@ -128,6 +149,9 @@ private:
     // Row-major (nLabels × nLabels) MI values; zero outside same-
     // snapshot blocks in v1.
     std::vector<double> mi_;
+    // Optional spacetime-vertex labels for the site axis (CausetChain
+    // integration, spec §H6). Empty = flat-site labelling.
+    std::vector<std::uint64_t> vertexIds_;
 };
 
 // ─── EmergentGraph ───────────────────────────────────────────────────

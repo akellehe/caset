@@ -956,7 +956,16 @@ Values: fraction of attempts accepted (0.0 to 1.0).)doc")
            R"doc(Enable or disable vertex relabeling after add/remove moves.
 
 Enabled by default per [BGL] Sec. 2.2.1.  Disable for deterministic
-tests that compare simplex fingerprints before and after moves.)doc");
+tests that compare simplex fingerprints before and after moves.)doc")
+      .def("setSeed",
+           [](CDT& self, std::uint32_t seed) { self.setSeed(seed); },
+           py::arg("seed"),
+           R"doc(Re-seed the internal RNG.
+
+The default constructor pulls a seed from std::random_device — fine
+for production MC sweeps but flaky for tests whose outcome depends
+on a specific growth pattern. Pass a fixed seed at the top of such
+tests to make them reproducible.)doc");
 
   // ========================================
   // SparseGraph (for modularity / spectral dimension)

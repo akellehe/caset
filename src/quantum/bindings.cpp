@@ -342,7 +342,11 @@ extension).
         .def_readwrite("conserveQns",             &TDVPConfig::conserveQns)
         .def_readwrite("recordSpectra",           &TDVPConfig::recordSpectra)
         .def_readwrite("recordPoset",             &TDVPConfig::recordPoset)
-        .def_readwrite("recordMutualInformation", &TDVPConfig::recordMutualInformation);
+        .def_readwrite("recordMutualInformation", &TDVPConfig::recordMutualInformation)
+        .def_readwrite("hoppingPairs",            &TDVPConfig::hoppingPairs,
+            "Optional custom hopping graph as a list of (i, j) "
+            "0-based flat-lattice pairs. Empty = default 1D NN chain. "
+            "Sourced from tessera.quantum.Causet.chainFrom(spacetime).");
 
     py::class_<TDVPSnapshot>(m, "TDVPSnapshot",
             R"doc(Per-step diagnostics recorded during a TDVP run.
@@ -731,6 +735,10 @@ configs raise ValueError before any TDVP work is done.
         .def_readwrite("maxTemporalStride", &HolographyConfig::maxTemporalStride)
         .def_readwrite("krylovDim",         &HolographyConfig::krylovDim)
         .def_readwrite("seed",              &HolographyConfig::seed)
+        .def_readwrite("vertexIds",         &HolographyConfig::vertexIds,
+            "Optional spacetime-vertex labels for the site axis. "
+            "Sourced from tessera.quantum.Causet.chainFrom(spacetime). "
+            "Empty = use flat-site indices 0..N-1 as labels.")
         .def("validate",                    &HolographyConfig::validate);
 
     py::class_<MutualInformationProfile>(holo, "MutualInformationProfile",
@@ -753,6 +761,10 @@ and a COO weighted-adjacency export.
              py::arg("v"), py::arg("w"))
         .def("siteOf",     &MutualInformationProfile::siteOf,     py::arg("label"))
         .def("snapshotOf", &MutualInformationProfile::snapshotOf, py::arg("label"))
+        .def("vertexId",   &MutualInformationProfile::vertexId,   py::arg("site"),
+            "Spacetime-vertex ID for a flat-site index. Returns the "
+            "flat index itself when the profile was built without "
+            "CausetChain labels.")
         .def("weightedAdjacency",
             [](MutualInformationProfile const& p) {
                 auto coo = p.weightedAdjacency();

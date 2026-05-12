@@ -261,6 +261,15 @@ class CDT : public Simulation {
     /// where fingerprint-based before/after comparison is needed.
     void setRelabelVertices(bool enabled) noexcept { relabelVertices_ = enabled; }
 
+    /// Re-seed the internal RNG. The default constructor pulls a
+    /// random seed from std::random_device — useful for production
+    /// MC sweeps but flaky for tests that depend on a specific
+    /// growth pattern (e.g. tests/test_pachner_remove_move.py needs
+    /// a topology that admits an order-2d vertex). Call this with a
+    /// fixed seed at the top of such tests to make the result
+    /// reproducible.
+    void setSeed(std::uint32_t s) noexcept { rng.seed(s); }
+
   private:
     std::shared_ptr<Spacetime> spacetime;
     double k0, k4, delta, epsilon;

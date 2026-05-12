@@ -138,7 +138,9 @@ QuenchResult SchwingerQuench::evolve() const {
     SchwingerParams p;
     p.N = cfg.N; p.a = cfg.a; p.m = cfg.m; p.g = cfg.g; p.L0 = cfg.L0;
 
-    auto sm = SchwingerHamiltonian{p}.mpo(cfg.conserveQns);
+    auto sm = cfg.hoppingPairs.empty()
+        ? SchwingerHamiltonian{p}.mpo(cfg.conserveQns)
+        : SchwingerHamiltonian{p}.mpoChain(cfg.hoppingPairs, cfg.conserveQns);
     auto psi0 = neelInit(sm.sites, cfg.N);
     auto sweepsDmrg = makeDmrgSweeps(
         cfg.dmrgMaxBondDim, cfg.dmrgNSweeps,

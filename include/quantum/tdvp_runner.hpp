@@ -81,6 +81,15 @@ struct TDVPConfig {
     bool recordSpectra{false};
     bool recordPoset{false};
     bool recordMutualInformation{false};
+
+    // Optional: explicit hopping graph for the Schwinger Hamiltonian.
+    // Empty (default) means use the standard 1D nearest-neighbour
+    // chain (sites n, n+1 for n = 0..N−2). Non-empty selects
+    // SchwingerHamiltonian::mpoChain(hoppingPairs, conserveQns)
+    // instead — used to plumb a tessera.Spacetime → CausetChain
+    // hopping pattern into the TDVP evolution (holography spec §H6).
+    // Each pair is (i, j) in 0-based flat-lattice indices.
+    std::vector<std::pair<int, int>> hoppingPairs;
 };
 
 // Per-step diagnostics. Schmidt spectra, poset, and mutual-information

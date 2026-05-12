@@ -16,18 +16,46 @@ import unittest
 import tessera
 
 
-def _make_st_with_addgrowth(d=4, n_simplices=200, n_grows=300):
-    """Build a lattice and grow it via cdt.add() so remove() has
-    eligible (order-2d) vertices."""
+def _make_st_with_addgrowth(d=4, n_simplices=200,
+                              batch_size=50, max_batches=200):
+    """Build a lattice and grow it via cdt.add() until at least one
+    order-(2d) vertex exists that satisfies RemoveMove's structural
+    prerequisites.
+
+    The CDT growth is RNG-driven. ``cdt.add()`` proposes a Pachner
+    add and accepts it via Metropolis; most attempts reject. Even
+    when many accept, an accepted (1, d+1) add only creates an
+    order-(d+1) vertex — but ``RemoveMove`` needs order-(2d), which
+    arises only when multiple growth moves stack around the same
+    vertex with the right typing. There is therefore no fixed number
+    of ``cdt.add()`` calls that guarantees a removable vertex exists.
+
+    To make the test robust regardless of RNG state we grow in
+    batches and probe between batches; we return as soon as a
+    removable vertex exists. Worst case: ``batch_size × max_batches``
+    add attempts before raising.
+    """
     sig = tessera.Signature(d, tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
     st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                            tessera.PREFERRED, tessera.Toroid())
     st.build(n_simplices)
     cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
-    for _ in range(n_grows):
-        cdt.add()
-    return st
+
+    for _ in range(max_batches):
+        for _ in range(batch_size):
+            cdt.add()
+        # Probe: try a fistful of RemoveMove.propose() calls. propose()
+        # doesn't mutate the topology — only advances the Spacetime
+        # RNG — so repeated probing is cheap and safe.
+        for s in range(200):
+            if tessera.RemoveMove(st, s).propose():
+                return st
+
+    raise RuntimeError(
+        f"_make_st_with_addgrowth: no order-{2*d} vertex after "
+        f"{batch_size * max_batches} add attempts."
+    )
 
 
 def _top_size(st):
@@ -271,7 +299,9 @@ class TestRemoveStress(unittest.TestCase):
     def test_chain_of_removes_lifo_rollback(self):
         """Apply 2 removes, rollback in LIFO order: state must equal
         initial."""
-        st = _make_st_with_addgrowth(n_grows=600)
+        # max_batches × batch_size ≥ the old n_grows = 600 so this
+        # case has enough room to find two stackable order-2d vertices.
+        st = _make_st_with_addgrowth(max_batches=300)
         before = _full_snapshot(st)
         applied = []
         for seed in range(5000):
