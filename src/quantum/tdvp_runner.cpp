@@ -5,6 +5,7 @@
 #include "quantum/tdvp_runner.hpp"
 
 #include "quantum/causal_compare.hpp"
+#include "quantum/mutual_information.hpp"
 #include "quantum/quench.hpp"
 #include "quantum/schwinger_model.hpp"
 
@@ -66,7 +67,8 @@ TDVPSnapshot makeSnapshot(double t,
                            SchwingerMPO const& sm,
                            SchwingerParams const& p,
                            bool recordSpectra,
-                           bool recordPoset) {
+                           bool recordPoset,
+                           bool recordMutualInformation) {
     TDVPSnapshot snap;
     snap.time      = t;
     snap.energy    = computeEnergy(psi, sm.H, sm.constant);
@@ -77,6 +79,19 @@ TDVPSnapshot makeSnapshot(double t,
         snap.spectra = Schmidt::allOf(psi);
         if (recordPoset) {
             snap.poset = Majorization::posetOf(snap.spectra.spectra);
+        }
+    }
+    if (recordMutualInformation) {
+        // All-pairs site-site MI. Flatten to row-major for the
+        // Python-side rebuilding.
+        auto mi = MutualInformation::allPairs(psi);
+        const int N = static_cast<int>(mi.rows());
+        snap.mutualInformation.assign(static_cast<std::size_t>(N) * N, 0.0);
+        for (int a = 0; a < N; ++a) {
+            for (int b = 0; b < N; ++b) {
+                snap.mutualInformation[static_cast<std::size_t>(a * N + b)] =
+                    mi(a, b);
+            }
         }
     }
     return snap;
@@ -148,7 +163,8 @@ QuenchResult SchwingerQuench::evolve() const {
     // the quench excitation cost.
     result.snapshots.push_back(makeSnapshot(
         /*t=*/0.0, psi, sm, p,
-        cfg.recordSpectra, cfg.recordPoset));
+        cfg.recordSpectra, cfg.recordPoset,
+        cfg.recordMutualInformation));
 
     // (4) TDVP loop. Real-time evolution e^{-i H Δt} corresponds to
     // ITensor's tdvp(...) with the time argument t = -i Δt.
@@ -169,7 +185,8 @@ QuenchResult SchwingerQuench::evolve() const {
             const double currentT = step * cfg.dt;
             result.snapshots.push_back(makeSnapshot(
                 currentT, psi, sm, p,
-                cfg.recordSpectra, cfg.recordPoset));
+                cfg.recordSpectra, cfg.recordPoset,
+                cfg.recordMutualInformation));
         }
     }
 

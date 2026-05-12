@@ -483,6 +483,53 @@ Cover edges run from earlier-time vertex to later-time vertex (the
 strict-precedes direction); the diagram should layer cleanly when
 the underlying foliation is :data:`tessera.PREFERRED`.
 
+## Emergent spectral dimension
+
+A sibling observable on the same TDVP snapshots: take the (site, time)
+mutual-information graph $G$, compute the heat-kernel return
+probability $P_G(\sigma)$, and read off the spectral dimension
+$D_S^{(G)}(\sigma) = -2\, d\log P_G / d\log\sigma$.
+
+The full scientific charter, falsification criteria, and integration
+plan live in
+[holography-causal-ordering-emergent-dimension.md](holography-causal-ordering-emergent-dimension.md);
+the API lives in :mod:`tessera.quantum.holography`. Quickstart:
+
+```python
+from tessera.quantum import TDVPConfig
+from tessera.quantum.holography import (
+    HolographyConfig, EmergentSpectralDimension,
+)
+
+cfg = HolographyConfig()
+cfg.tdvp = TDVPConfig()
+cfg.tdvp.N = 10; cfg.tdvp.g = 1.0; cfg.tdvp.m = 0.5; cfg.tdvp.L0 = 0.0
+cfg.tdvp.i0 = 3; cfg.tdvp.d = 3
+cfg.tdvp.dt = 0.2; cfg.tdvp.T = 1.0; cfg.tdvp.snapshotEvery = 1
+cfg.tdvp.dmrgMaxBondDim = 64; cfg.tdvp.maxBondDim = 80
+cfg.sigmaMin = 1e-2; cfg.sigmaMax = 1e3; cfg.sigmaCount = 64
+cfg.epsilonI = 1e-8
+
+result = EmergentSpectralDimension(cfg).compute()
+print(f"D_∞ fit = {result.dInfinity:.3f},  |V|={result.graphNVertices}")
+```
+
+The companion script
+`examples/quantum/run_emergent_spectral_dimension.py` scans m/g and
+plots $D_S(\sigma)$ side-by-side with $P(\sigma)$, and runs the
+falsification checks from the charter §1.
+
+The (site, time) graph is built from both **spatial MI** (per
+snapshot, all-pairs) and **temporal MI** (Choi state of the Schwinger
+propagator on an interleaved doubled chain). The Schwinger Hamiltonian
+is time-independent, so $U_{s \to t}$ depends only on the stride
+$|t - s|$ — one Choi state per unique stride, fanned out across all
+matching snapshot pairs.
+
+Set ``HolographyConfig.includeTemporal = True`` (default) for the full
+graph; ``False`` falls back to spatial-only edges. ``maxTemporalStride``
+caps how many strides are computed (``0`` = unlimited).
+
 ## Tested benchmarks
 
 The C++ and Python test suites cross-check every layer of the pipeline:
@@ -513,6 +560,9 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 | `test_cdt_causet_invariants.cpp` | Causet adapter | Foliated-CDT structural invariants (Ambjorn 2004): every Hasse cover spans exactly one slice; covers ≡ hoppingPairs (no transitive reduction on a foliated complex); Hasse height = num_layers − 1; total extraction; top-layer out-degree / bottom-layer in-degree both 0. |
 | `test_causet_chain_python.py` | Causet adapter | Python self-consistency on a default CDT Spacetime: layer sizes, flat-index alignment, partialOrder ⊆ hoppingPairs invariant, DOT round-trip. |
 | `test_class_api.py` | All | Class semantics: config introspection, stateless reuse, static-class non-instantiability, predicate hierarchy, `Majorization.posetOf` predicate variants, `CausalOrders.fromSnapshots` factory. |
+| `test_mutual_information_python.py` | Holography | Von Neumann entropy on Bell, product, maximally-mixed marginals; `edgeLength` cutoff behaviour. |
+| `test_holography_python.py` | Holography | `HolographyConfig` validation; `MutualInformationProfile` symmetry / non-negativity / diagonal-is-zero; `EmergentGraph` Laplacian symmetry, row-sums = 0, monotone $P(\sigma)$; `AmbjornLollFit` exact recovery on noiseless data; m/g sensitivity of the full pipeline. |
+| `test_choi_state_python.py` | Holography | Identity-channel temporal MI = $2 \ln 2$ on diagonal, $0$ off-diagonal (spec §H2 #1/#2, to $10^{-15}$). Off-diagonal entries grow with duration as expected. Pipeline edge count and peak $D_S(\sigma)$ both rise when `includeTemporal` flips on. |
 
 ## API reference
 
@@ -556,5 +606,11 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 
 ## See also
 
-* [`docs/source/quantum-plan.md`](quantum-plan.md) — the full multi-phase
-  plan including TDVP and majorization-poset extensions still to come.
+* [`docs/source/quantum-plan.md`](quantum-plan.md) — feature-by-feature
+  implementation plan for the Schwinger pipeline.
+* [`docs/source/quantum-methodology.md`](quantum-methodology.md) — the
+  scientific charter for the entanglement → causal-order programme.
+* [`docs/source/holography-causal-ordering-emergent-dimension.md`](holography-causal-ordering-emergent-dimension.md)
+  — scientific charter and implementation plan for the emergent
+  spectral-dimension observable, implemented in
+  :mod:`tessera.quantum.holography`.

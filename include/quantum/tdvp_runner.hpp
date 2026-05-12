@@ -73,12 +73,18 @@ struct TDVPConfig {
     // recordSpectra = true is needed to have any spectra in snapshots;
     // recordPoset additionally builds the majorization poset on those
     // spectra. recordPoset implies recordSpectra.
+    //
+    // recordMutualInformation = true stores the full N×N all-pairs
+    // site-site MI matrix per snapshot, used by tessera.quantum.holography
+    // to build the (site, time)-graph for the spectral-dimension test.
+    // Cost: O(N² · χ³) per snapshot.
     bool recordSpectra{false};
     bool recordPoset{false};
+    bool recordMutualInformation{false};
 };
 
-// Per-step diagnostics. Schmidt spectra and poset are populated only
-// when the corresponding TDVPConfig flags are set.
+// Per-step diagnostics. Schmidt spectra, poset, and mutual-information
+// fields are populated only when the corresponding TDVPConfig flag is set.
 struct TDVPSnapshot {
     double time{0.0};
     double energy{0.0};               // ⟨ψ|H|ψ⟩ + sm.constant
@@ -87,6 +93,10 @@ struct TDVPSnapshot {
     std::vector<double> lProfile;    // ⟨L_n⟩  for n = 1..N-1
     SchmidtSpectra      spectra;      // populated if cfg.recordSpectra
     Poset               poset;        // populated if cfg.recordPoset
+    // Symmetric N×N matrix of site-site mutual information in nats,
+    // stored row-major in a flat vector (length N·N). Zero diagonal.
+    // Populated iff cfg.recordMutualInformation. Empty otherwise.
+    std::vector<double> mutualInformation;
 };
 
 // Result bundle from SchwingerQuench::evolve: GS diagnostics, then a

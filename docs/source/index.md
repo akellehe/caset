@@ -21,5 +21,6 @@ examples
 benchmarks
 quantum
 quantum-methodology
+holography-causal-ordering-emergent-dimension
 cpp_api
 ```

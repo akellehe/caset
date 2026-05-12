@@ -24,12 +24,16 @@
 
 #include "quantum/causal_compare.hpp"
 #include "quantum/causet_chain.hpp"
+#include "quantum/choi_state.hpp"
 #include "quantum/dmrg_runner.hpp"
+#include "quantum/holography.hpp"
 #include "quantum/majorization.hpp"
+#include "quantum/mutual_information.hpp"
 #include "quantum/schmidt.hpp"
 #include "quantum/tdvp_runner.hpp"
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
 
+#include <pybind11/eigen.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -337,14 +341,15 @@ extension).
         .def_readwrite("quiet",                   &TDVPConfig::quiet)
         .def_readwrite("conserveQns",             &TDVPConfig::conserveQns)
         .def_readwrite("recordSpectra",           &TDVPConfig::recordSpectra)
-        .def_readwrite("recordPoset",             &TDVPConfig::recordPoset);
+        .def_readwrite("recordPoset",             &TDVPConfig::recordPoset)
+        .def_readwrite("recordMutualInformation", &TDVPConfig::recordMutualInformation);
 
     py::class_<TDVPSnapshot>(m, "TDVPSnapshot",
             R"doc(Per-step diagnostics recorded during a TDVP run.
 
 Always-populated fields: time, energy, bondDim, zProfile, lProfile.
 Optional fields (populated only if the corresponding TDVPConfig flag
-is set): spectra, poset.
+is set): spectra, poset, mutualInformation.
 )doc")
         .def_readonly("time",      &TDVPSnapshot::time)
         .def_readonly("energy",    &TDVPSnapshot::energy)
@@ -353,6 +358,9 @@ is set): spectra, poset.
         .def_readonly("lProfile",  &TDVPSnapshot::lProfile)
         .def_readonly("spectra",   &TDVPSnapshot::spectra)
         .def_readonly("poset",     &TDVPSnapshot::poset)
+        .def_readonly("mutualInformation", &TDVPSnapshot::mutualInformation,
+                       "Flat row-major N×N matrix of site-site MI in nats. "
+                       "Populated iff TDVPConfig.recordMutualInformation = True.")
         .def("__repr__", [](TDVPSnapshot const& s) {
             return "TDVPSnapshot(time=" + std::to_string(s.time) +
                    ", energy=" + std::to_string(s.energy) +
@@ -649,4 +657,273 @@ Returns
 -------
 CausetChain
 )doc");
+
+    // ─── MutualInformation utility ─────────────────────────────────────
+    py::class_<MutualInformation>(m, "MutualInformation",
+            R"doc(Static utility for site-site mutual information on a Schwinger MPS.
+
+Not instantiable. The full computation pipeline goes through
+SchwingerQuench(cfg).evolve() with TDVPConfig.recordMutualInformation
+= True; this class is exposed so callers can run the pure-math
+operations (vonNeumannEntropy, edgeLength) on numpy data without
+needing an MPS in hand.
+)doc")
+        .def_static("vonNeumannEntropy",
+            [](py::array_t<std::complex<double>,
+                            py::array::c_style | py::array::forcecast> rho,
+                double tol) -> double {
+                auto buf = rho.unchecked<2>();
+                const int r = static_cast<int>(buf.shape(0));
+                const int c = static_cast<int>(buf.shape(1));
+                if (r != c) {
+                    throw std::invalid_argument(
+                        "MutualInformation.vonNeumannEntropy: rho must be square");
+                }
+                Eigen::MatrixXcd m(r, c);
+                for (int i = 0; i < r; ++i) {
+                    for (int j = 0; j < c; ++j) {
+                        m(i, j) = buf(i, j);
+                    }
+                }
+                return MutualInformation::vonNeumannEntropy(m, tol);
+            },
+            py::arg("rho"), py::arg("tol") = 1e-12,
+            R"doc(Von Neumann entropy of a Hermitian density matrix, in nats.
+
+The implementation accepts any square dimension; in the holography
+pipeline we only need 2×2 (single-site marginals) and 4×4 (two-site
+joint reduced density matrices).
+)doc")
+        .def_static("edgeLength",
+            &MutualInformation::edgeLength,
+            py::arg("I"), py::arg("epsilon") = 1e-10,
+            R"doc(ℓ = -log(I) with infinity floor at -log(epsilon).)doc");
+
+    // ─── Holography submodule: emergent spectral dimension ─────────────
+    auto holo = m.def_submodule("holography",
+        R"doc(Emergent spectral dimension from the Schwinger TDVP state.
+
+See ``docs/source/holography-causal-ordering-emergent-dimension.md`` for
+the scientific charter. The pipeline runs through one workflow class:
+
+>>> from tessera.quantum import TDVPConfig
+>>> from tessera.quantum.holography import HolographyConfig, EmergentSpectralDimension
+>>> cfg = HolographyConfig()
+>>> cfg.tdvp.N = 10; cfg.tdvp.m = 0.5; cfg.tdvp.g = 1.0
+>>> # ... fill in TDVP fields ...
+>>> result = EmergentSpectralDimension(cfg).compute()
+)doc");
+
+    py::class_<HolographyConfig>(holo, "HolographyConfig",
+            R"doc(Configuration for an emergent-spectral-dimension run.
+
+Wraps a TDVPConfig and adds the σ-grid and mutual-information cutoff.
+Validated at construction inside EmergentSpectralDimension; invalid
+configs raise ValueError before any TDVP work is done.
+)doc")
+        .def(py::init<>())
+        .def_readwrite("tdvp",              &HolographyConfig::tdvp)
+        .def_readwrite("sigmaMin",          &HolographyConfig::sigmaMin)
+        .def_readwrite("sigmaMax",          &HolographyConfig::sigmaMax)
+        .def_readwrite("sigmaCount",        &HolographyConfig::sigmaCount)
+        .def_readwrite("epsilonI",          &HolographyConfig::epsilonI)
+        .def_readwrite("includeTemporal",   &HolographyConfig::includeTemporal)
+        .def_readwrite("maxTemporalStride", &HolographyConfig::maxTemporalStride)
+        .def_readwrite("krylovDim",         &HolographyConfig::krylovDim)
+        .def_readwrite("seed",              &HolographyConfig::seed)
+        .def("validate",                    &HolographyConfig::validate);
+
+    py::class_<MutualInformationProfile>(holo, "MutualInformationProfile",
+            R"doc(Symmetric site×snapshot mutual-information matrix.
+
+Built from a list of TDVPSnapshots that have ``mutualInformation``
+recorded. Provides indexed access via at(site_v, snap_v, site_w, snap_w)
+and a COO weighted-adjacency export.
+)doc")
+        .def(py::init<std::vector<TDVPSnapshot> const&,
+                       HolographyConfig const&>(),
+             py::arg("snapshots"), py::arg("config"))
+        .def_property_readonly("nSites",     &MutualInformationProfile::nSites)
+        .def_property_readonly("nSnapshots", &MutualInformationProfile::nSnapshots)
+        .def_property_readonly("nLabels",    &MutualInformationProfile::nLabels)
+        .def("at",     &MutualInformationProfile::at,
+             py::arg("siteV"), py::arg("snapV"),
+             py::arg("siteW"), py::arg("snapW"))
+        .def("atFlat", &MutualInformationProfile::atFlat,
+             py::arg("v"), py::arg("w"))
+        .def("siteOf",     &MutualInformationProfile::siteOf,     py::arg("label"))
+        .def("snapshotOf", &MutualInformationProfile::snapshotOf, py::arg("label"))
+        .def("weightedAdjacency",
+            [](MutualInformationProfile const& p) {
+                auto coo = p.weightedAdjacency();
+                return py::make_tuple(coo.rows, coo.cols, coo.weights, coo.nVertices);
+            },
+            R"doc(COO arrays (rows, cols, weights, nVertices) of edges with I > epsilonI.
+
+Each undirected edge appears twice (v→w and w→v).
+)doc");
+
+    py::class_<EmergentGraph>(holo, "EmergentGraph",
+            R"doc(Weighted graph (V_G, E_G, ℓ_G) on the (site × snapshot) label set.
+
+Edge weights are mutual-information values; the Laplacian L = D - W
+follows the convention from
+docs/source/holography-causal-ordering-emergent-dimension.md §3.4.
+)doc")
+        .def(py::init<MutualInformationProfile const&>(), py::arg("profile"))
+        .def_property_readonly("nVertices", &EmergentGraph::nVertices)
+        .def_property_readonly("nEdges",    &EmergentGraph::nEdges)
+        .def("laplacianCOO",
+            [](EmergentGraph const& g) {
+                // Return the Laplacian as plain COO arrays (rows, cols,
+                // values, n). pybind11/eigen.h's sparse-matrix binding
+                // currently produces an empty CSC under LTO; the COO
+                // path is small and stable.
+                auto L = g.laplacian();
+                std::vector<int>    rows;
+                std::vector<int>    cols;
+                std::vector<double> vals;
+                rows.reserve(static_cast<std::size_t>(L.nonZeros()));
+                cols.reserve(static_cast<std::size_t>(L.nonZeros()));
+                vals.reserve(static_cast<std::size_t>(L.nonZeros()));
+                for (int k = 0; k < L.outerSize(); ++k) {
+                    for (Eigen::SparseMatrix<double>::InnerIterator
+                            it(L, k); it; ++it) {
+                        rows.push_back(static_cast<int>(it.row()));
+                        cols.push_back(static_cast<int>(it.col()));
+                        vals.push_back(it.value());
+                    }
+                }
+                return py::make_tuple(rows, cols, vals, g.nVertices());
+            },
+            R"doc(Weighted Laplacian as a COO tuple (rows, cols, values, n).
+
+Wrap in scipy.sparse for downstream use::
+
+    >>> import scipy.sparse as sp
+    >>> rows, cols, vals, n = graph.laplacianCOO()
+    >>> L = sp.csr_matrix((vals, (rows, cols)), shape=(n, n))
+)doc")
+        .def("returnProbability", &EmergentGraph::returnProbability,
+             py::arg("sigmas"), py::arg("krylovDim") = 30,
+             R"doc(P(σ) = (1/|V|) Tr exp(-σ L) via Krylov-Lanczos diagonal estimation.)doc")
+        .def_static("spectralDimension", &EmergentGraph::spectralDimension,
+             py::arg("sigmas"), py::arg("P"),
+             R"doc(D_S(σ) = -2 d log P / d log σ via centered finite differences.)doc")
+        .def("toDot", &EmergentGraph::toDot,
+             R"doc(Graphviz DOT export. Mirrors Poset.toDot().)doc");
+
+    py::class_<AmbjornLollFit::Result>(holo, "AmbjornLollFitResult")
+        .def_readonly("dInfinity",  &AmbjornLollFit::Result::dInfinity)
+        .def_readonly("C",          &AmbjornLollFit::Result::C)
+        .def_readonly("B",          &AmbjornLollFit::Result::B)
+        .def_readonly("chiSquared", &AmbjornLollFit::Result::chiSquared);
+
+    py::class_<AmbjornLollFit>(holo, "AmbjornLollFit",
+            R"doc(Static utility: three-parameter D_S(σ) = D_∞ − C / (B + σ) fit.
+
+Stateless; not instantiable. Mirrors the form used by
+examples/spectral_dimension.py for CDT comparisons.
+)doc")
+        .def_static("fit", &AmbjornLollFit::fit,
+             py::arg("sigmas"), py::arg("dS"),
+             py::arg("sigmaFitMin") = -1.0,
+             py::arg("sigmaFitMax") = -1.0);
+
+    py::class_<SpectralDimensionResult>(holo, "SpectralDimensionResult",
+            R"doc(Result bundle from EmergentSpectralDimension.compute().
+
+Mirrors the snapshot-style results in tessera.quantum: plain data
+container, no MPS/MPO state crosses the boundary.
+)doc")
+        .def_readonly("sigmas",           &SpectralDimensionResult::sigmas)
+        .def_readonly("P",                &SpectralDimensionResult::P)
+        .def_readonly("dS",               &SpectralDimensionResult::dS)
+        .def_readonly("dInfinity",        &SpectralDimensionResult::dInfinity)
+        .def_readonly("C",                &SpectralDimensionResult::C)
+        .def_readonly("B",                &SpectralDimensionResult::B)
+        .def_readonly("fitChiSquared",    &SpectralDimensionResult::fitChiSquared)
+        .def_readonly("graphNVertices",   &SpectralDimensionResult::graphNVertices)
+        .def_readonly("graphNEdges",      &SpectralDimensionResult::graphNEdges)
+        .def_readonly("snapshotTimes",    &SpectralDimensionResult::snapshotTimes)
+        .def_readonly("snapshotBondDims", &SpectralDimensionResult::snapshotBondDims)
+        .def_readonly("snapshotEnergies", &SpectralDimensionResult::snapshotEnergies);
+
+    // ─── ChoiPropagator (temporal MI engine) ──────────────────────────
+    //
+    // Exposed for unit-testing the identity-channel acceptance and
+    // the single-qubit-unitary checks from the holography spec §H2.
+    // The full pipeline reaches the same code via
+    // MutualInformationProfile / HolographyConfig.includeTemporal.
+    py::class_<ChoiPropagator::TDVPSettings>(holo, "ChoiTDVPSettings",
+            R"doc(Sweep settings for the Choi-state TDVP evolution.)doc")
+        .def(py::init<>())
+        .def_readwrite("dt",         &ChoiPropagator::TDVPSettings::dt)
+        .def_readwrite("maxBondDim", &ChoiPropagator::TDVPSettings::maxBondDim)
+        .def_readwrite("krylovDim",  &ChoiPropagator::TDVPSettings::krylovDim)
+        .def_readwrite("cutoff",     &ChoiPropagator::TDVPSettings::cutoff)
+        .def_readwrite("quiet",      &ChoiPropagator::TDVPSettings::quiet);
+
+    py::class_<ChoiPropagator>(holo, "ChoiPropagator",
+            R"doc(Static utility for the Choi-state temporal MI.
+
+For a unitary U on N qubits, the Choi state |U⟩ = (U ⊗ I)|Φ+⟩^{⊗N}
+encodes the temporal mutual information between (site i at the input
+time) and (site j at the output time) as the 2-site reduced-density-
+matrix MI on (in_i, out_j). This class exposes the C++ helpers that
+build the Choi state under the Schwinger Hamiltonian (acting only on
+the output register of an interleaved doubled chain) and extract the
+N×N temporal MI matrix.
+
+Not instantiable; call methods on the class.
+)doc")
+        .def_static("temporalMutualInformation",
+            [](SchwingerParams const& p, double duration,
+                ChoiPropagator::TDVPSettings const& settings) {
+                auto choi = ChoiPropagator::choiState(p, duration, settings);
+                return ChoiPropagator::temporalMutualInformation(choi, p.N);
+            },
+            py::arg("params"), py::arg("duration"), py::arg("settings"),
+            R"doc(Temporal MI matrix for the Schwinger propagator over `duration`.
+
+Returns an N×N numpy array; entry (i-1, j-1) is I({in_i} : {out_j})
+in nats. At duration = 0 the Choi state is |Φ+⟩^{⊗N} and the matrix
+equals 2·ln(2) on the diagonal, zero elsewhere — the identity-channel
+acceptance from the spec §H2.
+)doc");
+
+    py::class_<SchwingerParams>(holo, "SchwingerParams",
+            R"doc(Bare dimensional parameters of the Schwinger Hamiltonian.
+
+Exposed here so the holography test suite can drive ChoiPropagator
+directly without going through TDVPConfig.
+)doc")
+        .def(py::init<>())
+        .def_readwrite("N",  &SchwingerParams::N)
+        .def_readwrite("a",  &SchwingerParams::a)
+        .def_readwrite("m",  &SchwingerParams::m)
+        .def_readwrite("g",  &SchwingerParams::g)
+        .def_readwrite("L0", &SchwingerParams::L0);
+
+    py::class_<EmergentSpectralDimension>(holo, "EmergentSpectralDimension",
+            R"doc(Workflow class: bind a HolographyConfig, run the full pipeline.
+
+DMRG ground state → q-qbar quench → TDVP loop with per-snapshot MI →
+weighted (site, time) graph → heat-kernel trace → D_S(σ) →
+Ambjorn-Loll fit. Mirrors the SchwingerModel(cfg).solve() and
+SchwingerQuench(cfg).evolve() patterns in tessera.quantum.
+
+The recordMutualInformation flag on the underlying TDVPConfig is
+forced on by the constructor so callers can't trip themselves up by
+leaving it off.
+)doc")
+        .def(py::init<HolographyConfig>(), py::arg("config"))
+        .def_property_readonly("config",
+            [](EmergentSpectralDimension const& m) { return m.config(); })
+        .def("compute", &EmergentSpectralDimension::compute,
+             R"doc(Run the full pipeline; returns SpectralDimensionResult.)doc")
+        .def("computeFromSnapshots",
+             &EmergentSpectralDimension::computeFromSnapshots,
+             py::arg("quench"),
+             R"doc(Reuse a single TDVP run across multiple σ-grids or ε_I values.)doc");
 }

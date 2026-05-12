@@ -194,10 +194,11 @@ try:
     PeakRadialMajorization = _qm.PeakRadialMajorization
 
     # ─── Coarse-grained workflow classes ───────────────────────────────────
-    SchwingerModel   = _qm.SchwingerModel
-    SchwingerQuench  = _qm.SchwingerQuench
-    Majorization     = _qm.Majorization
-    Causet           = _qm.Causet
+    SchwingerModel    = _qm.SchwingerModel
+    SchwingerQuench   = _qm.SchwingerQuench
+    Majorization      = _qm.Majorization
+    Causet            = _qm.Causet
+    MutualInformation = _qm.MutualInformation
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "tessera.quantum is unavailable: this tessera build does not include "
@@ -231,5 +232,6 @@ __all__ = [
     "SchwingerModel",
     "SchwingerQuench",
     "Majorization",
+    "MutualInformation",
     "Causet",
 ]
