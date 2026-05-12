@@ -3,12 +3,12 @@
 The `tessera.quantum` subpackage extends tessera with a tensor-network
 treatment of the 1+1D Kogut-Susskind Schwinger model — the simplest
 non-trivial gauge theory and a standard benchmark for lattice tensor-
-network methods. It implements the staged plan in
-`docs/source/quantum-plan.md`. As of this writing Phases 0-5 are
-complete (scaffolding, MPO + DMRG ground states, Python bindings,
-Schmidt spectra + majorization poset, q-qbar quench + 2-site TDVP,
-causal-order comparison); Phase 6 (tessera-embedded chain) and
-Phase 7 (MERA / KAK / EML, research) remain.
+network methods. The features below ship today: MPO + DMRG ground
+states, Python bindings, Schmidt spectra and the majorization poset,
+the q-qbar quench + 2-site TDVP pipeline, the causal-order comparison
+harness, and the tessera-spacetime → causet-chain adapter. Tree-
+tensor-network and MERA / KAK / EML extensions are research targets,
+not in this build.
 
 This page is the **user-facing** reference: how to build the subsystem,
 how to call the Python API, what each diagnostic field means. The two
@@ -18,8 +18,8 @@ companion documents are:
   charter: the hypothesis being tested (majorization order vs.
   Lieb–Robinson cone vs. causet order), the falsification criteria,
   scope and limitations.
-* [quantum-plan.md](quantum-plan.md) — the implementation tracker:
-  phase-by-phase deliverables, file layout, acceptance tests.
+* [quantum-plan.md](quantum-plan.md) — implementation tracker:
+  per-feature deliverables, file layout, acceptance tests.
 
 The C++ backend is [ITensor v3](https://itensor.org), vendored as a git
 submodule under `third_party/itensor/`. The Python layer is a thin
@@ -128,11 +128,11 @@ Continuum approach: ω₀ → -1/π ≈ -0.318310 as x → ∞
 
 (Numbers vary slightly across runs but the trend is robust.)
 
-## Phase 3 — Schmidt spectra and majorization poset
+## Schmidt spectra and the majorization poset
 
-Phase 3 of the plan provides the entanglement-structure data that the
-methodology charter (`docs/source/quantum-methodology.md`) builds its
-hypothesis around. For each contiguous interval $A = [i, j]$ on the
+This is the entanglement-structure data that the methodology charter
+(`docs/source/quantum-methodology.md`) builds its hypothesis around.
+For each contiguous interval $A = [i, j]$ on the
 chain, the Schmidt spectrum $\lambda_A$ is the list of eigenvalues of
 $\rho_A = \mathrm{Tr}_{\bar A}|\psi\rangle\langle\psi|$, sorted
 non-increasingly. Majorization $\lambda_A \preceq \lambda_B$ ("$B$ is at
@@ -227,9 +227,9 @@ interior cuts in the poset because they are the *most concentrated*
 spectra (least entangled). The Hasse direction is therefore "boundary
 ≻ interior", which is the expected behaviour for finite OBC chains.
 
-## Phase 4 — q-qbar quench and TDVP real-time evolution
+## q-qbar quench and TDVP real-time evolution
 
-Phase 4 takes the Schwinger ground state into a non-equilibrium regime by
+This takes the Schwinger ground state into a non-equilibrium regime by
 applying a *q-qbar quench operator* and integrating forward with two-site
 TDVP. The quench is the Schwinger-language analogue of pair-creating a
 heavy quark and antiquark connected by an electric flux string. The
@@ -319,12 +319,13 @@ At smaller $m/g$ (light-quark regime) the tube spreads / breaks
 within $T \sim 1/(m/g)$ — that's the string-breaking dynamics Buyens
 et al. study. Try ``--m-over-g 0.5 --T 4.0`` to see it in action.
 
-## Phase 5 — causal-order comparison
+## Causal-order comparison
 
-Phase 5 ties Phases 1-4 together to test the methodology charter's
-hypothesis (`docs/source/quantum-methodology.md`): that on a
-TDVP-evolved Schwinger state, three independently-defined partial orders
-on the (cut, time) label set agree.
+This ties the ground-state, Schmidt, and quench pipelines together to
+test the methodology charter's hypothesis
+(`docs/source/quantum-methodology.md`): on a TDVP-evolved Schwinger
+state, three independently-defined partial orders on the (cut, time)
+label set agree.
 
 ### The three orders
 
@@ -333,14 +334,15 @@ and $\mathcal{F}$ the contiguous-interval cut family, the labels are
 $\mathcal{L} = \mathcal{F} \times \{t_0, \dots, t_K\}$. We define:
 
 * $(A, s) \preceq_{\mathrm{maj}} (B, t)$ — strict-majorization order on
-  the Schmidt spectra; the Phase 3 :meth:`Majorization.posetOf` extended across
+  the Schmidt spectra; :meth:`Majorization.posetOf` extended across
   cuts AND times.
 * $(A, s) \preceq_{\mathrm{LR}} (B, t)$ iff $s < t$ and the
   interval-distance $d(A, B) \le v_{\mathrm{LR}} \cdot (t - s)$ —
   the Lieb-Robinson cone.
 * $(A, s) \preceq_{\mathrm{cs}} (B, t)$ iff $s < t$ — the trivial
-  causet order on a regular chain (Phase 6 makes this informative
-  within a time slice too).
+  causet order on a regular chain (a non-trivial causet makes this
+  informative within a time slice too; see the causet-embedded chain
+  section below).
 
 Each order is stored as a Hasse-cover :class:`Poset` over a shared
 label list. Pairwise agreement is reported as Kendall-τ, the discordant
@@ -402,12 +404,11 @@ Key invariant: ``lrVsCs.kendallTau = 1.0`` exactly (≼_LR is a strict
 subset of ≼_cs by construction). Any deviation flags an implementation
 bug.
 
-## Phase 6 — tessera-Spacetime → causet-embedded chain
+## tessera-Spacetime → causet-embedded chain
 
-Phase 6 (`docs/source/quantum-plan.md` §6) replaces the regular 1D
-lattice with a "chain of antichains" sourced from a
-:class:`tessera.Spacetime`. Two pieces of that integration have landed
-and are usable from Python today:
+This replaces the regular 1D lattice with a "chain of antichains"
+sourced from a :class:`tessera.Spacetime`. Two pieces of the integration
+are usable from Python today:
 
 1. **Inherited Hasse-cover Poset on the Spacetime vertex set**
    — :meth:`tessera.quantum.Poset.fromSpacetime` walks every timelike
@@ -415,7 +416,8 @@ and are usable from Python today:
    orients it earliest-time → latest-time, transitively closes the
    resulting DAG, and emits the cover edges (transitive reduction)
    as a :class:`tessera.quantum.Poset`. This is the natural "≼_cs" of
-   Phase 5 promoted to a non-trivial within-time-slice structure.
+   the causal-order comparison's ≼_cs promoted to a non-trivial
+   within-time-slice structure.
 
 2. **Chain-of-antichains adapter**
    — :meth:`tessera.quantum.Causet.chainFrom` walks the Spacetime,
@@ -485,31 +487,32 @@ the underlying foliation is :data:`tessera.PREFERRED`.
 
 The C++ and Python test suites cross-check every layer of the pipeline:
 
-| Test | Layer | What it verifies |
+| Test | Subsystem | What it verifies |
 |---|---|---|
-| `test_itensor_hello.cpp` | Phase 0 | Heisenberg $N{=}8$ DMRG vs. dense Eigen ED ($\sim$1e-14). |
-| `test_schwinger_spectrum.cpp` | Phase 1 | DMRG vs. dense Eigen ED on the full $2^N$ basis, $N \in \{4,6,8\}$, $m/g \in \{0, 0.125, 0.25\}$, $L_0 \in \{0, 0.5\}$ — agreement to $10^{-12}$. |
-| `test_schwinger_limits.cpp`   | Phase 1 | Free-fermion analytic limit ($g{=}m{=}0$) and strong-coupling vacuum ($m \to \infty$). |
-| `test_schwinger_paper.cpp`    | Phase 1 | Continuum trend $\omega_0 \to -1/\pi$, vector mass gap, chiral condensate, charge-conjugation parity. |
-| `test_phase2_compute_ground_state.py` | Phase 2 | Phase 1 numerics reproduced through the Python API to $10^{-8}$. |
-| `test_phase2_api_robustness.py` | Phase 2 | Validation, variational descent, reproducibility, conserveQns flag, L0 dependence, doctests. |
-| `test_majorization.cpp` | Phase 3 | Majorization predicate properties (reflexivity, transitivity, anti-symmetry, transitive reduction). |
-| `test_schmidt_spectra.cpp` | Phase 3 | Schmidt extraction on product, GHZ, Bell, singlet inputs. |
-| `test_majorization_poset.cpp` | Phase 3 | Acceptance: product → 0 Hasse edges, GHZ → 0 strict edges, Bell + product → $(1,0) \succ (\tfrac{1}{2},\tfrac{1}{2})$ edge present. |
-| `test_schwinger_schmidt_cross_check.cpp` | Phase 3 | MPS-side Schmidt vs. dense ED on Schwinger ground states for 8 (N, m, L₀) cases — 131 individual cuts to $10^{-9}$. |
-| `test_phase3_majorization_python.py` | Phase 3 | Pipeline reproduction through Python: majorization predicate, poset properties (acyclic, irreflexive, transitively reduced), complement symmetry, strong-mass collapse. |
-| `test_tdvp_string.cpp` | Phase 4 | Heavy-quark flux-tube test: $\langle L_n\rangle(t)$ matches +1-tube reference at $t=0$ and $t=T/2$ to within 0.05; $\|\Delta E\|/\|E_0\| < 10^{-3}$ over $T = d \cdot a$. |
-| `test_phase4_tdvp_python.py` | Phase 4 | Python pipeline tests: parity validation, snapshot schedule, energy conservation, total-charge conservation, optional spectra/poset recording. |
-| `test_tdvp_vs_dense.cpp` | Phase 4 | TDVP integrator vs $e^{-iHt}$ dense unitary evolution on the full $2^N$ Hilbert space, $N \le 8$, four parameter regimes — agreement to $3\times10^{-6}$. |
-| `test_schwinger_n4_hamiltonian.cpp` | Phase 1 | PLAN.md §7 trap: independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
-| `test_causal_compare.cpp` | Phase 5 | End-to-end three-order comparison; sanity checks on Kendall-τ ranges; vLr-monotonicity sanity. |
-| `test_phase5_causal_compare_python.py` | Phase 5 | Python pipeline: identical/reversed/disjoint pure compareOrders cases, end-to-end pipeline checks, ≼_LR ⊂ ≼_cs invariant (τ = 1.0 exactly), vLr monotonicity. |
-| `test_poset_from_spacetime.cpp` | Phase 6 | Hand-crafted Spacetimes (2-slice ladder, 3-slice chain with skip, empty, spacelike-only, sparse-ID, self-comparison, DOT export) — verifies `Poset::fromSpacetime` Hasse covers, transitive reduction, dense ID remapping. |
-| `test_causet_chain.cpp` | Phase 6 | `Causet::chainFrom` invariants on trivial chain, branching antichain, sparse IDs, slice-spanning skip edges. |
-| `test_phase6_causet_chain_python.py` | Phase 6 | Python-side self-consistency on a default CDT Spacetime: layer sizes, flat-index alignment, partialOrder ⊆ hoppingPairs invariant, DOT round-trip. |
-| `test_phase6_cdt_invariants.cpp` | Phase 6 | Foliated-CDT structural invariants (Ambjorn 2004): every Hasse cover spans exactly one slice; covers ≡ hoppingPairs (no transitive reduction on a foliated complex); Hasse height = num_layers − 1; total extraction; top-layer out-degree / bottom-layer in-degree both 0. |
-| `test_schwinger_paper.cpp::check_vector_mass_continuum_trend` | Phase 1 | Bañuls 2013 fig. 7a M_V/g continuum trend at $m/g = 0$: scan $(x, N) \in \{(4, 40), (16, 80)\}$, verify monotone descent of the first-excited-state gap toward $1/\sqrt{\pi}$ and $\Delta E/g$ in $[0.55, 0.75]$ at $1/\sqrt{x}=0.25$ (matching their published 0.61). |
-| `test_schmidt_invariants_dmrg.cpp` | Phase 1 / 3 | Universal density-matrix invariants on every contiguous-cut Schmidt spectrum of Schwinger DMRG ground states across $(N, m, L_0)$ grid: $\sum \lambda = 1$, $\lambda \in [0, 1]$, descending order, rank $\le 2^{\min(w, N-w)}$. 330 spectra validated to $\sim 10^{-15}$. |
+| `test_itensor_hello.cpp` | ITensor smoke | Heisenberg $N{=}8$ DMRG vs. dense Eigen ED ($\sim$1e-14). |
+| `test_schwinger_spectrum.cpp` | Schwinger MPO | DMRG vs. dense Eigen ED on the full $2^N$ basis, $N \in \{4,6,8\}$, $m/g \in \{0, 0.125, 0.25\}$, $L_0 \in \{0, 0.5\}$ — agreement to $10^{-12}$. |
+| `test_schwinger_limits.cpp` | Schwinger MPO | Free-fermion analytic limit ($g{=}m{=}0$) and strong-coupling vacuum ($m \to \infty$). |
+| `test_schwinger_n4_hamiltonian.cpp` | Schwinger MPO | PLAN.md §7 trap: independent symbolic evaluation of the H formula on every N=4 basis state, machine-precision match. |
+| `test_schwinger_paper.cpp` | Schwinger MPO | Continuum trend $\omega_0 \to -1/\pi$, vector mass gap, chiral condensate, charge-conjugation parity. |
+| `test_schwinger_ground_state_python.py` | Schwinger MPO | C++ reference energies reproduced through the Python API to $10^{-8}$. |
+| `test_schwinger_model_robustness_python.py` | Schwinger MPO | Validation, variational descent, reproducibility, conserveQns flag, L0 dependence, doctests. |
+| `test_majorization.cpp` | Majorization | Predicate properties (reflexivity, transitivity, anti-symmetry, transitive reduction). |
+| `test_schmidt_spectra.cpp` | Schmidt | Schmidt extraction on product, GHZ, Bell, singlet inputs. |
+| `test_majorization_poset.cpp` | Majorization | Pipeline acceptance: product → 0 Hasse edges, GHZ → 0 strict edges, Bell + product → $(1,0) \succ (\tfrac{1}{2},\tfrac{1}{2})$ edge present. |
+| `test_schwinger_schmidt_cross_check.cpp` | Schmidt | MPS-side Schmidt vs. dense ED on Schwinger ground states for 8 (N, m, L₀) cases — 131 individual cuts to $10^{-9}$. |
+| `test_schmidt_invariants_dmrg.cpp` | Schmidt | Universal density-matrix invariants on every contiguous-cut spectrum of Schwinger DMRG ground states across $(N, m, L_0)$: $\sum \lambda = 1$, $\lambda \in [0, 1]$, descending order, rank $\le 2^{\min(w, N-w)}$. 330 spectra validated to $\sim 10^{-15}$. |
+| `test_majorization_python.py` | Majorization | Pipeline reproduction through Python: majorization predicate, poset properties (acyclic, irreflexive, transitively reduced), complement symmetry, strong-mass collapse. |
+| `test_tdvp_string.cpp` | TDVP quench | Heavy-quark flux-tube test: $\langle L_n\rangle(t)$ matches +1-tube reference at $t=0$ and $t=T/2$ to within 0.05; $\|\Delta E\|/\|E_0\| < 10^{-3}$ over $T = d \cdot a$. |
+| `test_tdvp_vs_dense.cpp` | TDVP quench | TDVP integrator vs $e^{-iHt}$ dense unitary evolution on the full $2^N$ Hilbert space, $N \le 8$, four parameter regimes — agreement to $3\times10^{-6}$. |
+| `test_schwinger_quench_python.py` | TDVP quench | Python pipeline tests: parity validation, snapshot schedule, energy conservation, total-charge conservation, optional spectra/poset recording. |
+| `test_causal_compare.cpp` | Causal compare | End-to-end three-order comparison; sanity checks on Kendall-τ ranges; vLr-monotonicity. |
+| `test_causal_compare_python.py` | Causal compare | Python pipeline: identical/reversed/disjoint hand-built order cases, end-to-end checks, ≼_LR ⊂ ≼_cs invariant (τ = 1.0 exactly), vLr monotonicity. |
+| `test_poset_from_spacetime.cpp` | Causet adapter | Hand-crafted Spacetimes (2-slice ladder, 3-slice chain with skip, empty, spacelike-only, sparse-ID, self-comparison, DOT export) — verifies `Poset::fromSpacetime` Hasse covers, transitive reduction, dense ID remapping. |
+| `test_causet_chain.cpp` | Causet adapter | `Causet::chainFrom` invariants on trivial chain, branching antichain, sparse IDs, slice-spanning skip edges. |
+| `test_chain_causet_mpo.cpp` | Causet adapter | `SchwingerHamiltonian::mpoChain` reproduces the default 1D MPO on a chain causet (one vertex per time slice). |
+| `test_cdt_causet_invariants.cpp` | Causet adapter | Foliated-CDT structural invariants (Ambjorn 2004): every Hasse cover spans exactly one slice; covers ≡ hoppingPairs (no transitive reduction on a foliated complex); Hasse height = num_layers − 1; total extraction; top-layer out-degree / bottom-layer in-degree both 0. |
+| `test_causet_chain_python.py` | Causet adapter | Python self-consistency on a default CDT Spacetime: layer sizes, flat-index alignment, partialOrder ⊆ hoppingPairs invariant, DOT round-trip. |
+| `test_class_api.py` | All | Class semantics: config introspection, stateless reuse, static-class non-instantiability, predicate hierarchy, `Majorization.posetOf` predicate variants, `CausalOrders.fromSnapshots` factory. |
 
 ## API reference
 
@@ -526,7 +529,7 @@ The C++ and Python test suites cross-check every layer of the pipeline:
   *Matrix product states for gauge field theories*,
   Phys. Rev. Lett. **113**, 091601 (2014),
   [arXiv:1312.6654](https://arxiv.org/abs/1312.6654) — the
-  string-state construction underlying the Phase 4 q-qbar quench.
+  string-state construction underlying the q-qbar quench.
 * Haegeman, Lubich, Oseledets, Vandereycken, Verstraete,
   *Unifying time evolution and optimization with matrix product states*,
   Phys. Rev. B **94**, 165116 (2016),

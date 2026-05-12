@@ -92,8 +92,8 @@ void Poset::addCover(int a, int b) {
     if (a < 0 || b < 0) {
         throw std::invalid_argument("Poset::addCover: node indices must be ≥ 0");
     }
-    // Auto-resize so callers don't have to pre-call setNodeCount — Phase 5
-    // computes covers and node counts in one pass.
+    // Auto-resize so callers don't have to pre-call setNodeCount — the
+    // causal-comparison code computes covers and node counts in one pass.
     const int needed = std::max(a, b) + 1;
     if (needed > getNodeCount()) setNodeCount(needed);
     auto* src = vertices_[static_cast<std::uint64_t>(a)];
@@ -137,7 +137,8 @@ std::string Poset::toDot() const {
 }
 
 Poset Poset::fromSpacetime(Spacetime const& st) {
-    // Phase 6 (docs/source/quantum-plan.md §6) — inherit a partial order
+    // Causet-adapter inheritance (docs/source/quantum-plan.md §6) —
+    // inherit a partial order
     // from a tessera::Spacetime by treating each timelike edge as a strict
     // precedes-relation oriented earliest-time → latest-time, then
     // transitively reducing the resulting DAG to its Hasse covers.

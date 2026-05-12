@@ -112,7 +112,7 @@ public:
     // standard 1D nearest-neighbour hopping graph.
     [[nodiscard]] SchwingerMPO mpo(bool conserveQns = true) const;
 
-    // Phase 6.0 chain-causet variant. The hopping graph for H_hop is
+    // Chain-causet variant. The hopping graph for H_hop is
     // supplied externally as a list of (site_i, site_j) pairs in 0-based
     // flat lattice indexing. Mass and electric-field terms remain the
     // standard 1D formulas — they're well-defined as long as the lattice
@@ -122,7 +122,7 @@ public:
     // For a chain causet (every antichain has one vertex), `hoppingPairs`
     // is exactly `[(0,1), (1,2), …, (N-2, N-1)]` and the resulting MPO
     // is bit-for-bit identical to `mpo(conserveQns)` — that's the
-    // Phase 6.0 sanity equality.
+    // chain-causet sanity equality.
     //
     // Sites in `hoppingPairs` are 0-based flat indices and must be in
     // [0, p.N - 1]. ITensor's site indexing is 1-based internally; we

@@ -1,4 +1,4 @@
-// Phase 3 acceptance tests (PLAN.md §5):
+// Majorization-poset acceptance tests (PLAN.md §5):
 //
 //   (1) Product state |0⟩^⊗N: every contiguous-cut Schmidt spectrum is
 //       (1, 0, …); the Hasse diagram has no edges (all spectra are

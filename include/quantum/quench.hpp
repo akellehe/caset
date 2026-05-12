@@ -1,6 +1,6 @@
 // q-qbar quench: prepare a flux-tube initial state from a Schwinger-model
 // vacuum-like MPS by flipping two spins separated by `d` sites (PLAN.md
-// §5 Phase 4 / Buyens et al. 2014 string-breaking construction).
+// §5 / Buyens et al. 2014 string-breaking construction).
 //
 // ─── What this does ───────────────────────────────────────────────────────
 //

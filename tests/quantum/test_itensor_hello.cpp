@@ -1,4 +1,4 @@
-// Phase 0 acceptance: confirm the ITensor build links and runs by reproducing
+// ITensor smoke test: confirm the ITensor build links and runs by reproducing
 // a small Heisenberg ground state through AutoMPO + DMRG. We compare against
 // a dense Eigen diagonalization of the same Hamiltonian so the test stays
 // self-contained — no external reference numbers to maintain. If this fails
@@ -118,7 +118,7 @@ int main() {
         return 1;
     }
 
-    // ── Test 2: N=20 bond-dim convergence (PLAN.md §5 Phase 0 spec) ───
+    // ── Test 2: N=20 bond-dim convergence (PLAN.md §5 scaffolding spec) ───
     // The plan calls for "Heisenberg chain for N=20 to within 1e-6 of the
     // ITensor reference value". Dense ED at N=20 is too large (2^20×2^20),
     // so we replace "ITensor reference" with "DMRG converged at high

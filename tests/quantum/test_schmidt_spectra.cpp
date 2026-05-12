@@ -1,7 +1,7 @@
 // Schmidt-spectrum extraction tests on simple, hand-checkable MPSes.
 // Verifies that Schmidt::of and Schmidt::allOf return
 // the textbook values for product, GHZ, and Bell states — the inputs we
-// also feed into the Phase 3 majorization-poset acceptance test, but
+// also feed into the majorization-poset acceptance test, but
 // here we check only the spectra in isolation, before the poset layer
 // gets involved.
 

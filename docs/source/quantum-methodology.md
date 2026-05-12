@@ -97,8 +97,8 @@ contiguous spatial intervals at sampled times:
    superluminal-in-the-lattice-sense order.
 2. *Weak falsification.* If $\preceq_{\mathrm{maj}}$ disagrees with
    $\preceq_{\mathrm{cs}}$ on a non-vanishing fraction of comparable pairs
-   for non-trivial causet topologies (Phase 5), the prescribed causet
-   geometry does not control the emergent order.
+   for non-trivial causet topologies, the prescribed causet geometry
+   does not control the emergent order.
 3. *Trivial agreement.* If $\preceq_{\mathrm{cs}}$ is forced to coincide with
    $\preceq_{\mathrm{LR}}$ by the regularity of the lattice (1+1D total
    order on time slices), agreement is uninformative; the test must be
@@ -188,8 +188,10 @@ $\preceq_{\mathrm{LR}}$ is constructed from the Lieb–Robinson velocity
 $v_{\mathrm{LR}}$ extracted from out-of-time-ordered commutator
 front-propagation in the same simulation. $\preceq_{\mathrm{cs}}$, when
 present, is read directly from the causet adjacency provided by the host
-package; in Phase 4 the chain is regular and the causet order is
-trivial, so $\preceq_{\mathrm{cs}}$ becomes informative only in Phase 5.
+package; on a regular 1+1D chain the causet order is trivial, so
+$\preceq_{\mathrm{cs}}$ becomes informative only when the chain is
+replaced with a non-trivial causet (the causet-embedded variant of
+this pipeline).
 
 ## 4. Methodology
 
@@ -304,8 +306,8 @@ and over initial $i_0$ within a translation-invariant subregion.
 
 - *Spurious agreement from regularity.* On a translationally invariant
   lattice the three orders may coincide for reasons unrelated to the
-  hypothesis. Phase 5 with non-trivial causet topologies is required to
-  distinguish.
+  hypothesis. Re-running on non-trivial causet topologies is required
+  to distinguish.
 - *Truncation-induced order violations.* Aggressive bond-dimension
   truncation can perturb Schmidt spectra enough to flip a borderline
   majorization comparison. Comparisons within $\epsilon = 10^{-6}$ of the

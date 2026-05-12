@@ -1,4 +1,4 @@
-"""Phase 3 Python-level tests: pure majorization predicate, Poset
+"""Python-level tests: pure majorization predicate, Poset
 construction via :class:`Majorization`, and the end-to-end
 :meth:`SchwingerModel.solveWithMajorization` pipeline through the
 ``tessera.quantum`` API.

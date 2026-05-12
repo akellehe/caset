@@ -1,7 +1,7 @@
-// Phase 4 acceptance: heavy-quark q-qbar quench yields a flux tube of
+// TDVP-quench acceptance: heavy-quark q-qbar quench yields a flux tube of
 // value +1 above the vacuum on the d links between i0 and i0+d, with the
 // surrounding links unchanged. Energy is conserved by TDVP to better
-// than 0.1% of the post-quench energy. PLAN.md §5 Phase 4 specifies
+// than 0.1% of the post-quench energy. PLAN.md §5 specifies
 // this benchmark verbatim.
 //
 // We use d = 5 (odd) instead of the plan's d = 4: the σ⁻ σ⁺ quench
@@ -127,7 +127,7 @@ bool flux_tube_test() {
               << "  (tol " << initial_tol << ")\n\n";
 
     // ── (2) Mid-run profile must still match the flux tube to within
-    // 0.05 (PLAN.md §5 Phase 4 spec) at t = T/2.
+    // 0.05 (PLAN.md §5 spec) at t = T/2.
     bool mid_ok = true;
     constexpr double mid_tol = 0.05;
     for (int n = 1; n <= cfg.N - 1; ++n) {

@@ -1,5 +1,5 @@
 // Implementation of SchwingerQuench — the q-qbar-quench + TDVP pipeline
-// (Phase 4) and the causal-order comparison (Phase 5). See
+// and the causal-order comparison. See
 // include/quantum/tdvp_runner.hpp for the architectural narrative.
 
 #include "quantum/tdvp_runner.hpp"
@@ -139,7 +139,7 @@ QuenchResult SchwingerQuench::evolve() const {
     result.groundState.bondDim        = itensor::maxLinkDim(psiGs);
     result.groundState.truncationErr  = cfg.dmrgCutoff;
 
-    // (2) Apply the q-qbar quench (Phase 4 ≈ Buyens 2014 string state).
+    // (2) Apply the q-qbar quench (Buyens 2014 string state).
     auto psi = QqbarQuench{cfg.i0, cfg.d, cfg.quenchEnforceParity}
                    .apply(psiGs, sm.sites);
 

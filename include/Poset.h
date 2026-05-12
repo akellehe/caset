@@ -4,7 +4,7 @@
 // indexed nodes. Storage uses tessera's standard mesh primitives
 // (tessera::VertexList, tessera::EdgeList) so Poset instances interoperate
 // with the rest of tessera's graph machinery — rendering, GraphML / dot
-// export, and the Phase 6 causet inheritance share the same Vertex /
+// export, and the causet-adapter inheritance share the same Vertex /
 // Edge types we already use for the simplicial spacetime.
 //
 // ─── What this provides ───────────────────────────────────────────────────
@@ -32,7 +32,7 @@
 
 namespace tessera {
 
-class Spacetime;  // forward decl for Poset::fromSpacetime (Phase 6)
+class Spacetime;  // forward decl for Poset::fromSpacetime
 
 // Hasse-cover representation of a partial order on integer-indexed nodes.
 //
@@ -105,7 +105,7 @@ public:
     // using the directed-edge / timelike-edge subgraph as the strict
     // precedes-relation, then transitively-reducing to cover edges.
     //
-    // Phase 6 of the quantum-plan extends this for the (cut, time)
+    // The causet adapter extends this for the (cut, time)
     // label set used by majorization-vs-LR-vs-causet comparison;
     // currently this base version is implemented as a Phase-6 stub.
     static Poset fromSpacetime(Spacetime const& st);
@@ -169,4 +169,4 @@ OrderAgreement compareOrders(Poset const& a,
 // fields (and make the Edge struct ~16 B instead of ~32 B), halving the
 // per-cover memory cost in large posets. Not implemented yet — current
 // per-cover overhead (~70 B counting EdgeList map entry) is acceptable
-// for the Phase 5 problem sizes (hundreds of thousands of cover edges).
+// for the causal-comparison problem sizes (hundreds of thousands of cover edges).

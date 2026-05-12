@@ -1,5 +1,5 @@
 // Schmidt-spectrum extraction for contiguous-interval bipartitions of an
-// MPS. PLAN.md §5 Phase 3: given an MPS and a contiguous interval [i, j],
+// MPS. PLAN.md §5: given an MPS and a contiguous interval [i, j],
 // return the Schmidt spectrum of the bipartition A = [i, j] vs. its
 // complement.
 //
@@ -39,7 +39,7 @@ struct Interval {
 };
 
 // All-contiguous-cut Schmidt spectra of an MPS, excluding the trivial
-// full-chain bipartition [1, N] | ∅. PLAN.md §5 Phase 3 specifies exactly
+// full-chain bipartition [1, N] | ∅. PLAN.md §5 specifies exactly
 // this set as the cut family $\mathcal{F}$.
 struct SchmidtSpectra {
     int N{0};                                 // chain length

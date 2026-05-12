@@ -1,7 +1,7 @@
-"""Phase 2 acceptance: re-run Phase 1's small-N cases through the
+"""Re-run the small-N cases through the
 :class:`tessera.quantum.SchwingerModel` Python API and confirm the
-energies match the C++-side numbers (PLAN.md §5 Phase 2: "re-runs Phase 1
-with the wrapper; numerics unchanged").
+energies match the C++-side numbers (PLAN.md §5: the wrapper re-runs
+the MPO acceptance with numerics unchanged).
 
 Reference values are the (operator-only) ground-state energies produced
 by tests/quantum/test_schwinger_spectrum.cpp at the same parameters,
@@ -44,7 +44,7 @@ PHASE1_REFERENCE = {
 @unittest.skipUnless(HAVE_QUANTUM, "tessera built without TESSERA_QUANTUM=1")
 class TestSchwingerModelSolve(unittest.TestCase):
     def test_phase1_reference_match(self) -> None:
-        """Each (N, m/g, L0) in the Phase 1 sweep matches its reference
+        """Each (N, m/g, L0) in the small-N sweep matches its reference
         operator-only energy to within 1e-6."""
         for (N, m_over_g, L0), e_ref in PHASE1_REFERENCE.items():
             cfg = QuantumConfig()
@@ -73,7 +73,7 @@ class TestSchwingerModelSolve(unittest.TestCase):
             self.assertLessEqual(result.bondDim, cfg.maxBondDim)
 
     def test_n20_runs_and_returns_diagnostics(self) -> None:
-        """N=20 from PLAN.md §5 Phase 1 spec — verify the run completes,
+        """N=20 from the PLAN.md §5 spec — verify the run completes,
         returns a sane bondDim, and the operator energy + constant
         identity holds."""
         cfg = QuantumConfig()

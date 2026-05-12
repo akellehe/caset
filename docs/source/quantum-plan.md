@@ -1,8 +1,8 @@
 # PLAN.md — Schwinger-Model Majorization Poset Extension for `tessera`
 
-Hand this file to Claude Code as the working spec. Each phase has a
-concrete deliverable, a file layout, and an acceptance test. Do not
-skip acceptance tests; every phase gates the next.
+Hand this file to Claude Code as the working spec. Each feature below
+has a concrete deliverable, a file layout, and an acceptance test. Do
+not skip acceptance tests; each feature gates the ones that build on it.
 
 The hypothesis this plan is built to test, plus falsification criteria,
 limitations, and bibliographic context, are in
@@ -79,10 +79,10 @@ tessera/
     majorization.cpp
     causal_compare.cpp
   tests/quantum/
-    test_schwinger_spectrum.cpp   # Phase 1 acceptance
-    test_majorization.cpp         # Phase 3 acceptance
-    test_tdvp_string.cpp          # Phase 4 acceptance
-    test_causal_compare.cpp       # Phase 5 acceptance
+    test_schwinger_spectrum.cpp   # Schwinger MPO acceptance
+    test_majorization.cpp         # majorization acceptance
+    test_tdvp_string.cpp          # TDVP quench acceptance
+    test_causal_compare.cpp       # causal-comparison acceptance
   python/tessera/quantum/
     __init__.py
     _bindings.cpp              # pybind11, only exports final data
@@ -112,9 +112,9 @@ natively — use it, do not roll a hand-built MPO.
 Reference for all numerics: Bañuls, Cichy, Cirac, Jansen,
 *JHEP* **11**, 158 (2013).
 
-## 5. Phased implementation
+## 5. Build order and acceptance
 
-### Phase 0 — scaffolding (≤ 2 days)
+### Scaffolding
 
 - Add ITensor submodule; CMake build verifies with ITensor's own
   `sample/dmrg.cc` compiled against the tessera toolchain.
@@ -125,7 +125,7 @@ Reference for all numerics: Bañuls, Cichy, Cirac, Jansen,
 energy of the Heisenberg chain for $N=20$ to within $10^{-6}$ of the
 ITensor reference value.
 
-### Phase 1 — Schwinger MPO (2–3 days)
+### Schwinger MPO
 
 - Implement `schwinger_model.hpp`: a class that takes $(N, a, m, g, L_0)$
   and returns an `ITensor::MPO`.
@@ -137,7 +137,7 @@ DMRG ground-state energy per site for $N=20$, $a=1$, $m/g \in \{0.0,
 0.125, 0.25\}$ matches Bañuls et al. 2013 Table 1 to $< 10^{-3}$.
 Bond dimension 100 is enough for this check.
 
-### Phase 2 — DMRG runner (2 days)
+### DMRG ground-state runner
 
 - `dmrg_runner.hpp`: thin wrapper around `ITensor::dmrg`.
   Inputs: `SchwingerMPO`, sweep schedule, max bond dim, noise, Krylov
@@ -145,9 +145,10 @@ Bond dimension 100 is enough for this check.
 - Expose `SchwingerModel(config).solve()` through pybind11 returning
   only $(E_0, \text{bond\_dim}, \text{truncation\_err})$.
 
-**Acceptance**: re-runs Phase 1 with the wrapper; numerics unchanged.
+**Acceptance**: re-runs the Schwinger-MPO acceptance through the
+wrapper; numerics unchanged.
 
-### Phase 3 — Schmidt spectra and majorization poset (3 days)
+### Schmidt spectra and majorization poset
 
 - `schmidt.hpp`: given an MPS in right canonical form and an interval
   $[i,j]$, return $\lambda_{[i,j]}$ via SVD at the appropriate bond
@@ -188,7 +189,7 @@ Bond dimension 100 is enough for this check.
    $(\tfrac{1}{2}, \tfrac{1}{2})$; compared against product state
    $(\tfrac{1}{2}, \tfrac{1}{2}) \prec (1,0)$ correctly.
 
-### Phase 4 — TDVP with $q\bar{q}$ quench (4 days)
+### TDVP with $q\bar{q}$ quench
 
 - `tdvp_runner.hpp`: wraps ITensor's 2-site TDVP. Inputs: MPS, MPO,
   $\Delta t$, $T$, max bond dim, observables callback (pure C++).
@@ -211,11 +212,11 @@ Bond dimension 100 is enough for this check.
   $0.05$ after $t = T/2$.
 - Energy conservation: $|\Delta E|/|E_0| < 10^{-3}$ over the run.
 
-### Phase 5 — causal-order comparison (3 days)
+### Causal-order comparison
 
 - `causal_compare.hpp`: builds three partial orders on the label set
   $\{(\text{cut}, t)\}$:
-  1. $\prec_\text{maj}$: from Phase 3 Hasse diagram, per time slice.
+  1. $\prec_\text{maj}$: from the majorization Hasse diagram, per time slice.
   2. $\prec_\text{LR}$: from the Lieb–Robinson velocity $v_\text{LR}$
      extracted by fitting OTOC ($\langle [\sigma^+_i(t), \sigma^-_j]^\dagger
      [\sigma^+_i(t), \sigma^-_j]\rangle$) front propagation.
@@ -235,12 +236,12 @@ Bond dimension 100 is enough for this check.
 - Agreement rate quoted with uncertainty from bootstrap over Trotter
   seeds.
 
-### Phase 6 — tessera integration (1–2 weeks, optional for v1)
+### Causet adapter — tessera-Spacetime integration
 
-**Status (as of 2026-04-25)**: data-extraction layer landed; MPO
-rebuild on the extracted chain is the remaining piece.
+The data-extraction layer is implemented; the MPO rebuild on the
+extracted chain is still open work.
 
-Done:
+Implemented:
 
 - `tessera::Poset::fromSpacetime(Spacetime const&)` — inherits a Hasse
   cover Poset from the timelike-edge subgraph of any
@@ -257,9 +258,9 @@ Done:
   `tessera.CausalSet`).
 - C++ acceptance: `tests/quantum/test_poset_from_spacetime.cpp` (7
   cases) and `tests/quantum/test_causet_chain.cpp` (5 cases). Python
-  acceptance: `tests/quantum/test_phase6_causet_chain_python.py`.
+  acceptance: `tests/quantum/test_causet_chain_python.py`.
 
-Remaining for v1 close-out (deferred):
+Open work:
 
 - Rebuild the Schwinger MPO on the `CausetChain` so
   `H_hop` follows the extracted hopping pairs rather than uniform
@@ -275,19 +276,21 @@ Remaining for v1 close-out (deferred):
        handles branching antichains natively.
   Both paths are open work; pick after profiling the stride-1 case
   on a small CDT-derived chain.
-- Replace ≼_cs in `SchwingerQuench::compareCausalOrders` with the inherited
-  `partialOrder` on the cut/time label set, then re-run the Phase 5
-  invariants (`lrVsCs.kendallTau == 1.0` should still hold when
-  the chain is totally ordered per slice; it may relax for branching
-  causets, which is the Phase 6 hypothesis).
+- Replace ≼_cs in `SchwingerQuench::compareCausalOrders` with the
+  inherited `partialOrder` on the cut/time label set, then re-run the
+  causal-comparison invariants (`lrVsCs.kendallTau == 1.0` should
+  still hold when the chain is totally ordered per slice; it may
+  relax for branching causets, which is the causet-embedded
+  hypothesis).
 
-### Phase 7 — MERA / KAK / EML (research, not v1)
+### Future research: MERA / KAK / EML
 
-Do not attempt until Phases 1–5 produce publication-quality numbers.
-Replace MPS with binary MERA; KAK-decompose disentanglers; EML-
-parameterize KAK angles for symbolic regression over couplings.
-Reference: Evenbly–Vidal 2009 for MERA algorithms; Hauru–Van Damme–
-Haegeman 2021 for Riemannian optimization; Odrzywołek 2026 for EML.
+Do not attempt until the main pipeline above produces publication-
+quality numbers. Replace MPS with binary MERA; KAK-decompose
+disentanglers; EML-parameterize KAK angles for symbolic regression
+over couplings. Reference: Evenbly–Vidal 2009 for MERA algorithms;
+Hauru–Van Damme–Haegeman 2021 for Riemannian optimization;
+Odrzywołek 2026 for EML.
 
 ## 6. Python layer (minimal)
 
@@ -344,14 +347,18 @@ No MPS, MPO, or ITensor type crosses the barrier.
   at one or two intermediate times for $v_\text{LR}$ estimation; do
   not run every step.
 
-## 8. First week targets
+## 8. Suggested build order
 
-- Day 1–2: Phase 0 done, ITensor builds inside tessera's CMake tree.
-- Day 3–4: Phase 1 MPO constructed; matches Bañuls 2013 values.
-- Day 5–6: Phase 2 wrapper; Phase 3 majorization infrastructure on
-  trivial and GHZ test states.
-- End of week 1: DMRG + majorization pipeline end-to-end on $N=20$
-  Schwinger ground state.
+Each step depends only on what came before; do not skip ahead.
+
+1. Scaffolding: ITensor builds inside tessera's CMake tree.
+2. Schwinger MPO: matches Bañuls 2013 values on small N.
+3. DMRG ground-state wrapper.
+4. Majorization infrastructure on trivial and GHZ test states.
+5. End-to-end DMRG + majorization pipeline on $N=20$ Schwinger
+   ground state.
+6. TDVP quench + the causal-order comparison.
+7. Causet adapter integration.
 
 ## 9. Open questions to defer
 

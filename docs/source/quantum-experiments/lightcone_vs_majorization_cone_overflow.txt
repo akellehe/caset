@@ -1,5 +1,5 @@
-Phase 5 strong-falsification scan (criterion 1)
-================================================
+Cone-overflow strong-falsification scan (criterion 1)
+=====================================================
 n_maj∉LR : count of ≼_maj-related pairs OUTSIDE the LR cone.
          If > 0 at v_LR ≥ 1.0 (free-fermion bound), criterion 1
          is engaged — ≼_maj sees super-LR order on these pairs.

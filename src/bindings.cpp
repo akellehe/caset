@@ -782,7 +782,7 @@ dN41 + dN32 = 0.)doc")
 fresh ``std::mt19937`` seeded with ``seed`` for the proposal.
 
 For sweeps that share a single Markov chain across many moves, drive
-moves via ``CDT.proposeShift()`` (added in Phase 3) instead.)doc");
+moves via ``CDT.proposeShift()`` instead.)doc");
 
   // ========================================
   // CDTSimulation
@@ -1359,6 +1359,6 @@ Args:
   // call them as `tessera._tessera.quantum.computeGroundState(...)` (typically
   // routed through `tessera.quantum` — see tessera/quantum/__init__.py).
   register_quantum_bindings(m.def_submodule("quantum",
-      "Schwinger model + DMRG (Phase 2 of docs/source/quantum-plan.md)."));
+      "Schwinger model + DMRG (docs/source/quantum-plan.md)."));
 #endif
 }

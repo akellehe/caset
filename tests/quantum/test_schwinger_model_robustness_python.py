@@ -1,7 +1,7 @@
-"""Phase 2 robustness and API surface tests for :class:`tessera.quantum.SchwingerModel`.
+"""Robustness and API surface tests for :class:`tessera.quantum.SchwingerModel`.
 
-These tests exercise the Python API beyond the Phase 1 reference-value
-matching covered in test_phase2_compute_ground_state.py — they verify
+These tests exercise the Python API beyond the reference-value matching
+covered in test_schwinger_ground_state_python.py — they verify
 validation errors, variational descent, reproducibility, the
 conserveQns flag, L0 dependence, repr formatting, and analytic limits
 through the Python boundary.

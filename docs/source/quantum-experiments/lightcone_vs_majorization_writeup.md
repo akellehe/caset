@@ -10,8 +10,8 @@ addresses the **strong falsification** criterion of
 > the hypothesis is wrong.
 
 The **weak falsification** criterion (≼_maj vs non-trivial ≼_cs) is
-out of scope for this run — it requires Phase 6's MPO rebuild on a
-tessera-derived chain. The **trivial-agreement** caveat applies to the
+out of scope for this run — it requires the causet-embedded MPO
+rebuild on a tessera-derived chain. The **trivial-agreement** caveat applies to the
 ≼_cs column here: on a regular 1+1D chain, ≼_cs reduces to the
 time-only order, so ≼_LR ⊆ ≼_cs by construction (verified — `τ(LR, cs)
 = 1.0` exactly).
@@ -229,54 +229,55 @@ subset, but each has a piece the other doesn't see.
   context.
 - **Trotter / bond-dim sensitivity.** Single-seed run, fixed
   bond-dim 80, fixed dt 0.1. The methodology page calls for
-  bootstrap-over-Trotter-seeds (`docs/source/quantum-plan.md` §5
-  Phase 5 acceptance) to put a confidence band on these τ values.
-  Until that is done, the τ ranges above are point estimates only.
+  bootstrap-over-Trotter-seeds to put a confidence band on these τ
+  values. Until that is done, the τ ranges above are point estimates
+  only.
 - **Non-trivial ≼_cs.** All ≼_cs results above are time-only. The
-  weak-falsification test requires the Phase 6 tessera-embedded chain
-  with multi-vertex antichains, where ≼_cs has within-time-slice
-  structure that ≼_LR does not.
+  weak-falsification test requires a tessera-embedded chain with
+  multi-vertex antichains, where ≼_cs has within-time-slice structure
+  that ≼_LR does not.
 
-## Reading toward Phase 6
+## Reading toward a causet-embedded re-run
 
-The Phase 5 result is consistent with two readings of the hypothesis:
+The result here is consistent with two readings of the hypothesis:
 
 **Reading 1 — hypothesis-as-stated is too strong.** ≼_maj genuinely
 has more structure than time / LR cone capture, and no causet ≼_cs on
 the regular chain will recover the agreement.
 
 **Reading 2 — the regular chain hides the structure.** On a foliated
-CDT (Phase 6), ≼_cs gains within-slice structure. If the Schwinger
-state were re-evolved on a non-trivial causet and ≼_cs replaced its
-trivial form here, the within-slice ≼_maj relations may now have
-matching ≼_cs relations — recovering the τ ≈ 1 signal.
+CDT, ≼_cs gains within-slice structure. If the Schwinger state were
+re-evolved on a non-trivial causet and ≼_cs replaced its trivial form
+here, the within-slice ≼_maj relations may now have matching ≼_cs
+relations — recovering the τ ≈ 1 signal.
 
 Reading 2 is the interesting one because it would *vindicate* the
 hypothesis as a non-trivial claim about causet-embedded entanglement
-flow. Reading 1 would refute it. Either way, **Phase 6 is the test
-that distinguishes them.**
+flow. Reading 1 would refute it. Either way, **the causet-embedded
+re-run is the test that distinguishes them.**
 
-## Recommended next steps before Phase 6 build-out
+## Recommended next steps before the causet-embedded build-out
 
 A — Quick (under a day):
 
 - Add `nOnlyA`, `nOnlyB` to `OrderAgreement` so we can directly
   count maj-pairs outside the LR cone.
-- Bind `buildCausalOrders` to Python so a follow-up scan can dump
-  the actual maj-cover edges that are outside the cone.
+- Bind `CausalOrders.fromSnapshots` to Python so a follow-up scan can
+  dump the actual maj-cover edges that are outside the cone.
 - Re-run the scan with a Trotter-bootstrap (5-10 seeds per regime)
   to put error bars on τ.
 
 B — Medium (1-3 days):
 
-- Phase 6 MPO rebuild: buildSchwingerMpo accepts a CausetChain
-  hopping pattern; for chain causets (1 vertex per slice) reduces to
-  the existing MPO. Run a second scan with the chain-causet ≼_cs
-  replacing the time-only ≼_cs. Compare τ(maj, cs) before and after.
+- Causet-chain MPO re-run: `SchwingerHamiltonian::mpoChain` already
+  accepts a `CausetChain` hopping pattern; for chain causets
+  (1 vertex per slice) it reduces to the default MPO. Run a second
+  scan with the chain-causet ≼_cs replacing the time-only ≼_cs.
+  Compare τ(maj, cs) before and after.
 
 C — Long (1-2 weeks):
 
-- Phase 6 with a non-trivial CDT spacetime (multi-vertex antichains).
+- Re-run with a non-trivial CDT spacetime (multi-vertex antichains).
   Either accept long-range hopping in the MPO bond dim or switch to
   ITensor tree TN. This is the proper weak-falsification test.
 

@@ -1,7 +1,7 @@
 // SchwingerModel — coarse-grained ground-state pipeline for the
 // Schwinger model on a Jordan-Wigner spin chain.
 //
-// PLAN.md §5 Phase 2 / §1: a self-contained ground-state driver that
+// PLAN.md §1, §5: a self-contained ground-state driver that
 // takes a flat config struct and returns the bare numbers we want to
 // expose to Python — no MPS, no MPO, no ITensor types cross the API
 // boundary. This keeps the Python side a pure result viewer in line
@@ -16,7 +16,7 @@
 //                                     bundle (data class).
 // • SchwingerModel                  — coarse-grained façade. Holds a
 //                                     QuantumConfig; methods run the
-//                                     DMRG and (optionally) the Phase 3
+//                                     DMRG and (optionally) the Schmidt
 //                                     Schmidt + majorization extension.
 //
 // What SchwingerModel methods do internally:
@@ -59,7 +59,7 @@ struct QuantumConfig {
     bool   quiet{true};         // suppress ITensor's per-sweep diagnostics
     bool   conserveQns{true};  // U(1) total-Sz conservation on the SiteSet
 
-    // ─── Phase 4 (TDVP / quench) parameters; unused by SchwingerModel.
+    // ─── TDVP / quench parameters; unused by SchwingerModel.
     // Carried in this struct to match PLAN.md §6's exposed API surface.
     double dt{0.01};   // real-time step size
     double T{1.0};     // total evolution time
@@ -90,8 +90,8 @@ struct GroundStateMajorizationResult {
 // Coarse-grained Schwinger-model ground-state pipeline.
 //
 // One instance binds a QuantumConfig; the methods run either the bare
-// DMRG ground state (Phase 2) or the DMRG + Schmidt + majorization-poset
-// pipeline (Phase 3). The model is stateless beyond its config — every
+// DMRG ground state or the DMRG + Schmidt + majorization-poset
+// pipeline. The model is stateless beyond its config — every
 // method runs the underlying ITensor pipeline from scratch.
 class SchwingerModel {
 public:
@@ -106,7 +106,7 @@ public:
 
     // Run DMRG, then extract every contiguous-cut Schmidt spectrum of the
     // optimized MPS and build the strict-majorization Hasse poset on those
-    // spectra (Phase 3 pipeline). `tol` is the slack on the majorization
+    // spectra. `tol` is the slack on the majorization
     // comparisons.
     [[nodiscard]] GroundStateMajorizationResult
     solveWithMajorization(double tol = 1e-12) const;

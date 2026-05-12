@@ -1,6 +1,6 @@
 // Majorization partial order on probability distributions, plus the
 // Hasse-diagram construction we use to build the majorization poset of
-// Schmidt spectra of an MPS (Phase 3 of docs/source/quantum-plan.md).
+// Schmidt spectra of an MPS (see docs/source/quantum-plan.md).
 //
 // The Poset / OrderAgreement types themselves live at the top of tessera
 // (`include/Poset.h`) so they're shareable with non-quantum analyses;
@@ -64,7 +64,7 @@
 
 namespace tessera::quantum {
 
-// Aliases keeping the Phase 3-5 code paths working unchanged. The
+// Aliases keeping the quantum-side code paths working unchanged. The
 // canonical types live in `tessera::` so non-quantum analyses can use
 // them too.
 using Poset          = ::tessera::Poset;

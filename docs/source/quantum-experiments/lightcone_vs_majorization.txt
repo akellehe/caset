@@ -1,6 +1,6 @@
-Phase 5 hypothesis-test scan
-============================
-≼_maj — Schmidt-spectrum majorization order (Phase 3)
+Lightcone vs. majorization scan
+===============================
+≼_maj — Schmidt-spectrum majorization order
 ≼_LR  — Lieb–Robinson cone with prescribed v_LR
 ≼_cs  — causet order (time-only on regular 1D chain)
 

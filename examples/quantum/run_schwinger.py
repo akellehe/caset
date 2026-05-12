@@ -29,7 +29,7 @@ floor; running with ``--scan-x`` shows the descent toward the continuum.
 Examples
 --------
 
-Basic single-point run (Phase 1 PLAN.md spec parameters)::
+Basic single-point run (PLAN.md §4 spec parameters)::
 
     python examples/quantum/run_schwinger.py
 

@@ -1,4 +1,4 @@
-// Phase 6.0 acceptance — `SchwingerHamiltonian::mpoChain` reproduces
+// Chain-causet acceptance — `SchwingerHamiltonian::mpoChain` reproduces
 // `SchwingerHamiltonian::mpo` exactly on a chain causet (one vertex
 // per time slice).
 //
@@ -23,8 +23,8 @@
 //       API instead.
 //
 // If any of these fail, the chain-causet path is no longer a sanity
-// reproduction of the regular Schwinger model and Phase 6.1 (multi-
-// vertex antichains) shouldn't be trusted on top of it.
+// reproduction of the regular Schwinger model and the multi-vertex-
+// antichain extension shouldn't be trusted on top of it.
 
 #include "Poset.h"
 #include "quantum/causet_chain.hpp"

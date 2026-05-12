@@ -92,7 +92,7 @@ inline int spacetimeDim(const Spacetime &st) {
 /// happens to be sampled against.
 ///
 /// Locked-in characterization (see
-/// docs/source/modularity-plan.md, "Discoveries from Phase 0"):
+/// docs/source/modularity-plan.md, "Discoveries from the safety-net pass"):
 ///
 /// * Edges added by ``apply()`` are recorded by EdgePtr identity (not
 ///   by fingerprint hash, which is unstable under

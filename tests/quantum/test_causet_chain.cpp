@@ -1,4 +1,4 @@
-// Phase 6 acceptance tests for tessera::quantum::Causet::chainFrom
+// Acceptance tests for tessera::quantum::Causet::chainFrom
 // (docs/source/quantum-plan.md §6 — tessera-embedded Schwinger lattice
 // extraction).
 //

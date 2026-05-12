@@ -1,10 +1,9 @@
 # Modularity sweep via Pachner moves — implementation plan
 
-Living document tracking the multi-phase build of an in-C++ Newman-Girvan
-modularity sweep driven by transactional Pachner moves on a CDT
-spacetime.  Updated as we go; checkboxes flip from `[ ]` to `[x]` when a
-piece lands.  See the **Progress log** at the bottom for date-stamped
-notes.
+Living document tracking the in-C++ Newman-Girvan modularity sweep
+driven by transactional Pachner moves on a CDT spacetime.  Updated as
+we go; checkboxes flip from `[ ]` to `[x]` when a piece lands.  See
+the **Progress log** at the bottom for date-stamped notes.
 
 ## Goal
 
@@ -55,9 +54,9 @@ moves into C++**.  Coverage scales over simplex dimension d ∈ {2, 3, 4, 5}.
         └──────────────────┘
 ```
 
-## Phase plan
+## Build order
 
-### Phase 0 — Safety net (tasks 15, 16) ✅
+### Safety net (tasks 15, 16) ✅
 
 Before touching any existing CDT code, lock in current behavior.
 
@@ -83,7 +82,7 @@ Before touching any existing CDT code, lock in current behavior.
     `(k0, k4, delta, epsilon) · (dN0, dN41, dN32)` exactly, for every
     accepted move type.
 
-#### Discoveries from Phase 0 — informs the refactor
+#### Discoveries from the safety-net pass — informs the refactor
 
 1. **`Edge::toHash` is *not* fingerprint-stable across vertex
    relabeling**.  `Spacetime::swapVertexLabels` rewrites edge
@@ -105,7 +104,7 @@ Before touching any existing CDT code, lock in current behavior.
    removes simplices, and any registrations they had are torn down
    by `removeSimplex` calling `facet.removeCoface(simplex)`.
 
-### Phase 1 — Transactional Pachner infrastructure (tasks 1, 2, 3) ✅
+### Transactional Pachner infrastructure (tasks 1, 2, 3) ✅
 
 - [x] **Task 1**: ``EdgeList::tryAdd`` returning ``std::pair<EdgePtr, bool>``.
   The bool reports whether the edge was freshly inserted (vs. found
@@ -124,7 +123,7 @@ Before touching any existing CDT code, lock in current behavior.
   reports its combinatorial deltas, the caller (CDT) plugs them into
   the action.  Keeps the move purely about geometry.
 
-### Phase 2 — Concrete move classes (tasks 4–8) ✅
+### Concrete move classes (tasks 4–8) ✅
 
 Each move shipped with a round-trip apply/rollback test asserting
 byte-identical state recovery.
@@ -140,7 +139,7 @@ byte-identical state recovery.
 Per user feedback, headers + sources moved from `simulations/` to
 `spacetime/` since Pachner moves apply to any spacetime.
 
-### Phase 3 — CDT integration (tasks 9, 10) ✅
+### CDT integration (tasks 9, 10) ✅
 
 - [x] **Task 9**: `CDT::add()`/`remove()`/`flip()`/`iflip()`/
   `shiftImpl()` each refactored to a ~6-line wrapper:
@@ -152,7 +151,7 @@ Per user feedback, headers + sources moved from `simulations/` to
   no-mutation-on-propose, and end-to-end propose/apply/rollback
   through the bindings.
 
-### Phase 4 — Observables (tasks 11, 12) ✅
+### Observables (tasks 11, 12) ✅
 
 - [x] **Task 11**: `include/observables/SparseGraph.h` +
   `HeatKernel.h`.
@@ -171,7 +170,7 @@ Per user feedback, headers + sources moved from `simulations/` to
 - [x] **Task 12**: `Spacetime::getDualGraph()` +
   `modularityOnSkeleton(int M)`.
 
-### Phase 5 — Optimizer (task 13) ✅
+### Optimizer (task 13) ✅
 
 - [x] **Task 13**: `include/observables/ModularityOptimizer.h`.
   - Config: targetDq, maxIterations, nDiffusionWalks, maxSigma,
@@ -190,7 +189,7 @@ Per user feedback, headers + sources moved from `simulations/` to
       - Bipartite-detection and negative-D_S retry safety nets
         on every measurement, mirrored from modularity.py.
 
-### Phase 6 — Python driver (task 14) ✅
+### Python driver (task 14) ✅
 
 - [x] **Task 14**: `examples/modularity-cpp.py` — thin CLI driver:
   - Build CDT spacetime per dimension d ∈ {2, 3, 4, 5}.
@@ -204,7 +203,7 @@ Per user feedback, headers + sources moved from `simulations/` to
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Pachner rollback bookkeeping bug — silent state corruption that doesn't surface for many moves | High | High | Round-trip apply/rollback test per move type; full-fingerprint equality assertion |
-| Refactor breaks existing test_pachner_*.py expectations | Medium | High | Phase-0 characterization tests; refactor only after they're green |
+| Refactor breaks existing test_pachner_*.py expectations | Medium | High | Safety-net characterization tests run first; refactor only after they're green |
 | Krylov-Lanczos heat kernel disagrees with scipy expm_multiply | Medium | Medium | Cross-check on small (~50-node) graph with known spectrum before use; keep krylovDim configurable |
 | `cdt.tune()` fails to find pseudo-critical k4 for d ∉ {4} | Medium | Low | `tune()` is an existing well-tested operation; if it fails for d=5 we make CDT thermalization optional and document |
 | EdgeList::tryAdd signature change breaks callers | Low | Medium | Add new overload, leave existing intact; migrate callers in a separate commit |
@@ -236,19 +235,20 @@ Per user feedback, headers + sources moved from `simulations/` to
 ## Progress log
 
 - **2026-05-02**: Plan v1 drafted.  Task list of 16 items established.
-- **2026-05-02**: Phase 0 complete.  `tests/test_pachner_characterization.py`
-  has 15 tests, all passing on current main.  Existing 69-test Pachner
-  suite still green.  Three discoveries from writing the tests are
-  documented under Phase 0 above and inform the AddMove/RemoveMove
-  rollback design.
-- **2026-05-02**: Phase 1 complete.  ``EdgeList::tryAdd`` and
-  ``Spacetime::createSimplexTracked`` shipped.  ``include/simulations/
-  PachnerMove.h`` defines the transactional interface.  Build green;
-  characterization tests + existing Pachner suite all pass.  Next:
-  Phase 2, starting with ``ShiftMove`` (simplest move — no vertex/edge
-  net change, single-step rollback validates the design before tackling
+- **2026-05-02**: Safety-net characterization tests landed.
+  `tests/test_pachner_characterization.py` has 15 tests, all passing
+  on current main.  Existing 69-test Pachner suite still green.
+  Three discoveries from writing the tests are documented above and
+  inform the AddMove/RemoveMove rollback design.
+- **2026-05-02**: Transactional Pachner infrastructure landed.
+  ``EdgeList::tryAdd`` and ``Spacetime::createSimplexTracked``
+  shipped.  ``include/simulations/PachnerMove.h`` defines the
+  transactional interface.  Build green; characterization tests +
+  existing Pachner suite all pass.  Next up: concrete move classes,
+  starting with ``ShiftMove`` (simplest move — no vertex/edge net
+  change, single-step rollback validates the design before tackling
   the harder moves).
-- **2026-05-02**: Phase 2 complete.  All five move classes
+- **2026-05-02**: Concrete move classes landed.  All five
   (``ShiftMove``, ``FlipMove``, ``IFlipMove``, ``AddMove``,
   ``RemoveMove``) shipped with apply/rollback, bound to Python, each
   with its own test suite (15-20 tests).  Headers + sources moved
@@ -257,33 +257,32 @@ Per user feedback, headers + sources moved from `simulations/` to
   vertex relabeling; RemoveMove rollback recreates deleted edges
   (with original squared lengths) and the deleted vertex.  Build
   green; 109/109 Pachner-related tests pass.
-- **2026-05-02**: Phase 3 complete.  ``CDT::add()`` /
-  ``remove()`` / ``flip()`` / ``iflip()`` / ``shiftImpl()`` refactored
-  to use the new transactional move classes — each is now a
-  ~6-line wrapper around propose / Metropolis-accept / apply.
-  ``CDT::proposeXxx()`` factories exposed for the modularity
-  optimizer.  All 98 existing CDT/Pachner tests + 13 new factory
-  tests pass.
-- **2026-05-02**: Phase 4 complete.  ``include/observables/
+- **2026-05-02**: CDT integration done.  ``CDT::add()`` / ``remove()`` /
+  ``flip()`` / ``iflip()`` / ``shiftImpl()`` refactored to use the
+  transactional move classes — each is now a ~6-line wrapper around
+  propose / Metropolis-accept / apply.  ``CDT::proposeXxx()`` factories
+  exposed for the modularity optimizer.  All 98 existing CDT/Pachner
+  tests + 13 factory tests pass.
+- **2026-05-02**: Observables landed.  ``include/observables/
   SparseGraph.h`` + ``HeatKernel.h`` shipped — Krylov-Lanczos
   approximation of ``e^{-tL_sym}`` diagonal, no Eigen dependency,
-  hand-rolled Padé-13 with scaling-and-squaring.  Two real bugs
-  caught and fixed by the test suite: (1) inner/outer Padé
-  coefficients were swapped; (2) Lanczos was breaking one iteration
-  early due to a premature ``V.size() >= krylovDim`` exit.  Both
-  reflected in regression tests against analytic heat-kernel values
-  on path/triangle graphs.  ``Spacetime::getDualGraph()`` and
-  ``modularityOnSkeleton(M)`` shipped + tested.
-- **2026-05-02**: Phase 5 complete.  ``ModularityOptimizer`` shipped
+  hand-rolled Padé-13 with scaling-and-squaring.  Two real bugs caught
+  and fixed by the test suite: (1) inner/outer Padé coefficients were
+  swapped; (2) Lanczos was breaking one iteration early due to a
+  premature ``V.size() >= krylovDim`` exit.  Both reflected in
+  regression tests against analytic heat-kernel values on path/triangle
+  graphs.  ``Spacetime::getDualGraph()`` and ``modularityOnSkeleton(M)``
+  shipped + tested.
+- **2026-05-02**: Optimizer landed.  ``ModularityOptimizer`` shipped
   with sweep("up" | "down") driving Pachner moves with Q-direction
-  acceptance.  Threshold-driven D_S measurement at every
-  ``targetDq`` crossing.  Up-sweep early-exit when Q is within
-  ``epsilonQMax`` of ``1 - 1/M``.  Optional progress callback.
-  10/10 optimizer tests pass.
-- **2026-05-02**: Phase 6 complete.  ``examples/modularity-cpp.py``
-  shipped — thin Python driver: per-dimension d in {2,3,4,5}, build
-  CDT spacetime, optionally tune+sweep, run ``ModularityOptimizer``,
+  acceptance.  Threshold-driven D_S measurement at every ``targetDq``
+  crossing.  Up-sweep early-exit when Q is within ``epsilonQMax`` of
+  ``1 - 1/M``.  Optional progress callback.  10/10 optimizer tests
+  pass.
+- **2026-05-02**: Python driver landed.  ``examples/modularity-cpp.py``
+  ships as a thin CLI: per-dimension d in {2,3,4,5}, build CDT
+  spacetime, optionally tune+sweep, run ``ModularityOptimizer``,
   overlay-plot D_S vs Q.  3/3 driver smoke tests pass.
 
-  **Final tally**: 162 new tests + 83 existing CDT/Pachner tests, all
-  passing.  Build green throughout.  Project complete.
+  **Final tally**: 162 added tests + 83 existing CDT/Pachner tests,
+  all passing.  Build green throughout.  Project complete.

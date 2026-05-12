@@ -1,17 +1,16 @@
 // SchwingerQuench — coarse-grained q-qbar quench + TDVP real-time
 // evolution pipeline for the Schwinger model.
 //
-// PLAN.md §5 Phase 4: a self-contained DMRG → quench → TDVP driver
-// that takes a flat config struct and returns a list of per-snapshot
-// scalar diagnostics. PLAN.md §5 Phase 5 / §1: the same model can also
-// run the causal-order comparison pipeline (DMRG → quench → TDVP →
-// build the three orders → compare).
+// PLAN.md §5: a self-contained DMRG → quench → TDVP driver that takes
+// a flat config struct and returns a list of per-snapshot scalar
+// diagnostics. The same class can also run the causal-order comparison
+// pipeline (DMRG → quench → TDVP → build the three orders → compare).
 //
 // ─── End-to-end pipeline (SchwingerQuench::evolve) ────────────────────────
 //
-//   1. Build the Schwinger MPO (Phase 1) and run DMRG to the GS (Phase 2).
+//   1. Build the Schwinger MPO and run DMRG to the GS.
 //   2. Apply the σ⁻_{i0} · σ⁺_{i0+d} quench to flip the spins at the
-//      ends of the q-qbar pair (Phase 4 quench, see quench.hpp).
+//      ends of the q-qbar pair (see quench.hpp).
 //   3. Record the post-quench observables (snapshot at t = 0).
 //   4. Step TDVP forward by Δt for n_steps = T/Δt steps. After every
 //      `snapshotEvery` steps record ⟨L_n⟩(t), ⟨σ^z_n⟩(t), bondDim,
@@ -21,7 +20,7 @@
 //
 // ─── Causal-order comparison (SchwingerQuench::compareCausalOrders) ──────
 //
-// Phase 5: build three partial orders on the (cut, time) labels
+// Build three partial orders on the (cut, time) labels
 // produced by `evolve()` (with recordSpectra forced on) and report
 // pairwise agreement statistics. See causal_compare.hpp for the
 // definitions of the three orders.
@@ -101,7 +100,7 @@ struct QuenchResult {
 // Coarse-grained Schwinger-model quench + dynamics pipeline.
 //
 // One instance binds a TDVPConfig; the methods run the full DMRG →
-// quench → TDVP loop (`evolve`) or that loop followed by a Phase 5
+// quench → TDVP loop (`evolve`) or that loop followed by the
 // causal-order comparison (`compareCausalOrders`). The model is
 // stateless beyond its config — every method runs the underlying
 // pipeline from scratch.
@@ -116,7 +115,7 @@ public:
     // mismatch with quenchEnforceParity, etc.).
     [[nodiscard]] QuenchResult evolve() const;
 
-    // End-to-end Phase 5 pipeline: evolve(), then build three partial
+    // End-to-end causal-comparison pipeline: evolve(), then build three partial
     // orders on the (cut, time) labels and compare. Forces
     // `cfg.recordSpectra = true` regardless of the input.
     //

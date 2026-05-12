@@ -1,5 +1,5 @@
-Phase 5 hypothesis-test scan — N=20 extension
-==============================================
+Lightcone vs. majorization scan — N=20 extension
+=================================================
 
 N=10 baseline (light quark, T=1.0)
   N=10  m/g=0.5  d=3  T=1.0  max_bond=80  snapshot_every=5

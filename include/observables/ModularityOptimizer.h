@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>

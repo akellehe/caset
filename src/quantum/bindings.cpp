@@ -10,8 +10,9 @@
 // class — there are no free functions in tessera.quantum. The four user-
 // facing classes are:
 //
-//   • SchwingerModel(config)    — Phase 2/3 ground-state pipeline.
-//   • SchwingerQuench(config)   — Phase 4/5 quench + dynamics pipeline.
+//   • SchwingerModel(config)    — DMRG ground-state pipeline.
+//   • SchwingerQuench(config)   — quench + TDVP dynamics + causal-order
+//                                 comparison pipeline.
 //   • Majorization              — static utility for predicate-driven
 //                                 poset construction and pairwise
 //                                 order-agreement statistics.
@@ -48,7 +49,7 @@ The user-facing API is exclusively class-based:
 * :class:`Majorization`    — static utility: poset construction and
                               pairwise order-agreement statistics.
 * :class:`Causet`          — static utility: tessera.Spacetime → causet
-                              adapter (Phase 6).
+                              adapter.
 
 Plus the data classes (QuantumConfig, GroundStateResult, SchmidtSpectra,
 TDVPConfig, …) and the MajorizationPredicate hierarchy
@@ -79,7 +80,7 @@ References
 * Coleman, *Ann. Phys.* **101**, 239 (1976) — massive Schwinger model.
 )doc";
 
-    // ─── Phase 2 data classes ───────────────────────────────────────────
+    // ─── Ground-state config + result ──────────────────────────────────
     py::class_<QuantumConfig>(m, "QuantumConfig",
             R"doc(Configuration for a Schwinger-model DMRG ground-state run.
 
@@ -88,8 +89,8 @@ settings into a single struct so calling code only hands one Python
 object across the C++ boundary. Default-constructed instances have
 N = 0 and must be filled in before passing to :class:`SchwingerModel`.
 
-The dt and T fields are reserved for Phase 4 (real-time evolution
-after a quark/antiquark quench) and are ignored by SchwingerModel.
+The dt and T fields are reserved for the TDVP quench pipeline and
+are ignored by SchwingerModel.
 
 Attributes
 ----------
@@ -117,9 +118,9 @@ quiet : bool
 conserveQns : bool
     If True (default), enforce U(1) total-Sz conservation on the SiteSet.
 dt : float
-    *(Phase 4)* TDVP real-time step size. Unused by SchwingerModel.
+    TDVP real-time step size; used by SchwingerQuench, not by SchwingerModel.
 T : float
-    *(Phase 4)* Total evolution time. Unused by SchwingerModel.
+    Total TDVP evolution time; used by SchwingerQuench, not by SchwingerModel.
 
 Examples
 --------
@@ -182,7 +183,7 @@ truncationErr : float
                    ", truncationErr=" + std::to_string(r.truncationErr) + ")";
         });
 
-    // ─── Phase 3 data classes ───────────────────────────────────────────
+    // ─── Schmidt / majorization data classes ──────────────────────────
     py::class_<Interval>(m, "Interval",
             R"doc(1-based contiguous interval [i, j] on the spin chain.)doc")
         .def(py::init<>())
@@ -300,9 +301,9 @@ Strictly stronger than classical majorization.
         .def(py::init<double>(), py::arg("tol") = 1e-12)
         .def_property_readonly("tol", &PeakRadialMajorization::tol);
 
-    // ─── Phase 4 data classes ───────────────────────────────────────────
+    // ─── TDVP quench config + snapshot ─────────────────────────────────
     py::class_<TDVPConfig>(m, "TDVPConfig",
-            R"doc(Configuration for the Phase 4 q-qbar quench + TDVP run.
+            R"doc(Configuration for the q-qbar quench + TDVP run.
 
 Bundles the Hamiltonian parameters, the DMRG ground-state setup, the
 quench location / separation, and the real-time-evolution schedule.
@@ -311,7 +312,7 @@ quench location / separation, and the real-time-evolution schedule.
 ``i0`` must be odd and ``d`` must be odd.
 
 The pipeline runs through :meth:`SchwingerQuench.evolve` (or
-:meth:`SchwingerQuench.compareCausalOrders` for the Phase 5
+:meth:`SchwingerQuench.compareCausalOrders` for the causal-order
 extension).
 )doc")
         .def(py::init<>())
@@ -371,7 +372,7 @@ snapshots : list[TDVPSnapshot]
         .def_readonly("groundState", &QuenchResult::groundState)
         .def_readonly("snapshots",   &QuenchResult::snapshots);
 
-    // ─── Phase 5 data classes ───────────────────────────────────────────
+    // ─── Causal-order comparison data classes ─────────────────────────
     py::class_<LabelSpacetime>(m, "LabelSpacetime",
             R"doc(One label in a (cut, time) spacetime.)doc")
         .def_readonly("cutIdx",    &LabelSpacetime::cutIdx)
@@ -420,7 +421,7 @@ Build via :meth:`Majorization.agreement(a, b, n_labels)`.
         .def_readonly("nOnlyB",             &OrderAgreement::nOnlyB);
 
     py::class_<CausalComparisonReport>(m, "CausalComparisonReport",
-            R"doc(Pairwise agreement statistics across all three Phase 5 orders.
+            R"doc(Pairwise agreement statistics across the three causal orders (≼_maj, ≼_LR, ≼_cs).
 
 Build via :meth:`SchwingerQuench.compareCausalOrders`.
 )doc")
@@ -432,9 +433,9 @@ Build via :meth:`SchwingerQuench.compareCausalOrders`.
         .def_readonly("vLr",        &CausalComparisonReport::vLr)
         .def_readonly("majKind",    &CausalComparisonReport::majKind);
 
-    // ─── Phase 6 data classes ───────────────────────────────────────────
+    // ─── Causet adapter data classes ───────────────────────────────────
     py::class_<CausetChain>(m, "CausetChain",
-            R"doc(Phase 6 — Spacetime-derived chain layout for the Schwinger MPO.
+            R"doc(Spacetime-derived chain layout for the Schwinger MPO.
 
 Build via :meth:`Causet.chainFrom`.
 
@@ -472,7 +473,7 @@ partialOrder : Poset
     py::class_<SchwingerModel>(m, "SchwingerModel",
             R"doc(Schwinger-model DMRG ground-state pipeline.
 
-Coarse-grained interface for the Phase 2/3 ground-state workflow:
+Coarse-grained interface for the ground-state workflow:
 bundle a :class:`QuantumConfig` and call :meth:`solve` for the bare
 DMRG diagnostics or :meth:`solveWithMajorization` for the full Schmidt
 + majorization-poset bundle.
@@ -512,7 +513,7 @@ RuntimeError or ValueError
             py::arg("tol") = 1e-12,
             R"doc(Run DMRG, then extract Schmidt spectra and majorization poset.
 
-Single-shot Phase 3 pipeline:
+Single-shot pipeline:
 1. DMRG ground state of the Schwinger MPO.
 2. Schmidt spectrum of every contiguous bipartition (excluding the
    trivial full-chain cut).
@@ -531,9 +532,9 @@ GroundStateMajorizationResult
     py::class_<SchwingerQuench>(m, "SchwingerQuench",
             R"doc(Schwinger-model q-qbar quench + TDVP pipeline.
 
-Coarse-grained interface for the Phase 4/5 dynamics workflow: bundle
-a :class:`TDVPConfig` and call :meth:`evolve` for the snapshot
-trajectory or :meth:`compareCausalOrders` for the Phase 5 causal-order
+Coarse-grained interface for the dynamics workflow: bundle a
+:class:`TDVPConfig` and call :meth:`evolve` for the snapshot
+trajectory or :meth:`compareCausalOrders` for the causal-order
 comparison. The model is stateless beyond its config.
 
 Examples
@@ -567,7 +568,7 @@ QuenchResult
             },
             py::arg("vLr") = 1.0,
             py::arg("predicate") = nullptr,
-            R"doc(End-to-end Phase 5 causal-order comparison.
+            R"doc(End-to-end causal-order comparison.
 
 Runs :meth:`evolve` (forcing recordSpectra=True), builds three
 partial orders on the (cut, time) label set:
@@ -625,7 +626,7 @@ label set of size nLabels. Returns an :class:`OrderAgreement`.
 
     py::class_<Causet>(m, "Causet",
             R"doc(Static utility for tessera.Spacetime → causet adapters
-(Phase 6). Not instantiable; call methods on the class.
+. Not instantiable; call methods on the class.
 )doc")
         .def_static("chainFrom",
             [](py::object spacetime_obj) {

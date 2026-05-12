@@ -1,4 +1,4 @@
-// Implementation of CausalOrders::fromSnapshots — the Phase 5 cross-time
+// Implementation of CausalOrders::fromSnapshots — the cross-time
 // poset construction. See include/quantum/causal_compare.hpp for the
 // design and the three-order definitions.
 

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # MIT License -- Copyright (c) 2025 Andrew Kelleher
 """
-Phase 5: causal-order comparison on a TDVP q-qbar quench.
+Causal-order comparison on a TDVP q-qbar quench.
 
-Runs the full tessera.quantum Phase 5 pipeline:
+Runs the full tessera.quantum causal-comparison pipeline:
 
   1. DMRG ground state of the Schwinger Hamiltonian
   2. q-qbar quench (creates a flux tube on d links)
   3. 2-site TDVP with per-step Schmidt-spectra recording
   4. Build three partial orders on the (cut, time) labels:
-        ≼_maj  — strict majorization on the spectra (Phase 3, across time)
+        ≼_maj  — strict majorization on the spectra, across time
         ≼_LR   — Lieb-Robinson cone with prescribed vLr
-        ≼_cs   — causet (time-only on regular chain; Phase 6 makes
-                 this informative within a time slice too)
+        ≼_cs   — causet (time-only on regular chain; replacing the
+                 chain with a non-trivial causet makes this
+                 informative within a time slice too)
   5. Compute pairwise agreement statistics (Kendall-τ, discordant
      fraction, Hasse-graph edit distance).
 
@@ -40,7 +41,7 @@ References
   benchmarks underlying Phases 1-2.
 
   Buyens et al., Phys. Rev. Lett. 113, 091601 (2014), arXiv:1312.6654 —
-  string-state quench prescription (Phase 4).
+  string-state quench prescription.
 
 Examples
 --------

@@ -1,4 +1,4 @@
-// Phase 6 acceptance tests (docs/source/quantum-plan.md §6):
+// Causet-adapter acceptance tests (docs/source/quantum-plan.md §6):
 //
 // tessera::Poset::fromSpacetime(Spacetime const&) inherits a partial order
 // from a tessera::Spacetime by treating timelike edges (Edge::getSquaredLength
@@ -37,7 +37,7 @@ namespace {
 // Convenience: build a vertex at integer time `t`, ID `id`, with 1D
 // coords {static_cast<double>(t)}. Vertex::getTime() returns |x_0| for
 // 1D coords, so this gives integer-valued times that match the
-// time-slice / antichain pattern Phase 6 needs.
+// time-slice / antichain pattern the causet adapter needs.
 tessera::VertexPtr make_vertex(tessera::Spacetime& st, std::uint64_t id, int t) {
     return st.createVertex(id, std::vector<double>{static_cast<double>(t)});
 }

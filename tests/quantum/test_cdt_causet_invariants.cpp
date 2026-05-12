@@ -1,4 +1,4 @@
-// Phase 6 acceptance — CDT-specific structural invariants on the
+// CDT-specific structural invariants on the
 // Spacetime → Poset adapter.
 //
 // A foliated CDT (Foliation::PREFERRED) builds its complex out of d-simplices
@@ -19,7 +19,7 @@
 //      (extraction is total: no orphan vertices dropped).
 //
 // These are paper-compliance checks: the CDT formalism we inherit from
-// guarantees the foliated structure, and Phase 6 is meaningless if it
+// guarantees the foliated structure, and the causet adapter is meaningless if it
 // silently collapses or duplicates that structure.
 
 #include "Poset.h"

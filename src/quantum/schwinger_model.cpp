@@ -92,7 +92,7 @@ double schwingerEnergyConstant(SchwingerParams const& p) {
 
 // Shared core: build the AutoMPO for the Schwinger Hamiltonian given an
 // explicit hopping pair list. Used by both the chain (default-NN) builder
-// and the Phase 6 chain-causet builder.
+// and the chain-causet builder.
 //
 // `hoppingPairs` is a vector of (i, j) with 0-based flat lattice indices
 // in [0, p.N − 1]. Both directions of σ⁺σ⁻ + σ⁻σ⁺ are added per pair so

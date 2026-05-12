@@ -1,4 +1,4 @@
-"""Phase 6 Python tests — :meth:`Causet.chainFrom` (Spacetime → causet-
+"""Python tests — :meth:`Causet.chainFrom` (Spacetime → causet-
 chain extractor) plus the underlying :meth:`Poset.fromSpacetime`
 factory exposed in the same module.
 

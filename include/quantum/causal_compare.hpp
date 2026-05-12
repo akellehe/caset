@@ -1,12 +1,12 @@
-// Phase 5: causal-order comparison data classes plus the
-// `CausalOrders::fromSnapshots` factory. PLAN.md §5 Phase 5 /
-// methodology page §1, §4.4.
+// Causal-order comparison data classes plus the
+// `CausalOrders::fromSnapshots` factory. PLAN.md §5 / methodology
+// page §1, §4.4.
 //
 // ─── The three orders ────────────────────────────────────────────────────
 //
 //   1. ≼_maj — majorization order: (A, s) ≼_maj (B, t) iff the Schmidt
 //      spectrum λ_A(s) is majorized by λ_B(t). Built by feeding all
-//      snapshot spectra (across cuts AND times) into the Phase 3
+//      snapshot spectra (across cuts AND times) into the
 //      Majorization::posetOf routine. The hypothesis that this order
 //      "sees" the entanglement causal structure is the methodology
 //      page's central claim.
@@ -16,10 +16,10 @@
 //      Within-cone information transport bound from
 //      {LiebRobinson1972, HastingsKoma2006}.
 //
-//   3. ≼_cs — causet order: on the regular chain (Phase 5 scope) this
-//      is just the time order: (A, s) ≼_cs (B, t) iff s < t. Phase 6
-//      replaces the regular chain with a non-trivial causet, at which
-//      point ≼_cs becomes informative within time slices too.
+//   3. ≼_cs — causet order: on a regular chain this is just the time
+//      order: (A, s) ≼_cs (B, t) iff s < t. Replacing the chain with
+//      a non-trivial causet (see the Causet adapter) makes ≼_cs
+//      informative within time slices too.
 //
 // Each order is stored as a Hasse-cover Poset over the same shared
 // label set. `Majorization::agreement` then computes Kendall-τ, the

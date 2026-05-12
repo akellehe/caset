@@ -1,4 +1,4 @@
-// Phase 1/3 mathematical invariants on Schmidt spectra of Schwinger-model
+// Mathematical invariants on Schmidt spectra of Schwinger-model
 // DMRG ground states. Complements:
 //
 //   • test_schmidt_spectra.cpp           — spectra of hand-built MPSes

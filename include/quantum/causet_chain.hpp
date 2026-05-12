@@ -1,9 +1,9 @@
-// Phase 6 (docs/source/quantum-plan.md §6) — Spacetime → causet-chain
-// adapter for the quantum subsystem.
+// Spacetime → causet-chain adapter for the quantum subsystem.
+// See docs/source/quantum-plan.md §6.
 //
 // The vanilla Schwinger MPO (include/quantum/schwinger_model.hpp) lives
 // on a regular 1D lattice with N sites and nearest-neighbour hopping
-// pairs (n, n+1). Phase 6 generalises that lattice: replace it with a
+// pairs (n, n+1). This adapter generalises that lattice: replace it with a
 // "chain of antichains" sourced from a tessera::Spacetime, where each
 // antichain is the set of vertices at a fixed integer time slice and
 // hopping follows the timelike causet edges that connect adjacent
@@ -60,7 +60,7 @@ namespace tessera::quantum {
 //
 // `partialOrder` is the Hasse-cover Poset on flat-lattice-site IDs,
 // inherited from Spacetime via Poset::fromSpacetime. It's one of the
-// three orders compared in the Phase 5 causal-comparison machinery
+// three orders compared in the causal-comparison machinery
 // (the "≼_cs" entry).
 struct CausetChain {
     int nSites{0};

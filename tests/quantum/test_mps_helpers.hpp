@@ -1,4 +1,4 @@
-// Shared MPS-construction helpers for the Phase 3 / 4 / 5 acceptance
+// Shared MPS-construction helpers for the Schmidt, TDVP, and causal-comparison acceptance
 // tests. Each helper returns a normalized MPS in canonical form so the
 // test code can drop straight into Schmidt-spectrum / majorization
 // pipelines without further preparation.
@@ -14,7 +14,7 @@ namespace tessera::test_helpers {
 
 // |↑↑ … ↑⟩ product state on a SpinHalf SiteSet. Schmidt spectrum across
 // any contiguous bipartition is (1) — this is the trivial product-state
-// case for PLAN.md §5 Phase 3 acceptance #1.
+// case for PLAN.md §5 majorization-poset acceptance #1.
 inline itensor::MPS product_up(itensor::SpinHalf const& sites) {
     auto state = itensor::InitState(sites);
     for (int i = 1; i <= itensor::length(sites); ++i) {
@@ -42,7 +42,7 @@ inline itensor::MPS neel(itensor::SpinHalf const& sites) {
 // and β (out); we set entries so that contracting the chain reproduces
 // (|↑↑…↑⟩ + |↓↓…↓⟩) / √2.
 //
-// Schmidt spectrum at every cut is (½, ½) — Phase 3 acceptance #2.
+// Schmidt spectrum at every cut is (½, ½) — majorization-poset acceptance #2.
 inline itensor::MPS ghz(itensor::SpinHalf const& sites) {
     using namespace itensor;
     const int N = length(sites);
@@ -67,7 +67,7 @@ inline itensor::MPS ghz(itensor::SpinHalf const& sites) {
 
 // 2-qubit Bell state (|↑↑⟩ + |↓↓⟩) / √2 — equivalent to the N=2 GHZ.
 // Schmidt spectrum across the only nontrivial cut [1, 1] | [2, 2] is
-// (½, ½) — Phase 3 acceptance #3 input.
+// (½, ½) — majorization-poset acceptance #3 input.
 inline itensor::MPS bell_phi_plus(itensor::SpinHalf const& sites) {
     if (itensor::length(sites) != 2) {
         throw std::invalid_argument("bell_phi_plus expects N = 2");

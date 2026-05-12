@@ -9,11 +9,12 @@ state forward in real time using two-site TDVP. Prints the electric-field
 profile ⟨L_n⟩(t) and the charge density ⟨σ^z_n⟩(t) at sampled times so the
 flux-tube dynamics are visible at a glance.
 
-Implements Phase 4 of ``docs/source/quantum-plan.md``. The hypothesis under
-test is described in ``docs/source/quantum-methodology.md`` — this script
-runs the simulation that produces the entanglement / electric-field /
-charge data that downstream comparison code (Phase 5) will mine for the
-majorization vs. Lieb-Robinson vs. causet comparison.
+Runs the TDVP quench pipeline of ``docs/source/quantum-plan.md``. The
+hypothesis under test is described in
+``docs/source/quantum-methodology.md`` — this script runs the simulation
+that produces the entanglement / electric-field / charge data that the
+downstream causal-order comparison mines for the majorization vs.
+Lieb-Robinson vs. causet comparison.
 
 Theory
 ------
@@ -54,7 +55,7 @@ References
 Examples
 --------
 
-Heavy-quark limit (PLAN.md §5 Phase 4 acceptance setup)::
+Heavy-quark limit (PLAN.md §5 acceptance setup)::
 
     python examples/quantum/runQqbarQuench.py
 

@@ -1,4 +1,4 @@
-// Phase 5 acceptance test (PLAN.md §5):
+// Causal-order comparison acceptance test (PLAN.md §5):
 //
 // Run a TDVP q-qbar quench, build the three partial orders (≼_maj from
 // Schmidt-spectrum majorization across (cut, time), ≼_LR from a
@@ -14,7 +14,7 @@
 //     opposite direction; agreement with ≼_cs strictly increases or
 //     stays the same).
 //
-// PLAN.md §5 Phase 5 calls for "agreement rate quoted with uncertainty
+// PLAN.md §5 calls for "agreement rate quoted with uncertainty
 // from bootstrap over Trotter seeds". We don't bootstrap here (TDVP is
 // deterministic given a fixed schedule); the test is a smoke-test of
 // the full pipeline plus a vLr-monotonicity sanity check that exposes
@@ -115,7 +115,7 @@ bool monotonicity_test() {
 }
 
 bool acceptance() {
-    std::cout << "Phase 5 acceptance — full causal-comparison pipeline\n";
+    std::cout << "Causal-order comparison acceptance — full pipeline\n";
     std::cout << "----------------------------------------------------\n";
 
     // Light-quark, modest evolution time so the spectra evolve non-

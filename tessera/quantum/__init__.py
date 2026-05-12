@@ -1,7 +1,6 @@
 """tessera.quantum -- Schwinger model on a Jordan-Wigner spin chain via DMRG.
 
-This subpackage implements Phases 2-6 of ``docs/source/quantum-plan.md``:
-ground-state DMRG for the 1+1D Kogut-Susskind Schwinger model with U(1)
+Ground-state DMRG for the 1+1D Kogut-Susskind Schwinger model with U(1)
 total-charge conservation, contiguous-cut Schmidt spectra and the
 majorization poset on those spectra, a q-qbar quench + 2-site TDVP
 pipeline that produces real-time-evolution snapshots, and an end-to-end
@@ -21,14 +20,14 @@ Every Python-visible operation is a method on a coarse-grained class —
 there are no free functions in ``tessera.quantum``. The four user-facing
 classes are:
 
-* :class:`SchwingerModel`  — Phase 2/3 ground-state pipeline.
-* :class:`SchwingerQuench` — Phase 4/5 quench + dynamics + causal-order
+* :class:`SchwingerModel`  — DMRG ground-state pipeline.
+* :class:`SchwingerQuench` — q-qbar quench + TDVP + causal-order
                               comparison pipeline.
 * :class:`Majorization`    — static utility: predicate-driven poset
                               construction and pairwise order-agreement
                               statistics.
 * :class:`Causet`          — static utility: tessera.Spacetime → causet
-                              adapters (Phase 6).
+                              adapters.
 
 Plus the data classes (:class:`QuantumConfig`, :class:`GroundStateResult`,
 :class:`SchmidtSpectra`, :class:`TDVPConfig`, :class:`TDVPSnapshot`, …)
@@ -63,7 +62,7 @@ Schwinger Hamiltonian on N sites with open boundary conditions is::
 Quickstart
 ----------
 
-Compute the ground state at the Phase 1 / PLAN.md spec parameters::
+Compute the ground state at PLAN.md §4 spec parameters::
 
     >>> from tessera.quantum import QuantumConfig, SchwingerModel
     >>> cfg = QuantumConfig()
@@ -77,8 +76,8 @@ Compute the ground state at the Phase 1 / PLAN.md spec parameters::
     >>> result.energy < 0
     True
 
-Phase 3 — Schmidt spectra and majorization poset
-------------------------------------------------
+Schmidt spectra and majorization poset
+--------------------------------------
 
 For each contiguous interval A = [i, j] on the spin chain, the Schmidt
 spectrum λ_A is the list of eigenvalues of ρ_A = Tr_{Ā}|ψ⟩⟨ψ|, sorted
@@ -99,12 +98,12 @@ Or run the full DMRG → Schmidt → poset pipeline in one call::
     >>> r.spectra.N
     20
 
-Phase 3 cut family is contiguous intervals 1 ≤ i ≤ j ≤ N excluding the
+The cut family is contiguous intervals 1 ≤ i ≤ j ≤ N excluding the
 trivial full-chain bipartition [1, N] | ∅; this is N(N+1)/2 - 1 cuts
 total.
 
-Phase 4 — q-qbar quench and TDVP real-time evolution
-----------------------------------------------------
+q-qbar quench and TDVP real-time evolution
+------------------------------------------
 
 The :meth:`SchwingerQuench.evolve` method runs the full DMRG → quench →
 TDVP pipeline. The quench operator is
@@ -124,10 +123,11 @@ Parity constraint: i0 odd + d odd. Example::
     >>> r.snapshots[0].lProfile[:3]
     [-1.0, -0.0, -0.0]
 
-Phase 5 — causal-order comparison
----------------------------------
+Causal-order comparison
+-----------------------
 
-:meth:`SchwingerQuench.compareCausalOrders` ties Phases 1-4 together:
+:meth:`SchwingerQuench.compareCausalOrders` ties the ground-state,
+Schmidt, and TDVP pipelines together:
 DMRG ground state → q-qbar quench → TDVP loop → build three partial
 orders on (cut, time) labels → compare. The orders are:
 

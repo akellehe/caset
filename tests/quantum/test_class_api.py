@@ -1,9 +1,10 @@
-"""Class-semantics tests for the new C++/Python OO surface of
-``tessera.quantum``.
+"""Class-semantics tests for the OO surface of ``tessera.quantum``.
 
-This file targets behaviour that is *intrinsic to the class shape* of the
-refactor, distinct from the per-phase workflow correctness covered in
-test_phase{2..6}_*_python.py:
+This file targets behaviour that is *intrinsic to the class shape* —
+config introspection, statelessness, static-class non-instantiability,
+predicate hierarchy semantics — distinct from the per-class workflow
+correctness covered in test_schwinger_*.py, test_majorization_python.py,
+test_causal_compare_python.py, and test_causet_chain_python.py:
 
 * :class:`SchwingerModel`  — config introspection, statelessness (same
   config in, same result out), cross-method consistency.
@@ -466,7 +467,7 @@ class TestCausalOrdersFactory(unittest.TestCase):
 
     def test_lr_subset_of_cs_invariant_from_factory(self) -> None:
         """The structural invariant ≼_LR ⊂ ≼_cs (the strongest sanity
-        check on the Phase 5 construction) must also hold when the
+        check on the causal-comparison construction) must also hold when the
         orders are built directly via the factory."""
         orders = CausalOrders.fromSnapshots(self.snapshots, vLr=1.0)
         agr = Majorization.agreement(orders.lr, orders.cs,

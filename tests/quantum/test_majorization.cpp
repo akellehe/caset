@@ -4,7 +4,7 @@
 // transitive, antisymmetric on padded-sorted equivalence classes — plus
 // the canonical reference comparison (1, 0) ≻ (½, ½).
 //
-// The Phase 3 *physical* acceptance tests (product / GHZ / Bell against
+// The physical majorization-poset acceptance tests (product / GHZ / Bell against
 // the Schwinger model code) live in tests/quantum/test_majorization_poset.cpp;
 // this file is the unit-test layer for the majorizes() predicate itself.
 

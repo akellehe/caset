@@ -1,12 +1,11 @@
 """Pytest wrappers for the C++ quantum acceptance executables.
 
-Each test invokes a standalone C++ binary built when ``TESSERA_QUANTUM=ON`` is
-passed to CMake. The binaries cross-check ITensor's DMRG output against
-independent dense diagonalizations (Phase 0 Heisenberg, Phase 1 Schwinger).
+Each test invokes a standalone C++ binary built when ``TESSERA_QUANTUM=ON``
+is passed to CMake. The binaries are the source of truth for what passes
+— these wrappers only gate the executables behind pytest discovery and
+check the return code.
 
-The C++ side is the source of truth for what passes — these wrappers only
-gate the executables behind pytest discovery and check the return code.
-Tests skip cleanly when the quantum subsystem is not built.
+Skips cleanly when the quantum subsystem is not built.
 """
 
 from __future__ import annotations
@@ -63,83 +62,79 @@ class TestQuantumExecutables(unittest.TestCase):
         )
         self.assertIn(must_contain, result.stdout)
 
-    def test_phase0_itensor_hello(self) -> None:
-        """Phase 0: Heisenberg N=8 DMRG vs dense ED, agree to <1e-6."""
+    def test_itensor_heisenberg_smoke(self) -> None:
+        """Heisenberg N=8 DMRG vs dense ED, agree to <1e-6."""
         self._run("test_itensor_hello", "PASS", timeout=60)
 
-    def test_phase1_schwinger_spectrum(self) -> None:
-        """Phase 1: SchwingerMPO vs dense ED on Sz=0 sector for N=4,6,8 ×
+    def test_schwinger_mpo_vs_dense_ed(self) -> None:
+        """SchwingerMPO vs dense ED on the Sz=0 sector for N=4,6,8 ×
         m/g ∈ {0, 0.125, 0.25}, plus N=20 smoke test."""
         self._run("test_schwinger_spectrum", "ALL PASS", timeout=180)
 
-    def test_phase1_schwinger_limits(self) -> None:
-        """Phase 1: analytic-limit checks on SchwingerMPO — free-fermion
+    def test_schwinger_analytic_limits(self) -> None:
+        """Analytic-limit checks on SchwingerMPO — free-fermion
         half-filling at g=m=0, and strong-coupling vacuum at m≫g."""
         self._run("test_schwinger_limits", "ALL PASS", timeout=120)
 
     @pytest.mark.slow
-    def test_phase1_schwinger_paper(self) -> None:
-        """Phase 1 paper alignment: continuum trend ω_0 → -1/π (Bañuls
-        fig. 6), vector mass gap (Bañuls table), chiral condensate
-        benchmark observable. Slow — geometric scan over x with finite-N
-        DMRG runs scaling as N ~ 20·√x."""
+    def test_schwinger_continuum_trends(self) -> None:
+        """Continuum trend ω_0 → -1/π (Bañuls fig. 6), vector mass gap
+        (Bañuls table), chiral condensate benchmark observable. Slow —
+        geometric scan over x with finite-N DMRG runs scaling as N ~ 20·√x."""
         self._run("test_schwinger_paper", "ALL PASS", timeout=600)
 
-    def test_phase3_majorization(self) -> None:
-        """Phase 3 unit tests on the majorization predicate / poset:
-        reflexivity, transitivity, antisymmetry, the canonical (1,0)≻(½,½)
-        strict relation, and Hasse-diagram transitive reduction on a small
+    def test_majorization_predicate(self) -> None:
+        """Unit tests on the majorization predicate / poset: reflexivity,
+        transitivity, antisymmetry, the canonical (1,0)≻(½,½) strict
+        relation, and Hasse-diagram transitive reduction on a small
         synthetic chain."""
         self._run("test_majorization", "ALL PASS", timeout=30)
 
-    def test_phase3_schmidt_spectra(self) -> None:
-        """Phase 3 Schmidt-spectrum extraction on hand-checkable MPSes:
-        product |↑↑↑↑⟩ gives spectrum (1), N-qubit GHZ gives (½,½) at
-        every contiguous cut, Bell |Φ⁺⟩ and singlet give (½,½) at the
-        center cut, all spectra sum to 1."""
+    def test_schmidt_spectra(self) -> None:
+        """Schmidt-spectrum extraction on hand-checkable MPSes: product
+        |↑↑↑↑⟩ gives spectrum (1), N-qubit GHZ gives (½,½) at every
+        contiguous cut, Bell |Φ⁺⟩ and singlet give (½,½) at the center
+        cut, all spectra sum to 1."""
         self._run("test_schmidt_spectra", "ALL PASS", timeout=60)
 
-    def test_phase3_majorization_poset(self) -> None:
-        """Phase 3 acceptance (PLAN.md §5): full pipeline
-        allContiguousSpectra() → majorizationPoset() on product, GHZ,
-        and Bell-vs-product inputs, matching the three acceptance criteria."""
+    def test_majorization_poset(self) -> None:
+        """Full pipeline Schmidt::allOf → Majorization::posetOf on
+        product, GHZ, and Bell-vs-product inputs, matching the three
+        acceptance criteria from PLAN.md §5."""
         self._run("test_majorization_poset", "ALL PASS", timeout=60)
 
-    def test_phase3_schwinger_schmidt_cross_check(self) -> None:
-        """Phase 3 cross-check: MPS-side Schmidt spectra against dense ED
-        of the Schwinger Hamiltonian for small N — verifies the spectra
+    def test_schwinger_schmidt_cross_check(self) -> None:
+        """Cross-check: MPS-side Schmidt spectra against dense ED of the
+        Schwinger Hamiltonian for small N — verifies the spectra
         extraction works on a non-trivial physical state, not just
         product/GHZ/Bell."""
         self._run("test_schwinger_schmidt_cross_check", "ALL PASS", timeout=120)
 
     @pytest.mark.slow
-    def test_phase4_tdvp_string(self) -> None:
-        """Phase 4 acceptance (PLAN.md §5): heavy-quark q-qbar flux-tube
-        preservation under 2-site TDVP. d=5, T=5.0 (chosen to match the
-        plan's "T = d·a" prescription with d odd for parity). Marked slow
-        because it runs ~100 TDVP sweeps at N=14."""
+    def test_tdvp_flux_tube(self) -> None:
+        """Heavy-quark q-qbar flux-tube preservation under 2-site TDVP.
+        d=5, T=5.0 (matches the plan's "T = d·a" prescription with d
+        odd for parity). Marked slow because it runs ~100 TDVP sweeps
+        at N=14."""
         self._run("test_tdvp_string", "ALL PASS", timeout=300)
 
-    def test_phase1_n4_hamiltonian(self) -> None:
-        """PLAN.md §7 trap: 'Verify by independent sum on N=4 before
-        trusting the MPO.' Independent symbolic evaluation of the
-        plan's H_m + H_E formula on every N=4 basis state, compared to
-        buildSchwingerDense to machine precision. Catches L_n²
-        expansion errors that MPO-vs-dense would miss."""
+    def test_schwinger_n4_hamiltonian(self) -> None:
+        """PLAN.md §7 trap: independent symbolic evaluation of the
+        H_m + H_E formula on every N=4 basis state, compared to
+        SchwingerHamiltonian::denseMatrix to machine precision. Catches
+        L_n² expansion errors that MPO-vs-dense would miss."""
         self._run("test_schwinger_n4_hamiltonian", "ALL PASS", timeout=30)
 
-    def test_phase4_tdvp_vs_dense(self) -> None:
+    def test_tdvp_vs_dense_unitary(self) -> None:
         """Cross-check TDVP integrator against full e^{-iHt} dense
         unitary evolution on the 2^N Hilbert space, for N ≤ 8 across
         heavy / light / massless regimes. Guarantees the TDVP runner
-        reproduces exact dynamics to better than 1e-4 — far tighter
-        than the Phase 4 flux-tube acceptance, and over genuinely
+        reproduces exact dynamics to better than 1e-4 over genuinely
         time-dependent profiles (not just preserved plateaus)."""
         self._run("test_tdvp_vs_dense", "ALL PASS", timeout=120)
 
-    def test_phase5_causal_compare(self) -> None:
-        """Phase 5 acceptance: build the three partial orders
-        (maj/LR/cs) on a TDVP snapshot history and verify the comparison
-        statistics are sensible (Kendall-τ in [-1, 1], no NaNs,
-        vLr-monotonicity holds)."""
+    def test_causal_order_comparison(self) -> None:
+        """Build the three partial orders (maj/LR/cs) on a TDVP snapshot
+        history and verify the comparison statistics are sensible
+        (Kendall-τ in [-1, 1], no NaNs, vLr-monotonicity holds)."""
         self._run("test_causal_compare", "ALL PASS", timeout=180)

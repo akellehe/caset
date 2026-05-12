@@ -1,4 +1,4 @@
-"""Phase 5 Python tests — end-to-end causal-comparison pipeline through
+"""Python tests — end-to-end causal-comparison pipeline through
 :meth:`SchwingerQuench.compareCausalOrders`, plus low-level
 :meth:`Majorization.agreement` unit tests on hand-built posets.
 

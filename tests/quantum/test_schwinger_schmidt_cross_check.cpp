@@ -1,7 +1,7 @@
 // Cross-check Schmidt::of (MPS path) against an independent dense
 // Schmidt decomposition for the Schwinger ground state at small N.
 //
-// The Phase 3 product / GHZ / Bell tests in test_schmidt_spectra.cpp use
+// The product / GHZ / Bell tests in test_schmidt_spectra.cpp use
 // hand-checkable analytic spectra. This file extends coverage to a
 // non-trivial physical state — the Schwinger ground state, where the
 // spectrum has no closed form and any sign or coefficient bug in the
@@ -43,7 +43,7 @@ namespace {
 // Same site/bit convention used throughout the dense builder.
 //
 // We don't need to restrict to contiguous A here — the function works on
-// any subset — but Phase 3's cut family is contiguous so the caller
+// any subset — but the Schmidt cut family is contiguous so the caller
 // passes contiguous masks.
 std::vector<double>
 dense_schmidt_spectrum_subset(Eigen::VectorXd const& psi,
@@ -201,7 +201,7 @@ int main() {
     std::cout << "Schwinger ground-state Schmidt spectra: MPS vs dense ED\n";
     std::cout << "-------------------------------------------------------\n";
     bool ok = true;
-    // Cover the same parameter range as the Phase 1 acceptance test, so
+    // Cover the same parameter range as the Schwinger MPO acceptance test, so
     // any disagreement here also localises which (m, L0) breaks.
     ok &= run_case(/*N=*/4, /*m=*/0.0,   /*L0=*/0.0);
     ok &= run_case(/*N=*/4, /*m=*/0.125, /*L0=*/0.0);

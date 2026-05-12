@@ -5,7 +5,7 @@ Schmidt spectra and majorization poset of the Schwinger ground state.
 
 Computes the DMRG ground state of the Schwinger model, extracts every
 contiguous-interval Schmidt spectrum, and prints the majorization poset
-on those spectra. Implements the Phase 3 pipeline of
+on those spectra. Runs the Schmidt / majorization-poset pipeline of
 ``docs/source/quantum-plan.md`` end-to-end through the Python API:
 
     DMRG ground state  →  contiguous Schmidt spectra  →  Hasse cover edges

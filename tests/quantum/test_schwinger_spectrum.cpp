@@ -1,4 +1,4 @@
-// Phase 1 acceptance: verify the SchwingerMPO matches an independently-built
+// Schwinger MPO acceptance: verify the MPO matches an independently-built
 // dense Hamiltonian on the full 2^N Hilbert space (small-N cross-check), and
 // confirm the U(1)-charge-conserving DMRG run on N=20 produces a converged
 // energy. Conventions follow PLAN.md §4 / Bañuls 2013 eq. (2.6).
@@ -168,11 +168,11 @@ CaseResult run_small_case(SchwingerParams p) {
 int main() {
     bool ok = true;
 
-    // Print enough digits that downstream Python wrappers (Phase 2 acceptance)
+    // Print enough digits that the downstream Python wrapper acceptance
     // can hardcode references without losing precision relative to DMRG noise.
     std::cout << std::setprecision(12);
 
-    std::cout << "Phase 1 acceptance — Schwinger MPO vs dense ED (Sz=0)\n";
+    std::cout << "Schwinger MPO acceptance — vs dense ED (Sz=0)\n";
     std::cout << "------------------------------------------------------\n";
 
     // Tolerance is set well below DMRG noise on these problem sizes
@@ -181,7 +181,7 @@ int main() {
     constexpr double tol = 1e-8;
 
     // Sweep sizes (4, 6, 8) and masses (0, 0.125, 0.25) span the PLAN.md §5
-    // Phase 1 acceptance range. The L0=0.5 cases at the end exercise code
+    // small-N acceptance range. The L0=0.5 cases at the end exercise code
     // paths that vanish identically at L0=0 (the c_n constants and A_k tail
     // sums in the H_E expansion).
     struct CaseSpec { int N; double m_over_g; double L0; };
@@ -226,10 +226,10 @@ int main() {
     }
 
     // N=20 trace: smoke-test the DMRG pipeline at the size called out in
-    // PLAN.md §5 Phase 1. The published Bañuls et al. 2013 numbers are
+    // PLAN.md §5. The published Bañuls et al. 2013 numbers are
     // continuum-extrapolated, so we don't compare numerically here — we
     // just check DMRG converges (final sweep moves the energy by < 1e-7).
-    std::cout << "\nN=20 DMRG smoke test (PLAN.md Phase 1 size)\n";
+    std::cout << "\nN=20 DMRG smoke test (PLAN.md acceptance size)\n";
     for (double m_over_g : {0.0, 0.125, 0.25}) {
         SchwingerParams p;
         p.N = 20; p.a = 1.0; p.g = 1.0; p.m = m_over_g; p.L0 = 0.0;

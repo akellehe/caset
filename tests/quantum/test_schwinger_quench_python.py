@@ -1,4 +1,4 @@
-"""Phase 4 Python tests: TDVPConfig validation, end-to-end
+"""Python tests: TDVPConfig validation, end-to-end
 :meth:`SchwingerQuench.evolve` through the Python API, energy
 conservation, flux-tube formation, snapshot schedule. Mirrors the
 C++ test_tdvp_string.cpp at the binding layer.
