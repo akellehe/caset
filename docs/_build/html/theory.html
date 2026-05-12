@@ -197,6 +197,12 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="quantum-experiments/index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
 </ul>
 
@@ -238,8 +244,8 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="theory">
 <h1>Theory<a class="headerlink" href="#theory" title="Link to this heading">¶</a></h1>
-<p>This package is intended to provide a test bed with great unit test coverage for researchers and enthusiasts to
-implement ideas with respect to the latest in the field of lattice quantum gravity.</p>
+<p>This page is background reading for the rest of the docs — a personal-tour summary of the lattice-spacetime ideas
+the package plays with, with enough test coverage on the implementation that the experiments are reproducible.</p>
 <p>Since Tullio Regge’s work in the 1960s there’s been a ton of interest in implementing GR
 in such a way that it’s compatible with quantum mechanics, quantum field theory (QFT), and quantum chromodynamics (QCD).</p>
 <p>Regge Calculus is apparently not computationally efficient to work for any real world simulation. Dynamical
@@ -328,18 +334,6 @@ make sense of it, though.</p>
 </section>
 <section id="lattice-gravity-approaches">
 <h2>Lattice Gravity Approaches<a class="headerlink" href="#lattice-gravity-approaches" title="Link to this heading">¶</a></h2>
-<section id="lorentzian-spin-foams">
-<h3>Lorentzian Spin Foams<a class="headerlink" href="#lorentzian-spin-foams" title="Link to this heading">¶</a></h3>
-<p><em>Not yet implemented in tessera.</em></p>
-</section>
-<section id="loop-quantum-gravity-on-graphs">
-<h3>Loop Quantum Gravity on Graphs<a class="headerlink" href="#loop-quantum-gravity-on-graphs" title="Link to this heading">¶</a></h3>
-<p><em>Not yet implemented in tessera.</em></p>
-</section>
-<section id="picard-lefschetz-theory">
-<h3>Picard-Lefschetz Theory<a class="headerlink" href="#picard-lefschetz-theory" title="Link to this heading">¶</a></h3>
-<p><em>Not yet implemented in tessera.</em></p>
-</section>
 <section id="regge-calculus">
 <h3>Regge Calculus<a class="headerlink" href="#regge-calculus" title="Link to this heading">¶</a></h3>
 <p>Regge Calculus allows for edge lengths to vary, providing a discrete approximation to General Relativity. In this
@@ -561,9 +555,6 @@ described in the ‘Observables’ section of
 <li><a class="reference internal" href="#path-integrals-and-wick-rotations">Path Integrals and Wick Rotations</a></li>
 <li><a class="reference internal" href="#quantum-gravity">Quantum Gravity</a></li>
 <li><a class="reference internal" href="#lattice-gravity-approaches">Lattice Gravity Approaches</a><ul>
-<li><a class="reference internal" href="#lorentzian-spin-foams">Lorentzian Spin Foams</a></li>
-<li><a class="reference internal" href="#loop-quantum-gravity-on-graphs">Loop Quantum Gravity on Graphs</a></li>
-<li><a class="reference internal" href="#picard-lefschetz-theory">Picard-Lefschetz Theory</a></li>
 <li><a class="reference internal" href="#regge-calculus">Regge Calculus</a></li>
 <li><a class="reference internal" href="#cdt-causal-dynamical-triangulations">CDT (Causal Dynamical Triangulations)</a></li>
 <li><a class="reference internal" href="#causal-sets">Causal Sets</a></li>

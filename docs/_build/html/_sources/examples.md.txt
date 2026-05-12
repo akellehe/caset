@@ -15,9 +15,10 @@ four-simplices with $T = 80$ time slices and $10^5$--$10^8$ Monte Carlo
 sweeps.  The plots shown here use $N_4 \sim 800$--$1\,600$ to keep
 runtimes under a few minutes.  Observables that depend on large-scale
 geometry (phase boundaries, Hausdorff scaling, $\cos^3$ profile shape)
-require at least $N_4 > 5\,000$ to become visible.  Where our small-lattice
-results already confirm the paper predictions, this is noted explicitly;
-where they do not yet, the expected large-lattice behaviour is described.
+require at least $N_4 > 5\,000$ to become visible.  Where the
+small-lattice results already confirm the paper predictions, this is
+noted explicitly; where they do not, the expected large-lattice
+behaviour is described.
 ```
 
 ---
@@ -156,7 +157,7 @@ python examples/effective_action.py \
 - **Fig. 6** (Phase C, $\kappa_0 = 2.2$, $\Delta = 0.6$): extended
   de Sitter universe with $N_3(\tau) \propto \cos^3(\pi\tau/T)$.
 
-**Our result:** At $N_4 \sim 800$ the three profiles are **not yet
+**Our result:** At $N_4 \sim 800$ the three profiles are **not
 differentiated** -- all show a roughly uniform distribution across
 $\sim 9$ time slices.  The phase transitions in the paper occur at
 $N_4 \sim 20$k--$45$k; at smaller volumes the system is too small to
@@ -202,7 +203,7 @@ python examples/volume_profile_phases.py \
   interpreted as $D_H = 4$.
 
 **Our result:** At $N_4 \sim 650$--$1\,900$ the correlator data points
-(top left) do not yet collapse onto a single curve, and the D_H estimate
+(top left) do not collapse onto a single curve, and the D_H estimate
 (top right) does **not** show a clear minimum at $D_H = 4$.  This is
 expected: the paper explicitly notes that finite-volume effects are
 significant below $\tilde{N}_4 = 20$k and uses $T = 80$ time slices
@@ -271,9 +272,9 @@ python examples/phase_diagram.py \
 | Fig. 2 | $N_{32}$ distribution | **Confirmed** | Sharp peaks, correct ratio $N_{32}/N_{41} \approx 2.3$ |
 | Figs. 9--10 | Spectral dimension $D_S(\sigma)$ | **Qualitatively confirmed** | Monotonic rise, finite-size offset |
 | Fig. 11 | Kinetic dimension $D_2$ | **Consistent** | Minimum near $D_2 = 2$ |
-| Figs. 4--6 | Volume profiles A/B/C | Not yet visible | Requires $N_4 > 10\,000$ |
-| Figs. 7--8 | Hausdorff dimension $D_H$ | Not yet visible | Requires $N_4 > 20\,000$ |
-| Fig. 3 | Phase diagram | Not yet visible | Requires $N_4 > 20\,000$ |
+| Figs. 4--6 | Volume profiles A/B/C | Below threshold | Requires $N_4 > 10\,000$ |
+| Figs. 7--8 | Hausdorff dimension $D_H$ | Below threshold | Requires $N_4 > 20\,000$ |
+| Fig. 3 | Phase diagram | Below threshold | Requires $N_4 > 20\,000$ |
 | Figs. 12--13 | Effective action | Partially confirmed | $D_2$ minimum correct; $\cos^3$ needs larger lattice |
 
 ---

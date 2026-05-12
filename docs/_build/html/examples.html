@@ -197,6 +197,12 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="quantum-experiments/index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
 </ul>
 
@@ -252,9 +258,10 @@ four-simplices with <span class="math notranslate nohighlight">\(T = 80\)</span>
 sweeps.  The plots shown here use <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span>–<span class="math notranslate nohighlight">\(1\,600\)</span> to keep
 runtimes under a few minutes.  Observables that depend on large-scale
 geometry (phase boundaries, Hausdorff scaling, <span class="math notranslate nohighlight">\(\cos^3\)</span> profile shape)
-require at least <span class="math notranslate nohighlight">\(N_4 &gt; 5\,000\)</span> to become visible.  Where our small-lattice
-results already confirm the paper predictions, this is noted explicitly;
-where they do not yet, the expected large-lattice behaviour is described.</p>
+require at least <span class="math notranslate nohighlight">\(N_4 &gt; 5\,000\)</span> to become visible.  Where the
+small-lattice results already confirm the paper predictions, this is
+noted explicitly; where they do not, the expected large-lattice
+behaviour is described.</p>
 </div>
 <hr class="docutils" />
 <section id="n-32-distribution-at-fixed-n-41">
@@ -375,7 +382,7 @@ collapsed to <span class="math notranslate nohighlight">\(\sim 2\)</span> time s
 <li><p><strong>Fig. 6</strong> (Phase C, <span class="math notranslate nohighlight">\(\kappa_0 = 2.2\)</span>, <span class="math notranslate nohighlight">\(\Delta = 0.6\)</span>): extended
 de Sitter universe with <span class="math notranslate nohighlight">\(N_3(\tau) \propto \cos^3(\pi\tau/T)\)</span>.</p></li>
 </ul>
-<p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span> the three profiles are <strong>not yet
+<p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 800\)</span> the three profiles are <strong>not
 differentiated</strong> – all show a roughly uniform distribution across
 <span class="math notranslate nohighlight">\(\sim 9\)</span> time slices.  The phase transitions in the paper occur at
 <span class="math notranslate nohighlight">\(N_4 \sim 20\)</span>k–<span class="math notranslate nohighlight">\(45\)</span>k; at smaller volumes the system is too small to
@@ -411,7 +418,7 @@ collapses onto a universal peaked curve for system sizes
 interpreted as <span class="math notranslate nohighlight">\(D_H = 4\)</span>.</p></li>
 </ul>
 <p><strong>Our result:</strong> At <span class="math notranslate nohighlight">\(N_4 \sim 650\)</span>–<span class="math notranslate nohighlight">\(1\,900\)</span> the correlator data points
-(top left) do not yet collapse onto a single curve, and the D_H estimate
+(top left) do not collapse onto a single curve, and the D_H estimate
 (top right) does <strong>not</strong> show a clear minimum at <span class="math notranslate nohighlight">\(D_H = 4\)</span>.  This is
 expected: the paper explicitly notes that finite-volume effects are
 significant below <span class="math notranslate nohighlight">\(\tilde{N}_4 = 20\)</span>k and uses <span class="math notranslate nohighlight">\(T = 80\)</span> time slices
@@ -487,17 +494,17 @@ Phase A.  The white star marks the de Sitter point <span class="math notranslate
 </tr>
 <tr class="row-odd"><td class="text-left"><p>Figs. 4–6</p></td>
 <td class="text-left"><p>Volume profiles A/B/C</p></td>
-<td class="text-center"><p>Not yet visible</p></td>
+<td class="text-center"><p>Below threshold</p></td>
 <td class="text-left"><p>Requires <span class="math notranslate nohighlight">\(N_4 &gt; 10\,000\)</span></p></td>
 </tr>
 <tr class="row-even"><td class="text-left"><p>Figs. 7–8</p></td>
 <td class="text-left"><p>Hausdorff dimension <span class="math notranslate nohighlight">\(D_H\)</span></p></td>
-<td class="text-center"><p>Not yet visible</p></td>
+<td class="text-center"><p>Below threshold</p></td>
 <td class="text-left"><p>Requires <span class="math notranslate nohighlight">\(N_4 &gt; 20\,000\)</span></p></td>
 </tr>
 <tr class="row-odd"><td class="text-left"><p>Fig. 3</p></td>
 <td class="text-left"><p>Phase diagram</p></td>
-<td class="text-center"><p>Not yet visible</p></td>
+<td class="text-center"><p>Below threshold</p></td>
 <td class="text-left"><p>Requires <span class="math notranslate nohighlight">\(N_4 &gt; 20\,000\)</span></p></td>
 </tr>
 <tr class="row-even"><td class="text-left"><p>Figs. 12–13</p></td>

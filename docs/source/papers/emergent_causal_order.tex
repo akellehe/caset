@@ -146,7 +146,7 @@ simulation that runs in under a minute on a laptop.  This paper is
 about how to set up that test, what the right answer would tell us,
 and what the actual answer turns out to be.
 
-\paragraph{Roadmap.}
+\paragraph{Outline.}
 Sections~\ref{sec:math}--\ref{sec:majorization} build the mathematical
 machinery: probability vectors, partial orders, density matrices, the
 Schmidt decomposition, and majorization.
@@ -1164,10 +1164,10 @@ A label pair $(A, s)$ and $(B, s)$ at equal time is by definition
 not $\preceq_{\LR}$-related (the cone is strictly cross-time).  If
 $\preceq_{\maj}$ relates them --- a same-time strict
 Schmidt-spectrum majorization --- it shows up in $n_{\maj \notin \LR}$
-without being ``outside the cone'' in any geometric sense.  We have
-not yet split $n_{\maj \notin \LR}$ into a same-time component and a
-true cone-overflow component; doing so is a one-line fix to the
-agreement code and is the highest-priority follow-up.
+without being ``outside the cone'' in any geometric sense.  The count
+$n_{\maj \notin \LR}$ reported here aggregates same-time and true
+cone-overflow contributions; resolving the two requires a refinement
+of the agreement code.
 
 \paragraph{The two orders are largely orthogonal, not strict refinements.}
 The asymmetric counts $n_{\maj \notin \LR}$ and
@@ -1189,7 +1189,7 @@ $\preceq_{\maj}$ has genuine structure beyond the LR cone, and no
 choice of $\preceq_{\cs}$ on the regular chain will recover the
 agreement.  On this reading, the entanglement order is sensitive to
 features of the state (e.g.\ same-time spectrum equivalences) that
-a causal order is not designed to see; the right next step is to
+a causal order is not designed to see; the natural response is to
 \emph{loosen} the hypothesis (e.g.\ to a hypothesis about
 \emph{linear extensions} or about Hasse-graph distances rather than
 exact equality).
@@ -1214,10 +1214,10 @@ remains the next test.
 We note explicitly the limitations of this single experimental run.
 \begin{itemize}[nosep]
 \item \textbf{Single Trotter seed.}  All numbers above are point
-      estimates from one DMRG/TDVP trajectory per regime.  Bootstrap
+      estimates from one DMRG/TDVP trajectory per regime.  Bootstrapping
       over Trotter seeds and over the spatial origin $i_0$ of the
-      quench is the proper next step before quoting these numbers
-      outside the project.
+      quench would be needed before quoting these numbers in any
+      external context.
 \item \textbf{Truncation sensitivity.}  Bond-dimension truncation can
       perturb borderline majorization comparisons.  We exclude pairs
       within $\epsilon = 10^{-6}$ of the decision boundary; the

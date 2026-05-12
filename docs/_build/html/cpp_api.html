@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="Emergent Causal Order from Entanglement: Hypothesis and Methodology" href="quantum-methodology.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="Emergent spectral dimension — first run" href="quantum-experiments/emergent_spectral_dimension_writeup.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>The Tessera C++ API - tessera 0.1.0 documentation</title>
@@ -197,6 +197,12 @@
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="quantum-experiments/index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
+</ul>
+</li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">The Tessera C++ API</a></li>
 </ul>
 
@@ -333,6 +339,13 @@ exclusions to see the entire interface.</p>
 <dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime13createSimplexERK10VertexPtrs">
 <span id="_CPPv3N7tessera9Spacetime13createSimplexERK10VertexPtrs"></span><span id="_CPPv2N7tessera9Spacetime13createSimplexERK10VertexPtrs"></span><span id="tessera::Spacetime::createSimplex__VertexPtrsCR"></span><span class="target" id="classtessera_1_1Spacetime_1a8ac2aeb17d67a8270b2d6da8320d6c8c"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">pair</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">SimplexPtr</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">createSimplex</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">VertexPtrs</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">vertices</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime13createSimplexERK10VertexPtrs" title="Link to this definition">¶</a><br /></dt>
 <dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime20createSimplexTrackedERK10VertexPtrs">
+<span id="_CPPv3N7tessera9Spacetime20createSimplexTrackedERK10VertexPtrs"></span><span id="_CPPv2N7tessera9Spacetime20createSimplexTrackedERK10VertexPtrs"></span><span id="tessera::Spacetime::createSimplexTracked__VertexPtrsCR"></span><span class="target" id="classtessera_1_1Spacetime_1a430fe1d0fc9057971efb961852851e1b"></span><a class="reference internal" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResultE" title="tessera::Spacetime::CreateSimplexResult"><span class="n"><span class="pre">CreateSimplexResult</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">createSimplexTracked</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">VertexPtrs</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">vertices</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime20createSimplexTrackedERK10VertexPtrs" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Like <code class="docutils literal notranslate"><span class="pre">createSimplex(vertices)</span></code> but also reports the edges this call freshly inserted into the EdgeList — those that were auto-created from scratch rather than found existing. </p>
+<p>Caller can use this to undo edge insertions on rollback. </p>
+</dd></dl>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime13createSimplexERK10VertexPtrsRK5Edges">
@@ -718,6 +731,21 @@ exclusions to see the entire interface.</p>
 </dd></dl>
 
 <dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK7tessera9Spacetime12getDualGraphEv">
+<span id="_CPPv3NK7tessera9Spacetime12getDualGraphEv"></span><span id="_CPPv2NK7tessera9Spacetime12getDualGraphEv"></span><span id="tessera::Spacetime::getDualGraphC"></span><span class="target" id="classtessera_1_1Spacetime_1afaa364d98cf256de6ac34f2b3161c8d2"></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="n"><span class="pre">SparseGraph</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getDualGraph</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK7tessera9Spacetime12getDualGraphEv" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Convenience: build a :class:<code class="docutils literal notranslate"><span class="pre">SparseGraph</span></code> of the dual triangulation in one call. </p>
+<p>Equivalent to <code class="docutils literal notranslate"><span class="pre">SparseGraph::fromCOO(*getDualAdjacency())</span></code> but avoids the intermediate Python-side conversion. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4NK7tessera9Spacetime20modularityOnSkeletonEi">
+<span id="_CPPv3NK7tessera9Spacetime20modularityOnSkeletonEi"></span><span id="_CPPv2NK7tessera9Spacetime20modularityOnSkeletonEi"></span><span id="tessera::Spacetime::modularityOnSkeleton__iC"></span><span class="target" id="classtessera_1_1Spacetime_1ad4767924e27f98ecbaf61e9848affbe0"></span><span class="kt"><span class="pre">double</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">modularityOnSkeleton</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">M</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK7tessera9Spacetime20modularityOnSkeletonEi" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Newman-Girvan modularity Q on the vertex/edge 1-skeleton, with implicit labels <code class="docutils literal notranslate"><span class="pre">label(v)</span> <span class="pre">=</span> <span class="pre">v.id()</span> <span class="pre">%</span> <span class="pre">M</span></code>. </p>
+<p><code class="docutils literal notranslate"><span class="pre">Q</span> <span class="pre">=</span> <span class="pre">sum_c</span> <span class="pre">[L_c</span> <span class="pre">/</span> <span class="pre">m</span> <span class="pre">-</span> <span class="pre">(D_c</span> <span class="pre">/</span> <span class="pre">2m)^2]</span></code> where <code class="docutils literal notranslate"><span class="pre">L_c</span></code> is the number of edges within community c, <code class="docutils literal notranslate"><span class="pre">D_c</span></code> the sum of degrees of nodes in c, and <code class="docutils literal notranslate"><span class="pre">m</span> <span class="pre">=</span> <span class="pre">|E|</span></code>.</p>
+<p>Returns 0 if M &lt; 2, the graph has no edges, or the spacetime has no vertices. See <code class="docutils literal notranslate"><span class="pre">examples/modularity.py:modularity</span></code> for the reference Python implementation. </p>
+</dd></dl>
+
+<dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK7tessera9Spacetime22getConnectedComponentsEv">
 <span id="_CPPv3NK7tessera9Spacetime22getConnectedComponentsEv"></span><span id="_CPPv2NK7tessera9Spacetime22getConnectedComponentsEv"></span><span id="tessera::Spacetime::getConnectedComponentsC"></span><span class="target" id="classtessera_1_1Spacetime_1a7900cd82d393bda64ce70efc99d807d2"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">vector</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">VertexPtrs</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">getConnectedComponents</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK7tessera9Spacetime22getConnectedComponentsEv" title="Link to this definition">¶</a><br /></dt>
 <dd><p>Computes the connected components of the vertex graph. </p>
@@ -1007,6 +1035,36 @@ exclusions to see the entire interface.</p>
 <dd></dd></dl>
 
 </div>
+<dl class="cpp struct">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime19CreateSimplexResultE">
+<span id="_CPPv3N7tessera9Spacetime19CreateSimplexResultE"></span><span id="_CPPv2N7tessera9Spacetime19CreateSimplexResultE"></span><span id="tessera::Spacetime::CreateSimplexResult"></span><span class="target" id="structtessera_1_1Spacetime_1_1CreateSimplexResult"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CreateSimplexResult</span></span></span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResultE" title="Link to this definition">¶</a><br /></dt>
+<dd><div class="docutils container">
+<em>#include &lt;Spacetime.h&gt;</em></div>
+<p>Result of a tracked simplex creation that records freshly-inserted edges, used by the transactional Pachner-move infrastructure to know what to undo on rollback. </p>
+<div class="breathe-sectiondef docutils container">
+<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime19CreateSimplexResult7simplexE">
+<span id="_CPPv3N7tessera9Spacetime19CreateSimplexResult7simplexE"></span><span id="_CPPv2N7tessera9Spacetime19CreateSimplexResult7simplexE"></span><span id="tessera::Spacetime::CreateSimplexResult::simplex__SimplexPtr"></span><span class="target" id="structtessera_1_1Spacetime_1_1CreateSimplexResult_1a7dffdd9a7537f17102e7cb88783bd9dd"></span><span class="n"><span class="pre">SimplexPtr</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">simplex</span></span></span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResult7simplexE" title="Link to this definition">¶</a><br /></dt>
+<dd><p>The simplex (existing or freshly created). </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime19CreateSimplexResult7createdE">
+<span id="_CPPv3N7tessera9Spacetime19CreateSimplexResult7createdE"></span><span id="_CPPv2N7tessera9Spacetime19CreateSimplexResult7createdE"></span><span id="tessera::Spacetime::CreateSimplexResult::created__b"></span><span class="target" id="structtessera_1_1Spacetime_1_1CreateSimplexResult_1a11a567967d4fbce3f8770cd408353c5a"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">created</span></span></span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResult7createdE" title="Link to this definition">¶</a><br /></dt>
+<dd><p>True if the simplex was newly created; false if it already existed. </p>
+</dd></dl>
+
+<dl class="cpp var">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime19CreateSimplexResult8newEdgesE">
+<span id="_CPPv3N7tessera9Spacetime19CreateSimplexResult8newEdgesE"></span><span id="_CPPv2N7tessera9Spacetime19CreateSimplexResult8newEdgesE"></span><span id="tessera::Spacetime::CreateSimplexResult::newEdges__Edges"></span><span class="target" id="structtessera_1_1Spacetime_1_1CreateSimplexResult_1a37d4a872c11ca65e2dc445d4d25fcfac"></span><span class="n"><span class="pre">Edges</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">newEdges</span></span></span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResult8newEdgesE" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Edges that this call freshly inserted into the EdgeList (i.e. </p>
+<p>where <code class="docutils literal notranslate"><span class="pre">EdgeList::tryAdd</span></code> returned <code class="docutils literal notranslate"><span class="pre">inserted=true</span></code>). Empty when <code class="docutils literal notranslate"><span class="pre">created</span></code> is false (no edges were touched). </p>
+</dd></dl>
+
+</div>
+</dd></dl>
+
 </dd></dl>
 
 </dd></dl>
@@ -2974,6 +3032,33 @@ Two vertices are considered equal iff they have the same ID, regardless of coord
 </dd></dl>
 
 <dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT10proposeAddEv">
+<span id="_CPPv3N7tessera3CDT10proposeAddEv"></span><span id="_CPPv2N7tessera3CDT10proposeAddEv"></span><span id="tessera::CDT::proposeAdd"></span><span class="target" id="classtessera_1_1CDT_1a7cc45e6a18d8aa0e2fdad7bc8322176c"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="n"><span class="pre">PachnerMove</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">proposeAdd</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera3CDT10proposeAddEv" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Construct a transactional :class:<code class="docutils literal notranslate"><span class="pre">AddMove</span></code> bound to this simulation’s spacetime + RNG. </p>
+<p>Caller drives propose() / apply() / rollback() directly. Useful for the modularity sweep optimizer in observables/ModularityOptimizer.h, which layers custom acceptance (Q-direction filter) on top of the bare move mechanics. Does <em>not</em> update <a class="reference internal" href="#classtessera_1_1CDT"><span class="std std-ref">CDT</span></a>’s acceptance counters. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT13proposeRemoveEv">
+<span id="_CPPv3N7tessera3CDT13proposeRemoveEv"></span><span id="_CPPv2N7tessera3CDT13proposeRemoveEv"></span><span id="tessera::CDT::proposeRemove"></span><span class="target" id="classtessera_1_1CDT_1aca1a2c38a208defc927cd7f69a5e993f"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="n"><span class="pre">PachnerMove</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">proposeRemove</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera3CDT13proposeRemoveEv" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT11proposeFlipEv">
+<span id="_CPPv3N7tessera3CDT11proposeFlipEv"></span><span id="_CPPv2N7tessera3CDT11proposeFlipEv"></span><span id="tessera::CDT::proposeFlip"></span><span class="target" id="classtessera_1_1CDT_1a73654d1b84a309a5220a11fb460bc1f6"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="n"><span class="pre">PachnerMove</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">proposeFlip</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera3CDT11proposeFlipEv" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT12proposeIflipEv">
+<span id="_CPPv3N7tessera3CDT12proposeIflipEv"></span><span id="_CPPv2N7tessera3CDT12proposeIflipEv"></span><span id="tessera::CDT::proposeIflip"></span><span class="target" id="classtessera_1_1CDT_1afe907990ebf7b36490d8436fa78a6fda"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="n"><span class="pre">PachnerMove</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">proposeIflip</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera3CDT12proposeIflipEv" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT12proposeShiftEv">
+<span id="_CPPv3N7tessera3CDT12proposeShiftEv"></span><span id="_CPPv2N7tessera3CDT12proposeShiftEv"></span><span id="tessera::CDT::proposeShift"></span><span class="target" id="classtessera_1_1CDT_1a15cd50aa3348c10b58905203aa3959e1"></span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">unique_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><span class="k"><span class="pre">class</span></span><span class="w"> </span><span class="n"><span class="pre">PachnerMove</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">proposeShift</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera3CDT12proposeShiftEv" title="Link to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT4tuneENSt8functionIFviiEEE">
 <span id="_CPPv3N7tessera3CDT4tuneENSt8functionIFviiEEE"></span><span id="_CPPv2N7tessera3CDT4tuneENSt8functionIFviiEEE"></span><span class="target" id="classtessera_1_1CDT_1a928ee66e84c10b3a9b4ffc529fdf3e96"></span><span class="k"><span class="pre">virtual</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">tune</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">void</span></span><span class="p"><span class="pre">(</span></span><span class="kt"><span class="pre">int</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">int</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">progress</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">nullptr</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">override</span></span><a class="headerlink" href="#_CPPv4N7tessera3CDT4tuneENSt8functionIFviiEEE" title="Link to this definition">¶</a><br /></dt>
 <dd><p>Adjust the cosmological coupling <span class="math notranslate nohighlight">\( k_4 \)</span> to drive the total four-volume <span class="math notranslate nohighlight">\( N_4 \)</span> toward the target <span class="math notranslate nohighlight">\( \bar{N}_4 \)</span>. </p>
@@ -3076,6 +3161,13 @@ Two vertices are considered equal iff they have the same ID, regardless of coord
 <span id="_CPPv3N7tessera3CDT18setRelabelVerticesEb"></span><span id="_CPPv2N7tessera3CDT18setRelabelVerticesEb"></span><span id="tessera::CDT::setRelabelVertices__b"></span><span class="target" id="classtessera_1_1CDT_1a99779d3b0532cfc4d1ed89b083ae6572"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">setRelabelVertices</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">enabled</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><a class="headerlink" href="#_CPPv4N7tessera3CDT18setRelabelVerticesEb" title="Link to this definition">¶</a><br /></dt>
 <dd><p>Enable or disable vertex relabeling after add/remove moves. </p>
 <p>[BGL] Sec. 2.2.1: relabeling ensures correct detailed balance. Enabled by default. Disable for deterministic topology tests where fingerprint-based before/after comparison is needed. </p>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera3CDT7setSeedENSt8uint32_tE">
+<span id="_CPPv3N7tessera3CDT7setSeedENSt8uint32_tE"></span><span id="_CPPv2N7tessera3CDT7setSeedENSt8uint32_tE"></span><span id="tessera::CDT::setSeed__std::uint32_t"></span><span class="target" id="classtessera_1_1CDT_1ae89001cdeb2cc2c99e92ae36e0093f59"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">setSeed</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4St" title="std"><span class="n"><span class="pre">std</span></span></a><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">uint32_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">s</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><a class="headerlink" href="#_CPPv4N7tessera3CDT7setSeedENSt8uint32_tE" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Re-seed the internal RNG. </p>
+<p>The default constructor pulls a random seed from std::random_device — useful for production MC sweeps but flaky for tests that depend on a specific growth pattern (e.g. tests/test_pachner_remove_move.py needs a topology that admits an order-2d vertex). Call this with a fixed seed at the top of such tests to make the result reproducible. </p>
 </dd></dl>
 
 </div>
@@ -3669,14 +3761,14 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
         
         <div class="related-pages">
           
-          <a class="prev-page" href="quantum-methodology.html">
+          <a class="prev-page" href="quantum-experiments/emergent_spectral_dimension_writeup.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Emergent Causal Order from Entanglement: Hypothesis and Methodology</div>
+                <div class="title">Emergent spectral dimension — first run</div>
                 
               </div>
             </a>
@@ -3727,6 +3819,7 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
 <li><a class="reference internal" href="#_CPPv4N7tessera9SpacetimeD0Ev"><code class="docutils literal notranslate"><span class="pre">~Spacetime()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime9SpacetimeENSt10shared_ptrI6MetricEE13SpacetimeTypeNSt8optionalIdEENSt8optionalIdEE9FoliationNSt8optionalINSt10shared_ptrI8TopologyEEEE"><code class="docutils literal notranslate"><span class="pre">Spacetime()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime13createSimplexERK10VertexPtrs"><code class="docutils literal notranslate"><span class="pre">createSimplex()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime20createSimplexTrackedERK10VertexPtrs"><code class="docutils literal notranslate"><span class="pre">createSimplexTracked()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime13createSimplexERK10VertexPtrsRK5Edges"><code class="docutils literal notranslate"><span class="pre">createSimplex()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime13createSimplexERKNSt5tupleI7uint8_t7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">createSimplex()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime13createSimplexENSt6size_tE"><code class="docutils literal notranslate"><span class="pre">createSimplex()</span></code></a></li>
@@ -3760,6 +3853,8 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime18getSpatialSubgraphEi"><code class="docutils literal notranslate"><span class="pre">getSpatialSubgraph()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime12bfsDistancesE9VertexPtri"><code class="docutils literal notranslate"><span class="pre">bfsDistances()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime16getDualAdjacencyEv"><code class="docutils literal notranslate"><span class="pre">getDualAdjacency()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime12getDualGraphEv"><code class="docutils literal notranslate"><span class="pre">getDualGraph()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime20modularityOnSkeletonEi"><code class="docutils literal notranslate"><span class="pre">modularityOnSkeleton()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime22getConnectedComponentsEv"><code class="docutils literal notranslate"><span class="pre">getConnectedComponents()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime10getSimplexE10SimplexPtr"><code class="docutils literal notranslate"><span class="pre">getSimplex()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime10getSimplexENSt8uint64_tE"><code class="docutils literal notranslate"><span class="pre">getSimplex()</span></code></a></li>
@@ -3792,6 +3887,12 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime8n32CountE"><code class="docutils literal notranslate"><span class="pre">n32Count</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime3rngE"><code class="docutils literal notranslate"><span class="pre">rng</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime11observablesE"><code class="docutils literal notranslate"><span class="pre">observables</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResultE"><code class="docutils literal notranslate"><span class="pre">tessera::Spacetime::CreateSimplexResult</span></code></a><ul>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResult7simplexE"><code class="docutils literal notranslate"><span class="pre">simplex</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResult7createdE"><code class="docutils literal notranslate"><span class="pre">created</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime19CreateSimplexResult8newEdgesE"><code class="docutils literal notranslate"><span class="pre">newEdges</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -4025,6 +4126,11 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT5shiftEv"><code class="docutils literal notranslate"><span class="pre">shift()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT5iflipEv"><code class="docutils literal notranslate"><span class="pre">iflip()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT6ishiftEv"><code class="docutils literal notranslate"><span class="pre">ishift()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera3CDT10proposeAddEv"><code class="docutils literal notranslate"><span class="pre">proposeAdd()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera3CDT13proposeRemoveEv"><code class="docutils literal notranslate"><span class="pre">proposeRemove()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera3CDT11proposeFlipEv"><code class="docutils literal notranslate"><span class="pre">proposeFlip()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera3CDT12proposeIflipEv"><code class="docutils literal notranslate"><span class="pre">proposeIflip()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera3CDT12proposeShiftEv"><code class="docutils literal notranslate"><span class="pre">proposeShift()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT4tuneENSt8functionIFviiEEE"><code class="docutils literal notranslate"><span class="pre">tune()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT10thermalizeEv"><code class="docutils literal notranslate"><span class="pre">thermalize()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT5sweepEv"><code class="docutils literal notranslate"><span class="pre">sweep()</span></code></a></li>
@@ -4036,6 +4142,7 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
 <li><a class="reference internal" href="#_CPPv4NK7tessera3CDT5getK4Ev"><code class="docutils literal notranslate"><span class="pre">getK4()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera3CDT8getDeltaEv"><code class="docutils literal notranslate"><span class="pre">getDelta()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT18setRelabelVerticesEb"><code class="docutils literal notranslate"><span class="pre">setRelabelVertices()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera3CDT7setSeedENSt8uint32_tE"><code class="docutils literal notranslate"><span class="pre">setSeed()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT6acceptEdd"><code class="docutils literal notranslate"><span class="pre">accept()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera3CDT18computeDeltaActionEiii"><code class="docutils literal notranslate"><span class="pre">computeDeltaAction()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera3CDT9shiftImplEv"><code class="docutils literal notranslate"><span class="pre">shiftImpl()</span></code></a></li>
