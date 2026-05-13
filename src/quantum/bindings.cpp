@@ -343,6 +343,7 @@ extension).
         .def_readwrite("recordSpectra",           &TDVPConfig::recordSpectra)
         .def_readwrite("recordPoset",             &TDVPConfig::recordPoset)
         .def_readwrite("recordMutualInformation", &TDVPConfig::recordMutualInformation)
+        .def_readwrite("recordBondMutualInformation", &TDVPConfig::recordBondMutualInformation)
         .def_readwrite("hoppingPairs",            &TDVPConfig::hoppingPairs,
             "Optional custom hopping graph as a list of (i, j) "
             "0-based flat-lattice pairs. Empty = default 1D NN chain. "
@@ -362,6 +363,11 @@ is set): spectra, poset, mutualInformation.
         .def_readonly("lProfile",  &TDVPSnapshot::lProfile)
         .def_readonly("spectra",   &TDVPSnapshot::spectra)
         .def_readonly("poset",     &TDVPSnapshot::poset)
+        .def_readonly("bondMutualInformation",
+                       &TDVPSnapshot::bondMutualInformation,
+                       R"doc(Symmetric (N-1)×(N-1) bond-cut tripartite-information matrix in nats,
+flattened row-major. Zero diagonal.
+Populated iff TDVPConfig.recordBondMutualInformation = True.)doc")
         .def_readonly("mutualInformation", &TDVPSnapshot::mutualInformation,
                        "Flat row-major N×N matrix of site-site MI in nats. "
                        "Populated iff TDVPConfig.recordMutualInformation = True.")

@@ -68,7 +68,8 @@ TDVPSnapshot makeSnapshot(double t,
                            SchwingerParams const& p,
                            bool recordSpectra,
                            bool recordPoset,
-                           bool recordMutualInformation) {
+                           bool recordMutualInformation,
+                           bool recordBondMutualInformation) {
     TDVPSnapshot snap;
     snap.time      = t;
     snap.energy    = computeEnergy(psi, sm.H, sm.constant);
@@ -91,6 +92,20 @@ TDVPSnapshot makeSnapshot(double t,
             for (int b = 0; b < N; ++b) {
                 snap.mutualInformation[static_cast<std::size_t>(a * N + b)] =
                     mi(a, b);
+            }
+        }
+    }
+    if (recordBondMutualInformation) {
+        // All-pairs bond-cut tripartite info. Flatten (N-1) × (N-1)
+        // matrix to row-major.
+        auto bm = MutualInformation::allBondPairs(psi);
+        const int B = static_cast<int>(bm.rows());
+        snap.bondMutualInformation.assign(
+            static_cast<std::size_t>(B) * B, 0.0);
+        for (int a = 0; a < B; ++a) {
+            for (int b = 0; b < B; ++b) {
+                snap.bondMutualInformation[static_cast<std::size_t>(a * B + b)] =
+                    bm(a, b);
             }
         }
     }
@@ -166,7 +181,8 @@ QuenchResult SchwingerQuench::evolve() const {
     result.snapshots.push_back(makeSnapshot(
         /*t=*/0.0, psi, sm, p,
         cfg.recordSpectra, cfg.recordPoset,
-        cfg.recordMutualInformation));
+        cfg.recordMutualInformation,
+        cfg.recordBondMutualInformation));
 
     // (4) TDVP loop. Real-time evolution e^{-i H Δt} corresponds to
     // ITensor's tdvp(...) with the time argument t = -i Δt.
@@ -188,7 +204,8 @@ QuenchResult SchwingerQuench::evolve() const {
             result.snapshots.push_back(makeSnapshot(
                 currentT, psi, sm, p,
                 cfg.recordSpectra, cfg.recordPoset,
-                cfg.recordMutualInformation));
+                cfg.recordMutualInformation,
+                cfg.recordBondMutualInformation));
         }
     }
 

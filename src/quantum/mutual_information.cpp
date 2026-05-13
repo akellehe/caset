@@ -2,6 +2,7 @@
 // the architectural overview and the canonical-form derivation.
 
 #include "quantum/mutual_information.hpp"
+#include "quantum/schmidt.hpp"
 
 #include <itensor/all.h>
 
@@ -234,6 +235,179 @@ double
 MutualInformation::edgeLength(double I, double epsilon) noexcept {
     if (I < epsilon) return std::numeric_limits<double>::infinity();
     return -std::log(I);
+}
+
+// ─── Dual / bond-cut observables ─────────────────────────────────────
+
+namespace {
+
+// Shannon entropy in nats from a list of non-negative probabilities.
+// Renormalises against round-off; eigenvalues below `tol` contribute 0.
+double shannonEntropy(std::vector<double> const& probs,
+                        double tol = 1e-12) {
+    double total = 0.0;
+    for (auto p : probs) total += p;
+    if (total <= 0.0) return 0.0;
+    double H = 0.0;
+    for (auto p : probs) {
+        const double pn = p / total;
+        if (pn > tol) H -= pn * std::log(pn);
+    }
+    return H;
+}
+
+} // namespace
+
+double
+MutualInformation::bondEntropy(itensor::MPS const& psi, int k) {
+    const int N = itensor::length(psi);
+    if (k < 1 || k > N - 1) {
+        throw std::invalid_argument(
+            "MutualInformation::bondEntropy: bond k must be in [1, N-1]");
+    }
+    // The bipartition [1..k] | [k+1..N] is what ``Schmidt::of(psi, 1, k)``
+    // returns the spectrum of: eigenvalues of the reduced density matrix
+    // on the left half. Shannon entropy of that spectrum is the bond
+    // entanglement entropy.
+    auto eigs = Schmidt::of(psi, 1, k);
+    return shannonEntropy(eigs);
+}
+
+double
+MutualInformation::regionEntropy(itensor::MPS const& psi_in, int i, int j) {
+    using namespace itensor;
+    const int N = length(psi_in);
+    if (i > j) std::swap(i, j);
+    if (i < 1 || j > N) {
+        throw std::invalid_argument(
+            "MutualInformation::regionEntropy: require 1 <= i <= j <= N");
+    }
+    // Trivial bipartition (whole chain | empty): pure state ⇒ S = 0.
+    if (i == 1 && j == N) return 0.0;
+
+    // χ⁴ transfer-matrix sweep: contract sites i..j with their
+    // conjugates, tracing the physical index at each site and keeping
+    // the boundary bond pair (l, l', r, r') open. The resulting tensor
+    // K has eigenvalues equal to the non-zero spectrum of ρ_{[i, j]},
+    // and its memory footprint is bounded by χ⁴ regardless of |j - i|
+    // — the d^L blow-up of the dense-contraction path is avoided
+    // entirely.
+    //
+    // Boundary cases (left of i is left-canonical, right of j is right-
+    // canonical when psi.position(i) has been called):
+    //   • i = 1:  K starts as a scalar 1. The left-bond axes of K are
+    //             absent throughout the sweep; the final K has rank 2
+    //             on (r_j, r_j').
+    //   • j = N:  the rightmost MPS tensor has a trivial right bond;
+    //             K's final rank is on (l_{i-1}, l_{i-1}').
+    //   • interior: K has rank 4 on (l_{i-1}, l_{i-1}', r_j, r_j').
+
+    MPS psi = psi_in;
+    psi.position(i);
+
+    // χ⁴ K-matrix sweep. K starts as scalar 1; after the first site
+    // multiplication the boundary bond pair (l_{i-1}, prime(l_{i-1}))
+    // and the running bond pair (l_i, prime(l_i)) become open
+    // simultaneously and the boundary pair persists through every
+    // subsequent site. Bra has all link indices primed (so ket / bra
+    // bonds stay distinct); site indices stay unprimed on both so
+    // they auto-trace.
+    ITensor K(1.0);
+    for (int k = i; k <= j; ++k) {
+        ITensor const& A = psi(k);
+        ITensor bra = dag(A);
+        if (k > 1) {
+            auto leftL = commonIndex(psi(k - 1), psi(k));
+            bra.prime(leftL);
+        }
+        if (k < N) {
+            auto rightL = commonIndex(psi(k), psi(k + 1));
+            bra.prime(rightL);
+        }
+        K *= A;
+        K *= bra;
+    }
+
+    // Step 3: extract K's open indices, build a Hermitian matrix, eigh.
+    // K's open indices are exactly the un-traced bond pairs at the
+    // interval boundaries. We separate them into ``ket`` (unprimed) and
+    // ``bra`` (primed) sides and pack into an Eigen matrix.
+    std::vector<Index> ketSide;
+    std::vector<Index> braSide;
+    for (auto const& ind : K.inds()) {
+        if (ind.primeLevel() == 0) ketSide.push_back(ind);
+        else                        braSide.push_back(ind);
+    }
+    // Each ket-side index should pair with a primed sibling on the bra
+    // side; the pairs come in the order links were primed.
+    int dimK = 1;
+    for (auto const& ind : ketSide) dimK *= dim(ind);
+    int dimB = 1;
+    for (auto const& ind : braSide) dimB *= dim(ind);
+    if (dimK != dimB) {
+        throw std::runtime_error(
+            "regionEntropy: ket / bra side dimension mismatch — "
+            "indicates a priming bug in the transfer sweep");
+    }
+
+    Eigen::MatrixXcd M(dimK, dimK);
+    auto [C_ket, rowIdx] = combiner(IndexSet(ketSide));
+    auto [C_bra, colIdx] = combiner(IndexSet(braSide));
+    auto Kflat = K * C_ket * C_bra;
+    for (int a = 1; a <= dimK; ++a) {
+        for (int b = 1; b <= dimK; ++b) {
+            M(a - 1, b - 1) =
+                eltC(Kflat, rowIdx = a, colIdx = b);
+        }
+    }
+    // Symmetrise against numerical noise.
+    M = 0.5 * (M + M.adjoint());
+
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(M);
+    if (es.info() != Eigen::Success) {
+        throw std::runtime_error(
+            "regionEntropy: SelfAdjointEigenSolver failed");
+    }
+    auto evs = es.eigenvalues();
+    std::vector<double> probs;
+    probs.reserve(static_cast<std::size_t>(evs.size()));
+    for (int k = 0; k < evs.size(); ++k) {
+        probs.push_back(std::max(0.0, evs[k]));
+    }
+    return shannonEntropy(probs);
+}
+
+double
+MutualInformation::tripartiteInformation(itensor::MPS const& psi,
+                                            int n, int m) {
+    const int N = itensor::length(psi);
+    if (n < 1 || m < 1 || n >= N || m >= N) {
+        throw std::invalid_argument(
+            "MutualInformation::tripartiteInformation: bonds must be "
+            "in [1, N-1]");
+    }
+    if (n == m) return 0.0;
+    if (n > m) std::swap(n, m);
+    // A = [1..n], B = [n+1..m], C = [m+1..N].
+    const double S_A = regionEntropy(psi, 1, n);
+    const double S_C = regionEntropy(psi, m + 1, N);
+    const double S_B = regionEntropy(psi, n + 1, m);
+    return S_A + S_C - S_B;
+}
+
+Eigen::MatrixXd
+MutualInformation::allBondPairs(itensor::MPS const& psi) {
+    const int N = itensor::length(psi);
+    Eigen::MatrixXd out = Eigen::MatrixXd::Zero(N - 1, N - 1);
+    if (N < 3) return out;
+    for (int n = 1; n <= N - 1; ++n) {
+        for (int m = n + 1; m <= N - 1; ++m) {
+            const double I = tripartiteInformation(psi, n, m);
+            out(n - 1, m - 1) = I;
+            out(m - 1, n - 1) = I;
+        }
+    }
+    return out;
 }
 
 } // namespace tessera::quantum

@@ -81,6 +81,14 @@ struct TDVPConfig {
     bool recordSpectra{false};
     bool recordPoset{false};
     bool recordMutualInformation{false};
+    // recordBondMutualInformation = true stores the full (N-1) × (N-1)
+    // tripartite-information matrix on bond cuts per snapshot, used by
+    // the dual-lattice spectral-dimension pipeline. Each entry is the
+    // van Raamsdonk-style tripartite info S(A) + S(C) − S(B) for the
+    // outer regions A, C separated by middle region B between cuts.
+    // Cost: O(N³ · χ⁵) per snapshot — heavier than site-site MI by
+    // roughly N · χ² because of the contiguous-interval entropy sweep.
+    bool recordBondMutualInformation{false};
 
     // Optional: explicit hopping graph for the Schwinger Hamiltonian.
     // Empty (default) means use the standard 1D nearest-neighbour
@@ -106,6 +114,10 @@ struct TDVPSnapshot {
     // stored row-major in a flat vector (length N·N). Zero diagonal.
     // Populated iff cfg.recordMutualInformation. Empty otherwise.
     std::vector<double> mutualInformation;
+    // Symmetric (N-1) × (N-1) matrix of bond-cut tripartite information
+    // in nats, stored row-major in a flat vector. Zero diagonal.
+    // Populated iff cfg.recordBondMutualInformation. Empty otherwise.
+    std::vector<double> bondMutualInformation;
 };
 
 // Result bundle from SchwingerQuench::evolve: GS diagnostics, then a

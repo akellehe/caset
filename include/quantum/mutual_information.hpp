@@ -74,6 +74,48 @@ public:
     // mutual information to a metric weight.
     [[nodiscard]] static double
     edgeLength(double I, double epsilon = 1e-10) noexcept;
+
+    // ── Dual / bond-cut observables (van Raamsdonk graph) ──────────────
+    //
+    // Contiguous-interval entropy and bond-cut tripartite information
+    // power the bond-cut spectral-dimension pipeline that uses
+    // bipartitions of the chain as graph vertices (one per bond, one
+    // per snapshot). See
+    // ``docs/source/holography-causal-ordering-emergent-dimension.md``
+    // §3 (Dual lattice / bond-cut graph) for the construction.
+
+    // Bipartite entanglement entropy at bond ``k`` (1-based, between
+    // sites k and k+1, 1 ≤ k ≤ N-1) of an MPS. Computed from the
+    // Schmidt spectrum of the bipartition |1..k] / [k+1..N|.
+    [[nodiscard]] static double
+    bondEntropy(itensor::MPS const& psi, int k);
+
+    // Entropy of the reduced density matrix on the contiguous interval
+    // [i, j] (1-based, inclusive, 1 ≤ i ≤ j ≤ N). Uses a χ⁴ transfer-
+    // matrix sweep — never materialises ρ in the (d^L, d^L) basis, so
+    // memory stays bounded at O(χ²) and runtime at O((j-i) χ⁵). The
+    // returned entropy is in nats.
+    [[nodiscard]] static double
+    regionEntropy(itensor::MPS const& psi, int i, int j);
+
+    // Tripartite information between bonds n < m (both 1-based,
+    // 1 ≤ n < m ≤ N-1):
+    //   I(A : C) = S(A) + S(C) - S(B), with
+    //     A = [1..n], B = [n+1..m], C = [m+1..N].
+    // For a pure state |ψ⟩, S(A ∪ C) = S(B) so this equals the
+    // standard mutual information between the two outer regions and
+    // captures how strongly the two cuts are entangled through the
+    // bulk middle (the van Raamsdonk picture: bond ↔ minimal surface,
+    // tripartite info ↔ mutual connectivity).
+    [[nodiscard]] static double
+    tripartiteInformation(itensor::MPS const& psi, int n, int m);
+
+    // All-pairs bond-cut tripartite information as a symmetric
+    // (N-1) × (N-1) matrix with zero diagonal. Caches the per-bond
+    // ``bondEntropy`` once and shares the interval-entropy sweep
+    // structure across pairs so the per-pair cost is O(N χ⁵).
+    [[nodiscard]] static Eigen::MatrixXd
+    allBondPairs(itensor::MPS const& psi);
 };
 
 } // namespace tessera::quantum
