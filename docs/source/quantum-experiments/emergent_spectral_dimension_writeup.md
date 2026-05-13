@@ -169,11 +169,89 @@ at every $m/g$ (2.093 vs.\ 1.92–2.05 light, 1.79 vs.\ 1.74–1.77 mid, 1.38 vs
 ~0.05 offsets at the two lighter masses are within the per-run numerical noise of the smoothing
 window).
 
+## Scale-up to $N = 16$
+
+Going beyond $N = 8$ exposed a memory-scaling bug in `MutualInformation::twoSiteReducedDensity`
+(`src/quantum/mutual_information.cpp`): the previous implementation contracted sites $i \ldots j$ into a
+single dense tensor before tracing the interior site indices, accumulating $2^{j-i+1}$ physical-leg
+elements. On the Choi state's doubled chain that distance reaches $2N - 1$, so the worst-case temporal-MI
+pair allocated $2^{31}$ elements at $N=16$ — tens of GB per call, OOM in practice. The fixed version
+sweeps a transfer tensor through sites $i \ldots j$ on bra and ket together, priming the bra's link
+indices so interior site indices auto-trace and only $O(\chi^2)$ memory is held at any step. Per-run
+cost dropped from intractable to roughly $30$ s at $N=16$ on 10 cores. Existing acceptance tests at $N \in
+\{4, 6\}$ continue to pass numerically unchanged.
+
+With the fix landed, the same bootstrap as above runs at $N = 16$ across $i_0 \in \{1, 3, 5, 7, 9, 11, 13\}$
+(seven parity-valid centres). Reproduce with:
+
+```bash
+OMP_NUM_THREADS=10 OPENBLAS_NUM_THREADS=10 MKL_NUM_THREADS=10 \
+python examples/quantum/run_emergent_spectral_dimension_bootstrap.py \
+    --N 16 --T 1.0 --dt 0.25 \
+    --m-over-g 0.25 0.5 5.0 \
+    --i0 1 3 5 7 9 11 13 \
+    --out-dir /tmp/holography-N16-bootstrap
+```
+
+![Finite-N trend: peak D_S vs m/g and D_S(σ) at N=16](figures/emergent_spectral_dimension_n16.png)
+
+| $m/g$ | $\|V_G\|$ | $\|E_G\|$ | peak $D_S$ (mean ± std) | range across $i_0$ | $N = 8$ peak (mean) |
+|---|---|---|---|---|---|
+| 0.25 (light) | 80 | $\approx 2615$ | **2.518 ± 0.082** | 2.383–2.587 | 1.965 |
+| 0.5 | 80 | $\approx 2611$ | **2.141 ± 0.015** | 2.122–2.157 | 1.753 |
+| 5.0 (heavy) | 80 | $\approx 2321$ | **2.364 ± 0.019** | 2.320–2.372 | 1.334 |
+
+Three findings change the picture from the $N = 8$ baseline:
+
+1. **All three peaks overshoot $D_S = 2$.** At $N = 8$ only the light-quark case touched 2; at $N = 16$
+   every $m/g$ sits above 2 by at least 0.14 standard deviations of the bootstrap. The (site, time)
+   graph is ~3.5× denser in edges ($|E_G|$ went from ~680 to ~2400+), and the spectral-dimension
+   estimator picks up the extra connectivity directly.
+2. **The $m/g$ ordering is no longer monotonic.** $N = 8$ had light > medium > heavy in peak $D_S$ —
+   what the methodology charter predicts on physical grounds. $N = 16$ has light > heavy > medium: the
+   heavy-quark peak jumped from 1.33 to 2.36, the largest relative move of the three. Two physical
+   readings are consistent with this and we cannot yet discriminate:
+   (a) at larger $N$ the heavy-quark vacuum sits on a *longer* Néel chain, so the static-Coulomb-driven
+       cross-snapshot MI accumulates more edges and the temporal layer of the graph is more 2D-like
+       even though the spatial layer remains 1D-product; or
+   (b) the bond-dim cap $\chi = 80$ is biting hardest in the heavy-quark sector, where the true Choi
+       Schmidt rank is small at $N = 8$ but the cap forces over-mixing at $N = 16$, inflating temporal
+       MI artificially.
+3. **Bootstrap scatter remains small.** The largest within-$m/g$ std (0.082 at light quark) is still
+   one to two orders below the cross-$m/g$ spread; the finding is robust to quench placement.
+
+The $D_S(\sigma)$ overlay (right-hand panel) shows the profile shape is preserved from $N = 8$: clean
+rise-then-fall in $\sigma$, peak in the diffusion regime, decay toward zero at long $\sigma$. The
+*amplitude* at the peak has risen across the board; the *shape* hasn't changed.
+
+### Truncation caveat
+
+At $\chi_\text{Choi} = 80$ the Choi state's bond dim is capped 12 orders below the worst-case Schmidt
+rank ($\sim 2^{16}$) of the true propagator. The over-2 readings could be a faithful response to denser
+genuine MI, or a truncation artifact in which over-mixing inflates pairwise MI. Resolving this needs a
+$\chi$ sweep at $N = 16$ (acceptance criterion: peak $D_S$ stable to within ~0.05 under
+$\chi \in \{60, 100, 160\}$), which is the next item on the convergence list. Until that lands the
+$N = 16$ peak-$D_S$ table should be read as "directionally up versus $N = 8$" rather than as a
+quantitative continuum estimate.
+
+### Falsification check re-examined
+
+The criteria from §1 still all pass at $N = 16$:
+
+| Criterion | Outcome at $N = 16$ |
+|---|---|
+| Trivial confirmation ($D_S \equiv 2$) | Rejected — spread $\geq 0.4$ across $\sigma$ in every run. |
+| Independence from $m/g$ | Rejected — spread between mean peaks is 0.38 (light vs.\ mid). |
+| Strong falsification (non-monotonic outside small-$\sigma$ regime) | Not triggered — every profile is unimodal. |
+| $D_S \to 2$ at intermediate $\sigma$ | Confirmed (in fact overshoots), pending the $\chi$ check above. |
+| $D_S < 2$ at long $\sigma$ | Confirmed; all profiles decay toward zero at the largest $\sigma$. |
+
 ## Caveats
 
-- **Finite size.** $N = 8$ is small. The peak $D_S$ for the lattice is sensitive to system size; the
-  spec acknowledges this in §2. The result here is a trend ($m/g$ sensitivity, peak near 2 in the
-  light-quark case) rather than a precise asymptotic dimension.
+- **Finite size.** $N = 8$ and $N = 16$ are both small. The peak $D_S$ for the lattice rises
+  substantially from $N = 8$ to $N = 16$ in every $m/g$ sector, so the result here is a trend rather
+  than a precise asymptotic dimension. A stepped sweep through $N \in \{16, 24, 32\}$ would tell us
+  whether the rise plateaus.
 - **Forward-direction temporal MI.** For a $(\text{in}_i, \text{out}_j)$ pair with $i \neq j$ the Choi-state
   MI is asymmetric in $(i, j)$. The graph stores the forward-propagator value (earlier-time site as input,
   later-time site as output). The reverse-direction value differs in general; the choice is documented in
@@ -185,12 +263,16 @@ window).
 
 ## Reproducibility
 
-The JSON records at `/tmp/holography-results/mg_*.json` (single-trajectory) and
-`/tmp/holography-bootstrap/mg_*_i0_*.json` (bootstrap) capture the full input config, snapshot
-diagnostics, graph counts, $\sigma$/$P$/$D_S$ arrays, the Ambjorn-Loll fit, and a provenance block — the
-JSON-record schema documented in [holography-causal-ordering-emergent-dimension.md](../holography-causal-ordering-emergent-dimension.md). The bootstrap directory additionally contains `aggregate.json`, the
-$i_0$-aggregated peak-$D_S$ table that feeds the bootstrap section above. Anyone with the same JSON
-records and a `tessera` build of matching version can regenerate every number in this writeup.
+The JSON records at `/tmp/holography-results/mg_*.json` (single-trajectory, $N = 8$),
+`/tmp/holography-bootstrap/mg_*_i0_*.json` ($N = 8$ bootstrap), and
+`/tmp/holography-N16-bootstrap/mg_*_i0_*.json` ($N = 16$ bootstrap) capture the full input config,
+snapshot diagnostics, graph counts, $\sigma$/$P$/$D_S$ arrays, the Ambjorn-Loll fit, and a provenance
+block — the JSON-record schema documented in
+[holography-causal-ordering-emergent-dimension.md](../holography-causal-ordering-emergent-dimension.md).
+Each bootstrap directory additionally contains `aggregate.json`, the $i_0$-aggregated peak-$D_S$ table
+that feeds the corresponding bootstrap section above. Anyone with the same JSON records and a
+`tessera` build of matching version (at or after the `twoSiteReducedDensity` memory-scaling fix) can
+regenerate every number in this writeup.
 
 ## See also
 

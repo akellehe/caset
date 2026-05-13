@@ -98,41 +98,68 @@ MutualInformation::twoSiteReducedDensity(itensor::MPS const& psi_in,
     MPS psi = psi_in;
     psi.position(i);
 
-    // Contract sites i..j into a single tensor T. Its indices are:
-    //   left_bond (between i-1 and i), site_i, site_{i+1}, …, site_j,
-    //   right_bond (between j and j+1).
-    ITensor T = psi(i);
-    for (int k = i + 1; k <= j; ++k) {
-        T *= psi(k);
-    }
-
     auto site_i = siteIndex(psi, i);
     auto site_j = siteIndex(psi, j);
 
-    // The bra is T daggered, with site indices at i and j primed so
-    // they stay open in the contraction. Site indices for k ∈ (i, j)
-    // are left unprimed → they auto-contract with the ket (tracing
-    // out those interior sites). Bond indices are unprimed on both
-    // sides → they also auto-contract; the canonical form makes the
-    // left and right bond contractions equal to identity.
-    ITensor Td = dag(T);
-    Td.prime(site_i);
-    Td.prime(site_j);
+    // Transfer-matrix sweep from site i to site j. At every step the
+    // intermediate tensor T carries four open indices — (site_i,
+    // site_i', current_right_bond_ket, current_right_bond_bra) — so
+    // its size is O(χ²) regardless of (j - i). Interior site indices
+    // are unprimed on the bra side and auto-trace against the ket.
+    // The left bond at site i and the right bond at site j auto-
+    // contract via the orth-canonical / right-canonical conditions
+    // (psi.position(i) places sites 1..i-1 in left-canonical form and
+    // sites i+1..N in right-canonical form), giving identity
+    // environments at both boundaries.
+    //
+    // The previous implementation contracted sites i..j into a single
+    // dense tensor before forming rho; that accumulates 2^(j-i+1)
+    // physical-site elements and is intractable on long doubled
+    // chains (e.g. the Choi state's (in_1, out_N) pair).
 
-    ITensor rho = T * Td;
-    // rho's open indices are (site_i, site_i', site_j, site_j') — a
-    // rank-4 tensor whose flat 4×4 representation is the joint
-    // reduced density matrix ρ_{ij}.
+    auto primeBondAt = [&](ITensor& tensor, int bond) {
+        // bond ∈ [1, N-1]: link index between sites `bond` and bond+1.
+        if (bond < 1 || bond > N - 1) return;
+        auto link = commonIndex(psi(bond), psi(bond + 1));
+        if (link) tensor.prime(link);
+    };
 
+    // Site i: prime site_i on the bra (keep it open) and the right
+    // bond on the bra (keep ket/bra bonds distinct as we sweep).
+    ITensor bra = dag(psi(i));
+    bra.prime(site_i);
+    primeBondAt(bra, i);
+    ITensor T = psi(i);
+    T *= bra;
+
+    // Interior sites i+1 .. j-1: prime left+right bonds on the bra so
+    // its chain stays distinct; site_k is unprimed → auto-traces.
+    for (int k = i + 1; k <= j - 1; ++k) {
+        ITensor braK = dag(psi(k));
+        primeBondAt(braK, k - 1);
+        primeBondAt(braK, k);
+        T *= psi(k);
+        T *= braK;
+    }
+
+    // Site j: prime site_j on the bra and the left bond on the bra
+    // (continuing the primed chain from j-1). The right bond is left
+    // unprimed so it auto-traces against the right-canonical
+    // environment past j.
+    ITensor braJ = dag(psi(j));
+    braJ.prime(site_j);
+    primeBondAt(braJ, j - 1);
+    T *= psi(j);
+    T *= braJ;
+
+    // T now has only (site_i, site_i', site_j, site_j') open.
     Eigen::Matrix4cd out;
     out.setZero();
     for (int a = 1; a <= 2; ++a) {
         for (int b = 1; b <= 2; ++b) {
             for (int c = 1; c <= 2; ++c) {
                 for (int d = 1; d <= 2; ++d) {
-                    // Ket indices: site_i = a, site_j = b
-                    // Bra indices: site_i' = c, site_j' = d
-                    const auto v = eltC(rho,
+                    const auto v = eltC(T,
                                           site_i = a, prime(site_i) = c,
                                           site_j = b, prime(site_j) = d);
                     out(packTwoSite(a, b), packTwoSite(c, d)) = v;

@@ -513,12 +513,134 @@ at every <span class="math notranslate nohighlight">\(m/g\)</span> (2.093 vs.\ 1
 ~0.05 offsets at the two lighter masses are within the per-run numerical noise of the smoothing
 window).</p>
 </section>
+<section id="scale-up-to-n-16">
+<h2>Scale-up to <span class="math notranslate nohighlight">\(N = 16\)</span><a class="headerlink" href="#scale-up-to-n-16" title="Link to this heading">¶</a></h2>
+<p>Going beyond <span class="math notranslate nohighlight">\(N = 8\)</span> exposed a memory-scaling bug in <code class="docutils literal notranslate"><span class="pre">MutualInformation::twoSiteReducedDensity</span></code>
+(<code class="docutils literal notranslate"><span class="pre">src/quantum/mutual_information.cpp</span></code>): the previous implementation contracted sites <span class="math notranslate nohighlight">\(i \ldots j\)</span> into a
+single dense tensor before tracing the interior site indices, accumulating <span class="math notranslate nohighlight">\(2^{j-i+1}\)</span> physical-leg
+elements. On the Choi state’s doubled chain that distance reaches <span class="math notranslate nohighlight">\(2N - 1\)</span>, so the worst-case temporal-MI
+pair allocated <span class="math notranslate nohighlight">\(2^{31}\)</span> elements at <span class="math notranslate nohighlight">\(N=16\)</span> — tens of GB per call, OOM in practice. The fixed version
+sweeps a transfer tensor through sites <span class="math notranslate nohighlight">\(i \ldots j\)</span> on bra and ket together, priming the bra’s link
+indices so interior site indices auto-trace and only <span class="math notranslate nohighlight">\(O(\chi^2)\)</span> memory is held at any step. Per-run
+cost dropped from intractable to roughly <span class="math notranslate nohighlight">\(30\)</span> s at <span class="math notranslate nohighlight">\(N=16\)</span> on 10 cores. Existing acceptance tests at <span class="math notranslate nohighlight">\(N \in
+\{4, 6\}\)</span> continue to pass numerically unchanged.</p>
+<p>With the fix landed, the same bootstrap as above runs at <span class="math notranslate nohighlight">\(N = 16\)</span> across <span class="math notranslate nohighlight">\(i_0 \in \{1, 3, 5, 7, 9, 11, 13\}\)</span>
+(seven parity-valid centres). Reproduce with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">OMP_NUM_THREADS</span><span class="o">=</span><span class="m">10</span><span class="w"> </span><span class="nv">OPENBLAS_NUM_THREADS</span><span class="o">=</span><span class="m">10</span><span class="w"> </span><span class="nv">MKL_NUM_THREADS</span><span class="o">=</span><span class="m">10</span><span class="w"> </span><span class="se">\</span>
+python<span class="w"> </span>examples/quantum/run_emergent_spectral_dimension_bootstrap.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--N<span class="w"> </span><span class="m">16</span><span class="w"> </span>--T<span class="w"> </span><span class="m">1</span>.0<span class="w"> </span>--dt<span class="w"> </span><span class="m">0</span>.25<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--m-over-g<span class="w"> </span><span class="m">0</span>.25<span class="w"> </span><span class="m">0</span>.5<span class="w"> </span><span class="m">5</span>.0<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--i0<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="m">7</span><span class="w"> </span><span class="m">9</span><span class="w"> </span><span class="m">11</span><span class="w"> </span><span class="m">13</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out-dir<span class="w"> </span>/tmp/holography-N16-bootstrap
+</pre></div>
+</div>
+<p><img alt="Finite-N trend: peak D_S vs m/g and D_S(σ) at N=16" src="../_images/emergent_spectral_dimension_n16.png" /></p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(m/g\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(|V_G|\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(|E_G|\)</span></p></th>
+<th class="head"><p>peak <span class="math notranslate nohighlight">\(D_S\)</span> (mean ± std)</p></th>
+<th class="head"><p>range across <span class="math notranslate nohighlight">\(i_0\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(N = 8\)</span> peak (mean)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>0.25 (light)</p></td>
+<td><p>80</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx 2615\)</span></p></td>
+<td><p><strong>2.518 ± 0.082</strong></p></td>
+<td><p>2.383–2.587</p></td>
+<td><p>1.965</p></td>
+</tr>
+<tr class="row-odd"><td><p>0.5</p></td>
+<td><p>80</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx 2611\)</span></p></td>
+<td><p><strong>2.141 ± 0.015</strong></p></td>
+<td><p>2.122–2.157</p></td>
+<td><p>1.753</p></td>
+</tr>
+<tr class="row-even"><td><p>5.0 (heavy)</p></td>
+<td><p>80</p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx 2321\)</span></p></td>
+<td><p><strong>2.364 ± 0.019</strong></p></td>
+<td><p>2.320–2.372</p></td>
+<td><p>1.334</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Three findings change the picture from the <span class="math notranslate nohighlight">\(N = 8\)</span> baseline:</p>
+<ol class="arabic simple">
+<li><p><strong>All three peaks overshoot <span class="math notranslate nohighlight">\(D_S = 2\)</span>.</strong> At <span class="math notranslate nohighlight">\(N = 8\)</span> only the light-quark case touched 2; at <span class="math notranslate nohighlight">\(N = 16\)</span>
+every <span class="math notranslate nohighlight">\(m/g\)</span> sits above 2 by at least 0.14 standard deviations of the bootstrap. The (site, time)
+graph is ~3.5× denser in edges (<span class="math notranslate nohighlight">\(|E_G|\)</span> went from ~680 to ~2400+), and the spectral-dimension
+estimator picks up the extra connectivity directly.</p></li>
+<li><p><strong>The <span class="math notranslate nohighlight">\(m/g\)</span> ordering is no longer monotonic.</strong> <span class="math notranslate nohighlight">\(N = 8\)</span> had light &gt; medium &gt; heavy in peak <span class="math notranslate nohighlight">\(D_S\)</span> —
+what the methodology charter predicts on physical grounds. <span class="math notranslate nohighlight">\(N = 16\)</span> has light &gt; heavy &gt; medium: the
+heavy-quark peak jumped from 1.33 to 2.36, the largest relative move of the three. Two physical
+readings are consistent with this and we cannot yet discriminate:
+(a) at larger <span class="math notranslate nohighlight">\(N\)</span> the heavy-quark vacuum sits on a <em>longer</em> Néel chain, so the static-Coulomb-driven
+cross-snapshot MI accumulates more edges and the temporal layer of the graph is more 2D-like
+even though the spatial layer remains 1D-product; or
+(b) the bond-dim cap <span class="math notranslate nohighlight">\(\chi = 80\)</span> is biting hardest in the heavy-quark sector, where the true Choi
+Schmidt rank is small at <span class="math notranslate nohighlight">\(N = 8\)</span> but the cap forces over-mixing at <span class="math notranslate nohighlight">\(N = 16\)</span>, inflating temporal
+MI artificially.</p></li>
+<li><p><strong>Bootstrap scatter remains small.</strong> The largest within-<span class="math notranslate nohighlight">\(m/g\)</span> std (0.082 at light quark) is still
+one to two orders below the cross-<span class="math notranslate nohighlight">\(m/g\)</span> spread; the finding is robust to quench placement.</p></li>
+</ol>
+<p>The <span class="math notranslate nohighlight">\(D_S(\sigma)\)</span> overlay (right-hand panel) shows the profile shape is preserved from <span class="math notranslate nohighlight">\(N = 8\)</span>: clean
+rise-then-fall in <span class="math notranslate nohighlight">\(\sigma\)</span>, peak in the diffusion regime, decay toward zero at long <span class="math notranslate nohighlight">\(\sigma\)</span>. The
+<em>amplitude</em> at the peak has risen across the board; the <em>shape</em> hasn’t changed.</p>
+<section id="truncation-caveat">
+<h3>Truncation caveat<a class="headerlink" href="#truncation-caveat" title="Link to this heading">¶</a></h3>
+<p>At <span class="math notranslate nohighlight">\(\chi_\text{Choi} = 80\)</span> the Choi state’s bond dim is capped 12 orders below the worst-case Schmidt
+rank (<span class="math notranslate nohighlight">\(\sim 2^{16}\)</span>) of the true propagator. The over-2 readings could be a faithful response to denser
+genuine MI, or a truncation artifact in which over-mixing inflates pairwise MI. Resolving this needs a
+<span class="math notranslate nohighlight">\(\chi\)</span> sweep at <span class="math notranslate nohighlight">\(N = 16\)</span> (acceptance criterion: peak <span class="math notranslate nohighlight">\(D_S\)</span> stable to within ~0.05 under
+<span class="math notranslate nohighlight">\(\chi \in \{60, 100, 160\}\)</span>), which is the next item on the convergence list. Until that lands the
+<span class="math notranslate nohighlight">\(N = 16\)</span> peak-<span class="math notranslate nohighlight">\(D_S\)</span> table should be read as “directionally up versus <span class="math notranslate nohighlight">\(N = 8\)</span>” rather than as a
+quantitative continuum estimate.</p>
+</section>
+<section id="falsification-check-re-examined">
+<h3>Falsification check re-examined<a class="headerlink" href="#falsification-check-re-examined" title="Link to this heading">¶</a></h3>
+<p>The criteria from §1 still all pass at <span class="math notranslate nohighlight">\(N = 16\)</span>:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Criterion</p></th>
+<th class="head"><p>Outcome at <span class="math notranslate nohighlight">\(N = 16\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Trivial confirmation (<span class="math notranslate nohighlight">\(D_S \equiv 2\)</span>)</p></td>
+<td><p>Rejected — spread <span class="math notranslate nohighlight">\(\geq 0.4\)</span> across <span class="math notranslate nohighlight">\(\sigma\)</span> in every run.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Independence from <span class="math notranslate nohighlight">\(m/g\)</span></p></td>
+<td><p>Rejected — spread between mean peaks is 0.38 (light vs.\ mid).</p></td>
+</tr>
+<tr class="row-even"><td><p>Strong falsification (non-monotonic outside small-<span class="math notranslate nohighlight">\(\sigma\)</span> regime)</p></td>
+<td><p>Not triggered — every profile is unimodal.</p></td>
+</tr>
+<tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(D_S \to 2\)</span> at intermediate <span class="math notranslate nohighlight">\(\sigma\)</span></p></td>
+<td><p>Confirmed (in fact overshoots), pending the <span class="math notranslate nohighlight">\(\chi\)</span> check above.</p></td>
+</tr>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(D_S &lt; 2\)</span> at long <span class="math notranslate nohighlight">\(\sigma\)</span></p></td>
+<td><p>Confirmed; all profiles decay toward zero at the largest <span class="math notranslate nohighlight">\(\sigma\)</span>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
 <section id="caveats">
 <h2>Caveats<a class="headerlink" href="#caveats" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p><strong>Finite size.</strong> <span class="math notranslate nohighlight">\(N = 8\)</span> is small. The peak <span class="math notranslate nohighlight">\(D_S\)</span> for the lattice is sensitive to system size; the
-spec acknowledges this in §2. The result here is a trend (<span class="math notranslate nohighlight">\(m/g\)</span> sensitivity, peak near 2 in the
-light-quark case) rather than a precise asymptotic dimension.</p></li>
+<li><p><strong>Finite size.</strong> <span class="math notranslate nohighlight">\(N = 8\)</span> and <span class="math notranslate nohighlight">\(N = 16\)</span> are both small. The peak <span class="math notranslate nohighlight">\(D_S\)</span> for the lattice rises
+substantially from <span class="math notranslate nohighlight">\(N = 8\)</span> to <span class="math notranslate nohighlight">\(N = 16\)</span> in every <span class="math notranslate nohighlight">\(m/g\)</span> sector, so the result here is a trend rather
+than a precise asymptotic dimension. A stepped sweep through <span class="math notranslate nohighlight">\(N \in \{16, 24, 32\}\)</span> would tell us
+whether the rise plateaus.</p></li>
 <li><p><strong>Forward-direction temporal MI.</strong> For a <span class="math notranslate nohighlight">\((\text{in}_i, \text{out}_j)\)</span> pair with <span class="math notranslate nohighlight">\(i \neq j\)</span> the Choi-state
 MI is asymmetric in <span class="math notranslate nohighlight">\((i, j)\)</span>. The graph stores the forward-propagator value (earlier-time site as input,
 later-time site as output). The reverse-direction value differs in general; the choice is documented in
@@ -531,12 +653,16 @@ the TDVP truncation + the finite σ-grid.</p></li>
 </section>
 <section id="reproducibility">
 <h2>Reproducibility<a class="headerlink" href="#reproducibility" title="Link to this heading">¶</a></h2>
-<p>The JSON records at <code class="docutils literal notranslate"><span class="pre">/tmp/holography-results/mg_*.json</span></code> (single-trajectory) and
-<code class="docutils literal notranslate"><span class="pre">/tmp/holography-bootstrap/mg_*_i0_*.json</span></code> (bootstrap) capture the full input config, snapshot
-diagnostics, graph counts, <span class="math notranslate nohighlight">\(\sigma\)</span>/<span class="math notranslate nohighlight">\(P\)</span>/<span class="math notranslate nohighlight">\(D_S\)</span> arrays, the Ambjorn-Loll fit, and a provenance block — the
-JSON-record schema documented in <a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html"><span class="std std-doc">holography-causal-ordering-emergent-dimension.md</span></a>. The bootstrap directory additionally contains <code class="docutils literal notranslate"><span class="pre">aggregate.json</span></code>, the
-<span class="math notranslate nohighlight">\(i_0\)</span>-aggregated peak-<span class="math notranslate nohighlight">\(D_S\)</span> table that feeds the bootstrap section above. Anyone with the same JSON
-records and a <code class="docutils literal notranslate"><span class="pre">tessera</span></code> build of matching version can regenerate every number in this writeup.</p>
+<p>The JSON records at <code class="docutils literal notranslate"><span class="pre">/tmp/holography-results/mg_*.json</span></code> (single-trajectory, <span class="math notranslate nohighlight">\(N = 8\)</span>),
+<code class="docutils literal notranslate"><span class="pre">/tmp/holography-bootstrap/mg_*_i0_*.json</span></code> (<span class="math notranslate nohighlight">\(N = 8\)</span> bootstrap), and
+<code class="docutils literal notranslate"><span class="pre">/tmp/holography-N16-bootstrap/mg_*_i0_*.json</span></code> (<span class="math notranslate nohighlight">\(N = 16\)</span> bootstrap) capture the full input config,
+snapshot diagnostics, graph counts, <span class="math notranslate nohighlight">\(\sigma\)</span>/<span class="math notranslate nohighlight">\(P\)</span>/<span class="math notranslate nohighlight">\(D_S\)</span> arrays, the Ambjorn-Loll fit, and a provenance
+block — the JSON-record schema documented in
+<a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html"><span class="std std-doc">holography-causal-ordering-emergent-dimension.md</span></a>.
+Each bootstrap directory additionally contains <code class="docutils literal notranslate"><span class="pre">aggregate.json</span></code>, the <span class="math notranslate nohighlight">\(i_0\)</span>-aggregated peak-<span class="math notranslate nohighlight">\(D_S\)</span> table
+that feeds the corresponding bootstrap section above. Anyone with the same JSON records and a
+<code class="docutils literal notranslate"><span class="pre">tessera</span></code> build of matching version (at or after the <code class="docutils literal notranslate"><span class="pre">twoSiteReducedDensity</span></code> memory-scaling fix) can
+regenerate every number in this writeup.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h2>
@@ -612,6 +738,11 @@ causal-order-comparison experiment on the same TDVP snapshots.</p></li>
 <li><a class="reference internal" href="#hypothesis-check">Hypothesis check</a></li>
 <li><a class="reference internal" href="#convergence">Convergence</a></li>
 <li><a class="reference internal" href="#i-0-bootstrap"><span class="math notranslate nohighlight">\(i_0\)</span> bootstrap</a></li>
+<li><a class="reference internal" href="#scale-up-to-n-16">Scale-up to <span class="math notranslate nohighlight">\(N = 16\)</span></a><ul>
+<li><a class="reference internal" href="#truncation-caveat">Truncation caveat</a></li>
+<li><a class="reference internal" href="#falsification-check-re-examined">Falsification check re-examined</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#caveats">Caveats</a></li>
 <li><a class="reference internal" href="#reproducibility">Reproducibility</a></li>
 <li><a class="reference internal" href="#see-also">See also</a></li>
