@@ -248,6 +248,82 @@ The criteria from §1 still all pass at $N = 16$:
 | $D_S \to 2$ at intermediate $\sigma$ | Confirmed | **Confirmed** (in fact overshoots), pending the $\chi$ check above. | Pass (provisional) |
 | $D_S < 2$ at long $\sigma$ | Confirmed | **Confirmed** — all profiles decay toward zero at the largest $\sigma$. | Pass |
 
+## Dual lattice (bond-cut graph)
+
+Van Raamsdonk's framing — *spacetime is built up from entanglement* — puts the dual geometry on
+the **bipartitions** of the boundary, not its sites. The natural lattice for testing his picture is
+the bond-cut graph: one vertex per bond position (i.e., per bipartition of the chain) at each
+snapshot, with edge weights set by **tripartite information** rather than the bipartite site MI.
+
+For bonds $n < m$ at the same snapshot the edge weight is
+
+$$
+\mathcal{I}(n, m) \;=\; S\bigl(\rho_{[1, n]}\bigr) + S\bigl(\rho_{[m+1, N]}\bigr) - S\bigl(\rho_{[n+1, m]}\bigr),
+$$
+
+which for a pure $|\psi\rangle$ is the mutual information $I(A : C)$ between the two outer regions
+$A = [1, n]$ and $C = [m+1, N]$ separated by the bulk middle $B = [n+1, m]$. Strong entanglement
+between $A$ and $C$ through the bulk is the holographic signature of two cuts being close in the
+emergent geometry. Temporal edges between $(n, t)$ and $(n, t+1)$ get a unit-bond weight equal to
+the median spatial-MI value at snapshot $t$ — a structural anchor that puts a temporal hop on the
+same scale as a typical spatial hop. The downstream heat-kernel + Ambjorn-Loll fit is unchanged.
+
+Reproduce with:
+
+```bash
+python examples/quantum/run_dual_spectral_dimension.py \
+    --N 16 --T 1.0 --dt 0.25 \
+    --m-over-g 0.25 \
+    --out-json /tmp/dual-holography/N16_mg_0.25.json
+```
+
+(Bond MI per snapshot is gated by ``TDVPConfig.recordBondMutualInformation``.)
+
+![Dual-lattice vs site-graph spectral dimension at N=16](figures/dual_vs_site_spectral_dimension.png)
+
+### Results at $N = 16$
+
+| $m/g$ | $\lvert V_G \rvert$ | $\lvert E_G \rvert$ | dual peak $D_S$ | $\sigma_{\rm peak}$ | site peak $D_S$ (mean ± std) |
+|---|---|---|---|---|---|
+| 0.25 (light) | 75 | 585 | **1.84** | $\approx 1.05$ | 2.52 ± 0.08 |
+| 0.5 (mid)    | 75 | 585 | **1.77** | $\approx 3.57$ | 2.14 ± 0.02 |
+| 5.0 (heavy)  | 75 | 286 | **0.73** | grid edge       | 2.36 ± 0.02 |
+
+Three readings worth pulling out:
+
+1. **The dual peak $D_S$ stays strictly below 2 in every $m/g$ sector at $N = 16$**, where the site
+   graph overshoots 2 at every $m/g$. If we read the site-graph over-2 as a $\chi$-truncation
+   artifact (as flagged in the caveats above), the dual graph is the cleaner observable for H_SD:
+   the prediction $D_S \to 2$ at intermediate $\sigma$ is *capped* rather than overshot.
+2. **The $m/g$ ordering reverts to monotonic**: light > mid > heavy, in contrast to the flipped
+   ordering seen on the site graph at $N = 16$. The heavy-quark dual graph is much sparser
+   ($\lvert E_G \rvert = 286$ vs.\ 585 at lighter $m/g$) because bond entanglement on a near-Néel
+   vacuum is genuinely small — the bond cuts have almost no MI to register. The heavy-quark "peak"
+   at $\sigma \approx 230$ is at the grid edge, not a true diffusion-regime peak.
+3. **No emergent extra dimension.** Sweeping $N$ from 8 through 16 at $m/g = 0.5$ gives peak $D_S$
+   $\in \{1.57, 1.69, 1.74, 1.79, 1.77\}$ — plateauing near 1.78, comfortably below 2. The
+   Van Raamsdonk bond-cut graph does not lift the spectral dimension above what the underlying
+   1+1D physics supports.
+
+The third reading is the substantive negative result: hitting $D_S = 4$ from a 1+1D Schwinger
+chain is not within reach of this construction. Bond cuts plus tripartite-info edges give a graph
+that's still bounded by the 1+1D entanglement structure of the underlying model; the bulk-emergent
+dimension is at most ~2 in the diffusion regime. To genuinely probe $D_S > 2$ we'd need either a
+higher-dimensional underlying model (e.g., 2+1D Schwinger or pure-gauge on a square boundary, whose
+bulk dual would be 3+1D) or a substantively different graph construction admitting MI edges between
+non-adjacent snapshots.
+
+### Caveats specific to the dual construction
+
+- **Temporal-edge heuristic.** Spatial edges are first-principles tripartite information; temporal
+  edges use the median in-snapshot MI as a placeholder. A proper Choi-state-based bond MI between
+  consecutive snapshots — analogous to the site-pair temporal MI in the spec — is the next refinement.
+  The plateau at peak $D_S \approx 1.8$ is unlikely to change qualitatively, but the precise number
+  would shift.
+- **Heavy-quark sparseness.** At $m/g = 5.0$ the bond MI matrix has few entries above $\varepsilon_I
+  = 10^{-8}$; the graph is essentially disconnected in places. The reported "peak" at the grid edge
+  is best read as "no diffusion regime", not as a meaningful dimension estimate.
+
 ## Caveats
 
 - **Finite size.** $N = 8$ and $N = 16$ are both small. The peak $D_S$ for the lattice rises
@@ -264,6 +340,10 @@ The criteria from §1 still all pass at $N = 16$:
   the TDVP truncation + the finite σ-grid.
 
 ## Reproducibility
+
+Dual-lattice runs additionally live at `/tmp/dual-holography/N*_mg_*.json` — one file per
+$(N, m/g)$, with the same schema as the site-graph records plus a top-level ``graph`` block
+recording the bond-count and snapshot-count of the (bond, time) graph.
 
 The JSON records at `/tmp/holography-results/mg_*.json` (single-trajectory, $N = 8$),
 `/tmp/holography-bootstrap/mg_*_i0_*.json` ($N = 8$ bootstrap), and

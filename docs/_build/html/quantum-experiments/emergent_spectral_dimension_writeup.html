@@ -659,6 +659,110 @@ quantitative continuum estimate.</p>
 </div>
 </section>
 </section>
+<section id="dual-lattice-bond-cut-graph">
+<h2>Dual lattice (bond-cut graph)<a class="headerlink" href="#dual-lattice-bond-cut-graph" title="Link to this heading">¶</a></h2>
+<p>Van Raamsdonk’s framing — <em>spacetime is built up from entanglement</em> — puts the dual geometry on
+the <strong>bipartitions</strong> of the boundary, not its sites. The natural lattice for testing his picture is
+the bond-cut graph: one vertex per bond position (i.e., per bipartition of the chain) at each
+snapshot, with edge weights set by <strong>tripartite information</strong> rather than the bipartite site MI.</p>
+<p>For bonds <span class="math notranslate nohighlight">\(n &lt; m\)</span> at the same snapshot the edge weight is</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+\mathcal{I}(n, m) \;=\; S\bigl(\rho_{[1, n]}\bigr) + S\bigl(\rho_{[m+1, N]}\bigr) - S\bigl(\rho_{[n+1, m]}\bigr),
+\]</div>
+</div>
+<p>which for a pure <span class="math notranslate nohighlight">\(|\psi\rangle\)</span> is the mutual information <span class="math notranslate nohighlight">\(I(A : C)\)</span> between the two outer regions
+<span class="math notranslate nohighlight">\(A = [1, n]\)</span> and <span class="math notranslate nohighlight">\(C = [m+1, N]\)</span> separated by the bulk middle <span class="math notranslate nohighlight">\(B = [n+1, m]\)</span>. Strong entanglement
+between <span class="math notranslate nohighlight">\(A\)</span> and <span class="math notranslate nohighlight">\(C\)</span> through the bulk is the holographic signature of two cuts being close in the
+emergent geometry. Temporal edges between <span class="math notranslate nohighlight">\((n, t)\)</span> and <span class="math notranslate nohighlight">\((n, t+1)\)</span> get a unit-bond weight equal to
+the median spatial-MI value at snapshot <span class="math notranslate nohighlight">\(t\)</span> — a structural anchor that puts a temporal hop on the
+same scale as a typical spatial hop. The downstream heat-kernel + Ambjorn-Loll fit is unchanged.</p>
+<p>Reproduce with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>examples/quantum/run_dual_spectral_dimension.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--N<span class="w"> </span><span class="m">16</span><span class="w"> </span>--T<span class="w"> </span><span class="m">1</span>.0<span class="w"> </span>--dt<span class="w"> </span><span class="m">0</span>.25<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--m-over-g<span class="w"> </span><span class="m">0</span>.25<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out-json<span class="w"> </span>/tmp/dual-holography/N16_mg_0.25.json
+</pre></div>
+</div>
+<p>(Bond MI per snapshot is gated by <code class="docutils literal notranslate"><span class="pre">TDVPConfig.recordBondMutualInformation</span></code>.)</p>
+<p><img alt="Dual-lattice vs site-graph spectral dimension at N=16" src="../_images/dual_vs_site_spectral_dimension.png" /></p>
+<section id="results-at-n-16">
+<h3>Results at <span class="math notranslate nohighlight">\(N = 16\)</span><a class="headerlink" href="#results-at-n-16" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(m/g\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(\lvert V_G \rvert\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(\lvert E_G \rvert\)</span></p></th>
+<th class="head"><p>dual peak <span class="math notranslate nohighlight">\(D_S\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(\sigma_{\rm peak}\)</span></p></th>
+<th class="head"><p>site peak <span class="math notranslate nohighlight">\(D_S\)</span> (mean ± std)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>0.25 (light)</p></td>
+<td><p>75</p></td>
+<td><p>585</p></td>
+<td><p><strong>1.84</strong></p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx 1.05\)</span></p></td>
+<td><p>2.52 ± 0.08</p></td>
+</tr>
+<tr class="row-odd"><td><p>0.5 (mid)</p></td>
+<td><p>75</p></td>
+<td><p>585</p></td>
+<td><p><strong>1.77</strong></p></td>
+<td><p><span class="math notranslate nohighlight">\(\approx 3.57\)</span></p></td>
+<td><p>2.14 ± 0.02</p></td>
+</tr>
+<tr class="row-even"><td><p>5.0 (heavy)</p></td>
+<td><p>75</p></td>
+<td><p>286</p></td>
+<td><p><strong>0.73</strong></p></td>
+<td><p>grid edge</p></td>
+<td><p>2.36 ± 0.02</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Three readings worth pulling out:</p>
+<ol class="arabic simple">
+<li><p><strong>The dual peak <span class="math notranslate nohighlight">\(D_S\)</span> stays strictly below 2 in every <span class="math notranslate nohighlight">\(m/g\)</span> sector at <span class="math notranslate nohighlight">\(N = 16\)</span></strong>, where the site
+graph overshoots 2 at every <span class="math notranslate nohighlight">\(m/g\)</span>. If we read the site-graph over-2 as a <span class="math notranslate nohighlight">\(\chi\)</span>-truncation
+artifact (as flagged in the caveats above), the dual graph is the cleaner observable for H_SD:
+the prediction <span class="math notranslate nohighlight">\(D_S \to 2\)</span> at intermediate <span class="math notranslate nohighlight">\(\sigma\)</span> is <em>capped</em> rather than overshot.</p></li>
+<li><p><strong>The <span class="math notranslate nohighlight">\(m/g\)</span> ordering reverts to monotonic</strong>: light &gt; mid &gt; heavy, in contrast to the flipped
+ordering seen on the site graph at <span class="math notranslate nohighlight">\(N = 16\)</span>. The heavy-quark dual graph is much sparser
+(<span class="math notranslate nohighlight">\(\lvert E_G \rvert = 286\)</span> vs.\ 585 at lighter <span class="math notranslate nohighlight">\(m/g\)</span>) because bond entanglement on a near-Néel
+vacuum is genuinely small — the bond cuts have almost no MI to register. The heavy-quark “peak”
+at <span class="math notranslate nohighlight">\(\sigma \approx 230\)</span> is at the grid edge, not a true diffusion-regime peak.</p></li>
+<li><p><strong>No emergent extra dimension.</strong> Sweeping <span class="math notranslate nohighlight">\(N\)</span> from 8 through 16 at <span class="math notranslate nohighlight">\(m/g = 0.5\)</span> gives peak <span class="math notranslate nohighlight">\(D_S\)</span>
+<span class="math notranslate nohighlight">\(\in \{1.57, 1.69, 1.74, 1.79, 1.77\}\)</span> — plateauing near 1.78, comfortably below 2. The
+Van Raamsdonk bond-cut graph does not lift the spectral dimension above what the underlying
+1+1D physics supports.</p></li>
+</ol>
+<p>The third reading is the substantive negative result: hitting <span class="math notranslate nohighlight">\(D_S = 4\)</span> from a 1+1D Schwinger
+chain is not within reach of this construction. Bond cuts plus tripartite-info edges give a graph
+that’s still bounded by the 1+1D entanglement structure of the underlying model; the bulk-emergent
+dimension is at most ~2 in the diffusion regime. To genuinely probe <span class="math notranslate nohighlight">\(D_S &gt; 2\)</span> we’d need either a
+higher-dimensional underlying model (e.g., 2+1D Schwinger or pure-gauge on a square boundary, whose
+bulk dual would be 3+1D) or a substantively different graph construction admitting MI edges between
+non-adjacent snapshots.</p>
+</section>
+<section id="caveats-specific-to-the-dual-construction">
+<h3>Caveats specific to the dual construction<a class="headerlink" href="#caveats-specific-to-the-dual-construction" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><strong>Temporal-edge heuristic.</strong> Spatial edges are first-principles tripartite information; temporal
+edges use the median in-snapshot MI as a placeholder. A proper Choi-state-based bond MI between
+consecutive snapshots — analogous to the site-pair temporal MI in the spec — is the next refinement.
+The plateau at peak <span class="math notranslate nohighlight">\(D_S \approx 1.8\)</span> is unlikely to change qualitatively, but the precise number
+would shift.</p></li>
+<li><p><strong>Heavy-quark sparseness.</strong> At <span class="math notranslate nohighlight">\(m/g = 5.0\)</span> the bond MI matrix has few entries above <span class="math notranslate nohighlight">\(\varepsilon_I
+= 10^{-8}\)</span>; the graph is essentially disconnected in places. The reported “peak” at the grid edge
+is best read as “no diffusion regime”, not as a meaningful dimension estimate.</p></li>
+</ul>
+</section>
+</section>
 <section id="caveats">
 <h2>Caveats<a class="headerlink" href="#caveats" title="Link to this heading">¶</a></h2>
 <ul class="simple">
@@ -678,6 +782,9 @@ the TDVP truncation + the finite σ-grid.</p></li>
 </section>
 <section id="reproducibility">
 <h2>Reproducibility<a class="headerlink" href="#reproducibility" title="Link to this heading">¶</a></h2>
+<p>Dual-lattice runs additionally live at <code class="docutils literal notranslate"><span class="pre">/tmp/dual-holography/N*_mg_*.json</span></code> — one file per
+<span class="math notranslate nohighlight">\((N, m/g)\)</span>, with the same schema as the site-graph records plus a top-level <code class="docutils literal notranslate"><span class="pre">graph</span></code> block
+recording the bond-count and snapshot-count of the (bond, time) graph.</p>
 <p>The JSON records at <code class="docutils literal notranslate"><span class="pre">/tmp/holography-results/mg_*.json</span></code> (single-trajectory, <span class="math notranslate nohighlight">\(N = 8\)</span>),
 <code class="docutils literal notranslate"><span class="pre">/tmp/holography-bootstrap/mg_*_i0_*.json</span></code> (<span class="math notranslate nohighlight">\(N = 8\)</span> bootstrap), and
 <code class="docutils literal notranslate"><span class="pre">/tmp/holography-N16-bootstrap/mg_*_i0_*.json</span></code> (<span class="math notranslate nohighlight">\(N = 16\)</span> bootstrap) capture the full input config,
@@ -766,6 +873,11 @@ causal-order-comparison experiment on the same TDVP snapshots.</p></li>
 <li><a class="reference internal" href="#scale-up-to-n-16">Scale-up to <span class="math notranslate nohighlight">\(N = 16\)</span></a><ul>
 <li><a class="reference internal" href="#truncation-caveat">Truncation caveat</a></li>
 <li><a class="reference internal" href="#falsification-check-re-examined">Falsification check re-examined</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#dual-lattice-bond-cut-graph">Dual lattice (bond-cut graph)</a><ul>
+<li><a class="reference internal" href="#results-at-n-16">Results at <span class="math notranslate nohighlight">\(N = 16\)</span></a></li>
+<li><a class="reference internal" href="#caveats-specific-to-the-dual-construction">Caveats specific to the dual construction</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#caveats">Caveats</a></li>
