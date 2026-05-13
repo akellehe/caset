@@ -42,28 +42,6 @@ option(TESSERA_QUANTUM "Build the Schwinger-model / MPS subsystem (requires BLAS
 if (NOT TESSERA_QUANTUM)
     set(TESSERA_QUANTUM OFF)
 endif()
-option(TESSERA_QUANTUM_CUDA "Build the libtorch / CUDA mirror of the Schwinger pipeline (requires TESSERA_QUANTUM and a torch C++ install)" $ENV{TESSERA_QUANTUM_CUDA})
-if (NOT TESSERA_QUANTUM_CUDA)
-    set(TESSERA_QUANTUM_CUDA OFF)
-endif()
-if (TESSERA_QUANTUM_CUDA AND NOT TESSERA_QUANTUM)
-    message(FATAL_ERROR "TESSERA_QUANTUM_CUDA requires TESSERA_QUANTUM=ON")
-endif()
-
-# When the libtorch backend is enabled the build mustn't link NVHPC's BLAS
-# (it pulls in libnvomp.so which clashes with torch's bundled libgomp at
-# runtime → free(): invalid pointer on `import tessera`). LD_LIBRARY_PATH
-# on this box prepends NVHPC heavily, so FindBLAS picks NVHPC even with
-# BLA_VENDOR set. Override by pinning BLAS / LAPACK to the system netlib
-# libraries (no OpenMP dependency) before any find_package runs.
-if (TESSERA_QUANTUM_CUDA)
-    # The BLAS pin we previously had to avoid the NVHPC libnvomp /
-    # torch libgomp OpenMP clash is gone — we now keep libtorch out of
-    # the main _tessera.so via a separate _tessera_cuda extension, so
-    # the OpenMP clash never arises and ITensor can keep using whatever
-    # BLAS find_package(BLAS) picks (NVHPC on this box).
-endif()
-
 # ---- Read version from pyproject.toml ----
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
 string(REGEX MATCH "version = \"([0-9]+\\.[0-9]+\\.[0-9]+[^\"]*)" _ "${PYPROJECT_CONTENTS}")
@@ -75,7 +53,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- Python & pybind11 ----
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+
+# Pin pybind11 to the install inside the active Python env — pyenv
+# ships pybind11 v3 via ``pip install pybind11``, and the system
+# /usr/include/pybind11 may be an older v2 that we no longer support.
+if (NOT DEFINED pybind11_DIR)
+    execute_process(
+        COMMAND ${Python_EXECUTABLE} -c
+            "import pybind11; print(pybind11.get_cmake_dir(), end='')"
+        OUTPUT_VARIABLE _pybind11_cmake_dir
+        RESULT_VARIABLE _pybind11_rc)
+    if (_pybind11_rc EQUAL 0 AND EXISTS "${_pybind11_cmake_dir}")
+        set(pybind11_DIR "${_pybind11_cmake_dir}")
+        message(STATUS "Using pybind11 from active Python env: ${pybind11_DIR}")
+    endif()
+endif()
 find_package(pybind11 CONFIG REQUIRED)
+if (pybind11_VERSION VERSION_LESS "3.0")
+    message(FATAL_ERROR
+        "tessera requires pybind11 >= 3.0; found ${pybind11_VERSION} at "
+        "${pybind11_DIR}. Try ``pip install -U 'pybind11>=3.0'`` or set "
+        "pybind11_DIR explicitly.")
+endif()
+message(STATUS "pybind11 ${pybind11_VERSION}")
 find_package(ZLIB REQUIRED)
 
 include(CheckCXXSourceCompiles)
@@ -251,12 +251,6 @@ if(TESSERA_QUANTUM)
     # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
     # pybind-free static lib.
     list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/bindings\\.cpp$")
-    # The torch / CUDA mirror lives under src/quantum/cuda/ and is built
-    # into its own static library when TESSERA_QUANTUM_CUDA=ON. Strip its
-    # sources from the ITensor lib unconditionally so the directory is
-    # never split across two libraries.
-    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/cuda/")
-    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/include/quantum/cuda/")
     add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
     target_include_directories(tessera_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -296,123 +290,6 @@ else()
     message(STATUS "Quantum subsystem turned OFF (set TESSERA_QUANTUM=1 to enable).")
 endif()
 # ---- </Quantum subsystem> ----
-
-# ---- <Quantum CUDA mirror (libtorch)> ----
-# A pybind-free static lib that holds the libtorch port of the quantum
-# pipeline (MPS, MutualInformation, eventually DMRG / TDVP / Choi / the
-# holography stack). Built only when TESSERA_QUANTUM_CUDA=ON; uses
-# torch's CMake config from the installed pytorch package (or whatever
-# Torch_DIR points at).
-if(TESSERA_QUANTUM_CUDA)
-    message(STATUS "Quantum CUDA mirror turned ON (libtorch backend).")
-
-    # Locate torch's CMake config. If Torch_DIR isn't already set the
-    # caller can point at the pytorch install via the environment.
-    if (NOT DEFINED Torch_DIR AND DEFINED ENV{Torch_DIR})
-        set(Torch_DIR $ENV{Torch_DIR})
-    endif()
-    if (NOT DEFINED Torch_DIR)
-        # Fall back to whatever the active python interpreter exposes.
-        execute_process(
-            COMMAND ${Python_EXECUTABLE} -c
-                "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'share', 'cmake', 'Torch'))"
-            OUTPUT_VARIABLE _torch_cmake_dir
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            RESULT_VARIABLE _torch_cmake_rc)
-        if (_torch_cmake_rc EQUAL 0 AND EXISTS "${_torch_cmake_dir}")
-            set(Torch_DIR "${_torch_cmake_dir}")
-            message(STATUS "Discovered Torch_DIR via python: ${Torch_DIR}")
-        endif()
-    endif()
-    find_package(Torch REQUIRED)
-
-    file(GLOB_RECURSE TESSERA_QUANTUM_CUDA_SOURCES
-            CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/cuda/*.cpp"
-            "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/cuda/*.hpp")
-    # The pybind translation unit goes into _tessera, not the static lib.
-    list(FILTER TESSERA_QUANTUM_CUDA_SOURCES EXCLUDE REGEX "/src/quantum/cuda/bindings\\.cpp$")
-
-    add_library(tessera_quantum_cuda STATIC ${TESSERA_QUANTUM_CUDA_SOURCES})
-    target_include_directories(tessera_quantum_cuda PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(tessera_quantum_cuda PUBLIC ${TORCH_LIBRARIES})
-    target_compile_options(tessera_quantum_cuda PUBLIC ${TORCH_CXX_FLAGS})
-    set_target_properties(tessera_quantum_cuda PROPERTIES
-            POSITION_INDEPENDENT_CODE ON
-            CXX_STANDARD 20
-            CXX_STANDARD_REQUIRED ON)
-
-    # libtorch_python provides the pybind11 type casters for at::Tensor,
-    # torch::Device, torch::Dtype etc. — required because our bindings
-    # expose torch::Tensor values across the Python boundary. Resolve it
-    # by hand from the torch install (TORCH_LIBRARIES doesn't include
-    # the python helper).
-    find_library(TORCH_PYTHON_LIBRARY
-        NAMES torch_python
-        PATHS "${TORCH_INSTALL_PREFIX}/lib"
-              "${TORCH_INSTALL_PREFIX}/../lib"
-              "${TORCH_INSTALL_PREFIX}/../torch/lib"
-        NO_DEFAULT_PATH)
-    if (NOT TORCH_PYTHON_LIBRARY)
-        execute_process(
-            COMMAND ${Python_EXECUTABLE} -c
-                "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib', 'libtorch_python.so'))"
-            OUTPUT_VARIABLE _torch_py_lib
-            OUTPUT_STRIP_TRAILING_WHITESPACE)
-        if (EXISTS "${_torch_py_lib}")
-            set(TORCH_PYTHON_LIBRARY "${_torch_py_lib}")
-        endif()
-    endif()
-    if (NOT TORCH_PYTHON_LIBRARY)
-        message(FATAL_ERROR
-            "Could not locate libtorch_python.so under ${TORCH_INSTALL_PREFIX}.")
-    endif()
-    message(STATUS "Torch python helper: ${TORCH_PYTHON_LIBRARY}")
-
-    # The torch-backend bindings live in a separate pybind11 extension
-    # (_tessera_cuda) rather than inside _tessera. Linking libtorch_cpu
-    # directly into _tessera triggers a std::string destructor crash on
-    # module init — likely from libstdc++ inline visibility / static-init
-    # interaction with torch's TUs. Keeping torch contained to its own
-    # .so leaves the main tessera build untouched.
-    # Use Python::Module (the same modern pybind helper) but point the
-    # pybind11 include path at the version bundled with torch — the
-    # system pybind11 is v2 and torch's is v3, and torch's pybind11
-    # type caster for at::Tensor must be compiled against the same
-    # pybind11 version that libtorch_python is linked against.
-    set(_torch_pybind_include
-        "${TORCH_INSTALL_PREFIX}/include")
-    add_library(_tessera_cuda MODULE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/cuda/bindings.cpp")
-    target_include_directories(_tessera_cuda BEFORE PRIVATE
-        "${_torch_pybind_include}")
-    target_link_libraries(_tessera_cuda PRIVATE
-        Python::Module
-        tessera_quantum_cuda
-        ${TORCH_LIBRARIES}
-        "${TORCH_PYTHON_LIBRARY}")
-    target_compile_options(_tessera_cuda PRIVATE
-        ${TORCH_CXX_FLAGS} -fno-lto)
-    target_link_options(_tessera_cuda PRIVATE -fno-lto)
-    set_target_properties(_tessera_cuda PROPERTIES
-        PREFIX ""
-        CXX_VISIBILITY_PRESET default
-        VISIBILITY_INLINES_HIDDEN ON
-        INTERPROCEDURAL_OPTIMIZATION OFF)
-    # tessera_quantum_cuda is in the link line; disable LTO on it too
-    # since LTO across cross-flag-compiled TUs is fragile.
-    set_target_properties(tessera_quantum_cuda PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION OFF)
-    target_compile_options(tessera_quantum_cuda PRIVATE -fno-lto)
-    install(TARGETS _tessera_cuda
-        LIBRARY DESTINATION tessera/quantum/cuda
-        RUNTIME DESTINATION tessera/quantum/cuda
-        ARCHIVE DESTINATION tessera/quantum/cuda)
-else()
-    message(STATUS "Quantum CUDA mirror turned OFF (set TESSERA_QUANTUM_CUDA=1 to enable).")
-endif()
-# ---- </Quantum CUDA mirror> ----
 
 if(NOT TESSERA_ASAN)
 # --- Generate Python stubs for tessera (.pyi) ---

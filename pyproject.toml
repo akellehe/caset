@@ -2,7 +2,7 @@
 requires = [
 #    "cmake>=3.22",
 #    "ninja",                # optional but faster on CI
-    "pybind11>=2.12",
+    "pybind11>=3.0",
     "scikit-build-core>=0.9",
     "numpy>=2.3.4",
     "pybind11-stubgen==2.5.5"
@@ -32,7 +32,7 @@ optional-dependencies.dev = [
     "scikit-build-core>=0.9",
     "cmake>=3.22",
     "ninja",
-    "pybind11>=2.12",
+    "pybind11>=3.0",
     "pybind11-stubgen==2.5.5",
     "sphinx==8.2.3",
     "furo==2025.9.25",

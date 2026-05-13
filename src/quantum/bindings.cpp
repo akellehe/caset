@@ -978,10 +978,4 @@ leaving it off.
              &EmergentSpectralDimension::computeFromSnapshots,
              py::arg("quench"),
              R"doc(Reuse a single TDVP run across multiple σ-grids or ε_I values.)doc");
-
-    // The torch / CUDA mirror lives in a separate pybind11 extension
-    // (_tessera_cuda.so under tessera/quantum/cuda/); it is loaded
-    // lazily by tessera.quantum.cuda's __init__.py rather than wired
-    // in here, so libtorch's libstdc++ TUs don't share an .so with
-    // the main tessera build.
 }
