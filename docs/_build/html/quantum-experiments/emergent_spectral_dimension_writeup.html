@@ -351,28 +351,41 @@ stride and fanned out across snapshot pairs.</p></li>
 </section>
 <section id="hypothesis-check">
 <h2>Hypothesis check<a class="headerlink" href="#hypothesis-check" title="Link to this heading">¶</a></h2>
+<p>Each row pairs a hypothesis-level prediction with the observed run. “Rejected” / “Not triggered” applied to a falsification criterion is the <em>passing</em> outcome (the falsifier failed to fire, as H_SD predicts). The Status column collapses the comparison to a single verdict.</p>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Falsification criterion</p></th>
-<th class="head"><p>Outcome</p></th>
+<tr class="row-odd"><th class="head"><p>Criterion</p></th>
+<th class="head"><p>Expected if H_SD holds</p></th>
+<th class="head"><p>Observed</p></th>
+<th class="head"><p>Status</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Trivial confirmation (<span class="math notranslate nohighlight">\(D_S \equiv 2\)</span>)</p></td>
-<td><p><strong>Rejected.</strong> <span class="math notranslate nohighlight">\(D_S\)</span> range is <span class="math notranslate nohighlight">\([0, 2.1]\)</span> at <span class="math notranslate nohighlight">\(m/g=0.25\)</span>; spread &gt; 1.3 even at heaviest mass.</p></td>
+<tr class="row-even"><td><p>Trivial confirmation (<span class="math notranslate nohighlight">\(D_S \equiv 2\)</span> everywhere)</p></td>
+<td><p>Rejected</p></td>
+<td><p><strong>Rejected</strong> — <span class="math notranslate nohighlight">\(D_S\)</span> range is <span class="math notranslate nohighlight">\([0, 2.1]\)</span> at <span class="math notranslate nohighlight">\(m/g=0.25\)</span>; spread &gt; 1.3 even at heaviest mass.</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-odd"><td><p>Independence from <span class="math notranslate nohighlight">\(m/g\)</span></p></td>
-<td><p><strong>Rejected.</strong> Max σ-wise gap across <span class="math notranslate nohighlight">\(m/g\)</span> is <strong>1.42</strong>. Heavy quark caps near <span class="math notranslate nohighlight">\(D_S \approx 1.4\)</span>; light quark reaches <span class="math notranslate nohighlight">\(D_S \approx 2.1\)</span>.</p></td>
+<td><p>Rejected</p></td>
+<td><p><strong>Rejected</strong> — max σ-wise gap across <span class="math notranslate nohighlight">\(m/g\)</span> is <strong>1.42</strong>. Heavy quark caps near <span class="math notranslate nohighlight">\(D_S \approx 1.4\)</span>; light quark reaches <span class="math notranslate nohighlight">\(D_S \approx 2.1\)</span>.</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-even"><td><p>Strong falsification (non-monotonic outside small-σ regime)</p></td>
-<td><p><strong>Not triggered.</strong> All three profiles are unimodal (rise then fall) within tolerance 0.15 on a 10% σ-tail trim. The rise-then-fall shape matches H_SD §1.1 + §1.2 together.</p></td>
+<td><p>Not triggered</p></td>
+<td><p><strong>Not triggered</strong> — all three profiles are unimodal (rise then fall) within tolerance 0.15 on a 10% σ-tail trim. The rise-then-fall shape matches H_SD §1.1 + §1.2 together.</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(D_S \to 2\)</span> at short / intermediate σ (H_SD §1.1)</p></td>
-<td><p><strong>Confirmed for light quark.</strong> Peak <span class="math notranslate nohighlight">\(D_S = 2.093\)</span> at <span class="math notranslate nohighlight">\(m/g=0.25\)</span>, sitting on the spec’s “lattice dimension” claim.</p></td>
+<td><p>Confirmed (at least in the light-quark regime)</p></td>
+<td><p><strong>Confirmed</strong> — peak <span class="math notranslate nohighlight">\(D_S = 2.093\)</span> at <span class="math notranslate nohighlight">\(m/g=0.25\)</span>, sitting on the spec’s “lattice dimension” claim.</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-even"><td><p><span class="math notranslate nohighlight">\(D_S &lt; 2\)</span> at long σ (H_SD §1.2)</p></td>
-<td><p><strong>Confirmed.</strong> Every profile falls below its peak at long σ. The heavy-quark case retains a plateau around <span class="math notranslate nohighlight">\(D_S \approx 0.65\)</span> at the largest σ rather than going to zero — the small-world saturation value the spec calls out.</p></td>
+<td><p>Confirmed</p></td>
+<td><p><strong>Confirmed</strong> — every profile falls below its peak at long σ. The heavy-quark case retains a plateau around <span class="math notranslate nohighlight">\(D_S \approx 0.65\)</span> at the largest σ rather than going to zero — the small-world saturation value the spec calls out.</p></td>
+<td><p>Pass</p></td>
 </tr>
 </tbody>
 </table>
@@ -610,24 +623,36 @@ quantitative continuum estimate.</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Criterion</p></th>
-<th class="head"><p>Outcome at <span class="math notranslate nohighlight">\(N = 16\)</span></p></th>
+<th class="head"><p>Expected if H_SD holds</p></th>
+<th class="head"><p>Observed at <span class="math notranslate nohighlight">\(N = 16\)</span></p></th>
+<th class="head"><p>Status</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Trivial confirmation (<span class="math notranslate nohighlight">\(D_S \equiv 2\)</span>)</p></td>
-<td><p>Rejected — spread <span class="math notranslate nohighlight">\(\geq 0.4\)</span> across <span class="math notranslate nohighlight">\(\sigma\)</span> in every run.</p></td>
+<tr class="row-even"><td><p>Trivial confirmation (<span class="math notranslate nohighlight">\(D_S \equiv 2\)</span> everywhere)</p></td>
+<td><p>Rejected</p></td>
+<td><p><strong>Rejected</strong> — spread <span class="math notranslate nohighlight">\(\geq 0.4\)</span> across <span class="math notranslate nohighlight">\(\sigma\)</span> in every run.</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-odd"><td><p>Independence from <span class="math notranslate nohighlight">\(m/g\)</span></p></td>
-<td><p>Rejected — spread between mean peaks is 0.38 (light vs.\ mid).</p></td>
+<td><p>Rejected</p></td>
+<td><p><strong>Rejected</strong> — spread between mean peaks is 0.38 (light vs.\ mid).</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-even"><td><p>Strong falsification (non-monotonic outside small-<span class="math notranslate nohighlight">\(\sigma\)</span> regime)</p></td>
-<td><p>Not triggered — every profile is unimodal.</p></td>
+<td><p>Not triggered</p></td>
+<td><p><strong>Not triggered</strong> — every profile is unimodal.</p></td>
+<td><p>Pass</p></td>
 </tr>
 <tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(D_S \to 2\)</span> at intermediate <span class="math notranslate nohighlight">\(\sigma\)</span></p></td>
-<td><p>Confirmed (in fact overshoots), pending the <span class="math notranslate nohighlight">\(\chi\)</span> check above.</p></td>
+<td><p>Confirmed</p></td>
+<td><p><strong>Confirmed</strong> (in fact overshoots), pending the <span class="math notranslate nohighlight">\(\chi\)</span> check above.</p></td>
+<td><p>Pass (provisional)</p></td>
 </tr>
 <tr class="row-even"><td><p><span class="math notranslate nohighlight">\(D_S &lt; 2\)</span> at long <span class="math notranslate nohighlight">\(\sigma\)</span></p></td>
-<td><p>Confirmed; all profiles decay toward zero at the largest <span class="math notranslate nohighlight">\(\sigma\)</span>.</p></td>
+<td><p>Confirmed</p></td>
+<td><p><strong>Confirmed</strong> — all profiles decay toward zero at the largest <span class="math notranslate nohighlight">\(\sigma\)</span>.</p></td>
+<td><p>Pass</p></td>
 </tr>
 </tbody>
 </table>

@@ -78,13 +78,15 @@ All three profiles are clean rise-then-fall in $\sigma$, peak in the diffusion r
 
 ## Hypothesis check
 
-| Falsification criterion | Outcome |
-|---|---|
-| Trivial confirmation ($D_S \equiv 2$) | **Rejected.** $D_S$ range is $[0, 2.1]$ at $m/g=0.25$; spread > 1.3 even at heaviest mass. |
-| Independence from $m/g$ | **Rejected.** Max σ-wise gap across $m/g$ is **1.42**. Heavy quark caps near $D_S \approx 1.4$; light quark reaches $D_S \approx 2.1$. |
-| Strong falsification (non-monotonic outside small-σ regime) | **Not triggered.** All three profiles are unimodal (rise then fall) within tolerance 0.15 on a 10% σ-tail trim. The rise-then-fall shape matches H_SD §1.1 + §1.2 together. |
-| $D_S \to 2$ at short / intermediate σ (H_SD §1.1) | **Confirmed for light quark.** Peak $D_S = 2.093$ at $m/g=0.25$, sitting on the spec's "lattice dimension" claim. |
-| $D_S < 2$ at long σ (H_SD §1.2) | **Confirmed.** Every profile falls below its peak at long σ. The heavy-quark case retains a plateau around $D_S \approx 0.65$ at the largest σ rather than going to zero — the small-world saturation value the spec calls out. |
+Each row pairs a hypothesis-level prediction with the observed run. "Rejected" / "Not triggered" applied to a falsification criterion is the *passing* outcome (the falsifier failed to fire, as H_SD predicts). The Status column collapses the comparison to a single verdict.
+
+| Criterion | Expected if H_SD holds | Observed | Status |
+|---|---|---|---|
+| Trivial confirmation ($D_S \equiv 2$ everywhere) | Rejected | **Rejected** — $D_S$ range is $[0, 2.1]$ at $m/g=0.25$; spread > 1.3 even at heaviest mass. | Pass |
+| Independence from $m/g$ | Rejected | **Rejected** — max σ-wise gap across $m/g$ is **1.42**. Heavy quark caps near $D_S \approx 1.4$; light quark reaches $D_S \approx 2.1$. | Pass |
+| Strong falsification (non-monotonic outside small-σ regime) | Not triggered | **Not triggered** — all three profiles are unimodal (rise then fall) within tolerance 0.15 on a 10% σ-tail trim. The rise-then-fall shape matches H_SD §1.1 + §1.2 together. | Pass |
+| $D_S \to 2$ at short / intermediate σ (H_SD §1.1) | Confirmed (at least in the light-quark regime) | **Confirmed** — peak $D_S = 2.093$ at $m/g=0.25$, sitting on the spec's "lattice dimension" claim. | Pass |
+| $D_S < 2$ at long σ (H_SD §1.2) | Confirmed | **Confirmed** — every profile falls below its peak at long σ. The heavy-quark case retains a plateau around $D_S \approx 0.65$ at the largest σ rather than going to zero — the small-world saturation value the spec calls out. | Pass |
 
 **Reading.** The full H_SD claim holds: $D_S(\sigma)$ reaches ≈ 2 at the lattice scale in the light-quark
 regime (entanglement-spreading dynamics), is < 2 at long σ in every case, and depends substantially on the
@@ -238,13 +240,13 @@ quantitative continuum estimate.
 
 The criteria from §1 still all pass at $N = 16$:
 
-| Criterion | Outcome at $N = 16$ |
-|---|---|
-| Trivial confirmation ($D_S \equiv 2$) | Rejected — spread $\geq 0.4$ across $\sigma$ in every run. |
-| Independence from $m/g$ | Rejected — spread between mean peaks is 0.38 (light vs.\ mid). |
-| Strong falsification (non-monotonic outside small-$\sigma$ regime) | Not triggered — every profile is unimodal. |
-| $D_S \to 2$ at intermediate $\sigma$ | Confirmed (in fact overshoots), pending the $\chi$ check above. |
-| $D_S < 2$ at long $\sigma$ | Confirmed; all profiles decay toward zero at the largest $\sigma$. |
+| Criterion | Expected if H_SD holds | Observed at $N = 16$ | Status |
+|---|---|---|---|
+| Trivial confirmation ($D_S \equiv 2$ everywhere) | Rejected | **Rejected** — spread $\geq 0.4$ across $\sigma$ in every run. | Pass |
+| Independence from $m/g$ | Rejected | **Rejected** — spread between mean peaks is 0.38 (light vs.\ mid). | Pass |
+| Strong falsification (non-monotonic outside small-$\sigma$ regime) | Not triggered | **Not triggered** — every profile is unimodal. | Pass |
+| $D_S \to 2$ at intermediate $\sigma$ | Confirmed | **Confirmed** (in fact overshoots), pending the $\chi$ check above. | Pass (provisional) |
+| $D_S < 2$ at long $\sigma$ | Confirmed | **Confirmed** — all profiles decay toward zero at the largest $\sigma$. | Pass |
 
 ## Caveats
 

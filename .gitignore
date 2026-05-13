@@ -3,6 +3,7 @@
 .idea/copilot*
 build
 build-quantum
+build-*
 cmake-build-debug
 tessera.cpython-313-darwin.so
 tessera/_tessera*.so
