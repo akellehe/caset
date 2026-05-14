@@ -27,6 +27,7 @@
 #include "quantum/choi_state.hpp"
 #include "quantum/dmrg_runner.hpp"
 #include "quantum/holography.hpp"
+#include "quantum/interaction_simulation.hpp"
 #include "quantum/majorization.hpp"
 #include "quantum/mutual_information.hpp"
 #include "quantum/schmidt.hpp"
@@ -34,6 +35,7 @@
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
 
 #include <pybind11/eigen.h>
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -769,6 +771,72 @@ joint reduced density matrices).
             &MutualInformation::edgeLength,
             py::arg("I"), py::arg("epsilon") = 1e-10,
             R"doc(ℓ = -log(I) with infinity floor at -log(epsilon).)doc");
+
+    // ─── InteractionSimulation: interaction-history Monte Carlo ────────
+    // See docs/source/interaction-history-monte-carlo.md.
+    py::class_<InteractionConfig>(m, "InteractionConfig",
+        R"doc(Configuration for an interaction-history Monte Carlo run.
+
+nSystems randomized correlated mixed-state systems on a Poisson-Delaunay
+initial layer (delaunayEdges is the connectivity, supplied by the
+caller); the Schwinger two-site unitary exp(-i H_XY dt) drives each
+interaction; beta is the inverse temperature in e^{-beta S}.
+)doc")
+        .def(py::init<>())
+        .def_readwrite("nSystems",           &InteractionConfig::nSystems)
+        .def_readwrite("a",                  &InteractionConfig::a)
+        .def_readwrite("g",                  &InteractionConfig::g)
+        .def_readwrite("m",                  &InteractionConfig::m)
+        .def_readwrite("dt",                 &InteractionConfig::dt)
+        .def_readwrite("beta",               &InteractionConfig::beta)
+        .def_readwrite("epsilonI",           &InteractionConfig::epsilonI)
+        .def_readwrite("targetInteractions",
+                       &InteractionConfig::targetInteractions)
+        .def_readwrite("delaunayEdges",      &InteractionConfig::delaunayEdges)
+        .def_readwrite("seed",               &InteractionConfig::seed)
+        .def_readwrite("quiet",              &InteractionConfig::quiet);
+
+    py::class_<InteractionSimulation>(m, "InteractionSimulation",
+        R"doc(Metropolis Monte Carlo over interaction histories, weighted by
+the geometric Regge action on the dual lattice.
+
+Mirrors tessera.CDT: the move primitives interact() / unInteract(), the
+driving loop sweep() / thermalize() / tune(), and the diagnostics
+computeAction() / getSpectralDimension() / getAcceptanceRates(). The
+object of the search is the beta at which the emergent spectral
+dimension reaches 4.
+)doc")
+        .def(py::init<InteractionConfig>(), py::arg("config"))
+        .def("interact",   &InteractionSimulation::interact,
+             R"doc(Propose + Metropolis-accept one interaction. Returns acceptance.)doc")
+        .def("unInteract", &InteractionSimulation::unInteract,
+             R"doc(Propose + Metropolis-accept one un-interaction. Returns acceptance.)doc")
+        .def("sweep",      &InteractionSimulation::sweep,
+             R"doc(One Monte Carlo sweep; returns the number of accepted moves.)doc")
+        .def("thermalize", &InteractionSimulation::thermalize,
+             R"doc(Tune to the target volume, then sweep to equilibrium.)doc")
+        .def("tune",       &InteractionSimulation::tune,
+             py::arg("progress") = nullptr,
+             R"doc(Grow the complex toward targetInteractions.)doc")
+        .def("computeAction", &InteractionSimulation::computeAction,
+             R"doc(The geometric Regge action S = sum_h A_h eps_h.)doc")
+        .def("getSpectralDimension",
+             &InteractionSimulation::getSpectralDimension,
+             py::arg("sigmas"), py::arg("krylovDim") = 30,
+             R"doc(Heat-kernel spectral dimension D_S(sigma) of the MI-weighted complex.)doc")
+        .def("getDeficitAngleDistribution",
+             &InteractionSimulation::getDeficitAngleDistribution,
+             R"doc(Deficit angles over the interior hinges.)doc")
+        .def("getVolumeProfile", &InteractionSimulation::getVolumeProfile,
+             R"doc(Interaction-count profile by time slice.)doc")
+        .def("getAcceptanceRates",
+             &InteractionSimulation::getAcceptanceRates,
+             R"doc(Accepted / attempted ratio per move type.)doc")
+        .def_property_readonly("interactionCount",
+             &InteractionSimulation::interactionCount)
+        .def_property("beta", &InteractionSimulation::getBeta,
+             &InteractionSimulation::setBeta)
+        .def("setSeed", &InteractionSimulation::setSeed, py::arg("seed"));
 
     // ─── Holography submodule: emergent spectral dimension ─────────────
     auto holo = m.def_submodule("holography",

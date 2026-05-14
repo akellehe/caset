@@ -12,6 +12,7 @@
 #include "mesh/Edge.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
+#include "quantum/holography.hpp"
 #include "spacetime/Metric.h"
 
 #include <algorithm>
@@ -586,9 +587,10 @@ std::vector<int> InteractionSimulation::getVolumeProfile() const {
     std::vector<int> profile;
     for (SimplexPtr s : spacetime_->getSimplices()) {
         if (s->getVertices().size() != 5) continue;
-        int slice = 0;
+        double earliest = std::numeric_limits<double>::infinity();
         for (VertexPtr v : s->getVertices())
-            slice = std::min(slice, static_cast<int>(v->getTime()));
+            earliest = std::min(earliest, v->getTime());
+        const int slice = static_cast<int>(std::lround(earliest));
         if (static_cast<int>(profile.size()) <= slice)
             profile.resize(static_cast<std::size_t>(slice) + 1, 0);
         ++profile[static_cast<std::size_t>(slice)];
@@ -636,10 +638,31 @@ std::unique_ptr<InteractionMove> InteractionSimulation::proposeUnInteract() {
 
 std::vector<double> InteractionSimulation::getSpectralDimension(
     const std::vector<double>& sigmas, int krylovDim) const {
-    (void)krylovDim;
-    // TODO: build the MI-weighted graph Laplacian of the complex and read
-    // off the heat-kernel spectral dimension.
-    return std::vector<double>(sigmas.size(), 0.0);
+    // Index every vertex that appears in the complex.
+    std::unordered_map<VertexPtr, int> idx;
+    for (EdgePtr e : spacetime_->getEdgeList()->toVector())
+        for (VertexPtr v : {e->getSource(), e->getTarget()})
+            if (!idx.count(v)) idx[v] = static_cast<int>(idx.size());
+    if (idx.empty())
+        return std::vector<double>(sigmas.size(), 0.0);
+
+    // Weighted graph with edge weight = the mutual information itself
+    // (W = I, per holography §3.4) — recovered from the stored edge
+    // length ℓ via I = I_max · exp(-ℓ).
+    std::vector<std::tuple<int, int, double>> edges;
+    edges.reserve(static_cast<std::size_t>(spacetime_->getEdgeList()
+                                               ->toVector().size()));
+    for (EdgePtr e : spacetime_->getEdgeList()->toVector()) {
+        const double len = std::sqrt(std::abs(e->getSquaredLength()));
+        const double mi = kIMax * std::exp(-len);
+        edges.emplace_back(idx.at(e->getSource()),
+                           idx.at(e->getTarget()), mi);
+    }
+
+    EmergentGraph graph = EmergentGraph::fromWeightedEdges(
+        static_cast<int>(idx.size()), edges);
+    const std::vector<double> p = graph.returnProbability(sigmas, krylovDim);
+    return EmergentGraph::spectralDimension(sigmas, p);
 }
 
 } // namespace tessera::quantum

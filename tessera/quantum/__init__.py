@@ -181,6 +181,7 @@ try:
     TDVPConfig                    = _qm.TDVPConfig
     TDVPSnapshot                  = _qm.TDVPSnapshot
     QuenchResult                  = _qm.QuenchResult
+    InteractionConfig             = _qm.InteractionConfig
     LabelSpacetime                = _qm.LabelSpacetime
     CausalOrders                  = _qm.CausalOrders
     OrderAgreement                = _qm.OrderAgreement
@@ -194,11 +195,12 @@ try:
     PeakRadialMajorization = _qm.PeakRadialMajorization
 
     # ─── Coarse-grained workflow classes ───────────────────────────────────
-    SchwingerModel    = _qm.SchwingerModel
-    SchwingerQuench   = _qm.SchwingerQuench
-    Majorization      = _qm.Majorization
-    Causet            = _qm.Causet
-    MutualInformation = _qm.MutualInformation
+    SchwingerModel        = _qm.SchwingerModel
+    SchwingerQuench       = _qm.SchwingerQuench
+    InteractionSimulation = _qm.InteractionSimulation
+    Majorization          = _qm.Majorization
+    Causet                = _qm.Causet
+    MutualInformation     = _qm.MutualInformation
 
     # ─── Free functions ───────────────────────────────────────────────────
     # Pairwise agreement statistics between two Posets on a shared label
@@ -224,6 +226,7 @@ __all__ = [
     "TDVPConfig",
     "TDVPSnapshot",
     "QuenchResult",
+    "InteractionConfig",
     "LabelSpacetime",
     "CausalOrders",
     "OrderAgreement",
@@ -237,6 +240,7 @@ __all__ = [
     # Coarse-grained workflow classes
     "SchwingerModel",
     "SchwingerQuench",
+    "InteractionSimulation",
     "Majorization",
     "MutualInformation",
     "Causet",

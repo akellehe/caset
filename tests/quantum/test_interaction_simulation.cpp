@@ -83,7 +83,31 @@ int main() {
         }
     }
     const auto profile = sim.getVolumeProfile();
-    std::cout << "[volume] profile slices = " << profile.size() << std::endl;
+    std::cout << "[volume] profile slices = " << profile.size() << "  [";
+    for (int c : profile) std::cout << c << " ";
+    std::cout << "]" << std::endl;
+    if (profile.size() < 2) {
+        std::cerr << "FAIL: complex did not advance past one time slice\n";
+        ++failures;
+    }
+
+    // The spectral dimension — the observable the D_S = 4 search hinges
+    // on — must return finite values on a log-spaced sigma grid.
+    std::vector<double> sigmas;
+    for (int s = 0; s < 24; ++s)
+        sigmas.push_back(std::exp(std::log(1e-2)
+            + s * (std::log(1e3) - std::log(1e-2)) / 23.0));
+    const auto dS = sim.getSpectralDimension(sigmas);
+    double peakDS = 0.0;
+    int nFinite = 0;
+    for (double d : dS)
+        if (std::isfinite(d)) { ++nFinite; peakDS = std::max(peakDS, d); }
+    std::cout << "[spectral] " << nFinite << "/" << dS.size()
+              << " finite, peak D_S = " << peakDS << std::endl;
+    if (nFinite == 0) {
+        std::cerr << "FAIL: spectral dimension produced no finite values\n";
+        ++failures;
+    }
 
     // tune() should grow toward the target without crashing.
     InteractionSimulation sim2(cfg);
