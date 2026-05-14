@@ -196,12 +196,15 @@
 <li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="causal_sets.html">Causal sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wilson_loops.html">Wilson loops</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="quantum-experiments/index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
@@ -282,9 +285,9 @@ underlying spin Hamiltonian, and a prescribed causet (causal set) geometry on
 which the lattice is embedded. The lattice Schwinger model serves as the test
 system. The framework treats spacetime causal order as a derived quantity of
 the entanglement structure of a many-body state on a discrete substrate, in
-the spirit of the entanglement-builds-spacetime program <span id="id1">[<a class="reference internal" href="#id39" title="Mark Van Raamsdonk. Building up spacetime with quantum entanglement. General Relativity and Gravitation, 42:2323–2329, 2010. arXiv:1005.3035, doi:10.1007/s10714-010-1034-0.">1</a>, <a class="reference internal" href="#id40" title="Mark Van Raamsdonk. Building up spacetime: from boundary to bulk and back. Lectures, TASI 2017, 2018. arXiv:1809.01197.">2</a>]</span>,
+the spirit of the entanglement-builds-spacetime program <span id="id1">[<a class="reference internal" href="#id39" title="Mark Van Raamsdonk. Building up spacetime with quantum entanglement. General Relativity and Gravitation, 42:2323–2329, 2010. arXiv:1005.3035, doi:10.1007/s10714-010-1034-0.">4</a>, <a class="reference internal" href="#id40" title="Mark Van Raamsdonk. Building up spacetime: from boundary to bulk and back. Lectures, TASI 2017, 2018. arXiv:1809.01197.">5</a>]</span>,
 and operationalizes the comparison through tensor-network simulation
-<span id="id2">[<a class="reference internal" href="#id29" title="Ulrich Schollwöck. The density-matrix renormalization group in the age of matrix product states. Annals of Physics, 326:96–192, 2011. arXiv:1008.3477, doi:10.1016/j.aop.2010.09.012.">3</a>, <a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">4</a>]</span>.</p>
+<span id="id2">[<a class="reference internal" href="#id29" title="Ulrich Schollwöck. The density-matrix renormalization group in the age of matrix product states. Annals of Physics, 326:96–192, 2011. arXiv:1008.3477, doi:10.1016/j.aop.2010.09.012.">6</a>, <a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">7</a>]</span>.</p>
 <p>The work is exploratory. The hypothesis is falsifiable, but the
 1+1-dimensional test bed is the simplest setting in which the question can be
 posed numerically; agreement between the three orders in this regime would not
@@ -310,12 +313,12 @@ common length.</p>
 \quad \forall\, k \ge 1,\]</div>
 </div>
 <p>with the standard normalization <span class="math notranslate nohighlight">\(\sum_i \lambda_{A,i}(t) = 1\)</span>
-<span id="id3">[<a class="reference internal" href="#id34" title="Michael A. Nielsen. Conditions for a class of entanglement transformations. Phys. Rev. Lett., 83:436–439, 1999. arXiv:quant-ph/9811053, doi:10.1103/PhysRevLett.83.436.">5</a>, <a class="reference internal" href="#id35" title="Albert W. Marshall, Ingram Olkin, and Barry C. Arnold. Inequalities: Theory of Majorization and Its Applications. Springer, 2nd edition, 2011. doi:10.1007/978-0-387-68276-1.">6</a>]</span>.</p>
+<span id="id3">[<a class="reference internal" href="#id34" title="Michael A. Nielsen. Conditions for a class of entanglement transformations. Phys. Rev. Lett., 83:436–439, 1999. arXiv:quant-ph/9811053, doi:10.1103/PhysRevLett.83.436.">8</a>, <a class="reference internal" href="#id35" title="Albert W. Marshall, Ingram Olkin, and Barry C. Arnold. Inequalities: Theory of Majorization and Its Applications. Springer, 2nd edition, 2011. doi:10.1007/978-0-387-68276-1.">9</a>]</span>.</p>
 <p>Let <span class="math notranslate nohighlight">\(\preceq_{\mathrm{LR}}\)</span> denote the partial order induced by the
 Lieb–Robinson light cone of the lattice Hamiltonian
-<span id="id4">[<a class="reference internal" href="#id32" title="Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. Communications in Mathematical Physics, 28:251–257, 1972. doi:10.1007/BF01645779.">7</a>, <a class="reference internal" href="#id33" title="Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. Communications in Mathematical Physics, 265:781–804, 2006. arXiv:math-ph/0507008, doi:10.1007/s00220-006-0030-4.">8</a>]</span>, and let <span class="math notranslate nohighlight">\(\preceq_{\mathrm{cs}}\)</span>
+<span id="id4">[<a class="reference internal" href="#id32" title="Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. Communications in Mathematical Physics, 28:251–257, 1972. doi:10.1007/BF01645779.">1</a>, <a class="reference internal" href="#id33" title="Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. Communications in Mathematical Physics, 265:781–804, 2006. arXiv:math-ph/0507008, doi:10.1007/s00220-006-0030-4.">2</a>]</span>, and let <span class="math notranslate nohighlight">\(\preceq_{\mathrm{cs}}\)</span>
 denote the partial order inherited from a causet <span class="math notranslate nohighlight">\(\mathcal{C}\)</span> on which
-<span class="math notranslate nohighlight">\(\Lambda\)</span> is embedded <span id="id5">[<a class="reference internal" href="#id38" title="Jan Ambjørn, Jerzy Jurkiewicz, and Renate Loll. Emergence of a 4D world from causal quantum gravity. Phys. Rev. Lett., 93:131301, 2004. arXiv:hep-th/0404156, doi:10.1103/PhysRevLett.93.131301.">9</a>, <a class="reference internal" href="#id37" title="Tullio Regge. General relativity without coordinates. Il Nuovo Cimento, 19:558–571, 1961. doi:10.1007/BF02733251.">10</a>]</span>.</p>
+<span class="math notranslate nohighlight">\(\Lambda\)</span> is embedded <span id="id5">[<a class="reference internal" href="#id37" title="Tullio Regge. General relativity without coordinates. Il Nuovo Cimento, 19:558–571, 1961. doi:10.1007/BF02733251.">3</a>, <a class="reference internal" href="#id38" title="Jan Ambjørn, Jerzy Jurkiewicz, and Renate Loll. Emergence of a 4D world from causal quantum gravity. Phys. Rev. Lett., 93:131301, 2004. arXiv:hep-th/0404156, doi:10.1103/PhysRevLett.93.131301.">10</a>]</span>.</p>
 <p><strong>Hypothesis (H).</strong> For physical states arising from local-Hamiltonian
 real-time evolution of a gauge-invariant ground state with a localized
 charge-anticharge excitation, the three partial orders coincide on the
@@ -353,7 +356,7 @@ trivial chain.</p></li>
 <p>The following limitations bound the interpretive weight of the result.</p>
 <ul class="simple">
 <li><p><em>Pure-state, contiguous-cut regime.</em> Nielsen’s theorem is stated for pure
-bipartite LOCC convertibility <span id="id6">[<a class="reference internal" href="#id34" title="Michael A. Nielsen. Conditions for a class of entanglement transformations. Phys. Rev. Lett., 83:436–439, 1999. arXiv:quant-ph/9811053, doi:10.1103/PhysRevLett.83.436.">5</a>]</span>. Extensions to
+bipartite LOCC convertibility <span id="id6">[<a class="reference internal" href="#id34" title="Michael A. Nielsen. Conditions for a class of entanglement transformations. Phys. Rev. Lett., 83:436–439, 1999. arXiv:quant-ph/9811053, doi:10.1103/PhysRevLett.83.436.">8</a>]</span>. Extensions to
 mixed states or non-contiguous cut families weaken or break the
 well-definedness of the <span class="math notranslate nohighlight">\(\preceq_{\mathrm{maj}}\)</span> relation between
 <em>regions</em>. We restrict to pure states of the full chain and to
@@ -365,7 +368,7 @@ likely to require qualitatively different methods.</p></li>
 <li><p><em>Truncated electric basis.</em> The link Hilbert space is truncated at
 electric-field cutoff <span class="math notranslate nohighlight">\(\Lambda\)</span>; convergence in <span class="math notranslate nohighlight">\(\Lambda\)</span> is a numerical
 question requiring separate convergence studies
-<span id="id8">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">4</a>, <a class="reference internal" href="#id26" title="Erez Zohar, J. Ignacio Cirac, and Benni Reznik. Quantum simulations of lattice gauge theories using ultracold atoms in optical lattices. Rep. Prog. Phys., 79:014401, 2016. arXiv:1503.02312, doi:10.1088/0034-4885/79/1/014401.">13</a>]</span>.</p></li>
+<span id="id8">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">7</a>, <a class="reference internal" href="#id26" title="Erez Zohar, J. Ignacio Cirac, and Benni Reznik. Quantum simulations of lattice gauge theories using ultracold atoms in optical lattices. Rep. Prog. Phys., 79:014401, 2016. arXiv:1503.02312, doi:10.1088/0034-4885/79/1/014401.">13</a>]</span>.</p></li>
 <li><p><em>Trotter and bond-dimension errors.</em> TDVP integration introduces a finite
 Trotter error and bond-dimension truncation
 <span id="id9">[<a class="reference internal" href="#id31" title="Jutho Haegeman, Christian Lubich, Ivan Oseledets, Bart Vandereycken, and Frank Verstraete. Unifying time evolution and optimization with matrix product states. Phys. Rev. B, 94:165116, 2016. arXiv:1408.5056, doi:10.1103/PhysRevB.94.165116.">14</a>]</span>. Both are controllable but must be
@@ -383,7 +386,7 @@ finite system.</p></li>
 <p>Open boundary conditions, <span class="math notranslate nohighlight">\(N\)</span> staggered sites with lattice spacing <span class="math notranslate nohighlight">\(a\)</span>, bare
 fermion mass <span class="math notranslate nohighlight">\(m\)</span>, coupling <span class="math notranslate nohighlight">\(g\)</span>, and background field <span class="math notranslate nohighlight">\(L_0\)</span>. After a
 Jordan–Wigner transformation and Gauss-law elimination of the gauge links
-<span id="id10">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">4</a>, <a class="reference internal" href="#id27" title="John Kogut and Leonard Susskind. Hamiltonian formulation of Wilson's lattice gauge theories. Phys. Rev. D, 11:395–408, 1975. doi:10.1103/PhysRevD.11.395.">11</a>, <a class="reference internal" href="#id28" title="Tom Banks, Leonard Susskind, and John Kogut. Strong-coupling calculations of lattice gauge theories: (1+1)-dimensional exercises. Phys. Rev. D, 13:1043–1053, 1976. doi:10.1103/PhysRevD.13.1043.">12</a>]</span>,
+<span id="id10">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">7</a>, <a class="reference internal" href="#id27" title="John Kogut and Leonard Susskind. Hamiltonian formulation of Wilson's lattice gauge theories. Phys. Rev. D, 11:395–408, 1975. doi:10.1103/PhysRevD.11.395.">11</a>, <a class="reference internal" href="#id28" title="Tom Banks, Leonard Susskind, and John Kogut. Strong-coupling calculations of lattice gauge theories: (1+1)-dimensional exercises. Phys. Rev. D, 13:1043–1053, 1976. doi:10.1103/PhysRevD.13.1043.">12</a>]</span>,
 the Hamiltonian becomes a long-ranged spin Hamiltonian on <span class="math notranslate nohighlight">\(N\)</span> qubits:</p>
 <div class="math-wrapper docutils container" id="equation-ham">
 <div class="math notranslate nohighlight" id="equation-ham">
@@ -457,12 +460,12 @@ all tensor-network operations; Python serves only as a result viewer.</p>
 <tr class="row-even"><td><p>1</p></td>
 <td><p>Schwinger MPO</p></td>
 <td><p>AutoMPO assembly with <span class="math notranslate nohighlight">\(U(1)\)</span> charge conservation</p></td>
-<td><p><span id="id11">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">4</a>]</span></p></td>
+<td><p><span id="id11">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">7</a>]</span></p></td>
 </tr>
 <tr class="row-odd"><td><p>2</p></td>
 <td><p>Ground state <span class="math notranslate nohighlight">\(\ket{\Omega}\)</span></p></td>
 <td><p>Two-site DMRG sweeps to convergence</p></td>
-<td><p><span id="id12">[<a class="reference internal" href="#id29" title="Ulrich Schollwöck. The density-matrix renormalization group in the age of matrix product states. Annals of Physics, 326:96–192, 2011. arXiv:1008.3477, doi:10.1016/j.aop.2010.09.012.">3</a>, <a class="reference internal" href="#id30" title="Steven R. White. Density matrix formulation for quantum renormalization groups. Phys. Rev. Lett., 69:2863–2866, 1992. doi:10.1103/PhysRevLett.69.2863.">15</a>]</span></p></td>
+<td><p><span id="id12">[<a class="reference internal" href="#id29" title="Ulrich Schollwöck. The density-matrix renormalization group in the age of matrix product states. Annals of Physics, 326:96–192, 2011. arXiv:1008.3477, doi:10.1016/j.aop.2010.09.012.">6</a>, <a class="reference internal" href="#id30" title="Steven R. White. Density matrix formulation for quantum renormalization groups. Phys. Rev. Lett., 69:2863–2866, 1992. doi:10.1103/PhysRevLett.69.2863.">15</a>]</span></p></td>
 </tr>
 <tr class="row-even"><td><p>3</p></td>
 <td><p>Initial quenched state</p></td>
@@ -482,17 +485,17 @@ all tensor-network operations; Python serves only as a result viewer.</p>
 <tr class="row-odd"><td><p>6</p></td>
 <td><p>Majorization poset</p></td>
 <td><p>Pairwise test on padded sorted spectra; transitive reduction to Hasse form</p></td>
-<td><p><span id="id16">[<a class="reference internal" href="#id34" title="Michael A. Nielsen. Conditions for a class of entanglement transformations. Phys. Rev. Lett., 83:436–439, 1999. arXiv:quant-ph/9811053, doi:10.1103/PhysRevLett.83.436.">5</a>, <a class="reference internal" href="#id35" title="Albert W. Marshall, Ingram Olkin, and Barry C. Arnold. Inequalities: Theory of Majorization and Its Applications. Springer, 2nd edition, 2011. doi:10.1007/978-0-387-68276-1.">6</a>, <a class="reference internal" href="#id36" title="Rajendra Bhatia. Matrix Analysis. Volume 169 of Graduate Texts in Mathematics. Springer, 1997. doi:10.1007/978-1-4612-0653-8.">18</a>]</span></p></td>
+<td><p><span id="id16">[<a class="reference internal" href="#id34" title="Michael A. Nielsen. Conditions for a class of entanglement transformations. Phys. Rev. Lett., 83:436–439, 1999. arXiv:quant-ph/9811053, doi:10.1103/PhysRevLett.83.436.">8</a>, <a class="reference internal" href="#id35" title="Albert W. Marshall, Ingram Olkin, and Barry C. Arnold. Inequalities: Theory of Majorization and Its Applications. Springer, 2nd edition, 2011. doi:10.1007/978-0-387-68276-1.">9</a>, <a class="reference internal" href="#id36" title="Rajendra Bhatia. Matrix Analysis. Volume 169 of Graduate Texts in Mathematics. Springer, 1997. doi:10.1007/978-1-4612-0653-8.">18</a>]</span></p></td>
 </tr>
 <tr class="row-even"><td><p>7</p></td>
 <td><p>Lieb–Robinson order</p></td>
 <td><p><span class="math notranslate nohighlight">\(v_{\mathrm{LR}}\)</span> from OTOC front; cone-induced partial order on labels</p></td>
-<td><p><span id="id17">[<a class="reference internal" href="#id32" title="Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. Communications in Mathematical Physics, 28:251–257, 1972. doi:10.1007/BF01645779.">7</a>, <a class="reference internal" href="#id33" title="Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. Communications in Mathematical Physics, 265:781–804, 2006. arXiv:math-ph/0507008, doi:10.1007/s00220-006-0030-4.">8</a>]</span></p></td>
+<td><p><span id="id17">[<a class="reference internal" href="#id32" title="Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. Communications in Mathematical Physics, 28:251–257, 1972. doi:10.1007/BF01645779.">1</a>, <a class="reference internal" href="#id33" title="Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. Communications in Mathematical Physics, 265:781–804, 2006. arXiv:math-ph/0507008, doi:10.1007/s00220-006-0030-4.">2</a>]</span></p></td>
 </tr>
 <tr class="row-odd"><td><p>8</p></td>
 <td><p>Causet order (optional)</p></td>
 <td><p>Inherited from tessera adjacency on a non-regular causet embedding</p></td>
-<td><p><span id="id18">[<a class="reference internal" href="#id38" title="Jan Ambjørn, Jerzy Jurkiewicz, and Renate Loll. Emergence of a 4D world from causal quantum gravity. Phys. Rev. Lett., 93:131301, 2004. arXiv:hep-th/0404156, doi:10.1103/PhysRevLett.93.131301.">9</a>, <a class="reference internal" href="#id37" title="Tullio Regge. General relativity without coordinates. Il Nuovo Cimento, 19:558–571, 1961. doi:10.1007/BF02733251.">10</a>]</span></p></td>
+<td><p><span id="id18">[<a class="reference internal" href="#id37" title="Tullio Regge. General relativity without coordinates. Il Nuovo Cimento, 19:558–571, 1961. doi:10.1007/BF02733251.">3</a>, <a class="reference internal" href="#id38" title="Jan Ambjørn, Jerzy Jurkiewicz, and Renate Loll. Emergence of a 4D world from causal quantum gravity. Phys. Rev. Lett., 93:131301, 2004. arXiv:hep-th/0404156, doi:10.1103/PhysRevLett.93.131301.">10</a>]</span></p></td>
 </tr>
 <tr class="row-even"><td><p>9</p></td>
 <td><p>Comparison</p></td>
@@ -528,7 +531,7 @@ Gauss-violating state and is a known failure mode.</p>
 <ol class="arabic simple">
 <li><p><em>Spectral benchmark.</em> Ground-state energy per site for <span class="math notranslate nohighlight">\(N=20\)</span>,
 <span class="math notranslate nohighlight">\(m/g \in \{0,\, 0.125,\, 0.25\}\)</span> must agree with
-<span id="id20">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">4</a>]</span> to within <span class="math notranslate nohighlight">\(10^{-3}\)</span>.</p></li>
+<span id="id20">[<a class="reference internal" href="#id23" title="Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. JHEP, 11:158, 2013. arXiv:1305.3765, doi:10.1007/JHEP11(2013)158.">7</a>]</span> to within <span class="math notranslate nohighlight">\(10^{-3}\)</span>.</p></li>
 <li><p><em>String benchmark.</em> In the heavy-quark regime <span class="math notranslate nohighlight">\(m/g \gg 1\)</span> at
 <span class="math notranslate nohighlight">\(d=4\)</span>, <span class="math notranslate nohighlight">\(\langle L_n \rangle_t\)</span> should exhibit a flat plateau of value
 <span class="math notranslate nohighlight">\(\pm 1\)</span> between <span class="math notranslate nohighlight">\(i_0\)</span> and <span class="math notranslate nohighlight">\(i_0 + d\)</span> at intermediate times, consistent
@@ -584,53 +587,53 @@ recorded with each output for reproducibility.</p>
 <h2><a class="toc-backref" href="#id55" role="doc-backlink">References</a><a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
 <div class="docutils container" id="id22">
 <div role="list" class="citation-list">
-<div class="citation" id="id39" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
-<p>Mark Van Raamsdonk. Building up spacetime with quantum entanglement. <em>General Relativity and Gravitation</em>, 42:2323–2329, 2010. <a class="reference external" href="https://arxiv.org/abs/1005.3035">arXiv:1005.3035</a>, <a class="reference external" href="https://doi.org/10.1007/s10714-010-1034-0">doi:10.1007/s10714-010-1034-0</a>.</p>
-</div>
-<div class="citation" id="id40" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">2</a><span class="fn-bracket">]</span></span>
-<p>Mark Van Raamsdonk. Building up spacetime: from boundary to bulk and back. Lectures, TASI 2017, 2018. <a class="reference external" href="https://arxiv.org/abs/1809.01197">arXiv:1809.01197</a>.</p>
-</div>
-<div class="citation" id="id29" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></span>
-<span class="backrefs">(<a role="doc-backlink" href="#id2">1</a>,<a role="doc-backlink" href="#id12">2</a>)</span>
-<p>Ulrich Schollwöck. The density-matrix renormalization group in the age of matrix product states. <em>Annals of Physics</em>, 326:96–192, 2011. <a class="reference external" href="https://arxiv.org/abs/1008.3477">arXiv:1008.3477</a>, <a class="reference external" href="https://doi.org/10.1016/j.aop.2010.09.012">doi:10.1016/j.aop.2010.09.012</a>.</p>
-</div>
-<div class="citation" id="id23" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>4<span class="fn-bracket">]</span></span>
-<span class="backrefs">(<a role="doc-backlink" href="#id2">1</a>,<a role="doc-backlink" href="#id8">2</a>,<a role="doc-backlink" href="#id10">3</a>,<a role="doc-backlink" href="#id11">4</a>,<a role="doc-backlink" href="#id20">5</a>)</span>
-<p>Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. <em>JHEP</em>, 11:158, 2013. <a class="reference external" href="https://arxiv.org/abs/1305.3765">arXiv:1305.3765</a>, <a class="reference external" href="https://doi.org/10.1007/JHEP11(2013)158">doi:10.1007/JHEP11(2013)158</a>.</p>
-</div>
-<div class="citation" id="id34" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>5<span class="fn-bracket">]</span></span>
-<span class="backrefs">(<a role="doc-backlink" href="#id3">1</a>,<a role="doc-backlink" href="#id6">2</a>,<a role="doc-backlink" href="#id16">3</a>)</span>
-<p>Michael A. Nielsen. Conditions for a class of entanglement transformations. <em>Phys. Rev. Lett.</em>, 83:436–439, 1999. <a class="reference external" href="https://arxiv.org/abs/quant-ph/9811053">arXiv:quant-ph/9811053</a>, <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.83.436">doi:10.1103/PhysRevLett.83.436</a>.</p>
-</div>
-<div class="citation" id="id35" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></span>
-<span class="backrefs">(<a role="doc-backlink" href="#id3">1</a>,<a role="doc-backlink" href="#id16">2</a>)</span>
-<p>Albert W. Marshall, Ingram Olkin, and Barry C. Arnold. <em>Inequalities: Theory of Majorization and Its Applications</em>. Springer, 2nd edition, 2011. <a class="reference external" href="https://doi.org/10.1007/978-0-387-68276-1">doi:10.1007/978-0-387-68276-1</a>.</p>
-</div>
 <div class="citation" id="id32" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></span>
+<span class="label"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></span>
 <span class="backrefs">(<a role="doc-backlink" href="#id4">1</a>,<a role="doc-backlink" href="#id17">2</a>)</span>
 <p>Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. <em>Communications in Mathematical Physics</em>, 28:251–257, 1972. <a class="reference external" href="https://doi.org/10.1007/BF01645779">doi:10.1007/BF01645779</a>.</p>
 </div>
 <div class="citation" id="id33" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>8<span class="fn-bracket">]</span></span>
+<span class="label"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></span>
 <span class="backrefs">(<a role="doc-backlink" href="#id4">1</a>,<a role="doc-backlink" href="#id17">2</a>)</span>
 <p>Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. <em>Communications in Mathematical Physics</em>, 265:781–804, 2006. <a class="reference external" href="https://arxiv.org/abs/math-ph/0507008">arXiv:math-ph/0507008</a>, <a class="reference external" href="https://doi.org/10.1007/s00220-006-0030-4">doi:10.1007/s00220-006-0030-4</a>.</p>
 </div>
-<div class="citation" id="id38" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>9<span class="fn-bracket">]</span></span>
-<span class="backrefs">(<a role="doc-backlink" href="#id5">1</a>,<a role="doc-backlink" href="#id18">2</a>)</span>
-<p>Jan Ambjørn, Jerzy Jurkiewicz, and Renate Loll. Emergence of a 4D world from causal quantum gravity. <em>Phys. Rev. Lett.</em>, 93:131301, 2004. <a class="reference external" href="https://arxiv.org/abs/hep-th/0404156">arXiv:hep-th/0404156</a>, <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.93.131301">doi:10.1103/PhysRevLett.93.131301</a>.</p>
-</div>
 <div class="citation" id="id37" role="doc-biblioentry">
-<span class="label"><span class="fn-bracket">[</span>10<span class="fn-bracket">]</span></span>
+<span class="label"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></span>
 <span class="backrefs">(<a role="doc-backlink" href="#id5">1</a>,<a role="doc-backlink" href="#id18">2</a>)</span>
 <p>Tullio Regge. General relativity without coordinates. <em>Il Nuovo Cimento</em>, 19:558–571, 1961. <a class="reference external" href="https://doi.org/10.1007/BF02733251">doi:10.1007/BF02733251</a>.</p>
+</div>
+<div class="citation" id="id39" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">4</a><span class="fn-bracket">]</span></span>
+<p>Mark Van Raamsdonk. Building up spacetime with quantum entanglement. <em>General Relativity and Gravitation</em>, 42:2323–2329, 2010. <a class="reference external" href="https://arxiv.org/abs/1005.3035">arXiv:1005.3035</a>, <a class="reference external" href="https://doi.org/10.1007/s10714-010-1034-0">doi:10.1007/s10714-010-1034-0</a>.</p>
+</div>
+<div class="citation" id="id40" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">5</a><span class="fn-bracket">]</span></span>
+<p>Mark Van Raamsdonk. Building up spacetime: from boundary to bulk and back. Lectures, TASI 2017, 2018. <a class="reference external" href="https://arxiv.org/abs/1809.01197">arXiv:1809.01197</a>.</p>
+</div>
+<div class="citation" id="id29" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span>6<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id2">1</a>,<a role="doc-backlink" href="#id12">2</a>)</span>
+<p>Ulrich Schollwöck. The density-matrix renormalization group in the age of matrix product states. <em>Annals of Physics</em>, 326:96–192, 2011. <a class="reference external" href="https://arxiv.org/abs/1008.3477">arXiv:1008.3477</a>, <a class="reference external" href="https://doi.org/10.1016/j.aop.2010.09.012">doi:10.1016/j.aop.2010.09.012</a>.</p>
+</div>
+<div class="citation" id="id23" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span>7<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id2">1</a>,<a role="doc-backlink" href="#id8">2</a>,<a role="doc-backlink" href="#id10">3</a>,<a role="doc-backlink" href="#id11">4</a>,<a role="doc-backlink" href="#id20">5</a>)</span>
+<p>Mari Carmen Bañuls, Krzysztof Cichy, J. Ignacio Cirac, and Karl Jansen. The mass spectrum of the Schwinger model with matrix product states. <em>JHEP</em>, 11:158, 2013. <a class="reference external" href="https://arxiv.org/abs/1305.3765">arXiv:1305.3765</a>, <a class="reference external" href="https://doi.org/10.1007/JHEP11(2013)158">doi:10.1007/JHEP11(2013)158</a>.</p>
+</div>
+<div class="citation" id="id34" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span>8<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id3">1</a>,<a role="doc-backlink" href="#id6">2</a>,<a role="doc-backlink" href="#id16">3</a>)</span>
+<p>Michael A. Nielsen. Conditions for a class of entanglement transformations. <em>Phys. Rev. Lett.</em>, 83:436–439, 1999. <a class="reference external" href="https://arxiv.org/abs/quant-ph/9811053">arXiv:quant-ph/9811053</a>, <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.83.436">doi:10.1103/PhysRevLett.83.436</a>.</p>
+</div>
+<div class="citation" id="id35" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span>9<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id3">1</a>,<a role="doc-backlink" href="#id16">2</a>)</span>
+<p>Albert W. Marshall, Ingram Olkin, and Barry C. Arnold. <em>Inequalities: Theory of Majorization and Its Applications</em>. Springer, 2nd edition, 2011. <a class="reference external" href="https://doi.org/10.1007/978-0-387-68276-1">doi:10.1007/978-0-387-68276-1</a>.</p>
+</div>
+<div class="citation" id="id38" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span>10<span class="fn-bracket">]</span></span>
+<span class="backrefs">(<a role="doc-backlink" href="#id5">1</a>,<a role="doc-backlink" href="#id18">2</a>)</span>
+<p>Jan Ambjørn, Jerzy Jurkiewicz, and Renate Loll. Emergence of a 4D world from causal quantum gravity. <em>Phys. Rev. Lett.</em>, 93:131301, 2004. <a class="reference external" href="https://arxiv.org/abs/hep-th/0404156">arXiv:hep-th/0404156</a>, <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.93.131301">doi:10.1103/PhysRevLett.93.131301</a>.</p>
 </div>
 <div class="citation" id="id27" role="doc-biblioentry">
 <span class="label"><span class="fn-bracket">[</span>11<span class="fn-bracket">]</span></span>

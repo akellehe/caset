@@ -90,14 +90,47 @@ def get_configure_command(build_dir):
     return cmd
 
 def pytest_sessionstart(session):
-    # Skip cmake rebuild if tessera._tessera (the C extension) is already importable
-    # (e.g. from pip install -e .)
+    # Fast path: tessera._tessera already importable (the usual
+    # ``pip install -e .`` outcome).
     try:
         from tessera import _tessera
         if hasattr(_tessera, '__file__') and _tessera.__file__:
-            return  # already available, no rebuild needed
+            return
     except ImportError:
         pass
+
+    # The remaining branch tries to build tessera from source via cmake
+    # so the project author can iterate on C++ without re-running pip.
+    # That mode is only viable when scikit-build-core is installed in
+    # this Python (it's how we compute the per-Python build directory).
+    # If it isn't, the most likely cause is that the user hasn't yet
+    # installed tessera into THIS Python interpreter — so guide them
+    # there instead of trying to drive a build that won't work anyway.
+    try:
+        import scikit_build_core  # noqa: F401
+    except ImportError:
+        venv_hint = ""
+        in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+        if not in_venv:
+            venv_hint = (
+                "\n\nNote: this Python is not running inside a virtualenv. "
+                "If you `pip install`-ed into a venv but `pytest` resolved "
+                "to a different Python, activate the venv (or run "
+                f"``{sys.executable} -m pytest tests`` to force the same "
+                "interpreter you installed into).")
+        raise RuntimeError(
+            "tessera's C extension (``tessera._tessera``) is not "
+            f"importable from this Python interpreter:\n"
+            f"    {sys.executable}\n\n"
+            "Install tessera into THIS Python first:\n\n"
+            f"    {sys.executable} -m pip install -e \".[dev]\"   "
+            "# full dev toolchain\n"
+            f"    {sys.executable} -m pip install -e .          "
+            "# runtime only (also fine)\n\n"
+            "After that, ``pytest tests`` will pick up the built "
+            "extension and skip this fallback path entirely."
+            + venv_hint
+        )
 
     build_dir = get_scikit_build_dir()
     env = clean_build_env()
