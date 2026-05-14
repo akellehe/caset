@@ -203,55 +203,69 @@ The coned complex has a vertex per `(site, snapshot)` pair. Spatial
 edges are the Delaunay edges within each snapshot, weighted by that
 snapshot's site-site MI; temporal edges connect each site to its own
 forward copy and to the forward copies of its Delaunay neighbours --
-the CDT time-extrusion of the Delaunay complex -- weighted by the Choi
-temporal MI over `dt`. The weighted-Laplacian convention is `W = I`
-(per holography-causal-ordering-emergent-dimension.md §3.4), and
+the time-extrusion of the Delaunay complex -- weighted by the Choi
+temporal MI over `dt`. This is *not* a glued simplicial manifold and
+the construction does not assume one; it is the weighted graph the
+time-evolution logic produces, nothing more. The weighted-Laplacian
+convention is `W = I` (per
+holography-causal-ordering-emergent-dimension.md §3.4), and
 `D_S(σ) = -2 d log P / d log σ` is read off the heat-kernel return
 probability, with the three-parameter Ambjorn-Loll fit.
 
-Setup: `N = 14`, `dt = 0.25`, `T = 2.0` (`K = 9` snapshots), 12
-independent Poisson layouts per `m/g`. `|V| = 126`, `|E| ≈ 780–830`.
+Setup matches `temporally_connected_entangled_spacetime.py`:
+`N ∈ {10, 20, 30, 40}`, `m/g ∈ {0.125, 0.25, 0.5}`, `dt = 0.25`,
+`T = 1.0` (`K = 5` snapshots), max-bond-dim 80, DMRG 64/12 sweeps,
+σ-grid `[10⁻², 10³]` ×48, Krylov 30, `ε_I = 10⁻⁸`. 12 independent
+Poisson layouts per `(N, m/g)`.
 
-![Spectral dimension of the coned Poisson-Delaunay MI
-complex](figures/poisson_delaunay_spectral_dimension.png)
+![Peak spectral dimension and D_inf vs N for the coned Poisson-Delaunay
+MI complex](figures/poisson_delaunay_spectral_dimension.png)
 
-| `m/g` | peak `D_S` (mean ± std) | `D_∞` fit |
-|------:|------------------------:|----------:|
-| 0.125 | 1.78 ± 0.27             | 0.75 ± 1.01 |
-| 0.25  | 1.78 ± 0.12             | 1.11 ± 0.82 |
-| 0.5   | 3.09 ± 0.76             | 1.85 ± 5.67 |
+Peak `D_S`, mean ± std over Poisson layouts:
+
+| `N` | `m/g = 0.125` | `m/g = 0.25` | `m/g = 0.5` |
+|----:|--------------:|-------------:|------------:|
+| 10  | 1.59 ± 0.11   | 1.56 ± 0.10  | 1.18 ± 0.09 |
+| 20  | 1.81 ± 0.53   | 2.20 ± 0.43  | 2.07 ± 0.41 |
+| 30  | 1.15 ± 0.11   | 1.48 ± 0.54  | 1.45 ± 0.30 |
+| 40  | 1.07 ± 0.04   | 1.09 ± 0.05  | 1.09 ± 0.12 |
 
 Three readings:
 
-1. **An intermediate-σ plateau near `D_S ≈ 1.3–1.5`.** Every `m/g`
-   shows a clear plateau at moderate diffusion time — the "macroscopic"
-   dimension the random walker sees once it has left the local
-   neighbourhood. It sits *below* 2: the cone over a Delaunay-neighbour
-   temporal sector is sparser than the all-pairs temporal sector of
-   [temporally_connected_entangled_spacetime_writeup.md](temporally_connected_entangled_spacetime_writeup.md)
-   (which lands at `D_S ≈ 3.5–4.5`), and the difference is exactly the
-   temporal connectivity choice.
+1. **Peak `D_S` is non-monotonic in `N`, and it collapses toward 1.**
+   It rises to `≈ 2` at `N = 20`, then *decays* — by `N = 40` every
+   `m/g` sits at `D_S ≈ 1.07–1.09`. This is the opposite of
+   [temporally_connected_entangled_spacetime_writeup.md](temporally_connected_entangled_spacetime_writeup.md),
+   whose peak `D_S` rises monotonically `2.7 → 3.7` over the same `N`
+   range.
 
-2. **A mass-driven jump at heavy `m/g`.** Light and mid mass park at
-   `D_S ≈ 1.8`; `m/g = 0.5` jumps to `≈ 3.1` — but with large variance
-   (`±0.76`), and the peak is taken from the large-σ *upturn*, not the
-   plateau. The `m/g` dependence is real (the construction reads the
-   physics, not just the graph topology), but at `m/g = 0.5` it is not
-   a clean plateau dimension.
+2. **The difference is the temporal connectivity, and it is the whole
+   story.** That experiment wires *every* bond pair across snapshots —
+   an all-pairs temporal sector that makes the graph small-world, so
+   `D_S` rises with `N`. This construction cones: each site connects
+   forward only to itself and its Delaunay neighbours. As `N` grows
+   that graph becomes locally tree-like — bounded degree, growing
+   diameter — and the heat-kernel return probability is that of a
+   near-1D graph. The `D_S → 4` of the all-pairs experiment is an
+   artefact of its dense temporal sector; the geometrically faithful
+   coned construction, asked the same question with the same
+   parameters, gives `D_S → 1`, not `4`.
 
-3. **The large-σ upturn is a finite-graph artefact.** At `σ ≳ 10²` the
-   `D_S(σ)` curves turn back up — the random walker has wrapped the
-   whole `|V| = 126` graph and is in the small-world regime, the same
-   finite-size effect documented in the sibling experiment. The
-   `D_∞` fit is correspondingly ill-conditioned (`±5.67` at
-   `m/g = 0.5`): the Ambjorn-Loll form assumes a long-σ plateau, and
-   this finite graph rises, plateaus, dips, then rises again. Read the
-   intermediate plateau and peak `D_S`; treat `D_∞` as a fit artefact.
+3. **`m/g` dependence is within the layout noise.** At every `N` the
+   three mass curves overlap inside their `±std` bands; the `N = 20`
+   bump is the only place they separate at all, and not cleanly. The
+   `D_∞` fit is ill-conditioned throughout (error bars of order the
+   value itself) — the Ambjorn-Loll form assumes a long-σ plateau this
+   profile does not have. Read peak `D_S`; treat `D_∞` as a fit
+   artefact.
 
-The two observables agree on the headline: the construction is *not*
-two-dimensional. The single cell rotates out of the plane (`det G > 0`),
-and the full coned complex carries a spectral dimension that is
-`m/g`-sensitive and, at heavy mass, well above 2.
+The two observables do *not* tell the same story, and that is the
+result. The single cell rotates out of the plane — locally, the closure
+generates 4-volume. But the spectral dimension of the coned graph it
+generates collapses toward 1 as the system grows: local 4-volume does
+not add up to a 4-dimensional bulk under this time-evolution logic. If
+the construction is to reach a higher emergent dimension, it is the
+*temporal connectivity rule* that has to change, not the cell geometry.
 
 ## Threats to validity
 

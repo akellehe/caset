@@ -105,8 +105,8 @@ def schwinger_snapshots(n_sites: int, m_over_g: float, dt: float, total_t: float
     cfg.g = 1.0
     cfg.m = m_over_g * cfg.g
     cfg.L0 = 0.0
-    cfg.dmrgMaxBondDim = min(64, max_bond_dim)
-    cfg.dmrgNSweeps = 10
+    cfg.dmrgMaxBondDim = 64
+    cfg.dmrgNSweeps = 12
     cfg.dmrgKrylovDim = 4
     cfg.dmrgCutoff = 1e-12
     cfg.i0 = 3
@@ -258,21 +258,22 @@ def main() -> None:
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--N", type=int, default=14,
-                   help="Schwinger sites = Poisson points")
+    # Defaults match examples/quantum/temporally_connected_entangled_spacetime.py
+    p.add_argument("--N", type=int, nargs="+", default=[10, 20, 30, 40],
+                   help="Schwinger sites = Poisson points (sweep)")
     p.add_argument("--m-over-g", type=float, nargs="+",
                    default=[0.125, 0.25, 0.5])
     p.add_argument("--dt", type=float, default=0.25)
-    p.add_argument("--T", type=float, default=2.0,
+    p.add_argument("--T", type=float, default=1.0,
                    help="total TDVP time; snapshot count K = T/dt + 1")
-    p.add_argument("--max-bond-dim", type=int, default=64)
+    p.add_argument("--max-bond-dim", type=int, default=80)
     p.add_argument("--layers", type=int, default=12,
-                   help="independent Poisson layouts per m/g")
+                   help="independent Poisson layouts per (N, m/g)")
     p.add_argument("--sigma-min", type=float, default=1e-2)
     p.add_argument("--sigma-max", type=float, default=1e3)
     p.add_argument("--sigma-count", type=int, default=48)
     p.add_argument("--krylov-dim", type=int, default=30)
-    p.add_argument("--epsilon", type=float, default=1e-10)
+    p.add_argument("--epsilon", type=float, default=1e-8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out-json",
                    default="/tmp/interaction-branching/spectral_dimension.json")
@@ -288,31 +289,34 @@ def main() -> None:
           f"{args.layers} Poisson layouts each", flush=True)
 
     records = []
-    for m_over_g in args.m_over_g:
-        data = schwinger_snapshots(args.N, m_over_g, args.dt, args.T,
-                                   args.max_bond_dim)
-        runs = []
-        for _ in range(args.layers):
-            r = run_one(data, args.N, rng, sigmas, args.krylov_dim,
-                        args.epsilon)
-            if r is not None:
-                runs.append(r)
-        summary = summarise(runs)
-        rec = {
-            "m_over_g": m_over_g,
-            "energies": data["energies"],
-            "summary": summary,
-            "runs": runs,
-            "sigmas": sigmas,
-        }
-        records.append(rec)
-        ps = summary["peak_dS"]
-        di = summary["D_infinity"]
-        ex = runs[0]
-        print(f"[m/g={m_over_g}] |V|={ex['n_vertices']} |E|~{ex['n_edges']}  "
-              f"peak D_S = {ps['mean']:.3f} +/- {ps['std']:.3f}  "
-              f"(range {ps['min']:.2f}-{ps['max']:.2f})   "
-              f"D_inf = {di['mean']:.3f} +/- {di['std']:.3f}", flush=True)
+    for n_sites in args.N:
+        for m_over_g in args.m_over_g:
+            data = schwinger_snapshots(n_sites, m_over_g, args.dt, args.T,
+                                       args.max_bond_dim)
+            runs = []
+            for _ in range(args.layers):
+                r = run_one(data, n_sites, rng, sigmas, args.krylov_dim,
+                            args.epsilon)
+                if r is not None:
+                    runs.append(r)
+            summary = summarise(runs)
+            rec = {
+                "N": n_sites,
+                "m_over_g": m_over_g,
+                "energies": data["energies"],
+                "summary": summary,
+                "runs": runs,
+                "sigmas": sigmas,
+            }
+            records.append(rec)
+            ps = summary["peak_dS"]
+            di = summary["D_infinity"]
+            ex = runs[0]
+            print(f"[N={n_sites:>2} m/g={m_over_g}] "
+                  f"|V|={ex['n_vertices']} |E|~{ex['n_edges']}  "
+                  f"peak D_S = {ps['mean']:.3f} +/- {ps['std']:.3f}  "
+                  f"(range {ps['min']:.2f}-{ps['max']:.2f})   "
+                  f"D_inf = {di['mean']:.3f} +/- {di['std']:.3f}", flush=True)
 
     os.makedirs(os.path.dirname(args.out_json) or ".", exist_ok=True)
     with open(args.out_json, "w") as f:

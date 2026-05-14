@@ -1,7 +1,8 @@
 """Render the Poisson-Delaunay spectral-dimension figure.
 
-Left panel: D_S(sigma) per Schwinger m/g -- mean over Poisson layouts
-with a +/- std band. Right panel: peak D_S per m/g with error bars.
+The result JSON is an N x m/g sweep. Left panel: peak D_S vs N, one line
+per Schwinger m/g (mean over Poisson layouts, +/- std band). Right panel:
+the Ambjorn-Loll D_inf fit vs N, same grouping.
 
 Usage::
 
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 
 import matplotlib
 
@@ -20,7 +22,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-COLORS = ["#1b9e77", "#7570b3", "#d95f02"]
+COLORS = ["#1b9e77", "#7570b3", "#d95f02", "#e7298a"]
 
 
 def main() -> None:
@@ -35,48 +37,46 @@ def main() -> None:
     with open(args.in_json) as f:
         records = json.load(f)["records"]
 
+    # group by m/g -> sorted list of (N, peak_mean, peak_std, dinf_mean, dinf_std)
+    by_mg = defaultdict(list)
+    for rec in records:
+        s = rec["summary"]
+        by_mg[rec["m_over_g"]].append((
+            rec["N"],
+            s["peak_dS"]["mean"], s["peak_dS"]["std"],
+            s["D_infinity"]["mean"], s["D_infinity"]["std"],
+        ))
+    for mg in by_mg:
+        by_mg[mg].sort()
+
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 4.2))
 
-    peak_means, peak_stds, labels = [], [], []
-    for rec, color in zip(records, COLORS):
-        sigmas = np.array(rec["sigmas"])
-        curves = np.array([r["dS_smoothed"] for r in rec["runs"]],
-                          dtype=np.float64)
-        curves = np.where(np.isfinite(curves), curves, np.nan)
-        mean = np.nanmean(curves, axis=0)
-        std = np.nanstd(curves, axis=0)
-        label = f"m/g = {rec['m_over_g']:g}"
-        ax0.plot(sigmas, mean, "-", color=color, label=label)
-        ax0.fill_between(sigmas, mean - std, mean + std, color=color,
-                         alpha=0.18)
-        peak_means.append(rec["summary"]["peak_dS"]["mean"])
-        peak_stds.append(rec["summary"]["peak_dS"]["std"])
-        labels.append(f"{rec['m_over_g']:g}")
+    for (mg, rows), color in zip(sorted(by_mg.items()), COLORS):
+        ns = np.array([r[0] for r in rows])
+        peak_m = np.array([r[1] for r in rows])
+        peak_s = np.array([r[2] for r in rows])
+        dinf_m = np.array([r[3] for r in rows])
+        dinf_s = np.array([r[4] for r in rows])
+        label = f"m/g = {mg:g}"
+        ax0.plot(ns, peak_m, "o-", color=color, label=label)
+        ax0.fill_between(ns, peak_m - peak_s, peak_m + peak_s,
+                         color=color, alpha=0.18)
+        ax1.plot(ns, dinf_m, "o-", color=color, label=label)
+        ax1.fill_between(ns, dinf_m - dinf_s, dinf_m + dinf_s,
+                         color=color, alpha=0.18)
 
-    ax0.set_xscale("log")
-    ax0.set_xlabel(r"$\sigma$ (diffusion time)")
-    ax0.set_ylabel(r"$D_S(\sigma)$")
-    ax0.set_title("Spectral dimension of the coned Poisson-Delaunay MI complex")
-    ax0.axhline(2.0, ls=":", color="grey", lw=0.8)
-    ax0.axhline(4.0, ls=":", color="grey", lw=0.8)
-    ax0.legend(fontsize=8)
+    for ax in (ax0, ax1):
+        ax.set_xlabel("N (Schwinger sites = Poisson points)")
+        ax.axhline(2.0, ls=":", color="grey", lw=0.8)
+        ax.axhline(4.0, ls=":", color="grey", lw=0.8)
+        ax.legend(fontsize=8)
+    ax0.set_ylabel(r"peak $D_S$")
+    ax0.set_title(r"Peak spectral dimension vs $N$")
+    ax1.set_ylabel(r"Ambjorn-Loll $D_\infty$")
+    ax1.set_title(r"$D_\infty$ fit vs $N$")
 
-    x = np.arange(len(records))
-    ax1.bar(x, peak_means, 0.5, yerr=peak_stds, capsize=4,
-            color=COLORS[:len(records)], edgecolor="white")
-    for xi, m, s in zip(x, peak_means, peak_stds):
-        ax1.text(xi, m + s + 0.1, f"{m:.2f}", ha="center", fontsize=9)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(labels)
-    ax1.set_xlabel(r"Schwinger $m/g$")
-    ax1.set_ylabel(r"peak $D_S$")
-    ax1.set_title("Peak spectral dimension")
-    ax1.axhline(2.0, ls=":", color="grey", lw=0.8)
-    ax1.axhline(4.0, ls=":", color="grey", lw=0.8)
-    ax1.set_ylim(0, max(4.4, max(peak_means) + max(peak_stds) + 0.4))
-
-    fig.suptitle("Poisson-Delaunay coned complex: heat-kernel spectral "
-                 "dimension", fontsize=11)
+    fig.suptitle("Coned Poisson-Delaunay MI complex: spectral dimension "
+                 "(temporally-connected parameters)", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(args.out_png, dpi=130)
     print(f"[wrote] {args.out_png}")
