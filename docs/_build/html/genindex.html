@@ -193,6 +193,8 @@
 <li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="causal_sets.html">Causal sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wilson_loops.html">Wilson loops</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
@@ -253,6 +255,8 @@
         </ul></li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.Poset.addCover">addCover() (tessera.quantum.Poset method)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.Majorization.agreement">agreement() (tessera.quantum.Majorization static method)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.CausetChain.antichains">antichains (tessera.quantum.CausetChain attribute)</a>
@@ -278,6 +282,10 @@
 </li>
         </ul></li>
     </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.TDVPSnapshot.bondMutualInformation">bondMutualInformation (tessera.quantum.TDVPSnapshot property)</a>
+</li>
+    </ul></td>
   </tr></table>
 </section>
 
@@ -296,6 +304,8 @@
         <li><a href="quantum.html#tessera.quantum.Causet.chainFrom">chainFrom() (tessera.quantum.Causet static method)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.SchwingerQuench.compareCausalOrders">compareCausalOrders() (tessera.quantum.SchwingerQuench method)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.compareOrders">compareOrders() (in module tessera.quantum)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.SchwingerModel.config">config (tessera.quantum.SchwingerModel property)</a>
 
@@ -415,8 +425,12 @@
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.g">(tessera.quantum.TDVPConfig property)</a>
 </li>
         </ul></li>
+        <li><a href="quantum.html#tessera.quantum.Poset.getCoverCount">getCoverCount() (tessera.quantum.Poset method)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.Poset.getNodeCount">getNodeCount (tessera.quantum.Poset property)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="quantum.html#tessera.quantum.GroundStateMajorizationResult.groundState">groundState (tessera.quantum.GroundStateMajorizationResult attribute)</a>
 
         <ul>
@@ -427,8 +441,6 @@
           <li><a href="quantum.html#id27">(tessera.quantum.QuenchResult property)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="quantum.html#tessera.quantum.GroundStateMajorizationResult">GroundStateMajorizationResult (class in tessera.quantum)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.GroundStateResult">GroundStateResult (class in tessera.quantum)</a>
@@ -712,6 +724,8 @@
   <h2>R</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.TDVPConfig.recordBondMutualInformation">recordBondMutualInformation (tessera.quantum.TDVPConfig property)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig.recordMutualInformation">recordMutualInformation (tessera.quantum.TDVPConfig property)</a>
 </li>
     </ul></td>

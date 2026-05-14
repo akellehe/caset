@@ -207,26 +207,65 @@ truncationErr : float
     py::class_<Poset>(m, "Poset",
             R"doc(Hasse / cover representation of a finite partial order.
 
-Nodes are integers 0 .. getNodeCount - 1. ``covers`` lists the cover
-edges: each entry (a, b) means a ≻ b with no intermediate node.
+Nodes are integers ``0 .. getNodeCount - 1``. ``covers`` lists the cover
+edges: each entry ``(a, b)`` means ``a`` strictly precedes ``b`` with no
+intermediate node. The full strict order is the transitive closure of
+the covers; see :func:`compareOrders` for pairwise statistics derived
+from that closure.
+
+Construct empty (``Poset()``) and resize via the ``getNodeCount``
+setter, or pass an integer to pre-populate node count
+(``Poset(4)``). Mutate via :meth:`addCover` (single edge) or the
+``covers`` setter (whole list). The class makes no internal
+consistency checks; callers are responsible for transitivity and
+acyclicity.
+
+See ``docs/source/causal_sets.md`` for the conceptual background.
 )doc")
         .def(py::init<>())
+        .def(py::init<int>(), py::arg("nodeCount"),
+            "Construct with the node count pre-set to ``nodeCount``.")
+        .def("addCover", &Poset::addCover, py::arg("a"), py::arg("b"),
+            R"doc(Add the cover edge ``a -> b`` (a strictly precedes b, no intermediate).
+
+Both endpoints must already exist (call the int constructor or the
+``getNodeCount`` setter first). No deduplication is performed —
+adding the same cover twice creates two parallel edges. The standard
+use is to feed covers from a transitive-reduction algorithm where
+duplicates can't arise.
+)doc")
         .def_property("getNodeCount",
             [](Poset const& p) { return p.getNodeCount(); },
-            [](Poset& p, int n) { p.setNodeCount(n); })
+            [](Poset& p, int n) { p.setNodeCount(n); },
+            "Number of nodes. Setting grows the node set; nodes are not "
+            "removed if you set a smaller value, and cover edges are "
+            "preserved across resizes.")
+        .def("getCoverCount", &Poset::getCoverCount,
+            "Number of cover edges currently registered.")
         .def_property("covers",
             [](Poset const& p) { return p.covers(); },
             [](Poset& p, std::vector<std::pair<int, int>> const& covers) {
                 p.setCovers(covers);
-            })
+            },
+            "Cover edges as a list of ``(a, b)`` pairs. Setting replaces "
+            "the entire cover list in one pass.")
         .def("toDot", &Poset::toDot,
-            "Graphviz DOT representation of the Hasse diagram.")
+            "Graphviz DOT representation of the Hasse diagram. "
+            "Nodes labelled by their integer id; one directed edge per "
+            "cover. Suitable for ``dot -Tsvg`` rendering.")
         .def_static("fromSpacetime",
             [](py::object spacetime_obj) {
                 auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
                 return tessera::Poset::fromSpacetime(*st);
             }, py::arg("spacetime"),
-            R"doc(Inherit a Hasse-cover Poset from a tessera.Spacetime.)doc")
+            R"doc(Build the causet partial order on a Spacetime's vertices.
+
+Reads the directed-edge / timelike-edge subgraph as the strict
+``precedes`` relation, then takes the transitive reduction to recover
+cover edges. The result has one node per Spacetime vertex (in
+ascending ID order); cover edges are between strictly comparable
+vertices with no intermediate.
+)doc")
         .def("__repr__", [](Poset const& p) {
             return "Poset(getNodeCount=" + std::to_string(p.getNodeCount()) +
                    ", covers=" + std::to_string(p.getCoverCount()) + " edges)";
@@ -437,6 +476,28 @@ Build via :meth:`Majorization.agreement(a, b, n_labels)`.
         .def_readonly("nComparableBoth",    &OrderAgreement::nComparableBoth)
         .def_readonly("nOnlyA",             &OrderAgreement::nOnlyA)
         .def_readonly("nOnlyB",             &OrderAgreement::nOnlyB);
+
+    m.def("compareOrders", &tessera::compareOrders,
+        py::arg("a"), py::arg("b"), py::arg("nLabels"),
+        R"doc(Pairwise agreement statistics between two posets on a shared label set.
+
+Counts unordered pairs (i, j) with i < j in five disjoint buckets via
+Floyd–Warshall transitive closures of `a` and `b`:
+
+* concordant   — both orders relate the pair the same way
+* discordant   — both orders relate the pair, opposite ways
+* only-a       — `a` relates the pair, `b` does not
+* only-b       — `b` relates the pair, `a` does not
+* neither      — neither order relates the pair
+
+Returns an :class:`OrderAgreement` with ``kendallTau``,
+``discordantFraction``, ``hasseEditDistance``, and the five counts.
+
+Complexity: O(nLabels^3) for the transitive closure, O(nLabels^2) for
+the pair counts. Practical up to a few thousand labels.
+
+See ``docs/source/causal_sets.md`` for the methodology context.
+)doc");
 
     py::class_<CausalComparisonReport>(m, "CausalComparisonReport",
             R"doc(Pairwise agreement statistics across the three causal orders (≼_maj, ≼_LR, ≼_cs).

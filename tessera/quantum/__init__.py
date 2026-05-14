@@ -199,6 +199,12 @@ try:
     Majorization      = _qm.Majorization
     Causet            = _qm.Causet
     MutualInformation = _qm.MutualInformation
+
+    # ─── Free functions ───────────────────────────────────────────────────
+    # Pairwise agreement statistics between two Posets on a shared label
+    # set; returns an :class:`OrderAgreement`. See
+    # ``docs/source/causal_sets.md`` for the methodology context.
+    compareOrders = _qm.compareOrders
 except (ImportError, AttributeError) as exc:
     raise ImportError(
         "tessera.quantum is unavailable: this tessera build does not include "
@@ -234,4 +240,6 @@ __all__ = [
     "Majorization",
     "MutualInformation",
     "Causet",
+    # Free functions
+    "compareOrders",
 ]

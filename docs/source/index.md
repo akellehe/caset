@@ -19,6 +19,8 @@ getting_started
 theory
 examples
 benchmarks
+causal_sets
+wilson_loops
 quantum
 quantum-methodology
 holography-causal-ordering-emergent-dimension

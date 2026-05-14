@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Emergent Causal Order from Entanglement: Hypothesis and Methodology" href="quantum-methodology.html"><link rel="prev" title="Benchmarks" href="benchmarks.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Emergent Causal Order from Entanglement: Hypothesis and Methodology" href="quantum-methodology.html"><link rel="prev" title="Wilson loops" href="wilson_loops.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>Quantum subsystem (Schwinger MPS / DMRG) - tessera 0.1.0 documentation</title>
@@ -195,6 +195,8 @@
 <li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">CDT Examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="causal_sets.html">Causal sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="wilson_loops.html">Wilson loops</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
@@ -1105,7 +1107,7 @@ underlying SchwingerQuench pipeline; most users go through
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.CausalOrders.fromSnapshots">
-<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fromSnapshots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">snapshots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#tessera.quantum.TDVPSnapshot" title="tessera._tessera.quantum.TDVPSnapshot"><span class="pre">tessera._tessera.quantum.TDVPSnapshot</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vLr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.CausalOrders" title="tessera._tessera.quantum.CausalOrders"><span class="pre">tessera._tessera.quantum.CausalOrders</span></a></span></span><a class="headerlink" href="#tessera.quantum.CausalOrders.fromSnapshots" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fromSnapshots</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">snapshots</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#tessera.quantum.TDVPSnapshot" title="tessera._tessera.quantum.TDVPSnapshot"><span class="pre">tessera._tessera.quantum.TDVPSnapshot</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vLr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.CausalOrders" title="tessera._tessera.quantum.CausalOrders"><span class="pre">tessera._tessera.quantum.CausalOrders</span></a></span></span><a class="headerlink" href="#tessera.quantum.CausalOrders.fromSnapshots" title="Link to this definition">¶</a></dt>
 <dd><p>Build the three orders from a list of TDVP snapshots.</p>
 </dd></dl>
 
@@ -1459,7 +1461,7 @@ when AutoMPO-encoding the electric term.</p>
 (Brändén 2015 arXiv:1410.6601 §1).</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.LogConcaveMajorization.isLogConcave">
-<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">isLogConcave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.LogConcaveMajorization.isLogConcave" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">isLogConcave</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.LogConcaveMajorization.isLogConcave" title="Link to this definition">¶</a></dt>
 <dd><p>True iff the spectrum is log-concave on its support.</p>
 </dd></dl>
 
@@ -1479,7 +1481,7 @@ order-agreement statistics. Not instantiable; call methods on the class.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.Majorization.agreement">
-<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">agreement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">nLabels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.OrderAgreement" title="tessera._tessera.quantum.OrderAgreement"><span class="pre">tessera._tessera.quantum.OrderAgreement</span></a></span></span><a class="headerlink" href="#tessera.quantum.Majorization.agreement" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">agreement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">nLabels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsInt</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.OrderAgreement" title="tessera._tessera.quantum.OrderAgreement"><span class="pre">tessera._tessera.quantum.OrderAgreement</span></a></span></span><a class="headerlink" href="#tessera.quantum.Majorization.agreement" title="Link to this definition">¶</a></dt>
 <dd><p>Pairwise agreement statistics between two Posets on the same
 label set of size nLabels. Returns an <a class="reference internal" href="#tessera.quantum.OrderAgreement" title="tessera.quantum.OrderAgreement"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderAgreement</span></code></a>.</p>
 </dd></dl>
@@ -1489,11 +1491,11 @@ label set of size nLabels. Returns an <a class="reference internal" href="#tesse
 <em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">posetOf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tessera.quantum.Majorization.posetOf" title="Link to this definition">¶</a></dt>
 <dd><p>Overloaded function.</p>
 <ol class="arabic simple">
-<li><p>posetOf(spectra: List[List[float]], predicate: tessera._tessera.quantum.MajorizationPredicate) -&gt; tessera._tessera.quantum.Poset</p></li>
+<li><p>posetOf(spectra: collections.abc.Sequence[collections.abc.Sequence[typing.SupportsFloat | typing.SupportsIndex]], predicate: tessera._tessera.quantum.MajorizationPredicate) -&gt; tessera._tessera.quantum.Poset</p></li>
 </ol>
 <p>Build the majorization poset under an explicit predicate.</p>
 <ol class="arabic simple" start="2">
-<li><p>posetOf(spectra: List[List[float]], tol: float = 1e-12) -&gt; tessera._tessera.quantum.Poset</p></li>
+<li><p>posetOf(spectra: collections.abc.Sequence[collections.abc.Sequence[typing.SupportsFloat | typing.SupportsIndex]], tol: typing.SupportsFloat | typing.SupportsIndex = 1e-12) -&gt; tessera._tessera.quantum.Poset</p></li>
 </ol>
 <p>Build the classical {N1999} majorization poset at the given tolerance.</p>
 </dd></dl>
@@ -1517,7 +1519,7 @@ label set of size nLabels. Returns an <a class="reference internal" href="#tesse
 subclass instance.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.MajorizationPredicate.majorizes">
-<span class="sig-name descname"><span class="pre">majorizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lambda_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.MajorizationPredicate.majorizes" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">majorizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lambda_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.MajorizationPredicate.majorizes" title="Link to this definition">¶</a></dt>
 <dd><p>True iff μ majorizes λ under this variant.</p>
 </dd></dl>
 
@@ -1529,7 +1531,7 @@ subclass instance.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.MajorizationPredicate.strictlyMajorizes">
-<span class="sig-name descname"><span class="pre">strictlyMajorizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lambda_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.MajorizationPredicate.strictlyMajorizes" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">strictlyMajorizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lambda_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">collections.abc.Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.MajorizationPredicate.strictlyMajorizes" title="Link to this definition">¶</a></dt>
 <dd><p>True iff μ strictly majorizes λ under this variant.</p>
 </dd></dl>
 
@@ -1547,13 +1549,13 @@ operations (vonNeumannEntropy, edgeLength) on numpy data without
 needing an MPS in hand.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.MutualInformation.edgeLength">
-<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">edgeLength</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">I</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-10</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#tessera.quantum.MutualInformation.edgeLength" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">edgeLength</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">I</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epsilon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-10</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#tessera.quantum.MutualInformation.edgeLength" title="Link to this definition">¶</a></dt>
 <dd><p>ℓ = -log(I) with infinity floor at -log(epsilon).</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.MutualInformation.vonNeumannEntropy">
-<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">vonNeumannEntropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rho</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.complex128</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#tessera.quantum.MutualInformation.vonNeumannEntropy" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">vonNeumannEntropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rho</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.typing.ArrayLike</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.complex128</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#tessera.quantum.MutualInformation.vonNeumannEntropy" title="Link to this definition">¶</a></dt>
 <dd><p>Von Neumann entropy of a Hermitian density matrix, in nats.</p>
 <p>The implementation accepts any square dimension; in the holography
 pipeline we only need 2×2 (single-site marginals) and 4×4 (two-site
@@ -1632,28 +1634,62 @@ Strictly stronger than classical majorization.</p>
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tessera.quantum.</span></span><span class="sig-name descname"><span class="pre">Poset</span></span><a class="headerlink" href="#tessera.quantum.Poset" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">pybind11_object</span></code></p>
 <p>Hasse / cover representation of a finite partial order.</p>
-<p>Nodes are integers 0 .. getNodeCount - 1. <code class="docutils literal notranslate"><span class="pre">covers</span></code> lists the cover
-edges: each entry (a, b) means a ≻ b with no intermediate node.</p>
+<p>Nodes are integers <code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">..</span> <span class="pre">getNodeCount</span> <span class="pre">-</span> <span class="pre">1</span></code>. <code class="docutils literal notranslate"><span class="pre">covers</span></code> lists the cover
+edges: each entry <code class="docutils literal notranslate"><span class="pre">(a,</span> <span class="pre">b)</span></code> means <code class="docutils literal notranslate"><span class="pre">a</span></code> strictly precedes <code class="docutils literal notranslate"><span class="pre">b</span></code> with no
+intermediate node. The full strict order is the transitive closure of
+the covers; see <a class="reference internal" href="#tessera.quantum.compareOrders" title="tessera.quantum.compareOrders"><code class="xref py py-func docutils literal notranslate"><span class="pre">compareOrders()</span></code></a> for pairwise statistics derived
+from that closure.</p>
+<p>Construct empty (<code class="docutils literal notranslate"><span class="pre">Poset()</span></code>) and resize via the <code class="docutils literal notranslate"><span class="pre">getNodeCount</span></code>
+setter, or pass an integer to pre-populate node count
+(<code class="docutils literal notranslate"><span class="pre">Poset(4)</span></code>). Mutate via <a class="reference internal" href="#tessera.quantum.Poset.addCover" title="tessera.quantum.Poset.addCover"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addCover()</span></code></a> (single edge) or the
+<code class="docutils literal notranslate"><span class="pre">covers</span></code> setter (whole list). The class makes no internal
+consistency checks; callers are responsible for transitivity and
+acyclicity.</p>
+<p>See <code class="docutils literal notranslate"><span class="pre">docs/source/causal_sets.md</span></code> for the conceptual background.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.Poset.addCover">
+<span class="sig-name descname"><span class="pre">addCover</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsInt</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsInt</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#tessera.quantum.Poset.addCover" title="Link to this definition">¶</a></dt>
+<dd><p>Add the cover edge <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">-&gt;</span> <span class="pre">b</span></code> (a strictly precedes b, no intermediate).</p>
+<p>Both endpoints must already exist (call the int constructor or the
+<code class="docutils literal notranslate"><span class="pre">getNodeCount</span></code> setter first). No deduplication is performed —
+adding the same cover twice creates two parallel edges. The standard
+use is to feed covers from a transitive-reduction algorithm where
+duplicates can’t arise.</p>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.Poset.covers">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">covers</span></span><a class="headerlink" href="#tessera.quantum.Poset.covers" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Cover edges as a list of <code class="docutils literal notranslate"><span class="pre">(a,</span> <span class="pre">b)</span></code> pairs. Setting replaces the entire cover list in one pass.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.Poset.fromSpacetime">
 <em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fromSpacetime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spacetime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></span><a class="headerlink" href="#tessera.quantum.Poset.fromSpacetime" title="Link to this definition">¶</a></dt>
-<dd><p>Inherit a Hasse-cover Poset from a tessera.Spacetime.</p>
+<dd><p>Build the causet partial order on a Spacetime’s vertices.</p>
+<p>Reads the directed-edge / timelike-edge subgraph as the strict
+<code class="docutils literal notranslate"><span class="pre">precedes</span></code> relation, then takes the transitive reduction to recover
+cover edges. The result has one node per Spacetime vertex (in
+ascending ID order); cover edges are between strictly comparable
+vertices with no intermediate.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.Poset.getCoverCount">
+<span class="sig-name descname"><span class="pre">getCoverCount</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#tessera.quantum.Poset.getCoverCount" title="Link to this definition">¶</a></dt>
+<dd><p>Number of cover edges currently registered.</p>
 </dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.Poset.getNodeCount">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getNodeCount</span></span><a class="headerlink" href="#tessera.quantum.Poset.getNodeCount" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Number of nodes. Setting grows the node set; nodes are not removed if you set a smaller value, and cover edges are preserved across resizes.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.Poset.toDot">
 <span class="sig-name descname"><span class="pre">toDot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#tessera.quantum.Poset.toDot" title="Link to this definition">¶</a></dt>
-<dd><p>Graphviz DOT representation of the Hasse diagram.</p>
+<dd><p>Graphviz DOT representation of the Hasse diagram. Nodes labelled by their integer id; one directed edge per cover. Suitable for <code class="docutils literal notranslate"><span class="pre">dot</span> <span class="pre">-Tsvg</span></code> rendering.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1996,7 +2032,7 @@ underlying ITensor pipeline from scratch.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.SchwingerModel.solveWithMajorization">
-<span class="sig-name descname"><span class="pre">solveWithMajorization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.SchwingerModel" title="tessera._tessera.quantum.SchwingerModel"><span class="pre">tessera._tessera.quantum.SchwingerModel</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.GroundStateMajorizationResult" title="tessera._tessera.quantum.GroundStateMajorizationResult"><span class="pre">tessera._tessera.quantum.GroundStateMajorizationResult</span></a></span></span><a class="headerlink" href="#tessera.quantum.SchwingerModel.solveWithMajorization" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">solveWithMajorization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.SchwingerModel" title="tessera._tessera.quantum.SchwingerModel"><span class="pre">tessera._tessera.quantum.SchwingerModel</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.GroundStateMajorizationResult" title="tessera._tessera.quantum.GroundStateMajorizationResult"><span class="pre">tessera._tessera.quantum.GroundStateMajorizationResult</span></a></span></span><a class="headerlink" href="#tessera.quantum.SchwingerModel.solveWithMajorization" title="Link to this definition">¶</a></dt>
 <dd><p>Run DMRG, then extract Schmidt spectra and majorization poset.</p>
 <p>Single-shot pipeline:
 1. DMRG ground state of the Schwinger MPO.
@@ -2041,7 +2077,7 @@ comparison. The model is stateless beyond its config.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.SchwingerQuench.compareCausalOrders">
-<span class="sig-name descname"><span class="pre">compareCausalOrders</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.SchwingerQuench" title="tessera._tessera.quantum.SchwingerQuench"><span class="pre">tessera._tessera.quantum.SchwingerQuench</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">vLr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.CausalComparisonReport" title="tessera._tessera.quantum.CausalComparisonReport"><span class="pre">tessera._tessera.quantum.CausalComparisonReport</span></a></span></span><a class="headerlink" href="#tessera.quantum.SchwingerQuench.compareCausalOrders" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">compareCausalOrders</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.SchwingerQuench" title="tessera._tessera.quantum.SchwingerQuench"><span class="pre">tessera._tessera.quantum.SchwingerQuench</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">vLr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsFloat</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.MajorizationPredicate" title="tessera._tessera.quantum.MajorizationPredicate"><span class="pre">tessera._tessera.quantum.MajorizationPredicate</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.CausalComparisonReport" title="tessera._tessera.quantum.CausalComparisonReport"><span class="pre">tessera._tessera.quantum.CausalComparisonReport</span></a></span></span><a class="headerlink" href="#tessera.quantum.SchwingerQuench.compareCausalOrders" title="Link to this definition">¶</a></dt>
 <dd><p>End-to-end causal-order comparison.</p>
 <p>Runs <a class="reference internal" href="#tessera.quantum.SchwingerQuench.evolve" title="tessera.quantum.SchwingerQuench.evolve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evolve()</span></code></a> (forcing recordSpectra=True), builds three
 partial orders on the (cut, time) label set:</p>
@@ -2216,6 +2252,11 @@ extension).</p>
 <dd></dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.TDVPConfig.recordBondMutualInformation">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">recordBondMutualInformation</span></span><a class="headerlink" href="#tessera.quantum.TDVPConfig.recordBondMutualInformation" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.TDVPConfig.recordMutualInformation">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">recordMutualInformation</span></span><a class="headerlink" href="#tessera.quantum.TDVPConfig.recordMutualInformation" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -2249,6 +2290,14 @@ is set): spectra, poset, mutualInformation.</p>
 <dt class="sig sig-object py" id="tessera.quantum.TDVPSnapshot.bondDim">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">bondDim</span></span><a class="headerlink" href="#tessera.quantum.TDVPSnapshot.bondDim" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.TDVPSnapshot.bondMutualInformation">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">bondMutualInformation</span></span><a class="headerlink" href="#tessera.quantum.TDVPSnapshot.bondMutualInformation" title="Link to this definition">¶</a></dt>
+<dd><p>Symmetric (N-1)×(N-1) bond-cut tripartite-information matrix in nats,
+flattened row-major. Zero diagonal.
+Populated iff TDVPConfig.recordBondMutualInformation = True.</p>
+</dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.TDVPSnapshot.energy">
@@ -2286,6 +2335,26 @@ is set): spectra, poset, mutualInformation.</p>
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">zProfile</span></span><a class="headerlink" href="#tessera.quantum.TDVPSnapshot.zProfile" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="tessera.quantum.compareOrders">
+<span class="sig-prename descclassname"><span class="pre">tessera.quantum.</span></span><span class="sig-name descname"><span class="pre">compareOrders</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.Poset" title="tessera._tessera.quantum.Poset"><span class="pre">tessera._tessera.quantum.Poset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">nLabels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsInt</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#tessera.quantum.OrderAgreement" title="tessera._tessera.quantum.OrderAgreement"><span class="pre">tessera._tessera.quantum.OrderAgreement</span></a></span></span><a class="headerlink" href="#tessera.quantum.compareOrders" title="Link to this definition">¶</a></dt>
+<dd><p>Pairwise agreement statistics between two posets on a shared label set.</p>
+<p>Counts unordered pairs (i, j) with i &lt; j in five disjoint buckets via
+Floyd–Warshall transitive closures of <cite>a</cite> and <cite>b</cite>:</p>
+<ul class="simple">
+<li><p>concordant   — both orders relate the pair the same way</p></li>
+<li><p>discordant   — both orders relate the pair, opposite ways</p></li>
+<li><p>only-a       — <cite>a</cite> relates the pair, <cite>b</cite> does not</p></li>
+<li><p>only-b       — <cite>b</cite> relates the pair, <cite>a</cite> does not</p></li>
+<li><p>neither      — neither order relates the pair</p></li>
+</ul>
+<p>Returns an <a class="reference internal" href="#tessera.quantum.OrderAgreement" title="tessera.quantum.OrderAgreement"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderAgreement</span></code></a> with <code class="docutils literal notranslate"><span class="pre">kendallTau</span></code>,
+<code class="docutils literal notranslate"><span class="pre">discordantFraction</span></code>, <code class="docutils literal notranslate"><span class="pre">hasseEditDistance</span></code>, and the five counts.</p>
+<p>Complexity: O(nLabels^3) for the transitive closure, O(nLabels^2) for
+the pair counts. Practical up to a few thousand labels.</p>
+<p>See <code class="docutils literal notranslate"><span class="pre">docs/source/causal_sets.md</span></code> for the methodology context.</p>
 </dd></dl>
 
 </section>
@@ -2348,14 +2417,14 @@ exposed by :mod:<code class="docutils literal notranslate"><span class="pre">tes
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="benchmarks.html">
+          <a class="prev-page" href="wilson_loops.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Benchmarks</div>
+                <div class="title">Wilson loops</div>
                 
               </div>
             </a>
@@ -2536,8 +2605,10 @@ exposed by :mod:<code class="docutils literal notranslate"><span class="pre">tes
 </ul>
 </li>
 <li><a class="reference internal" href="#tessera.quantum.Poset"><code class="docutils literal notranslate"><span class="pre">Poset</span></code></a><ul>
+<li><a class="reference internal" href="#tessera.quantum.Poset.addCover"><code class="docutils literal notranslate"><span class="pre">Poset.addCover()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.Poset.covers"><code class="docutils literal notranslate"><span class="pre">Poset.covers</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.Poset.fromSpacetime"><code class="docutils literal notranslate"><span class="pre">Poset.fromSpacetime()</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.Poset.getCoverCount"><code class="docutils literal notranslate"><span class="pre">Poset.getCoverCount()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.Poset.getNodeCount"><code class="docutils literal notranslate"><span class="pre">Poset.getNodeCount</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.Poset.toDot"><code class="docutils literal notranslate"><span class="pre">Poset.toDot()</span></code></a></li>
 </ul>
@@ -2621,6 +2692,7 @@ exposed by :mod:<code class="docutils literal notranslate"><span class="pre">tes
 <li><a class="reference internal" href="#tessera.quantum.TDVPConfig.maxBondDim"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.maxBondDim</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPConfig.quenchEnforceParity"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.quenchEnforceParity</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPConfig.quiet"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.quiet</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.TDVPConfig.recordBondMutualInformation"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.recordBondMutualInformation</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPConfig.recordMutualInformation"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.recordMutualInformation</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPConfig.recordPoset"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.recordPoset</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPConfig.recordSpectra"><code class="docutils literal notranslate"><span class="pre">TDVPConfig.recordSpectra</span></code></a></li>
@@ -2629,6 +2701,7 @@ exposed by :mod:<code class="docutils literal notranslate"><span class="pre">tes
 </li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot</span></code></a><ul>
 <li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot.bondDim"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot.bondDim</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot.bondMutualInformation"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot.bondMutualInformation</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot.energy"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot.energy</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot.lProfile"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot.lProfile</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot.mutualInformation"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot.mutualInformation</span></code></a></li>
@@ -2638,6 +2711,7 @@ exposed by :mod:<code class="docutils literal notranslate"><span class="pre">tes
 <li><a class="reference internal" href="#tessera.quantum.TDVPSnapshot.zProfile"><code class="docutils literal notranslate"><span class="pre">TDVPSnapshot.zProfile</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#tessera.quantum.compareOrders"><code class="docutils literal notranslate"><span class="pre">compareOrders()</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#references">References</a></li>

@@ -1163,50 +1163,131 @@ multiple configurations for averaging.)doc")
   py::class_<WilsonLoop, std::shared_ptr<WilsonLoop>>(m, "WilsonLoop",
       R"doc(Wilson loop observable on a triangulated spacetime.
 
-Computes holonomy-like quantities around closed paths in the dual graph.
-Three evaluation modes at increasing levels of geometric commitment:
-  COMBINATORIAL -- dual-graph topology only
-  DEFICIT_ANGLE -- curvature via deficit angles
-  CAUSAL        -- CDT causal structure
+A Wilson loop is the trace of a parallel-transport operator around a
+closed path. On a curved triangulation without an explicit gauge field
+tessera computes the Levi-Civita holonomy analogue: closed walks on the
+dual graph (top-simplices as nodes, shared facets as edges), with the
+loop value determined by the deficit angles of enclosed hinges.
+
+Three evaluation modes:
+
+* ``COMBINATORIAL``  — dual-graph topology only. ``value`` is the loop
+  length; ``enclosedHinges`` counts hinges contained in every loop
+  simplex; ``contractible`` is True iff ``enclosedHinges == 0``.
+* ``DEFICIT_ANGLE``  — Regge-curvature holonomy. For a hinge loop
+  enclosing one hinge h:
+      W = ((d-2) + 2 cos(eps_h)) / d
+  For multi-hinge loops the U(1) approximation is used:
+      W = product_{h in enclosed} cos(eps_h).
+  W = 1 corresponds to a flat loop; deviation from 1 measures local
+  curvature.
+* ``CAUSAL``  — CDT causal-orientation winding. ``causalWindingNumber``
+  is the signed net change in foliation index around the loop; non-
+  zero values mark loops that cross a CDT slice boundary.
 
 Three loop-shape generators:
-  hingeLoop()       -- elementary loop around a hinge
-  dualLatticeLoop() -- BFS-discovered loop of target size
-  geodesicLoop()    -- shortest cycle through a simplex)doc")
-      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"))
+
+* ``hingeLoop(h)``        — cyclically ordered loop of top-simplices
+                            around the (d-2)-simplex ``h``. Encloses
+                            exactly one hinge (``h``), so the
+                            DEFICIT_ANGLE formula above is exact.
+* ``dualLatticeLoop(start, L)``  — BFS-discovered loop of approximately
+                            ``L`` simplices through ``start``. Suitable
+                            for population sweeps at fixed loop scale.
+* ``geodesicLoop(start)``  — shortest cycle through ``start`` in the
+                            dual graph (girth at that simplex).
+
+Measurement bookkeeping: ``measure()`` and ``measureAllHinges()`` append
+``WilsonResult`` entries to an internal list. ``getMeasurements()``
+returns the accumulated list; ``getAverageBySize()`` aggregates by loop
+length (the standard form for Creutz-ratio-style analyses);
+``reset()`` clears.
+
+See ``docs/source/wilson_loops.md`` for an end-to-end tutorial with
+curvature-scan, contractibility-statistics, and causal-winding
+examples.
+)doc")
+      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
+           "Construct a Wilson-loop calculator bound to a Spacetime.")
       .def("evaluate", &WilsonLoop::evaluate,
            py::arg("loop"), py::arg("mode"),
-           "Evaluate the Wilson loop in the given mode.")
+           R"doc(Evaluate the Wilson loop in the given mode.
+
+Dispatches to ``evaluateCombinatorial``, ``evaluateDeficitAngle``, or
+``evaluateCausal`` depending on ``mode``.
+)doc")
       .def("evaluateCombinatorial", &WilsonLoop::evaluateCombinatorial,
            py::arg("loop"),
-           "Evaluate using dual-graph topology only.")
+           R"doc(Evaluate using dual-graph topology only.
+
+Returns a ``WilsonResult`` with ``value = loopSize``,
+``enclosedHinges`` = count of hinges shared by every loop simplex, and
+``contractible`` = True iff no hinge is enclosed.
+)doc")
       .def("evaluateDeficitAngle", &WilsonLoop::evaluateDeficitAngle,
            py::arg("loop"),
-           "Evaluate using deficit angles.")
+           R"doc(Evaluate using Regge deficit angles.
+
+For a hinge loop (exactly one enclosed hinge h):
+    W = ((d - 2) + 2 cos(eps_h)) / d.
+For multi-hinge loops the U(1) approximation:
+    W = product_{h in enclosed} cos(eps_h).
+``value`` carries W; ``enclosedHinges`` carries the count.
+)doc")
       .def("evaluateCausal", &WilsonLoop::evaluateCausal,
            py::arg("loop"),
-           "Evaluate using CDT causal orientation changes.")
+           R"doc(Evaluate using CDT causal-orientation changes.
+
+Walks the loop and accumulates a signed winding count from the
+final-time stamps of consecutive simplices. ``causalWindingNumber`` is
+the net winding; ``value`` carries the same number as a double.
+)doc")
       .def("hingeLoop", &WilsonLoop::hingeLoop,
            py::arg("hinge"),
-           "Generate the loop of top-simplices around a hinge.")
+           R"doc(Loop of top-simplices around a hinge, ordered cyclically.
+
+Encloses exactly one hinge (the input). This is the natural loop for
+``DEFICIT_ANGLE`` mode and is what ``measureAllHinges`` uses internally.
+)doc")
       .def("dualLatticeLoop", &WilsonLoop::dualLatticeLoop,
            py::arg("start"), py::arg("targetLength"),
-           "BFS-discovered loop of approximately targetLength simplices.")
+           R"doc(BFS-discovered loop of approximately ``targetLength`` simplices.
+
+Not guaranteed to be exactly ``targetLength`` — the BFS may overshoot
+or return a shorter loop if local connectivity doesn't permit closing
+at the target size. Suitable for population-level scans at a fixed
+loop scale (analogous to specifying Wilson-loop side length in lattice
+gauge theory).
+)doc")
       .def("geodesicLoop", &WilsonLoop::geodesicLoop,
            py::arg("start"),
-           "Shortest cycle through start in the dual graph.")
+           R"doc(Shortest cycle through ``start`` in the dual graph.
+
+The cycle length is the local girth of the dual graph at ``start``.
+Useful when you want the natural shortest loop without specifying a
+target size.
+)doc")
       .def("measure", &WilsonLoop::measure,
            py::arg("loop"), py::arg("mode"),
-           "Evaluate and record a measurement.")
+           "Evaluate ``loop`` in ``mode`` and append the result to the "
+           "internal measurement list.")
       .def("measureAllHinges", &WilsonLoop::measureAllHinges,
            py::arg("mode"),
-           "Measure all hinge loops in the spacetime.")
+           R"doc(Walk every (d-2)-simplex of the spacetime, generate its hinge
+loop, and record the evaluation in ``mode``. Skips degenerate hinges
+whose loop has fewer than 2 distinct simplices. Bulk shortcut for a
+curvature scan.
+)doc")
       .def("reset", &WilsonLoop::reset,
-           "Clear accumulated measurements.")
+           "Clear all accumulated measurements.")
       .def("getMeasurements", &WilsonLoop::getMeasurements,
-           "Return all recorded WilsonResult objects.")
+           "Return the full list of accumulated ``WilsonResult`` entries.")
       .def("getAverageBySize", &WilsonLoop::getAverageBySize,
-           "Return average Wilson value for each loop size.");
+           R"doc(Mean ``value`` grouped by loop size, as a ``{size: mean}`` dict.
+
+The standard form for Creutz-ratio-style analyses: fix loop size L,
+read off the population-averaged Wilson value at that scale.
+)doc");
 
   // ========================================
   // MatterConfiguration
