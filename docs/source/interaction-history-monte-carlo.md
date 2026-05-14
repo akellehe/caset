@@ -55,42 +55,31 @@ DMRG-ground-state initial layer of the earlier single-cell experiments
 
 ## 3. The interaction event
 
-When `A` and `B` interact, the interaction is a two-system unitary `U`.
-Its **KAK (Cartan) decomposition** is exact:
+When `A` and `B` interact through a two-system unitary `U`, the
+interaction product `AB` is the **genuine joint state** of the two
+systems:
 
-$$U = (k_A \otimes k_B)\; e^{i(c_x XX + c_y YY + c_z ZZ)}\; (k'_A \otimes k'_B).$$
+$$\rho_{AB} = U\,(\rho_A \otimes \rho_B)\,U^\dagger.$$
 
-The single-qubit factors carry no entanglement; they rotate `A → A'` and
-`B → B'`. The non-local content is the **Cartan core**
-`e^{i(c_x XX + c_y YY + c_z ZZ)}`, and the Cartan coordinates
-`\vec c = (c_x, c_y, c_z)` are the gate's entangling power.
+`AB` is a genuine new node — a worldline created by the event — and its
+quantum content is `ρ_AB`, a concrete object that simply exists. There
+is no Choi isomorphism, no reference legs, no co-existence puzzle: `AB`,
+its marginals, and the input states are all reduced-density-matrix
+quantities on states that exist.
 
-### 3.1 The Cartan core as a state
+### 3.1 Factorizing the joint state
 
-The interaction product `AB` is the Cartan core, written as a state via
-the Choi–Jamiołkowski isomorphism (operator on `H` ↔ state on
-`H ⊗ H`). The core is diagonal in the Bell basis, so its Choi state is
-clean:
+`ρ_AB` is factorized to extract the entanglement content. Any two-qubit
+state can be written
 
-$$|AB\rangle = \tfrac12 \sum_{\mu} e^{i\varphi_\mu}\, |B_\mu\rangle_{\text{out}}\, |B_\mu\rangle_{\text{in}},$$
+$$\rho_{AB} = \tfrac14\Big(I + \sum_i a_i\,\sigma^A_i + \sum_j b_j\,\sigma^B_j + \sum_{ij} c_{ij}\,\sigma^A_i\sigma^B_j\Big),$$
 
-with `|B_μ⟩ ∈ {|Φ⁺⟩, |Φ⁻⟩, |Ψ⁺⟩, |Ψ⁻⟩}` and the four phases the sign
-combinations
-
-$$\varphi_\mu \in \{\,c_x - c_y + c_z,\; -c_x + c_y + c_z,\; c_x + c_y - c_z,\; -c_x - c_y - c_z\,\}.$$
-
-`|AB⟩` is a pure 4-leg state on `(out_A, out_B, in_A, in_B)`, fully
-explicit in the computational basis. `AB` is a **genuine subsystem** of
-the global state — a new worldline created by the event — and its four
-legs are what the cell's edges to `A`, `B`, `A'`, `B'` attach to.
-
-The entangling power shows up as the entanglement of `|AB⟩` across the
-**A-side | B-side cut** `(out_A, in_A) | (out_B, in_B)`: for `\vec c = 0`
-the core is the identity and `|AB⟩` factorizes across that cut (a local
-interaction couples nothing); for `\vec c ≠ 0` it is entangled, by a
-definite function of `\vec c`. That cut-entanglement is the honest
-single-number measure of how much the interaction couples the two
-systems.
+and under local rotations the correlation matrix `c_ij` diagonalizes to
+three invariants `\vec c = (c_1, c_2, c_3)` — the **Cartan coordinates
+of the state**, the honest measure of how much the interaction coupled
+the two systems. The Bloch vectors `a_i`, `b_j` are the local content
+and peel off as `A'` and `B'` (the marginals carried forward). `\vec c`
+is zero for a non-entangling interaction and grows with the coupling.
 
 ---
 
@@ -107,10 +96,11 @@ co-exist in the one global state:
 
 - `I(A:B)` — the input pair, before the interaction.
 - `I(A':AB)`, `I(B':AB)`, `I(A':B')` — the output triple.
-- `I(A:AB)` — `ρ_A` linked into `|AB⟩`'s `in_A` leg; the mutual
-  information of that linked state. This is "how much of `A` fed the
-  core" — concretely the A-side entanglement of the core, weighted by
-  `ρ_A`. Similarly `I(B:AB)` via the `in_B` leg.
+- `I(A:AB)`, `I(B:AB)` — the primary temporal quantities. `AB` is the
+  joint state `ρ_AB`; `A'`, `B'` are its marginals. `I(A:AB)` is the
+  genuine mutual information sitting in `ρ_AB` —
+  `S(A') + S(B') − S(ρ_AB)` — how much the interaction correlated the
+  two systems. It is an ordinary MI on one concrete object.
 
 ### 4.2 The conservation law
 
@@ -182,8 +172,8 @@ $$A(C \to C') = \min\!\left\{1,\; \frac{N_+}{N_-}\cdot\frac{C_C}{C_{C'}}\cdot e^
 
 `ΔS` is local — the new cell's hinge contributions — read off a
 per-hinge action table. The volume is controlled by capping the
-interaction count (the `T`-cap). The lifecycle is **thermalize, then
-tune**.
+interaction count (the `T`-cap). The lifecycle is **tune, then
+thermalize**, the same order as `CDTSimulation`.
 
 ---
 
@@ -217,24 +207,20 @@ reduced-density-matrix computations on that MPS; the spike
 
 ---
 
-## 8. Open items to confirm
+## 8. Design decisions
 
-These are the implementation-level choices the design does not yet
-fully pin:
+The design is closed. The choices that took discussion to settle:
 
-1. **`AB`'s representation in the MPS.** `|AB⟩` is a 4-leg Choi state.
-   Is `AB` a single node carrying a 4-qubit subsystem, or do its four
-   legs (`in_A`, `out_A`, `in_B`, `out_B`) attach directly as the four
-   edges to `A`, `A'`, `B`, `B'` (a link object with no independent
-   qubit)? The conservation law in §4.2 needs whichever choice makes
-   `S(AB)` and `I(·:AB)` consistently defined.
-2. **Linking `ρ_A` into `|AB⟩`.** "`ρ_A` linked into the `in_A` leg" —
-   the link-product mechanics (project the `in_A` leg onto `ρ_A`, or
-   feed `ρ_A` as the input register) — needs to be pinned so `I(A:AB)`
-   is unambiguous.
-3. **Lifecycle order.** "Thermalize, then tune" — confirm this is the
-   intended order (it is the reverse of the `CDTSimulation` lifecycle,
-   which tunes the volume first).
+1. **`AB` is the genuine joint state** `ρ_AB`, a single node — not a
+   Choi-isomorphism construct. It connects through the ordinary edges
+   `A→AB`, `B→AB`, `A'–AB`, `B'–AB`; `A→A'`, `B→B'` are `A`'s and `B`'s
+   other out-edges. No internal multi-leg structure.
+2. **`I(A:AB)` is the genuine mutual information of `ρ_AB`** —
+   `S(A') + S(B') − S(ρ_AB)` — and `I(A:A') = S(A) − I(A:AB)` is the
+   residual. Every quantity is a reduced-density-matrix computation on
+   a state that concretely exists; no freeze, no Choi, no co-existence
+   puzzle.
+3. **Lifecycle: tune, then thermalize** — the `CDTSimulation` order.
 
 ---
 

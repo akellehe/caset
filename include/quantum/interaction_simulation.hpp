@@ -1,68 +1,49 @@
 // InteractionSimulation — Metropolis Monte Carlo over interaction histories,
 // weighted by the geometric Regge action on the dual lattice.
 //
+// See docs/source/interaction-history-monte-carlo.md for the full charter.
+//
 // ─── The construction ────────────────────────────────────────────────────
 //
-// The configuration is an *interaction history*: a simplicial complex grown
-// from a Poisson-Delaunay initial layer of Schwinger sites by pairwise
-// interaction events, together with the evolving MPS quantum state the
-// interactions act on.
+// The configuration is an interaction history: a simplicial complex grown
+// from a Poisson-Delaunay initial layer of quantum systems by pairwise
+// interaction events.
 //
-//   • Initial layer.  N staggered Schwinger sites, Delaunay-triangulated in
-//     2D (the triangulation is supplied by the caller — scipy.spatial). The
-//     joint state is the Schwinger DMRG ground state.
+//   • Initial layer. N systems, each a known randomized *mixed* state
+//     (S(ρ) > 0), Delaunay-triangulated in 2D.
 //
-//   • Interaction event.  Two frontier systems X, Y sharing a frontier
-//     spatial edge interact: a fresh staggered site AB is created (pair
-//     creation — "a new worldline"), the mediated interaction unitary is
-//     applied to the MPS, and the (2,3) cell {X, Y, X', AB, Y'} is attached.
-//     X, Y leave the frontier; X', AB, Y' join it.
+//   • Interaction event. Two frontier systems X, Y interact through a
+//     two-system unitary U; the interaction product is the genuine joint
+//     state ρ_AB = U (ρ_X ⊗ ρ_Y) U†. The (2,3) cell {X, Y, X', AB, Y'} is
+//     attached: X, Y leave the frontier, the marginals X', Y' and the
+//     joint-state node AB join it.
 //
-//   • Frontier rule.  A system may interact only while it has no out-edges.
-//     un-interact may remove only a *leaf* cell — one whose three products
-//     are all still on the frontier.
+//   • Edge lengths. ℓ = -log I. The spatial / co-existing edges are
+//     ordinary mutual informations; the temporal edges close by a
+//     conservation law — S(X) = I(X:X') + I(X:AB) with I(X:X') the
+//     residual. Every quantity is a reduced-density-matrix computation on
+//     a state that concretely exists: no MPS, no Choi, no freeze.
 //
-//   • Edge lengths.  ℓ = -log I, with I the ordinary reduced-density-matrix
-//     mutual information between co-existing subsystems of the MPS. No Choi
-//     states: the interaction event makes a system and its successors
-//     co-exist in one pure state.
+// ─── The ensemble ────────────────────────────────────────────────────────
 //
-// ─── The action and the ensemble ─────────────────────────────────────────
-//
-// The geometric Regge action on the MI-lengthed complex,
-//
-//     S = Σ_{h ∈ hinges} A_h ε_h,
-//
-// with A_h the Heron hinge area and ε_h the deficit angle, evaluated (not
-// solved) via the ReggeSolver primitives. The partition function is
-//
-//     Z = Σ_C (1 / C_C) e^{-β S[C]}
-//
-// over interaction histories reachable from the initial layer. β is the
-// inverse-temperature coupling: varying β (and the Schwinger m/g) maps
-// out the phase structure, and the object of the search is the point
-// where the emergent heat-kernel spectral dimension reaches 4 — the
-// 3+1-dimensional phase. The equilibrium ensemble is sampled by
-// Metropolis-Hastings with the interact / un-interact move pair:
+// The geometric Regge action S = Σ_h A_h ε_h on the MI-lengthed complex,
+// sampled at inverse temperature β by Metropolis-Hastings with the
+// interact / un-interact move pair:
 //
 //     A(C→C') = min{ 1, (N₊/N₋)·(C_C/C_{C'})·e^{-β ΔS} }.
 //
-// Volume is controlled by capping the interaction count (the T-cap).
-//
-// The class mirrors the abstraction level of tessera::CDT — move
-// primitives, propose* counterparts, sweep / thermalize / tune, and the
-// computeAction / getAcceptanceRates / observable getters — but with the
-// interaction move set, the β coupling, and an MPS state carried
-// internally. The MPS never crosses the language boundary.
+// Volume is controlled by capping the interaction count (the T-cap). The
+// object of the search is the β at which the emergent spectral dimension
+// reaches 4. The class mirrors the abstraction level of tessera::CDT —
+// move primitives, propose* counterparts, sweep / thermalize / tune, and
+// the computeAction / getAcceptanceRates / observable getters.
 
 #pragma once
 
-#include "matter/MatterConfiguration.h"
-#include "quantum/schwinger_model.hpp"
 #include "simulations/Simulation.h"
 #include "spacetime/Spacetime.h"
 
-#include <itensor/all.h>
+#include <Eigen/Dense>
 
 #include <cstdint>
 #include <functional>
@@ -76,70 +57,60 @@
 
 namespace tessera::quantum {
 
+// A single system's quantum state — a one-qubit density matrix.
+using SystemState = Eigen::Matrix2cd;
+
 // Flat configuration for an interaction-history Monte Carlo run.
 struct InteractionConfig {
-    // ─── Schwinger Hamiltonian (initial ground state + interaction unitary) ─
-    SchwingerParams params{};   // N is the initial-layer site count
+    // ─── Initial layer ──────────────────────────────────────────────────
+    int nSystems{0};   // system count = Poisson-point count
 
-    // ─── DMRG ground state of the initial layer ─────────────────────────
-    int    dmrgMaxBondDim{64};
-    int    dmrgNSweeps{12};
-    int    dmrgKrylovDim{4};
-    double dmrgCutoff{1e-12};
-
-    // ─── Interaction unitary ────────────────────────────────────────────
-    // The two-site Schwinger evolution exp(-i H_XY dt) is KAK-decomposed
-    // and its Cartan core routed through the freshly-created AB site.
+    // ─── Two-site interaction unitary U = exp(-i H_XY dt) ───────────────
+    // H_XY is the Schwinger two-site Hamiltonian term.
+    double a{1.0};
+    double g{1.0};
+    double m{0.5};
     double dt{0.25};
 
-    // ─── MPS bookkeeping for gate application ───────────────────────────
-    int    maxBondDim{200};
-    double cutoff{1e-10};
-
     // ─── Regge ensemble ─────────────────────────────────────────────────
-    double beta{1.0};            // inverse temperature in e^{-β S}
-    double epsilonI{1e-10};      // MI floor for ℓ = -log I
+    double beta{1.0};        // inverse temperature in e^{-β S}
+    double epsilonI{1e-10};  // mutual-information floor for ℓ = -log I
 
     // ─── Volume control (the T-cap) ─────────────────────────────────────
-    // The complex is grown to this many interaction events, then the MC
-    // equilibrates with interact / un-interact moves holding ~this size.
     std::size_t targetInteractions{0};
 
     // ─── Initial Poisson-Delaunay layer connectivity ────────────────────
-    // Delaunay edges among the N initial sites, as 0-based site-index
-    // pairs. Supplied by the caller (scipy.spatial.Delaunay).
+    // Delaunay edges among the N initial systems, 0-based index pairs,
+    // supplied by the caller (scipy.spatial.Delaunay).
     std::vector<std::pair<int, int>> delaunayEdges;
 
-    bool         quiet{true};
     std::uint32_t seed{0};
+    bool          quiet{true};
 };
 
-// Transactional interaction move — propose() tentatively applies the
-// interaction (or its inverse) to the MPS and the complex; apply() commits;
-// rollback() replays the undo log. Mirrors tessera::PachnerMove. Defined in
-// the .cpp; forward-declared here so propose* can hand one back.
+// Transactional interaction move — mirrors tessera::PachnerMove. Defined
+// in the .cpp; forward-declared so propose* can hand one back.
 class InteractionMove;
 
 // Metropolis Monte Carlo over interaction histories.
 class InteractionSimulation : public tessera::Simulation {
   public:
-    // Build the initial Poisson-Delaunay layer, solve its Schwinger DMRG
-    // ground state, and stand up the (vertex, frontier, table) bookkeeping.
-    // Throws std::invalid_argument on a malformed config (N < 2, empty
-    // delaunayEdges, out-of-range edge indices, ...).
+    // Build the Poisson-Delaunay initial layer of randomized mixed-state
+    // systems and the frontier / N₊ / N₋ bookkeeping. Throws
+    // std::invalid_argument on a malformed config.
     explicit InteractionSimulation(InteractionConfig config);
 
     ~InteractionSimulation() override;
 
     // ─── Move primitives (propose + Metropolis accept, like CDT::add) ───
 
-    // Propose interacting a uniformly-random eligible frontier spatial
-    // edge {X, Y}; attach the (2,3) cell, create AB, apply the mediated
-    // interaction unitary. Returns true if accepted.
+    // Interact a uniformly-random eligible frontier spatial edge {X, Y}:
+    // form ρ_AB = U(ρ_X⊗ρ_Y)U†, attach the (2,3) cell, length its edges.
+    // Returns true if the Metropolis test accepted.
     bool interact();
 
-    // Propose removing a uniformly-random leaf cell; invert its unitary,
-    // restore the parents to the frontier. Returns true if accepted.
+    // Remove a uniformly-random leaf cell, restoring its parents to the
+    // frontier. Returns true if accepted.
     bool unInteract();
 
     // ─── Transactional proposers (caller drives propose/apply/rollback) ──
@@ -148,18 +119,16 @@ class InteractionSimulation : public tessera::Simulation {
 
     // ─── Driving loop (Simulation overrides + sweep) ────────────────────
 
-    // One Monte Carlo sweep: propose ~N₊ + N₋ moves (uniformly chosen
-    // between interact and un-interact) and accept/reject each. Returns
-    // the number of accepted moves.
+    // One Monte Carlo sweep: propose ~N₊ + N₋ moves, accept/reject each.
+    // Returns the number of accepted moves.
     int sweep();
 
-    // Grow to the T-capped size, then run sweeps until the action
-    // stabilises (relative change below 1% between sweeps).
-    void thermalize() override;
-
-    // Grow the complex toward targetInteractions by biased interact moves;
-    // the initial-condition phase, analogous to CDT::tune driving N₄.
+    // Grow the complex toward targetInteractions — the initial-condition
+    // phase, analogous to CDT::tune driving N₄.
     void tune(std::function<void(int, int)> progress = nullptr) override;
+
+    // Run sweeps until the action stabilises (relative change < 1%).
+    void thermalize() override;
 
     // ─── Diagnostics ────────────────────────────────────────────────────
 
@@ -175,8 +144,7 @@ class InteractionSimulation : public tessera::Simulation {
     // Histogram of deficit angles over interior hinges.
     [[nodiscard]] std::vector<double> getDeficitAngleDistribution() const;
 
-    // Interaction-count profile by generation depth — the analogue of
-    // CDT::getVolumeProfile.
+    // Interaction-count profile by generation depth.
     [[nodiscard]] std::vector<int> getVolumeProfile() const;
 
     // Accepted / attempted ratio per move type.
@@ -197,24 +165,30 @@ class InteractionSimulation : public tessera::Simulation {
     // ─── Configuration + owned state ────────────────────────────────────
     InteractionConfig config_;
     std::shared_ptr<tessera::Spacetime> spacetime_;
-
-    // The evolving quantum state. sites_ grows by one each interaction
-    // (AB creation); psi_ is rebuilt onto the longer SiteSet.
-    itensor::SpinHalf sites_;
-    itensor::MPS      psi_;
-
     std::mt19937 rng_;
 
-    // ─── Frontier / move bookkeeping (the DP tables) ────────────────────
-    // System ↔ MPS-site index. A "system" is a Spacetime vertex.
-    std::unordered_map<tessera::VertexPtr, int> siteOfVertex_;
-    std::vector<tessera::VertexPtr>             vertexOfSite_;
+    // The two-site interaction unitary U = exp(-i H_XY dt), 4×4.
+    Eigen::Matrix4cd interactionU_;
 
+    // Per-system quantum state — the one-qubit marginal. Every system ever
+    // created keeps its state here; frozen systems retain theirs so
+    // un-interact restores cleanly.
+    std::unordered_map<tessera::VertexPtr, SystemState> stateOf_;
+
+    // Joint states of correlated system pairs: the randomized initial
+    // layer is one correlated mixed state, so Delaunay-adjacent systems
+    // share genuine mutual information, and an interaction's two products
+    // X', Y' inherit the joint state ρ_AB. Keyed by the sorted vertex
+    // pointer pair. A pair absent here is treated as uncorrelated.
+    std::map<std::pair<tessera::VertexPtr, tessera::VertexPtr>,
+             Eigen::Matrix4cd>
+        jointOf_;
+
+    // ─── Frontier / move bookkeeping (the DP tables) ────────────────────
     // Systems with no out-edges. Maintained incrementally.
     std::vector<tessera::VertexPtr> frontier_;
 
-    // N₊: eligible interact candidates — frontier spatial edges {X, Y}
-    // with both endpoints on the frontier.
+    // N₊: eligible interact candidates — frontier spatial edges {X, Y}.
     std::vector<std::pair<tessera::VertexPtr, tessera::VertexPtr>>
         eligibleEdges_;
 
@@ -222,81 +196,48 @@ class InteractionSimulation : public tessera::Simulation {
     // the frontier.
     std::vector<tessera::SimplexPtr> leafCells_;
 
-    // Per-hinge action contribution A_h·ε_h, keyed by simplex pointer
-    // (fingerprint-deduplicated by the Spacetime). Updated locally per
-    // move so ΔS is O(affected hinges).
+    // Per-hinge action contribution A_h·ε_h. Updated locally per move so
+    // ΔS is O(affected hinges).
     std::unordered_map<tessera::SimplexPtr, double,
                        tessera::SimplexPtrHash, tessera::SimplexPtrEq>
         hingeAction_;
 
-    // Frozen edge lengths ℓ = -log I — immutable once a system leaves the
-    // frontier. The memoization boundary. Keyed by the sorted endpoint
-    // id pair.
-    std::map<std::pair<tessera::IdType, tessera::IdType>, double>
-        frozenEdgeLength_;
-
     std::size_t interactionCount_{0};
 
-    // Undo stack for Metropolis rollback and the un-interact move: the
-    // MPS state and the frontier-position bookkeeping, snapshotted
-    // immediately before each applyInteractionMPS. revertInteractionMPS
-    // pops the most recent frame back.
-    struct UndoFrame {
-        itensor::MPS psi;
-        std::unordered_map<tessera::VertexPtr, int> siteOfVertex;
-        std::vector<tessera::VertexPtr> vertexOfSite;
-    };
-    std::vector<UndoFrame> undoStack_;
-
-    // Matter config kept null/empty: matter is in the MIs, not a separate
-    // worldline term (see writeup — avoids double-counting).
-    tessera::MatterConfiguration matter_{};
-
-    // ─── Metropolis-Hastings acceptance test ────────────────────────────
-    // Accepts when -βΔS + logPrefactor ≥ 0, else with probability
-    // e^{-βΔS + logPrefactor}. logPrefactor carries log[(N₊/N₋)(C_C/C_C')].
-    [[nodiscard]] bool accept(double deltaS, double logPrefactor = 0.0);
-
-    // Build the initial layer: vertices, Delaunay edges, ground-state MPS,
-    // and the initial frontier / eligible-edge tables.
+    // ─── Helpers ────────────────────────────────────────────────────────
+    // Build the Poisson-Delaunay initial layer: randomized mixed-state
+    // systems as t=0 vertices, the Delaunay edges, the initial tables.
     void buildInitialLayer();
-
-    // DMRG the Schwinger ground state of the N-site initial layer onto
-    // sites_ / psi_.
-    void buildGroundState();
 
     // Predicate: a system is on the frontier iff it has no out-edges.
     [[nodiscard]] static bool isFrontier(tessera::VertexPtr v) noexcept;
 
     // Recompute eligibleEdges_ (N₊) and leafCells_ (N₋) from the current
-    // complex. Used at construction; per-move updates are incremental.
+    // complex.
     void rebuildMoveTables();
 
-    // MPS-dependent helpers. interact() / unInteract() route every
-    // quantum-state touch through these — the simplicial bookkeeping is
-    // written against this interface and goes live unchanged once the
-    // mediated-unitary / site-insertion machinery is wired in.
-
-    // Result of tentatively applying an interaction to the MPS: the
-    // mutual informations of the ten edges of the new (2,3) cell, keyed
-    // by the cell's local-label pairs (0=X 1=Y 2=X' 3=AB 4=Y'), plus the
-    // MPS positions the three products X', AB, Y' now occupy.
-    struct InteractionMIs {
+    // The ten edge mutual informations of an interaction X,Y → X',AB,Y'.
+    // Keyed by the cell's local-label pairs (0=X 1=Y 2=X' 3=AB 4=Y').
+    // Also returns the marginal states X' = Tr_Y ρ_AB, Y' = Tr_X ρ_AB.
+    struct InteractionResult {
         std::map<std::pair<int, int>, double> edgeMI;
-        int posXp{0};
-        int posAB{0};
-        int posYp{0};
+        SystemState statePrimeX;     // X' = Tr_Y ρ_AB
+        SystemState statePrimeY;     // Y' = Tr_X ρ_AB
+        SystemState stateAB;         // AB carried as its X-marginal proxy
+        Eigen::Matrix4cd jointAB;    // ρ_AB in (X' ⊗ Y') order
     };
+    [[nodiscard]] InteractionResult
+    computeInteraction(tessera::VertexPtr x, tessera::VertexPtr y) const;
 
-    // Apply the mediated KAK interaction unitary for frontier systems
-    // X, Y: create the AB site in the MPS, evolve, and return the
-    // new-edge MIs.
-    [[nodiscard]] InteractionMIs applyInteractionMPS(tessera::VertexPtr x,
-                                                     tessera::VertexPtr y);
+    // The joint state ρ_XY in (X ⊗ Y) order: the stored correlated pair
+    // if X, Y share one (initial-layer Delaunay neighbours, or the two
+    // products of one interaction), the uncorrelated product otherwise.
+    [[nodiscard]] Eigen::Matrix4cd
+    jointStateFor(tessera::VertexPtr x, tessera::VertexPtr y) const;
 
-    // Invert the most recent interaction on the MPS (the un-interact
-    // move / a Metropolis rollback).
-    void revertInteractionMPS();
+    // Metropolis-Hastings acceptance: accepts when -βΔS + logPrefactor ≥ 0,
+    // else with probability e^{-βΔS + logPrefactor}.
+    [[nodiscard]] bool accept(double deltaS, double logPrefactor = 0.0);
 
     // ─── Acceptance counters ────────────────────────────────────────────
     std::int64_t interactAttempts_{0},   interactAccepted_{0};
