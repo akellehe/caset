@@ -135,9 +135,11 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
     exceeds ``epsilon_i``. ``max_stride <= 0`` means ``K - 1`` (all
     forward pairs).
 
-    ``mi_values`` is a ``(spatial_all, temporal_all)`` tuple of flat
-    numpy arrays carrying *all* candidate weights *before* the
-    ``epsilon_i`` cutoff — for downstream histogram analysis.
+    ``mi_values`` is a dict with:
+      • ``spatial_all`` / ``temporal_all`` — aggregated flat arrays.
+      • ``spatial_per_snap`` — list of K arrays (one per snapshot).
+      • ``temporal_per_source`` — list of K-1 arrays (concatenated
+        over all forward strides from snapshot t).
     """
     bond_mi = _bond_matrices(snapshots)
     K, B, _ = bond_mi.shape
@@ -151,39 +153,37 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
 
     edges = []
 
-    spatial_all = []
+    spatial_per_snap = []
     spatial_count = 0
     for t in range(K):
         W = bond_mi[t]
         ii, jj = np.triu_indices(B, k=1)
         wij = W[ii, jj]
-        spatial_all.append(wij)
+        spatial_per_snap.append(wij)
         keep = wij > epsilon_i
         for n, m, w in zip(ii[keep], jj[keep], wij[keep]):
             edges.append((vertex(int(n), t), vertex(int(m), t), float(w)))
             spatial_count += 1
 
-    temporal_all = []
+    temporal_per_source = []
     temporal_count = 0
     for t in range(K - 1):
+        per_source = []
         s_max = min(max_stride, K - 1 - t)
         for s in range(1, s_max + 1):
             avg = 0.5 * (bond_mi[t] + bond_mi[t + s])
-            # All bond pairs — including (n, n) — are eligible across
-            # snapshots; n=m on the temporal axis is the analogue of
-            # the causet baseline.
             ii, jj = np.indices(avg.shape)
             wij = avg.ravel()
-            temporal_all.append(wij)
+            per_source.append(wij)
             mask = (avg > epsilon_i)
-            # Avoid degenerate self-loops within the same vertex; vertices
-            # are (bond, snap) so (n, t) and (n, t+s) are distinct.
             for n, m in zip(ii[mask], jj[mask]):
                 w = float(avg[n, m])
                 edges.append((vertex(int(n), t),
                                vertex(int(m), t + s),
                                w))
                 temporal_count += 1
+        temporal_per_source.append(
+            np.concatenate(per_source) if per_source else np.empty(0))
 
     stats = {
         "n_bonds":         B,
@@ -192,10 +192,14 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
         "n_edges_spatial":  spatial_count,
         "n_edges_temporal": temporal_count,
     }
-    mi_values = (
-        np.concatenate(spatial_all)  if spatial_all  else np.empty(0),
-        np.concatenate(temporal_all) if temporal_all else np.empty(0),
-    )
+    mi_values = {
+        "spatial_all":         (np.concatenate(spatial_per_snap)
+                                   if spatial_per_snap else np.empty(0)),
+        "temporal_all":        (np.concatenate(temporal_per_source)
+                                   if temporal_per_source else np.empty(0)),
+        "spatial_per_snap":    spatial_per_snap,
+        "temporal_per_source": temporal_per_source,
+    }
     return n_vertices, edges, stats, mi_values
 
 
@@ -314,7 +318,12 @@ def parse_args():
     p.add_argument("--sigma-min",   type=float, default=1e-2)
     p.add_argument("--sigma-max",   type=float, default=1e3)
     p.add_argument("--sigma-count", type=int,   default=48)
-    p.add_argument("--epsilon-i",   type=float, default=1e-8)
+    p.add_argument("--epsilon-i",   type=float, nargs="+", default=[1e-8],
+                    help="One or more epsilon_I cutoff(s). When multiple are "
+                         "given, TDVP runs once and the graph build / "
+                         "spectral dimension / diameter / histogram are "
+                         "computed at each epsilon. The --out-json path is "
+                         "extended with _eps{value} per cutoff.")
     p.add_argument("--krylov-dim",  type=int,   default=30)
     p.add_argument("--max-temporal-stride", type=int, default=0,
                     help="Max |t' - t| on the temporal axis. 0 (default) = "
@@ -354,114 +363,141 @@ def main():
     cfg.conserveQns = True
     cfg.recordBondMutualInformation = True
 
+    epsilons = args.epsilon_i if isinstance(args.epsilon_i, list) \
+                                    else [args.epsilon_i]
+
     print(f"[setup] N={args.N}, m/g={args.m_over_g}, T={args.T}, "
-          f"dt={args.dt}, max_stride={args.max_temporal_stride}",
+          f"dt={args.dt}, max_stride={args.max_temporal_stride}, "
+          f"epsilons={epsilons}",
           flush=True)
     t0 = time.perf_counter()
     res = SchwingerQuench(cfg).evolve()
     print(f"[tdvp]  {len(res.snapshots)} snapshots in "
           f"{time.perf_counter() - t0:.1f} s", flush=True)
 
-    n_vertices, edges, gstats, mi_values = build_temporally_connected_graph(
-        res.snapshots, args.epsilon_i, args.max_temporal_stride)
-    print(f"[graph] |V|={n_vertices}, |E|={len(edges)}  "
-          f"(spatial={gstats['n_edges_spatial']}, "
-          f"temporal={gstats['n_edges_temporal']})", flush=True)
-    if len(edges) == 0:
-        print("[abort] no edges above epsilon_I — check input")
-        sys.exit(1)
+    base_out_json = args.out_json
+    base_root, base_ext = os.path.splitext(base_out_json)
 
-    deg = _degree_summary(n_vertices, edges)
-    print(f"[degree] mean={deg['mean']:.2f}  median={deg['median']:.2f}  "
-          f"p95={deg['p95']:.1f}  max={deg['max']}", flush=True)
+    for eps in epsilons:
+        print(f"\n[eps] epsilon_I = {eps:.0e}", flush=True)
 
-    t_diam = time.perf_counter()
-    diam = _diameter_summary(n_vertices, edges)
-    print(f"[diam] hop_diameter={diam['hop_diameter']}  "
-          f"avg_path={diam['hop_avg']:.2f}  "
-          f"LCC={diam['lcc_size']}/{n_vertices}  "
-          f"comps={diam['n_components']}  "
-          f"({time.perf_counter() - t_diam:.1f}s)", flush=True)
+        if len(epsilons) > 1:
+            out_json = f"{base_root}_eps{eps:.0e}{base_ext}"
+        else:
+            out_json = base_out_json
 
-    spatial_hist  = _mi_histogram(mi_values[0])
-    temporal_hist = _mi_histogram(mi_values[1])
-    print(f"[mi] spatial:  n={spatial_hist['n_positive']}/{spatial_hist['n_total']} "
-          f"min={spatial_hist['min']:.2e} max={spatial_hist['max']:.2e} "
-          f"median={spatial_hist['median']:.2e}", flush=True)
-    print(f"[mi] temporal: n={temporal_hist['n_positive']}/{temporal_hist['n_total']} "
-          f"min={temporal_hist['min']:.2e} max={temporal_hist['max']:.2e} "
-          f"median={temporal_hist['median']:.2e}", flush=True)
+        n_vertices, edges, gstats, mi_values = build_temporally_connected_graph(
+            res.snapshots, eps, args.max_temporal_stride)
+        print(f"[graph] |V|={n_vertices}, |E|={len(edges)}  "
+              f"(spatial={gstats['n_edges_spatial']}, "
+              f"temporal={gstats['n_edges_temporal']})", flush=True)
+        if len(edges) == 0:
+            print(f"[skip eps={eps:.0e}] no edges above epsilon_I — moving on")
+            continue
 
-    g = EmergentGraph.fromWeightedEdges(n_vertices, edges)
+        deg = _degree_summary(n_vertices, edges)
+        print(f"[degree] mean={deg['mean']:.2f}  median={deg['median']:.2f}  "
+              f"p95={deg['p95']:.1f}  max={deg['max']}", flush=True)
 
-    sigmas_log = np.linspace(math.log(args.sigma_min),
-                              math.log(args.sigma_max),
-                              args.sigma_count).tolist()
-    sigmas = [math.exp(x) for x in sigmas_log]
+        t_diam = time.perf_counter()
+        diam = _diameter_summary(n_vertices, edges)
+        print(f"[diam] hop_diameter={diam['hop_diameter']}  "
+              f"avg_path={diam['hop_avg']:.2f}  "
+              f"LCC={diam['lcc_size']}/{n_vertices}  "
+              f"comps={diam['n_components']}  "
+              f"({time.perf_counter() - t_diam:.1f}s)", flush=True)
 
-    t1 = time.perf_counter()
-    P = g.returnProbability(sigmas, args.krylov_dim)
-    print(f"[heat]  {args.sigma_count} sigmas in "
-          f"{time.perf_counter() - t1:.1f} s", flush=True)
+        spatial_hist  = _mi_histogram(mi_values["spatial_all"])
+        temporal_hist = _mi_histogram(mi_values["temporal_all"])
+        spatial_hist_per_snap   = [_mi_histogram(v)
+                                     for v in mi_values["spatial_per_snap"]]
+        temporal_hist_per_source = [_mi_histogram(v)
+                                     for v in mi_values["temporal_per_source"]]
+        print(f"[mi] spatial:  n={spatial_hist['n_positive']}/{spatial_hist['n_total']} "
+              f"min={spatial_hist['min']:.2e} max={spatial_hist['max']:.2e} "
+              f"median={spatial_hist['median']:.2e}", flush=True)
+        print(f"[mi] temporal: n={temporal_hist['n_positive']}/{temporal_hist['n_total']} "
+              f"min={temporal_hist['min']:.2e} max={temporal_hist['max']:.2e} "
+              f"median={temporal_hist['median']:.2e}", flush=True)
 
-    dS  = EmergentGraph.spectralDimension(sigmas, P)
-    dSs = EmergentGraph.spectralDimensionSmoothed(sigmas, P, 5, 2)
-    fit = AmbjornLollFit.fit(sigmas, dSs)
+        g = EmergentGraph.fromWeightedEdges(n_vertices, edges)
 
-    peak_dS = max((d for d in dSs if math.isfinite(d)), default=float("nan"))
-    peak_idx = next((i for i, d in enumerate(dSs)
-                      if math.isfinite(d) and d == peak_dS), None)
-    sigma_peak = sigmas[peak_idx] if peak_idx is not None else None
+        sigmas_log = np.linspace(math.log(args.sigma_min),
+                                  math.log(args.sigma_max),
+                                  args.sigma_count).tolist()
+        sigmas = [math.exp(x) for x in sigmas_log]
 
-    sigma_peak_str = f"{sigma_peak:.4f}" if sigma_peak is not None else "NA"
-    print(f"[result] peak D_S = {peak_dS:.4f} at sigma ~= {sigma_peak_str}",
-          flush=True)
-    print(f"[result] D_inf (Ambjorn-Loll fit) = {fit.dInfinity:.4f}",
-          flush=True)
+        t1 = time.perf_counter()
+        P = g.returnProbability(sigmas, args.krylov_dim)
+        print(f"[heat]  {args.sigma_count} sigmas in "
+              f"{time.perf_counter() - t1:.1f} s", flush=True)
 
-    out = {
-        "config": {
-            "N": args.N, "a": args.a, "g": args.g,
-            "m_over_g": args.m_over_g, "L0": args.L0,
-            "i0": args.i0, "d": args.d,
-            "dt": args.dt, "T": args.T,
-            "max_bond_dim":     args.max_bond_dim,
-            "sigma_count":       args.sigma_count,
-            "epsilon_I":         args.epsilon_i,
-            "krylov_dim":        args.krylov_dim,
-            "max_temporal_stride": args.max_temporal_stride,
-        },
-        "graph": {
-            "n_vertices":     n_vertices,
-            "n_edges":        len(edges),
-            "n_edges_spatial":  gstats["n_edges_spatial"],
-            "n_edges_temporal": gstats["n_edges_temporal"],
-            "n_snapshots":    gstats["n_snapshots"],
-            "n_bonds":        gstats["n_bonds"],
-            "max_stride":     gstats["max_stride"],
-            "degree":         deg,
-            "diameter":       diam,
-        },
-        "sigmas":      sigmas,
-        "P":           P,
-        "dS_raw":      dS,
-        "dS_smoothed": dSs,
-        "ambjorn_loll": {
-            "D_infinity":  fit.dInfinity,
-            "C":           fit.C,
-            "B":           fit.B,
-            "chi_squared": fit.chiSquared,
-        },
-        "peak_dS":    peak_dS,
-        "sigma_peak": sigma_peak,
-        "mi_distributions": {
-            "spatial":  spatial_hist,
-            "temporal": temporal_hist,
-        },
-    }
-    with open(args.out_json, "w") as f:
-        json.dump(out, f, indent=2)
-    print(f"[wrote] {args.out_json}", flush=True)
+        dS  = EmergentGraph.spectralDimension(sigmas, P)
+        dSs = EmergentGraph.spectralDimensionSmoothed(sigmas, P, 5, 2)
+        fit = AmbjornLollFit.fit(sigmas, dSs)
+
+        peak_dS = max((d for d in dSs if math.isfinite(d)), default=float("nan"))
+        peak_idx = next((i for i, d in enumerate(dSs)
+                          if math.isfinite(d) and d == peak_dS), None)
+        sigma_peak = sigmas[peak_idx] if peak_idx is not None else None
+
+        sigma_peak_str = f"{sigma_peak:.4f}" if sigma_peak is not None else "NA"
+        print(f"[result] peak D_S = {peak_dS:.4f} at sigma ~= {sigma_peak_str}",
+              flush=True)
+        print(f"[result] D_inf (Ambjorn-Loll fit) = {fit.dInfinity:.4f}",
+              flush=True)
+
+        out = {
+            "config": {
+                "epsilon_I":           eps,
+                "N":                   args.N,
+                "a":                   args.a,
+                "g":                   args.g,
+                "m_over_g":            args.m_over_g,
+                "L0":                  args.L0,
+                "i0":                  args.i0,
+                "d":                   args.d,
+                "dt":                  args.dt,
+                "T":                   args.T,
+                "max_bond_dim":        args.max_bond_dim,
+                "sigma_count":         args.sigma_count,
+                "krylov_dim":          args.krylov_dim,
+                "max_temporal_stride": args.max_temporal_stride,
+            },
+            "graph": {
+                "n_vertices":       n_vertices,
+                "n_edges":          len(edges),
+                "n_edges_spatial":  gstats["n_edges_spatial"],
+                "n_edges_temporal": gstats["n_edges_temporal"],
+                "n_snapshots":      gstats["n_snapshots"],
+                "n_bonds":          gstats["n_bonds"],
+                "max_stride":       gstats["max_stride"],
+                "degree":           deg,
+                "diameter":         diam,
+            },
+            "sigmas":      sigmas,
+            "P":           P,
+            "dS_raw":      dS,
+            "dS_smoothed": dSs,
+            "ambjorn_loll": {
+                "D_infinity":  fit.dInfinity,
+                "C":           fit.C,
+                "B":           fit.B,
+                "chi_squared": fit.chiSquared,
+            },
+            "peak_dS":    peak_dS,
+            "sigma_peak": sigma_peak,
+            "mi_distributions": {
+                "spatial":             spatial_hist,
+                "temporal":            temporal_hist,
+                "spatial_per_snap":    spatial_hist_per_snap,
+                "temporal_per_source": temporal_hist_per_source,
+            },
+        }
+        os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)
+        with open(out_json, "w") as f:
+            json.dump(out, f, indent=2)
+        print(f"[wrote] {out_json}", flush=True)
 
 
 if __name__ == "__main__":
