@@ -681,33 +681,173 @@ diameter grows toward <span class="math notranslate nohighlight">\(\mathcal{O}(N
 convergence-parameter sweep H_4D needs to pass.</p></li>
 </ol>
 </section>
-<section id="next-experiments">
-<h2>Next experiments<a class="headerlink" href="#next-experiments" title="Link to this heading">¶</a></h2>
-<p>Three independent tests, in order of cost-to-insight:</p>
-<ol class="arabic simple">
-<li><p><strong><span class="math notranslate nohighlight">\(K\)</span>-only scan at fixed <span class="math notranslate nohighlight">\(N = 40\)</span></strong>, <span class="math notranslate nohighlight">\(K \in \{5, 7, 9, 11, 13\}\)</span>.
-Cheap (~3–8 min per cell). Directly isolates whether the <span class="math notranslate nohighlight">\(K = 9\)</span>
-overshoot at <span class="math notranslate nohighlight">\(N = 60\)</span> was a <span class="math notranslate nohighlight">\(K\)</span>-effect or a real refutation. H_4D
-passes iff peak <span class="math notranslate nohighlight">\(D_S\)</span> converges to <span class="math notranslate nohighlight">\(\sim 4\)</span> as <span class="math notranslate nohighlight">\(K\)</span> grows at fixed
-<span class="math notranslate nohighlight">\(N\)</span>.</p></li>
-<li><p><strong><span class="math notranslate nohighlight">\(N\)</span>-only scan at fixed <span class="math notranslate nohighlight">\(K = 5\)</span></strong>, <span class="math notranslate nohighlight">\(N \in \{50, 60, 80, 100\}\)</span>,
-single <span class="math notranslate nohighlight">\(m/g\)</span> to start. Medium cost (~10–60 min per cell). Tests
-the asymptotic behaviour along the original <span class="math notranslate nohighlight">\(N\)</span>-axis. H_4D passes
-iff peak <span class="math notranslate nohighlight">\(D_S\)</span> plateaus near 4 from below.</p></li>
-<li><p><strong><span class="math notranslate nohighlight">\(\varepsilon_I\)</span>-only scan at fixed <span class="math notranslate nohighlight">\((N, K)\)</span>.</strong> Plot peak <span class="math notranslate nohighlight">\(D_S\)</span>
-vs <span class="math notranslate nohighlight">\(\log \varepsilon_I\)</span>. The graph diameter should pass through
-small-world (low <span class="math notranslate nohighlight">\(\varepsilon_I\)</span>) → lattice-like (high
-<span class="math notranslate nohighlight">\(\varepsilon_I\)</span>) as the threshold rises. H_4D passes iff there is
-an intermediate <span class="math notranslate nohighlight">\(\varepsilon_I\)</span> window where peak <span class="math notranslate nohighlight">\(D_S\)</span> plateaus
-near 4 and the diameter is in the <span class="math notranslate nohighlight">\(\mathcal{O}(\sqrt{N})\)</span> regime
-typical of a 2D graph (since the dual lattice is bonds<span class="math notranslate nohighlight">\(\times\)</span>time
-with the bulk one extra direction).</p></li>
-</ol>
-<p>A clean H_4D validation requires (1) and (2) to both converge to <span class="math notranslate nohighlight">\(4\)</span>,
-and (3) to show a Goldilocks <span class="math notranslate nohighlight">\(\varepsilon_I\)</span> window. A single
-plateau-below-4 along any of these axes refutes H_4D in favour of
-some lower emergent dimension. A continued rise past 4 in (1) or (2)
-refutes H_4D in favour of small-world saturation.</p>
+<section id="h-4d-convergence-tests">
+<h2>H_4D convergence tests<a class="headerlink" href="#h-4d-convergence-tests" title="Link to this heading">¶</a></h2>
+<p>Three independent control axes — <span class="math notranslate nohighlight">\(T\)</span> (evolution time), <span class="math notranslate nohighlight">\(N\)</span> (boundary
+lattice size), and <span class="math notranslate nohighlight">\(\varepsilon_I\)</span> (mutual-information cutoff) — each
+get their own scan. Reproducibility scripts live in
+<code class="docutils literal notranslate"><span class="pre">examples/mutual-information-connectivity/</span></code>.</p>
+<section id="t-scan-evolution-time-axis">
+<h3>T-scan (evolution-time axis)<a class="headerlink" href="#t-scan-evolution-time-axis" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">run_t_scan.sh</span></code>: <span class="math notranslate nohighlight">\(N = 40\)</span>, <span class="math notranslate nohighlight">\(T \in \{1.0, 1.5, 2.0, 2.5, 3.0\}\)</span>,
+<span class="math notranslate nohighlight">\(dt = 0.25\)</span>, <span class="math notranslate nohighlight">\(\varepsilon_I = 10^{-6}\)</span>, <span class="math notranslate nohighlight">\(m/g \in \{0.125, 0.25, 0.5\}\)</span>.</p>
+<p><img alt="T-scan" src="../_images/t_scan.png" /></p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(T\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(m/g=0.125\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(m/g=0.25\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(m/g=0.5\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1.0</p></td>
+<td><p>3.49</p></td>
+<td><p>3.70</p></td>
+<td><p>3.49</p></td>
+</tr>
+<tr class="row-odd"><td><p>1.5</p></td>
+<td><p>~3.7</p></td>
+<td><p>4.06</p></td>
+<td><p>3.90</p></td>
+</tr>
+<tr class="row-even"><td><p>2.0</p></td>
+<td><p>~4.1</p></td>
+<td><p>4.34</p></td>
+<td><p>~4.2</p></td>
+</tr>
+<tr class="row-odd"><td><p>2.5</p></td>
+<td><p>~4.3</p></td>
+<td><p>~4.4</p></td>
+<td><p>~4.4</p></td>
+</tr>
+<tr class="row-even"><td><p>3.0</p></td>
+<td><p>~4.5</p></td>
+<td><p>~4.5</p></td>
+<td><p>4.61</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Peak <span class="math notranslate nohighlight">\(D_S\)</span> rises monotonically with <span class="math notranslate nohighlight">\(T\)</span> across all <span class="math notranslate nohighlight">\(m/g\)</span>. By <span class="math notranslate nohighlight">\(T = 3.0\)</span>
+the curves are near <span class="math notranslate nohighlight">\(\sim 4.5\)</span> and still rising slowly — no clean
+plateau. Hop diameter stays at <span class="math notranslate nohighlight">\(2\)</span>–<span class="math notranslate nohighlight">\(3\)</span> throughout, so the graph is
+small-world at every <span class="math notranslate nohighlight">\(T\)</span> tested.</p>
+<p><strong>Verdict.</strong> Counter-evidence to strict H_4D in this regime: the
+trajectory passes through <span class="math notranslate nohighlight">\(D_S = 4\)</span> around <span class="math notranslate nohighlight">\(T \approx 2\)</span> and keeps
+going up. If there is an asymptote, it’s <em>above</em> 4, not at 4.</p>
+</section>
+<section id="scan-mutual-information-cutoff-axis">
+<h3>ε-scan (mutual-information cutoff axis)<a class="headerlink" href="#scan-mutual-information-cutoff-axis" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">run_epsilon_scan.sh</span></code>: <span class="math notranslate nohighlight">\(N = 60\)</span>, <span class="math notranslate nohighlight">\(T = 2.0\)</span>, <span class="math notranslate nohighlight">\(dt = 0.25\)</span>,
+<span class="math notranslate nohighlight">\(\varepsilon_I \in \{10^{-8}, 10^{-6}, 10^{-4}, 10^{-3}, 10^{-2}\}\)</span>,
+<span class="math notranslate nohighlight">\(m/g \in \{0.125, 0.25, 0.5\}\)</span>. Multi-<span class="math notranslate nohighlight">\(\varepsilon\)</span> per TDVP run, so
+all five cutoffs come from a single quench evolution.</p>
+<p><img alt="ε-scan" src="../_images/epsilon_scan.png" /></p>
+<p>Peak <span class="math notranslate nohighlight">\(D_S\)</span> is essentially <em>flat</em> at <span class="math notranslate nohighlight">\(\sim 4.3\)</span>–<span class="math notranslate nohighlight">\(4.5\)</span> across six decades
+of <span class="math notranslate nohighlight">\(\varepsilon_I\)</span> for all three <span class="math notranslate nohighlight">\(m/g\)</span> values. The hop diameter,
+meanwhile, rises from <span class="math notranslate nohighlight">\(\sim 2\)</span>–<span class="math notranslate nohighlight">\(3\)</span> at <span class="math notranslate nohighlight">\(\varepsilon_I = 10^{-8}\)</span> to
+<span class="math notranslate nohighlight">\(\sim 10\)</span>–<span class="math notranslate nohighlight">\(15\)</span> at <span class="math notranslate nohighlight">\(\varepsilon_I = 10^{-2}\)</span> — so the threshold does
+break the small-world structure, but the spectral dimension doesn’t
+track it.</p>
+<p><strong>Verdict.</strong> The dimension reading is robust to the cutoff choice
+(good for the construction’s internal consistency) but lands above 4
+(soft counter-evidence to strict H_4D). The fact that peak <span class="math notranslate nohighlight">\(D_S\)</span>
+doesn’t fall as the graph becomes less small-world is interesting on
+its own: <span class="math notranslate nohighlight">\(D_S\)</span> near <span class="math notranslate nohighlight">\(4.5\)</span> here is not just a small-world artifact —
+it survives aggressive thinning of long-range edges.</p>
+</section>
+<section id="n-scan-boundary-lattice-axis">
+<h3>N-scan (boundary lattice axis)<a class="headerlink" href="#n-scan-boundary-lattice-axis" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">run_n_scan.sh</span></code>: <span class="math notranslate nohighlight">\(N \in \{50, 60, 80, 100\}\)</span>, <span class="math notranslate nohighlight">\(T = 1.0\)</span>, <span class="math notranslate nohighlight">\(dt = 0.25\)</span>,
+<span class="math notranslate nohighlight">\(\varepsilon_I = 10^{-6}\)</span>, <span class="math notranslate nohighlight">\(m/g = 0.5\)</span> only (cheapest direction). The
+<span class="math notranslate nohighlight">\(N = 100\)</span> cell was interrupted at ~50% TDVP progress; only <span class="math notranslate nohighlight">\(N \in
+\{50, 60, 80\}\)</span> have results.</p>
+<p><img alt="N-scan" src="../_images/n_scan.png" /></p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(N\)</span></p></th>
+<th class="head"><p>peak <span class="math notranslate nohighlight">\(D_S\)</span></p></th>
+<th class="head"><p>hop diameter</p></th>
+<th class="head"><p>TDVP time</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>50</p></td>
+<td><p>3.52</p></td>
+<td><p>2</p></td>
+<td><p>9 min</p></td>
+</tr>
+<tr class="row-odd"><td><p>60</p></td>
+<td><p>3.57</p></td>
+<td><p>2</p></td>
+<td><p>18 min</p></td>
+</tr>
+<tr class="row-even"><td><p>80</p></td>
+<td><p>3.69</p></td>
+<td><p>3</p></td>
+<td><p>45 min</p></td>
+</tr>
+<tr class="row-odd"><td><p>100</p></td>
+<td><p>(interrupted)</p></td>
+<td><p></p></td>
+<td><p>(~90 min est.)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Slow rise: <span class="math notranslate nohighlight">\(\Delta D_S \approx 0.17\)</span> across the <span class="math notranslate nohighlight">\(N \in [50, 80]\)</span>
+range, an order of magnitude smaller than the <span class="math notranslate nohighlight">\(\Delta D_S \approx 1\)</span>
+seen in the <span class="math notranslate nohighlight">\(T\)</span>-scan over a comparable parameter range. The trajectory
+looks like it could plateau <strong>below</strong> 4 along the <span class="math notranslate nohighlight">\(N\)</span>-axis at fixed
+<span class="math notranslate nohighlight">\(T = 1.0\)</span>.</p>
+<p><strong>Verdict.</strong> <em>Ambiguous, but suggestive</em>. The <span class="math notranslate nohighlight">\(N\)</span>-axis on its own
+doesn’t drive <span class="math notranslate nohighlight">\(D_S\)</span> past 4. What pushes <span class="math notranslate nohighlight">\(D_S\)</span> above 4 is <span class="math notranslate nohighlight">\(T\)</span>, not <span class="math notranslate nohighlight">\(N\)</span>.
+The original “approaching 4 from below in <span class="math notranslate nohighlight">\(N\)</span>” reading that motivated
+H_4D was likely picking up the combined <span class="math notranslate nohighlight">\(T\)</span> and <span class="math notranslate nohighlight">\(N\)</span> effect; cleanly
+isolated, <span class="math notranslate nohighlight">\(N\)</span>-alone looks like it plateaus around <span class="math notranslate nohighlight">\(3.7\)</span>–<span class="math notranslate nohighlight">\(3.9\)</span>.</p>
+</section>
+<section id="synthesis">
+<h3>Synthesis<a class="headerlink" href="#synthesis" title="Link to this heading">¶</a></h3>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Test</p></th>
+<th class="head"><p>Trajectory</p></th>
+<th class="head"><p>Asymptote (extrapolated)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>T-scan</p></td>
+<td><p>rises 3.5 → 4.6 with <span class="math notranslate nohighlight">\(T \in [1, 3]\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\gtrsim 4.5\)</span>, not yet plateaued</p></td>
+</tr>
+<tr class="row-odd"><td><p>ε-scan</p></td>
+<td><p>flat across 6 decades of <span class="math notranslate nohighlight">\(\varepsilon_I\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\sim 4.3\)</span>–<span class="math notranslate nohighlight">\(4.5\)</span>, robust</p></td>
+</tr>
+<tr class="row-even"><td><p>N-scan</p></td>
+<td><p>rises slowly 3.52 → 3.69 with <span class="math notranslate nohighlight">\(N \in [50, 80]\)</span></p></td>
+<td><p>possibly <span class="math notranslate nohighlight">\(&lt; 4\)</span> at fixed <span class="math notranslate nohighlight">\(T = 1.0\)</span></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Three axes, two of them parking <span class="math notranslate nohighlight">\(D_S\)</span> near <span class="math notranslate nohighlight">\(4.3\)</span>–<span class="math notranslate nohighlight">\(4.5\)</span> and the third
+(at modest <span class="math notranslate nohighlight">\(T\)</span>) suggesting an asymptote below 4. The strict H_4D claim
+“peak <span class="math notranslate nohighlight">\(D_S \to 4\)</span> as <span class="math notranslate nohighlight">\(N, T \to \infty\)</span>” is not directly supported by
+this data: either <span class="math notranslate nohighlight">\(T\)</span>-evolution is pushing <span class="math notranslate nohighlight">\(D_S\)</span> past 4 indefinitely
+(refutes H_4D toward small-world), or there is an asymptote near
+<span class="math notranslate nohighlight">\(4.3\)</span>–<span class="math notranslate nohighlight">\(4.5\)</span> (refutes H_4D toward “approximately 4 but with a finite
+overshoot”). Of the two, the <span class="math notranslate nohighlight">\(\varepsilon\)</span>-robust plateau argues for
+the latter: <span class="math notranslate nohighlight">\(D_S \approx 4.3\)</span>–<span class="math notranslate nohighlight">\(4.5\)</span> may be the actual large-<span class="math notranslate nohighlight">\(T\)</span> limit
+of the construction, and the modest overshoot from 4 is an intrinsic
+feature, not a small-world artifact.</p>
+<p>A clean test of which scenario holds would extend the <span class="math notranslate nohighlight">\(T\)</span>-scan to
+<span class="math notranslate nohighlight">\(T \geq 4\)</span>–<span class="math notranslate nohighlight">\(5\)</span> at <span class="math notranslate nohighlight">\(N = 40\)</span> to see whether peak <span class="math notranslate nohighlight">\(D_S\)</span> saturates near
+<span class="math notranslate nohighlight">\(4.5\)</span> or keeps climbing.</p>
 <p><strong>Independent refinement</strong> (not a falsification test, but tightens
 the interpretation):</p>
 <ul class="simple">
@@ -717,23 +857,26 @@ machinery to bipartition variables; it’s the next refinement
 needed before any quantitative spacetime-reconstruction claim.</p></li>
 </ul>
 </section>
+</section>
 <section id="reproducibility">
 <h2>Reproducibility<a class="headerlink" href="#reproducibility" title="Link to this heading">¶</a></h2>
-<p>The full scan lives at <code class="docutils literal notranslate"><span class="pre">/tmp/temporal-entangled/scan/</span></code>:</p>
+<p>The original <span class="math notranslate nohighlight">\(N \in [10, 40]\)</span> scan lives at <code class="docutils literal notranslate"><span class="pre">/tmp/temporal-entangled/scan/</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">N</span><span class="p">{</span><span class="mi">10</span><span class="p">,</span><span class="mi">20</span><span class="p">,</span><span class="mi">30</span><span class="p">,</span><span class="mi">40</span><span class="p">}</span><span class="n">_mg_</span><span class="p">{</span><span class="mf">0.125</span><span class="p">,</span><span class="mf">0.25</span><span class="p">,</span><span class="mf">0.5</span><span class="p">}</span><span class="o">.</span><span class="n">json</span>
 <span class="n">scan</span><span class="o">.</span><span class="n">log</span>
 <span class="n">run_scan</span><span class="o">.</span><span class="n">sh</span>
 </pre></div>
 </div>
-<p>Each JSON record carries the input config, snapshot count, graph
-counts, degree summary, <span class="math notranslate nohighlight">\(\sigma\)</span>/<span class="math notranslate nohighlight">\(P\)</span>/<span class="math notranslate nohighlight">\(D_S\)</span> arrays, the Ambjorn-Loll
-fit, and <code class="docutils literal notranslate"><span class="pre">peak_dS</span></code> / <code class="docutils literal notranslate"><span class="pre">sigma_peak</span></code>. The plot script
-<code class="docutils literal notranslate"><span class="pre">examples/quantum/plot_temporally_connected.py</span></code> reads this directory
-directly and writes
-<code class="docutils literal notranslate"><span class="pre">docs/source/quantum-experiments/figures/temporally_connected_entangled_spacetime.png</span></code>.</p>
-<p>The experiment script that produced the JSON is
-<code class="docutils literal notranslate"><span class="pre">examples/quantum/temporally_connected_entangled_spacetime.py</span></code>. Anyone
-with a tessera build at or after the <code class="docutils literal notranslate"><span class="pre">recordBondMutualInformation</span></code>
+<p>The H_4D convergence scans live at <code class="docutils literal notranslate"><span class="pre">/tmp/temporal-entangled/{t_scan,</span> <span class="pre">epsilon_scan,</span> <span class="pre">n_scan}/</span></code>. Each JSON record carries the input config,
+snapshot count, graph counts (vertices, edges, mean / max degree,
+hop diameter, average path length, component count), <span class="math notranslate nohighlight">\(\sigma\)</span> / <span class="math notranslate nohighlight">\(P\)</span>
+/ <span class="math notranslate nohighlight">\(D_S\)</span> arrays, the Ambjorn-Loll fit, peak <span class="math notranslate nohighlight">\(D_S\)</span> + <span class="math notranslate nohighlight">\(\sigma_{peak}\)</span>,
+and per-snapshot MI histograms (binned counts in log-space).</p>
+<p>The experiment script is
+<code class="docutils literal notranslate"><span class="pre">examples/quantum/temporally_connected_entangled_spacetime.py</span></code>.
+Runners and plotters for the convergence scans live in
+<code class="docutils literal notranslate"><span class="pre">examples/mutual-information-connectivity/</span></code> — see that directory’s
+<code class="docutils literal notranslate"><span class="pre">README.md</span></code> for a one-pager and reproduce commands.</p>
+<p>Anyone with a tessera build at or after the <code class="docutils literal notranslate"><span class="pre">recordBondMutualInformation</span></code>
 fix can regenerate every number above.</p>
 </section>
 <section id="see-also">
@@ -811,7 +954,13 @@ the causet temporal edges were drawn from.</p></li>
 <li><a class="reference internal" href="#results">Results</a></li>
 <li><a class="reference internal" href="#falsification-check-h-4d">Falsification check (H_4D)</a></li>
 <li><a class="reference internal" href="#reading">Reading</a></li>
-<li><a class="reference internal" href="#next-experiments">Next experiments</a></li>
+<li><a class="reference internal" href="#h-4d-convergence-tests">H_4D convergence tests</a><ul>
+<li><a class="reference internal" href="#t-scan-evolution-time-axis">T-scan (evolution-time axis)</a></li>
+<li><a class="reference internal" href="#scan-mutual-information-cutoff-axis">ε-scan (mutual-information cutoff axis)</a></li>
+<li><a class="reference internal" href="#n-scan-boundary-lattice-axis">N-scan (boundary lattice axis)</a></li>
+<li><a class="reference internal" href="#synthesis">Synthesis</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#reproducibility">Reproducibility</a></li>
 <li><a class="reference internal" href="#see-also">See also</a></li>
 </ul>

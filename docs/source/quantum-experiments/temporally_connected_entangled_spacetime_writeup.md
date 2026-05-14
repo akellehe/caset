@@ -244,33 +244,110 @@ scan can't yet confirm:
    diameter grows toward $\mathcal{O}(N)$) is the
    convergence-parameter sweep H_4D needs to pass.
 
-## Next experiments
+## H_4D convergence tests
 
-Three independent tests, in order of cost-to-insight:
+Three independent control axes — $T$ (evolution time), $N$ (boundary
+lattice size), and $\varepsilon_I$ (mutual-information cutoff) — each
+get their own scan. Reproducibility scripts live in
+`examples/mutual-information-connectivity/`.
 
-1. **$K$-only scan at fixed $N = 40$**, $K \in \{5, 7, 9, 11, 13\}$.
-   Cheap (~3–8 min per cell). Directly isolates whether the $K = 9$
-   overshoot at $N = 60$ was a $K$-effect or a real refutation. H_4D
-   passes iff peak $D_S$ converges to $\sim 4$ as $K$ grows at fixed
-   $N$.
-2. **$N$-only scan at fixed $K = 5$**, $N \in \{50, 60, 80, 100\}$,
-   single $m/g$ to start. Medium cost (~10–60 min per cell). Tests
-   the asymptotic behaviour along the original $N$-axis. H_4D passes
-   iff peak $D_S$ plateaus near 4 from below.
-3. **$\varepsilon_I$-only scan at fixed $(N, K)$.** Plot peak $D_S$
-   vs $\log \varepsilon_I$. The graph diameter should pass through
-   small-world (low $\varepsilon_I$) → lattice-like (high
-   $\varepsilon_I$) as the threshold rises. H_4D passes iff there is
-   an intermediate $\varepsilon_I$ window where peak $D_S$ plateaus
-   near 4 and the diameter is in the $\mathcal{O}(\sqrt{N})$ regime
-   typical of a 2D graph (since the dual lattice is bonds$\times$time
-   with the bulk one extra direction).
+### T-scan (evolution-time axis)
 
-A clean H_4D validation requires (1) and (2) to both converge to $4$,
-and (3) to show a Goldilocks $\varepsilon_I$ window. A single
-plateau-below-4 along any of these axes refutes H_4D in favour of
-some lower emergent dimension. A continued rise past 4 in (1) or (2)
-refutes H_4D in favour of small-world saturation.
+`run_t_scan.sh`: $N = 40$, $T \in \{1.0, 1.5, 2.0, 2.5, 3.0\}$,
+$dt = 0.25$, $\varepsilon_I = 10^{-6}$, $m/g \in \{0.125, 0.25, 0.5\}$.
+
+![T-scan](figures/t_scan.png)
+
+| $T$ | $m/g=0.125$ | $m/g=0.25$ | $m/g=0.5$ |
+|---|---|---|---|
+| 1.0 | 3.49 | 3.70 | 3.49 |
+| 1.5 | ~3.7 | 4.06 | 3.90 |
+| 2.0 | ~4.1 | 4.34 | ~4.2 |
+| 2.5 | ~4.3 | ~4.4 | ~4.4 |
+| 3.0 | ~4.5 | ~4.5 | 4.61 |
+
+Peak $D_S$ rises monotonically with $T$ across all $m/g$. By $T = 3.0$
+the curves are near $\sim 4.5$ and still rising slowly — no clean
+plateau. Hop diameter stays at $2$–$3$ throughout, so the graph is
+small-world at every $T$ tested.
+
+**Verdict.** Counter-evidence to strict H_4D in this regime: the
+trajectory passes through $D_S = 4$ around $T \approx 2$ and keeps
+going up. If there is an asymptote, it's *above* 4, not at 4.
+
+### ε-scan (mutual-information cutoff axis)
+
+`run_epsilon_scan.sh`: $N = 60$, $T = 2.0$, $dt = 0.25$,
+$\varepsilon_I \in \{10^{-8}, 10^{-6}, 10^{-4}, 10^{-3}, 10^{-2}\}$,
+$m/g \in \{0.125, 0.25, 0.5\}$. Multi-$\varepsilon$ per TDVP run, so
+all five cutoffs come from a single quench evolution.
+
+![ε-scan](figures/epsilon_scan.png)
+
+Peak $D_S$ is essentially *flat* at $\sim 4.3$–$4.5$ across six decades
+of $\varepsilon_I$ for all three $m/g$ values. The hop diameter,
+meanwhile, rises from $\sim 2$–$3$ at $\varepsilon_I = 10^{-8}$ to
+$\sim 10$–$15$ at $\varepsilon_I = 10^{-2}$ — so the threshold does
+break the small-world structure, but the spectral dimension doesn't
+track it.
+
+**Verdict.** The dimension reading is robust to the cutoff choice
+(good for the construction's internal consistency) but lands above 4
+(soft counter-evidence to strict H_4D). The fact that peak $D_S$
+doesn't fall as the graph becomes less small-world is interesting on
+its own: $D_S$ near $4.5$ here is not just a small-world artifact —
+it survives aggressive thinning of long-range edges.
+
+### N-scan (boundary lattice axis)
+
+`run_n_scan.sh`: $N \in \{50, 60, 80, 100\}$, $T = 1.0$, $dt = 0.25$,
+$\varepsilon_I = 10^{-6}$, $m/g = 0.5$ only (cheapest direction). The
+$N = 100$ cell was interrupted at ~50% TDVP progress; only $N \in
+\{50, 60, 80\}$ have results.
+
+![N-scan](figures/n_scan.png)
+
+| $N$ | peak $D_S$ | hop diameter | TDVP time |
+|---|---|---|---|
+| 50 | 3.52 | 2 | 9 min |
+| 60 | 3.57 | 2 | 18 min |
+| 80 | 3.69 | 3 | 45 min |
+| 100 | (interrupted) | | (~90 min est.) |
+
+Slow rise: $\Delta D_S \approx 0.17$ across the $N \in [50, 80]$
+range, an order of magnitude smaller than the $\Delta D_S \approx 1$
+seen in the $T$-scan over a comparable parameter range. The trajectory
+looks like it could plateau **below** 4 along the $N$-axis at fixed
+$T = 1.0$.
+
+**Verdict.** *Ambiguous, but suggestive*. The $N$-axis on its own
+doesn't drive $D_S$ past 4. What pushes $D_S$ above 4 is $T$, not $N$.
+The original "approaching 4 from below in $N$" reading that motivated
+H_4D was likely picking up the combined $T$ and $N$ effect; cleanly
+isolated, $N$-alone looks like it plateaus around $3.7$–$3.9$.
+
+### Synthesis
+
+| Test | Trajectory | Asymptote (extrapolated) |
+|---|---|---|
+| T-scan | rises 3.5 → 4.6 with $T \in [1, 3]$ | $\gtrsim 4.5$, not yet plateaued |
+| ε-scan | flat across 6 decades of $\varepsilon_I$ | $\sim 4.3$–$4.5$, robust |
+| N-scan | rises slowly 3.52 → 3.69 with $N \in [50, 80]$ | possibly $< 4$ at fixed $T = 1.0$ |
+
+Three axes, two of them parking $D_S$ near $4.3$–$4.5$ and the third
+(at modest $T$) suggesting an asymptote below 4. The strict H_4D claim
+"peak $D_S \to 4$ as $N, T \to \infty$" is not directly supported by
+this data: either $T$-evolution is pushing $D_S$ past 4 indefinitely
+(refutes H_4D toward small-world), or there is an asymptote near
+$4.3$–$4.5$ (refutes H_4D toward "approximately 4 but with a finite
+overshoot"). Of the two, the $\varepsilon$-robust plateau argues for
+the latter: $D_S \approx 4.3$–$4.5$ may be the actual large-$T$ limit
+of the construction, and the modest overshoot from 4 is an intrinsic
+feature, not a small-world artifact.
+
+A clean test of which scenario holds would extend the $T$-scan to
+$T \geq 4$–$5$ at $N = 40$ to see whether peak $D_S$ saturates near
+$4.5$ or keeps climbing.
 
 **Independent refinement** (not a falsification test, but tightens
 the interpretation):
@@ -282,7 +359,7 @@ the interpretation):
 
 ## Reproducibility
 
-The full scan lives at `/tmp/temporal-entangled/scan/`:
+The original $N \in [10, 40]$ scan lives at `/tmp/temporal-entangled/scan/`:
 
 ```
 N{10,20,30,40}_mg_{0.125,0.25,0.5}.json
@@ -290,16 +367,20 @@ scan.log
 run_scan.sh
 ```
 
-Each JSON record carries the input config, snapshot count, graph
-counts, degree summary, $\sigma$/$P$/$D_S$ arrays, the Ambjorn-Loll
-fit, and `peak_dS` / `sigma_peak`. The plot script
-`examples/quantum/plot_temporally_connected.py` reads this directory
-directly and writes
-`docs/source/quantum-experiments/figures/temporally_connected_entangled_spacetime.png`.
+The H_4D convergence scans live at `/tmp/temporal-entangled/{t_scan,
+epsilon_scan, n_scan}/`. Each JSON record carries the input config,
+snapshot count, graph counts (vertices, edges, mean / max degree,
+hop diameter, average path length, component count), $\sigma$ / $P$
+/ $D_S$ arrays, the Ambjorn-Loll fit, peak $D_S$ + $\sigma_{peak}$,
+and per-snapshot MI histograms (binned counts in log-space).
 
-The experiment script that produced the JSON is
-`examples/quantum/temporally_connected_entangled_spacetime.py`. Anyone
-with a tessera build at or after the `recordBondMutualInformation`
+The experiment script is
+`examples/quantum/temporally_connected_entangled_spacetime.py`.
+Runners and plotters for the convergence scans live in
+`examples/mutual-information-connectivity/` — see that directory's
+`README.md` for a one-pager and reproduce commands.
+
+Anyone with a tessera build at or after the `recordBondMutualInformation`
 fix can regenerate every number above.
 
 ## See also

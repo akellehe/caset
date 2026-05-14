@@ -6,10 +6,11 @@
 # window.
 set -u
 cd "$(dirname "$0")/../.."
-export OMP_NUM_THREADS=10
-export OPENBLAS_NUM_THREADS=10
-export MKL_NUM_THREADS=10
-export BLIS_NUM_THREADS=10
+: "${OMP_NUM_THREADS:=10}"
+: "${OPENBLAS_NUM_THREADS:=10}"
+: "${MKL_NUM_THREADS:=10}"
+: "${BLIS_NUM_THREADS:=10}"
+export OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS BLIS_NUM_THREADS
 
 OUT_DIR=/tmp/temporal-entangled/epsilon_scan
 mkdir -p "$OUT_DIR"
