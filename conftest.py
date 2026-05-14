@@ -42,10 +42,26 @@ def get_scikit_build_dir() -> Path:
     data = tomllib.loads(pyproj.read_text())
     template = data["tool"]["scikit-build"]["build-dir"]  # "cmake-build/{wheel_tag}"
 
-    wheel_tag = subprocess.check_output(
-        [sys.executable, "-m", "scikit_build_core.builder.wheel_tag"],
-        text=True,
-    ).strip()
+    try:
+        wheel_tag = subprocess.check_output(
+            [sys.executable, "-m", "scikit_build_core.builder.wheel_tag"],
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(
+            "conftest.py's fallback build path needs `scikit-build-core` "
+            "to compute the cmake build directory, but it isn't importable "
+            "from this Python interpreter ({sys.executable}).\n\n"
+            "The usual fix is to install tessera once into the current "
+            "environment first:\n\n"
+            "    pip install -e \".[dev]\"      # full dev toolchain\n"
+            "    pip install -e .              # runtime only (also fine)\n\n"
+            "After that, ``pytest tests`` will import the already-built "
+            "``tessera._tessera`` extension and skip this fallback "
+            "entirely."
+            .format(sys=sys)
+        ) from exc
 
     return (root / template.format(wheel_tag=wheel_tag)).resolve()
 
