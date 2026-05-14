@@ -54,26 +54,60 @@ should wait on a proper Choi-state bond MI.
 
 ## Hypothesis
 
-The dual-lattice experiment with causet temporal edges plateaus near
-$D_S \approx 1.8$ at moderate $N$. The MI-temporal sector adds a
-larger temporal-edge population (degree up to $N - 1$ per snapshot
-pair vs. degree 1 in the causet case). Two qualitatively different
-outcomes are possible:
+**Primary hypothesis (H_4D).** As $N$ and $K$ grow, the peak spectral
+dimension of the MI-driven dual lattice approaches **$D_S = 4$** — the
+physical spacetime dimension. The causet variant of the dual lattice
+caps near $D_S \approx 1.8$ because its temporal sector is degree-1
+per node (only the same bond at $t \to t+1$); enriching the temporal
+sector to "every bond pair that shares mutual information" lifts the
+effective dimensionality of the emergent graph toward $4$.
 
-1. **Geometric preservation.** Cross-snapshot MI edges concentrate on
-   bond pairs that *would* be temporal neighbors in the bulk
-   geometry, so the spectral dimension stays near 2. The extra edges
-   just thicken the diffusion bundle around the bulk geodesics.
-2. **Small-world collapse.** The cross-snapshot MI fans out enough
-   that the graph becomes effectively small-world: $D_S(\sigma)$ peaks
-   well above 2 at intermediate $\sigma$ (the random walk explores
-   many vertices per step), and the long-$\sigma$ tail does not match
-   the Ambjorn-Loll $D_\infty - C/(B + \sigma)$ form.
+Concretely, the prediction is that
 
-Outcome 1 would say "MI is a richer temporal connectivity than the
-causet step, but the bulk geometry is robust." Outcome 2 would say
-"the operational MI temporal sector is too connected to recover the
-bulk dimension."
+$$
+\lim_{N, K \to \infty}\;\max_{\sigma}\, D_S(\sigma)\;\longrightarrow\;4,
+$$
+
+with the approach being monotone-from-below in both $N$ and $K$, at
+fixed $m/g$ and fixed mutual-information cutoff $\varepsilon_I$. The
+intermediate-$\sigma$ peak is the "macroscopic" dimension the random
+walker sees once it has left the local-neighborhood regime.
+
+**Falsification routes** for H_4D:
+
+1. **Plateau below $4$.** If peak $D_S$ stabilises at some value
+   strictly below $4$ as $N, K$ grow (e.g., $D_S \to 3$ from below
+   with no further rise), H_4D fails — the emergent dimension is
+   real but not 4.
+2. **Overshoot.** If peak $D_S$ exceeds $4$ and keeps rising, the
+   construction is driving small-world saturation (every vertex is
+   close to every other) rather than reconstructing a fixed bulk
+   geometry, and H_4D fails in the opposite direction.
+3. **No convergence.** If peak $D_S$ doesn't stabilise at all as
+   $N, K$ vary, the observable isn't a well-defined dimension on
+   this graph and the test is null.
+
+The two ancillary checks are:
+
+- **$m/g$ sensitivity.** Peak $D_S$ should depend on the underlying
+  physics. A flat dependence on $m/g$ would mean the construction is
+  reading off graph topology, not the boundary state.
+- **Confinement-style decay.** Van Raamsdonk distance $d = -\log I$
+  should grow linearly in bond separation $|n - m|$ at moderate
+  range, matching the linear confining potential of the Schwinger
+  model. A flat $d(|r|)$ would mean the quench has homogenised the
+  entanglement structure and the MI graph carries no spatial-decay
+  signal.
+
+(For context: a 1+1D boundary theory's bulk dual is generically
+3-dimensional under standard AdS/CFT counting. H_4D is therefore a
+stronger claim — that the *physical* 3+1D spacetime can be
+reconstructed from the entanglement structure of a 1+1D lattice gauge
+theory whose continuum limit is in the right universality class. The
+counterproposal $D_S \to 2$ ("the dual is just the 1+1D lattice
+again") is what the causet variant gives; the counterproposal
+$D_S \to 3$ ("standard holographic bulk dimension") is the
+intermediate falsification outcome.)
 
 ## Setup
 
@@ -128,49 +162,56 @@ fit vs N](figures/temporally_connected_entangled_spacetime.png)
 
 Four readings:
 
-1. **Outcome 2 wins.** Every $(N, m/g)$ cell has peak $D_S \in
-   [2.7, 3.7]$ — well above the lattice value of 2 that the causet
-   dual-lattice peaks at. The MI-temporal sector is too connected to
-   recover the bulk 1+1D dimension at the scales tested.
+1. **Peak $D_S$ rises monotonically with $N$ from $\sim 2.7$ to $\sim 3.7$
+   over $N \in [10, 40]$, consistent with H_4D's monotone-from-below
+   prediction.** No plateau yet — at $N = 40$ we still see headroom
+   toward 4. The N=60 (K=9) extension below reaches peak $D_S \approx 4.5$.
 2. **Edge counts saturate against the bond cutoff.** At $N \geq 20$
    the temporal:spatial edge ratio is exactly 4:1 (four forward
    strides $\times$ all bond pairs vs. one same-snapshot
    upper-triangle), and the maximum degree equals $N - 1$ in the
    densest cells. The MI cutoff $\varepsilon_I = 10^{-8}$ is rarely
-   blocking edges; the graph is essentially complete on the temporal
-   axis.
-3. **$m/g$ dependence is small but present.** The peak $D_S$ varies
-   by $\sim 0.3$ across $m/g$ at fixed $N$, monotonic at $N = 10$
+   blocking edges in this scan; the graph is essentially complete on
+   the temporal axis. Pushing $\varepsilon_I$ into the natural tail
+   of the MI distribution is necessary to read off a *converged*
+   $D_S$, not just a "graph is dense" $D_S$.
+3. **$m/g$ dependence is small but present.** Peak $D_S$ varies by
+   $\sim 0.3$ across $m/g$ at fixed $N$, monotonic at $N = 10$
    (light $<$ mid $<$ heavy on this scale) and non-monotonic at
    $N \geq 20$ (the $m/g = 0.25$ cell consistently peaks highest).
    The signal is *not* swamped by the high-degree saturation — physics
-   still shows through, just weakly.
-4. **The Ambjorn-Loll fit is no longer a good model.** At nine of
-   twelve cells $\chi^2 / \mathrm{dof} > 0.5$ and the $D_\infty$
-   parameter swings between $-0.27$ and $+7.04$ depending on the cell
-   — the small mass case at $N = 10$ has $C \approx -36{,}000$ and
-   $B \approx -5{,}700$, well outside any physical interpretation. The
-   $D_S(\sigma)$ profile under MI-temporal connectivity does not have
-   the $D_\infty - C/(B + \sigma)$ shape the AL form assumes; it rises
-   sharply, peaks, and falls without a clean long-$\sigma$ plateau in
-   the diffusion regime we sample. The faint grey overlays on the
-   left panel of the figure show the fits visibly missing the curve.
+   still shows through, weakly.
+4. **The Ambjorn-Loll fit is poorly conditioned at this $N$.** At
+   nine of twelve cells $\chi^2 / \mathrm{dof} > 0.5$ and the
+   $D_\infty$ parameter swings between $-0.27$ and $+7.04$ — the
+   small-mass case at $N = 10$ has $C \approx -36{,}000$ and
+   $B \approx -5{,}700$, well outside any physical interpretation.
+   The AL form assumes a long-$\sigma$ plateau; our finite graph has
+   $D_S$ rising, peaking, and decaying instead. Read peak $D_S$ as
+   the primary indicator and $D_\infty$ as a fit artifact at this
+   stage.
 
-## Falsification check
+## Falsification check (H_4D)
 
-| Criterion | Expected if "MI temporal preserves bulk geometry" holds | Observed | Status |
+| Criterion | H_4D expects | Observed in the $N \in [10, 40]$ scan | Status |
 |---|---|---|---|
-| Trivial confirmation ($D_S \equiv 2$) | Rejected | **Rejected** — $D_S$ range spans $[0, 3.7]$ at every $(N, m/g)$. | Pass |
-| Independence from $m/g$ | Rejected | **Rejected** — peak $D_S$ varies $\geq 0.3$ across $m/g$ at every $N$. | Pass |
-| Strong falsification (non-monotonic outside small-$\sigma$ regime) | Not triggered | **Not triggered** — every profile is unimodal (rise then fall). | Pass |
-| $D_S \to 2$ at intermediate $\sigma$ | Confirmed | **Rejected** — peak $D_S$ is $\geq 2.7$ in *every* cell. The construction overshoots the lattice dimension by 35–85 %. | **Fail** |
-| Ambjorn-Loll fits the long-$\sigma$ tail | Confirmed | **Rejected** — fit residuals and parameters are pathological at $N \leq 30$ for $m/g \leq 0.25$. | **Fail** |
+| Trivial confirmation ($D_S \equiv 2$) | Rejected | **Rejected** — $D_S$ range spans $[0, 3.7]$. | Pass |
+| Independence from $m/g$ | Rejected | **Rejected** — peak $D_S$ varies $\geq 0.3$ across $m/g$. | Pass |
+| Profile shape unimodal in $\sigma$ | Confirmed | **Confirmed** — every profile is rise-then-fall. | Pass |
+| Peak $D_S$ monotone-from-below in $N$ at fixed $m/g$ | Confirmed | **Confirmed** — peak rises from $2.7$ ($N=10$) to $3.7$ ($N=40$) across all three $m/g$. | Pass |
+| Plateau strictly below 4 (counter-evidence) | Not triggered | **Not triggered** — no plateau visible yet at $N = 40$; the curve is still rising. | Pass (provisional) |
+| Overshoot above 4 (counter-evidence) | Not triggered | **Ambiguous** — peak $D_S \in \{4.33, 4.53, 4.38\}$ at $(N, K) = (60, 9)$, but $K$ jumped from $5$ to $9$ simultaneously with $N$ going from $40$ to $60$. The hop diameter at this point is $2$–$4$, so the graph is in the small-world regime where $D_S$ is being driven by topology, not bulk geometry. Cannot disentangle without an $N$-only and a $K$-only scan. | Ambiguous |
 
-The construction passes the trivial-confirmation and $m/g$-sensitivity
-checks, but it fails the substantive bulk-geometry prediction: $D_S$
-overshoots 2 across the entire scan, and the AL form does not describe
-the resulting profile. **The MI-temporal sector does not preserve the
-spectral-dimension content of the causet dual lattice.**
+**Reading.** The scan from $N=10$ to $N=40$ at fixed $K=5$ matches
+H_4D's monotone-approach-from-below: peak $D_S$ climbs from $2.7$ to
+$3.7$ in lockstep with $N$, and the underlying physics ($m/g$) is
+registering. The single $(N, K) = (60, 9)$ point exceeds 4 in every
+$m/g$ cell, but with $K$ doubled and the hop diameter dropping to
+$2$–$4$ it's not a clean H_4D falsifier — the graph density is in
+the small-world regime where the spectral dimension is being driven
+by connectivity rather than bulk geometry. **The current state is:
+consistent with H_4D, not yet established.** A clean answer needs the
+$N$-only and $K$-only scans below.
 
 ## Reading
 
@@ -179,23 +220,65 @@ Compared against the causet dual lattice — which reaches peak $D_S
 [emergent_spectral_dimension_writeup.md](emergent_spectral_dimension_writeup.md)
 "Dual lattice" section — replacing the causet step with the
 endpoint-averaged MI surrogate produces a graph that is genuinely
-denser in the temporal direction, not just dressed-up. The same
-weighted Laplacian sees a graph of much higher mean degree (40 at
-$N = 10$, 190 at $N = 40$) and the heat-kernel walker explores a
-small-world-like neighborhood per unit $\sigma$. That is consistent
-with $D_S$ being driven up by topology, not by physics.
+denser in the temporal direction. Peak $D_S$ rises from $\sim 1.8$
+(causet) to $\sim 3.5$–$4.5$ (MI temporal) at comparable $N$.
 
-Two follow-ups would tighten the interpretation:
+For H_4D to land cleanly, two things need to be true that the current
+scan can't yet confirm:
 
-1. **Sweep $\varepsilon_I$** to thin the temporal sector. If the
-   overshoot persists at $\varepsilon_I \in \{10^{-4}, 10^{-3}\}$
-   where significant temporal edges are dropped, the conclusion
-   "graph is too small-world" is robust. If it disappears, the
-   threshold choice was driving the result.
-2. **Replace the endpoint-averaged surrogate with a true Choi-state
-   bond MI.** That requires extending the existing site-based Choi
-   machinery to bipartition variables; it's the next refinement
-   needed before any quantitative spacetime-reconstruction claim.
+1. **The rise must stop near 4.** The trajectory $N \in [10, 40]$ at
+   $K = 5$ shows peak $D_S$ approaching 4 from below; the $N = 60,
+   K = 9$ point already exceeds 4 in every $m/g$ cell. Without
+   intermediate $(N, K)$ data we can't tell whether the curve is
+   *converging* to 4 or simply *passing through* 4 on the way to a
+   larger small-world value. A scan that holds $K$ fixed and varies
+   $N$ (and vice versa) is the next step.
+2. **The result must be robust to $\varepsilon_I$.** At
+   $\varepsilon_I = 10^{-8}$ in the $N=10$–$40$ scan the graph is
+   essentially complete on the temporal axis — almost no edges are
+   pruned. The $N = 60$ run at $\varepsilon_I = 10^{-6}$ does prune
+   meaningfully (44–58 % of candidate edges survive) but still
+   shows hop diameter 2–4, which is small-world by any standard
+   reading. Pushing $\varepsilon_I$ into the natural fall-off of the
+   MI distribution (where the graph becomes locally tree-like and
+   diameter grows toward $\mathcal{O}(N)$) is the
+   convergence-parameter sweep H_4D needs to pass.
+
+## Next experiments
+
+Three independent tests, in order of cost-to-insight:
+
+1. **$K$-only scan at fixed $N = 40$**, $K \in \{5, 7, 9, 11, 13\}$.
+   Cheap (~3–8 min per cell). Directly isolates whether the $K = 9$
+   overshoot at $N = 60$ was a $K$-effect or a real refutation. H_4D
+   passes iff peak $D_S$ converges to $\sim 4$ as $K$ grows at fixed
+   $N$.
+2. **$N$-only scan at fixed $K = 5$**, $N \in \{50, 60, 80, 100\}$,
+   single $m/g$ to start. Medium cost (~10–60 min per cell). Tests
+   the asymptotic behaviour along the original $N$-axis. H_4D passes
+   iff peak $D_S$ plateaus near 4 from below.
+3. **$\varepsilon_I$-only scan at fixed $(N, K)$.** Plot peak $D_S$
+   vs $\log \varepsilon_I$. The graph diameter should pass through
+   small-world (low $\varepsilon_I$) → lattice-like (high
+   $\varepsilon_I$) as the threshold rises. H_4D passes iff there is
+   an intermediate $\varepsilon_I$ window where peak $D_S$ plateaus
+   near 4 and the diameter is in the $\mathcal{O}(\sqrt{N})$ regime
+   typical of a 2D graph (since the dual lattice is bonds$\times$time
+   with the bulk one extra direction).
+
+A clean H_4D validation requires (1) and (2) to both converge to $4$,
+and (3) to show a Goldilocks $\varepsilon_I$ window. A single
+plateau-below-4 along any of these axes refutes H_4D in favour of
+some lower emergent dimension. A continued rise past 4 in (1) or (2)
+refutes H_4D in favour of small-world saturation.
+
+**Independent refinement** (not a falsification test, but tightens
+the interpretation):
+
+- **Replace the endpoint-averaged surrogate with a true Choi-state
+  bond MI.** That requires extending the existing site-based Choi
+  machinery to bipartition variables; it's the next refinement
+  needed before any quantitative spacetime-reconstruction claim.
 
 ## Reproducibility
 
