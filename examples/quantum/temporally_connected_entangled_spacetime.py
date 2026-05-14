@@ -138,8 +138,10 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
     ``mi_values`` is a dict with:
       • ``spatial_all`` / ``temporal_all`` — aggregated flat arrays.
       • ``spatial_per_snap`` — list of K arrays (one per snapshot).
-      • ``temporal_per_source`` — list of K-1 arrays (concatenated
-        over all forward strides from snapshot t).
+      • ``temporal_per_pair`` — list of (source, stride, values) tuples,
+        one per snapshot pair ``(t, t+s)`` in the construction. Allows
+        the plotter to restrict to pairs whose endpoints both lie in
+        a chosen time range.
     """
     bond_mi = _bond_matrices(snapshots)
     K, B, _ = bond_mi.shape
@@ -165,16 +167,15 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
             edges.append((vertex(int(n), t), vertex(int(m), t), float(w)))
             spatial_count += 1
 
-    temporal_per_source = []
+    temporal_per_pair = []  # list of (source, stride, values)
     temporal_count = 0
     for t in range(K - 1):
-        per_source = []
         s_max = min(max_stride, K - 1 - t)
         for s in range(1, s_max + 1):
             avg = 0.5 * (bond_mi[t] + bond_mi[t + s])
             ii, jj = np.indices(avg.shape)
             wij = avg.ravel()
-            per_source.append(wij)
+            temporal_per_pair.append((int(t), int(s), wij))
             mask = (avg > epsilon_i)
             for n, m in zip(ii[mask], jj[mask]):
                 w = float(avg[n, m])
@@ -182,8 +183,6 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
                                vertex(int(m), t + s),
                                w))
                 temporal_count += 1
-        temporal_per_source.append(
-            np.concatenate(per_source) if per_source else np.empty(0))
 
     stats = {
         "n_bonds":         B,
@@ -192,13 +191,17 @@ def build_temporally_connected_graph(snapshots, epsilon_i, max_stride):
         "n_edges_spatial":  spatial_count,
         "n_edges_temporal": temporal_count,
     }
+
+    spatial_all = (np.concatenate(spatial_per_snap)
+                    if spatial_per_snap else np.empty(0))
+    temporal_all = (np.concatenate([v for _, _, v in temporal_per_pair])
+                     if temporal_per_pair else np.empty(0))
+
     mi_values = {
-        "spatial_all":         (np.concatenate(spatial_per_snap)
-                                   if spatial_per_snap else np.empty(0)),
-        "temporal_all":        (np.concatenate(temporal_per_source)
-                                   if temporal_per_source else np.empty(0)),
-        "spatial_per_snap":    spatial_per_snap,
-        "temporal_per_source": temporal_per_source,
+        "spatial_all":       spatial_all,
+        "temporal_all":      temporal_all,
+        "spatial_per_snap":  spatial_per_snap,
+        "temporal_per_pair": temporal_per_pair,
     }
     return n_vertices, edges, stats, mi_values
 
@@ -233,6 +236,74 @@ def _mi_histogram(values, n_bins=60):
         "median":     float(np.median(positive)),
         "edges":      edges.tolist(),
         "counts":     counts.astype(int).tolist(),
+    }
+
+
+def _build_segment_histograms(spatial_per_snap, temporal_per_pair,
+                                 n_bins=60):
+    """Compute aligned per-segment histograms with COMMON bin edges.
+
+    Returns a dict with:
+      • ``edges``: shared log-spaced bin edges (length n_bins+1).
+      • ``spatial_per_snap``: list of K count arrays (length n_bins),
+        one per snapshot, on the shared edges.
+      • ``temporal_per_pair``: list of dicts ``{source, stride,
+        counts}`` for every snapshot pair, on the shared edges.
+
+    The plotter aggregates these by region by simply summing counts
+    over the included snapshots / pairs.
+    """
+    pos_values = []
+    for v in spatial_per_snap:
+        v = np.asarray(v, dtype=np.float64)
+        p = v[v > 0]
+        if p.size:
+            pos_values.append(p)
+    for _, _, v in temporal_per_pair:
+        v = np.asarray(v, dtype=np.float64)
+        p = v[v > 0]
+        if p.size:
+            pos_values.append(p)
+
+    if pos_values:
+        combined = np.concatenate(pos_values)
+        lo = float(combined.min())
+        hi = float(combined.max())
+        if hi <= lo:
+            hi = lo * 10.0
+        edges = np.logspace(np.log10(lo), np.log10(hi), n_bins + 1)
+    else:
+        edges = np.logspace(-10, 0, n_bins + 1)
+
+    edges_list = edges.tolist()
+    spatial_counts = []
+    for v in spatial_per_snap:
+        v = np.asarray(v, dtype=np.float64)
+        p = v[v > 0]
+        if p.size:
+            counts, _ = np.histogram(p, bins=edges)
+        else:
+            counts = np.zeros(n_bins, dtype=int)
+        spatial_counts.append(counts.astype(int).tolist())
+
+    temporal_counts = []
+    for src, stride, v in temporal_per_pair:
+        v = np.asarray(v, dtype=np.float64)
+        p = v[v > 0]
+        if p.size:
+            counts, _ = np.histogram(p, bins=edges)
+        else:
+            counts = np.zeros(n_bins, dtype=int)
+        temporal_counts.append({
+            "source":  int(src),
+            "stride":  int(stride),
+            "counts":  counts.astype(int).tolist(),
+        })
+
+    return {
+        "edges":             edges_list,
+        "spatial_per_snap":  spatial_counts,
+        "temporal_per_pair": temporal_counts,
     }
 
 
@@ -409,10 +480,9 @@ def main():
 
         spatial_hist  = _mi_histogram(mi_values["spatial_all"])
         temporal_hist = _mi_histogram(mi_values["temporal_all"])
-        spatial_hist_per_snap   = [_mi_histogram(v)
-                                     for v in mi_values["spatial_per_snap"]]
-        temporal_hist_per_source = [_mi_histogram(v)
-                                     for v in mi_values["temporal_per_source"]]
+        by_segment    = _build_segment_histograms(
+            mi_values["spatial_per_snap"],
+            mi_values["temporal_per_pair"])
         print(f"[mi] spatial:  n={spatial_hist['n_positive']}/{spatial_hist['n_total']} "
               f"min={spatial_hist['min']:.2e} max={spatial_hist['max']:.2e} "
               f"median={spatial_hist['median']:.2e}", flush=True)
@@ -488,10 +558,9 @@ def main():
             "peak_dS":    peak_dS,
             "sigma_peak": sigma_peak,
             "mi_distributions": {
-                "spatial":             spatial_hist,
-                "temporal":            temporal_hist,
-                "spatial_per_snap":    spatial_hist_per_snap,
-                "temporal_per_source": temporal_hist_per_source,
+                "spatial":    spatial_hist,
+                "temporal":   temporal_hist,
+                "by_segment": by_segment,
             },
         }
         os.makedirs(os.path.dirname(out_json) or ".", exist_ok=True)

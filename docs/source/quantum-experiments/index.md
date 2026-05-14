@@ -13,6 +13,7 @@ trace claim → number → command-to-reproduce.
 lightcone_vs_majorization_writeup
 emergent_spectral_dimension_writeup
 temporally_connected_entangled_spacetime_writeup
+interaction_branching_simplex_writeup
 ```
 
 ## Reproducing
