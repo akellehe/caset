@@ -104,6 +104,23 @@ class WilsonLoop {
     [[nodiscard]] LoopPath buildLoopPath(
         const std::vector<SimplexPtr> &simplices) const;
 
+    /// BFS over the dual graph starting at \a start, yielding each
+    /// cycle to ``onCycle(path)``. The path runs start → ... → start.
+    /// If \a onCycle returns true, the walk terminates; otherwise it
+    /// continues searching.
+    ///
+    /// ``maxDepth < 0`` disables the depth cap. ``minCurDepth`` filters
+    /// out cycles whose far endpoint is too close to the start
+    /// (used by the target-length search to skip trivial back-and-forth
+    /// cycles of length 2).
+    ///
+    /// Shared implementation backing both ``geodesicLoop`` (first
+    /// cycle, no depth cap) and ``dualLatticeLoop`` (best target-length
+    /// cycle within a depth budget).
+    template <typename OnCycleFn>
+    void bfsFindCycles(SimplexPtr start, int maxDepth, int minCurDepth,
+                          OnCycleFn onCycle) const;
+
 };
 
 } // namespace tessera

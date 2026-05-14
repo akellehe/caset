@@ -30,6 +30,8 @@
 #include <queue>
 #include <set>
 #include "spacetime/Spacetime.h"
+#include "graph/dual_graph.hpp"
+#include "graph/index_by_key.hpp"
 #include "observables/SparseGraph.h"
 #include "mesh/SimplexOrientation.h"
 #include "mesh/ForwardDeclarations.h"
@@ -383,29 +385,22 @@ Spacetime::getDualAdjacency() const {
 
   // Map fingerprint → index in topSimplicesVec
   // (topSimplexVecIndex already exists but maps to pool slots; rebuild a clean one)
-  std::unordered_map<std::uint64_t, std::uint32_t> fpToIdx;
-  fpToIdx.reserve(N);
-  for (std::uint32_t i = 0; i < N; ++i) {
-    fpToIdx[topSimplicesVec[i]->fingerprint.fingerprint()] = i;
-  }
+  auto fpToIdx = ::tessera::graph::indexByKey<std::uint32_t>(
+      topSimplicesVec,
+      [](auto const& s) { return s->fingerprint.fingerprint(); });
 
   std::vector<std::uint32_t> rows, cols;
   rows.reserve(N * 5);  // ~d+1 neighbours per simplex in d dimensions
   cols.reserve(N * 5);
 
   for (std::uint32_t i = 0; i < N; ++i) {
-    const auto &simplex = topSimplicesVec[i];
-    const auto &facets = simplex->getFacets();
-    for (const auto &facet : facets) {
-      const auto &cofaces = facet->getCofaces();
-      for (const auto &coface : cofaces) {
-        if (coface == simplex) continue;
-        const auto fp = coface->fingerprint.fingerprint();
-        auto it = fpToIdx.find(fp);
-        if (it != fpToIdx.end()) {
-          rows.push_back(it->second);
-          cols.push_back(i);
-        }
+    auto const& simplex = topSimplicesVec[i];
+    for (auto const& coface : ::tessera::graph::dualNeighbors(simplex)) {
+      const auto fp = coface->fingerprint.fingerprint();
+      auto it = fpToIdx.find(fp);
+      if (it != fpToIdx.end()) {
+        rows.push_back(it->second);
+        cols.push_back(i);
       }
     }
   }

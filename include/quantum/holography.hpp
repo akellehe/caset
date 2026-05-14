@@ -26,6 +26,8 @@
 #pragma once
 
 #include "quantum/tdvp_runner.hpp"  // TDVPConfig, TDVPSnapshot, QuenchResult
+#include "graph/spectral_graph.hpp"
+#include "graph/coo.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -134,13 +136,11 @@ public:
 
     // COO arrays for the edge set with I > epsilon_I. Symmetric — each
     // edge appears twice (rows[k]=i, cols[k]=j AND rows[k']=j, cols[k']=i).
-    struct COO {
-        std::vector<int>    rows;
-        std::vector<int>    cols;
-        std::vector<double> weights;
-        int                 nVertices{0};
-    };
-    [[nodiscard]] COO weightedAdjacency() const;
+    // Returns the shared ``tessera::graph::WeightedCOO<int, double>``
+    // type so the result drops into ``buildCSRFromCOO`` without
+    // reformatting.
+    [[nodiscard]] ::tessera::graph::WeightedCOO<int, double>
+    weightedAdjacency() const;
 
 private:
     int                 nSites_{0};
@@ -159,7 +159,13 @@ private:
 // Weighted graph on the (site × snapshot) label set with edge weights
 // I(v, w). Stores the CSR adjacency, the per-vertex weighted degree,
 // and the Laplacian implicitly via L · x = D · x − W · x.
-class EmergentGraph {
+//
+// Derives from ``::tessera::SpectralGraph``: the diagonal heat-kernel
+// trace, return probability, and D_S(σ) helpers are inherited from
+// the shared Lanczos + Padé-13 backbone in
+// ``src/graph/spectral_graph.cpp``. This class supplies only
+// ``applyLaplacian`` (the weighted L = D − W matvec) and ``nVertices``.
+class EmergentGraph : public ::tessera::SpectralGraph {
 public:
     explicit EmergentGraph(MutualInformationProfile const& profile);
 
@@ -172,50 +178,16 @@ public:
     fromWeightedEdges(int n,
                        std::vector<std::tuple<int, int, double>> const& edges);
 
-    [[nodiscard]] int nVertices() const noexcept { return n_; }
+    [[nodiscard]] int nVertices() const noexcept override { return n_; }
     [[nodiscard]] int nEdges()    const noexcept { return nEdges_; }
+
+    // y ← L x with L = D − W. Implements the SpectralGraph contract;
+    // ``y`` is sized to ``nVertices()`` on entry.
+    void applyLaplacian(std::vector<double> const& x,
+                          std::vector<double>& y) const override;
 
     // Sparse weighted Laplacian L = D - W. Symmetric, in CSR format.
     [[nodiscard]] Eigen::SparseMatrix<double> laplacian() const;
-
-    // P(σ) = (1/|V|) Tr e^{-σ L} for the weighted Laplacian.
-    //
-    // The trace is computed exactly via diagonal Krylov-Lanczos:
-    // for each vertex v as a starting vector e_v, project L onto the
-    // K-dim Krylov subspace, exponentiate the resulting tridiagonal
-    // T (small dense matrix), and read [exp(-σ T)]_{0,0} which gives
-    // exactly e_v^T exp(-σ L) e_v. Summing over v yields the trace.
-    //
-    // The same pattern is used by tessera::SparseGraph::diagonalHeatKernel
-    // for unweighted Laplacians; extended here to weighted L.
-    [[nodiscard]] std::vector<double>
-    returnProbability(std::vector<double> const& sigmas,
-                       int krylovDim = 30) const;
-
-    // D_S(σ) = -2 d log P / d log σ via centered finite differences,
-    // with one-sided differences at the endpoints. Pure function; the
-    // graph instance is unused. Exposed here for the workflow class to
-    // call without round-tripping through Python.
-    [[nodiscard]] static std::vector<double>
-    spectralDimension(std::vector<double> const& sigmas,
-                       std::vector<double> const& P);
-
-    // Savitzky-Golay smoothed D_S(σ): for each interior point, fit a
-    // local polynomial in (log σ, log P) over a centered window of
-    // size `windowSize` and read off the slope at that σ. Endpoints
-    // use a one-sided window. Returns -2 · slope at each grid point.
-    //
-    // Per spec §8: "Smoothing via local polynomial fit
-    // (Savitzky-Golay, window 5) before differentiation is acceptable;
-    // report both raw and smoothed D_S."
-    //
-    // windowSize must be odd and >= polyOrder + 1. Default (window 5,
-    // poly order 2) matches the spec recommendation.
-    [[nodiscard]] static std::vector<double>
-    spectralDimensionSmoothed(std::vector<double> const& sigmas,
-                               std::vector<double> const& P,
-                               int windowSize = 5,
-                               int polyOrder = 2);
 
     // Graphviz DOT representation. Mirrors Poset::toDot. Edge labels
     // are I(v,w) to 3 significant digits. Suitable for `dot -Tsvg`.

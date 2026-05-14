@@ -835,7 +835,7 @@ and a COO weighted-adjacency export.
         .def("weightedAdjacency",
             [](MutualInformationProfile const& p) {
                 auto coo = p.weightedAdjacency();
-                return py::make_tuple(coo.rows, coo.cols, coo.weights, coo.nVertices);
+                return py::make_tuple(coo.rows, coo.cols, coo.weights, coo.n);
             },
             R"doc(COO arrays (rows, cols, weights, nVertices) of edges with I > epsilonI.
 

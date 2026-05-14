@@ -48,16 +48,7 @@ bool ShiftMove::propose() {
   if (static_cast<int>(sharing.size()) != hingeSize) return false;
 
   // Collect all unique vertices across the sharing simplices (must be d+2).
-  std::vector<VertexPtr> allVerts;
-  for (const auto &s : sharing) {
-    for (const auto &v : s->getVertices()) {
-      bool dup = false;
-      for (const auto &av : allVerts) {
-        if (av->getId() == v->getId()) { dup = true; break; }
-      }
-      if (!dup) allVerts.push_back(v);
-    }
-  }
+  auto allVerts = pachner_detail::unionVerticesAcross(sharing);
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
   // Separate shared (in all of `sharing`) and unique (in only one).
@@ -152,12 +143,7 @@ void ShiftMove::rollback() {
 
   // 2. Remove the edges we freshly inserted.
   // (Pre-existing edges that the new simplices reused are left alone.)
-  for (const auto &e : createdEdges_) {
-    e->getSource()->removeOutEdge(e);
-    e->getTarget()->removeInEdge(e);
-    st_->getEdgeList()->remove(e);
-  }
-  createdEdges_.clear();
+  pachner_detail::removeAndClearEdges(createdEdges_, st_);
 
   // 3. Recreate the old simplices from their captured vertex tuples.
   // ``createSimplexTracked`` re-inserts edges that the removed simplices

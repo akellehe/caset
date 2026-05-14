@@ -46,15 +46,8 @@ bool FlipMove::propose() {
   SimplexPtr s2 = topCofaces[1];
 
   // Collect d+2 unique vertices: d shared + 2 unique.
-  std::vector<VertexPtr> allVerts;
-  for (const auto &v : s1->getVertices()) allVerts.push_back(v);
-  for (const auto &v : s2->getVertices()) {
-    bool dup = false;
-    for (const auto &av : allVerts) {
-      if (av->getId() == v->getId()) { dup = true; break; }
-    }
-    if (!dup) allVerts.push_back(v);
-  }
+  auto allVerts = pachner_detail::unionVerticesAcross(
+      Simplices{s1, s2});
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
   VertexPtrs shared, unique;
@@ -142,12 +135,7 @@ void FlipMove::rollback() {
   for (const auto &s : createdSimplices_) st_->removeSimplex(s);
   createdSimplices_.clear();
 
-  for (const auto &e : createdEdges_) {
-    e->getSource()->removeOutEdge(e);
-    e->getTarget()->removeInEdge(e);
-    st_->getEdgeList()->remove(e);
-  }
-  createdEdges_.clear();
+  pachner_detail::removeAndClearEdges(createdEdges_, st_);
 
   for (const auto &verts : oldSimplexVerts_) {
     st_->createSimplexTracked(verts);

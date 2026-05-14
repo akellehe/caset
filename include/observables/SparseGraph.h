@@ -4,6 +4,8 @@
 #ifndef TESSERA_OBSERVABLES_SPARSEGRAPH_H
 #define TESSERA_OBSERVABLES_SPARSEGRAPH_H
 
+#include "graph/spectral_graph.hpp"
+
 #include <cstdint>
 #include <random>
 #include <utility>
@@ -19,9 +21,13 @@ namespace tessera {
 /// data; the modularity sweep recomputes the graph from the spacetime
 /// at every measurement rather than mutating it.
 ///
+/// Derives from ``SpectralGraph``, inheriting the diagonal heat-kernel
+/// and return-probability machinery; the override here installs the
+/// symmetric normalised Laplacian ``L_sym = I - D^{-1/2} A D^{-1/2}``.
+///
 /// No Eigen dependency — plain ``std::vector`` storage so this header
 /// is cheap to include from anywhere in tessera_core.
-class SparseGraph {
+class SparseGraph : public SpectralGraph {
 public:
   /// Build from COO.  ``rows`` and ``cols`` may contain duplicates
   /// and need not be symmetric — both directions are added once each
@@ -42,17 +48,33 @@ public:
     return static_cast<std::uint32_t>(indptr_[i + 1] - indptr_[i]);
   }
 
+  // ── SpectralGraph overrides ─────────────────────────────────────────
+  int nVertices() const override {
+    return static_cast<int>(nNodes_);
+  }
+
+  /// y ← L_sym · x where L_sym = I - D^{-1/2} A D^{-1/2}.
+  /// Isolated nodes (degree 0) get invSqrtDeg = 0, so the matvec
+  /// reduces to y_i = x_i — L_sym acts as the identity on them.
+  void applyLaplacian(std::vector<double> const &x,
+                        std::vector<double> &y) const override;
+
   /// True iff the graph is 2-colorable (no odd cycle).
   /// BFS-based; empty graphs are trivially bipartite.
   bool isBipartite() const;
 
   /// Diagonal of the heat kernel ``e^{-t L_sym}`` for each
-  /// (start, t) pair, via Krylov-Lanczos approximation on the
-  /// symmetric normalized Laplacian.
+  /// (start, t) pair.
   ///
   /// Returns a flat row-major matrix of shape
   /// ``(starts.size(), times.size())``.  ``out[w][j]`` is the
   /// approximated ``[e^{-times[j] L_sym}]_{starts[w], starts[w]}``.
+  ///
+  /// Implemented as a thin uint32_t-keyed wrapper around the inherited
+  /// ``SpectralGraph::diagonalHeatKernel`` so that the Python binding
+  /// keeps its existing list-of-unsigned-index signature, and the
+  /// nEdges_ == 0 fast path stays here (empty-graph return = 1.0 by
+  /// convention).
   ///
   /// Note: ``L_rw = I - D^{-1} A`` (random-walk Laplacian) and
   /// ``L_sym = I - D^{-1/2} A D^{-1/2}`` (symmetric normalized) are
@@ -76,6 +98,11 @@ public:
   ///
   /// Returns ``(D_S_small, D_S_large)`` as a pair, or ``{NaN, NaN}``
   /// if the graph is too small or has no valid log-K samples.
+  ///
+  /// Note this overload returns a (small, large) pair via random-walk
+  /// sampling, distinct from the inherited static
+  /// ``SpectralGraph::spectralDimension(sigmas, P)`` which is a pure
+  /// finite-difference helper on a precomputed P(σ) curve.
   std::pair<double, double> spectralDimension(
       int nWalks, double maxSigma, std::mt19937 *rng,
       double tailFraction = 0.2, int nTimes = 40,
@@ -86,6 +113,7 @@ private:
   std::size_t nEdges_ = 0;
   std::vector<std::int64_t> indptr_;     // size nNodes + 1
   std::vector<std::uint32_t> indices_;   // size 2 * nEdges
+  std::vector<double> invSqrtDeg_;        // size nNodes; 0.0 for isolated nodes
 };
 
 }  // namespace tessera

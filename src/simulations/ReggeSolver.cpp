@@ -1,6 +1,7 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
+#include "graph/index_by_key.hpp"
 #include "mesh/Simplex.h"
 #include "mesh/Edge.h"
 #include "mesh/Vertex.h"
@@ -173,9 +174,8 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
     // --- Collect edges and assign indices ---
     auto edgeVec = spacetime_->getEdgeList()->toVector();
     mesh.n_edges = static_cast<int>(edgeVec.size());
-    std::unordered_map<std::uint64_t, int> edgeToIdx;
-    for (int ei = 0; ei < mesh.n_edges; ++ei)
-        edgeToIdx[edgeVec[ei]->fingerprint.fingerprint()] = ei;
+    auto edgeToIdx = ::tessera::graph::indexByKey(
+        edgeVec, [](auto const& e) { return e->fingerprint.fingerprint(); });
 
     // --- Per-simplex squared-distance matrices ---
     // Also record which (simplex, row, col) positions correspond to each edge.

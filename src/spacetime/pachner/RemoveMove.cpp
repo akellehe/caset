@@ -176,12 +176,7 @@ void RemoveMove::rollback() {
   createdSimplices_.clear();
 
   // 2. Remove freshly-inserted edges (from the replacement simplices).
-  for (const auto &e : createdEdges_) {
-    e->getSource()->removeOutEdge(e);
-    e->getTarget()->removeInEdge(e);
-    st_->getEdgeList()->remove(e);
-  }
-  createdEdges_.clear();
+  pachner_detail::removeAndClearEdges(createdEdges_, st_);
 
   // 3. Recreate the deleted vertex with its original ID and coordinates.
   v_ = st_->createVertex(vertexId_, vertexCoords_);

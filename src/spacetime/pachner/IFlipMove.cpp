@@ -48,16 +48,7 @@ bool IFlipMove::propose() {
   if (static_cast<int>(sharing.size()) != d) return false;
 
   // Collect all vertices: should be d+2 total.
-  std::vector<VertexPtr> allVerts;
-  for (const auto &s : sharing) {
-    for (const auto &v : s->getVertices()) {
-      bool dup = false;
-      for (const auto &av : allVerts) {
-        if (av->getId() == v->getId()) { dup = true; break; }
-      }
-      if (!dup) allVerts.push_back(v);
-    }
-  }
+  auto allVerts = pachner_detail::unionVerticesAcross(sharing);
   if (static_cast<int>(allVerts.size()) != d + 2) return false;
 
   // Separate shared (the 2 edge endpoints) and unique (the d others).
@@ -161,12 +152,7 @@ void IFlipMove::rollback() {
   for (const auto &s : createdSimplices_) st_->removeSimplex(s);
   createdSimplices_.clear();
 
-  for (const auto &e : createdEdges_) {
-    e->getSource()->removeOutEdge(e);
-    e->getTarget()->removeInEdge(e);
-    st_->getEdgeList()->remove(e);
-  }
-  createdEdges_.clear();
+  pachner_detail::removeAndClearEdges(createdEdges_, st_);
 
   for (const auto &verts : oldSimplexVerts_) {
     st_->createSimplexTracked(verts);

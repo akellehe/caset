@@ -1,0 +1,40 @@
+// MIT License -- Copyright (c) 2025 Andrew Kelleher
+//
+// Centralised definition of the simplicial-complex dual graph: every
+// top-simplex is a vertex, and two top-simplices are adjacent when they
+// share a facet.
+//
+// Previously this walk lived in two places: ``Spacetime::getDualAdjacency``
+// (which collects the edges into a COO array) and
+// ``WilsonLoop::dualNeighbors`` (which uses the same neighbour list to
+// trace dual-graph loops). Putting the walk here keeps the dual-graph
+// definition in one spot — both callers thread through this helper.
+
+#pragma once
+
+#include "mesh/Simplex.h"
+
+#include <vector>
+
+namespace tessera::graph {
+
+// Top-simplex dual-graph neighbours of ``sigma``: every other simplex
+// sharing one of sigma's facets. Boundary facets contribute no
+// neighbours (their ``getCofaces()`` returns only sigma itself).
+//
+// Pointer comparison is used to skip sigma itself — tessera's mesh
+// keeps one canonical Simplex per fingerprint, so pointer equality
+// matches fingerprint equality. Callers that want to defensively also
+// filter on dimension can post-process the returned vector.
+[[nodiscard]] inline std::vector<SimplexPtr>
+dualNeighbors(SimplexPtr const& sigma) {
+    std::vector<SimplexPtr> nbrs;
+    for (auto const& facet : sigma->getFacets()) {
+        for (auto const& coface : facet->getCofaces()) {
+            if (coface != sigma) nbrs.push_back(coface);
+        }
+    }
+    return nbrs;
+}
+
+} // namespace tessera::graph

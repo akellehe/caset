@@ -61,6 +61,37 @@ inline int spacetimeDim(const Spacetime &st) {
   return st.getMetric()->getSignature()->getDimensions();
 }
 
+/// Detach every edge in ``edges`` from its endpoints, remove it from
+/// the spacetime's EdgeList, then clear the container. Used by all
+/// five Pachner moves at the end of ``rollback()`` to undo edges that
+/// ``apply()`` freshly inserted.
+inline void removeAndClearEdges(Edges &edges, Spacetime *st) {
+  for (const auto &e : edges) {
+    e->getSource()->removeOutEdge(e);
+    e->getTarget()->removeInEdge(e);
+    st->getEdgeList()->remove(e);
+  }
+  edges.clear();
+}
+
+/// Order-preserving union of every simplex's vertex list,
+/// de-duplicated by vertex ID. Used by FlipMove / IFlipMove /
+/// ShiftMove during ``propose()`` to build the (d+2)-vertex span of
+/// adjacent simplices before checking the orientation constraint.
+/// Hash-set dedup makes this O(n) over the total vertex count instead
+/// of the inlined O(n²) loop the move classes used to carry.
+template <typename SimplexRange>
+inline VertexPtrs unionVerticesAcross(SimplexRange const &simplices) {
+  VertexPtrs out;
+  std::unordered_set<std::uint64_t> seen;
+  for (const auto &s : simplices) {
+    for (const auto &v : s->getVertices()) {
+      if (seen.insert(v->getId()).second) out.push_back(v);
+    }
+  }
+  return out;
+}
+
 }  // namespace pachner_detail
 
 

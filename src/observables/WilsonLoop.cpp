@@ -1,6 +1,7 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 #include "observables/WilsonLoop.h"
 #include "spacetime/Spacetime.h"
+#include "graph/dual_graph.hpp"
 #include "mesh/Simplex.h"
 #include "mesh/Edge.h"
 #include "mesh/Vertex.h"
@@ -36,16 +37,16 @@ WilsonLoop::WilsonLoop(std::shared_ptr<Spacetime> spacetime)
 // =====================================================================
 
 std::vector<SimplexPtr> WilsonLoop::dualNeighbors(SimplexPtr sigma) const {
-    int topSize = d_ + 1;
+    // Delegate to the shared dual-graph walk and retain WilsonLoop's
+    // defensive top-dimension filter — same set of neighbours as
+    // before for any well-formed manifold.
+    const int topSize = d_ + 1;
+    auto raw = ::tessera::graph::dualNeighbors(sigma);
     std::vector<SimplexPtr> nbrs;
-    for (const auto &facet : sigma->getFacets()) {
-        for (const auto &coface : facet->getCofaces()) {
-            if (static_cast<int>(coface->size()) == topSize &&
-                coface->fingerprint.fingerprint() !=
-                    sigma->fingerprint.fingerprint()) {
-                nbrs.push_back(coface);
-            }
-        }
+    nbrs.reserve(raw.size());
+    for (auto const& coface : raw) {
+        if (static_cast<int>(coface->size()) == topSize)
+            nbrs.push_back(coface);
     }
     return nbrs;
 }
@@ -135,73 +136,23 @@ LoopPath WilsonLoop::hingeLoop(SimplexPtr hinge) const {
     return buildLoopPath(ordered);
 }
 
-LoopPath WilsonLoop::geodesicLoop(SimplexPtr start) const {
+template <typename OnCycleFn>
+void WilsonLoop::bfsFindCycles(SimplexPtr start,
+                                  int maxDepth,
+                                  int minCurDepth,
+                                  OnCycleFn onCycle) const {
     using FP = std::uint64_t;
-    FP startFp = start->fingerprint.fingerprint();
-    int topSize = d_ + 1;
+    const FP startFp = start->fingerprint.fingerprint();
 
-    std::unordered_map<FP, FP> parent;       // fp -> parent fp
-    std::unordered_map<FP, SimplexPtr> fpMap; // fp -> simplex
-    parent[startFp] = startFp;               // self = root
-    fpMap[startFp] = start;
-
-    std::queue<SimplexPtr> q;
-    q.push(start);
-
-    while (!q.empty()) {
-        auto cur = q.front(); q.pop();
-        auto curFp = cur->fingerprint.fingerprint();
-
-        for (const auto &nbr : dualNeighbors(cur)) {
-            auto nbrFp = nbr->fingerprint.fingerprint();
-            if (parent.find(nbrFp) == parent.end()) {
-                parent[nbrFp] = curFp;
-                fpMap[nbrFp] = nbr;
-                q.push(nbr);
-            } else if (nbrFp != parent[curFp]) {
-                // Found a cycle: trace cur→start and nbr→start, combine.
-                auto trace = [&](FP fp) {
-                    std::vector<SimplexPtr> path;
-                    while (fp != startFp) {
-                        path.push_back(fpMap[fp]);
-                        fp = parent[fp];
-                    }
-                    path.push_back(start);
-                    return path;
-                };
-                auto p1 = trace(curFp);
-                auto p2 = trace(nbrFp);
-                std::reverse(p1.begin(), p1.end());
-                // p1 goes start → ... → cur, p2 goes nbr → ... → start
-                // Drop the duplicate start at end of p2
-                if (!p2.empty()) p2.pop_back();
-                p1.insert(p1.end(), p2.begin(), p2.end());
-                return buildLoopPath(p1);
-            }
-        }
-    }
-    return {};  // shouldn't happen on a closed manifold
-}
-
-LoopPath WilsonLoop::dualLatticeLoop(SimplexPtr start,
-                                      int targetLength) const {
-    using FP = std::uint64_t;
-    FP startFp = start->fingerprint.fingerprint();
-    int maxDepth = std::max(targetLength / 2, 2);
-
-    std::unordered_map<FP, FP> parent;
-    std::unordered_map<FP, int> depth;
-    std::unordered_map<FP, SimplexPtr> fpMap;
+    std::unordered_map<FP, FP> parent;       // fp → parent fp
+    std::unordered_map<FP, int> depth;       // fp → BFS depth from start
+    std::unordered_map<FP, SimplexPtr> fpMap; // fp → simplex
     parent[startFp] = startFp;
-    depth[startFp] = 0;
-    fpMap[startFp] = start;
+    depth[startFp]  = 0;
+    fpMap[startFp]  = start;
 
     std::queue<SimplexPtr> q;
     q.push(start);
-
-    // Track the best cycle found
-    std::vector<SimplexPtr> bestCycle;
-    int bestDiff = targetLength + 1;
 
     auto trace = [&](FP fp) {
         std::vector<SimplexPtr> path;
@@ -215,34 +166,58 @@ LoopPath WilsonLoop::dualLatticeLoop(SimplexPtr start,
 
     while (!q.empty()) {
         auto cur = q.front(); q.pop();
-        auto curFp = cur->fingerprint.fingerprint();
-        if (depth[curFp] >= maxDepth) continue;
+        const FP curFp = cur->fingerprint.fingerprint();
+        if (maxDepth >= 0 && depth[curFp] >= maxDepth) continue;
 
-        for (const auto &nbr : dualNeighbors(cur)) {
-            auto nbrFp = nbr->fingerprint.fingerprint();
+        for (auto const& nbr : dualNeighbors(cur)) {
+            const FP nbrFp = nbr->fingerprint.fingerprint();
             if (parent.find(nbrFp) == parent.end()) {
                 parent[nbrFp] = curFp;
-                depth[nbrFp] = depth[curFp] + 1;
-                fpMap[nbrFp] = nbr;
+                depth[nbrFp]  = depth[curFp] + 1;
+                fpMap[nbrFp]  = nbr;
                 q.push(nbr);
-            } else if (nbrFp != parent[curFp] && depth[curFp] >= 1) {
-                // Found a cycle
+            } else if (nbrFp != parent[curFp] && depth[curFp] >= minCurDepth) {
+                // Cycle found: splice cur→start (reversed) with
+                // nbr→start (drop the duplicate start at the join).
                 auto p1 = trace(curFp);
                 auto p2 = trace(nbrFp);
                 std::reverse(p1.begin(), p1.end());
                 if (!p2.empty()) p2.pop_back();
                 p1.insert(p1.end(), p2.begin(), p2.end());
-                int len = static_cast<int>(p1.size());
-                int diff = std::abs(len - targetLength);
-                if (diff < bestDiff) {
-                    bestDiff = diff;
-                    bestCycle = p1;
-                    if (diff == 0) goto done;
-                }
+                if (onCycle(p1)) return;
             }
         }
     }
-done:
+}
+
+LoopPath WilsonLoop::geodesicLoop(SimplexPtr start) const {
+    LoopPath result;
+    bfsFindCycles(start, /*maxDepth=*/-1, /*minCurDepth=*/0,
+                   [&](std::vector<SimplexPtr> const& path) {
+                       result = buildLoopPath(path);
+                       return true;  // first cycle wins
+                   });
+    return result;  // empty if the manifold is open / no cycle reached
+}
+
+LoopPath WilsonLoop::dualLatticeLoop(SimplexPtr start,
+                                       int targetLength) const {
+    const int maxDepth = std::max(targetLength / 2, 2);
+    std::vector<SimplexPtr> bestCycle;
+    int bestDiff = targetLength + 1;
+
+    bfsFindCycles(start, maxDepth, /*minCurDepth=*/1,
+                   [&](std::vector<SimplexPtr> const& path) {
+                       const int len  = static_cast<int>(path.size());
+                       const int diff = std::abs(len - targetLength);
+                       if (diff < bestDiff) {
+                           bestDiff  = diff;
+                           bestCycle = path;
+                           if (diff == 0) return true;  // exact match, stop
+                       }
+                       return false;
+                   });
+
     if (bestCycle.empty()) return geodesicLoop(start);
     return buildLoopPath(bestCycle);
 }

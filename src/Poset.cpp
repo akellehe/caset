@@ -3,6 +3,7 @@
 
 #include "Poset.h"
 
+#include "graph/index_by_key.hpp"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Vertex.h"
@@ -165,11 +166,8 @@ Poset Poset::fromSpacetime(Spacetime const& st) {
         if (v != nullptr) id_in_order.push_back(v->getId());
     }
     std::sort(id_in_order.begin(), id_in_order.end());
-    std::unordered_map<std::uint64_t, int> id_to_idx;
-    id_to_idx.reserve(id_in_order.size());
-    for (int i = 0; i < static_cast<int>(id_in_order.size()); ++i) {
-        id_to_idx.emplace(id_in_order[static_cast<std::size_t>(i)], i);
-    }
+    auto id_to_idx = ::tessera::graph::indexByKey(
+        id_in_order, [](auto id) { return id; });
     const int n_dense = static_cast<int>(id_in_order.size());
 
     // Collect strict-precedes pairs (earliest → latest) from timelike

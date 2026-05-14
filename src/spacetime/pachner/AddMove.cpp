@@ -189,12 +189,7 @@ void AddMove::rollback() {
 
   // 3. Remove the freshly-inserted edges (mostly: edges from newVert
   // to spatial vertices and to vertA/vertB).
-  for (const auto &e : createdEdges_) {
-    e->getSource()->removeOutEdge(e);
-    e->getTarget()->removeInEdge(e);
-    st_->getEdgeList()->remove(e);
-  }
-  createdEdges_.clear();
+  pachner_detail::removeAndClearEdges(createdEdges_, st_);
 
   // 4. Remove the new vertex.
   if (newVert_ != nullptr) {

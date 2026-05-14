@@ -5,10 +5,10 @@
 
 #include "quantum/holography.hpp"
 
+#include "graph/csr_builder.hpp"
 #include "quantum/choi_state.hpp"
 #include "quantum/tdvp_runner.hpp"
 
-#include <Eigen/Eigenvalues>
 #include <Eigen/SparseCore>
 
 #include <algorithm>
@@ -295,11 +295,11 @@ double MutualInformationProfile::atFlat(int v, int w) const noexcept {
     return mi_[static_cast<std::size_t>(v) * n + w];
 }
 
-MutualInformationProfile::COO
+::tessera::graph::WeightedCOO<int, double>
 MutualInformationProfile::weightedAdjacency() const {
-    COO coo;
+    ::tessera::graph::WeightedCOO<int, double> coo;
     const int n = nLabels();
-    coo.nVertices = n;
+    coo.n = n;
     if (n == 0) return coo;
 
     // Reserve a heuristic upper bound. Each snapshot contributes at
@@ -362,22 +362,9 @@ void EmergentGraph::buildFromCOO_(int n,
                                     std::vector<int> const& cols,
                                     std::vector<double> const& weights) {
     n_ = n;
-    std::vector<int> rowCount(static_cast<std::size_t>(n_) + 1, 0);
-    for (auto r : rows) ++rowCount[static_cast<std::size_t>(r) + 1];
-    std::partial_sum(rowCount.begin(), rowCount.end(), rowCount.begin());
-    indptr_ = std::move(rowCount);
-    indices_.assign(rows.size(), 0);
-    weights_.assign(rows.size(), 0.0);
-
-    std::vector<int> cursor(static_cast<std::size_t>(n_), 0);
-    for (std::size_t k = 0; k < rows.size(); ++k) {
-        const int r = rows[k];
-        const std::size_t pos =
-            static_cast<std::size_t>(indptr_[static_cast<std::size_t>(r)]) +
-            static_cast<std::size_t>(cursor[static_cast<std::size_t>(r)]++);
-        indices_[pos] = cols[k];
-        weights_[pos] = weights[k];
-    }
+    ::tessera::graph::buildCSRFromCOO<int, double, int>(
+        static_cast<std::size_t>(n_), rows, cols, weights,
+        indptr_, indices_, weights_);
 
     degrees_.assign(static_cast<std::size_t>(n_), 0.0);
     for (int v = 0; v < n_; ++v) {
@@ -410,298 +397,23 @@ Eigen::SparseMatrix<double> EmergentGraph::laplacian() const {
     return L;
 }
 
-namespace {
-
-// Apply L = D - W to a dense column vector v in-place, writing into out.
-// L is implicit from (indptr, indices, weights, degrees).
-void applyLaplacian(int n,
-                     std::vector<int> const& indptr,
-                     std::vector<int> const& indices,
-                     std::vector<double> const& weights,
-                     std::vector<double> const& degrees,
-                     std::vector<double> const& v,
-                     std::vector<double>& out) {
-    for (int i = 0; i < n; ++i) {
-        double s = degrees[static_cast<std::size_t>(i)] *
-                   v[static_cast<std::size_t>(i)];
-        const int lo = indptr[static_cast<std::size_t>(i)];
-        const int hi = indptr[static_cast<std::size_t>(i) + 1];
+void EmergentGraph::applyLaplacian(std::vector<double> const& x,
+                                       std::vector<double>& y) const {
+    // y = (D − W) · x. The implicit Laplacian acts on a CSR adjacency:
+    // diagonal term degrees_[i] · x[i] and off-diagonal subtraction
+    // over the row's neighbour list.
+    y.assign(static_cast<std::size_t>(n_), 0.0);
+    for (int i = 0; i < n_; ++i) {
+        double s = degrees_[static_cast<std::size_t>(i)] *
+                   x[static_cast<std::size_t>(i)];
+        const int lo = indptr_[static_cast<std::size_t>(i)];
+        const int hi = indptr_[static_cast<std::size_t>(i) + 1];
         for (int k = lo; k < hi; ++k) {
-            s -= weights[static_cast<std::size_t>(k)] *
-                 v[static_cast<std::size_t>(indices[static_cast<std::size_t>(k)])];
+            s -= weights_[static_cast<std::size_t>(k)] *
+                 x[static_cast<std::size_t>(indices_[static_cast<std::size_t>(k)])];
         }
-        out[static_cast<std::size_t>(i)] = s;
+        y[static_cast<std::size_t>(i)] = s;
     }
-}
-
-// Padé-13 matrix exponential on a small dense matrix (for the projected
-// Krylov tridiagonal). For the tiny sizes here (k ≤ 30) this is fine.
-Eigen::MatrixXd matExp(Eigen::MatrixXd const& A) {
-    // Eigen has no built-in matrix exp; use eigendecomposition since A
-    // is symmetric (T is symmetric tridiagonal in the Lanczos basis).
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(A);
-    auto const& V = es.eigenvectors();
-    auto const& d = es.eigenvalues();
-    Eigen::MatrixXd D = Eigen::MatrixXd::Zero(A.rows(), A.cols());
-    for (int i = 0; i < d.size(); ++i) D(i, i) = std::exp(d[i]);
-    return V * D * V.transpose();
-}
-
-} // namespace
-
-std::vector<double>
-EmergentGraph::returnProbability(std::vector<double> const& sigmas,
-                                   int krylovDim) const {
-    const int nT = static_cast<int>(sigmas.size());
-    std::vector<double> P(static_cast<std::size_t>(nT), 0.0);
-    if (n_ == 0 || nT == 0) return P;
-
-    // Krylov-Lanczos for each vertex v: project L onto a small symmetric
-    // tridiagonal T_k starting from e_v, then [exp(-σ T_k)]_{0,0}
-    // equals e_v^T exp(-σ L) e_v exactly to Krylov order.
-    std::vector<double> v(static_cast<std::size_t>(n_));
-    std::vector<double> w(static_cast<std::size_t>(n_));
-    std::vector<double> prev(static_cast<std::size_t>(n_));
-    std::vector<std::vector<double>> V;
-    std::vector<double> alpha;
-    std::vector<double> beta;
-
-    for (int start = 0; start < n_; ++start) {
-        // Initialise v0 = e_start, V = [v0], alpha = [], beta = [].
-        std::fill(v.begin(), v.end(), 0.0);
-        v[static_cast<std::size_t>(start)] = 1.0;
-        V.assign(1, v);
-        alpha.clear();
-        beta.clear();
-
-        const int kMax = std::min(krylovDim, n_);
-        for (int j = 0; j < kMax; ++j) {
-            // w = L · v
-            applyLaplacian(n_, indptr_, indices_, weights_, degrees_, v, w);
-            // alpha_j = ⟨v, w⟩
-            double a = 0.0;
-            for (int i = 0; i < n_; ++i) {
-                a += v[static_cast<std::size_t>(i)] *
-                     w[static_cast<std::size_t>(i)];
-            }
-            alpha.push_back(a);
-            if (j + 1 == kMax) break;
-
-            // w ← w − alpha_j · v − beta_{j-1} · v_{j-1}
-            for (int i = 0; i < n_; ++i) {
-                w[static_cast<std::size_t>(i)] -=
-                    a * v[static_cast<std::size_t>(i)];
-                if (j > 0) {
-                    w[static_cast<std::size_t>(i)] -=
-                        beta.back() *
-                        prev[static_cast<std::size_t>(i)];
-                }
-            }
-            // Full re-orthogonalisation against existing V (numerical
-            // stability).
-            for (auto const& u : V) {
-                double dot = 0.0;
-                for (int i = 0; i < n_; ++i) {
-                    dot += u[static_cast<std::size_t>(i)] *
-                           w[static_cast<std::size_t>(i)];
-                }
-                for (int i = 0; i < n_; ++i) {
-                    w[static_cast<std::size_t>(i)] -=
-                        dot * u[static_cast<std::size_t>(i)];
-                }
-            }
-            double normW = 0.0;
-            for (int i = 0; i < n_; ++i) {
-                normW += w[static_cast<std::size_t>(i)] *
-                         w[static_cast<std::size_t>(i)];
-            }
-            normW = std::sqrt(normW);
-            if (normW < 1e-12) break;  // Krylov subspace exhausted.
-            beta.push_back(normW);
-            prev = v;
-            const double inv = 1.0 / normW;
-            for (int i = 0; i < n_; ++i) {
-                v[static_cast<std::size_t>(i)] =
-                    w[static_cast<std::size_t>(i)] * inv;
-            }
-            V.push_back(v);
-        }
-
-        const int actualK = static_cast<int>(alpha.size());
-        if (actualK == 0) {
-            // No iterations succeeded; identity element gives P = 1.
-            for (int t = 0; t < nT; ++t)
-                P[static_cast<std::size_t>(t)] += 1.0;
-            continue;
-        }
-
-        // Build the symmetric tridiagonal T (actualK × actualK).
-        Eigen::MatrixXd T = Eigen::MatrixXd::Zero(actualK, actualK);
-        for (int i = 0; i < actualK; ++i) T(i, i) = alpha[i];
-        for (int i = 0; i + 1 < actualK; ++i) {
-            T(i, i + 1) = beta[i];
-            T(i + 1, i) = beta[i];
-        }
-
-        // For each σ, [exp(-σ T)]_{0,0} contributes to the trace.
-        for (int t = 0; t < nT; ++t) {
-            const double sigma = sigmas[static_cast<std::size_t>(t)];
-            Eigen::MatrixXd e = matExp(-sigma * T);
-            P[static_cast<std::size_t>(t)] += e(0, 0);
-        }
-    }
-
-    // Normalise to a return probability (trace / |V|).
-    const double invN = 1.0 / static_cast<double>(n_);
-    for (int t = 0; t < nT; ++t) P[static_cast<std::size_t>(t)] *= invN;
-    return P;
-}
-
-std::vector<double>
-EmergentGraph::spectralDimension(std::vector<double> const& sigmas,
-                                   std::vector<double> const& P) {
-    const int n = static_cast<int>(sigmas.size());
-    std::vector<double> dS(static_cast<std::size_t>(n),
-                            std::numeric_limits<double>::quiet_NaN());
-    if (n < 2 || static_cast<int>(P.size()) != n) return dS;
-
-    // Centered finite differences on (log σ, log P); one-sided at
-    // endpoints. D_S = -2 · d log P / d log σ.
-    std::vector<double> logSig(static_cast<std::size_t>(n));
-    std::vector<double> logP(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; ++i) {
-        const double s = sigmas[static_cast<std::size_t>(i)];
-        const double p = P[static_cast<std::size_t>(i)];
-        if (s <= 0.0 || p <= 0.0) {
-            // Leave dS[i] as NaN.
-            logSig[static_cast<std::size_t>(i)] =
-                std::numeric_limits<double>::quiet_NaN();
-            logP[static_cast<std::size_t>(i)] =
-                std::numeric_limits<double>::quiet_NaN();
-            continue;
-        }
-        logSig[static_cast<std::size_t>(i)] = std::log(s);
-        logP[static_cast<std::size_t>(i)]   = std::log(p);
-    }
-
-    auto valid = [](double x) {
-        return std::isfinite(x);
-    };
-
-    for (int i = 0; i < n; ++i) {
-        double slope;
-        if (i == 0) {
-            const double a = logP[1] - logP[0];
-            const double b = logSig[1] - logSig[0];
-            slope = (valid(a) && valid(b) && b != 0.0) ? a / b : std::nan("");
-        } else if (i == n - 1) {
-            const double a = logP[static_cast<std::size_t>(n - 1)] -
-                              logP[static_cast<std::size_t>(n - 2)];
-            const double b = logSig[static_cast<std::size_t>(n - 1)] -
-                              logSig[static_cast<std::size_t>(n - 2)];
-            slope = (valid(a) && valid(b) && b != 0.0) ? a / b : std::nan("");
-        } else {
-            const double a = logP[static_cast<std::size_t>(i + 1)] -
-                              logP[static_cast<std::size_t>(i - 1)];
-            const double b = logSig[static_cast<std::size_t>(i + 1)] -
-                              logSig[static_cast<std::size_t>(i - 1)];
-            slope = (valid(a) && valid(b) && b != 0.0) ? a / b : std::nan("");
-        }
-        dS[static_cast<std::size_t>(i)] = -2.0 * slope;
-    }
-    return dS;
-}
-
-std::vector<double>
-EmergentGraph::spectralDimensionSmoothed(std::vector<double> const& sigmas,
-                                          std::vector<double> const& P,
-                                          int windowSize,
-                                          int polyOrder) {
-    const int n = static_cast<int>(sigmas.size());
-    std::vector<double> dS(static_cast<std::size_t>(n),
-                            std::numeric_limits<double>::quiet_NaN());
-    if (n < 2 || static_cast<int>(P.size()) != n) return dS;
-    if (windowSize < 3 || (windowSize % 2) == 0 ||
-        polyOrder < 1 || polyOrder + 1 > windowSize) {
-        throw std::invalid_argument(
-            "EmergentGraph::spectralDimensionSmoothed: require windowSize "
-            "odd >= 3, polyOrder >= 1, polyOrder + 1 <= windowSize");
-    }
-    const int half = windowSize / 2;
-
-    // Pre-compute log σ and log P, marking non-finite points so the
-    // local fits can skip them.
-    std::vector<double> logSig(static_cast<std::size_t>(n));
-    std::vector<double> logP(static_cast<std::size_t>(n));
-    std::vector<bool>   ok(static_cast<std::size_t>(n), false);
-    for (int i = 0; i < n; ++i) {
-        const double s = sigmas[static_cast<std::size_t>(i)];
-        const double p = P[static_cast<std::size_t>(i)];
-        if (s > 0.0 && p > 0.0) {
-            logSig[static_cast<std::size_t>(i)] = std::log(s);
-            logP[static_cast<std::size_t>(i)]   = std::log(p);
-            ok[static_cast<std::size_t>(i)]     = true;
-        }
-    }
-
-    // Local-polynomial slope estimator: for each grid point i, fit a
-    // degree-`polyOrder` polynomial p(x) = Σ_k a_k (x − x_i)^k to the
-    // (log σ, log P) data in a centered window, then the slope at x_i
-    // is a_1.
-    for (int i = 0; i < n; ++i) {
-        if (!ok[static_cast<std::size_t>(i)]) continue;
-
-        // Build a window centered on i, clipped to the grid boundary.
-        int lo = std::max(0, i - half);
-        int hi = std::min(n - 1, i + half);
-        // For very narrow effective windows (short P arrays), fall
-        // back to centered finite difference.
-        if (hi - lo + 1 < polyOrder + 1) {
-            const auto& Sig = logSig;
-            const auto& Lp  = logP;
-            double slope = 0.0;
-            if (i == 0 || i == n - 1) {
-                int a = (i == 0) ? 0 : n - 2;
-                int b = a + 1;
-                if (ok[a] && ok[b] && Sig[b] != Sig[a]) {
-                    slope = (Lp[b] - Lp[a]) / (Sig[b] - Sig[a]);
-                }
-            } else {
-                if (ok[i - 1] && ok[i + 1] && Sig[i + 1] != Sig[i - 1]) {
-                    slope = (Lp[i + 1] - Lp[i - 1]) /
-                            (Sig[i + 1] - Sig[i - 1]);
-                }
-            }
-            dS[static_cast<std::size_t>(i)] = -2.0 * slope;
-            continue;
-        }
-
-        // Assemble the local least-squares system (V · a = y).
-        const int win = hi - lo + 1;
-        Eigen::MatrixXd V(win, polyOrder + 1);
-        Eigen::VectorXd y(win);
-        const double xCenter = logSig[static_cast<std::size_t>(i)];
-        int row = 0;
-        for (int k = lo; k <= hi; ++k) {
-            if (!ok[static_cast<std::size_t>(k)]) continue;
-            const double dx =
-                logSig[static_cast<std::size_t>(k)] - xCenter;
-            double pow = 1.0;
-            for (int p = 0; p <= polyOrder; ++p) {
-                V(row, p) = pow;
-                pow *= dx;
-            }
-            y(row) = logP[static_cast<std::size_t>(k)];
-            ++row;
-        }
-        if (row < polyOrder + 1) continue;
-
-        Eigen::VectorXd coeffs = V.topRows(row).householderQr().solve(y.head(row));
-        // a_1 is the slope at the window center.
-        const double slope = coeffs(1);
-        dS[static_cast<std::size_t>(i)] = -2.0 * slope;
-    }
-    return dS;
 }
 
 std::string EmergentGraph::toGraphML() const {
