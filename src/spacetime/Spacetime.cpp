@@ -807,4 +807,19 @@ void Spacetime::removeSimplex(const SimplexPtr &simplex) {
   unregisterSimplex(simplex);
 }
 
+void Spacetime::removeEdge(const EdgePtr &edge) {
+  if (edge == nullptr) return;
+  if (auto src = edge->getSource()) src->removeOutEdge(edge);
+  if (auto tgt = edge->getTarget()) tgt->removeInEdge(edge);
+  edgeList->remove(edge);
+}
+
+void Spacetime::removeVertex(const VertexPtr &vertex) {
+  if (vertex == nullptr) return;
+  // Snapshot the incidence list before mutating — removeEdge mutates it.
+  Edges incident = vertex->getEdges();
+  for (auto const &e : incident) removeEdge(e);
+  vertexList->remove(vertex);
+}
+
 } // tessera

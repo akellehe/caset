@@ -230,6 +230,19 @@ class Spacetime {
     /// @param simplex The simplex \f$ \sigma \f$ to remove
     void removeSimplex(const SimplexPtr &simplex);
 
+    /// Fully remove an edge from the complex: drop it from its endpoints'
+    /// in/out edge lists and from the EdgeList. The caller is responsible
+    /// for first removing any simplices that contain the edge.
+    /// @param edge The edge \f$ e \f$ to remove
+    void removeEdge(const EdgePtr &edge);
+
+    /// Fully remove a vertex from the complex: remove every edge incident
+    /// to it (via :func:`removeEdge`) and drop the vertex from the
+    /// VertexList. The caller is responsible for first removing any
+    /// simplices that contain the vertex.
+    /// @param vertex The vertex \f$ v \f$ to remove
+    void removeVertex(const VertexPtr &vertex);
+
     /// @return The type of quantum gravity formulation (CDT, Regge, etc.)
     [[nodiscard]] SpacetimeType getSpacetimeType() const noexcept;
 

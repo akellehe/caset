@@ -63,50 +63,59 @@ int main() {
     }
     std::cout << "[grow] vertices " << v0 << " -> " << v1 << std::endl;
 
-    // A Monte Carlo sweep, then un-interact moves.
+    // Check observables on the *grown* complex, before any un-interactions
+    // can truncate it.
+    {
+        const auto profile = sim.getVolumeProfile();
+        std::cout << "[volume] profile slices = " << profile.size() << "  [";
+        for (int c : profile) std::cout << c << " ";
+        std::cout << "]" << std::endl;
+        if (profile.size() < 2) {
+            std::cerr << "FAIL: complex did not advance past one time slice\n";
+            ++failures;
+        }
+        std::vector<double> sigmas;
+        for (int s = 0; s < 24; ++s)
+            sigmas.push_back(std::exp(std::log(1e-2)
+                + s * (std::log(1e3) - std::log(1e-2)) / 23.0));
+        const auto dS = sim.getSpectralDimension(sigmas);
+        double peakDS = 0.0;
+        int nFinite = 0;
+        for (double d : dS)
+            if (std::isfinite(d)) { ++nFinite; peakDS = std::max(peakDS, d); }
+        std::cout << "[spectral] " << nFinite << "/" << dS.size()
+                  << " finite, peak D_S = " << peakDS << std::endl;
+        if (nFinite == 0) {
+            std::cerr << "FAIL: spectral dimension produced no finite values\n";
+            ++failures;
+        }
+    }
+
+    // A Monte Carlo sweep, then deep un-interactions (each accepted
+    // un-interact truncates a cell's whole future cone).
     const int swept = sim.sweep();
     std::cout << "[sweep] " << swept << " moves accepted" << std::endl;
 
+    const std::size_t countBeforeUninteract = sim.interactionCount();
     int unInteracted = 0;
     for (int k = 0; k < 20; ++k)
         if (sim.unInteract()) ++unInteracted;
     std::cout << "[unInteract] " << unInteracted << "/20 accepted, "
               << "interactionCount = " << sim.interactionCount()
-              << std::endl;
+              << "  (was " << countBeforeUninteract << ")" << std::endl;
+    if (unInteracted > 0 && sim.interactionCount() >= countBeforeUninteract) {
+        std::cerr << "FAIL: un-interactions accepted but interactionCount "
+                  << "did not decrease\n";
+        ++failures;
+    }
 
-    // Acceptance rates and observables must be finite.
+    // Acceptance rates must be in range.
     for (auto const& [name, rate] : sim.getAcceptanceRates()) {
         std::cout << "[rate] " << name << " = " << rate << std::endl;
         if (!std::isfinite(rate) || rate < 0.0 || rate > 1.0) {
             std::cerr << "FAIL: acceptance rate out of range\n";
             ++failures;
         }
-    }
-    const auto profile = sim.getVolumeProfile();
-    std::cout << "[volume] profile slices = " << profile.size() << "  [";
-    for (int c : profile) std::cout << c << " ";
-    std::cout << "]" << std::endl;
-    if (profile.size() < 2) {
-        std::cerr << "FAIL: complex did not advance past one time slice\n";
-        ++failures;
-    }
-
-    // The spectral dimension — the observable the D_S = 4 search hinges
-    // on — must return finite values on a log-spaced sigma grid.
-    std::vector<double> sigmas;
-    for (int s = 0; s < 24; ++s)
-        sigmas.push_back(std::exp(std::log(1e-2)
-            + s * (std::log(1e3) - std::log(1e-2)) / 23.0));
-    const auto dS = sim.getSpectralDimension(sigmas);
-    double peakDS = 0.0;
-    int nFinite = 0;
-    for (double d : dS)
-        if (std::isfinite(d)) { ++nFinite; peakDS = std::max(peakDS, d); }
-    std::cout << "[spectral] " << nFinite << "/" << dS.size()
-              << " finite, peak D_S = " << peakDS << std::endl;
-    if (nFinite == 0) {
-        std::cerr << "FAIL: spectral dimension produced no finite values\n";
-        ++failures;
     }
 
     // tune() should grow toward the target without crashing.

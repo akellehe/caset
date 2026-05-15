@@ -832,6 +832,8 @@ dimension reaches 4.
         .def("getAcceptanceRates",
              &InteractionSimulation::getAcceptanceRates,
              R"doc(Accepted / attempted ratio per move type.)doc")
+        .def("getSpacetime", &InteractionSimulation::getSpacetime,
+             R"doc(The interaction-history simplicial complex (the primal).)doc")
         .def_property_readonly("interactionCount",
              &InteractionSimulation::interactionCount)
         .def_property("beta", &InteractionSimulation::getBeta,

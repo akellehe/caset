@@ -50,8 +50,10 @@
 #include <map>
 #include <memory>
 #include <random>
+#include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -185,16 +187,25 @@ class InteractionSimulation : public tessera::Simulation {
         jointOf_;
 
     // ─── Frontier / move bookkeeping (the DP tables) ────────────────────
-    // Systems with no out-edges. Maintained incrementally.
-    std::vector<tessera::VertexPtr> frontier_;
+    // The frontier — systems that have not yet interacted (no temporal
+    // out-edges). Maintained incrementally; O(1) membership.
+    std::unordered_set<tessera::VertexPtr> frontier_;
 
     // N₊: eligible interact candidates — frontier spatial edges {X, Y}.
+    // Kept as a flat vector for O(1) uniform-random pick by index, plus
+    // the back-reference indices below for O(degree) incremental
+    // add/remove.
     std::vector<std::pair<tessera::VertexPtr, tessera::VertexPtr>>
         eligibleEdges_;
-
-    // N₋: leaf cells — (2,3) cells whose three products are all still on
-    // the frontier.
-    std::vector<tessera::SimplexPtr> leafCells_;
+    // edge (sorted pair) -> its position in eligibleEdges_.
+    std::map<std::pair<tessera::VertexPtr, tessera::VertexPtr>, std::size_t>
+        edgePos_;
+    // vertex -> the eligible-edges incident to it. Used to drop all of v's
+    // edges in O(degree) when v freezes.
+    std::unordered_map<tessera::VertexPtr,
+                       std::set<std::pair<tessera::VertexPtr,
+                                          tessera::VertexPtr>>>
+        vertexEdges_;
 
     // Per-hinge action contribution A_h·ε_h. Updated locally per move so
     // ΔS is O(affected hinges).
@@ -202,19 +213,58 @@ class InteractionSimulation : public tessera::Simulation {
                        tessera::SimplexPtrHash, tessera::SimplexPtrEq>
         hingeAction_;
 
-    std::size_t interactionCount_{0};
+    // Dependency tracking for deep un-interactions.
+    //   producedByCell_[v]  = the cell whose interaction created v (a
+    //                         product vertex X', AB, or Y').
+    //   consumedByCell_[v]  = the cell that took v as a parent in its
+    //                         interaction (if any). Each vertex is
+    //                         consumed by at most one cell.
+    // Together these give the dependency tree: un-interacting a cell
+    // truncates its future cone via BFS through producedByCell_ →
+    // consumedByCell_.
+    std::unordered_map<tessera::VertexPtr, tessera::SimplexPtr>
+        producedByCell_;
+    std::unordered_map<tessera::VertexPtr, tessera::SimplexPtr>
+        consumedByCell_;
+
+    // Per-cell count of its products that have been consumed by a child
+    // interaction. A cell is a *leaf* (its deep un-interact returns to
+    // exactly the state where this cell didn't exist) iff this count is
+    // zero. The Metropolis prefactor for interact uses leafCellCount_,
+    // bounded as the lattice grows. Maintained incrementally.
+    std::unordered_map<tessera::SimplexPtr, std::uint8_t,
+                       tessera::SimplexPtrHash, tessera::SimplexPtrEq>
+        consumedProductsOf_;
+    std::size_t leafCellCount_{0};
+
+    std::size_t   interactionCount_{0};
+    std::uint64_t nextVertexId_{0};   // monotone; never reused after removeVertex
 
     // ─── Helpers ────────────────────────────────────────────────────────
     // Build the Poisson-Delaunay initial layer: randomized mixed-state
     // systems as t=0 vertices, the Delaunay edges, the initial tables.
     void buildInitialLayer();
 
-    // Predicate: a system is on the frontier iff it has no out-edges.
-    [[nodiscard]] static bool isFrontier(tessera::VertexPtr v) noexcept;
+    // Initial population of frontier_, eligibleEdges_, edgePos_,
+    // vertexEdges_ from the Poisson-Delaunay layer. Called once.
+    void initMoveTables();
 
-    // Recompute eligibleEdges_ (N₊) and leafCells_ (N₋) from the current
-    // complex.
-    void rebuildMoveTables();
+    // Incremental updates — O(degree) per call.
+    void addEligibleEdge(tessera::VertexPtr a, tessera::VertexPtr b);
+    void removeEligibleEdge(
+        std::pair<tessera::VertexPtr, tessera::VertexPtr> key);
+    // Freeze v: drop it from the frontier and drop all its eligible
+    // edges. The mirror unfreeze (used by un-interact) re-adds v to the
+    // frontier and reinstates eligible edges to its still-frontier
+    // neighbours.
+    void freezeFromFrontier(tessera::VertexPtr v);
+    void unfreezeIntoFrontier(tessera::VertexPtr v);
+
+    // Sorted-pair key constructor for the edge tables.
+    static std::pair<tessera::VertexPtr, tessera::VertexPtr>
+    edgeKey(tessera::VertexPtr a, tessera::VertexPtr b) noexcept {
+        return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
+    }
 
     // The ten edge mutual informations of an interaction X,Y → X',AB,Y'.
     // Keyed by the cell's local-label pairs (0=X 1=Y 2=X' 3=AB 4=Y').

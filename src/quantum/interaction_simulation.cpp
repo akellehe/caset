@@ -19,6 +19,7 @@
 #include <cmath>
 #include <complex>
 #include <limits>
+#include <set>
 #include <stdexcept>
 
 namespace tessera::quantum {
@@ -274,10 +275,10 @@ void InteractionSimulation::buildInitialLayer() {
     std::vector<VertexPtr> verts(static_cast<std::size_t>(n));
     for (int s = 0; s < n; ++s) {
         VertexPtr v = spacetime_->createVertex(
-            static_cast<std::uint64_t>(s), std::vector<double>{0.0});
+            nextVertexId_++, std::vector<double>{0.0});
         verts[static_cast<std::size_t>(s)] = v;
         stateOf_[v] = partialTrace(layer, n, {s});  // one-qubit marginal
-        frontier_.push_back(v);
+        frontier_.insert(v);
     }
 
     // Delaunay edges, lengthed by the genuine pairwise mutual information
@@ -295,7 +296,7 @@ void InteractionSimulation::buildInitialLayer() {
             a, b, signedSquaredLength(len, /*spacelike=*/true));
     }
 
-    rebuildMoveTables();
+    initMoveTables();
 }
 
 // The joint state ρ_XY in (X ⊗ Y) qubit order — the stored correlated
@@ -340,60 +341,122 @@ InteractionSimulation::computeInteraction(VertexPtr x, VertexPtr y) const {
     res.stateAB = primeX;  // AB carried forward via its X-marginal proxy
     res.jointAB = rhoAB;   // (X' ⊗ Y') joint, inherited by the products
 
-    // Local labels: 0=X 1=Y 2=X' 3=AB 4=Y'.
+    // Cartan/local-frame model: under the KAK decomposition
+    //   U = (K₁⊗K₂)·exp(i·c·σσ)·(K₃⊗K₄),
+    // U_A ≡ K₁K₃ and V_B ≡ K₂K₄ are *local* operators on the A and B
+    // worldlines, and Σ_AB ≡ exp(i·c·σσ) is the entangling core. So
+    // the post-interaction A-side state (and B-side state) depend only
+    // on the respective input — I(B : U_A) = I(A : V_B) = 0 — and the
+    // genuine new joint information lives in Σ_AB. The bowtie has:
+    //   • two worldline self-info edges A–A' and B–B' carrying S(ρ_A)
+    //     and S(ρ_B) respectively (a local unitary preserves entropy);
+    //   • four hub-spoke edges to AB, each carrying jointMI(ρ_AB);
+    //   • the input spatial edge A–B carrying the input MI;
+    //   • and three cross-worldline edges (A–B', B–A', A'–B') at MI=0
+    //     by construction.
     auto key = [](int u, int v) {
         return std::make_pair(std::min(u, v), std::max(u, v));
     };
-    res.edgeMI[key(0, 1)] = iInput;                  // X-Y   input pair
-    res.edgeMI[key(0, 2)] = std::max(sX - iJoint, 0.0);  // X-X' residual
-    res.edgeMI[key(1, 4)] = std::max(sY - iJoint, 0.0);  // Y-Y' residual
-    res.edgeMI[key(0, 3)] = iJoint;                  // X-AB  joint MI
-    res.edgeMI[key(1, 3)] = iJoint;                  // Y-AB  joint MI
-    res.edgeMI[key(2, 3)] = iJoint;                  // X'-AB
-    res.edgeMI[key(3, 4)] = iJoint;                  // Y'-AB
-    res.edgeMI[key(2, 4)] = iJoint;                  // X'-Y' joint correlation
-    res.edgeMI[key(0, 4)] = iJoint;                  // X-Y'  closure
-    res.edgeMI[key(1, 2)] = iJoint;                  // Y-X'  closure
+    res.edgeMI[key(0, 1)] = iInput;   // A-B   input spatial
+    res.edgeMI[key(0, 2)] = sX;       // A-A'  worldline self-info
+    res.edgeMI[key(1, 4)] = sY;       // B-B'  worldline self-info
+    res.edgeMI[key(0, 3)] = iJoint;   // A-AB  hub spoke
+    res.edgeMI[key(1, 3)] = iJoint;   // B-AB  hub spoke
+    res.edgeMI[key(2, 3)] = iJoint;   // A'-AB hub spoke
+    res.edgeMI[key(3, 4)] = iJoint;   // AB-B' hub spoke
+    res.edgeMI[key(2, 4)] = 0.0;      // A'-B' cross-worldline (structural 0)
+    res.edgeMI[key(0, 4)] = 0.0;      // A-B'  cross-worldline (structural 0)
+    res.edgeMI[key(1, 2)] = 0.0;      // B-A'  cross-worldline (structural 0)
     return res;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Frontier / move-table bookkeeping
+// Frontier / move-table bookkeeping — incremental, O(degree) per change
+//
+// The frontier is the set of systems with no temporal out-edge. The
+// eligible-edge table N₊ is the spatial edges between two frontier
+// vertices; it is kept as a flat vector for O(1) uniform pick, plus an
+// edgePos_ index for swap-and-pop removal and a vertexEdges_ incidence
+// index for O(degree) cascade when a vertex freezes. The un-interact
+// denominator is just the total cell count interactionCount_ (deep
+// un-interact picks any cell), so no leaf-cell table is needed.
 // ─────────────────────────────────────────────────────────────────────────
 
-bool InteractionSimulation::isFrontier(VertexPtr v) noexcept {
-    if (v == nullptr) return false;
-    // A system is frozen once it has interacted — i.e. once it has an
-    // out-edge crossing to a later time slice. Same-slice (spatial /
-    // Delaunay) out-edges do not freeze it.
-    for (EdgePtr e : v->getOutEdges())
-        if (e->getTarget()->getTime() > v->getTime()) return false;
-    return true;
+void InteractionSimulation::addEligibleEdge(VertexPtr a, VertexPtr b) {
+    if (a == nullptr || b == nullptr || a == b) return;
+    const auto key = edgeKey(a, b);
+    if (edgePos_.count(key)) return;  // already eligible
+    edgePos_[key] = eligibleEdges_.size();
+    eligibleEdges_.push_back(key);
+    vertexEdges_[key.first].insert(key);
+    vertexEdges_[key.second].insert(key);
 }
 
-void InteractionSimulation::rebuildMoveTables() {
-    frontier_.clear();
-    for (auto const& [v, state] : stateOf_) {
-        (void)state;
-        if (isFrontier(v)) frontier_.push_back(v);
+void InteractionSimulation::removeEligibleEdge(
+    std::pair<VertexPtr, VertexPtr> key) {
+    auto it = edgePos_.find(key);
+    if (it == edgePos_.end()) return;
+    const std::size_t pos = it->second;
+    const std::size_t last = eligibleEdges_.size() - 1;
+    if (pos != last) {
+        eligibleEdges_[pos] = eligibleEdges_[last];
+        edgePos_[eligibleEdges_[pos]] = pos;
     }
+    eligibleEdges_.pop_back();
+    edgePos_.erase(it);
+    auto eraseInc = [&](VertexPtr v) {
+        auto vit = vertexEdges_.find(v);
+        if (vit == vertexEdges_.end()) return;
+        vit->second.erase(key);
+        if (vit->second.empty()) vertexEdges_.erase(vit);
+    };
+    eraseInc(key.first);
+    eraseInc(key.second);
+}
 
+void InteractionSimulation::freezeFromFrontier(VertexPtr v) {
+    if (v == nullptr) return;
+    frontier_.erase(v);
+    auto it = vertexEdges_.find(v);
+    if (it == vertexEdges_.end()) return;
+    // Copy first — removeEligibleEdge mutates vertexEdges_[v] under us.
+    std::vector<std::pair<VertexPtr, VertexPtr>> keys(it->second.begin(),
+                                                     it->second.end());
+    for (auto const& k : keys) removeEligibleEdge(k);
+}
+
+void InteractionSimulation::unfreezeIntoFrontier(VertexPtr v) {
+    if (v == nullptr) return;
+    frontier_.insert(v);
+    // Reinstate eligibility for v's spatial neighbours that are also
+    // currently on the frontier. We walk the live spacetime edges
+    // incident to v; products of deleted cells are already gone, so
+    // those edges no longer appear.
+    for (EdgePtr e : v->getEdges()) {
+        VertexPtr a = e->getSource();
+        VertexPtr b = e->getTarget();
+        VertexPtr other = (a == v) ? b : a;
+        if (other == nullptr || other == v) continue;
+        if (other->getTime() != v->getTime()) continue;  // temporal
+        if (frontier_.count(other) == 0) continue;
+        addEligibleEdge(v, other);
+    }
+}
+
+void InteractionSimulation::initMoveTables() {
+    // The Poisson-Delaunay layer starts entirely on the frontier — every
+    // vertex was just added by buildInitialLayer with no out-edges. The
+    // Delaunay edges are all eligible.
     eligibleEdges_.clear();
+    edgePos_.clear();
+    vertexEdges_.clear();
     for (EdgePtr e : spacetime_->getEdgeList()->toVector()) {
         VertexPtr a = e->getSource();
         VertexPtr b = e->getTarget();
-        if (!isFrontier(a) || !isFrontier(b)) continue;
-        if (a->getTime() != b->getTime()) continue;  // spatial only
-        eligibleEdges_.emplace_back(a, b);
-    }
-
-    leafCells_.clear();
-    for (SimplexPtr s : spacetime_->getSimplices()) {
-        if (s->getVertices().size() != 5) continue;  // (2,3) cell
-        int frontierProducts = 0;
-        for (VertexPtr v : s->getVertices())
-            if (isFrontier(v)) ++frontierProducts;
-        if (frontierProducts == 3) leafCells_.push_back(s);
+        if (a == nullptr || b == nullptr) continue;
+        if (a->getTime() != b->getTime()) continue;
+        if (frontier_.count(a) == 0 || frontier_.count(b) == 0) continue;
+        addEligibleEdge(a, b);
     }
 }
 
@@ -405,8 +468,7 @@ bool InteractionSimulation::interact() {
     ++interactAttempts_;
     if (eligibleEdges_.empty()) return false;
     if (config_.targetInteractions != 0
-        && interactionCount_ >= config_.targetInteractions
-        && leafCells_.empty())
+        && interactionCount_ >= config_.targetInteractions)
         return false;
 
     std::uniform_int_distribution<std::size_t> pick(
@@ -430,7 +492,26 @@ bool InteractionSimulation::interact() {
     // touches the live geometry.
     const double deltaS = cellHingeAction(edgeSq);
 
-    const std::size_t nMinusAfter = leafCells_.size() + 1;
+    // Reverse-move denominator: the proposed cell will be a leaf in the
+    // new state (its three products are fresh), and only leaf cells'
+    // deep un-interact returns to exactly the pre-interact state.
+    // Counting leaves stays bounded as T grows; using total cells would
+    // crater acceptance at large T.
+    auto producer = [&](VertexPtr v) -> SimplexPtr {
+        auto it = producedByCell_.find(v);
+        return (it == producedByCell_.end()) ? nullptr : it->second;
+    };
+    auto consumedCount = [&](SimplexPtr c) -> unsigned {
+        auto it = consumedProductsOf_.find(c);
+        return (it == consumedProductsOf_.end()) ? 0u : it->second;
+    };
+    const SimplexPtr cX = producer(x);
+    const SimplexPtr cY = producer(y);
+    std::size_t leavesAfter = leafCellCount_ + 1;  // the new cell
+    if (cX != nullptr && consumedCount(cX) == 0) --leavesAfter;
+    if (cY != nullptr && cY != cX && consumedCount(cY) == 0)
+        --leavesAfter;
+    const std::size_t nMinusAfter = std::max<std::size_t>(leavesAfter, 1);
     const double logPrefactor =
         std::log(static_cast<double>(nPlusBefore))
         - std::log(static_cast<double>(nMinusAfter));
@@ -440,11 +521,11 @@ bool InteractionSimulation::interact() {
     // Accepted — build the (2,3) cell into the live complex.
     const double tNext = x->getTime() + 1.0;
     VertexPtr xp = spacetime_->createVertex(
-        spacetime_->getVertexCount(), std::vector<double>{tNext});
+        nextVertexId_++, std::vector<double>{tNext});
     VertexPtr ab = spacetime_->createVertex(
-        spacetime_->getVertexCount(), std::vector<double>{tNext});
+        nextVertexId_++, std::vector<double>{tNext});
     VertexPtr yp = spacetime_->createVertex(
-        spacetime_->getVertexCount(), std::vector<double>{tNext});
+        nextVertexId_++, std::vector<double>{tNext});
     VertexPtr label[5] = {x, y, xp, ab, yp};
     for (int e = 0; e < 10; ++e)
         (void)spacetime_->createEdge(label[kCellEdges[e].u],
@@ -460,56 +541,197 @@ bool InteractionSimulation::interact() {
     stateOf_[xp] = res.statePrimeX;
     stateOf_[ab] = res.stateAB;
     stateOf_[yp] = res.statePrimeY;
-    // The two products inherit the joint state ρ_AB — they stay
-    // correlated, so a later interaction between them is genuine.
-    {
-        const auto key = sortedPair(xp, yp);
-        jointOf_[key] =
-            (key.first == xp) ? res.jointAB : swapQubits(res.jointAB);
+    // Cartan model joints: the entangling correlation lives on the
+    // hub-spokes A'–AB and AB–B', not on A'–B'. The (A',B') pair has
+    // no entry — jointStateFor falls back to the separable tensor
+    // product, giving the structural-zero MI we want.
+    auto putJoint = [&](VertexPtr u, VertexPtr v,
+                        const Eigen::Matrix4cd& rho) {
+        const auto k = sortedPair(u, v);
+        jointOf_[k] = (k.first == u) ? rho : swapQubits(rho);
+    };
+    putJoint(xp, ab, res.jointAB);  // A'–AB joint (= ρ_AB, A' on A-side)
+    putJoint(ab, yp, res.jointAB);  // AB–B' joint (= ρ_AB, B' on B-side)
+
+    // Dependency tracking for deep un-interactions.
+    producedByCell_[xp] = cell;
+    producedByCell_[ab] = cell;
+    producedByCell_[yp] = cell;
+    consumedByCell_[x] = cell;
+    consumedByCell_[y] = cell;
+
+    // Leaf bookkeeping — the new cell joins as a leaf; each of x, y that
+    // was itself a product takes its producing cell out of leaf state on
+    // the first consumed product.
+    consumedProductsOf_[cell] = 0;
+    ++leafCellCount_;
+    if (cX != nullptr) {
+        std::uint8_t &k = consumedProductsOf_[cX];
+        if (k == 0) --leafCellCount_;
+        ++k;
     }
+    if (cY != nullptr) {
+        std::uint8_t &k = consumedProductsOf_[cY];
+        if (k == 0 && cY != cX) --leafCellCount_;
+        ++k;
+    }
+
+    // Incremental move-table update — O(deg(x) + deg(y) + 3).
+    freezeFromFrontier(x);
+    freezeFromFrontier(y);
+    frontier_.insert(xp);
+    frontier_.insert(ab);
+    frontier_.insert(yp);
+    addEligibleEdge(xp, ab);
+    addEligibleEdge(ab, yp);
+    addEligibleEdge(xp, yp);
 
     ++interactionCount_;
     ++interactAccepted_;
-    rebuildMoveTables();
     return true;
 }
 
 bool InteractionSimulation::unInteract() {
     ++unInteractAttempts_;
-    if (leafCells_.empty()) return false;
+    // Eligible: every (2,3) cell. Removing a past cell truncates the
+    // whole future cone of its products — each product is consumed by
+    // at most one later cell, so the descendant set is well-defined.
+    std::vector<SimplexPtr> allCells;
+    for (SimplexPtr s : spacetime_->getSimplices())
+        if (s->getVertices().size() == 5) allCells.push_back(s);
+    if (allCells.empty()) return false;
 
-    std::uniform_int_distribution<std::size_t> pick(
-        0, leafCells_.size() - 1);
-    SimplexPtr cell = leafCells_[pick(rng_)];
+    std::uniform_int_distribution<std::size_t> pick(0, allCells.size() - 1);
+    SimplexPtr root = allCells[pick(rng_)];
 
-    const std::size_t nMinusBefore = leafCells_.size();
-
-    double deltaS = 0.0;
-    std::vector<SimplexPtr> cellHinges;
-    for (SimplexPtr facet : cell->getFacets())
-        for (SimplexPtr hinge : facet->getFacets()) {
-            if (hinge->getVertices().size() != 3) continue;
-            cellHinges.push_back(hinge);
-            auto it = hingeAction_.find(hinge);
-            if (it != hingeAction_.end()) deltaS -= it->second;
+    // BFS through producedByCell_ → consumedByCell_ to collect every
+    // cell whose existence depends on root.
+    std::vector<SimplexPtr> descendants;
+    std::set<SimplexPtr> visited;
+    std::vector<SimplexPtr> stack{root};
+    visited.insert(root);
+    while (!stack.empty()) {
+        SimplexPtr c = stack.back();
+        stack.pop_back();
+        descendants.push_back(c);
+        for (VertexPtr v : c->getVertices()) {
+            auto pit = producedByCell_.find(v);
+            if (pit == producedByCell_.end() || pit->second != c) continue;
+            auto cit = consumedByCell_.find(v);
+            if (cit == consumedByCell_.end()) continue;
+            if (visited.insert(cit->second).second)
+                stack.push_back(cit->second);
         }
+    }
 
-    const std::size_t nPlusAfter = eligibleEdges_.size() + 1;
+    // ΔS = −Σ A_h ε_h over the descendant cells' hinges. Read off the
+    // per-hinge table; no Spacetime mutation yet.
+    double deltaS = 0.0;
+    std::set<SimplexPtr> descendantHinges;
+    for (SimplexPtr c : descendants)
+        for (SimplexPtr facet : c->getFacets())
+            for (SimplexPtr h : facet->getFacets())
+                if (h->getVertices().size() == 3) {
+                    auto it = hingeAction_.find(h);
+                    if (it != hingeAction_.end()) {
+                        if (descendantHinges.insert(h).second)
+                            deltaS -= it->second;
+                    }
+                }
+
+    // Coarse combinatorial prefactor: N₊ / N₋ where N₋ is the eligible
+    // cells (we picked from), and N₊ after removal grows by roughly the
+    // number of removed cells (the un-frozen parents re-frontier).
+    const std::size_t nMinusBefore = allCells.size();
+    const std::size_t nPlusAfter = eligibleEdges_.size() + descendants.size();
     const double logPrefactor =
         std::log(static_cast<double>(nMinusBefore))
         - std::log(static_cast<double>(nPlusAfter));
 
     if (!accept(deltaS, logPrefactor)) return false;
 
-    // Commit: drop the cell's three product vertices and their states.
-    for (SimplexPtr hinge : cellHinges) hingeAction_.erase(hinge);
-    for (VertexPtr v : cell->getVertices())
-        if (v->getOutEdges().empty()) stateOf_.erase(v);  // products only
-    spacetime_->removeSimplex(cell);
+    // Commit. Classify every vertex of the descendant set as product
+    // (will be deleted) or parent (will re-frontier, unless also a
+    // product of some other descendant) before any mutation.
+    const std::set<SimplexPtr> descendantSet(descendants.begin(),
+                                             descendants.end());
+    std::vector<VertexPtr> productsToRemove;
+    std::set<VertexPtr> parentsTouched;
+    for (SimplexPtr c : descendants) {
+        for (VertexPtr v : c->getVertices()) {
+            auto pit = producedByCell_.find(v);
+            if (pit != producedByCell_.end() && pit->second == c) {
+                productsToRemove.push_back(v);
+            } else {
+                auto cit = consumedByCell_.find(v);
+                if (cit != consumedByCell_.end() && cit->second == c)
+                    consumedByCell_.erase(cit);
+                parentsTouched.insert(v);
+                // v was a product of some cell c'_v (perhaps); when v
+                // got consumed by c, c'_v's consumed-product count went
+                // up. If c'_v survives, that count now goes back down,
+                // potentially making c'_v a leaf again.
+                auto vp = producedByCell_.find(v);
+                if (vp != producedByCell_.end()
+                    && descendantSet.count(vp->second) == 0) {
+                    auto kit = consumedProductsOf_.find(vp->second);
+                    if (kit != consumedProductsOf_.end()
+                        && kit->second > 0) {
+                        --kit->second;
+                        if (kit->second == 0) ++leafCellCount_;
+                    }
+                }
+            }
+        }
+    }
+    const std::set<VertexPtr> productSet(productsToRemove.begin(),
+                                         productsToRemove.end());
 
-    if (interactionCount_ > 0) --interactionCount_;
+    // Each descendant cell exits the leaf pool (if it was one) and its
+    // bookkeeping entry is dropped.
+    for (SimplexPtr c : descendants) {
+        auto kit = consumedProductsOf_.find(c);
+        if (kit != consumedProductsOf_.end()) {
+            if (kit->second == 0 && leafCellCount_ > 0) --leafCellCount_;
+            consumedProductsOf_.erase(kit);
+        }
+    }
+
+    // 1. Remove the simplices first so vertex/edge removal doesn't
+    //    dangle simplex references.
+    for (SimplexPtr c : descendants) spacetime_->removeSimplex(c);
+
+    // 2. Drop hingeAction entries for the descendants.
+    for (SimplexPtr h : descendantHinges) hingeAction_.erase(h);
+
+    // 3. Drop the product vertices' states / dependency / move-table
+    //    entries, then remove them from the complex (which also removes
+    //    their edges).
+    for (VertexPtr v : productsToRemove) {
+        freezeFromFrontier(v);  // drops v from frontier_ + eligible tables
+        stateOf_.erase(v);
+        producedByCell_.erase(v);
+        for (auto it = jointOf_.begin(); it != jointOf_.end();) {
+            if (it->first.first == v || it->first.second == v)
+                it = jointOf_.erase(it);
+            else
+                ++it;
+        }
+        spacetime_->removeVertex(v);
+    }
+
+    // 4. Re-frontier the parents whose subtree just got cut and that
+    //    aren't themselves slated for deletion. unfreezeIntoFrontier
+    //    walks each parent's surviving spatial edges and adds eligible
+    //    entries to its still-frontier neighbours — O(deg) per parent.
+    for (VertexPtr v : parentsTouched)
+        if (productSet.count(v) == 0) unfreezeIntoFrontier(v);
+
+    if (interactionCount_ >= descendants.size())
+        interactionCount_ -= descendants.size();
+    else
+        interactionCount_ = 0;
     ++unInteractAccepted_;
-    rebuildMoveTables();
     return true;
 }
 
@@ -518,13 +740,16 @@ bool InteractionSimulation::unInteract() {
 // ─────────────────────────────────────────────────────────────────────────
 
 int InteractionSimulation::sweep() {
-    const std::size_t nMoves =
-        std::max<std::size_t>(1, eligibleEdges_.size() + leafCells_.size());
+    // Every (2,3) cell is eligible for un-interaction now (deep
+    // truncation), so the move-count balance uses the total cell count
+    // rather than the leaf count.
+    const std::size_t nMoves = std::max<std::size_t>(
+        1, eligibleEdges_.size() + interactionCount_);
     std::uniform_real_distribution<double> coin(0.0, 1.0);
     int accepted = 0;
     for (std::size_t k = 0; k < nMoves; ++k) {
         const bool doInteract =
-            leafCells_.empty()      ? true
+            interactionCount_ == 0    ? true
             : eligibleEdges_.empty() ? false
                                      : coin(rng_) < 0.5;
         if (doInteract ? interact() : unInteract()) ++accepted;
@@ -638,26 +863,31 @@ std::unique_ptr<InteractionMove> InteractionSimulation::proposeUnInteract() {
 
 std::vector<double> InteractionSimulation::getSpectralDimension(
     const std::vector<double>& sigmas, int krylovDim) const {
-    // Index every vertex that appears in the complex.
+    // The dimension we want is that of the tetrahedral dual — the
+    // simplicial complex of completed (2,3) 4-simplices. We measure its
+    // 1-skeleton: systems as nodes, the cells' edges MI-weighted (the
+    // closure edges are what lift each bowtie into a non-degenerate
+    // tetrahedron). Bare initial-layer edges that never joined a cell
+    // are part of the primal interaction lattice and are excluded.
     std::unordered_map<VertexPtr, int> idx;
-    for (EdgePtr e : spacetime_->getEdgeList()->toVector())
-        for (VertexPtr v : {e->getSource(), e->getTarget()})
-            if (!idx.count(v)) idx[v] = static_cast<int>(idx.size());
-    if (idx.empty())
-        return std::vector<double>(sigmas.size(), 0.0);
-
-    // Weighted graph with edge weight = the mutual information itself
-    // (W = I, per holography §3.4) — recovered from the stored edge
-    // length ℓ via I = I_max · exp(-ℓ).
     std::vector<std::tuple<int, int, double>> edges;
-    edges.reserve(static_cast<std::size_t>(spacetime_->getEdgeList()
-                                               ->toVector().size()));
-    for (EdgePtr e : spacetime_->getEdgeList()->toVector()) {
-        const double len = std::sqrt(std::abs(e->getSquaredLength()));
-        const double mi = kIMax * std::exp(-len);
-        edges.emplace_back(idx.at(e->getSource()),
-                           idx.at(e->getTarget()), mi);
+    std::set<std::pair<int, int>> seen;
+    for (SimplexPtr s : spacetime_->getSimplices()) {
+        if (s->getVertices().size() != 5) continue;  // (2,3) cells only
+        for (EdgePtr e : s->getEdges()) {
+            VertexPtr a = e->getSource();
+            VertexPtr b = e->getTarget();
+            if (!idx.count(a)) idx[a] = static_cast<int>(idx.size());
+            if (!idx.count(b)) idx[b] = static_cast<int>(idx.size());
+            const int ia = idx.at(a), ib = idx.at(b);
+            const auto key = std::minmax(ia, ib);
+            if (!seen.insert({key.first, key.second}).second) continue;
+            const double len = std::sqrt(std::abs(e->getSquaredLength()));
+            edges.emplace_back(ia, ib, kIMax * std::exp(-len));
+        }
     }
+    if (edges.empty())
+        return std::vector<double>(sigmas.size(), 0.0);
 
     EmergentGraph graph = EmergentGraph::fromWeightedEdges(
         static_cast<int>(idx.size()), edges);
