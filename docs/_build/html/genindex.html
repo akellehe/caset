@@ -202,6 +202,8 @@
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/interaction_branching_simplex_writeup.html">Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/interaction_history_monte_carlo_writeup.html">Interaction-history Monte Carlo: the search for spectral dimension 4</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
@@ -240,15 +242,17 @@
           
 <section class="genindex-section">
   <h1 id="index">Index</h1>
-  <div class="genindex-jumpbox"><a href="#A"><strong>A</strong></a> | <a href="#B"><strong>B</strong></a> | <a href="#C"><strong>C</strong></a> | <a href="#D"><strong>D</strong></a> | <a href="#E"><strong>E</strong></a> | <a href="#F"><strong>F</strong></a> | <a href="#G"><strong>G</strong></a> | <a href="#H"><strong>H</strong></a> | <a href="#I"><strong>I</strong></a> | <a href="#J"><strong>J</strong></a> | <a href="#K"><strong>K</strong></a> | <a href="#L"><strong>L</strong></a> | <a href="#M"><strong>M</strong></a> | <a href="#N"><strong>N</strong></a> | <a href="#O"><strong>O</strong></a> | <a href="#P"><strong>P</strong></a> | <a href="#Q"><strong>Q</strong></a> | <a href="#R"><strong>R</strong></a> | <a href="#S"><strong>S</strong></a> | <a href="#T"><strong>T</strong></a> | <a href="#V"><strong>V</strong></a> | <a href="#Z"><strong>Z</strong></a></div>
+  <div class="genindex-jumpbox"><a href="#A"><strong>A</strong></a> | <a href="#B"><strong>B</strong></a> | <a href="#C"><strong>C</strong></a> | <a href="#D"><strong>D</strong></a> | <a href="#E"><strong>E</strong></a> | <a href="#F"><strong>F</strong></a> | <a href="#G"><strong>G</strong></a> | <a href="#H"><strong>H</strong></a> | <a href="#I"><strong>I</strong></a> | <a href="#J"><strong>J</strong></a> | <a href="#K"><strong>K</strong></a> | <a href="#L"><strong>L</strong></a> | <a href="#M"><strong>M</strong></a> | <a href="#N"><strong>N</strong></a> | <a href="#O"><strong>O</strong></a> | <a href="#P"><strong>P</strong></a> | <a href="#Q"><strong>Q</strong></a> | <a href="#R"><strong>R</strong></a> | <a href="#S"><strong>S</strong></a> | <a href="#T"><strong>T</strong></a> | <a href="#U"><strong>U</strong></a> | <a href="#V"><strong>V</strong></a> | <a href="#Z"><strong>Z</strong></a></div>
 </section>
 <section id="A" class="genindex-section">
   <h2>A</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="quantum.html#tessera.quantum.QuantumConfig.a">a (tessera.quantum.QuantumConfig attribute)</a>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.a">a (tessera.quantum.InteractionConfig property)</a>
 
         <ul>
+          <li><a href="quantum.html#tessera.quantum.QuantumConfig.a">(tessera.quantum.QuantumConfig attribute)</a>
+</li>
           <li><a href="quantum.html#id17">(tessera.quantum.QuantumConfig property)</a>
 </li>
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.a">(tessera.quantum.TDVPConfig property)</a>
@@ -274,6 +278,12 @@
   <h2>B</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.beta">beta (tessera.quantum.InteractionConfig property)</a>
+
+        <ul>
+          <li><a href="quantum.html#tessera.quantum.InteractionSimulation.beta">(tessera.quantum.InteractionSimulation property)</a>
+</li>
+        </ul></li>
         <li><a href="quantum.html#tessera.quantum.GroundStateResult.bondDim">bondDim (tessera.quantum.GroundStateResult attribute)</a>
 
         <ul>
@@ -308,12 +318,16 @@
 </li>
         <li><a href="quantum.html#tessera.quantum.compareOrders">compareOrders() (in module tessera.quantum)</a>
 </li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.computeAction">computeAction() (tessera.quantum.InteractionSimulation method)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.SchwingerModel.config">config (tessera.quantum.SchwingerModel property)</a>
 
         <ul>
           <li><a href="quantum.html#tessera.quantum.SchwingerQuench.config">(tessera.quantum.SchwingerQuench property)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="quantum.html#tessera.quantum.QuantumConfig.conserveQns">conserveQns (tessera.quantum.QuantumConfig attribute)</a>
 
         <ul>
@@ -322,8 +336,6 @@
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.conserveQns">(tessera.quantum.TDVPConfig property)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="quantum.html#tessera.quantum.GroundStateResult.constant">constant (tessera.quantum.GroundStateResult attribute)</a>
 
         <ul>
@@ -354,6 +366,8 @@
     <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig.d">d (tessera.quantum.TDVPConfig property)</a>
 </li>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.delaunayEdges">delaunayEdges (tessera.quantum.InteractionConfig property)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.OrderAgreement.discordantFraction">discordantFraction (tessera.quantum.OrderAgreement property)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig.dmrgCutoff">dmrgCutoff (tessera.quantum.TDVPConfig property)</a>
@@ -366,9 +380,11 @@
 </li>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig.dmrgNSweeps">dmrgNSweeps (tessera.quantum.TDVPConfig property)</a>
 </li>
-        <li><a href="quantum.html#tessera.quantum.QuantumConfig.dt">dt (tessera.quantum.QuantumConfig attribute)</a>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.dt">dt (tessera.quantum.InteractionConfig property)</a>
 
         <ul>
+          <li><a href="quantum.html#tessera.quantum.QuantumConfig.dt">(tessera.quantum.QuantumConfig attribute)</a>
+</li>
           <li><a href="quantum.html#id20">(tessera.quantum.QuantumConfig property)</a>
 </li>
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.dt">(tessera.quantum.TDVPConfig property)</a>
@@ -394,6 +410,8 @@
         </ul></li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.epsilonI">epsilonI (tessera.quantum.InteractionConfig property)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.SchwingerQuench.evolve">evolve() (tessera.quantum.SchwingerQuench method)</a>
 </li>
     </ul></td>
@@ -418,20 +436,32 @@
   <h2>G</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="quantum.html#tessera.quantum.QuantumConfig.g">g (tessera.quantum.QuantumConfig attribute)</a>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.g">g (tessera.quantum.InteractionConfig property)</a>
 
         <ul>
+          <li><a href="quantum.html#tessera.quantum.QuantumConfig.g">(tessera.quantum.QuantumConfig attribute)</a>
+</li>
           <li><a href="quantum.html#id21">(tessera.quantum.QuantumConfig property)</a>
 </li>
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.g">(tessera.quantum.TDVPConfig property)</a>
 </li>
         </ul></li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.getAcceptanceRates">getAcceptanceRates() (tessera.quantum.InteractionSimulation method)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.Poset.getCoverCount">getCoverCount() (tessera.quantum.Poset method)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.getDeficitAngleDistribution">getDeficitAngleDistribution() (tessera.quantum.InteractionSimulation method)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.Poset.getNodeCount">getNodeCount (tessera.quantum.Poset property)</a>
 </li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.getSpacetime">getSpacetime() (tessera.quantum.InteractionSimulation method)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.getSpectralDimension">getSpectralDimension() (tessera.quantum.InteractionSimulation method)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.getVolumeProfile">getVolumeProfile() (tessera.quantum.InteractionSimulation method)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.GroundStateMajorizationResult.groundState">groundState (tessera.quantum.GroundStateMajorizationResult attribute)</a>
 
         <ul>
@@ -476,10 +506,18 @@
 </li>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig.i0">i0 (tessera.quantum.TDVPConfig property)</a>
 </li>
-        <li><a href="quantum.html#tessera.quantum.Interval">Interval (class in tessera.quantum)</a>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.interact">interact() (tessera.quantum.InteractionSimulation method)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig">InteractionConfig (class in tessera.quantum)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.interactionCount">interactionCount (tessera.quantum.InteractionSimulation property)</a>
 </li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation">InteractionSimulation (class in tessera.quantum)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.Interval">Interval (class in tessera.quantum)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.LabelSpacetime.intervalI">intervalI (tessera.quantum.LabelSpacetime property)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.LabelSpacetime.intervalJ">intervalJ (tessera.quantum.LabelSpacetime property)</a>
@@ -554,9 +592,11 @@
   <h2>M</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
     <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="quantum.html#tessera.quantum.QuantumConfig.m">m (tessera.quantum.QuantumConfig attribute)</a>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.m">m (tessera.quantum.InteractionConfig property)</a>
 
         <ul>
+          <li><a href="quantum.html#tessera.quantum.QuantumConfig.m">(tessera.quantum.QuantumConfig attribute)</a>
+</li>
           <li><a href="quantum.html#id23">(tessera.quantum.QuantumConfig property)</a>
 </li>
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.m">(tessera.quantum.TDVPConfig property)</a>
@@ -645,6 +685,8 @@
           <li><a href="quantum.html#id25">(tessera.quantum.QuantumConfig property)</a>
 </li>
         </ul></li>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.nSystems">nSystems (tessera.quantum.InteractionConfig property)</a>
+</li>
     </ul></td>
   </tr></table>
 </section>
@@ -709,9 +751,11 @@
 </li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="quantum.html#tessera.quantum.QuantumConfig.quiet">quiet (tessera.quantum.QuantumConfig attribute)</a>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.quiet">quiet (tessera.quantum.InteractionConfig property)</a>
 
         <ul>
+          <li><a href="quantum.html#tessera.quantum.QuantumConfig.quiet">(tessera.quantum.QuantumConfig attribute)</a>
+</li>
           <li><a href="quantum.html#id26">(tessera.quantum.QuantumConfig property)</a>
 </li>
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.quiet">(tessera.quantum.TDVPConfig property)</a>
@@ -748,6 +792,10 @@
         <li><a href="quantum.html#tessera.quantum.SchwingerModel">SchwingerModel (class in tessera.quantum)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.SchwingerQuench">SchwingerQuench (class in tessera.quantum)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.seed">seed (tessera.quantum.InteractionConfig property)</a>
+</li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.setSeed">setSeed() (tessera.quantum.InteractionSimulation method)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig.snapshotEvery">snapshotEvery (tessera.quantum.TDVPConfig property)</a>
 </li>
@@ -795,6 +843,8 @@
 </li>
         <li><a href="quantum.html#tessera.quantum.MajorizationPredicate.strictlyMajorizes">strictlyMajorizes() (tessera.quantum.MajorizationPredicate method)</a>
 </li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.sweep">sweep() (tessera.quantum.InteractionSimulation method)</a>
+</li>
     </ul></td>
   </tr></table>
 </section>
@@ -811,6 +861,8 @@
           <li><a href="quantum.html#tessera.quantum.TDVPConfig.T">(tessera.quantum.TDVPConfig property)</a>
 </li>
         </ul></li>
+        <li><a href="quantum.html#tessera.quantum.InteractionConfig.targetInteractions">targetInteractions (tessera.quantum.InteractionConfig property)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.TDVPConfig">TDVPConfig (class in tessera.quantum)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.TDVPSnapshot">TDVPSnapshot (class in tessera.quantum)</a>
@@ -1144,10 +1196,10 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera7Simplex10topVecIdx_E">tessera::Simplex::topVecIdx_ (C++ member)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="cpp_api.html#_CPPv4NK7tessera7Simplex8toStringEv">tessera::Simplex::toString (C++ function)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="cpp_api.html#_CPPv4N7tessera7Simplex14updateVertexIdE6IdType6IdType">tessera::Simplex::updateVertexId (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera7Simplex8validateEv">tessera::Simplex::validate (C++ function)</a>
@@ -1298,9 +1350,13 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9Spacetime15registerSimplexERK10SimplexPtrb">tessera::Spacetime::registerSimplex (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9Spacetime10removeEdgeERK7EdgePtr">tessera::Spacetime::removeEdge (C++ function)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9Spacetime16removeIfIsolatedERK9VertexPtr">tessera::Spacetime::removeIfIsolated (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9Spacetime13removeSimplexERK10SimplexPtr">tessera::Spacetime::removeSimplex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9Spacetime12removeVertexERK9VertexPtr">tessera::Spacetime::removeVertex (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9Spacetime7reserveEi">tessera::Spacetime::reserve (C++ function)</a>
 </li>
@@ -1462,6 +1518,8 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera13VolumeProfile6updateERKNSt10shared_ptrI9SpacetimeEE">tessera::VolumeProfile::update (C++ function)</a>
 </li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.thermalize">thermalize() (tessera.quantum.InteractionSimulation method)</a>
+</li>
         <li><a href="quantum.html#tessera.quantum.LabelSpacetime.tIdx">tIdx (tessera.quantum.LabelSpacetime property)</a>
 </li>
         <li><a href="quantum.html#tessera.quantum.LabelSpacetime.time">time (tessera.quantum.LabelSpacetime property)</a>
@@ -1490,6 +1548,18 @@
           <li><a href="quantum.html#id13">(tessera.quantum.GroundStateResult property)</a>
 </li>
         </ul></li>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.tune">tune() (tessera.quantum.InteractionSimulation method)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="U" class="genindex-section">
+  <h2>U</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="quantum.html#tessera.quantum.InteractionSimulation.unInteract">unInteract() (tessera.quantum.InteractionSimulation method)</a>
+</li>
     </ul></td>
   </tr></table>
 </section>

@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="Temporally-connected entangled spacetime" href="quantum-experiments/temporally_connected_entangled_spacetime_writeup.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="Interaction-history Monte Carlo: the search for spectral dimension 4" href="quantum-experiments/interaction_history_monte_carlo_writeup.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>The Tessera C++ API - tessera 0.1.0 documentation</title>
@@ -204,6 +204,8 @@
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/interaction_branching_simplex_writeup.html">Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/interaction_history_monte_carlo_writeup.html">Interaction-history Monte Carlo: the search for spectral dimension 4</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">The Tessera C++ API</a></li>
@@ -602,6 +604,30 @@ exclusions to see the entire interface.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>simplex</strong> – The simplex <span class="math notranslate nohighlight">\( \sigma \)</span> to remove </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime10removeEdgeERK7EdgePtr">
+<span id="_CPPv3N7tessera9Spacetime10removeEdgeERK7EdgePtr"></span><span id="_CPPv2N7tessera9Spacetime10removeEdgeERK7EdgePtr"></span><span id="tessera::Spacetime::removeEdge__EdgePtrCR"></span><span class="target" id="classtessera_1_1Spacetime_1ac08600c94a6ece893cb002a9515e2c02"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">removeEdge</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">EdgePtr</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">edge</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime10removeEdgeERK7EdgePtr" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Fully remove an edge from the complex: drop it from its endpoints’ in/out edge lists and from the EdgeList. </p>
+<p>The caller is responsible for first removing any simplices that contain the edge. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>edge</strong> – The edge <span class="math notranslate nohighlight">\( e \)</span> to remove </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N7tessera9Spacetime12removeVertexERK9VertexPtr">
+<span id="_CPPv3N7tessera9Spacetime12removeVertexERK9VertexPtr"></span><span id="_CPPv2N7tessera9Spacetime12removeVertexERK9VertexPtr"></span><span id="tessera::Spacetime::removeVertex__VertexPtrCR"></span><span class="target" id="classtessera_1_1Spacetime_1a1aaa4a915012f652eb9ec35d873a0a06"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">removeVertex</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">VertexPtr</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">vertex</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N7tessera9Spacetime12removeVertexERK9VertexPtr" title="Link to this definition">¶</a><br /></dt>
+<dd><p>Fully remove a vertex from the complex: remove every edge incident to it (via :func:<code class="docutils literal notranslate"><span class="pre">removeEdge</span></code>) and drop the vertex from the VertexList. </p>
+<p>The caller is responsible for first removing any simplices that contain the vertex. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>vertex</strong> – The vertex <span class="math notranslate nohighlight">\( v \)</span> to remove </p>
 </dd>
 </dl>
 </dd></dl>
@@ -2823,7 +2849,7 @@ Two vertices are considered equal iff they have the same ID, regardless of coord
 </ol>
 </p>
 </section>
-<p>Subclassed by <a class="reference internal" href="#classtessera_1_1CDT"><span class="std std-ref">tessera::CDT</span></a></p>
+<p>Subclassed by <a class="reference internal" href="#classtessera_1_1CDT"><span class="std std-ref">tessera::CDT</span></a>, tessera::quantum::InteractionSimulation</p>
 <div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
@@ -3764,14 +3790,14 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
         
         <div class="related-pages">
           
-          <a class="prev-page" href="quantum-experiments/temporally_connected_entangled_spacetime_writeup.html">
+          <a class="prev-page" href="quantum-experiments/interaction_history_monte_carlo_writeup.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Temporally-connected entangled spacetime</div>
+                <div class="title">Interaction-history Monte Carlo: the search for spectral dimension 4</div>
                 
               </div>
             </a>
@@ -3843,6 +3869,8 @@ Constructs time slabs between adjacent layers of (d+1) vertices each. The spatia
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime19getRandomTopSimplexEv"><code class="docutils literal notranslate"><span class="pre">getRandomTopSimplex()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime31getRandomSimplexWithOrientationE7uint8_t7uint8_t"><code class="docutils literal notranslate"><span class="pre">getRandomSimplexWithOrientation()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime13removeSimplexERK10SimplexPtr"><code class="docutils literal notranslate"><span class="pre">removeSimplex()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime10removeEdgeERK7EdgePtr"><code class="docutils literal notranslate"><span class="pre">removeEdge()</span></code></a></li>
+<li><a class="reference internal" href="#_CPPv4N7tessera9Spacetime12removeVertexERK9VertexPtr"><code class="docutils literal notranslate"><span class="pre">removeVertex()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime16getSpacetimeTypeEv"><code class="docutils literal notranslate"><span class="pre">getSpacetimeType()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime14getCurrentTimeEv"><code class="docutils literal notranslate"><span class="pre">getCurrentTime()</span></code></a></li>
 <li><a class="reference internal" href="#_CPPv4NK7tessera9Spacetime11getEdgeListEv"><code class="docutils literal notranslate"><span class="pre">getEdgeList()</span></code></a></li>
