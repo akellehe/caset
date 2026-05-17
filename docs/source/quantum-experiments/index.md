@@ -15,6 +15,8 @@ emergent_spectral_dimension_writeup
 temporally_connected_entangled_spacetime_writeup
 interaction_branching_simplex_writeup
 interaction_history_monte_carlo_writeup
+charged_cartan_monte_carlo_v0.1
+charged_cartan_v01_BplusIII_writeup
 ```
 
 ## Reproducing

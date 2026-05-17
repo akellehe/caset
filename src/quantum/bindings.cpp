@@ -794,6 +794,12 @@ interaction; beta is the inverse temperature in e^{-beta S}.
                        &InteractionConfig::targetInteractions)
         .def_readwrite("delaunayEdges",      &InteractionConfig::delaunayEdges)
         .def_readwrite("useCharges",         &InteractionConfig::useCharges)
+        .def_readwrite("featureCharges",
+                       &InteractionConfig::featureCharges)
+        .def_readwrite("featureDeactivateOnAnnihilate",
+                       &InteractionConfig::featureDeactivateOnAnnihilate)
+        .def_readwrite("featurePhotonOnAnnihilate",
+                       &InteractionConfig::featurePhotonOnAnnihilate)
         .def_readwrite("cpBias",             &InteractionConfig::cpBias)
         .def_readwrite("initialChargeMode",
                        &InteractionConfig::initialChargeMode)
@@ -858,6 +864,8 @@ dimension reaches 4.
              R"doc(The interaction-history simplicial complex (the primal).)doc")
         .def_property_readonly("interactionCount",
              &InteractionSimulation::interactionCount)
+        .def_property_readonly("frontierSize",
+             &InteractionSimulation::frontierSize)
         .def_property("beta", &InteractionSimulation::getBeta,
              &InteractionSimulation::setBeta)
         .def("setSeed", &InteractionSimulation::setSeed, py::arg("seed"));

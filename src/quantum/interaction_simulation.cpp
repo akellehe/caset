@@ -255,6 +255,18 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
     if (config_.a <= 0.0)
         throw std::invalid_argument("InteractionConfig.a must be > 0");
 
+    // Reconcile the legacy `useCharges` alias with `featureCharges`:
+    // setting either enables the charged-Cartan code paths.
+    const bool chargesOn = config_.useCharges || config_.featureCharges;
+    config_.useCharges = chargesOn;
+    config_.featureCharges = chargesOn;
+    // Dependent features only make sense with charges on; auto-clear
+    // them otherwise so we fail safely rather than partially-on.
+    if (!chargesOn) {
+        config_.featureDeactivateOnAnnihilate = false;
+        config_.featurePhotonOnAnnihilate = false;
+    }
+
     auto metric = std::make_shared<Metric>(
         /*coordinateFree=*/true, Signature(4, SignatureType::Euclidean));
     spacetime_ = std::make_shared<Spacetime>(
@@ -806,31 +818,81 @@ bool InteractionSimulation::annihilate() {
         - std::log(static_cast<double>(revCount));
     if (!accept(/*deltaS=*/0.0, logPrefactor)) return false;
 
-    // Charge annihilates, vertices remain. Conceptually: the *charge*
-    // is a quantum number that can cancel; the *worldline* persists as
-    // a neutral system. This preserves the geometric content of any
-    // cell that already references these vertices and avoids stale
-    // pointers when un-interact later visits those cells.
+    // Three behaviours selected by feature flags:
+    //   1. Default (charge-only): both vertices stay on the frontier
+    //      with charges neutralised / reduced. The worldlines persist
+    //      as neutral systems. Preserves cell references but breaks
+    //      Q-conservation under later un-interact.
+    //   2. feature_deactivate_on_annihilate: the matched portion's
+    //      vertices are *removed from the frontier* (worldlines
+    //      terminate) but stay in the spacetime. Their chargeOf_
+    //      entries are kept as-is — they're historical charges, no
+    //      longer counted in getGlobalCharge (frontier-only sum).
+    //      Q is then conserved exactly under later un-interact.
+    //   3. feature_photon_on_annihilate: in addition to (2), spawn a
+    //      new neutral "photon" vertex on the frontier carrying away
+    //      the released information (state = I/2, maximally mixed).
     const double netQ = qp + qm;
+    const bool deactivate = config_.featureDeactivateOnAnnihilate;
+    const bool emitPhoton = config_.featurePhotonOnAnnihilate;
+
     auto setCharge = [&](VertexPtr v, double q) {
-        // Update charge and migrate sign-bucket membership if the sign
-        // changed (in particular, from ±1 → 0 means leaving the bucket).
+        // Update charge and migrate sign-bucket membership.
         removeFromSignBucket(v);
         chargeOf_[v] = q;
         if (q != 0.0 && frontierIdx_.count(v)) addToSignBucket(v);
     };
+    auto deactivateVertex = [&](VertexPtr v) {
+        // Remove v from the frontier; keep chargeOf_ / stateOf_ / the
+        // spacetime entry intact so historical cell references still
+        // resolve. The vertex is now "inactive" — can't be picked for
+        // future moves.
+        removeFromFrontier(v);
+    };
+    auto spawnPhoton = [&](double tNew) {
+        if (!emitPhoton) return;
+        VertexPtr photon = spacetime_->createVertex(
+            nextVertexId_++, std::vector<double>{tNew});
+        stateOf_[photon] = 0.5 * Eigen::Matrix2cd::Identity();
+        chargeOf_[photon] = 0.0;
+        addToFrontier(photon);
+    };
+
     if (std::abs(netQ) < 1e-12) {
-        // Full annihilation: both become neutral.
-        setCharge(p, 0.0);
-        setCharge(m, 0.0);
+        // Full annihilation — both worldlines terminate (or both
+        // neutralise under the default).
+        const double tNew =
+            std::max(p->getTime(), m->getTime()) + 1.0;
+        if (deactivate) {
+            deactivateVertex(p);
+            deactivateVertex(m);
+        } else {
+            setCharge(p, 0.0);
+            setCharge(m, 0.0);
+        }
+        spawnPhoton(tNew);
     } else if (netQ > 0.0) {
-        // |qp| > |qm|: m neutralised, p's charge becomes qp + qm.
-        setCharge(m, 0.0);
+        // |qp| > |qm|: the m-worldline fully annihilates (matched by
+        // |qm| of p's charge); p survives with reduced charge.
+        const double tNew = m->getTime() + 1.0;
+        if (deactivate) {
+            deactivateVertex(m);
+        } else {
+            setCharge(m, 0.0);
+        }
         setCharge(p, netQ);
+        spawnPhoton(tNew);
     } else {
-        // |qm| > |qp|: p neutralised, m's charge becomes qp + qm < 0.
-        setCharge(p, 0.0);
+        // |qm| > |qp|: the p-worldline fully annihilates; m survives
+        // with the residual negative charge.
+        const double tNew = p->getTime() + 1.0;
+        if (deactivate) {
+            deactivateVertex(p);
+        } else {
+            setCharge(p, 0.0);
+        }
         setCharge(m, netQ);
+        spawnPhoton(tNew);
     }
     ++annihilateAccepted_;
     return true;

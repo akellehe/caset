@@ -154,16 +154,49 @@ Beyond the existing `D_S(σ)`:
 
 ## Configurable parameters
 
+Numeric parameters (non-experimental):
+
 ```
-cfg.beta                 — inverse temperature (existing)
-cfg.epsilonI             — MI floor for zero edges (existing)
-cfg.targetInteractions   — T-cap (existing)
-cfg.cpBias               — CP-violation bias (new, signed double, 0)
-cfg.initialChargeMode    — ALTERNATING / RANDOM (new)
-cfg.unitaryMode          — CARTAN_ENTANGLER / SCHWINGER (new)
-cfg.cartanCore           — (c_x, c_y, c_z) when unitaryMode = CARTAN_ENTANGLER
-cfg.useCharges           — enable v0.1 model (default false for backwards-compat)
+cfg.beta                 — inverse temperature
+cfg.epsilonI             — MI floor for zero edges
+cfg.targetInteractions   — T-cap
+cfg.cpBias               — CP-violation bias (signed double, default 0)
+cfg.initialChargeMode    — ALTERNATING / RANDOM (only if charges enabled)
+cfg.unitaryMode          — CARTAN_ENTANGLER / SCHWINGER  (deferred)
+cfg.cartanCore           — (c_x, c_y, c_z) for the entangler
 ```
+
+### Feature flags
+
+Experimental features are toggled by boolean flags on `InteractionConfig`,
+all named `featureXxx` (camelCase, matching the rest of the API) and all
+defaulting to `false`. New experimental behaviour is *always* gated
+behind a flag so old runs are bit-for-bit reproducible. A typical script
+enables several at once:
+
+```python
+cfg = q.InteractionConfig()
+cfg.featureCharges                 = True   # v0.1 — charge labels enabled
+cfg.featureDeactivateOnAnnihilate  = True   # v0.1.B — annihilation removes from frontier
+cfg.featurePhotonOnAnnihilate      = True   # v0.1.iii — spawn photon vertex on annihilation
+```
+
+Each experiment writeup should record the flag configuration it used at
+the top of the results section.
+
+Current flags:
+
+| Flag | Effect |
+|---|---|
+| `featureCharges` | v0.1 charged Cartan: charge labels, annihilate / pairCreate moves, charge observables. |
+| `featureDeactivateOnAnnihilate` | annihilate removes vertices from the frontier (worldlines terminate) instead of just neutralising their charges. Requires `featureCharges`. |
+| `featurePhotonOnAnnihilate` | annihilate also spawns a new neutral "photon" vertex on the frontier, carrying the released information. Requires `featureCharges`. |
+| `featureQuditBasis` *(deferred to v0.2)* | each vertex carries a 4-dim qudit state with charge intrinsic via Q̂. Removes the need for `featureCharges` (and the v0.1 limitations). |
+
+The legacy `cfg.useCharges` flag is preserved as an alias for
+`cfg.featureCharges` — setting either enables the charged-Cartan code
+paths. Dependent flags are auto-cleared when `featureCharges` is off,
+so a partially-configured run can't enter an undefined state.
 
 ## What v0.1 does NOT include (deferred to v0.2+)
 
@@ -260,15 +293,28 @@ of charge in v0.1 and the *historical* semantics of un-interact:
 Net effect: `Q_frontier` after the un-interact can differ from
 `Q_frontier` before, by the amount the annihilation neutralised.
 
-This is intentional in v0.1 — it reflects the fact that the charge
-label lives "next to" the state rather than "in" it. The proper
-fix is in v0.2 (qudit basis), where the charge is intrinsic to the
-quantum state and any operation that modifies it (annihilation
-included) modifies it consistently through the state's worldline.
+**`feature_deactivate_on_annihilate` does NOT eliminate this drift.**
+Deactivation cleanly removes the annihilated vertices from the
+frontier, but the drift comes from un-interact restoring a parent
+of *one side* of an annihilation event (e.g., x, the producer of
+xp) while the partner side (m, paired with xp in the annihilation)
+isn't accounted for — m was produced by a different cell that's
+not being un-interacted. The conservation requires un-interact to
+cascade through annihilation events to the partner's history, which
+isn't implemented.
 
-The covered regression test
-`testUnInteractCanDriftQWithAnnihilation` pins this behaviour so
-it's stable until v0.2 changes it intentionally.
+The covered regression tests
+`testUnInteractCanDriftQWithAnnihilation` and
+`testDeactivateOnAnnihilateDocumentedDrift` pin this behaviour
+explicitly so it's stable until v0.2 changes it intentionally.
+
+To eliminate the drift would require either:
+- annihilation events become first-class objects in the un-interact
+  cascade BFS (treat annihilation as a "fake cell" linking the two
+  worldline-producing cells); or
+- v0.2's qudit basis, where charge is intrinsic to the state and any
+  modification (including annihilation) is propagated unitarily
+  along the worldline.
 
 ## Next round of experiments
 

@@ -320,6 +320,103 @@ void testForwardOnlyConservation() {
               << maxDrift << "\n";
 }
 
+// ─── featureDeactivateOnAnnihilate (option B) ───────────────────────────
+//
+// Annihilated worldlines terminate (vertices removed from frontier) but
+// stay in the spacetime. chargeOf_ for deactivated vertices is preserved
+// (they're historical charges, not counted in the frontier-only Q sum).
+void testDeactivateOnAnnihilateRemovesFromFrontier() {
+    std::cout << "\n=== featureDeactivateOnAnnihilate: vertices leave frontier ===\n";
+    InteractionConfig cfg = baseConfig();
+    cfg.featureCharges = true;
+    cfg.featureDeactivateOnAnnihilate = true;
+    InteractionSimulation sim(cfg);
+    const std::size_t v0 = sim.getSpacetime()->getVertexCount();
+    const std::size_t f0 = sim.frontierSize();
+    int accepted = 0;
+    for (int k = 0; k < 50; ++k) if (sim.annihilate()) ++accepted;
+    CHECK(accepted > 0,
+          "annihilate accepted with deactivate flag on");
+    CHECK(sim.getSpacetime()->getVertexCount() == v0,
+          "deactivated vertices stay in the spacetime");
+    // Each full annihilation removes 2 vertices from the frontier;
+    // each partial annihilation removes 1. We accept at least one drop
+    // per accepted annihilation.
+    CHECK(sim.frontierSize() <= f0 - static_cast<std::size_t>(accepted),
+          "frontier shrank by ≥ accepted-annihilate count");
+    std::cout << "  [info] frontier: before " << f0
+              << "  after " << sim.frontierSize()
+              << "  (Δ = -" << (f0 - sim.frontierSize())
+              << ", accepted=" << accepted << ")\n";
+}
+
+void testDeactivateOnAnnihilateDocumentedDrift() {
+    std::cout << "\n=== featureDeactivateOnAnnihilate: Q-drift is unchanged ===\n";
+    // IMPORTANT: deactivate alone does NOT fix the Q-drift under
+    // un-interact. The drift comes from the *un-interact* restoring a
+    // parent (charge +qx) without knowing that the product (xp) was
+    // annihilated against some partner (m) whose parent is on a
+    // different cell — so the partner side of the original
+    // annihilation isn't compensated. To eliminate the drift entirely
+    // we'd need annihilation events to be first-class objects in the
+    // un-interact cascade BFS, or to forbid un-interact on cells whose
+    // products have been annihilated. Neither is in v0.1; both are
+    // candidates for v0.2.
+    InteractionConfig cfg = baseConfig();
+    cfg.featureCharges = true;
+    cfg.featureDeactivateOnAnnihilate = true;
+    cfg.targetInteractions = 8;
+    InteractionSimulation sim(cfg);
+    sim.tune();
+    for (int k = 0; k < 30; ++k) sim.annihilate();
+    const double q0 = sim.getGlobalCharge();
+    for (int k = 0; k < 8; ++k) sim.unInteract();
+    const double q1 = sim.getGlobalCharge();
+    CHECK(std::isfinite(q1),
+          "Q stays finite even when deactivate-then-uninteract drifts");
+    std::cout << "  [info] Q before/after un-interact (deactivate on): "
+              << q0 << " / " << q1
+              << "  (drift remains — see test comment)\n";
+}
+
+// ─── featurePhotonOnAnnihilate (option iii) ─────────────────────────────
+void testPhotonOnAnnihilateSpawnsNeutralVertex() {
+    std::cout << "\n=== featurePhotonOnAnnihilate: spawns neutral vertex per annihilation ===\n";
+    InteractionConfig cfg = baseConfig();
+    cfg.featureCharges = true;
+    cfg.featureDeactivateOnAnnihilate = true;
+    cfg.featurePhotonOnAnnihilate = true;
+    InteractionSimulation sim(cfg);
+    const std::size_t v0 = sim.getSpacetime()->getVertexCount();
+    int accepted = 0;
+    for (int k = 0; k < 30; ++k) if (sim.annihilate()) ++accepted;
+    CHECK(accepted > 0, "annihilate accepted with photon flag on");
+    const std::size_t v1 = sim.getSpacetime()->getVertexCount();
+    // Photon flag spawns one new vertex per annihilation event.
+    CHECK(v1 == v0 + static_cast<std::size_t>(accepted),
+          "vertex count grew by exactly the number of annihilations");
+    std::cout << "  [info] " << accepted << " annihilations → " << (v1 - v0)
+              << " new vertices in spacetime\n";
+    // Q must still be conserved (photons are neutral).
+    CHECK_NEAR(sim.getGlobalCharge(), 0.0, 1e-9,
+               "Q conserved through annihilation+photon emission");
+}
+
+// ─── Feature-flag default behaviour ────────────────────────────────────────
+void testFeatureFlagsDefaultOff() {
+    std::cout << "\n=== feature flags default off / dependent flags auto-clear ===\n";
+    InteractionConfig cfg = baseConfig();
+    // No flags set explicitly — all should be false.
+    cfg.featureDeactivateOnAnnihilate = true;  // but featureCharges off
+    cfg.featurePhotonOnAnnihilate = true;
+    InteractionSimulation sim(cfg);
+    // Construction should not enable the dependent flags without
+    // charges; the constructor's reconciliation step clears them.
+    auto rates = sim.getAcceptanceRates();
+    CHECK(rates.find("annihilate") == rates.end(),
+          "annihilate move absent when charges off (dependent flags cleared)");
+}
+
 // Test the documented unInteract drift: confirm it CAN cause Q to drift
 // when annihilations have occurred. This is intentional — the test
 // asserts the known behaviour so a future code change doesn't silently
@@ -382,6 +479,10 @@ int main() {
     testForwardOnlyConservation();
     testUnInteractCascadeConservesQ();
     testUnInteractCanDriftQWithAnnihilation();
+    testDeactivateOnAnnihilateRemovesFromFrontier();
+    testDeactivateOnAnnihilateDocumentedDrift();
+    testPhotonOnAnnihilateSpawnsNeutralVertex();
+    testFeatureFlagsDefaultOff();
 
     if (failures == 0) {
         std::cout << "\nPASS — all charged-Cartan v0.1 checks satisfied\n";

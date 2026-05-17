@@ -93,14 +93,22 @@ struct InteractionConfig {
     std::vector<std::pair<int, int>> delaunayEdges;
 
     // ─── Charged Cartan Monte Carlo (v0.1) ──────────────────────────────
-    // When false (default), runs in v0 mode: no charges, no
-    // annihilate/pairCreate moves, all the original v0 behaviour.
+    // Experimental features are toggled by booleans named `featureXxx`,
+    // all defaulting to false. See
+    // docs/source/quantum-experiments/charged_cartan_monte_carlo_v0.1.md
+    // for the full convention. Old runs stay reproducible because every
+    // new behaviour is opt-in.
+    bool featureCharges{false};
+    bool featureDeactivateOnAnnihilate{false};
+    bool featurePhotonOnAnnihilate{false};
+    // Convenience alias kept for backward-compat with existing scripts:
+    // sets / mirrors featureCharges.
     bool useCharges{false};
     // CP-violation bias for pair-creation. The first vertex of a
-    // spontaneously-created (+, −) pair gets charge 0.5 + δ where δ is
-    // drawn uniformly from [−|cpBias|, +|cpBias|] when cpBias is positive
-    // and from [−|cpBias|, 0] when negative (favouring the chosen sign).
-    // Default 0 = exact C/CP symmetry.
+    // spontaneously-created (+, −) pair gets charge 0.5 + δ. If cpBias
+    // > 0, δ is drawn from [0, +cpBias] (mean cpBias/2 > 0, favouring
+    // +); if < 0, δ from [cpBias, 0] (favouring −). Default 0 = exact
+    // C/CP symmetry.
     double cpBias{0.0};
     InitialChargeMode initialChargeMode{InitialChargeMode::ALTERNATING};
 
@@ -211,6 +219,9 @@ class InteractionSimulation : public tessera::Simulation {
 
     [[nodiscard]] std::size_t interactionCount() const noexcept {
         return interactionCount_;
+    }
+    [[nodiscard]] std::size_t frontierSize() const noexcept {
+        return frontier_.size();
     }
     [[nodiscard]] double getBeta() const noexcept { return config_.beta; }
 
