@@ -182,6 +182,7 @@ try:
     TDVPSnapshot                  = _qm.TDVPSnapshot
     QuenchResult                  = _qm.QuenchResult
     InteractionConfig             = _qm.InteractionConfig
+    InitialChargeMode             = _qm.InitialChargeMode
     LabelSpacetime                = _qm.LabelSpacetime
     CausalOrders                  = _qm.CausalOrders
     OrderAgreement                = _qm.OrderAgreement
@@ -227,6 +228,7 @@ __all__ = [
     "TDVPSnapshot",
     "QuenchResult",
     "InteractionConfig",
+    "InitialChargeMode",
     "LabelSpacetime",
     "CausalOrders",
     "OrderAgreement",

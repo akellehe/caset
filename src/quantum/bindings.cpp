@@ -793,8 +793,18 @@ interaction; beta is the inverse temperature in e^{-beta S}.
         .def_readwrite("targetInteractions",
                        &InteractionConfig::targetInteractions)
         .def_readwrite("delaunayEdges",      &InteractionConfig::delaunayEdges)
+        .def_readwrite("useCharges",         &InteractionConfig::useCharges)
+        .def_readwrite("cpBias",             &InteractionConfig::cpBias)
+        .def_readwrite("initialChargeMode",
+                       &InteractionConfig::initialChargeMode)
         .def_readwrite("seed",               &InteractionConfig::seed)
         .def_readwrite("quiet",              &InteractionConfig::quiet);
+
+    py::enum_<tessera::quantum::InitialChargeMode>(m, "InitialChargeMode")
+        .value("ALTERNATING",
+               tessera::quantum::InitialChargeMode::ALTERNATING)
+        .value("RANDOM",
+               tessera::quantum::InitialChargeMode::RANDOM);
 
     py::class_<InteractionSimulation>(m, "InteractionSimulation",
         R"doc(Metropolis Monte Carlo over interaction histories, weighted by
@@ -832,6 +842,18 @@ dimension reaches 4.
         .def("getAcceptanceRates",
              &InteractionSimulation::getAcceptanceRates,
              R"doc(Accepted / attempted ratio per move type.)doc")
+        .def("annihilate", &InteractionSimulation::annihilate,
+             R"doc(v0.1: spontaneous partial-annihilation of a (+, -) frontier pair.)doc")
+        .def("pairCreate", &InteractionSimulation::pairCreate,
+             R"doc(v0.1: spontaneous (+, -) pair-creation with a Bell joint.)doc")
+        .def("getGlobalCharge", &InteractionSimulation::getGlobalCharge,
+             R"doc(v0.1: total signed charge across the complex.)doc")
+        .def("getChargeProfile", &InteractionSimulation::getChargeProfile,
+             R"doc(v0.1: per-time-slice (n_+, n_0, n_-, sum_q).)doc")
+        .def("getChargeCorrelation",
+             &InteractionSimulation::getChargeCorrelation,
+             py::arg("maxDist"),
+             R"doc(v0.1: <q_v . q_w> as a function of graph distance.)doc")
         .def("getSpacetime", &InteractionSimulation::getSpacetime,
              R"doc(The interaction-history simplicial complex (the primal).)doc")
         .def_property_readonly("interactionCount",

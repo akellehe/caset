@@ -62,6 +62,12 @@ namespace tessera::quantum {
 // A single system's quantum state — a one-qubit density matrix.
 using SystemState = Eigen::Matrix2cd;
 
+// Initial charge assignment for the v0.1 charged-model initial layer.
+enum class InitialChargeMode {
+    ALTERNATING,  // even-index vertex +1, odd-index −1 (exact Q = 0)
+    RANDOM,       // independent ±1 per vertex (Q ≈ 0 ± √N)
+};
+
 // Flat configuration for an interaction-history Monte Carlo run.
 struct InteractionConfig {
     // ─── Initial layer ──────────────────────────────────────────────────
@@ -85,6 +91,18 @@ struct InteractionConfig {
     // Delaunay edges among the N initial systems, 0-based index pairs,
     // supplied by the caller (scipy.spatial.Delaunay).
     std::vector<std::pair<int, int>> delaunayEdges;
+
+    // ─── Charged Cartan Monte Carlo (v0.1) ──────────────────────────────
+    // When false (default), runs in v0 mode: no charges, no
+    // annihilate/pairCreate moves, all the original v0 behaviour.
+    bool useCharges{false};
+    // CP-violation bias for pair-creation. The first vertex of a
+    // spontaneously-created (+, −) pair gets charge 0.5 + δ where δ is
+    // drawn uniformly from [−|cpBias|, +|cpBias|] when cpBias is positive
+    // and from [−|cpBias|, 0] when negative (favouring the chosen sign).
+    // Default 0 = exact C/CP symmetry.
+    double cpBias{0.0};
+    InitialChargeMode initialChargeMode{InitialChargeMode::ALTERNATING};
 
     std::uint32_t seed{0};
     bool          quiet{true};
@@ -114,6 +132,22 @@ class InteractionSimulation : public tessera::Simulation {
     // Remove a uniformly-random leaf cell, restoring its parents to the
     // frontier. Returns true if accepted.
     bool unInteract();
+
+    // ─── Charged Cartan Monte Carlo (v0.1) moves ────────────────────────
+
+    // Spontaneous partial-annihilation: pick a uniformly-random (+, −)
+    // frontier pair, cancel the matched portion of their charges, leave
+    // a residual (or fully annihilate if magnitudes match). Free of
+    // Regge action change; the move's Metropolis prefactor balances it
+    // against pairCreate. Returns true if accepted. No-op if useCharges
+    // is false.
+    bool annihilate();
+
+    // Spontaneous (+, −) pair creation on the frontier with a Bell-state
+    // joint and charges drawn from the cpBias distribution. Free of
+    // Regge change. Returns true if accepted. No-op if useCharges is
+    // false.
+    bool pairCreate();
 
     // ─── Transactional proposers (caller drives propose/apply/rollback) ──
     [[nodiscard]] std::unique_ptr<InteractionMove> proposeInteract();
@@ -152,6 +186,26 @@ class InteractionSimulation : public tessera::Simulation {
     // Accepted / attempted ratio per move type.
     [[nodiscard]] std::map<std::string, double> getAcceptanceRates() const;
 
+    // ─── Charged Cartan observables (v0.1) ──────────────────────────────
+
+    // Σ_v q_v over the entire complex. Exactly conserved at cpBias = 0;
+    // drifts as the integrated CP-violation when cpBias ≠ 0.
+    [[nodiscard]] double getGlobalCharge() const;
+
+    // Per-time-slice counts (n_+, n_0, n_−) plus net Σq_v on that slice.
+    // Each entry is a 4-tuple (n_pos, n_zero, n_neg, sum_q) indexed by
+    // time slice (slice 0 = initial layer).
+    [[nodiscard]] std::vector<std::array<double, 4>>
+    getChargeProfile() const;
+
+    // Charge auto-correlation ⟨q_v · q_w⟩ vs graph-distance d(v, w) for
+    // 1 ≤ d ≤ maxDist. Returns a vector of length maxDist; entry [d-1]
+    // is the mean q·q over vertex pairs at graph-distance exactly d on
+    // the MI-weighted complex graph. Sample-averaged when the pair
+    // count is large; exact otherwise.
+    [[nodiscard]] std::vector<double>
+    getChargeCorrelation(int maxDist) const;
+
     [[nodiscard]] const std::shared_ptr<tessera::Spacetime> &
     getSpacetime() const noexcept { return spacetime_; }
 
@@ -188,24 +242,29 @@ class InteractionSimulation : public tessera::Simulation {
 
     // ─── Frontier / move bookkeeping (the DP tables) ────────────────────
     // The frontier — systems that have not yet interacted (no temporal
-    // out-edges). Maintained incrementally; O(1) membership.
-    std::unordered_set<tessera::VertexPtr> frontier_;
+    // out-edges). Any pair of frontier vertices is an eligible interact
+    // candidate, so N₊ = |frontier|·(|frontier|−1)/2 and a uniform-random
+    // candidate is just (frontier_[i], frontier_[j]) for random i ≠ j.
+    // Kept as a flat vector for O(1) sampling, paired with an index map
+    // for O(1) swap-and-pop removal.
+    std::vector<tessera::VertexPtr> frontier_;
+    std::unordered_map<tessera::VertexPtr, std::size_t> frontierIdx_;
 
-    // N₊: eligible interact candidates — frontier spatial edges {X, Y}.
-    // Kept as a flat vector for O(1) uniform-random pick by index, plus
-    // the back-reference indices below for O(degree) incremental
-    // add/remove.
-    std::vector<std::pair<tessera::VertexPtr, tessera::VertexPtr>>
-        eligibleEdges_;
-    // edge (sorted pair) -> its position in eligibleEdges_.
-    std::map<std::pair<tessera::VertexPtr, tessera::VertexPtr>, std::size_t>
-        edgePos_;
-    // vertex -> the eligible-edges incident to it. Used to drop all of v's
-    // edges in O(degree) when v freezes.
-    std::unordered_map<tessera::VertexPtr,
-                       std::set<std::pair<tessera::VertexPtr,
-                                          tessera::VertexPtr>>>
-        vertexEdges_;
+    // ─── Charge bookkeeping (v0.1) ──────────────────────────────────────
+    // Continuous charge per vertex in [−1, +1]. Only populated when
+    // config.useCharges is true. Worldline-product vertices inherit
+    // their parent's charge; Σ_AB products are neutral (0).
+    std::unordered_map<tessera::VertexPtr, double> chargeOf_;
+    // Frontier vertices indexed by charge sign for O(1) annihilation
+    // candidate sampling. A vertex with q > 0 is in frontierPos_,
+    // q < 0 in frontierNeg_, q = 0 in frontierZero_. The same
+    // swap-and-pop machinery as frontier_ applies.
+    std::vector<tessera::VertexPtr> frontierPos_, frontierNeg_;
+    std::unordered_map<tessera::VertexPtr, std::size_t>
+        frontierPosIdx_, frontierNegIdx_;
+    // Counters for the new moves.
+    std::int64_t annihilateAttempts_{0}, annihilateAccepted_{0};
+    std::int64_t pairCreateAttempts_{0}, pairCreateAccepted_{0};
 
     // Per-hinge action contribution A_h·ε_h. Updated locally per move so
     // ΔS is O(affected hinges).
@@ -245,26 +304,19 @@ class InteractionSimulation : public tessera::Simulation {
     // systems as t=0 vertices, the Delaunay edges, the initial tables.
     void buildInitialLayer();
 
-    // Initial population of frontier_, eligibleEdges_, edgePos_,
-    // vertexEdges_ from the Poisson-Delaunay layer. Called once.
-    void initMoveTables();
-
-    // Incremental updates — O(degree) per call.
-    void addEligibleEdge(tessera::VertexPtr a, tessera::VertexPtr b);
-    void removeEligibleEdge(
-        std::pair<tessera::VertexPtr, tessera::VertexPtr> key);
-    // Freeze v: drop it from the frontier and drop all its eligible
-    // edges. The mirror unfreeze (used by un-interact) re-adds v to the
-    // frontier and reinstates eligible edges to its still-frontier
-    // neighbours.
-    void freezeFromFrontier(tessera::VertexPtr v);
-    void unfreezeIntoFrontier(tessera::VertexPtr v);
-
-    // Sorted-pair key constructor for the edge tables.
-    static std::pair<tessera::VertexPtr, tessera::VertexPtr>
-    edgeKey(tessera::VertexPtr a, tessera::VertexPtr b) noexcept {
-        return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
+    // O(1) frontier mutations via swap-and-pop on the flat vector.
+    // When useCharges is enabled, also maintain the per-sign frontier
+    // vectors (frontierPos_ / frontierNeg_) for fast annihilate
+    // candidate sampling.
+    void addToFrontier(tessera::VertexPtr v);
+    void removeFromFrontier(tessera::VertexPtr v);
+    [[nodiscard]] bool onFrontier(tessera::VertexPtr v) const noexcept {
+        return frontierIdx_.find(v) != frontierIdx_.end();
     }
+
+    // Sign-bucketed frontier helpers (no-op when useCharges is false).
+    void addToSignBucket(tessera::VertexPtr v);
+    void removeFromSignBucket(tessera::VertexPtr v);
 
     // The ten edge mutual informations of an interaction X,Y → X',AB,Y'.
     // Keyed by the cell's local-label pairs (0=X 1=Y 2=X' 3=AB 4=Y').
