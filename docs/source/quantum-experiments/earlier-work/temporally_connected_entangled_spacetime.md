@@ -1,7 +1,7 @@
 # Temporally-connected entangled spacetime
 
 Companion experiment to the dual-lattice section of
-[emergent_spectral_dimension_writeup.md](emergent_spectral_dimension_writeup.md).
+[emergent_spectral_dimension.md](emergent_spectral_dimension.md).
 The dual lattice there uses two distinct rules for the two axes of the
 $(bond, snapshot)$ graph: tripartite mutual information for spatial
 edges, and a causet-style same-bond forward step for temporal edges.
@@ -143,7 +143,7 @@ figure below from the resulting JSON.
 ## Results
 
 ![Temporally-connected entangled spacetime: D_S(σ), peak D_S vs N, D_∞
-fit vs N](figures/temporally_connected_entangled_spacetime.png)
+fit vs N](../figures/temporally_connected_entangled_spacetime.png)
 
 |  N  |  m/g  | $\|V\|$ | $\|E\|$ | $E_{sp}$ | $E_{tm}$ | deg mean | deg max | peak $D_S$ | $\sigma_{peak}$ | $D_\infty$ | fit $\chi^2$ |
 |----:|------:|--------:|--------:|---------:|---------:|---------:|--------:|-----------:|----------------:|-----------:|-------------:|
@@ -217,7 +217,7 @@ $N$-only and $K$-only scans below.
 
 Compared against the causet dual lattice — which reaches peak $D_S
 \approx 1.8$ at $N = 16$ in the
-[emergent_spectral_dimension_writeup.md](emergent_spectral_dimension_writeup.md)
+[emergent_spectral_dimension.md](emergent_spectral_dimension.md)
 "Dual lattice" section — replacing the causet step with the
 endpoint-averaged MI surrogate produces a graph that is genuinely
 denser in the temporal direction. Peak $D_S$ rises from $\sim 1.8$
@@ -256,7 +256,7 @@ get their own scan. Reproducibility scripts live in
 `run_t_scan.sh`: $N = 40$, $T \in \{1.0, 1.5, 2.0, 2.5, 3.0\}$,
 $dt = 0.25$, $\varepsilon_I = 10^{-6}$, $m/g \in \{0.125, 0.25, 0.5\}$.
 
-![T-scan](figures/t_scan.png)
+![T-scan](../figures/t_scan.png)
 
 | $T$ | $m/g=0.125$ | $m/g=0.25$ | $m/g=0.5$ |
 |---|---|---|---|
@@ -282,7 +282,7 @@ $\varepsilon_I \in \{10^{-8}, 10^{-6}, 10^{-4}, 10^{-3}, 10^{-2}\}$,
 $m/g \in \{0.125, 0.25, 0.5\}$. Multi-$\varepsilon$ per TDVP run, so
 all five cutoffs come from a single quench evolution.
 
-![ε-scan](figures/epsilon_scan.png)
+![ε-scan](../figures/epsilon_scan.png)
 
 Peak $D_S$ is essentially *flat* at $\sim 4.3$–$4.5$ across six decades
 of $\varepsilon_I$ for all three $m/g$ values. The hop diameter,
@@ -305,7 +305,7 @@ $\varepsilon_I = 10^{-6}$, $m/g = 0.5$ only (cheapest direction). The
 $N = 100$ cell was interrupted at ~50% TDVP progress; only $N \in
 \{50, 60, 80\}$ have results.
 
-![N-scan](figures/n_scan.png)
+![N-scan](../figures/n_scan.png)
 
 | $N$ | peak $D_S$ | hop diameter | TDVP time |
 |---|---|---|---|
@@ -385,7 +385,7 @@ fix can regenerate every number above.
 
 ## See also
 
-- [emergent_spectral_dimension_writeup.md](emergent_spectral_dimension_writeup.md)
+- [emergent_spectral_dimension.md](emergent_spectral_dimension.md)
   — the causet dual-lattice baseline this experiment varies from.
 - [holography-causal-ordering-emergent-dimension.md](../holography-causal-ordering-emergent-dimension.md)
   §3.4 — the weighted-Laplacian convention $W = I$, $\ell = -\log I$.
