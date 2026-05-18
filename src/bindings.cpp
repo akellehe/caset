@@ -460,6 +460,15 @@ Args:
     topology: Spatial topology (Toroid or Sphere).)doc"
       )
       .def(py::init<>(), "Create an empty spacetime with default 4D Lorentzian CDT settings.")
+      .def("setSeed", &Spacetime::setSeed, py::arg("seed"),
+           R"doc(Seed the spacetime's internal RNG deterministically.
+
+The RNG drives ``getRandomVertex`` / ``getRandomSimplex`` /
+``getRandomTopSimplex`` — i.e. the first-step sigma selection in
+every Pachner move (ShiftMove, FlipMove, IFlipMove, AddMove,
+RemoveMove). Use this in tests that need byte-identical reproducibility
+across processes; otherwise the default seed comes from
+``std::random_device`` and varies per construction.)doc")
       .def("getVertexList", &Spacetime::getVertexList,
            "Return the VertexList containing all vertices.")
       .def("getSimplicesWithOrientation",
