@@ -205,22 +205,29 @@ warns if both are set.
   Q conservation at γ_CP=0, Q drift at γ_CP≠0, the v0.1 un-interact
   drift bug is fixed, peak D_S is a reasonable physical value.
 
-🚧 **Deferred (still v0.2 work, not yet implemented):**
+🚧 **Deferred to v0.3** (see
+[charged_cartan_monte_carlo_v0.3.md](charged_cartan_monte_carlo_v0.3.md)
+which picks these up as preconditions for the gauge-mediation work):
 
 - `annihilate` / `pairCreate` measurement / spawn semantics in the
   qudit basis. The v0.1 moves still work (they read v0.1's
   `chargeOf_`); under v0.2 they're effectively no-ops because the
   v0.2 charge isn't replicated into `chargeOf_`. The full v0.2
-  versions need to: project a charged vertex onto the Q=0 subspace
+  versions need to: project a charged vertex onto the Q = 0 subspace
   (annihilate); spawn a pair in a charge-entangled state
   (pairCreate).
-- `getChargeProfile` and `getChargeCorrelation` still read from
-  `chargeOf_`. Under v0.2 they return zero / empty.
-- Σ_AB as the full 256-dim Choi state of U.
+- `getChargeProfile` and `getChargeCorrelation` reading from qudit
+  states via `Tr[ρ · Q̂]`. Under v0.2 they currently return zero /
+  empty.
+- Σ_AB as the full 256-dim Choi state of U (currently the `I/4`
+  proxy).
 
-These are tracked as follow-up items; the first-pass v0.2 implementation
-already exercises the qudit Hilbert space end-to-end through the
-interact + tune + spectral-dim pipeline.
+These deferrals are bundled into v0.3 because v0.3's gauge mediation
+needs the qudit-basis annihilate to produce real photons and the
+qudit-basis observables to characterise the resulting charge
+clustering. The first-pass v0.2 implementation already exercises the
+qudit Hilbert space end-to-end through the interact + tune +
+spectral-dim pipeline, which is what the v0.2 β-scan documents.
 
 ## Open question for after implementation
 

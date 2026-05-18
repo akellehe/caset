@@ -9,6 +9,14 @@ trace claim → number → command-to-reproduce.
 
 ```{toctree}
 :maxdepth: 1
+:caption: Project-level overview
+
+intellectual_lineage
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Earlier experiments
 
 lightcone_vs_majorization_writeup
 emergent_spectral_dimension_writeup
@@ -16,10 +24,17 @@ temporally_connected_entangled_spacetime_writeup
 interaction_branching_simplex_writeup
 interaction_history_monte_carlo_writeup
 from_schwinger_to_lattice
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Charged Cartan Monte Carlo
+
 charged_cartan_monte_carlo_v0.1
 charged_cartan_v01_BplusIII_writeup
 charged_cartan_monte_carlo_v0.2
 charged_cartan_v02_beta_scan_writeup
+v02_finite_size_investigation
 charged_cartan_monte_carlo_v0.3
 ```
 
