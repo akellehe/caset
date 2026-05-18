@@ -206,6 +206,9 @@
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/interaction_branching_simplex_writeup.html">Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/interaction_history_monte_carlo_writeup.html">Interaction-history Monte Carlo: the search for spectral dimension 4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/from_schwinger_to_lattice.html">From the Schwinger model to an abstract lattice construction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/charged_cartan_monte_carlo_v0.1.html">Charged Cartan Monte Carlo — design note v0.1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
@@ -1408,6 +1411,35 @@ when AutoMPO-encoding the electric term.</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="tessera.quantum.InitialChargeMode">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tessera.quantum.</span></span><span class="sig-name descname"><span class="pre">InitialChargeMode</span></span><a class="headerlink" href="#tessera.quantum.InitialChargeMode" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">pybind11_object</span></code></p>
+<p>Members:</p>
+<p>ALTERNATING</p>
+<p>RANDOM</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tessera.quantum.InitialChargeMode.ALTERNATING">
+<span class="sig-name descname"><span class="pre">ALTERNATING</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;InitialChargeMode.ALTERNATING:</span> <span class="pre">0&gt;</span></em><a class="headerlink" href="#tessera.quantum.InitialChargeMode.ALTERNATING" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="tessera.quantum.InitialChargeMode.RANDOM">
+<span class="sig-name descname"><span class="pre">RANDOM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;InitialChargeMode.RANDOM:</span> <span class="pre">1&gt;</span></em><a class="headerlink" href="#tessera.quantum.InitialChargeMode.RANDOM" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InitialChargeMode.name">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#tessera.quantum.InitialChargeMode.name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InitialChargeMode.value">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">value</span></span><a class="headerlink" href="#tessera.quantum.InitialChargeMode.value" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionConfig">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tessera.quantum.</span></span><span class="sig-name descname"><span class="pre">InteractionConfig</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">pybind11_object</span></code></p>
@@ -1427,6 +1459,11 @@ interaction; beta is the inverse temperature in e^{-beta S}.</p>
 <dd></dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.cpBias">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">cpBias</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.cpBias" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.delaunayEdges">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">delaunayEdges</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.delaunayEdges" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -1442,8 +1479,28 @@ interaction; beta is the inverse temperature in e^{-beta S}.</p>
 <dd></dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.featureCharges">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">featureCharges</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.featureCharges" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.featureDeactivateOnAnnihilate">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">featureDeactivateOnAnnihilate</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.featureDeactivateOnAnnihilate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.featurePhotonOnAnnihilate">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">featurePhotonOnAnnihilate</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.featurePhotonOnAnnihilate" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.g">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">g</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.g" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.initialChargeMode">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">initialChargeMode</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.initialChargeMode" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -1471,6 +1528,11 @@ interaction; beta is the inverse temperature in e^{-beta S}.</p>
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">targetInteractions</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.targetInteractions" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionConfig.useCharges">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">useCharges</span></span><a class="headerlink" href="#tessera.quantum.InteractionConfig.useCharges" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -1484,6 +1546,12 @@ driving loop sweep() / thermalize() / tune(), and the diagnostics
 computeAction() / getSpectralDimension() / getAcceptanceRates(). The
 object of the search is the beta at which the emergent spectral
 dimension reaches 4.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.annihilate">
+<span class="sig-name descname"><span class="pre">annihilate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.annihilate" title="Link to this definition">¶</a></dt>
+<dd><p>v0.1: spontaneous partial-annihilation of a (+, -) frontier pair.</p>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.beta">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">beta</span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.beta" title="Link to this definition">¶</a></dt>
@@ -1495,6 +1563,11 @@ dimension reaches 4.</p>
 <dd><p>The geometric Regge action S = sum_h A_h eps_h.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.frontierSize">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">frontierSize</span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.frontierSize" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.getAcceptanceRates">
 <span class="sig-name descname"><span class="pre">getAcceptanceRates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.getAcceptanceRates" title="Link to this definition">¶</a></dt>
@@ -1502,9 +1575,27 @@ dimension reaches 4.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.getChargeCorrelation">
+<span class="sig-name descname"><span class="pre">getChargeCorrelation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxDist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">SupportsInt</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">SupportsIndex</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.getChargeCorrelation" title="Link to this definition">¶</a></dt>
+<dd><p>v0.1: &lt;q_v . q_w&gt; as a function of graph distance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.getChargeProfile">
+<span class="sig-name descname"><span class="pre">getChargeProfile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'FixedSize(4)'</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.getChargeProfile" title="Link to this definition">¶</a></dt>
+<dd><p>v0.1: per-time-slice (n_+, n_0, <a href="#id2"><span class="problematic" id="id3">n_</span></a>-, sum_q).</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.getDeficitAngleDistribution">
 <span class="sig-name descname"><span class="pre">getDeficitAngleDistribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.getDeficitAngleDistribution" title="Link to this definition">¶</a></dt>
 <dd><p>Deficit angles over the interior hinges.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.getGlobalCharge">
+<span class="sig-name descname"><span class="pre">getGlobalCharge</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.getGlobalCharge" title="Link to this definition">¶</a></dt>
+<dd><p>v0.1: total signed charge across the complex.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1535,6 +1626,12 @@ dimension reaches 4.</p>
 <dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.interactionCount">
 <em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">interactionCount</span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.interactionCount" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.pairCreate">
+<span class="sig-name descname"><span class="pre">pairCreate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#tessera.quantum.InteractionSimulation" title="tessera._tessera.quantum.InteractionSimulation"><span class="pre">tessera._tessera.quantum.InteractionSimulation</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#tessera.quantum.InteractionSimulation.pairCreate" title="Link to this definition">¶</a></dt>
+<dd><p>v0.1: spontaneous (+, -) pair-creation with a Bell joint.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tessera.quantum.InteractionSimulation.setSeed">
@@ -2719,30 +2816,49 @@ exposed by :mod:<code class="docutils literal notranslate"><span class="pre">tes
 <li><a class="reference internal" href="#id13"><code class="docutils literal notranslate"><span class="pre">GroundStateResult.truncationErr</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#tessera.quantum.InitialChargeMode"><code class="docutils literal notranslate"><span class="pre">InitialChargeMode</span></code></a><ul>
+<li><a class="reference internal" href="#tessera.quantum.InitialChargeMode.ALTERNATING"><code class="docutils literal notranslate"><span class="pre">InitialChargeMode.ALTERNATING</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InitialChargeMode.RANDOM"><code class="docutils literal notranslate"><span class="pre">InitialChargeMode.RANDOM</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InitialChargeMode.name"><code class="docutils literal notranslate"><span class="pre">InitialChargeMode.name</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InitialChargeMode.value"><code class="docutils literal notranslate"><span class="pre">InitialChargeMode.value</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig"><code class="docutils literal notranslate"><span class="pre">InteractionConfig</span></code></a><ul>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.a"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.a</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.beta"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.beta</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionConfig.cpBias"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.cpBias</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.delaunayEdges"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.delaunayEdges</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.dt"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.dt</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.epsilonI"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.epsilonI</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionConfig.featureCharges"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.featureCharges</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionConfig.featureDeactivateOnAnnihilate"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.featureDeactivateOnAnnihilate</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionConfig.featurePhotonOnAnnihilate"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.featurePhotonOnAnnihilate</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.g"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.g</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionConfig.initialChargeMode"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.initialChargeMode</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.m"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.m</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.nSystems"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.nSystems</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.quiet"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.quiet</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.seed"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.seed</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionConfig.targetInteractions"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.targetInteractions</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionConfig.useCharges"><code class="docutils literal notranslate"><span class="pre">InteractionConfig.useCharges</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation</span></code></a><ul>
+<li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.annihilate"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.annihilate()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.beta"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.beta</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.computeAction"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.computeAction()</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.frontierSize"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.frontierSize</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getAcceptanceRates"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getAcceptanceRates()</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getChargeCorrelation"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getChargeCorrelation()</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getChargeProfile"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getChargeProfile()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getDeficitAngleDistribution"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getDeficitAngleDistribution()</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getGlobalCharge"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getGlobalCharge()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getSpacetime"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getSpacetime()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getSpectralDimension"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getSpectralDimension()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.getVolumeProfile"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.getVolumeProfile()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.interact"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.interact()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.interactionCount"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.interactionCount</span></code></a></li>
+<li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.pairCreate"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.pairCreate()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.setSeed"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.setSeed()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.sweep"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.sweep()</span></code></a></li>
 <li><a class="reference internal" href="#tessera.quantum.InteractionSimulation.thermalize"><code class="docutils literal notranslate"><span class="pre">InteractionSimulation.thermalize()</span></code></a></li>
