@@ -215,6 +215,61 @@ Two consequences emerge from this reading:
   graph* mediates a Coulomb-like amplitude that conditions their
   next interaction's input state.
 
+## 7.25. Post-selection and worldline creation: TSVF inspiration
+
+The mechanism by which Σ_AB's quantum content is reduced to 4 dim
+when it later participates in an interaction — *projection onto a
+charge-basis subspace matched to the partner vertex* — is a
+**post-selection** step in the sense of the Two-State Vector
+Formalism (TSVF) of Aharonov, Vaidman, and collaborators. In TSVF
+the quantum state of a system is conditioned on both its past
+(prepared) state and its future (post-selected) state; the
+"effective" state at any intermediate time is computed using both.
+
+In our construction:
+
+- The Σ_AB vertex's "past state" is the Choi state `J(U)` of the
+  interaction that created it.
+- Its "future state" is fixed by the partner it eventually
+  encounters at consumption time — specifically, the partner's
+  charge sector selects which subspace of Σ_AB's 256-dim Hilbert is
+  realised.
+- The "effective" 4-dim ρ that we feed into the next interaction is
+  this post-selection: the reduction of `J(U)` conditioned on the
+  partner's charge content.
+
+This isn't just an analogy — it's the same mathematical operation.
+TSVF gave us the framing: rather than treating the Σ_AB reduction as
+an arbitrary contraction choice, view it as a *measurement-like
+post-selection* whose outcome is decided by the partner.
+
+Closely related: **Avshalom Elitzur**'s interpretation of how
+worldlines are created and removed at interaction events in TSVF
+inspired the choice of when worldlines terminate and begin in our
+construction. Specifically:
+
+- **Worldlines terminate at consumption.** When a vertex is consumed
+  as input to a new interaction, its worldline ends — the next slice
+  carries different vertices (the products). In TSVF terms, the
+  vertex's two-state vector "closes" at the consumption event.
+- **Worldlines begin at creation.** Every product of an interaction
+  begins a new worldline, with the Choi-state / marginal content
+  determined by the interaction's joint output. In TSVF terms, the
+  product carries a fresh past-state vector.
+- **Annihilation deactivates both worldlines.** Under
+  `featureDeactivateOnAnnihilate`, the matched pair vanishes from the
+  frontier — both two-state vectors close simultaneously. The
+  optional photon vertex begins a new worldline with no charge,
+  inheriting only the released energy budget.
+
+We're using these formalisms as *inspiration* — adopting the
+worldline-termination semantics and the partner-conditioned
+projection picture — without committing to TSVF as a complete
+interpretational framework. The Monte Carlo dynamics doesn't care
+which interpretation of quantum mechanics we hold; what TSVF gave
+us is a coherent *language* for describing the projections and
+worldline boundaries that already had to happen in our model.
+
 ## 7.5. Worldline discontinuity and the 4 / 16 / 256 dimensional ladder
 
 The qudit-basis + Choi-state machinery from steps 5–7 has a natural
