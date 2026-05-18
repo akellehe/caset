@@ -1,4 +1,4 @@
-# Intellectual lineage of the Charged Cartan Monte Carlo
+# 4D Charged Cartan Monte Carlo: milestones and motivation
 
 This is the through-line of the project: the sequence of ideas — each
 from a piece of established physics — that took the construction from
@@ -75,30 +75,48 @@ time-slice difference, related by their causal cone." Edge length =
 −log(I) still defines distance, but now both spacelike and timelike
 distances are encoded in the same object.
 
-## 4. Schwinger model and the charge degree of freedom
+## 4. Schwinger model: a set of requirements to satisfy
 
-The natural question is: which `U` to apply at each interaction event?
-The Schwinger model — 1+1D QED with massive fermions and a U(1) gauge
-field — gave us a textbook starting point. Its two-site Hamiltonian
-fragment
+The natural question is: which `U` to apply at each interaction
+event? Rather than commit to a specific model, we read the Schwinger
+model — 1+1D QED with massive fermions and a U(1) gauge field — as a
+**set of requirements** that any per-event `U` should plausibly
+satisfy. Its two-site Hamiltonian fragment
 
 ```
 H_Schwinger = (1 / 4a) (XX + YY) + (m / 2) (−Z⊗I + I⊗Z) + Coulomb
 ```
 
 (with the Coulomb term integrated out via Gauss's law in the original
-theory) supplied a specific, physically-motivated `U`.
+theory) gave us a concrete first `U` to use, but the *requirements*
+it embodied were the structurally important content:
 
-The Schwinger choice carried with it three structurally important
-properties:
+1. **A specific 4×4 unitary** `U = exp(−i H · dt)` we can apply on
+   each pair of inputs.
+2. **A conserved U(1) charge** (staggered fermion number) that `U`
+   commutes with — so charge is a real quantum number, not just a
+   classical label.
+3. **A gauge force** between charges (the Coulomb / σ^z σ^z term) —
+   so distant charges feel each other through a propagator.
+4. **C and CP as operator-level structures**, not numerical knobs —
+   so charge conjugation and CP-violation become statements about
+   how `U` interacts with `Q̂` and `Ĉ`, not opt-in parameters.
+5. **An out-of-equilibrium growth process** consistent with
+   Sakharov's third condition, in case we want to study
+   matter-antimatter asymmetry mechanisms.
 
-1. A **specific 4×4 unitary** `U = exp(−i H · dt)`.
-2. A **conserved U(1) charge** (staggered fermion number) which `U`
-   commutes with.
-3. A **gauge force** between charges (the Coulomb / σ^z σ^z term).
+The original v0 implementation used the Schwinger `U` literally for
+(1) and inherited (2) via the staggered fermion number. (3) was
+dropped at the two-site fragment level. (4) and (5) were not
+addressed in v0; v0.2's qudit basis made (4) operator-level, and
+v0.3's gauge mediation aims to address (3).
 
-We retained (1) and (2) and dropped (3) when we moved to a two-site
-fragment — that's the limitation we're addressing in v0.3.
+By v0.2, the Schwinger `U` itself is no longer load-bearing — it
+remains as a configurable option, but the *default* is a parametric
+ququart-pair Hamiltonian whose constants `(J_c, J_s, δ_m, γ_CP)`
+let us tune to satisfy each requirement independently. We treat
+Schwinger as the historical anchor that gave us the requirements,
+not as the dynamics the model is committed to.
 
 See [from_schwinger_to_lattice.md](from_schwinger_to_lattice.md) for
 the detailed argument about why each piece of the Schwinger framing
@@ -151,6 +169,22 @@ encodes everything about `U` as a pure quantum state on a larger
 space. The Choi state is the principled generalisation of the SU(4)
 Cartan core to any 4×4 or 16×16 unitary — it carries the entangling
 content of `U` as a state we can put on the Σ_AB vertex.
+
+> **Claim to defend later.** "Cartan core" is the right name here
+> because the property that makes the SU(4) Cartan core meaningful —
+> being the *non-local* part of `U` that cannot be reduced to local
+> rotations on either side — also applies to the Choi-isomorphized
+> entanglement core. Concretely: any local-only unitary `U = K_A ⊗
+> K_B` has operator-Schmidt rank 1, so its Choi state factors across
+> the bipartite cut and carries no genuine entanglement between A
+> and B. Any genuinely entangling `U` has operator-Schmidt rank > 1
+> (the σ-spectrum from the operator Schmidt decomposition; in SU(4)
+> this is exactly the `(c_x, c_y, c_z)` Cartan-core parameters
+> reorganised). The Choi state is the unique pure quantum state that
+> captures this *non-local* content for arbitrary `U`. A proper
+> defense — showing the operator Schmidt rank ≥ 2 condition is
+> equivalent to non-locality in the same sense the Cartan core
+> captures — should appear in a dedicated note in v0.3 or later.
 
 In v0.2 we use a placeholder (the maximally-mixed `I/4`) for the
 Σ_AB marginal, which is what the [finite-size
