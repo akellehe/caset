@@ -216,21 +216,31 @@ SpectralGraph::diagonalHeatKernel(std::vector<int> const& starts,
     std::vector<double> out(static_cast<std::size_t>(nSt) * nSig, 0.0);
     if (n == 0 || nSt == 0 || nSig == 0) return out;
 
-    std::vector<double> v(static_cast<std::size_t>(n));
-    std::vector<double> w(static_cast<std::size_t>(n));
-    std::vector<double> prev(static_cast<std::size_t>(n));
-    std::vector<std::vector<double>> V;
-    std::vector<double> alpha, beta;
-
+    // The outer loop over `starts` is embarrassingly parallel: each
+    // iteration builds its own Krylov subspace from a distinct unit
+    // vector, calls applyLaplacian (const, thread-safe), and writes
+    // only to its own contiguous slice of `out` (positions
+    // s*nSig .. (s+1)*nSig). Scratch buffers (v, w, prev, V, alpha,
+    // beta) are per-iteration and therefore per-thread under OpenMP.
+    //
+    // `schedule(dynamic)` because per-start cost varies (sparser
+    // neighborhoods break out of the kMax loop earlier when normW <
+    // 1e-12). Bit-identical to the serial version — same arithmetic
+    // in the same order within each iteration, and inter-iteration
+    // independence means thread ordering doesn't affect output.
+    #pragma omp parallel for schedule(dynamic)
     for (int s = 0; s < nSt; ++s) {
         const int start = starts[static_cast<std::size_t>(s)];
         if (start < 0 || start >= n) continue;
 
-        std::fill(v.begin(), v.end(), 0.0);
+        std::vector<double> v(static_cast<std::size_t>(n));
+        std::vector<double> w(static_cast<std::size_t>(n));
+        std::vector<double> prev(static_cast<std::size_t>(n));
+        std::vector<std::vector<double>> V;
+        std::vector<double> alpha, beta;
+
         v[static_cast<std::size_t>(start)] = 1.0;
         V.assign(1, v);
-        alpha.clear();
-        beta.clear();
 
         const int kMax = std::min(krylovDim, n);
         for (int j = 0; j < kMax; ++j) {

@@ -155,6 +155,23 @@ target_include_directories(tessera_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB)
+
+# Optional OpenMP for the spectral-graph heat-kernel parallel loop and
+# similar embarrassingly-parallel hot paths. Bit-identical to the
+# serial code at OMP_NUM_THREADS=1 (the default in our 10-CPU-budget
+# scan policy); only kicks in for solo / exploratory runs that set
+# OMP_NUM_THREADS > 1 explicitly. Required so `#pragma omp parallel`
+# compiles and links cleanly; if OpenMP is absent the pragmas are
+# silently no-ops (we don't gate compilation on it).
+find_package(OpenMP COMPONENTS CXX)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(tessera_core PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP found (${OpenMP_CXX_VERSION}); spectral-graph "
+                   "heat-kernel will respect OMP_NUM_THREADS.")
+else()
+    message(STATUS "OpenMP not found; #pragma omp directives in "
+                   "tessera_core will compile as no-ops.")
+endif()
 # tessera_core is pybind-free: the binding code (which uses pybind11) lives
 # only in src/bindings.cpp and src/quantum/bindings.cpp, both compiled
 # directly into the _tessera Python module. Earlier versions of tessera had
