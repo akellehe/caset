@@ -1,21 +1,39 @@
-# Charged Cartan v0.2 — plateau finite-size investigation
-
-Follow-up to [charged_cartan_v02_beta_scan_writeup.md](charged_cartan_v02_beta_scan_writeup.md),
-which found a stable peak D_S ≈ 4.6 ± 0.1 plateau across a decade of
-β at N = 8, T = 2500. Open follow-up #1 from that writeup:
-*"is the 4 → 4.6 offset a finite-size effect?"* This note answers it.
+# Plateau finite-size investigation: does the 4.6 → 4 offset close in the asymptotic limit?
 
 Tracks GitHub issue
 [#10](https://github.com/akellehe/tessera/issues/10) in milestone
 [Charged Cartan Monte Carlo v0.2](https://github.com/akellehe/tessera/milestone/1).
 
+## Context
+
+The [intellectual lineage of this project](intellectual_lineage.md)
+sets out the through-line: from van Raamsdonk's premise that
+spacetime is built from entanglement, through Sorkin's causal-set
+events, through replacing the Schwinger fermion field with a
+4-dim qudit basis carrying intrinsic charge, to the
+[v0.2 β-scan](charged_cartan_v02_beta_scan_writeup.md) in which the
+heat-kernel spectral dimension finds a stable plateau at peak
+`D_S ≈ 4.6 ± 0.1` across a full decade of `β`.
+
+That plateau is the closest any construction in this project has come
+to a *stable* dimensional phase: per-seed std ~0.1, β-flat over a
+decade, σ-peak finite (not σ-saturated). The structural properties
+of a real phase. But the value sits ~0.6 above the H_DS4 target of
+exactly 4.
+
+This experiment asks the natural next question:
+
+**Is the 4 → 4.6 offset a finite-size effect that closes in the
+asymptotic limit, or a model-level structural number we'd reach
+even at infinite lattice size?**
+
 ## Hypothesis
 
-If the v0.2 plateau at peak D_S ≈ 4.6 reflects a model-level
-geometric structure, the value should be insensitive to N (initial
-vertex count) and T (cell-target count). If instead the offset above
-4 is a finite-size effect, we expect peak D_S to drift toward 4 as
-either N or T grows.
+If the plateau reflects a model-level geometric structure, the value
+should be insensitive to N (initial-layer vertex count) and T
+(cell-target count). If instead the offset is a finite-size effect,
+we expect peak D_S to drift toward 4 as either N or T grows — and
+the drift should slow as we approach the asymptote.
 
 ## Setup
 
