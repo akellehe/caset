@@ -160,7 +160,7 @@ void testChoiFlag_QConservation_AtGammaCpZero() {
         // featureChoiSigmaAB isn't a config field yet, this call
         // will be a no-op; once it's added, the assertion below is
         // the live target.
-        // cfg.featureChoiSigmaAB = true;
+        cfg.featureChoiSigmaAB = true;
         InteractionSimulation sim(cfg);
         sim.tune();
         if (std::abs(sim.getGlobalCharge()) > 1e-6) ++n_drifters;
@@ -187,7 +187,7 @@ void testChoiFlag_BackwardCompat() {
     const std::size_t cells_baseline = sim.interactionCount();
 
     InteractionConfig cfg2 = cfg;
-    // cfg2.featureChoiSigmaAB = false;  // explicit
+    cfg2.featureChoiSigmaAB = false;  // explicit
     InteractionSimulation sim2(cfg2);
     sim2.tune();
     CHECK(sim2.interactionCount() == cells_baseline,
@@ -214,11 +214,11 @@ void testChoiFlag_GeometryUnchangedByFlag() {
     // is the diagnostic.
     constexpr int N_SEEDS = 5;
     constexpr int T = 200;
-    auto runOne = [&](int seed, bool /*choiFlag*/) -> double {
+    auto runOne = [&](int seed, bool choiFlag) -> double {
         InteractionConfig cfg = baseConfig();
         cfg.seed = seed;
         cfg.targetInteractions = T;
-        // cfg.featureChoiSigmaAB = choiFlag;  // wired in once #16 lands
+        cfg.featureChoiSigmaAB = choiFlag;  // wired in once #16 lands
         InteractionSimulation sim(cfg);
         sim.tune();
         std::vector<double> sigmas;
@@ -256,7 +256,7 @@ void testChoiFlag_CharGammaCpStillDriftsCharge() {
     cfg.seed = 1;
     cfg.targetInteractions = 50;
     cfg.gammaCpViolation = 0.5;
-    // cfg.featureChoiSigmaAB = true;
+    cfg.featureChoiSigmaAB = true;
     InteractionSimulation sim(cfg);
     sim.tune();
     CHECK(std::abs(sim.getGlobalCharge()) > 0.5,
@@ -277,7 +277,7 @@ void testChoiFlag_NoExceptionsUnderMixedSweep() {
     InteractionConfig cfg = baseConfig();
     cfg.seed = 7;
     cfg.targetInteractions = 30;
-    // cfg.featureChoiSigmaAB = true;
+    cfg.featureChoiSigmaAB = true;
     InteractionSimulation sim(cfg);
     sim.tune();
     // Mixed-move sweep — should not throw, should not segfault.

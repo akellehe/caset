@@ -802,6 +802,8 @@ interaction; beta is the inverse temperature in e^{-beta S}.
                        &InteractionConfig::featurePhotonOnAnnihilate)
         .def_readwrite("featureQuditBasis",
                        &InteractionConfig::featureQuditBasis)
+        .def_readwrite("featureChoiSigmaAB",
+                       &InteractionConfig::featureChoiSigmaAB)
         .def_readwrite("j_chargeCharge",
                        &InteractionConfig::j_chargeCharge)
         .def_readwrite("j_spinSpin",

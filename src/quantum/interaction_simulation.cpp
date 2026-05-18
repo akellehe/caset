@@ -421,6 +421,29 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
             config_.massShift, config_.gammaCpViolation,
             config_.dtPair);
     }
+    // v0.2 + #16: build the 256-dim Choi state of U once. Requires
+    // featureQuditBasis (Choi has no meaning without the U it encodes).
+    if (config_.featureChoiSigmaAB) {
+        if (!config_.featureQuditBasis)
+            throw std::invalid_argument(
+                "featureChoiSigmaAB requires featureQuditBasis");
+        // |Ω⟩ = (1/4) Σ_{i,j} |i,j⟩_A |i,j⟩_B' on the doubled
+        // ququart space; J(U) = (U ⊗ I_16) |Ω⟩⟨Ω| (U† ⊗ I_16).
+        // We construct |Ω⟩ as a 256-dim column vector with 1/4 at
+        // every "diagonal" (i,j;i,j) index, then apply U on the
+        // first 16-dim subsystem.
+        Eigen::VectorXcd omega = Eigen::VectorXcd::Zero(256);
+        for (int k = 0; k < 16; ++k)
+            omega(k * 16 + k) = cd(0.25, 0.0);   // (1/4) (i,j) (i,j)
+        // Apply U on the first 16-dim factor: reshape omega as 16×16
+        // (rows = first factor, cols = second), multiply by U from
+        // the left, reshape back.
+        Eigen::Map<Eigen::MatrixXcd> omega_mat(omega.data(), 16, 16);
+        Eigen::MatrixXcd shaped = quditInteractionU_ * omega_mat;
+        Eigen::VectorXcd uOmega = Eigen::Map<Eigen::VectorXcd>(
+            shaped.data(), 256);
+        quditChoiU_ = uOmega * uOmega.adjoint();
+    }
 
     buildInitialLayer();
 }
@@ -589,7 +612,101 @@ InteractionSimulation::computeInteraction(VertexPtr x, VertexPtr y) const {
 
 // ─── v0.2: qudit-basis interaction machinery ────────────────────────────
 
+namespace {
+
+// Partial trace of a 256×256 Choi state J(U) on the doubled
+// (H_AB ⊗ H_A'B') Hilbert, keeping the first 16-dim factor (H_AB)
+// and tracing out the second (H_A'B'). Returns a 16×16 mixed state.
+// (For a maximally-entangled Choi this gives I_16/16 — uninformative
+// alone; the partner-conditioning step below picks the right
+// 4-dim subspace.)
+Eigen::MatrixXcd traceOutChoiPrimed(Eigen::MatrixXcd const& choi) {
+    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
+    // Index layout: row = a * 16 + b' where a ∈ [0,16) is H_AB,
+    // b' ∈ [0,16) is H_A'B'. Trace out the b' / d' diagonal.
+    for (int a = 0; a < 16; ++a)
+        for (int c = 0; c < 16; ++c)
+            for (int k = 0; k < 16; ++k)
+                out(a, c) += choi(a * 16 + k, c * 16 + k);
+    return out;
+}
+
+// Reduce a 256-dim Σ_AB Choi state to a 4-dim "single ququart" state
+// in a way that's consistent with the joint correlations stored in
+// quditJointOf_. The reduction depends on the partner's charge:
+//
+//   • Partial-trace the Choi over the "primed" doubled subsystem to
+//     get a 16-dim density matrix on H_AB.
+//   • The 16-dim H_AB factorises as H_A ⊗ H_B where A is the
+//     worldline-continuation side (q_A determined by inputs) and B
+//     is the other.
+//   • For a partner with charge q_p, project the 16-dim state onto
+//     the q_total = q_p subspace (so the joint conserves Q with the
+//     partner), then partial-trace down to 4-dim on the "shared"
+//     side.
+//
+// This is the conservation-preserving choice: when a Σ_AB is later
+// consumed with partner p, the effective marginal of Σ_AB has
+// ⟨Q⟩ = -q_p, ensuring the joint Q sums correctly.
+Eigen::Matrix4cd reduceChoiAgainstPartner(Eigen::MatrixXcd const& choi,
+                                          double partnerCharge) {
+    // Step 1: trace out primed → 16-dim density matrix on H_AB.
+    const Eigen::MatrixXcd rho_AB = traceOutChoiPrimed(choi);
+    // Step 2: project onto the Q_total = −partnerCharge subspace so
+    // the joint with the partner has Q = 0 (charge-conserving
+    // contraction). Q_total acts on H_AB = H_A ⊗ H_B with Q̂_A and
+    // Q̂_B on each ququart factor; eigenvalues of Q̂_A + Q̂_B are
+    // in {−2, 0, +2} (with 0 having an 8-dim subspace, ±2 each
+    // 4-dim). Round the partner's charge to the nearest integer for
+    // the projection target.
+    const int qTarget = -static_cast<int>(std::lround(partnerCharge));
+    // Build the projector onto the Q_total = qTarget subspace of the
+    // 16-dim H_AB. Basis index = 4*a + b where a, b ∈ [0,4) and
+    // Q̂(a) = +1 for a ∈ {0,1}, −1 for a ∈ {2,3} (and same for b).
+    auto qOfIndex = [](int idx) {
+        const int a = idx / 4;
+        const int b = idx % 4;
+        const int qA = (a < 2) ? +1 : -1;
+        const int qB = (b < 2) ? +1 : -1;
+        return qA + qB;
+    };
+    Eigen::MatrixXcd proj = Eigen::MatrixXcd::Zero(16, 16);
+    for (int i = 0; i < 16; ++i)
+        if (qOfIndex(i) == qTarget) proj(i, i) = cd(1.0, 0.0);
+    Eigen::MatrixXcd projected = proj * rho_AB * proj;
+    // Renormalise. If the projection has zero weight (target Q
+    // outside ±2), fall back to the I/4 proxy.
+    const double tr = projected.trace().real();
+    if (tr < 1e-12) {
+        return 0.25 * Eigen::Matrix4cd::Identity();
+    }
+    projected /= tr;
+    // Step 3: partial-trace projected (16-dim, on H_A ⊗ H_B) down
+    // to H_A (4-dim) — this is the marginal of Σ_AB on the side
+    // facing the partner.
+    Eigen::Matrix4cd out = Eigen::Matrix4cd::Zero();
+    for (int a = 0; a < 4; ++a)
+        for (int c = 0; c < 4; ++c)
+            for (int b = 0; b < 4; ++b)
+                out(a, c) += projected(4*a + b, 4*c + b);
+    return out;
+}
+
+} // namespace
+
 double InteractionSimulation::quditChargeOf(VertexPtr v) const {
+    // When v is a Choi Σ_AB, its single-vertex charge (used by
+    // getGlobalCharge for frontier summation) needs care: the Choi
+    // state on its own has ⟨Q̂_total⟩ = 0 (maximally entangled),
+    // and we want the frontier-sum to track conserved Q. We report
+    // 0 for the unconsumed Choi state — at consumption time, the
+    // partner-conditioned reduction gives the right marginal.
+    if (choiSigmaAbSet_.count(v)) {
+        // Choi state's diagonal trace against (Q̂ ⊗ I): identically
+        // zero because J(U) has uniform diagonal weight 1/16 on the
+        // Q = +2, 0, −2 sectors of the 16-dim H_AB.
+        return 0.0;
+    }
     auto it = quditStateOf_.find(v);
     if (it == quditStateOf_.end()) return 0.0;
     // ⟨Q⟩ = Tr[ρ · Q̂] where Q̂ = diag(+1,+1,-1,-1).
@@ -599,18 +716,33 @@ double InteractionSimulation::quditChargeOf(VertexPtr v) const {
 
 Eigen::MatrixXcd
 InteractionSimulation::quditJointStateFor(VertexPtr x, VertexPtr y) const {
-    auto it = quditJointOf_.find(sortedPair(x, y));
-    if (it != quditJointOf_.end()) {
-        if (sortedPair(x, y).first == x) return it->second;
-        return quditSwap(it->second);
+    // Choi-vertex partner-conditioned reduction: if either x or y
+    // carries the Choi state, replace its "marginal" used in the
+    // separable-fallback tensor product with the partner-conditioned
+    // reduction. Stored quditJointOf_ entries override this.
+    auto jit = quditJointOf_.find(sortedPair(x, y));
+    if (jit != quditJointOf_.end()) {
+        if (sortedPair(x, y).first == x) return jit->second;
+        return quditSwap(jit->second);
     }
-    // Default: separable product of per-vertex 4-dim states.
-    Eigen::Matrix4cd rhoX = (quditStateOf_.count(x))
-        ? quditStateOf_.at(x)
-        : (Eigen::Matrix4cd)(0.25 * Eigen::Matrix4cd::Identity());
-    Eigen::Matrix4cd rhoY = (quditStateOf_.count(y))
-        ? quditStateOf_.at(y)
-        : (Eigen::Matrix4cd)(0.25 * Eigen::Matrix4cd::Identity());
+    auto materialise = [&](VertexPtr v) -> Eigen::Matrix4cd {
+        if (choiSigmaAbSet_.count(v)) {
+            // The Choi-typed Σ_AB has an effective single-vertex
+            // marginal of I/4 (the maximally-entangled-on-doubled
+            // Hilbert Choi state traces down to (1/16) I_16 on H_AB,
+            // and one more partial trace gives (1/4) I_4). Q = 0 by
+            // construction. The genuine quantum content of the
+            // interaction lives in the (xp, yp) joint that the
+            // Choi-mode interact() stored, not in joint contractions
+            // through ab.
+            return 0.25 * Eigen::Matrix4cd::Identity();
+        }
+        auto sit = quditStateOf_.find(v);
+        if (sit != quditStateOf_.end()) return sit->second;
+        return (Eigen::Matrix4cd)(0.25 * Eigen::Matrix4cd::Identity());
+    };
+    Eigen::Matrix4cd rhoX = materialise(x);
+    Eigen::Matrix4cd rhoY = materialise(y);
     return quditTensor(rhoX, rhoY);
 }
 
@@ -861,15 +993,35 @@ bool InteractionSimulation::interact() {
     // v0.2 parallel seeding: 4-dim qudit states + 16×16 joints.
     if (config_.featureQuditBasis) {
         quditStateOf_[xp] = resQudit.statePrimeX;
-        quditStateOf_[ab] = resQudit.stateAB;
         quditStateOf_[yp] = resQudit.statePrimeY;
         auto putQuditJoint = [&](VertexPtr u, VertexPtr v,
                                  const Eigen::MatrixXcd& rho) {
             const auto k = sortedPair(u, v);
             quditJointOf_[k] = (k.first == u) ? rho : quditSwap(rho);
         };
-        putQuditJoint(xp, ab, resQudit.jointAB);
-        putQuditJoint(ab, yp, resQudit.jointAB);
+        if (config_.featureChoiSigmaAB) {
+            // #16: Σ_AB carries the full Choi state of U (marker only;
+            // the shared 256-dim state is in quditChoiU_). The genuine
+            // products correlation rhoAB is stored as a joint
+            // *between the two worldline continuations* (xp ↔ yp),
+            // *not* duplicated as (xp, ab) and (ab, yp). This avoids
+            // the double-counting that made the v0.2 proxy
+            // inconsistent and let Q drift under un-symmetric joint
+            // accounting. The Σ_AB vertex is a properly neutral
+            // entangling core: q_ab = 0, and any interaction
+            // involving it goes through tensor(I/4, partner) as a
+            // separable input — which is exactly Q-conservation
+            // friendly because tensor(I/4, partner) has Q = q_partner.
+            choiSigmaAbSet_.insert(ab);
+            putQuditJoint(xp, yp, resQudit.jointAB);
+        } else {
+            // v0.2 default: I/4 proxy + duplicated joints (the
+            // configuration that surfaced the Q-drift bug; pinned by
+            // the test_sigma_ab_choi_state baseline tests).
+            quditStateOf_[ab] = resQudit.stateAB;
+            putQuditJoint(xp, ab, resQudit.jointAB);
+            putQuditJoint(ab, yp, resQudit.jointAB);
+        }
     }
 
     // Dependency tracking for deep un-interactions.

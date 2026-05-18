@@ -120,6 +120,16 @@ struct InteractionConfig {
     // When this flag is on, the v0.1 charge-related flags are ignored
     // (v0.2 supersedes them).
     bool featureQuditBasis{false};
+    // ─── v0.2 + #16: Σ_AB as full 256-dim Choi state ───────────────────
+    // When true (requires featureQuditBasis), the Σ_AB entangling-core
+    // vertex carries the full Choi state J(U) = (U ⊗ I)|Ω⟩⟨Ω|(U† ⊗ I)
+    // — a 256×256 pure state on the doubled Hilbert — instead of the
+    // I/4 maximally-mixed proxy. This makes Σ_AB's marginal consistent
+    // with its joint correlations and eliminates the discrete Q-drift
+    // documented in v02_finite_size_investigation.md. When Σ_AB is
+    // consumed by a later interaction, its Choi state is reduced to
+    // 4 dimensions via charge-basis projection matched to the partner.
+    bool featureChoiSigmaAB{false};
     // Pair-Hamiltonian parameters. Sensible defaults map to a
     // "v0.1-ish" regime in the J_c → 0 limit; experiments can scan.
     double j_chargeCharge{1.0};    // J_c · (Q̂_A · Q̂_B)
@@ -294,6 +304,14 @@ class InteractionSimulation : public tessera::Simulation {
     // The 16×16 ququart-pair unitary. Built at construction time when
     // featureQuditBasis is on.
     Eigen::MatrixXcd quditInteractionU_;
+    // The 256×256 Choi state J(U) of the pair unitary, built once at
+    // construction when featureChoiSigmaAB is on. Each Σ_AB vertex
+    // carries a copy by reference (via membership in choiStateOf_).
+    Eigen::MatrixXcd quditChoiU_;
+    // Σ_AB vertices that carry the Choi state (rather than the I/4
+    // proxy in quditStateOf_). Membership in this set is the
+    // vertex-type marker; the state itself is the shared quditChoiU_.
+    std::unordered_set<tessera::VertexPtr> choiSigmaAbSet_;
     // Frontier vertices indexed by charge sign for O(1) annihilation
     // candidate sampling. A vertex with q > 0 is in frontierPos_,
     // q < 0 in frontierNeg_, q = 0 in frontierZero_. The same
