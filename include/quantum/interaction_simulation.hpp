@@ -248,6 +248,29 @@ class InteractionSimulation : public tessera::Simulation {
     [[nodiscard]] const std::shared_ptr<tessera::Spacetime> &
     getSpacetime() const noexcept { return spacetime_; }
 
+    // ─── Charged Cartan v0.2 observables ────────────────────────────────
+
+    // Per-vertex continuous charge ⟨Q̂⟩ = Tr[ρ · Q̂], where
+    // Q̂ = diag(+1, +1, -1, -1) on the {|+0⟩, |+1⟩, |−0⟩, |−1⟩} basis.
+    // Returns ±1 for integer-charge eigenstates, 0 for the maximally-mixed
+    // I/4 proxy. 0.0 for vertices the simulation has not associated with
+    // a qudit state. Requires `featureQuditBasis = True`.
+    [[nodiscard]] double quditChargeOf(tessera::VertexPtr v) const;
+
+    // 16×16 joint qudit state ρ_XY for a pair. Stored correlated joint
+    // when (x, y) share an interaction history or are initial-layer
+    // Delaunay neighbours; uncorrelated product ρ_x ⊗ ρ_y otherwise.
+    [[nodiscard]] Eigen::MatrixXcd
+    quditJointStateFor(tessera::VertexPtr x, tessera::VertexPtr y) const;
+
+    // Read-only access to the per-vertex 4-dim qudit states. Empty for
+    // non-qudit configs and for vertices in the Choi-state path that
+    // haven't materialized a single-vertex state. Used by the Python
+    // `quditStateOf(vertex)` accessor for tests.
+    [[nodiscard]] const std::unordered_map<
+        tessera::VertexPtr, Eigen::Matrix4cd> &
+    quditStateOfMap() const noexcept { return quditStateOf_; }
+
     [[nodiscard]] std::size_t interactionCount() const noexcept {
         return interactionCount_;
     }
@@ -403,8 +426,8 @@ class InteractionSimulation : public tessera::Simulation {
         Eigen::Matrix4cd stateAB;
         Eigen::MatrixXcd jointAB;   // 16×16, in (X' ⊗ Y') order
     };
-    // v0.2: derive a vertex's continuous charge from its state via Q̂.
-    [[nodiscard]] double quditChargeOf(tessera::VertexPtr v) const;
+    // (quditChargeOf and quditJointStateFor are declared public above —
+    // they're observables intended for inspection from tests/Python.)
     [[nodiscard]] InteractionResult
     computeInteraction(tessera::VertexPtr x, tessera::VertexPtr y) const;
 
@@ -412,11 +435,6 @@ class InteractionSimulation : public tessera::Simulation {
     [[nodiscard]] InteractionResultQudit
     computeInteractionQudit(tessera::VertexPtr x,
                             tessera::VertexPtr y) const;
-
-    // v0.2 joint-state lookup: stored 16×16 ρ_XY for correlated pairs,
-    // separable qudit tensor product otherwise.
-    [[nodiscard]] Eigen::MatrixXcd
-    quditJointStateFor(tessera::VertexPtr x, tessera::VertexPtr y) const;
 
     // The joint state ρ_XY in (X ⊗ Y) order: the stored correlated pair
     // if X, Y share one (initial-layer Delaunay neighbours, or the two
