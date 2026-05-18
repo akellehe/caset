@@ -1,0 +1,564 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)" href="charged_cartan_monte_carlo_v0.3.html"><link rel="prev" title="Charged Cartan v0.1 — annihilation as worldline termination + photon emission" href="charged_cartan_v01_BplusIII_writeup.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
+        <title>Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices) - tessera 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">tessera 0.1.0 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">tessera 0.1.0 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">CDT Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../causal_sets.html">Causal sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../wilson_loops.html">Wilson loops</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interaction_branching_simplex_writeup.html">Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane</a></li>
+<li class="toctree-l2"><a class="reference internal" href="interaction_history_monte_carlo_writeup.html">Interaction-history Monte Carlo: the search for spectral dimension 4</a></li>
+<li class="toctree-l2"><a class="reference internal" href="from_schwinger_to_lattice.html">From the Schwinger model to an abstract lattice construction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html">Charged Cartan Monte Carlo — design note v0.1</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Tessera C++ API</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/quantum-experiments/charged_cartan_monte_carlo_v0.2.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section class="tex2jax_ignore mathjax_ignore" id="charged-cartan-monte-carlo-design-note-v0-2-qudit-basis-vertices">
+<h1>Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)<a class="headerlink" href="#charged-cartan-monte-carlo-design-note-v0-2-qudit-basis-vertices" title="Link to this heading">¶</a></h1>
+<p>Implementation note for the v0.2 promotion described in the
+<a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html"><span class="std std-doc">v0.1 sketch</span></a>. v0.2 makes charge
+<em>intrinsic to the quantum state</em> by promoting each vertex’s Hilbert
+space from a qubit (2-dim) to a ququart (4-dim) with the structure of
+a Dirac-spinor-like register:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>basis = { |+0⟩, |+1⟩, |−0⟩, |−1⟩ }
+        ── charge ──   ── spin ──
+</pre></div>
+</div>
+<p>The first label is the <em>charge sector</em> (particle ↔ antiparticle); the
+second is the <em>spin / internal</em> qubit. The charge operator becomes</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Q̂ = diag(+1, +1, −1, −1)
+</pre></div>
+</div>
+<p>and the charge of a vertex is read out as ⟨q⟩_v = Tr[ρ_v · Q̂] ∈ [−1, +1].
+Continuous charge values fall out of mixed states naturally; the
+classical <code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code> map is no longer needed.</p>
+<section id="what-v0-2-fixes">
+<h2>What v0.2 fixes<a class="headerlink" href="#what-v0-2-fixes" title="Link to this heading">¶</a></h2>
+<p>The v0.1 model carries charge as a classical label <code class="docutils literal notranslate"><span class="pre">chargeOf_[v]</span></code>
+adjacent to the quantum state. This works but has structural
+limitations:</p>
+<ul class="simple">
+<li><p><strong>Q drifts under un-interact after annihilation</strong> (documented v0.1
+limitation). The fix requires un-interact to know the history of
+charge modifications; with classical labels this is bookkeeping the
+model wasn’t designed to do.</p></li>
+<li><p><strong>No quantum charge superpositions.</strong> A vertex can be <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">−</span></code>,
+but not <code class="docutils literal notranslate"><span class="pre">(|+⟩</span> <span class="pre">+</span> <span class="pre">|−⟩)/√2</span></code>. Real fermion-field charge eigenstates
+<em>do</em> admit such superpositions, and the matter-antimatter coherent
+oscillations that drive baryogenesis-like phenomena live in this
+subspace.</p></li>
+<li><p><strong>C and CP are imposed conventions, not symmetries.</strong> In v0.1 the
+CP-violating <code class="docutils literal notranslate"><span class="pre">cpBias</span></code> parameter biases pair-creation by hand. With
+charge intrinsic to the state, charge conjugation <code class="docutils literal notranslate"><span class="pre">Ĉ</span> <span class="pre">=</span> <span class="pre">X_charge</span> <span class="pre">⊗</span> <span class="pre">I_spin</span></code> becomes an operator on the Hilbert space, and CP-violation
+becomes “U doesn’t commute with Ĉ ⊗ P̂” — a structural statement
+about the chosen unitary, not an opt-in numerical knob.</p></li>
+</ul>
+</section>
+<section id="hilbert-space-change">
+<h2>Hilbert-space change<a class="headerlink" href="#hilbert-space-change" title="Link to this heading">¶</a></h2>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Object</p></th>
+<th class="head"><p>v0.1</p></th>
+<th class="head"><p>v0.2</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Per-vertex state</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Matrix2cd</span></code> (qubit, dim 2)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Matrix4cd</span></code> (ququart, dim 4)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Per-joint state</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Matrix4cd</span></code> (2-qubit, dim 4)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Matrix16cd</span></code> (2-ququart, dim 16)</p></td>
+</tr>
+<tr class="row-even"><td><p>Two-site U</p></td>
+<td><p>4×4</p></td>
+<td><p>16×16</p></td>
+</tr>
+<tr class="row-odd"><td><p>Charge representation</p></td>
+<td><p>classical <code class="docutils literal notranslate"><span class="pre">chargeOf_[v]</span></code> map</p></td>
+<td><p>derived: <code class="docutils literal notranslate"><span class="pre">Tr[ρ_v</span> <span class="pre">·</span> <span class="pre">Q̂]</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Numerical cost goes up roughly:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">partialTrace</span></code>: O(d²) → O(d⁴) ≈ 16×</p></li>
+<li><p>Matrix multiplies in <code class="docutils literal notranslate"><span class="pre">computeInteraction</span></code>: 4×4 → 16×16 ≈ 64×</p></li>
+<li><p>Per-cell wall time: estimated 30–50× slower than v0.1.</p></li>
+</ul>
+<p>At our scale (T ~ 3000 cells, ~9000 vertices), that’s tractable.</p>
+</section>
+<section id="interaction-unitary-u">
+<h2>Interaction unitary U<a class="headerlink" href="#interaction-unitary-u" title="Link to this heading">¶</a></h2>
+<p>v0.2 needs a configurable 16×16 unitary on bipartite ququart inputs.
+Three options for parameterising it, in order of complexity:</p>
+<ol class="arabic">
+<li><p><strong>Direct Hamiltonian + exponentiate.</strong> Build a Hamiltonian on the
+bipartite ququart Hilbert space from a small number of physically-
+motivated terms, exponentiate via <code class="docutils literal notranslate"><span class="pre">SelfAdjointEigenSolver</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>H_pair = J_c · (Q̂_A · Q̂_B)              ← charge-charge coupling
+       + J_s · (σ^x_A·σ^x_B + σ^y_A·σ^y_B) ← spin-spin (XX + YY)
+       + δ_m  · (Q̂_A + Q̂_B)              ← mass-like shift per charge
+       + γ_CP · (Ĉ_A ⊗ I_B + I_A ⊗ Ĉ_B)   ← optional CP-violating term
+U_pair = exp(−i · H_pair · dt)
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">(J_c,</span> <span class="pre">J_s,</span> <span class="pre">δ_m,</span> <span class="pre">γ_CP,</span> <span class="pre">dt)</span></code> are the configurable parameters. This is
+the path I’d take for v0.2 default.</p>
+</li>
+<li><p><strong>Operator Schmidt parameterisation.</strong> Pick the operator Schmidt
+spectrum <code class="docutils literal notranslate"><span class="pre">(σ_k)</span></code> and basis operators <code class="docutils literal notranslate"><span class="pre">(A_k,</span> <span class="pre">B_k)</span></code> directly — every
+16×16 U has such a decomposition (the generalisation of the SU(4)
+Cartan core). More expressive but harder to motivate physically.</p></li>
+<li><p><strong>Cartan / KAK on SU(16).</strong> Recursive decomposition into nested
+two-qubit blocks. Most general; most parameters; least
+illuminating physically. Defer.</p></li>
+</ol>
+<p>We’ll go with (1) and use the operator Schmidt decomposition of the
+resulting U as a diagnostic at construction time (so we can report
+“how entangling is this choice of (J_c, J_s, …)” once and forget
+about it).</p>
+</section>
+<section id="the-ab-dimension-mismatch">
+<h2>The Σ_AB-dimension mismatch<a class="headerlink" href="#the-ab-dimension-mismatch" title="Link to this heading">¶</a></h2>
+<p>A worldline vertex carries a 4-dim ρ. The entangling core Σ_AB
+naturally carries the <em>Choi state of U</em> — a pure state on a 256-dim
+doubled Hilbert space. When Σ_AB later participates in an interaction
+with another vertex, we need to reduce its 256-dim state to something
+that fits into the standard 16-dim joint input.</p>
+<p>v0.2 default: <strong>reduce-before-interaction (option A in the
+discussion).</strong> When Σ_AB is picked for interaction, partially trace its
+Choi state down to a 4-dim charge-basis subspace at the moment of
+interaction. The full Choi state is used at the moment of bowtie
+creation for principled per-edge MI calculation; the reduction only
+happens at subsequent consumption. This is the
+“interaction-as-measurement” reading: the partner vertex “measures”
+Σ_AB onto its charge eigenbasis.</p>
+<p>Options B (promote-to-256-dim) and C (Σ_AB never interacts) remain
+deferred behind separate feature flags.</p>
+</section>
+<section id="move-set-under-v0-2">
+<h2>Move set under v0.2<a class="headerlink" href="#move-set-under-v0-2" title="Link to this heading">¶</a></h2>
+<p>Same four moves as v0.1 (<code class="docutils literal notranslate"><span class="pre">interact</span></code>, <code class="docutils literal notranslate"><span class="pre">unInteract</span></code>, <code class="docutils literal notranslate"><span class="pre">annihilate</span></code>,
+<code class="docutils literal notranslate"><span class="pre">pairCreate</span></code>), but their <em>semantics</em> simplify:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">interact</span></code> eligibility</strong>: opposite-sign pairs are not blocked at
+the eligibility filter (charge isn’t a separate label anymore). The
+interaction itself, applied to opposite-charge inputs, produces an
+output ρ_AB whose charge structure is whatever U dictates — including
+possible annihilation-like collapse if U happens to project onto the
+Q=0 subspace.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">annihilate</span></code></strong> becomes a <em>measurement</em> move: pick a charged vertex,
+project its state onto the Q=0 sector with appropriate amplitude.
+This collapses the worldline (consistent with deactivation in v0.1.B)
+and the energy can optionally be carried away as a photon (v0.1.iii
+analog).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">pairCreate</span></code></strong> spawns two vertices in a charge-entangled state:
+e.g. <code class="docutils literal notranslate"><span class="pre">(|+,0⟩|−,0⟩</span> <span class="pre">+</span> <span class="pre">|−,0⟩|+,0⟩)/√2</span></code> (Bell-like in the charge
+register, neutral spin). The CP-bias becomes asymmetry in the
+state coefficients, not in an external parameter.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">unInteract</span></code></strong>: structurally identical to v0.1; the Q-drift bug
+disappears because charge is now propagated unitarily by U through
+the interaction, so un-interact (which removes the cell from the
+spacetime) automatically restores the pre-interact charge state.</p></li>
+</ul>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cfg</span><span class="o">.</span><span class="n">featureQuditBasis</span>           <span class="o">=</span> <span class="kc">True</span>   <span class="c1"># turn on v0.2 (4-dim vertices)</span>
+<span class="n">cfg</span><span class="o">.</span><span class="n">j_chargeCharge</span>              <span class="o">=</span> <span class="mf">1.0</span>    <span class="c1"># H_pair: J_c</span>
+<span class="n">cfg</span><span class="o">.</span><span class="n">j_spinSpin</span>                  <span class="o">=</span> <span class="mf">0.25</span>   <span class="c1"># H_pair: J_s</span>
+<span class="n">cfg</span><span class="o">.</span><span class="n">massShift</span>                   <span class="o">=</span> <span class="mf">0.5</span>    <span class="c1"># H_pair: δ_m</span>
+<span class="n">cfg</span><span class="o">.</span><span class="n">gammaCpViolation</span>            <span class="o">=</span> <span class="mf">0.0</span>    <span class="c1"># H_pair: γ_CP (off by default)</span>
+<span class="n">cfg</span><span class="o">.</span><span class="n">dtPair</span>                      <span class="o">=</span> <span class="mf">0.25</span>   <span class="c1"># H_pair: dt</span>
+</pre></div>
+</div>
+<p>Old v0.1 flags (featureCharges, featureDeactivateOnAnnihilate,
+featurePhotonOnAnnihilate, cpBias) are ignored when <code class="docutils literal notranslate"><span class="pre">featureQuditBasis</span></code>
+is on (v0.2 supersedes them). The constructor reconciles this and
+warns if both are set.</p>
+</section>
+<section id="implementation-order">
+<h2>Implementation order<a class="headerlink" href="#implementation-order" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><strong>Foundation</strong>: introduce <code class="docutils literal notranslate"><span class="pre">cfg.featureQuditBasis</span></code> (default false);
+introduce a <code class="docutils literal notranslate"><span class="pre">VertexDim</span></code> runtime constant on the <code class="docutils literal notranslate"><span class="pre">InteractionSimulation</span></code>
+set at construction time (2 for v0.1, 4 for v0.2). All density-matrix
+buffers become <code class="docutils literal notranslate"><span class="pre">Eigen::MatrixXcd</span></code> with runtime size.</p></li>
+<li><p><strong>Generalise the per-vertex / per-joint helpers</strong>: <code class="docutils literal notranslate"><span class="pre">partialTrace</span></code>,
+<code class="docutils literal notranslate"><span class="pre">traceOutFirst/Second</span></code>, <code class="docutils literal notranslate"><span class="pre">tensor2</span></code>, <code class="docutils literal notranslate"><span class="pre">jointMutualInformation</span></code> — they
+already use <code class="docutils literal notranslate"><span class="pre">MatrixXcd</span></code> internally for <code class="docutils literal notranslate"><span class="pre">partialTrace</span></code>; the typed
+2-qubit versions get wrapped or replaced.</p></li>
+<li><p><strong>Build the v0.2 Hamiltonian and U</strong> in <code class="docutils literal notranslate"><span class="pre">schwingerTwoSiteU</span></code>’s
+neighbourhood as <code class="docutils literal notranslate"><span class="pre">quditPairU(J_c,</span> <span class="pre">J_s,</span> <span class="pre">delta_m,</span> <span class="pre">gamma_CP,</span> <span class="pre">dt)</span></code>.</p></li>
+<li><p><strong>Re-port <code class="docutils literal notranslate"><span class="pre">interact</span></code></strong>: read charges from <code class="docutils literal notranslate"><span class="pre">Tr[ρ</span> <span class="pre">·</span> <span class="pre">Q̂]</span></code> instead of
+<code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>; opposite-sign eligibility filter removed; charge
+inheritance becomes automatic via U.</p></li>
+<li><p><strong>Re-port <code class="docutils literal notranslate"><span class="pre">annihilate</span></code></strong> and <strong><code class="docutils literal notranslate"><span class="pre">pairCreate</span></code></strong> as measurement /
+pair-spawn on 4-dim states.</p></li>
+<li><p><strong>Per-vertex observables</strong>: <code class="docutils literal notranslate"><span class="pre">getGlobalCharge</span></code>, <code class="docutils literal notranslate"><span class="pre">getChargeProfile</span></code>,
+<code class="docutils literal notranslate"><span class="pre">getChargeCorrelation</span></code> read from <code class="docutils literal notranslate"><span class="pre">Tr[ρ</span> <span class="pre">·</span> <span class="pre">Q̂]</span></code>.</p></li>
+<li><p><strong>Smoke test</strong>: confirm v0.1 path stays bit-identical at
+<code class="docutils literal notranslate"><span class="pre">featureQuditBasis</span> <span class="pre">=</span> <span class="pre">false</span></code>, then exercise v0.2 path end-to-end.</p></li>
+<li><p><strong>β-scan and writeup</strong> comparable to v0.1’s.</p></li>
+</ol>
+</section>
+<section id="open-question-for-after-implementation">
+<h2>Open question for after implementation<a class="headerlink" href="#open-question-for-after-implementation" title="Link to this heading">¶</a></h2>
+<p>The default <code class="docutils literal notranslate"><span class="pre">H_pair</span></code> is somewhat arbitrary — there are infinitely many
+ways to parameterise a 16×16 unitary, and the choice we make will
+affect every result. Two natural anchors:</p>
+<ul class="simple">
+<li><p><strong>Match v0.1 in a limit.</strong> Set <code class="docutils literal notranslate"><span class="pre">J_c</span> <span class="pre">=</span> <span class="pre">0</span></code> (no charge-charge coupling),
+keep <code class="docutils literal notranslate"><span class="pre">J_s</span></code> matching the v0.1 Schwinger fragment, and verify that
+v0.2 reproduces v0.1’s qualitative behaviour up to the inherent
+doubling. If it does, we have a clean baseline to add <code class="docutils literal notranslate"><span class="pre">J_c</span> <span class="pre">≠</span> <span class="pre">0</span></code>
+from.</p></li>
+<li><p><strong>Pick a known textbook coupled-fermion-pair model.</strong> The
+Nambu-Jona-Lasinio four-fermion interaction in 1+1D has exactly the
+right Hilbert-space structure (Dirac-spinor pairs) and a long
+experimental literature on chiral symmetry breaking. Mapping our
+<code class="docutils literal notranslate"><span class="pre">(J_c,</span> <span class="pre">J_s,</span> <span class="pre">δ_m,</span> <span class="pre">γ_CP)</span></code> to NJL parameters would tie the model to a
+known physics target.</p></li>
+</ul>
+<p>I’d default to “match v0.1 in a limit” until results suggest pivoting.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.1.md</span></a>
+— the v0.1 design v0.2 builds on; especially the “v0.2 sketch”
+section and the “Σ_AB as Choi state of U” discussion.</p></li>
+<li><p><a class="reference internal" href="from_schwinger_to_lattice.html"><span class="std std-doc">from_schwinger_to_lattice.md</span></a> — the
+justification for the abstract-lattice framing v0.2 inherits.</p></li>
+<li><p><a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.3.md</span></a>
+— v0.3 (gauge mediation), which will sit on top of v0.2.</p></li>
+</ul>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="charged_cartan_monte_carlo_v0.3.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="charged_cartan_v01_BplusIII_writeup.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a><ul>
+<li><a class="reference internal" href="#what-v0-2-fixes">What v0.2 fixes</a></li>
+<li><a class="reference internal" href="#hilbert-space-change">Hilbert-space change</a></li>
+<li><a class="reference internal" href="#interaction-unitary-u">Interaction unitary U</a></li>
+<li><a class="reference internal" href="#the-ab-dimension-mismatch">The Σ_AB-dimension mismatch</a></li>
+<li><a class="reference internal" href="#move-set-under-v0-2">Move set under v0.2</a></li>
+<li><a class="reference internal" href="#configuration">Configuration</a></li>
+<li><a class="reference internal" href="#implementation-order">Implementation order</a></li>
+<li><a class="reference internal" href="#open-question-for-after-implementation">Open question for after implementation</a></li>
+<li><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>

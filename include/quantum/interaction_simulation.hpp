@@ -112,6 +112,22 @@ struct InteractionConfig {
     double cpBias{0.0};
     InitialChargeMode initialChargeMode{InitialChargeMode::ALTERNATING};
 
+    // ─── v0.2: qudit-basis vertices (4-dim Hilbert per vertex) ──────────
+    // When true, vertices carry a 4-dim ququart state with the basis
+    // {|+0⟩, |+1⟩, |−0⟩, |−1⟩} so charge is intrinsic via the operator
+    // Q̂ = diag(+1, +1, −1, −1). The 16×16 pair Hamiltonian is built
+    // from the parameters below; the unitary is U = exp(−i H_pair · dt).
+    // When this flag is on, the v0.1 charge-related flags are ignored
+    // (v0.2 supersedes them).
+    bool featureQuditBasis{false};
+    // Pair-Hamiltonian parameters. Sensible defaults map to a
+    // "v0.1-ish" regime in the J_c → 0 limit; experiments can scan.
+    double j_chargeCharge{1.0};    // J_c · (Q̂_A · Q̂_B)
+    double j_spinSpin{0.25};       // J_s · (XX + YY)_spin
+    double massShift{0.5};         // δ_m · (Q̂_A + Q̂_B)
+    double gammaCpViolation{0.0};  // γ_CP · (Ĉ_A ⊗ I + I ⊗ Ĉ_B)
+    double dtPair{0.25};           // exponentiation time step
+
     std::uint32_t seed{0};
     bool          quiet{true};
 };
@@ -266,6 +282,18 @@ class InteractionSimulation : public tessera::Simulation {
     // config.useCharges is true. Worldline-product vertices inherit
     // their parent's charge; Σ_AB products are neutral (0).
     std::unordered_map<tessera::VertexPtr, double> chargeOf_;
+
+    // ─── v0.2: qudit-basis state buffers ────────────────────────────────
+    // Populated only when config.featureQuditBasis is on. Per-vertex 4×4
+    // density matrix in the basis {|+0⟩, |+1⟩, |−0⟩, |−1⟩}. Charge is
+    // derived as Tr[ρ · Q̂] where Q̂ = diag(+1, +1, −1, −1).
+    std::unordered_map<tessera::VertexPtr, Eigen::Matrix4cd> quditStateOf_;
+    // Per-pair 16-dim joint state in the (A ⊗ B) qudit-tensor order.
+    std::map<std::pair<tessera::VertexPtr, tessera::VertexPtr>,
+             Eigen::MatrixXcd> quditJointOf_;
+    // The 16×16 ququart-pair unitary. Built at construction time when
+    // featureQuditBasis is on.
+    Eigen::MatrixXcd quditInteractionU_;
     // Frontier vertices indexed by charge sign for O(1) annihilation
     // candidate sampling. A vertex with q > 0 is in frontierPos_,
     // q < 0 in frontierNeg_, q = 0 in frontierZero_. The same
@@ -339,8 +367,33 @@ class InteractionSimulation : public tessera::Simulation {
         SystemState stateAB;         // AB carried as its X-marginal proxy
         Eigen::Matrix4cd jointAB;    // ρ_AB in (X' ⊗ Y') order
     };
+
+    // v0.2: the same construction at 4-dim qudit vertices. ρ are
+    // 4×4; joints are 16×16. statePrimeX/Y are the 4-dim marginals;
+    // stateAB carries the Σ_AB proxy as a 4-dim state (the v0.2 default
+    // is the A-side marginal of the qudit joint, mirroring v0.1's
+    // proxy choice; the full 256-dim Choi state is a deferred upgrade).
+    struct InteractionResultQudit {
+        std::map<std::pair<int, int>, double> edgeMI;
+        Eigen::Matrix4cd statePrimeX;
+        Eigen::Matrix4cd statePrimeY;
+        Eigen::Matrix4cd stateAB;
+        Eigen::MatrixXcd jointAB;   // 16×16, in (X' ⊗ Y') order
+    };
+    // v0.2: derive a vertex's continuous charge from its state via Q̂.
+    [[nodiscard]] double quditChargeOf(tessera::VertexPtr v) const;
     [[nodiscard]] InteractionResult
     computeInteraction(tessera::VertexPtr x, tessera::VertexPtr y) const;
+
+    // v0.2 analog: 4-dim qudit inputs, 16×16 interaction unitary.
+    [[nodiscard]] InteractionResultQudit
+    computeInteractionQudit(tessera::VertexPtr x,
+                            tessera::VertexPtr y) const;
+
+    // v0.2 joint-state lookup: stored 16×16 ρ_XY for correlated pairs,
+    // separable qudit tensor product otherwise.
+    [[nodiscard]] Eigen::MatrixXcd
+    quditJointStateFor(tessera::VertexPtr x, tessera::VertexPtr y) const;
 
     // The joint state ρ_XY in (X ⊗ Y) order: the stored correlated pair
     // if X, Y share one (initial-layer Delaunay neighbours, or the two

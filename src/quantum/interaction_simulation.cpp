@@ -169,6 +169,145 @@ double jointMutualInformation(Eigen::Matrix4cd const& rho) {
     return std::max(sX + sY - sXY, 0.0);
 }
 
+// ─── v0.2: 4-dim qudit-basis helpers ────────────────────────────────────
+//
+// Vertex Hilbert space: basis {|+0⟩, |+1⟩, |−0⟩, |−1⟩}, indexed 0..3.
+// The first label is the charge sector, the second the spin / internal.
+// Charge operator: Q̂ = diag(+1, +1, −1, −1). Charge-conjugation Ĉ swaps
+// the charge bit while leaving spin untouched: Ĉ|q,s⟩ = |¬q, s⟩.
+
+// Charge operator on the 4-dim Hilbert.
+Eigen::Matrix4cd quditChargeOp() {
+    Eigen::Matrix4cd Q = Eigen::Matrix4cd::Zero();
+    Q(0,0) = 1; Q(1,1) = 1; Q(2,2) = -1; Q(3,3) = -1;
+    return Q;
+}
+
+// Charge-conjugation operator on the 4-dim Hilbert.
+Eigen::Matrix4cd quditChargeConj() {
+    Eigen::Matrix4cd C = Eigen::Matrix4cd::Zero();
+    C(0,2) = 1; C(2,0) = 1; C(1,3) = 1; C(3,1) = 1;
+    return C;
+}
+
+// Tensor product of two d-dim matrices (d=4 for the ququart pair).
+Eigen::MatrixXcd kron4(Eigen::Matrix4cd const& A, Eigen::Matrix4cd const& B) {
+    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            for (int k = 0; k < 4; ++k)
+                for (int l = 0; l < 4; ++l)
+                    out(4*i+k, 4*j+l) = A(i,j) * B(k,l);
+    return out;
+}
+
+// X and Y of the *spin* register only — i.e., the qubit X/Y acting on
+// the 2-dim spin subspace, lifted to the 4-dim qudit by ignoring the
+// charge index. Layout: bit 0 = spin, bit 1 = charge → index = (q<<1)|s.
+Eigen::Matrix4cd quditSpinSx() {
+    Eigen::Matrix4cd X = Eigen::Matrix4cd::Zero();
+    X(0,1) = 1; X(1,0) = 1; X(2,3) = 1; X(3,2) = 1;
+    return X;
+}
+Eigen::Matrix4cd quditSpinSy() {
+    Eigen::Matrix4cd Y = Eigen::Matrix4cd::Zero();
+    Y(0,1) = -I_UNIT; Y(1,0) = I_UNIT;
+    Y(2,3) = -I_UNIT; Y(3,2) = I_UNIT;
+    return Y;
+}
+
+// Build the 16×16 pair Hamiltonian H_pair and exponentiate to U.
+// See docs/source/quantum-experiments/charged_cartan_monte_carlo_v0.2.md.
+Eigen::MatrixXcd quditPairU(double jCharge, double jSpin,
+                            double massShift, double gammaCp,
+                            double dt) {
+    const Eigen::Matrix4cd Q = quditChargeOp();
+    const Eigen::Matrix4cd C = quditChargeConj();
+    const Eigen::Matrix4cd Sx = quditSpinSx();
+    const Eigen::Matrix4cd Sy = quditSpinSy();
+    const Eigen::Matrix4cd Id4 = Eigen::Matrix4cd::Identity();
+    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(16, 16);
+    // Charge-charge coupling.
+    H += jCharge * kron4(Q, Q);
+    // Spin-spin coupling (XX + YY) on the spin register.
+    H += jSpin * (kron4(Sx, Sx) + kron4(Sy, Sy));
+    // Mass-like one-body shift.
+    H += massShift * (kron4(Q, Id4) + kron4(Id4, Q));
+    // CP-violating coupling (Ĉ ⊗ I + I ⊗ Ĉ, Hermitian as Ĉ² = I).
+    if (gammaCp != 0.0)
+        H += gammaCp * (kron4(C, Id4) + kron4(Id4, C));
+    // Exponentiate via Hermitian eigendecomposition.
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(H);
+    Eigen::VectorXcd phase(16);
+    for (int k = 0; k < 16; ++k)
+        phase(k) = std::exp(-I_UNIT * dt * es.eigenvalues()(k));
+    return es.eigenvectors() * phase.asDiagonal()
+           * es.eigenvectors().adjoint();
+}
+
+// Partial trace of a 16×16 joint state on a 2-ququart bipartite space:
+// keep the A subsystem (index 0), trace out the B subsystem (index 1).
+// Returns the 4×4 marginal density matrix for A.
+Eigen::Matrix4cd quditTraceOutB(Eigen::MatrixXcd const& rho) {
+    Eigen::Matrix4cd out = Eigen::Matrix4cd::Zero();
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            for (int k = 0; k < 4; ++k)
+                out(i, j) += rho(4*i + k, 4*j + k);
+    return out;
+}
+Eigen::Matrix4cd quditTraceOutA(Eigen::MatrixXcd const& rho) {
+    Eigen::Matrix4cd out = Eigen::Matrix4cd::Zero();
+    for (int k = 0; k < 4; ++k)
+        for (int l = 0; l < 4; ++l)
+            for (int i = 0; i < 4; ++i)
+                out(k, l) += rho(4*i + k, 4*i + l);
+    return out;
+}
+
+// Tensor product of two 4-dim qudit states → 16×16 separable joint.
+Eigen::MatrixXcd quditTensor(Eigen::Matrix4cd const& a,
+                             Eigen::Matrix4cd const& b) {
+    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            for (int k = 0; k < 4; ++k)
+                for (int l = 0; l < 4; ++l)
+                    out(4*i + k, 4*j + l) = a(i, j) * b(k, l);
+    return out;
+}
+
+// Swap the two ququart subsystems of a 16×16 joint: (A ⊗ B) → (B ⊗ A).
+Eigen::MatrixXcd quditSwap(Eigen::MatrixXcd const& m) {
+    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
+    for (int a = 0; a < 4; ++a)
+        for (int b = 0; b < 4; ++b)
+            for (int c = 0; c < 4; ++c)
+                for (int d = 0; d < 4; ++d)
+                    out(4*b + a, 4*d + c) = m(4*a + b, 4*c + d);
+    return out;
+}
+
+// von Neumann entropy of any d×d density matrix (handles d=4 and d=16).
+double vonNeumannEntropyAny(Eigen::MatrixXcd const& rho) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(rho);
+    double s = 0.0;
+    for (double lambda : es.eigenvalues())
+        if (lambda > 1e-13) s -= lambda * std::log(lambda);
+    return s;
+}
+
+// Mutual information of a bipartite 16-dim joint, in nats.
+double quditJointMI(Eigen::MatrixXcd const& rho) {
+    const Eigen::Matrix4cd rhoA = quditTraceOutB(rho);
+    const Eigen::Matrix4cd rhoB = quditTraceOutA(rho);
+    const Eigen::MatrixXcd full = rho;
+    const double sA  = vonNeumannEntropyAny(rhoA);
+    const double sB  = vonNeumannEntropyAny(rhoB);
+    const double sAB = vonNeumannEntropyAny(full);
+    return std::max(sA + sB - sAB, 0.0);
+}
+
 // ℓ = -log(I / I_max), normalised so ℓ ≥ 0; floored when I is tiny so
 // uncorrelated systems are far apart but not infinitely so.
 double edgeLengthFromMI(double mi, double epsilon) {
@@ -275,6 +414,14 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
 
     interactionU_ = schwingerTwoSiteU(config_.a, config_.m, config_.dt);
 
+    // v0.2: build the 16×16 qudit-pair unitary if requested.
+    if (config_.featureQuditBasis) {
+        quditInteractionU_ = quditPairU(
+            config_.j_chargeCharge, config_.j_spinSpin,
+            config_.massShift, config_.gammaCpViolation,
+            config_.dtPair);
+    }
+
     buildInitialLayer();
 }
 
@@ -287,6 +434,10 @@ void InteractionSimulation::buildInitialLayer() {
     // mutual information between any pair of initial systems. All MI in
     // the complex is generated by interactions.
     std::vector<SystemState> initialStates(static_cast<std::size_t>(n));
+    // v0.2 parallel buffer: 4-dim random mixed states confined to a
+    // chosen charge sector. Built only when featureQuditBasis is on.
+    std::vector<Eigen::Matrix4cd> initialQuditStates(
+        static_cast<std::size_t>(n));
     {
         std::normal_distribution<double> g(0.0, 1.0);
         for (int s = 0; s < n; ++s) {
@@ -315,6 +466,34 @@ void InteractionSimulation::buildInitialLayer() {
                     ? ((s % 2 == 0) ? +1.0 : -1.0)
                     : (coin(rng_) ? +1.0 : -1.0);
             chargeOf_[v] = q;
+        }
+        if (config_.featureQuditBasis) {
+            // Build a 4-dim random mixed state confined to one charge
+            // sector: ρ_qudit = P_q · (M M†) · P_q / Tr(P_q · MM†), where
+            // P_q is the projector onto the chosen charge subspace
+            // (rows/cols 0,1 for +, rows/cols 2,3 for −).
+            const bool isPositive =
+                (config_.initialChargeMode == InitialChargeMode::ALTERNATING)
+                    ? (s % 2 == 0)
+                    : coin(rng_);
+            std::normal_distribution<double> g4(0.0, 1.0);
+            Eigen::Matrix4cd m4;
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j < 4; ++j)
+                    m4(i, j) = cd(g4(rng_), g4(rng_));
+            Eigen::Matrix4cd rho4 = m4 * m4.adjoint();
+            // Zero out the off-sector rows/cols.
+            for (int i = 0; i < 4; ++i) {
+                const bool iIsPositive = (i < 2);
+                if (iIsPositive != isPositive) {
+                    rho4.row(i).setZero();
+                    rho4.col(i).setZero();
+                }
+            }
+            const double tr = rho4.trace().real();
+            if (tr > 1e-15) rho4 /= tr;
+            initialQuditStates[static_cast<std::size_t>(s)] = rho4;
+            quditStateOf_[v] = rho4;
         }
         addToFrontier(v);
     }
@@ -405,6 +584,78 @@ InteractionSimulation::computeInteraction(VertexPtr x, VertexPtr y) const {
     res.edgeMI[key(2, 4)] = iInput;   // A'-B' = I(A:B)_input by unitary invariance
     res.edgeMI[key(0, 4)] = iInput;   // A-B'  = I(A:B)_input
     res.edgeMI[key(1, 2)] = iInput;   // B-A'  = I(A:B)_input
+    return res;
+}
+
+// ─── v0.2: qudit-basis interaction machinery ────────────────────────────
+
+double InteractionSimulation::quditChargeOf(VertexPtr v) const {
+    auto it = quditStateOf_.find(v);
+    if (it == quditStateOf_.end()) return 0.0;
+    // ⟨Q⟩ = Tr[ρ · Q̂] where Q̂ = diag(+1,+1,-1,-1).
+    const Eigen::Matrix4cd& rho = it->second;
+    return (rho(0,0) + rho(1,1) - rho(2,2) - rho(3,3)).real();
+}
+
+Eigen::MatrixXcd
+InteractionSimulation::quditJointStateFor(VertexPtr x, VertexPtr y) const {
+    auto it = quditJointOf_.find(sortedPair(x, y));
+    if (it != quditJointOf_.end()) {
+        if (sortedPair(x, y).first == x) return it->second;
+        return quditSwap(it->second);
+    }
+    // Default: separable product of per-vertex 4-dim states.
+    Eigen::Matrix4cd rhoX = (quditStateOf_.count(x))
+        ? quditStateOf_.at(x)
+        : (Eigen::Matrix4cd)(0.25 * Eigen::Matrix4cd::Identity());
+    Eigen::Matrix4cd rhoY = (quditStateOf_.count(y))
+        ? quditStateOf_.at(y)
+        : (Eigen::Matrix4cd)(0.25 * Eigen::Matrix4cd::Identity());
+    return quditTensor(rhoX, rhoY);
+}
+
+InteractionSimulation::InteractionResultQudit
+InteractionSimulation::computeInteractionQudit(VertexPtr x,
+                                               VertexPtr y) const {
+    // The genuine joint input state in the qudit basis (16×16).
+    const Eigen::MatrixXcd rhoXY = quditJointStateFor(x, y);
+
+    // ρ_AB = U ρ_XY U† — the genuine joint state after the interaction.
+    const Eigen::MatrixXcd rhoAB =
+        quditInteractionU_ * rhoXY * quditInteractionU_.adjoint();
+
+    const Eigen::Matrix4cd primeX = quditTraceOutB(rhoAB);
+    const Eigen::Matrix4cd primeY = quditTraceOutA(rhoAB);
+
+    // Input marginals' entropies (the worldline self-MI).
+    const Eigen::Matrix4cd rhoX_in = quditTraceOutB(rhoXY);
+    const Eigen::Matrix4cd rhoY_in = quditTraceOutA(rhoXY);
+    const double sX = vonNeumannEntropyAny(rhoX_in);
+    const double sY = vonNeumannEntropyAny(rhoY_in);
+    const double iJoint = quditJointMI(rhoAB);
+    const double iInput = quditJointMI(rhoXY);
+
+    InteractionResultQudit res;
+    res.statePrimeX = primeX;
+    res.statePrimeY = primeY;
+    // Σ_AB proxy: the A-side marginal, mirroring v0.1's choice. The
+    // full Choi state of the 16×16 U is a deferred upgrade.
+    res.stateAB = primeX;
+    res.jointAB = rhoAB;
+
+    auto key = [](int u, int v) {
+        return std::make_pair(std::min(u, v), std::max(u, v));
+    };
+    res.edgeMI[key(0, 1)] = iInput;
+    res.edgeMI[key(0, 2)] = sX;
+    res.edgeMI[key(1, 4)] = sY;
+    res.edgeMI[key(0, 3)] = iJoint;
+    res.edgeMI[key(1, 3)] = iJoint;
+    res.edgeMI[key(2, 3)] = iJoint;
+    res.edgeMI[key(3, 4)] = iJoint;
+    res.edgeMI[key(2, 4)] = iInput;
+    res.edgeMI[key(0, 4)] = iInput;
+    res.edgeMI[key(1, 2)] = iInput;
     return res;
 }
 
@@ -512,14 +763,26 @@ bool InteractionSimulation::interact() {
 
     const std::size_t nFrontier   = frontier_.size();
     const std::size_t nPlusBefore = nFrontier * (nFrontier - 1) / 2;
-    const InteractionResult res = computeInteraction(x, y);
+
+    // v0.1 vs v0.2: compute the interaction result on the right Hilbert
+    // space. We always populate the v0.1 result (used to length the
+    // edges and dispatch in the existing accept logic); when v0.2 is
+    // on we additionally compute the qudit result and use its edge MIs
+    // for the action and its 4-dim states for the product seeding.
+    const InteractionResult       res       = computeInteraction(x, y);
+    InteractionResultQudit        resQudit;
+    if (config_.featureQuditBasis)
+        resQudit = computeInteractionQudit(x, y);
 
     // The ten signed squared edge lengths of the proposed cell.
     double edgeSq[10];
     for (int e = 0; e < 10; ++e) {
         CellEdge const& ce = kCellEdges[e];
-        const double mi = res.edgeMI.at(
-            {std::min(ce.u, ce.v), std::max(ce.u, ce.v)});
+        const auto k = std::make_pair(std::min(ce.u, ce.v),
+                                       std::max(ce.u, ce.v));
+        const double mi = config_.featureQuditBasis
+                              ? resQudit.edgeMI.at(k)
+                              : res.edgeMI.at(k);
         const double len = edgeLengthFromMI(mi, config_.epsilonI);
         edgeSq[e] = signedSquaredLength(len, ce.spacelike);
     }
@@ -591,6 +854,20 @@ bool InteractionSimulation::interact() {
     };
     putJoint(xp, ab, res.jointAB);  // A'–AB joint (= ρ_AB, A' on A-side)
     putJoint(ab, yp, res.jointAB);  // AB–B' joint (= ρ_AB, B' on B-side)
+
+    // v0.2 parallel seeding: 4-dim qudit states + 16×16 joints.
+    if (config_.featureQuditBasis) {
+        quditStateOf_[xp] = resQudit.statePrimeX;
+        quditStateOf_[ab] = resQudit.stateAB;
+        quditStateOf_[yp] = resQudit.statePrimeY;
+        auto putQuditJoint = [&](VertexPtr u, VertexPtr v,
+                                 const Eigen::MatrixXcd& rho) {
+            const auto k = sortedPair(u, v);
+            quditJointOf_[k] = (k.first == u) ? rho : quditSwap(rho);
+        };
+        putQuditJoint(xp, ab, resQudit.jointAB);
+        putQuditJoint(ab, yp, resQudit.jointAB);
+    }
 
     // Dependency tracking for deep un-interactions.
     producedByCell_[xp] = cell;
@@ -1082,9 +1359,15 @@ double InteractionSimulation::getGlobalCharge() const {
     // has already propagated to product worldlines are excluded — their
     // charge is now carried by their descendants.
     double q = 0.0;
-    for (VertexPtr v : frontier_) {
-        auto it = chargeOf_.find(v);
-        if (it != chargeOf_.end()) q += it->second;
+    if (config_.featureQuditBasis) {
+        // v0.2: read charge from Tr[ρ · Q̂] per vertex.
+        for (VertexPtr v : frontier_)
+            q += quditChargeOf(v);
+    } else {
+        for (VertexPtr v : frontier_) {
+            auto it = chargeOf_.find(v);
+            if (it != chargeOf_.end()) q += it->second;
+        }
     }
     return q;
 }
