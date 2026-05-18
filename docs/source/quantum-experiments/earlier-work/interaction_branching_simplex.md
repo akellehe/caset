@@ -1,7 +1,7 @@
 # Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane
 
 A single-cell experiment, complementary to the graph-level
-[temporally_connected_entangled_spacetime_writeup.md](temporally_connected_entangled_spacetime_writeup.md).
+[temporally_connected_entangled_spacetime.md](temporally_connected_entangled_spacetime.md).
 That experiment asks what spectral dimension the mutual-information graph
 of a Schwinger chain *carries in aggregate*. This one asks the
 elementary question underneath it: when two systems interact and branch,
@@ -129,7 +129,7 @@ python examples/quantum/plot_interaction_branching_simplex.py
 ## Results
 
 ![Interaction-branching simplex: cell composition open vs closed, and
-the cured fraction](figures/interaction_branching_simplex.png)
+the cured fraction](../figures/interaction_branching_simplex.png)
 
 Fractions below are of the **connected** cells (those with all ten
 edges finite); ~50% of cells are disconnected — see threats to validity.
@@ -219,7 +219,7 @@ Setup matches `temporally_connected_entangled_spacetime.py`:
 Poisson layouts per `(N, m/g)`.
 
 ![Peak spectral dimension and D_inf vs N for the coned Poisson-Delaunay
-MI complex](figures/poisson_delaunay_spectral_dimension.png)
+MI complex](../figures/poisson_delaunay_spectral_dimension.png)
 
 Peak `D_S`, mean ± std over Poisson layouts:
 
@@ -235,7 +235,7 @@ Three readings:
 1. **Peak `D_S` is non-monotonic in `N`, and it collapses toward 1.**
    It rises to `≈ 2` at `N = 20`, then *decays* — by `N = 40` every
    `m/g` sits at `D_S ≈ 1.07–1.09`. This is the opposite of
-   [temporally_connected_entangled_spacetime_writeup.md](temporally_connected_entangled_spacetime_writeup.md),
+   [temporally_connected_entangled_spacetime.md](temporally_connected_entangled_spacetime.md),
    whose peak `D_S` rises monotonically `2.7 → 3.7` over the same `N`
    range.
 
@@ -339,7 +339,7 @@ Anyone with a tessera build at or after the `ChoiPropagator` and
 
 ## See also
 
-- [temporally_connected_entangled_spacetime_writeup.md](temporally_connected_entangled_spacetime_writeup.md)
+- [temporally_connected_entangled_spacetime.md](temporally_connected_entangled_spacetime.md)
   — the graph-level spectral-dimension experiment this single-cell test
   sits underneath.
 - [holography-causal-ordering-emergent-dimension.md](../holography-causal-ordering-emergent-dimension.md)

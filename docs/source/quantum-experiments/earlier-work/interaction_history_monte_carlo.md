@@ -122,7 +122,7 @@ generates at most a quasi-1D dual.
 circles = D_S(σ) curve turned over inside the σ-grid (true peak);
 hollow triangles = σ-saturated (peak landed at σ_max; reading is a
 lower bound on the true peak). Bottom panel shows the diffusion time
-at which the peak occurs.](figures/cartan_beta_scatter.png)
+at which the peak occurs.](../figures/cartan_beta_scatter.png)
 
 Under the Cartan model the 0.635 ceiling is broken decisively and the
 construction passes `D_S = 4`. The 22-β × 10-seed scatter exhibits
@@ -282,8 +282,8 @@ records are at `/tmp/interaction-history/cartan_beta_scatter.json`.
 
 - [interaction-history-monte-carlo.md](../interaction-history-monte-carlo.md)
   — the construction's charter.
-- [interaction_branching_simplex_writeup.md](interaction_branching_simplex_writeup.md)
+- [interaction_branching_simplex.md](interaction_branching_simplex.md)
   — the single-cell test: one closed cell *can* carry a 4-volume.
-- [temporally_connected_entangled_spacetime_writeup.md](temporally_connected_entangled_spacetime_writeup.md)
+- [temporally_connected_entangled_spacetime.md](temporally_connected_entangled_spacetime.md)
   — the earlier finding that local 4-volume does not sum to a 4D bulk
   under a sparse connectivity rule.

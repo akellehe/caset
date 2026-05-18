@@ -3,8 +3,8 @@
 A standalone justification for why the current line of work has dropped
 every load-bearing aspect of the Schwinger fermion-field construction
 and what we keep / lose by doing so. Read this alongside
-[interaction_history_monte_carlo_writeup.md](interaction_history_monte_carlo_writeup.md)
-and [charged_cartan_monte_carlo_v0.1.md](charged_cartan_monte_carlo_v0.1.md).
+[../earlier-work/interaction_history_monte_carlo.md](../earlier-work/interaction_history_monte_carlo.md)
+and [../charged-cartan/design/v0.1.md](../charged-cartan/design/v0.1.md).
 
 ## The starting point
 
@@ -207,8 +207,8 @@ committed to yet.
 - [interaction-history-monte-carlo.md](../interaction-history-monte-carlo.md)
   — the construction's charter (still uses Schwinger language; will be
   updated to match this note in due course).
-- [charged_cartan_monte_carlo_v0.1.md](charged_cartan_monte_carlo_v0.1.md)
+- [../charged-cartan/design/v0.1.md](../charged-cartan/design/v0.1.md)
   — the v0.1 design including the configurable $U$ modes.
-- [interaction_history_monte_carlo_writeup.md](interaction_history_monte_carlo_writeup.md)
+- [../earlier-work/interaction_history_monte_carlo.md](../earlier-work/interaction_history_monte_carlo.md)
   — the original experiment's results, run under the Schwinger $U$
   default.

@@ -54,7 +54,7 @@ Single JSON record per $m/g$ is written matching the schema in [holography-causa
 
 ## Numerical findings
 
-![Emergent spectral dimension across m/g](figures/emergent_spectral_dimension.png)
+![Emergent spectral dimension across m/g](../figures/emergent_spectral_dimension.png)
 
 | $m/g$ | $|V_G|$ | $|E_G|$ | bondDim peak | peak $D_S$ | $\sigma_{\mathrm{peak}}$ | $D_\infty$ fit | fit $\chi^2$/dof |
 |---|---|---|---|---|---|---|---|
@@ -106,7 +106,7 @@ A separate convergence sweep at a smaller baseline ($N = 6$, $T = 0.6$, $m/g = 0
 python examples/quantum/run_holography_convergence.py --N 6 --m-over-g 0.5 --T 0.6
 ```
 
-![Convergence in genuine and structural parameters](figures/emergent_spectral_dimension_convergence.png)
+![Convergence in genuine and structural parameters](../figures/emergent_spectral_dimension_convergence.png)
 
 | Sweep | Values | $D_S$ peak | $D_\infty$ fit | Verdict |
 |---|---|---|---|---|
@@ -142,7 +142,7 @@ python examples/quantum/run_emergent_spectral_dimension_bootstrap.py \
     --out-dir /tmp/holography-bootstrap
 ```
 
-![i_0 bootstrap of peak D_S](figures/emergent_spectral_dimension_bootstrap.png)
+![i_0 bootstrap of peak D_S](../figures/emergent_spectral_dimension_bootstrap.png)
 
 | $m/g$ | $i_0 = 1$ | $i_0 = 3$ | $i_0 = 5$ | mean ± std | range |
 |---|---|---|---|---|---|
@@ -195,7 +195,7 @@ python examples/quantum/run_emergent_spectral_dimension_bootstrap.py \
     --out-dir /tmp/holography-N16-bootstrap
 ```
 
-![Finite-N trend: peak D_S vs m/g and D_S(σ) at N=16](figures/emergent_spectral_dimension_n16.png)
+![Finite-N trend: peak D_S vs m/g and D_S(σ) at N=16](../figures/emergent_spectral_dimension_n16.png)
 
 | $m/g$ | $\|V_G\|$ | $\|E_G\|$ | peak $D_S$ (mean ± std) | range across $i_0$ | $N = 8$ peak (mean) |
 |---|---|---|---|---|---|
@@ -279,7 +279,7 @@ python examples/quantum/run_dual_spectral_dimension.py \
 
 (Bond MI per snapshot is gated by ``TDVPConfig.recordBondMutualInformation``.)
 
-![Dual-lattice vs site-graph spectral dimension at N=16](figures/dual_vs_site_spectral_dimension.png)
+![Dual-lattice vs site-graph spectral dimension at N=16](../figures/dual_vs_site_spectral_dimension.png)
 
 ### Results at $N = 16$
 
@@ -361,5 +361,5 @@ regenerate every number in this writeup.
 - [holography-causal-ordering-emergent-dimension.md](../holography-causal-ordering-emergent-dimension.md)
   — the spec this experiment tests.
 - [quantum.md](../quantum.md) — the user-facing reference for the entire Schwinger pipeline.
-- [lightcone_vs_majorization_writeup.md](lightcone_vs_majorization_writeup.md) — the companion
+- [lightcone_vs_majorization.md](lightcone_vs_majorization.md) — the companion
   causal-order-comparison experiment on the same TDVP snapshots.
