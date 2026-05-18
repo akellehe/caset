@@ -874,6 +874,37 @@ dimension reaches 4.
              &InteractionSimulation::getChargeCorrelation,
              py::arg("maxDist"),
              R"doc(v0.1: <q_v . q_w> as a function of graph distance.)doc")
+        .def("quditChargeOf", &InteractionSimulation::quditChargeOf,
+             py::arg("vertex"),
+             R"doc(v0.2: a single vertex's continuous charge via Tr[ρ · Q̂].
+
+Q̂ = diag(+1, +1, -1, -1) on the {|+0⟩, |+1⟩, |−0⟩, |−1⟩} basis.
+For an integer-charge eigenstate this returns ±1; for the maximally-mixed
+I/4 proxy it returns 0; for an arbitrary mixed state, the value sits in
+[−1, +1]. Requires ``featureQuditBasis = True``. Returns 0.0 for vertices
+the simulation has no qudit state for.)doc")
+        .def("quditStateOf",
+             [](const InteractionSimulation &self, tessera::VertexPtr v)
+                 -> py::object {
+               const auto &m = self.quditStateOfMap();
+               auto it = m.find(v);
+               if (it == m.end()) return py::none();
+               return py::cast(it->second);
+             },
+             py::arg("vertex"),
+             R"doc(v0.2: read a single vertex's 4×4 qudit density matrix, or
+``None`` if no qudit state is stored. Useful for tests that inspect
+per-vertex purity, charge content, or basis populations directly rather
+than going through the projected ``Tr[ρ · Q̂]`` accessor. Requires
+``featureQuditBasis = True``.)doc")
+        .def("quditJointStateFor",
+             &InteractionSimulation::quditJointStateFor,
+             py::arg("x"), py::arg("y"),
+             R"doc(v0.2: 16×16 joint qudit state ρ_XY for a pair.
+
+Returns the stored correlated joint when (x, y) share an interaction
+history or are initial-layer Delaunay neighbours; otherwise the
+uncorrelated product ρ_x ⊗ ρ_y.)doc")
         .def("getSpacetime", &InteractionSimulation::getSpacetime,
              R"doc(The interaction-history simplicial complex (the primal).)doc")
         .def_property_readonly("interactionCount",

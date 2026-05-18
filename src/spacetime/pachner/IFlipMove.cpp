@@ -135,10 +135,10 @@ bool IFlipMove::apply() {
 
   for (const auto &s : oldSimplices_) st_->removeSimplex(s);
 
-  createdSimplices_.reserve(newSimplexVerts_.size());
+  createdSimplexVerts_.reserve(newSimplexVerts_.size());
   for (const auto &nv : newSimplexVerts_) {
     auto r = st_->createSimplexTracked(nv);
-    if (r.created) createdSimplices_.push_back(r.simplex);
+    if (r.created) createdSimplexVerts_.push_back(nv);
     for (const auto &e : r.newEdges) createdEdges_.push_back(e);
   }
 
@@ -149,8 +149,11 @@ bool IFlipMove::apply() {
 void IFlipMove::rollback() {
   if (!applied_) return;
 
-  for (const auto &s : createdSimplices_) st_->removeSimplex(s);
-  createdSimplices_.clear();
+  // Resolve created simplices by verts at rollback time (see ShiftMove).
+  for (const auto &verts : createdSimplexVerts_) {
+    if (auto s = st_->findSimplexByVerts(verts)) st_->removeSimplex(s);
+  }
+  createdSimplexVerts_.clear();
 
   pachner_detail::removeAndClearEdges(createdEdges_, st_);
 

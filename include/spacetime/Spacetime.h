@@ -202,6 +202,26 @@ class Spacetime {
     /// (all simplices of all dimensions registered in the complex).
     [[nodiscard]] const std::vector<SimplexPtr>& getSimplices() const noexcept;
 
+    /// Deterministically seed the spacetime's internal RNG. The RNG drives
+    /// the @ref getRandomVertex / @ref getRandomSimplex / @ref getRandomTopSimplex
+    /// family used by Pachner moves' first-step sigma selection. Call this
+    /// in tests that need byte-identical reproducibility across processes;
+    /// otherwise the default seed comes from `std::random_device`.
+    void setSeed(std::uint32_t s) noexcept { rng.seed(s); }
+
+    /// Look up the live simplex with the given vertex tuple, if any.
+    /// Returns ``nullptr`` if no simplex currently has exactly these
+    /// vertices. The lookup is by fingerprint (commutative XOR-mix of
+    /// vertex IDs), so order does not matter; duplicate vertices are
+    /// folded.
+    ///
+    /// Intended for transactional-move rollback code that needs to
+    /// resolve a simplex by its identifying verts at rollback time
+    /// (the original ``SimplexPtr`` may be stale if another move ran
+    /// in between).
+    [[nodiscard]] SimplexPtr findSimplexByVerts(
+        const VertexPtrs &vertices) const noexcept;
+
     /// Select a uniformly random vertex from the vertex list.
     /// Used by the (2d,2) delete move for blind-guessing vertex selection.
     /// @return A random vertex, or nullptr if none exist

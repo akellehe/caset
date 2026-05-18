@@ -69,8 +69,9 @@ private:
     double squaredLength;
   };
   std::vector<EdgeRecord> deletedEdges_;
-  // The 2 replacement simplices we created in apply().
-  std::vector<SimplexPtr> createdSimplices_;
+  // Vertex tuples of the 2 replacement simplices we actually created in
+  // apply() (see ShiftMove for the staleness-bug rationale).
+  std::vector<VertexPtrs> createdSimplexVerts_;
   // Edges freshly inserted by createSimplexTracked when we built the
   // 2 replacement simplices (likely empty since they reuse existing
   // edges, but track for safety).

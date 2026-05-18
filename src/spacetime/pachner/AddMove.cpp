@@ -148,11 +148,11 @@ bool AddMove::apply() {
     verts2.push_back(vertB_);
 
     auto r1 = st_->createSimplexTracked(verts1);
-    if (r1.created) createdSimplices_.push_back(r1.simplex);
+    if (r1.created) createdSimplexVerts_.push_back(verts1);
     for (const auto &e : r1.newEdges) createdEdges_.push_back(e);
 
     auto r2 = st_->createSimplexTracked(verts2);
-    if (r2.created) createdSimplices_.push_back(r2.simplex);
+    if (r2.created) createdSimplexVerts_.push_back(verts2);
     for (const auto &e : r2.newEdges) createdEdges_.push_back(e);
   }
 
@@ -184,8 +184,13 @@ void AddMove::rollback() {
 
   // 2. Remove the 2d created simplices.  Their fingerprints are now
   // back to the pre-swap state (involving newVert's auto-assigned ID).
-  for (const auto &s : createdSimplices_) st_->removeSimplex(s);
-  createdSimplices_.clear();
+  // Resolve by verts at rollback time — captured SimplexPtrs would be
+  // stale if any other move removed-and-recreated these in between
+  // (see ShiftMove for the full rationale).
+  for (const auto &verts : createdSimplexVerts_) {
+    if (auto s = st_->findSimplexByVerts(verts)) st_->removeSimplex(s);
+  }
+  createdSimplexVerts_.clear();
 
   // 3. Remove the freshly-inserted edges (mostly: edges from newVert
   // to spatial vertices and to vertA/vertB).

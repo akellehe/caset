@@ -342,9 +342,17 @@ class TestShiftStress(unittest.TestCase):
     # structure, d=4 only").
 
     def test_apply_apply_rollback_rollback_chain(self):
-        """Apply two non-overlapping shifts, then rollback in reverse
-        order; final state must equal initial state."""
+        """Apply two shifts, then rollback in reverse order; final
+        state must equal initial state.
+
+        Seeds the spacetime's internal RNG (``st.setSeed``) so the
+        sigma-selection inside ``ShiftMove.propose`` is deterministic
+        across processes. The previous version of this test depended
+        on ``std::random_device``-seeded sigma selection and was
+        intermittently flaky in CI.
+        """
         st = _make_st(d=4)
+        st.setSeed(0)
         before = _full_snapshot(st)
         # Find two shifts that succeed sequentially.
         m1 = m2 = None
@@ -370,6 +378,44 @@ class TestShiftStress(unittest.TestCase):
         self.assertEqual(_full_snapshot(st), before,
                          "Stacked apply/rollback in LIFO order must "
                          "restore byte-identical initial state")
+
+    def test_overlapping_shifts_lifo_rollback_regression(self):
+        """Regression for the use-after-free in the (3,3) Pachner
+        rollback when two shifts share a created cell.
+
+        Before the fix, ``m1.createdSimplices_`` held raw
+        ``SimplexPtr`` for cells m1 created.  If m2 then removed one
+        of those cells (and m2.rollback recreated it as a fresh
+        allocation), m1's stored pointer was dangling.
+        ``m1.rollback`` would feed it to ``removeSimplex``, whose
+        swap-and-pop on the stale ``vecIdx_`` would clobber an
+        unrelated simplex in the spacetime — leaving the dead cell in
+        place and removing the wrong one.
+
+        With ``st.setSeed(0)`` the failure is deterministic at
+        ``(m1_seed=2, m2_seed=13)``: BEFORE has
+        ``(25,27,32,33,34)`` and lacks ``(25,26,27,33,34)``; AFTER had
+        the opposite.  After the fix (verts-based rollback resolution
+        via ``Spacetime::findSimplexByVerts``), both states match
+        byte-for-byte.
+        """
+        st = _make_st(d=4)
+        st.setSeed(0)
+        before = _full_snapshot(st)
+
+        m1 = tessera.ShiftMove(st, 2)
+        if not (m1.propose() and m1.apply()):
+            self.skipTest("seed-pinned m1 didn't apply in this build")
+        m2 = tessera.ShiftMove(st, 13)
+        if not (m2.propose() and m2.apply()):
+            self.skipTest("seed-pinned m2 didn't apply in this build")
+        m2.rollback()
+        m1.rollback()
+        self.assertEqual(
+            _full_snapshot(st), before,
+            "LIFO rollback of two overlapping shifts must restore "
+            "byte-identical initial state (regression for the "
+            "stale-SimplexPtr use-after-free).")
 
 
 if __name__ == "__main__":

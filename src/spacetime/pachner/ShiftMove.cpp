@@ -122,11 +122,14 @@ bool ShiftMove::apply() {
   // Remove the 3 old simplices.
   for (const auto &s : oldSimplices_) st_->removeSimplex(s);
 
-  // Create the 3 new ones, recording fresh edges for rollback.
-  createdSimplices_.reserve(newSimplexVerts_.size());
+  // Create the 3 new ones, recording the verts of those we actually
+  // created (skipping any that already existed and were deduped).  We
+  // store verts rather than SimplexPtr so rollback survives another
+  // move removing the underlying Simplex in between.
+  createdSimplexVerts_.reserve(newSimplexVerts_.size());
   for (const auto &nv : newSimplexVerts_) {
     auto r = st_->createSimplexTracked(nv);
-    if (r.created) createdSimplices_.push_back(r.simplex);
+    if (r.created) createdSimplexVerts_.push_back(nv);
     for (const auto &e : r.newEdges) createdEdges_.push_back(e);
   }
 
@@ -137,9 +140,18 @@ bool ShiftMove::apply() {
 void ShiftMove::rollback() {
   if (!applied_) return;
 
-  // 1. Remove the simplices we created.
-  for (const auto &s : createdSimplices_) st_->removeSimplex(s);
-  createdSimplices_.clear();
+  // 1. Remove the simplices we created.  Resolve each by its vertex
+  // tuple at rollback time — the SimplexPtr captured at apply time
+  // can be stale (another move may have removed-and-recreated the
+  // same-verts simplex with a fresh allocation; the old pointer would
+  // be dangling and trigger a use-after-free in removeSimplex's
+  // swap-and-pop on stale vecIdx_).
+  for (const auto &verts : createdSimplexVerts_) {
+    if (auto s = st_->findSimplexByVerts(verts)) {
+      st_->removeSimplex(s);
+    }
+  }
+  createdSimplexVerts_.clear();
 
   // 2. Remove the edges we freshly inserted.
   // (Pre-existing edges that the new simplices reused are left alone.)

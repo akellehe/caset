@@ -157,11 +157,11 @@ bool RemoveMove::apply() {
   verts2.push_back(vertB_);
 
   auto r1 = st_->createSimplexTracked(verts1);
-  if (r1.created) createdSimplices_.push_back(r1.simplex);
+  if (r1.created) createdSimplexVerts_.push_back(verts1);
   for (const auto &e : r1.newEdges) createdEdges_.push_back(e);
 
   auto r2 = st_->createSimplexTracked(verts2);
-  if (r2.created) createdSimplices_.push_back(r2.simplex);
+  if (r2.created) createdSimplexVerts_.push_back(verts2);
   for (const auto &e : r2.newEdges) createdEdges_.push_back(e);
 
   applied_ = true;
@@ -171,9 +171,12 @@ bool RemoveMove::apply() {
 void RemoveMove::rollback() {
   if (!applied_) return;
 
-  // 1. Remove the 2 replacement simplices.
-  for (const auto &s : createdSimplices_) st_->removeSimplex(s);
-  createdSimplices_.clear();
+  // 1. Remove the 2 replacement simplices.  Resolve by verts at
+  // rollback time (see ShiftMove for the staleness-bug rationale).
+  for (const auto &verts : createdSimplexVerts_) {
+    if (auto s = st_->findSimplexByVerts(verts)) st_->removeSimplex(s);
+  }
+  createdSimplexVerts_.clear();
 
   // 2. Remove freshly-inserted edges (from the replacement simplices).
   pachner_detail::removeAndClearEdges(createdEdges_, st_);
