@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)" href="charged_cartan_monte_carlo_v0.3.html"><link rel="prev" title="Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)" href="charged_cartan_monte_carlo_v0.2.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Plateau finite-size investigation: does the 4.6 → 4 offset close in the asymptotic limit?" href="v02_finite_size_investigation.html"><link rel="prev" title="Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)" href="charged_cartan_monte_carlo_v0.2.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline - tessera 0.1.0 documentation</title>
@@ -201,6 +201,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
 <li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="intellectual_lineage.html">4D Charged Cartan Monte Carlo: milestones and motivation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
 <li class="toctree-l2"><a class="reference internal" href="temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
@@ -211,6 +212,7 @@
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.2.html">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_finite_size_investigation.html">Plateau finite-size investigation: does the 4.6 → 4 offset close in the asymptotic limit?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</a></li>
 </ul>
 </li>
@@ -571,7 +573,14 @@ question.</p>
 <ol class="arabic simple">
 <li><p><strong>Is the 4.6 offset finite-size?</strong> Re-run at N = 12, T = 10⁴ and
 see if it shifts toward 4. Currently capped because v0.2 is
-~30-50× slower than v0.1 per cell.</p></li>
+~30-50× slower than v0.1 per cell.
+<strong>Update:</strong> answered in
+<a class="reference internal" href="v02_finite_size_investigation.html"><span class="std std-doc">v02_finite_size_investigation.md</span></a>
+— T-scaling drives mean peak D_S from 4.62 (T = 2500) down to
+4.24 (T = 20000), geometrically extrapolating to ~4.11. N-scaling
+does the opposite. So the 4 → 4.6 offset is genuinely a finite-T
+effect, and the asymptotic value sits within ~0.1 of the H_DS4
+target.</p></li>
 <li><p><strong>Is the 4.6 offset Hamiltonian-dependent?</strong> Scan J_c, J_s,
 massShift to see if the plateau value moves.</p></li>
 <li><p><strong>What’s happening at the β ≈ 1.6×10⁻³ phase transition?</strong> The
@@ -618,12 +627,12 @@ deferred items.</p></li>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="charged_cartan_monte_carlo_v0.3.html">
+          <a class="next-page" href="v02_finite_size_investigation.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</div>
+                <div class="title">Plateau finite-size investigation: does the 4.6 → 4 offset close in the asymptotic limit?</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

@@ -201,6 +201,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
 <li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="intellectual_lineage.html">4D Charged Cartan Monte Carlo: milestones and motivation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
 <li class="toctree-l2"><a class="reference internal" href="temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
@@ -209,6 +210,10 @@
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">From the Schwinger model to an abstract lattice construction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html">Charged Cartan Monte Carlo — design note v0.1</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.2.html">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_v02_beta_scan_writeup.html">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_finite_size_investigation.html">Plateau finite-size investigation: does the 4.6 → 4 offset close in the asymptotic limit?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Tessera C++ API</a></li>
@@ -261,28 +266,33 @@ and <a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html"><s
 <h2>The starting point<a class="headerlink" href="#the-starting-point" title="Link to this heading">¶</a></h2>
 <p>The original <code class="docutils literal notranslate"><span class="pre">InteractionSimulation</span></code> line used the Schwinger
 two-site Hamiltonian to drive each interaction:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>H_XY = (1 / 4a) (XX + YY) + (m / 2) (-Z ⊗ I + I ⊗ Z)
-U    = exp(-i H_XY · dt)
-</pre></div>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\begin{aligned}
+H_{XY} &amp;= \frac{1}{4a}\,(XX + YY) + \frac{m}{2}\,(-Z \otimes I + I \otimes Z), \\
+U &amp;= \exp(-i\, H_{XY}\, dt).
+\end{aligned}
+\end{split}\]</div>
 </div>
 <p>This was the 1+1D massive Schwinger model in its staggered-fermion +
 Jordan-Wigner form, restricted to a single two-site fragment. Choosing
 it had two practical advantages and two structural ones:</p>
 <ul class="simple">
 <li><p><strong>Practical, concrete</strong>: a textbook QFT we could write down without
-inventing physics ourselves; clean parameters (<code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">m</span></code>, <code class="docutils literal notranslate"><span class="pre">dt</span></code>) with
-established meaning; a well-documented <code class="docutils literal notranslate"><span class="pre">g</span> <span class="pre">→</span> <span class="pre">0</span></code> (strong-coupling)
+inventing physics ourselves; clean parameters (<span class="math notranslate nohighlight">\(a\)</span>, <span class="math notranslate nohighlight">\(m\)</span>, <span class="math notranslate nohighlight">\(dt\)</span>) with
+established meaning; a well-documented <span class="math notranslate nohighlight">\(g \to 0\)</span> (strong-coupling)
 limit where confinement and meson-like bound states appear.</p></li>
 <li><p><strong>Structural</strong>: the Hamiltonian commutes with the staggered fermion
-number <code class="docutils literal notranslate"><span class="pre">Q</span></code> per site-pair, so charge is a real conserved U(1) quantum
-number rather than a bookkeeping label.</p></li>
+number <span class="math notranslate nohighlight">\(Q\)</span> per site-pair, so charge is a real conserved <span class="math notranslate nohighlight">\(U(1)\)</span>
+quantum number rather than a bookkeeping label.</p></li>
 </ul>
 </section>
 <section id="why-we-kept-it-at-first">
 <h2>Why we kept it at first<a class="headerlink" href="#why-we-kept-it-at-first" title="Link to this heading">¶</a></h2>
 <p>The motivating spec mentioned the Schwinger model as the candidate
-two-site dynamics because we wanted a <em>specific</em> <code class="docutils literal notranslate"><span class="pre">U</span></code> whose Cartan core
-<code class="docutils literal notranslate"><span class="pre">(c_x,</span> <span class="pre">c_y,</span> <span class="pre">c_z)</span></code> corresponded to something physical. The decision was
+two-site dynamics because we wanted a <em>specific</em> <span class="math notranslate nohighlight">\(U\)</span> whose Cartan core
+<span class="math notranslate nohighlight">\((c_x, c_y, c_z)\)</span> corresponded to something physical. The decision was
 “use Schwinger now, scan over Hamiltonian parameters later” — i.e.,
 treat the Schwinger choice as a baseline rather than as the central
 claim. Even in the original spec, the line of work was always going to
@@ -294,23 +304,24 @@ particular does.</p>
 <h2>What the Schwinger truncation was actually doing<a class="headerlink" href="#what-the-schwinger-truncation-was-actually-doing" title="Link to this heading">¶</a></h2>
 <p>Three things, ordered by how essential they were to the experiment:</p>
 <ol class="arabic simple">
-<li><p><strong>Providing a 4×4 unitary <code class="docutils literal notranslate"><span class="pre">U</span></code></strong> to apply to each pair of inputs.</p></li>
-<li><p><strong>Carrying a conserved U(1) charge</strong> (fermion number) that the
-two-site <code class="docutils literal notranslate"><span class="pre">U</span></code> commutes with.</p></li>
+<li><p><strong>Providing a <span class="math notranslate nohighlight">\(4 \times 4\)</span> unitary <span class="math notranslate nohighlight">\(U\)</span></strong> to apply to each pair of
+inputs.</p></li>
+<li><p><strong>Carrying a conserved <span class="math notranslate nohighlight">\(U(1)\)</span> charge</strong> (fermion number) that the
+two-site <span class="math notranslate nohighlight">\(U\)</span> commutes with.</p></li>
 <li><p><strong>Connecting the construction to a textbook 1+1D QFT</strong> so reviewers
 could check the physics interpretation.</p></li>
 </ol>
 <p>Of these, only (1) was load-bearing in the actual computation. Every
 edge MI, every cell-action contribution, every charge bookkeeping
-step works the same way for <em>any</em> 4×4 unitary — the Schwinger choice
-just fixed a specific point in the SU(4) parameter space.</p>
+step works the same way for <em>any</em> <span class="math notranslate nohighlight">\(4 \times 4\)</span> unitary — the Schwinger
+choice just fixed a specific point in the <span class="math notranslate nohighlight">\(SU(4)\)</span> parameter space.</p>
 </section>
 <section id="what-we-already-truncated-by-going-two-site">
 <h2>What we already truncated by going two-site<a class="headerlink" href="#what-we-already-truncated-by-going-two-site" title="Link to this heading">¶</a></h2>
-<p>The Schwinger model in 1+1D has a <strong>non-local Coulomb term</strong> <code class="docutils literal notranslate"><span class="pre">L_n²</span></code>
+<p>The Schwinger model in 1+1D has a <strong>non-local Coulomb term</strong> <span class="math notranslate nohighlight">\(L_n^2\)</span>
 (the gauge-field electric energy) that, after Gauss’s law is solved,
-becomes a long-range <code class="docutils literal notranslate"><span class="pre">σ^z_i</span> <span class="pre">σ^z_j</span></code> interaction between fermion sites
-weighted by <code class="docutils literal notranslate"><span class="pre">|i</span> <span class="pre">−</span> <span class="pre">j|</span></code>. This term:</p>
+becomes a long-range <span class="math notranslate nohighlight">\(\sigma^z_i \sigma^z_j\)</span> interaction between
+fermion sites weighted by <span class="math notranslate nohighlight">\(|i - j|\)</span>. This term:</p>
 <ul class="simple">
 <li><p>can’t be written as a two-site fragment (it’s non-local by
 construction), so we dropped it the moment we chose a per-pair
@@ -322,7 +333,7 @@ it’s the channel through which energy is exchanged.</p></li>
 <p>So the moment the original spec restricted to a two-site Hamiltonian
 fragment, the Schwinger model was <em>already</em> truncated to “fermion
 hopping + staggered mass, no gauge dynamics.” That truncation was
-necessary to keep <code class="docutils literal notranslate"><span class="pre">U</span></code> local to a pair, but it dropped the energy
+necessary to keep <span class="math notranslate nohighlight">\(U\)</span> local to a pair, but it dropped the energy
 conservation that the full theory has during pair annihilation.</p>
 <p>The “Schwinger model” label on the original construction was therefore
 already misleading: it was running a <em>two-site fragment</em> of the
@@ -332,19 +343,25 @@ parameterised entangler.</p>
 </section>
 <section id="what-we-drop-in-v0-1-and-why-it-doesn-t-cost-anything">
 <h2>What we drop in v0.1 (and why it doesn’t cost anything)<a class="headerlink" href="#what-we-drop-in-v0-1-and-why-it-doesn-t-cost-anything" title="Link to this heading">¶</a></h2>
-<p><strong>The Schwinger Hamiltonian as the default <code class="docutils literal notranslate"><span class="pre">U</span></code>.</strong> Replaced (still
-configurable) with a fixed canonical Cartan entangler
-<code class="docutils literal notranslate"><span class="pre">exp(i</span> <span class="pre">(c_x</span> <span class="pre">XX</span> <span class="pre">+</span> <span class="pre">c_y</span> <span class="pre">YY</span> <span class="pre">+</span> <span class="pre">c_z</span> <span class="pre">ZZ))</span></code>. The Cartan decomposition exists
-for any 4×4 unitary, so this is just choosing a representative point
-in SU(4) without the appearance of physical baggage. We keep the
-Schwinger U as an alternative option (<code class="docutils literal notranslate"><span class="pre">cfg.unitaryMode</span> <span class="pre">=</span> <span class="pre">SCHWINGER</span></code>)
-so backward compatibility is preserved.</p>
+<p><strong>The Schwinger Hamiltonian as the default <span class="math notranslate nohighlight">\(U\)</span>.</strong> Replaced (still
+configurable) with a fixed canonical Cartan entangler</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+U_{\mathrm{Cartan}} = \exp\!\bigl(i\,(c_x\, XX + c_y\, YY + c_z\, ZZ)\bigr).
+\]</div>
+</div>
+<p>The Cartan decomposition exists for any <span class="math notranslate nohighlight">\(4 \times 4\)</span> unitary, so this
+is just choosing a representative point in <span class="math notranslate nohighlight">\(SU(4)\)</span> without the
+appearance of physical baggage. We keep the Schwinger <span class="math notranslate nohighlight">\(U\)</span> as an
+alternative option (<code class="docutils literal notranslate"><span class="pre">cfg.unitaryMode</span> <span class="pre">=</span> <span class="pre">SCHWINGER</span></code>) so backward
+compatibility is preserved.</p>
 <p><strong>The Schwinger fermion-number as the charge source.</strong> In v0.1 the
 charge is carried as a <em>separate classical label</em> <code class="docutils literal notranslate"><span class="pre">chargeOf_[v]</span></code>. It
 is no longer derived from the state. We enforce conservation through
 the move rules (annihilate / pairCreate) and the eligibility filter
 (opposite-sign pairs don’t interact, they annihilate). This is a
-much weaker statement than “U commutes with the charge operator” —
+much weaker statement than “<span class="math notranslate nohighlight">\(U\)</span> commutes with the charge operator” —
 it’s an <em>imposed</em> conservation law rather than a <em>derived</em> one — but
 it’s exactly as physical for our purposes, because:</p>
 <ul class="simple">
@@ -354,13 +371,15 @@ it, which it does;</p></li>
 modify charge without modifying state (like our partial-annihilation
 move) need the label and the state to stay consistent, which we
 achieve by convention rather than by Hamiltonian symmetry;</p></li>
-<li><p>v0.2 promotes charge to be intrinsic to the state by using a 4-dim
-qudit basis <code class="docutils literal notranslate"><span class="pre">{|+0⟩,</span> <span class="pre">|+1⟩,</span> <span class="pre">|−0⟩,</span> <span class="pre">|−1⟩}</span></code> with <code class="docutils literal notranslate"><span class="pre">Q̂</span> <span class="pre">=</span> <span class="pre">diag(+1,</span> <span class="pre">+1,</span> <span class="pre">−1,</span> <span class="pre">−1)</span></code>,
-recovering the operator-level statement.</p></li>
+<li><p>v0.2 promotes charge to be intrinsic to the state by using a
+4-dim qudit basis
+<span class="math notranslate nohighlight">\(\{\lvert{+}0\rangle,\, \lvert{+}1\rangle,\, \lvert{-}0\rangle,\, \lvert{-}1\rangle\}\)</span>
+with <span class="math notranslate nohighlight">\(\hat{Q} = \operatorname{diag}(+1, +1, -1, -1)\)</span>, recovering the
+operator-level statement.</p></li>
 </ul>
 <p><strong>Energy conservation during annihilation.</strong> The Schwinger model
 preserved energy because the Coulomb term carried it. Our truncated
-two-site <code class="docutils literal notranslate"><span class="pre">U</span></code> already lost the Coulomb term, so even the original
+two-site <span class="math notranslate nohighlight">\(U\)</span> already lost the Coulomb term, so even the original
 construction wasn’t energy-conserving across annihilation events.
 v0.1’s <code class="docutils literal notranslate"><span class="pre">annihilate</span></code> move (and v0.1.B/iii variants) makes this
 explicit: annihilation produces no energy-carrying photon by default,
@@ -376,56 +395,65 @@ we always had.</p>
 <section id="what-we-keep">
 <h2>What we keep<a class="headerlink" href="#what-we-keep" title="Link to this heading">¶</a></h2>
 <p>The objects that genuinely drive the experiment:</p>
-<ul class="simple">
+<ul>
 <li><p><strong>Two-site interaction unitaries on density-matrix inputs.</strong> Every
-interaction is <code class="docutils literal notranslate"><span class="pre">ρ_AB</span> <span class="pre">=</span> <span class="pre">U</span> <span class="pre">(ρ_A</span> <span class="pre">⊗</span> <span class="pre">ρ_B)</span> <span class="pre">U†</span></code> with <code class="docutils literal notranslate"><span class="pre">U</span></code> a fixed 4×4
-unitary. The choice of <code class="docutils literal notranslate"><span class="pre">U</span></code> parameterises the SU(4) Cartan core but
-doesn’t change the structural content of the experiment.</p></li>
-<li><p><strong>The Cartan / KAK decomposition</strong> <code class="docutils literal notranslate"><span class="pre">U</span> <span class="pre">=</span> <span class="pre">(K₁</span> <span class="pre">⊗</span> <span class="pre">K₂)·exp(i·c·σσ)·(K₃</span> <span class="pre">⊗</span> <span class="pre">K₄)</span></code>
-as the principled way to split per-cell physics into “local-frame
-carriers” (the U_A, V_B worldline products) and “entangling core”
-(the Σ_AB joint-state carrier).</p></li>
-<li><p><strong>Mutual-information-derived edge lengths</strong> <code class="docutils literal notranslate"><span class="pre">ℓ</span> <span class="pre">=</span> <span class="pre">-log(I</span> <span class="pre">/</span> <span class="pre">I_max)</span></code> as
-the way to lift quantum correlation onto geometric edges of a
-simplicial complex.</p></li>
+interaction is
+<span class="math notranslate nohighlight">\(\rho_{AB} = U\,(\rho_A \otimes \rho_B)\,U^\dagger\)</span>
+with <span class="math notranslate nohighlight">\(U\)</span> a fixed <span class="math notranslate nohighlight">\(4 \times 4\)</span> unitary. The choice of <span class="math notranslate nohighlight">\(U\)</span>
+parameterises the <span class="math notranslate nohighlight">\(SU(4)\)</span> Cartan core but doesn’t change the
+structural content of the experiment.</p></li>
+<li><p><strong>The Cartan / KAK decomposition</strong></p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[
+  U = (K_1 \otimes K_2)\,\exp\!\bigl(i\,\vec{c}\cdot\vec{\sigma}\vec{\sigma}\bigr)\,(K_3 \otimes K_4)
+  \]</div>
+</div>
+<p>as the principled way to split per-cell physics into “local-frame
+carriers” (the <span class="math notranslate nohighlight">\(U_A\)</span>, <span class="math notranslate nohighlight">\(V_B\)</span> worldline products) and “entangling
+core” (the <span class="math notranslate nohighlight">\(\Sigma_{AB}\)</span> joint-state carrier).</p>
+</li>
+<li><p><strong>Mutual-information-derived edge lengths</strong>
+<span class="math notranslate nohighlight">\(\ell = -\log(I / I_{\max})\)</span> as the way to lift quantum correlation
+onto geometric edges of a simplicial complex.</p></li>
 <li><p><strong>Regge action on hinges of the resulting complex</strong> as the dynamical
-weight, with Monte Carlo sampling at inverse temperature <code class="docutils literal notranslate"><span class="pre">β</span></code>.</p></li>
+weight, with Monte Carlo sampling at inverse temperature <span class="math notranslate nohighlight">\(\beta\)</span>.</p></li>
 <li><p><strong>Charge as a conserved quantum number</strong> that organizes the move
 set (same-sign pairs → bowtie; opposite-sign pairs → annihilation).
 The conservation is enforced by the move rules; whether the
-underlying <code class="docutils literal notranslate"><span class="pre">U</span></code> makes this a derived theorem (Schwinger) or an
+underlying <span class="math notranslate nohighlight">\(U\)</span> makes this a derived theorem (Schwinger) or an
 imposed convention (v0.1) does not change the geometry.</p></li>
 </ul>
 </section>
-<section id="why-this-is-the-right-framing-for-the-h-ds4-question">
-<h2>Why this is the right framing for the H_DS4 question<a class="headerlink" href="#why-this-is-the-right-framing-for-the-h-ds4-question" title="Link to this heading">¶</a></h2>
-<p>The hypothesis <code class="docutils literal notranslate"><span class="pre">H_DS4</span></code> — “is there a <code class="docutils literal notranslate"><span class="pre">β</span></code> at which the heat-kernel
-spectral dimension of the interaction-history complex reaches 4?” —
-is a <em>geometric</em> question. It depends on:</p>
+<section id="why-this-is-the-right-framing-for-the-h-d-s-4-question">
+<h2>Why this is the right framing for the <span class="math notranslate nohighlight">\(H_{D_S=4}\)</span> question<a class="headerlink" href="#why-this-is-the-right-framing-for-the-h-d-s-4-question" title="Link to this heading">¶</a></h2>
+<p>The hypothesis <span class="math notranslate nohighlight">\(H_{D_S=4}\)</span> — “is there a <span class="math notranslate nohighlight">\(\beta\)</span> at which the
+heat-kernel spectral dimension of the interaction-history complex
+reaches 4?” — is a <em>geometric</em> question. It depends on:</p>
 <ul class="simple">
 <li><p>what cells are eligible to form,</p></li>
 <li><p>what the action weight on each candidate cell is,</p></li>
 <li><p>how cells share vertices (or faces) with their neighbours,</p></li>
 <li><p>the resulting graph topology and edge weights.</p></li>
 </ul>
-<p>None of these depend on whether <code class="docutils literal notranslate"><span class="pre">U</span></code> is the Schwinger Hamiltonian, a
-Cartan-canonical entangler, or any other SU(4) element. They all
+<p>None of these depend on whether <span class="math notranslate nohighlight">\(U\)</span> is the Schwinger Hamiltonian, a
+Cartan-canonical entangler, or any other <span class="math notranslate nohighlight">\(SU(4)\)</span> element. They all
 depend on the <em>structure</em> of how interactions chain together.</p>
 <p>The Schwinger framing was load-bearing for the <em>physical
 interpretation</em> (we could talk about fermions and gauge fields), but
 it was scaffolding for the <em>experiment</em> (the structural question is
 about graphs and actions). Dropping it makes the construction more
 honest and more reusable, without changing the content of the
-H_DS4 test.</p>
+<span class="math notranslate nohighlight">\(H_{D_S=4}\)</span> test.</p>
 </section>
 <section id="glossary-what-the-current-construction-is">
 <h2>Glossary: what the current construction “is”<a class="headerlink" href="#glossary-what-the-current-construction-is" title="Link to this heading">¶</a></h2>
 <p><strong>A construction.</strong> A simplicial-complex Monte Carlo where each cell
 records a unitary interaction event between two prior systems, with
 edge weights computed from the resulting mutual informations, weighted
-by an Euclidean Regge action, and sampled at inverse temperature β.
-Charges are a separately-tracked U(1) quantum number, conserved by
-the move rules.</p>
+by an Euclidean Regge action, and sampled at inverse temperature
+<span class="math notranslate nohighlight">\(\beta\)</span>. Charges are a separately-tracked <span class="math notranslate nohighlight">\(U(1)\)</span> quantum number,
+conserved by the move rules.</p>
 <p><strong>Not.</strong> A simulation of the Schwinger model, the Standard Model, or
 any specific QFT. It’s a discrete geometric model that <em>could</em> be a
 toy version of various theories depending on choices we haven’t
@@ -438,9 +466,9 @@ committed to yet.</p>
 — the construction’s charter (still uses Schwinger language; will be
 updated to match this note in due course).</p></li>
 <li><p><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.1.md</span></a>
-— the v0.1 design including the configurable <code class="docutils literal notranslate"><span class="pre">U</span></code> modes.</p></li>
+— the v0.1 design including the configurable <span class="math notranslate nohighlight">\(U\)</span> modes.</p></li>
 <li><p><a class="reference internal" href="interaction_history_monte_carlo_writeup.html"><span class="std std-doc">interaction_history_monte_carlo_writeup.md</span></a>
-— the original experiment’s results, run under the Schwinger <code class="docutils literal notranslate"><span class="pre">U</span></code>
+— the original experiment’s results, run under the Schwinger <span class="math notranslate nohighlight">\(U\)</span>
 default.</p></li>
 </ul>
 </section>
@@ -508,7 +536,7 @@ default.</p></li>
 <li><a class="reference internal" href="#what-we-already-truncated-by-going-two-site">What we already truncated by going two-site</a></li>
 <li><a class="reference internal" href="#what-we-drop-in-v0-1-and-why-it-doesn-t-cost-anything">What we drop in v0.1 (and why it doesn’t cost anything)</a></li>
 <li><a class="reference internal" href="#what-we-keep">What we keep</a></li>
-<li><a class="reference internal" href="#why-this-is-the-right-framing-for-the-h-ds4-question">Why this is the right framing for the H_DS4 question</a></li>
+<li><a class="reference internal" href="#why-this-is-the-right-framing-for-the-h-d-s-4-question">Why this is the right framing for the <span class="math notranslate nohighlight">\(H_{D_S=4}\)</span> question</a></li>
 <li><a class="reference internal" href="#glossary-what-the-current-construction-is">Glossary: what the current construction “is”</a></li>
 <li><a class="reference internal" href="#see-also">See also</a></li>
 </ul>
@@ -526,5 +554,7 @@ default.</p></li>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     </body>
 </html>

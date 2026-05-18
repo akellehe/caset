@@ -201,6 +201,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
 <li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="intellectual_lineage.html">4D Charged Cartan Monte Carlo: milestones and motivation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="lightcone_vs_majorization_writeup.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="emergent_spectral_dimension_writeup.html">Emergent spectral dimension — first run</a></li>
 <li class="toctree-l2"><a class="reference internal" href="temporally_connected_entangled_spacetime_writeup.html">Temporally-connected entangled spacetime</a></li>
@@ -211,6 +212,7 @@
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_v02_beta_scan_writeup.html">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_finite_size_investigation.html">Plateau finite-size investigation: does the 4.6 → 4 offset close in the asymptotic limit?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</a></li>
 </ul>
 </li>
@@ -476,22 +478,29 @@ with 6 checks, all passing: backward compat, sector projection,
 Q conservation at γ_CP=0, Q drift at γ_CP≠0, the v0.1 un-interact
 drift bug is fixed, peak D_S is a reasonable physical value.</p></li>
 </ul>
-<p>🚧 <strong>Deferred (still v0.2 work, not yet implemented):</strong></p>
+<p>🚧 <strong>Deferred to v0.3</strong> (see
+<a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.3.md</span></a>
+which picks these up as preconditions for the gauge-mediation work):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">annihilate</span></code> / <code class="docutils literal notranslate"><span class="pre">pairCreate</span></code> measurement / spawn semantics in the
 qudit basis. The v0.1 moves still work (they read v0.1’s
 <code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>); under v0.2 they’re effectively no-ops because the
 v0.2 charge isn’t replicated into <code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>. The full v0.2
-versions need to: project a charged vertex onto the Q=0 subspace
+versions need to: project a charged vertex onto the Q = 0 subspace
 (annihilate); spawn a pair in a charge-entangled state
 (pairCreate).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">getChargeProfile</span></code> and <code class="docutils literal notranslate"><span class="pre">getChargeCorrelation</span></code> still read from
-<code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>. Under v0.2 they return zero / empty.</p></li>
-<li><p>Σ_AB as the full 256-dim Choi state of U.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">getChargeProfile</span></code> and <code class="docutils literal notranslate"><span class="pre">getChargeCorrelation</span></code> reading from qudit
+states via <code class="docutils literal notranslate"><span class="pre">Tr[ρ</span> <span class="pre">·</span> <span class="pre">Q̂]</span></code>. Under v0.2 they currently return zero /
+empty.</p></li>
+<li><p>Σ_AB as the full 256-dim Choi state of U (currently the <code class="docutils literal notranslate"><span class="pre">I/4</span></code>
+proxy).</p></li>
 </ul>
-<p>These are tracked as follow-up items; the first-pass v0.2 implementation
-already exercises the qudit Hilbert space end-to-end through the
-interact + tune + spectral-dim pipeline.</p>
+<p>These deferrals are bundled into v0.3 because v0.3’s gauge mediation
+needs the qudit-basis annihilate to produce real photons and the
+qudit-basis observables to characterise the resulting charge
+clustering. The first-pass v0.2 implementation already exercises the
+qudit Hilbert space end-to-end through the interact + tune +
+spectral-dim pipeline, which is what the v0.2 β-scan documents.</p>
 </section>
 <section id="open-question-for-after-implementation">
 <h2>Open question for after implementation<a class="headerlink" href="#open-question-for-after-implementation" title="Link to this heading">¶</a></h2>
