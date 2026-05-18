@@ -32,9 +32,23 @@ exact 4.
 
 **Open question**: is the 0.07 offset a finite-T residual that
 closes at T → ∞? An artifact of the current Hamiltonian parameter
-choice `(J_c=1.0, J_s=0.25, δ_m=0.5)`? Or a real structural number?
-A deeper T = 100k scan is queued; a Hamiltonian-parameter scan
-(issue #11) is the next experimental step.
+choice `(J_c=1.0, J_s=0.25, δ_m=0)`? Or a real structural number?
+A deeper T = 100k scan is queued for the first question; the
+Hamiltonian-parameter scan
+([Experiment 05](../charged-cartan/experiments/05-v0.2-h-param-sweep.md),
+issue [#11](https://github.com/akellehe/tessera/issues/11)) has
+since answered the second:
+
+> **The single dominant H knob is `J_s`** (spin-spin coupling).
+> Turning it off (`J_s = 0`) pulls the *finite-T* plateau from
+> 4.57 down to **4.078 ± 0.002** at T = 2500 — within 0.08 of 4
+> and indistinguishable from the v0.2 default's T → ∞ asymptote.
+> `J_c`, `δ_m`, `γ_CP` move the plateau by ≤ 0.2 individually.
+
+So the H_DS4 candidate working point is **`(J_c, J_s, δ_m, γ_CP)
+= (1.0, 0, 0, 0)`**, and the still-open question is whether the
+remaining 0.08 closes under T-scaling (the next experiment) or
+is a structural feature of even the J_s = 0 limit.
 
 ## Hypothesis statement
 
@@ -67,6 +81,7 @@ each version's best β.
 | v0.2 qudit basis (γ_CP = 0) | **4.6 ± 0.1** across a β decade | **clean plateau** | **passes the criterion** with 0.6 offset |
 | v0.2 qudit basis + T → ∞ extrapolation | ~4.07 | finite-T extrapolation closes most of the gap | **near-pass**; offset ≤ 0.1 |
 | v0.2 + Choi-state Σ_AB (#16) | 4.537–4.609 across β decade | bug-free Q-conservation, same plateau | **near-pass** with Q exactly conserved |
+| v0.2 + Choi + H-sweep at J_s = 0 (#11) | **4.078 ± 0.002** at T = 2500 | finite-T plateau equals the default-H T → ∞ asymptote | **near-pass** with H working-point identified |
 
 ## Where each result is documented
 
@@ -76,6 +91,9 @@ each version's best β.
 - **Finite-size T-scaling**: [`../charged-cartan/experiments/03-v0.2-finite-size.md`](../charged-cartan/experiments/03-v0.2-finite-size.md)
 - **Choi-state Q-conservation fix** (sanity, headline numbers
   unchanged): [`../charged-cartan/experiments/04-v0.2-choi-q-conservation.md`](../charged-cartan/experiments/04-v0.2-choi-q-conservation.md)
+- **H-parameter sweep** (J_s identified as the dominant knob, J_s=0
+  reproduces the default-H T → ∞ asymptote at small T):
+  [`../charged-cartan/experiments/05-v0.2-h-param-sweep.md`](../charged-cartan/experiments/05-v0.2-h-param-sweep.md)
 
 ## What would close the 0.07 gap
 
@@ -84,11 +102,14 @@ Three plausible paths, in increasing complexity:
 1. **Deeper T-scan** (queued — T = 100k overnight): confirms or
    refutes the geometric extrapolation. If the trend continues, the
    asymptote is ≈ 4.07 or possibly lower.
-2. **Hamiltonian-parameter scan** ([issue #11](https://github.com/akellehe/tessera/issues/11)):
-   scan `(J_c, J_s, δ_m)` to find a natural parameter choice where
-   the plateau lands exactly at 4 instead of 4.6. A clean "D_S = 4
-   at some natural Hamiltonian" result would be a stronger H_DS4
-   pass than "D_S → 4 only in the asymptotic limit."
+2. **Hamiltonian-parameter scan** ([issue #11](https://github.com/akellehe/tessera/issues/11),
+   [Experiment 05](../charged-cartan/experiments/05-v0.2-h-param-sweep.md)):
+   **done.** The dominant knob is `J_s` — turning it off pulls the
+   *finite-T* plateau to 4.08 ± 0.002, matching the v0.2 default's
+   T → ∞ asymptote. Remaining work: a T-scaling check *at* `J_s = 0`
+   to see whether the residual 0.08 closes (the simplest path to
+   "D_S = 4 at a natural Hamiltonian"), and a fine grid around
+   `J_s ∈ [0, 0.05]` to localise where J_s starts to matter.
 3. **v0.3 gauge mediation** ([milestone #2](https://github.com/akellehe/tessera/milestone/2)):
    restoring the photon-mediated Coulomb interaction may or may not
    change the plateau value. If it preserves D_S ≈ 4, that's a
