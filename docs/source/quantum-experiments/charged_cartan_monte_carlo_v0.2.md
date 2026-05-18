@@ -176,6 +176,52 @@ warns if both are set.
    `featureQuditBasis = false`, then exercise v0.2 path end-to-end.
 8. **β-scan and writeup** comparable to v0.1's.
 
+## Implementation status (initial pass)
+
+✅ **Done in the initial implementation:**
+
+- `featureQuditBasis` flag wired into `InteractionConfig`; defaults to
+  false (v0 backward compat preserved).
+- 4-dim per-vertex Hilbert space (`quditStateOf_`), 16-dim joint state
+  buffer (`quditJointOf_`), 16×16 pair unitary
+  (`quditInteractionU_`).
+- Charge operator `Q̂` and charge-conjugation `Ĉ` defined; per-vertex
+  charge derived as `Tr[ρ · Q̂]`.
+- `quditPairU(J_c, J_s, δ_m, γ_CP, dt)` builds the canonical pair
+  Hamiltonian and exponentiates it.
+- Initial layer projects each vertex into a definite ± charge sector
+  (ALTERNATING by index or RANDOM).
+- `interact` builds the v0.2 result alongside the v0.1 result; uses
+  the v0.2 edge MIs for the Regge action when the flag is on; seeds
+  product states / joints into both buffers so observables stay
+  consistent.
+- `Σ_AB` (entangling-core proxy) uses the maximally-mixed 4-dim state
+  `I/4`, which is structurally neutral (`⟨Q̂⟩ = 0`), matching the
+  v0.1 framing of AB as a neutral photon-like vertex.
+- `getGlobalCharge` reads `Tr[ρ · Q̂]` per frontier vertex under v0.2.
+- Python bindings expose the new flags and Hamiltonian parameters.
+- Test suite (`tests/quantum/test_interaction_simulation_v02.cpp`)
+  with 6 checks, all passing: backward compat, sector projection,
+  Q conservation at γ_CP=0, Q drift at γ_CP≠0, the v0.1 un-interact
+  drift bug is fixed, peak D_S is a reasonable physical value.
+
+🚧 **Deferred (still v0.2 work, not yet implemented):**
+
+- `annihilate` / `pairCreate` measurement / spawn semantics in the
+  qudit basis. The v0.1 moves still work (they read v0.1's
+  `chargeOf_`); under v0.2 they're effectively no-ops because the
+  v0.2 charge isn't replicated into `chargeOf_`. The full v0.2
+  versions need to: project a charged vertex onto the Q=0 subspace
+  (annihilate); spawn a pair in a charge-entangled state
+  (pairCreate).
+- `getChargeProfile` and `getChargeCorrelation` still read from
+  `chargeOf_`. Under v0.2 they return zero / empty.
+- Σ_AB as the full 256-dim Choi state of U.
+
+These are tracked as follow-up items; the first-pass v0.2 implementation
+already exercises the qudit Hilbert space end-to-end through the
+interact + tune + spectral-dim pipeline.
+
 ## Open question for after implementation
 
 The default `H_pair` is somewhat arbitrary — there are infinitely many

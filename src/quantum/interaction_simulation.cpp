@@ -638,9 +638,12 @@ InteractionSimulation::computeInteractionQudit(VertexPtr x,
     InteractionResultQudit res;
     res.statePrimeX = primeX;
     res.statePrimeY = primeY;
-    // Σ_AB proxy: the A-side marginal, mirroring v0.1's choice. The
-    // full Choi state of the 16×16 U is a deferred upgrade.
-    res.stateAB = primeX;
+    // Σ_AB is the entangling-core analog of a neutral photon: use the
+    // maximally-mixed 4-dim state, which has ⟨Q̂⟩ = 0 by construction
+    // (Tr[I/4 · diag(+1,+1,-1,-1)] = 0). The full Choi state of U is a
+    // deferred upgrade. The genuine joint correlations between AB and
+    // its bowtie neighbours live in jointAB, not in this proxy.
+    res.stateAB = 0.25 * Eigen::Matrix4cd::Identity();
     res.jointAB = rhoAB;
 
     auto key = [](int u, int v) {

@@ -19,6 +19,7 @@ from_schwinger_to_lattice
 charged_cartan_monte_carlo_v0.1
 charged_cartan_v01_BplusIII_writeup
 charged_cartan_monte_carlo_v0.2
+charged_cartan_v02_beta_scan_writeup
 charged_cartan_monte_carlo_v0.3
 ```
 

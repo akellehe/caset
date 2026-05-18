@@ -212,10 +212,67 @@ implement first.
    0.1, 1.0}` to find the regime where mediation visibly changes
    geometry.
 
+## v0.3 also picks up the v0.2 deferrals
+
+The first-pass v0.2 implementation
+([charged_cartan_monte_carlo_v0.2.md](charged_cartan_monte_carlo_v0.2.md))
+covered the foundational machinery (4-dim qudit vertices, 16×16 U,
+exact Q-conservation, CP-violation as operator-level effect) and the
+core `interact → tune → spectral-dim` pipeline. It explicitly
+deferred three items that v0.3 should pick up as preconditions for
+the gauge-mediation work:
+
+1. **`annihilate` in the qudit basis** — implement as a projection of
+   a charged vertex's state onto the Q = 0 subspace. This is the
+   measurement-flavoured semantics described in the v0.2 design (a
+   "partner vertex measures the charge"). The probability of accepted
+   annihilation should equal the input state's overlap with the Q = 0
+   subspace.
+2. **`pairCreate` in the qudit basis** — spawn two vertices in a
+   charge-entangled state, e.g.
+   `(|+,0⟩|−,0⟩ + |−,0⟩|+,0⟩)/√2 ` or its CP-asymmetric variant.
+   No more `cpBias` parameter; the asymmetry is now an operator
+   choice in the spawned state.
+3. **`getChargeProfile` and `getChargeCorrelation` reading from qudit
+   states** via `Tr[ρ·Q̂]` per vertex. These v0.1 observables are
+   needed by the gauge-mediation diagnostic (the charge-correlation
+   profile is what should change when gauge mediation turns on).
+
+Optional but related: upgrading Σ_AB from the `I/4` proxy to the full
+256-dim Choi state of U. This wasn't load-bearing for the first-pass
+v0.2 results, but the gauge-mediation work needs photon vertices
+(which under v0.2 *are* Σ_AB vertices after charge-only annihilation)
+to carry physically-meaningful state for the BFS coupling amplitude to
+be well-defined.
+
+## Investigation focus for v0.3
+
+Beyond implementing the design above, v0.3 should investigate:
+
+- **Coulomb force fidelity.** Does the `gaugeCouplingAlpha · q_i · q_j ·
+  Σ exp(-d_path)` form actually reproduce known Coulomb-like behaviour
+  in a controlled scenario (one isolated charge pair + a chain of
+  photons connecting them)? The amplitude should fall off with path
+  length and flip sign under charge conjugation.
+- **Gauge force generalisation.** Once Coulomb is validated, sketch
+  what would change for SU(2) / SU(3). The structure ("graph-mediated
+  state conditioning at interaction time") is identical; only the
+  group-theoretic invariant in the correlation amplitude changes.
+  v0.3 itself only implements U(1), but the writeup should make the
+  extension path clear.
+- **Photon-density dependence.** Vary the rate of photon emission
+  (via β acceptance or by tuning `featurePhotonOnAnnihilate`) and
+  observe how the gauge-mediated D_S depends on photon density.
+  Sparse photons → mostly local dynamics; dense photons → richer
+  gauge structure.
+
 ## See also
 
 - [charged_cartan_monte_carlo_v0.1.md](charged_cartan_monte_carlo_v0.1.md)
   — the v0.1 design with the photon-emission flag this builds on.
+- [charged_cartan_monte_carlo_v0.2.md](charged_cartan_monte_carlo_v0.2.md)
+  — v0.2 (qudit basis); v0.3 sits on top of it once v0.2's deferred
+  items above are picked up.
 - [from_schwinger_to_lattice.md](from_schwinger_to_lattice.md) — the
   justification for why we dropped the Schwinger framing in favour of
   abstract Cartan dynamics. v0.3 restores the gauge content the

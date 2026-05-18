@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="The Tessera C++ API" href="../cpp_api.html"><link rel="prev" title="Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)" href="charged_cartan_monte_carlo_v0.2.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="The Tessera C++ API" href="../cpp_api.html"><link rel="prev" title="Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline" href="charged_cartan_v02_beta_scan_writeup.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>Charged Cartan Monte Carlo — design note v0.3 (gauge mediation) - tessera 0.1.0 documentation</title>
@@ -210,6 +210,7 @@
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html">Charged Cartan Monte Carlo — design note v0.1</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.2.html">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_v02_beta_scan_writeup.html">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</a></li>
 </ul>
 </li>
@@ -489,11 +490,68 @@ changes via <code class="docutils literal notranslate"><span class="pre">getChar
 geometry.</p></li>
 </ol>
 </section>
+<section id="v0-3-also-picks-up-the-v0-2-deferrals">
+<h2>v0.3 also picks up the v0.2 deferrals<a class="headerlink" href="#v0-3-also-picks-up-the-v0-2-deferrals" title="Link to this heading">¶</a></h2>
+<p>The first-pass v0.2 implementation
+(<a class="reference internal" href="charged_cartan_monte_carlo_v0.2.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.2.md</span></a>)
+covered the foundational machinery (4-dim qudit vertices, 16×16 U,
+exact Q-conservation, CP-violation as operator-level effect) and the
+core <code class="docutils literal notranslate"><span class="pre">interact</span> <span class="pre">→</span> <span class="pre">tune</span> <span class="pre">→</span> <span class="pre">spectral-dim</span></code> pipeline. It explicitly
+deferred three items that v0.3 should pick up as preconditions for
+the gauge-mediation work:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">annihilate</span></code> in the qudit basis</strong> — implement as a projection of
+a charged vertex’s state onto the Q = 0 subspace. This is the
+measurement-flavoured semantics described in the v0.2 design (a
+“partner vertex measures the charge”). The probability of accepted
+annihilation should equal the input state’s overlap with the Q = 0
+subspace.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">pairCreate</span></code> in the qudit basis</strong> — spawn two vertices in a
+charge-entangled state, e.g.
+<code class="docutils literal notranslate"><span class="pre">(|+,0⟩|−,0⟩</span> <span class="pre">+</span> <span class="pre">|−,0⟩|+,0⟩)/√2</span> </code> or its CP-asymmetric variant.
+No more <code class="docutils literal notranslate"><span class="pre">cpBias</span></code> parameter; the asymmetry is now an operator
+choice in the spawned state.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">getChargeProfile</span></code> and <code class="docutils literal notranslate"><span class="pre">getChargeCorrelation</span></code> reading from qudit
+states</strong> via <code class="docutils literal notranslate"><span class="pre">Tr[ρ·Q̂]</span></code> per vertex. These v0.1 observables are
+needed by the gauge-mediation diagnostic (the charge-correlation
+profile is what should change when gauge mediation turns on).</p></li>
+</ol>
+<p>Optional but related: upgrading Σ_AB from the <code class="docutils literal notranslate"><span class="pre">I/4</span></code> proxy to the full
+256-dim Choi state of U. This wasn’t load-bearing for the first-pass
+v0.2 results, but the gauge-mediation work needs photon vertices
+(which under v0.2 <em>are</em> Σ_AB vertices after charge-only annihilation)
+to carry physically-meaningful state for the BFS coupling amplitude to
+be well-defined.</p>
+</section>
+<section id="investigation-focus-for-v0-3">
+<h2>Investigation focus for v0.3<a class="headerlink" href="#investigation-focus-for-v0-3" title="Link to this heading">¶</a></h2>
+<p>Beyond implementing the design above, v0.3 should investigate:</p>
+<ul class="simple">
+<li><p><strong>Coulomb force fidelity.</strong> Does the <code class="docutils literal notranslate"><span class="pre">gaugeCouplingAlpha</span> <span class="pre">·</span> <span class="pre">q_i</span> <span class="pre">·</span> <span class="pre">q_j</span> <span class="pre">·</span> <span class="pre">Σ</span> <span class="pre">exp(-d_path)</span></code> form actually reproduce known Coulomb-like behaviour
+in a controlled scenario (one isolated charge pair + a chain of
+photons connecting them)? The amplitude should fall off with path
+length and flip sign under charge conjugation.</p></li>
+<li><p><strong>Gauge force generalisation.</strong> Once Coulomb is validated, sketch
+what would change for SU(2) / SU(3). The structure (“graph-mediated
+state conditioning at interaction time”) is identical; only the
+group-theoretic invariant in the correlation amplitude changes.
+v0.3 itself only implements U(1), but the writeup should make the
+extension path clear.</p></li>
+<li><p><strong>Photon-density dependence.</strong> Vary the rate of photon emission
+(via β acceptance or by tuning <code class="docutils literal notranslate"><span class="pre">featurePhotonOnAnnihilate</span></code>) and
+observe how the gauge-mediated D_S depends on photon density.
+Sparse photons → mostly local dynamics; dense photons → richer
+gauge structure.</p></li>
+</ul>
+</section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.1.md</span></a>
 — the v0.1 design with the photon-emission flag this builds on.</p></li>
+<li><p><a class="reference internal" href="charged_cartan_monte_carlo_v0.2.html"><span class="std std-doc">charged_cartan_monte_carlo_v0.2.md</span></a>
+— v0.2 (qudit basis); v0.3 sits on top of it once v0.2’s deferred
+items above are picked up.</p></li>
 <li><p><a class="reference internal" href="from_schwinger_to_lattice.html"><span class="std std-doc">from_schwinger_to_lattice.md</span></a> — the
 justification for why we dropped the Schwinger framing in favour of
 abstract Cartan dynamics. v0.3 restores the gauge content the
@@ -517,14 +575,14 @@ mechanism rather than a separate action.</p></li>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="charged_cartan_monte_carlo_v0.2.html">
+          <a class="prev-page" href="charged_cartan_v02_beta_scan_writeup.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</div>
+                <div class="title">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</div>
                 
               </div>
             </a>
@@ -568,6 +626,8 @@ mechanism rather than a separate action.</p></li>
 <li><a class="reference internal" href="#generalisation-to-non-abelian-gauge">Generalisation to non-abelian gauge</a></li>
 <li><a class="reference internal" href="#tests-to-be-written-alongside-implementation">Tests (to be written alongside implementation)</a></li>
 <li><a class="reference internal" href="#comparison-experiments-to-run-after-implementation">Comparison experiments (to run after implementation)</a></li>
+<li><a class="reference internal" href="#v0-3-also-picks-up-the-v0-2-deferrals">v0.3 also picks up the v0.2 deferrals</a></li>
+<li><a class="reference internal" href="#investigation-focus-for-v0-3">Investigation focus for v0.3</a></li>
 <li><a class="reference internal" href="#see-also">See also</a></li>
 </ul>
 </li>

@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)" href="charged_cartan_monte_carlo_v0.3.html"><link rel="prev" title="Charged Cartan v0.1 — annihilation as worldline termination + photon emission" href="charged_cartan_v01_BplusIII_writeup.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline" href="charged_cartan_v02_beta_scan_writeup.html"><link rel="prev" title="Charged Cartan v0.1 — annihilation as worldline termination + photon emission" href="charged_cartan_v01_BplusIII_writeup.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices) - tessera 0.1.0 documentation</title>
@@ -210,6 +210,7 @@
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.1.html">Charged Cartan Monte Carlo — design note v0.1</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_v01_BplusIII_writeup.html">Charged Cartan v0.1 — annihilation as worldline termination + photon emission</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Charged Cartan Monte Carlo — design note v0.2 (qudit-basis vertices)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="charged_cartan_v02_beta_scan_writeup.html">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged_cartan_monte_carlo_v0.3.html">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</a></li>
 </ul>
 </li>
@@ -446,6 +447,52 @@ pair-spawn on 4-dim states.</p></li>
 <li><p><strong>β-scan and writeup</strong> comparable to v0.1’s.</p></li>
 </ol>
 </section>
+<section id="implementation-status-initial-pass">
+<h2>Implementation status (initial pass)<a class="headerlink" href="#implementation-status-initial-pass" title="Link to this heading">¶</a></h2>
+<p>✅ <strong>Done in the initial implementation:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">featureQuditBasis</span></code> flag wired into <code class="docutils literal notranslate"><span class="pre">InteractionConfig</span></code>; defaults to
+false (v0 backward compat preserved).</p></li>
+<li><p>4-dim per-vertex Hilbert space (<code class="docutils literal notranslate"><span class="pre">quditStateOf_</span></code>), 16-dim joint state
+buffer (<code class="docutils literal notranslate"><span class="pre">quditJointOf_</span></code>), 16×16 pair unitary
+(<code class="docutils literal notranslate"><span class="pre">quditInteractionU_</span></code>).</p></li>
+<li><p>Charge operator <code class="docutils literal notranslate"><span class="pre">Q̂</span></code> and charge-conjugation <code class="docutils literal notranslate"><span class="pre">Ĉ</span></code> defined; per-vertex
+charge derived as <code class="docutils literal notranslate"><span class="pre">Tr[ρ</span> <span class="pre">·</span> <span class="pre">Q̂]</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">quditPairU(J_c,</span> <span class="pre">J_s,</span> <span class="pre">δ_m,</span> <span class="pre">γ_CP,</span> <span class="pre">dt)</span></code> builds the canonical pair
+Hamiltonian and exponentiates it.</p></li>
+<li><p>Initial layer projects each vertex into a definite ± charge sector
+(ALTERNATING by index or RANDOM).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">interact</span></code> builds the v0.2 result alongside the v0.1 result; uses
+the v0.2 edge MIs for the Regge action when the flag is on; seeds
+product states / joints into both buffers so observables stay
+consistent.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Σ_AB</span></code> (entangling-core proxy) uses the maximally-mixed 4-dim state
+<code class="docutils literal notranslate"><span class="pre">I/4</span></code>, which is structurally neutral (<code class="docutils literal notranslate"><span class="pre">⟨Q̂⟩</span> <span class="pre">=</span> <span class="pre">0</span></code>), matching the
+v0.1 framing of AB as a neutral photon-like vertex.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">getGlobalCharge</span></code> reads <code class="docutils literal notranslate"><span class="pre">Tr[ρ</span> <span class="pre">·</span> <span class="pre">Q̂]</span></code> per frontier vertex under v0.2.</p></li>
+<li><p>Python bindings expose the new flags and Hamiltonian parameters.</p></li>
+<li><p>Test suite (<code class="docutils literal notranslate"><span class="pre">tests/quantum/test_interaction_simulation_v02.cpp</span></code>)
+with 6 checks, all passing: backward compat, sector projection,
+Q conservation at γ_CP=0, Q drift at γ_CP≠0, the v0.1 un-interact
+drift bug is fixed, peak D_S is a reasonable physical value.</p></li>
+</ul>
+<p>🚧 <strong>Deferred (still v0.2 work, not yet implemented):</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">annihilate</span></code> / <code class="docutils literal notranslate"><span class="pre">pairCreate</span></code> measurement / spawn semantics in the
+qudit basis. The v0.1 moves still work (they read v0.1’s
+<code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>); under v0.2 they’re effectively no-ops because the
+v0.2 charge isn’t replicated into <code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>. The full v0.2
+versions need to: project a charged vertex onto the Q=0 subspace
+(annihilate); spawn a pair in a charge-entangled state
+(pairCreate).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">getChargeProfile</span></code> and <code class="docutils literal notranslate"><span class="pre">getChargeCorrelation</span></code> still read from
+<code class="docutils literal notranslate"><span class="pre">chargeOf_</span></code>. Under v0.2 they return zero / empty.</p></li>
+<li><p>Σ_AB as the full 256-dim Choi state of U.</p></li>
+</ul>
+<p>These are tracked as follow-up items; the first-pass v0.2 implementation
+already exercises the qudit Hilbert space end-to-end through the
+interact + tune + spectral-dim pipeline.</p>
+</section>
 <section id="open-question-for-after-implementation">
 <h2>Open question for after implementation<a class="headerlink" href="#open-question-for-after-implementation" title="Link to this heading">¶</a></h2>
 <p>The default <code class="docutils literal notranslate"><span class="pre">H_pair</span></code> is somewhat arbitrary — there are infinitely many
@@ -485,12 +532,12 @@ justification for the abstract-lattice framing v0.2 inherits.</p></li>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="charged_cartan_monte_carlo_v0.3.html">
+          <a class="next-page" href="charged_cartan_v02_beta_scan_writeup.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Charged Cartan Monte Carlo — design note v0.3 (gauge mediation)</div>
+                <div class="title">Charged Cartan v0.2 β-scan: qudit basis vs v0.1 baseline</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -543,6 +590,7 @@ justification for the abstract-lattice framing v0.2 inherits.</p></li>
 <li><a class="reference internal" href="#move-set-under-v0-2">Move set under v0.2</a></li>
 <li><a class="reference internal" href="#configuration">Configuration</a></li>
 <li><a class="reference internal" href="#implementation-order">Implementation order</a></li>
+<li><a class="reference internal" href="#implementation-status-initial-pass">Implementation status (initial pass)</a></li>
 <li><a class="reference internal" href="#open-question-for-after-implementation">Open question for after implementation</a></li>
 <li><a class="reference internal" href="#see-also">See also</a></li>
 </ul>
