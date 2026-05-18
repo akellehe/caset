@@ -124,6 +124,31 @@ matters or doesn't.
 
 ## 5. The qudit basis: charge intrinsic to the state
 
+### What "qudit" means
+
+A **qudit** is the d-dimensional generalisation of a qubit. A qubit
+lives in a 2-dim Hilbert space with computational basis
+{|0⟩, |1⟩}; a qudit lives in a d-dim Hilbert space with basis
+{|0⟩, |1⟩, …, |d−1⟩}. Naming convention:
+
+| d | name | basis size |
+|---:|---|---|
+| 2 | qubit | 2 |
+| 3 | qutrit | 3 |
+| 4 | ququart (= 4-dim qudit) | 4 |
+| d | qudit | d |
+
+A general d-dim pure state is a unit-norm vector in ℂ^d; a mixed
+state is a d×d density matrix ρ with Tr ρ = 1 and ρ ⪰ 0. Composite
+systems compose by tensor product, so two qudits live in ℂ^d ⊗ ℂ^d
+= ℂ^{d²}. For our v0.2 vertices that's a 4-dim per-vertex state
+(`ρ_v ∈ ℂ^{4×4}`) and a 16-dim bipartite joint state
+(`ρ_{XY} ∈ ℂ^{16×16}`) — the bottom two rungs of the
+[4 / 16 / 256 dimensional ladder](#7-5-worldline-discontinuity-and-the-4-16-256-dimensional-ladder)
+that the v0.2 design walks.
+
+### Why the v0.2 vertices need to be qudits, not qubits
+
 In the original implementation each vertex carried a *qubit* state
 (2-dim Hilbert), with charge as an external classical label
 (`chargeOf_[v]`). This worked but left charge as a separate register
@@ -142,8 +167,11 @@ charge sector            spin / internal
 ```
 
 with the charge operator `Q̂ = diag(+1, +1, −1, −1)`. Charge is now
-*intrinsic to the state*: `⟨q⟩_v = Tr[ρ_v · Q̂]`. Continuous
-expectation values arise naturally from mixed states.
+*intrinsic to the state*: `⟨q⟩_v = Tr[ρ_v · Q̂]` (available from
+Python as `sim.quditChargeOf(v)`). Continuous expectation values
+arise naturally from mixed states: an integer-charge eigenstate
+returns ±1, the maximally-mixed I/4 proxy returns 0, an arbitrary
+mixed state sits in [−1, +1].
 
 This generalisation cost us a property the qubit basis had for free:
 the **Cartan / KAK decomposition** of SU(4), which cleanly factors any
