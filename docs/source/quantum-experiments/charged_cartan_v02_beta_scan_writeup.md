@@ -174,6 +174,13 @@ question.
 1. **Is the 4.6 offset finite-size?** Re-run at N = 12, T = 10⁴ and
    see if it shifts toward 4. Currently capped because v0.2 is
    ~30-50× slower than v0.1 per cell.
+   **Update:** answered in
+   [v02_finite_size_investigation.md](v02_finite_size_investigation.md)
+   — T-scaling drives mean peak D_S from 4.62 (T = 2500) down to
+   4.24 (T = 20000), geometrically extrapolating to ~4.11. N-scaling
+   does the opposite. So the 4 → 4.6 offset is genuinely a finite-T
+   effect, and the asymptotic value sits within ~0.1 of the H_DS4
+   target.
 2. **Is the 4.6 offset Hamiltonian-dependent?** Scan J_c, J_s,
    massShift to see if the plateau value moves.
 3. **What's happening at the β ≈ 1.6×10⁻³ phase transition?** The
