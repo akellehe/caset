@@ -64,7 +64,9 @@ private:
   bool applied_ = false;
   VertexPtr newVert_;                       // the inserted vertex
   VertexPtr swapPartner_ = nullptr;         // null if no relabel happened
-  std::vector<SimplexPtr> createdSimplices_;
+  // Vertex tuples of simplices we actually created (see ShiftMove for the
+  // staleness-bug rationale).
+  std::vector<VertexPtrs> createdSimplexVerts_;
   Edges createdEdges_;
 };
 

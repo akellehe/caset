@@ -57,7 +57,9 @@ private:
 
   bool applied_ = false;
   std::vector<SimplexPtr> oldSimplices_;
-  std::vector<SimplexPtr> createdSimplices_;
+  // Vertex tuples of simplices we actually created (see ShiftMove for the
+  // staleness-bug rationale).
+  std::vector<VertexPtrs> createdSimplexVerts_;
   Edges createdEdges_;
 };
 

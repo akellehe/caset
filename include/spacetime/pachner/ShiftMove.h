@@ -63,7 +63,13 @@ private:
   // Filled in by apply() — used by rollback()
   bool applied_ = false;
   std::vector<SimplexPtr> oldSimplices_;      // captured pre-apply
-  std::vector<SimplexPtr> createdSimplices_;
+  // Vertex tuples of simplices we *actually* created (i.e. createSimplexTracked
+  // returned created=true).  Stored as verts rather than SimplexPtr so rollback
+  // is robust when another move runs in between and deletes the underlying
+  // Simplex (the pointer would become dangling; the verts are stable).  See
+  // tests/test_pachner_shift_move.py::TestShiftStress::test_apply_apply_rollback_rollback_chain
+  // and Spacetime::findSimplexByVerts.
+  std::vector<VertexPtrs> createdSimplexVerts_;
   Edges createdEdges_;
 };
 

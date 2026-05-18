@@ -692,6 +692,18 @@ SimplexPtr Spacetime::getRandomTopSimplex() {
   return topSimplicesVec[dist(rng)];
 }
 
+SimplexPtr Spacetime::findSimplexByVerts(
+    const VertexPtrs &vertices) const noexcept {
+  // Same hash formulation as createSimplex(verts, edges): commutative
+  // XOR-mix over vertex IDs.  Order-independent, duplicate-safe.
+  std::uint64_t hash = 0;
+  for (const auto &v : vertices) {
+    hash ^= Fingerprint::mix64(v->getId());
+  }
+  auto *found = simplexIndex_.find(hash);
+  return found ? *found : nullptr;
+}
+
 SimplexPtr Spacetime::getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf) {
   SimplexOrientation target{ti, tf};
   // Try random sampling first (fast if many match)
