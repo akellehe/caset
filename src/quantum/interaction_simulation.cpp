@@ -422,11 +422,13 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
             config_.dtPair);
     }
     // v0.2 + #16: build the 256-dim Choi state of U once. Requires
-    // featureQuditBasis (Choi has no meaning without the U it encodes).
+    // featureQuditBasis (Choi has no meaning without the U it
+    // encodes); auto-clear when the qudit basis is off so v0/v0.1
+    // configurations don't blow up on the default-on Choi flag.
+    if (!config_.featureQuditBasis) {
+        config_.featureChoiSigmaAB = false;
+    }
     if (config_.featureChoiSigmaAB) {
-        if (!config_.featureQuditBasis)
-            throw std::invalid_argument(
-                "featureChoiSigmaAB requires featureQuditBasis");
         // |Ω⟩ = (1/4) Σ_{i,j} |i,j⟩_A |i,j⟩_B' on the doubled
         // ququart space; J(U) = (U ⊗ I_16) |Ω⟩⟨Ω| (U† ⊗ I_16).
         // We construct |Ω⟩ as a 256-dim column vector with 1/4 at

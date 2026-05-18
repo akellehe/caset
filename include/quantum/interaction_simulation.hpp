@@ -129,7 +129,12 @@ struct InteractionConfig {
     // documented in v02_finite_size_investigation.md. When Σ_AB is
     // consumed by a later interaction, its Choi state is reduced to
     // 4 dimensions via charge-basis projection matched to the partner.
-    bool featureChoiSigmaAB{false};
+    //
+    // Default: true. The constructor auto-clears this to false when
+    // featureQuditBasis is off (it has no meaning without the qudit
+    // basis), so v0/v0.1 configurations don't get an unexpected
+    // exception or behavior change.
+    bool featureChoiSigmaAB{true};
     // Pair-Hamiltonian parameters. Sensible defaults map to a
     // "v0.1-ish" regime in the J_c → 0 limit; experiments can scan.
     double j_chargeCharge{1.0};    // J_c · (Q̂_A · Q̂_B)
