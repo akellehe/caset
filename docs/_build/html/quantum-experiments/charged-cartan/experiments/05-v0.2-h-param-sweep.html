@@ -220,6 +220,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../design/v0.1.html">Charged Cartan Monte Carlo — v0.1 design: charge labels + annihilation / pairCreate moves</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../design/v0.2.html">Charged Cartan Monte Carlo — v0.2 design: qudit-basis vertices</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../design/v0.3.html">Charged Cartan Monte Carlo — v0.3 design: gauge mediation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../design/h_pair_first_cell.html">Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation</a></li>
 </ul>
 </li>
 <li class="toctree-l3 current has-children"><a class="reference internal" href="index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
@@ -276,10 +277,11 @@
           <section class="tex2jax_ignore mathjax_ignore" id="charged-cartan-monte-carlo-experiment-05-h-parameter-sweep-j-c-j-s-m-cp">
 <h1>Charged Cartan Monte Carlo — Experiment 05: H-parameter sweep (J_c, J_s, δ_m, γ_CP)<a class="headerlink" href="#charged-cartan-monte-carlo-experiment-05-h-parameter-sweep-j-c-j-s-m-cp" title="Link to this heading">¶</a></h1>
 <blockquote>
-<div><p><strong>Status</strong>: complete (T-scaling follow-up pending)
+<div><p><strong>Status</strong>: complete (interpretation in flux — see <a class="reference internal" href="../design/h_pair_first_cell.html"><span class="std std-doc">first-cell derivation</span></a>)
 <strong>Tracks</strong>: GitHub issue <a class="reference external" href="https://github.com/akellehe/tessera/issues/11">#11</a>
-<strong>Design</strong>: <a class="reference internal" href="../design/v0.2.html"><span class="std std-doc">v0.2 qudit-basis</span></a>
-<strong>Result</strong>: J_s is the dominant H knob — turning it off pulls the finite-T plateau from 4.57 down to 4.078 ± 0.002, indistinguishable from the v0.2 default’s T → ∞ asymptote. J_c, δ_m, γ_CP move the plateau by ≤ 0.2 each. The J_s = 0 axis is the H_DS4 working-point candidate.</p>
+<strong>Design</strong>: <a class="reference internal" href="../design/v0.2.html"><span class="std std-doc">v0.2 qudit-basis</span></a>, <a class="reference internal" href="../design/h_pair_first_cell.html"><span class="std std-doc">H_pair engagement derivation</span></a>
+<strong>Result</strong>: J_s is the dominant H knob — turning it off pulls the finite-T plateau from 4.57 down to 4.078 ± 0.002, indistinguishable from the v0.2 default’s T → ∞ asymptote. J_c, δ_m, γ_CP move the plateau by ≤ 0.2 each.
+<strong>Caveat</strong>: a follow-up <a class="reference internal" href="../design/h_pair_first_cell.html"><span class="std std-doc">by-hand calculation</span></a> shows the J_s = 0 dynamics are actually <em>inert</em> on the code’s charge-eigenstate initial states (any U is a global phase there), so the 4.08 may reflect bare topology rather than Hamiltonian-shaped geometry. Reinterpretation pending the manipulations proposed in §6 of that derivation.</p>
 </div></blockquote>
 <section id="context">
 <h2>Context<a class="headerlink" href="#context" title="Link to this heading">¶</a></h2>

@@ -514,7 +514,7 @@ falsification checks from the charter §1.
 
 The first experimental run with hypothesis-check, convergence sweep,
 and plots is written up in
-[quantum-experiments/emergent_spectral_dimension_writeup.md](quantum-experiments/emergent_spectral_dimension_writeup.md).
+[quantum-experiments/earlier-work/emergent_spectral_dimension.md](quantum-experiments/earlier-work/emergent_spectral_dimension.md).
 Headline: $D_S(\sigma)$ peaks at ≈ 2.1 in the light-quark regime
 ($m/g = 0.25$) and falls to a small-world plateau at long σ, with
 strong $m/g$ sensitivity — all five hypothesis falsification criteria
