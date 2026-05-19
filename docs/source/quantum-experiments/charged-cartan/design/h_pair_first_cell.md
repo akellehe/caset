@@ -177,7 +177,7 @@ five vertices $\{X, Y, X', AB, Y'\}$ together form a **4-simplex**
 
 ![Two gen-0 vertices interact via $\hat U$ to produce three gen-1
 vertices; the five vertices form a 4-simplex with 10 labeled
-edges](../../figures/h_pair_first_cell_diagram.png)
+edges](../../figures/h_pair_first_cell_diagram.svg)
 
 The 10 edges fall into three classes by MI semantics:
 
@@ -196,9 +196,9 @@ The 10 edges fall into three classes by MI semantics:
 The causal/temporal structure is cleanest in the auxiliary
 schematic:
 
-![Causal schematic: $\rho_X \otimes \rho_Y$ at $t=0$ goes through
-$\hat U$ producing $\rho_{X'}, \rho_{Y'}$, and the Choi state
-$\rho_{AB}$ at $t = \Delta t$](../../figures/h_pair_first_cell_schematic.png)
+![Discrete event step $n=0 \to n=1$: input $\rho_X \otimes \rho_Y$
+goes through $\hat U$ producing $\rho_{X'}, \rho_{Y'}$, and the Choi
+state $\rho_{AB}$](../../figures/h_pair_first_cell_schematic.svg)
 
 ### 2.2 The three product states
 
