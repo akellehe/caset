@@ -653,6 +653,15 @@ basis (filling the active $(+,-)$ block, zero elsewhere).
 
 The most informative second event reuses both products of cell 1
 together: $X^{(2)} = X'$ from cell 1, $Y^{(2)} = Y'$ from cell 1.
+The two cells then share the $X'$-$Y'$ edge — one physical edge in
+the spacetime, referenced by both cells' MI tables:
+
+![Two generations of (2,3) Pachner cells stitched together via
+the shared $X'$-$Y'$ edge; cell 1 produces $X', AB_1, Y'$ from
+$X, Y$ at generation $n=1$, and cell 2 produces $X'', AB_2, Y''$
+from $X', Y'$ at generation
+$n=2$.](../../figures/h_pair_two_generations_diagram.svg)
+
 The input joint to cell 2 is then **not** a product of marginals —
 it's the stored $\rho_{AB_1}$:
 
