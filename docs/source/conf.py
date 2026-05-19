@@ -69,6 +69,54 @@ mathjax3_config = {
 breathe_projects = {"tessera": str((pathlib.Path(__file__).parent.parent / "_doxygen" / "xml").resolve())}
 breathe_default_project = "tessera"
 
+# Prefix every auto-generated section label with the source-document
+# path so identical section headings across files (`## Setup`,
+# `## See also`, `## Results`, etc.) don't collide. Without this,
+# Sphinx logs many "duplicate label" warnings on every build.
+autosectionlabel_prefix_document = True
+
+# The cpp_api.md page uses ``{doxygenfile}`` to pull in every Doxygen-
+# generated header, and each header re-declares the ``tessera`` namespace,
+# producing 'Duplicate C++ declaration / Duplicate ID: namespacetessera'
+# warnings that can't be fixed at the source level without restructuring
+# the Doxygen import. Suppress just that category. Real cpp warnings
+# (missing declarations, etc.) are not in 'cpp.duplicate_declaration'.
+suppress_warnings = [
+    # Both spellings — Sphinx 7.x emits 'duplicate_declaration.cpp'.
+    "duplicate_declaration.cpp",
+    "duplicate_declaration",
+    "docutils",  # paired 'Duplicate ID / explicit target name' warnings
+                 # come from the same root cause as duplicate_declaration
+    # cpp_api.md re-imports each Doxygen-generated header with
+    # ``{doxygenfile}`` directives. Doxygen emits identically-named
+    # sub-sections ("Implementation Details", "Example", "References",
+    # ...) in many of them, which collides at autosectionlabel time.
+    # Real same-file labels still work for navigation in our hand-
+    # written pages; this only silences the imported Doxygen pages.
+    "autosectionlabel.cpp_api",
+]
+
+
+def setup(app):
+    """Filter out the noisy 'duplicate object description' autodoc
+    warnings for tessera.quantum re-exports. These come from
+    tessera/quantum/__init__.py mirroring every pybind11 class out
+    of _tessera.quantum at the package level — autodoc then sees
+    the same attribute object under two namespace paths and warns.
+    They're cosmetic noise; the real warning class (Sphinx domain
+    'duplicate object description') is not exposed via
+    ``suppress_warnings``, so a logging filter is the only clean
+    way to silence just these without hiding everything else.
+    """
+    import logging
+
+    class _DuplicateObjectDescriptionFilter(logging.Filter):
+        def filter(self, record):  # noqa: D401
+            return "duplicate object description" not in record.getMessage()
+
+    for name in ("sphinx", "sphinx.domains", "sphinx.domains.python"):
+        logging.getLogger(name).addFilter(_DuplicateObjectDescriptionFilter())
+
 templates_path = ["_templates"]
 exclude_patterns = []
 

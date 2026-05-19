@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # Interaction-history Monte Carlo: emergent spacetime from mutual information
 
 This is the scientific charter for a Metropolis Monte Carlo that samples
