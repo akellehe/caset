@@ -165,21 +165,57 @@ $(-,+)$ block is identical under $A \leftrightarrow B$.
 
 ## 2. The first interaction cell
 
-When $\hat{U}$ is applied to two vertices $X, Y$, the construction
-produces three product vertices $X', Y', AB$:
+### 2.1 Generation 0 → generation 1
 
-- $X' = \mathrm{Tr}_Y\bigl(\hat{U}(\rho_X \otimes \rho_Y)\hat{U}^\dagger\bigr)$
-- $Y' = \mathrm{Tr}_X\bigl(\hat{U}(\rho_X \otimes \rho_Y)\hat{U}^\dagger\bigr)$
-- $AB =$ the $\Sigma_{AB}$ Choi-state vertex carrying $J(\hat{U})$ (post-#16)
+Two initial-layer vertices $X, Y$ (the *0-simplices* of generation 0)
+get picked from the frontier and interact via $\hat U$. The
+construction produces three new generation-1 vertices — $X', Y'$
+(the worldline continuations of $X, Y$) and $AB$ (the entangling-
+core $\Sigma_{AB}$ that carries the Choi state of $\hat U$). The
+five vertices $\{X, Y, X', AB, Y'\}$ together form a **4-simplex**
+(a $(2,3)$-Pachner cell) with $\binom{5}{2} = 10$ edges:
 
-The cell is a four-simplex with 5 vertices $\{X, Y, X', AB, Y'\}$ and
-$\binom{5}{2} = 10$ edges. Each edge gets a mutual information
-$I_e$, which becomes an edge length $\ell_e = -\ln(I_e / I_{\max})$
-(with $I_{\max} = 2 \ln 2$) and squared length
+![Two gen-0 vertices interact via $\hat U$ to produce three gen-1
+vertices; the five vertices form a 4-simplex with 10 labeled
+edges](../../figures/h_pair_first_cell_diagram.png)
+
+The 10 edges fall into three classes by MI semantics:
+
+- **2 worldline self-info edges** (green): $X{-}X'$ carries
+  $S_X = S(\rho_X)$, $Y{-}Y'$ carries $S_Y$. These connect each
+  input to its own product.
+- **4 hub-spoke edges** (red): each connects a corner to the
+  $\Sigma_{AB}$ vertex. All four carry the post-event MI
+  $I_{\mathrm{joint}} = I(X' : Y')$ (the "joint" because it
+  measures how much $\hat U$ correlated the products).
+- **4 pair-MI edges** (blue): the input edge $X{-}Y$ and three
+  more $X'{-}Y'$, $X{-}Y'$, $Y{-}X'$. All four carry MI = either
+  $I_{\mathrm{input}} = I(X{:}Y)$ (input joint) or
+  $I_{\mathrm{joint}} = I(X'{:}Y')$ (post-event joint).
+
+The causal/temporal structure is cleanest in the auxiliary
+schematic:
+
+![Causal schematic: $\rho_X \otimes \rho_Y$ at $t=0$ goes through
+$\hat U$ producing $\rho_{X'}, \rho_{Y'}$, and the Choi state
+$\rho_{AB}$ at $t = \Delta t$](../../figures/h_pair_first_cell_schematic.png)
+
+### 2.2 The three product states
+
+The new vertices' density matrices come from the post-event joint:
+
+- $\rho_{X'} = \mathrm{Tr}_Y\bigl(\hat{U}(\rho_X \otimes \rho_Y)\hat{U}^\dagger\bigr)$
+- $\rho_{Y'} = \mathrm{Tr}_X\bigl(\hat{U}(\rho_X \otimes \rho_Y)\hat{U}^\dagger\bigr)$
+- $\rho_{AB} =$ the $\Sigma_{AB}$ Choi-state vertex carrying $J(\hat{U})$ (post-#16)
+
+Each edge gets a mutual information $I_e$, which becomes an edge
+length $\ell_e = -\ln(I_e / I_{\max})$ (with $I_{\max} = 2 \ln 2$)
+and squared length
 $\ell_e^2 = \mathrm{signedSquaredLength}(\ell_e, \text{spacelike})$.
 
-The 10 MI assignments (from `src/quantum/interaction_simulation.cpp`,
-lines 786–795):
+### 2.3 The 10 MI assignments
+
+From `src/quantum/interaction_simulation.cpp` (lines 786–795):
 
 | edge | endpoints | MI value | meaning |
 |---|---|---|---|
@@ -592,10 +628,10 @@ $$
 with $c^2 \approx 0.9844$, $s^2 \approx 0.0156$. Per-vertex entropies:
 
 $$
-S(\rho_{X'}^{(1)}) \;=\; S(\rho_{Y'}^{(1)}) \;=\; -[\,c^2 \ln c^2 + s^2 \ln s^2\,] \;\approx\; 0.0804\ \text{nats}.
+S(\rho_{X'}^{(1)}) \;=\; S(\rho_{Y'}^{(1)}) \;=\; -[\,c^2 \ln c^2 + s^2 \ln s^2\,] \;\approx\; 0.0801\ \text{nats}.
 $$
 
-And $I^{(1)}_{\mathrm{joint}} = 2 S(\rho_{X'}^{(1)}) \approx 0.161$ nats
+And $I^{(1)}_{\mathrm{joint}} = 2 S(\rho_{X'}^{(1)}) \approx 0.160$ nats
 (since $\rho_{AB_1}$ is pure).
 
 The joint $\rho_{AB_1}$ is also stored as `quditJointOf_[(X', Y')]`
@@ -677,11 +713,11 @@ So for the new cell's 10 edges:
 
 | edge | $I_e$ (nats) | $\ell_e = -\ln(I_e/I_{\max})$ |
 |---|---:|---:|
-| $X^{(2)}$–$Y^{(2)}$ (= $X'$–$Y'$ of cell 1) | $0.161$ | $2.16$ |
-| $X^{(2)}$–$X^{(2)\prime}$ | $S(\rho_{X^{(2)}}) = 0.080$ | $2.86$ |
-| $Y^{(2)}$–$Y^{(2)\prime}$ | $S(\rho_{Y^{(2)}}) = 0.080$ | $2.86$ |
-| 4 hub spokes ($AB_2$) | $I^{(2)}_{\mathrm{joint}} \approx 0.46$ | $1.10$ |
-| 3 cross-pair | $I^{(2)}_{\mathrm{input}} = 0.161$ | $2.16$ |
+| $X^{(2)}$–$Y^{(2)}$ (= $X'$–$Y'$ of cell 1) | $0.160$ | $2.155$ |
+| $X^{(2)}$–$X^{(2)\prime}$ | $S(\rho_{X^{(2)}}) = 0.080$ | $2.852$ |
+| $Y^{(2)}$–$Y^{(2)\prime}$ | $S(\rho_{Y^{(2)}}) = 0.080$ | $2.852$ |
+| 4 hub spokes ($AB_2$) | $I^{(2)}_{\mathrm{joint}} \approx 0.461$ | $1.102$ |
+| 3 cross-pair | $I^{(2)}_{\mathrm{input}} = 0.160$ | $2.155$ |
 
 (With $I_{\max} = 2 \ln 2 \approx 1.386$.)
 
@@ -823,20 +859,59 @@ etc., and $I^{(2)}_{\mathrm{input}} = I^{(1)}_{\mathrm{joint}}$).
 
 In numbers (v0.2 defaults, pure-basis-state inputs):
 
-| | $S_X^{\text{in}}$ | $S_Y^{\text{in}}$ | $I_{\mathrm{input}}$ | $I_{\mathrm{joint}}$ |
-|---|---:|---:|---:|---:|
-| cell 1 | $0$ | $0$ | $0$ | $0.161$ |
-| cell 2 | $0.080$ | $0.080$ | $0.161$ | $0.460$ |
-| cell 3 | $0.230$ | $0.230$ | $0.460$ | $0.792$ |
+| $n$ | $S_X^{\text{in}}$ | $S_Y^{\text{in}}$ | $I_{\mathrm{input}}$ | $I_{\mathrm{joint}}$ |
+|---:|---:|---:|---:|---:|
+| 1 | $0$       | $0$       | $0$       | $0.160$ |
+| 2 | $0.080$   | $0.080$   | $0.160$   | $0.461$ |
+| 3 | $0.230$   | $0.230$   | $0.461$   | $0.788$ |
+| 4 | $0.394$   | $0.394$   | $0.788$   | $1.078$ |
+| 5 | $0.539$   | $0.539$   | $1.078$   | $1.285$ |
+| 6 | $0.643$   | $0.643$   | $1.285$   | $1.381$ |
+| 7 | $0.691$   | $0.691$   | $1.381$   | $1.354$ |
+| 8 | $0.677$   | $0.677$   | $1.354$   | $1.208$ |
+| 9 | $0.604$   | $0.604$   | $1.208$   | $0.961$ |
+| 10 | $0.480$  | $0.480$   | $0.961$   | $0.648$ |
+| 11 | $0.324$  | $0.324$   | $0.648$   | $0.322$ |
+| 12 | $0.161$  | $0.161$   | $0.322$   | $0.063$ |
 
-The MI signal grows monotonically along the worldline because each
-event rotates the joint state further into the $\{\ket{+0,-1},\ket{+1,-0}\}$
-subspace. After enough events the rotation saturates (at total
-angle $2 n J_s \Delta t = \pi/2$, the state is maximally mixed
-within the 2-dim spin sub-block), and per-cell MI generation
-stops. That sets a natural correlation length in the construction:
-roughly $n^* = \pi/(4 J_s \Delta t) \approx 13$ events along a
-single worldline at v0.2 defaults.
+**Important**: the MI signal does **not** saturate at $I_{\max}$ — it
+**oscillates coherently**. Each application of $\hat U$ rotates the
+joint state further around the $\sigma^x$ axis of the spin sub-block.
+Three key angles, parameterised by $n\theta$ where $\theta = 2 J_s \Delta t$:
+
+| event $n$ | $n\theta$ | population $(\cos^2, \sin^2)$ | $S(\rho_X)$ | $I_{\mathrm{joint}}$ |
+|---:|---|---|---:|---:|
+| $0$ | $0$ | $(1, 0)$ — pure input $\ket{+0,-1}$ | $0$ | $0$ |
+| $\approx 6$ | $\pi/4$ | $(0.5, 0.5)$ — first MI **peak** | $\ln 2$ | $I_{\max} = 2\ln 2$ |
+| $\approx 13$ | $\pi/2$ | $(0, 1)$ — fully swapped to pure $\ket{+1,-0}$ | $0$ | $0$ (first MI **node**) |
+| $\approx 19$ | $3\pi/4$ | $(0.5, 0.5)$ — second MI peak | $\ln 2$ | $I_{\max}$ |
+| $\approx 25$ | $\pi$ | $(1, 0)$ — back to input | $0$ | $0$ |
+
+so MI is a periodic function of $n$ with period
+$T_{\mathrm{MI}} = 2\pi/(2\theta) = \pi/\theta \approx 25$ cells at
+v0.2 defaults (the *state* itself has period $2\pi/\theta \approx 50$
+cells, but the marginal entropy is even in the deviation from a
+pure state, so it has half the period). The first MI peak is at
+
+$$
+n_{\mathrm{peak}} \;\approx\; \frac{\pi}{4\theta} \;=\; \frac{\pi}{8 J_s \Delta t} \;\approx\; 6.28
+$$
+
+cells along a chained worldline at v0.2 defaults — six events before
+the unitary rotation drives $I_{\mathrm{joint}}$ to its maximum,
+and another six before it falls back to zero.
+
+> **Caveat.** This coherent oscillation only applies along an
+> *uninterrupted* chain that keeps reusing the same products. In
+> the actual simulation, the second cell rarely picks both of the
+> first cell's products: the frontier has many vertices and
+> `getRandomTopSimplex` / `interact` chooses among them. So most
+> worldlines see only a few stacked rotations before their
+> products get consumed by interactions with other vertices,
+> which mixes their state and breaks the coherence. The estimate
+> $n_{\mathrm{peak}} \approx 13$ is therefore an upper bound on
+> coherent buildup along a single chain, not a typical correlation
+> length in the simulated complex.
 
 ### 9.5 What "geometry from entanglement" really means here
 
