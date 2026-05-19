@@ -755,6 +755,53 @@ instead, $\hat U^2$ would still be a global phase or trivial, and
 cell 2 would inherit cell 1's degeneracy. The "intermediate
 engagement" regime is the one where the history does any work.
 
+### 8.6 Cross-history merging — two cells fire in parallel, then their products interact
+
+The chained picture above (cells 1 and 2 along a single pair of
+worldlines) is the cleanest analytical case, but it's also a
+*special* topology. In the actual simulation the frontier holds
+many vertices, and most events fire on pairs whose ancestries
+**don't share a stored joint** — typically because the two inputs
+came from different prior cells, or one is fresh from the initial
+layer. That's the "cross-history merging" topology:
+
+![Two parallel first-generation cells (A and B) whose products
+meet in a second-generation cell C; cell C inputs are
+$X_1'$ from cell A and $X_2'$ from cell B, with no stored joint
+between
+them.](../../figures/h_pair_merging_cells_diagram.svg)
+
+At cell C, since the two inputs $X_1'$ and $X_2'$ don't share an
+interaction history, there is **no entry in `quditJointOf_`** for
+the pair $(X_1', X_2')$. The simulator's
+`quditJointStateFor(X_1', X_2')` then falls back to the
+**tensor-product input**
+
+$$
+\rho_{X_1' X_2'}^{(\text{cell C})} \;=\; \rho_{X_1'}^{(\text{cell A})} \,\otimes\, \rho_{X_2'}^{(\text{cell B})},
+$$
+
+losing whatever quantum coherence each marginal kept *internally*
+to its parent cell. Concretely:
+
+- Cell A correlated $X_1'$ with $Y_1'$ (and with $AB_A$) but **not**
+  with anything from cell B.
+- Cell B correlated $X_2'$ with $Y_2'$ (and with $AB_B$) but **not**
+  with anything from cell A.
+- At cell C, $X_1'$ and $X_2'$ are uncorrelated → $I_{\mathrm{input}}^{(C)} = 0$
+  identically.
+
+So cell C is in the regime of [Case B](#case-b-distributed-mixed-input-maximally-distributed-information)
+from the input-MI side, even though its marginals have nonzero
+entropy (inherited from the prior cells' dynamics).
+
+This is the **typical** topology in the simulation: most pairs the
+random frontier-picker chooses share no prior interaction, so most
+events get product-input joints and zero $I_{\mathrm{input}}$. The
+chained / shared-joint topology of [§8.1–§8.5](#cell-2-setup-reuse-the-two-products)
+is the *exception*, and the only place where the per-event MI
+output can compound by more than the worldline-self contribution.
+
 ## 9. How this all fits into the path integral
 
 The Monte Carlo samples a partition function
