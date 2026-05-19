@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # Fixing CUDA for CMake
 
 CMake's `find_package(CUDAToolkit)` expects the CUDA Toolkit at
