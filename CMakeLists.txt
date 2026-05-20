@@ -22,6 +22,22 @@ else()
     project(tessera LANGUAGES CXX)
 endif()
 
+# ---- Compiler cache (ccache / sccache) ----
+# Content-addressed object cache: makes clean rebuilds and per-wheel-tag
+# builds near-instant — in particular ITensor's ~35 translation units,
+# whose objects hash identically across Python versions and build dirs.
+# Auto-enabled when found; set TESSERA_CCACHE=0 to opt out.
+if (NOT "$ENV{TESSERA_CCACHE}" STREQUAL "0")
+    find_program(CCACHE_PROGRAM NAMES ccache sccache)
+    if (CCACHE_PROGRAM)
+        set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        message(STATUS "Compiler cache enabled: ${CCACHE_PROGRAM}")
+    else()
+        message(STATUS "Compiler cache not found — install ccache for fast rebuilds.")
+    endif()
+endif()
+
 option(TESSERA_ASAN "Build tessera with AddressSanitizer/UBSan" $ENV{TESSERA_ASAN})
 if(NOT TESSERA_ASAN)
     set(TESSERA_ASAN OFF)
@@ -38,9 +54,94 @@ option(TESSERA_PROFILE "Build with -g -O1 to keep symbol names for stack traces"
 if (NOT TESSERA_PROFILE)
     set(TESSERA_PROFILE OFF)
 endif()
-option(TESSERA_QUANTUM "Build the Schwinger-model / MPS subsystem (requires BLAS+LAPACK)" $ENV{TESSERA_QUANTUM})
-if (NOT TESSERA_QUANTUM)
+# ---- Quantum subsystem (Schwinger / MPS / DMRG): auto-detected ----
+# Mirrors TESSERA_CUDA above: built automatically when its prerequisites
+# are present, with an env var to override. Prerequisites are (1) the
+# ITensor submodule checked out under third_party/itensor and (2) a
+# BLAS/LAPACK backend. TESSERA_QUANTUM=1 forces it on — fetching the
+# ITensor submodule automatically when it is missing; a missing BLAS/LAPACK
+# is still a hard error. TESSERA_QUANTUM=0 forces it off.
+#
+# Kept as a plain variable rather than option(): it is recomputed on every
+# configure, so checking out the submodule and re-running the build picks
+# the subsystem up without needing a fresh build directory.
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.h")
+    set(_quantum_itensor_present TRUE)
+else()
+    set(_quantum_itensor_present FALSE)
+endif()
+if (APPLE)
+    set(_quantum_lapack_present TRUE)   # Accelerate framework ships with macOS
+else()
+    find_package(LAPACK QUIET)
+    set(_quantum_lapack_present ${LAPACK_FOUND})
+endif()
+
+if (DEFINED ENV{TESSERA_QUANTUM} AND NOT "$ENV{TESSERA_QUANTUM}" STREQUAL "")
+    set(TESSERA_QUANTUM $ENV{TESSERA_QUANTUM})        # explicit override
+elseif (_quantum_itensor_present AND _quantum_lapack_present)
+    set(TESSERA_QUANTUM ON)                           # auto-detect
+else()
     set(TESSERA_QUANTUM OFF)
+endif()
+
+if (TESSERA_QUANTUM)
+    set(TESSERA_QUANTUM ON)
+    # The ITensor submodule is the one prerequisite we can satisfy for the
+    # user: when quantum is explicitly requested (TESSERA_QUANTUM=1) but the
+    # submodule is missing, fetch it with git instead of erroring out. The
+    # auto-detect path never reaches here without the submodule — only an
+    # explicit request does — so a bare `pip install -e .` stays opt-in.
+    if (NOT _quantum_itensor_present)
+        find_package(Git QUIET)
+        if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+            message(FATAL_ERROR
+                "TESSERA_QUANTUM=1 but third_party/itensor is not checked out, "
+                "and it cannot be fetched automatically (git not found, or "
+                "this is not a git checkout).\n"
+                "  Install tessera from a git clone, or fetch it manually:\n"
+                "    git submodule update --init --recursive")
+        endif()
+        message(STATUS "TESSERA_QUANTUM=1: fetching the ITensor submodule "
+                       "(one-time network download)...")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive
+                    -- third_party/itensor third_party/itensor_tdvp
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE _quantum_submodule_result)
+        if (NOT _quantum_submodule_result EQUAL 0)
+            message(FATAL_ERROR
+                "Failed to fetch the ITensor submodule (git exited "
+                "${_quantum_submodule_result}).\n"
+                "  Check your network, then re-run the build — or fetch it "
+                "manually:\n"
+                "    git submodule update --init --recursive")
+        endif()
+        if (NOT EXISTS
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.h")
+            message(FATAL_ERROR
+                "ITensor submodule fetch reported success but "
+                "third_party/itensor is still empty.")
+        endif()
+        set(_quantum_itensor_present TRUE)
+        message(STATUS "ITensor submodule ready.")
+    endif()
+    if (NOT _quantum_lapack_present)
+        message(FATAL_ERROR
+            "TESSERA_QUANTUM is on but no BLAS/LAPACK backend was found.\n"
+            "  Install one (e.g. apt-get install liblapack-dev libblas-dev),\n"
+            "  or set TESSERA_QUANTUM=0 to skip the quantum subsystem.")
+    endif()
+else()
+    set(TESSERA_QUANTUM OFF)
+    if (NOT _quantum_itensor_present)
+        message(STATUS "Quantum subsystem OFF — third_party/itensor not checked "
+                       "out (run `git submodule update --init --recursive`).")
+    elseif (NOT _quantum_lapack_present)
+        message(STATUS "Quantum subsystem OFF — no BLAS/LAPACK backend found.")
+    else()
+        message(STATUS "Quantum subsystem OFF — disabled via TESSERA_QUANTUM=0.")
+    endif()
 endif()
 # ---- Read version from pyproject.toml ----
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
@@ -54,28 +155,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---- Python & pybind11 ----
 find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
 
-# Pin pybind11 to the install inside the active Python env — pyenv
-# ships pybind11 v3 via ``pip install pybind11``, and the system
-# /usr/include/pybind11 may be an older v2 that we no longer support.
-if (NOT DEFINED pybind11_DIR)
-    execute_process(
-        COMMAND ${Python_EXECUTABLE} -c
-            "import pybind11; print(pybind11.get_cmake_dir(), end='')"
-        OUTPUT_VARIABLE _pybind11_cmake_dir
-        RESULT_VARIABLE _pybind11_rc)
-    if (_pybind11_rc EQUAL 0 AND EXISTS "${_pybind11_cmake_dir}")
-        set(pybind11_DIR "${_pybind11_cmake_dir}")
-        message(STATUS "Using pybind11 from active Python env: ${pybind11_DIR}")
-    endif()
-endif()
-find_package(pybind11 CONFIG REQUIRED)
-if (pybind11_VERSION VERSION_LESS "3.0")
-    message(FATAL_ERROR
-        "tessera requires pybind11 >= 3.0; found ${pybind11_VERSION} at "
-        "${pybind11_DIR}. Try ``pip install -U 'pybind11>=3.0'`` or set "
-        "pybind11_DIR explicitly.")
-endif()
-message(STATUS "pybind11 ${pybind11_VERSION}")
+# Locate pybind11 >= 3.0. tessera's bindings use the v3 API, so an older
+# v2 must never be selected — and the distro's ``pybind11-dev`` installs a
+# config into ``/usr/lib/cmake``, a default find_package() search path.
+#
+# The ``3.0`` floor is enforced *by* find_package: a too-old config is
+# skipped, and if nothing satisfies it the build fails loudly instead of
+# silently linking the wrong ABI. CMake's CONFIG-mode search order then
+# covers both supported build paths without any manual pinning:
+#   * ``pip install`` — scikit-build-core puts the pinned pybind11 (from
+#     build-system.requires) on CMAKE_PREFIX_PATH; searched ahead of HINTS.
+#   * direct ``cmake`` — the active interpreter's own pybind11, supplied as
+#     the HINTS fallback below. Empty (and harmless) if none is installed.
+execute_process(
+    COMMAND ${Python_EXECUTABLE} -m pybind11 --cmakedir
+    OUTPUT_VARIABLE _pybind11_hint
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+find_package(pybind11 3.0 CONFIG REQUIRED HINTS "${_pybind11_hint}")
+message(STATUS "pybind11 ${pybind11_VERSION} (${pybind11_DIR})")
 find_package(ZLIB REQUIRED)
 
 include(CheckCXXSourceCompiles)
@@ -303,9 +401,7 @@ if(TESSERA_QUANTUM)
     # registers the `quantum` submodule.
     target_link_libraries(_tessera PRIVATE tessera_quantum)
     target_compile_definitions(_tessera PRIVATE TESSERA_QUANTUM=1)
-else()
-    message(STATUS "Quantum subsystem turned OFF (set TESSERA_QUANTUM=1 to enable).")
-endif()
+endif()  # the auto-detect block above already reports when quantum is OFF
 # ---- </Quantum subsystem> ----
 
 if(NOT TESSERA_ASAN)

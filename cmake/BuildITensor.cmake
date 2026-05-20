@@ -28,9 +28,15 @@ function(tessera_build_itensor)
     endif()
 
     # Cache variable so users can override with -DITENSOR_PLATFORM=openblas
-    # at configure time. Default "lapack" matches the most common Linux
-    # setup (libblas + liblapack via the system package manager).
-    set(ITENSOR_PLATFORM "lapack" CACHE STRING
+    # at configure time. The default tracks the OS's native backend:
+    # Accelerate on macOS, reference LAPACK elsewhere (libblas + liblapack
+    # via the system package manager — the most common Linux setup).
+    if(APPLE)
+        set(_itensor_platform_default "macos")
+    else()
+        set(_itensor_platform_default "lapack")
+    endif()
+    set(ITENSOR_PLATFORM "${_itensor_platform_default}" CACHE STRING
         "ITensor BLAS/LAPACK backend: lapack | openblas | mkl | acml | macos")
     set_property(CACHE ITENSOR_PLATFORM PROPERTY STRINGS
         lapack openblas mkl acml macos)
@@ -99,7 +105,16 @@ function(tessera_build_itensor)
         CXX_EXTENSIONS OFF)
     target_compile_definitions(itensor PUBLIC
         "PLATFORM_${ITENSOR_PLATFORM}"
-        "__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0")
+        "__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0"
+        # ITensor v3's itdata.h calls std::shared_ptr::unique() — deprecated
+        # in C++17, removed in C++20, and dropped entirely by libc++ in C++20
+        # mode. tessera builds at C++20 (CMAKE_CXX_STANDARD), so re-enable the
+        # symbol via libc++'s documented escape hatch. PUBLIC because the two
+        # call sites are templates in a public header, instantiated in C++20
+        # consumer TUs (tessera_quantum, _tessera) as well. No-op on libstdc++,
+        # which keeps unique(). Capping itensor at C++17 would not fix those
+        # consumer TUs — the active standard is per-TU, not per-target.
+        "_LIBCPP_ENABLE_CXX20_REMOVED_SHARED_PTR_UNIQUE")
 
     # ITensor's own source has minor compiler-warning noise (deprecated
     # `register`, unused warnings inside its template machinery). PRIVATE

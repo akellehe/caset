@@ -42,36 +42,51 @@ Quickstart
 True
 """
 
+# Every name re-exported from the C++ ``quantum.holography`` submodule —
+# bound below when the subsystem is available, used for a build-aware error
+# when it is not.
+_EXPORTS = (
+    "HolographyConfig", "MutualInformationProfile", "EmergentGraph",
+    "AmbjornLollFit", "AmbjornLollFitResult", "SpectralDimensionResult",
+    "EmergentSpectralDimension", "ChoiPropagator", "ChoiTDVPSettings",
+    "SchwingerParams",
+)
+
+_UNAVAILABLE_MESSAGE = (
+    "tessera.quantum.holography is unavailable: this build of tessera does "
+    "not include the quantum subsystem. Enable it with a single command — "
+    "`TESSERA_QUANTUM=1 pip install -e .`; see tessera.quantum for details."
+)
+
 try:
     from tessera import _tessera
-    _holo = _tessera.quantum.holography
-
-    HolographyConfig            = _holo.HolographyConfig
-    MutualInformationProfile    = _holo.MutualInformationProfile
-    EmergentGraph               = _holo.EmergentGraph
-    AmbjornLollFit              = _holo.AmbjornLollFit
-    AmbjornLollFitResult        = _holo.AmbjornLollFitResult
-    SpectralDimensionResult     = _holo.SpectralDimensionResult
-    EmergentSpectralDimension   = _holo.EmergentSpectralDimension
-    ChoiPropagator              = _holo.ChoiPropagator
-    ChoiTDVPSettings            = _holo.ChoiTDVPSettings
-    SchwingerParams             = _holo.SchwingerParams
+    _holography = _tessera.quantum.holography
+    _AVAILABLE = True
+    _IMPORT_ERROR = None
 except (ImportError, AttributeError) as exc:
-    raise ImportError(
-        "tessera.quantum.holography is unavailable: this tessera build does "
-        "not include the quantum subsystem. Rebuild with TESSERA_QUANTUM=1 "
-        "(e.g. `TESSERA_QUANTUM=1 pip install -e .`) to enable it."
-    ) from exc
+    _holography = None
+    _AVAILABLE = False
+    _IMPORT_ERROR = exc
 
-__all__ = [
-    "HolographyConfig",
-    "MutualInformationProfile",
-    "EmergentGraph",
-    "AmbjornLollFit",
-    "AmbjornLollFitResult",
-    "SpectralDimensionResult",
-    "EmergentSpectralDimension",
-    "ChoiPropagator",
-    "ChoiTDVPSettings",
-    "SchwingerParams",
-]
+
+def is_available() -> bool:
+    """Return ``True`` if this tessera build includes the holography subsystem.
+
+    Equivalent to :func:`tessera.quantum.is_available` — holography is part
+    of the same optional C++ component.
+    """
+    return _AVAILABLE
+
+
+if _AVAILABLE:
+    for _name in _EXPORTS:
+        globals()[_name] = getattr(_holography, _name)
+    del _name
+else:
+    def __getattr__(name):
+        if name in _EXPORTS:
+            raise ImportError(_UNAVAILABLE_MESSAGE) from _IMPORT_ERROR
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [*_EXPORTS, "is_available"]

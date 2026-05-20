@@ -31,6 +31,16 @@ python -c "import tessera; print('tessera OK')"
 
 CUDA GPU acceleration is auto-detected. To force it off: `TESSERA_CUDA=0 pip install -e .`
 
+The **quantum subsystem** (Schwinger model / DMRG, ITensor-backed) is auto-detected. The easiest way to enable it is a single command:
+
+```bash
+TESSERA_QUANTUM=1 pip install -e .   # fetches the ITensor submodule, then builds it
+```
+
+`TESSERA_QUANTUM=1` checks out the ITensor submodule for you on the first build (a one-time network download). If the submodule is already present — e.g. you cloned with `git clone --recurse-submodules` — a plain `pip install -e .` detects and builds it automatically. `TESSERA_QUANTUM=0` forces it off.
+
+Builds also use [`ccache`](https://ccache.dev/) automatically when it is installed (`brew install ccache` / `apt-get install ccache`) — recommended: it makes rebuilds and CI dramatically faster.
+
 ## Quick start
 
 Build a 4D Lorentzian spacetime, thermalize it with CDT, and export a rotating GIF:
@@ -163,14 +173,30 @@ The Regge solver optionally offloads deficit-angle and gradient computation to C
 
 ## Running tests
 
+`pytest tests/` runs the **entire** suite — slow tests included. The `slow`
+marker is opt-out, not opt-in: nothing is deselected unless you ask for it.
+
 ```bash
-pytest tests/ -v
+pytest tests/ -v                   # everything, including slow (>30s) tests
+pytest tests/ -v -m "not slow"     # skip the slow tests
+pytest tests/ -v -m slow           # run only the slow tests
+```
+
+Some tests cover the quantum subsystem (Schwinger model / DMRG). They
+skip cleanly when it isn't built. Enable it once — `TESSERA_QUANTUM=1`
+fetches the ITensor submodule and builds the subsystem:
+
+```bash
+TESSERA_QUANTUM=1 pip install -e .   # one-time: fetch + build quantum
+pytest tests/ -v                     # the quantum tests now run too
 ```
 
 Build options via environment variables:
 
 ```bash
 TESSERA_CUDA=0       pip install -e .     # CPU-only build
+TESSERA_QUANTUM=0    pip install -e .     # skip the quantum subsystem
+TESSERA_CCACHE=0     pip install -e .     # disable the ccache compiler cache
 TESSERA_ASAN=1       pytest tests/        # AddressSanitizer + UBSan
 TESSERA_VERBOSE=1    pytest tests/        # C++ logging
 TESSERA_ASSERTIONS=1 pytest tests/        # extra invariant checks
