@@ -889,6 +889,20 @@ The H_DS4 hypothesis (§3 of the [v0.2 design](v0.2.md)) is the
 claim that *some* $\beta$ exists where the equilibrium ensemble's
 geometry has emergent spectral dimension $D_S = 4$.
 
+> **Primal vs. dual lattice.** The Metropolis weight uses the Regge
+> action $S_{\mathrm{Regge}}$, which lives on the **primal** complex
+> $\mathcal K_T$ — areas and deficit angles of its hinges — and each
+> $\Delta S_n$ is local to the cell just added. The dual lattice never
+> enters a move's accept/reject. The spectral dimension is a separate
+> *observable*: exactly as in CDT (Ambjørn, Jurkiewicz, Loll,
+> *Reconstructing the Universe*, eq. 24 — a random walk hopping between
+> four-simplices, $1/5$ to each of its five neighbours), $D_S$ is
+> measured by heat-kernel diffusion on the **dual** lattice, on
+> equilibrated configurations — not per move. So $\mathcal K_T$ here is
+> CDT-style: the triangulation *is* the geometry, and the dual is the
+> discretization the diffusion runs on. Tracked in [issue
+> #31](https://github.com/akellehe/tessera/issues/31).
+
 ### 9.4 Putting cells 1 and 2 into the path integral
 
 For our 2-cell intermediate-engagement example:
