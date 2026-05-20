@@ -1,7 +1,7 @@
 # Interaction-history Monte Carlo: the search for spectral dimension 4
 
 Experimental writeup for the construction in
-[interaction-history-monte-carlo.md](../interaction-history-monte-carlo.md).
+[interaction-history-monte-carlo.md](../../interaction-history-monte-carlo.md).
 A set of randomized correlated quantum systems on a Poisson-Delaunay
 initial layer interact pairwise; each interaction attaches a `(2,3)`
 cell to a simplicial complex, with edge lengths from mutual information
@@ -280,7 +280,7 @@ records are at `/tmp/interaction-history/cartan_beta_scatter.json`.
 
 ## See also
 
-- [interaction-history-monte-carlo.md](../interaction-history-monte-carlo.md)
+- [interaction-history-monte-carlo.md](../../interaction-history-monte-carlo.md)
   — the construction's charter.
 - [interaction_branching_simplex.md](interaction_branching_simplex.md)
   — the single-cell test: one closed cell *can* carry a 4-volume.

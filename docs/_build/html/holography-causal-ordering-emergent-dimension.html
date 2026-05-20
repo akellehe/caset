@@ -286,7 +286,7 @@ existing causal-order comparison; it does not replace it.</p>
 <a class="reference internal" href="quantum-methodology.html"><span class="std std-doc">quantum-methodology.md</span></a> for the broader
 entanglement → causal-order charter. An experimental run is recorded
 in
-<a class="reference internal" href="#quantum-experiments/emergent_spectral_dimension_writeup.md"><span class="xref myst">quantum-experiments/emergent_spectral_dimension_writeup.md</span></a>.</p>
+<a class="reference internal" href="quantum-experiments/earlier-work/emergent_spectral_dimension.html"><span class="std std-doc">quantum-experiments/earlier-work/emergent_spectral_dimension.md</span></a>.</p>
 <p>The graph is the boundary state’s mutual-information structure made
 flat; the spectral dimension is its random-walk return probability.
 Both are one line of math each.</p>
@@ -809,16 +809,16 @@ Both are one line of math each.</p>
 <section id="json-record">
 <h2>9. JSON record<a class="headerlink" href="#json-record" title="Link to this heading">¶</a></h2>
 <p>Each run writes a single JSON record (matching the recorded-config convention in <code class="docutils literal notranslate"><span class="pre">quantum-methodology</span></code> §5):</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="err">HolographyCo</span><span class="kc">nf</span><span class="err">ig</span><span class="w"> </span><span class="err">as</span><span class="w"> </span><span class="err">dic</span><span class="kc">t</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;tdvp_summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;snapshot_times&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;bond_dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;energies&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;graph&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;n_vertices&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;n_edges&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;edge_density&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;spectral_dimension&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;sigmas&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;P&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="nt">&quot;D_S&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span>
-<span class="w">    </span><span class="nt">&quot;fit&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;D_infinity&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;C&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;B&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;chi_squared&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">}</span>
-<span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;provenance&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;tessera_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;git_sha&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;seed&quot;</span><span class="p">:</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">}</span>
-<span class="p">}</span>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{
+  &quot;config&quot;: { ... HolographyConfig as dict ... },
+  &quot;tdvp_summary&quot;: { &quot;snapshot_times&quot;: [...], &quot;bond_dims&quot;: [...], &quot;energies&quot;: [...] },
+  &quot;graph&quot;: { &quot;n_vertices&quot;: ..., &quot;n_edges&quot;: ..., &quot;edge_density&quot;: ... },
+  &quot;spectral_dimension&quot;: {
+    &quot;sigmas&quot;: [...], &quot;P&quot;: [...], &quot;D_S&quot;: [...],
+    &quot;fit&quot;: { &quot;D_infinity&quot;: ..., &quot;C&quot;: ..., &quot;B&quot;: ..., &quot;chi_squared&quot;: ... }
+  },
+  &quot;provenance&quot;: { &quot;tessera_version&quot;: &quot;...&quot;, &quot;git_sha&quot;: &quot;...&quot;, &quot;seed&quot;: ... }
+}
 </pre></div>
 </div>
 <p>The JSON is sufficient to regenerate every figure; the same <code class="docutils literal notranslate"><span class="pre">HolographyConfig</span></code> re-run produces bit-identical numerics modulo BLAS nondeterminism.</p>

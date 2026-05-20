@@ -11,7 +11,7 @@ The observable is exposed by `tessera.quantum.holography`. See
 [quantum-methodology.md](quantum-methodology.md) for the broader
 entanglement → causal-order charter. An experimental run is recorded
 in
-[quantum-experiments/emergent_spectral_dimension_writeup.md](quantum-experiments/emergent_spectral_dimension_writeup.md).
+[quantum-experiments/earlier-work/emergent_spectral_dimension.md](quantum-experiments/earlier-work/emergent_spectral_dimension.md).
 
 The graph is the boundary state's mutual-information structure made
 flat; the spectral dimension is its random-walk return probability.
@@ -478,7 +478,7 @@ Following the test table format of `quantum.md`:
 
 Each run writes a single JSON record (matching the recorded-config convention in `quantum-methodology` §5):
 
-```json
+```text
 {
   "config": { ... HolographyConfig as dict ... },
   "tdvp_summary": { "snapshot_times": [...], "bond_dims": [...], "energies": [...] },

@@ -204,7 +204,7 @@ committed to yet.
 
 ## See also
 
-- [interaction-history-monte-carlo.md](../interaction-history-monte-carlo.md)
+- [interaction-history-monte-carlo.md](../../interaction-history-monte-carlo.md)
   — the construction's charter (still uses Schwinger language; will be
   updated to match this note in due course).
 - [../charged-cartan/design/v0.1.md](../charged-cartan/design/v0.1.md)

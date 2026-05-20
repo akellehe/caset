@@ -107,7 +107,7 @@ hinges, leading to a discrete version of the gravitational action.
 
 Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from 
 causally ordered simplices. This is explained very well in 
-[Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019](./resources/1905.08669v1.pdf). In CDT,
+[Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019](./resources/CDT/1905.08669v1.pdf). In CDT,
 the path integral over geometries is approximated by summing over all possible causal triangulations. From
 equation (5) in [Discrete Lorentzian Quantum Gravity, R. Loll, 2000](./resources/CDT/0011194v1.pdf) the partition 
 function is
@@ -128,7 +128,7 @@ l_t^2 = -\alpha a^2 \xrightarrow{\text{Wick}} l_t^2 = +\alpha a^2
 $$
 
 There has been much success in implementing CDT as an MCMC algorithm, ensuring that the causal structure of spacetime is 
-preserved. You can find a detailed description and source code in [Simulating CDT quantum gravity, Brunekreef et. al, 2023](./resources/CDT/moves.pdf) 
+preserved. You can find a detailed description and source code in [Simulating CDT quantum gravity, Brunekreef et. al, 2023](./resources/CDT/cpp-implementation-of-cdt.pdf) 
 This approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at 
 small scales. You can find lots of details of those results in [Causal Dynamical Triangulations without Preferred Foliation, 2013](./resources/CDT/cdt-wo-pref-folia.pdf), 
 [Quantum Gravity or The Art of Building Spacetime, 2006](./resources/CDT/0604212v1.pdf), [De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013](./resources/CDT/de-sitter.pdf),
