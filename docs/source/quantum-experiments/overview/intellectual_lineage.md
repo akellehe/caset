@@ -28,8 +28,13 @@ The construction in this project takes this literally:
 - **Edge lengths** between vertices are computed from their mutual
   information `ℓ = −log(I / I_max)`. Strong correlation ↔ short edge;
   no correlation ↔ infinite edge.
-- The simplicial complex of vertices, with these MI-derived lengths,
-  *is* the emergent spacetime — there is no separate background metric.
+- The simplicial complex of vertices, with these MI-derived lengths, is
+  the **boundary** data — the network of quantum systems and their
+  correlations. The emergent spacetime is *not* this complex but the
+  geometry **holographically dual** to it: in van Raamsdonk's essay the
+  `ℓ ∝ −log I` relation ties *boundary* mutual information to *bulk*
+  distance. Spacetime is built up from the correlation pattern, on the
+  dual side of it — there is no separate background metric.
 
 This is the founding principle and remains intact through every
 subsequent generalisation.
@@ -387,11 +392,19 @@ seen by a random walker diffusing on the lattice for time `σ` — as
 the diagnostic for whether their path-integral over geometries
 produces 4D macroscopic spacetime.
 
-We borrow exactly this observable. On our MI-weighted simplicial
-complex, the heat kernel `P(σ) = (1/N) Σ_v ⟨v| exp(−σ L) |v⟩` gives
-us `D_S(σ) = −2 d log P / d log σ`. The H_DS4 hypothesis is: there
+We borrow exactly this observable. The heat kernel
+`P(σ) = (1/N) Σ_v ⟨v| exp(−σ L) |v⟩` gives us
+`D_S(σ) = −2 d log P / d log σ`. The H_DS4 hypothesis is: there
 exists a regime where this `D_S` reaches 4, signalling an emergent
 3+1-dimensional macroscopic phase.
+
+> **Boundary vs. dual (see §1).** `D_S` should be the spectral
+> dimension of the emergent spacetime — the geometry *dual* to the MI
+> complex. The current pipeline (`EmergentGraph` /
+> `EmergentSpectralDimension`) computes the heat kernel directly on the
+> **boundary** MI complex, so the `D_S` it reports is the boundary
+> network's, not the dual's. Reconciling this is tracked in [issue
+> #31](https://github.com/akellehe/tessera/issues/31).
 
 The v0.2 β-scan ([writeup](../charged-cartan/experiments/02-v0.2-beta-scan.md))
 finds a stable plateau at peak `D_S ≈ 4.6 ± 0.1` across a decade of
