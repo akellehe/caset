@@ -25,7 +25,7 @@ are easier to solve, but they obscure the causal structure of spacetime.
 In Euclidean spacetimes, all points are effectively spacelike separated. Unitarity/probability conservation is tied to 
 the Lorentzian structure. 
 
-More interesting physics come into play when we use a Lorentzian metric, as described in [Discrete Lorentzian Quantum Gravity, 2000, R.Loll](./resources/CDT/0011194v1.pdf).
+More interesting physics come into play when we use a Lorentzian metric, as described in [Discrete Lorentzian Quantum Gravity, 2000, R.Loll](https://arxiv.org/abs/hep-th/0011194).
 
 ## Path Integrals and Wick Rotations
 
@@ -107,9 +107,9 @@ hinges, leading to a discrete version of the gravitational action.
 
 Causal Dynamical Triangulations (CDT) is a non-perturbative approach to quantum gravity that constructs spacetime from 
 causally ordered simplices. This is explained very well in 
-[Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019](./resources/CDT/1905.08669v1.pdf). In CDT,
+[Quantum Gravity from Causal Dynamical Triangulations: A Review, R. Loll, 2019](https://arxiv.org/abs/1905.08669). In CDT,
 the path integral over geometries is approximated by summing over all possible causal triangulations. From
-equation (5) in [Discrete Lorentzian Quantum Gravity, R. Loll, 2000](./resources/CDT/0011194v1.pdf) the partition 
+equation (5) in [Discrete Lorentzian Quantum Gravity, R. Loll, 2000](https://arxiv.org/abs/hep-th/0011194) the partition 
 function is
 
 $$
@@ -128,11 +128,11 @@ l_t^2 = -\alpha a^2 \xrightarrow{\text{Wick}} l_t^2 = +\alpha a^2
 $$
 
 There has been much success in implementing CDT as an MCMC algorithm, ensuring that the causal structure of spacetime is 
-preserved. You can find a detailed description and source code in [Simulating CDT quantum gravity, Brunekreef et. al, 2023](./resources/CDT/cpp-implementation-of-cdt.pdf) 
+preserved. You can find a detailed description and source code in [Simulating CDT quantum gravity, Brunekreef et. al, 2023](https://arxiv.org/abs/2310.16744) 
 This approach has shown promise in recovering classical spacetime at large scales while incorporating quantum effects at 
-small scales. You can find lots of details of those results in [Causal Dynamical Triangulations without Preferred Foliation, 2013](./resources/CDT/cdt-wo-pref-folia.pdf), 
-[Quantum Gravity or The Art of Building Spacetime, 2006](./resources/CDT/0604212v1.pdf), [De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013](./resources/CDT/de-sitter.pdf),
-as well as others in the `resources/CDT/` directory.
+small scales. You can find lots of details of those results in [Causal Dynamical Triangulations without Preferred Foliation, 2013](https://arxiv.org/abs/1305.4582), 
+[Quantum Gravity or The Art of Building Spacetime, 2006](https://arxiv.org/abs/hep-th/0604212), [De Sitter Universe from Causal Dynamical Triangulations without Preferred Foliation, 2013](https://arxiv.org/abs/1307.5469),
+as well as others in the CDT literature.
 
 ### Causal Sets
 
