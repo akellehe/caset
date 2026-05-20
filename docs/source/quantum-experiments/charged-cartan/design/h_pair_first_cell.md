@@ -323,6 +323,7 @@ and of $XX+YY$ (eigenvalue $0$), hence of $\hat H_{\mathrm{pair}}$
 itself. Eigenstates pick up phases under $\hat U$; their MI
 structure is rigid.
 
+(case-b-distributed)=
 ## 4. Case B — distributed mixed input (maximally distributed information)
 
 Now take
@@ -649,6 +650,7 @@ $$
 in the $\{\ket{+\,0,\,-\,1},\,\ket{+\,0,\,-\,0},\,\ket{+\,1,\,-\,1},\,\ket{+\,1,\,-\,0}\}$
 basis (filling the active $(+,-)$ block, zero elsewhere).
 
+(cell-2-setup)=
 ### 8.2 Cell 2 setup — reuse the two products
 
 The most informative second event reuses both products of cell 1
@@ -791,14 +793,14 @@ to its parent cell. Concretely:
 - At cell C, $X_1'$ and $X_2'$ are uncorrelated → $I_{\mathrm{input}}^{(C)} = 0$
   identically.
 
-So cell C is in the regime of [Case B](#case-b-distributed-mixed-input-maximally-distributed-information)
+So cell C is in the regime of [Case B](#case-b-distributed)
 from the input-MI side, even though its marginals have nonzero
 entropy (inherited from the prior cells' dynamics).
 
 This is the **typical** topology in the simulation: most pairs the
 random frontier-picker chooses share no prior interaction, so most
 events get product-input joints and zero $I_{\mathrm{input}}$. The
-chained / shared-joint topology of [§8.1–§8.5](#cell-2-setup-reuse-the-two-products)
+chained / shared-joint topology of [§8.1–§8.5](#cell-2-setup)
 is the *exception*, and the only place where the per-event MI
 output can compound by more than the worldline-self contribution.
 

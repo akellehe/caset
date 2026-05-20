@@ -144,7 +144,7 @@ systems compose by tensor product, so two qudits live in ℂ^d ⊗ ℂ^d
 = ℂ^{d²}. For our v0.2 vertices that's a 4-dim per-vertex state
 (`ρ_v ∈ ℂ^{4×4}`) and a 16-dim bipartite joint state
 (`ρ_{XY} ∈ ℂ^{16×16}`) — the bottom two rungs of the
-[4 / 16 / 256 dimensional ladder](#7-5-worldline-discontinuity-and-the-4-16-256-dimensional-ladder)
+[4 / 16 / 256 dimensional ladder](#worldline-ladder)
 that the v0.2 design walks.
 
 ### Why the v0.2 vertices need to be qudits, not qubits
@@ -298,6 +298,7 @@ which interpretation of quantum mechanics we hold; what TSVF gave
 us is a coherent *language* for describing the projections and
 worldline boundaries that already had to happen in our model.
 
+(worldline-ladder)=
 ## 7.5. Worldline discontinuity and the 4 / 16 / 256 dimensional ladder
 
 The qudit-basis + Choi-state machinery from steps 5–7 has a natural

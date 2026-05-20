@@ -94,6 +94,11 @@ suppress_warnings = [
     # Real same-file labels still work for navigation in our hand-
     # written pages; this only silences the imported Doxygen pages.
     "autosectionlabel.cpp_api",
+    # quantum.md renders the tessera.quantum module docstring via
+    # autodoc; that docstring repeats section titles ("Quickstart",
+    # "Causal-order comparison", ...) that also appear as hand-written
+    # headings in quantum.md, colliding at autosectionlabel time.
+    "autosectionlabel.quantum",
 ]
 
 
