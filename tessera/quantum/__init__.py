@@ -37,13 +37,24 @@ and the :class:`MajorizationPredicate` hierarchy
 
 Availability
 ------------
-This module requires tessera to be built with ``TESSERA_QUANTUM=1``::
+The quantum subsystem is an optional ITensor-backed C++ component. Like
+CUDA support, it is auto-detected at build time — compiled in whenever the
+ITensor submodule is present and a BLAS/LAPACK backend is available. To
+enable it from scratch in one step::
 
     TESSERA_QUANTUM=1 pip install -e .
 
-Without that flag, importing this module raises :class:`ImportError`
-with the rebuild instruction. The default (TESSERA_QUANTUM=0) build of
-tessera is unaffected.
+``TESSERA_QUANTUM=1`` checks out the ITensor submodule for you; ``=0``
+forces the subsystem off.
+
+This module always imports cleanly, regardless of how tessera was built.
+Call :func:`is_available` to test whether the subsystem is present;
+accessing a workflow class in a build without it raises
+:class:`ImportError` with rebuild instructions::
+
+    import tessera.quantum as q
+    if q.is_available():
+        result = q.SchwingerModel(q.QuantumConfig()).solve()
 
 Hamiltonian (PLAN.md §4 / Bañuls et al. 2013 eq. 2.6)
 -----------------------------------------------------
@@ -163,89 +174,77 @@ References
 
 """
 
+# ─── C++ export names ──────────────────────────────────────────────────────
+# Every name this module re-exports from the C++ ``quantum`` submodule.
+# Declared once: bound below when the subsystem is available, and used to
+# raise a build-aware error when it is not.
+_EXPORTS = (
+    # Data classes (configs, results, labels, posets)
+    "QuantumConfig", "GroundStateResult", "Interval", "SchmidtSpectra",
+    "Poset", "GroundStateMajorizationResult", "TDVPConfig", "TDVPSnapshot",
+    "QuenchResult", "InteractionConfig", "InitialChargeMode", "LabelSpacetime",
+    "CausalOrders", "OrderAgreement", "CausalComparisonReport", "CausetChain",
+    # MajorizationPredicate hierarchy
+    "MajorizationPredicate", "StandardMajorization", "LogConcaveMajorization",
+    "PeakRadialMajorization",
+    # Coarse-grained workflow classes
+    "SchwingerModel", "SchwingerQuench", "InteractionSimulation",
+    "Majorization", "Causet", "MutualInformation",
+    # Free functions — compareOrders: pairwise agreement statistics between
+    # two Posets on a shared label set (see docs/source/causal_sets.md).
+    "compareOrders",
+)
+
+_UNAVAILABLE_MESSAGE = (
+    "tessera.quantum is unavailable: this build of tessera does not include "
+    "the quantum subsystem (Schwinger model / DMRG / ITensor).\n\n"
+    "Enable it with a single command — TESSERA_QUANTUM=1 checks out the "
+    "ITensor submodule and builds the subsystem:\n\n"
+    "    TESSERA_QUANTUM=1 pip install -e .\n\n"
+    "TESSERA_QUANTUM=0 forces it off. See docs/source/quantum-plan.md."
+)
+
 try:
     # tessera._tessera is a single C extension (.so), not a Python package, so
     # the submodule is exposed as an attribute rather than a separate
     # importable module. Pybind11's def_submodule installs it on the parent
-    # module's __dict__ at import time; we just look it up.
+    # module's __dict__ at import time; we just look it up. In a build without
+    # the quantum subsystem the attribute is simply absent (AttributeError).
     from tessera import _tessera
-    _qm = _tessera.quantum
-
-    # ─── Data classes (configs, results, labels, posets) ───────────────────
-    QuantumConfig                 = _qm.QuantumConfig
-    GroundStateResult             = _qm.GroundStateResult
-    Interval                      = _qm.Interval
-    SchmidtSpectra                = _qm.SchmidtSpectra
-    Poset                         = _qm.Poset
-    GroundStateMajorizationResult = _qm.GroundStateMajorizationResult
-    TDVPConfig                    = _qm.TDVPConfig
-    TDVPSnapshot                  = _qm.TDVPSnapshot
-    QuenchResult                  = _qm.QuenchResult
-    InteractionConfig             = _qm.InteractionConfig
-    InitialChargeMode             = _qm.InitialChargeMode
-    LabelSpacetime                = _qm.LabelSpacetime
-    CausalOrders                  = _qm.CausalOrders
-    OrderAgreement                = _qm.OrderAgreement
-    CausalComparisonReport        = _qm.CausalComparisonReport
-    CausetChain                   = _qm.CausetChain
-
-    # ─── MajorizationPredicate hierarchy ───────────────────────────────────
-    MajorizationPredicate  = _qm.MajorizationPredicate
-    StandardMajorization   = _qm.StandardMajorization
-    LogConcaveMajorization = _qm.LogConcaveMajorization
-    PeakRadialMajorization = _qm.PeakRadialMajorization
-
-    # ─── Coarse-grained workflow classes ───────────────────────────────────
-    SchwingerModel        = _qm.SchwingerModel
-    SchwingerQuench       = _qm.SchwingerQuench
-    InteractionSimulation = _qm.InteractionSimulation
-    Majorization          = _qm.Majorization
-    Causet                = _qm.Causet
-    MutualInformation     = _qm.MutualInformation
-
-    # ─── Free functions ───────────────────────────────────────────────────
-    # Pairwise agreement statistics between two Posets on a shared label
-    # set; returns an :class:`OrderAgreement`. See
-    # ``docs/source/causal_sets.md`` for the methodology context.
-    compareOrders = _qm.compareOrders
+    _quantum = _tessera.quantum
+    _AVAILABLE = True
+    _IMPORT_ERROR = None
 except (ImportError, AttributeError) as exc:
-    raise ImportError(
-        "tessera.quantum is unavailable: this tessera build does not include "
-        "the quantum subsystem. Rebuild with TESSERA_QUANTUM=1 (e.g. "
-        "`TESSERA_QUANTUM=1 pip install -e .`) to enable it. "
-        "See docs/source/quantum-plan.md for the broader plan."
-    ) from exc
+    _quantum = None
+    _AVAILABLE = False
+    _IMPORT_ERROR = exc
 
-__all__ = [
-    # Data classes
-    "QuantumConfig",
-    "GroundStateResult",
-    "Interval",
-    "SchmidtSpectra",
-    "Poset",
-    "GroundStateMajorizationResult",
-    "TDVPConfig",
-    "TDVPSnapshot",
-    "QuenchResult",
-    "InteractionConfig",
-    "InitialChargeMode",
-    "LabelSpacetime",
-    "CausalOrders",
-    "OrderAgreement",
-    "CausalComparisonReport",
-    "CausetChain",
-    # Majorization predicate hierarchy
-    "MajorizationPredicate",
-    "StandardMajorization",
-    "LogConcaveMajorization",
-    "PeakRadialMajorization",
-    # Coarse-grained workflow classes
-    "SchwingerModel",
-    "SchwingerQuench",
-    "InteractionSimulation",
-    "Majorization",
-    "MutualInformation",
-    "Causet",
-    # Free functions
-    "compareOrders",
-]
+
+def is_available() -> bool:
+    """Return ``True`` if this tessera build includes the quantum subsystem.
+
+    Safe to call and branch on regardless of how tessera was built — the
+    same role :func:`torch.cuda.is_available` plays for CUDA. When this
+    returns ``False``, accessing any quantum export raises
+    :class:`ImportError` with rebuild instructions.
+    """
+    return _AVAILABLE
+
+
+if _AVAILABLE:
+    # Bind every C++ export onto this module's namespace.
+    for _name in _EXPORTS:
+        globals()[_name] = getattr(_quantum, _name)
+    del _name
+else:
+    # PEP 562 module-level __getattr__: consulted only for names not already
+    # bound. Turn access to a known quantum export into an actionable error
+    # rather than a bare NameError, while leaving genuine typos as
+    # AttributeError.
+    def __getattr__(name):
+        if name in _EXPORTS:
+            raise ImportError(_UNAVAILABLE_MESSAGE) from _IMPORT_ERROR
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [*_EXPORTS, "is_available"]

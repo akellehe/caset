@@ -301,8 +301,13 @@ correlations rather than being a stage on which quantum systems sit.</p>
 <li><p><strong>Edge lengths</strong> between vertices are computed from their mutual
 information <code class="docutils literal notranslate"><span class="pre">ℓ</span> <span class="pre">=</span> <span class="pre">−log(I</span> <span class="pre">/</span> <span class="pre">I_max)</span></code>. Strong correlation ↔ short edge;
 no correlation ↔ infinite edge.</p></li>
-<li><p>The simplicial complex of vertices, with these MI-derived lengths,
-<em>is</em> the emergent spacetime — there is no separate background metric.</p></li>
+<li><p>The simplicial complex of vertices, with these MI-derived lengths, is
+the <strong>boundary</strong> data — the network of quantum systems and their
+correlations. The emergent spacetime is <em>not</em> this complex but the
+geometry <strong>holographically dual</strong> to it: in van Raamsdonk’s essay the
+<code class="docutils literal notranslate"><span class="pre">ℓ</span> <span class="pre">∝</span> <span class="pre">−log</span> <span class="pre">I</span></code> relation ties <em>boundary</em> mutual information to <em>bulk</em>
+distance. Spacetime is built up from the correlation pattern, on the
+dual side of it — there is no separate background metric.</p></li>
 </ul>
 <p>This is the founding principle and remains intact through every
 subsequent generalisation.</p>
@@ -679,11 +684,22 @@ uses the <strong>heat-kernel spectral dimension</strong> <code class="docutils l
 seen by a random walker diffusing on the lattice for time <code class="docutils literal notranslate"><span class="pre">σ</span></code> — as
 the diagnostic for whether their path-integral over geometries
 produces 4D macroscopic spacetime.</p>
-<p>We borrow exactly this observable. On our MI-weighted simplicial
-complex, the heat kernel <code class="docutils literal notranslate"><span class="pre">P(σ)</span> <span class="pre">=</span> <span class="pre">(1/N)</span> <span class="pre">Σ_v</span> <span class="pre">⟨v|</span> <span class="pre">exp(−σ</span> <span class="pre">L)</span> <span class="pre">|v⟩</span></code> gives
-us <code class="docutils literal notranslate"><span class="pre">D_S(σ)</span> <span class="pre">=</span> <span class="pre">−2</span> <span class="pre">d</span> <span class="pre">log</span> <span class="pre">P</span> <span class="pre">/</span> <span class="pre">d</span> <span class="pre">log</span> <span class="pre">σ</span></code>. The H_DS4 hypothesis is: there
+<p>We borrow exactly this observable. The heat kernel
+<code class="docutils literal notranslate"><span class="pre">P(σ)</span> <span class="pre">=</span> <span class="pre">(1/N)</span> <span class="pre">Σ_v</span> <span class="pre">⟨v|</span> <span class="pre">exp(−σ</span> <span class="pre">L)</span> <span class="pre">|v⟩</span></code> gives us
+<code class="docutils literal notranslate"><span class="pre">D_S(σ)</span> <span class="pre">=</span> <span class="pre">−2</span> <span class="pre">d</span> <span class="pre">log</span> <span class="pre">P</span> <span class="pre">/</span> <span class="pre">d</span> <span class="pre">log</span> <span class="pre">σ</span></code>. The H_DS4 hypothesis is: there
 exists a regime where this <code class="docutils literal notranslate"><span class="pre">D_S</span></code> reaches 4, signalling an emergent
 3+1-dimensional macroscopic phase.</p>
+<blockquote>
+<div><p><strong>Boundary vs. dual (see §1).</strong> <code class="docutils literal notranslate"><span class="pre">D_S</span></code> should be the spectral
+dimension of the emergent spacetime — the geometry <em>dual</em> to the MI
+complex. Measuring it on the dual is also the faithful CDT procedure:
+Ambjørn–Jurkiewicz–Loll run the diffusion on the dual lattice (a
+walker hopping between four-simplices), not on the triangulation
+itself. The current pipeline (<code class="docutils literal notranslate"><span class="pre">EmergentGraph</span></code> /
+<code class="docutils literal notranslate"><span class="pre">EmergentSpectralDimension</span></code>) instead computes the heat kernel on the
+<strong>boundary</strong> MI complex. Reconciling this is tracked in <a class="reference external" href="https://github.com/akellehe/tessera/issues/31">issue
+#31</a>.</p>
+</div></blockquote>
 <p>The v0.2 β-scan (<a class="reference internal" href="../charged-cartan/experiments/02-v0.2-beta-scan.html"><span class="std std-doc">writeup</span></a>)
 finds a stable plateau at peak <code class="docutils literal notranslate"><span class="pre">D_S</span> <span class="pre">≈</span> <span class="pre">4.6</span> <span class="pre">±</span> <span class="pre">0.1</span></code> across a decade of
 <code class="docutils literal notranslate"><span class="pre">β</span></code>. The <a class="reference internal" href="../charged-cartan/experiments/03-v0.2-finite-size.html"><span class="std std-doc">finite-size

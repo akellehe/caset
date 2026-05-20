@@ -1328,6 +1328,21 @@ space. At large <span class="math notranslate nohighlight">\(\beta\)</span>, the
 The H_DS4 hypothesis (§3 of the <a class="reference internal" href="v0.2.html"><span class="std std-doc">v0.2 design</span></a>) is the
 claim that <em>some</em> <span class="math notranslate nohighlight">\(\beta\)</span> exists where the equilibrium ensemble’s
 geometry has emergent spectral dimension <span class="math notranslate nohighlight">\(D_S = 4\)</span>.</p>
+<blockquote>
+<div><p><strong>Primal vs. dual lattice.</strong> The Metropolis weight uses the Regge
+action <span class="math notranslate nohighlight">\(S_{\mathrm{Regge}}\)</span>, which lives on the <strong>primal</strong> complex
+<span class="math notranslate nohighlight">\(\mathcal K_T\)</span> — areas and deficit angles of its hinges — and each
+<span class="math notranslate nohighlight">\(\Delta S_n\)</span> is local to the cell just added. The dual lattice never
+enters a move’s accept/reject. The spectral dimension is a separate
+<em>observable</em>: exactly as in CDT (Ambjørn, Jurkiewicz, Loll,
+<em>Reconstructing the Universe</em>, eq. 24 — a random walk hopping between
+four-simplices, <span class="math notranslate nohighlight">\(1/5\)</span> to each of its five neighbours), <span class="math notranslate nohighlight">\(D_S\)</span> is
+measured by heat-kernel diffusion on the <strong>dual</strong> lattice, on
+equilibrated configurations — not per move. So <span class="math notranslate nohighlight">\(\mathcal K_T\)</span> here is
+CDT-style: the triangulation <em>is</em> the geometry, and the dual is the
+discretization the diffusion runs on. Tracked in <a class="reference external" href="https://github.com/akellehe/tessera/issues/31">issue
+#31</a>.</p>
+</div></blockquote>
 </section>
 <section id="putting-cells-1-and-2-into-the-path-integral">
 <h3>9.4 Putting cells 1 and 2 into the path integral<a class="headerlink" href="#putting-cells-1-and-2-into-the-path-integral" title="Link to this heading">¶</a></h3>

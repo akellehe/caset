@@ -15,7 +15,7 @@ version = "0.1.0"
 description = "C++/pybind11 extension for lattice spacetime experiments"
 authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "numpy>=2.0",
@@ -50,6 +50,8 @@ markers = [
 build-dir = "cmake-build-debug/{wheel_tag}"
 cmake.build-type = "Release"
 wheel.packages = ["tessera"]
-
-[tool.scikit-build.cmake.define]
-Python_EXECUTABLE = "${python.executable}"
+# Do NOT add a [tool.scikit-build.cmake.define] override for Python_EXECUTABLE.
+# scikit-build-core already sets it (and CMAKE_PREFIX_PATH) to the build
+# interpreter; cmake.define values are passed verbatim, so a "${...}" token
+# is not interpolated — it lands in CMake as a literal bogus path and makes
+# find_package(Python) fall back to the wrong interpreter.
