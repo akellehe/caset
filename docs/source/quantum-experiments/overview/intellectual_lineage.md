@@ -400,10 +400,12 @@ exists a regime where this `D_S` reaches 4, signalling an emergent
 
 > **Boundary vs. dual (see §1).** `D_S` should be the spectral
 > dimension of the emergent spacetime — the geometry *dual* to the MI
-> complex. The current pipeline (`EmergentGraph` /
-> `EmergentSpectralDimension`) computes the heat kernel directly on the
-> **boundary** MI complex, so the `D_S` it reports is the boundary
-> network's, not the dual's. Reconciling this is tracked in [issue
+> complex. Measuring it on the dual is also the faithful CDT procedure:
+> Ambjørn–Jurkiewicz–Loll run the diffusion on the dual lattice (a
+> walker hopping between four-simplices), not on the triangulation
+> itself. The current pipeline (`EmergentGraph` /
+> `EmergentSpectralDimension`) instead computes the heat kernel on the
+> **boundary** MI complex. Reconciling this is tracked in [issue
 > #31](https://github.com/akellehe/tessera/issues/31).
 
 The v0.2 β-scan ([writeup](../charged-cartan/experiments/02-v0.2-beta-scan.md))
