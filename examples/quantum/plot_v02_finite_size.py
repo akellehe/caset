@@ -2,18 +2,21 @@
 
 Two panels:
   • A. peak D_S vs N at T = 2500 (three β values overlaid).
-  • B. peak D_S vs T at N = 8, β = 3×10⁻⁴ (log-x; fit a simple
-       1/T scaling guide line).
+  • B. peak D_S vs T at N = 8, β = 3×10⁻⁴ (log-x; power-law fit
+       D_S(T) = D_∞ + A·T^(-p) with the T→∞ asymptote marked).
 
-Loads /tmp/interaction-history/issue10_finite_size.json.
+Loads /tmp/interaction-history/issue10_finite_size.json and the
+deep-T extension /tmp/interaction-history/issue10_T100k.json.
 """
 import json
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 SRC = Path("/tmp/interaction-history/issue10_finite_size.json")
+SRC_T100K = Path("/tmp/interaction-history/issue10_T100k.json")
 REPO = Path(__file__).resolve().parents[2]
 OUT = (REPO / "docs/source/quantum-experiments/figures"
        / "v02_finite_size_investigation.png")
@@ -25,6 +28,11 @@ def main():
     rs = data["records"]
     A = [r for r in rs if r["scan"] == "A_N_scan"]
     B = [r for r in rs if r["scan"] == "B_T_scan"]
+
+    # Deep-T extension (T = 100000) lives in a separate scan file.
+    if SRC_T100K.exists():
+        with open(SRC_T100K) as f:
+            B += json.load(f)["records"]
 
     fig, (axN, axT) = plt.subplots(1, 2, figsize=(13, 5))
 
@@ -68,15 +76,21 @@ def main():
                  capsize=4, markersize=7,
                  label="N = 8, β = 3×10⁻⁴")
     axT.axhline(4.0, color="gray", lw=0.8, ls="--", label="target D_S = 4")
-    # Naive log-T fit: D_S(T) ≈ 4 + a / log(T)
-    Ts_arr   = np.array(Ts, float)
+    # Power-law fit: D_S(T) = D_∞ + A·T^(-p), SEM-weighted.
+    Ts_arr    = np.array(Ts, float)
     means_arr = np.array(means, float)
-    # Fit (D_S - 4) ~ a / log(T)  →  a = mean[(D_S - 4) * log(T)]
-    a_fit = np.mean((means_arr - 4.0) * np.log(Ts_arr))
-    T_grid = np.logspace(np.log10(Ts[0]), np.log10(2e5), 200)
-    pred = 4.0 + a_fit / np.log(T_grid)
-    axT.plot(T_grid, pred, color="#7f7f7f", lw=1.0, ls=":",
-             label=f"fit: 4 + {a_fit:.2f} / ln T")
+    sem_arr   = np.array(stds, float) / np.sqrt(
+        [sum(1 for r in B if r["T"] == T) for T in Ts])
+    (Dinf, A_fit, p_fit), _ = curve_fit(
+        lambda T, D, A, p: D + A * T ** (-p),
+        Ts_arr, means_arr, p0=[4.1, 50.0, 0.6],
+        sigma=sem_arr, absolute_sigma=True, maxfev=20000)
+    T_grid = np.logspace(np.log10(Ts[0]), np.log10(Ts[-1] * 1.3), 300)
+    pred = Dinf + A_fit * T_grid ** (-p_fit)
+    axT.plot(T_grid, pred, color="#7f7f7f", lw=1.2, ls=":",
+             label=f"fit: {Dinf:.3f} + {A_fit:.0f}·T$^{{-{p_fit:.2f}}}$")
+    axT.axhline(Dinf, color="#7f7f7f", lw=0.8, ls="-.",
+                label=f"D_S(T→∞) = {Dinf:.3f}")
     axT.set_xscale("log")
     axT.set_xlabel("T (cells)")
     axT.set_ylabel("peak D_S  (mean ± std, 10 seeds)")
@@ -104,6 +118,8 @@ def main():
     for T in Ts:
         ps = np.array([r["peak_dS"] for r in B if r["T"] == T])
         print(f"  {T:>6}  {ps.mean():6.3f} ± {ps.std():5.3f}  {len(ps):>5}")
+    print(f"  power-law fit: D_S(T) = {Dinf:.3f} + {A_fit:.1f}·T^(-{p_fit:.3f})")
+    print(f"  asymptote:     D_S(T→∞) = {Dinf:.3f}")
 
     # Q-drift summary.
     n_drift = sum(1 for r in rs if abs(r["q_global"]) >= 1e-6)
