@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="Charged Cartan Monte Carlo — Experiment 04: Σ_AB Choi-state Q-conservation" href="04-v0.2-choi-q-conservation.html"><link rel="prev" title="Charged Cartan Monte Carlo — Experiment 02: v0.2 β-scan finds peak D_S ≈ 4.6 plateau" href="02-v0.2-beta-scan.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.07 asymptote) - tessera 0.1.0 documentation</title>
+        <title>Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.09 asymptote) - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -226,7 +226,7 @@
 <li class="toctree-l3 current has-children"><a class="reference internal" href="index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="01-v0.1-BplusIII-comparison.html">Charged Cartan Monte Carlo — Experiment 01: v0.1 + B + iii (annihilation as worldline termination + photon emission)</a></li>
 <li class="toctree-l4"><a class="reference internal" href="02-v0.2-beta-scan.html">Charged Cartan Monte Carlo — Experiment 02: v0.2 β-scan finds peak D_S ≈ 4.6 plateau</a></li>
-<li class="toctree-l4 current current-page"><a class="current reference internal" href="#">Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.07 asymptote)</a></li>
+<li class="toctree-l4 current current-page"><a class="current reference internal" href="#">Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.09 asymptote)</a></li>
 <li class="toctree-l4"><a class="reference internal" href="04-v0.2-choi-q-conservation.html">Charged Cartan Monte Carlo — Experiment 04: Σ_AB Choi-state Q-conservation</a></li>
 <li class="toctree-l4"><a class="reference internal" href="05-v0.2-h-param-sweep.html">Charged Cartan Monte Carlo — Experiment 05: H-parameter sweep (J_c, J_s, δ_m, γ_CP)</a></li>
 </ul>
@@ -274,20 +274,20 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="charged-cartan-monte-carlo-experiment-03-v0-2-plateau-finite-size-investigation-4-6-4-07-asymptote">
-<h1>Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.07 asymptote)<a class="headerlink" href="#charged-cartan-monte-carlo-experiment-03-v0-2-plateau-finite-size-investigation-4-6-4-07-asymptote" title="Link to this heading">¶</a></h1>
+          <section class="tex2jax_ignore mathjax_ignore" id="charged-cartan-monte-carlo-experiment-03-v0-2-plateau-finite-size-investigation-4-6-4-09-asymptote">
+<h1>Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.09 asymptote)<a class="headerlink" href="#charged-cartan-monte-carlo-experiment-03-v0-2-plateau-finite-size-investigation-4-6-4-09-asymptote" title="Link to this heading">¶</a></h1>
 <blockquote>
 <div><p><strong>Status</strong>: complete
 <strong>Tracks</strong>: GitHub issue <a class="reference external" href="https://github.com/akellehe/tessera/issues/10">#10</a>, PR <a class="reference external" href="https://github.com/akellehe/tessera/pull/20">#20</a> (merged)
 <strong>Design</strong>: <a class="reference internal" href="../design/v0.2.html"><span class="std std-doc">v0.2 qudit-basis</span></a>
-<strong>Result</strong>: T-scan drives peak D_S from 4.62 (T=2500) → 4.24 (T=20000); geometric extrapolation projects to D_S(T→∞) ≈ 4.07. Also surfaced the Q-drift bug fixed in <a class="reference internal" href="04-v0.2-choi-q-conservation.html"><span class="std std-doc">Experiment 04</span></a>.</p>
+<strong>Result</strong>: T-scan drives peak D_S from 4.62 (T=2500) → 4.14 (T=100000); an SEM-weighted power-law fit gives D_S(T→∞) = 4.086 ± 0.011. Also surfaced the Q-drift bug fixed in <a class="reference internal" href="04-v0.2-choi-q-conservation.html"><span class="std std-doc">Experiment 04</span></a>.</p>
 </div></blockquote>
 <p>Tracks GitHub issue
 <a class="reference external" href="https://github.com/akellehe/tessera/issues/10">#10</a> in milestone
 <a class="reference external" href="https://github.com/akellehe/tessera/milestone/1">Charged Cartan Monte Carlo v0.2</a>.</p>
 <section id="context">
 <h2>Context<a class="headerlink" href="#context" title="Link to this heading">¶</a></h2>
-<p>The <a class="reference internal" href="#intellectual_lineage.md"><span class="xref myst">intellectual lineage of this project</span></a>
+<p>The <a class="reference internal" href="../../overview/intellectual_lineage.html"><span class="std std-doc">intellectual lineage of this project</span></a>
 sets out the through-line: from van Raamsdonk’s premise that
 spacetime is built from entanglement, through Sorkin’s causal-set
 events, through replacing the Schwinger fermion field with a
@@ -336,17 +336,24 @@ the drift should slow as we approach the asymptote.</p>
 <p>Each run is a fresh Python subprocess; 18 workers run concurrently
 with 2 BLAS threads each (fits a 20-CPU budget). σ-grid is 20
 log-spaced over [10⁻², 10¹⁰], Krylov dim 15.</p>
+<p><strong>Scan B extension — deep-T anchor.</strong> To pin down the asymptotic
+extrapolation, Scan B was extended with a single T = 100000 point
+(N = 8, β = 3×10⁻⁴, 10 seeds), 5× beyond its original deepest T.
+This run used 10 concurrent workers with 1 BLAS thread each; per-run
+wall was 31.4 h, essentially all of it in <code class="docutils literal notranslate"><span class="pre">getSpectralDimension</span></code>.</p>
 </section>
 <section id="reproduce">
 <h2>Reproduce<a class="headerlink" href="#reproduce" title="Link to this heading">¶</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">OMP_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="nv">OPENBLAS_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
 <span class="nv">MKL_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="nv">BLIS_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
-python<span class="w"> </span>/tmp/issue10_scan.py
+python<span class="w"> </span>/tmp/issue10_scan.py<span class="w">            </span><span class="c1"># Scans A + B</span>
+python<span class="w"> </span>/tmp/issue10_T100k_scan.py<span class="w">      </span><span class="c1"># Scan B deep-T anchor (T=100k)</span>
 python<span class="w"> </span>examples/quantum/plot_v02_finite_size.py
 </pre></div>
 </div>
-<p>Records land at <code class="docutils literal notranslate"><span class="pre">/tmp/interaction-history/issue10_finite_size.json</span></code>;
-plot at <code class="docutils literal notranslate"><span class="pre">docs/source/quantum-experiments/figures/v02_finite_size_investigation.png</span></code>.</p>
+<p>Records land at <code class="docutils literal notranslate"><span class="pre">/tmp/interaction-history/issue10_finite_size.json</span></code>
+and <code class="docutils literal notranslate"><span class="pre">/tmp/interaction-history/issue10_T100k.json</span></code>; plot at
+<code class="docutils literal notranslate"><span class="pre">docs/source/quantum-experiments/figures/v02_finite_size_investigation.png</span></code>.</p>
 </section>
 <section id="results">
 <h2>Results<a class="headerlink" href="#results" title="Link to this heading">¶</a></h2>
@@ -416,6 +423,9 @@ first place.</p>
 <tr class="row-odd"><td><p>20000</p></td>
 <td><p>4.245 ± 0.024</p></td>
 </tr>
+<tr class="row-even"><td><p>100000</p></td>
+<td><p>4.144 ± 0.008</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -426,7 +436,7 @@ finite limit rather than unbounded decay:</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>T-step</p></th>
-<th class="head"><p>Δ peak D_S</p></th>
+<th class="head"><p>Δ peak D_S (per doubling)</p></th>
 </tr>
 </thead>
 <tbody>
@@ -439,47 +449,65 @@ finite limit rather than unbounded decay:</p>
 <tr class="row-even"><td><p>10000 → 20000</p></td>
 <td><p>−0.067</p></td>
 </tr>
+<tr class="row-odd"><td><p>20000 → 100000</p></td>
+<td><p>−0.043</p></td>
+</tr>
 </tbody>
 </table>
 </div>
-<p>The ratio of successive deltas is roughly 0.5, so naive geometric
-extrapolation gives an asymptote:</p>
+<p>(The 20000 → 100000 step spans 2.32 doublings; −0.043 is the
+per-doubling average across it.) The deltas keep shrinking — a clean
+convergent sequence.</p>
+<p><strong>Power-law extrapolation.</strong> With the deep-T anchor in hand, an
+SEM-weighted fit of <code class="docutils literal notranslate"><span class="pre">D_S(T)</span> <span class="pre">=</span> <span class="pre">D_∞</span> <span class="pre">+</span> <span class="pre">A·T^(−p)</span></code> over all five points
+gives:</p>
 <blockquote>
-<div><p>D_S(T → ∞) ≈ 4.245 − 0.067 / (1 − 0.5) ≈ <strong>4.11</strong></p>
+<div><p><strong>D_∞ = 4.086 ± 0.011</strong>,  A = 59,  p = 0.601</p>
 </div></blockquote>
-<p>within ~0.1 of the H_DS4 target. The simple <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">+</span> <span class="pre">a/ln</span> <span class="pre">T</span></code> fit shown in
-the plot is too shallow (the data falls faster than <code class="docutils literal notranslate"><span class="pre">1/ln</span> <span class="pre">T</span></code>),
-suggesting the true scaling is some power law with a small exponent,
-or a different functional form. Worth a separate fit study, but the
-qualitative picture is clear: <strong>the plateau approaches a value close
-to (but probably above) 4 in the large-T limit</strong>.</p>
+<p>with residuals below 0.007 at every point. The exponent p ≈ 0.6
+explains why the original <code class="docutils literal notranslate"><span class="pre">4</span> <span class="pre">+</span> <span class="pre">a/ln</span> <span class="pre">T</span></code> guide line was too shallow:
+the data follows a genuine sub-linear power law, not a logarithm.
+The T = 100000 point is load-bearing — a 1/T fit on data ≤ T=20000
+extrapolates to ~4.17 (too high); the deep anchor fixes the exponent
+and pulls the asymptote down into the 4.07–4.11 band the earlier
+geometric extrapolation had projected.</p>
+<p><strong>The plateau settles at D_S ≈ 4.09 in the large-T limit</strong> — about
+0.09 above the exact H_DS4 target.</p>
 </section>
 </section>
 <section id="findings">
 <h2>Findings<a class="headerlink" href="#findings" title="Link to this heading">¶</a></h2>
 <ol class="arabic simple">
 <li><p><strong>The 4 → 4.6 offset is a T-scaling effect, not an N-scaling one.</strong>
-Growing the lattice in <em>cell count</em> drives peak D_S down by 0.4
-over the T = 2500 → 20000 range and projects to D_S ≈ 4.1 at
-T → ∞. Growing the lattice in <em>initial-vertex count</em> at fixed T
-actually makes the plateau <em>higher</em>, which clarifies the role of
-N as a “structural multiplier” rather than a “continuum limit”
-parameter.</p></li>
-<li><p><strong>The H_DS4 target is plausibly reachable</strong> in the large-T limit
-under the current qudit-basis Hamiltonian. The scan didn’t show
-D_S = 4 exactly, but the asymptotic value is within ~0.1 of it,
-and a deeper run at T = 50k-100k (or a parameter-tuning study on
-the pair Hamiltonian) should clarify whether the limit is exactly
-4 or settles ~0.1 above.</p></li>
+Growing the lattice in <em>cell count</em> drives peak D_S down by 0.48
+over the T = 2500 → 100000 range and converges to D_S = 4.086 ±
+0.011 at T → ∞. Growing the lattice in <em>initial-vertex count</em> at
+fixed T actually makes the plateau <em>higher</em>, which clarifies the
+role of N as a “structural multiplier” rather than a “continuum
+limit” parameter.</p></li>
+<li><p><strong>The H_DS4 target is approached but not hit exactly.</strong> The
+power-law fit converges to D_S = 4.086 ± 0.011 — within 0.09 of
+the target, but the uncertainty band excludes exactly 4. Under
+the current qudit-basis Hamiltonian the large-T limit settles a
+small but resolvable offset above 4; closing that last 0.09 is a
+job for a parameter-tuning study on the pair Hamiltonian
+(<a class="reference external" href="https://github.com/akellehe/tessera/issues/11">issue #11</a>).</p></li>
 <li><p><strong>A discrete Q-drift bug surfaced.</strong> At γ_CP = 0, Q should be
 exactly conserved — but <strong>95 of 160 runs (59 %)</strong> show |Q| ≥ 1
 drift at integer values (-4, -3, -2, -1, +1, +2, +3). The discrete
 spectrum points at a specific mechanism, not floating-point noise.
-See <a class="reference internal" href="#discrete-q-drift-at-gamma_cp--0"><span class="xref myst">Q-drift section</span></a> below.</p></li>
+See <a class="reference internal" href="#q-drift">Q-drift section</a> below.</p></li>
+<li><p><strong>The deep-T probe is compute-bound by <code class="docutils literal notranslate"><span class="pre">getSpectralDimension</span></code>.</strong>
+At T = 100000 each run took 31.4 h, ~100 % of it in the
+spectral-dimension post-processing — the Monte Carlo <code class="docutils literal notranslate"><span class="pre">tune()</span></code>
+step is only 0.4 min. The routine does <code class="docutils literal notranslate"><span class="pre">n_vertices</span> <span class="pre">×</span> <span class="pre">n_σ</span></code> Krylov
+heat-kernel solves with n_vertices = 3T+8, and its cost scales
+empirically as ~T^2.4. Going deeper than T = 100k is impractical
+without optimizing that routine first.</p></li>
 </ol>
 </section>
 <section id="discrete-q-drift-at-cp-0">
-<h2>Discrete Q-drift at γ_CP = 0<a class="headerlink" href="#discrete-q-drift-at-cp-0" title="Link to this heading">¶</a></h2>
+<span id="q-drift"></span><h2>Discrete Q-drift at γ_CP = 0<a class="headerlink" href="#discrete-q-drift-at-cp-0" title="Link to this heading">¶</a></h2>
 <p>A real consistency issue in v0.2 surfaced by this scan, traceable to
 the Σ_AB-state proxy choice. Symptom:</p>
 <ul class="simple">
@@ -536,13 +564,13 @@ relies on Q conservation beyond a single interact step.”</strong></p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Is the 4 → 4.6 plateau offset a finite-size artefact?</p></td>
-<td><p><strong>Partial yes</strong> — T-scaling drives it down toward ~4.1 asymptotically; N-scaling does the opposite.</p></td>
+<td><p><strong>Partial yes</strong> — T-scaling drives it down toward the asymptote; N-scaling does the opposite.</p></td>
 </tr>
 <tr class="row-odd"><td><p>Does any scan touch D_S = 4 exactly?</p></td>
-<td><p>Not yet — T = 20000 gives 4.245 ± 0.024.</p></td>
+<td><p>No — the deepest point, T = 100000, gives 4.144 ± 0.008, and the power-law fit gives D_S(T→∞) = 4.086 ± 0.011.</p></td>
 </tr>
 <tr class="row-even"><td><p>Is the H_DS4 target reachable?</p></td>
-<td><p><strong>Plausible</strong> — geometric extrapolation projects to ~4.11, close enough that follow-up scans at T = 50k-100k and Hamiltonian parameter tuning (<a class="reference external" href="https://github.com/akellehe/tessera/issues/11">issue #11</a>) could land exactly at 4.</p></td>
+<td><p><strong>Approached, not hit</strong> — the fit converges to 4.086 ± 0.011, ~0.09 above 4 with the band excluding exactly 4. Closing the gap would need Hamiltonian parameter tuning (<a class="reference external" href="https://github.com/akellehe/tessera/issues/11">issue #11</a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -551,9 +579,11 @@ relies on Q conservation beyond a single interact step.”</strong></p>
 <section id="open-follow-ups">
 <h2>Open follow-ups<a class="headerlink" href="#open-follow-ups" title="Link to this heading">¶</a></h2>
 <ol class="arabic simple">
-<li><p><strong>Deeper T-scan.</strong> Run at T = 40000 and 80000 to confirm the
-geometric extrapolation. ~30 min compute per T at N=8 in 18-way
-parallel.</p></li>
+<li><p><strong>Deeper T-scan — done.</strong> T = 100000 (10 seeds) confirms the
+extrapolation; the power-law fit gives D_S(T→∞) = 4.086 ± 0.011
+(see the Scan B section above). The per-run cost was 31.4 h, far
+above the ~30 min originally estimated here — <code class="docutils literal notranslate"><span class="pre">getSpectralDimension</span></code>
+scales ~T^2.4 in the cell count (Finding 4).</p></li>
 <li><p><strong>Joint (N, T) scan.</strong> Does increasing N alongside T cancel or
 amplify the trend? Run at N=12, T=20000 to find out.</p></li>
 <li><p><strong>Issue <a class="reference external" href="https://github.com/akellehe/tessera/issues/16">#16</a>:
@@ -631,7 +661,7 @@ this writeup ties back to.</p></li>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.07 asymptote)</a><ul>
+<li><a class="reference internal" href="#">Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.09 asymptote)</a><ul>
 <li><a class="reference internal" href="#context">Context</a></li>
 <li><a class="reference internal" href="#hypothesis">Hypothesis</a></li>
 <li><a class="reference internal" href="#setup">Setup</a></li>
