@@ -11,7 +11,7 @@
 // The -n flag tells neato to honor the explicit `pos` attributes
 // (in inches via inputscale=72) instead of running its own layout.
 // Edge labels show ℓ = -ln(I/I_max) computed from the cell-2
-// intermediate-engagement MI values from §8 of h_pair_first_cell.md.
+// intermediate-engagement MI values from §9 of h_pair_first_cell.md.
 
 graph FirstCell {
   // ---- global graph attributes ----

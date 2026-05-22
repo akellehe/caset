@@ -6,7 +6,7 @@
 <link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html"><link rel="next" title="Charged Cartan Monte Carlo — experiments" href="../experiments/index.html"><link rel="prev" title="Charged Cartan Monte Carlo — v0.3 design: gauge mediation" href="v0.3.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Charged Cartan — when does \(H_{\mathrm{pair}}\) actually engage? A first-cell derivation - tessera 0.1.0 documentation</title>
+        <title>Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -220,7 +220,7 @@
 <li class="toctree-l4"><a class="reference internal" href="v0.1.html">Charged Cartan Monte Carlo — v0.1 design: charge labels + annihilation / pairCreate moves</a></li>
 <li class="toctree-l4"><a class="reference internal" href="v0.2.html">Charged Cartan Monte Carlo — v0.2 design: qudit-basis vertices</a></li>
 <li class="toctree-l4"><a class="reference internal" href="v0.3.html">Charged Cartan Monte Carlo — v0.3 design: gauge mediation</a></li>
-<li class="toctree-l4 current current-page"><a class="current reference internal" href="#">Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation</a></li>
+<li class="toctree-l4 current current-page"><a class="current reference internal" href="#">Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation</a></li>
 </ul>
 </li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="../experiments/index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -274,8 +274,8 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="charged-cartan-when-does-h-mathrm-pair-actually-engage-a-first-cell-derivation">
-<h1>Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation<a class="headerlink" href="#charged-cartan-when-does-h-mathrm-pair-actually-engage-a-first-cell-derivation" title="Link to this heading">¶</a></h1>
+          <section class="tex2jax_ignore mathjax_ignore" id="charged-cartan-what-the-pair-hamiltonian-must-satisfy-a-first-cell-derivation">
+<h1>Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation<a class="headerlink" href="#charged-cartan-what-the-pair-hamiltonian-must-satisfy-a-first-cell-derivation" title="Link to this heading">¶</a></h1>
 <blockquote>
 <div><p><strong>Status</strong>: design exploration
 <strong>Motivation</strong>: <a class="reference internal" href="../experiments/05-v0.2-h-param-sweep.html"><span class="std std-doc">Experiment 05</span></a>
@@ -284,15 +284,142 @@ from the v0.2 default’s <span class="math notranslate nohighlight">\(T \to \in
 code revealed the initial states are charge eigenstates within their
 sector, which makes <span class="math notranslate nohighlight">\(\hat{Q} \otimes \hat{Q}\)</span> act as a global phase
 and means the dynamics may be degenerate at <span class="math notranslate nohighlight">\(J_s = 0\)</span>. This document
-works the first interaction cell by hand to characterise <em>when</em>
-<span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> has dynamical content vs. when it doesn’t, and
-proposes physically meaningful manipulations to increase
-“engagement.”</p>
+works the first interaction cell by hand. Rather than analysing one
+fixed Hamiltonian, it treats the per-event unitary <strong>generally</strong> —
+stating the <em>requirements</em> any pair Hamiltonian must satisfy for the
+construction’s features to come out right — and carries the v0.2
+<span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> throughout as the worked example. The first cell
+is the derivation tool: the two pathologies it exhibits (§4, §5) are
+what <em>force</em> the requirements (§7).</p>
 </div></blockquote>
-<section id="setup">
-<h2>1. Setup<a class="headerlink" href="#setup" title="Link to this heading">¶</a></h2>
-<p>Each vertex carries a four-dimensional <a class="reference internal" href="../../overview/intellectual_lineage.html#the-qudit-basis-charge-intrinsic-to-the-state"><span class="std std-ref">qudit</span></a>
-state <span class="math notranslate nohighlight">\(\rho_v \in \mathbb{C}^{4 \times 4}\)</span> on the basis</p>
+<section id="the-question-which-pair-hamiltonian">
+<h2>1. The question: which pair Hamiltonian?<a class="headerlink" href="#the-question-which-pair-hamiltonian" title="Link to this heading">¶</a></h2>
+<p>Every interaction event applies a unitary <span class="math notranslate nohighlight">\(\hat U\)</span> to a pair of
+vertices. The construction has so far answered “which <span class="math notranslate nohighlight">\(\hat U\)</span>?” by
+<em>picking a Hamiltonian and exponentiating</em> — <span class="math notranslate nohighlight">\(\hat U = \exp(-i\hat
+H\,\Delta t)\)</span> — with <span class="math notranslate nohighlight">\(\hat H\)</span> a short sum of physically-motivated
+terms. The <a class="reference internal" href="v0.2.html"><span class="std std-doc">v0.2 design note</span></a> is candid that this choice “is
+somewhat arbitrary — there are infinitely many ways to parameterise a
+16×16 unitary, and the choice we make will affect every result.”</p>
+<p>This document takes the opposite approach. Instead of analysing one
+<span class="math notranslate nohighlight">\(\hat H\)</span>, it asks: <strong>what must any pair Hamiltonian satisfy</strong> for the
+construction to behave the way we need? The specific v0.2
+<span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> is kept throughout as a <em>worked example</em> — it is
+the thing the explicit arithmetic (§2.4–2.7, §9) and the diagrams are
+computed from — but the load-bearing content is the requirement list
+of §7, not the choice of terms.</p>
+<section id="three-layers-and-what-a-requirement-on-hat-h-can-fix">
+<h3>1.1 Three layers — and what a requirement on <span class="math notranslate nohighlight">\(\hat H\)</span> can fix<a class="headerlink" href="#three-layers-and-what-a-requirement-on-hat-h-can-fix" title="Link to this heading">¶</a></h3>
+<p>A natural temptation is to ask for “the properties of <span class="math notranslate nohighlight">\(\hat H\)</span> that
+make the Standard Model come out.” Most of the Standard Model is not
+reachable that way. The construction’s physics splits into three
+layers, and only the middle one is “properties of <span class="math notranslate nohighlight">\(\hat H\)</span>”:</p>
+<ul class="simple">
+<li><p><strong>Kinematic layer</strong> — the per-vertex Hilbert space (the qudit), its
+charge grading, and the operators defined on it. The gauge group,
+the generation count, the representation content all live <em>here</em>:
+they are fixed by <em>choosing the qudit</em>, not by constraining
+<span class="math notranslate nohighlight">\(\hat H\)</span>.</p></li>
+<li><p><strong>Hamiltonian layer</strong> — symmetry and structure properties of
+<span class="math notranslate nohighlight">\(\hat H\)</span> itself. These are the <em>requirements</em> this document derives
+(§7).</p></li>
+<li><p><strong>Emergent layer</strong> — what we want to <em>come out</em> of the full Monte
+Carlo: spectral dimension <span class="math notranslate nohighlight">\(D_S = 4\)</span>, a baryon asymmetry. These are
+diagnostics and hypotheses, not things one can impose term-by-term.</p></li>
+</ul>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Standard-Model feature</p></th>
+<th class="head"><p>Layer it lives in</p></th>
+<th class="head"><p>A requirement on <span class="math notranslate nohighlight">\(\hat H\)</span>?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Gauge group, generation count</p></td>
+<td><p>Kinematic — the per-vertex qudit / representation content</p></td>
+<td><p>No — fixed by choosing <span class="math notranslate nohighlight">\(\mathcal H_v\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p>A conserved charge</p></td>
+<td><p>Hamiltonian — <span class="math notranslate nohighlight">\([\hat H, \hat Q_{\mathrm{tot}}] = 0\)</span></p></td>
+<td><p><strong>Yes</strong> — R1</p></td>
+</tr>
+<tr class="row-even"><td><p>C / CP violation</p></td>
+<td><p>Hamiltonian — <span class="math notranslate nohighlight">\([\hat H, \widehat{CP}] \neq 0\)</span>, controllably</p></td>
+<td><p><strong>Yes</strong> — R4</p></td>
+</tr>
+<tr class="row-odd"><td><p>A Hamiltonian-shaped geometry at all</p></td>
+<td><p>Hamiltonian — entangling, operator-Schmidt rank <span class="math notranslate nohighlight">\(&gt; 1\)</span></p></td>
+<td><p><strong>Yes</strong> — R2</p></td>
+</tr>
+<tr class="row-even"><td><p>Chirality / parity violation</p></td>
+<td><p>Kinematic (L/R structure) <strong>+</strong> Hamiltonian (asymmetric coupling)</p></td>
+<td><p>Partly — needs <span class="math notranslate nohighlight">\(\mathcal H_v\)</span> enlarged</p></td>
+</tr>
+<tr class="row-odd"><td><p>CPT, spin–statistics</p></td>
+<td><p>Theorems — follow from Hermiticity + locality + a Lorentz-like structure</p></td>
+<td><p>Derived, not imposed</p></td>
+</tr>
+<tr class="row-even"><td><p>Anomaly cancellation</p></td>
+<td><p>Kinematic — a consistency condition on representation content</p></td>
+<td><p>No</p></td>
+</tr>
+<tr class="row-odd"><td><p>Mass spectrum</p></td>
+<td><p>Hamiltonian <em>form</em> (a mass term) — but the <em>values</em> are inputs</p></td>
+<td><p>Form: <strong>yes</strong> — R6; values: no</p></td>
+</tr>
+<tr class="row-even"><td><p>Baryon asymmetry, <span class="math notranslate nohighlight">\(D_S = 4\)</span></p></td>
+<td><p>Emergent — outcomes of the full Monte Carlo</p></td>
+<td><p>No — these are the targets</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The honest consequence: the current per-vertex qudit is
+4-dimensional — a <span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span> charge register times one spin-like
+qubit. It cannot <em>hold</em> <span class="math notranslate nohighlight">\(SU(3)_C \times SU(2)_L \times U(1)_Y\)</span> with
+three generations; that would need the kinematic layer enlarged far
+beyond <span class="math notranslate nohighlight">\(d = 4\)</span>. So this document does <strong>not</strong> claim a requirement
+list sufficient for “the Standard Model.” It states <em>necessary</em>
+conditions on <span class="math notranslate nohighlight">\(\hat H\)</span> for the <em>structural</em> features the present
+framework can carry — a conserved charge, operator-level C/CP, a
+baryogenesis channel, a mass term, and a geometry that the
+Hamiltonian (not the bare lattice topology) actually shapes. This is
+consistent with
+<a class="reference internal" href="../../overview/from_schwinger_to_lattice.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">from_schwinger_to_lattice.md</span></code></span></a>,
+whose glossary already states the construction is “<strong>Not.</strong> A
+simulation of … the Standard Model.”</p>
+</section>
+<section id="roadmap">
+<h3>1.2 Roadmap<a class="headerlink" href="#roadmap" title="Link to this heading">¶</a></h3>
+<p>§2 sets up the kinematic layer and the <em>general</em> pair Hamiltonian,
+then introduces the worked-example <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span>. §3 builds the
+first interaction cell — note that <em>nothing</em> there uses the form of
+<span class="math notranslate nohighlight">\(\hat H\)</span>, only that <span class="math notranslate nohighlight">\(\hat U\)</span> is a completely-positive trace-preserving
+(CPTP) map. §4 and §5 work two extreme inputs and find that on both,
+<span class="math notranslate nohighlight">\(\hat U\)</span> is <em>inert</em> — these are the two pathologies. §6 reads off the
+general engagement condition. §7 collects the requirements, each tied
+to the pathology that forces it. §8 lists the design knobs for
+satisfying them. §9 works a second cell (the worked example,
+propagating); §10 places it all in the path integral.</p>
+</section>
+</section>
+<section id="setup-the-kinematic-layer-and-the-pair-hamiltonian">
+<h2>2. Setup: the kinematic layer and the pair Hamiltonian<a class="headerlink" href="#setup-the-kinematic-layer-and-the-pair-hamiltonian" title="Link to this heading">¶</a></h2>
+<section id="the-kinematic-layer-per-vertex-qudits">
+<h3>2.1 The kinematic layer: per-vertex qudits<a class="headerlink" href="#the-kinematic-layer-per-vertex-qudits" title="Link to this heading">¶</a></h3>
+<p>Each vertex carries a
+<a class="reference internal" href="../../overview/intellectual_lineage.html#the-qudit-basis-charge-intrinsic-to-the-state"><span class="std std-ref">qudit</span></a>
+state <span class="math notranslate nohighlight">\(\rho_v\)</span> — a density matrix on a <span class="math notranslate nohighlight">\(d\)</span>-dimensional Hilbert space
+<span class="math notranslate nohighlight">\(\mathcal H_v\)</span>. The construction requires of <span class="math notranslate nohighlight">\(\mathcal H_v\)</span> only that
+it carry <strong>(i)</strong> a <em>charge grading</em> — a decomposition into sectors
+labelled by a conserved quantum number — and <strong>(ii)</strong> an <em>internal
+register</em> the dynamics can act on within a sector. Everything else
+about <span class="math notranslate nohighlight">\(\mathcal H_v\)</span> — how many sectors, how large the internal
+register, which gauge group it represents — is a free choice of the
+kinematic layer (§1.1).</p>
+<p>The <strong>worked example</strong> fixes the smallest non-trivial choice:
+<span class="math notranslate nohighlight">\(d = 4\)</span>, with <span class="math notranslate nohighlight">\(\rho_v \in \mathbb{C}^{4 \times 4}\)</span> on the basis</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[
@@ -304,9 +431,16 @@ state <span class="math notranslate nohighlight">\(\rho_v \in \mathbb{C}^{4 \tim
 second is an internal <strong>spin-like</strong> index (<span class="math notranslate nohighlight">\(0/1\)</span>). We treat them as
 two qubits, with the convention that the <em>charge</em> qubit is the outer
 slot in tensor products and the <em>spin</em> qubit is the inner slot.
-Compactly, <span class="math notranslate nohighlight">\(\mathbb{C}^4 = \mathbb{C}^2_q \otimes \mathbb{C}^2_s\)</span>.</p>
+Compactly, <span class="math notranslate nohighlight">\(\mathbb{C}^4 = \mathbb{C}^2_q \otimes \mathbb{C}^2_s\)</span>. A
+richer kinematic layer — colour, weak isospin, generations — would
+enlarge <span class="math notranslate nohighlight">\(\mathcal H_v\)</span>, and is exactly the work §1.1 flags as <em>not</em> a
+Hamiltonian requirement.</p>
+</section>
 <section id="single-vertex-operators">
-<h3>1.1 Single-vertex operators<a class="headerlink" href="#single-vertex-operators" title="Link to this heading">¶</a></h3>
+<h3>2.2 Single-vertex operators<a class="headerlink" href="#single-vertex-operators" title="Link to this heading">¶</a></h3>
+<p>The kinematic layer must supply three kinds of single-vertex
+operator: a <strong>charge</strong> operator <span class="math notranslate nohighlight">\(\hat Q\)</span>, <strong>internal</strong> generators,
+and a <strong>charge-conjugation</strong> <span class="math notranslate nohighlight">\(\hat C\)</span>. In the worked example:</p>
 <p>The charge operator is diagonal in <span class="math notranslate nohighlight">\(\mathcal{B}\)</span>:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -335,8 +469,28 @@ spin sector:</p>
 <p>which swaps <span class="math notranslate nohighlight">\(\ket{+\,s}\leftrightarrow\ket{-\,s}\)</span>. (This is the only
 operator in <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> that does not commute with <span class="math notranslate nohighlight">\(\hat{Q}\)</span>.)</p>
 </section>
-<section id="the-pair-hamiltonian">
-<h3>1.2 The pair Hamiltonian<a class="headerlink" href="#the-pair-hamiltonian" title="Link to this heading">¶</a></h3>
+<section id="the-pair-hamiltonian-general-form">
+<h3>2.3 The pair Hamiltonian: general form<a class="headerlink" href="#the-pair-hamiltonian-general-form" title="Link to this heading">¶</a></h3>
+<p>An interaction couples two vertices <span class="math notranslate nohighlight">\(A, B\)</span>. The per-event dynamics is
+a unitary <span class="math notranslate nohighlight">\(\hat U = \exp(-i\,\hat H\,\Delta t)\)</span> generated by a
+Hamiltonian <span class="math notranslate nohighlight">\(\hat H\)</span> on the bipartite space <span class="math notranslate nohighlight">\(\mathcal H_{\mathrm{pair}}
+= \mathcal H_v \otimes \mathcal H_v\)</span> (in the worked example,
+<span class="math notranslate nohighlight">\(\mathbb{C}^4 \otimes \mathbb{C}^4 = \mathbb{C}^{16}\)</span>).</p>
+<p>The <strong>baseline</strong> assumed before any of §7’s requirements is just
+Hermiticity: <span class="math notranslate nohighlight">\(\hat H = \hat H^\dagger\)</span>, so <span class="math notranslate nohighlight">\(\hat U\)</span> is unitary.
+Unitarity is what makes the total two-vertex entropy invariant,
+<span class="math notranslate nohighlight">\(S(\rho_{AB}) = S(\rho_{XY})\)</span> — a fact the per-edge MI machinery
+(§3.3, §4) leans on throughout. The one deliberate departure is the
+<span class="math notranslate nohighlight">\(\Sigma_{AB}\)</span> reduction (the 256→4-dim charge-basis projection at
+consumption), which is CPTP but not unitary; everything else inside a
+cell is unitary.</p>
+<p>What §7 adds to “Hermitian” is a list of <em>structural</em> requirements —
+symmetries, couplings, locality. §2.4–2.7 work one <span class="math notranslate nohighlight">\(\hat H\)</span> that
+satisfies them; §7 says which of its features were load-bearing and
+which were a representative choice.</p>
+</section>
+<section id="worked-example-the-v0-2-h-mathrm-pair">
+<h3>2.4 Worked example: the v0.2 <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span><a class="headerlink" href="#worked-example-the-v0-2-h-mathrm-pair" title="Link to this heading">¶</a></h3>
 <p>For two vertices <span class="math notranslate nohighlight">\(A, B\)</span> (sites in <span class="math notranslate nohighlight">\(\mathbb{C}^4 \otimes \mathbb{C}^4 = \mathbb{C}^{16}\)</span>):</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -384,12 +538,16 @@ operator in <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</sp
 \hat{H}_{\mathrm{pair}}\big|_{\text{v0.2}} \;=\; J_c \,\hat{Q}\otimes\hat{Q} \;+\; J_s\,(\sigma^x\sigma^x + \sigma^y\sigma^y).
 \]</div>
 </div>
+<p>The four terms map one-to-one onto requirements R1, R2, R6 and R4 of
+§7 respectively — §7 says so explicitly, term by term.</p>
 </section>
 <section id="conservation-and-block-structure">
-<h3>1.3 Conservation and block structure<a class="headerlink" href="#conservation-and-block-structure" title="Link to this heading">¶</a></h3>
-<p>At <span class="math notranslate nohighlight">\(\gamma_{\mathrm{CP}} = 0\)</span>, every term in <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> commutes
-with the total-charge operator <span class="math notranslate nohighlight">\(\hat{Q}_{\mathrm{tot}} = \hat{Q}_A + \hat{Q}_B\)</span>.
-So <span class="math notranslate nohighlight">\(\hat{U}\)</span> is block-diagonal in the <span class="math notranslate nohighlight">\(\hat{Q}_{\mathrm{tot}}\)</span> eigenspaces:</p>
+<h3>2.5 Conservation and block structure<a class="headerlink" href="#conservation-and-block-structure" title="Link to this heading">¶</a></h3>
+<p>Suppose <span class="math notranslate nohighlight">\(\hat H\)</span> commutes with the total-charge operator
+<span class="math notranslate nohighlight">\(\hat{Q}_{\mathrm{tot}} = \hat{Q}_A + \hat{Q}_B\)</span> — this is requirement
+<strong>R1</strong> (§7). Then <span class="math notranslate nohighlight">\(\hat{U}\)</span> is block-diagonal in the
+<span class="math notranslate nohighlight">\(\hat{Q}_{\mathrm{tot}}\)</span> eigenspaces. For the worked example this
+holds whenever <span class="math notranslate nohighlight">\(\gamma_{\mathrm{CP}} = 0\)</span>:</p>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
 <thead>
@@ -420,9 +578,11 @@ a fixed-charge-pair sub-block, the only operator with non-trivial
 matrix structure is <span class="math notranslate nohighlight">\(\sigma^x\sigma^x + \sigma^y\sigma^y\)</span>, which lives
 entirely in the spin sector.</p>
 </section>
-<section id="xx-yy-in-the-spin-sector">
-<h3>1.4 <span class="math notranslate nohighlight">\(XX + YY\)</span> in the spin sector<a class="headerlink" href="#xx-yy-in-the-spin-sector" title="Link to this heading">¶</a></h3>
-<p>Acting on the <span class="math notranslate nohighlight">\(\{\ket{00}, \ket{01}, \ket{10}, \ket{11}\}\)</span> spin-pair basis:</p>
+<section id="the-entangling-core-xx-yy-in-the-spin-sector">
+<h3>2.6 The entangling core: <span class="math notranslate nohighlight">\((XX + YY)\)</span> in the spin sector<a class="headerlink" href="#the-entangling-core-xx-yy-in-the-spin-sector" title="Link to this heading">¶</a></h3>
+<p>The term that does the entangling work — the worked example’s
+realisation of requirement <strong>R2</strong> (§7) — is <span class="math notranslate nohighlight">\((XX + YY)\)</span>. Acting on
+the <span class="math notranslate nohighlight">\(\{\ket{00}, \ket{01}, \ket{10}, \ket{11}\}\)</span> spin-pair basis:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[\begin{split}
@@ -442,7 +602,7 @@ entirely in the spin sector.</p>
 as <span class="math notranslate nohighlight">\(2\,\sigma^x\)</span> on the <span class="math notranslate nohighlight">\(\{\ket{01}, \ket{10}\}\)</span> subspace.</p>
 </section>
 <section id="the-unitary-on-a-fixed-charge-pair-sub-block">
-<h3>1.5 The unitary on a fixed-charge-pair sub-block<a class="headerlink" href="#the-unitary-on-a-fixed-charge-pair-sub-block" title="Link to this heading">¶</a></h3>
+<h3>2.7 The unitary on a fixed-charge-pair sub-block<a class="headerlink" href="#the-unitary-on-a-fixed-charge-pair-sub-block" title="Link to this heading">¶</a></h3>
 <p>Take <span class="math notranslate nohighlight">\(A = +\)</span>, <span class="math notranslate nohighlight">\(B = -\)</span> (the relevant block for an alternating-charge
 initial layer). On the 8-dimensional <span class="math notranslate nohighlight">\((+,-)\)</span> block:</p>
 <div class="math-wrapper docutils container">
@@ -485,9 +645,13 @@ with eigenvalues <span class="math notranslate nohighlight">\(-J_c \pm 2 J_s\)</
 </section>
 </section>
 <section id="the-first-interaction-cell">
-<h2>2. The first interaction cell<a class="headerlink" href="#the-first-interaction-cell" title="Link to this heading">¶</a></h2>
+<h2>3. The first interaction cell<a class="headerlink" href="#the-first-interaction-cell" title="Link to this heading">¶</a></h2>
+<p>Nothing in this section uses the form of <span class="math notranslate nohighlight">\(\hat H\)</span>: the cell topology,
+its ten edges, and the MI assignments follow purely from <span class="math notranslate nohighlight">\(\hat U\)</span>
+being a CPTP map. The Hamiltonian re-enters only with the specific
+inputs of §4.</p>
 <section id="generation-0-generation-1">
-<h3>2.1 Generation 0 → generation 1<a class="headerlink" href="#generation-0-generation-1" title="Link to this heading">¶</a></h3>
+<h3>3.1 Generation 0 → generation 1<a class="headerlink" href="#generation-0-generation-1" title="Link to this heading">¶</a></h3>
 <p>Two initial-layer vertices <span class="math notranslate nohighlight">\(X, Y\)</span> (the <em>0-simplices</em> of generation 0)
 get picked from the frontier and interact via <span class="math notranslate nohighlight">\(\hat U\)</span>. The
 construction produces three new generation-1 vertices — <span class="math notranslate nohighlight">\(X', Y'\)</span>
@@ -515,7 +679,7 @@ schematic:</p>
 <p><img alt="Discrete event step : input goes through  producing , and the Choistate " src="../../../_images/h_pair_first_cell_schematic.svg" /></p>
 </section>
 <section id="the-three-product-states">
-<h3>2.2 The three product states<a class="headerlink" href="#the-three-product-states" title="Link to this heading">¶</a></h3>
+<h3>3.2 The three product states<a class="headerlink" href="#the-three-product-states" title="Link to this heading">¶</a></h3>
 <p>The new vertices’ density matrices come from the post-event joint:</p>
 <ul class="simple">
 <li><p><span class="math notranslate nohighlight">\(\rho_{X'} = \mathrm{Tr}_Y\bigl(\hat{U}(\rho_X \otimes \rho_Y)\hat{U}^\dagger\bigr)\)</span></p></li>
@@ -528,7 +692,7 @@ and squared length
 <span class="math notranslate nohighlight">\(\ell_e^2 = \mathrm{signedSquaredLength}(\ell_e, \text{spacelike})\)</span>.</p>
 </section>
 <section id="the-10-mi-assignments">
-<h3>2.3 The 10 MI assignments<a class="headerlink" href="#the-10-mi-assignments" title="Link to this heading">¶</a></h3>
+<h3>3.3 The 10 MI assignments<a class="headerlink" href="#the-10-mi-assignments" title="Link to this heading">¶</a></h3>
 <p>From <code class="docutils literal notranslate"><span class="pre">src/quantum/interaction_simulation.cpp</span></code> (lines 786–795):</p>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
@@ -604,8 +768,8 @@ so the question of <span class="math notranslate nohighlight">\(I_{\mathrm{joint
 <span class="math notranslate nohighlight">\(\hat{U}\)</span> rearranges marginal entropies between <span class="math notranslate nohighlight">\(X\)</span> and <span class="math notranslate nohighlight">\(Y\)</span>.</p>
 </section>
 </section>
-<section id="case-a-bell-like-input-concentrated-information">
-<h2>3. Case A — Bell-like input (concentrated information)<a class="headerlink" href="#case-a-bell-like-input-concentrated-information" title="Link to this heading">¶</a></h2>
+<section id="case-a-the-eigenstate-trap-concentrated-information">
+<h2>4. Case A — the eigenstate trap (concentrated information)<a class="headerlink" href="#case-a-the-eigenstate-trap-concentrated-information" title="Link to this heading">¶</a></h2>
 <p>Take a charge-Bell input</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -614,7 +778,7 @@ so the question of <span class="math notranslate nohighlight">\(I_{\mathrm{joint
 \]</div>
 </div>
 <section id="marginals-and-entropies">
-<h3>3.1 Marginals and entropies<a class="headerlink" href="#marginals-and-entropies" title="Link to this heading">¶</a></h3>
+<h3>4.1 Marginals and entropies<a class="headerlink" href="#marginals-and-entropies" title="Link to this heading">¶</a></h3>
 <p><span class="math notranslate nohighlight">\(\rho_{XY} = \ket{\psi}\bra{\psi}\)</span>, pure, so <span class="math notranslate nohighlight">\(S(\rho_{XY}) = 0\)</span>. Trace
 out <span class="math notranslate nohighlight">\(Y\)</span>:</p>
 <div class="math-wrapper docutils container">
@@ -639,7 +803,7 @@ I^{(A)}_{\mathrm{input}} \;=\; S_X + S_Y - S(\rho_{XY}) \;=\; \ln 2 + \ln 2 - 0 
 register</strong> and <strong>trivial in the spin register</strong> (<span class="math notranslate nohighlight">\(s = 0\)</span> frozen).</p>
 </section>
 <section id="action-of-hat-u">
-<h3>3.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span><a class="headerlink" href="#action-of-hat-u" title="Link to this heading">¶</a></h3>
+<h3>4.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span><a class="headerlink" href="#action-of-hat-u" title="Link to this heading">¶</a></h3>
 <p>The two basis states <span class="math notranslate nohighlight">\(\ket{+\,0,\,-\,0}\)</span> and <span class="math notranslate nohighlight">\(\ket{-\,0,\,+\,0}\)</span> live in
 the <span class="math notranslate nohighlight">\((+,-)\)</span> and <span class="math notranslate nohighlight">\((-,+)\)</span> blocks respectively. From the boxed expression
 above, both get the same global phase <span class="math notranslate nohighlight">\(e^{+i J_c \Delta t}\)</span>:</p>
@@ -661,7 +825,7 @@ I^{(A)}_{\mathrm{joint}} \;=\; I^{(A)}_{\mathrm{input}} \;=\; 2\,\ln 2.
 </div>
 </section>
 <section id="per-edge-mi">
-<h3>3.3 Per-edge MI<a class="headerlink" href="#per-edge-mi" title="Link to this heading">¶</a></h3>
+<h3>4.3 Per-edge MI<a class="headerlink" href="#per-edge-mi" title="Link to this heading">¶</a></h3>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
 <thead>
@@ -708,7 +872,7 @@ possible” — and the Regge action <span class="math notranslate nohighlight">
 entirely by the two worldline edges.</p>
 </section>
 <section id="what-happened-dynamically">
-<h3>3.4 What happened dynamically<a class="headerlink" href="#what-happened-dynamically" title="Link to this heading">¶</a></h3>
+<h3>4.4 What happened dynamically<a class="headerlink" href="#what-happened-dynamically" title="Link to this heading">¶</a></h3>
 <p><strong>Nothing.</strong> <span class="math notranslate nohighlight">\(\hat U\)</span> acted as the identity (up to global phase) on
 this input. The cell has rich MI structure, but all of it was
 <strong>already present in the input</strong>. The Hamiltonian did not generate
@@ -717,11 +881,13 @@ any of it.</p>
 eigenstate of <span class="math notranslate nohighlight">\(\hat Q\otimes\hat Q\)</span> (eigenvalue <span class="math notranslate nohighlight">\(-1\)</span>, in both blocks)
 and of <span class="math notranslate nohighlight">\(XX+YY\)</span> (eigenvalue <span class="math notranslate nohighlight">\(0\)</span>), hence of <span class="math notranslate nohighlight">\(\hat H_{\mathrm{pair}}\)</span>
 itself. Eigenstates pick up phases under <span class="math notranslate nohighlight">\(\hat U\)</span>; their MI
-structure is rigid.</p>
+structure is rigid. In requirement terms (§7): this is the pathology
+<strong>R3</strong> rules out — <span class="math notranslate nohighlight">\(\hat U\)</span> engages only on inputs that are <em>not</em>
+eigenstates of <span class="math notranslate nohighlight">\(\hat H\)</span>.</p>
 </section>
 </section>
-<section id="case-b-distributed-mixed-input-maximally-distributed-information">
-<span id="case-b-distributed"></span><h2>4. Case B — distributed mixed input (maximally distributed information)<a class="headerlink" href="#case-b-distributed-mixed-input-maximally-distributed-information" title="Link to this heading">¶</a></h2>
+<section id="case-b-the-maximally-mixed-trap-distributed-information">
+<span id="case-b-distributed"></span><h2>5. Case B — the maximally-mixed trap (distributed information)<a class="headerlink" href="#case-b-the-maximally-mixed-trap-distributed-information" title="Link to this heading">¶</a></h2>
 <p>Now take</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -743,7 +909,7 @@ state in each sector, see <code class="docutils literal notranslate"><span class
 — maximally distributed information <em>within</em> each sector, no
 sector-superposition, no cross-vertex correlation.</p>
 <section id="id1">
-<h3>4.1 Marginals and entropies<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h3>
+<h3>5.1 Marginals and entropies<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h3>
 <p><span class="math notranslate nohighlight">\(S(\rho_X^{(B)}) = S(\rho_Y^{(B)}) = \ln 2\)</span> (a maximally-mixed state
 on a 2-dim subspace).</p>
 <p><span class="math notranslate nohighlight">\(S(\rho_{XY}^{(B)}) = S(\rho_X^{(B)}) + S(\rho_Y^{(B)}) = 2\ln 2\)</span>
@@ -759,7 +925,7 @@ entropy (<span class="math notranslate nohighlight">\(\ln 2\)</span> each) as th
 — hence <span class="math notranslate nohighlight">\(I = 0\)</span>.</p>
 </section>
 <section id="id2">
-<h3>4.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span><a class="headerlink" href="#id2" title="Link to this heading">¶</a></h3>
+<h3>5.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span><a class="headerlink" href="#id2" title="Link to this heading">¶</a></h3>
 <p><span class="math notranslate nohighlight">\(\rho_{XY}^{(B)} = \tfrac{1}{4} P_+ \otimes P_-\)</span> sits entirely in the
 <span class="math notranslate nohighlight">\((+,-)\)</span> block. Within that block:</p>
 <div class="math-wrapper docutils container">
@@ -787,7 +953,7 @@ I^{(B)}_{\mathrm{joint}} \;=\; I^{(B)}_{\mathrm{input}} \;=\; 0.
 </div>
 </section>
 <section id="id3">
-<h3>4.3 Per-edge MI<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h3>
+<h3>5.3 Per-edge MI<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h3>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
 <thead>
@@ -828,23 +994,28 @@ worldline-self edges, with <span class="math notranslate nohighlight">\(\ell = \
 information.</p>
 </section>
 <section id="id4">
-<h3>4.4 What happened dynamically<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h3>
+<h3>5.4 What happened dynamically<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h3>
 <p>Again, nothing. <span class="math notranslate nohighlight">\(\hat U\)</span> commutes with the maximally-mixed state on
 the active sub-block — every unitary does. The Hamiltonian
-contributed neither phase structure nor entanglement.</p>
+contributed neither phase structure nor entanglement. Again in
+requirement terms: this is the second half of <strong>R3</strong> — inputs must
+not be maximally mixed on the active sub-block, or <em>every</em> unitary is
+inert regardless of <span class="math notranslate nohighlight">\(\hat H\)</span>.</p>
 </section>
 </section>
-<section id="reading-when-does-h-mathrm-pair-engage">
-<h2>5. Reading: when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> engage?<a class="headerlink" href="#reading-when-does-h-mathrm-pair-engage" title="Link to this heading">¶</a></h2>
+<section id="when-does-the-hamiltonian-engage">
+<h2>6. When does the Hamiltonian engage?<a class="headerlink" href="#when-does-the-hamiltonian-engage" title="Link to this heading">¶</a></h2>
 <p>Both extremes — pure Bell-eigenstate input and maximally-mixed
 product input — leave <span class="math notranslate nohighlight">\(\hat U\)</span> inert. The Hamiltonian engages only in
 the <strong>middle</strong>: inputs that are simultaneously</p>
 <ol class="arabic simple">
-<li><p><strong>Not eigenstates of <span class="math notranslate nohighlight">\(\hat H_{\mathrm{pair}}\)</span></strong> (otherwise <span class="math notranslate nohighlight">\(\hat U\)</span>
+<li><p><strong>Not eigenstates of <span class="math notranslate nohighlight">\(\hat H\)</span></strong> (otherwise <span class="math notranslate nohighlight">\(\hat U\)</span>
 is a global phase), and</p></li>
 <li><p><strong>Not maximally mixed on the active sub-block</strong> (otherwise
 <span class="math notranslate nohighlight">\(\hat U I \hat U^\dagger = I\)</span>).</p></li>
 </ol>
+<p>These two conditions are requirement <strong>R3</strong> of §7; the rest of this
+section makes them quantitative.</p>
 <p>Concretely, “engagement” requires <em>coherences</em> in the spin index
 within an allowed sub-block: e.g., off-diagonal terms
 <span class="math notranslate nohighlight">\(\ket{+\,0,\,-\,1}\bra{+\,1,\,-\,0}\)</span> or pure-basis-state inputs like
@@ -873,7 +1044,7 @@ rank-2 in-sector inputs sit between this and Case B): some MI gets
 generated, but at v0.2 defaults the rotation angle <span class="math notranslate nohighlight">\(2 J_s \Delta t =
 0.125\)</span> rad keeps it small.</p>
 <section id="why-the-j-s-0-sweep-result-was-suspicious">
-<h3>5.1 Why the J_s = 0 sweep result was suspicious<a class="headerlink" href="#why-the-j-s-0-sweep-result-was-suspicious" title="Link to this heading">¶</a></h3>
+<h3>6.1 Why the <span class="math notranslate nohighlight">\(J_s = 0\)</span> sweep result was suspicious<a class="headerlink" href="#why-the-j-s-0-sweep-result-was-suspicious" title="Link to this heading">¶</a></h3>
 <p>At <span class="math notranslate nohighlight">\(J_s = 0\)</span> exactly, the <span class="math notranslate nohighlight">\((XX+YY)\)</span> term vanishes and the only
 remaining Hamiltonian term, <span class="math notranslate nohighlight">\(J_c\,\hat Q\otimes\hat Q\)</span>, is constant on
 each fixed-charge-pair sub-block (eigenvalue <span class="math notranslate nohighlight">\(\pm 1\)</span>). So
@@ -890,16 +1061,169 @@ topology of the (2,3)-Pachner-stacked cell complex with degenerate
 edge weights — <em>not</em> a Hamiltonian-shaped geometry. Experiment 05’s
 finding “J_s = 0 is the H_DS4 working point” should be downgraded
 until the dynamics-on regime is also checked at the same lattice
-size.</p>
+size. In requirement terms: at <span class="math notranslate nohighlight">\(J_s = 0\)</span> the worked example fails
+<strong>R2</strong> (the entangling core vanishes), so the geometry it samples is
+the bare topological prior.</p>
 </section>
 </section>
-<section id="physically-meaningful-manipulations-to-increase-engagement">
-<h2>6. Physically meaningful manipulations to increase engagement<a class="headerlink" href="#physically-meaningful-manipulations-to-increase-engagement" title="Link to this heading">¶</a></h2>
-<p>The above analysis suggests six directions, each with a clean
-physical interpretation. They’re listed in increasing order of how
-disruptive they are to the current v0.2 picture.</p>
+<section id="the-requirements">
+<h2>7. The requirements<a class="headerlink" href="#the-requirements" title="Link to this heading">¶</a></h2>
+<p>§4–§6 worked the first cell and found a sharp lesson: on the two
+extreme inputs <span class="math notranslate nohighlight">\(\hat U\)</span> does <em>nothing</em>, and the cell’s geometry is
+then independent of <span class="math notranslate nohighlight">\(\hat H\)</span> entirely. Generalising that lesson — and
+the conservation argument of §2.5, the entangling argument of §2.6,
+and the locality built into §3 — gives the list below. Each
+requirement is stated as a property of <span class="math notranslate nohighlight">\(\hat H\)</span> (or, for <strong>R3</strong>, of
+<span class="math notranslate nohighlight">\(\hat H\)</span> together with the input-state class), the structural feature
+it secures, the pathology that appears if it is dropped, and how the
+worked-example <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> realises it.</p>
+<p>A note on what kind of list this is. These are <strong>necessary</strong>
+conditions, not a sufficient recipe: satisfying R1–R6 does not
+<em>guarantee</em> <span class="math notranslate nohighlight">\(D_S = 4\)</span> or a baryon asymmetry — those are emergent
+(§1.1, third layer). The requirements make the dynamics <em>capable</em> of
+producing them; whether it does is what the Monte Carlo measures. R2,
+R3 and R5 secure the <em>geometric substrate</em> (that there is a
+Hamiltonian-shaped, causal spacetime at all); R1, R4 and R6 secure
+<em>structural matter features</em> (charge, CP-violation/baryogenesis,
+mass).</p>
+<section id="r1-charge-gradeability-and-conservation">
+<h3>R1 — Charge gradeability and conservation<a class="headerlink" href="#r1-charge-gradeability-and-conservation" title="Link to this heading">¶</a></h3>
+<p><em>Property.</em> The kinematic layer supplies a charge operator <span class="math notranslate nohighlight">\(\hat Q\)</span>,
+and <span class="math notranslate nohighlight">\(\hat H\)</span> commutes with the total charge
+<span class="math notranslate nohighlight">\(\hat Q_{\mathrm{tot}} = \hat Q_A + \hat Q_B\)</span> — exactly, except for
+one explicitly-labelled term whose magnitude is controlled (see R4).</p>
+<p><em>Secures.</em> A conserved <span class="math notranslate nohighlight">\(U(1)\)</span>-type quantum number: particle /
+antiparticle sectors, the block-diagonal structure of §2.5, and the
+eligibility logic of the move set.</p>
+<p><em>Pathology if dropped.</em> If <span class="math notranslate nohighlight">\(\hat H\)</span> mixes charge sectors
+uncontrollably, “charge” is no longer a quantum number; the block
+decomposition that the entire sub-block analysis (§2.5–2.7, §4–§6)
+rests on is lost, and there is no sharp <span class="math notranslate nohighlight">\(\hat Q\)</span> to read out per
+vertex.</p>
+<p><em>In the worked example.</em> <span class="math notranslate nohighlight">\(J_c\,\hat Q\!\otimes\!\hat Q\)</span>,
+<span class="math notranslate nohighlight">\(J_s(XX+YY)\)</span> and <span class="math notranslate nohighlight">\(\delta_m(\hat Q_A + \hat Q_B)\)</span> all commute with
+<span class="math notranslate nohighlight">\(\hat Q_{\mathrm{tot}}\)</span>; only the <span class="math notranslate nohighlight">\(\gamma_{\mathrm{CP}}\)</span> term does
+not — that is R4.</p>
+</section>
+<section id="r2-genuine-entangling-content">
+<h3>R2 — Genuine entangling content<a class="headerlink" href="#r2-genuine-entangling-content" title="Link to this heading">¶</a></h3>
+<p><em>Property.</em> <span class="math notranslate nohighlight">\(\hat H\)</span> has a genuinely two-body part — it is not of the
+form <span class="math notranslate nohighlight">\(\hat H_A \otimes I + I \otimes \hat H_B\)</span> — so <span class="math notranslate nohighlight">\(\hat U\)</span> has
+operator-Schmidt rank <span class="math notranslate nohighlight">\(&gt; 1\)</span> on the active sub-block (it is not a
+product <span class="math notranslate nohighlight">\(K_A \otimes K_B\)</span> of local rotations).</p>
+<p><em>Secures.</em> That mutual information is <em>generated</em> at all. Edge
+lengths are <span class="math notranslate nohighlight">\(\ell = -\ln(I/I_{\max})\)</span>; if <span class="math notranslate nohighlight">\(\hat U\)</span> creates no
+correlation there is nothing for the geometry to be made of. This is
+the van Raamsdonk hinge the whole construction stands on.</p>
+<p><em>Pathology if dropped.</em> A rank-1 <span class="math notranslate nohighlight">\(\hat U = K_A \otimes K_B\)</span> rotates
+each vertex locally and leaves <span class="math notranslate nohighlight">\(I_{\mathrm{joint}} = I_{\mathrm{input}}\)</span>
+identically. The cell complex then carries only its bare
+combinatorial topology — exactly the degenerate-geometry outcome
+described in §6.1 for <span class="math notranslate nohighlight">\(J_s = 0\)</span>.</p>
+<p><em>In the worked example.</em> The <span class="math notranslate nohighlight">\(J_s(XX+YY)\)</span> term is the entangling
+core; the operator-Schmidt rank of <span class="math notranslate nohighlight">\(\hat U\)</span> collapses to 1 as
+<span class="math notranslate nohighlight">\(J_s \to 0\)</span>.</p>
+</section>
+<section id="r3-non-degeneracy-on-the-input-class-engagement">
+<h3>R3 — Non-degeneracy on the input class (engagement)<a class="headerlink" href="#r3-non-degeneracy-on-the-input-class-engagement" title="Link to this heading">¶</a></h3>
+<p><em>Property.</em> A <em>joint</em> condition on <span class="math notranslate nohighlight">\(\hat H\)</span> and the input-state
+preparation: the construction’s actual input states must be
+<strong>neither eigenstates of <span class="math notranslate nohighlight">\(\hat H\)</span></strong> nor <strong>maximally mixed on the
+active sub-block</strong>. Equivalently, <span class="math notranslate nohighlight">\(\hat H\)</span> must carry matrix elements
+off-diagonal in the basis the inputs are (near-)diagonal in.</p>
+<p><em>Secures.</em> That <span class="math notranslate nohighlight">\(\hat U\)</span> does dynamical <em>work</em> — generates <em>new</em>
+correlation — so the per-event action increment <span class="math notranslate nohighlight">\(\Delta S_n\)</span> depends
+on the chosen pair, and the Metropolis sampler can select among
+quantum-distinct geometries (§10).</p>
+<p><em>Pathology if dropped.</em> The two traps of §4 and §5: an eigenstate
+input (Case A) gets only a global phase; a maximally-mixed input
+(Case B) satisfies <span class="math notranslate nohighlight">\(\hat U\,\rho\,\hat U^\dagger = \rho\)</span>. Either way
+<span class="math notranslate nohighlight">\(I_{\mathrm{joint}} = I_{\mathrm{input}}\)</span> and the geometry is
+Hamiltonian-independent.</p>
+<p><em>In the worked example.</em> At v0.2 defaults the inputs are charge
+eigenstates within a sector and the random in-sector state is
+near-maximally-mixed — the worked example sits <em>close to both traps
+at once</em>, which is why its engagement is weak and why §8 is mostly
+about moving the inputs, not the Hamiltonian. R3 is the subtlest
+requirement precisely because it is not a property of <span class="math notranslate nohighlight">\(\hat H\)</span> alone.</p>
+</section>
+<section id="r4-controlled-c-cp-structure">
+<h3>R4 — Controlled C / CP structure<a class="headerlink" href="#r4-controlled-c-cp-structure" title="Link to this heading">¶</a></h3>
+<p><em>Property.</em> The kinematic layer supplies a charge-conjugation
+operator <span class="math notranslate nohighlight">\(\hat C\)</span>; <span class="math notranslate nohighlight">\(\hat H\)</span> has a CP-respecting part and a CP-breaking
+part whose magnitude is a <em>tunable parameter</em>. CP violation is the
+structural statement <span class="math notranslate nohighlight">\([\hat U, \widehat{CP}] \neq 0\)</span>, not an external
+numerical bias.</p>
+<p><em>Secures.</em> Sakharov condition (ii); a baryogenesis channel that is
+dialable from exactly CP-symmetric to strongly-violating — the
+operator-level C/CP the v0.2 qudit basis was introduced to make
+possible.</p>
+<p><em>Pathology if dropped.</em> If CP <em>cannot</em> be broken, no matter–
+antimatter asymmetry can form. If it is broken <em>uncontrollably</em> —
+with no symmetric limit — then charge is not even approximately
+conserved and R1’s block structure never holds.</p>
+<p><em>In the worked example.</em> <span class="math notranslate nohighlight">\(\gamma_{\mathrm{CP}}(\hat C_A + \hat C_B)\)</span>,
+the only term that fails to commute with <span class="math notranslate nohighlight">\(\hat Q\)</span>;
+<span class="math notranslate nohighlight">\(\gamma_{\mathrm{CP}} = 0\)</span> is the exactly-CP-symmetric limit (and the
+v0.2 default analysed here).</p>
+</section>
+<section id="r5-two-body-locality">
+<h3>R5 — Two-body locality<a class="headerlink" href="#r5-two-body-locality" title="Link to this heading">¶</a></h3>
+<p><em>Property.</em> <span class="math notranslate nohighlight">\(\hat H\)</span> couples one pair of vertices at a time: no
+<span class="math notranslate nohighlight">\(k\)</span>-body terms with <span class="math notranslate nohighlight">\(k &gt; 2\)</span>.</p>
+<p><em>Secures.</em> That each <code class="docutils literal notranslate"><span class="pre">interact</span></code> is a <em>local</em> (2,3) Pachner move, so
+the complex grows by local moves with a well-defined causal /
+simplicial structure, and the Regge action is a sum of <em>local</em>
+increments <span class="math notranslate nohighlight">\(\Delta S_n\)</span> (§10).</p>
+<p><em>Pathology if dropped.</em> A non-local <span class="math notranslate nohighlight">\(\hat H\)</span> — e.g. the Schwinger
+model’s long-range Coulomb <span class="math notranslate nohighlight">\(\sigma^z_i \sigma^z_j\)</span> term — cannot be
+written as a per-pair <span class="math notranslate nohighlight">\(\hat U\)</span>; there is no per-event unitary to
+attach to a (2,3) cell. This is exactly the truncation
+<a class="reference internal" href="../../overview/from_schwinger_to_lattice.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">from_schwinger_to_lattice.md</span></code></span></a>
+documents, and its price is the gauge / Coulomb channel, deferred to
+v0.3’s photon mediation.</p>
+<p><em>In the worked example.</em> Every term of <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> is
+two-body by construction; the long-range gauge force is deliberately
+absent.</p>
+</section>
+<section id="r6-a-tunable-mass-gap-term">
+<h3>R6 — A tunable mass / gap term<a class="headerlink" href="#r6-a-tunable-mass-gap-term" title="Link to this heading">¶</a></h3>
+<p><em>Property.</em> <span class="math notranslate nohighlight">\(\hat H\)</span> contains a tunable single-site diagonal term
+that splits the energies of the charge (and, ideally, spin) sectors.</p>
+<p><em>Secures.</em> Dynamically distinguishable sectors and the possibility of
+bound-state / mass-shell structure — the role the staggered mass
+plays in the Schwinger fragment.</p>
+<p><em>Pathology if dropped.</em> With no energy splitting the sectors are
+degenerate; certain superpositions never dephase, and the model loses
+the knob a mass hierarchy would be built on.</p>
+<p><em>In the worked example.</em> <span class="math notranslate nohighlight">\(\delta_m(\hat Q_A + \hat Q_B)\)</span>; note
+<span class="math notranslate nohighlight">\(\delta_m = 0\)</span> at the v0.2 default, so the worked example runs in the
+gapless limit.</p>
+</section>
+<section id="what-is-not-a-requirement-on-hat-h">
+<h3>What is <em>not</em> a requirement on <span class="math notranslate nohighlight">\(\hat H\)</span><a class="headerlink" href="#what-is-not-a-requirement-on-hat-h" title="Link to this heading">¶</a></h3>
+<p>For contrast — and to keep the list honest — the following are
+<strong>not</strong> on it, by §1.1’s layering: the gauge group and generation
+count (kinematic — choose <span class="math notranslate nohighlight">\(\mathcal H_v\)</span>); anomaly cancellation (a
+consistency condition on representation content); CPT and
+spin–statistics (theorems that <em>follow</em> from Hermiticity, locality
+and a Lorentz-like structure, rather than axioms one imposes); and
+the actual mass and mixing <em>values</em> (inputs, not consequences of the
+<em>form</em> of <span class="math notranslate nohighlight">\(\hat H\)</span>).</p>
+</section>
+</section>
+<section id="design-knobs-satisfying-the-requirements">
+<h2>8. Design knobs: satisfying the requirements<a class="headerlink" href="#design-knobs-satisfying-the-requirements" title="Link to this heading">¶</a></h2>
+<p>The worked example <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> already satisfies R1, R2, R4,
+R5 and R6 by construction — the four terms were chosen for exactly
+those roles. The requirement that bites is <strong>R3</strong> (engagement): §6
+showed the worked example sits close to <em>both</em> traps at once. The six
+knobs below are the ways to satisfy R3 more strongly — some by
+changing the input-state class, some by changing <span class="math notranslate nohighlight">\(\hat H\)</span> itself
+(which also touches R2 and R6). They are listed in increasing order
+of how disruptive they are to the current v0.2 picture.</p>
 <section id="lower-initial-state-entropy">
-<h3>6.1 Lower initial-state entropy<a class="headerlink" href="#lower-initial-state-entropy" title="Link to this heading">¶</a></h3>
+<h3>8.1 Lower initial-state entropy<a class="headerlink" href="#lower-initial-state-entropy" title="Link to this heading">¶</a></h3>
 <p>The current <code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code> produces random rank-<span class="math notranslate nohighlight">\(\leq 2\)</span> mixed
 states in each sector by sampling 4×4 complex Gaussians, projecting
 to the sector, and trace-normalising. The result has typical
@@ -915,7 +1239,7 @@ rotation. Cost: trivial code change in
 (thermal-ish vacuum) with “definite single-particle state”.</p>
 </section>
 <section id="charge-sector-superposition-inputs">
-<h3>6.2 Charge-sector superposition inputs<a class="headerlink" href="#charge-sector-superposition-inputs" title="Link to this heading">¶</a></h3>
+<h3>8.2 Charge-sector superposition inputs<a class="headerlink" href="#charge-sector-superposition-inputs" title="Link to this heading">¶</a></h3>
 <p>Lift the off-sector zeroing in <code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code>. The vertex state
 then has support on <strong>both</strong> charge sectors, with
 <span class="math notranslate nohighlight">\(\bra{+}\rho\ket{-}\)</span> off-diagonal terms. Now <span class="math notranslate nohighlight">\(\hat Q\otimes\hat Q\)</span>
@@ -930,7 +1254,7 @@ function. Tradeoff: <span class="math notranslate nohighlight">\(Q\)</span>-cons
 in the input; it would still be preserved as an expectation value.</p>
 </section>
 <section id="increase-delta-t">
-<h3>6.3 Increase <span class="math notranslate nohighlight">\(\Delta t\)</span><a class="headerlink" href="#increase-delta-t" title="Link to this heading">¶</a></h3>
+<h3>8.3 Increase <span class="math notranslate nohighlight">\(\Delta t\)</span><a class="headerlink" href="#increase-delta-t" title="Link to this heading">¶</a></h3>
 <p>The rotation angle in <span class="math notranslate nohighlight">\((XX+YY)\)</span> is <span class="math notranslate nohighlight">\(2 J_s \Delta t = 0.125\)</span> rad at
 defaults. Doubling <span class="math notranslate nohighlight">\(\Delta t\)</span> to <span class="math notranslate nohighlight">\(0.5\)</span> gives angle <span class="math notranslate nohighlight">\(0.25\)</span> rad
 (<span class="math notranslate nohighlight">\(\approx 14^\circ\)</span>, <span class="math notranslate nohighlight">\(\sin \approx 0.247\)</span>) — about 4× more MI
@@ -940,7 +1264,7 @@ unitary is still the same form but takes a bigger Trotter step in
 the underlying continuous-time evolution.</p>
 </section>
 <section id="add-a-spincharge-cross-term">
-<h3>6.4 Add a spin–charge cross term<a class="headerlink" href="#add-a-spincharge-cross-term" title="Link to this heading">¶</a></h3>
+<h3>8.4 Add a spin–charge cross term<a class="headerlink" href="#add-a-spincharge-cross-term" title="Link to this heading">¶</a></h3>
 <p>The current <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> has no operator that couples the
 <em>spin</em> and <em>charge</em> indices on the same vertex. So a vertex in a
 charge eigenstate stays in that charge eigenstate, and the spin
@@ -962,7 +1286,7 @@ term that mixes spin and “internal flavor” on each vertex — making
 the qudit basis less reducible than a tensor product.</p>
 </section>
 <section id="replace-xx-yy-with-a-full-cartan-entangler">
-<h3>6.5 Replace <span class="math notranslate nohighlight">\((XX+YY)\)</span> with a full Cartan entangler<a class="headerlink" href="#replace-xx-yy-with-a-full-cartan-entangler" title="Link to this heading">¶</a></h3>
+<h3>8.5 Replace <span class="math notranslate nohighlight">\((XX+YY)\)</span> with a full Cartan entangler<a class="headerlink" href="#replace-xx-yy-with-a-full-cartan-entangler" title="Link to this heading">¶</a></h3>
 <p>The general SU(4) Cartan entangling content of any pair unitary is
 <span class="math notranslate nohighlight">\(\exp(i (c_x XX + c_y YY + c_z ZZ))\)</span>, with three independent
 coupling constants. The current <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> uses only the
@@ -975,7 +1299,7 @@ coupling constants. The current <span class="math notranslate nohighlight">\(H_{
 the additional coupling is just one more knob.</p>
 </section>
 <section id="time-dependent-kicked-hat-u">
-<h3>6.6 Time-dependent / kicked <span class="math notranslate nohighlight">\(\hat U\)</span><a class="headerlink" href="#time-dependent-kicked-hat-u" title="Link to this heading">¶</a></h3>
+<h3>8.6 Time-dependent / kicked <span class="math notranslate nohighlight">\(\hat U\)</span><a class="headerlink" href="#time-dependent-kicked-hat-u" title="Link to this heading">¶</a></h3>
 <p>Currently <span class="math notranslate nohighlight">\(\hat U\)</span> is the same matrix at every event. Allowing a
 slowly varying <span class="math notranslate nohighlight">\(\hat U\)</span> (e.g., a Floquet drive where <span class="math notranslate nohighlight">\(J_s, J_c\)</span>
 modulate with cell index) would prevent the input from settling
@@ -984,39 +1308,39 @@ into any eigenstate of a single <span class="math notranslate nohighlight">\(\ha
 Most ambitious; touches the autonomy of <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> as a
 single fundamental object.</p>
 </section>
-</section>
 <section id="recommendations">
-<h2>7. Recommendations<a class="headerlink" href="#recommendations" title="Link to this heading">¶</a></h2>
+<h3>8.7 Recommendations<a class="headerlink" href="#recommendations" title="Link to this heading">¶</a></h3>
 <p>In rough order of “do this first”:</p>
 <ol class="arabic simple">
-<li><p><strong>(6.1)</strong> Random <em>pure</em> states in each sector, instead of random
+<li><p><strong>(§8.1)</strong> Random <em>pure</em> states in each sector, instead of random
 mixed. Trivial code change; immediately distinguishes the
 <span class="math notranslate nohighlight">\(J_s = 0\)</span> inert regime from non-trivial dynamics. Predicted: peak
 <span class="math notranslate nohighlight">\(D_S\)</span> at <span class="math notranslate nohighlight">\(J_s = 0\)</span> should <em>rise</em> above 4.08 once the inputs aren’t
 maximally distributable, because the cross-pair edges will now
 carry non-zero <span class="math notranslate nohighlight">\(I_{\mathrm{joint}}\)</span>.</p></li>
-<li><p><strong>(6.3)</strong> Increase <span class="math notranslate nohighlight">\(\Delta t\)</span> to <span class="math notranslate nohighlight">\(\sim 0.5\)</span> in a control run, see
+<li><p><strong>(§8.3)</strong> Increase <span class="math notranslate nohighlight">\(\Delta t\)</span> to <span class="math notranslate nohighlight">\(\sim 0.5\)</span> in a control run, see
 whether peak <span class="math notranslate nohighlight">\(D_S\)</span> moves systematically.</p></li>
-<li><p><strong>(6.2)</strong> A separate experiment with sector-superposition
+<li><p><strong>(§8.2)</strong> A separate experiment with sector-superposition
 inputs. This is the cleanest way to actually engage <span class="math notranslate nohighlight">\(\hat
 Q\otimes\hat Q\)</span>, which is currently almost entirely cosmetic at
 the chosen initial conditions.</p></li>
 </ol>
-<p>Each of (6.1)–(6.3) is a one-line config change or a few-line
+<p>Each of (§8.1)–(§8.3) is a one-line config change or a few-line
 patch to <code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code>. They can be run as small sweeps
 against the same N=8, T=2500 lattice the H-parameter sweep used,
 and the resulting <span class="math notranslate nohighlight">\(D_S\)</span> surfaces should be qualitatively different
 from the current ones — <em>that</em> would mean we’ve moved out of the
 “dynamics inert” regime and into “Hamiltonian-shaped geometry.”</p>
 </section>
+</section>
 <section id="a-second-interaction-event">
-<h2>8. A second interaction event<a class="headerlink" href="#a-second-interaction-event" title="Link to this heading">¶</a></h2>
+<h2>9. A second interaction event<a class="headerlink" href="#a-second-interaction-event" title="Link to this heading">¶</a></h2>
 <p>To see how state propagates through the history and how the
 Regge action accumulates, work the next event. After cell 1 has
 fired on inputs <span class="math notranslate nohighlight">\(X, Y\)</span> producing <span class="math notranslate nohighlight">\(X', Y', AB_1\)</span>, the frontier
 contains <span class="math notranslate nohighlight">\(\{X', Y', AB_1\}\)</span> plus whatever initial-layer vertices
 weren’t consumed.</p>
-<p>We’ll work the “<strong>intermediate engagement</strong>” case from §5 — pure
+<p>We’ll work the “<strong>intermediate engagement</strong>” case from §6 — pure
 basis-state inputs, where <span class="math notranslate nohighlight">\(\hat U\)</span> actually does something
 non-trivial — so the propagation is visible. Cell 1 inputs:</p>
 <div class="math-wrapper docutils container">
@@ -1026,8 +1350,8 @@ non-trivial — so the propagation is visible. Cell 1 inputs:</p>
 \qquad \rho_{XY}^{(1)} = \ket{+\,0,\,-\,1}\bra{+\,0,\,-\,1}.
 \]</div>
 </div>
-<section id="cell-1-outputs-recap-of-5-s-mid-engagement-case">
-<h3>8.1 Cell 1 outputs (recap of §5’s mid-engagement case)<a class="headerlink" href="#cell-1-outputs-recap-of-5-s-mid-engagement-case" title="Link to this heading">¶</a></h3>
+<section id="cell-1-outputs-recap-of-6-s-mid-engagement-case">
+<h3>9.1 Cell 1 outputs (recap of §6’s mid-engagement case)<a class="headerlink" href="#cell-1-outputs-recap-of-6-s-mid-engagement-case" title="Link to this heading">¶</a></h3>
 <p>From the boxed action on the <span class="math notranslate nohighlight">\((+,-)\)</span> block:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -1071,7 +1395,7 @@ c^2 &amp; 0 &amp; 0 &amp; i s c\\
 basis (filling the active <span class="math notranslate nohighlight">\((+,-)\)</span> block, zero elsewhere).</p>
 </section>
 <section id="cell-2-setup-reuse-the-two-products">
-<span id="cell-2-setup"></span><h3>8.2 Cell 2 setup — reuse the two products<a class="headerlink" href="#cell-2-setup-reuse-the-two-products" title="Link to this heading">¶</a></h3>
+<span id="cell-2-setup"></span><h3>9.2 Cell 2 setup — reuse the two products<a class="headerlink" href="#cell-2-setup-reuse-the-two-products" title="Link to this heading">¶</a></h3>
 <p>The most informative second event reuses both products of cell 1
 together: <span class="math notranslate nohighlight">\(X^{(2)} = X'\)</span> from cell 1, <span class="math notranslate nohighlight">\(Y^{(2)} = Y'\)</span> from cell 1.
 The two cells then share the <span class="math notranslate nohighlight">\(X'\)</span>-<span class="math notranslate nohighlight">\(Y'\)</span> edge — one physical edge in
@@ -1091,7 +1415,7 @@ simulator uses the <strong>stored 16-dim joint</strong>, not the tensor product
 of marginals. The path-integral picture below makes this matter.</p>
 </section>
 <section id="hat-u-on-cell-2">
-<h3>8.3 <span class="math notranslate nohighlight">\(\hat U\)</span> on cell 2<a class="headerlink" href="#hat-u-on-cell-2" title="Link to this heading">¶</a></h3>
+<h3>9.3 <span class="math notranslate nohighlight">\(\hat U\)</span> on cell 2<a class="headerlink" href="#hat-u-on-cell-2" title="Link to this heading">¶</a></h3>
 <p>We’re applying <span class="math notranslate nohighlight">\(\hat U\)</span> to a state that is <em>itself</em> the output of
 <span class="math notranslate nohighlight">\(\hat U\)</span> acting on <span class="math notranslate nohighlight">\(\ket{+\,0,\,-\,1}\)</span> at cell 1. Stacking:</p>
 <div class="math-wrapper docutils container">
@@ -1134,7 +1458,7 @@ R^2 \;=\; \cos(4 J_s \Delta t)\,I \;-\; i\sin(4 J_s \Delta t)\,\sigma^x.
 <p><span class="math notranslate nohighlight">\(S(\rho_{X''}^{(2)}) \approx 0.230\)</span> nats. And <span class="math notranslate nohighlight">\(I^{(2)}_{\mathrm{joint}} \approx 0.46\)</span> nats — <strong>about 2.9× larger than cell 1’s <span class="math notranslate nohighlight">\(I^{(1)}_{\mathrm{joint}}\)</span></strong>.</p>
 </section>
 <section id="per-edge-mi-in-cell-2">
-<h3>8.4 Per-edge MI in cell 2<a class="headerlink" href="#per-edge-mi-in-cell-2" title="Link to this heading">¶</a></h3>
+<h3>9.4 Per-edge MI in cell 2<a class="headerlink" href="#per-edge-mi-in-cell-2" title="Link to this heading">¶</a></h3>
 <p>The inputs to cell 2 are not maximally mixed, and the input joint
 already carries MI <span class="math notranslate nohighlight">\(I^{(1)}_{\mathrm{joint}} \approx 0.161\)</span> nats from cell 1.
 So for the new cell’s 10 edges:</p>
@@ -1180,11 +1504,11 @@ the input is now correlated and U has rotated further.</p></li>
 </ul>
 </section>
 <section id="what-the-second-cell-taught-us">
-<h3>8.5 What the second cell taught us<a class="headerlink" href="#what-the-second-cell-taught-us" title="Link to this heading">¶</a></h3>
+<h3>9.5 What the second cell taught us<a class="headerlink" href="#what-the-second-cell-taught-us" title="Link to this heading">¶</a></h3>
 <ol class="arabic simple">
 <li><p><strong>Stacking <span class="math notranslate nohighlight">\(\hat U\)</span> doubles the rotation angle</strong> in the active
 spin sub-block. So if we want richer per-event dynamics, we
-can either (a) make <span class="math notranslate nohighlight">\(J_s \Delta t\)</span> larger (§6.3) or (b) chain
+can either (a) make <span class="math notranslate nohighlight">\(J_s \Delta t\)</span> larger (§8.3) or (b) chain
 events through the same worldlines so the angle accumulates.</p></li>
 <li><p><strong>Cell 2 inherits cell 1’s joint state</strong>, not just marginals.
 This is exactly the v0.2 / #16 storage convention paying off
@@ -1199,7 +1523,7 @@ cell 2 would inherit cell 1’s degeneracy. The “intermediate
 engagement” regime is the one where the history does any work.</p>
 </section>
 <section id="cross-history-merging-two-cells-fire-in-parallel-then-their-products-interact">
-<h3>8.6 Cross-history merging — two cells fire in parallel, then their products interact<a class="headerlink" href="#cross-history-merging-two-cells-fire-in-parallel-then-their-products-interact" title="Link to this heading">¶</a></h3>
+<h3>9.6 Cross-history merging — two cells fire in parallel, then their products interact<a class="headerlink" href="#cross-history-merging-two-cells-fire-in-parallel-then-their-products-interact" title="Link to this heading">¶</a></h3>
 <p>The chained picture above (cells 1 and 2 along a single pair of
 worldlines) is the cleanest analytical case, but it’s also a
 <em>special</em> topology. In the actual simulation the frontier holds
@@ -1235,13 +1559,13 @@ entropy (inherited from the prior cells’ dynamics).</p>
 <p>This is the <strong>typical</strong> topology in the simulation: most pairs the
 random frontier-picker chooses share no prior interaction, so most
 events get product-input joints and zero <span class="math notranslate nohighlight">\(I_{\mathrm{input}}\)</span>. The
-chained / shared-joint topology of <a class="reference internal" href="#cell-2-setup">§8.1–§8.5</a>
+chained / shared-joint topology of <a class="reference internal" href="#cell-2-setup">§9.1–§9.5</a>
 is the <em>exception</em>, and the only place where the per-event MI
 output can compound by more than the worldline-self contribution.</p>
 </section>
 </section>
-<section id="how-this-all-fits-into-the-path-integral">
-<h2>9. How this all fits into the path integral<a class="headerlink" href="#how-this-all-fits-into-the-path-integral" title="Link to this heading">¶</a></h2>
+<section id="how-this-fits-into-the-path-integral">
+<h2>10. How this fits into the path integral<a class="headerlink" href="#how-this-fits-into-the-path-integral" title="Link to this heading">¶</a></h2>
 <p>The Monte Carlo samples a partition function</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -1259,7 +1583,7 @@ Z \;=\; \sum_{\text{histories } h}\, \pi(h),
 \]</div>
 </div>
 <section id="what-s-summed-over">
-<h3>9.1 What’s summed over<a class="headerlink" href="#what-s-summed-over" title="Link to this heading">¶</a></h3>
+<h3>10.1 What’s summed over<a class="headerlink" href="#what-s-summed-over" title="Link to this heading">¶</a></h3>
 <p>The configuration space is <strong>the set of growable cell complexes</strong>
 reachable from the initial layer by a sequence of <code class="docutils literal notranslate"><span class="pre">interact</span></code>
 (and optionally <code class="docutils literal notranslate"><span class="pre">annihilate</span></code>, <code class="docutils literal notranslate"><span class="pre">pairCreate</span></code>) moves. Crucially:</p>
@@ -1268,7 +1592,7 @@ reachable from the initial layer by a sequence of <code class="docutils literal 
 cells, not a continuum metric.</p></li>
 <li><p>Each cell <span class="math notranslate nohighlight">\(c\)</span> contributes its 10 edges; each edge <span class="math notranslate nohighlight">\(e\)</span> has a
 <em>length</em> <span class="math notranslate nohighlight">\(\ell_e\)</span> determined by the MI of the pair-state that
-the cell was constructed from (§2, §3.3, §4.3, §8.4).</p></li>
+the cell was constructed from (§3, §4.3, §5.3, §9.4).</p></li>
 <li><p>The action <span class="math notranslate nohighlight">\(S_{\mathrm{Regge}} = \sum_H A_H \varepsilon_H\)</span> is a
 function of those edge lengths via the hinge areas and deficit
 angles.</p></li>
@@ -1281,7 +1605,7 @@ The path integral is over histories that <em>jointly specify the
 geometry and the quantum state evolution</em>.</p>
 </section>
 <section id="conditional-structure-of-the-boltzmann-weight">
-<h3>9.2 Conditional structure of the Boltzmann weight<a class="headerlink" href="#conditional-structure-of-the-boltzmann-weight" title="Link to this heading">¶</a></h3>
+<h3>10.2 Conditional structure of the Boltzmann weight<a class="headerlink" href="#conditional-structure-of-the-boltzmann-weight" title="Link to this heading">¶</a></h3>
 <p>The cumulative action telescopes:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -1291,7 +1615,7 @@ S_{\mathrm{Regge}}[\mathcal K_T] \;=\; \sum_{n=1}^{T} \Delta S_n,
 </div>
 <p>where <span class="math notranslate nohighlight">\(\Delta S_n\)</span> is the <em>new</em> hinge contribution from event <span class="math notranslate nohighlight">\(n\)</span> —
 i.e., the action of the hinges added by cell <span class="math notranslate nohighlight">\(n\)</span> that weren’t in
-<span class="math notranslate nohighlight">\(\mathcal K_{n-1}\)</span>. From §2, <span class="math notranslate nohighlight">\(\Delta S_n\)</span> is computed from the 10
+<span class="math notranslate nohighlight">\(\mathcal K_{n-1}\)</span>. From §3, <span class="math notranslate nohighlight">\(\Delta S_n\)</span> is computed from the 10
 edge lengths of cell <span class="math notranslate nohighlight">\(n\)</span>, which depend on:</p>
 <ul class="simple">
 <li><p>The marginal states <span class="math notranslate nohighlight">\(\rho_{X_n}, \rho_{Y_n}\)</span> of the chosen
@@ -1310,7 +1634,7 @@ forward from earlier events through <code class="docutils literal notranslate"><
 <span class="math notranslate nohighlight">\(n-1\)</span>. Each accepted move multiplicatively reweights the history.</p>
 </section>
 <section id="the-metropolis-sampler">
-<h3>9.3 The Metropolis sampler<a class="headerlink" href="#the-metropolis-sampler" title="Link to this heading">¶</a></h3>
+<h3>10.3 The Metropolis sampler<a class="headerlink" href="#the-metropolis-sampler" title="Link to this heading">¶</a></h3>
 <p>The Metropolis-Hastings acceptance for proposed move <span class="math notranslate nohighlight">\(m_n\)</span> is</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -1345,7 +1669,7 @@ discretization the diffusion runs on. Tracked in <a class="reference external" h
 </div></blockquote>
 </section>
 <section id="putting-cells-1-and-2-into-the-path-integral">
-<h3>9.4 Putting cells 1 and 2 into the path integral<a class="headerlink" href="#putting-cells-1-and-2-into-the-path-integral" title="Link to this heading">¶</a></h3>
+<h3>10.4 Putting cells 1 and 2 into the path integral<a class="headerlink" href="#putting-cells-1-and-2-into-the-path-integral" title="Link to this heading">¶</a></h3>
 <p>For our 2-cell intermediate-engagement example:</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
@@ -1536,7 +1860,7 @@ length in the simulated complex.</p>
 </div></blockquote>
 </section>
 <section id="what-geometry-from-entanglement-really-means-here">
-<h3>9.5 What “geometry from entanglement” really means here<a class="headerlink" href="#what-geometry-from-entanglement-really-means-here" title="Link to this heading">¶</a></h3>
+<h3>10.5 What “geometry from entanglement” really means here<a class="headerlink" href="#what-geometry-from-entanglement-really-means-here" title="Link to this heading">¶</a></h3>
 <p>Read this all backward, and the path integral is doing something
 specific:</p>
 <ol class="arabic simple">
@@ -1557,7 +1881,7 @@ The H_DS4 question — does this generate a 4-dimensional spacetime
 ingredients.</p>
 <p>Conversely, the things this derivation makes vivid:</p>
 <ul class="simple">
-<li><p>If <span class="math notranslate nohighlight">\(\hat U\)</span> is dynamically inert on the chosen inputs (§3 / §4),
+<li><p>If <span class="math notranslate nohighlight">\(\hat U\)</span> is dynamically inert on the chosen inputs (§4 / §5),
 every <span class="math notranslate nohighlight">\(\Delta S_n\)</span> is approximately a <em>constant</em> — driven only
 by the worldline-self edges with <span class="math notranslate nohighlight">\(\ell = -\ln(S/I_{\max})\)</span>, and
 independent of which <span class="math notranslate nohighlight">\((X, Y)\)</span> pair was chosen at step <span class="math notranslate nohighlight">\(n\)</span>. The
@@ -1565,8 +1889,8 @@ geometry then samples a <em>single</em> effective lattice up to
 combinatorial choices.</p></li>
 <li><p>The “interesting” regime is the one where <span class="math notranslate nohighlight">\(\Delta S_n\)</span> varies
 strongly across move proposals — i.e., where the H-engagement
-conditions of §5 are met.</p></li>
-<li><p>Manipulations from §6 are all ways to make <span class="math notranslate nohighlight">\(\Delta S_n\)</span> depend
+conditions of §6 are met.</p></li>
+<li><p>Manipulations from §8 are all ways to make <span class="math notranslate nohighlight">\(\Delta S_n\)</span> depend
 more strongly on the quantum state of the chosen pair, so the
 Metropolis sampler can actually select among quantum-distinct
 geometries rather than a near-uniform topological prior.</p></li>
@@ -1577,11 +1901,18 @@ geometries rather than a near-uniform topological prior.</p></li>
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="v0.2.html"><span class="std std-doc">v0.2 design note</span></a> — sets up <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> and
-introduces the Choi-state <span class="math notranslate nohighlight">\(\Sigma_{AB}\)</span>.</p></li>
-<li><p><a class="reference internal" href="../experiments/05-v0.2-h-param-sweep.html"><span class="std std-doc">Experiment 05: H-parameter sweep</span></a>
-— the surface result this derivation reinterprets.</p></li>
+introduces the Choi-state <span class="math notranslate nohighlight">\(\Sigma_{AB}\)</span>; its “Open question” on
+the arbitrariness of the default <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> is what §1
+here responds to.</p></li>
+<li><p><a class="reference internal" href="../../overview/from_schwinger_to_lattice.html"><span class="std std-doc">from_schwinger_to_lattice.md</span></a>
+— the Schwinger model read as a set of requirements rather than
+dynamics; the locality truncation behind R5.</p></li>
 <li><p><a class="reference internal" href="../../overview/intellectual_lineage.html#the-qudit-basis-charge-intrinsic-to-the-state"><span class="std std-ref">Intellectual lineage</span></a>
-— the qudit-basis story this builds on.</p></li>
+— the qudit-basis story this builds on; §4 there gives the
+Schwinger “set of requirements” framing that §7 here extends to
+the first-cell operational level.</p></li>
+<li><p><a class="reference internal" href="../experiments/05-v0.2-h-param-sweep.html"><span class="std std-doc">Experiment 05: H-parameter sweep</span></a>
+— the surface result §6.1 reinterprets.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">src/quantum/interaction_simulation.cpp</span></code> lines 455–525
 (<code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code>) and 760–810 (<code class="docutils literal notranslate"><span class="pre">computeInteractionQudit</span></code>):
 the code paths this analysis matches.</p></li>
@@ -1644,64 +1975,81 @@ the code paths this analysis matches.</p></li>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation</a><ul>
-<li><a class="reference internal" href="#setup">1. Setup</a><ul>
-<li><a class="reference internal" href="#single-vertex-operators">1.1 Single-vertex operators</a></li>
-<li><a class="reference internal" href="#the-pair-hamiltonian">1.2 The pair Hamiltonian</a></li>
-<li><a class="reference internal" href="#conservation-and-block-structure">1.3 Conservation and block structure</a></li>
-<li><a class="reference internal" href="#xx-yy-in-the-spin-sector">1.4 <span class="math notranslate nohighlight">\(XX + YY\)</span> in the spin sector</a></li>
-<li><a class="reference internal" href="#the-unitary-on-a-fixed-charge-pair-sub-block">1.5 The unitary on a fixed-charge-pair sub-block</a></li>
+<li><a class="reference internal" href="#">Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation</a><ul>
+<li><a class="reference internal" href="#the-question-which-pair-hamiltonian">1. The question: which pair Hamiltonian?</a><ul>
+<li><a class="reference internal" href="#three-layers-and-what-a-requirement-on-hat-h-can-fix">1.1 Three layers — and what a requirement on <span class="math notranslate nohighlight">\(\hat H\)</span> can fix</a></li>
+<li><a class="reference internal" href="#roadmap">1.2 Roadmap</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#the-first-interaction-cell">2. The first interaction cell</a><ul>
-<li><a class="reference internal" href="#generation-0-generation-1">2.1 Generation 0 → generation 1</a></li>
-<li><a class="reference internal" href="#the-three-product-states">2.2 The three product states</a></li>
-<li><a class="reference internal" href="#the-10-mi-assignments">2.3 The 10 MI assignments</a></li>
+<li><a class="reference internal" href="#setup-the-kinematic-layer-and-the-pair-hamiltonian">2. Setup: the kinematic layer and the pair Hamiltonian</a><ul>
+<li><a class="reference internal" href="#the-kinematic-layer-per-vertex-qudits">2.1 The kinematic layer: per-vertex qudits</a></li>
+<li><a class="reference internal" href="#single-vertex-operators">2.2 Single-vertex operators</a></li>
+<li><a class="reference internal" href="#the-pair-hamiltonian-general-form">2.3 The pair Hamiltonian: general form</a></li>
+<li><a class="reference internal" href="#worked-example-the-v0-2-h-mathrm-pair">2.4 Worked example: the v0.2 <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span></a></li>
+<li><a class="reference internal" href="#conservation-and-block-structure">2.5 Conservation and block structure</a></li>
+<li><a class="reference internal" href="#the-entangling-core-xx-yy-in-the-spin-sector">2.6 The entangling core: <span class="math notranslate nohighlight">\((XX + YY)\)</span> in the spin sector</a></li>
+<li><a class="reference internal" href="#the-unitary-on-a-fixed-charge-pair-sub-block">2.7 The unitary on a fixed-charge-pair sub-block</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#case-a-bell-like-input-concentrated-information">3. Case A — Bell-like input (concentrated information)</a><ul>
-<li><a class="reference internal" href="#marginals-and-entropies">3.1 Marginals and entropies</a></li>
-<li><a class="reference internal" href="#action-of-hat-u">3.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span></a></li>
-<li><a class="reference internal" href="#per-edge-mi">3.3 Per-edge MI</a></li>
-<li><a class="reference internal" href="#what-happened-dynamically">3.4 What happened dynamically</a></li>
+<li><a class="reference internal" href="#the-first-interaction-cell">3. The first interaction cell</a><ul>
+<li><a class="reference internal" href="#generation-0-generation-1">3.1 Generation 0 → generation 1</a></li>
+<li><a class="reference internal" href="#the-three-product-states">3.2 The three product states</a></li>
+<li><a class="reference internal" href="#the-10-mi-assignments">3.3 The 10 MI assignments</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#case-b-distributed-mixed-input-maximally-distributed-information">4. Case B — distributed mixed input (maximally distributed information)</a><ul>
-<li><a class="reference internal" href="#id1">4.1 Marginals and entropies</a></li>
-<li><a class="reference internal" href="#id2">4.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span></a></li>
-<li><a class="reference internal" href="#id3">4.3 Per-edge MI</a></li>
-<li><a class="reference internal" href="#id4">4.4 What happened dynamically</a></li>
+<li><a class="reference internal" href="#case-a-the-eigenstate-trap-concentrated-information">4. Case A — the eigenstate trap (concentrated information)</a><ul>
+<li><a class="reference internal" href="#marginals-and-entropies">4.1 Marginals and entropies</a></li>
+<li><a class="reference internal" href="#action-of-hat-u">4.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span></a></li>
+<li><a class="reference internal" href="#per-edge-mi">4.3 Per-edge MI</a></li>
+<li><a class="reference internal" href="#what-happened-dynamically">4.4 What happened dynamically</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#reading-when-does-h-mathrm-pair-engage">5. Reading: when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> engage?</a><ul>
-<li><a class="reference internal" href="#why-the-j-s-0-sweep-result-was-suspicious">5.1 Why the J_s = 0 sweep result was suspicious</a></li>
+<li><a class="reference internal" href="#case-b-the-maximally-mixed-trap-distributed-information">5. Case B — the maximally-mixed trap (distributed information)</a><ul>
+<li><a class="reference internal" href="#id1">5.1 Marginals and entropies</a></li>
+<li><a class="reference internal" href="#id2">5.2 Action of <span class="math notranslate nohighlight">\(\hat U\)</span></a></li>
+<li><a class="reference internal" href="#id3">5.3 Per-edge MI</a></li>
+<li><a class="reference internal" href="#id4">5.4 What happened dynamically</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#physically-meaningful-manipulations-to-increase-engagement">6. Physically meaningful manipulations to increase engagement</a><ul>
-<li><a class="reference internal" href="#lower-initial-state-entropy">6.1 Lower initial-state entropy</a></li>
-<li><a class="reference internal" href="#charge-sector-superposition-inputs">6.2 Charge-sector superposition inputs</a></li>
-<li><a class="reference internal" href="#increase-delta-t">6.3 Increase <span class="math notranslate nohighlight">\(\Delta t\)</span></a></li>
-<li><a class="reference internal" href="#add-a-spincharge-cross-term">6.4 Add a spin–charge cross term</a></li>
-<li><a class="reference internal" href="#replace-xx-yy-with-a-full-cartan-entangler">6.5 Replace <span class="math notranslate nohighlight">\((XX+YY)\)</span> with a full Cartan entangler</a></li>
-<li><a class="reference internal" href="#time-dependent-kicked-hat-u">6.6 Time-dependent / kicked <span class="math notranslate nohighlight">\(\hat U\)</span></a></li>
+<li><a class="reference internal" href="#when-does-the-hamiltonian-engage">6. When does the Hamiltonian engage?</a><ul>
+<li><a class="reference internal" href="#why-the-j-s-0-sweep-result-was-suspicious">6.1 Why the <span class="math notranslate nohighlight">\(J_s = 0\)</span> sweep result was suspicious</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#recommendations">7. Recommendations</a></li>
-<li><a class="reference internal" href="#a-second-interaction-event">8. A second interaction event</a><ul>
-<li><a class="reference internal" href="#cell-1-outputs-recap-of-5-s-mid-engagement-case">8.1 Cell 1 outputs (recap of §5’s mid-engagement case)</a></li>
-<li><a class="reference internal" href="#cell-2-setup-reuse-the-two-products">8.2 Cell 2 setup — reuse the two products</a></li>
-<li><a class="reference internal" href="#hat-u-on-cell-2">8.3 <span class="math notranslate nohighlight">\(\hat U\)</span> on cell 2</a></li>
-<li><a class="reference internal" href="#per-edge-mi-in-cell-2">8.4 Per-edge MI in cell 2</a></li>
-<li><a class="reference internal" href="#what-the-second-cell-taught-us">8.5 What the second cell taught us</a></li>
-<li><a class="reference internal" href="#cross-history-merging-two-cells-fire-in-parallel-then-their-products-interact">8.6 Cross-history merging — two cells fire in parallel, then their products interact</a></li>
+<li><a class="reference internal" href="#the-requirements">7. The requirements</a><ul>
+<li><a class="reference internal" href="#r1-charge-gradeability-and-conservation">R1 — Charge gradeability and conservation</a></li>
+<li><a class="reference internal" href="#r2-genuine-entangling-content">R2 — Genuine entangling content</a></li>
+<li><a class="reference internal" href="#r3-non-degeneracy-on-the-input-class-engagement">R3 — Non-degeneracy on the input class (engagement)</a></li>
+<li><a class="reference internal" href="#r4-controlled-c-cp-structure">R4 — Controlled C / CP structure</a></li>
+<li><a class="reference internal" href="#r5-two-body-locality">R5 — Two-body locality</a></li>
+<li><a class="reference internal" href="#r6-a-tunable-mass-gap-term">R6 — A tunable mass / gap term</a></li>
+<li><a class="reference internal" href="#what-is-not-a-requirement-on-hat-h">What is <em>not</em> a requirement on <span class="math notranslate nohighlight">\(\hat H\)</span></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#how-this-all-fits-into-the-path-integral">9. How this all fits into the path integral</a><ul>
-<li><a class="reference internal" href="#what-s-summed-over">9.1 What’s summed over</a></li>
-<li><a class="reference internal" href="#conditional-structure-of-the-boltzmann-weight">9.2 Conditional structure of the Boltzmann weight</a></li>
-<li><a class="reference internal" href="#the-metropolis-sampler">9.3 The Metropolis sampler</a></li>
-<li><a class="reference internal" href="#putting-cells-1-and-2-into-the-path-integral">9.4 Putting cells 1 and 2 into the path integral</a></li>
-<li><a class="reference internal" href="#what-geometry-from-entanglement-really-means-here">9.5 What “geometry from entanglement” really means here</a></li>
+<li><a class="reference internal" href="#design-knobs-satisfying-the-requirements">8. Design knobs: satisfying the requirements</a><ul>
+<li><a class="reference internal" href="#lower-initial-state-entropy">8.1 Lower initial-state entropy</a></li>
+<li><a class="reference internal" href="#charge-sector-superposition-inputs">8.2 Charge-sector superposition inputs</a></li>
+<li><a class="reference internal" href="#increase-delta-t">8.3 Increase <span class="math notranslate nohighlight">\(\Delta t\)</span></a></li>
+<li><a class="reference internal" href="#add-a-spincharge-cross-term">8.4 Add a spin–charge cross term</a></li>
+<li><a class="reference internal" href="#replace-xx-yy-with-a-full-cartan-entangler">8.5 Replace <span class="math notranslate nohighlight">\((XX+YY)\)</span> with a full Cartan entangler</a></li>
+<li><a class="reference internal" href="#time-dependent-kicked-hat-u">8.6 Time-dependent / kicked <span class="math notranslate nohighlight">\(\hat U\)</span></a></li>
+<li><a class="reference internal" href="#recommendations">8.7 Recommendations</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#a-second-interaction-event">9. A second interaction event</a><ul>
+<li><a class="reference internal" href="#cell-1-outputs-recap-of-6-s-mid-engagement-case">9.1 Cell 1 outputs (recap of §6’s mid-engagement case)</a></li>
+<li><a class="reference internal" href="#cell-2-setup-reuse-the-two-products">9.2 Cell 2 setup — reuse the two products</a></li>
+<li><a class="reference internal" href="#hat-u-on-cell-2">9.3 <span class="math notranslate nohighlight">\(\hat U\)</span> on cell 2</a></li>
+<li><a class="reference internal" href="#per-edge-mi-in-cell-2">9.4 Per-edge MI in cell 2</a></li>
+<li><a class="reference internal" href="#what-the-second-cell-taught-us">9.5 What the second cell taught us</a></li>
+<li><a class="reference internal" href="#cross-history-merging-two-cells-fire-in-parallel-then-their-products-interact">9.6 Cross-history merging — two cells fire in parallel, then their products interact</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#how-this-fits-into-the-path-integral">10. How this fits into the path integral</a><ul>
+<li><a class="reference internal" href="#what-s-summed-over">10.1 What’s summed over</a></li>
+<li><a class="reference internal" href="#conditional-structure-of-the-boltzmann-weight">10.2 Conditional structure of the Boltzmann weight</a></li>
+<li><a class="reference internal" href="#the-metropolis-sampler">10.3 The Metropolis sampler</a></li>
+<li><a class="reference internal" href="#putting-cells-1-and-2-into-the-path-integral">10.4 Putting cells 1 and 2 into the path integral</a></li>
+<li><a class="reference internal" href="#what-geometry-from-entanglement-really-means-here">10.5 What “geometry from entanglement” really means here</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#see-also">See also</a></li>
