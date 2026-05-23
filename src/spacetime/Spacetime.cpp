@@ -615,6 +615,13 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
     topSimplicesVec.push_back(simplex);
   }
   updateOrientationCounters(simplex, +1);
+  // Mirror the simplex into each of its edges' simplex index so the
+  // hot path in Vertex::removeOutEdge / removeInEdge can look up edge
+  // cofaces directly instead of iterating every simplex incident to
+  // the endpoint and filtering by hasVertex.
+  for (auto const& e : simplex->getEdges()) {
+    if (e != nullptr) e->registerSimplex(simplex);
+  }
   return simplex;
 }
 
@@ -628,6 +635,13 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
   }
 
   updateOrientationCounters(simplex, -1);
+
+  // Drop this simplex from each of its edges' simplex index. Mirror of
+  // the registerSimplex hook; must happen BEFORE the pool slot is freed
+  // because we need to access ``simplex->getEdges()``.
+  for (auto const& e : simplex->getEdges()) {
+    if (e != nullptr) e->unregisterSimplex(simplex);
+  }
 
   auto fp = simplex->fingerprint.fingerprint();
   auto poolSlot = simplex->poolSlot_;

@@ -22,6 +22,7 @@
 #include "mesh/Fingerprint.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeKey.h"
+#include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
 #include "utils.h"
 
@@ -106,6 +107,29 @@ class Simplex;
 
     EdgeKey Edge::getKey() const noexcept {
       return {source->getId(), target->getId()};
+    }
+
+    void Edge::registerSimplex(SimplexPtr s) {
+      // Append; the registry is duplicate-free by construction because
+      // Simplex::addEdge / Spacetime::registerSimplex deduplicate before
+      // calling. Idempotency under multiple registers would require a
+      // scan we don't want in the hot path.
+      simplices_.push_back(s);
+    }
+
+    void Edge::unregisterSimplex(SimplexPtr s) noexcept {
+      // Swap-pop by fingerprint to keep the storage tight. The list is
+      // small (≤ few simplices per edge in typical 4D builds) so the
+      // linear scan is cheap; the canonical Simplex pointer is unique
+      // per fingerprint so the first match suffices.
+      const auto fp = s->fingerprint.fingerprint();
+      for (std::size_t i = 0; i < simplices_.size(); ++i) {
+        if (simplices_[i]->fingerprint.fingerprint() == fp) {
+          simplices_[i] = simplices_.back();
+          simplices_.pop_back();
+          return;
+        }
+      }
     }
 
 }
