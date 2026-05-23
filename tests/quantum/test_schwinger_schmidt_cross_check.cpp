@@ -19,9 +19,9 @@
 //      (dense ED is exact, DMRG converges to machine precision at this
 //      size).
 
-#include "quantum/dmrg_runner.hpp"
-#include "quantum/schmidt.hpp"
-#include "quantum/schwinger_model.hpp"
+#include "quantum/DMRGRunner.hpp"
+#include "quantum/Schmidt.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <itensor/all.h>
 

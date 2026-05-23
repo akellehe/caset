@@ -1,7 +1,7 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 #include "observables/WilsonLoop.h"
 #include "spacetime/Spacetime.h"
-#include "graph/dual_graph.hpp"
+#include "graph/DualGraph.hpp"
 #include "mesh/Simplex.h"
 #include "mesh/Edge.h"
 #include "mesh/Vertex.h"

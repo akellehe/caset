@@ -51,7 +51,7 @@
 // And the hopping (1/(4a))(XX + YY) = (1/(2a))(σ⁺σ⁻ + σ⁻σ⁺) goes in directly
 // since ITensor's "S+", "S-" are bare σ⁺, σ⁻ (no factor of 1/2).
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <itensor/mps/autompo.h>
 

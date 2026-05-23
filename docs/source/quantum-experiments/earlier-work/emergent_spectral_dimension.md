@@ -174,7 +174,7 @@ window).
 ## Scale-up to $N = 16$
 
 Going beyond $N = 8$ exposed a memory-scaling bug in `MutualInformation::twoSiteReducedDensity`
-(`src/quantum/mutual_information.cpp`): the previous implementation contracted sites $i \ldots j$ into a
+(`src/quantum/MutualInformation.cpp`): the previous implementation contracted sites $i \ldots j$ into a
 single dense tensor before tracing the interior site indices, accumulating $2^{j-i+1}$ physical-leg
 elements. On the Choi state's doubled chain that distance reaches $2N - 1$, so the worst-case temporal-MI
 pair allocated $2^{31}$ elements at $N=16$ — tens of GB per call, OOM in practice. The fixed version

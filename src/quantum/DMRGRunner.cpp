@@ -1,7 +1,7 @@
 // Implementation of SchwingerModel — see dmrg_runner.hpp for the
 // architectural rationale.
 
-#include "quantum/dmrg_runner.hpp"
+#include "quantum/DMRGRunner.hpp"
 
 #include <itensor/all.h>
 

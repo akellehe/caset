@@ -32,8 +32,8 @@
 
 #pragma once
 
-#include "quantum/majorization.hpp"
-#include "quantum/schmidt.hpp"
+#include "quantum/Majorization.hpp"
+#include "quantum/Schmidt.hpp"
 
 #include <string>
 #include <vector>

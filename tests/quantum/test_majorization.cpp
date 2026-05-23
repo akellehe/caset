@@ -8,7 +8,7 @@
 // the Schwinger model code) live in tests/quantum/test_majorization_poset.cpp;
 // this file is the unit-test layer for the majorizes() predicate itself.
 
-#include "quantum/majorization.hpp"
+#include "quantum/Majorization.hpp"
 
 #include <cmath>
 #include <iostream>

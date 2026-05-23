@@ -1,10 +1,10 @@
 // Implementation of ChoiPropagator. See choi_state.hpp for the
 // architectural overview.
 
-#include "quantum/choi_state.hpp"
+#include "quantum/ChoiState.hpp"
 
-#include "quantum/mutual_information.hpp"
-#include "quantum/schwinger_model.hpp"
+#include "quantum/MutualInformation.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include "tdvp.h"  // ITensor TDVP add-on
 

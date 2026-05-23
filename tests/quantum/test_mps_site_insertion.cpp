@@ -18,7 +18,7 @@
 
 #include <itensor/all.h>
 
-#include "quantum/mutual_information.hpp"
+#include "quantum/MutualInformation.hpp"
 
 #include <array>
 #include <cmath>

@@ -15,8 +15,8 @@
 // These exercise the full pipeline: Schmidt::of() → vector of
 // spectra → Majorization::posetOf() → Hasse cover edges.
 
-#include "quantum/schmidt.hpp"
-#include "quantum/majorization.hpp"
+#include "quantum/Schmidt.hpp"
+#include "quantum/Majorization.hpp"
 #include "test_mps_helpers.hpp"
 
 #include <itensor/all.h>

@@ -57,7 +57,7 @@
 #include <utility>
 #include <vector>
 
-namespace tessera::quantum {
+namespace tessera {
 
 // A single system's quantum state — a one-qubit density matrix.
 using SystemState = Eigen::Matrix2cd;
@@ -451,4 +451,4 @@ class InteractionSimulation : public tessera::Simulation {
     std::int64_t unInteractAttempts_{0}, unInteractAccepted_{0};
 };
 
-} // namespace tessera::quantum
+} // namespace tessera

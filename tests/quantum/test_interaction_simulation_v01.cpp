@@ -6,7 +6,7 @@
 // See docs/source/quantum-experiments/charged_cartan_monte_carlo_v0.1.md
 // for the construction.
 
-#include "quantum/interaction_simulation.hpp"
+#include "simulations/InteractionSimulation.h"
 
 #include <cmath>
 #include <iostream>
@@ -14,9 +14,9 @@
 #include <random>
 #include <set>
 
-using tessera::quantum::InitialChargeMode;
-using tessera::quantum::InteractionConfig;
-using tessera::quantum::InteractionSimulation;
+using tessera::InitialChargeMode;
+using tessera::InteractionConfig;
+using tessera::InteractionSimulation;
 
 namespace {
 

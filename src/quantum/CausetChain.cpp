@@ -1,7 +1,7 @@
 // Implementation of the Causet adapter — see
-// include/quantum/causet_chain.hpp for the design.
+// include/quantum/CausetChain.hpp for the design.
 
-#include "quantum/causet_chain.hpp"
+#include "quantum/CausetChain.hpp"
 
 #include "Poset.h"
 #include "mesh/Edge.h"

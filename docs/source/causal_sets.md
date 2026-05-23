@@ -18,13 +18,13 @@ triangulated `tessera.Spacetime` or from a Schwinger TDVP quench run.
 | Concept                       | Class                                | Header                              |
 |-------------------------------|--------------------------------------|-------------------------------------|
 | Partial order (Hasse covers)  | `tessera.quantum.Poset`              | `include/Poset.h`                   |
-| Spacetime → 1D causet adapter | `tessera.quantum.Causet`             | `include/quantum/causet_chain.hpp`  |
-| Causet-as-data                | `tessera.quantum.CausetChain`        | `include/quantum/causet_chain.hpp`  |
+| Spacetime → 1D causet adapter | `tessera.quantum.Causet`             | `include/quantum/CausetChain.hpp`  |
+| Causet-as-data                | `tessera.quantum.CausetChain`        | `include/quantum/CausetChain.hpp`  |
 | Pairwise order agreement      | `tessera.quantum.OrderAgreement`     | `include/Poset.h`                   |
 | `compareOrders(a, b, nLabels)`| free fn in `tessera.quantum`         | `include/Poset.h`                   |
-| (cut, time) label             | `tessera.quantum.LabelSpacetime`     | `include/quantum/causal_compare.hpp`|
-| Three orders bundle           | `tessera.quantum.CausalOrders`       | `include/quantum/causal_compare.hpp`|
-| End-to-end comparison report  | `tessera.quantum.CausalComparisonReport` | `include/quantum/causal_compare.hpp` |
+| (cut, time) label             | `tessera.quantum.LabelSpacetime`     | `include/quantum/CausalCompare.hpp`|
+| Three orders bundle           | `tessera.quantum.CausalOrders`       | `include/quantum/CausalCompare.hpp`|
+| End-to-end comparison report  | `tessera.quantum.CausalComparisonReport` | `include/quantum/CausalCompare.hpp` |
 
 All names above are exposed at the documented Python paths.
 

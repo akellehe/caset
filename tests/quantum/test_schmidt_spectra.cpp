@@ -5,7 +5,7 @@
 // here we check only the spectra in isolation, before the poset layer
 // gets involved.
 
-#include "quantum/schmidt.hpp"
+#include "quantum/Schmidt.hpp"
 #include "test_mps_helpers.hpp"
 
 #include <itensor/all.h>

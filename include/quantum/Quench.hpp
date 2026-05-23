@@ -10,7 +10,7 @@
 //     L_n  =  L_0  +  Σ_{k=1..n} [ (1 - σ^z_k)/2  -  (1 - (-1)^k)/2 ]
 //          =  c_n  -  ½ Σ_{k=1..n} σ^z_k
 //
-// (see include/quantum/schwinger_model.hpp). Flipping σ^z at TWO sites
+// (see include/quantum/SchwingerModel.hpp). Flipping σ^z at TWO sites
 // (k1, k2) with k1 < k2 in opposite directions produces a "flux tube" —
 // L_n shifts by +1 (or −1) on links in [k1, k2 − 1] and goes back to
 // vacuum elsewhere.

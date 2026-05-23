@@ -1,8 +1,8 @@
 // Schmidt-spectrum extraction for contiguous-interval bipartitions of an
-// MPS. See include/quantum/schmidt.hpp for the header-level explanation
+// MPS. See include/quantum/Schmidt.hpp for the header-level explanation
 // of what we're computing and why.
 
-#include "quantum/schmidt.hpp"
+#include "quantum/Schmidt.hpp"
 
 #include <itensor/all.h>
 #include <itensor/decomp.h>

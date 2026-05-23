@@ -4,7 +4,7 @@
 #ifndef TESSERA_OBSERVABLES_SPARSEGRAPH_H
 #define TESSERA_OBSERVABLES_SPARSEGRAPH_H
 
-#include "graph/spectral_graph.hpp"
+#include "graph/SpectralGraph.hpp"
 
 #include <cstdint>
 #include <random>

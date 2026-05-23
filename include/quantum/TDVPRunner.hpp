@@ -27,10 +27,10 @@
 
 #pragma once
 
-#include "quantum/causal_compare.hpp"   // CausalComparisonReport
-#include "quantum/dmrg_runner.hpp"      // GroundStateResult
-#include "quantum/majorization.hpp"     // MajorizationPredicate, Poset
-#include "quantum/schmidt.hpp"          // SchmidtSpectra
+#include "quantum/CausalCompare.hpp"   // CausalComparisonReport
+#include "quantum/DMRGRunner.hpp"      // GroundStateResult
+#include "quantum/Majorization.hpp"     // MajorizationPredicate, Poset
+#include "quantum/Schmidt.hpp"          // SchmidtSpectra
 
 #include <vector>
 

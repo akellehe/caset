@@ -349,7 +349,7 @@ $\ell_e^2 = \mathrm{signedSquaredLength}(\ell_e, \text{spacelike})$.
 
 ### 3.3 The 10 MI assignments
 
-From `src/quantum/interaction_simulation.cpp` (lines 786–795):
+From `src/simulations/InteractionSimulation.cpp` (lines 786–795):
 
 | edge | endpoints | MI value | meaning |
 |---|---|---|---|
@@ -477,7 +477,7 @@ $$
 $$
 
 This idealises the actual code path (which uses a random rank-≤2
-state in each sector, see `src/quantum/interaction_simulation.cpp:495`)
+state in each sector, see `src/simulations/InteractionSimulation.cpp:495`)
 — maximally distributed information *within* each sector, no
 sector-superposition, no cross-vertex correlation.
 
@@ -802,7 +802,7 @@ move it strongly.
 (rank 1, $S = 0$). This makes each vertex maximally distinguishable
 in its sector and gives $\hat U$ full purchase via $(XX+YY)$
 rotation. Cost: trivial code change in
-[`buildInitialLayer`](https://github.com/akellehe/tessera/blob/main/src/quantum/interaction_simulation.cpp#L495).
+[`buildInitialLayer`](https://github.com/akellehe/tessera/blob/main/src/simulations/InteractionSimulation.cpp#L495).
 
 Interpretation: replaces "random spinor in this charge sector"
 (thermal-ish vacuum) with "definite single-particle state".
@@ -1351,6 +1351,6 @@ Conversely, the things this derivation makes vivid:
   the first-cell operational level.
 - [Experiment 05: H-parameter sweep](../experiments/05-v0.2-h-param-sweep.md)
   — the surface result §6.1 reinterprets.
-- `src/quantum/interaction_simulation.cpp` lines 455–525
+- `src/simulations/InteractionSimulation.cpp` lines 455–525
   (`buildInitialLayer`) and 760–810 (`computeInteractionQudit`):
   the code paths this analysis matches.

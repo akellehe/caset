@@ -1,7 +1,7 @@
 // Spacetime → causet-chain adapter for the quantum subsystem.
 // See docs/source/quantum-plan.md §6.
 //
-// The vanilla Schwinger MPO (include/quantum/schwinger_model.hpp) lives
+// The vanilla Schwinger MPO (include/quantum/SchwingerModel.hpp) lives
 // on a regular 1D lattice with N sites and nearest-neighbour hopping
 // pairs (n, n+1). This adapter generalises that lattice: replace it with a
 // "chain of antichains" sourced from a tessera::Spacetime, where each

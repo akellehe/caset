@@ -62,7 +62,7 @@
 // to the build_schwinger_*() functions (both paths share the same formula
 // constants), not to AutoMPO or DMRG.
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <itensor/all.h>
 

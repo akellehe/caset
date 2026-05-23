@@ -3,7 +3,7 @@
 
 #include "observables/SparseGraph.h"
 
-#include "graph/csr_builder.hpp"
+#include "graph/CSRBuilder.hpp"
 
 #include <algorithm>
 #include <cmath>

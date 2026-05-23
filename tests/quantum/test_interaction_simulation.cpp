@@ -4,13 +4,13 @@
 // numbers. If this fails the bug is in the simulation plumbing — the
 // physics interpretation is checked separately.
 
-#include "quantum/interaction_simulation.hpp"
+#include "simulations/InteractionSimulation.h"
 
 #include <cmath>
 #include <iostream>
 
-using tessera::quantum::InteractionConfig;
-using tessera::quantum::InteractionSimulation;
+using tessera::InteractionConfig;
+using tessera::InteractionSimulation;
 
 int main() {
     int failures = 0;

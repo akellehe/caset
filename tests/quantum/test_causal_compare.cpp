@@ -20,8 +20,8 @@
 // the full pipeline plus a vLr-monotonicity sanity check that exposes
 // any cone-direction sign error.
 
-#include "quantum/causal_compare.hpp"
-#include "quantum/tdvp_runner.hpp"
+#include "quantum/CausalCompare.hpp"
+#include "quantum/TDVPRunner.hpp"
 
 #include <cmath>
 #include <iomanip>
