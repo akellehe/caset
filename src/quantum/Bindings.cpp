@@ -41,7 +41,7 @@
 
 namespace py = pybind11;
 
-void register_quantum_bindings(py::module_ m) {
+void register_quantum(py::module_ m) {
     using namespace tessera::quantum;
     // InteractionSimulation moved to tessera:: (see issue #44). Keep its
     // Python module path as tessera.quantum.InteractionSimulation for

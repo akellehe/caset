@@ -220,12 +220,20 @@ list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
     "/(src|include)/simulations/InteractionSimulation\\.(cpp|h)$")
 # bindings.cpp is the pybind11 entry point — goes into _tessera, not tessera_core.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
+# Per-subsystem Bindings.cpp files also belong to _tessera, not tessera_core
+# (they include pybind11 / Python.h).
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/[^/]+/Bindings\\.cpp$")
 
 # Sources for the pybind11 module. quantum bindings only when enabled.
-set(TESSERA_PYBIND_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp")
+set(TESSERA_PYBIND_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/mesh/Bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/spacetime/Bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/Bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/Bindings.cpp")
 if(TESSERA_QUANTUM)
     list(APPEND TESSERA_PYBIND_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/bindings.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/Bindings.cpp")
 endif()
 # ---- </Define source partitions> -----------------------------------------
 
@@ -276,7 +284,7 @@ else()
                    "tessera_core will compile as no-ops.")
 endif()
 # tessera_core is pybind-free: the binding code (which uses pybind11) lives
-# only in src/bindings.cpp and src/quantum/bindings.cpp, both compiled
+# only in src/bindings.cpp and src/quantum/Bindings.cpp, both compiled
 # directly into the _tessera Python module. Earlier versions of tessera had
 # stray `#include <pybind11/pybind11.h>` in mesh/spacetime headers that
 # served no purpose; those have been removed so tessera_core no longer
@@ -375,7 +383,7 @@ if(TESSERA_QUANTUM)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/InteractionSimulation.cpp")
     # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
     # pybind-free static lib.
-    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/bindings\\.cpp$")
+    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
     add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
     target_include_directories(tessera_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
