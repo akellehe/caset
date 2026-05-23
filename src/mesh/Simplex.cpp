@@ -125,8 +125,6 @@ Simplex::Simplex(
 #if TESSERA_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif
-  vertexIds_.reserve(vertices_.size());
-  for (const auto &v : vertices_) vertexIds_.push_back(v->getId());
 }
 
 Simplex::Simplex(
@@ -136,10 +134,8 @@ Simplex::Simplex(
   const SimplexOrientation &orientation_
 ) : spacetime(spacetime_), orientation(orientation_), vertices(vertices_), edges(std::move(edges_)),
     fingerprint() {
-  vertexIds_.reserve(vertices_.size());
   for (const auto &v : vertices_) {
     fingerprint.addId(v->getId());
-    vertexIds_.push_back(v->getId());
   }
   fingerprint.refresh();
 #if TESSERA_ASSERTIONS
@@ -328,14 +324,9 @@ void Simplex::removeCoface(SimplexPtr coface) {
 }
 
 [[nodiscard]] bool Simplex::hasVertex(const VertexPtr &vertex) const {
-  // O(k) linear scan over cached vertex IDs (k+1 ≤ 5 in typical 4D
-  // builds). The scan walks primitives — no per-element pointer
-  // dereferences — so it's roughly 5× faster than the prior
-  // ``v->getId()`` loop and eliminates the ``Vertex::getId`` hot path
-  // surfaced by the v0.2 thermalize profile.
   const auto id = vertex->getId();
-  for (const auto vid : vertexIds_)
-    if (vid == id) return true;
+  for (const auto &v : vertices)
+    if (v->getId() == id) return true;
   return false;
 }
 
@@ -512,8 +503,10 @@ bool Simplex::addEdge(const EdgePtr &edge) {
   return true;
 }
 
-// updateVertexId and swapVertexIds are now inlined no-ops in Simplex.h.
-// The vertices vector stores pointers whose IDs are updated externally.
+// updateVertexId / swapVertexIds are intentional no-ops (inlined in
+// Simplex.h). The Simplex stores VertexPtrs and reads IDs through
+// them; when Spacetime::swapVertexLabels rewrites a Vertex's ID, the
+// Simplex sees the new ID automatically on its next ``getId()``.
 
 bool Simplex::hasStoredFacet(const SimplexPtr &facet) const {
   if (facets.empty()) return false;

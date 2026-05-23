@@ -360,8 +360,10 @@ class Simplex {
     /// @return
     bool replaceVertex(const VertexPtr &oldVertex, const VertexPtr &newVertex);
 
-    /// No-op after removing per-simplex ID maps.  The vertices vector stores
-    /// pointers whose IDs are updated externally by Spacetime::swapVertexLabels.
+    /// No-op. The Simplex stores VertexPtrs and reads IDs through
+    /// them, so ``Spacetime::swapVertexLabels`` writing a new ID on
+    /// a Vertex is visible to the Simplex on its next ``getId()``.
+    /// Kept as an API hook for callers that may still invoke it.
     void updateVertexId(IdType oldId, IdType newId) { (void)oldId; (void)newId; }
 
     /// No-op — see updateVertexId.
@@ -373,15 +375,6 @@ class Simplex {
     SimplexOrientation orientation{};
 
     VertexPtrs vertices{};
-    /// Cached IDs of ``vertices`` in the same order. Populated by both
-    /// constructors and never mutated thereafter — a Simplex's vertex
-    /// set is immutable post-construction. Used by ``hasVertex`` to
-    /// avoid a vertex-pointer dereference per element of a 5-element
-    /// linear scan: the scan walks IDs (primitive uint64) against a
-    /// single dereferenced lookup ID. Cuts the hot-path
-    /// ``Simplex::hasVertex`` cost surfaced by the v0.2 finite-size
-    /// profile (≈25% of `thermalize` wall time at T=2500).
-    std::vector<IdType> vertexIds_{};
 
     Edges edges{};
 
