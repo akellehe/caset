@@ -332,6 +332,31 @@ class Spacetime {
     /// intermediate Python-side conversion.
     [[nodiscard]] class SparseGraph getDualGraph() const;
 
+    /// Spectral dimension D_S(σ) on the weighted 1-skeleton of top
+    /// simplices that pass ``filter``. Walks ``getSimplices()`` keeping
+    /// simplices with ``size() == topK + 1`` for which
+    /// ``filter.accept(s)`` is true, unions their edges (uniqued by
+    /// endpoint pair), weights them
+    /// ``w_uv = I_max · exp(-sqrt(|squaredLength_uv|))``, builds the
+    /// unnormalised weighted Laplacian ``L = D - W``, and returns
+    /// ``SpectralGraph::spectralDimension`` of the heat-kernel return
+    /// probability.
+    ///
+    /// Sits next to :func:`modularityOnSkeleton`: Spacetime exposes
+    /// graph-based observables as single methods that compose the
+    /// inherited heat-kernel pipeline with a filtered top-simplex
+    /// projection.
+    ///
+    /// ``skeletonDim`` reserves API space for higher-k skeletons; only
+    /// ``skeletonDim == 1`` is currently supported.
+    [[nodiscard]] std::vector<double>
+    getSpectralDimensionOnSkeleton(
+        std::vector<double> const& sigmas,
+        int krylovDim,
+        class SimplexFilter const& filter,
+        int topK = 4,
+        int skeletonDim = 1) const;
+
     /// Newman-Girvan modularity Q on the vertex/edge 1-skeleton, with
     /// implicit labels ``label(v) = v.id() % M``.
     ///

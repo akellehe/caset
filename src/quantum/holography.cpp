@@ -566,6 +566,14 @@ EmergentSpectralDimension::computeFromSnapshots(QuenchResult const& quench) cons
     SpectralDimensionResult result;
 
     // (1) Build the MI profile on the (site, snapshot) label set.
+    //
+    // Note: D_S is measured here on the *boundary* MI graph directly.
+    // The MI/TDVP "holographic dual" idea was tried and rolled back —
+    // see #41 (vertex-state on Spacetime is the right architecture for
+    // an MI-driven Spacetime, not a snapshot-based bulk reconstruction).
+    // For a physical-bulk D_S, use the interaction-history pipeline
+    // (InteractionSimulation::getSpectralDimension), which now routes
+    // through Spacetime::getSpectralDimensionOnSkeleton.
     MutualInformationProfile profile(quench.snapshots, config_);
     EmergentGraph graph(profile);
 
