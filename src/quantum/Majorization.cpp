@@ -1,6 +1,6 @@
 // Concrete implementations of the `MajorizationPredicate` hierarchy and
 // the variant-agnostic `Majorization` façade. See
-// include/quantum/majorization.hpp for the abstract contract, the
+// include/quantum/Majorization.hpp for the abstract contract, the
 // partial-order axioms each variant satisfies, and the bibliographic
 // references — short references in this file point back to the header.
 //
@@ -9,7 +9,7 @@
 // (2015), arXiv: 1410.6601; {AN2008} = Aubrun, G. & Nechita, I. (2008),
 // arXiv: 0707.0211.
 
-#include "quantum/majorization.hpp"
+#include "quantum/Majorization.hpp"
 
 #include <algorithm>
 #include <cmath>

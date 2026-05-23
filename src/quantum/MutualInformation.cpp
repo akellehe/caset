@@ -1,8 +1,8 @@
 // Implementation of MutualInformation — see mutual_information.hpp for
 // the architectural overview and the canonical-form derivation.
 
-#include "quantum/mutual_information.hpp"
-#include "quantum/schmidt.hpp"
+#include "quantum/MutualInformation.hpp"
+#include "quantum/Schmidt.hpp"
 
 #include <itensor/all.h>
 

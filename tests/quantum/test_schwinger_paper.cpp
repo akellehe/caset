@@ -52,7 +52,7 @@
 // to position 1 with that bond originally not connecting through the edge.
 // Dense ED on the Sz=0 sector is small enough at N=8,12 to be free.
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <itensor/all.h>
 

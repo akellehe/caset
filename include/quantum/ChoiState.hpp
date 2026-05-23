@@ -41,7 +41,7 @@
 
 #pragma once
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <Eigen/Dense>
 #include <itensor/all.h>

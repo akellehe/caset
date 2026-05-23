@@ -3,7 +3,7 @@
 
 #include "Poset.h"
 
-#include "graph/index_by_key.hpp"
+#include "graph/IndexByKey.hpp"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Vertex.h"

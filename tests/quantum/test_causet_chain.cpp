@@ -28,7 +28,7 @@
 //       hoppingPairs (would not be a Hasse cover).
 
 #include "Poset.h"
-#include "quantum/causet_chain.hpp"
+#include "quantum/CausetChain.hpp"
 #include "spacetime/Spacetime.h"
 
 #include <algorithm>

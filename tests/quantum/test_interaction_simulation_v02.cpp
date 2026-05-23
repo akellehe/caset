@@ -1,14 +1,14 @@
 // Test suite for the v0.2 qudit-basis additions to InteractionSimulation.
 // See docs/source/quantum-experiments/charged_cartan_monte_carlo_v0.2.md.
 
-#include "quantum/interaction_simulation.hpp"
+#include "simulations/InteractionSimulation.h"
 
 #include <cmath>
 #include <iostream>
 
-using tessera::quantum::InitialChargeMode;
-using tessera::quantum::InteractionConfig;
-using tessera::quantum::InteractionSimulation;
+using tessera::InitialChargeMode;
+using tessera::InteractionConfig;
+using tessera::InteractionSimulation;
 
 namespace {
 

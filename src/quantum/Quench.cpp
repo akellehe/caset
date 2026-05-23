@@ -1,7 +1,7 @@
 // Implementation of the QqbarQuench operator. See
-// include/quantum/quench.hpp for the physics + parity discussion.
+// include/quantum/Quench.hpp for the physics + parity discussion.
 
-#include "quantum/quench.hpp"
+#include "quantum/Quench.hpp"
 
 #include <itensor/all.h>
 

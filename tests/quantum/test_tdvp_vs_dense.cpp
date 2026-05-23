@@ -24,9 +24,9 @@
 // with bondDim sufficient to be exact, agreement should be ~1e-6 over
 // the full evolution.
 
-#include "quantum/quench.hpp"
-#include "quantum/schwinger_model.hpp"
-#include "quantum/tdvp_runner.hpp"
+#include "quantum/Quench.hpp"
+#include "quantum/SchwingerModel.hpp"
+#include "quantum/TDVPRunner.hpp"
 
 #include <Eigen/Dense>
 

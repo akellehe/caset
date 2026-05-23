@@ -25,7 +25,7 @@
 //       AutoMPO's automatic compression and the long-range terms aren't
 //       being grouped efficiently.
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <itensor/all.h>
 

@@ -23,7 +23,7 @@
 // silently collapses or duplicates that structure.
 
 #include "Poset.h"
-#include "quantum/causet_chain.hpp"
+#include "quantum/CausetChain.hpp"
 #include "spacetime/Foliation.h"
 #include "spacetime/Metric.h"
 #include "spacetime/Signature.h"

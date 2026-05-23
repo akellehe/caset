@@ -162,7 +162,7 @@ handled with the AutoMPO machinery described below.
 
 This is the same Hamiltonian implemented by `tessera.quantum`; see
 [quantum.md](quantum.md) for the API surface and convention details, and
-`include/quantum/schwinger_model.hpp` for the algebraic expansion of
+`include/quantum/SchwingerModel.hpp` for the algebraic expansion of
 $L_n^2$ into operator and c-number pieces.
 
 ### 3.2 Cut family and Schmidt spectra

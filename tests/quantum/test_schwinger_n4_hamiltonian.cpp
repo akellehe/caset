@@ -9,7 +9,7 @@
 // PLAN.md §4 Hamiltonian formula symbolically (term-by-term, with no
 // MPO machinery) and confirm that SchwingerHamiltonian::denseMatrix agrees to
 // machine precision. We also check a representative off-diagonal hopping
-// matrix element. If the L_n² expansion in src/quantum/schwinger_model.cpp
+// matrix element. If the L_n² expansion in src/quantum/SchwingerModel.cpp
 // got a sign or coefficient wrong, this test catches it independently of
 // any AutoMPO / DMRG machinery.
 //
@@ -18,7 +18,7 @@
 // pieces of L_n² (constant, linear σ^z, pair σ^z σ^z) are non-trivially
 // exercised.
 
-#include "quantum/schwinger_model.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include <cmath>
 #include <cstdint>

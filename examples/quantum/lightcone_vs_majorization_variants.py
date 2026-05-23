@@ -4,7 +4,7 @@
 Re-runs the regimes from ``lightcone_vs_majorization_cone_overflow.py``
 through each of the three concrete majorization-predicate variants
 (``StandardMajorization``, ``LogConcaveMajorization``,
-``PeakRadialMajorization`` — see ``include/quantum/majorization.hpp``
+``PeakRadialMajorization`` — see ``include/quantum/Majorization.hpp``
 for the contract and the bibliographic references). The objective is
 to test whether the ~50% strong-falsification fraction observed in the
 classical-majorization scan is sensitive to *which* notion of

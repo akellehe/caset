@@ -30,8 +30,8 @@
 // L₀ ∈ {0, 0.5}) — 12 ground states × O(N²) cuts each = O(100) spectra
 // validated. Total runtime ~5–10 s, dominated by DMRG.
 
-#include "quantum/dmrg_runner.hpp"
-#include "quantum/schmidt.hpp"
+#include "quantum/DMRGRunner.hpp"
+#include "quantum/Schmidt.hpp"
 
 #include <algorithm>
 #include <cmath>

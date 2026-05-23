@@ -1,7 +1,7 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
-#include "graph/index_by_key.hpp"
+#include "graph/IndexByKey.hpp"
 #include "mesh/Simplex.h"
 #include "mesh/Edge.h"
 #include "mesh/Vertex.h"

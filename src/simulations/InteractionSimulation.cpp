@@ -7,14 +7,14 @@
 // Choi state, no global wavefunction — the global correlation structure
 // lives in the geometry (the accumulated edge lengths / Regge action).
 
-#include "quantum/interaction_simulation.hpp"
+#include "simulations/InteractionSimulation.h"
 
 #include "mesh/Edge.h"
 #include "mesh/Simplex.h"
 #include "mesh/SimplexFilter.h"
 #include "mesh/Vertex.h"
 #include "observables/MIUnits.hpp"
-#include "quantum/holography.hpp"
+#include "quantum/Holography.hpp"
 #include "spacetime/Metric.h"
 #include "spacetime/Spacetime.h"
 
@@ -25,7 +25,7 @@
 #include <set>
 #include <stdexcept>
 
-namespace tessera::quantum {
+namespace tessera {
 
 namespace {
 
@@ -1652,4 +1652,4 @@ std::vector<double> InteractionSimulation::getSpectralDimension(
         /*topK=*/4, /*skeletonDim=*/1);
 }
 
-} // namespace tessera::quantum
+} // namespace tessera

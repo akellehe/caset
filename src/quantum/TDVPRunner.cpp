@@ -1,13 +1,13 @@
 // Implementation of SchwingerQuench — the q-qbar-quench + TDVP pipeline
 // and the causal-order comparison. See
-// include/quantum/tdvp_runner.hpp for the architectural narrative.
+// include/quantum/TDVPRunner.hpp for the architectural narrative.
 
-#include "quantum/tdvp_runner.hpp"
+#include "quantum/TDVPRunner.hpp"
 
-#include "quantum/causal_compare.hpp"
-#include "quantum/mutual_information.hpp"
-#include "quantum/quench.hpp"
-#include "quantum/schwinger_model.hpp"
+#include "quantum/CausalCompare.hpp"
+#include "quantum/MutualInformation.hpp"
+#include "quantum/Quench.hpp"
+#include "quantum/SchwingerModel.hpp"
 
 #include "tdvp.h"  // ITensor TDVP add-on, vendored under third_party/itensor_tdvp
 

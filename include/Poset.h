@@ -18,7 +18,7 @@
 //
 // All three are general-purpose; the quantum subsystem layers
 // majorization-specific glue on top of them in
-// include/quantum/majorization.hpp.
+// include/quantum/Majorization.hpp.
 
 #pragma once
 

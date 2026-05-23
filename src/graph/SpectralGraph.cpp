@@ -12,7 +12,7 @@
 // below — no Eigen dependency, so this file is safe to link into
 // ``tessera_core`` (whose header surface promises no Eigen).
 
-#include "graph/spectral_graph.hpp"
+#include "graph/SpectralGraph.hpp"
 
 #include <algorithm>
 #include <cmath>

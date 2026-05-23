@@ -27,8 +27,8 @@
 // antichain extension shouldn't be trusted on top of it.
 
 #include "Poset.h"
-#include "quantum/causet_chain.hpp"
-#include "quantum/schwinger_model.hpp"
+#include "quantum/CausetChain.hpp"
+#include "quantum/SchwingerModel.hpp"
 #include "spacetime/Spacetime.h"
 
 #include <itensor/all.h>

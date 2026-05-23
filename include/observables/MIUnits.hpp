@@ -1,7 +1,7 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 //
 // Shared MI normalisation constant. Promoted from
-// ``src/quantum/interaction_simulation.cpp`` so the same value is used by
+// ``src/simulations/InteractionSimulation.cpp`` so the same value is used by
 // every consumer of the MI → length map ℓ = −log(I / I_max):
 //
 //   • InteractionSimulation (Pachner cells, Regge action)

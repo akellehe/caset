@@ -22,16 +22,16 @@
 // Plus the existing data classes (QuantumConfig, GroundStateResult,
 // SchmidtSpectra, …) and the MajorizationPredicate hierarchy.
 
-#include "quantum/causal_compare.hpp"
-#include "quantum/causet_chain.hpp"
-#include "quantum/choi_state.hpp"
-#include "quantum/dmrg_runner.hpp"
-#include "quantum/holography.hpp"
-#include "quantum/interaction_simulation.hpp"
-#include "quantum/majorization.hpp"
-#include "quantum/mutual_information.hpp"
-#include "quantum/schmidt.hpp"
-#include "quantum/tdvp_runner.hpp"
+#include "quantum/CausalCompare.hpp"
+#include "quantum/CausetChain.hpp"
+#include "quantum/ChoiState.hpp"
+#include "quantum/DMRGRunner.hpp"
+#include "quantum/Holography.hpp"
+#include "simulations/InteractionSimulation.h"
+#include "quantum/Majorization.hpp"
+#include "quantum/MutualInformation.hpp"
+#include "quantum/Schmidt.hpp"
+#include "quantum/TDVPRunner.hpp"
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
 
 #include <pybind11/eigen.h>
@@ -43,6 +43,13 @@ namespace py = pybind11;
 
 void register_quantum_bindings(py::module_ m) {
     using namespace tessera::quantum;
+    // InteractionSimulation moved to tessera:: (see issue #44). Keep its
+    // Python module path as tessera.quantum.InteractionSimulation for
+    // backward compatibility with existing scripts; only the C++ host
+    // namespace changed.
+    using ::tessera::InitialChargeMode;
+    using ::tessera::InteractionConfig;
+    using ::tessera::InteractionSimulation;
 
     m.doc() = R"doc(
 Schwinger model + DMRG + TDVP + causal-order analysis.
@@ -820,11 +827,11 @@ interaction; beta is the inverse temperature in e^{-beta S}.
         .def_readwrite("seed",               &InteractionConfig::seed)
         .def_readwrite("quiet",              &InteractionConfig::quiet);
 
-    py::enum_<tessera::quantum::InitialChargeMode>(m, "InitialChargeMode")
+    py::enum_<tessera::InitialChargeMode>(m, "InitialChargeMode")
         .value("ALTERNATING",
-               tessera::quantum::InitialChargeMode::ALTERNATING)
+               tessera::InitialChargeMode::ALTERNATING)
         .value("RANDOM",
-               tessera::quantum::InitialChargeMode::RANDOM);
+               tessera::InitialChargeMode::RANDOM);
 
     py::class_<InteractionSimulation>(m, "InteractionSimulation",
         R"doc(Metropolis Monte Carlo over interaction histories, weighted by

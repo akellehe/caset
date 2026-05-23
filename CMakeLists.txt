@@ -213,6 +213,11 @@ file(GLOB_RECURSE TESSERA_SOURCES
 # Quantum lives in its own static lib; exclude its sources from tessera_core.
 set(TESSERA_CORE_SOURCES ${TESSERA_SOURCES})
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+# InteractionSimulation lives in src/simulations/ for architectural
+# alignment with CDT (#44), but depends on Eigen + ITensor and so belongs
+# in tessera_quantum, not tessera_core.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX
+    "/(src|include)/simulations/InteractionSimulation\\.(cpp|h)$")
 # bindings.cpp is the pybind11 entry point — goes into _tessera, not tessera_core.
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
 
@@ -363,6 +368,11 @@ if(TESSERA_QUANTUM)
             CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/*.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/*.hpp")
+    # InteractionSimulation lives in src/simulations/ for architectural
+    # alignment with CDT (#44) but its Eigen/ITensor dependency makes it
+    # part of tessera_quantum, not tessera_core.
+    list(APPEND TESSERA_QUANTUM_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/InteractionSimulation.cpp")
     # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
     # pybind-free static lib.
     list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/bindings\\.cpp$")

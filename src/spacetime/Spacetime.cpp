@@ -30,10 +30,10 @@
 #include <queue>
 #include <set>
 #include "spacetime/Spacetime.h"
-#include "graph/csr_builder.hpp"
-#include "graph/dual_graph.hpp"
-#include "graph/index_by_key.hpp"
-#include "graph/spectral_graph.hpp"
+#include "graph/CSRBuilder.hpp"
+#include "graph/DualGraph.hpp"
+#include "graph/IndexByKey.hpp"
+#include "graph/SpectralGraph.hpp"
 #include "mesh/SimplexFilter.h"
 #include "observables/MIUnits.hpp"
 #include "observables/SparseGraph.h"

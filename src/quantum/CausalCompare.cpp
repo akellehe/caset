@@ -1,9 +1,9 @@
 // Implementation of CausalOrders::fromSnapshots — the cross-time
-// poset construction. See include/quantum/causal_compare.hpp for the
+// poset construction. See include/quantum/CausalCompare.hpp for the
 // design and the three-order definitions.
 
-#include "quantum/causal_compare.hpp"
-#include "quantum/tdvp_runner.hpp"   // full definition of TDVPSnapshot
+#include "quantum/CausalCompare.hpp"
+#include "quantum/TDVPRunner.hpp"   // full definition of TDVPSnapshot
 
 #include <algorithm>
 #include <cmath>

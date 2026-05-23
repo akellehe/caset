@@ -25,9 +25,9 @@
 
 #pragma once
 
-#include "quantum/tdvp_runner.hpp"  // TDVPConfig, TDVPSnapshot, QuenchResult
-#include "graph/spectral_graph.hpp"
-#include "graph/coo.hpp"
+#include "quantum/TDVPRunner.hpp"  // TDVPConfig, TDVPSnapshot, QuenchResult
+#include "graph/SpectralGraph.hpp"
+#include "graph/COO.hpp"
 
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -163,7 +163,7 @@ private:
 // Derives from ``::tessera::SpectralGraph``: the diagonal heat-kernel
 // trace, return probability, and D_S(σ) helpers are inherited from
 // the shared Lanczos + Padé-13 backbone in
-// ``src/graph/spectral_graph.cpp``. This class supplies only
+// ``src/graph/SpectralGraph.cpp``. This class supplies only
 // ``applyLaplacian`` (the weighted L = D − W matvec) and ``nVertices``.
 class EmergentGraph : public ::tessera::SpectralGraph {
 public:

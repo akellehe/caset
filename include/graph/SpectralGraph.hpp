@@ -11,7 +11,7 @@
 //   uses the symmetric normalised Laplacian
 //   $L_\text{sym} = I - D^{-1/2} A D^{-1/2}$.
 // * ``tessera::quantum::EmergentGraph``
-//   (``include/quantum/holography.hpp``) uses the weighted Laplacian
+//   (``include/quantum/Holography.hpp``) uses the weighted Laplacian
 //   $L = D - W$ on a CSR adjacency.
 //
 // Both derivations share the Krylov-Lanczos sweep, Padé-13 dense-
@@ -49,7 +49,7 @@ public:
     //   out[s * nSigmas + j] = diagonal entry at vertex starts[s] for σ[j].
     //
     // Implementation is concrete and lives in
-    // ``src/graph/spectral_graph.cpp``.
+    // ``src/graph/SpectralGraph.cpp``.
     std::vector<double> diagonalHeatKernel(
         std::vector<int> const& starts,
         std::vector<double> const& sigmas,

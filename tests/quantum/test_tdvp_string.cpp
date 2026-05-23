@@ -8,11 +8,11 @@
 // only acts non-trivially on the heavy-quark Néel when the two ends
 // land on opposite sublattices, which requires d odd. Five lattice
 // spacings is the closest match to the plan's d = 4 that satisfies
-// the parity constraint — see include/quantum/quench.hpp.
+// the parity constraint — see include/quantum/Quench.hpp.
 
-#include "quantum/quench.hpp"
-#include "quantum/schwinger_model.hpp"
-#include "quantum/tdvp_runner.hpp"
+#include "quantum/Quench.hpp"
+#include "quantum/SchwingerModel.hpp"
+#include "quantum/TDVPRunner.hpp"
 
 #include <iostream>
 #include <iomanip>

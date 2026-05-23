@@ -1,13 +1,13 @@
 // Implementation of the emergent-spectral-dimension submodule. See
-// include/quantum/holography.hpp for the architectural overview and
+// include/quantum/Holography.hpp for the architectural overview and
 // docs/source/holography-causal-ordering-emergent-dimension.md for the
 // scientific charter and falsification criteria.
 
-#include "quantum/holography.hpp"
+#include "quantum/Holography.hpp"
 
-#include "graph/csr_builder.hpp"
-#include "quantum/choi_state.hpp"
-#include "quantum/tdvp_runner.hpp"
+#include "graph/CSRBuilder.hpp"
+#include "quantum/ChoiState.hpp"
+#include "quantum/TDVPRunner.hpp"
 
 #include <Eigen/SparseCore>
 

@@ -33,9 +33,9 @@
 
 #pragma once
 
-#include "quantum/majorization.hpp"     // Poset
-#include "quantum/schmidt.hpp"          // SchmidtSpectra
-#include "quantum/schwinger_model.hpp"  // SchwingerHamiltonian, SchwingerParams
+#include "quantum/Majorization.hpp"     // Poset
+#include "quantum/Schmidt.hpp"          // SchmidtSpectra
+#include "quantum/SchwingerModel.hpp"  // SchwingerHamiltonian, SchwingerParams
 
 namespace tessera::quantum {
 

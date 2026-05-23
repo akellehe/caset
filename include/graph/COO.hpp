@@ -7,7 +7,7 @@
 // ``MutualInformationProfile::weightedAdjacency`` (MI graph), and
 // ``EmergentGraph::fromWeightedEdges`` (test factory). Each previously
 // invented its own return shape; these two structs give the C++ side a
-// single canonical type. The CSR builder in ``graph/csr_builder.hpp``
+// single canonical type. The CSR builder in ``graph/CSRBuilder.hpp``
 // consumes the same field convention.
 //
 // Note: each undirected edge is expected to appear *twice* in the
