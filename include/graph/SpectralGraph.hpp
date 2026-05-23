@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 // === tessera subsystem ns fwd-decls ===
@@ -66,13 +67,23 @@ public:
         std::vector<double> const& sigmas,
         int krylovDim = 30) const;
 
-    // $P(\sigma) = (1/|V|) \mathrm{Tr}\,e^{-\sigma L}$. Sums the diagonal
-    // heat-kernel entry over all vertices and divides by nVertices.
-    // Equivalent to:
-    //   starts = [0, 1, ..., n-1]; mean of diagonalHeatKernel rows.
+    // $P(\sigma) = (1/|V|) \mathrm{Tr}\,e^{-\sigma L}$. Estimator is the
+    // mean of the diagonal heat-kernel entry over a random ``m``-subset
+    // of vertices (Hutchinson-style unbiased estimator on the trace
+    // diagonal). When ``m >= n``, all vertices are used and the result
+    // is exact; the random subset is sampled WITHOUT replacement so
+    // repeated indices don't double-count. ``m <= 0`` requests the
+    // default (``min(n, 3000)``), which is the Tier-1 fix from #28 —
+    // cuts the heat-kernel cost from O(n²) to O(n·m). With m=3000 at
+    // n=300k this gives a 100× speedup at a modest variance penalty
+    // that the Savitzky-Golay smoother absorbs.
+    //
+    // ``seed`` controls the subset sampling RNG for reproducibility.
     std::vector<double> returnProbability(
         std::vector<double> const& sigmas,
-        int krylovDim = 30) const;
+        int krylovDim = 30,
+        int m = 0,
+        std::uint64_t seed = 0) const;
 
     // $D_S(\sigma) = -2 \,d\log P / d\log\sigma$ via centered finite
     // differences (one-sided at endpoints). Pure function; the graph

@@ -15,6 +15,7 @@
 #include "graph/SpectralGraph.hpp"
 
 #include <algorithm>
+#include <random>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -323,22 +324,55 @@ SpectralGraph::diagonalHeatKernel(std::vector<int> const& starts,
 
 std::vector<double>
 SpectralGraph::returnProbability(std::vector<double> const& sigmas,
-                                    int krylovDim) const {
+                                    int krylovDim,
+                                    int m,
+                                    std::uint64_t seed) const {
     const int n = nVertices();
     std::vector<double> P(sigmas.size(), 0.0);
     if (n == 0 || sigmas.empty()) return P;
-    std::vector<int> starts(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; ++i) starts[static_cast<std::size_t>(i)] = i;
+
+    // Tier-1 from #28: subsample a random m-subset of starting vertices.
+    // m <= 0 → default `min(n, 3000)`. m >= n → all vertices (exact).
+    int sampleSize;
+    if (m <= 0) {
+        constexpr int kDefaultM = 3000;
+        sampleSize = std::min(n, kDefaultM);
+    } else {
+        sampleSize = std::min(n, m);
+    }
+
+    std::vector<int> starts;
+    starts.reserve(static_cast<std::size_t>(sampleSize));
+    if (sampleSize == n) {
+        for (int i = 0; i < n; ++i) starts.push_back(i);
+    } else {
+        // Reservoir sampling: deterministic, without replacement.
+        starts.resize(static_cast<std::size_t>(sampleSize));
+        for (int i = 0; i < sampleSize; ++i) starts[static_cast<std::size_t>(i)] = i;
+        std::mt19937_64 rng(seed);
+        for (int i = sampleSize; i < n; ++i) {
+            std::uniform_int_distribution<int> dist(0, i);
+            const int j = dist(rng);
+            if (j < sampleSize) starts[static_cast<std::size_t>(j)] = i;
+        }
+    }
+
     auto diag = diagonalHeatKernel(starts, sigmas, krylovDim);
     const int nSig = static_cast<int>(sigmas.size());
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < sampleSize; ++i) {
         for (int j = 0; j < nSig; ++j) {
             P[static_cast<std::size_t>(j)] +=
                 diag[static_cast<std::size_t>(i) * nSig + j];
         }
     }
-    const double invN = 1.0 / static_cast<double>(n);
-    for (auto& p : P) p *= invN;
+    // Estimator: P(σ) ≈ (1/m) Σ_{s ∈ sample} [e^{-σL}]_{s,s}.
+    // For an exact trace estimator the prefactor would carry an extra
+    // (n/m) factor, but the convention everywhere in this codebase is
+    // P(σ) = (1/n) Tr e^{-σL} ≈ mean of diagonals — which the m-subset
+    // estimator returns directly. ``spectralDimension`` is a log-derivative
+    // of P so a constant prefactor cancels regardless.
+    const double invM = 1.0 / static_cast<double>(sampleSize);
+    for (auto& p : P) p *= invM;
     return P;
 }
 
