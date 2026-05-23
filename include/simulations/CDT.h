@@ -31,7 +31,18 @@
 #include <vector>
 #include <map>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::spacetime { class PachnerMove; }
+namespace tessera::simulations {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::quantum;
 
 /// # Causal Dynamical Triangulations (CDT) Simulation
 ///
@@ -201,11 +212,11 @@ class CDT : public Simulation {
     /// optimizer in observables/ModularityOptimizer.h, which layers
     /// custom acceptance (Q-direction filter) on top of the bare
     /// move mechanics.  Does *not* update CDT's acceptance counters.
-    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeAdd();
-    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeRemove();
-    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeFlip();
-    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeIflip();
-    [[nodiscard]] std::unique_ptr<class PachnerMove> proposeShift();
+    [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeAdd();
+    [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeRemove();
+    [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeFlip();
+    [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeIflip();
+    [[nodiscard]] std::unique_ptr<class ::tessera::spacetime::PachnerMove> proposeShift();
 
     /// Adjust the cosmological coupling \f$ k_4 \f$ to drive the total four-volume
     /// \f$ N_4 \f$ toward the target \f$ \bar{N}_4 \f$. Uses a proportional controller
@@ -322,6 +333,6 @@ class CDT : public Simulation {
     std::int64_t ishiftAttempts = 0, ishiftAccepted = 0;
 };
 
-} // tessera
+} // namespace tessera::simulations
 
 #endif //TESSERA_CDT_H

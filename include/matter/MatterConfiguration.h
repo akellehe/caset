@@ -6,9 +6,11 @@
 #include <unordered_map>
 #include <vector>
 
-namespace tessera {
+namespace tessera::spacetime { class Spacetime; }
 
-class Spacetime;
+namespace tessera {
+using namespace ::tessera::mesh;
+using namespace ::tessera::spacetime;
 
 /// Whether a hinge's vertices all lie on one time slice or span two.
 enum class HingeType { SPATIAL, TIMELIKE };

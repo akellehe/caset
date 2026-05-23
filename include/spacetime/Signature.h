@@ -29,7 +29,18 @@
 #include <vector>
 #include <cstdint>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// The signature type of the spacetime metric tensor \f$ g_{\mu\nu} \f$.
 ///
@@ -79,6 +90,6 @@ class Signature {
 
     static inline const double c = 1.;
 };
-} // tessera
+} // namespace tessera::spacetime
 
 #endif //TESSERA_SIGNATURE_H

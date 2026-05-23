@@ -11,7 +11,18 @@
 #include <utility>
 #include <vector>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// Undirected sparse graph in CSR (compressed sparse row) form.
 ///

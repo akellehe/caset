@@ -17,7 +17,18 @@
 
 #include <cmath>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// I_max for maximally-entangled qubit pairs. Used as the normalisation
 /// in ℓ = −log(I / kIMax). Hardcoded 2·log(2) for now; #39 promotes this

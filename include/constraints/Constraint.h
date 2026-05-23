@@ -24,9 +24,10 @@
 
 #include <memory>
 
-namespace tessera {
+namespace tessera::spacetime { class Spacetime; }
 
-class Spacetime;
+namespace tessera {
+using namespace ::tessera::spacetime;
 
 /// Types of constraints that can be applied to a spacetime.
 ///

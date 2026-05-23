@@ -96,9 +96,29 @@ References:
 )doc";
 
   // ========================================
+  // Subsystem submodules — 1:1 with C++ namespaces
+  // ========================================
+  //
+  // Each subsystem's classes are registered in its own Python submodule
+  // (`tessera.mesh`, `tessera.spacetime`, etc.), mirroring the C++ namespace
+  // layout (`tessera::mesh::`, `tessera::spacetime::`, ...). The classes
+  // are re-exported at the top-level `tessera` module via
+  // `tessera/__init__.py` for backward compatibility, so `tessera.Spacetime`
+  // and `tessera.spacetime.Spacetime` both work.
+  auto m_mesh        = m.def_submodule("mesh",
+      "Vertex / Edge / Simplex primitives, SimplexFilter, and ID typedefs.");
+  auto m_spacetime   = m.def_submodule("spacetime",
+      "Spacetime simplicial complex, Metric, Signature, Foliation, topologies, Pachner moves.");
+  auto m_observables = m.def_submodule("observables",
+      "Observables on a Spacetime: SparseGraph, ModularityOptimizer, "
+      "WilsonLoop, VolumeProfile.");
+  auto m_simulations = m.def_submodule("simulations",
+      "Monte Carlo simulations: CDT, ReggeSolver, Simulation base class.");
+
+  // ========================================
   // Edge
   // ========================================
-  py::class_<Edge, std::unique_ptr<Edge, py::nodelete>>(m, "Edge",
+  py::class_<Edge, std::unique_ptr<Edge, py::nodelete>>(m_mesh, "Edge",
       R"doc(An edge connecting two vertices in the simplicial complex.
 
 Edges are 1-simplices linking a source and target vertex.  In CDT the
@@ -143,7 +163,7 @@ timelike (imaginary-length) edges.)doc")
   // ========================================
   // Vertex
   // ========================================
-  py::class_<Vertex, std::unique_ptr<Vertex, py::nodelete>>(m, "Vertex",
+  py::class_<Vertex, std::unique_ptr<Vertex, py::nodelete>>(m_mesh, "Vertex",
       R"doc(A point in the simplicial spacetime, identified by a unique integer ID.
 
 Each vertex carries a time coordinate (the first element of its
@@ -186,7 +206,7 @@ and containing simplices.)doc")
   // ========================================
   // VertexList
   // ========================================
-  py::class_<VertexList, std::shared_ptr<VertexList> >(m, "VertexList",
+  py::class_<VertexList, std::shared_ptr<VertexList> >(m_mesh, "VertexList",
       "Container mapping vertex IDs to Vertex objects.")
       .def(py::init<>())
       .def("__getitem__", &VertexList::operator[], py::arg("vertexId"), py::return_value_policy::reference,
@@ -212,7 +232,7 @@ and containing simplices.)doc")
   // ========================================
   // EdgeList
   // ========================================
-  py::class_<EdgeList, std::shared_ptr<EdgeList> >(m, "EdgeList",
+  py::class_<EdgeList, std::shared_ptr<EdgeList> >(m_mesh, "EdgeList",
       "Container storing all edges in the spacetime, keyed by fingerprint.")
       .def(py::init<>())
       .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &, double>(&EdgeList::add),
@@ -242,22 +262,22 @@ which to remove).)doc")
   // ========================================
   // Topologies
   // ========================================
-  py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology",
+  py::class_<Topology, std::shared_ptr<Topology> >(m_spacetime, "Topology",
       "Base class for spatial topologies (Toroid, Sphere, etc.).");
 
-  py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere",
+  py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m_spacetime, "Sphere",
       "Spherical spatial topology S^{d-1}.")
       .def(py::init<>())
       .def("build", &Sphere::build, py::arg("spacetime"), py::arg("numSimplices"),
            "Build a spherical initial triangulation with the given number of simplices.");
 
-  py::class_<Cylinder, Topology, std::shared_ptr<Cylinder> >(m, "Cylinder",
+  py::class_<Cylinder, Topology, std::shared_ptr<Cylinder> >(m_spacetime, "Cylinder",
       "Cylindrical spatial topology with open time boundaries.")
       .def(py::init<>())
       .def("build", &Cylinder::build, py::arg("spacetime"), py::arg("numSimplices"),
            "Build a cylindrical triangulation with the given number of simplices.");
 
-  py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid",
+  py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m_spacetime, "Toroid",
       R"doc(Toroidal spatial topology (periodic boundary conditions).
 
 Uses the staircase product triangulation: each time slab contains
@@ -272,7 +292,7 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
   // ========================================
   // SimplexOrientation
   // ========================================
-  py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation",
+  py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m_mesh, "SimplexOrientation",
       R"doc(CDT simplex orientation (ti, tf) counting vertices at each time slice.
 
 For a d-simplex spanning times t and t+1:
@@ -292,15 +312,15 @@ For d=4: (4,1), (1,4), (3,2), (2,3).)doc")
       .def("numeric", &SimplexOrientation::numeric,
            "Return the orientation as a Python tuple (ti, tf).");
 
-  py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash> >(m, "SimplexOrientationHash")
+  py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash> >(m_mesh, "SimplexOrientationHash")
       .def(py::init<>());
-  py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq> >(m, "SimplexOrientationEq")
+  py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq> >(m_mesh, "SimplexOrientationEq")
       .def(py::init<>());
 
   // ========================================
   // Simplex
   // ========================================
-  py::class_<Simplex, std::unique_ptr<Simplex, py::nodelete>>(m, "Simplex",
+  py::class_<Simplex, std::unique_ptr<Simplex, py::nodelete>>(m_mesh, "Simplex",
       R"doc(A k-simplex in the simplicial complex.
 
 A k-simplex has k+1 vertices, C(k+1,2) edges, and k+1 facets
@@ -360,15 +380,15 @@ facet.getCofaces() includes this simplex.)doc")
       .def("area", &Simplex::area,
            "Area of this triangle (hinge) via Heron's formula.");
 
-  py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
+  py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m_mesh, "SimplexHash")
       .def(py::init<>());
-  py::class_<SimplexEq, std::shared_ptr<SimplexEq> >(m, "SimplexEq")
+  py::class_<SimplexEq, std::shared_ptr<SimplexEq> >(m_mesh, "SimplexEq")
       .def(py::init<>());
 
   // ========================================
   // Metric
   // ========================================
-  py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric",
+  py::class_<Metric, std::shared_ptr<Metric> >(m_spacetime, "Metric",
       R"doc(Spacetime metric defining edge lengths and causal structure.
 
 In coordinate-free mode (the default for CDT), edge squared lengths
@@ -387,13 +407,13 @@ Args:
   // ========================================
   // Enums
   // ========================================
-  py::enum_<SignatureType>(m, "SignatureType",
+  py::enum_<SignatureType>(m_spacetime, "SignatureType",
       "Metric signature: Lorentzian (-,+,+,...) or Euclidean (+,+,+,...).")
       .value("Lorentzian", SignatureType::Lorentzian)
       .value("Euclidean", SignatureType::Euclidean)
       .export_values();
 
-  py::enum_<Foliation>(m, "Foliation",
+  py::enum_<Foliation>(m_spacetime, "Foliation",
       "Time foliation type for CDT spacetimes.")
       .value("PREFERRED", Foliation::PREFERRED)
       .value("NONE", Foliation::NONE)
@@ -402,7 +422,7 @@ Args:
   // ========================================
   // Signature
   // ========================================
-  py::class_<Signature, std::shared_ptr<Signature> >(m, "Signature",
+  py::class_<Signature, std::shared_ptr<Signature> >(m_spacetime, "Signature",
       R"doc(Metric signature specifying dimension and type.
 
 Args:
@@ -412,7 +432,7 @@ Args:
       .def("getDiagonal", &Signature::getDiagonal,
            "Return the diagonal entries of the metric signature tensor.");
 
-  py::enum_<SpacetimeType>(m, "SpacetimeType",
+  py::enum_<SpacetimeType>(m_spacetime, "SpacetimeType",
       "Type of spacetime simulation.")
       .value("CDT", SpacetimeType::CDT)
       .value("REGGE", SpacetimeType::REGGE)
@@ -422,7 +442,7 @@ Args:
   // ========================================
   // Spacetime
   // ========================================
-  py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime",
+  py::class_<Spacetime, std::shared_ptr<Spacetime> >(m_spacetime, "Spacetime",
       R"doc(The simplicial spacetime manifold.
 
 Holds the full simplicial complex: vertices, edges, and simplices of all
@@ -689,7 +709,7 @@ Args:
   // ========================================
   // PachnerMove (transactional Pachner moves)
   // ========================================
-  py::class_<PachnerMove>(m, "PachnerMove",
+  py::class_<PachnerMove>(m_spacetime, "PachnerMove",
       R"doc(Abstract base class for transactional Pachner moves.
 
 Each subclass (ShiftMove, FlipMove, IFlipMove, AddMove, RemoveMove)
@@ -731,7 +751,7 @@ See ``docs/source/modularity-plan.md`` for the design rationale.)doc")
            "Move-type tag: one of 'add', 'remove', 'flip', 'iflip', "
            "'shift'.");
 
-  py::class_<AddMove, PachnerMove>(m, "AddMove",
+  py::class_<AddMove, PachnerMove>(m_spacetime, "AddMove",
       R"doc(Transactional (2,2d) add (vertex insertion) move.
 
 Picks a random N41 simplex, finds its spatial face and the adjacent
@@ -751,7 +771,7 @@ fingerprints across moves.)doc")
            "new vertex's ID is swap-relabeled with a random existing "
            "vertex on apply().");
 
-  py::class_<FlipMove, PachnerMove>(m, "FlipMove",
+  py::class_<FlipMove, PachnerMove>(m_spacetime, "FlipMove",
       R"doc(Transactional (2,d) flip move.
 
 Removes 2 d-simplices sharing a (d-1)-face and creates d new
@@ -763,7 +783,7 @@ Inverse: :class:`IFlipMove`.)doc")
            "Construct a (2,d) flip move bound to ``spacetime`` with a "
            "fresh ``std::mt19937`` seeded with ``seed``.");
 
-  py::class_<RemoveMove, PachnerMove>(m, "RemoveMove",
+  py::class_<RemoveMove, PachnerMove>(m_spacetime, "RemoveMove",
       R"doc(Transactional (2d, 2) remove (vertex deletion) move.
 
 Picks a random vertex with order 2d, removes the 2d incident
@@ -780,7 +800,7 @@ lengths), and recreates the 2d removed simplices.)doc")
            "Construct a remove move bound to ``spacetime`` with a fresh "
            "RNG seeded from ``seed``.");
 
-  py::class_<IFlipMove, PachnerMove>(m, "IFlipMove",
+  py::class_<IFlipMove, PachnerMove>(m_spacetime, "IFlipMove",
       R"doc(Transactional inverse (d, 2) flip move.
 
 Removes d d-simplices sharing an edge and creates 2 new d-simplices
@@ -795,7 +815,7 @@ either new simplex would already exist in the lattice.)doc")
            "Construct an inverse flip bound to ``spacetime`` with a "
            "fresh ``std::mt19937`` seeded with ``seed``.");
 
-  py::class_<ShiftMove, PachnerMove>(m, "ShiftMove",
+  py::class_<ShiftMove, PachnerMove>(m_spacetime, "ShiftMove",
       R"doc(Transactional (3,3) shift move.
 
 Picks a random top simplex and a random (d-2)-face.  If exactly d-1
@@ -814,7 +834,7 @@ moves via ``CDT.proposeShift()`` instead.)doc");
   // ========================================
   // CDTSimulation
   // ========================================
-  py::class_<CDT, std::shared_ptr<CDT> >(m, "CDTSimulation",
+  py::class_<CDT, std::shared_ptr<CDT> >(m_simulations, "CDTSimulation",
       R"doc(Causal Dynamical Triangulations Monte Carlo simulation.
 
 Implements the five Pachner moves (add, remove, flip, iflip, shift) with
@@ -997,7 +1017,7 @@ tests to make them reproducible.)doc");
   // ========================================
   // SparseGraph (for modularity / spectral dimension)
   // ========================================
-  py::class_<SparseGraph>(m, "SparseGraph",
+  py::class_<SparseGraph>(m_observables, "SparseGraph",
       R"doc(Undirected sparse graph in CSR form.
 
 Built from the COO output of ``Spacetime.getDualAdjacency`` (or
@@ -1057,8 +1077,7 @@ in ``examples/modularity.py:Graph.spectral_dimension``.)doc");
   // be referenced from HolographyConfig.simplexFilter and survive
   // copy-by-value of the config. Python subclassing is not supported
   // in this build — extend via C++ subclass + binding instead.
-  py::class_<SimplexFilter, std::shared_ptr<SimplexFilter>>(
-      m, "SimplexFilter",
+  py::class_<SimplexFilter, std::shared_ptr<SimplexFilter>>(m_mesh, "SimplexFilter",
       R"doc(Predicate over top simplices (abstract base).
 
 Selects which top simplices participate in a downstream observable
@@ -1075,7 +1094,7 @@ C++ subclass + binding.)doc")
         return "<" + self.name() + ">";
       });
   py::class_<AllSimplexFilter, SimplexFilter,
-             std::shared_ptr<AllSimplexFilter>>(m, "AllSimplexFilter",
+             std::shared_ptr<AllSimplexFilter>>(m_mesh, "AllSimplexFilter",
       R"doc(Accepts every top simplex.
 
 Default for the holographic-dual measurement (issue #31). Registration
@@ -1085,8 +1104,7 @@ the edge set), so this filter intentionally ignores edge-length
 geometry.)doc")
       .def(py::init<>());
   py::class_<PositiveGramDeterminantFilter, SimplexFilter,
-             std::shared_ptr<PositiveGramDeterminantFilter>>(
-      m, "PositiveGramDeterminantFilter",
+             std::shared_ptr<PositiveGramDeterminantFilter>>(m_mesh, "PositiveGramDeterminantFilter",
       R"doc(Accepts simplices whose Gram matrix has positive determinant.
 
 Restricts the measurement to metrically valid (non-degenerate,
@@ -1097,7 +1115,7 @@ non-collapsed) Euclidean cells. Stricter alternative to the default
   // ========================================
   // ModularityOptimizer
   // ========================================
-  py::class_<ModularityMeasurement>(m, "ModularityMeasurement",
+  py::class_<ModularityMeasurement>(m_observables, "ModularityMeasurement",
       R"doc(One recorded point on the (Q, D_S) trajectory.
 
 Mirrors examples/modularity.py:Measurement.)doc")
@@ -1110,7 +1128,7 @@ Mirrors examples/modularity.py:Measurement.)doc")
       .def_readonly("iter", &ModularityMeasurement::iter)
       .def_readonly("direction", &ModularityMeasurement::direction);
 
-  py::class_<ModularityOptimizerConfig>(m, "ModularityOptimizerConfig")
+  py::class_<ModularityOptimizerConfig>(m_observables, "ModularityOptimizerConfig")
       .def(py::init<>())
       .def_readwrite("targetDq", &ModularityOptimizerConfig::targetDq)
       .def_readwrite("maxIterations",
@@ -1126,7 +1144,7 @@ Mirrors examples/modularity.py:Measurement.)doc")
       .def_readwrite("targetNModules",
                      &ModularityOptimizerConfig::targetNModules);
 
-  py::class_<ModularityOptimizer>(m, "ModularityOptimizer",
+  py::class_<ModularityOptimizer>(m_observables, "ModularityOptimizer",
       R"doc(Modularity sweep on a CDT spacetime, driven by transactional
 Pachner moves with Q-direction acceptance.
 
@@ -1173,7 +1191,7 @@ See docs/source/modularity-plan.md for the design rationale.)doc")
   // ========================================
   // VolumeProfile
   // ========================================
-  py::class_<VolumeProfile, std::shared_ptr<VolumeProfile> >(m, "VolumeProfile",
+  py::class_<VolumeProfile, std::shared_ptr<VolumeProfile> >(m_observables, "VolumeProfile",
       R"doc(Observable measuring the spatial volume profile N(t).
 
 Counts top simplices per time slice.  Can accumulate measurements over
@@ -1193,7 +1211,7 @@ multiple configurations for averaging.)doc")
   // ========================================
   // WilsonLoop
   // ========================================
-  py::enum_<WilsonMode>(m, "WilsonMode",
+  py::enum_<WilsonMode>(m_observables, "WilsonMode",
       "Evaluation mode for Wilson loops.")
       .value("COMBINATORIAL", WilsonMode::COMBINATORIAL,
              "Dual-graph topology only (loop length, enclosed hinges).")
@@ -1202,7 +1220,7 @@ multiple configurations for averaging.)doc")
       .value("CAUSAL", WilsonMode::CAUSAL,
              "CDT causal orientation changes around the loop.");
 
-  py::enum_<LoopType>(m, "LoopType",
+  py::enum_<LoopType>(m_observables, "LoopType",
       "Which loop-shape generator to use.")
       .value("HINGE", LoopType::HINGE,
              "Elementary loop around a (d-2)-simplex.")
@@ -1211,7 +1229,7 @@ multiple configurations for averaging.)doc")
       .value("GEODESIC", LoopType::GEODESIC,
              "Shortest cycle through a start simplex.");
 
-  py::class_<LoopPath>(m, "LoopPath",
+  py::class_<LoopPath>(m_observables, "LoopPath",
       "A closed path through the dual graph (sequence of top-simplices).")
       .def_readonly("simplices", &LoopPath::simplices,
                     py::return_value_policy::reference)
@@ -1219,7 +1237,7 @@ multiple configurations for averaging.)doc")
                     py::return_value_policy::reference)
       .def("__len__", [](const LoopPath &lp) { return lp.simplices.size(); });
 
-  py::class_<WilsonResult>(m, "WilsonResult",
+  py::class_<WilsonResult>(m_observables, "WilsonResult",
       "Result of evaluating a Wilson loop.")
       .def_readonly("value", &WilsonResult::value,
                     "Primary scalar value.")
@@ -1232,7 +1250,7 @@ multiple configurations for averaging.)doc")
       .def_readonly("causalWindingNumber", &WilsonResult::causalWindingNumber,
                     "Net time-orientation changes (causal mode).");
 
-  py::class_<WilsonLoop, std::shared_ptr<WilsonLoop>>(m, "WilsonLoop",
+  py::class_<WilsonLoop, std::shared_ptr<WilsonLoop>>(m_observables, "WilsonLoop",
       R"doc(Wilson loop observable on a triangulated spacetime.
 
 A Wilson loop is the trace of a parallel-transport operator around a
@@ -1416,7 +1434,7 @@ Returns a list of vertices, one per time slice, ordered by time.)doc")
   // ========================================
   // ReggeSolver
   // ========================================
-  py::class_<ReggeSolver>(m, "ReggeSolver",
+  py::class_<ReggeSolver>(m_simulations, "ReggeSolver",
       R"doc(Regge equation solver.
 
 Adjusts edge lengths so that the Regge equations (∂S/∂ℓ² = 0) are satisfied.

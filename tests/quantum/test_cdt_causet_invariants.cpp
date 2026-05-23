@@ -39,17 +39,17 @@ namespace {
 
 // Build a small foliated 4D-Lorentzian Toroid CDT for the invariants
 // to apply to. Default Toroid produces dPlus1=5 vertices per layer.
-tessera::Spacetime build_toroid_cdt(int n_simplices = 40) {
-    tessera::Signature sig(4, tessera::SignatureType::Lorentzian);
-    auto metric = std::make_shared<tessera::Metric>(true, sig);
-    auto topology = std::static_pointer_cast<tessera::Topology>(
-        std::make_shared<tessera::Toroid>());
-    tessera::Spacetime st(metric,
-                        tessera::SpacetimeType::CDT,
+tessera::spacetime::Spacetime build_toroid_cdt(int n_simplices = 40) {
+    tessera::spacetime::Signature sig(4, tessera::spacetime::SignatureType::Lorentzian);
+    auto metric = std::make_shared<tessera::spacetime::Metric>(true, sig);
+    auto topology = std::static_pointer_cast<tessera::spacetime::Topology>(
+        std::make_shared<tessera::spacetime::Toroid>());
+    tessera::spacetime::Spacetime st(metric,
+                        tessera::spacetime::SpacetimeType::CDT,
                         std::optional<double>{1.0},
                         std::optional<double>{1.0},
-                        tessera::Foliation::PREFERRED,
-                        std::optional<std::shared_ptr<tessera::Topology>>{topology});
+                        tessera::spacetime::Foliation::PREFERRED,
+                        std::optional<std::shared_ptr<tessera::spacetime::Topology>>{topology});
     st.build(n_simplices);
     return st;
 }
@@ -147,7 +147,7 @@ bool acceptance_height_equals_num_slices_minus_one(
     return ok;
 }
 
-bool acceptance_total_extraction(tessera::Spacetime const& st,
+bool acceptance_total_extraction(tessera::spacetime::Spacetime const& st,
                                  tessera::quantum::CausetChain const& chain) {
     std::cout << "Acceptance #4 — every Spacetime vertex appears in the Poset\n";
 

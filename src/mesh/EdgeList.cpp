@@ -2,7 +2,18 @@
 #include "mesh/EdgeList.h"
 #include "mesh/Vertex.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 std::uint32_t EdgeList::allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength) {
   std::uint32_t slot;
@@ -108,4 +119,4 @@ void EdgeList::reserve(std::size_t nSimplices) {
   fpToSlot_.reserve(nSimplices);
 }
 
-} // tessera
+} // namespace tessera::mesh

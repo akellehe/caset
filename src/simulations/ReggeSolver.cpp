@@ -17,7 +17,18 @@
 #include <numbers>
 #include <set>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::spacetime {}
+namespace tessera::simulations {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::quantum;
 
 // =====================================================================
 // Construction
@@ -462,4 +473,4 @@ std::tuple<bool, double, int> ReggeSolver::solve(
     return {false, F, maxIters};
 }
 
-} // namespace tessera
+} // namespace tessera::simulations

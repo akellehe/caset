@@ -20,7 +20,18 @@
 #include <cstdint>
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::graph {
+using namespace ::tessera::mesh;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 // Unweighted COO. ``rows.size() == cols.size() == 2 * |E|`` for
 // undirected graphs (each edge listed both directions).

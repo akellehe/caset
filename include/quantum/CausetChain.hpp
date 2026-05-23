@@ -4,7 +4,7 @@
 // The vanilla Schwinger MPO (include/quantum/SchwingerModel.hpp) lives
 // on a regular 1D lattice with N sites and nearest-neighbour hopping
 // pairs (n, n+1). This adapter generalises that lattice: replace it with a
-// "chain of antichains" sourced from a tessera::Spacetime, where each
+// "chain of antichains" sourced from a tessera::spacetime::Spacetime, where each
 // antichain is the set of vertices at a fixed integer time slice and
 // hopping follows the timelike causet edges that connect adjacent
 // slices.
@@ -32,11 +32,20 @@
 #include <utility>
 #include <vector>
 
-namespace tessera {
-class Spacetime;
-}
+namespace tessera::spacetime { class Spacetime; }
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 // Spacetime → 1D lattice adapter (data class).
 //
@@ -71,7 +80,7 @@ struct CausetChain {
     tessera::Poset partialOrder;
 };
 
-// Coarse-grained façade for tessera::Spacetime → causet adapters.
+// Coarse-grained façade for tessera::spacetime::Spacetime → causet adapters.
 // Stateless; not instantiable.
 class Causet {
 public:
@@ -96,7 +105,7 @@ public:
     // ≥ 0 (spacelike or null) are ignored, as are any timelike edges
     // with src.time == tgt.time.
     [[nodiscard]] static CausetChain
-    chainFrom(tessera::Spacetime const& st);
+    chainFrom(tessera::spacetime::Spacetime const& st);
 };
 
 } // namespace tessera::quantum

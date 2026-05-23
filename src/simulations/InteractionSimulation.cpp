@@ -25,7 +25,18 @@
 #include <set>
 #include <stdexcept>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::spacetime {}
+namespace tessera::simulations {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::quantum;
 
 namespace {
 
@@ -1652,4 +1663,4 @@ std::vector<double> InteractionSimulation::getSpectralDimension(
         /*topK=*/4, /*skeletonDim=*/1);
 }
 
-} // namespace tessera
+} // namespace tessera::simulations

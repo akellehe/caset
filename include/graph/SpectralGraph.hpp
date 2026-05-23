@@ -7,7 +7,7 @@
 //
 // Concrete derivations:
 //
-// * ``tessera::SparseGraph`` (``include/observables/SparseGraph.h``)
+// * ``tessera::observables::SparseGraph`` (``include/observables/SparseGraph.h``)
 //   uses the symmetric normalised Laplacian
 //   $L_\text{sym} = I - D^{-1/2} A D^{-1/2}$.
 // * ``tessera::quantum::EmergentGraph``
@@ -22,7 +22,18 @@
 
 #include <vector>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::graph {
+using namespace ::tessera::mesh;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 class SpectralGraph {
 public:
@@ -86,4 +97,4 @@ public:
         int polyOrder = 2);
 };
 
-} // namespace tessera
+} // namespace tessera::graph

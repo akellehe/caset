@@ -1,7 +1,7 @@
 // Causet-adapter acceptance tests (docs/source/quantum-plan.md §6):
 //
 // tessera::Poset::fromSpacetime(Spacetime const&) inherits a partial order
-// from a tessera::Spacetime by treating timelike edges (Edge::getSquaredLength
+// from a tessera::spacetime::Spacetime by treating timelike edges (Edge::getSquaredLength
 // < 0) as strict precedes-relations oriented earliest-time → latest-time,
 // then transitively reducing the resulting DAG to its Hasse covers.
 //
@@ -38,7 +38,7 @@ namespace {
 // coords {static_cast<double>(t)}. Vertex::getTime() returns |x_0| for
 // 1D coords, so this gives integer-valued times that match the
 // time-slice / antichain pattern the causet adapter needs.
-tessera::VertexPtr make_vertex(tessera::Spacetime& st, std::uint64_t id, int t) {
+tessera::mesh::VertexPtr make_vertex(tessera::spacetime::Spacetime& st, std::uint64_t id, int t) {
     return st.createVertex(id, std::vector<double>{static_cast<double>(t)});
 }
 
@@ -52,7 +52,7 @@ bool covers_equal(std::vector<std::pair<int, int>> got,
 bool acceptance_two_slice_ladder() {
     std::cout << "Acceptance #1 — 2-slice ladder, every cross-slice edge is a cover\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 0);
     auto v2 = make_vertex(st, 2, 1);
@@ -81,7 +81,7 @@ bool acceptance_two_slice_ladder() {
 bool acceptance_three_slice_with_skip() {
     std::cout << "Acceptance #2 — 3-slice chain, skipping edge is reduced\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 2);
@@ -106,7 +106,7 @@ bool acceptance_three_slice_with_skip() {
 
 bool acceptance_empty_spacetime() {
     std::cout << "Acceptance #3 — empty Spacetime → empty Poset\n";
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto p = tessera::Poset::fromSpacetime(st);
     const bool ok = (p.getNodeCount() == 0) && p.covers().empty();
     std::cout << "  getNodeCount=" << p.getNodeCount()
@@ -118,7 +118,7 @@ bool acceptance_empty_spacetime() {
 bool acceptance_only_spacelike_edges() {
     std::cout << "Acceptance #4 — same-slice spacelike-only graph → no covers\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 0);
     auto v2 = make_vertex(st, 2, 0);
@@ -138,7 +138,7 @@ bool acceptance_only_spacelike_edges() {
 bool acceptance_self_comparison() {
     std::cout << "Acceptance #5 — compareOrders(p, p) = perfect agreement\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 2);
@@ -168,7 +168,7 @@ bool acceptance_dense_remap() {
     // Use non-contiguous spacetime vertex IDs (0, 5, 11, 13). The Poset
     // should remap them densely to 0..3 in ascending-ID order, so
     // ID-monotonic edges produce ID-monotonic covers in Poset space.
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v_lo = make_vertex(st, 0,  0);
     auto v_md = make_vertex(st, 5,  1);
     auto v_hi = make_vertex(st, 11, 2);
@@ -193,7 +193,7 @@ bool acceptance_dense_remap() {
 
 bool acceptance_to_dot_format() {
     std::cout << "Acceptance #7 — toDot() emits the cover edges\n";
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     st.createEdge(v0, v1, -1.0);

@@ -30,7 +30,22 @@
 #include "mesh/Fingerprint.h"
 #include <optional>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime {
+  class Spacetime;
+}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 // Basic types
 using IdType = std::uint64_t;
@@ -102,8 +117,7 @@ using SimplexOrientationHash = FingerprintHash<SimplexOrientation>;
 using SimplexOrientationEq = FingerprintEq<SimplexOrientation>;
 using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrientationHash, SimplexOrientationEq>;
 
-class Spacetime;
 
-} // namespace tessera
+} // namespace tessera::mesh
 
 #endif // TESSERA_FORWARD_DECLARATIONS_H

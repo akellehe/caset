@@ -140,7 +140,7 @@ std::string Poset::toDot() const {
 Poset Poset::fromSpacetime(Spacetime const& st) {
     // Causet-adapter inheritance (docs/source/quantum-plan.md §6) —
     // inherit a partial order
-    // from a tessera::Spacetime by treating each timelike edge as a strict
+    // from a tessera::spacetime::Spacetime by treating each timelike edge as a strict
     // precedes-relation oriented earliest-time → latest-time, then
     // transitively reducing the resulting DAG to its Hasse covers.
     //

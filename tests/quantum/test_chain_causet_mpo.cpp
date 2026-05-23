@@ -123,8 +123,8 @@ bool acceptance_spacetime_chain_extraction() {
     // built `tessera::CausalSet` chain would produce. Use 8 slices for
     // N=8 lattice sites total.
     constexpr int N = 8;
-    tessera::Spacetime st;
-    std::vector<tessera::VertexPtr> verts;
+    tessera::spacetime::Spacetime st;
+    std::vector<tessera::mesh::VertexPtr> verts;
     verts.reserve(static_cast<std::size_t>(N));
     for (int t = 0; t < N; ++t) {
         verts.push_back(st.createVertex(static_cast<std::uint64_t>(t),

@@ -13,9 +13,23 @@
 #include "cuda/regge_cuda.h"
 #endif
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::spacetime {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime {
+  class Spacetime;
+}
+namespace tessera::simulations {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::quantum;
 
-class Spacetime;
 
 /// Regge equation solver.
 ///
@@ -121,4 +135,4 @@ class ReggeSolver {
 
 };
 
-} // namespace tessera
+} // namespace tessera::simulations

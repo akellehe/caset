@@ -12,7 +12,18 @@
 #include "spacetime/PachnerMove.h"
 #include "spacetime/Spacetime.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// Inverse (d, 2) Pachner flip with apply / rollback.
 ///

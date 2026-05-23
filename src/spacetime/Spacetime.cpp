@@ -46,7 +46,18 @@
 #include <unordered_map>
 #include "spacetime/topologies/Toroid.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 // ========================================
 // Constructors
@@ -744,9 +755,9 @@ void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) 
   }
 }
 
-SparseGraph Spacetime::getDualGraph() const {
+::tessera::observables::SparseGraph Spacetime::getDualGraph() const {
   auto [rows, cols, n] = getDualAdjacency();
-  return SparseGraph::fromCOO(rows, cols, n);
+  return ::tessera::observables::SparseGraph::fromCOO(rows, cols, n);
 }
 
 namespace {
@@ -973,4 +984,4 @@ void Spacetime::removeVertex(const VertexPtr &vertex) {
   vertexList->remove(vertex);
 }
 
-} // tessera
+} // namespace tessera::spacetime

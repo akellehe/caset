@@ -32,7 +32,18 @@
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/Fingerprint.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 ///
 /// \brief Represents a vertex in a causal set (causet) spacetime discretization
@@ -448,7 +459,7 @@ class Vertex {
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
 };
 
-}  // namespace tessera
+}  // namespace tessera::mesh
 
 // ========================================
 // Standard Library Specializations
@@ -457,7 +468,7 @@ class Vertex {
 namespace std {
 
 ///
-/// \brief Hash function specialization for tessera::Vertex
+/// \brief Hash function specialization for tessera::mesh::Vertex
 ///
 /// Enables Vertex objects to be used as keys in std::unordered_set and std::unordered_map.
 /// The hash is computed from the vertex ID, ensuring consistent hashing across equal vertices.
@@ -466,14 +477,14 @@ namespace std {
 /// O(1) - delegates to std::hash<std::uint64_t>
 ///
 template<>
-struct hash<tessera::Vertex> {
-    size_t operator()(const tessera::Vertex &vertex) const noexcept {
+struct hash<tessera::mesh::Vertex> {
+    size_t operator()(const tessera::mesh::Vertex &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex.getId());
     }
 };
 
 ///
-/// \brief Hash function specialization for tessera::Vertex*
+/// \brief Hash function specialization for tessera::mesh::Vertex*
 ///
 /// Enables VertexPtr (Vertex*) to be used as keys in hash tables.
 /// Hashes the underlying vertex ID, not the pointer address.
@@ -483,14 +494,14 @@ struct hash<tessera::Vertex> {
 /// even if they are different pointer instances.
 ///
 template<>
-struct hash<tessera::Vertex*> {
-    size_t operator()(tessera::Vertex* const &vertex) const noexcept {
+struct hash<tessera::mesh::Vertex*> {
+    size_t operator()(tessera::mesh::Vertex* const &vertex) const noexcept {
         return std::hash<std::uint64_t>{}(vertex->getId());
     }
 };
 
 ///
-/// \brief Equality comparison specialization for tessera::Vertex
+/// \brief Equality comparison specialization for tessera::mesh::Vertex
 ///
 /// Used by standard library containers to compare Vertex objects.
 /// Two vertices are equal iff they have the same ID.
@@ -499,21 +510,21 @@ struct hash<tessera::Vertex*> {
 /// This is consistent with the hash specialization above.
 ///
 template<>
-struct equal_to<tessera::Vertex> {
-    size_t operator()(const tessera::Vertex &a, const tessera::Vertex &b) const noexcept {
+struct equal_to<tessera::mesh::Vertex> {
+    size_t operator()(const tessera::mesh::Vertex &a, const tessera::mesh::Vertex &b) const noexcept {
         return a.getId() == b.getId();
     }
 };
 
 ///
-/// \brief Equality comparison specialization for tessera::Vertex*
+/// \brief Equality comparison specialization for tessera::mesh::Vertex*
 ///
 /// Compares vertices by ID, not by pointer address.
 /// Consistent with the hash specialization for Vertex*.
 ///
 template<>
-struct equal_to<tessera::Vertex*> {
-    size_t operator()(tessera::Vertex* const &a, tessera::Vertex* const &b) const noexcept {
+struct equal_to<tessera::mesh::Vertex*> {
+    size_t operator()(tessera::mesh::Vertex* const &a, tessera::mesh::Vertex* const &b) const noexcept {
         return a->getId() == b->getId();
     }
 };

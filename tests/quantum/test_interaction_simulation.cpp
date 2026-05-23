@@ -9,8 +9,8 @@
 #include <cmath>
 #include <iostream>
 
-using tessera::InteractionConfig;
-using tessera::InteractionSimulation;
+using tessera::simulations::InteractionConfig;
+using tessera::simulations::InteractionSimulation;
 
 int main() {
     int failures = 0;

@@ -10,7 +10,18 @@
 #include "mesh/SimplexOrientation.h"
 #include "mesh/Vertex.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 AddMove::AddMove(Spacetime *st, std::mt19937 *rng, bool relabelEnabled)
     : st_(st), ownedRng_(nullptr), rng_(rng),
