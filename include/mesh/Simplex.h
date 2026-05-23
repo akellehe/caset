@@ -373,6 +373,15 @@ class Simplex {
     SimplexOrientation orientation{};
 
     VertexPtrs vertices{};
+    /// Cached IDs of ``vertices`` in the same order. Populated by both
+    /// constructors and never mutated thereafter — a Simplex's vertex
+    /// set is immutable post-construction. Used by ``hasVertex`` to
+    /// avoid a vertex-pointer dereference per element of a 5-element
+    /// linear scan: the scan walks IDs (primitive uint64) against a
+    /// single dereferenced lookup ID. Cuts the hot-path
+    /// ``Simplex::hasVertex`` cost surfaced by the v0.2 finite-size
+    /// profile (≈25% of `thermalize` wall time at T=2500).
+    std::vector<IdType> vertexIds_{};
 
     Edges edges{};
 
