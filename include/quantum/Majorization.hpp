@@ -62,7 +62,18 @@
 #include <utility>
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 // Aliases keeping the quantum-side code paths working unchanged. The
 // canonical types live in `tessera::` so non-quantum analyses can use

@@ -8,7 +8,18 @@
 #include <deque>
 #include <cmath>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 void Cylinder::build(Spacetime *spacetime, int nSimplices) {
   auto dimensions = spacetime->getMetric()->getSignature()->getDimensions();
   SimplexOrientation orientation{1, static_cast<std::uint8_t>(dimensions)};

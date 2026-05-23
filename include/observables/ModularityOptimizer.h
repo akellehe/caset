@@ -11,10 +11,26 @@
 #include <string>
 #include <vector>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::simulations {
+  class CDT;
+}
+namespace tessera::spacetime {
+  class PachnerMove;
+}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
-class CDT;
-class PachnerMove;
 
 /// One recorded measurement on the (Q, D_S) trajectory.
 ///

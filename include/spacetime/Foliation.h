@@ -27,11 +27,22 @@
 #define TESSERA_FOLIATION_H
 #include <cstdint>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 enum class Foliation : std::uint8_t {
   NONE = 0,
   PREFERRED = 1
 };
-} // tessera
+} // namespace tessera::spacetime
 
 #endif //TESSERA_FOLIATION_H

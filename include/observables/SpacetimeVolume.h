@@ -29,8 +29,22 @@
 #include <memory>
 #include "Observable.h"
 
-namespace tessera {
-class Spacetime;
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime {
+  class Spacetime;
+}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 class SpacetimeVolume : public Observable {
   public:
     double compute(const std::shared_ptr<Spacetime> &spacetime) override;

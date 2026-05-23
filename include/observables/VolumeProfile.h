@@ -27,7 +27,18 @@
 #include <vector>
 #include <map>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// # Volume Profile Observable
 ///
@@ -93,6 +104,6 @@ class VolumeProfile : public Observable {
     std::vector<std::vector<int>> measurements; ///< History of profiles for averaging
 };
 
-} // tessera
+} // namespace tessera::observables
 
 #endif //TESSERA_VOLUMEPROFILE_H

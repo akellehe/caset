@@ -38,7 +38,7 @@
 
 namespace {
 
-tessera::VertexPtr make_vertex(tessera::Spacetime& st, std::uint64_t id, int t) {
+tessera::mesh::VertexPtr make_vertex(tessera::spacetime::Spacetime& st, std::uint64_t id, int t) {
     return st.createVertex(id, std::vector<double>{static_cast<double>(t)});
 }
 
@@ -52,7 +52,7 @@ bool pairs_equal(std::vector<std::pair<int, int>> got,
 bool acceptance_trivial_chain() {
     std::cout << "Acceptance #1 — N=4 trivial chain → uniform 1D lattice\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 2);
@@ -84,7 +84,7 @@ bool acceptance_trivial_chain() {
 bool acceptance_branching_antichain() {
     std::cout << "Acceptance #2 — branching causet (1 root, 2 leaves)\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 1);
@@ -119,7 +119,7 @@ bool acceptance_branching_antichain() {
 bool acceptance_empty_spacetime() {
     std::cout << "Acceptance #3 — empty Spacetime → empty CausetChain\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto chain = tessera::quantum::Causet::chainFrom(st);
 
     bool ok = (chain.nSites == 0)
@@ -138,7 +138,7 @@ bool acceptance_empty_spacetime() {
 bool acceptance_sparse_ids() {
     std::cout << "Acceptance #4 — sparse Spacetime IDs → dense flat indices\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto va = make_vertex(st, 7,  0);
     auto vb = make_vertex(st, 11, 1);
     auto vc = make_vertex(st, 19, 2);
@@ -168,7 +168,7 @@ bool acceptance_sparse_ids() {
 bool acceptance_skipping_edge_dropped() {
     std::cout << "Acceptance #5 — skipping (t=0 → t=2) timelike edge dropped\n";
 
-    tessera::Spacetime st;
+    tessera::spacetime::Spacetime st;
     auto v0 = make_vertex(st, 0, 0);
     auto v1 = make_vertex(st, 1, 1);
     auto v2 = make_vertex(st, 2, 2);

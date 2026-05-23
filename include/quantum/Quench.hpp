@@ -40,7 +40,18 @@
 
 #include <itensor/all.h>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 // Coarse-grained interface for the q-qbar quench operator. One instance
 // binds the operator's intrinsic parameters (location i0, separation d,

@@ -27,7 +27,18 @@
 #include <unordered_map>
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::graph {
+using namespace ::tessera::mesh;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 template <typename IndexType = int, typename Container, typename KeyFn>
 [[nodiscard]] auto

@@ -38,7 +38,18 @@
 #include <string>
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 // Forward decl — TDVPSnapshot is defined in tdvp_runner.hpp; we only
 // need its name to declare CausalOrders::fromSnapshots.

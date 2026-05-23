@@ -1,0 +1,540 @@
+// MIT License
+// Copyright (c) 2025 Andrew Kelleher
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/options.h>
+#include <pybind11/complex.h>
+#include <pybind11/functional.h>
+#include <pybind11/chrono.h>
+
+#include "spacetime/topologies/Topology.h"
+#include "spacetime/topologies/Cylinder.h"
+#include "spacetime/topologies/Sphere.h"
+#include "spacetime/topologies/Toroid.h"
+#include "simulations/CDT.h"
+#include "spacetime/PachnerMove.h"
+#include "spacetime/pachner/AddMove.h"
+#include "spacetime/pachner/FlipMove.h"
+#include "spacetime/pachner/IFlipMove.h"
+#include "spacetime/pachner/RemoveMove.h"
+#include "spacetime/pachner/ShiftMove.h"
+#include "simulations/ReggeSolver.h"
+#include "matter/MatterConfiguration.h"
+#include "mesh/SimplexFilter.h"
+#include "observables/ModularityOptimizer.h"
+#include "observables/SparseGraph.h"
+#include "observables/VolumeProfile.h"
+#include "observables/WilsonLoop.h"
+#include "spacetime/Spacetime.h"
+#include "ForceLayout.h"
+#include "mesh/VertexList.h"
+#include "mesh/EdgeList.h"
+#include "spacetime/Signature.h"
+#include "mesh/Vertex.h"
+#include "mesh/Edge.h"
+#include "mesh/Simplex.h"
+#include "spacetime/Metric.h"
+#include "Renderer.h"
+
+#include <vector>
+#include <algorithm>
+
+
+namespace py = pybind11;
+using namespace tessera;
+using namespace tessera::spacetime;
+
+// Registers all tessera::spacetime classes into the `m` submodule
+// (i.e. `tessera.spacetime`). Called from src/bindings.cpp's
+// PYBIND11_MODULE entry point.
+void register_spacetime(py::module_ m) {
+  // ========================================
+  // Topologies
+  // ========================================
+  py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology",
+      "Base class for spatial topologies (Toroid, Sphere, etc.).");
+
+  py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere",
+      "Spherical spatial topology S^{d-1}.")
+      .def(py::init<>())
+      .def("build", &Sphere::build, py::arg("spacetime"), py::arg("numSimplices"),
+           "Build a spherical initial triangulation with the given number of simplices.");
+
+  py::class_<Cylinder, Topology, std::shared_ptr<Cylinder> >(m, "Cylinder",
+      "Cylindrical spatial topology with open time boundaries.")
+      .def(py::init<>())
+      .def("build", &Cylinder::build, py::arg("spacetime"), py::arg("numSimplices"),
+           "Build a cylindrical triangulation with the given number of simplices.");
+
+  py::class_<Toroid, Topology, std::shared_ptr<Toroid> >(m, "Toroid",
+      R"doc(Toroidal spatial topology (periodic boundary conditions).
+
+Uses the staircase product triangulation: each time slab contains
+d*(d+1) simplices covering all CDT orientation types (d,1), (d-1,2),
+..., (1,d).  For d=4 this gives 20 simplices per slab with equal
+numbers of (4,1), (3,2), (2,3), and (1,4) types, enabling all five
+Pachner moves (add, remove, flip, iflip, shift).)doc")
+      .def(py::init<>())
+      .def("build", &Toroid::build, py::arg("spacetime"), py::arg("numSimplices"),
+           "Build a toroidal staircase triangulation with the given number of simplices.");
+  // ========================================
+  // Metric
+  // ========================================
+  py::class_<Metric, std::shared_ptr<Metric> >(m, "Metric",
+      R"doc(Spacetime metric defining edge lengths and causal structure.
+
+In coordinate-free mode (the default for CDT), edge squared lengths
+are stored directly on the edges rather than computed from coordinates.
+
+Args:
+    coordinateFree: If True, squared lengths are stored on edges directly.
+    signature: The metric signature (Lorentzian or Euclidean).)doc")
+      .def(py::init<bool, Signature &>(),
+           py::arg("coordinateFree"),
+           py::arg("signature"))
+      .def("getSquaredLength", &Metric::getSquaredLength,
+           py::arg("sourceCoords"), py::arg("targetCoords"),
+           "Compute the squared length of an edge from vertex coordinates.");
+  // ========================================
+  // Enums
+  // ========================================
+  py::enum_<SignatureType>(m, "SignatureType",
+      "Metric signature: Lorentzian (-,+,+,...) or Euclidean (+,+,+,...).")
+      .value("Lorentzian", SignatureType::Lorentzian)
+      .value("Euclidean", SignatureType::Euclidean)
+      .export_values();
+
+  py::enum_<Foliation>(m, "Foliation",
+      "Time foliation type for CDT spacetimes.")
+      .value("PREFERRED", Foliation::PREFERRED)
+      .value("NONE", Foliation::NONE)
+      .export_values();
+  // ========================================
+  // Signature
+  // ========================================
+  py::class_<Signature, std::shared_ptr<Signature> >(m, "Signature",
+      R"doc(Metric signature specifying dimension and type.
+
+Args:
+    dimensions: Number of spacetime dimensions d (e.g. 4 for 4D CDT).
+    signatureType: Lorentzian or Euclidean.)doc")
+      .def(py::init<int, SignatureType>(), py::arg("dimensions"), py::arg("signatureType"))
+      .def("getDiagonal", &Signature::getDiagonal,
+           "Return the diagonal entries of the metric signature tensor.");
+
+  py::enum_<SpacetimeType>(m, "SpacetimeType",
+      "Type of spacetime simulation.")
+      .value("CDT", SpacetimeType::CDT)
+      .value("REGGE", SpacetimeType::REGGE)
+      .value("COSET", SpacetimeType::COSET)
+      .export_values();
+  // ========================================
+  // Spacetime
+  // ========================================
+  py::class_<Spacetime, std::shared_ptr<Spacetime> >(m, "Spacetime",
+      R"doc(The simplicial spacetime manifold.
+
+Holds the full simplicial complex: vertices, edges, and simplices of all
+dimensions, along with the metric and topology.  Provides methods for
+building the initial triangulation and manipulating the complex.
+
+Typical construction::
+
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                         tessera.Toroid())
+    st.build(500))doc")
+      .def(py::init<
+             std::shared_ptr<Metric>,
+             const SpacetimeType,
+             std::optional<double>,
+             std::optional<double>,
+             Foliation,
+             std::optional<std::shared_ptr<Topology> >
+           >(),
+           py::arg("metric"),
+           py::arg("spacetimeType"),
+           py::arg("alpha"),
+           py::arg("a"),
+           py::arg("foliation"),
+           py::arg("topology"),
+           R"doc(Construct a spacetime with the given metric, type, and topology.
+
+Args:
+    metric: The Metric object defining edge lengths.
+    spacetimeType: CDT, REGGE, or COSET.
+    alpha: Wick rotation parameter (1.0 for Lorentzian CDT).
+    a: Lattice spacing parameter.
+    foliation: PREFERRED for CDT (fixed time slicing).
+    topology: Spatial topology (Toroid or Sphere).)doc"
+      )
+      .def(py::init<>(), "Create an empty spacetime with default 4D Lorentzian CDT settings.")
+      .def("setSeed", &Spacetime::setSeed, py::arg("seed"),
+           R"doc(Seed the spacetime's internal RNG deterministically.
+
+The RNG drives ``getRandomVertex`` / ``getRandomSimplex`` /
+``getRandomTopSimplex`` — i.e. the first-step sigma selection in
+every Pachner move (ShiftMove, FlipMove, IFlipMove, AddMove,
+RemoveMove). Use this in tests that need byte-identical reproducibility
+across processes; otherwise the default seed comes from
+``std::random_device`` and varies per construction.)doc")
+      .def("getVertexList", &Spacetime::getVertexList,
+           "Return the VertexList containing all vertices.")
+      .def("getSimplicesWithOrientation",
+           &Spacetime::getSimplicesWithOrientation,
+           py::arg("orientation"),
+           py::return_value_policy::reference,
+           "Return all top simplices with the given CDT orientation.")
+      .def("getEdgeList", &Spacetime::getEdgeList,
+           "Return the EdgeList containing all edges.")
+      .def("getConnectedComponents", &Spacetime::getConnectedComponents, py::return_value_policy::reference,
+           "Return the connected components of the simplicial complex.")
+      .def("getDualAdjacency", &Spacetime::getDualAdjacency,
+           R"doc(Return the dual graph of the top-dimensional triangulation as COO arrays.
+
+Two top simplices are adjacent when they share a (d-1)-face.  Returns
+(rows, cols, N) where rows[k] and cols[k] are 0-based indices into the
+internal top-simplex array and N is the number of top simplices.
+
+This is much faster than iterating over simplices/facets/cofaces from
+Python because it makes a single C++ call instead of O(N) round trips.)doc")
+      .def("getDualGraph", &Spacetime::getDualGraph,
+           R"doc(Return the dual graph as a SparseGraph.
+
+Equivalent to ``SparseGraph::fromCOO(*getDualAdjacency())`` but
+avoids the intermediate Python conversion.)doc")
+      .def("modularityOnSkeleton", &Spacetime::modularityOnSkeleton,
+           py::arg("M"),
+           R"doc(Newman-Girvan modularity Q on the vertex/edge 1-skeleton.
+
+Implicit labels: ``label(v) = v.id() % M``.  Returns 0 if M < 2,
+the graph has no edges, or the spacetime has no vertices.)doc")
+      .def("getSpectralDimensionOnSkeleton",
+           &Spacetime::getSpectralDimensionOnSkeleton,
+           py::arg("sigmas"), py::arg("krylovDim"),
+           py::arg("filter"), py::arg("topK") = 4,
+           py::arg("skeletonDim") = 1,
+           R"doc(D_S(σ) on the weighted 1-skeleton of top simplices that
+pass ``filter``.
+
+Walks the simplex list keeping those with ``size() == topK + 1`` for
+which ``filter.accept(s)`` is true, unions their edges with weights
+``w_uv = I_max · exp(-sqrt(|squaredLength_uv|))``, builds the
+unnormalised weighted Laplacian ``L = D - W``, and returns
+``SpectralGraph.spectralDimension`` of the heat-kernel return
+probability. Sits next to ``modularityOnSkeleton``.
+
+``skeletonDim`` reserves API space for higher-k skeletons; only
+``skeletonDim == 1`` is currently supported.)doc")
+      .def("getTimeSlices", &Spacetime::getTimeSlices,
+           "Return sorted list of integer time values in the triangulation.")
+      .def("getVerticesAtTime", &Spacetime::getVerticesAtTime,
+           py::arg("t"), py::return_value_policy::reference,
+           "Return all vertices at integer time t.")
+      .def("getSpatialSubgraph", &Spacetime::getSpatialSubgraph,
+           py::arg("t"), py::return_value_policy::reference,
+           "Return (vertices, spacelike_edges) at time t.")
+      .def("bfsDistances", &Spacetime::bfsDistances,
+           py::arg("center"), py::arg("maxDepth") = -1,
+           "BFS distances from center through spacelike edges.  Returns {id: dist}.")
+      .def("build", &Spacetime::build, py::arg("numSimplices") = 3, py::call_guard<py::gil_scoped_release>(),
+           R"doc(Build the initial triangulation with approximately n_simplices top simplices.
+
+Uses the topology's builder (e.g. Toroid staircase triangulation) to
+create the initial simplicial complex.  The actual number of simplices
+may differ slightly due to slab quantization.)doc")
+      .def("getSimplices", &Spacetime::getSimplices, py::return_value_policy::copy,
+           "Return all top-dimensional simplices in the complex.")
+      .def("getExternalSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::copy,
+           "Return simplices on the boundary of the complex.")
+      .def("createEdge",
+           static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&
+             Spacetime::createEdge),
+           py::arg("source"),
+           py::arg("target"),
+           py::return_value_policy::reference,
+           "Create an edge between two vertices (squared length computed from metric).")
+      .def("createEdge",
+           static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &, double) const>(&
+             Spacetime::createEdge),
+           py::arg("source"),
+           py::arg("target"),
+           py::arg("squaredLength"),
+           py::return_value_policy::reference,
+           "Create an edge between two vertices with a specified squared length.")
+      .def("createVertex",
+           static_cast<VertexPtr (Spacetime::*)(const std::uint64_t) const noexcept>(
+             &Spacetime::createVertex),
+           py::arg("id"),
+           py::return_value_policy::reference,
+           "Create a vertex with the given ID (auto-assigned coordinates).")
+      .def("createVertex",
+           static_cast<VertexPtr (Spacetime::*)(const std::uint64_t, const std::vector<double> &) const noexcept>(
+             &Spacetime::createVertex),
+           py::arg("id"), py::arg("coordinates"),
+           py::return_value_policy::reference,
+           "Create a vertex with the given ID and coordinates (first = time).")
+      .def("createSimplex",
+           py::overload_cast<const std::vector<VertexPtr> &>(
+             &Spacetime::createSimplex),
+           py::arg("vertices"),
+           py::return_value_policy::reference,
+           R"doc(Create a simplex from the given vertices.
+
+Returns (simplex, created) where created is True if the simplex was
+new, False if it already existed (dedup by fingerprint).)doc")
+      .def("createSimplexTracked",
+           [](Spacetime &self, const std::vector<VertexPtr> &vertices) {
+               auto r = self.createSimplexTracked(vertices);
+               return py::make_tuple(r.simplex, r.created, r.newEdges);
+           },
+           py::arg("vertices"),
+           py::return_value_policy::reference,
+           R"doc(Like createSimplex(vertices) but also returns the edges
+that this call freshly inserted into the EdgeList.
+
+Returns (simplex, created, newEdges) where:
+  - simplex: SimplexPtr (existing or freshly created)
+  - created: True if newly created, False if found existing
+  - newEdges: list of edges this call freshly inserted (empty when
+              created=False, or when all needed edges already existed)
+
+Used by transactional Pachner moves so rollback can undo edge
+insertions.)doc")
+      .def("createSimplex",
+           py::overload_cast<const std::vector<VertexPtr> &, const std::vector<EdgePtr> &>(
+             &Spacetime::createSimplex),
+           py::arg("vertices"),
+           py::arg("edges"),
+           py::return_value_policy::reference,
+           "Create a simplex from the given vertices and edges.")
+      .def("createSimplex",
+           py::overload_cast<const std::tuple<uint8_t, uint8_t> &>(&Spacetime::createSimplex),
+           py::arg("orientation"),
+           py::return_value_policy::reference,
+           R"doc(Create a seed simplex with the given orientation.
+
+Automatically creates vertices at times 0 and 1.  Useful for building
+minimal test lattices, e.g. createSimplex((1, 4)) for a (1,4) simplex.)doc")
+      .def("getSimplexCount", &Spacetime::getSimplexCount,
+           "Return N4 = N41 + N32, the total number of top-dimensional simplices.")
+      .def("getVertexCount", &Spacetime::getVertexCount,
+           "Return N0, the total number of vertices.")
+      .def("getN41", &Spacetime::getN41,
+           R"doc(Return N41: the count of (d,1) + (1,d) type simplices.
+
+This is the volume-fixing target per [RU] eq. 6.)doc")
+      .def("getN32", &Spacetime::getN32,
+           "Return N32: the count of (d-1,2) + (2,d-1) type simplices.")
+      .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference,
+           "Return a uniformly random simplex from the complex (any dimension).")
+      .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference,
+           "Return a uniformly random top-dimensional simplex.")
+      .def("getRandomVertex", &Spacetime::getRandomVertex, py::return_value_policy::reference,
+           "Return a uniformly random vertex.")
+      .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"),
+           "Remove a top-dimensional simplex from the complex.")
+      .def("swapVertexLabels", &Spacetime::swapVertexLabels, py::arg("v1"), py::arg("v2"),
+           R"doc(Swap the integer IDs of two vertices ([BGL] Sec. 2.2.1).
+
+Atomically re-keys all dependent data structures: VertexList,
+Edge fingerprints, Simplex vertex-ID maps, and all hash tables.
+Handles shared simplices, transient fingerprint collisions, and
+sub-simplex ownership correctly.
+
+No-op if v1 and v2 are the same vertex.)doc")
+      .def("save", [](const Spacetime &st, const std::string &path,
+                       int panelSize, int layoutIters,
+                       double tilt, int spin, int precession,
+                       int nFrames, int delayCentiseconds) {
+          renderSpacetime(st, path, panelSize, layoutIters,
+                          tilt, spin, precession, nFrames, delayCentiseconds);
+      }, py::arg("path"), py::arg("panelSize") = 800,
+         py::arg("layoutIters") = 500,
+         py::arg("tilt") = 25.0,
+         py::arg("spin") = 1,
+         py::arg("precession") = 1,
+         py::arg("nFrames") = 36,
+         py::arg("delayCs") = 15,
+           R"doc(Render the spacetime to an image file.
+
+Uses a force-directed layout (time fixed, spatial coordinates
+optimized via spring + repulsion) then projects onto 2D.
+
+If the path ends in .gif, produces an animated GIF whose rotation
+is controlled by three parameters:
+
+    tilt        – cone half-angle in degrees (default 25).
+    spin        – full Y-axis rotations per loop (default 1).
+    precession  – precession cycles per loop (default 1).
+
+Per-frame rotation:
+    ry = 2π · spin · t
+    rx = tilt · cos(2π · precession · t)
+    rz = tilt · sin(2π · precession · t)
+
+Integer values for spin and precession guarantee a perfect loop.
+
+For .graphml or .dot/.gv, exports the graph structure with vertex
+attributes (id, time, degree) and edge attributes (squared_length,
+timelike).  Layout/rotation parameters are ignored for these formats.
+
+Otherwise produces a static PNG with four panels
+(no rotation, 40° X, 40° Y, 40° Z).
+
+The layout is computed internally and does not modify vertex state.
+
+Args:
+    path: Output file path (.png, .gif, .graphml, .dot, or .gv).
+    panelSize: Pixel size of each panel (default 800).
+    layoutIters: Maximum force-directed iterations (default 500).
+    tilt: Precession cone half-angle in degrees (default 25).
+    spin: Y-axis rotations per loop, integer for perfect loop (default 1).
+    precession: Precession cycles per loop, integer for perfect loop (default 1).
+    nFrames: Number of GIF frames (default 36).
+    delayCs: Frame delay in centiseconds (default 7).)doc");
+  // ========================================
+  // PachnerMove (transactional Pachner moves)
+  // ========================================
+  py::class_<PachnerMove>(m, "PachnerMove",
+      R"doc(Abstract base class for transactional Pachner moves.
+
+Each subclass (ShiftMove, FlipMove, IFlipMove, AddMove, RemoveMove)
+exposes a propose / apply / rollback lifecycle:
+
+  - propose():  read-only target selection + validation.  Returns
+                False if no eligible target is found.
+  - apply():    commits the move; builds an internal undo log.
+  - rollback(): replays the undo log; restores the spacetime to its
+                pre-apply state.  Idempotent.
+
+After a successful propose(), the move publishes its combinatorial
+deltas (dN0, dN41, dN32) and Metropolis log prefactor so callers can
+plug them into action-based acceptance criteria.
+
+See ``docs/source/modularity-plan.md`` for the design rationale.)doc")
+      .def("propose", &PachnerMove::propose,
+           "Pick a target and validate.  No state change.  Returns "
+           "True on success.")
+      .def("apply", &PachnerMove::apply,
+           "Commit the proposed move; build the undo log.  Returns "
+           "True on success.")
+      .def("rollback", &PachnerMove::rollback,
+           "Restore the spacetime to its pre-apply state.  Idempotent.")
+      .def("isApplied", &PachnerMove::isApplied,
+           "True iff apply() has been called and not rolled back.")
+      .def("dN0", &PachnerMove::dN0,
+           "Combinatorial change in vertex count.")
+      .def("dN41", &PachnerMove::dN41,
+           "Combinatorial change in N41-type top-simplex count.")
+      .def("dN32", &PachnerMove::dN32,
+           "Combinatorial change in N32-type top-simplex count.")
+      .def("metropolisLogPrefactor", &PachnerMove::metropolisLogPrefactor,
+           "log of the Metropolis combinatorial prefactor.")
+      .def("touchedVertexIds", &PachnerMove::touchedVertexIds,
+           "IDs of the vertices whose neighborhood the move re-arranges. "
+           "Used for informed (community-aware) proposals.")
+      .def("moveType", &PachnerMove::moveType,
+           "Move-type tag: one of 'add', 'remove', 'flip', 'iflip', "
+           "'shift'.");
+
+  py::class_<AddMove, PachnerMove>(m, "AddMove",
+      R"doc(Transactional (2,2d) add (vertex insertion) move.
+
+Picks a random N41 simplex, finds its spatial face and the adjacent
+simplex of opposite orientation, and inserts a new vertex at the
+spatial time slice.  ``dN0 = +1``; ``dN41 = +(2d-2) = +6`` in 4D;
+``dN32 = 0``.
+
+Vertex relabeling (per [BGL] Sec. 2.2.1) is enabled by default.
+Pass ``relabel=False`` to disable for tests that need stable
+fingerprints across moves.)doc")
+      .def(py::init<Spacetime *, std::uint64_t, bool>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::arg("relabel") = true,
+           py::keep_alive<1, 2>(),
+           "Construct an add move bound to ``spacetime`` with a fresh "
+           "RNG seeded from ``seed``.  ``relabel`` controls whether the "
+           "new vertex's ID is swap-relabeled with a random existing "
+           "vertex on apply().");
+
+  py::class_<FlipMove, PachnerMove>(m, "FlipMove",
+      R"doc(Transactional (2,d) flip move.
+
+Removes 2 d-simplices sharing a (d-1)-face and creates d new
+d-simplices sharing an edge.  ``dN0 = 0``; ``ΔN4 = d - 2 = +2`` in 4D.
+Inverse: :class:`IFlipMove`.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           "Construct a (2,d) flip move bound to ``spacetime`` with a "
+           "fresh ``std::mt19937`` seeded with ``seed``.");
+
+  py::class_<RemoveMove, PachnerMove>(m, "RemoveMove",
+      R"doc(Transactional (2d, 2) remove (vertex deletion) move.
+
+Picks a random vertex with order 2d, removes the 2d incident
+N41-type simplices and the vertex, and creates 2 replacement
+simplices.  ``dN0 = -1``; ``dN41 = -(2d-2) = -6`` in 4D;
+``dN32 = 0``.  Inverse: :class:`AddMove`.
+
+Rollback recreates the deleted vertex (with original ID and
+coordinates), reinserts its incident edges (with original squared
+lengths), and recreates the 2d removed simplices.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           "Construct a remove move bound to ``spacetime`` with a fresh "
+           "RNG seeded from ``seed``.");
+
+  py::class_<IFlipMove, PachnerMove>(m, "IFlipMove",
+      R"doc(Transactional inverse (d, 2) flip move.
+
+Removes d d-simplices sharing an edge and creates 2 new d-simplices
+sharing a (d-1)-face.  ``dN0 = 0``; ``ΔN4 = -(d - 2) = -2`` in 4D.
+Inverse: :class:`FlipMove`.
+
+Includes a manifold-preservation check in propose() — rejects if
+either new simplex would already exist in the lattice.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           "Construct an inverse flip bound to ``spacetime`` with a "
+           "fresh ``std::mt19937`` seeded with ``seed``.");
+
+  py::class_<ShiftMove, PachnerMove>(m, "ShiftMove",
+      R"doc(Transactional (3,3) shift move.
+
+Picks a random top simplex and a random (d-2)-face.  If exactly d-1
+top simplices share that face, replaces them with d-1 new simplices
+sharing the complementary (d-2)-face.  Self-inverse — dN0 = 0 and
+dN41 + dN32 = 0.)doc")
+      .def(py::init<Spacetime *, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("seed"),
+           py::keep_alive<1, 2>(),
+           R"doc(Construct a shift move bound to ``spacetime``, using a
+fresh ``std::mt19937`` seeded with ``seed`` for the proposal.
+
+For sweeps that share a single Markov chain across many moves, drive
+moves via ``CDT.proposeShift()`` instead.)doc");
+}

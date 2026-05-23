@@ -3,9 +3,10 @@
 
 #include <string>
 
-namespace tessera {
+namespace tessera::spacetime { class Spacetime; }
 
-class Spacetime;
+namespace tessera {
+using namespace ::tessera::spacetime;
 
 /// Render the spacetime to an image file.
 ///

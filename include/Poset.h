@@ -2,7 +2,7 @@
 //
 // Hasse-cover representation of a finite partial order over integer-
 // indexed nodes. Storage uses tessera's standard mesh primitives
-// (tessera::VertexList, tessera::EdgeList) so Poset instances interoperate
+// (tessera::mesh::VertexList, tessera::mesh::EdgeList) so Poset instances interoperate
 // with the rest of tessera's graph machinery — rendering, GraphML / dot
 // export, and the causet-adapter inheritance share the same Vertex /
 // Edge types we already use for the simplicial spacetime.
@@ -30,14 +30,19 @@
 #include <utility>
 #include <vector>
 
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime { class Spacetime; }
+
 namespace tessera {
 
-class Spacetime;  // forward decl for Poset::fromSpacetime
+// Bring sibling subsystem names into scope for the root-level Poset class.
+using namespace ::tessera::mesh;
+using namespace ::tessera::spacetime;
 
 // Hasse-cover representation of a partial order on integer-indexed nodes.
 //
 // Internally stores a VertexList (one Vertex per node, no coordinates) and
-// an EdgeList of cover edges. Cover edges are tessera::Edge objects; their
+// an EdgeList of cover edges. Cover edges are tessera::mesh::Edge objects; their
 // `squaredLength` and `disposition` fields are unused by the partial-order
 // semantics and stay at their default values. (See note at the bottom of
 // this header about the "compiler flag to pare them down" idea — currently
@@ -163,7 +168,7 @@ OrderAgreement compareOrders(Poset const& a,
 // ─── Notes ─────────────────────────────────────────────────────────────────
 //
 // "compiler flags to pare it down" (per architectural discussion):
-// tessera::Edge currently carries `squaredLength` (8 B) and `disposition`
+// tessera::mesh::Edge currently carries `squaredLength` (8 B) and `disposition`
 // (1 B + padding) which are unused for Poset cover edges. A future
 // TESSERA_LIGHTWEIGHT_EDGES build flag could conditionally drop those
 // fields (and make the Edge struct ~16 B instead of ~32 B), halving the

@@ -3,9 +3,20 @@
 
 #include "simulations/Simulation.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::spacetime {}
+namespace tessera::simulations {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::quantum;
 
 void Simulation::tune(std::function<void(int,int)> /*progress*/) {}
 void Simulation::thermalize() {}
 
-} // tessera
+} // namespace tessera::simulations

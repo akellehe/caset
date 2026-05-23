@@ -16,7 +16,18 @@
 
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::graph {
+using namespace ::tessera::mesh;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 // Top-simplex dual-graph neighbours of ``sigma``: every other simplex
 // sharing one of sigma's facets. Boundary facets contribute no

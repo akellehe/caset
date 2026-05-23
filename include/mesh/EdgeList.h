@@ -29,7 +29,18 @@
 #include "mesh/Edge.h"
 #include "Logger.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// Flat-pool edge container.
 ///
@@ -84,6 +95,6 @@ class EdgeList {
     EdgePtr getOrInsert(const VertexPtr &source, const VertexPtr &target, double squaredLength);
     std::uint32_t allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength);
 };
-} // tessera
+} // namespace tessera::mesh
 
 #endif //TESSERA_EDGELIST_H

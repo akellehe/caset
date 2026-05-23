@@ -24,9 +24,23 @@
 
 #include <memory>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime {
+  class Spacetime;
+}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
-class Spacetime;
 
 /// # Observable Base Class
 ///
@@ -63,6 +77,6 @@ class Observable {
     virtual ~Observable() = default;
 };
 
-} // tessera
+} // namespace tessera::observables
 
 #endif //TESSERA_OBSERVABLE_H

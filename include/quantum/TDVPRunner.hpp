@@ -34,7 +34,18 @@
 
 #include <vector>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 // Configuration for a complete DMRG-then-TDVP run. Hamiltonian fields
 // mirror QuantumConfig; the rest configure the quench, the TDVP loop,

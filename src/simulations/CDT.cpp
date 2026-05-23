@@ -45,7 +45,18 @@ struct StackVec {
 };
 } // anon
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::spacetime {}
+namespace tessera::simulations {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::quantum;
 
 CDT::CDT(std::shared_ptr<Spacetime> spacetime_, double k0_, double k4_, double delta_,
          double epsilon_, std::size_t targetN41_, bool quadraticVolumeFix_)
@@ -349,4 +360,4 @@ double CDT::getK0() const noexcept { return k0; }
 double CDT::getK4() const noexcept { return k4; }
 double CDT::getDelta() const noexcept { return delta; }
 
-} // tessera
+} // namespace tessera::simulations

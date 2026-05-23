@@ -24,7 +24,18 @@
 
 #include "Topology.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 class Spacetime;
 
 /// # Toroidal Topology \f$ T^{d-1} \f$
@@ -53,6 +64,6 @@ class Toroid : public Topology {
     void build(Spacetime *spacetime, int numSimplices) override;
 };
 
-} // tessera
+} // namespace tessera::spacetime
 
 #endif //TESSERA_TOROID_H

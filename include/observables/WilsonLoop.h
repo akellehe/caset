@@ -6,9 +6,23 @@
 #include <memory>
 #include <vector>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+// === cross-subsystem fwd-decls ===
+namespace tessera::spacetime {
+  class Spacetime;
+}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
-class Spacetime;
 
 /// Evaluation mode for Wilson loops, at increasing levels of geometric commitment.
 enum class WilsonMode : uint8_t {
@@ -123,4 +137,4 @@ class WilsonLoop {
 
 };
 
-} // namespace tessera
+} // namespace tessera::observables

@@ -40,7 +40,19 @@
 #include "mesh/Simplex.h"
 #include "mesh/FlatHashMap.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh { class SimplexFilter; }
+namespace tessera::observables { class SparseGraph; }
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime { class PachnerMove; }
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 enum class SpacetimeType : uint8_t {
   CDT = 0,
   REGGE = 1,
@@ -330,7 +342,7 @@ class Spacetime {
     /// triangulation in one call.  Equivalent to
     /// ``SparseGraph::fromCOO(*getDualAdjacency())`` but avoids the
     /// intermediate Python-side conversion.
-    [[nodiscard]] class SparseGraph getDualGraph() const;
+    [[nodiscard]] ::tessera::observables::SparseGraph getDualGraph() const;
 
     /// Spectral dimension D_S(σ) on the weighted 1-skeleton of top
     /// simplices that pass ``filter``. Walks ``getSimplices()`` keeping
@@ -353,7 +365,7 @@ class Spacetime {
     getSpectralDimensionOnSkeleton(
         std::vector<double> const& sigmas,
         int krylovDim,
-        class SimplexFilter const& filter,
+        SimplexFilter const& filter,
         int topK = 4,
         int skeletonDim = 1) const;
 
@@ -505,6 +517,6 @@ class Spacetime {
 
     std::vector<std::shared_ptr<Observable> > observables{};
 };
-} // tessera
+} // namespace tessera::spacetime
 
 #endif //TESSERA_SPACETIME_H

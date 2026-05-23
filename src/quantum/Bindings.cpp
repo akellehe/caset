@@ -41,7 +41,7 @@
 
 namespace py = pybind11;
 
-void register_quantum_bindings(py::module_ m) {
+void register_quantum(py::module_ m) {
     using namespace tessera::quantum;
     // InteractionSimulation moved to tessera:: (see issue #44). Keep its
     // Python module path as tessera.quantum.InteractionSimulation for
@@ -264,7 +264,7 @@ duplicates can't arise.
             "cover. Suitable for ``dot -Tsvg`` rendering.")
         .def_static("fromSpacetime",
             [](py::object spacetime_obj) {
-                auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
+                auto const* st = spacetime_obj.cast<tessera::spacetime::Spacetime const*>();
                 return tessera::Poset::fromSpacetime(*st);
             }, py::arg("spacetime"),
             R"doc(Build the causet partial order on a Spacetime's vertices.
@@ -718,7 +718,7 @@ label set of size nLabels. Returns an :class:`OrderAgreement`.
 )doc")
         .def_static("chainFrom",
             [](py::object spacetime_obj) {
-                auto const* st = spacetime_obj.cast<tessera::Spacetime const*>();
+                auto const* st = spacetime_obj.cast<tessera::spacetime::Spacetime const*>();
                 return Causet::chainFrom(*st);
             }, py::arg("spacetime"),
             R"doc(Extract a chain-of-antichains adapter from a Spacetime.
@@ -827,11 +827,11 @@ interaction; beta is the inverse temperature in e^{-beta S}.
         .def_readwrite("seed",               &InteractionConfig::seed)
         .def_readwrite("quiet",              &InteractionConfig::quiet);
 
-    py::enum_<tessera::InitialChargeMode>(m, "InitialChargeMode")
+    py::enum_<tessera::simulations::InitialChargeMode>(m, "InitialChargeMode")
         .value("ALTERNATING",
-               tessera::InitialChargeMode::ALTERNATING)
+               tessera::simulations::InitialChargeMode::ALTERNATING)
         .value("RANDOM",
-               tessera::InitialChargeMode::RANDOM);
+               tessera::simulations::InitialChargeMode::RANDOM);
 
     py::class_<InteractionSimulation>(m, "InteractionSimulation",
         R"doc(Metropolis Monte Carlo over interaction histories, weighted by
@@ -891,7 +891,7 @@ I/4 proxy it returns 0; for an arbitrary mixed state, the value sits in
 [−1, +1]. Requires ``featureQuditBasis = True``. Returns 0.0 for vertices
 the simulation has no qudit state for.)doc")
         .def("quditStateOf",
-             [](const InteractionSimulation &self, tessera::VertexPtr v)
+             [](const InteractionSimulation &self, tessera::mesh::VertexPtr v)
                  -> py::object {
                const auto &m = self.quditStateOfMap();
                auto it = m.find(v);

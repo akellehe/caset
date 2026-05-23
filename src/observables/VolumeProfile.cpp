@@ -22,7 +22,18 @@
 #include "observables/VolumeProfile.h"
 #include <algorithm>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 double VolumeProfile::compute(const std::shared_ptr<Spacetime> &spacetime) {
   int topSize = spacetime->getMetric()->getSignature()->getDimensions() + 1;
@@ -79,4 +90,4 @@ void VolumeProfile::reset() {
   measurements.clear();
 }
 
-} // tessera
+} // namespace tessera::observables

@@ -15,9 +15,20 @@
 #include <map>
 #include <unordered_map>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
-CausetChain Causet::chainFrom(tessera::Spacetime const& st) {
+CausetChain Causet::chainFrom(tessera::spacetime::Spacetime const& st) {
     CausetChain out;
 
     auto const& vlist = st.getVertexList();

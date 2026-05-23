@@ -8,7 +8,18 @@
 #include <stdexcept>
 #include <string>
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 QqbarQuench::QqbarQuench(int i0, int d, bool enforceParity) noexcept
     : i0_(i0), d_(d), enforceParity_(enforceParity) {}

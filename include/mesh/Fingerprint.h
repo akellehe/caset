@@ -77,7 +77,18 @@
 /// - **Memory**: Fixed 64-element array + metadata ≈ 520 bytes per instance
 ///
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 // ========================================
 // Type Definitions
@@ -162,8 +173,8 @@ inline constexpr std::uint64_t kSeed = 0xcbf29ce484222325ull;
 /// ```cpp
 /// namespace std {
 /// template<>
-/// struct hash<tessera::Simplex> {
-///   size_t operator()(const tessera::Simplex &s) const noexcept {
+/// struct hash<tessera::mesh::Simplex> {
+///   size_t operator()(const tessera::mesh::Simplex &s) const noexcept {
 ///     return std::hash<std::uint64_t>{}(s.fingerprint.fingerprint());
 ///   }
 /// };

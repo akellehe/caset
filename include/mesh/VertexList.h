@@ -33,7 +33,18 @@
 
 #include "mesh/Vertex.h"
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// Flat-pool vertex container.
 ///
@@ -153,6 +164,6 @@ class VertexList {
     std::unordered_map<std::uint64_t, std::uint32_t> idToIndex_; ///< vertex ID → pool slot
     std::vector<Vertex*> liveVec_;                             ///< Flat array of live vertices
 };
-} // tessera
+} // namespace tessera::mesh
 
 #endif //TESSERA_VERTEXLIST_H

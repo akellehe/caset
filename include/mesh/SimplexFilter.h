@@ -16,7 +16,18 @@
 
 #include <string>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// Boolean predicate over top simplices. ``accept(s)`` returning false
 /// means: do not include ``s`` in the downstream observable.
@@ -73,4 +84,4 @@ public:
     }
 };
 
-} // namespace tessera
+} // namespace tessera::mesh

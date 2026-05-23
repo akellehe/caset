@@ -15,7 +15,18 @@
 #include <utility>
 #include <vector>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 /// Identity hash for uint64_t keys that are already well-distributed
 /// (e.g. fingerprints produced by mix64).
@@ -158,6 +169,6 @@ class FlatHashMap {
     void grow() { resize(cap_ * 2); }
 };
 
-} // namespace tessera
+} // namespace tessera::mesh
 
 #endif // TESSERA_FLAT_HASH_MAP_H

@@ -22,7 +22,18 @@
 #ifndef TESSERA_TOPOLOGY_H
 #define TESSERA_TOPOLOGY_H
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 class Spacetime;
 
@@ -60,6 +71,6 @@ class Topology {
     virtual void build(Spacetime *spacetime, int numSimplices) = 0;
 };
 
-} // tessera
+} // namespace tessera::spacetime
 
 #endif //TESSERA_TOPOLOGY_H

@@ -8,7 +8,18 @@
 
 #include <cmath>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::mesh {
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 bool PositiveGramDeterminantFilter::accept(SimplexPtr const& simplex) const {
     if (simplex == nullptr) return false;
@@ -33,4 +44,4 @@ bool PositiveGramDeterminantFilter::accept(SimplexPtr const& simplex) const {
     return std::isfinite(det) && det > 0.0;
 }
 
-} // namespace tessera
+} // namespace tessera::mesh

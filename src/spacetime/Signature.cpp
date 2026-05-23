@@ -28,7 +28,18 @@
 #include <vector>
 #include <cstdint>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 Signature::Signature(int dimensions_, SignatureType signatureType_) {
   dimensions = dimensions_;
   signatureType = signatureType_;
@@ -50,4 +61,4 @@ Signature::Signature(int dimensions_, SignatureType signatureType_) {
 [[nodiscard]] SignatureType Signature::getSignatureType() const noexcept {
   return signatureType;
 }
-} // tessera
+} // namespace tessera::spacetime

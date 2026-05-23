@@ -6,9 +6,9 @@
 #include <cmath>
 #include <iostream>
 
-using tessera::InitialChargeMode;
-using tessera::InteractionConfig;
-using tessera::InteractionSimulation;
+using tessera::simulations::InitialChargeMode;
+using tessera::simulations::InteractionConfig;
+using tessera::simulations::InteractionSimulation;
 
 namespace {
 

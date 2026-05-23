@@ -37,7 +37,18 @@
 #include "quantum/Schmidt.hpp"          // SchmidtSpectra
 #include "quantum/SchwingerModel.hpp"  // SchwingerHamiltonian, SchwingerParams
 
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
 namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
 
 // Flat, Python-friendly configuration. Holds Hamiltonian parameters plus
 // DMRG sweep settings. Defaults are tuned for the small / moderate N runs

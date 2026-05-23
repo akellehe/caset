@@ -14,7 +14,18 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace tessera {
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::quantum {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::observables {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::simulations;
+using namespace ::tessera::quantum;
 
 // =====================================================================
 // Construction
@@ -374,4 +385,4 @@ std::map<int, double> WilsonLoop::getAverageBySize() const {
     return avg;
 }
 
-} // namespace tessera
+} // namespace tessera::observables
