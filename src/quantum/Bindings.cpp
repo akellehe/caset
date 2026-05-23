@@ -1037,7 +1037,13 @@ Wrap in scipy.sparse for downstream use::
 )doc")
         .def("returnProbability", &EmergentGraph::returnProbability,
              py::arg("sigmas"), py::arg("krylovDim") = 30,
-             R"doc(P(σ) = (1/|V|) Tr exp(-σ L) via Krylov-Lanczos diagonal estimation.)doc")
+             py::arg("m") = 0, py::arg("seed") = 0,
+             R"doc(P(σ) = (1/|V|) Tr exp(-σ L) via Krylov-Lanczos diagonal estimation.
+
+``m`` is the Hutchinson-style subsample size (issue #28 Tier-1). 0 (default)
+uses ``min(n, 3000)`` start vertices, which trades a small variance penalty
+for ~100× speedup at large n. Set ``m = n`` for the exact sum.
+``seed`` controls the subset RNG for reproducibility.)doc")
         .def_static("spectralDimension", &EmergentGraph::spectralDimension,
              py::arg("sigmas"), py::arg("P"),
              R"doc(D_S(σ) = -2 d log P / d log σ via centered finite differences.)doc")
