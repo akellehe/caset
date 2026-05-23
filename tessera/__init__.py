@@ -25,8 +25,16 @@ from tessera._tessera import (                              # noqa: F401
     spacetime,
     observables,
     simulations,
-    quantum,
 )
+
+# The ``quantum`` submodule is only built when ``TESSERA_QUANTUM=1`` is
+# set at build time. Tolerate its absence so the CDT-only configuration
+# (``TESSERA_QUANTUM=0``) imports cleanly. Scripts that need quantum
+# features should ``import tessera.quantum`` and let that fail loudly.
+try:
+    from tessera._tessera import quantum                    # noqa: F401
+except ImportError:
+    pass
 
 # Backward-compat re-exports at top level. Star-import each submodule so
 # existing scripts that do `from tessera import Spacetime`, `tessera.CDT`,
