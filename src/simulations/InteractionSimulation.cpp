@@ -1091,13 +1091,12 @@ bool InteractionSimulation::unInteract() {
     // Eligible: every (2,3) cell. Removing a past cell truncates the
     // whole future cone of its products — each product is consumed by
     // at most one later cell, so the descendant set is well-defined.
-    std::vector<SimplexPtr> allCells;
-    for (SimplexPtr s : spacetime_->getSimplices())
-        if (s->getVertices().size() == 5) allCells.push_back(s);
-    if (allCells.empty()) return false;
-
-    std::uniform_int_distribution<std::size_t> pick(0, allCells.size() - 1);
-    SimplexPtr root = allCells[pick(rng_)];
+    // Spacetime already partitions top-dimensional simplices into a
+    // dedicated vector (topSimplicesVec) with O(1) swap-pop on remove,
+    // so we ask it directly instead of scanning the full flat
+    // simplices_ vector and filtering by vertex count.
+    SimplexPtr root = spacetime_->getRandomTopSimplex();
+    if (root == nullptr) return false;
 
     // BFS through producedByCell_ → consumedByCell_ to collect every
     // cell whose existence depends on root.
@@ -1139,7 +1138,7 @@ bool InteractionSimulation::unInteract() {
     // unordered-pair count over the (predicted) post-frontier. Each
     // descendant cell removes 3 product vertices from the frontier and
     // restores 2 parent vertices (its inputs).
-    const std::size_t nMinusBefore   = allCells.size();
+    const std::size_t nMinusBefore   = spacetime_->getSimplexCount();
     const std::size_t nFrontierNow   = frontier_.size();
     const std::size_t nProductsLost  = 3 * descendants.size();
     const std::size_t nParentsBack   = 2 * descendants.size();
