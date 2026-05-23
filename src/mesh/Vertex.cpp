@@ -277,10 +277,16 @@ void Vertex::removeInEdge(const EdgePtr &edge) noexcept {
     std::abort();
   }
 #endif
-  for (const auto &simplex : simplices) {
-    if (simplex->hasVertex(edge->getSource()) && simplex->hasVertex(edge->getTarget())) {
-      simplex->removeEdge(edge);
-    }
+  // Edge-coface index: iterate only the simplices that actually contain
+  // this edge — replaces the previous "iterate all simplices touching
+  // this vertex, filter by hasVertex × 2" pattern that dominated
+  // `thermalize` wall time at T=2500 (≈22% of samples in
+  // `Simplex::hasVertex`). Snapshot is required because
+  // `simplex->removeEdge(edge)` calls back into `edge->unregisterSimplex`
+  // which mutates `edge->simplices_`.
+  Simplices cofaces = edge->simplicesCopy();
+  for (auto const& simplex : cofaces) {
+    if (simplex != nullptr) simplex->removeEdge(edge);
   }
   auto fp = edge->fingerprint.fingerprint();
   for (auto it = inEdges.begin(); it != inEdges.end(); ++it) {
@@ -299,10 +305,10 @@ void Vertex::removeOutEdge(const EdgePtr &edge) noexcept {
     std::abort();
   }
 #endif
-  for (const auto &simplex : simplices) {
-    if (simplex->hasVertex(edge->getSource()) && simplex->hasVertex(edge->getTarget())) {
-      simplex->removeEdge(edge);
-    }
+  // See removeInEdge for the design note — same pattern.
+  Simplices cofaces = edge->simplicesCopy();
+  for (auto const& simplex : cofaces) {
+    if (simplex != nullptr) simplex->removeEdge(edge);
   }
   auto fp = edge->fingerprint.fingerprint();
   for (auto it = outEdges.begin(); it != outEdges.end(); ++it) {

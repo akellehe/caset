@@ -491,6 +491,11 @@ bool Simplex::removeEdge(const EdgePtr &edge) {
     if ((*it)->fingerprint.fingerprint() == fp) {
       *it = edges.back();
       edges.pop_back();
+      // Keep the Edge → Simplex index in sync. Without this the
+      // edge's `simplices_` still claims this simplex as a member and
+      // the next `Vertex::removeOutEdge` would dispatch into a
+      // simplex that no longer contains the edge.
+      edge->unregisterSimplex(this);
       return true;
     }
   }
@@ -503,6 +508,7 @@ bool Simplex::addEdge(const EdgePtr &edge) {
     if (e->fingerprint.fingerprint() == fp) return false;
   }
   edges.push_back(edge);
+  edge->registerSimplex(this);
   return true;
 }
 

@@ -157,11 +157,37 @@ class Edge {
     /// Index into EdgeList::liveVec_ (maintained by EdgeList).
     std::uint32_t liveIdx_{UINT32_MAX};
 
+    /// Simplices currently containing this edge (the edge's "cofaces" in
+    /// the codim-1 sense). Mirror of ``Vertex::simplices`` but at edge
+    /// granularity, used by ``Vertex::removeOutEdge`` /
+    /// ``Vertex::removeInEdge`` to drop the edge from just the simplices
+    /// that actually contain it — instead of iterating every simplex
+    /// touching the endpoint and filtering by ``hasVertex``. Surfaced by
+    /// the v0.2 finite-size profile: hasVertex was ≈22% of `thermalize`
+    /// wall time even after the per-call cache.
+    ///
+    /// Maintained in lockstep with ``Simplex::edges``:
+    ///   * Spacetime::registerSimplex registers the simplex on each of
+    ///     its edges
+    ///   * Spacetime::unregisterSimplex removes it
+    ///   * Simplex::addEdge / Simplex::removeEdge mirror the same
+    ///     callbacks at runtime
+    ///
+    /// Callers that intend to mutate the index from inside an iteration
+    /// loop (e.g. ``simplex->removeEdge(this)`` invalidates ``simplices_``)
+    /// MUST use ``simplicesCopy()`` to snapshot first.
+    void registerSimplex(SimplexPtr s);
+    void unregisterSimplex(SimplexPtr s) noexcept;
+    [[nodiscard]] Simplices const& simplices() const noexcept { return simplices_; }
+    [[nodiscard]] Simplices simplicesCopy() const { return simplices_; }
+
   private:
     VertexPtr source = nullptr;
     VertexPtr target = nullptr;
 
     double squaredLength;
+
+    Simplices simplices_{};
 };
 
 }
