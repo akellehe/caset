@@ -39,6 +39,7 @@
 #include "spacetime/pachner/ShiftMove.h"
 #include "simulations/ReggeSolver.h"
 #include "matter/MatterConfiguration.h"
+#include "mesh/SimplexFilter.h"
 #include "observables/ModularityOptimizer.h"
 #include "observables/SparseGraph.h"
 #include "observables/VolumeProfile.h"
@@ -500,6 +501,23 @@ avoids the intermediate Python conversion.)doc")
 
 Implicit labels: ``label(v) = v.id() % M``.  Returns 0 if M < 2,
 the graph has no edges, or the spacetime has no vertices.)doc")
+      .def("getSpectralDimensionOnSkeleton",
+           &Spacetime::getSpectralDimensionOnSkeleton,
+           py::arg("sigmas"), py::arg("krylovDim"),
+           py::arg("filter"), py::arg("topK") = 4,
+           py::arg("skeletonDim") = 1,
+           R"doc(D_S(σ) on the weighted 1-skeleton of top simplices that
+pass ``filter``.
+
+Walks the simplex list keeping those with ``size() == topK + 1`` for
+which ``filter.accept(s)`` is true, unions their edges with weights
+``w_uv = I_max · exp(-sqrt(|squaredLength_uv|))``, builds the
+unnormalised weighted Laplacian ``L = D - W``, and returns
+``SpectralGraph.spectralDimension`` of the heat-kernel return
+probability. Sits next to ``modularityOnSkeleton``.
+
+``skeletonDim`` reserves API space for higher-k skeletons; only
+``skeletonDim == 1`` is currently supported.)doc")
       .def("getTimeSlices", &Spacetime::getTimeSlices,
            "Return sorted list of integer time values in the triangulation.")
       .def("getVerticesAtTime", &Spacetime::getVerticesAtTime,
@@ -1030,6 +1048,51 @@ dimension on the dual graph.)doc")
 
 Returns ``(D_S_small, D_S_large)``.  Mirrors the Python implementation
 in ``examples/modularity.py:Graph.spectral_dimension``.)doc");
+
+  // ========================================
+  // SimplexFilter (predicate over top simplices)
+  // ========================================
+  //
+  // Held as ``std::shared_ptr<SimplexFilter>`` so the same object can
+  // be referenced from HolographyConfig.simplexFilter and survive
+  // copy-by-value of the config. Python subclassing is not supported
+  // in this build — extend via C++ subclass + binding instead.
+  py::class_<SimplexFilter, std::shared_ptr<SimplexFilter>>(
+      m, "SimplexFilter",
+      R"doc(Predicate over top simplices (abstract base).
+
+Selects which top simplices participate in a downstream observable
+(``Spacetime.getSpectralDimensionOnSkeleton``). Use one of the
+concrete subclasses below; in this build, custom filters require a
+C++ subclass + binding.)doc")
+      .def("accept", &SimplexFilter::accept, py::arg("simplex"),
+           "Return True iff the simplex should participate in the "
+           "downstream observable.")
+      .def("name", &SimplexFilter::name,
+           "Human-readable name; appears in JSON output for "
+           "reproducibility.")
+      .def("__repr__", [](SimplexFilter const& self) {
+        return "<" + self.name() + ">";
+      });
+  py::class_<AllSimplexFilter, SimplexFilter,
+             std::shared_ptr<AllSimplexFilter>>(m, "AllSimplexFilter",
+      R"doc(Accepts every top simplex.
+
+Default for the holographic-dual measurement (issue #31). Registration
+via ``Spacetime.createSimplex`` already implies combinatorial
+constructibility (the ``k + 1`` vertices form a complete subgraph in
+the edge set), so this filter intentionally ignores edge-length
+geometry.)doc")
+      .def(py::init<>());
+  py::class_<PositiveGramDeterminantFilter, SimplexFilter,
+             std::shared_ptr<PositiveGramDeterminantFilter>>(
+      m, "PositiveGramDeterminantFilter",
+      R"doc(Accepts simplices whose Gram matrix has positive determinant.
+
+Restricts the measurement to metrically valid (non-degenerate,
+non-collapsed) Euclidean cells. Stricter alternative to the default
+``AllSimplexFilter``.)doc")
+      .def(py::init<>());
 
   // ========================================
   // ModularityOptimizer

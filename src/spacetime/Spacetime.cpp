@@ -30,13 +30,20 @@
 #include <queue>
 #include <set>
 #include "spacetime/Spacetime.h"
+#include "graph/csr_builder.hpp"
 #include "graph/dual_graph.hpp"
 #include "graph/index_by_key.hpp"
+#include "graph/spectral_graph.hpp"
+#include "mesh/SimplexFilter.h"
+#include "observables/MIUnits.hpp"
 #include "observables/SparseGraph.h"
 #include "mesh/SimplexOrientation.h"
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Edge.h"
+
+#include <tuple>
+#include <unordered_map>
 #include "spacetime/topologies/Toroid.h"
 
 namespace tessera {
@@ -740,6 +747,138 @@ void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) 
 SparseGraph Spacetime::getDualGraph() const {
   auto [rows, cols, n] = getDualAdjacency();
   return SparseGraph::fromCOO(rows, cols, n);
+}
+
+namespace {
+
+// Private SpectralGraph subclass used only by
+// Spacetime::getSpectralDimensionOnSkeleton — holds the CSR of the
+// weighted 1-skeleton of filtered top simplices and supplies the
+// L = D - W matvec. Lives in an anonymous namespace because no other
+// code paths currently consume the weighted-skeleton graph directly;
+// promote to a public class when a second consumer appears.
+class SkeletonSpectralView final : public SpectralGraph {
+ public:
+  SkeletonSpectralView(int n,
+                       std::vector<int> indptr,
+                       std::vector<int> indices,
+                       std::vector<double> weights,
+                       std::vector<double> degrees)
+      : n_(n),
+        indptr_(std::move(indptr)),
+        indices_(std::move(indices)),
+        weights_(std::move(weights)),
+        degrees_(std::move(degrees)) {}
+
+  int nVertices() const override { return n_; }
+
+  void applyLaplacian(std::vector<double> const& x,
+                        std::vector<double>& y) const override {
+    y.assign(static_cast<std::size_t>(n_), 0.0);
+    for (int i = 0; i < n_; ++i) {
+      double s = degrees_[static_cast<std::size_t>(i)] *
+                 x[static_cast<std::size_t>(i)];
+      const int lo = indptr_[static_cast<std::size_t>(i)];
+      const int hi = indptr_[static_cast<std::size_t>(i) + 1];
+      for (int k = lo; k < hi; ++k) {
+        s -= weights_[static_cast<std::size_t>(k)] *
+             x[static_cast<std::size_t>(indices_[
+                 static_cast<std::size_t>(k)])];
+      }
+      y[static_cast<std::size_t>(i)] = s;
+    }
+  }
+
+ private:
+  int n_;
+  std::vector<int>    indptr_, indices_;
+  std::vector<double> weights_, degrees_;
+};
+
+}  // anonymous namespace
+
+std::vector<double>
+Spacetime::getSpectralDimensionOnSkeleton(
+    std::vector<double> const& sigmas,
+    int krylovDim,
+    SimplexFilter const& filter,
+    int topK,
+    int skeletonDim) const {
+  if (skeletonDim != 1) {
+    throw std::invalid_argument(
+        "Spacetime::getSpectralDimensionOnSkeleton: skeletonDim != 1 "
+        "is reserved for follow-up #36; only the 1-skeleton is "
+        "supported in this build");
+  }
+  if (topK < 1) {
+    throw std::invalid_argument(
+        "Spacetime::getSpectralDimensionOnSkeleton: topK must be >= 1");
+  }
+  const std::uint64_t expectedVerts =
+      static_cast<std::uint64_t>(topK) + 1;
+
+  // Walk filtered top simplices; collect unique edges with MI-derived
+  // weights. Same shape as the previous body of
+  // InteractionSimulation::getSpectralDimension (pre-#31), now living
+  // here so both pipelines share it.
+  std::unordered_map<VertexPtr, int> idx;
+  std::vector<std::tuple<int, int, double>> edgeList;
+  std::set<std::pair<int, int>> seen;
+  for (SimplexPtr s : simplicesVec) {
+    if (s == nullptr) continue;
+    if (s->size() != expectedVerts) continue;
+    if (!filter.accept(s)) continue;
+    for (EdgePtr e : s->getEdges()) {
+      if (e == nullptr) continue;
+      VertexPtr a = e->getSource();
+      VertexPtr b = e->getTarget();
+      if (a == nullptr || b == nullptr || a == b) continue;
+      if (!idx.count(a)) idx[a] = static_cast<int>(idx.size());
+      if (!idx.count(b)) idx[b] = static_cast<int>(idx.size());
+      const int ia = idx.at(a);
+      const int ib = idx.at(b);
+      const auto key = std::minmax(ia, ib);
+      if (!seen.insert({key.first, key.second}).second) continue;
+      const double len = std::sqrt(std::abs(e->getSquaredLength()));
+      const double w   = ::tessera::observables::kIMax * std::exp(-len);
+      edgeList.emplace_back(ia, ib, w);
+    }
+  }
+  if (edgeList.empty()) {
+    return std::vector<double>(sigmas.size(), 0.0);
+  }
+
+  // Build CSR (each undirected edge listed twice).
+  const int n = static_cast<int>(idx.size());
+  std::vector<int>    rows, cols;
+  std::vector<double> ws;
+  rows.reserve(edgeList.size() * 2);
+  cols.reserve(edgeList.size() * 2);
+  ws.reserve(edgeList.size() * 2);
+  for (auto const& [u, v, w] : edgeList) {
+    rows.push_back(u); cols.push_back(v); ws.push_back(w);
+    rows.push_back(v); cols.push_back(u); ws.push_back(w);
+  }
+  std::vector<int>    indptr, indices;
+  std::vector<double> weights;
+  ::tessera::graph::buildCSRFromCOO<int, double, int>(
+      static_cast<std::size_t>(n), rows, cols, ws,
+      indptr, indices, weights);
+
+  std::vector<double> degrees(static_cast<std::size_t>(n), 0.0);
+  for (int v = 0; v < n; ++v) {
+    const int lo = indptr[static_cast<std::size_t>(v)];
+    const int hi = indptr[static_cast<std::size_t>(v) + 1];
+    for (int k = lo; k < hi; ++k) {
+      degrees[static_cast<std::size_t>(v)] +=
+          weights[static_cast<std::size_t>(k)];
+    }
+  }
+
+  SkeletonSpectralView view(n, std::move(indptr), std::move(indices),
+                              std::move(weights), std::move(degrees));
+  const std::vector<double> p = view.returnProbability(sigmas, krylovDim);
+  return SpectralGraph::spectralDimension(sigmas, p);
 }
 
 double Spacetime::modularityOnSkeleton(int M) const {

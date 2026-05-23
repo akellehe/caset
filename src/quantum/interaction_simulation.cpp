@@ -11,9 +11,12 @@
 
 #include "mesh/Edge.h"
 #include "mesh/Simplex.h"
+#include "mesh/SimplexFilter.h"
 #include "mesh/Vertex.h"
+#include "observables/MIUnits.hpp"
 #include "quantum/holography.hpp"
 #include "spacetime/Metric.h"
+#include "spacetime/Spacetime.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +33,10 @@ using cd = std::complex<double>;
 constexpr cd I_UNIT{0.0, 1.0};
 
 // Algebraic maximum mutual information between two single qubits.
-const double kIMax = 2.0 * std::log(2.0);
+// Shared with the holography path via observables/MIUnits.hpp; the
+// alias keeps existing call-site spellings untouched (#39 will promote
+// this to a config parameter to support qudit-basis runs).
+using ::tessera::observables::kIMax;
 
 // Von Neumann entropy S(ρ) = -Tr ρ log ρ, in nats.
 double vonNeumannEntropy(Eigen::MatrixXcd const& rho) {
@@ -1630,36 +1636,20 @@ std::unique_ptr<InteractionMove> InteractionSimulation::proposeUnInteract() {
 
 std::vector<double> InteractionSimulation::getSpectralDimension(
     const std::vector<double>& sigmas, int krylovDim) const {
-    // The dimension we want is that of the tetrahedral dual — the
-    // simplicial complex of completed (2,3) 4-simplices. We measure its
-    // 1-skeleton: systems as nodes, the cells' edges MI-weighted (the
-    // closure edges are what lift each bowtie into a non-degenerate
-    // tetrahedron). Bare initial-layer edges that never joined a cell
-    // are part of the primal interaction lattice and are excluded.
-    std::unordered_map<VertexPtr, int> idx;
-    std::vector<std::tuple<int, int, double>> edges;
-    std::set<std::pair<int, int>> seen;
-    for (SimplexPtr s : spacetime_->getSimplices()) {
-        if (s->getVertices().size() != 5) continue;  // (2,3) cells only
-        for (EdgePtr e : s->getEdges()) {
-            VertexPtr a = e->getSource();
-            VertexPtr b = e->getTarget();
-            if (!idx.count(a)) idx[a] = static_cast<int>(idx.size());
-            if (!idx.count(b)) idx[b] = static_cast<int>(idx.size());
-            const int ia = idx.at(a), ib = idx.at(b);
-            const auto key = std::minmax(ia, ib);
-            if (!seen.insert({key.first, key.second}).second) continue;
-            const double len = std::sqrt(std::abs(e->getSquaredLength()));
-            edges.emplace_back(ia, ib, kIMax * std::exp(-len));
-        }
-    }
-    if (edges.empty())
-        return std::vector<double>(sigmas.size(), 0.0);
-
-    EmergentGraph graph = EmergentGraph::fromWeightedEdges(
-        static_cast<int>(idx.size()), edges);
-    const std::vector<double> p = graph.returnProbability(sigmas, krylovDim);
-    return EmergentGraph::spectralDimension(sigmas, p);
+    // The dimension we want is that of the simplicial complex of
+    // completed (2,3) 4-simplices. We measure its 1-skeleton: systems
+    // as nodes, the cells' edges MI-weighted. Bare initial-layer edges
+    // that never joined a cell are part of the primal interaction
+    // lattice and are excluded by the topK == 4 size filter.
+    //
+    // Delegates to the shared Spacetime → SpectralGraph path (issue #31)
+    // so the holography and interaction-history pipelines share one
+    // measurement code path. AllSimplexFilter matches the pre-#31
+    // behavior (every 4-simplex passes); use of a stricter filter is
+    // tracked in #38.
+    return spacetime_->getSpectralDimensionOnSkeleton(
+        sigmas, krylovDim, ::tessera::AllSimplexFilter{},
+        /*topK=*/4, /*skeletonDim=*/1);
 }
 
 } // namespace tessera::quantum
