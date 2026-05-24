@@ -182,7 +182,7 @@ _EXPORTS = (
     # Data classes (configs, results, labels, posets)
     "QuantumConfig", "GroundStateResult", "Interval", "SchmidtSpectra",
     "Poset", "GroundStateMajorizationResult", "TDVPConfig", "TDVPSnapshot",
-    "QuenchResult", "InteractionConfig", "InitialChargeMode", "LabelSpacetime",
+    "QuenchResult", "InteractionConfig", "LabelSpacetime",
     "CausalOrders", "OrderAgreement", "CausalComparisonReport", "CausetChain",
     # MajorizationPredicate hierarchy
     "MajorizationPredicate", "StandardMajorization", "LogConcaveMajorization",
