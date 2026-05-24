@@ -1,6 +1,26 @@
 """Python coverage for the Charged Cartan Monte Carlo v0.2 (qudit basis
 + Σ_AB Choi state).
 
+SKIPPED in #56 (charge-observables-v0.3 follow-up) — the entire qudit /
+charge surface this file exercises (annihilate, pairCreate,
+getGlobalCharge, getChargeProfile, getChargeCorrelation, quditChargeOf,
+quditStateOf, quditJointStateFor, plus the v0.1/v0.2 config flags
+useCharges, featureCharges, featureQuditBasis, featureChoiSigmaAB,
+initialChargeMode) was removed when the simulation moved to a
+per-vertex QuantumState model. The replacement charge observables will
+land in the follow-up issue; this file is re-enabled then.
+"""
+
+import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="charge / qudit surface removed in #56; reinstated in "
+           "charge-observables-v0.3 against QuantumState"
+)
+
+
+_ORIGINAL_DOCSTRING_BELOW = """
+
 Mirrors the C++ suites
 ``tests/quantum/test_interaction_simulation_v02.cpp`` and
 ``tests/quantum/test_sigma_ab_choi_state.cpp`` at the API surface that's
@@ -319,3 +339,4 @@ class TestV02ChoiVsLegacyGeometry(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+"""  # close _ORIGINAL_DOCSTRING_BELOW
