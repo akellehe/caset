@@ -298,7 +298,7 @@ class Simplex {
     /// Indices maintained by Spacetime for O(1) swap-and-pop removal.
     /// UINT32_MAX means "not registered in that vector".
     std::uint32_t vecIdx_{UINT32_MAX};    // index in Spacetime::simplicesVec
-    std::uint32_t poolSlot_{UINT32_MAX};  // index in Spacetime::simplexPool_
+    std::uint32_t poolSlot_{UINT32_MAX};  // index in Spacetime::simplexStorage_; never reset (storage slots are never recycled)
     std::uint32_t topVecIdx_{UINT32_MAX}; // index in Spacetime::topSimplicesVec
 
 #ifdef TESSERA_ASSERTIONS
@@ -370,6 +370,16 @@ class Simplex {
     void swapVertexIds(IdType id1, IdType id2) { (void)id1; (void)id2; }
 
     bool isInitialized() const noexcept;
+
+    /// Release this Simplex's heap-allocated children (vertex/edge/facet/
+    /// coface vectors), shrinking them to zero capacity.  Called by
+    /// ``Spacetime::unregisterSimplex`` once the simplex has been removed
+    /// from all live indices: the Simplex shell stays in
+    /// ``Spacetime::simplexStorage_`` at its stable address (so cached
+    /// ``Simplex*`` remain dereferenceable and read empty children), but the
+    /// memory backing those children is returned to the allocator.  Callers
+    /// MUST NOT invoke this while the simplex is still registered.
+    void releaseChildren() noexcept;
   private:
     Spacetime *spacetime{nullptr};
     SimplexOrientation orientation{};
