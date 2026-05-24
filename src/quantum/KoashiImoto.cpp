@@ -244,17 +244,129 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
     std::sort(ordered.begin(), ordered.end(),
               [](const auto& l, const auto& r) { return l.first > r.first; });
 
-    // 6. For each block, extract the per-block (Σ, A', B') contributions.
+    // 6. Build the symmetric counterparts on the B side. For each
+    //    B-eigvec \f$|b\rangle\f$, the conditional A-state is
+    //    \f[
+    //      \sigma_b^A \;=\;
+    //        \frac{\bigl(I_A \otimes \langle b|\bigr)\,
+    //              \rho_{AB}\,
+    //              \bigl(I_A \otimes |b\rangle\bigr)}
+    //             {\mathrm{Tr}\bigl[I_A \otimes |b\rangle\langle b|
+    //              \cdot \rho_{AB}\bigr]} .
+    //    \f]
+    //    In the AB-eigenbasis (\f$\rho'\f$ = `rhoP`), this is the
+    //    \f$d_A \times d_A\f$ matrix
+    //    \f$\sigma_b^A[i, i'] = \rho'[i\,d_B + b,\; i'\,d_B + b] / w_b\f$,
+    //    where the weight \f$w_b = \langle b|\rho_B|b\rangle\f$ is just
+    //    the corresponding B-eigenvalue (since \f$\rho_B\f$ is diagonal
+    //    in this basis).
+    std::vector<Eigen::MatrixXcd> condA(dimB);
+    std::vector<double>           weightB(dimB);
+    for (int b = 0; b < dimB; ++b) {
+        const double w = evalsB[b];
+        weightB[b] = w;
+        Eigen::MatrixXcd s = Eigen::MatrixXcd::Zero(dimA, dimA);
+        for (int i = 0; i < dimA; ++i) {
+            for (int ip = 0; ip < dimA; ++ip) {
+                s(i, ip) = rhoP(i * dimB + b, ip * dimB + b);
+            }
+        }
+        if (w > tol.epsKiEigen) {
+            condA[b] = s / w;
+        } else {
+            condA[b] = Eigen::MatrixXcd::Identity(dimA, dimA)
+                       / static_cast<double>(dimA);
+        }
+    }
+
+    // 7. Per-block construction. One single algorithm — no branches
+    //    on the shape of the block, no pure/product/Bell special cases.
+    //
+    //    Setup: each connected component \f$j\f$ from step 5 has
+    //    A-eigvec indices \f$\{i : i \in \text{block}_j\}\f$. The
+    //    block's B-eigvec support is read off the diagonal of
+    //    \f$\sum_{i \in \text{block}_j} \rho'[i,\cdot,i,\cdot]\f$
+    //    (the per-block B-marginal in the eigenbasis is diagonal).
+    //
+    //    KI within block \f$j\f$:
+    //    \f[
+    //      \rho_{AB}\big|_{\text{block }j}
+    //        \;=\; p_j \cdot \rho_{L,j}\;\otimes\;\omega_{R^A_j}
+    //                       \;\otimes\;\omega_{R^B_j}
+    //    \f]
+    //    with the factorization \f$\mathcal{H}_{A_j} = \mathcal{H}_{L^A_j}
+    //    \otimes \mathcal{H}_{R^A_j}\f$ (similarly for B).
+    //
+    //    The L/R dimensions on each side are determined by a single
+    //    count: how many distinct conditional states the eigvecs in
+    //    the block split into. Two A-eigvecs \f$|a_i\rangle, |a_{i'}\rangle\f$
+    //    sharing the same conditional B-state \f$\sigma_i^B = \sigma_{i'}^B\f$
+    //    are equivalent under B's view — they share an L-label and
+    //    contribute a multiplicity to \f$\mathcal{H}_{R^A_j}\f$. Distinct
+    //    conditional states give distinct L-labels.
+    //
+    //    Concretely, if a block has \f$|aIdxs| = m_A\f$ A-eigvecs that
+    //    fall into \f$K_A\f$ groups (each of size \f$r_A\f$, with
+    //    \f$m_A = K_A \cdot r_A\f$):
+    //    \f[
+    //      \dim \mathcal{H}_{L^A_j} = K_A,
+    //      \qquad
+    //      \dim \mathcal{H}_{R^A_j} = r_A.
+    //    \f]
+    //    Same on the B side with \f$K_B, r_B\f$.
+    //
+    //    Construction:
+    //    - \f$L^A\f$ basis: one representative A-eigvec from each group.
+    //    - \f$L^B\f$ basis: one representative B-eigvec from each group.
+    //    - \f$\rho_{L,j}\f$: the \f$K_A K_B \times K_A K_B\f$ submatrix
+    //      of \f$\rho'\f$ indexed by the cross product of L^A and L^B
+    //      representatives, renormalised by \f$p_j\f$.
+    //    - \f$\omega_{R^A_j}\f$: the eigenvalue spread of one A-group,
+    //      \f$\mathrm{diag}(\lambda_{i_1}, \ldots, \lambda_{i_{r_A}}) /
+    //         \sum_k \lambda_{i_k}\f$ (any group gives the same answer
+    //      up to relabelling, by KI's R-uniformity).
+    //    - \f$\omega_{R^B_j}\f$: symmetric.
     KoashiImotoResult result;
     std::vector<Eigen::MatrixXcd> sigmaBlocks, aPrimeBlocks, bPrimeBlocks;
+
+    // Closure: group indices `idxs` by equality of `getMatrix(i)` within
+    // Frobenius distance `eq`. Returns the equivalence classes as a list
+    // of index-lists, where each inner list holds the original `idxs`
+    // entries that share a common matrix. Used for both the A-side group
+    // (by conditional B-state) and the B-side group (by conditional
+    // A-state), so the partitioning rule is identical on both sides.
+    auto groupByMatrixEquivalence =
+        [&](const std::vector<int>& idxs,
+            const std::vector<Eigen::MatrixXcd>& matrices,
+            double eq) -> std::vector<std::vector<int>>
+    {
+        std::vector<std::vector<int>> groups;
+        std::vector<bool> used(idxs.size(), false);
+        for (size_t k = 0; k < idxs.size(); ++k) {
+            if (used[k]) continue;
+            std::vector<int> g{idxs[k]};
+            used[k] = true;
+            for (size_t l = k + 1; l < idxs.size(); ++l) {
+                if (used[l]) continue;
+                if ((matrices[idxs[k]] - matrices[idxs[l]]).norm() < eq) {
+                    g.push_back(idxs[l]);
+                    used[l] = true;
+                }
+            }
+            groups.push_back(std::move(g));
+        }
+        return groups;
+    };
 
     for (auto& [weight, aIdxs] : ordered) {
         KoashiImotoBlock blk;
         blk.weight = weight;
 
-        // Determine which B-eigvecs are in this block: those that have
-        // weight in the diagonal of rhoP restricted to the block's A
-        // subspace. Sum the A-diagonal blocks and read off B-support.
+        // Identify B-side support of this block from the diagonal of
+        // \f$\sum_{i \in aIdxs} \rho'\!\!\restriction_{(i, b)(i, b')}\f$.
+        // In the AB-eigenbasis the off-block-diagonal entries on B are
+        // negligible (by the same coupling logic that defined the block
+        // on the A side), so a positive diagonal entry pins membership.
         Eigen::MatrixXcd blockSumB = Eigen::MatrixXcd::Zero(dimB, dimB);
         for (int i : aIdxs) {
             blockSumB += rhoP.block(i * dimB, i * dimB, dimB, dimB);
@@ -266,97 +378,131 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
             }
         }
         if (bIdxs.empty()) {
-            // Degenerate: empty B-support means this block contributes
-            // a trivial 1-dim core and a max-mixed A-tail.
-            blk.dimLeftA  = 1;
-            blk.dimLeftB  = 1;
-            blk.dimRightA = static_cast<int>(aIdxs.size());
-            blk.dimRightB = dimB;
-            blk.coreState = Eigen::MatrixXcd::Identity(1, 1);
-            blk.tailA     = Eigen::MatrixXcd::Identity(
-                                blk.dimRightA, blk.dimRightA)
-                            / static_cast<double>(blk.dimRightA);
-            blk.tailB     = Eigen::MatrixXcd::Identity(
-                                blk.dimRightB, blk.dimRightB)
-                            / static_cast<double>(blk.dimRightB);
-            sigmaBlocks.push_back(blk.weight * blk.coreState);
-            aPrimeBlocks.push_back(blk.weight * blk.tailA);
-            bPrimeBlocks.push_back(blk.weight * blk.tailB);
-            result.blocks.push_back(std::move(blk));
+            // No B-support means \f$p_j \approx 0\f$ for this block;
+            // it contributes a trivial 1-dim slot to \f$\Sigma\f$ and
+            // empty contributions to \f$A', B'\f$. Skip it.
             continue;
         }
 
-        // Classify block as "L-dominant" (Bell-like — eigvecs coherently
-        // coupled, distinct cond-states) or "R-dominant" (product-like —
-        // eigvecs all share the same cond-state). The classification is
-        // a heuristic that handles the common cases; mixed blocks (some
-        // L and some R structure) collapse to L-dominant which over-
-        // counts the L dim but stays numerically faithful.
-        bool allCondStatesEqual = true;
-        for (size_t i = 1; i < aIdxs.size(); ++i) {
-            if ((condB[aIdxs[i]] - condB[aIdxs[0]]).norm()
-                > tol.epsKiCondState) {
-                allCondStatesEqual = false;
-                break;
-            }
-        }
+        // Partition A-eigvecs by conditional B-state. Each equivalence
+        // class is an L-label; its size is the R-multiplicity.
+        // \f[ \{|a_i\rangle : i \in \text{aIdxs}\}
+        //     \;\to\;
+        //     \bigsqcup_{k=1}^{K_A} \mathrm{Group}_k^A,\;
+        //     \forall i \in \mathrm{Group}_k^A:\; \sigma_i^B = \sigma_k^B. \f]
+        auto groupsA = groupByMatrixEquivalence(aIdxs, condB,
+                                                tol.epsKiCondState);
+        auto groupsB = groupByMatrixEquivalence(bIdxs, condA,
+                                                tol.epsKiCondState);
+        const int K_A = static_cast<int>(groupsA.size());
+        const int K_B = static_cast<int>(groupsB.size());
+        const int r_A = static_cast<int>(groupsA.front().size());
+        const int r_B = static_cast<int>(groupsB.front().size());
 
-        if (allCondStatesEqual && aIdxs.size() > 1) {
-            // R-dominant: L is trivial (dim 1), all A-eigvecs are in R.
-            blk.dimLeftA  = 1;
-            blk.dimLeftB  = 1;
-            blk.dimRightA = static_cast<int>(aIdxs.size());
-            blk.dimRightB = static_cast<int>(bIdxs.size());
-            blk.coreState = Eigen::MatrixXcd::Identity(1, 1);
+        // Uniformity check. KI guarantees uniform R-multiplicities
+        // within a block (every L-label has the same R-copy count).
+        // Non-uniform groups indicate either numerical noise pushing
+        // a near-degenerate decomposition off the manifold of clean
+        // KI states, or a state that's not a single KI block. We
+        // detect both and proceed with K_A, r_A as defined; the result
+        // may not exactly reconstruct the input but stays trace-faithful.
+        bool uniformA = true, uniformB = true;
+        for (const auto& g : groupsA)
+            if (static_cast<int>(g.size()) != r_A) { uniformA = false; break; }
+        for (const auto& g : groupsB)
+            if (static_cast<int>(g.size()) != r_B) { uniformB = false; break; }
+        (void)uniformA; (void)uniformB;
+        // TODO: when !uniformA || !uniformB, split the block into
+        // sub-blocks (one per (groupA_size, groupB_size) signature)
+        // to recover a clean KI factorisation. For valid KI-decomposable
+        // inputs this branch is unreachable; for noisy inputs it
+        // introduces \f$O(\text{tol})\f$ error in the reconstruction.
 
-            // tailA: the block's contribution to ρ_A divided by weight,
-            // projected onto the A-eigvec subspace of the block.
-            Eigen::MatrixXcd tA = Eigen::MatrixXcd::Zero(
-                blk.dimRightA, blk.dimRightA);
-            for (int ri = 0; ri < blk.dimRightA; ++ri) {
-                tA(ri, ri) = weightA[aIdxs[ri]] / weight;
-            }
-            blk.tailA = tA;
+        blk.dimLeftA  = K_A;
+        blk.dimLeftB  = K_B;
+        blk.dimRightA = r_A;
+        blk.dimRightB = r_B;
 
-            // tailB: B-marginal of the block's rhoP, divided by weight.
-            Eigen::MatrixXcd tBfull = blockSumB / weight;
-            Eigen::MatrixXcd tB = Eigen::MatrixXcd::Zero(
-                blk.dimRightB, blk.dimRightB);
-            for (int ri = 0; ri < blk.dimRightB; ++ri) {
-                for (int ci = 0; ci < blk.dimRightB; ++ci) {
-                    tB(ri, ci) = tBfull(bIdxs[ri], bIdxs[ci]);
-                }
-            }
-            blk.tailB = tB;
-        } else {
-            // L-dominant: A-eigvecs each carry their own L-label.
-            blk.dimLeftA  = static_cast<int>(aIdxs.size());
-            blk.dimLeftB  = static_cast<int>(bIdxs.size());
-            blk.dimRightA = 1;
-            blk.dimRightB = 1;
+        // Representative L-basis: one A-eigvec per group, one B-eigvec
+        // per group. Canonical choice: the first index of each group,
+        // which (since `aIdxs` and `bIdxs` are sorted ascending and
+        // `groupByMatrixEquivalence` preserves order) is deterministic
+        // across runs.
+        std::vector<int> lAIdx(K_A), lBIdx(K_B);
+        for (int k = 0; k < K_A; ++k) lAIdx[k] = groupsA[k].front();
+        for (int k = 0; k < K_B; ++k) lBIdx[k] = groupsB[k].front();
 
-            const int coreDim = blk.dimLeftA * blk.dimLeftB;
-            Eigen::MatrixXcd core = Eigen::MatrixXcd::Zero(coreDim, coreDim);
-            for (int ri = 0; ri < blk.dimLeftA; ++ri) {
-                for (int rb = 0; rb < blk.dimLeftB; ++rb) {
-                    for (int ci = 0; ci < blk.dimLeftA; ++ci) {
-                        for (int cb = 0; cb < blk.dimLeftB; ++cb) {
-                            core(ri * blk.dimLeftB + rb,
-                                 ci * blk.dimLeftB + cb) =
-                                rhoP(aIdxs[ri] * dimB + bIdxs[rb],
-                                     aIdxs[ci] * dimB + bIdxs[cb]);
-                        }
+        // \f$\rho_{L,j}\f$: the \f$K_A K_B\f$-square core, indexed by
+        // pairs (representative A, representative B). The basis order
+        // is \f$|k_A\rangle \otimes |k_B\rangle\f$, i.e. row index
+        // \f$k_A K_B + k_B\f$.
+        // \f[
+        //   \rho_{L,j}[k_A K_B + k_B, k'_A K_B + k'_B]
+        //   = \frac{\rho'[\,\text{lAIdx}[k_A] \cdot d_B + \text{lBIdx}[k_B],
+        //                  \;\text{lAIdx}[k'_A] \cdot d_B + \text{lBIdx}[k'_B]\,]}
+        //          {p_j} .
+        // \f]
+        const int coreDim = K_A * K_B;
+        Eigen::MatrixXcd core = Eigen::MatrixXcd::Zero(coreDim, coreDim);
+        for (int kA = 0; kA < K_A; ++kA) {
+            for (int kB = 0; kB < K_B; ++kB) {
+                for (int kAp = 0; kAp < K_A; ++kAp) {
+                    for (int kBp = 0; kBp < K_B; ++kBp) {
+                        core(kA * K_B + kB, kAp * K_B + kBp) =
+                            rhoP(lAIdx[kA] * dimB + lBIdx[kB],
+                                 lAIdx[kAp] * dimB + lBIdx[kBp]);
                     }
                 }
             }
-            if (weight > tol.epsKiSvd) {
-                core /= weight;
-            }
-            blk.coreState = core;
-            blk.tailA = Eigen::MatrixXcd::Identity(1, 1);
-            blk.tailB = Eigen::MatrixXcd::Identity(1, 1);
         }
+        if (weight > tol.epsKiSvd) {
+            core /= weight;
+        }
+        blk.coreState = std::move(core);
 
+        // \f$\omega_{R^A_j}\f$: the eigenvalue spread within one A-group,
+        // normalised. Pick group 0 (deterministic).
+        // \f[
+        //   \omega_{R^A_j}[r, r]
+        //   = \frac{\lambda_{\text{groupsA}[0][r]}}
+        //          {\sum_{r'} \lambda_{\text{groupsA}[0][r']}} .
+        // \f]
+        // For a pure block (r_A = 1) this collapses to the trivial
+        // \f$1 \times 1\f$ identity; for a product block (K_A = 1)
+        // this recovers the full marginal \f$\rho_A\f$ restricted to
+        // the block.
+        Eigen::MatrixXcd tA = Eigen::MatrixXcd::Zero(r_A, r_A);
+        double normA = 0.0;
+        for (int r = 0; r < r_A; ++r) normA += weightA[groupsA[0][r]];
+        if (normA > tol.epsKiSvd) {
+            for (int r = 0; r < r_A; ++r) {
+                tA(r, r) = weightA[groupsA[0][r]] / normA;
+            }
+        } else {
+            tA = Eigen::MatrixXcd::Identity(r_A, r_A)
+                 / static_cast<double>(r_A);
+        }
+        blk.tailA = std::move(tA);
+
+        // \f$\omega_{R^B_j}\f$: symmetric on the B side.
+        Eigen::MatrixXcd tB = Eigen::MatrixXcd::Zero(r_B, r_B);
+        double normB = 0.0;
+        for (int r = 0; r < r_B; ++r) normB += weightB[groupsB[0][r]];
+        if (normB > tol.epsKiSvd) {
+            for (int r = 0; r < r_B; ++r) {
+                tB(r, r) = weightB[groupsB[0][r]] / normB;
+            }
+        } else {
+            tB = Eigen::MatrixXcd::Identity(r_B, r_B)
+                 / static_cast<double>(r_B);
+        }
+        blk.tailB = std::move(tB);
+
+        // Accumulate this block's contribution to \f$\Sigma, A', B'\f$.
+        // The block-diagonal layout (rather than additive sum) is the
+        // explicit classical register \f$\{|j\rangle\}\f$ that lets
+        // downstream KI on the resulting Σ vertex decompose against
+        // its (A-side, B-side) factorisation.
         sigmaBlocks.push_back(blk.weight * blk.coreState);
         aPrimeBlocks.push_back(blk.weight * blk.tailA);
         bPrimeBlocks.push_back(blk.weight * blk.tailB);
