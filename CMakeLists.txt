@@ -219,11 +219,14 @@ file(GLOB_RECURSE TESSERA_SOURCES
 set(TESSERA_CORE_SOURCES ${TESSERA_SOURCES})
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
 
-# QuantumState is required by mesh::Vertex (every vertex carries one), so
-# its implementation must live in tessera_core. Add it back after the
-# blanket /quantum/ exclusion.
+# QuantumState is required by mesh::Vertex (every vertex carries one),
+# and KoashiImoto is the KI primitive on top of QuantumState; both
+# depend only on Eigen, not on ITensor, so they belong in tessera_core
+# alongside the rest of the pybind-free C++ implementation. Add them
+# back after the blanket /quantum/ exclusion.
 list(APPEND TESSERA_CORE_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/QuantumState.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/QuantumState.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/KoashiImoto.cpp")
 # InteractionSimulation lives in src/simulations/ for architectural
 # alignment with CDT (#44), but depends on Eigen + ITensor and so belongs
 # in tessera_quantum, not tessera_core.
@@ -359,6 +362,25 @@ else()
     message(STATUS "Assertions turned OFF.")
 endif()
 # ---- </tessera_core static library> --------------------------------------
+
+# ---- <Quantum-core tests (Eigen-only, no ITensor) > -----------------------
+# Tests for QuantumState and KoashiImoto live under tests/quantum_core/
+# and link only tessera_core. They build regardless of TESSERA_QUANTUM,
+# so KI can be exercised on hand-calculated reference values even when
+# the ITensor / DMRG / TDVP subsystem isn't checked out.
+enable_testing()
+file(GLOB TESSERA_QUANTUM_CORE_TESTS
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum_core/*.cpp")
+foreach(_test_src ${TESSERA_QUANTUM_CORE_TESTS})
+    get_filename_component(_test_name "${_test_src}" NAME_WE)
+    add_executable(${_test_name} "${_test_src}")
+    target_link_libraries(${_test_name} PRIVATE tessera_core)
+    set_target_properties(${_test_name} PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON)
+    add_test(NAME ${_test_name} COMMAND ${_test_name})
+endforeach()
 
 # ---- <Build the Python module> ----
 pybind11_add_module(_tessera MODULE ${TESSERA_PYBIND_SOURCES})
