@@ -417,6 +417,15 @@ if(TESSERA_QUANTUM)
     # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
     # pybind-free static lib.
     list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
+    # QuantumState and KoashiImoto are explicitly in tessera_core (per the
+    # whitelist above). The /src/quantum/ GLOB would otherwise pull them
+    # into tessera_quantum as well, producing duplicate symbols that hit
+    # an ODR violation at runtime (the .so loads but immediately
+    # segfaults on import).
+    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX
+        "/src/quantum/QuantumState\\.cpp$")
+    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX
+        "/src/quantum/KoashiImoto\\.cpp$")
     add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
     target_include_directories(tessera_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)

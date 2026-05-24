@@ -455,8 +455,16 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
                 }
             }
         }
-        if (weight > tol.epsKiSvd) {
-            core /= weight;
+        // \f$\rho_{L,j}\f$ is a density matrix on H_{L^A_j} ⊗ H_{L^B_j}
+        // — its trace is 1 by definition, regardless of the block's
+        // weight p_j. Normalise by the actual core trace (which for a
+        // uniform L⊗R block carries the within-block accounting:
+        // pulling one L-representative captures weight / (r_A · r_B),
+        // and dividing by that recovers a trace-1 density matrix on
+        // the L subspaces).
+        const double coreTrace = core.trace().real();
+        if (coreTrace > tol.epsKiSvd) {
+            core /= coreTrace;
         }
         blk.coreState = std::move(core);
 
