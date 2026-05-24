@@ -371,6 +371,17 @@ class Simplex {
 
     bool isInitialized() const noexcept;
 
+    /// True iff this Simplex has been logically removed from its Spacetime
+    /// (i.e. ``Spacetime::unregisterSimplex`` has run on it).  Use this to
+    /// validate cached ``Simplex*`` pointers before dereferencing — with
+    /// stable-address storage the pointer itself is always safe to read,
+    /// but a stale simplex has its child vectors cleared, so iterating
+    /// them is a silent no-op rather than the live data the caller likely
+    /// expected.  Equivalent to ``vecIdx_ == UINT32_MAX``.
+    [[nodiscard]] bool isStale() const noexcept {
+      return vecIdx_ == UINT32_MAX;
+    }
+
     /// Release this Simplex's heap-allocated children (vertex/edge/facet/
     /// coface vectors), shrinking them to zero capacity.  Called by
     /// ``Spacetime::unregisterSimplex`` once the simplex has been removed
