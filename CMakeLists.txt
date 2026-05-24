@@ -176,6 +176,11 @@ find_package(pybind11 3.0 CONFIG REQUIRED HINTS "${_pybind11_hint}")
 message(STATUS "pybind11 ${pybind11_VERSION} (${pybind11_DIR})")
 find_package(ZLIB REQUIRED)
 
+# ---- Eigen3 (header-only) ----
+# Used by tessera_core's QuantumState and by the rest of the project.
+# Header-only, so "linking" just propagates include dirs to consumers.
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+
 include(CheckCXXSourceCompiles)
 
 check_cxx_source_compiles("
@@ -213,6 +218,15 @@ file(GLOB_RECURSE TESSERA_SOURCES
 # Quantum lives in its own static lib; exclude its sources from tessera_core.
 set(TESSERA_CORE_SOURCES ${TESSERA_SOURCES})
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+
+# QuantumState is required by mesh::Vertex (every vertex carries one),
+# and KoashiImoto is the KI primitive on top of QuantumState; both
+# depend only on Eigen, not on ITensor, so they belong in tessera_core
+# alongside the rest of the pybind-free C++ implementation. Add them
+# back after the blanket /quantum/ exclusion.
+list(APPEND TESSERA_CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/QuantumState.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/KoashiImoto.cpp")
 # InteractionSimulation lives in src/simulations/ for architectural
 # alignment with CDT (#44), but depends on Eigen + ITensor and so belongs
 # in tessera_quantum, not tessera_core.
@@ -265,7 +279,7 @@ add_library(tessera_core STATIC ${TESSERA_CORE_SOURCES})
 target_include_directories(tessera_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB)
+target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB Eigen3::Eigen)
 
 # Optional OpenMP for the spectral-graph heat-kernel parallel loop and
 # similar embarrassingly-parallel hot paths. Bit-identical to the
@@ -349,6 +363,25 @@ else()
 endif()
 # ---- </tessera_core static library> --------------------------------------
 
+# ---- <Quantum-core tests (Eigen-only, no ITensor) > -----------------------
+# Tests for QuantumState and KoashiImoto live under tests/quantum_core/
+# and link only tessera_core. They build regardless of TESSERA_QUANTUM,
+# so KI can be exercised on hand-calculated reference values even when
+# the ITensor / DMRG / TDVP subsystem isn't checked out.
+enable_testing()
+file(GLOB TESSERA_QUANTUM_CORE_TESTS
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum_core/*.cpp")
+foreach(_test_src ${TESSERA_QUANTUM_CORE_TESTS})
+    get_filename_component(_test_name "${_test_src}" NAME_WE)
+    add_executable(${_test_name} "${_test_src}")
+    target_link_libraries(${_test_name} PRIVATE tessera_core)
+    set_target_properties(${_test_name} PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON)
+    add_test(NAME ${_test_name} COMMAND ${_test_name})
+endforeach()
+
 # ---- <Build the Python module> ----
 pybind11_add_module(_tessera MODULE ${TESSERA_PYBIND_SOURCES})
 target_link_libraries(_tessera PRIVATE tessera_core)
@@ -384,6 +417,15 @@ if(TESSERA_QUANTUM)
     # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
     # pybind-free static lib.
     list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
+    # QuantumState and KoashiImoto are explicitly in tessera_core (per the
+    # whitelist above). The /src/quantum/ GLOB would otherwise pull them
+    # into tessera_quantum as well, producing duplicate symbols that hit
+    # an ODR violation at runtime (the .so loads but immediately
+    # segfaults on import).
+    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX
+        "/src/quantum/QuantumState\\.cpp$")
+    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX
+        "/src/quantum/KoashiImoto\\.cpp$")
     add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
     target_include_directories(tessera_quantum PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -401,6 +443,22 @@ if(TESSERA_QUANTUM)
     file(GLOB TESSERA_QUANTUM_TESTS
             CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum/*.cpp")
+    # SKIPPED in #56 (TODO charge-observables-v0.3): these tests pin
+    # behaviour of the removed v0.1 charge moves / v0.2 qudit machinery
+    # / Schwinger Hamiltonian. They reference deleted methods like
+    # annihilate, pairCreate, getGlobalCharge, quditChargeOf,
+    # quditJointStateFor, plus removed InteractionConfig fields
+    # (a, g, m, dt, useCharges, featureQuditBasis, ...). They will be
+    # re-written against the new QuantumState surface in the
+    # follow-up; until then they don't compile and are skipped.
+    list(FILTER TESSERA_QUANTUM_TESTS EXCLUDE REGEX
+        "/tests/quantum/test_interaction_simulation\\.cpp$")
+    list(FILTER TESSERA_QUANTUM_TESTS EXCLUDE REGEX
+        "/tests/quantum/test_interaction_simulation_v01\\.cpp$")
+    list(FILTER TESSERA_QUANTUM_TESTS EXCLUDE REGEX
+        "/tests/quantum/test_interaction_simulation_v02\\.cpp$")
+    list(FILTER TESSERA_QUANTUM_TESTS EXCLUDE REGEX
+        "/tests/quantum/test_sigma_ab_choi_state\\.cpp$")
     foreach(_test_src ${TESSERA_QUANTUM_TESTS})
         get_filename_component(_test_name "${_test_src}" NAME_WE)
         add_executable(${_test_name} "${_test_src}")

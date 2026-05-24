@@ -51,6 +51,18 @@ Vertex::Vertex(const std::uint64_t id_) noexcept : id(id_), fingerprint({id_}) {
 
 std::uint64_t Vertex::getId() const noexcept { return id; }
 
+const ::tessera::quantum::QuantumState& Vertex::quantumState() const noexcept {
+  return quantumState_;
+}
+
+::tessera::quantum::QuantumState& Vertex::quantumState() noexcept {
+  return quantumState_;
+}
+
+bool Vertex::isLocallyPure(double eps) const noexcept {
+  return quantumState_.isLocallyPure(eps);
+}
+
 void Vertex::setTime(double time) noexcept {
   if (coordinates.empty()) {
     coordinates = std::vector<double>();

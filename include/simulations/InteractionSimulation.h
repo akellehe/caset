@@ -71,88 +71,64 @@ using namespace ::tessera::observables;
 using namespace ::tessera::quantum;
 
 // A single system's quantum state — a one-qubit density matrix.
+// LEGACY: pre-#56 v0.1 path used this; the live state-bearer is now
+// `tessera::quantum::QuantumState` carried by every Vertex. Kept as an
+// alias only because the removed `computeInteraction` helper returned
+// a struct full of these; remove together with the helper once the
+// rewrite of `interact()` is complete.
 using SystemState = Eigen::Matrix2cd;
 
-// Initial charge assignment for the v0.1 charged-model initial layer.
-enum class InitialChargeMode {
-    ALTERNATING,  // even-index vertex +1, odd-index −1 (exact Q = 0)
-    RANDOM,       // independent ±1 per vertex (Q ≈ 0 ± √N)
-};
+// LEGACY (removed in #56): v0.1 charge mode is gone with the rest of the
+// charge observables. Kept here as a comment so anyone bisecting through
+// git history can quickly identify what was removed. Will be reinstated
+// against QuantumState in the charge-observables-v0.3 follow-up.
+//
+//   enum class InitialChargeMode { ALTERNATING, RANDOM };
 
 // Flat configuration for an interaction-history Monte Carlo run.
+// Post-#56 design: no time-evolution parameters, no charge flags —
+// every interaction is a Koashi-Imoto decomposition of the joint state
+// at the moment of interaction (see docs/source/design — captured in
+// the issue body since the design doc was inlined there).
 struct InteractionConfig {
     // ─── Initial layer ──────────────────────────────────────────────────
-    int nSystems{0};   // system count = Poisson-point count
-
-    // ─── Two-site interaction unitary U = exp(-i H_XY dt) ───────────────
-    // H_XY is the Schwinger two-site Hamiltonian term.
-    double a{1.0};
-    double g{1.0};
-    double m{0.5};
-    double dt{0.25};
+    int nSystems{0};       // system count = Poisson-point count
+    int dimPerVertex{4};   // per-vertex physical Hilbert dimension
 
     // ─── Regge ensemble ─────────────────────────────────────────────────
     double beta{1.0};        // inverse temperature in e^{-β S}
-    double epsilonI{1e-10};  // mutual-information floor for ℓ = -log I
+    double epsilonI{1e-10};  // mutual-information floor (legacy, retained
+                             // for edge-length numerical safety; the d_VR
+                             // formula uses I_max-relative MI but still
+                             // needs a positivity floor near I = 0)
 
     // ─── Volume control (the T-cap) ─────────────────────────────────────
     std::size_t targetInteractions{0};
 
     // ─── Initial Poisson-Delaunay layer connectivity ────────────────────
-    // Delaunay edges among the N initial systems, 0-based index pairs,
-    // supplied by the caller (scipy.spatial.Delaunay).
     std::vector<std::pair<int, int>> delaunayEdges;
 
-    // ─── Charged Cartan Monte Carlo (v0.1) ──────────────────────────────
-    // Experimental features are toggled by booleans named `featureXxx`,
-    // all defaulting to false. See
-    // docs/source/quantum-experiments/charged_cartan_monte_carlo_v0.1.md
-    // for the full convention. Old runs stay reproducible because every
-    // new behaviour is opt-in.
-    bool featureCharges{false};
-    bool featureDeactivateOnAnnihilate{false};
-    bool featurePhotonOnAnnihilate{false};
-    // Convenience alias kept for backward-compat with existing scripts:
-    // sets / mirrors featureCharges.
-    bool useCharges{false};
-    // CP-violation bias for pair-creation. The first vertex of a
-    // spontaneously-created (+, −) pair gets charge 0.5 + δ. If cpBias
-    // > 0, δ is drawn from [0, +cpBias] (mean cpBias/2 > 0, favouring
-    // +); if < 0, δ from [cpBias, 0] (favouring −). Default 0 = exact
-    // C/CP symmetry.
-    double cpBias{0.0};
-    InitialChargeMode initialChargeMode{InitialChargeMode::ALTERNATING};
+    // ─── Information budget and KI tolerances (issue #56) ──────────────
+    // I_max for the whole simulation is N · epsInit; per-vertex
+    // unique-information contribution at initialisation is epsInit nats.
+    double epsInit{1.0};
+    double epsLocalPure{1e-10};
+    double epsKiEigen{1e-10};
+    double epsKiCondState{1e-10};
+    double epsKiSvd{1e-10};
 
-    // ─── v0.2: qudit-basis vertices (4-dim Hilbert per vertex) ──────────
-    // When true, vertices carry a 4-dim ququart state with the basis
-    // {|+0⟩, |+1⟩, |−0⟩, |−1⟩} so charge is intrinsic via the operator
-    // Q̂ = diag(+1, +1, −1, −1). The 16×16 pair Hamiltonian is built
-    // from the parameters below; the unitary is U = exp(−i H_pair · dt).
-    // When this flag is on, the v0.1 charge-related flags are ignored
-    // (v0.2 supersedes them).
-    bool featureQuditBasis{false};
-    // ─── v0.2 + #16: Σ_AB as full 256-dim Choi state ───────────────────
-    // When true (requires featureQuditBasis), the Σ_AB entangling-core
-    // vertex carries the full Choi state J(U) = (U ⊗ I)|Ω⟩⟨Ω|(U† ⊗ I)
-    // — a 256×256 pure state on the doubled Hilbert — instead of the
-    // I/4 maximally-mixed proxy. This makes Σ_AB's marginal consistent
-    // with its joint correlations and eliminates the discrete Q-drift
-    // documented in v02_finite_size_investigation.md. When Σ_AB is
-    // consumed by a later interaction, its Choi state is reduced to
-    // 4 dimensions via charge-basis projection matched to the partner.
+    // ─── REMOVED in #56 (kept here as a comment for git-bisect breadcrumbs) ──
     //
-    // Default: true. The constructor auto-clears this to false when
-    // featureQuditBasis is off (it has no meaning without the qudit
-    // basis), so v0/v0.1 configurations don't get an unexpected
-    // exception or behavior change.
-    bool featureChoiSigmaAB{true};
-    // Pair-Hamiltonian parameters. Sensible defaults map to a
-    // "v0.1-ish" regime in the J_c → 0 limit; experiments can scan.
-    double j_chargeCharge{1.0};    // J_c · (Q̂_A · Q̂_B)
-    double j_spinSpin{0.25};       // J_s · (XX + YY)_spin
-    double massShift{0.5};         // δ_m · (Q̂_A + Q̂_B)
-    double gammaCpViolation{0.0};  // γ_CP · (Ĉ_A ⊗ I + I ⊗ Ĉ_B)
-    double dtPair{0.25};           // exponentiation time step
+    // Schwinger two-site H_XY:        a, g, m, dt
+    // v0.1 charge moves:              featureCharges, featureDeactivateOnAnnihilate,
+    //                                 featurePhotonOnAnnihilate, useCharges,
+    //                                 cpBias, initialChargeMode
+    // v0.2 qudit-basis:               featureQuditBasis, featureChoiSigmaAB,
+    //                                 j_chargeCharge, j_spinSpin, massShift,
+    //                                 gammaCpViolation, dtPair
+    //
+    // All of the above are reinstated in the charge-observables-v0.3
+    // follow-up against the new QuantumState representation.
 
     std::uint32_t seed{0};
     bool          quiet{true};
@@ -183,21 +159,11 @@ class InteractionSimulation : public tessera::simulations::Simulation {
     // frontier. Returns true if accepted.
     bool unInteract();
 
-    // ─── Charged Cartan Monte Carlo (v0.1) moves ────────────────────────
-
-    // Spontaneous partial-annihilation: pick a uniformly-random (+, −)
-    // frontier pair, cancel the matched portion of their charges, leave
-    // a residual (or fully annihilate if magnitudes match). Free of
-    // Regge action change; the move's Metropolis prefactor balances it
-    // against pairCreate. Returns true if accepted. No-op if useCharges
-    // is false.
-    bool annihilate();
-
-    // Spontaneous (+, −) pair creation on the frontier with a Bell-state
-    // joint and charges drawn from the cpBias distribution. Free of
-    // Regge change. Returns true if accepted. No-op if useCharges is
-    // false.
-    bool pairCreate();
+    // ─── REMOVED in #56 ─────────────────────────────────────────────────
+    // bool annihilate();   — v0.1 (+,−) partial annihilation move.
+    // bool pairCreate();   — v0.1 (+,−) pair creation move.
+    // Both depended on per-vertex charges and are reinstated against
+    // QuantumState in the charge-observables-v0.3 follow-up.
 
     // ─── Transactional proposers (caller drives propose/apply/rollback) ──
     [[nodiscard]] std::unique_ptr<InteractionMove> proposeInteract();
@@ -236,51 +202,24 @@ class InteractionSimulation : public tessera::simulations::Simulation {
     // Accepted / attempted ratio per move type.
     [[nodiscard]] std::map<std::string, double> getAcceptanceRates() const;
 
-    // ─── Charged Cartan observables (v0.1) ──────────────────────────────
-
-    // Σ_v q_v over the entire complex. Exactly conserved at cpBias = 0;
-    // drifts as the integrated CP-violation when cpBias ≠ 0.
-    [[nodiscard]] double getGlobalCharge() const;
-
-    // Per-time-slice counts (n_+, n_0, n_−) plus net Σq_v on that slice.
-    // Each entry is a 4-tuple (n_pos, n_zero, n_neg, sum_q) indexed by
-    // time slice (slice 0 = initial layer).
-    [[nodiscard]] std::vector<std::array<double, 4>>
-    getChargeProfile() const;
-
-    // Charge auto-correlation ⟨q_v · q_w⟩ vs graph-distance d(v, w) for
-    // 1 ≤ d ≤ maxDist. Returns a vector of length maxDist; entry [d-1]
-    // is the mean q·q over vertex pairs at graph-distance exactly d on
-    // the MI-weighted complex graph. Sample-averaged when the pair
-    // count is large; exact otherwise.
-    [[nodiscard]] std::vector<double>
-    getChargeCorrelation(int maxDist) const;
+    // ─── REMOVED in #56 ─────────────────────────────────────────────────
+    // double                    getGlobalCharge()         — v0.1.
+    // vector<array<double, 4>>  getChargeProfile()        — v0.1.
+    // vector<double>            getChargeCorrelation(int) — v0.1.
+    // Reinstated against QuantumState in charge-observables-v0.3.
 
     [[nodiscard]] const std::shared_ptr<tessera::spacetime::Spacetime> &
     getSpacetime() const noexcept { return spacetime_; }
 
-    // ─── Charged Cartan v0.2 observables ────────────────────────────────
-
-    // Per-vertex continuous charge ⟨Q̂⟩ = Tr[ρ · Q̂], where
-    // Q̂ = diag(+1, +1, -1, -1) on the {|+0⟩, |+1⟩, |−0⟩, |−1⟩} basis.
-    // Returns ±1 for integer-charge eigenstates, 0 for the maximally-mixed
-    // I/4 proxy. 0.0 for vertices the simulation has not associated with
-    // a qudit state. Requires `featureQuditBasis = True`.
-    [[nodiscard]] double quditChargeOf(tessera::mesh::VertexPtr v) const;
-
-    // 16×16 joint qudit state ρ_XY for a pair. Stored correlated joint
-    // when (x, y) share an interaction history or are initial-layer
-    // Delaunay neighbours; uncorrelated product ρ_x ⊗ ρ_y otherwise.
-    [[nodiscard]] Eigen::MatrixXcd
-    quditJointStateFor(tessera::mesh::VertexPtr x, tessera::mesh::VertexPtr y) const;
-
-    // Read-only access to the per-vertex 4-dim qudit states. Empty for
-    // non-qudit configs and for vertices in the Choi-state path that
-    // haven't materialized a single-vertex state. Used by the Python
-    // `quditStateOf(vertex)` accessor for tests.
-    [[nodiscard]] const std::unordered_map<
-        tessera::mesh::VertexPtr, Eigen::Matrix4cd> &
-    quditStateOfMap() const noexcept { return quditStateOf_; }
+    // ─── REMOVED in #56 ─────────────────────────────────────────────────
+    // double           quditChargeOf(VertexPtr)               — v0.2.
+    // MatrixXcd        quditJointStateFor(VertexPtr, VertexPtr) — v0.2.
+    // map<VertexPtr,M> quditStateOfMap()                       — v0.2.
+    //
+    // Replacements: per-vertex state is now `vertex.quantumState()`
+    // (mesh::Vertex); pairwise joint state is reconstructed on demand
+    // from endpoint vertex states. Charge observables are reinstated
+    // against QuantumState in charge-observables-v0.3.
 
     [[nodiscard]] std::size_t interactionCount() const noexcept {
         return interactionCount_;
@@ -288,6 +227,15 @@ class InteractionSimulation : public tessera::simulations::Simulation {
     [[nodiscard]] std::size_t frontierSize() const noexcept {
         return frontier_.size();
     }
+    // The cardinality of the eligible un-interact set. Replaces the
+    // pre-#56 `leafCellCount_` counter; the value is now `leafSimplices_.size()`.
+    [[nodiscard]] std::size_t leafSimplexCount() const noexcept {
+        return leafSimplices_.size();
+    }
+    // Global information ceiling for the simulation: N · epsInit. Set
+    // once at construction from the initial layer; used by edge-length
+    // computation (d_VR = -log(I / I_max)).
+    [[nodiscard]] double getIMax() const noexcept { return iMax_; }
     [[nodiscard]] double getBeta() const noexcept { return config_.beta; }
 
     void setBeta(double beta) noexcept { config_.beta = beta; }
@@ -295,103 +243,63 @@ class InteractionSimulation : public tessera::simulations::Simulation {
 
   private:
     // ─── Configuration + owned state ────────────────────────────────────
-    InteractionConfig config_;
+    InteractionConfig                              config_;
     std::shared_ptr<tessera::spacetime::Spacetime> spacetime_;
-    std::mt19937 rng_;
+    std::mt19937                                   rng_;
 
-    // The two-site interaction unitary U = exp(-i H_XY dt), 4×4.
-    Eigen::Matrix4cd interactionU_;
-
-    // Per-system quantum state — the one-qubit marginal. Every system ever
-    // created keeps its state here; frozen systems retain theirs so
-    // un-interact restores cleanly.
-    std::unordered_map<tessera::mesh::VertexPtr, SystemState> stateOf_;
-
-    // Joint states of correlated system pairs: the randomized initial
-    // layer is one correlated mixed state, so Delaunay-adjacent systems
-    // share genuine mutual information, and an interaction's two products
-    // X', Y' inherit the joint state ρ_AB. Keyed by the sorted vertex
-    // pointer pair. A pair absent here is treated as uncorrelated.
-    std::map<std::pair<tessera::mesh::VertexPtr, tessera::mesh::VertexPtr>,
-             Eigen::Matrix4cd>
-        jointOf_;
-
-    // ─── Frontier / move bookkeeping (the DP tables) ────────────────────
-    // The frontier — systems that have not yet interacted (no temporal
-    // out-edges). Any pair of frontier vertices is an eligible interact
-    // candidate, so N₊ = |frontier|·(|frontier|−1)/2 and a uniform-random
-    // candidate is just (frontier_[i], frontier_[j]) for random i ≠ j.
-    // Kept as a flat vector for O(1) sampling, paired with an index map
-    // for O(1) swap-and-pop removal.
-    std::vector<tessera::mesh::VertexPtr> frontier_;
+    // ─── Frontier (uninteracted vertices) ───────────────────────────────
+    // Flat for O(1) sampling, index map for O(1) swap-and-pop removal.
+    // N_+ = |frontier|·(|frontier|−1)/2; a uniform-random pair is
+    // (frontier_[i], frontier_[j]) for random i ≠ j.
+    std::vector<tessera::mesh::VertexPtr>                     frontier_;
     std::unordered_map<tessera::mesh::VertexPtr, std::size_t> frontierIdx_;
 
-    // ─── Charge bookkeeping (v0.1) ──────────────────────────────────────
-    // Continuous charge per vertex in [−1, +1]. Only populated when
-    // config.useCharges is true. Worldline-product vertices inherit
-    // their parent's charge; Σ_AB products are neutral (0).
-    std::unordered_map<tessera::mesh::VertexPtr, double> chargeOf_;
+    // ─── Leaf simplices (eligible un-interact targets) ──────────────────
+    // A simplex S is a "leaf" iff all three of its child vertices are
+    // currently on the frontier. Maintained incrementally on interact /
+    // unInteract; `leafSimplices_.size()` replaces the old
+    // `leafCellCount_` counter (the Metropolis prefactor reads the
+    // size directly).
+    //
+    // REMOVED in #56 — derivable from leafSimplices_ + simplex containment:
+    //   producedByCell_     — a vertex's parent simplex is found by
+    //                         walking its `simplices_` set and selecting
+    //                         the one where the vertex is a child.
+    //   consumedByCell_     — symmetric; a vertex's child simplex (if any)
+    //                         is the one where it's a parent.
+    //   consumedProductsOf_ — per-cell "kids still on frontier?" counter
+    //                         replaced by leafSimplices_ membership.
+    //   leafCellCount_      — replaced by leafSimplices_.size().
+    std::unordered_set<tessera::mesh::SimplexPtr,
+                       tessera::mesh::SimplexPtrHash,
+                       tessera::mesh::SimplexPtrEq>           leafSimplices_;
 
-    // ─── v0.2: qudit-basis state buffers ────────────────────────────────
-    // Populated only when config.featureQuditBasis is on. Per-vertex 4×4
-    // density matrix in the basis {|+0⟩, |+1⟩, |−0⟩, |−1⟩}. Charge is
-    // derived as Tr[ρ · Q̂] where Q̂ = diag(+1, +1, −1, −1).
-    std::unordered_map<tessera::mesh::VertexPtr, Eigen::Matrix4cd> quditStateOf_;
-    // Per-pair 16-dim joint state in the (A ⊗ B) qudit-tensor order.
-    std::map<std::pair<tessera::mesh::VertexPtr, tessera::mesh::VertexPtr>,
-             Eigen::MatrixXcd> quditJointOf_;
-    // The 16×16 ququart-pair unitary. Built at construction time when
-    // featureQuditBasis is on.
-    Eigen::MatrixXcd quditInteractionU_;
-    // The 256×256 Choi state J(U) of the pair unitary, built once at
-    // construction when featureChoiSigmaAB is on. Each Σ_AB vertex
-    // carries a copy by reference (via membership in choiStateOf_).
-    Eigen::MatrixXcd quditChoiU_;
-    // Σ_AB vertices that carry the Choi state (rather than the I/4
-    // proxy in quditStateOf_). Membership in this set is the
-    // vertex-type marker; the state itself is the shared quditChoiU_.
-    std::unordered_set<tessera::mesh::VertexPtr> choiSigmaAbSet_;
-    // Frontier vertices indexed by charge sign for O(1) annihilation
-    // candidate sampling. A vertex with q > 0 is in frontierPos_,
-    // q < 0 in frontierNeg_, q = 0 in frontierZero_. The same
-    // swap-and-pop machinery as frontier_ applies.
-    std::vector<tessera::mesh::VertexPtr> frontierPos_, frontierNeg_;
-    std::unordered_map<tessera::mesh::VertexPtr, std::size_t>
-        frontierPosIdx_, frontierNegIdx_;
-    // Counters for the new moves.
-    std::int64_t annihilateAttempts_{0}, annihilateAccepted_{0};
-    std::int64_t pairCreateAttempts_{0}, pairCreateAccepted_{0};
+    // ─── REMOVED in #56 (state now lives on mesh::Vertex) ───────────────
+    //
+    //   Eigen::Matrix4cd                                     interactionU_;
+    //   unordered_map<VertexPtr, SystemState>                stateOf_;
+    //   map<pair<VertexPtr, VertexPtr>, Eigen::Matrix4cd>    jointOf_;
+    //   unordered_map<VertexPtr, double>                     chargeOf_;
+    //   unordered_map<VertexPtr, Eigen::Matrix4cd>           quditStateOf_;
+    //   map<pair<VertexPtr, VertexPtr>, Eigen::MatrixXcd>    quditJointOf_;
+    //   Eigen::MatrixXcd                                     quditInteractionU_;
+    //   Eigen::MatrixXcd                                     quditChoiU_;
+    //   unordered_set<VertexPtr>                             choiSigmaAbSet_;
+    //   vector<VertexPtr>          frontierPos_, frontierNeg_;
+    //   unordered_map<VertexPtr, size_t> frontierPosIdx_, frontierNegIdx_;
+    //   int64_t annihilateAttempts_, annihilateAccepted_;
+    //   int64_t pairCreateAttempts_, pairCreateAccepted_;
+    //
+    // All replaced by `vertex.quantumState()` (per-vertex marginal,
+    // joints reconstructed on demand) plus KI-based interact / unInteract.
 
     // Per-hinge action contribution A_h·ε_h. Updated locally per move so
     // ΔS is O(affected hinges).
     std::unordered_map<tessera::mesh::SimplexPtr, double,
-                       tessera::mesh::SimplexPtrHash, tessera::mesh::SimplexPtrEq>
-        hingeAction_;
+                       tessera::mesh::SimplexPtrHash,
+                       tessera::mesh::SimplexPtrEq>            hingeAction_;
 
-    // Dependency tracking for deep un-interactions.
-    //   producedByCell_[v]  = the cell whose interaction created v (a
-    //                         product vertex X', AB, or Y').
-    //   consumedByCell_[v]  = the cell that took v as a parent in its
-    //                         interaction (if any). Each vertex is
-    //                         consumed by at most one cell.
-    // Together these give the dependency tree: un-interacting a cell
-    // truncates its future cone via BFS through producedByCell_ →
-    // consumedByCell_.
-    std::unordered_map<tessera::mesh::VertexPtr, tessera::mesh::SimplexPtr>
-        producedByCell_;
-    std::unordered_map<tessera::mesh::VertexPtr, tessera::mesh::SimplexPtr>
-        consumedByCell_;
-
-    // Per-cell count of its products that have been consumed by a child
-    // interaction. A cell is a *leaf* (its deep un-interact returns to
-    // exactly the state where this cell didn't exist) iff this count is
-    // zero. The Metropolis prefactor for interact uses leafCellCount_,
-    // bounded as the lattice grows. Maintained incrementally.
-    std::unordered_map<tessera::mesh::SimplexPtr, std::uint8_t,
-                       tessera::mesh::SimplexPtrHash, tessera::mesh::SimplexPtrEq>
-        consumedProductsOf_;
-    std::size_t leafCellCount_{0};
-
+    double        iMax_{0.0};            // N · epsInit, set in ctor
     std::size_t   interactionCount_{0};
     std::uint64_t nextVertexId_{0};   // monotone; never reused after removeVertex
 
@@ -401,57 +309,30 @@ class InteractionSimulation : public tessera::simulations::Simulation {
     void buildInitialLayer();
 
     // O(1) frontier mutations via swap-and-pop on the flat vector.
-    // When useCharges is enabled, also maintain the per-sign frontier
-    // vectors (frontierPos_ / frontierNeg_) for fast annihilate
-    // candidate sampling.
     void addToFrontier(tessera::mesh::VertexPtr v);
     void removeFromFrontier(tessera::mesh::VertexPtr v);
     [[nodiscard]] bool onFrontier(tessera::mesh::VertexPtr v) const noexcept {
         return frontierIdx_.find(v) != frontierIdx_.end();
     }
 
-    // Sign-bucketed frontier helpers (no-op when useCharges is false).
-    void addToSignBucket(tessera::mesh::VertexPtr v);
-    void removeFromSignBucket(tessera::mesh::VertexPtr v);
+    // d_VR(u, v) = -log(I(u:v) / iMax_), with I computed from the
+    // two vertex states' joint (product joint ρ_u ⊗ ρ_v as per the
+    // #56 design — joint history rides on Σ vertices in the state graph,
+    // not on a separate lookup table). Returns +∞ if I == 0.
+    [[nodiscard]] double edgeLength(tessera::mesh::VertexPtr u,
+                                    tessera::mesh::VertexPtr v) const;
 
-    // The ten edge mutual informations of an interaction X,Y → X',AB,Y'.
-    // Keyed by the cell's local-label pairs (0=X 1=Y 2=X' 3=AB 4=Y').
-    // Also returns the marginal states X' = Tr_Y ρ_AB, Y' = Tr_X ρ_AB.
-    struct InteractionResult {
-        std::map<std::pair<int, int>, double> edgeMI;
-        SystemState statePrimeX;     // X' = Tr_Y ρ_AB
-        SystemState statePrimeY;     // Y' = Tr_X ρ_AB
-        SystemState stateAB;         // AB carried as its X-marginal proxy
-        Eigen::Matrix4cd jointAB;    // ρ_AB in (X' ⊗ Y') order
-    };
-
-    // v0.2: the same construction at 4-dim qudit vertices. ρ are
-    // 4×4; joints are 16×16. statePrimeX/Y are the 4-dim marginals;
-    // stateAB carries the Σ_AB proxy as a 4-dim state (the v0.2 default
-    // is the A-side marginal of the qudit joint, mirroring v0.1's
-    // proxy choice; the full 256-dim Choi state is a deferred upgrade).
-    struct InteractionResultQudit {
-        std::map<std::pair<int, int>, double> edgeMI;
-        Eigen::Matrix4cd statePrimeX;
-        Eigen::Matrix4cd statePrimeY;
-        Eigen::Matrix4cd stateAB;
-        Eigen::MatrixXcd jointAB;   // 16×16, in (X' ⊗ Y') order
-    };
-    // (quditChargeOf and quditJointStateFor are declared public above —
-    // they're observables intended for inspection from tests/Python.)
-    [[nodiscard]] InteractionResult
-    computeInteraction(tessera::mesh::VertexPtr x, tessera::mesh::VertexPtr y) const;
-
-    // v0.2 analog: 4-dim qudit inputs, 16×16 interaction unitary.
-    [[nodiscard]] InteractionResultQudit
-    computeInteractionQudit(tessera::mesh::VertexPtr x,
-                            tessera::mesh::VertexPtr y) const;
-
-    // The joint state ρ_XY in (X ⊗ Y) order: the stored correlated pair
-    // if X, Y share one (initial-layer Delaunay neighbours, or the two
-    // products of one interaction), the uncorrelated product otherwise.
-    [[nodiscard]] Eigen::Matrix4cd
-    jointStateFor(tessera::mesh::VertexPtr x, tessera::mesh::VertexPtr y) const;
+    // ─── REMOVED in #56 ─────────────────────────────────────────────────
+    //   void               addToSignBucket(VertexPtr);
+    //   void               removeFromSignBucket(VertexPtr);
+    //   InteractionResult  computeInteraction(VertexPtr, VertexPtr);     — Schwinger.
+    //   InteractionResultQudit computeInteractionQudit(VertexPtr, VertexPtr);
+    //   Matrix4cd          jointStateFor(VertexPtr, VertexPtr);
+    //
+    // The Schwinger-based `computeInteraction*` is replaced inline in
+    // `interact()` by a Koashi-Imoto decomposition via
+    // `tessera::quantum::koashiImotoDecompose`. The 10 edge MIs are
+    // recovered by querying the resulting per-vertex states pairwise.
 
     // Metropolis-Hastings acceptance: accepts when -βΔS + logPrefactor ≥ 0,
     // else with probability e^{-βΔS + logPrefactor}.

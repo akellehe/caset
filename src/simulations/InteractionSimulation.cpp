@@ -15,6 +15,8 @@
 #include "mesh/Vertex.h"
 #include "observables/MIUnits.hpp"
 #include "quantum/Holography.hpp"
+#include "quantum/KoashiImoto.hpp"
+#include "quantum/QuantumState.hpp"
 #include "spacetime/Metric.h"
 #include "spacetime/Spacetime.h"
 
@@ -41,302 +43,45 @@ using namespace ::tessera::quantum;
 namespace {
 
 using cd = std::complex<double>;
-constexpr cd I_UNIT{0.0, 1.0};
 
-// Algebraic maximum mutual information between two single qubits.
-// Shared with the holography path via observables/MIUnits.hpp; the
-// alias keeps existing call-site spellings untouched (#39 will promote
-// this to a config parameter to support qudit-basis runs).
-using ::tessera::observables::kIMax;
-
-// Von Neumann entropy S(ρ) = -Tr ρ log ρ, in nats.
-double vonNeumannEntropy(Eigen::MatrixXcd const& rho) {
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(rho);
-    double s = 0.0;
-    for (double lambda : es.eigenvalues())
-        if (lambda > 1e-13) s -= lambda * std::log(lambda);
-    return s;
-}
-
-// A randomized correlated mixed state on n qubits: ρ = M M† / Tr(M M†)
-// with M a complex-Gaussian 2ⁿ × 2ⁿ matrix. Generic — every pair of
-// qubits shares genuine mutual information.
-Eigen::MatrixXcd randomCorrelatedState(int n, std::mt19937& rng) {
-    const int dim = 1 << n;
-    std::normal_distribution<double> g(0.0, 1.0);
-    Eigen::MatrixXcd m(dim, dim);
-    for (int i = 0; i < dim; ++i)
-        for (int j = 0; j < dim; ++j)
-            m(i, j) = cd(g(rng), g(rng));
-    Eigen::MatrixXcd rho = m * m.adjoint();
-    return rho / rho.trace().real();
-}
-
-// Reduced density matrix of an n-qubit state, keeping the qubits in
-// `keep` (0-based; qubit 0 is the most significant bit). The kept qubits
-// keep their listed order, so keep = {i, j} returns the (qubit i ⊗
-// qubit j) joint state in the same ordering as tensor2.
-Eigen::MatrixXcd partialTrace(Eigen::MatrixXcd const& rho, int n,
-                              std::vector<int> const& keep) {
-    std::vector<int> traced;
-    for (int b = 0; b < n; ++b)
-        if (std::find(keep.begin(), keep.end(), b) == keep.end())
-            traced.push_back(b);
-    const int k = static_cast<int>(keep.size());
-    const int t = static_cast<int>(traced.size());
-    const int dimK = 1 << k;
-    const int dimT = 1 << t;
-    auto fullIndex = [&](int kv, int tv) {
-        int idx = 0;
-        for (int i = 0; i < k; ++i)             // keep[0] = most significant
-            if (kv & (1 << (k - 1 - i))) idx |= 1 << (n - 1 - keep[i]);
-        for (int i = 0; i < t; ++i)
-            if (tv & (1 << (t - 1 - i))) idx |= 1 << (n - 1 - traced[i]);
-        return idx;
-    };
-    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(dimK, dimK);
-    for (int r = 0; r < dimK; ++r)
-        for (int c = 0; c < dimK; ++c)
-            for (int tv = 0; tv < dimT; ++tv)
-                out(r, c) += rho(fullIndex(r, tv), fullIndex(c, tv));
-    return out;
-}
-
-// Sorted vertex-pointer pair, the canonical key for jointOf_.
-std::pair<VertexPtr, VertexPtr> sortedPair(VertexPtr a, VertexPtr b) {
-    return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
-}
-
-// Swap the two qubits of a two-qubit operator: (X ⊗ Y) -> (Y ⊗ X).
-Eigen::Matrix4cd swapQubits(Eigen::Matrix4cd const& m) {
-    Eigen::Matrix4cd out;
-    for (int a = 0; a < 2; ++a)
-        for (int b = 0; b < 2; ++b)
-            for (int c = 0; c < 2; ++c)
-                for (int d = 0; d < 2; ++d)
-                    out(2 * b + a, 2 * d + c) = m(2 * a + b, 2 * c + d);
-    return out;
-}
-
-// Kronecker product of two one-qubit states, ordering (X ⊗ Y).
-Eigen::Matrix4cd tensor2(SystemState const& a, SystemState const& b) {
-    Eigen::Matrix4cd out;
-    for (int i = 0; i < 2; ++i)
-        for (int j = 0; j < 2; ++j)
-            for (int k = 0; k < 2; ++k)
-                for (int l = 0; l < 2; ++l)
-                    out(2 * i + k, 2 * j + l) = a(i, j) * b(k, l);
-    return out;
-}
-
-// Partial traces of a two-qubit joint state.
-SystemState traceOutSecond(Eigen::Matrix4cd const& rho) {  // -> X marginal
-    SystemState out;
-    for (int i = 0; i < 2; ++i)
-        for (int j = 0; j < 2; ++j)
-            out(i, j) = rho(2 * i + 0, 2 * j + 0) + rho(2 * i + 1, 2 * j + 1);
-    return out;
-}
-SystemState traceOutFirst(Eigen::Matrix4cd const& rho) {  // -> Y marginal
-    SystemState out;
-    for (int k = 0; k < 2; ++k)
-        for (int l = 0; l < 2; ++l)
-            out(k, l) = rho(0 + k, 0 + l) + rho(2 + k, 2 + l);
-    return out;
-}
-
-// The Schwinger two-site interaction unitary U = exp(-i H_XY dt).
-// H_XY is the local two-site Hamiltonian — hopping plus the staggered
-// mass term — built as a 4×4 dense matrix and exponentiated through a
-// Hermitian eigendecomposition. (The electric term L_n² is non-local in
-// the staggered formulation and is not part of a two-site fragment.)
-Eigen::Matrix4cd schwingerTwoSiteU(double a, double m, double dt) {
-    // Pauli matrices.
-    Eigen::Matrix2cd X, Y, Z, Id;
-    X << 0, 1, 1, 0;
-    Y << 0, -I_UNIT, I_UNIT, 0;
-    Z << 1, 0, 0, -1;
-    Id << 1, 0, 0, 1;
-    auto kron = [](Eigen::Matrix2cd const& p, Eigen::Matrix2cd const& q) {
-        Eigen::Matrix4cd r;
-        for (int i = 0; i < 2; ++i)
-            for (int j = 0; j < 2; ++j)
-                for (int k = 0; k < 2; ++k)
-                    for (int l = 0; l < 2; ++l)
-                        r(2 * i + k, 2 * j + l) = p(i, j) * q(k, l);
-        return r;
-    };
-    // H_hop = (1/(4a)) (XX + YY); H_m = (m/2)(-Z⊗I + I⊗Z).
-    Eigen::Matrix4cd H =
-        (1.0 / (4.0 * a)) * (kron(X, X) + kron(Y, Y))
-        + (m / 2.0) * (-kron(Z, Id) + kron(Id, Z));
-    Eigen::SelfAdjointEigenSolver<Eigen::Matrix4cd> es(H);
-    Eigen::Vector4cd phase;
-    for (int k = 0; k < 4; ++k)
-        phase(k) = std::exp(-I_UNIT * dt * es.eigenvalues()(k));
-    return es.eigenvectors() * phase.asDiagonal()
-           * es.eigenvectors().adjoint();
-}
-
-// Mutual information of a two-qubit joint state, in nats.
-double jointMutualInformation(Eigen::Matrix4cd const& rho) {
-    const double sX = vonNeumannEntropy(traceOutSecond(rho));
-    const double sY = vonNeumannEntropy(traceOutFirst(rho));
-    const double sXY = vonNeumannEntropy(rho);
-    return std::max(sX + sY - sXY, 0.0);
-}
-
-// ─── v0.2: 4-dim qudit-basis helpers ────────────────────────────────────
+// ─── REMOVED in #56 ─────────────────────────────────────────────────────
+// The pre-refactor file held a forest of small Eigen helpers in this
+// anonymous namespace, all serving the Schwinger / qudit / Choi code
+// paths that are gone with the rest of the v0.1/v0.2 machinery:
 //
-// Vertex Hilbert space: basis {|+0⟩, |+1⟩, |−0⟩, |−1⟩}, indexed 0..3.
-// The first label is the charge sector, the second the spin / internal.
-// Charge operator: Q̂ = diag(+1, +1, −1, −1). Charge-conjugation Ĉ swaps
-// the charge bit while leaving spin untouched: Ĉ|q,s⟩ = |¬q, s⟩.
-
-// Charge operator on the 4-dim Hilbert.
-Eigen::Matrix4cd quditChargeOp() {
-    Eigen::Matrix4cd Q = Eigen::Matrix4cd::Zero();
-    Q(0,0) = 1; Q(1,1) = 1; Q(2,2) = -1; Q(3,3) = -1;
-    return Q;
-}
-
-// Charge-conjugation operator on the 4-dim Hilbert.
-Eigen::Matrix4cd quditChargeConj() {
-    Eigen::Matrix4cd C = Eigen::Matrix4cd::Zero();
-    C(0,2) = 1; C(2,0) = 1; C(1,3) = 1; C(3,1) = 1;
-    return C;
-}
-
-// Tensor product of two d-dim matrices (d=4 for the ququart pair).
-Eigen::MatrixXcd kron4(Eigen::Matrix4cd const& A, Eigen::Matrix4cd const& B) {
-    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            for (int k = 0; k < 4; ++k)
-                for (int l = 0; l < 4; ++l)
-                    out(4*i+k, 4*j+l) = A(i,j) * B(k,l);
-    return out;
-}
-
-// X and Y of the *spin* register only — i.e., the qubit X/Y acting on
-// the 2-dim spin subspace, lifted to the 4-dim qudit by ignoring the
-// charge index. Layout: bit 0 = spin, bit 1 = charge → index = (q<<1)|s.
-Eigen::Matrix4cd quditSpinSx() {
-    Eigen::Matrix4cd X = Eigen::Matrix4cd::Zero();
-    X(0,1) = 1; X(1,0) = 1; X(2,3) = 1; X(3,2) = 1;
-    return X;
-}
-Eigen::Matrix4cd quditSpinSy() {
-    Eigen::Matrix4cd Y = Eigen::Matrix4cd::Zero();
-    Y(0,1) = -I_UNIT; Y(1,0) = I_UNIT;
-    Y(2,3) = -I_UNIT; Y(3,2) = I_UNIT;
-    return Y;
-}
-
-// Build the 16×16 pair Hamiltonian H_pair and exponentiate to U.
-// See docs/source/quantum-experiments/charged_cartan_monte_carlo_v0.2.md.
-Eigen::MatrixXcd quditPairU(double jCharge, double jSpin,
-                            double massShift, double gammaCp,
-                            double dt) {
-    const Eigen::Matrix4cd Q = quditChargeOp();
-    const Eigen::Matrix4cd C = quditChargeConj();
-    const Eigen::Matrix4cd Sx = quditSpinSx();
-    const Eigen::Matrix4cd Sy = quditSpinSy();
-    const Eigen::Matrix4cd Id4 = Eigen::Matrix4cd::Identity();
-    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(16, 16);
-    // Charge-charge coupling.
-    H += jCharge * kron4(Q, Q);
-    // Spin-spin coupling (XX + YY) on the spin register.
-    H += jSpin * (kron4(Sx, Sx) + kron4(Sy, Sy));
-    // Mass-like one-body shift.
-    H += massShift * (kron4(Q, Id4) + kron4(Id4, Q));
-    // CP-violating coupling (Ĉ ⊗ I + I ⊗ Ĉ, Hermitian as Ĉ² = I).
-    if (gammaCp != 0.0)
-        H += gammaCp * (kron4(C, Id4) + kron4(Id4, C));
-    // Exponentiate via Hermitian eigendecomposition.
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(H);
-    Eigen::VectorXcd phase(16);
-    for (int k = 0; k < 16; ++k)
-        phase(k) = std::exp(-I_UNIT * dt * es.eigenvalues()(k));
-    return es.eigenvectors() * phase.asDiagonal()
-           * es.eigenvectors().adjoint();
-}
-
-// Partial trace of a 16×16 joint state on a 2-ququart bipartite space:
-// keep the A subsystem (index 0), trace out the B subsystem (index 1).
-// Returns the 4×4 marginal density matrix for A.
-Eigen::Matrix4cd quditTraceOutB(Eigen::MatrixXcd const& rho) {
-    Eigen::Matrix4cd out = Eigen::Matrix4cd::Zero();
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            for (int k = 0; k < 4; ++k)
-                out(i, j) += rho(4*i + k, 4*j + k);
-    return out;
-}
-Eigen::Matrix4cd quditTraceOutA(Eigen::MatrixXcd const& rho) {
-    Eigen::Matrix4cd out = Eigen::Matrix4cd::Zero();
-    for (int k = 0; k < 4; ++k)
-        for (int l = 0; l < 4; ++l)
-            for (int i = 0; i < 4; ++i)
-                out(k, l) += rho(4*i + k, 4*i + l);
-    return out;
-}
-
-// Tensor product of two 4-dim qudit states → 16×16 separable joint.
-Eigen::MatrixXcd quditTensor(Eigen::Matrix4cd const& a,
-                             Eigen::Matrix4cd const& b) {
-    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            for (int k = 0; k < 4; ++k)
-                for (int l = 0; l < 4; ++l)
-                    out(4*i + k, 4*j + l) = a(i, j) * b(k, l);
-    return out;
-}
-
-// Swap the two ququart subsystems of a 16×16 joint: (A ⊗ B) → (B ⊗ A).
-Eigen::MatrixXcd quditSwap(Eigen::MatrixXcd const& m) {
-    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
-    for (int a = 0; a < 4; ++a)
-        for (int b = 0; b < 4; ++b)
-            for (int c = 0; c < 4; ++c)
-                for (int d = 0; d < 4; ++d)
-                    out(4*b + a, 4*d + c) = m(4*a + b, 4*c + d);
-    return out;
-}
-
-// von Neumann entropy of any d×d density matrix (handles d=4 and d=16).
-double vonNeumannEntropyAny(Eigen::MatrixXcd const& rho) {
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(rho);
-    double s = 0.0;
-    for (double lambda : es.eigenvalues())
-        if (lambda > 1e-13) s -= lambda * std::log(lambda);
-    return s;
-}
-
-// Mutual information of a bipartite 16-dim joint, in nats.
-double quditJointMI(Eigen::MatrixXcd const& rho) {
-    const Eigen::Matrix4cd rhoA = quditTraceOutB(rho);
-    const Eigen::Matrix4cd rhoB = quditTraceOutA(rho);
-    const Eigen::MatrixXcd full = rho;
-    const double sA  = vonNeumannEntropyAny(rhoA);
-    const double sB  = vonNeumannEntropyAny(rhoB);
-    const double sAB = vonNeumannEntropyAny(full);
-    return std::max(sA + sB - sAB, 0.0);
-}
-
-// ℓ = -log(I / I_max), normalised so ℓ ≥ 0; floored when I is tiny so
-// uncorrelated systems are far apart but not infinitely so.
-double edgeLengthFromMI(double mi, double epsilon) {
-    const double x = std::max(mi, 0.0) / kIMax;
-    if (x < epsilon) return -std::log(epsilon);
-    return -std::log(x);
-}
+//   vonNeumannEntropy / vonNeumannEntropyAny  — replaced by
+//                          tessera::quantum::QuantumState::entropy
+//                          (per-vertex marginal) and by
+//                          tessera::quantum::mutualInformation
+//                          (joint, when needed).
+//   randomCorrelatedState  — pre-refactor initial layer; replaced by
+//                          QuantumState::randomMixed.
+//   partialTrace           — replaced by tessera::quantum::partialTrace{A,B}.
+//   sortedPair / swapQubits / tensor2 / kron4   — used by the old
+//                          jointStateFor / computeInteraction; both
+//                          methods are gone.
+//   schwingerTwoSiteU / I_UNIT   — Schwinger two-site Hamiltonian's
+//                          unitary exponential. Gone with the
+//                          Hamiltonian.
+//   jointMutualInformation  — used by computeInteraction.
+//   quditChargeOp / quditChargeConj / quditSpinSx / quditSpinSy —
+//                          v0.2 charge / spin operators.
+//   quditPairU / quditTraceOutA / quditTraceOutB / quditTensor /
+//   quditSwap / quditJointMI   — v0.2 16-dim joint machinery.
+//   edgeLengthFromMI       — replaced by the inline `dVrOf` lambda in
+//                          interact() (and by InteractionSimulation::edgeLength
+//                          for free-form edge queries), since the d_VR
+//                          formula now uses I_max-relative MI and no
+//                          longer needs the epsilon floor at this site.
+//
+// Everything below this point is *still in use* by the post-#56
+// interact() / unInteract() / Regge-action plumbing.
 
 // Wick-rotated to Euclidean signature: every edge contributes +ℓ². The
 // spacelike/timelike flag on each cell edge is now informational only —
 // the Regge action is real and well-defined everywhere with no complex
 // projection step.
+
 double signedSquaredLength(double length, bool /*spacelike*/) {
     return length * length;
 }
@@ -408,20 +153,19 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
             throw std::invalid_argument(
                 "InteractionConfig.delaunayEdges has an out-of-range or "
                 "degenerate site-index pair");
-    if (config_.a <= 0.0)
-        throw std::invalid_argument("InteractionConfig.a must be > 0");
+    if (config_.epsInit <= 0.0)
+        throw std::invalid_argument("InteractionConfig.epsInit must be > 0");
+    if (config_.dimPerVertex <= 1)
+        throw std::invalid_argument(
+            "InteractionConfig.dimPerVertex must be > 1");
 
-    // Reconcile the legacy `useCharges` alias with `featureCharges`:
-    // setting either enables the charged-Cartan code paths.
-    const bool chargesOn = config_.useCharges || config_.featureCharges;
-    config_.useCharges = chargesOn;
-    config_.featureCharges = chargesOn;
-    // Dependent features only make sense with charges on; auto-clear
-    // them otherwise so we fail safely rather than partially-on.
-    if (!chargesOn) {
-        config_.featureDeactivateOnAnnihilate = false;
-        config_.featurePhotonOnAnnihilate = false;
-    }
+    // ─── REMOVED in #56 ────────────────────────────────────────────────
+    // Schwinger H_XY validation:   if (config_.a <= 0.0) throw ...
+    // Charge code-path reconcile:  useCharges <-> featureCharges aliasing,
+    //                              auto-clear of dependent flags.
+    // Schwinger unitary build:     interactionU_ = schwingerTwoSiteU(...)
+    // Qudit-pair unitary build:    if (featureQuditBasis) quditInteractionU_ = ...
+    // Choi state build:            if (featureChoiSigmaAB) quditChoiU_ = ...
 
     auto metric = std::make_shared<Metric>(
         /*coordinateFree=*/true, Signature(4, SignatureType::Euclidean));
@@ -429,40 +173,10 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
         metric, SpacetimeType::REGGE, 1.0, 1.0, Foliation::NONE,
         std::nullopt);
 
-    interactionU_ = schwingerTwoSiteU(config_.a, config_.m, config_.dt);
-
-    // v0.2: build the 16×16 qudit-pair unitary if requested.
-    if (config_.featureQuditBasis) {
-        quditInteractionU_ = quditPairU(
-            config_.j_chargeCharge, config_.j_spinSpin,
-            config_.massShift, config_.gammaCpViolation,
-            config_.dtPair);
-    }
-    // v0.2 + #16: build the 256-dim Choi state of U once. Requires
-    // featureQuditBasis (Choi has no meaning without the U it
-    // encodes); auto-clear when the qudit basis is off so v0/v0.1
-    // configurations don't blow up on the default-on Choi flag.
-    if (!config_.featureQuditBasis) {
-        config_.featureChoiSigmaAB = false;
-    }
-    if (config_.featureChoiSigmaAB) {
-        // |Ω⟩ = (1/4) Σ_{i,j} |i,j⟩_A |i,j⟩_B' on the doubled
-        // ququart space; J(U) = (U ⊗ I_16) |Ω⟩⟨Ω| (U† ⊗ I_16).
-        // We construct |Ω⟩ as a 256-dim column vector with 1/4 at
-        // every "diagonal" (i,j;i,j) index, then apply U on the
-        // first 16-dim subsystem.
-        Eigen::VectorXcd omega = Eigen::VectorXcd::Zero(256);
-        for (int k = 0; k < 16; ++k)
-            omega(k * 16 + k) = cd(0.25, 0.0);   // (1/4) (i,j) (i,j)
-        // Apply U on the first 16-dim factor: reshape omega as 16×16
-        // (rows = first factor, cols = second), multiply by U from
-        // the left, reshape back.
-        Eigen::Map<Eigen::MatrixXcd> omega_mat(omega.data(), 16, 16);
-        Eigen::MatrixXcd shaped = quditInteractionU_ * omega_mat;
-        Eigen::VectorXcd uOmega = Eigen::Map<Eigen::VectorXcd>(
-            shaped.data(), 256);
-        quditChoiU_ = uOmega * uOmega.adjoint();
-    }
+    // Global information ceiling: N · epsInit (issue #56). Edge lengths
+    // are d_VR = -log(I / iMax_); set once at construction and never
+    // recomputed.
+    iMax_ = static_cast<double>(config_.nSystems) * config_.epsInit;
 
     buildInitialLayer();
 }
@@ -471,366 +185,63 @@ InteractionSimulation::~InteractionSimulation() = default;
 
 void InteractionSimulation::buildInitialLayer() {
     const int n = config_.nSystems;
+    const int dim = config_.dimPerVertex;
 
-    // The initial layer is a set of *independent* random mixed states: no
-    // mutual information between any pair of initial systems. All MI in
-    // the complex is generated by interactions.
-    std::vector<SystemState> initialStates(static_cast<std::size_t>(n));
-    // v0.2 parallel buffer: 4-dim random mixed states confined to a
-    // chosen charge sector. Built only when featureQuditBasis is on.
-    std::vector<Eigen::Matrix4cd> initialQuditStates(
-        static_cast<std::size_t>(n));
-    {
-        std::normal_distribution<double> g(0.0, 1.0);
-        for (int s = 0; s < n; ++s) {
-            // ρ_s = M M† / Tr(MM†) with M a 2×2 complex Gaussian — a
-            // generic one-qubit mixed state, independent of the others.
-            Eigen::Matrix2cd m;
-            for (int i = 0; i < 2; ++i)
-                for (int j = 0; j < 2; ++j)
-                    m(i, j) = cd(g(rng_), g(rng_));
-            Eigen::Matrix2cd rho = m * m.adjoint();
-            initialStates[static_cast<std::size_t>(s)] =
-                rho / rho.trace().real();
-        }
-    }
+    // Recipe: sample marginals, then dial in MIs (issue #56).
+    //
+    // First pass — sample per-vertex QuantumStates with marginal entropy
+    // close to epsInit nats. We use the existing randomMixed factory,
+    // which lays down a Haar-conjugated diagonal at the target entropy.
+    // This already satisfies the "each vertex carries epsInit nats" floor.
+    //
+    // Second pass (TODO — placeholder for now) — inject random pairwise
+    // MIs by entangling Delaunay-adjacent pairs. The current pass leaves
+    // the initial joint as product so the simulation starts with all
+    // MIs near zero; interactions then generate correlation via KI
+    // applied to the product joints (which on a first interaction is
+    // structurally trivial — interactions emerge as the lattice grows
+    // and Σ vertices accumulate).
+    std::uniform_int_distribution<std::uint64_t> seedDist(
+        1, std::numeric_limits<std::uint64_t>::max());
 
     std::vector<VertexPtr> verts(static_cast<std::size_t>(n));
-    std::uniform_int_distribution<int> coin(0, 1);
     for (int s = 0; s < n; ++s) {
         VertexPtr v = spacetime_->createVertex(
             nextVertexId_++, std::vector<double>{0.0});
         verts[static_cast<std::size_t>(s)] = v;
-        stateOf_[v] = initialStates[static_cast<std::size_t>(s)];
-        if (config_.useCharges) {
-            const double q =
-                (config_.initialChargeMode == InitialChargeMode::ALTERNATING)
-                    ? ((s % 2 == 0) ? +1.0 : -1.0)
-                    : (coin(rng_) ? +1.0 : -1.0);
-            chargeOf_[v] = q;
-        }
-        if (config_.featureQuditBasis) {
-            // Build a 4-dim random mixed state confined to one charge
-            // sector: ρ_qudit = P_q · (M M†) · P_q / Tr(P_q · MM†), where
-            // P_q is the projector onto the chosen charge subspace
-            // (rows/cols 0,1 for +, rows/cols 2,3 for −).
-            const bool isPositive =
-                (config_.initialChargeMode == InitialChargeMode::ALTERNATING)
-                    ? (s % 2 == 0)
-                    : coin(rng_);
-            std::normal_distribution<double> g4(0.0, 1.0);
-            Eigen::Matrix4cd m4;
-            for (int i = 0; i < 4; ++i)
-                for (int j = 0; j < 4; ++j)
-                    m4(i, j) = cd(g4(rng_), g4(rng_));
-            Eigen::Matrix4cd rho4 = m4 * m4.adjoint();
-            // Zero out the off-sector rows/cols.
-            for (int i = 0; i < 4; ++i) {
-                const bool iIsPositive = (i < 2);
-                if (iIsPositive != isPositive) {
-                    rho4.row(i).setZero();
-                    rho4.col(i).setZero();
-                }
-            }
-            const double tr = rho4.trace().real();
-            if (tr > 1e-15) rho4 /= tr;
-            initialQuditStates[static_cast<std::size_t>(s)] = rho4;
-            quditStateOf_[v] = rho4;
-        }
+
+        // Per-vertex QuantumState: random mixed state at entropy
+        // ≈ epsInit (clamped to log(dim) since that's the max entropy
+        // on a d-dim Hilbert space).
+        const double maxS = std::log(static_cast<double>(dim));
+        const double targetS = std::min(config_.epsInit, maxS);
+        v->quantumState() = tessera::quantum::QuantumState::randomMixed(
+            dim, targetS, seedDist(rng_));
+
         addToFrontier(v);
     }
 
-    // Delaunay edges with zero MI between independent inputs: stored at
-    // the epsilon-floored length so the geometry is well-defined. No
-    // jointOf_ entries — the default tensor-product fallback in
-    // jointStateFor gives the correct separable joint state.
-    const double zeroMiLen = edgeLengthFromMI(0.0, config_.epsilonI);
-    const double zeroMiSq  = signedSquaredLength(zeroMiLen,
-                                                  /*spacelike=*/true);
+    // Delaunay edges with d_VR length from MI between endpoint states.
+    // For the product-joint initial layer above, all MIs are zero, so
+    // every edge is at +∞ length. We still create the edges to seed
+    // the geometry; the Regge solver / spectral pipeline can collapse
+    // any infinite-length edges or treat them as disconnected per its
+    // own contract.
     for (auto const& [i, j] : config_.delaunayEdges) {
         VertexPtr a = verts[static_cast<std::size_t>(i)];
         VertexPtr b = verts[static_cast<std::size_t>(j)];
-        (void)spacetime_->createEdge(a, b, zeroMiSq);
+        const double len = edgeLength(a, b);
+        (void)spacetime_->createEdge(a, b, len);
     }
 }
-
-// The joint state ρ_XY in (X ⊗ Y) qubit order — the stored correlated
-// pair if X, Y share one, the uncorrelated product otherwise.
-Eigen::Matrix4cd
-InteractionSimulation::jointStateFor(VertexPtr x, VertexPtr y) const {
-    auto it = jointOf_.find(sortedPair(x, y));
-    if (it == jointOf_.end())
-        return tensor2(stateOf_.at(x), stateOf_.at(y));
-    return (sortedPair(x, y).first == x) ? it->second
-                                         : swapQubits(it->second);
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// The interaction
-// ─────────────────────────────────────────────────────────────────────────
-
-InteractionSimulation::InteractionResult
-InteractionSimulation::computeInteraction(VertexPtr x, VertexPtr y) const {
-    // The genuine joint input state — correlated when X, Y are Delaunay
-    // neighbours of the initial layer or co-products of one interaction.
-    const Eigen::Matrix4cd rhoXY = jointStateFor(x, y);
-
-    // ρ_AB = U ρ_XY U† — the genuine joint state after the interaction.
-    const Eigen::Matrix4cd rhoAB =
-        interactionU_ * rhoXY * interactionU_.adjoint();
-
-    const SystemState primeX = traceOutSecond(rhoAB);  // X' = Tr_Y ρ_AB
-    const SystemState primeY = traceOutFirst(rhoAB);   // Y' = Tr_X ρ_AB
-
-    const double sX = vonNeumannEntropy(traceOutSecond(rhoXY));
-    const double sY = vonNeumannEntropy(traceOutFirst(rhoXY));
-    // I(X:AB): the genuine mutual information sitting in ρ_AB — how much
-    // the interaction correlated the two systems. The primary temporal
-    // quantity; I(X:X') = S(X) - I(X:AB) is the residual.
-    const double iJoint = jointMutualInformation(rhoAB);
-    const double iInput = jointMutualInformation(rhoXY);
-
-    InteractionResult res;
-    res.statePrimeX = primeX;
-    res.statePrimeY = primeY;
-    res.stateAB = primeX;  // AB carried forward via its X-marginal proxy
-    res.jointAB = rhoAB;   // (X' ⊗ Y') joint, inherited by the products
-
-    // Cartan/local-frame model: under the KAK decomposition
-    //   U = (K₁⊗K₂)·exp(i·c·σσ)·(K₃⊗K₄),
-    // U_A ≡ K₁K₃ and V_B ≡ K₂K₄ are *local* operators on the A and B
-    // worldlines, and Σ_AB ≡ exp(i·c·σσ) is the entangling core. So
-    // the post-interaction A-side state (and B-side state) depend only
-    // on the respective input — I(B : U_A) = I(A : V_B) = 0 — and the
-    // genuine new joint information lives in Σ_AB. The bowtie has:
-    //   • two worldline self-info edges A–A' and B–B' carrying S(ρ_A)
-    //     and S(ρ_B) respectively (a local unitary preserves entropy);
-    //   • four hub-spoke edges to AB, each carrying jointMI(ρ_AB);
-    //   • the input spatial edge A–B carrying the input MI;
-    //   • and three cross-worldline edges (A–B', B–A', A'–B') carrying
-    //     the *input* MI — local unitaries on a single side preserve the
-    //     joint, so I(A:V_B) = I(A:B)_input, symmetric for the others.
-    //     When the inputs were uncorrelated these reduce to zero
-    //     (initial-layer separable layer); when they carry inherited
-    //     joint state they reflect that correlation transparently.
-    auto key = [](int u, int v) {
-        return std::make_pair(std::min(u, v), std::max(u, v));
-    };
-    res.edgeMI[key(0, 1)] = iInput;   // A-B   input spatial
-    res.edgeMI[key(0, 2)] = sX;       // A-A'  worldline self-info
-    res.edgeMI[key(1, 4)] = sY;       // B-B'  worldline self-info
-    res.edgeMI[key(0, 3)] = iJoint;   // A-AB  hub spoke
-    res.edgeMI[key(1, 3)] = iJoint;   // B-AB  hub spoke
-    res.edgeMI[key(2, 3)] = iJoint;   // A'-AB hub spoke
-    res.edgeMI[key(3, 4)] = iJoint;   // AB-B' hub spoke
-    res.edgeMI[key(2, 4)] = iInput;   // A'-B' = I(A:B)_input by unitary invariance
-    res.edgeMI[key(0, 4)] = iInput;   // A-B'  = I(A:B)_input
-    res.edgeMI[key(1, 2)] = iInput;   // B-A'  = I(A:B)_input
-    return res;
-}
-
-// ─── v0.2: qudit-basis interaction machinery ────────────────────────────
-
-namespace {
-
-// Partial trace of a 256×256 Choi state J(U) on the doubled
-// (H_AB ⊗ H_A'B') Hilbert, keeping the first 16-dim factor (H_AB)
-// and tracing out the second (H_A'B'). Returns a 16×16 mixed state.
-// (For a maximally-entangled Choi this gives I_16/16 — uninformative
-// alone; the partner-conditioning step below picks the right
-// 4-dim subspace.)
-Eigen::MatrixXcd traceOutChoiPrimed(Eigen::MatrixXcd const& choi) {
-    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(16, 16);
-    // Index layout: row = a * 16 + b' where a ∈ [0,16) is H_AB,
-    // b' ∈ [0,16) is H_A'B'. Trace out the b' / d' diagonal.
-    for (int a = 0; a < 16; ++a)
-        for (int c = 0; c < 16; ++c)
-            for (int k = 0; k < 16; ++k)
-                out(a, c) += choi(a * 16 + k, c * 16 + k);
-    return out;
-}
-
-// Reduce a 256-dim Σ_AB Choi state to a 4-dim "single ququart" state
-// in a way that's consistent with the joint correlations stored in
-// quditJointOf_. The reduction depends on the partner's charge:
-//
-//   • Partial-trace the Choi over the "primed" doubled subsystem to
-//     get a 16-dim density matrix on H_AB.
-//   • The 16-dim H_AB factorises as H_A ⊗ H_B where A is the
-//     worldline-continuation side (q_A determined by inputs) and B
-//     is the other.
-//   • For a partner with charge q_p, project the 16-dim state onto
-//     the q_total = q_p subspace (so the joint conserves Q with the
-//     partner), then partial-trace down to 4-dim on the "shared"
-//     side.
-//
-// This is the conservation-preserving choice: when a Σ_AB is later
-// consumed with partner p, the effective marginal of Σ_AB has
-// ⟨Q⟩ = -q_p, ensuring the joint Q sums correctly.
-Eigen::Matrix4cd reduceChoiAgainstPartner(Eigen::MatrixXcd const& choi,
-                                          double partnerCharge) {
-    // Step 1: trace out primed → 16-dim density matrix on H_AB.
-    const Eigen::MatrixXcd rho_AB = traceOutChoiPrimed(choi);
-    // Step 2: project onto the Q_total = −partnerCharge subspace so
-    // the joint with the partner has Q = 0 (charge-conserving
-    // contraction). Q_total acts on H_AB = H_A ⊗ H_B with Q̂_A and
-    // Q̂_B on each ququart factor; eigenvalues of Q̂_A + Q̂_B are
-    // in {−2, 0, +2} (with 0 having an 8-dim subspace, ±2 each
-    // 4-dim). Round the partner's charge to the nearest integer for
-    // the projection target.
-    const int qTarget = -static_cast<int>(std::lround(partnerCharge));
-    // Build the projector onto the Q_total = qTarget subspace of the
-    // 16-dim H_AB. Basis index = 4*a + b where a, b ∈ [0,4) and
-    // Q̂(a) = +1 for a ∈ {0,1}, −1 for a ∈ {2,3} (and same for b).
-    auto qOfIndex = [](int idx) {
-        const int a = idx / 4;
-        const int b = idx % 4;
-        const int qA = (a < 2) ? +1 : -1;
-        const int qB = (b < 2) ? +1 : -1;
-        return qA + qB;
-    };
-    Eigen::MatrixXcd proj = Eigen::MatrixXcd::Zero(16, 16);
-    for (int i = 0; i < 16; ++i)
-        if (qOfIndex(i) == qTarget) proj(i, i) = cd(1.0, 0.0);
-    Eigen::MatrixXcd projected = proj * rho_AB * proj;
-    // Renormalise. If the projection has zero weight (target Q
-    // outside ±2), fall back to the I/4 proxy.
-    const double tr = projected.trace().real();
-    if (tr < 1e-12) {
-        return 0.25 * Eigen::Matrix4cd::Identity();
-    }
-    projected /= tr;
-    // Step 3: partial-trace projected (16-dim, on H_A ⊗ H_B) down
-    // to H_A (4-dim) — this is the marginal of Σ_AB on the side
-    // facing the partner.
-    Eigen::Matrix4cd out = Eigen::Matrix4cd::Zero();
-    for (int a = 0; a < 4; ++a)
-        for (int c = 0; c < 4; ++c)
-            for (int b = 0; b < 4; ++b)
-                out(a, c) += projected(4*a + b, 4*c + b);
-    return out;
-}
-
-} // namespace
-
-double InteractionSimulation::quditChargeOf(VertexPtr v) const {
-    // When v is a Choi Σ_AB, its single-vertex charge (used by
-    // getGlobalCharge for frontier summation) needs care: the Choi
-    // state on its own has ⟨Q̂_total⟩ = 0 (maximally entangled),
-    // and we want the frontier-sum to track conserved Q. We report
-    // 0 for the unconsumed Choi state — at consumption time, the
-    // partner-conditioned reduction gives the right marginal.
-    if (choiSigmaAbSet_.count(v)) {
-        // Choi state's diagonal trace against (Q̂ ⊗ I): identically
-        // zero because J(U) has uniform diagonal weight 1/16 on the
-        // Q = +2, 0, −2 sectors of the 16-dim H_AB.
-        return 0.0;
-    }
-    auto it = quditStateOf_.find(v);
-    if (it == quditStateOf_.end()) return 0.0;
-    // ⟨Q⟩ = Tr[ρ · Q̂] where Q̂ = diag(+1,+1,-1,-1).
-    const Eigen::Matrix4cd& rho = it->second;
-    return (rho(0,0) + rho(1,1) - rho(2,2) - rho(3,3)).real();
-}
-
-Eigen::MatrixXcd
-InteractionSimulation::quditJointStateFor(VertexPtr x, VertexPtr y) const {
-    // Choi-vertex partner-conditioned reduction: if either x or y
-    // carries the Choi state, replace its "marginal" used in the
-    // separable-fallback tensor product with the partner-conditioned
-    // reduction. Stored quditJointOf_ entries override this.
-    auto jit = quditJointOf_.find(sortedPair(x, y));
-    if (jit != quditJointOf_.end()) {
-        if (sortedPair(x, y).first == x) return jit->second;
-        return quditSwap(jit->second);
-    }
-    auto materialise = [&](VertexPtr v) -> Eigen::Matrix4cd {
-        if (choiSigmaAbSet_.count(v)) {
-            // The Choi-typed Σ_AB has an effective single-vertex
-            // marginal of I/4 (the maximally-entangled-on-doubled
-            // Hilbert Choi state traces down to (1/16) I_16 on H_AB,
-            // and one more partial trace gives (1/4) I_4). Q = 0 by
-            // construction. The genuine quantum content of the
-            // interaction lives in the (xp, yp) joint that the
-            // Choi-mode interact() stored, not in joint contractions
-            // through ab.
-            return 0.25 * Eigen::Matrix4cd::Identity();
-        }
-        auto sit = quditStateOf_.find(v);
-        if (sit != quditStateOf_.end()) return sit->second;
-        return (Eigen::Matrix4cd)(0.25 * Eigen::Matrix4cd::Identity());
-    };
-    Eigen::Matrix4cd rhoX = materialise(x);
-    Eigen::Matrix4cd rhoY = materialise(y);
-    return quditTensor(rhoX, rhoY);
-}
-
-InteractionSimulation::InteractionResultQudit
-InteractionSimulation::computeInteractionQudit(VertexPtr x,
-                                               VertexPtr y) const {
-    // The genuine joint input state in the qudit basis (16×16).
-    const Eigen::MatrixXcd rhoXY = quditJointStateFor(x, y);
-
-    // ρ_AB = U ρ_XY U† — the genuine joint state after the interaction.
-    const Eigen::MatrixXcd rhoAB =
-        quditInteractionU_ * rhoXY * quditInteractionU_.adjoint();
-
-    const Eigen::Matrix4cd primeX = quditTraceOutB(rhoAB);
-    const Eigen::Matrix4cd primeY = quditTraceOutA(rhoAB);
-
-    // Input marginals' entropies (the worldline self-MI).
-    const Eigen::Matrix4cd rhoX_in = quditTraceOutB(rhoXY);
-    const Eigen::Matrix4cd rhoY_in = quditTraceOutA(rhoXY);
-    const double sX = vonNeumannEntropyAny(rhoX_in);
-    const double sY = vonNeumannEntropyAny(rhoY_in);
-    const double iJoint = quditJointMI(rhoAB);
-    const double iInput = quditJointMI(rhoXY);
-
-    InteractionResultQudit res;
-    res.statePrimeX = primeX;
-    res.statePrimeY = primeY;
-    // Σ_AB is the entangling-core analog of a neutral photon: use the
-    // maximally-mixed 4-dim state, which has ⟨Q̂⟩ = 0 by construction
-    // (Tr[I/4 · diag(+1,+1,-1,-1)] = 0). The full Choi state of U is a
-    // deferred upgrade. The genuine joint correlations between AB and
-    // its bowtie neighbours live in jointAB, not in this proxy.
-    res.stateAB = 0.25 * Eigen::Matrix4cd::Identity();
-    res.jointAB = rhoAB;
-
-    auto key = [](int u, int v) {
-        return std::make_pair(std::min(u, v), std::max(u, v));
-    };
-    res.edgeMI[key(0, 1)] = iInput;
-    res.edgeMI[key(0, 2)] = sX;
-    res.edgeMI[key(1, 4)] = sY;
-    res.edgeMI[key(0, 3)] = iJoint;
-    res.edgeMI[key(1, 3)] = iJoint;
-    res.edgeMI[key(2, 3)] = iJoint;
-    res.edgeMI[key(3, 4)] = iJoint;
-    res.edgeMI[key(2, 4)] = iInput;
-    res.edgeMI[key(0, 4)] = iInput;
-    res.edgeMI[key(1, 2)] = iInput;
-    return res;
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Frontier bookkeeping — flat vector + index map, O(1) per mutation.
-//
-// Any pair of frontier vertices is an eligible interact candidate, so
-// N₊ = |frontier|·(|frontier|−1)/2 and a uniform-random candidate is
-// picked by drawing two distinct indices into the vector. The
-// un-interact denominator uses leafCellCount_ — see consumedProductsOf_.
-// ─────────────────────────────────────────────────────────────────────────
 
 void InteractionSimulation::addToFrontier(VertexPtr v) {
     if (v == nullptr || frontierIdx_.count(v)) return;
     frontierIdx_[v] = frontier_.size();
     frontier_.push_back(v);
-    if (config_.useCharges) addToSignBucket(v);
 }
 
 void InteractionSimulation::removeFromFrontier(VertexPtr v) {
-    if (config_.useCharges) removeFromSignBucket(v);
     auto it = frontierIdx_.find(v);
     if (it == frontierIdx_.end()) return;
     const std::size_t pos  = it->second;
@@ -843,41 +254,32 @@ void InteractionSimulation::removeFromFrontier(VertexPtr v) {
     frontierIdx_.erase(it);
 }
 
-void InteractionSimulation::addToSignBucket(VertexPtr v) {
-    if (v == nullptr) return;
-    auto qit = chargeOf_.find(v);
-    if (qit == chargeOf_.end()) return;
-    const double q = qit->second;
-    if (q > 0.0) {
-        if (frontierPosIdx_.count(v)) return;
-        frontierPosIdx_[v] = frontierPos_.size();
-        frontierPos_.push_back(v);
-    } else if (q < 0.0) {
-        if (frontierNegIdx_.count(v)) return;
-        frontierNegIdx_[v] = frontierNeg_.size();
-        frontierNeg_.push_back(v);
-    }
-    // q == 0: no sign bucket (neutrals don't annihilate).
-}
+// ─── REMOVED in #56 (sign-bucketed frontier was for the annihilate move) ──
+//   void addToSignBucket(VertexPtr)
+//   void removeFromSignBucket(VertexPtr)
 
-void InteractionSimulation::removeFromSignBucket(VertexPtr v) {
-    if (v == nullptr) return;
-    auto removeFrom = [&](std::vector<VertexPtr>& vec,
-                          std::unordered_map<VertexPtr, std::size_t>& idx) {
-        auto it = idx.find(v);
-        if (it == idx.end()) return false;
-        const std::size_t pos  = it->second;
-        const std::size_t last = vec.size() - 1;
-        if (pos != last) {
-            vec[pos] = vec[last];
-            idx[vec[pos]] = pos;
-        }
-        vec.pop_back();
-        idx.erase(it);
-        return true;
-    };
-    if (removeFrom(frontierPos_, frontierPosIdx_)) return;
-    (void)removeFrom(frontierNeg_, frontierNegIdx_);
+double InteractionSimulation::edgeLength(VertexPtr u, VertexPtr v) const {
+    // d_VR(u, v) = -log(I(u:v) / iMax_), with I computed from the joint
+    // ρ_u ⊗ ρ_v of the two endpoint states. The joint is product at
+    // this layer (lineage rides on Σ vertices in the state graph, see
+    // issue #56); when u or v carries Σ-like internal structure, KI
+    // applied to the product recovers it.
+    if (u == nullptr || v == nullptr) return 0.0;
+    const auto& rhoU = u->quantumState().matrix();
+    const auto& rhoV = v->quantumState().matrix();
+    const int dU = static_cast<int>(rhoU.rows());
+    const int dV = static_cast<int>(rhoV.rows());
+    Eigen::MatrixXcd rhoUV(dU * dV, dU * dV);
+    for (int i = 0; i < dU; ++i)
+        for (int j = 0; j < dU; ++j)
+            for (int a = 0; a < dV; ++a)
+                for (int b = 0; b < dV; ++b)
+                    rhoUV(i * dV + a, j * dV + b) = rhoU(i, j) * rhoV(a, b);
+    const double I = tessera::quantum::mutualInformation(rhoUV, dU, dV);
+    if (!(I > 0.0) || !(iMax_ > 0.0)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return -std::log(I / iMax_);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -891,53 +293,83 @@ bool InteractionSimulation::interact() {
         && interactionCount_ >= config_.targetInteractions)
         return false;
 
-    // Sample a uniform-random unordered pair of distinct frontier
-    // vertices. With useCharges, opposite-sign pairs are ineligible
-    // for interaction (they would annihilate); reject and re-sample
-    // (up to a small cap) to stay roughly uniform over the eligible
-    // subset.
+    // Sample a uniform-random unordered pair of distinct frontier vertices.
+    // REMOVED in #56: useCharges-aware re-sampling (same-sign-only constraint
+    // belonged to the v0.1 annihilate move; reinstated against QuantumState
+    // in charge-observables-v0.3).
     std::uniform_int_distribution<std::size_t> pick(
         0, frontier_.size() - 1);
-    std::size_t i = 0, j = 0;
-    VertexPtr x = nullptr, y = nullptr;
-    constexpr int kMaxResamples = 32;
-    for (int k = 0; k < kMaxResamples; ++k) {
-        i = pick(rng_);
-        j = pick(rng_);
-        if (j == i) continue;
-        x = frontier_[i];
-        y = frontier_[j];
-        if (!config_.useCharges) break;
-        const double qx = chargeOf_.count(x) ? chargeOf_.at(x) : 0.0;
-        const double qy = chargeOf_.count(y) ? chargeOf_.at(y) : 0.0;
-        if (qx * qy >= 0.0) break;  // same-sign or with-neutral: eligible
-        x = y = nullptr;
-    }
-    if (x == nullptr) return false;
+    std::size_t i = pick(rng_);
+    std::size_t j = pick(rng_);
+    while (j == i) j = pick(rng_);
+    VertexPtr x = frontier_[i];
+    VertexPtr y = frontier_[j];
 
     const std::size_t nFrontier   = frontier_.size();
     const std::size_t nPlusBefore = nFrontier * (nFrontier - 1) / 2;
 
-    // v0.1 vs v0.2: compute the interaction result on the right Hilbert
-    // space. We always populate the v0.1 result (used to length the
-    // edges and dispatch in the existing accept logic); when v0.2 is
-    // on we additionally compute the qudit result and use its edge MIs
-    // for the action and its 4-dim states for the product seeding.
-    const InteractionResult       res       = computeInteraction(x, y);
-    InteractionResultQudit        resQudit;
-    if (config_.featureQuditBasis)
-        resQudit = computeInteractionQudit(x, y);
+    // Build the joint \f$\rho_{XY} = \rho_X \otimes \rho_Y\f$ from the
+    // two endpoint vertex states and KI-decompose it (issue #56). The
+    // joint is a product at this layer — joint history is carried by
+    // the Σ vertices already in the state graph, not by a separate
+    // pairwise cache. When X or Y is itself a Σ vertex with internal
+    // block-diagonal structure, KI sees that structure in the product
+    // and propagates it forward.
+    const Eigen::MatrixXcd& rhoX = x->quantumState().matrix();
+    const Eigen::MatrixXcd& rhoY = y->quantumState().matrix();
+    const int dX = static_cast<int>(rhoX.rows());
+    const int dY = static_cast<int>(rhoY.rows());
+    Eigen::MatrixXcd rhoXY(dX * dY, dX * dY);
+    for (int a = 0; a < dX; ++a)
+        for (int ap = 0; ap < dX; ++ap)
+            for (int b = 0; b < dY; ++b)
+                for (int bp = 0; bp < dY; ++bp)
+                    rhoXY(a * dY + b, ap * dY + bp) =
+                        rhoX(a, ap) * rhoY(b, bp);
 
-    // The ten signed squared edge lengths of the proposed cell.
+    const tessera::quantum::KoashiImotoTolerances kiTol{
+        config_.epsKiEigen, config_.epsKiCondState, config_.epsKiSvd};
+    const auto ki = tessera::quantum::koashiImotoDecompose(
+        rhoXY, dX, dY, kiTol);
+
+    // Candidate child states. Label convention matches kCellEdges:
+    //   0=X, 1=Y, 2=X' (aPrime), 3=Σ_{A,B} (sigma), 4=Y' (bPrime).
+    const Eigen::MatrixXcd* rhoByLabel[5] = {
+        &rhoX, &rhoY, &ki.aPrime, &ki.sigma, &ki.bPrime};
+
+    // Edge length from MI between the two endpoint states. The MI is
+    // computed on the product joint of the two states (consistent with
+    // the simulation-wide "joint = product, lineage in Σ" rule). The
+    // length stored on the edge is d_VR = -log(I / iMax_); when I = 0
+    // we store IEEE +∞ (#56: dVrMax removed in favour of true infinity).
+    auto miOf = [](const Eigen::MatrixXcd& r1,
+                   const Eigen::MatrixXcd& r2) -> double {
+        const int d1 = static_cast<int>(r1.rows());
+        const int d2 = static_cast<int>(r2.rows());
+        Eigen::MatrixXcd j(d1 * d2, d1 * d2);
+        for (int a = 0; a < d1; ++a)
+            for (int ap = 0; ap < d1; ++ap)
+                for (int b = 0; b < d2; ++b)
+                    for (int bp = 0; bp < d2; ++bp)
+                        j(a * d2 + b, ap * d2 + bp) = r1(a, ap) * r2(b, bp);
+        return tessera::quantum::mutualInformation(j, d1, d2);
+    };
+    auto dVrOf = [this](double mi) -> double {
+        if (!(mi > 0.0) || !(iMax_ > 0.0))
+            return std::numeric_limits<double>::infinity();
+        return -std::log(mi / iMax_);
+    };
+
+    // The ten signed edge "lengths" of the proposed cell. Per #56 the
+    // value stored in `Edge::squaredLength` is d_VR directly (the
+    // field name keeps the legacy spelling — see issue #56 / CDT
+    // follow-up). signedSquaredLength still applies the timelike-vs-
+    // spacelike sign that the Regge action needs.
     double edgeSq[10];
     for (int e = 0; e < 10; ++e) {
-        CellEdge const& ce = kCellEdges[e];
-        const auto k = std::make_pair(std::min(ce.u, ce.v),
-                                       std::max(ce.u, ce.v));
-        const double mi = config_.featureQuditBasis
-                              ? resQudit.edgeMI.at(k)
-                              : res.edgeMI.at(k);
-        const double len = edgeLengthFromMI(mi, config_.epsilonI);
+        const CellEdge& ce = kCellEdges[e];
+        const double mi  = miOf(*rhoByLabel[ce.u], *rhoByLabel[ce.v]);
+        const double len = dVrOf(mi);
         edgeSq[e] = signedSquaredLength(len, ce.spacelike);
     }
 
@@ -945,24 +377,21 @@ bool InteractionSimulation::interact() {
     // touches the live geometry.
     const double deltaS = cellHingeAction(edgeSq);
 
-    // Reverse-move denominator: the proposed cell will be a leaf in the
-    // new state (its three products are fresh), and only leaf cells'
-    // deep un-interact returns to exactly the pre-interact state.
-    // Counting leaves stays bounded as T grows; using total cells would
-    // crater acceptance at large T.
-    auto producer = [&](VertexPtr v) -> SimplexPtr {
-        auto it = producedByCell_.find(v);
-        return (it == producedByCell_.end()) ? nullptr : it->second;
+    // Reverse-move denominator: number of leaf simplices AFTER this
+    // interact. A frontier vertex's parent simplex (if any) is the
+    // unique simplex it currently belongs to; once that vertex leaves
+    // the frontier, the parent simplex is no longer a leaf. (#56
+    // replaces producedByCell_ + consumedProductsOf_ + leafCellCount_
+    // with the leafSimplices_ index queried directly.)
+    auto parentOf = [](VertexPtr v) -> SimplexPtr {
+        const auto& sims = v->getSimplices();
+        return sims.empty() ? nullptr : sims.front();
     };
-    auto consumedCount = [&](SimplexPtr c) -> unsigned {
-        auto it = consumedProductsOf_.find(c);
-        return (it == consumedProductsOf_.end()) ? 0u : it->second;
-    };
-    const SimplexPtr cX = producer(x);
-    const SimplexPtr cY = producer(y);
-    std::size_t leavesAfter = leafCellCount_ + 1;  // the new cell
-    if (cX != nullptr && consumedCount(cX) == 0) --leavesAfter;
-    if (cY != nullptr && cY != cX && consumedCount(cY) == 0)
+    const SimplexPtr sX = parentOf(x);
+    const SimplexPtr sY = parentOf(y);
+    std::size_t leavesAfter = leafSimplices_.size() + 1;  // the new cell
+    if (sX != nullptr && leafSimplices_.count(sX)) --leavesAfter;
+    if (sY != nullptr && sY != sX && leafSimplices_.count(sY))
         --leavesAfter;
     const std::size_t nMinusAfter = std::max<std::size_t>(leavesAfter, 1);
     const double logPrefactor =
@@ -982,6 +411,16 @@ bool InteractionSimulation::interact() {
         nextVertexId_++, std::vector<double>{tNext});
     VertexPtr yp = spacetime_->createVertex(
         nextVertexId_++, std::vector<double>{tNext});
+
+    // Install KI-decomposed states on the three children. The matrices
+    // come out of KI already Hermitian, positive, and trace-1 (the
+    // weight * core / weight * tail factorisation guarantees it), so
+    // we skip the QuantumState validators that the public setMatrix
+    // would re-run.
+    xp->quantumState().setMatrixUnchecked(ki.aPrime);
+    ab->quantumState().setMatrixUnchecked(ki.sigma);
+    yp->quantumState().setMatrixUnchecked(ki.bPrime);
+
     VertexPtr label[5] = {x, y, xp, ab, yp};
     for (int e = 0; e < 10; ++e)
         (void)spacetime_->createEdge(label[kCellEdges[e].u],
@@ -994,85 +433,20 @@ bool InteractionSimulation::interact() {
             if (hinge->getVertices().size() == 3)
                 hingeAction_[hinge] = hinge->area() * hinge->deficitAngle();
 
-    stateOf_[xp] = res.statePrimeX;
-    stateOf_[ab] = res.stateAB;
-    stateOf_[yp] = res.statePrimeY;
-    // Cartan model joints: the entangling correlation lives on the
-    // hub-spokes A'–AB and AB–B', not on A'–B'. The (A',B') pair has
-    // no entry — jointStateFor falls back to the separable tensor
-    // product, giving the structural-zero MI we want.
-    auto putJoint = [&](VertexPtr u, VertexPtr v,
-                        const Eigen::Matrix4cd& rho) {
-        const auto k = sortedPair(u, v);
-        jointOf_[k] = (k.first == u) ? rho : swapQubits(rho);
-    };
-    putJoint(xp, ab, res.jointAB);  // A'–AB joint (= ρ_AB, A' on A-side)
-    putJoint(ab, yp, res.jointAB);  // AB–B' joint (= ρ_AB, B' on B-side)
+    // ─── REMOVED in #56 ──────────────────────────────────────────────
+    //   stateOf_ / jointOf_ writes        — state lives on vertex.quantumState()
+    //   producedByCell_, consumedByCell_  — derivable from simplex containment
+    //   consumedProductsOf_, leafCellCount_ — replaced by leafSimplices_
+    //   v0.2 qudit / Choi seeding (quditStateOf_, quditJointOf_, choiSigmaAbSet_)
+    //   v0.1 charge inheritance (chargeOf_ updates)
 
-    // v0.2 parallel seeding: 4-dim qudit states + 16×16 joints.
-    if (config_.featureQuditBasis) {
-        quditStateOf_[xp] = resQudit.statePrimeX;
-        quditStateOf_[yp] = resQudit.statePrimeY;
-        auto putQuditJoint = [&](VertexPtr u, VertexPtr v,
-                                 const Eigen::MatrixXcd& rho) {
-            const auto k = sortedPair(u, v);
-            quditJointOf_[k] = (k.first == u) ? rho : quditSwap(rho);
-        };
-        if (config_.featureChoiSigmaAB) {
-            // #16: Σ_AB carries the full Choi state of U (marker only;
-            // the shared 256-dim state is in quditChoiU_). The genuine
-            // products correlation rhoAB is stored as a joint
-            // *between the two worldline continuations* (xp ↔ yp),
-            // *not* duplicated as (xp, ab) and (ab, yp). This avoids
-            // the double-counting that made the v0.2 proxy
-            // inconsistent and let Q drift under un-symmetric joint
-            // accounting. The Σ_AB vertex is a properly neutral
-            // entangling core: q_ab = 0, and any interaction
-            // involving it goes through tensor(I/4, partner) as a
-            // separable input — which is exactly Q-conservation
-            // friendly because tensor(I/4, partner) has Q = q_partner.
-            choiSigmaAbSet_.insert(ab);
-            putQuditJoint(xp, yp, resQudit.jointAB);
-        } else {
-            // v0.2 default: I/4 proxy + duplicated joints (the
-            // configuration that surfaced the Q-drift bug; pinned by
-            // the test_sigma_ab_choi_state baseline tests).
-            quditStateOf_[ab] = resQudit.stateAB;
-            putQuditJoint(xp, ab, resQudit.jointAB);
-            putQuditJoint(ab, yp, resQudit.jointAB);
-        }
-    }
-
-    // Dependency tracking for deep un-interactions.
-    producedByCell_[xp] = cell;
-    producedByCell_[ab] = cell;
-    producedByCell_[yp] = cell;
-    consumedByCell_[x] = cell;
-    consumedByCell_[y] = cell;
-
-    // Leaf bookkeeping — the new cell joins as a leaf; each of x, y that
-    // was itself a product takes its producing cell out of leaf state on
-    // the first consumed product.
-    consumedProductsOf_[cell] = 0;
-    ++leafCellCount_;
-    if (cX != nullptr) {
-        std::uint8_t &k = consumedProductsOf_[cX];
-        if (k == 0) --leafCellCount_;
-        ++k;
-    }
-    if (cY != nullptr) {
-        std::uint8_t &k = consumedProductsOf_[cY];
-        if (k == 0 && cY != cX) --leafCellCount_;
-        ++k;
-    }
-
-    // Charge inheritance: worldline products carry their parent's
-    // charge, the entangling-core product is neutral.
-    if (config_.useCharges) {
-        chargeOf_[xp] = chargeOf_.count(x) ? chargeOf_.at(x) : 0.0;
-        chargeOf_[yp] = chargeOf_.count(y) ? chargeOf_.at(y) : 0.0;
-        chargeOf_[ab] = 0.0;
-    }
+    // Leaf-simplex bookkeeping: the new cell is a leaf (all three of
+    // its children xp / ab / yp join the frontier in the next block);
+    // sX and sY, if they were leaves, stop being leaves because x and
+    // y are about to leave the frontier.
+    leafSimplices_.insert(cell);
+    if (sX != nullptr) leafSimplices_.erase(sX);
+    if (sY != nullptr && sY != sX) leafSimplices_.erase(sY);
 
     // Incremental frontier update — O(1).
     removeFromFrontier(x);
@@ -1088,64 +462,65 @@ bool InteractionSimulation::interact() {
 
 bool InteractionSimulation::unInteract() {
     ++unInteractAttempts_;
-    // Eligible: every (2,3) cell. Removing a past cell truncates the
-    // whole future cone of its products — each product is consumed by
-    // at most one later cell, so the descendant set is well-defined.
-    // Spacetime already partitions top-dimensional simplices into a
-    // dedicated vector (topSimplicesVec) with O(1) swap-pop on remove,
-    // so we ask it directly instead of scanning the full flat
-    // simplices_ vector and filtering by vertex count.
-    SimplexPtr root = spacetime_->getRandomTopSimplex();
-    if (root == nullptr) return false;
+    // Eligible: only leaf simplices (#56 — the legacy "deep
+    // un-interaction" of an arbitrary cell required the
+    // producedByCell_ / consumedByCell_ DAG tables, which are removed
+    // in this refactor along with the rest of the per-vertex
+    // bookkeeping. Leaf-only is sufficient for ergodicity because
+    // every interaction eventually becomes a leaf once its descendants
+    // are themselves un-interacted, and the move pair (interact,
+    // unInteract) is detail-balanced under the leaf-set Metropolis
+    // prefactor below.)
+    if (leafSimplices_.empty()) return false;
 
-    // BFS through producedByCell_ → consumedByCell_ to collect every
-    // cell whose existence depends on root.
-    std::vector<SimplexPtr> descendants;
-    std::set<SimplexPtr> visited;
-    std::vector<SimplexPtr> stack{root};
-    visited.insert(root);
-    while (!stack.empty()) {
-        SimplexPtr c = stack.back();
-        stack.pop_back();
-        descendants.push_back(c);
-        for (VertexPtr v : c->getVertices()) {
-            auto pit = producedByCell_.find(v);
-            if (pit == producedByCell_.end() || pit->second != c) continue;
-            auto cit = consumedByCell_.find(v);
-            if (cit == consumedByCell_.end()) continue;
-            if (visited.insert(cit->second).second)
-                stack.push_back(cit->second);
+    std::uniform_int_distribution<std::size_t> pick(
+        0, leafSimplices_.size() - 1);
+    auto it = leafSimplices_.begin();
+    std::advance(it, pick(rng_));
+    const SimplexPtr cell = *it;
+
+    // Classify the 5 vertices into 2 parents (earlier timestamp) and
+    // 3 children (latest timestamp). The simplex stores its vertex
+    // list in whatever order spacetime chose at creation; recovering
+    // the parent/child split from timestamps is robust to that ordering.
+    std::vector<VertexPtr> parents, children;
+    double maxT = -std::numeric_limits<double>::infinity();
+    for (VertexPtr v : cell->getVertices())
+        if (v->getTime() > maxT) maxT = v->getTime();
+    for (VertexPtr v : cell->getVertices()) {
+        if (v->getTime() == maxT) children.push_back(v);
+        else                      parents.push_back(v);
+    }
+    if (parents.size() != 2 || children.size() != 3) {
+        // Defensive: a well-formed (2,3) cell always has 2-vs-3. A
+        // mismatch indicates a corrupted simplex; refuse the move.
+        return false;
+    }
+
+    // ΔS = -Σ A_h ε_h over this cell's hinges (no descendant cells
+    // in the leaf-only design).
+    double deltaS = 0.0;
+    std::vector<SimplexPtr> hingesToErase;
+    for (SimplexPtr facet : cell->getFacets()) {
+        for (SimplexPtr h : facet->getFacets()) {
+            if (h->getVertices().size() != 3) continue;
+            auto hit = hingeAction_.find(h);
+            if (hit != hingeAction_.end()) {
+                deltaS -= hit->second;
+                hingesToErase.push_back(h);
+            }
         }
     }
 
-    // ΔS = −Σ A_h ε_h over the descendant cells' hinges. Read off the
-    // per-hinge table; no Spacetime mutation yet.
-    double deltaS = 0.0;
-    std::set<SimplexPtr> descendantHinges;
-    for (SimplexPtr c : descendants)
-        for (SimplexPtr facet : c->getFacets())
-            for (SimplexPtr h : facet->getFacets())
-                if (h->getVertices().size() == 3) {
-                    auto it = hingeAction_.find(h);
-                    if (it != hingeAction_.end()) {
-                        if (descendantHinges.insert(h).second)
-                            deltaS -= it->second;
-                    }
-                }
-
-    // Coarse combinatorial prefactor: N₊ / N₋ where N₋ is the eligible
-    // cells (we picked from), and N₊ in the post-uninteract state is the
-    // unordered-pair count over the (predicted) post-frontier. Each
-    // descendant cell removes 3 product vertices from the frontier and
-    // restores 2 parent vertices (its inputs).
-    const std::size_t nMinusBefore   = spacetime_->getSimplexCount();
+    // Reverse-move Metropolis prefactor:
+    //   N_- (eligible reverses now) = |leafSimplices_|
+    //   N_+ (eligible forwards after) = C(|frontier| + 2 - 3, 2)
+    //                                  = C(|frontier| - 1, 2)
+    // (Lose 3 children from frontier, gain 2 parents back → net −1.)
+    const std::size_t nMinusBefore   = leafSimplices_.size();
     const std::size_t nFrontierNow   = frontier_.size();
-    const std::size_t nProductsLost  = 3 * descendants.size();
-    const std::size_t nParentsBack   = 2 * descendants.size();
     const std::size_t nFrontierAfter =
-        (nFrontierNow + nParentsBack > nProductsLost)
-            ? nFrontierNow + nParentsBack - nProductsLost
-            : 0;
+        (nFrontierNow >= 1) ? nFrontierNow - 1 : 0;
     const std::size_t nPlusAfter =
         nFrontierAfter < 2
             ? 1
@@ -1156,255 +531,62 @@ bool InteractionSimulation::unInteract() {
 
     if (!accept(deltaS, logPrefactor)) return false;
 
-    // Commit. Classify every vertex of the descendant set as product
-    // (will be deleted) or parent (will re-frontier, unless also a
-    // product of some other descendant) before any mutation.
-    const std::set<SimplexPtr> descendantSet(descendants.begin(),
-                                             descendants.end());
-    std::vector<VertexPtr> productsToRemove;
-    std::set<VertexPtr> parentsTouched;
-    for (SimplexPtr c : descendants) {
-        for (VertexPtr v : c->getVertices()) {
-            auto pit = producedByCell_.find(v);
-            if (pit != producedByCell_.end() && pit->second == c) {
-                productsToRemove.push_back(v);
-            } else {
-                auto cit = consumedByCell_.find(v);
-                if (cit != consumedByCell_.end() && cit->second == c)
-                    consumedByCell_.erase(cit);
-                parentsTouched.insert(v);
-                // v was a product of some cell c'_v (perhaps); when v
-                // got consumed by c, c'_v's consumed-product count went
-                // up. If c'_v survives, that count now goes back down,
-                // potentially making c'_v a leaf again.
-                auto vp = producedByCell_.find(v);
-                if (vp != producedByCell_.end()
-                    && descendantSet.count(vp->second) == 0) {
-                    auto kit = consumedProductsOf_.find(vp->second);
-                    if (kit != consumedProductsOf_.end()
-                        && kit->second > 0) {
-                        --kit->second;
-                        if (kit->second == 0) ++leafCellCount_;
-                    }
-                }
-            }
-        }
-    }
-    const std::set<VertexPtr> productSet(productsToRemove.begin(),
-                                         productsToRemove.end());
+    // Commit. Order matters: remove the simplex first so vertex /
+    // edge removal in step 2 doesn't dangle simplex references.
 
-    // Each descendant cell exits the leaf pool (if it was one) and its
-    // bookkeeping entry is dropped.
-    for (SimplexPtr c : descendants) {
-        auto kit = consumedProductsOf_.find(c);
-        if (kit != consumedProductsOf_.end()) {
-            if (kit->second == 0 && leafCellCount_ > 0) --leafCellCount_;
-            consumedProductsOf_.erase(kit);
-        }
-    }
+    // 1. Drop the cell from the leaf set and from spacetime.
+    leafSimplices_.erase(cell);
+    spacetime_->removeSimplex(cell);
 
-    // 1. Remove the simplices first so vertex/edge removal doesn't
-    //    dangle simplex references.
-    for (SimplexPtr c : descendants) spacetime_->removeSimplex(c);
+    // 2. Drop hingeAction entries for the now-removed hinges.
+    for (SimplexPtr h : hingesToErase) hingeAction_.erase(h);
 
-    // 2. Drop hingeAction entries for the descendants.
-    for (SimplexPtr h : descendantHinges) hingeAction_.erase(h);
-
-    // 3. Drop the product vertices' states / dependency / frontier
-    //    entries, then remove them from the complex (which also removes
-    //    their edges).
-    for (VertexPtr v : productsToRemove) {
+    // 3. Remove the 3 children from the frontier and from spacetime.
+    //    Their QuantumStates are stored on the Vertex itself and go
+    //    away when the Vertex is removed — no separate state cleanup.
+    //    (#56: stateOf_, jointOf_, chargeOf_, producedByCell_ erasures
+    //    are gone; per-vertex state lives on the vertex.)
+    for (VertexPtr v : children) {
         removeFromFrontier(v);
-        stateOf_.erase(v);
-        chargeOf_.erase(v);
-        producedByCell_.erase(v);
-        for (auto it = jointOf_.begin(); it != jointOf_.end();) {
-            if (it->first.first == v || it->first.second == v)
-                it = jointOf_.erase(it);
-            else
-                ++it;
-        }
         spacetime_->removeVertex(v);
     }
 
-    // 4. Re-frontier the parents whose subtree just got cut and that
-    //    aren't themselves slated for deletion.
-    for (VertexPtr v : parentsTouched)
-        if (productSet.count(v) == 0) addToFrontier(v);
+    // 4. Restore the 2 parents to the frontier. Their states were
+    //    never mutated by interact (KI is decomposition, not
+    //    transformation — issue #56), so nothing to restore.
+    for (VertexPtr v : parents) addToFrontier(v);
 
-    if (interactionCount_ >= descendants.size())
-        interactionCount_ -= descendants.size();
-    else
-        interactionCount_ = 0;
+    // 5. Leaf-set bookkeeping: each restored parent may have its own
+    //    parent simplex S_v whose other two children are still on the
+    //    frontier. If so, S_v is now a leaf again. Same parent/child
+    //    classification via timestamp as in step 2.
+    auto parentSimplex = [](VertexPtr v) -> SimplexPtr {
+        const auto& sims = v->getSimplices();
+        // After removeSimplex(cell), the cell isn't in v->simplices any
+        // more, so the remaining simplex (if any) is v's birth simplex.
+        return sims.empty() ? nullptr : sims.front();
+    };
+    auto isLeafSimplex = [this](SimplexPtr s) -> bool {
+        if (s == nullptr) return false;
+        double sMaxT = -std::numeric_limits<double>::infinity();
+        for (VertexPtr v : s->getVertices())
+            if (v->getTime() > sMaxT) sMaxT = v->getTime();
+        int childCount = 0, onFront = 0;
+        for (VertexPtr v : s->getVertices())
+            if (v->getTime() == sMaxT) {
+                ++childCount;
+                if (onFrontier(v)) ++onFront;
+            }
+        return childCount == 3 && onFront == 3;
+    };
+    for (VertexPtr v : parents) {
+        SimplexPtr sV = parentSimplex(v);
+        if (sV != nullptr && isLeafSimplex(sV))
+            leafSimplices_.insert(sV);
+    }
+
+    if (interactionCount_ > 0) --interactionCount_;
     ++unInteractAccepted_;
-    return true;
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Charge moves (v0.1) — annihilate / pairCreate
-// ─────────────────────────────────────────────────────────────────────────
-
-bool InteractionSimulation::annihilate() {
-    if (!config_.useCharges) return false;
-    ++annihilateAttempts_;
-    if (frontierPos_.empty() || frontierNeg_.empty()) return false;
-
-    std::uniform_int_distribution<std::size_t> pickPos(
-        0, frontierPos_.size() - 1);
-    std::uniform_int_distribution<std::size_t> pickNeg(
-        0, frontierNeg_.size() - 1);
-    VertexPtr p = frontierPos_[pickPos(rng_)];
-    VertexPtr m = frontierNeg_[pickNeg(rng_)];
-
-    const double qp = chargeOf_.at(p);
-    const double qm = chargeOf_.at(m);  // qm < 0
-
-    // Symmetric Metropolis prefactor: forward and reverse rates are
-    // both ∝ 1 over the candidate-pool sizes. ΔS = 0.
-    const std::size_t fwdCount = frontierPos_.size() * frontierNeg_.size();
-    const std::size_t revCount = 1;
-    const double logPrefactor =
-        std::log(static_cast<double>(fwdCount))
-        - std::log(static_cast<double>(revCount));
-    if (!accept(/*deltaS=*/0.0, logPrefactor)) return false;
-
-    // Three behaviours selected by feature flags:
-    //   1. Default (charge-only): both vertices stay on the frontier
-    //      with charges neutralised / reduced. The worldlines persist
-    //      as neutral systems. Preserves cell references but breaks
-    //      Q-conservation under later un-interact.
-    //   2. feature_deactivate_on_annihilate: the matched portion's
-    //      vertices are *removed from the frontier* (worldlines
-    //      terminate) but stay in the spacetime. Their chargeOf_
-    //      entries are kept as-is — they're historical charges, no
-    //      longer counted in getGlobalCharge (frontier-only sum).
-    //      Q is then conserved exactly under later un-interact.
-    //   3. feature_photon_on_annihilate: in addition to (2), spawn a
-    //      new neutral "photon" vertex on the frontier carrying away
-    //      the released information (state = I/2, maximally mixed).
-    const double netQ = qp + qm;
-    const bool deactivate = config_.featureDeactivateOnAnnihilate;
-    const bool emitPhoton = config_.featurePhotonOnAnnihilate;
-
-    auto setCharge = [&](VertexPtr v, double q) {
-        // Update charge and migrate sign-bucket membership.
-        removeFromSignBucket(v);
-        chargeOf_[v] = q;
-        if (q != 0.0 && frontierIdx_.count(v)) addToSignBucket(v);
-    };
-    auto deactivateVertex = [&](VertexPtr v) {
-        // Remove v from the frontier; keep chargeOf_ / stateOf_ / the
-        // spacetime entry intact so historical cell references still
-        // resolve. The vertex is now "inactive" — can't be picked for
-        // future moves.
-        removeFromFrontier(v);
-    };
-    auto spawnPhoton = [&](double tNew) {
-        if (!emitPhoton) return;
-        VertexPtr photon = spacetime_->createVertex(
-            nextVertexId_++, std::vector<double>{tNew});
-        stateOf_[photon] = 0.5 * Eigen::Matrix2cd::Identity();
-        chargeOf_[photon] = 0.0;
-        addToFrontier(photon);
-    };
-
-    if (std::abs(netQ) < 1e-12) {
-        // Full annihilation — both worldlines terminate (or both
-        // neutralise under the default).
-        const double tNew =
-            std::max(p->getTime(), m->getTime()) + 1.0;
-        if (deactivate) {
-            deactivateVertex(p);
-            deactivateVertex(m);
-        } else {
-            setCharge(p, 0.0);
-            setCharge(m, 0.0);
-        }
-        spawnPhoton(tNew);
-    } else if (netQ > 0.0) {
-        // |qp| > |qm|: the m-worldline fully annihilates (matched by
-        // |qm| of p's charge); p survives with reduced charge.
-        const double tNew = m->getTime() + 1.0;
-        if (deactivate) {
-            deactivateVertex(m);
-        } else {
-            setCharge(m, 0.0);
-        }
-        setCharge(p, netQ);
-        spawnPhoton(tNew);
-    } else {
-        // |qm| > |qp|: the p-worldline fully annihilates; m survives
-        // with the residual negative charge.
-        const double tNew = p->getTime() + 1.0;
-        if (deactivate) {
-            deactivateVertex(p);
-        } else {
-            setCharge(p, 0.0);
-        }
-        setCharge(m, netQ);
-        spawnPhoton(tNew);
-    }
-    ++annihilateAccepted_;
-    return true;
-}
-
-bool InteractionSimulation::pairCreate() {
-    if (!config_.useCharges) return false;
-    ++pairCreateAttempts_;
-
-    // Draw charges with CP-violation bias. ε_CP > 0 favours +
-    // (δ uniform on [0, +ε_CP], mean ε_CP/2 > 0; pair net charge mean
-    // ε_CP > 0); ε_CP < 0 favours − (δ uniform on [ε_CP, 0], mean
-    // ε_CP/2 < 0). Default ε_CP = 0 gives δ = 0 — exactly symmetric.
-    const double eps = config_.cpBias;
-    std::uniform_real_distribution<double> u(0.0, 1.0);
-    double delta;
-    if (eps > 0.0) {
-        delta = eps * u(rng_);                 // [0, +ε_CP]
-    } else if (eps < 0.0) {
-        delta = eps * u(rng_);                 // [ε_CP, 0]  (eps<0)
-    } else {
-        delta = 0.0;
-    }
-    const double qPos = 0.5 + delta;        // (0, 1]
-    const double qNeg = -(1.0 - qPos);      // [−1, 0)
-
-    // Metropolis prefactor: forward = 1, reverse = N_pos·N_neg AFTER.
-    const std::size_t revCount =
-        (frontierPos_.size() + 1) * (frontierNeg_.size() + 1);
-    const std::size_t fwdCount = 1;
-    const double logPrefactor =
-        std::log(static_cast<double>(fwdCount))
-        - std::log(static_cast<double>(revCount));
-    if (!accept(/*deltaS=*/0.0, logPrefactor)) return false;
-
-    // Build the Bell state |Φ+⟩⟨Φ+| as the 2-qubit joint of the new
-    // pair, with maximally-mixed marginals I/2 on each vertex.
-    Eigen::Matrix4cd bell = Eigen::Matrix4cd::Zero();
-    bell(0, 0) = 0.5;  bell(0, 3) = 0.5;
-    bell(3, 0) = 0.5;  bell(3, 3) = 0.5;
-    SystemState halfMixed = 0.5 * Eigen::Matrix2cd::Identity();
-
-    // Spawn the two vertices at time = current frontier max + 1 so
-    // they're "born now" causally. If frontier_ is empty pick t=0.
-    double tMax = 0.0;
-    for (VertexPtr v : frontier_)
-        tMax = std::max(tMax, v->getTime());
-    const double tNew = tMax + 1.0;
-
-    VertexPtr vPos = spacetime_->createVertex(
-        nextVertexId_++, std::vector<double>{tNew});
-    VertexPtr vNeg = spacetime_->createVertex(
-        nextVertexId_++, std::vector<double>{tNew});
-    stateOf_[vPos] = halfMixed;
-    stateOf_[vNeg] = halfMixed;
-    chargeOf_[vPos] = qPos;
-    chargeOf_[vNeg] = qNeg;
-    const auto key = sortedPair(vPos, vNeg);
-    jointOf_[key] = (key.first == vPos) ? bell : swapQubits(bell);
-    addToFrontier(vPos);
-    addToFrontier(vNeg);
-    ++pairCreateAccepted_;
     return true;
 }
 
@@ -1423,23 +605,16 @@ int InteractionSimulation::sweep() {
     std::uniform_real_distribution<double> coin(0.0, 1.0);
     int accepted = 0;
     for (std::size_t k = 0; k < nMoves; ++k) {
-        if (config_.useCharges) {
-            // Four-move sweep: interact / unInteract / annihilate /
-            // pairCreate with equal proposal probability.
-            const double r = coin(rng_);
-            bool ok = false;
-            if      (r < 0.25) ok = interact();
-            else if (r < 0.50) ok = (interactionCount_ > 0) && unInteract();
-            else if (r < 0.75) ok = annihilate();
-            else               ok = pairCreate();
-            if (ok) ++accepted;
-        } else {
-            const bool doInteract =
-                interactionCount_ == 0 ? true
-                : nFront < 2           ? false
-                                       : coin(rng_) < 0.5;
-            if (doInteract ? interact() : unInteract()) ++accepted;
-        }
+        // Two-move sweep (post-#56): interact / unInteract with equal
+        // proposal probability. The annihilate / pairCreate charge moves
+        // are removed alongside the rest of the charge code paths and
+        // will be reinstated against QuantumState in the
+        // charge-observables-v0.3 follow-up.
+        const bool doInteract =
+            interactionCount_ == 0 ? true
+            : nFront < 2           ? false
+                                   : coin(rng_) < 0.5;
+        if (doInteract ? interact() : unInteract()) ++accepted;
     }
     return accepted;
 }
@@ -1520,104 +695,9 @@ InteractionSimulation::getAcceptanceRates() const {
         {"interact",   rate(interactAccepted_,   interactAttempts_)},
         {"unInteract", rate(unInteractAccepted_, unInteractAttempts_)},
     };
-    if (config_.useCharges) {
-        out["annihilate"] = rate(annihilateAccepted_, annihilateAttempts_);
-        out["pairCreate"] = rate(pairCreateAccepted_, pairCreateAttempts_);
-    }
+    // REMOVED in #56: annihilate / pairCreate counters no longer exist.
     return out;
 }
-
-double InteractionSimulation::getGlobalCharge() const {
-    // Sum over frontier (live) vertices only. Past inputs whose charge
-    // has already propagated to product worldlines are excluded — their
-    // charge is now carried by their descendants.
-    double q = 0.0;
-    if (config_.featureQuditBasis) {
-        // v0.2: read charge from Tr[ρ · Q̂] per vertex.
-        for (VertexPtr v : frontier_)
-            q += quditChargeOf(v);
-    } else {
-        for (VertexPtr v : frontier_) {
-            auto it = chargeOf_.find(v);
-            if (it != chargeOf_.end()) q += it->second;
-        }
-    }
-    return q;
-}
-
-std::vector<std::array<double, 4>>
-InteractionSimulation::getChargeProfile() const {
-    std::vector<std::array<double, 4>> profile;
-    for (auto const& [v, qv] : chargeOf_) {
-        const int slice = static_cast<int>(std::lround(v->getTime()));
-        if (slice < 0) continue;
-        if (static_cast<int>(profile.size()) <= slice)
-            profile.resize(static_cast<std::size_t>(slice) + 1,
-                           {0.0, 0.0, 0.0, 0.0});
-        auto& row = profile[static_cast<std::size_t>(slice)];
-        if      (qv > 0.0) row[0] += 1.0;
-        else if (qv < 0.0) row[2] += 1.0;
-        else               row[1] += 1.0;
-        row[3] += qv;
-    }
-    return profile;
-}
-
-std::vector<double>
-InteractionSimulation::getChargeCorrelation(int maxDist) const {
-    std::vector<double> out(static_cast<std::size_t>(std::max(maxDist, 1)),
-                             0.0);
-    if (maxDist <= 0 || chargeOf_.empty()) return out;
-
-    // Build a CSR-style adjacency on the MI-weighted graph (we ignore
-    // edge weights here — only graph-distance matters).
-    std::unordered_map<VertexPtr, int> idx;
-    int n = 0;
-    for (auto const& kv : chargeOf_) idx[kv.first] = n++;
-    std::vector<std::vector<int>> adj(n);
-    for (EdgePtr e : spacetime_->getEdgeList()->toVector()) {
-        VertexPtr a = e->getSource();
-        VertexPtr b = e->getTarget();
-        auto ia = idx.find(a), ib = idx.find(b);
-        if (ia == idx.end() || ib == idx.end()) continue;
-        adj[ia->second].push_back(ib->second);
-        adj[ib->second].push_back(ia->second);
-    }
-    std::vector<double> charges(n, 0.0);
-    for (auto const& kv : chargeOf_) charges[idx.at(kv.first)] = kv.second;
-
-    std::vector<long long> count(maxDist, 0);
-    std::vector<double>   sumQQ(maxDist, 0.0);
-    std::vector<int> dist(n, -1);
-
-    // BFS from a sample of source vertices (to keep this O(n · maxDist ·
-    // avg_degree) for a small sample fraction rather than O(n^2)).
-    const int sampleStride = std::max(1, n / 200);
-    for (int s = 0; s < n; s += sampleStride) {
-        std::fill(dist.begin(), dist.end(), -1);
-        dist[s] = 0;
-        std::vector<int> frontier{s};
-        for (int d = 1; d <= maxDist; ++d) {
-            std::vector<int> next;
-            for (int u : frontier)
-                for (int w : adj[u])
-                    if (dist[w] < 0) {
-                        dist[w] = d;
-                        next.push_back(w);
-                        ++count[d - 1];
-                        sumQQ[d - 1] += charges[s] * charges[w];
-                    }
-            frontier.swap(next);
-            if (frontier.empty()) break;
-        }
-    }
-    for (int d = 0; d < maxDist; ++d)
-        out[d] = (count[d] > 0)
-                     ? sumQQ[d] / static_cast<double>(count[d])
-                     : 0.0;
-    return out;
-}
-
 bool InteractionSimulation::accept(double deltaS, double logPrefactor) {
     const double exponent = -config_.beta * deltaS + logPrefactor;
     if (exponent >= 0.0) return true;
