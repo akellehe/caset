@@ -176,6 +176,11 @@ find_package(pybind11 3.0 CONFIG REQUIRED HINTS "${_pybind11_hint}")
 message(STATUS "pybind11 ${pybind11_VERSION} (${pybind11_DIR})")
 find_package(ZLIB REQUIRED)
 
+# ---- Eigen3 (header-only) ----
+# Used by tessera_core's QuantumState and by the rest of the project.
+# Header-only, so "linking" just propagates include dirs to consumers.
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+
 include(CheckCXXSourceCompiles)
 
 check_cxx_source_compiles("
@@ -213,6 +218,12 @@ file(GLOB_RECURSE TESSERA_SOURCES
 # Quantum lives in its own static lib; exclude its sources from tessera_core.
 set(TESSERA_CORE_SOURCES ${TESSERA_SOURCES})
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+
+# QuantumState is required by mesh::Vertex (every vertex carries one), so
+# its implementation must live in tessera_core. Add it back after the
+# blanket /quantum/ exclusion.
+list(APPEND TESSERA_CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/QuantumState.cpp")
 # InteractionSimulation lives in src/simulations/ for architectural
 # alignment with CDT (#44), but depends on Eigen + ITensor and so belongs
 # in tessera_quantum, not tessera_core.
@@ -265,7 +276,7 @@ add_library(tessera_core STATIC ${TESSERA_CORE_SOURCES})
 target_include_directories(tessera_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB)
+target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB Eigen3::Eigen)
 
 # Optional OpenMP for the spectral-graph heat-kernel parallel loop and
 # similar embarrassingly-parallel hot paths. Bit-identical to the
