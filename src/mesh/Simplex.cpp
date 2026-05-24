@@ -157,6 +157,16 @@ Simplex* Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, con
 
 bool Simplex::isInitialized() const noexcept { return initialized; }
 
+void Simplex::releaseChildren() noexcept {
+  // swap-with-empty deallocates the underlying buffer (clear() alone would
+  // keep capacity).  Order doesn't matter — none of these refer to each
+  // other.
+  VertexPtrs().swap(vertices);
+  Edges().swap(edges);
+  Simplices().swap(facets);
+  Simplices().swap(cofaces);
+}
+
 Simplex* Simplex::create(Spacetime *spacetime_,
                            const VertexPtrs &vertices_,
                            const Edges &edges_,

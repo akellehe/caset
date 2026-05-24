@@ -85,9 +85,7 @@ class Spacetime {
 
     /// Default constructor. Creates a 4D Lorentzian spacetime with CDT type and Toroid topology.
     Spacetime();
-    ~Spacetime() {
-      for (auto *p : simplexPool_) delete p;
-    }
+    ~Spacetime() = default;
 
     /// Parameterized constructor.
     /// @param metric_ The metric tensor defining the signature and dimension
@@ -503,8 +501,20 @@ class Spacetime {
     std::shared_ptr<Topology> topology;
     std::uint64_t currentTime = 0;
 
-    std::vector<SimplexPtr> simplexPool_{}; // owns all Simplex allocations (raw new ptrs)
-    std::vector<std::uint32_t> simplexFreeSlots_{}; // recycled pool slots
+    /// Storage for every Simplex this Spacetime has ever owned, live or
+    /// logically removed.  std::deque is required: it gives stable element
+    /// addresses across push_back, so raw Simplex* cached anywhere (vertex
+    /// simplex lists, simplex facets/cofaces, edge simplex indices, Pachner-
+    /// move snapshots, etc.) remain valid for the Spacetime's lifetime.
+    ///
+    /// Slots are NEVER recycled.  unregisterSimplex marks a slot stale via
+    /// vecIdx_ == UINT32_MAX and clears the Simplex's heap-allocated children
+    /// (vertices/edges/facets/cofaces) to release most of its memory, but
+    /// leaves the shell in place at its original address.  This trades a
+    /// modest memory growth (the ~40-byte Simplex shell per ever-allocated
+    /// simplex) for elimination of the use-after-free hazard that slot
+    /// recycling otherwise creates.
+    std::deque<Simplex> simplexStorage_{};
     std::vector<SimplexPtr> simplicesVec{}; // flat array of live simplex pointers (swap-and-pop)
     FlatHashMap<SimplexPtr> simplexIndex_{}; // fingerprint → simplex ptr (dedup only)
     std::vector<SimplexPtr> topSimplicesVec{}; // top-dimensional simplices only
