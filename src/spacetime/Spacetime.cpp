@@ -629,13 +629,13 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
 }
 
 void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
-  auto vecIdx = simplex->vecIdx_;
-  if (vecIdx == UINT32_MAX) {
+  if (simplex->isStale()) {
 #ifdef TESSERA_ASSERTIONS
     CLOG(CRITICAL_LEVEL, "You attempted to unregister a simplex that does not exist!");
 #endif
     return;
   }
+  auto vecIdx = simplex->vecIdx_;
 
   updateOrientationCounters(simplex, -1);
 
@@ -974,6 +974,12 @@ double Spacetime::modularityOnSkeleton(int M) const {
 }
 
 void Spacetime::removeSimplex(const SimplexPtr &simplex) {
+  // Defensive: double-remove (or remove of an already-stale simplex via a
+  // dangling cache entry) is a silent no-op.  Without this, the getters
+  // below would trip the stale-deref tripwire under TESSERA_ASSERTIONS,
+  // whereas every caller's intent here is "if this simplex is already gone,
+  // there's nothing to do."
+  if (simplex->isStale()) return;
   // Remove from vertex simplex lists
   for (const auto &v : simplex->getVertices()) {
     v->removeSimplex(simplex);

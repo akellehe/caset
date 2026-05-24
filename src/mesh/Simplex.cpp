@@ -44,7 +44,29 @@ using namespace ::tessera::spacetime;
 using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
+
+// Tripwire: catch dereferences of stale Simplex pointers.  Storage is
+// stable, so reads from a logically-removed simplex won't fault — they'd
+// just see empty child vectors and proceed silently.  This macro turns
+// that silent failure mode into a loud abort under TESSERA_ASSERTIONS,
+// while costing nothing in release builds.  Used at the top of the
+// hot getters that callers might invoke through a cached SimplexPtr.
+#ifdef TESSERA_ASSERTIONS
+  #define TESSERA_TRIPWIRE_LIVE(method_name)                              \
+    do {                                                                  \
+      if (isStale()) {                                                    \
+        CLOG(CRITICAL_LEVEL, "Stale Simplex* dereferenced via " method_name \
+                             " — caller is holding a pointer to a "      \
+                             "simplex that was already removed.");        \
+        std::abort();                                                     \
+      }                                                                   \
+    } while (0)
+#else
+  #define TESSERA_TRIPWIRE_LIVE(method_name) ((void)0)
+#endif
+
 bool Simplex::hasFacets() const {
+  TESSERA_TRIPWIRE_LIVE("hasFacets");
   return !facets.empty();
 }
 
@@ -54,6 +76,7 @@ class SimplexCorruptionDetector : public CorruptionDetector<SimplexPtr, SimplexP
 #endif
 
 const std::vector<SimplexPtr> &Simplex::getFacets() {
+  TESSERA_TRIPWIRE_LIVE("getFacets");
 #if TESSERA_ASSERTIONS
   if (getVertices().empty()) throw std::runtime_error("Simplex is empty");
 #endif
@@ -158,6 +181,13 @@ Simplex* Simplex::create(Spacetime *spacetime_, const VertexPtrs &vertices_, con
 bool Simplex::isInitialized() const noexcept { return initialized; }
 
 void Simplex::releaseChildren() noexcept {
+#ifdef TESSERA_ASSERTIONS
+  if (!isStale()) {
+    CLOG(CRITICAL_LEVEL, "releaseChildren() called on a still-registered "
+                         "simplex; caller must mark it stale first.");
+    std::abort();
+  }
+#endif
   // swap-with-empty deallocates the underlying buffer (clear() alone would
   // keep capacity).  Order doesn't matter — none of these refer to each
   // other.
@@ -251,7 +281,10 @@ std::string Simplex::toString() const noexcept {
 
 // getOrientation() inlined in Simplex.h
 
-[[nodiscard]] const VertexPtrs &Simplex::getVertices() const noexcept { return vertices; }
+[[nodiscard]] const VertexPtrs &Simplex::getVertices() const noexcept {
+  TESSERA_TRIPWIRE_LIVE("getVertices");
+  return vertices;
+}
 
 // isSpatial() / isTimelike() inlined in Simplex.h (uses cached _isSpatial)
 
@@ -326,6 +359,7 @@ void Simplex::removeCoface(SimplexPtr coface) {
 }
 
 [[nodiscard]] bool Simplex::hasCoface(SimplexPtr coface) const {
+  TESSERA_TRIPWIRE_LIVE("hasCoface");
   auto fp = coface->fingerprint.fingerprint();
   for (const auto &c : cofaces) {
     if (c->fingerprint.fingerprint() == fp) return true;
@@ -334,6 +368,7 @@ void Simplex::removeCoface(SimplexPtr coface) {
 }
 
 [[nodiscard]] bool Simplex::hasVertex(const VertexPtr &vertex) const {
+  TESSERA_TRIPWIRE_LIVE("hasVertex");
   const auto id = vertex->getId();
   for (const auto &v : vertices)
     if (v->getId() == id) return true;
@@ -374,6 +409,7 @@ void Simplex::validate() const {
 }
 
 [[nodiscard]] const Edges &Simplex::getEdges() const {
+  TESSERA_TRIPWIRE_LIVE("getEdges");
   return edges;
 }
 
@@ -407,6 +443,7 @@ void Simplex::validate() const {
 
 [[nodiscard]] const Simplices &
 Simplex::getCofaces() const noexcept {
+  TESSERA_TRIPWIRE_LIVE("getCofaces");
   return cofaces;
 }
 
