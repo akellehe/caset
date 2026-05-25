@@ -47,7 +47,7 @@ void register_quantum(py::module_ m) {
     // Python module path as tessera.quantum.InteractionSimulation for
     // backward compatibility with existing scripts; only the C++ host
     // namespace changed.
-    // REMOVED in #56: using ::tessera::InitialChargeMode (enum gone).
+    using ::tessera::InitialChargeMode;
     using ::tessera::InteractionConfig;
     using ::tessera::InteractionSimulation;
 
@@ -791,27 +791,47 @@ interaction; beta is the inverse temperature in e^{-beta S}.
 )doc")
         .def(py::init<>())
         .def_readwrite("nSystems",           &InteractionConfig::nSystems)
-        .def_readwrite("dimPerVertex",       &InteractionConfig::dimPerVertex)
+        .def_readwrite("a",                  &InteractionConfig::a)
+        .def_readwrite("g",                  &InteractionConfig::g)
+        .def_readwrite("m",                  &InteractionConfig::m)
+        .def_readwrite("dt",                 &InteractionConfig::dt)
         .def_readwrite("beta",               &InteractionConfig::beta)
         .def_readwrite("epsilonI",           &InteractionConfig::epsilonI)
         .def_readwrite("targetInteractions",
                        &InteractionConfig::targetInteractions)
         .def_readwrite("delaunayEdges",      &InteractionConfig::delaunayEdges)
-        // ─── Post-#56 KI parameters ────────────────────────────────────
-        .def_readwrite("epsInit",            &InteractionConfig::epsInit)
-        .def_readwrite("epsLocalPure",       &InteractionConfig::epsLocalPure)
-        .def_readwrite("epsKiEigen",         &InteractionConfig::epsKiEigen)
-        .def_readwrite("epsKiCondState",     &InteractionConfig::epsKiCondState)
-        .def_readwrite("epsKiSvd",           &InteractionConfig::epsKiSvd)
+        .def_readwrite("useCharges",         &InteractionConfig::useCharges)
+        .def_readwrite("featureCharges",
+                       &InteractionConfig::featureCharges)
+        .def_readwrite("featureDeactivateOnAnnihilate",
+                       &InteractionConfig::featureDeactivateOnAnnihilate)
+        .def_readwrite("featurePhotonOnAnnihilate",
+                       &InteractionConfig::featurePhotonOnAnnihilate)
+        .def_readwrite("featureQuditBasis",
+                       &InteractionConfig::featureQuditBasis)
+        .def_readwrite("featureChoiSigmaAB",
+                       &InteractionConfig::featureChoiSigmaAB)
+        .def_readwrite("j_chargeCharge",
+                       &InteractionConfig::j_chargeCharge)
+        .def_readwrite("j_spinSpin",
+                       &InteractionConfig::j_spinSpin)
+        .def_readwrite("massShift",
+                       &InteractionConfig::massShift)
+        .def_readwrite("gammaCpViolation",
+                       &InteractionConfig::gammaCpViolation)
+        .def_readwrite("dtPair",
+                       &InteractionConfig::dtPair)
+        .def_readwrite("cpBias",             &InteractionConfig::cpBias)
+        .def_readwrite("initialChargeMode",
+                       &InteractionConfig::initialChargeMode)
         .def_readwrite("seed",               &InteractionConfig::seed)
         .def_readwrite("quiet",              &InteractionConfig::quiet);
 
-    // REMOVED in #56: InitialChargeMode enum + the v0.1/v0.2 readwrite
-    // properties (a, g, m, dt, useCharges, featureCharges,
-    // featureDeactivateOnAnnihilate, featurePhotonOnAnnihilate,
-    // featureQuditBasis, featureChoiSigmaAB, j_chargeCharge, j_spinSpin,
-    // massShift, gammaCpViolation, dtPair, cpBias, initialChargeMode).
-    // Reinstated against QuantumState in charge-observables-v0.3.
+    py::enum_<tessera::simulations::InitialChargeMode>(m, "InitialChargeMode")
+        .value("ALTERNATING",
+               tessera::simulations::InitialChargeMode::ALTERNATING)
+        .value("RANDOM",
+               tessera::simulations::InitialChargeMode::RANDOM);
 
     py::class_<InteractionSimulation>(m, "InteractionSimulation",
         R"doc(Metropolis Monte Carlo over interaction histories, weighted by
@@ -849,21 +869,49 @@ dimension reaches 4.
         .def("getAcceptanceRates",
              &InteractionSimulation::getAcceptanceRates,
              R"doc(Accepted / attempted ratio per move type.)doc")
-        // REMOVED in #56 (reinstated in charge-observables-v0.3 against
-        // QuantumState):
-        //   .def("annihilate", ...)
-        //   .def("pairCreate", ...)
-        //   .def("getGlobalCharge", ...)
-        //   .def("getChargeProfile", ...)
-        //   .def("getChargeCorrelation", ...)
-        //   .def("quditChargeOf", ...)
-        //   .def("quditStateOf", ...)        — superseded by Vertex.quantumState()
-        //   .def("quditJointStateFor", ...)  — joint state lives on Σ vertices now
-        .def_property_readonly("leafSimplexCount",
-             &InteractionSimulation::leafSimplexCount,
-             R"doc(Number of leaf simplices currently eligible for un-interact.)doc")
-        .def_property_readonly("iMax", &InteractionSimulation::getIMax,
-             R"doc(Global information ceiling I_max = N · epsInit, used by d_VR.)doc")
+        .def("annihilate", &InteractionSimulation::annihilate,
+             R"doc(v0.1: spontaneous partial-annihilation of a (+, -) frontier pair.)doc")
+        .def("pairCreate", &InteractionSimulation::pairCreate,
+             R"doc(v0.1: spontaneous (+, -) pair-creation with a Bell joint.)doc")
+        .def("getGlobalCharge", &InteractionSimulation::getGlobalCharge,
+             R"doc(v0.1: total signed charge across the complex.)doc")
+        .def("getChargeProfile", &InteractionSimulation::getChargeProfile,
+             R"doc(v0.1: per-time-slice (n_+, n_0, n_-, sum_q).)doc")
+        .def("getChargeCorrelation",
+             &InteractionSimulation::getChargeCorrelation,
+             py::arg("maxDist"),
+             R"doc(v0.1: <q_v . q_w> as a function of graph distance.)doc")
+        .def("quditChargeOf", &InteractionSimulation::quditChargeOf,
+             py::arg("vertex"),
+             R"doc(v0.2: a single vertex's continuous charge via Tr[ρ · Q̂].
+
+Q̂ = diag(+1, +1, -1, -1) on the {|+0⟩, |+1⟩, |−0⟩, |−1⟩} basis.
+For an integer-charge eigenstate this returns ±1; for the maximally-mixed
+I/4 proxy it returns 0; for an arbitrary mixed state, the value sits in
+[−1, +1]. Requires ``featureQuditBasis = True``. Returns 0.0 for vertices
+the simulation has no qudit state for.)doc")
+        .def("quditStateOf",
+             [](const InteractionSimulation &self, tessera::mesh::VertexPtr v)
+                 -> py::object {
+               const auto &m = self.quditStateOfMap();
+               auto it = m.find(v);
+               if (it == m.end()) return py::none();
+               return py::cast(it->second);
+             },
+             py::arg("vertex"),
+             R"doc(v0.2: read a single vertex's 4×4 qudit density matrix, or
+``None`` if no qudit state is stored. Useful for tests that inspect
+per-vertex purity, charge content, or basis populations directly rather
+than going through the projected ``Tr[ρ · Q̂]`` accessor. Requires
+``featureQuditBasis = True``.)doc")
+        .def("quditJointStateFor",
+             &InteractionSimulation::quditJointStateFor,
+             py::arg("x"), py::arg("y"),
+             R"doc(v0.2: 16×16 joint qudit state ρ_XY for a pair.
+
+Returns the stored correlated joint when (x, y) share an interaction
+history or are initial-layer Delaunay neighbours; otherwise the
+uncorrelated product ρ_x ⊗ ρ_y.)doc")
         .def("getSpacetime", &InteractionSimulation::getSpacetime,
              R"doc(The interaction-history simplicial complex (the primal).)doc")
         .def_property_readonly("interactionCount",

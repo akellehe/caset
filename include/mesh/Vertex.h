@@ -31,7 +31,6 @@
 #include <unordered_set>
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/Fingerprint.h"
-#include "quantum/QuantumState.hpp"
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -415,31 +414,6 @@ class Vertex {
 #endif
 
         // ========================================
-        // Quantum State
-        // ========================================
-
-        ///
-        /// \brief The density matrix at this vertex.
-        ///
-        /// Every vertex carries a QuantumState. Σ, A/B, and A'/B' vertices
-        /// are distinguished only by the shape and structure of this state
-        /// (its dimension, its block-diagonal pattern), not by any type
-        /// tag. Default-constructed vertices hold the 1-dim trivial state
-        /// until an initialization step (e.g. `InteractionSimulation`'s
-        /// buildInitialLayer) replaces it.
-        ///
-        [[nodiscard]] const ::tessera::quantum::QuantumState& quantumState() const noexcept;
-        [[nodiscard]] ::tessera::quantum::QuantumState&       quantumState()       noexcept;
-
-        ///
-        /// \brief True iff this vertex's state is locally pure to within `eps`.
-        ///
-        /// Wraps QuantumState::isLocallyPure. The default tolerance matches
-        /// InteractionConfig::epsLocalPure.
-        ///
-        [[nodiscard]] bool isLocallyPure(double eps = 1e-10) const noexcept;
-
-        // ========================================
         // Public Members
         // ========================================
 
@@ -483,8 +457,6 @@ class Vertex {
         Simplices simplices{};         ///< Simplices containing this vertex
         std::uint64_t id;              ///< Unique identifier
         std::vector<double> coordinates{};  ///< Spacetime position (may be empty)
-        ::tessera::quantum::QuantumState quantumState_{};
-                                       ///< Density matrix at this vertex
 };
 
 }  // namespace tessera::mesh

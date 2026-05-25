@@ -25,7 +25,6 @@ def _find_executable(name: str) -> Path | None:
     # the conftest.py rebuild path, and a manual cmake invocation (build-quantum/)
     # might write to.
     patterns = [
-        f"build/{name}",
         f"build-quantum/{name}",
         f"cmake-build-debug/{name}",
         f"cmake-build-debug/*/{name}",
