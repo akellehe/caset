@@ -30,6 +30,8 @@
 #include "simulations/InteractionSimulation.h"
 #include "quantum/Majorization.hpp"
 #include "quantum/MutualInformation.hpp"
+#include "quantum/KoashiImoto.hpp"
+#include "quantum/QuantumSimplex.hpp"
 #include "quantum/Schmidt.hpp"
 #include "quantum/TDVPRunner.hpp"
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
@@ -1203,4 +1205,142 @@ leaving it off.
              &EmergentSpectralDimension::computeFromSnapshots,
              py::arg("quench"),
              R"doc(Reuse a single TDVP run across multiple σ-grids or ε_I values.)doc");
+
+    // ─── Koashi-Imoto + QuantumSimplex ─────────────────────────────────
+    m.def("partialTraceA", &::tessera::quantum::partialTraceA,
+          py::arg("rhoAB"), py::arg("dimA"), py::arg("dimB"),
+          R"doc(Partial trace over the A factor of a bipartite ρ_AB.
+
+rhoAB is a (dimA * dimB) x (dimA * dimB) matrix in (A ⊗ B) ordering
+(row index = a * dimB + b). Returns a dimB x dimB density matrix.)doc");
+
+    m.def("partialTraceB", &::tessera::quantum::partialTraceB,
+          py::arg("rhoAB"), py::arg("dimA"), py::arg("dimB"),
+          R"doc(Partial trace over the B factor of a bipartite ρ_AB.
+
+Returns a dimA x dimA density matrix.)doc");
+
+    m.def("mutualInformation", &::tessera::quantum::mutualInformation,
+          py::arg("rhoAB"), py::arg("dimA"), py::arg("dimB"),
+          R"doc(Mutual information I(A:B) = S(A) + S(B) - S(AB) in nats.
+
+Floors at 0. Computed from the joint ρ_AB directly.)doc");
+
+    py::class_<::tessera::quantum::KoashiImotoTolerances>(m,
+            "KoashiImotoTolerances",
+            R"doc(Numerical tolerances for the symmetric KI decomposition.
+
+Each defaults to 1e-10. Tightening or relaxing affects the block /
+cond-state clustering and so the resolved L/R structure.)doc")
+        .def(py::init<>())
+        .def_readwrite("epsKiEigen",
+                       &::tessera::quantum::KoashiImotoTolerances::epsKiEigen)
+        .def_readwrite("epsKiCondState",
+                       &::tessera::quantum::KoashiImotoTolerances::epsKiCondState)
+        .def_readwrite("epsKiSvd",
+                       &::tessera::quantum::KoashiImotoTolerances::epsKiSvd);
+
+    py::class_<::tessera::quantum::KoashiImotoBlock>(m, "KoashiImotoBlock",
+            R"doc(A single j-block of the symmetric KI decomposition.)doc")
+        .def_readonly("weight",
+                      &::tessera::quantum::KoashiImotoBlock::weight)
+        .def_readonly("coreState",
+                      &::tessera::quantum::KoashiImotoBlock::coreState)
+        .def_readonly("tailA",
+                      &::tessera::quantum::KoashiImotoBlock::tailA)
+        .def_readonly("tailB",
+                      &::tessera::quantum::KoashiImotoBlock::tailB)
+        .def_readonly("dimLeftA",
+                      &::tessera::quantum::KoashiImotoBlock::dimLeftA)
+        .def_readonly("dimLeftB",
+                      &::tessera::quantum::KoashiImotoBlock::dimLeftB)
+        .def_readonly("dimRightA",
+                      &::tessera::quantum::KoashiImotoBlock::dimRightA)
+        .def_readonly("dimRightB",
+                      &::tessera::quantum::KoashiImotoBlock::dimRightB);
+
+    py::class_<::tessera::quantum::KoashiImotoResult>(m,
+            "KoashiImotoResult",
+            R"doc(Result of the symmetric Koashi-Imoto decomposition.
+
+Holds the three child matrices (sigma = the joint core; aPrime, bPrime
+= the uncorrelated tails) and the per-block breakdown.)doc")
+        .def_readonly("sigma",
+                      &::tessera::quantum::KoashiImotoResult::sigma)
+        .def_readonly("aPrime",
+                      &::tessera::quantum::KoashiImotoResult::aPrime)
+        .def_readonly("bPrime",
+                      &::tessera::quantum::KoashiImotoResult::bPrime)
+        .def_readonly("blocks",
+                      &::tessera::quantum::KoashiImotoResult::blocks);
+
+    m.def("koashiImotoDecompose",
+          &::tessera::quantum::koashiImotoDecompose,
+          py::arg("rhoAB"), py::arg("dimA"), py::arg("dimB"),
+          py::arg("tol") = ::tessera::quantum::KoashiImotoTolerances{},
+          R"doc(Symmetric Koashi-Imoto decomposition of a bipartite ρ_AB.
+
+Returns a KoashiImotoResult with the three child matrices and the
+per-block breakdown.)doc");
+
+    py::class_<::tessera::quantum::QuantumSimplex,
+               ::tessera::mesh::Simplex>(m, "QuantumSimplex",
+            R"doc(5-vertex KI-interaction simplex.
+
+A QuantumSimplex extends mesh.Simplex with per-vertex quantum states
+and the Koashi-Imoto decomposition that produced them. The five
+positions are A, B, Sigma (the KI core), APrime, BPrime (the KI tails
+on the A and B sides).
+
+Construct via the static factory ``fromKIInteraction(spacetime,
+rhoAB, dimA, dimB, iMax)``. The factory creates 5 vertices and 10
+edges in the spacetime; the simplex is registered as an external
+simplex (not in the spacetime's value-stored simplexStorage_; lives
+in a process-static deque inside the quantum library).)doc")
+        .def_static("fromKIInteraction",
+            &::tessera::quantum::QuantumSimplex::fromKIInteraction,
+            py::arg("spacetime"),
+            py::arg("rhoAB"),
+            py::arg("dimA"),
+            py::arg("dimB"),
+            py::arg("iMax"),
+            py::arg("tol") = ::tessera::quantum::KoashiImotoTolerances{},
+            py::return_value_policy::reference,
+            R"doc(Construct a QuantumSimplex from a joint state ρ_AB.
+
+Creates 5 vertices and 10 edges in the spacetime, KI-decomposes
+ρ_AB to populate Sigma / APrime / BPrime, computes pairwise MIs
+and Van Raamsdonk lengths, and registers the simplex with the
+spacetime.)doc")
+        .def("vertexAt",
+             &::tessera::quantum::QuantumSimplex::vertexAt,
+             py::arg("position"),
+             py::return_value_policy::reference)
+        .def("stateAt",
+             &::tessera::quantum::QuantumSimplex::stateAt,
+             py::arg("position"),
+             py::return_value_policy::reference_internal)
+        .def("mutualInfoFor",
+             &::tessera::quantum::QuantumSimplex::mutualInfoFor,
+             py::arg("p"), py::arg("q"),
+             R"doc(Mutual information (nats) between the two endpoint
+states for the edge connecting positions p and q.)doc")
+        .def("vanRaamsdonkDistanceFor",
+             &::tessera::quantum::QuantumSimplex::vanRaamsdonkDistanceFor,
+             py::arg("p"), py::arg("q"),
+             R"doc(Van Raamsdonk distance d_VR (nats) for the edge
+connecting positions p and q. +∞ when MI is zero.)doc")
+        .def("kiResult",
+             &::tessera::quantum::QuantumSimplex::kiResult,
+             py::return_value_policy::reference_internal)
+        .def_property_readonly("iMax",
+             &::tessera::quantum::QuantumSimplex::iMax);
+
+    py::enum_<::tessera::quantum::QuantumSimplex::Position>(
+            m, "QuantumSimplexPosition")
+        .value("A",      ::tessera::quantum::QuantumSimplex::A)
+        .value("B",      ::tessera::quantum::QuantumSimplex::B)
+        .value("Sigma",  ::tessera::quantum::QuantumSimplex::Sigma)
+        .value("APrime", ::tessera::quantum::QuantumSimplex::APrime)
+        .value("BPrime", ::tessera::quantum::QuantumSimplex::BPrime);
 }
