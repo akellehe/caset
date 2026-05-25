@@ -271,7 +271,7 @@ facet.getCofaces() includes this simplex.)doc")
            "Return the CDT orientation (ti, tf) of this simplex.")
       .def("getVertexIdLookup", &Simplex::getVertexIdLookup, py::return_value_policy::copy,
            "Return the internal vertex-ID-to-index mapping.")
-      .def("getVertices", &Simplex::getVertices, py::return_value_policy::copy,
+      .def("getVertices", &Simplex::getVertices, py::return_value_policy::reference_internal,
            "Return the vertices of this simplex.")
       .def("hasVertex", &Simplex::hasVertex, py::arg("vertex"),
            "Return True if this simplex contains the given vertex.")

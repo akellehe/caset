@@ -288,6 +288,22 @@ class Spacetime {
     /// @return The vertex list \f$ V \f$ containing all vertices in the complex
     [[nodiscard]] const std::shared_ptr<VertexList> &getVertexList() const noexcept;
 
+    /// Reserves and returns the next unique vertex ID without
+    /// allocating a Vertex object. Use this when constructing a
+    /// Vertex subclass (e.g. ``quantum::QuantumVertex``) via the
+    /// polymorphic ``VertexList::addAs<T>(id, id, ...)`` path —
+    /// the typed-add API needs an id up front, and bypassing
+    /// ``createVertex`` avoids allocating a temporary base Vertex
+    /// only to immediately discard it.
+    ///
+    /// The returned id is guaranteed unique for the lifetime of
+    /// this Spacetime; callers are responsible for actually
+    /// inserting a vertex with this id (otherwise the id is
+    /// simply unused).
+    [[nodiscard]] std::uint64_t reserveVertexId() noexcept {
+      return vertexIdCounter++;
+    }
+
     /// @return Simplices around the boundary of the simplicial complex. These simplices have at
     /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note
     /// that this method does not return 2-simplices as you might expect, but 5-simplices since those are the standard
