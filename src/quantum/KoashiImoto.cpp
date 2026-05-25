@@ -57,6 +57,12 @@ double vonNeumann(const Eigen::MatrixXcd& rho, double tol = 1e-12) {
 double mutualInformation(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB) {
     const auto rhoA = partialTraceB(rhoAB, dimA, dimB);
     const auto rhoB = partialTraceA(rhoAB, dimA, dimB);
+    return mutualInformation(rhoAB, rhoA, rhoB);
+}
+
+double mutualInformation(const Eigen::MatrixXcd& rhoAB,
+                         const Eigen::MatrixXcd& rhoA,
+                         const Eigen::MatrixXcd& rhoB) {
     const double I = vonNeumann(rhoA) + vonNeumann(rhoB) - vonNeumann(rhoAB);
     return std::max(0.0, I);
 }
@@ -127,6 +133,29 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
 
     const Eigen::MatrixXcd rhoA = partialTraceB(rhoAB, dimA, dimB);
     const Eigen::MatrixXcd rhoB = partialTraceA(rhoAB, dimA, dimB);
+    return koashiImotoDecompose(rhoAB, rhoA, rhoB, tol);
+}
+
+KoashiImotoResult
+koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB,
+                     const Eigen::MatrixXcd& rhoA,
+                     const Eigen::MatrixXcd& rhoB,
+                     const KoashiImotoTolerances& tol) {
+    if (rhoA.rows() != rhoA.cols() || rhoB.rows() != rhoB.cols()) {
+        throw std::invalid_argument("KI: marginals must be square");
+    }
+    if (rhoAB.rows() != rhoAB.cols()) {
+        throw std::invalid_argument("KI: rhoAB must be square");
+    }
+    const int dimA = static_cast<int>(rhoA.rows());
+    const int dimB = static_cast<int>(rhoB.rows());
+    if (dimA <= 0 || dimB <= 0) {
+        throw std::invalid_argument("KI: marginal dimensions must be positive");
+    }
+    if (rhoAB.rows() != static_cast<Eigen::Index>(dimA) * dimB) {
+        throw std::invalid_argument(
+            "KI: rhoAB dimension must equal dimA · dimB");
+    }
 
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> esA(rhoA);
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> esB(rhoB);
@@ -147,7 +176,7 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
         Eigen::MatrixXcd block = rhoP.block(i * dimB, i * dimB, dimB, dimB);
         const double w = block.trace().real();
         weightA[i] = w;
-        if (w > tol.epsKiEigen) {
+        if (w > tol.getEpsKiEigen()) {
             condB[i] = block / w;
         } else {
             condB[i] = Eigen::MatrixXcd::Identity(dimB, dimB)
@@ -164,8 +193,8 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
             const double offDiagNorm =
                 rhoP.block(i * dimB, j * dimB, dimB, dimB).norm();
             const double condDiff = (condB[i] - condB[j]).norm();
-            if (offDiagNorm > tol.epsKiCondState
-                || condDiff < tol.epsKiCondState) {
+            if (offDiagNorm > tol.getEpsKiCondState()
+                || condDiff < tol.getEpsKiCondState()) {
                 uf.unite(i, j);
             }
         }
@@ -197,7 +226,7 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
                 s(i, ip) = rhoP(i * dimB + b, ip * dimB + b);
             }
         }
-        if (w > tol.epsKiEigen) {
+        if (w > tol.getEpsKiEigen()) {
             condA[b] = s / w;
         } else {
             condA[b] = Eigen::MatrixXcd::Identity(dimA, dimA)
@@ -205,8 +234,8 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
         }
     }
 
-    KoashiImotoResult result;
-    std::vector<Eigen::MatrixXcd> sigmaBlocks, aPrimeBlocks, bPrimeBlocks;
+    std::vector<KoashiImotoBlock>    blocks;
+    std::vector<Eigen::MatrixXcd>    sigmaBlocks, aPrimeBlocks, bPrimeBlocks;
 
     auto groupByMatrixEquivalence =
         [&](const std::vector<int>& idxs,
@@ -232,34 +261,26 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
     };
 
     for (auto& [weight, aIdxs] : ordered) {
-        KoashiImotoBlock blk;
-        blk.weight = weight;
-
         Eigen::MatrixXcd blockSumB = Eigen::MatrixXcd::Zero(dimB, dimB);
         for (int i : aIdxs) {
             blockSumB += rhoP.block(i * dimB, i * dimB, dimB, dimB);
         }
         std::vector<int> bIdxs;
         for (int b = 0; b < dimB; ++b) {
-            if (std::abs(blockSumB(b, b)) > tol.epsKiCondState) {
+            if (std::abs(blockSumB(b, b)) > tol.getEpsKiCondState()) {
                 bIdxs.push_back(b);
             }
         }
         if (bIdxs.empty()) continue;
 
         auto groupsA = groupByMatrixEquivalence(aIdxs, condB,
-                                                tol.epsKiCondState);
+                                                tol.getEpsKiCondState());
         auto groupsB = groupByMatrixEquivalence(bIdxs, condA,
-                                                tol.epsKiCondState);
+                                                tol.getEpsKiCondState());
         const int K_A = static_cast<int>(groupsA.size());
         const int K_B = static_cast<int>(groupsB.size());
         const int r_A = static_cast<int>(groupsA.front().size());
         const int r_B = static_cast<int>(groupsB.front().size());
-
-        blk.dimLeftA  = K_A;
-        blk.dimLeftB  = K_B;
-        blk.dimRightA = r_A;
-        blk.dimRightB = r_B;
 
         std::vector<int> lAIdx(K_A), lBIdx(K_B);
         for (int k = 0; k < K_A; ++k) lAIdx[k] = groupsA[k].front();
@@ -279,15 +300,14 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
             }
         }
         const double coreTrace = core.trace().real();
-        if (coreTrace > tol.epsKiSvd) {
+        if (coreTrace > tol.getEpsKiSvd()) {
             core /= coreTrace;
         }
-        blk.coreState = std::move(core);
 
         Eigen::MatrixXcd tA = Eigen::MatrixXcd::Zero(r_A, r_A);
         double normA = 0.0;
         for (int r = 0; r < r_A; ++r) normA += weightA[groupsA[0][r]];
-        if (normA > tol.epsKiSvd) {
+        if (normA > tol.getEpsKiSvd()) {
             for (int r = 0; r < r_A; ++r) {
                 tA(r, r) = weightA[groupsA[0][r]] / normA;
             }
@@ -295,12 +315,11 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
             tA = Eigen::MatrixXcd::Identity(r_A, r_A)
                  / static_cast<double>(r_A);
         }
-        blk.tailA = std::move(tA);
 
         Eigen::MatrixXcd tB = Eigen::MatrixXcd::Zero(r_B, r_B);
         double normB = 0.0;
         for (int r = 0; r < r_B; ++r) normB += weightB[groupsB[0][r]];
-        if (normB > tol.epsKiSvd) {
+        if (normB > tol.getEpsKiSvd()) {
             for (int r = 0; r < r_B; ++r) {
                 tB(r, r) = weightB[groupsB[0][r]] / normB;
             }
@@ -308,18 +327,18 @@ koashiImotoDecompose(const Eigen::MatrixXcd& rhoAB, int dimA, int dimB,
             tB = Eigen::MatrixXcd::Identity(r_B, r_B)
                  / static_cast<double>(r_B);
         }
-        blk.tailB = std::move(tB);
 
-        sigmaBlocks.push_back(blk.weight * blk.coreState);
-        aPrimeBlocks.push_back(blk.weight * blk.tailA);
-        bPrimeBlocks.push_back(blk.weight * blk.tailB);
-        result.blocks.push_back(std::move(blk));
+        sigmaBlocks.push_back(weight * core);
+        aPrimeBlocks.push_back(weight * tA);
+        bPrimeBlocks.push_back(weight * tB);
+        blocks.emplace_back(weight, std::move(core), std::move(tA),
+                            std::move(tB), K_A, K_B, r_A, r_B);
     }
 
-    result.sigma  = blockDiagonal(sigmaBlocks);
-    result.aPrime = blockDiagonal(aPrimeBlocks);
-    result.bPrime = blockDiagonal(bPrimeBlocks);
-    return result;
+    return KoashiImotoResult(blockDiagonal(sigmaBlocks),
+                             blockDiagonal(aPrimeBlocks),
+                             blockDiagonal(bPrimeBlocks),
+                             std::move(blocks));
 }
 
 } // namespace tessera::quantum

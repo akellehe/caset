@@ -4,8 +4,8 @@
 #include "mesh/Vertex.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
-#include <deque>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -14,20 +14,8 @@ namespace tessera::quantum {
 
 namespace {
 
-// Process-static stable-address storage for QuantumSimplex objects.
-// std::deque guarantees that previously-pushed elements keep their
-// addresses on push_back, and we never erase, so any raw pointer
-// obtained from this deque is valid for the life of the process.
-// Spacetime tracks QuantumSimplex objects only as Simplex* pointers
-// into this storage; this lets the Spacetime stay in tessera_core
-// while QuantumSimplex (with its Eigen dependency) lives in
-// tessera_quantum.
-std::deque<QuantumSimplex>& quantumSimplexStorage() {
-    static std::deque<QuantumSimplex> storage;
-    return storage;
-}
-
-// All ten pairs (i, j) with i < j over the five vertex positions.
+// All ten pairs (i, j) with i < j over the five vertex positions of
+// a 4-simplex (C(5, 2) = 10).
 struct PositionPair { int u, v; };
 constexpr PositionPair kAllEdges[10] = {
     {0, 1}, {0, 2}, {0, 3}, {0, 4},
@@ -36,13 +24,9 @@ constexpr PositionPair kAllEdges[10] = {
     {3, 4},
 };
 
-inline std::pair<int, int> orderedPair(int a, int b) {
-    return (a < b) ? std::pair{a, b} : std::pair{b, a};
-}
-
-// Construct ρ_u ⊗ ρ_v in (u ⊗ v) ordering. Used to compute pairwise MI
-// between two vertex states that have no inherited correlation
-// (everything except the (A, B) pair, which carries the input joint).
+// ρ_u ⊗ ρ_v in (u ⊗ v) ordering. Used only for the (A, B) edge
+// where the factory has the input joint ρ_AB; everything else
+// asks the QuantumVertex itself via vanRaamsdonkDistanceTo.
 Eigen::MatrixXcd kron(const Eigen::MatrixXcd& a, const Eigen::MatrixXcd& b) {
     const int dA = static_cast<int>(a.rows());
     const int dB = static_cast<int>(b.rows());
@@ -55,144 +39,289 @@ Eigen::MatrixXcd kron(const Eigen::MatrixXcd& a, const Eigen::MatrixXcd& b) {
     return out;
 }
 
-// d_VR(I) = -log(I / iMax). Returns +∞ when I == 0 (or iMax == 0).
-double vanRaamsdonk(double I, double iMax) {
-    if (!(I > 0.0) || !(iMax > 0.0)) {
+double vrFromJoint(const Eigen::MatrixXcd& rhoAB,
+                   const Eigen::MatrixXcd& rhoA,
+                   const Eigen::MatrixXcd& rhoB,
+                   double                  iMax) {
+    if (!(iMax > 0.0)) {
+        return std::numeric_limits<double>::infinity();
+    }
+    const double I = mutualInformation(rhoAB, rhoA, rhoB);
+    if (!(I > 0.0)) {
         return std::numeric_limits<double>::infinity();
     }
     return -std::log(I / iMax);
 }
 
-} // namespace
+struct SortedEig {
+    Eigen::VectorXd  evals;
+    Eigen::MatrixXcd evecs;
+};
 
-QuantumSimplex::QuantumSimplex(::tessera::spacetime::Spacetime*       spacetime,
-                               const ::tessera::mesh::VertexPtrs&     verts,
-                               ::tessera::mesh::Edges                 edges,
-                               std::array<::tessera::mesh::VertexPtr, 5> positions,
-                               std::array<Eigen::MatrixXcd, 5>           states,
-                               std::map<std::pair<int, int>, double>     mi,
-                               KoashiImotoResult                         ki,
-                               double                                    iMaxVal)
-    : ::tessera::mesh::Simplex(spacetime, verts, std::move(edges)),
-      positions_(std::move(positions)),
-      states_(std::move(states)),
-      mi_(std::move(mi)),
-      kiResult_(std::move(ki)),
-      iMax_(iMaxVal) {}
-
-double QuantumSimplex::mutualInfoFor(Position p, Position q) const {
-    auto it = mi_.find(orderedPair(p, q));
-    if (it == mi_.end()) return 0.0;
-    return it->second;
-}
-
-double QuantumSimplex::vanRaamsdonkDistanceFor(Position p, Position q) const {
-    return vanRaamsdonk(mutualInfoFor(p, q), iMax_);
-}
-
-QuantumSimplex*
-QuantumSimplex::fromKIInteraction(::tessera::spacetime::Spacetime& spacetime,
-                                  const Eigen::MatrixXcd&          rhoAB,
-                                  int                              dimA,
-                                  int                              dimB,
-                                  double                           iMaxVal,
-                                  const KoashiImotoTolerances&     tol) {
-    if (dimA <= 0 || dimB <= 0) {
-        throw std::invalid_argument("QuantumSimplex::fromKIInteraction: "
-                                    "dimA, dimB must be positive");
+SortedEig descendingEig(const Eigen::MatrixXcd& rho) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(rho);
+    if (es.info() != Eigen::Success) {
+        throw std::runtime_error("QuantumSimplex: eigendecomposition failed");
     }
+    SortedEig out;
+    out.evals = es.eigenvalues().reverse();
+    out.evecs = Eigen::MatrixXcd(es.eigenvectors().rows(),
+                                 es.eigenvectors().cols());
+    for (Eigen::Index c = 0; c < es.eigenvectors().cols(); ++c) {
+        out.evecs.col(c) = es.eigenvectors().col(
+            es.eigenvectors().cols() - 1 - c);
+    }
+    return out;
+}
+
+void requireMatchedSpectra(const Eigen::VectorXd& evalsA,
+                           const Eigen::VectorXd& evalsB,
+                           double                 tolerance) {
+    if (evalsA.size() != evalsB.size()) {
+        throw std::invalid_argument(
+            "QuantumSimplex: ρ_A and ρ_B must have equal dimension "
+            "for the requested factory");
+    }
+    for (Eigen::Index i = 0; i < evalsA.size(); ++i) {
+        if (std::abs(evalsA[i] - evalsB[i]) > tolerance) {
+            throw std::invalid_argument(
+                "QuantumSimplex: this factory requires ρ_A and ρ_B "
+                "to share an eigenvalue spectrum; spectra differ");
+        }
+    }
+}
+
+// |ψ⟩⟨ψ| with |ψ⟩ = Σ_i √λ_i |a_i⟩|b_i⟩ in matched eigenbases.
+Eigen::MatrixXcd schmidtJointFromMarginals(const Eigen::MatrixXcd& rhoA,
+                                           const Eigen::MatrixXcd& rhoB) {
+    const auto eigA = descendingEig(rhoA);
+    const auto eigB = descendingEig(rhoB);
+    const int d = static_cast<int>(eigA.evals.size());
+    Eigen::VectorXcd psi = Eigen::VectorXcd::Zero(d * d);
+    for (int a = 0; a < d; ++a) {
+        for (int b = 0; b < d; ++b) {
+            std::complex<double> acc(0.0, 0.0);
+            for (int i = 0; i < d; ++i) {
+                const double lambda = std::max(0.0, eigA.evals[i]);
+                acc += eigA.evecs(a, i) * eigB.evecs(b, i)
+                       * std::sqrt(lambda);
+            }
+            psi[a * d + b] = acc;
+        }
+    }
+    return psi * psi.adjoint();
+}
+
+// ρ_AB = Σ_i λ_i |a_i⟩⟨a_i| ⊗ |b_i⟩⟨b_i| in matched eigenbases.
+Eigen::MatrixXcd classicalJointFromMarginals(const Eigen::MatrixXcd& rhoA,
+                                             const Eigen::MatrixXcd& rhoB) {
+    const auto eigA = descendingEig(rhoA);
+    const auto eigB = descendingEig(rhoB);
+    const int d = static_cast<int>(eigA.evals.size());
+    Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(d * d, d * d);
+    for (int i = 0; i < d; ++i) {
+        const double lambda = std::max(0.0, eigA.evals[i]);
+        if (lambda <= 0.0) continue;
+        Eigen::VectorXcd aOut = eigA.evecs.col(i);
+        Eigen::VectorXcd bOut = eigB.evecs.col(i);
+        Eigen::MatrixXcd Pa = aOut * aOut.adjoint();
+        Eigen::MatrixXcd Pb = bOut * bOut.adjoint();
+        for (int p = 0; p < d; ++p) {
+            for (int q = 0; q < d; ++q) {
+                for (int r = 0; r < d; ++r) {
+                    for (int s = 0; s < d; ++s) {
+                        out(p * d + r, q * d + s) +=
+                            lambda * Pa(p, q) * Pb(r, s);
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+// Build the five-vertex / ten-edge mesh::Simplex from the given
+// joint ρ_AB on (qva, qvb). Allocates Σ, A', B' QuantumVertex via
+// the spacetime's vertex list with the KI core / tail states.
+// Computes d_VR per edge: for (A, B) directly from the input joint;
+// for every other edge by asking the endpoint QuantumVertex
+// (vanRaamsdonkDistanceTo, which assumes a product joint). Writes
+// d_VR² to ``Edge::squaredLength`` at edge creation time.
+::tessera::mesh::Simplex*
+buildSimplexFromJoint(::tessera::spacetime::Spacetime& spacetime,
+                      QuantumVertex*                   qva,
+                      QuantumVertex*                   qvb,
+                      const Eigen::MatrixXcd&          rhoAB,
+                      double                           iMax,
+                      const KoashiImotoTolerances&     tol) {
+    if (qva == nullptr || qvb == nullptr) {
+        throw std::invalid_argument(
+            "QuantumSimplex: input QuantumVertex pointers must be non-null");
+    }
+    if (!(iMax > 0.0)) {
+        throw std::invalid_argument(
+            "QuantumSimplex: iMax must be positive");
+    }
+    const Eigen::MatrixXcd& rhoA = qva->getState();
+    const Eigen::MatrixXcd& rhoB = qvb->getState();
+    const int dimA = qva->stateDim();
+    const int dimB = qvb->stateDim();
     if (rhoAB.rows() != rhoAB.cols()
         || rhoAB.rows() != static_cast<Eigen::Index>(dimA) * dimB) {
-        throw std::invalid_argument("QuantumSimplex::fromKIInteraction: "
-                                    "rhoAB dimension must equal dimA · dimB");
-    }
-    if (!(iMaxVal > 0.0)) {
-        throw std::invalid_argument("QuantumSimplex::fromKIInteraction: "
-                                    "iMax must be positive");
+        throw std::invalid_argument(
+            "QuantumSimplex: rhoAB dimension must equal dimA · dimB");
     }
 
-    // Marginals + KI decomposition.
-    const Eigen::MatrixXcd rhoA = partialTraceB(rhoAB, dimA, dimB);
-    const Eigen::MatrixXcd rhoB = partialTraceA(rhoAB, dimA, dimB);
-    KoashiImotoResult ki = koashiImotoDecompose(rhoAB, dimA, dimB, tol);
+    const KoashiImotoResult ki =
+        koashiImotoDecompose(rhoAB, rhoA, rhoB, tol);
 
-    // Per-position states. Position layout: A, B, Σ, A', B'.
-    std::array<Eigen::MatrixXcd, 5> states = {
-        rhoA,
-        rhoB,
-        ki.sigma,
-        ki.aPrime,
-        ki.bPrime,
-    };
-    std::array<int, 5> dims = {
-        dimA,
-        dimB,
-        static_cast<int>(ki.sigma.rows()),
-        static_cast<int>(ki.aPrime.rows()),
-        static_cast<int>(ki.bPrime.rows()),
-    };
-
-    // Allocate five vertices via the Spacetime. Vertex IDs are
-    // assigned automatically by createVertex() (no-arg overload).
-    std::array<::tessera::mesh::VertexPtr, 5> positions;
-    for (int p = 0; p < 5; ++p) {
-        positions[p] = spacetime.createVertex();
+    auto vlist = spacetime.getVertexList();
+    std::array<QuantumVertex*, 5> positions{};
+    positions[QuantumSimplex::A] = qva;
+    positions[QuantumSimplex::B] = qvb;
+    {
+        const auto id = spacetime.reserveVertexId();
+        positions[QuantumSimplex::Sigma] =
+            vlist->template addAs<QuantumVertex>(id, id, ki.getSigma());
     }
-    ::tessera::mesh::VertexPtrs verts(positions.begin(), positions.end());
-
-    // Compute the 10 pairwise MIs and edge lengths.
-    //
-    // The (A, B) edge uses the INPUT joint ρ_AB directly — that's the
-    // pair carrying inherited correlation. All other edges use the
-    // product joint of the two endpoint states (no inherited
-    // correlation between, say, A and Σ — the relationship is encoded
-    // in the structure of ρ_AB and falls out through KI, but the
-    // pairwise joint between distinct vertices in the new cell is
-    // taken as product).
-    std::map<std::pair<int, int>, double> mi;
-    std::map<std::pair<int, int>, double> dvr;
-    for (const auto& [u, v] : kAllEdges) {
-        double I;
-        if ((u == A && v == B) || (u == B && v == A)) {
-            I = mutualInformation(rhoAB, dimA, dimB);
-        } else {
-            const Eigen::MatrixXcd joint = kron(states[u], states[v]);
-            I = mutualInformation(joint, dims[u], dims[v]);
-        }
-        const std::pair<int, int> key = orderedPair(u, v);
-        mi[key]  = I;
-        dvr[key] = vanRaamsdonk(I, iMaxVal);
+    {
+        const auto id = spacetime.reserveVertexId();
+        positions[QuantumSimplex::APrime] =
+            vlist->template addAs<QuantumVertex>(id, id, ki.getAPrime());
+    }
+    {
+        const auto id = spacetime.reserveVertexId();
+        positions[QuantumSimplex::BPrime] =
+            vlist->template addAs<QuantumVertex>(id, id, ki.getBPrime());
     }
 
-    // Create the 10 edges in the Spacetime. Edge stores squaredLength;
-    // here we square the d_VR (Euclidean spacelike convention — every
-    // edge contributes +ℓ²). +∞ length squares to +∞.
+    // d_VR per edge. (A, B) uses the input joint directly; every
+    // other pair asks the endpoint vertex (product joint).
     ::tessera::mesh::Edges edges;
     edges.reserve(10);
     for (const auto& [u, v] : kAllEdges) {
-        const double len   = dvr.at(orderedPair(u, v));
-        const double lenSq = len * len;
+        double dvr;
+        if ((u == QuantumSimplex::A && v == QuantumSimplex::B)
+            || (u == QuantumSimplex::B && v == QuantumSimplex::A)) {
+            dvr = vrFromJoint(rhoAB, rhoA, rhoB, iMax);
+        } else {
+            dvr = positions[u]->vanRaamsdonkDistanceTo(
+                positions[v], iMax);
+        }
+        const double dvrSq = dvr * dvr;
         ::tessera::mesh::EdgePtr edge =
-            spacetime.createEdge(positions[u], positions[v], lenSq);
+            spacetime.createEdge(positions[u], positions[v], dvrSq);
         if (edge != nullptr) edges.push_back(edge);
     }
 
-    // Allocate the QuantumSimplex in our stable-storage deque, then
-    // register it with the Spacetime as an external simplex. The
-    // initialize() hook registers the simplex back on its vertices.
-    auto& storage = quantumSimplexStorage();
-    storage.emplace_back(&spacetime,
-                         verts,
-                         std::move(edges),
-                         positions,
-                         std::move(states),
-                         std::move(mi),
-                         std::move(ki),
-                         iMaxVal);
-    QuantumSimplex* qs = &storage.back();
-    qs->initialize(qs);
-    spacetime.registerSimplex(qs, /*internal=*/true);
-    return qs;
+    ::tessera::mesh::VertexPtrs verts;
+    verts.reserve(5);
+    for (int p = QuantumSimplex::A; p <= QuantumSimplex::BPrime; ++p) {
+        verts.push_back(positions[p]);
+    }
+    auto [s, created] = spacetime.createSimplex(verts, edges);
+    (void)created;
+    return s;
+}
+
+} // namespace
+
+::tessera::mesh::Simplex*
+QuantumSimplex::fromSchmidtPurification(
+    ::tessera::spacetime::Spacetime& spacetime,
+    QuantumVertex*                   qva,
+    QuantumVertex*                   qvb,
+    double                           iMax,
+    const KoashiImotoTolerances&     tol) {
+    if (qva == nullptr || qvb == nullptr) {
+        throw std::invalid_argument(
+            "fromSchmidtPurification: inputs must be non-null");
+    }
+    const auto eigA = descendingEig(qva->getState());
+    const auto eigB = descendingEig(qvb->getState());
+    requireMatchedSpectra(eigA.evals, eigB.evals, tol.getEpsKiEigen());
+    auto rhoAB = schmidtJointFromMarginals(qva->getState(), qvb->getState());
+    return buildSimplexFromJoint(spacetime, qva, qvb, rhoAB, iMax, tol);
+}
+
+::tessera::mesh::Simplex*
+QuantumSimplex::fromClassicalCorrelation(
+    ::tessera::spacetime::Spacetime& spacetime,
+    QuantumVertex*                   qva,
+    QuantumVertex*                   qvb,
+    double                           iMax,
+    const KoashiImotoTolerances&     tol) {
+    if (qva == nullptr || qvb == nullptr) {
+        throw std::invalid_argument(
+            "fromClassicalCorrelation: inputs must be non-null");
+    }
+    const auto eigA = descendingEig(qva->getState());
+    const auto eigB = descendingEig(qvb->getState());
+    requireMatchedSpectra(eigA.evals, eigB.evals, tol.getEpsKiEigen());
+    auto rhoAB = classicalJointFromMarginals(qva->getState(), qvb->getState());
+    return buildSimplexFromJoint(spacetime, qva, qvb, rhoAB, iMax, tol);
+}
+
+::tessera::mesh::Simplex*
+QuantumSimplex::fromExplicitJoint(
+    ::tessera::spacetime::Spacetime& spacetime,
+    QuantumVertex*                   qva,
+    QuantumVertex*                   qvb,
+    const Eigen::MatrixXcd&          rhoAB,
+    double                           iMax,
+    const KoashiImotoTolerances&     tol) {
+    return buildSimplexFromJoint(spacetime, qva, qvb, rhoAB, iMax, tol);
+}
+
+::tessera::mesh::Simplex*
+QuantumSimplex::fromTargetMutualInformation(
+    ::tessera::spacetime::Spacetime& spacetime,
+    QuantumVertex*                   qva,
+    QuantumVertex*                   qvb,
+    double                           targetMI,
+    double                           iMax,
+    const KoashiImotoTolerances&     tol) {
+    if (qva == nullptr || qvb == nullptr) {
+        throw std::invalid_argument(
+            "fromTargetMutualInformation: inputs must be non-null");
+    }
+    if (targetMI < 0.0) {
+        throw std::invalid_argument(
+            "fromTargetMutualInformation: targetMI must be >= 0");
+    }
+    const auto eigA = descendingEig(qva->getState());
+    const auto eigB = descendingEig(qvb->getState());
+    requireMatchedSpectra(eigA.evals, eigB.evals, tol.getEpsKiEigen());
+
+    const Eigen::MatrixXcd rhoA    = qva->getState();
+    const Eigen::MatrixXcd rhoB    = qvb->getState();
+    const Eigen::MatrixXcd product = kron(rhoA, rhoB);
+    const Eigen::MatrixXcd schmidt = schmidtJointFromMarginals(rhoA, rhoB);
+    const double miMax = mutualInformation(schmidt, rhoA, rhoB);
+    if (targetMI > miMax + tol.getEpsKiCondState()) {
+        throw std::invalid_argument(
+            "fromTargetMutualInformation: target exceeds the "
+            "achievable maximum 2·H(λ) for the given marginals");
+    }
+    // Short-circuit the trivial endpoints so the binary search
+    // doesn't leave residual α > 0 contaminating an MI=0 target.
+    if (targetMI <= tol.getEpsKiCondState()) {
+        return buildSimplexFromJoint(spacetime, qva, qvb, product, iMax, tol);
+    }
+    if (std::abs(targetMI - miMax) <= tol.getEpsKiCondState()) {
+        return buildSimplexFromJoint(spacetime, qva, qvb, schmidt, iMax, tol);
+    }
+    double lo = 0.0, hi = 1.0;
+    Eigen::MatrixXcd rhoAB;
+    for (int it = 0; it < 60; ++it) {
+        const double mid = 0.5 * (lo + hi);
+        rhoAB = (1.0 - mid) * product + mid * schmidt;
+        const double I = mutualInformation(rhoAB, rhoA, rhoB);
+        if (std::abs(I - targetMI) < tol.getEpsKiCondState()) break;
+        if (I < targetMI) lo = mid;
+        else              hi = mid;
+    }
+    return buildSimplexFromJoint(spacetime, qva, qvb, rhoAB, iMax, tol);
 }
 
 } // namespace tessera::quantum

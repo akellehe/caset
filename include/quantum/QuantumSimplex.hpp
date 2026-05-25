@@ -1,36 +1,43 @@
-// QuantumSimplex — Simplex subclass for the 5-vertex KI-interaction cell.
+// QuantumSimplex — KI factories that build a 5-vertex / 10-edge
+// mesh::Simplex from two QuantumVertex inputs.
 //
-// A QuantumSimplex is a 5-vertex mesh::Simplex that carries the quantum
-// states for each of its vertices and a record of the Koashi–Imoto
-// decomposition that produced them. The five positions are:
+// QuantumSimplex is **not** a separate type at runtime. It is a
+// static-only utility class whose only methods are the four KI
+// factory entry points that:
+//   - take two pre-existing QuantumVertex objects (A and B) and a
+//     simulation-wide ``iMax``;
+//   - construct ρ_AB by one of four strategies (see the methods);
+//   - run the symmetric Koashi-Imoto decomposition;
+//   - allocate the Σ, A', B' QuantumVertex objects in the
+//     spacetime's vertex list, carrying ρ_Σ, ρ_{A'}, ρ_{B'};
+//   - write d_VR² = (−log(I / iMax))² as the squaredLength of each
+//     of the ten edges;
+//   - build a regular ``mesh::Simplex`` via ``spacetime.createSimplex``;
+//   - return that ``mesh::Simplex*``.
 //
-//     A       — the input "left" system, with state ρ_A
-//     B       — the input "right" system, with state ρ_B
-//     Sigma   — the KI core ρ_{Σ_{AB}}
-//     APrime  — the KI tail on the A side, ρ_{A'}
-//     BPrime  — the KI tail on the B side, ρ_{B'}
+// State distribution:
+//   - per-vertex density matrices ρ live on the QuantumVertex objects
+//     (which are owned by ``VertexList`` via ``unique_ptr<Vertex>``);
+//   - per-edge Van Raamsdonk distance lives on ``Edge::squaredLength_``
+//     (d_VR² so callers recover d_VR via sqrt and MI via
+//     ``iMax · exp(−sqrt(squaredLength))``);
+//   - ``iMax`` is global to the simulation and is **not** stored on
+//     the simplex; callers track it externally;
+//   - the KoashiImotoResult is computed inside the factory and
+//     discarded — the vertex states plus block dimensions encode
+//     everything the simplex needs at runtime.
 //
-// The simplex has all 10 edges of a 4-simplex (C(5, 2) = 10), each with
-// length equal to the Van Raamsdonk metric d_VR = -log(I / I_max) where
-// I is the mutual information between the two endpoint vertices' states.
-//
-// Storage: QuantumSimplex objects are value-stored in a process-static
-// deque inside this library (stable addresses; never moved or freed for
-// the life of the process). The Spacetime tracks them as base Simplex*
-// pointers via Spacetime::registerSimplex(qs, /*internal=*/true). This
-// keeps tessera_core free of Eigen and of any quantum-domain types.
+// The five Position constants give canonical indices into the
+// ``mesh::Simplex::getVertices()`` ordering used by the factories.
 
 #pragma once
 
 #include "mesh/Simplex.h"
 #include "quantum/KoashiImoto.hpp"
+#include "quantum/QuantumVertex.hpp"
 #include "spacetime/Spacetime.h"
 
 #include <Eigen/Dense>
-
-#include <array>
-#include <map>
-#include <utility>
 
 namespace tessera::graph {}
 namespace tessera::mesh {}
@@ -39,10 +46,18 @@ namespace tessera::simulations {}
 namespace tessera::spacetime {}
 namespace tessera::quantum {
 
-class QuantumSimplex : public ::tessera::mesh::Simplex {
+class QuantumSimplex {
   public:
-    // Vertex roles inside the 5-vertex simplex. The integer values are
-    // the canonical positions in the underlying ``vertices_`` order.
+    // Static-only utility class — never constructed at runtime.
+    // The default constructor is deleted so callers can't make
+    // an instance accidentally; the destructor stays compiler-
+    // generated because pybind11 needs to register a deallocator
+    // when it binds this name into Python.
+    QuantumSimplex() = delete;
+
+    // Canonical positions in the returned ``mesh::Simplex``'s vertex
+    // list. Callers downcast via ``QuantumVertex::require`` (or
+    // ``dynamic_cast``) when they want the typed handle.
     enum Position : int {
         A       = 0,
         B       = 1,
@@ -51,81 +66,59 @@ class QuantumSimplex : public ::tessera::mesh::Simplex {
         BPrime  = 4,
     };
 
-    // Static factory. Constructs the five vertices, the ten edges, and
-    // the QuantumSimplex itself; registers the simplex with
-    // ``spacetime`` via ``registerSimplex(..., /*internal=*/true)``.
+    // (a) Schmidt purification.
     //
-    // Inputs:
-    //   spacetime — the Spacetime that owns the vertices / edges and
-    //               registers the simplex.
-    //   rhoAB     — the joint density matrix on H_A ⊗ H_B, given in
-    //               (A ⊗ B) ordering (row index = a · dimB + b).
-    //   dimA, dimB — the dimensions of the A and B Hilbert spaces.
-    //   iMax      — the simulation-wide information ceiling used in the
-    //               Van Raamsdonk metric d_VR = -log(I / iMax). Pass
-    //               whatever convention the caller wants; common choices
-    //               are log(dimA · dimB) (the maximum joint entropy) or
-    //               2·log(min(dimA, dimB)) (the maximum mutual info).
-    //   tol       — KI numerical tolerances; defaults to 1e-10 each.
+    // Requires ρ_A on ``qva`` and ρ_B on ``qvb`` to share the same
+    // eigenvalue spectrum. Constructs the canonical purifier
+    //   |ψ⟩ = Σ_i √λ_i |a_i⟩|b_i⟩
+    // and sets ρ_AB = |ψ⟩⟨ψ|. The resulting joint is pure and
+    // I(A:B) = 2·H(λ). Throws ``std::invalid_argument`` if the
+    // spectra do not match within ``tol.epsKiEigen``.
+    [[nodiscard]] static ::tessera::mesh::Simplex*
+    fromSchmidtPurification(::tessera::spacetime::Spacetime& spacetime,
+                            QuantumVertex*                   qva,
+                            QuantumVertex*                   qvb,
+                            double                           iMax,
+                            const KoashiImotoTolerances&     tol = {});
+
+    // (b) Classical correlation (perfectly correlated diagonal joint).
     //
-    // Returns: a non-owning pointer to the QuantumSimplex, whose
-    // lifetime is the process. The caller does NOT delete this pointer.
-    [[nodiscard]] static QuantumSimplex*
-    fromKIInteraction(::tessera::spacetime::Spacetime& spacetime,
+    //   ρ_AB = Σ_i λ_i |a_i⟩⟨a_i| ⊗ |b_i⟩⟨b_i|
+    // in matched eigenbases. Separable; I(A:B) = H(λ). Throws if
+    // the spectra do not match.
+    [[nodiscard]] static ::tessera::mesh::Simplex*
+    fromClassicalCorrelation(::tessera::spacetime::Spacetime& spacetime,
+                             QuantumVertex*                   qva,
+                             QuantumVertex*                   qvb,
+                             double                           iMax,
+                             const KoashiImotoTolerances&     tol = {});
+
+    // (c) Explicit joint.
+    //
+    // Caller supplies ρ_AB directly. Its partial traces over B (resp.
+    // A) must agree with ρ_A on ``qva`` (resp. ρ_B on ``qvb``).
+    [[nodiscard]] static ::tessera::mesh::Simplex*
+    fromExplicitJoint(::tessera::spacetime::Spacetime& spacetime,
+                      QuantumVertex*                   qva,
+                      QuantumVertex*                   qvb,
                       const Eigen::MatrixXcd&          rhoAB,
-                      int                              dimA,
-                      int                              dimB,
                       double                           iMax,
                       const KoashiImotoTolerances&     tol = {});
 
-    // The vertex at position p (A, B, Sigma, APrime, BPrime).
-    [[nodiscard]] ::tessera::mesh::VertexPtr
-    vertexAt(Position p) const noexcept { return positions_[p]; }
-
-    // The quantum state at position p, as a density matrix in the
-    // vertex's local basis.
-    [[nodiscard]] const Eigen::MatrixXcd&
-    stateAt(Position p) const noexcept { return states_[p]; }
-
-    // Mutual information (nats) between the two endpoint states for
-    // the edge connecting positions p and q. Symmetric; either order
-    // works.
-    [[nodiscard]] double
-    mutualInfoFor(Position p, Position q) const;
-
-    // Van Raamsdonk distance d_VR (nats) for the edge connecting
-    // positions p and q. Symmetric; either order works. Returns +∞
-    // when the corresponding MI is zero (the edge is "disconnected"
-    // in the metric, though the simplex still has the edge in its
-    // topology).
-    [[nodiscard]] double
-    vanRaamsdonkDistanceFor(Position p, Position q) const;
-
-    // The full KI decomposition that produced this simplex.
-    [[nodiscard]] const KoashiImotoResult&
-    kiResult() const noexcept { return kiResult_; }
-
-    [[nodiscard]] double iMax() const noexcept { return iMax_; }
-
-    // Public so std::deque can emplace one. Callers should use the
-    // static factory above; this is only public to satisfy the
-    // allocator_traits::construct path through emplace_back.
-    QuantumSimplex(::tessera::spacetime::Spacetime*       spacetime,
-                   const ::tessera::mesh::VertexPtrs&     verts,
-                   ::tessera::mesh::Edges                 edges,
-                   std::array<::tessera::mesh::VertexPtr, 5> positions,
-                   std::array<Eigen::MatrixXcd, 5>           states,
-                   std::map<std::pair<int, int>, double>     mi,
-                   KoashiImotoResult                         ki,
-                   double                                    iMax);
-
-  private:
-
-    std::array<::tessera::mesh::VertexPtr, 5> positions_;
-    std::array<Eigen::MatrixXcd, 5>           states_;
-    std::map<std::pair<int, int>, double>     mi_;
-    KoashiImotoResult                         kiResult_;
-    double                                    iMax_;
+    // (d) Target mutual information.
+    //
+    // Interpolates
+    //   ρ_AB(α) = (1−α)·(ρ_A ⊗ ρ_B) + α·ρ_AB^Schmidt
+    // and binary-searches α so that I(A:B) ≈ targetMI. Requires
+    // matched spectra (the Schmidt endpoint is only defined when
+    // ρ_A and ρ_B agree). Throws if targetMI ∉ [0, 2·H(λ)].
+    [[nodiscard]] static ::tessera::mesh::Simplex*
+    fromTargetMutualInformation(::tessera::spacetime::Spacetime& spacetime,
+                                QuantumVertex*                   qva,
+                                QuantumVertex*                   qvb,
+                                double                           targetMI,
+                                double                           iMax,
+                                const KoashiImotoTolerances&     tol = {});
 };
 
 } // namespace tessera::quantum

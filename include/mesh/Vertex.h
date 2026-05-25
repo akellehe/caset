@@ -89,6 +89,12 @@ class Vertex {
         /// Default constructor creating a vertex with ID 0
         Vertex() noexcept;
 
+        /// Virtual destructor — Vertex is a polymorphic base
+        /// (QuantumVertex lives in tessera_quantum) and VertexList
+        /// owns instances through std::unique_ptr<Vertex>, so the
+        /// destructor must be virtual for safe polymorphic deletion.
+        virtual ~Vertex() = default;
+
         ///
         /// \brief Construct vertex with ID and spatial coordinates
         /// \param id_ Unique identifier for this vertex

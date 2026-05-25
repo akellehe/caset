@@ -191,7 +191,8 @@ _EXPORTS = (
     "SchwingerModel", "SchwingerQuench", "InteractionSimulation",
     "Majorization", "Causet", "MutualInformation",
     # KI + QuantumSimplex (Van Raamsdonk-metric simplex factory)
-    "QuantumSimplex", "QuantumSimplexPosition",
+    "QuantumSimplex", "QuantumSimplexPosition", "QuantumVertex",
+    "createQuantumVertex",
     "KoashiImotoResult", "KoashiImotoBlock", "KoashiImotoTolerances",
     "koashiImotoDecompose", "partialTraceA", "partialTraceB",
     "mutualInformation",
