@@ -16,3 +16,5 @@ cmake-build
 *.pyc
 .claude/
 benchmarks/runs/
+Testing/
+examples/quantum/_out/
