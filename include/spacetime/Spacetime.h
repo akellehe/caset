@@ -124,6 +124,92 @@ class Spacetime {
       Edges newEdges;
     };
 
+    ///
+    /// This method computes energy for every Edge in the Spacetime that doesn't already have an energyDensity assigned
+    /// to it.
+    ///
+    /// Timelike edges go from a time t to a time t + 1.
+    /// Spacelike edges go from a point in space to another point in space.
+    ///
+    /// Energy is calculated as two terms. One is spacelike and is summed over edges (1-simplices). The second is
+    /// timelike and is summed over triangles (2-simplices).
+    ///
+    /// The crazy thing is that the energy is a term of the Hamiltonian present in the time evolution operator,
+    ///
+    /// U(t, t_0) | n \ket = e^{-iE_n(t - t_0)/\hbar} | n \ket
+    ///
+    /// and it's the interaction of two systems that define both a triangle and a step forward in time. So for the
+    /// operator that causes their interaction, we can just use time evolution with t - t_0 = 1 (one tick forward in
+    /// time) and E_n is that which applies to the triangle formed by two systems and their resultant (mixed) state.
+    ///
+    /// We can calculate E_t as:
+    ///
+    /// E_t = \frac{1}{8\pi G}\left[\,\sum_{\ell \subset \Sigma_t} L_\ell\,\delta_\ell^{(3)} \;-\; \sum_{\Delta\,\text{bridging}} A_\Delta\,\psi_\Delta\,\right]
+    /// \delta_\ell^{(3)} = 2\pi - \sum_{\tau \supset \ell} \theta_{\ell,\tau}
+    ///
+    /// \psi_\Delta = \sum_{\sigma \supset \Delta} \eta_{\Delta,\sigma}
+    ///
+    /// \begin{align*}
+    /// E_t &= \text{discrete gravitational Hamiltonian (energy) on the spatial slice } \Sigma_t \\
+    /// G &= \text{Newton's gravitational constant} \\
+    /// \Sigma_t &= \text{3D spatial slice at time } t \text{ (triangulated by tetrahedra)} \\
+    /// \ell &= \text{a 1-simplex (edge) lying entirely within } \Sigma_t \text{; "slice edge"} \\
+    /// L_\ell &= \text{length of edge } \ell \\
+    /// \delta_\ell^{(3)} &= \text{intrinsic 3D deficit angle around edge } \ell \\
+    /// \tau &= \text{a 3-simplex (tetrahedron) of } \Sigma_t \\
+    /// \theta_{\ell,\tau} &= \text{dihedral angle at edge } \ell \text{ inside tetrahedron } \tau \\
+    /// \Delta &= \text{a 2-simplex (triangle) with vertices split between } \Sigma_t,\,\Sigma_{t+1}; \\
+    /// &\quad \text{"bridging" or "timelike" triangle} \\
+    /// A_\Delta &= \text{area of triangle } \Delta \\
+    /// \psi_\Delta &= \text{extrinsic boost deficit around } \Delta \text{ (Lorentzian dihedral sum)} \\
+    /// \sigma &= \text{a 4-simplex (pentatope) of the 4D triangulation} \\
+    /// \eta_{\Delta,\sigma} &= \text{boost angle (rapidity) at hinge } \Delta \text{ inside 4-simplex } \sigma
+    /// \end{align*}
+    ///
+    /// \begin{align*}
+    /// \sum_{\ell \subset \Sigma_t} &: \text{sum over all edges } \ell \text{ contained in the slice } \Sigma_t \\
+    /// \sum_{\tau \supset \ell} &: \text{sum over all tetrahedra } \tau \text{ containing edge } \ell \\
+    /// \sum_{\Delta\,\text{bridging}} &: \text{sum over all bridging triangles between } \Sigma_t \text{ and } \Sigma_{t+1} \\
+    /// \sum_{\sigma \supset \Delta} &: \text{sum over all 4-simplices } \sigma \text{ containing triangle } \Delta
+    /// \end{align*}
+    ///
+    /// Now, in order to determine E_t at each triangle/hinge, we can just say that the temporal triangle carries across
+    /// it the spatial energy of the edge at it's base. Concretely; given systems A and B \in \Sigma_t (a spatial slice)
+    /// with state \rho_A and \rho_B there is an edge between them representing their mutual information. It should
+    /// be assigned at the initial state we set up for the graph. Probably randomly or according to the constraint that
+    /// each share some particular amount of mutual information with the other vertices in the slice.
+    ///
+    /// If we assume some value for the total energy of the system, E_{total}, then we can split that energy across
+    /// every (spatial) edge in proportion to the edge length described by the van raamsdonk metric between those
+    /// vertices. So each Edge in the initial (totally spatial) state should be assigned energy \frac{l}{E_{total}}.
+    ///
+    /// Now, given the energy on, E_{AB}, we can understand how time evolution moves them forward. If we have
+    /// systems with \rho_A and \rho_B joined by edge E_{A \rightarrow B} then time evolution looks like
+    ///
+    /// \rho_AB = U(t, t_0) \rho_A \otimes \rho_B U^{\dagger}(t, t_0)
+    ///
+    /// where U(t, t_0) = e^{-i E_{A \rightarrow B} (t - t_0)}
+    ///
+    /// and since we're defining one interaction as one step forward in time; we can take (t - t_0) to be 1 and then
+    /// we have
+    ///
+    /// U(t, t_0) = e^{-i E_{A \rightarrow B}}
+    ///
+    /// to use for mixing the systems. After they're mixed and we have the joint state \rho_{AB} then we can use KI
+    /// decomposition to expand the \rho_{AB} (virtual) node into the three physical nodes A', \Sigma_{AB}, B' from
+    /// which we actually draw our simplex.
+    ///
+    /// Once the simplex is drawn, we take that E_{A \rightarrow B} and distribute it across
+    /// E_{A' \rightarrow \Sigma_{AB}} and E_{B' \rightarrow \Sigma_{AB}} in proportion to their edge lengths so there
+    /// is a constant amount of energy per unit of length:
+    ///
+    /// \frac{E_{A \rightarrow B}}{d_{VR}(A' \rightarrow \Sigma_{AB}) + d_{VR}(B' \rightarrow \Sigma_{AB})}
+    ///
+    ///
+    ///
+    void labelEnergyDensity();
+
+
     /// Like ``createSimplex(vertices)`` but also reports the edges this
     /// call freshly inserted into the EdgeList — those that were
     /// auto-created from scratch rather than found existing.  Caller can
