@@ -388,6 +388,34 @@ const std::shared_ptr<VertexList> &Spacetime::getVertexList() const noexcept {
 }
 
 SimplexSet Spacetime::getExternalSimplices() noexcept {
+  // Boundary detection needs every facet's coface count to be complete:
+  // a facet is on the boundary iff it has fewer than two cofaces. Facets
+  // are materialized lazily — ``Simplex::getFacets()`` creates them on first
+  // access and registers each one back into ``simplicesVec`` (via
+  // ``registerSimplex``). For CDT-built complexes this already happened during
+  // gluing, so the loop below would converge immediately. For complexes
+  // assembled from scratch (e.g. a hand-built triangulation), the facets do
+  // not exist yet, and materializing them *during* a range-for over
+  // ``simplicesVec`` would both invalidate the iterator (the vector grows) and
+  // read incomplete coface counts (a shared facet looks like a boundary facet
+  // until its second coface registers).
+  //
+  // Force lazy facet materialization first. ``getFacets()`` appends any
+  // newly-created facet simplices to ``simplicesVec``; index iteration walks
+  // into them too, so a single pass reaches a fixpoint (dimension strictly
+  // decreases, terminating at vertices whose ``getFacets()`` is a no-op).
+  //
+  // Index iteration — re-reading ``simplicesVec[i]`` and ``size()`` each step —
+  // is safe under the growth a range-for would not survive: reallocation moves
+  // the buffer, but the next ``simplicesVec[i]`` reads the current buffer.
+  // No copy of the vector is made. For CDT-built complexes the facets already
+  // exist, so every ``getFacets()`` is a cached no-op and nothing is appended.
+  for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
+    simplicesVec[i]->getFacets();
+  }
+
+  // Cofaces are now fully linked; no further simplices will be created, so a
+  // direct scan is safe.
   SimplexSet result{};
   for (const auto &simplex : simplicesVec) {
     if (simplex->hasBoundaryFacet()) result.insert(simplex);

@@ -267,5 +267,47 @@ class TestSpacetime(unittest.TestCase):
                             self.assertIn(coface, vertex.getSimplices())
 
 
+class TestExternalSimplicesNonCDT(unittest.TestCase):
+    """getExternalSimplices() on hand-built (non-CDT) complexes.
+
+    Regression: facets are materialized lazily by Simplex.getFacets(), which
+    registers them back into the spacetime's simplex vector. A from-scratch
+    complex has no facets until something asks for them, so getExternalSimplices
+    used to (a) grow the vector it was iterating — a segfault — and (b) read
+    incomplete coface counts mid-pass. CDT-built complexes never hit this
+    because gluing materializes facets up front.
+    """
+
+    def _tetra_boundary(self):
+        """S^2 = boundary of a tetrahedron: 4 vertices, 4 triangles, closed."""
+        import itertools
+        st = Spacetime()
+        V = [st.createVertex(i, [0.0]) for i in range(4)]
+        for a, b in itertools.combinations(range(4), 2):
+            st.createEdge(V[a], V[b], 1.0)
+        tris = [st.createSimplex([V[i] for i in c])[0]
+                for c in itertools.combinations(range(4), 3)]
+        return st, V, tris
+
+    def test_closed_surface_has_no_external_top_simplices(self):
+        # Every edge of S^2 is shared by exactly two triangles, so no triangle
+        # has a boundary facet. (Must not segfault.)
+        st, _V, tris = self._tetra_boundary()
+        ext = st.getExternalSimplices()
+        triangles = [s for s in ext if len(s.getVertices()) == 3]
+        self.assertEqual(triangles, [],
+                         "closed S^2 should have no boundary triangles")
+
+    def test_open_complex_reports_boundary(self):
+        # Drop one triangle: the three edges it covered now have a single
+        # coface, so the three remaining triangles each gain a boundary edge.
+        st, _V, tris = self._tetra_boundary()
+        st.removeSimplex(tris[0])
+        ext = st.getExternalSimplices()
+        triangles = [s for s in ext if len(s.getVertices()) == 3]
+        self.assertEqual(len(triangles), 3,
+                         "each remaining triangle should touch the new boundary")
+
+
 if __name__ == '__main__':
     unittest.main()
