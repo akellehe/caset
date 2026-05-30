@@ -17,7 +17,8 @@ tessera bundles several discrete-geometry formulations on a shared simplicial me
 
 ## Installation
 
-Requires Python 3.9+, a C++20 compiler, and CMake 3.18+.
+Requires Python 3.9+, a C++20 compiler, CMake 3.18+, and a BLAS/LAPACK backend
+(Accelerate ships with macOS; on Linux install `liblapack-dev libblas-dev`).
 
 ```bash
 pip install -e ".[dev]"
@@ -31,13 +32,12 @@ python -c "import tessera; print('tessera OK')"
 
 CUDA GPU acceleration is auto-detected. To force it off: `TESSERA_CUDA=0 pip install -e .`
 
-The **quantum subsystem** (Schwinger model / DMRG, ITensor-backed) is auto-detected. The easiest way to enable it is a single command:
-
-```bash
-TESSERA_QUANTUM=1 pip install -e .   # fetches the ITensor submodule, then builds it
-```
-
-`TESSERA_QUANTUM=1` checks out the ITensor submodule for you on the first build (a one-time network download). If the submodule is already present — e.g. you cloned with `git clone --recurse-submodules` — a plain `pip install -e .` detects and builds it automatically. `TESSERA_QUANTUM=0` forces it off.
+The **quantum subsystem** (Schwinger model / DMRG, ITensor-backed) is **always
+built** — ITensor, Eigen3, and a BLAS/LAPACK backend are unconditional
+dependencies. The ITensor submodule is fetched automatically on the first build
+(a one-time network download) if it is not already present; cloning with
+`git clone --recurse-submodules` avoids the fetch. A cold build is noticeably
+slower because ITensor is compiled from source — `ccache` (below) helps a lot.
 
 Builds also use [`ccache`](https://ccache.dev/) automatically when it is installed (`brew install ccache` / `apt-get install ccache`) — recommended: it makes rebuilds and CI dramatically faster.
 
@@ -182,20 +182,17 @@ pytest tests/ -v -m "not slow"     # skip the slow tests
 pytest tests/ -v -m slow           # run only the slow tests
 ```
 
-Some tests cover the quantum subsystem (Schwinger model / DMRG). They
-skip cleanly when it isn't built. Enable it once — `TESSERA_QUANTUM=1`
-fetches the ITensor submodule and builds the subsystem:
+Some tests cover the quantum subsystem (Schwinger model / DMRG). It is always
+built, so these run as part of the normal suite:
 
 ```bash
-TESSERA_QUANTUM=1 pip install -e .   # one-time: fetch + build quantum
-pytest tests/ -v                     # the quantum tests now run too
+pytest tests/ -v                     # includes the quantum tests
 ```
 
 Build options via environment variables:
 
 ```bash
 TESSERA_CUDA=0       pip install -e .     # CPU-only build
-TESSERA_QUANTUM=0    pip install -e .     # skip the quantum subsystem
 TESSERA_CCACHE=0     pip install -e .     # disable the ccache compiler cache
 TESSERA_ASAN=1       pytest tests/        # AddressSanitizer + UBSan
 TESSERA_VERBOSE=1    pytest tests/        # C++ logging

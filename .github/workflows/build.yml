@@ -15,13 +15,12 @@ concurrency:
 
 jobs:
   pip-install:
-    name: pip install (py${{ matrix.python-version }}, quantum=${{ matrix.quantum }})
+    name: pip install (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-        quantum: ["0", "1"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +34,8 @@ jobs:
       # config lands in /usr/lib/cmake/pybind11 — a default find_package()
       # search path — so a green run asserts the build still selects
       # pybind11 >= 3.0 and never falls back to the system v2.
-      # liblapack/libblas satisfy the quantum subsystem's BLAS/LAPACK need.
+      # liblapack/libblas satisfy the (unconditional) quantum subsystem's
+      # BLAS/LAPACK need.
       - name: Install system packages (incl. pybind11 v2 regression trap)
         run: |
           sudo apt-get update
@@ -44,22 +44,15 @@ jobs:
       - name: Build and install
         env:
           TESSERA_CUDA: "0"
-          TESSERA_QUANTUM: ${{ matrix.quantum }}
         run: python -m pip install -e . -v
 
       - name: Import smoke test
         working-directory: ${{ runner.temp }}
-        env:
-          EXPECT_QUANTUM: ${{ matrix.quantum }}
         run: |
           python - <<'PY'
-          import os, tessera, tessera._tessera
+          import tessera, tessera._tessera, tessera.quantum
           print("tessera  ->", tessera.__file__)
           print("_tessera ->", tessera._tessera.__file__)
-          if os.environ["EXPECT_QUANTUM"] == "1":
-              assert hasattr(tessera, "quantum"), \
-                  "TESSERA_QUANTUM=1 but tessera.quantum is missing"
-              print("quantum subsystem present")
-          else:
-              print("quantum subsystem off (TESSERA_QUANTUM=0)")
+          assert hasattr(tessera, "quantum"), "tessera.quantum is missing"
+          print("quantum subsystem present")
           PY

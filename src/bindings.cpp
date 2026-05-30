@@ -62,11 +62,8 @@ namespace py = pybind11;
 
 using namespace tessera;
 
-#ifdef TESSERA_QUANTUM
-// Defined in src/quantum/bindings.cpp. Conditionally compiled when the
-// TESSERA_QUANTUM CMake option is on — see CMakeLists.txt for the wiring.
+// Defined in src/quantum/Bindings.cpp — always built.
 void register_quantum(py::module_ m);
-#endif
 
 void register_mesh(py::module_ m);
 void register_spacetime(py::module_ m);
@@ -214,12 +211,10 @@ Args:
   m.attr("__version__") = "unknown";
 #endif
 
-#ifdef TESSERA_QUANTUM
   // Register the Schwinger / DMRG bindings as a `quantum` submodule so users
   // call them as `tessera._tessera.quantum.computeGroundState(...)` (typically
   // routed through `tessera.quantum` — see tessera/quantum/__init__.py).
   register_quantum(m.def_submodule("quantum",
       "Schwinger model + DMRG (docs/source/quantum-plan.md)."));
-#endif
 }
 
