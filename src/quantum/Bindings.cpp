@@ -1,7 +1,7 @@
 // Pybind11 bindings for the quantum subsystem. Lives outside libtessera_quantum
 // (which is pybind-free) so the static library can be reused without pulling
-// in the Python dependency. This translation unit is added to _tessera's
-// sources only when TESSERA_QUANTUM=ON in CMakeLists.txt.
+// in the Python dependency. This translation unit is always added to
+// _tessera's sources (the quantum subsystem is unconditional).
 //
 // Surface area is deliberately minimal per PLAN.md §1: scalars in, scalars
 // out. No MPS / MPO / ITensor types cross the Python boundary.

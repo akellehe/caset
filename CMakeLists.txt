@@ -54,94 +54,48 @@ option(TESSERA_PROFILE "Build with -g -O1 to keep symbol names for stack traces"
 if (NOT TESSERA_PROFILE)
     set(TESSERA_PROFILE OFF)
 endif()
-# ---- Quantum subsystem (Schwinger / MPS / DMRG): auto-detected ----
-# Mirrors TESSERA_CUDA above: built automatically when its prerequisites
-# are present, with an env var to override. Prerequisites are (1) the
-# ITensor submodule checked out under third_party/itensor and (2) a
-# BLAS/LAPACK backend. TESSERA_QUANTUM=1 forces it on — fetching the
-# ITensor submodule automatically when it is missing; a missing BLAS/LAPACK
-# is still a hard error. TESSERA_QUANTUM=0 forces it off.
-#
-# Kept as a plain variable rather than option(): it is recomputed on every
-# configure, so checking out the submodule and re-running the build picks
-# the subsystem up without needing a fresh build directory.
-if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.h")
-    set(_quantum_itensor_present TRUE)
-else()
-    set(_quantum_itensor_present FALSE)
-endif()
-if (APPLE)
-    set(_quantum_lapack_present TRUE)   # Accelerate framework ships with macOS
-else()
-    find_package(LAPACK QUIET)
-    set(_quantum_lapack_present ${LAPACK_FOUND})
-endif()
-
-if (DEFINED ENV{TESSERA_QUANTUM} AND NOT "$ENV{TESSERA_QUANTUM}" STREQUAL "")
-    set(TESSERA_QUANTUM $ENV{TESSERA_QUANTUM})        # explicit override
-elseif (_quantum_itensor_present AND _quantum_lapack_present)
-    set(TESSERA_QUANTUM ON)                           # auto-detect
-else()
-    set(TESSERA_QUANTUM OFF)
-endif()
-
-if (TESSERA_QUANTUM)
-    set(TESSERA_QUANTUM ON)
-    # The ITensor submodule is the one prerequisite we can satisfy for the
-    # user: when quantum is explicitly requested (TESSERA_QUANTUM=1) but the
-    # submodule is missing, fetch it with git instead of erroring out. The
-    # auto-detect path never reaches here without the submodule — only an
-    # explicit request does — so a bare `pip install -e .` stays opt-in.
-    if (NOT _quantum_itensor_present)
-        find_package(Git QUIET)
-        if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
-            message(FATAL_ERROR
-                "TESSERA_QUANTUM=1 but third_party/itensor is not checked out, "
-                "and it cannot be fetched automatically (git not found, or "
-                "this is not a git checkout).\n"
-                "  Install tessera from a git clone, or fetch it manually:\n"
-                "    git submodule update --init --recursive")
-        endif()
-        message(STATUS "TESSERA_QUANTUM=1: fetching the ITensor submodule "
-                       "(one-time network download)...")
-        execute_process(
-            COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive
-                    -- third_party/itensor third_party/itensor_tdvp
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            RESULT_VARIABLE _quantum_submodule_result)
-        if (NOT _quantum_submodule_result EQUAL 0)
-            message(FATAL_ERROR
-                "Failed to fetch the ITensor submodule (git exited "
-                "${_quantum_submodule_result}).\n"
-                "  Check your network, then re-run the build — or fetch it "
-                "manually:\n"
-                "    git submodule update --init --recursive")
-        endif()
-        if (NOT EXISTS
-                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.h")
-            message(FATAL_ERROR
-                "ITensor submodule fetch reported success but "
-                "third_party/itensor is still empty.")
-        endif()
-        set(_quantum_itensor_present TRUE)
-        message(STATUS "ITensor submodule ready.")
-    endif()
-    if (NOT _quantum_lapack_present)
+# ---- Quantum subsystem (Schwinger / MPS / DMRG): always built ----
+# ITensor and a BLAS/LAPACK backend are unconditional dependencies of
+# tessera. The ITensor submodule under third_party/itensor is fetched
+# automatically when missing (one-time network download); a missing
+# BLAS/LAPACK backend is a hard error. Eigen3 (resolved below near ZLIB)
+# is likewise unconditional and is linked into tessera_core so every
+# subsystem — including cobordism — can use it.
+if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.h")
+    find_package(Git QUIET)
+    if (NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
         message(FATAL_ERROR
-            "TESSERA_QUANTUM is on but no BLAS/LAPACK backend was found.\n"
-            "  Install one (e.g. apt-get install liblapack-dev libblas-dev),\n"
-            "  or set TESSERA_QUANTUM=0 to skip the quantum subsystem.")
+            "third_party/itensor is not checked out and cannot be fetched "
+            "automatically (git not found, or this is not a git checkout).\n"
+            "  Install tessera from a git clone, or fetch it manually:\n"
+            "    git submodule update --init --recursive")
     endif()
-else()
-    set(TESSERA_QUANTUM OFF)
-    if (NOT _quantum_itensor_present)
-        message(STATUS "Quantum subsystem OFF — third_party/itensor not checked "
-                       "out (run `git submodule update --init --recursive`).")
-    elseif (NOT _quantum_lapack_present)
-        message(STATUS "Quantum subsystem OFF — no BLAS/LAPACK backend found.")
-    else()
-        message(STATUS "Quantum subsystem OFF — disabled via TESSERA_QUANTUM=0.")
+    message(STATUS "Fetching the ITensor submodule (one-time network download)...")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive
+                -- third_party/itensor third_party/itensor_tdvp
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE _itensor_submodule_result)
+    if (NOT _itensor_submodule_result EQUAL 0)
+        message(FATAL_ERROR
+            "Failed to fetch the ITensor submodule (git exited "
+            "${_itensor_submodule_result}).\n"
+            "  Check your network, then re-run the build — or fetch it "
+            "manually:\n"
+            "    git submodule update --init --recursive")
     endif()
+    if (NOT EXISTS
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.h")
+        message(FATAL_ERROR
+            "ITensor submodule fetch reported success but "
+            "third_party/itensor is still empty.")
+    endif()
+    message(STATUS "ITensor submodule ready.")
+endif()
+
+# BLAS/LAPACK backend: Accelerate ships with macOS; elsewhere it is required.
+if (NOT APPLE)
+    find_package(LAPACK REQUIRED)
 endif()
 # ---- Read version from pyproject.toml ----
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml" PYPROJECT_CONTENTS)
@@ -175,6 +129,9 @@ execute_process(
 find_package(pybind11 3.0 CONFIG REQUIRED HINTS "${_pybind11_hint}")
 message(STATUS "pybind11 ${pybind11_VERSION} (${pybind11_DIR})")
 find_package(ZLIB REQUIRED)
+# Eigen3 is an unconditional dependency (used by the quantum and cobordism
+# subsystems). Resolved here so it can be linked into tessera_core below.
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 include(CheckCXXSourceCompiles)
 
@@ -200,7 +157,7 @@ endif()
 #   tessera_core  — pybind-free C++ implementation: mesh primitives,
 #                 spacetime, observables, Poset infrastructure, etc.
 #                 Linked into _tessera and (when enabled) tessera_quantum.
-#   tessera_quantum (when TESSERA_QUANTUM=ON) — Schwinger / DMRG / TDVP code,
+#   tessera_quantum — Schwinger / DMRG / TDVP code (always built),
 #                 also pybind-free, links tessera_core PUBLIC for shared
 #                 mesh / Poset types.
 # Plus a thin pybind11 module:
@@ -224,17 +181,15 @@ list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/bindings\\.cpp$")
 # (they include pybind11 / Python.h).
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/src/[^/]+/Bindings\\.cpp$")
 
-# Sources for the pybind11 module. quantum bindings only when enabled.
+# Sources for the pybind11 module. The quantum bindings are always built.
 set(TESSERA_PYBIND_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/bindings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/mesh/Bindings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/spacetime/Bindings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/Bindings.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/Bindings.cpp")
-if(TESSERA_QUANTUM)
-    list(APPEND TESSERA_PYBIND_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/Bindings.cpp")
-endif()
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/Bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cobordism/Bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/Bindings.cpp")
 # ---- </Define source partitions> -----------------------------------------
 
 # ---- <Build CUDA kernels as static library> ----
@@ -265,7 +220,7 @@ add_library(tessera_core STATIC ${TESSERA_CORE_SOURCES})
 target_include_directories(tessera_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB)
+target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB Eigen3::Eigen)
 
 # Optional OpenMP for the spectral-graph heat-kernel parallel loop and
 # similar embarrassingly-parallel hot paths. Bit-identical to the
@@ -367,59 +322,55 @@ install(TARGETS _tessera
 )
 
 # ---- <Quantum subsystem (ITensor + Schwinger MPO)> ----
-if(TESSERA_QUANTUM)
-    message(STATUS "Quantum subsystem turned ON (ITensor + DMRG).")
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildITensor.cmake)
-    tessera_build_itensor()
+message(STATUS "Building quantum subsystem (ITensor + DMRG).")
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildITensor.cmake)
+tessera_build_itensor()
 
-    file(GLOB_RECURSE TESSERA_QUANTUM_SOURCES
-            CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/*.cpp"
-            "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/*.hpp")
-    # InteractionSimulation lives in src/simulations/ for architectural
-    # alignment with CDT (#44) but its Eigen/ITensor dependency makes it
-    # part of tessera_quantum, not tessera_core.
-    list(APPEND TESSERA_QUANTUM_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/InteractionSimulation.cpp")
-    # bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
-    # pybind-free static lib.
-    list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
-    add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
-    target_include_directories(tessera_quantum PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    find_package(Eigen3 3.3 REQUIRED NO_MODULE)
-    # PUBLIC link to tessera_core: tessera::Poset / Vertex / EdgeList live in
-    # tessera_core, and quantum's Poset-using headers expose them in their
-    # public API. PUBLIC propagates symbols to test executables too.
-    target_link_libraries(tessera_quantum PUBLIC itensor Eigen3::Eigen tessera_core)
-    set_target_properties(tessera_quantum PROPERTIES
-            POSITION_INDEPENDENT_CODE ON
+file(GLOB_RECURSE TESSERA_QUANTUM_SOURCES
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/quantum/*.hpp")
+# InteractionSimulation lives in src/simulations/ for architectural
+# alignment with CDT (#44) but its Eigen/ITensor dependency makes it
+# part of tessera_quantum, not tessera_core.
+list(APPEND TESSERA_QUANTUM_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/InteractionSimulation.cpp")
+# bindings.cpp uses pybind11 + Python.h and goes into _tessera, not the
+# pybind-free static lib.
+list(FILTER TESSERA_QUANTUM_SOURCES EXCLUDE REGEX "/src/quantum/Bindings\\.cpp$")
+add_library(tessera_quantum STATIC ${TESSERA_QUANTUM_SOURCES})
+target_include_directories(tessera_quantum PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# PUBLIC link to tessera_core: tessera::Poset / Vertex / EdgeList live in
+# tessera_core, and quantum's Poset-using headers expose them in their
+# public API. PUBLIC propagates symbols to test executables too.
+# (Eigen3 is already linked transitively via tessera_core, but kept explicit
+# here for clarity since quantum headers use it directly.)
+target_link_libraries(tessera_quantum PUBLIC itensor Eigen3::Eigen tessera_core)
+set_target_properties(tessera_quantum PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON)
+
+enable_testing()
+file(GLOB TESSERA_QUANTUM_TESTS
+        CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum/*.cpp")
+foreach(_test_src ${TESSERA_QUANTUM_TESTS})
+    get_filename_component(_test_name "${_test_src}" NAME_WE)
+    add_executable(${_test_name} "${_test_src}")
+    # tessera_quantum PUBLIC-links tessera_core, so tests get its symbols
+    # transitively without an explicit tessera_core link here.
+    target_link_libraries(${_test_name} PRIVATE tessera_quantum)
+    set_target_properties(${_test_name} PROPERTIES
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON)
+    add_test(NAME ${_test_name} COMMAND ${_test_name})
+endforeach()
 
-    enable_testing()
-    file(GLOB TESSERA_QUANTUM_TESTS
-            CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/quantum/*.cpp")
-    foreach(_test_src ${TESSERA_QUANTUM_TESTS})
-        get_filename_component(_test_name "${_test_src}" NAME_WE)
-        add_executable(${_test_name} "${_test_src}")
-        # tessera_quantum PUBLIC-links tessera_core, so tests get its symbols
-        # transitively without an explicit tessera_core link here.
-        target_link_libraries(${_test_name} PRIVATE tessera_quantum)
-        set_target_properties(${_test_name} PROPERTIES
-                CXX_STANDARD 20
-                CXX_STANDARD_REQUIRED ON)
-        add_test(NAME ${_test_name} COMMAND ${_test_name})
-    endforeach()
-
-    # Wire the quantum bindings TU (added to TESSERA_PYBIND_SOURCES above)
-    # into _tessera by linking against the implementation library and
-    # flipping the TESSERA_QUANTUM compile flag so src/bindings.cpp
-    # registers the `quantum` submodule.
-    target_link_libraries(_tessera PRIVATE tessera_quantum)
-    target_compile_definitions(_tessera PRIVATE TESSERA_QUANTUM=1)
-endif()  # the auto-detect block above already reports when quantum is OFF
+# Wire the quantum bindings TU (added to TESSERA_PYBIND_SOURCES above)
+# into _tessera by linking against the implementation library.
+target_link_libraries(_tessera PRIVATE tessera_quantum)
 # ---- </Quantum subsystem> ----
 
 if(NOT TESSERA_ASAN)

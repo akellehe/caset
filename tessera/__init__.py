@@ -25,16 +25,12 @@ from tessera._tessera import (                              # noqa: F401
     spacetime,
     observables,
     simulations,
+    cobordism,
 )
 
-# The ``quantum`` submodule is only built when ``TESSERA_QUANTUM=1`` is
-# set at build time. Tolerate its absence so the CDT-only configuration
-# (``TESSERA_QUANTUM=0``) imports cleanly. Scripts that need quantum
-# features should ``import tessera.quantum`` and let that fail loudly.
-try:
-    from tessera._tessera import quantum                    # noqa: F401
-except ImportError:
-    pass
+# The ``quantum`` submodule (Schwinger model / DMRG, ITensor-backed) is
+# always built — ITensor/Eigen/BLAS are unconditional dependencies.
+from tessera._tessera import quantum                        # noqa: F401
 
 # Backward-compat re-exports at top level. Star-import each submodule so
 # existing scripts that do `from tessera import Spacetime`, `tessera.CDT`,
@@ -43,5 +39,6 @@ from tessera._tessera.mesh        import *                  # noqa: F401,F403
 from tessera._tessera.spacetime   import *                  # noqa: F401,F403
 from tessera._tessera.observables import *                  # noqa: F401,F403
 from tessera._tessera.simulations import *                  # noqa: F401,F403
+from tessera._tessera.cobordism   import *                  # noqa: F401,F403
 # Quantum is also subsystem-namespaced; expose at top level for symmetry
 # with the others (existing scripts already use `tessera.quantum.*`).
