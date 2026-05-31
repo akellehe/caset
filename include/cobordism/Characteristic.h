@@ -37,9 +37,13 @@ using namespace ::tessera::spacetime;
 
 /// # EulerCharacteristic
 ///
-/// Observable: the Euler characteristic
-/// \f$ \chi(K) = \sum_{k=0}^{n} (-1)^k\, |C_k(K)| \f$ of a triangulation.
-/// Computed from the chain complex's \f$ f \f$-vector.
+/// Observable measuring the Euler characteristic of a triangulation: the
+/// alternating count of its cells,
+/// \f$ \chi = (\text{vertices}) - (\text{edges}) + (\text{triangles}) - \cdots
+/// = \sum_{k} (-1)^k\, |C_k| \f$. It is one of the most basic topological
+/// invariants — two triangulations of the same shape always give the same
+/// value (for example every triangulation of a 2-sphere has \f$ \chi = 2 \f$).
+/// Computed from the chain complex's face counts.
 class EulerCharacteristic : public Observable {
   public:
     double compute(const std::shared_ptr<Spacetime> &spacetime) override;
@@ -47,10 +51,18 @@ class EulerCharacteristic : public Observable {
 
 /// # Signature
 ///
-/// Observable: the signature \f$ \sigma(K) = b_+ - b_- \f$ of the intersection
-/// form on \f$ H_2(K;\mathbb{Z}) \f$, for a closed oriented 4-manifold. Returns
-/// 0 for \f$ n \neq 4 \f$ or \f$ b_2 = 0 \f$. See
-/// :func:`ChainComplex::signature`.
+/// Observable measuring the signature of a closed, orientable 4-dimensional
+/// manifold. The manifold's two-dimensional "holes" carry a symmetric pairing
+/// (the *intersection form*): given two such holes it returns an integer
+/// counting how they cross. The signature is
+/// \f$ \sigma = (\text{number of positive directions}) - (\text{number of
+/// negative directions}) \f$ of that pairing — equivalently the count of
+/// positive minus negative eigenvalues. It is what tells apart manifolds that
+/// share the same Euler characteristic and homology (and is the key to telling
+/// two different fillings of the same boundary apart).
+///
+/// Returns 0 when there are no two-dimensional holes, or when the manifold is
+/// not 4-dimensional. See :func:`ChainComplex::signature`.
 class Signature : public Observable {
   public:
     double compute(const std::shared_ptr<Spacetime> &spacetime) override;
@@ -58,29 +70,41 @@ class Signature : public Observable {
 
 /// # Characteristic numbers (Capability A)
 ///
-/// The full set of characteristic numbers of a closed PL \f$ n \f$-manifold.
-/// Scalars that are naturally Observables (\f$ \chi \f$, \f$ \sigma \f$) are
-/// also exposed as such; this aggregate additionally carries the families that
-/// are not a single scalar (Stiefel–Whitney and Pontryagin numbers).
+/// A bundle of topological invariants of a closed PL \f$ n \f$-manifold. The
+/// invariants that are a single number (Euler characteristic, signature) are
+/// also available individually as Observables above; this struct additionally
+/// carries the ones that are *families* of numbers (Stiefel–Whitney and
+/// Pontryagin numbers).
 struct CharacteristicNumbers {
-  /// Euler characteristic \f$ \chi \f$.
+  /// Euler characteristic (see EulerCharacteristic above).
   int euler{0};
-  /// Signature \f$ \sigma \f$ (defined for \f$ n = 4 \f$; unset for a
-  /// non-orientable 4-manifold or \f$ n \neq 4 \f$).
-  std::optional<int> signature{};
-  /// Stiefel–Whitney numbers \f$ \langle w_{i_1}\cdots w_{i_j}, [K]\rangle \in
-  /// \mathbb{Z}/2 \f$, keyed by monomial (e.g. "w1^2", "w2^2").
-  /// @note Not yet computed (pending the Wu-class / Steenrod-square work); empty.
-  std::map<std::string, int> sw{};
-  /// Pontryagin numbers (oriented, \f$ n = 4k \f$). For \f$ n = 4 \f$ the only
-  /// one is \f$ \langle p_1, [K]\rangle = 3\sigma \f$ (Hirzebruch signature
-  /// theorem), keyed "p1".
-  std::map<std::string, long> pontryagin{};
 
-  /// Compute the characteristic numbers of \f$ K \f$. When \f$ n = 4 \f$ and
-  /// the manifold is closed-orientable, fills \f$ \sigma \f$ and
-  /// \f$ p_1 = 3\sigma \f$. (The \a oriented flag will gate oriented vs
-  /// unoriented invariants once Stiefel–Whitney numbers are added.)
+  /// Signature (see Signature above). Present only for an orientable
+  /// 4-manifold; left empty for a non-orientable 4-manifold or any dimension
+  /// other than 4, where it is not defined.
+  std::optional<int> signature{};
+
+  /// Stiefel–Whitney numbers: a family of yes/no (mod-2) invariants that detect
+  /// orientability and related "twisting" of the manifold. Each entry is keyed
+  /// by the characteristic-class monomial it comes from (for example the key
+  /// "w1^2" is the number obtained from the first Stiefel–Whitney class
+  /// squared), with value in \f$ \{0, 1\} \f$.
+  /// @note Not computed yet — pending the Stiefel–Whitney / Wu-class work; the
+  ///   map is currently always empty.
+  std::map<std::string, int> stiefelWhitneyNumbers{};
+
+  /// Pontryagin numbers: integer invariants coming from curvature, defined for
+  /// orientable manifolds whose dimension is a multiple of 4. In dimension 4
+  /// there is only one, conventionally keyed "p1", and the Hirzebruch signature
+  /// theorem says it equals three times the signature
+  /// (\f$ \langle p_1, [K]\rangle = 3\sigma \f$).
+  std::map<std::string, long> pontryaginNumbers{};
+
+  /// Compute the characteristic numbers of the manifold \a K. For an orientable
+  /// 4-manifold this fills in the signature and the Pontryagin number
+  /// \f$ p_1 = 3\sigma \f$. The \a oriented flag will later select which
+  /// invariants to report (orientation-dependent ones vs. the mod-2
+  /// Stiefel–Whitney numbers) once those are implemented.
   static CharacteristicNumbers of(const Spacetime &K, bool oriented = true);
 };
 

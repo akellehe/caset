@@ -45,12 +45,13 @@ CharacteristicNumbers CharacteristicNumbers::of(const Spacetime &K, bool oriente
   out.euler = cc.eulerCharacteristic();
   if (cc.dimension() == 4) {
     try {
-      const int s = cc.signature();
-      out.signature = s;
-      // Hirzebruch signature theorem: <p_1, [K]> = 3 sigma.
-      out.pontryagin["p1"] = 3 * static_cast<long>(s);
+      const int signatureValue = cc.signature();
+      out.signature = signatureValue;
+      // Hirzebruch signature theorem: the first Pontryagin number equals three
+      // times the signature.
+      out.pontryaginNumbers["p1"] = 3 * static_cast<long>(signatureValue);
     } catch (const std::exception &) {
-      // Non-orientable / no fundamental class: signature (hence p_1) undefined.
+      // Non-orientable / no fundamental class: signature (hence p1) undefined.
     }
   }
   // Stiefel–Whitney numbers: pending the Wu-class / Steenrod-square work.

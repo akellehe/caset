@@ -191,121 +191,164 @@ std::vector<int> ChainComplex::bettiNumbersGF2() const {
   return b;
 }
 
+// The intersection form records how the two-dimensional surfaces sitting
+// inside a four-dimensional manifold cross one another: given two such
+// surfaces it returns an integer counting their (signed) crossing points. We
+// compute it the standard algebraic-topology way, which needs no geometry:
+//
+//   1. Find the manifold's independent two-dimensional surfaces. Working with
+//      "cochains" (a number assigned to each triangle), these are the *closed*
+//      cochains that are not *exact*; one representative per two-dimensional
+//      hole gives a basis of the relevant cohomology.
+//   2. Pair them with the cup product (the Alexander-Whitney recipe): on a
+//      four-simplex with vertices v0<v1<v2<v3<v4, the product of two such
+//      cochains evaluates the first on the front triangle (v0,v1,v2) and the
+//      second on the back triangle (v2,v3,v4).
+//   3. Sum those products over the whole manifold, with each four-simplex
+//      weighted by its orientation (+/-1, from the "fundamental class"). The
+//      result is the symmetric crossing-number matrix.
 std::vector<double> ChainComplex::intersectionForm() const {
   if (dimension_ != 4) return {};
-  const int b2 = bettiNumbers()[2];
-  if (b2 == 0) return {};
+  const int numTwoDimensionalHoles = bettiNumbers()[2];  // rank of H_2
+  if (numTwoDimensionalHoles == 0) return {};
 
-  const int nC1 = static_cast<int>(counts_[1]);
-  const int nC2 = static_cast<int>(counts_[2]);
-  const int nC3 = static_cast<int>(counts_[3]);
-  const int nC4 = static_cast<int>(counts_[4]);
+  const int numEdges = static_cast<int>(counts_[1]);
+  const int numTriangles = static_cast<int>(counts_[2]);
+  const int numTetrahedra = static_cast<int>(counts_[3]);
+  const int numFourSimplices = static_cast<int>(counts_[4]);
 
-  auto eigenOf = [&](int k, int rows, int cols) {
-    Eigen::MatrixXd M(rows, cols);
+  auto boundaryMatrixAsEigen = [&](int k, int rows, int cols) {
+    Eigen::MatrixXd matrix(rows, cols);
     const auto &flat = boundary_[static_cast<std::size_t>(k)];
-    for (int i = 0; i < rows; ++i)
-      for (int j = 0; j < cols; ++j)
-        M(i, j) = static_cast<double>(flat[static_cast<std::size_t>(i) * cols + j]);
-    return M;
+    for (int row = 0; row < rows; ++row)
+      for (int col = 0; col < cols; ++col)
+        matrix(row, col) =
+            static_cast<double>(flat[static_cast<std::size_t>(row) * cols + col]);
+    return matrix;
   };
-  const Eigen::MatrixXd d2 = eigenOf(2, nC1, nC2);  // \partial_2 : C_2 -> C_1
-  const Eigen::MatrixXd d3 = eigenOf(3, nC2, nC3);  // \partial_3 : C_3 -> C_2
-  const Eigen::MatrixXd d4 = eigenOf(4, nC3, nC4);  // \partial_4 : C_4 -> C_3
+  // Boundary maps: each sends a cell to the (signed) sum of its faces.
+  const Eigen::MatrixXd triangleBoundaries =
+      boundaryMatrixAsEigen(2, numEdges, numTriangles);          // triangles -> edges
+  const Eigen::MatrixXd tetrahedronBoundaries =
+      boundaryMatrixAsEigen(3, numTriangles, numTetrahedra);     // tetrahedra -> triangles
+  const Eigen::MatrixXd fourSimplexBoundaries =
+      boundaryMatrixAsEigen(4, numTetrahedra, numFourSimplices); // 4-simplices -> tetrahedra
 
-  // Fundamental class [K]: generator of ker \partial_4. For a closed oriented
-  // 4-manifold this is 1-dimensional with ±1 entries; otherwise [K] is ill-
-  // defined and the signature is not.
-  const Eigen::MatrixXd K4 = Eigen::FullPivLU<Eigen::MatrixXd>(d4).kernel();
-  if (K4.cols() != 1)
+  // Fundamental class: the single way (up to sign) to orient all the
+  // four-simplices coherently so their boundaries cancel. Algebraically it is
+  // the one-dimensional null space of the four-simplex boundary map; its
+  // entries are +/-1, one orientation per four-simplex. A closed orientable
+  // 4-manifold has exactly this; anything else has no fundamental class and no
+  // well-defined signature.
+  const Eigen::MatrixXd topCycles =
+      Eigen::FullPivLU<Eigen::MatrixXd>(fourSimplexBoundaries).kernel();
+  if (topCycles.cols() != 1)
     throw std::runtime_error(
         "ChainComplex::intersectionForm: a closed orientable 4-manifold is "
-        "required (dim ker d_4 != 1)");
-  Eigen::VectorXd c = K4.col(0);
-  int piv = 0;
-  for (int i = 1; i < c.size(); ++i)
-    if (std::abs(c[i]) > std::abs(c[piv])) piv = i;
-  c /= c[piv];  // normalize: entries become ±1 (orientation fixed up to overall sign)
+        "required (the space of top-dimensional cycles is not 1-dimensional, so "
+        "there is no fundamental class)");
+  Eigen::VectorXd orientationPerFourSimplex = topCycles.col(0);
+  int largestEntry = 0;
+  for (int i = 1; i < orientationPerFourSimplex.size(); ++i)
+    if (std::abs(orientationPerFourSimplex[i]) >
+        std::abs(orientationPerFourSimplex[largestEntry]))
+      largestEntry = i;
+  orientationPerFourSimplex /= orientationPerFourSimplex[largestEntry];  // -> entries +/-1
 
-  // 2-cocycles Z^2 = ker(\delta_2 = \partial_3^T); 2-coboundaries B^2 =
-  // im(\delta_1 = \partial_2^T). H^2 reps = cocycles independent modulo
-  // coboundaries.
-  const Eigen::MatrixXd Zco =
-      Eigen::FullPivLU<Eigen::MatrixXd>(d3.transpose()).kernel();  // |C_2| x dimZ
-  const Eigen::MatrixXd Bco = d2.transpose();                      // |C_2| x |C_1|
+  // Two-dimensional cohomology classes as triangle-cochains:
+  //  - "closed" cochains are the null space of the transposed tetrahedron
+  //    boundary map (the coboundary operator on triangle-cochains);
+  //  - "exact" cochains are the columns of the transposed triangle boundary map.
+  // A basis of cohomology is a set of closed cochains that stay independent
+  // after the exact ones are accounted for.
+  const Eigen::MatrixXd closedTriangleCochains =
+      Eigen::FullPivLU<Eigen::MatrixXd>(tetrahedronBoundaries.transpose()).kernel();
+  const Eigen::MatrixXd exactTriangleCochains = triangleBoundaries.transpose();
 
-  const double tol = 1e-9;
-  auto rankOf = [&](const Eigen::MatrixXd &M) {
-    if (M.cols() == 0) return 0;
-    Eigen::FullPivLU<Eigen::MatrixXd> lu(M);
-    lu.setThreshold(tol);
-    return static_cast<int>(lu.rank());
+  const double zeroTolerance = 1e-9;
+  auto numericalRank = [&](const Eigen::MatrixXd &matrix) {
+    if (matrix.cols() == 0) return 0;
+    Eigen::FullPivLU<Eigen::MatrixXd> decomposition(matrix);
+    decomposition.setThreshold(zeroTolerance);
+    return static_cast<int>(decomposition.rank());
   };
-  Eigen::MatrixXd span = Bco;
-  int spanRank = rankOf(span);
-  std::vector<Eigen::VectorXd> reps;
-  for (int j = 0; j < Zco.cols() && static_cast<int>(reps.size()) < b2; ++j) {
-    Eigen::MatrixXd aug(nC2, span.cols() + 1);
-    if (span.cols() > 0) aug.leftCols(span.cols()) = span;
-    aug.col(span.cols()) = Zco.col(j);
-    if (rankOf(aug) > spanRank) {
-      reps.push_back(Zco.col(j));
-      span = aug;
-      ++spanRank;
+  Eigen::MatrixXd spannedSoFar = exactTriangleCochains;
+  int spannedRank = numericalRank(spannedSoFar);
+  std::vector<Eigen::VectorXd> cohomologyBasis;
+  for (int j = 0; j < closedTriangleCochains.cols() &&
+                  static_cast<int>(cohomologyBasis.size()) < numTwoDimensionalHoles;
+       ++j) {
+    Eigen::MatrixXd augmented(numTriangles, spannedSoFar.cols() + 1);
+    if (spannedSoFar.cols() > 0) augmented.leftCols(spannedSoFar.cols()) = spannedSoFar;
+    augmented.col(spannedSoFar.cols()) = closedTriangleCochains.col(j);
+    if (numericalRank(augmented) > spannedRank) {  // genuinely new cohomology class
+      cohomologyBasis.push_back(closedTriangleCochains.col(j));
+      spannedSoFar = augmented;
+      ++spannedRank;
     }
   }
 
-  // Index 2-simplices (sorted vertex triples) for cup-product lookups.
-  std::map<std::array<std::uint64_t, 3>, int> triIndex;
-  for (int j = 0; j < nC2; ++j) {
-    const auto &v = faceVerts_[2][static_cast<std::size_t>(j)];
-    triIndex[{v[0], v[1], v[2]}] = j;
+  // Look up a triangle's index from its (sorted) three vertices, for the
+  // cup-product front/back faces below.
+  std::map<std::array<std::uint64_t, 3>, int> triangleIndexByVertices;
+  for (int j = 0; j < numTriangles; ++j) {
+    const auto &vertices = faceVerts_[2][static_cast<std::size_t>(j)];
+    triangleIndexByVertices[{vertices[0], vertices[1], vertices[2]}] = j;
   }
 
-  // Alexander–Whitney cup product on [K]:
-  //   Q(\alpha,\beta) = \sum_\sigma c_\sigma \, \alpha(v_0 v_1 v_2)\,\beta(v_2 v_3 v_4)
-  // over each 4-simplex \sigma = [v_0 < ... < v_4].
-  const int B = static_cast<int>(reps.size());
-  std::vector<double> Q(static_cast<std::size_t>(B) * B, 0.0);
-  for (int s = 0; s < nC4; ++s) {
-    const auto &v = faceVerts_[4][static_cast<std::size_t>(s)];
-    const int fi = triIndex.at({v[0], v[1], v[2]});
-    const int bi = triIndex.at({v[2], v[3], v[4]});
-    const double cs = c[s];
-    for (int i = 0; i < B; ++i)
-      for (int j = 0; j < B; ++j)
-        Q[static_cast<std::size_t>(i) * B + j] += cs * reps[i][fi] * reps[j][bi];
+  // Cup product summed over the oriented manifold (step 2 + 3 above).
+  const int numClasses = static_cast<int>(cohomologyBasis.size());
+  std::vector<double> intersectionMatrix(
+      static_cast<std::size_t>(numClasses) * numClasses, 0.0);
+  for (int s = 0; s < numFourSimplices; ++s) {
+    const auto &vertices = faceVerts_[4][static_cast<std::size_t>(s)];
+    const int frontTriangle =
+        triangleIndexByVertices.at({vertices[0], vertices[1], vertices[2]});
+    const int backTriangle =
+        triangleIndexByVertices.at({vertices[2], vertices[3], vertices[4]});
+    const double orientation = orientationPerFourSimplex[s];
+    for (int a = 0; a < numClasses; ++a)
+      for (int b = 0; b < numClasses; ++b)
+        intersectionMatrix[static_cast<std::size_t>(a) * numClasses + b] +=
+            orientation * cohomologyBasis[a][frontTriangle] *
+            cohomologyBasis[b][backTriangle];
   }
-  // The cup product on H^2 is symmetric; clean up numerical asymmetry.
-  for (int i = 0; i < B; ++i)
-    for (int j = i + 1; j < B; ++j) {
-      const double avg = 0.5 * (Q[static_cast<std::size_t>(i) * B + j] +
-                                Q[static_cast<std::size_t>(j) * B + i]);
-      Q[static_cast<std::size_t>(i) * B + j] = avg;
-      Q[static_cast<std::size_t>(j) * B + i] = avg;
+  // The crossing pairing is symmetric; average away any numerical asymmetry.
+  for (int a = 0; a < numClasses; ++a)
+    for (int b = a + 1; b < numClasses; ++b) {
+      const double mean =
+          0.5 * (intersectionMatrix[static_cast<std::size_t>(a) * numClasses + b] +
+                 intersectionMatrix[static_cast<std::size_t>(b) * numClasses + a]);
+      intersectionMatrix[static_cast<std::size_t>(a) * numClasses + b] = mean;
+      intersectionMatrix[static_cast<std::size_t>(b) * numClasses + a] = mean;
     }
-  return Q;
+  return intersectionMatrix;
 }
 
 int ChainComplex::signature() const {
-  const std::vector<double> Q = intersectionForm();
-  if (Q.empty()) return 0;
-  const int B = static_cast<int>(std::lround(std::sqrt(static_cast<double>(Q.size()))));
-  Eigen::MatrixXd M(B, B);
-  for (int i = 0; i < B; ++i)
-    for (int j = 0; j < B; ++j)
-      M(i, j) = Q[static_cast<std::size_t>(i) * B + j];
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(M, Eigen::EigenvaluesOnly);
-  double scale = 0.0;
-  for (int i = 0; i < B; ++i) scale = std::max(scale, std::abs(es.eigenvalues()[i]));
-  const double tol = 1e-7 * (scale > 0 ? scale : 1.0);  // relative: form is unimodular
-  int pos = 0, neg = 0;
-  for (int i = 0; i < B; ++i) {
-    const double l = es.eigenvalues()[i];
-    if (l > tol) ++pos;
-    else if (l < -tol) ++neg;
+  const std::vector<double> intersectionMatrix = intersectionForm();
+  if (intersectionMatrix.empty()) return 0;
+  const int size = static_cast<int>(
+      std::lround(std::sqrt(static_cast<double>(intersectionMatrix.size()))));
+  Eigen::MatrixXd form(size, size);
+  for (int row = 0; row < size; ++row)
+    for (int col = 0; col < size; ++col)
+      form(row, col) = intersectionMatrix[static_cast<std::size_t>(row) * size + col];
+  // Signature = (number of positive eigenvalues) - (number of negative ones).
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(form, Eigen::EigenvaluesOnly);
+  double largestMagnitude = 0.0;
+  for (int i = 0; i < size; ++i)
+    largestMagnitude = std::max(largestMagnitude, std::abs(solver.eigenvalues()[i]));
+  // Relative threshold for "nonzero": the form is nondegenerate (unimodular) on
+  // a closed 4-manifold, so its eigenvalues sit well away from zero.
+  const double zeroTolerance = 1e-7 * (largestMagnitude > 0 ? largestMagnitude : 1.0);
+  int numPositive = 0, numNegative = 0;
+  for (int i = 0; i < size; ++i) {
+    const double eigenvalue = solver.eigenvalues()[i];
+    if (eigenvalue > zeroTolerance) ++numPositive;
+    else if (eigenvalue < -zeroTolerance) ++numNegative;
   }
-  return pos - neg;
+  return numPositive - numNegative;
 }
 
 std::vector<long> ChainComplex::torsion(int k) const {

@@ -129,13 +129,22 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
       .def("compute", &cobordism::Signature::compute, py::arg("spacetime"));
 
   py::class_<CharacteristicNumbers>(m, "CharacteristicNumbers",
-      "Characteristic numbers of a closed PL n-manifold: Euler characteristic, "
-      "signature (n=4), Stiefel-Whitney numbers (pending), Pontryagin numbers "
-      "(n=4: p1 = 3*sigma).")
-      .def_readonly("euler", &CharacteristicNumbers::euler)
-      .def_readonly("signature", &CharacteristicNumbers::signature)
-      .def_readonly("sw", &CharacteristicNumbers::sw)
-      .def_readonly("pontryagin", &CharacteristicNumbers::pontryagin)
+      "Topological invariants of a closed PL n-manifold: Euler characteristic, "
+      "signature (4-manifolds), Stiefel-Whitney numbers (pending), and "
+      "Pontryagin numbers (4-manifolds: p1 = 3*signature).")
+      .def_readonly("euler", &CharacteristicNumbers::euler,
+                    "Euler characteristic (alternating count of cells).")
+      .def_readonly("signature", &CharacteristicNumbers::signature,
+                    "Signature of the intersection form; None unless an "
+                    "orientable 4-manifold.")
+      .def_readonly("stiefel_whitney_numbers",
+                    &CharacteristicNumbers::stiefelWhitneyNumbers,
+                    "Mod-2 Stiefel-Whitney numbers, keyed by monomial (pending; "
+                    "currently empty).")
+      .def_readonly("pontryagin_numbers",
+                    &CharacteristicNumbers::pontryaginNumbers,
+                    "Pontryagin numbers (4-manifolds: {'p1': 3*signature}).")
       .def_static("of", &CharacteristicNumbers::of, py::arg("spacetime"),
-                  py::arg("oriented") = true);
+                  py::arg("oriented") = true,
+                  "Compute the characteristic numbers of the given manifold.");
 }
