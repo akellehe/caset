@@ -39,6 +39,9 @@ from tessera._tessera.mesh        import *                  # noqa: F401,F403
 from tessera._tessera.spacetime   import *                  # noqa: F401,F403
 from tessera._tessera.observables import *                  # noqa: F401,F403
 from tessera._tessera.simulations import *                  # noqa: F401,F403
-from tessera._tessera.cobordism   import *                  # noqa: F401,F403
+# NB: cobordism is intentionally NOT star-imported to the top level. It is a
+# specialized subsystem (no backward-compat scripts) and some of its names
+# would shadow core ones — e.g. cobordism.Signature vs the metric
+# spacetime.Signature. Access it as ``tessera.cobordism.*``.
 # Quantum is also subsystem-namespaced; expose at top level for symmetry
 # with the others (existing scripts already use `tessera.quantum.*`).
