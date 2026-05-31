@@ -24,6 +24,9 @@
 #include <memory>
 #include <iostream>
 
+#include "spacetime/Spacetime.h"
+#include "mesh/Vertex.h"
+
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
 namespace tessera::mesh {}
@@ -40,5 +43,22 @@ Topology::~Topology() = default;
 // std::vector<std::shared_ptr<Constraint> > Topology::getConstraints() {return {};}
 void Topology::build(Spacetime *spacetime, int numSimplices) {
   std::cout << "Building Topology (base)" << std::endl;
+}
+
+void Topology::buildExplicit(
+    Spacetime *spacetime, std::size_t numVertices,
+    const std::vector<std::vector<std::uint64_t>> &topSimplices) {
+  std::vector<VertexPtr> verts;
+  verts.reserve(numVertices);
+  // Coordinate-free vertices: the triangulation is purely combinatorial here.
+  for (std::size_t i = 0; i < numVertices; ++i) {
+    verts.push_back(spacetime->createVertex(static_cast<std::uint64_t>(i)));
+  }
+  for (const auto &simplex : topSimplices) {
+    VertexPtrs sv;
+    sv.reserve(simplex.size());
+    for (auto id : simplex) sv.push_back(verts.at(static_cast<std::size_t>(id)));
+    spacetime->createSimplex(sv);
+  }
 }
 } // namespace tessera::spacetime
