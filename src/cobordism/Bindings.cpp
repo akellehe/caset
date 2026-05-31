@@ -29,6 +29,7 @@
 
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
+#include "cobordism/Cobordism.h"
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/IntegerLinalg.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -147,4 +148,37 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
       .def_static("of", &CharacteristicNumbers::of, py::arg("spacetime"),
                   py::arg("oriented") = true,
                   "Compute the characteristic numbers of the given manifold.");
+
+  // ----- Capability C (#66): cobordism verification (boundary structure) -----
+  py::enum_<CobordismCheck>(m, "CobordismCheck")
+      .value("Ok", CobordismCheck::Ok)
+      .value("BoundaryChainNotClosed", CobordismCheck::BoundaryChainNotClosed)
+      .value("WrongNumberOfBoundaryComponents",
+             CobordismCheck::WrongNumberOfBoundaryComponents)
+      .value("BoundaryNotIsomorphic", CobordismCheck::BoundaryNotIsomorphic);
+
+  py::class_<CobordismResult>(m, "CobordismResult",
+      "Result of verifying a cobordism: ok flag, machine-readable code, and a "
+      "human-readable detail string.")
+      .def_readonly("ok", &CobordismResult::ok)
+      .def_readonly("code", &CobordismResult::code)
+      .def_readonly("detail", &CobordismResult::detail);
+
+  py::class_<Cobordism>(m, "Cobordism",
+      "Cobordism verification (static-only): does a triangulation W have "
+      "boundary equal to M1 disjoint-union M2? Checks the boundary structure "
+      "and that the boundary is itself closed.")
+      .def_static("boundaryFaces", &Cobordism::boundaryFaces, py::arg("W"),
+                  "Codimension-one faces of W belonging to exactly one top "
+                  "simplex (the boundary), as sorted vertex-id tuples.")
+      .def_static("connectedComponents", &Cobordism::connectedComponents,
+                  py::arg("simplices"),
+                  "Split same-dimensional simplices into facet-connected pieces.")
+      .def_static("areIsomorphic", &Cobordism::areIsomorphic, py::arg("a"),
+                  py::arg("b"),
+                  "Whether two triangulations (lists of top-simplex vertex "
+                  "tuples) are isomorphic under a vertex relabeling.")
+      .def_static("verify", &Cobordism::verify, py::arg("W"), py::arg("M1"),
+                  py::arg("M2"),
+                  "Verify W is a cobordism from M1 to M2 (boundary structure).");
 }
