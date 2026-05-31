@@ -24,7 +24,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
-#include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "cobordism/IntegerLinalg.h"
@@ -36,74 +37,82 @@ namespace tessera::cobordism {
 
 using Face = std::vector<std::uint64_t>;  // sorted vertex ids
 
+namespace {
+// Sorted vertex ids of a simplex — the homological reference ordering.
+Face sortedIds(const SimplexPtr &s) {
+  Face ids;
+  for (const auto &v : s->getVertices()) ids.push_back(v->getId());
+  std::sort(ids.begin(), ids.end());
+  return ids;
+}
+}  // namespace
+
 ChainComplex ChainComplex::fromSpacetime(const Spacetime &K) {
   ChainComplex cc;
 
-  // Collect the full face-closure: every sub-face of every registered simplex,
-  // bucketed by cardinality (card = k+1 for a k-simplex).
-  std::vector<std::set<Face>> faceSets;  // faceSets[card-1]
-  for (const auto &simplex : K.getSimplices()) {
-    Face verts;
-    for (const auto &v : simplex->getVertices())
-      verts.push_back(v->getId());
-    std::sort(verts.begin(), verts.end());
-    const std::size_t sz = verts.size();
-    if (faceSets.size() < sz) faceSets.resize(sz);
-    // Enumerate every nonempty subset by cardinality.
-    for (std::size_t card = 1; card <= sz; ++card) {
-      std::vector<std::size_t> idx(card);
-      for (std::size_t i = 0; i < card; ++i) idx[i] = i;
-      for (;;) {
-        Face f;
-        f.reserve(card);
-        for (auto i : idx) f.push_back(verts[i]);
-        faceSets[card - 1].insert(std::move(f));
-        // next combination of indices over [0, sz)
-        std::size_t pos = card;
-        while (pos > 0) {
-          --pos;
-          if (idx[pos] != pos + sz - card) {
-            ++idx[pos];
-            for (std::size_t j = pos + 1; j < card; ++j) idx[j] = idx[j - 1] + 1;
-            break;
-          }
-          if (pos == 0) { pos = card + 1; break; }
-        }
-        if (pos == card + 1) break;
-      }
-    }
+  // Collect the face lattice through the mesh's own facet operation
+  // (Simplex::getFacets) — a BFS down from the registered simplices,
+  // de-duplicated by fingerprint and bucketed by dimension. We do NOT
+  // re-derive faces; getFacets is the single source of truth for "the faces of
+  // a simplex". The only thing ChainComplex adds is the homological boundary
+  // sign below, which mesh facets don't carry.
+  std::map<int, std::vector<SimplexPtr>> byDim;
+  std::unordered_set<std::uint64_t> seen;
+  std::vector<SimplexPtr> stack(K.getSimplices().begin(), K.getSimplices().end());
+  while (!stack.empty()) {
+    SimplexPtr s = stack.back();
+    stack.pop_back();
+    if (s == nullptr) continue;
+    if (!seen.insert(s->fingerprint.fingerprint()).second) continue;
+    const int k = static_cast<int>(s->size()) - 1;
+    byDim[k].push_back(s);
+    if (k >= 1)
+      for (const auto &f : s->getFacets()) stack.push_back(f);
   }
 
-  cc.dimension_ = static_cast<int>(faceSets.size()) - 1;
-  if (cc.dimension_ < 0) return cc;  // empty complex
+  if (byDim.empty()) return cc;  // empty complex
+  const int n = byDim.rbegin()->first;
+  cc.dimension_ = n;
 
-  // Per-dimension ordered face lists + index maps (sorted order is canonical).
-  const int n = cc.dimension_;
-  std::vector<std::vector<Face>> faces(n + 1);
-  std::vector<std::map<Face, int>> index(n + 1);
+  // Order each dimension deterministically (by sorted vertex ids) and index
+  // the simplices by fingerprint for boundary lookups.
+  std::vector<std::vector<SimplexPtr>> faces(n + 1);
+  std::vector<std::unordered_map<std::uint64_t, int>> index(n + 1);
   cc.counts_.assign(n + 1, 0);
   for (int k = 0; k <= n; ++k) {
-    faces[k].assign(faceSets[k].begin(), faceSets[k].end());  // std::set is sorted
-    cc.counts_[k] = faces[k].size();
-    for (int j = 0; j < static_cast<int>(faces[k].size()); ++j)
-      index[k][faces[k][j]] = j;
+    auto &vec = byDim[k];
+    std::sort(vec.begin(), vec.end(), [](const SimplexPtr &a, const SimplexPtr &b) {
+      return sortedIds(a) < sortedIds(b);
+    });
+    faces[k] = vec;
+    cc.counts_[k] = vec.size();
+    for (int j = 0; j < static_cast<int>(vec.size()); ++j)
+      index[k][vec[j]->fingerprint.fingerprint()] = j;
   }
 
-  // Boundary matrices ∂_k for k = 1..n. boundary_[0] stays empty.
+  // Boundary ∂_k (rows = |C_{k-1}|, cols = |C_k|): each column is a k-simplex,
+  // its nonzero rows are its getFacets(), and the sign is (-1)^p where p is the
+  // position (in the simplex's sorted vertex order) of the vertex that facet
+  // drops — the standard ∂[v_0<…<v_k] = Σ (-1)^i [v_0,…,v̂_i,…,v_k].
   cc.boundary_.assign(n + 1, {});
   for (int k = 1; k <= n; ++k) {
     const int rows = static_cast<int>(cc.counts_[k - 1]);
     const int cols = static_cast<int>(cc.counts_[k]);
     std::vector<long> M(static_cast<std::size_t>(rows) * cols, 0);
     for (int j = 0; j < cols; ++j) {
-      const Face &s = faces[k][j];  // (k+1) sorted vertices
-      for (std::size_t i = 0; i < s.size(); ++i) {
-        Face f;
-        f.reserve(s.size() - 1);
-        for (std::size_t m = 0; m < s.size(); ++m)
-          if (m != i) f.push_back(s[m]);
-        const int r = index[k - 1].at(f);
-        M[static_cast<std::size_t>(r) * cols + j] = (i % 2 == 0) ? 1 : -1;
+      const SimplexPtr &s = faces[k][j];
+      const Face sids = sortedIds(s);
+      for (const auto &facet : s->getFacets()) {
+        const Face fids = sortedIds(facet);
+        // The dropped vertex is the first position where sids and fids diverge
+        // (fids is sids with exactly one id removed); default to the last.
+        int dropPos = static_cast<int>(sids.size()) - 1;
+        for (std::size_t a = 0, b = 0; a < sids.size(); ++a) {
+          if (b < fids.size() && sids[a] == fids[b]) { ++b; }
+          else { dropPos = static_cast<int>(a); break; }
+        }
+        const int r = index[k - 1].at(facet->fingerprint.fingerprint());
+        M[static_cast<std::size_t>(r) * cols + j] = (dropPos % 2 == 0) ? 1 : -1;
       }
     }
     cc.boundary_[k] = std::move(M);
