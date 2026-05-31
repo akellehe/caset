@@ -25,6 +25,7 @@ from tessera._tessera import (                              # noqa: F401
     spacetime,
     observables,
     simulations,
+    cobordism,
 )
 
 # The ``quantum`` submodule (Schwinger model / DMRG, ITensor-backed) is
@@ -38,5 +39,6 @@ from tessera._tessera.mesh        import *                  # noqa: F401,F403
 from tessera._tessera.spacetime   import *                  # noqa: F401,F403
 from tessera._tessera.observables import *                  # noqa: F401,F403
 from tessera._tessera.simulations import *                  # noqa: F401,F403
+from tessera._tessera.cobordism   import *                  # noqa: F401,F403
 # Quantum is also subsystem-namespaced; expose at top level for symmetry
 # with the others (existing scripts already use `tessera.quantum.*`).

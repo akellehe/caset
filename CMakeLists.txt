@@ -188,6 +188,7 @@ set(TESSERA_PYBIND_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/spacetime/Bindings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/observables/Bindings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/simulations/Bindings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cobordism/Bindings.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/quantum/Bindings.cpp")
 # ---- </Define source partitions> -----------------------------------------
 
