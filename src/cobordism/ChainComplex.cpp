@@ -91,28 +91,20 @@ ChainComplex ChainComplex::fromSpacetime(const Spacetime &K) {
   }
 
   // Boundary ∂_k (rows = |C_{k-1}|, cols = |C_k|): each column is a k-simplex,
-  // its nonzero rows are its getFacets(), and the sign is (-1)^p where p is the
-  // position (in the simplex's sorted vertex order) of the vertex that facet
-  // drops — the standard ∂[v_0<…<v_k] = Σ (-1)^i [v_0,…,v̂_i,…,v_k].
+  // its nonzero rows are its facets, and the orientation is already carried by
+  // getFacets()'s canonical order — facet at index i is the i-th vertex
+  // dropped, so its coefficient is (-1)^i (see Simplex::getFacets). We read it
+  // off the index rather than recomputing any sign.
   cc.boundary_.assign(n + 1, {});
   for (int k = 1; k <= n; ++k) {
     const int rows = static_cast<int>(cc.counts_[k - 1]);
     const int cols = static_cast<int>(cc.counts_[k]);
     std::vector<long> M(static_cast<std::size_t>(rows) * cols, 0);
     for (int j = 0; j < cols; ++j) {
-      const SimplexPtr &s = faces[k][j];
-      const Face sids = sortedIds(s);
-      for (const auto &facet : s->getFacets()) {
-        const Face fids = sortedIds(facet);
-        // The dropped vertex is the first position where sids and fids diverge
-        // (fids is sids with exactly one id removed); default to the last.
-        int dropPos = static_cast<int>(sids.size()) - 1;
-        for (std::size_t a = 0, b = 0; a < sids.size(); ++a) {
-          if (b < fids.size() && sids[a] == fids[b]) { ++b; }
-          else { dropPos = static_cast<int>(a); break; }
-        }
-        const int r = index[k - 1].at(facet->fingerprint.fingerprint());
-        M[static_cast<std::size_t>(r) * cols + j] = (dropPos % 2 == 0) ? 1 : -1;
+      const auto &facets = faces[k][j]->getFacets();
+      for (int i = 0; i < static_cast<int>(facets.size()); ++i) {
+        const int r = index[k - 1].at(facets[i]->fingerprint.fingerprint());
+        M[static_cast<std::size_t>(r) * cols + j] = (i % 2 == 0) ? 1 : -1;
       }
     }
     cc.boundary_[k] = std::move(M);
