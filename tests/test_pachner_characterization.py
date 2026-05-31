@@ -61,10 +61,18 @@ def _make_cdt(d=4, n_simplices=200, k0=2.2, k4=0.5, delta=0.6,
 
 
 def _top_simplex_size(st):
-    """Return d+1 (the vertex count of a top simplex) for this spacetime."""
-    for s in st.getSimplices():
-        return len(s.getVertices())
-    return 0
+    """Return d+1 (the vertex count of a top simplex) for this spacetime.
+
+    ``getSimplices()`` can contain lazily-materialized lower-dimensional faces:
+    a move's ``propose()`` inspects a simplex's facets via ``getFacets()``,
+    which creates and registers those facet simplices on demand. So the *first*
+    registered simplex is not necessarily top-dimensional — take the maximum
+    vertex count over all simplices to find the true top dimension. (Using the
+    first simplex's size here was the cause of an intermittent failure in
+    TestStateUnchangedOnRejection: when a tetrahedron sorted first the snapshot
+    began counting tetrahedra, which then grew as more facets materialized.)
+    """
+    return max((len(s.getVertices()) for s in st.getSimplices()), default=0)
 
 
 def _state_snapshot(st):
@@ -449,6 +457,83 @@ class TestActionDeltaPerMove(unittest.TestCase):
         cdt, st, target = self._make()
         if not self._check_one_move(cdt, st, "shift", target):
             self.skipTest("No shift accepted in window")
+
+
+# ---------------------------------------------------------------------------
+# Lazy facet materialization is bookkeeping-neutral
+# ---------------------------------------------------------------------------
+
+
+def _top_fingerprints(st):
+    """Fingerprints of the top-dimensional simplices (robust to lazily
+    materialized lower-dimensional faces in getSimplices())."""
+    top_size = _top_simplex_size(st)
+    return frozenset(hash(s) for s in st.getSimplices()
+                     if len(s.getVertices()) == top_size)
+
+
+def _bookkeeping(st):
+    """The CDT bookkeeping that a rejected move must leave untouched: the
+    vertex / N41 / N32 / N4 counts and the set of top-dimensional simplices.
+    Deliberately excludes the raw getSimplices() membership, which can grow
+    with benign lazily-materialized facets."""
+    return (st.getVertexCount(), st.getN41(), st.getN32(),
+            st.getSimplexCount(), _top_fingerprints(st))
+
+
+class TestLazyFacetMaterializationIsBenign(unittest.TestCase):
+    """Inspecting a simplex's facets (via getFacets(), as every move's
+    propose() does) materializes those facet simplices and registers them in
+    the spacetime, so getSimplices() can grow. That is a benign caching of real
+    faces: it must NOT change the CDT bookkeeping (vertex/N41/N32/N4 counts or
+    the set of top-dimensional simplices). This is *why* a rejected move — which
+    runs propose() but not apply() — leaves the bookkeeping intact even though
+    propose() is not strictly side-effect-free.
+    """
+
+    def test_materializing_facets_preserves_counts_and_top_simplices(self):
+        cdt, st = _make_cdt()
+        _grow(cdt, n=100)
+        before = _bookkeeping(st)
+        simplices_before = len(st.getSimplices())
+
+        # getExternalSimplices() forces facet materialization to a fixpoint —
+        # the same lazy getFacets() machinery a move's propose() triggers.
+        st.getExternalSimplices()
+
+        self.assertEqual(_bookkeeping(st), before,
+                         "facet materialization changed the CDT bookkeeping")
+        self.assertGreaterEqual(
+            len(st.getSimplices()), simplices_before,
+            "materialization should only ever add face simplices")
+
+    def test_top_simplex_size_is_robust_to_materialized_facets(self):
+        # After materialization the simplex list contains faces of several
+        # dimensions; _top_simplex_size must still report the true top (d+1=5).
+        cdt, st = _make_cdt(d=4)
+        _grow(cdt, n=100)
+        st.getExternalSimplices()
+        sizes = {len(s.getVertices()) for s in st.getSimplices()}
+        self.assertIn(5, sizes)            # top simplices present
+        self.assertTrue(sizes - {5})       # and lower-dim faces too
+        self.assertEqual(_top_simplex_size(st), 5)
+
+    def test_rejected_add_preserves_bookkeeping_directly(self):
+        # Drive add() to rejection at k4 = -20 (favours large volume, so the
+        # combinatorial / Metropolis path rejects some adds) and confirm the
+        # bookkeeping is identical across each rejection.
+        cdt, st = _make_cdt(k4=-20.0)
+        _grow(cdt, n=200)
+        before = _bookkeeping(st)
+        rejections = 0
+        for _ in range(200):
+            if cdt.add():
+                before = _bookkeeping(st)
+            else:
+                self.assertEqual(_bookkeeping(st), before,
+                                 "rejected add() changed the CDT bookkeeping")
+                rejections += 1
+        self.assertGreater(rejections, 0, "saw no add() rejections to check")
 
 
 if __name__ == "__main__":
