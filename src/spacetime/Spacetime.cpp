@@ -29,6 +29,8 @@
 #include <memory>
 #include <queue>
 #include <set>
+#include <stdexcept>
+#include <string>
 #include "spacetime/Spacetime.h"
 #include "graph/CSRBuilder.hpp"
 #include "graph/DualGraph.hpp"
@@ -93,6 +95,20 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(
   const VertexPtrs &vertices,
   const Edges &edges
 ) {
+  // A Simplex's identity is its Fingerprint, which stores at most kMax vertex
+  // IDs (mesh/Fingerprint.h). Past that, addId() silently drops IDs, so two
+  // distinct >kMax-vertex simplices can share a (truncated) fingerprint and the
+  // second is silently treated as a duplicate — never registered, but returned
+  // with created=true. Fail loudly instead of corrupting the complex (issue
+  // #77). kMax = 8 supports simplices up to dimension 7, well beyond CDT (≤5
+  // vertices) and the cobordism extension (≤6).
+  if (vertices.size() > kMax) {
+    throw std::invalid_argument(
+        "Spacetime::createSimplex: " + std::to_string(vertices.size()) +
+        "-vertex simplex exceeds the Fingerprint capacity kMax=" +
+        std::to_string(kMax) + " (max simplex dimension " +
+        std::to_string(kMax - 1) + "). See issue #77.");
+  }
   // Compute hash directly without allocating a temporary Fingerprint.
   std::uint64_t hash = 0;
   for (const auto &v : vertices) {

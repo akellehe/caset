@@ -309,5 +309,51 @@ class TestExternalSimplicesNonCDT(unittest.TestCase):
                          "each remaining triangle should touch the new boundary")
 
 
+class TestCreateSimplexVertexCap(unittest.TestCase):
+    """createSimplex must reject simplices beyond the Fingerprint capacity.
+
+    The Fingerprint stores at most kMax = 8 vertex IDs; past that it truncates,
+    so a >8-vertex simplex would collide with another and be silently dropped
+    (returned created=true but never registered). createSimplex now raises
+    instead of corrupting the complex (issue #77).
+    """
+
+    KMAX = 8  # mesh/Fingerprint.h
+
+    def _verts(self, st, n):
+        return [st.createVertex(i) for i in range(n)]
+
+    def test_max_capacity_simplex_registers(self):
+        # A kMax-vertex simplex (dimension 7) is the largest that round-trips.
+        st = Spacetime()
+        s, created = st.createSimplex(self._verts(st, self.KMAX))
+        self.assertTrue(created)
+        self.assertEqual(len(s.getVertices()), self.KMAX)
+        self.assertIn(s, st.getSimplices())
+
+    def test_over_capacity_simplex_raises(self):
+        st = Spacetime()
+        verts = self._verts(st, self.KMAX + 1)  # 9 vertices
+        with self.assertRaises(Exception):
+            st.createSimplex(verts)
+
+    def test_no_silent_drop_for_S8(self):
+        # S^8 = ∂Δ^9 has ten 8-simplices (9 vertices each). Previously only 9 of
+        # the 10 registered silently; now each over-capacity create raises, so
+        # the complex is never partially built behind the caller's back.
+        st = Spacetime()
+        V = self._verts(st, 10)
+        raised = 0
+        for omit in range(10):
+            verts = [V[i] for i in range(10) if i != omit]  # 9 vertices
+            try:
+                st.createSimplex(verts)
+            except Exception:
+                raised += 1
+        self.assertEqual(raised, 10)
+        self.assertEqual(len([s for s in st.getSimplices()
+                              if len(s.getVertices()) == 9]), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
