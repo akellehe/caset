@@ -28,6 +28,7 @@
 #include <pybind11/stl.h>
 
 #include "cobordism/ChainComplex.h"
+#include "cobordism/Characteristic.h"
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/IntegerLinalg.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -83,7 +84,12 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
       .def("bettiNumbers", &ChainComplex::bettiNumbers, "Betti numbers b_0..b_n over Q.")
       .def("bettiNumbersGF2", &ChainComplex::bettiNumbersGF2, "Betti numbers over GF(2).")
       .def("torsion", &ChainComplex::torsion, py::arg("k"),
-           "Torsion coefficients of H_k (invariant factors > 1 of ∂_{k+1}).");
+           "Torsion coefficients of H_k (invariant factors > 1 of d_{k+1}).")
+      .def("intersectionForm", &ChainComplex::intersectionForm,
+           "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
+           "oriented 4-manifold; empty if n != 4 or b2 == 0.")
+      .def("signature", &ChainComplex::signature,
+           "Signature b+ - b- of the intersection form (0 if n != 4 or b2 == 0).");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
@@ -105,4 +111,31 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
   m.def("symmetric_inertia", &symmetricInertia, py::arg("matrix"), py::arg("n"),
         py::arg("tol") = 1e-9,
         "Inertia (#pos,#neg,#zero eigenvalues) of a symmetric integer matrix.");
+
+  // ----- Capability A (#65): characteristic numbers -----
+  // Scalar invariants are Observables; families come from CharacteristicNumbers.
+  py::class_<EulerCharacteristic, std::shared_ptr<EulerCharacteristic>>(
+      m, "EulerCharacteristic",
+      "Observable: Euler characteristic chi = sum_k (-1)^k |C_k|.")
+      .def(py::init<>())
+      .def("compute", &EulerCharacteristic::compute, py::arg("spacetime"));
+  // Qualified: tessera::spacetime::Signature (metric signature) is also in
+  // scope via the using-directives.
+  py::class_<cobordism::Signature, std::shared_ptr<cobordism::Signature>>(
+      m, "Signature",
+      "Observable: signature b+ - b- of the H_2 intersection form (closed "
+      "oriented 4-manifold; 0 if n != 4 or b2 == 0).")
+      .def(py::init<>())
+      .def("compute", &cobordism::Signature::compute, py::arg("spacetime"));
+
+  py::class_<CharacteristicNumbers>(m, "CharacteristicNumbers",
+      "Characteristic numbers of a closed PL n-manifold: Euler characteristic, "
+      "signature (n=4), Stiefel-Whitney numbers (pending), Pontryagin numbers "
+      "(n=4: p1 = 3*sigma).")
+      .def_readonly("euler", &CharacteristicNumbers::euler)
+      .def_readonly("signature", &CharacteristicNumbers::signature)
+      .def_readonly("sw", &CharacteristicNumbers::sw)
+      .def_readonly("pontryagin", &CharacteristicNumbers::pontryagin)
+      .def_static("of", &CharacteristicNumbers::of, py::arg("spacetime"),
+                  py::arg("oriented") = true);
 }

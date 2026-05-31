@@ -33,6 +33,7 @@
 #include "spacetime/topologies/SimplexBoundarySphere.h"
 #include "spacetime/topologies/SolidSimplex.h"
 #include "spacetime/topologies/RealProjectivePlane.h"
+#include "spacetime/topologies/SimplicialProduct.h"
 #include "simulations/CDT.h"
 #include "spacetime/PachnerMove.h"
 #include "spacetime/pachner/AddMove.h"
@@ -130,7 +131,18 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def(py::init<>())
       .def("build", &RealProjectivePlane::build, py::arg("spacetime"),
            py::arg("numSimplices") = 0,
-           "Build the 6-vertex ℝP² (numSimplices ignored).");
+           "Build the 6-vertex RP^2 (numSimplices ignored).");
+
+  py::class_<SimplicialProduct, Topology, std::shared_ptr<SimplicialProduct> >(
+      m, "SimplicialProduct",
+      "Product K x L of two topologies, triangulated by the staircase "
+      "(Eilenberg-Zilber) construction. E.g. SimplicialProduct(S2, S2) builds "
+      "S^2 x S^2. Exact and pre-geometric; build() ignores numSimplices.")
+      .def(py::init<std::shared_ptr<Topology>, std::shared_ptr<Topology> >(),
+           py::arg("left"), py::arg("right"))
+      .def("build", &SimplicialProduct::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the product complex (numSimplices ignored).");
   // ========================================
   // Metric
   // ========================================

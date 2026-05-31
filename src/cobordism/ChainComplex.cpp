@@ -21,9 +21,14 @@
 
 #include "cobordism/ChainComplex.h"
 
+#include <Eigen/Dense>
+
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <map>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -79,6 +84,7 @@ ChainComplex ChainComplex::fromSpacetime(const Spacetime &K) {
   std::vector<std::vector<SimplexPtr>> faces(n + 1);
   std::vector<std::unordered_map<std::uint64_t, int>> index(n + 1);
   cc.counts_.assign(n + 1, 0);
+  cc.faceVerts_.assign(n + 1, {});
   for (int k = 0; k <= n; ++k) {
     auto &vec = byDim[k];
     std::sort(vec.begin(), vec.end(), [](const SimplexPtr &a, const SimplexPtr &b) {
@@ -86,8 +92,11 @@ ChainComplex ChainComplex::fromSpacetime(const Spacetime &K) {
     });
     faces[k] = vec;
     cc.counts_[k] = vec.size();
-    for (int j = 0; j < static_cast<int>(vec.size()); ++j)
+    cc.faceVerts_[k].reserve(vec.size());
+    for (int j = 0; j < static_cast<int>(vec.size()); ++j) {
       index[k][vec[j]->fingerprint.fingerprint()] = j;
+      cc.faceVerts_[k].push_back(sortedIds(vec[j]));
+    }
   }
 
   // Boundary ∂_k (rows = |C_{k-1}|, cols = |C_k|): each column is a k-simplex,
@@ -180,6 +189,123 @@ std::vector<int> ChainComplex::bettiNumbersGF2() const {
   for (int k = 0; k <= dimension_; ++k)
     b[k] = static_cast<int>(counts_[k]) - gf2RankOfBoundary(k) - gf2RankOfBoundary(k + 1);
   return b;
+}
+
+std::vector<double> ChainComplex::intersectionForm() const {
+  if (dimension_ != 4) return {};
+  const int b2 = bettiNumbers()[2];
+  if (b2 == 0) return {};
+
+  const int nC1 = static_cast<int>(counts_[1]);
+  const int nC2 = static_cast<int>(counts_[2]);
+  const int nC3 = static_cast<int>(counts_[3]);
+  const int nC4 = static_cast<int>(counts_[4]);
+
+  auto eigenOf = [&](int k, int rows, int cols) {
+    Eigen::MatrixXd M(rows, cols);
+    const auto &flat = boundary_[static_cast<std::size_t>(k)];
+    for (int i = 0; i < rows; ++i)
+      for (int j = 0; j < cols; ++j)
+        M(i, j) = static_cast<double>(flat[static_cast<std::size_t>(i) * cols + j]);
+    return M;
+  };
+  const Eigen::MatrixXd d2 = eigenOf(2, nC1, nC2);  // \partial_2 : C_2 -> C_1
+  const Eigen::MatrixXd d3 = eigenOf(3, nC2, nC3);  // \partial_3 : C_3 -> C_2
+  const Eigen::MatrixXd d4 = eigenOf(4, nC3, nC4);  // \partial_4 : C_4 -> C_3
+
+  // Fundamental class [K]: generator of ker \partial_4. For a closed oriented
+  // 4-manifold this is 1-dimensional with ±1 entries; otherwise [K] is ill-
+  // defined and the signature is not.
+  const Eigen::MatrixXd K4 = Eigen::FullPivLU<Eigen::MatrixXd>(d4).kernel();
+  if (K4.cols() != 1)
+    throw std::runtime_error(
+        "ChainComplex::intersectionForm: a closed orientable 4-manifold is "
+        "required (dim ker d_4 != 1)");
+  Eigen::VectorXd c = K4.col(0);
+  int piv = 0;
+  for (int i = 1; i < c.size(); ++i)
+    if (std::abs(c[i]) > std::abs(c[piv])) piv = i;
+  c /= c[piv];  // normalize: entries become ±1 (orientation fixed up to overall sign)
+
+  // 2-cocycles Z^2 = ker(\delta_2 = \partial_3^T); 2-coboundaries B^2 =
+  // im(\delta_1 = \partial_2^T). H^2 reps = cocycles independent modulo
+  // coboundaries.
+  const Eigen::MatrixXd Zco =
+      Eigen::FullPivLU<Eigen::MatrixXd>(d3.transpose()).kernel();  // |C_2| x dimZ
+  const Eigen::MatrixXd Bco = d2.transpose();                      // |C_2| x |C_1|
+
+  const double tol = 1e-9;
+  auto rankOf = [&](const Eigen::MatrixXd &M) {
+    if (M.cols() == 0) return 0;
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(M);
+    lu.setThreshold(tol);
+    return static_cast<int>(lu.rank());
+  };
+  Eigen::MatrixXd span = Bco;
+  int spanRank = rankOf(span);
+  std::vector<Eigen::VectorXd> reps;
+  for (int j = 0; j < Zco.cols() && static_cast<int>(reps.size()) < b2; ++j) {
+    Eigen::MatrixXd aug(nC2, span.cols() + 1);
+    if (span.cols() > 0) aug.leftCols(span.cols()) = span;
+    aug.col(span.cols()) = Zco.col(j);
+    if (rankOf(aug) > spanRank) {
+      reps.push_back(Zco.col(j));
+      span = aug;
+      ++spanRank;
+    }
+  }
+
+  // Index 2-simplices (sorted vertex triples) for cup-product lookups.
+  std::map<std::array<std::uint64_t, 3>, int> triIndex;
+  for (int j = 0; j < nC2; ++j) {
+    const auto &v = faceVerts_[2][static_cast<std::size_t>(j)];
+    triIndex[{v[0], v[1], v[2]}] = j;
+  }
+
+  // Alexander–Whitney cup product on [K]:
+  //   Q(\alpha,\beta) = \sum_\sigma c_\sigma \, \alpha(v_0 v_1 v_2)\,\beta(v_2 v_3 v_4)
+  // over each 4-simplex \sigma = [v_0 < ... < v_4].
+  const int B = static_cast<int>(reps.size());
+  std::vector<double> Q(static_cast<std::size_t>(B) * B, 0.0);
+  for (int s = 0; s < nC4; ++s) {
+    const auto &v = faceVerts_[4][static_cast<std::size_t>(s)];
+    const int fi = triIndex.at({v[0], v[1], v[2]});
+    const int bi = triIndex.at({v[2], v[3], v[4]});
+    const double cs = c[s];
+    for (int i = 0; i < B; ++i)
+      for (int j = 0; j < B; ++j)
+        Q[static_cast<std::size_t>(i) * B + j] += cs * reps[i][fi] * reps[j][bi];
+  }
+  // The cup product on H^2 is symmetric; clean up numerical asymmetry.
+  for (int i = 0; i < B; ++i)
+    for (int j = i + 1; j < B; ++j) {
+      const double avg = 0.5 * (Q[static_cast<std::size_t>(i) * B + j] +
+                                Q[static_cast<std::size_t>(j) * B + i]);
+      Q[static_cast<std::size_t>(i) * B + j] = avg;
+      Q[static_cast<std::size_t>(j) * B + i] = avg;
+    }
+  return Q;
+}
+
+int ChainComplex::signature() const {
+  const std::vector<double> Q = intersectionForm();
+  if (Q.empty()) return 0;
+  const int B = static_cast<int>(std::lround(std::sqrt(static_cast<double>(Q.size()))));
+  Eigen::MatrixXd M(B, B);
+  for (int i = 0; i < B; ++i)
+    for (int j = 0; j < B; ++j)
+      M(i, j) = Q[static_cast<std::size_t>(i) * B + j];
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(M, Eigen::EigenvaluesOnly);
+  double scale = 0.0;
+  for (int i = 0; i < B; ++i) scale = std::max(scale, std::abs(es.eigenvalues()[i]));
+  const double tol = 1e-7 * (scale > 0 ? scale : 1.0);  // relative: form is unimodular
+  int pos = 0, neg = 0;
+  for (int i = 0; i < B; ++i) {
+    const double l = es.eigenvalues()[i];
+    if (l > tol) ++pos;
+    else if (l < -tol) ++neg;
+  }
+  return pos - neg;
 }
 
 std::vector<long> ChainComplex::torsion(int k) const {
