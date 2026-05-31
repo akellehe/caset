@@ -22,6 +22,10 @@
 #ifndef TESSERA_TOPOLOGY_H
 #define TESSERA_TOPOLOGY_H
 
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
 namespace tessera::mesh {}
@@ -69,6 +73,27 @@ class Topology {
     /// @param spacetime The spacetime in which to build the triangulation
     /// @param numSimplices Target number of top-dimensional simplices to create
     virtual void build(Spacetime *spacetime, int numSimplices) = 0;
+
+  protected:
+    /// Build an explicit, *pre-geometric* triangulation from a combinatorial
+    /// description: create `numVertices` **coordinate-free** vertices
+    /// (ids 0..numVertices-1) and one top simplex per vertex-id tuple in
+    /// `topSimplices`.
+    ///
+    /// No coordinates are assigned — the cobordism capabilities (homology,
+    /// characteristic numbers, cobordism existence) are purely combinatorial;
+    /// geometry (vertex coordinates / edge lengths) is layered on only when a
+    /// geometric capability (reconstruction, Regge) actually needs it. Edges
+    /// are still materialized by ``createSimplex`` so the incidence structure
+    /// is complete; any squared length they carry is an unused placeholder, not
+    /// meaningful geometry.
+    ///
+    /// Shared by the exact, fixed-triangulation topologies
+    /// (``SimplexBoundarySphere``, ``SolidSimplex``, ``RealProjectivePlane``,
+    /// …) whose ``build()`` ignores ``numSimplices``.
+    static void buildExplicit(
+        Spacetime *spacetime, std::size_t numVertices,
+        const std::vector<std::vector<std::uint64_t>> &topSimplices);
 };
 
 } // namespace tessera::spacetime

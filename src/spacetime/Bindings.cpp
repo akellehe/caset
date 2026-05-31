@@ -30,6 +30,9 @@
 #include "spacetime/topologies/Cylinder.h"
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/topologies/Toroid.h"
+#include "spacetime/topologies/SimplexBoundarySphere.h"
+#include "spacetime/topologies/SolidSimplex.h"
+#include "spacetime/topologies/RealProjectivePlane.h"
 #include "simulations/CDT.h"
 #include "spacetime/PachnerMove.h"
 #include "spacetime/pachner/AddMove.h"
@@ -96,6 +99,38 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def(py::init<>())
       .def("build", &Toroid::build, py::arg("spacetime"), py::arg("numSimplices"),
            "Build a toroidal staircase triangulation with the given number of simplices.");
+
+  // Exact, fixed minimal triangulations (cobordism fixtures). Unlike the CDT
+  // topologies above, these build a specific pre-geometric (coordinate-free)
+  // complex and ignore `numSimplices`.
+  py::class_<SimplexBoundarySphere, Topology,
+             std::shared_ptr<SimplexBoundarySphere> >(m, "SimplexBoundarySphere",
+      "S^n = boundary of the (n+1)-simplex: the minimal n-sphere triangulation "
+      "(n+2 vertices). Exact and pre-geometric; build() ignores numSimplices.")
+      .def(py::init<int>(), py::arg("n"))
+      .def("n", &SimplexBoundarySphere::n, "Dimension n of the sphere.")
+      .def("build", &SimplexBoundarySphere::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build S^n = ∂Δ^{n+1} (numSimplices ignored).");
+
+  py::class_<SolidSimplex, Topology, std::shared_ptr<SolidSimplex> >(
+      m, "SolidSimplex",
+      "Solid n-simplex Δ^n (closed n-ball; ∂ = S^{n-1}), a single top simplex on "
+      "n+1 vertices. Exact and pre-geometric; build() ignores numSimplices.")
+      .def(py::init<int>(), py::arg("n"))
+      .def("n", &SolidSimplex::n, "Dimension n of the simplex.")
+      .def("build", &SolidSimplex::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the solid n-simplex (numSimplices ignored).");
+
+  py::class_<RealProjectivePlane, Topology,
+             std::shared_ptr<RealProjectivePlane> >(m, "RealProjectivePlane",
+      "Minimal 6-vertex ℝP² (hemi-icosahedron): f=(6,15,10), χ=1, "
+      "non-orientable. Exact and pre-geometric; build() ignores numSimplices.")
+      .def(py::init<>())
+      .def("build", &RealProjectivePlane::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the 6-vertex ℝP² (numSimplices ignored).");
   // ========================================
   // Metric
   // ========================================
