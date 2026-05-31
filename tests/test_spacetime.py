@@ -19,8 +19,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import gc
 import unittest
 
+import tessera
 from tessera import Spacetime, Edge, Vertex
 
 class TestSpacetime(unittest.TestCase):
@@ -353,6 +355,66 @@ class TestCreateSimplexVertexCap(unittest.TestCase):
         self.assertEqual(raised, 10)
         self.assertEqual(len([s for s in st.getSimplices()
                               if len(s.getVertices()) == 9]), 0)
+
+
+class TestHandleLifetime(unittest.TestCase):
+    """Simplex/Vertex handles returned by the query methods point into the
+    Spacetime's storage, so the Spacetime must stay alive while they are used.
+    The bindings enforce this (keep_alive), so the handles remain valid even
+    after the Spacetime variable goes out of scope. Each helper builds a
+    Spacetime in a local, returns handles, and lets the local drop — without
+    the keep_alive these accesses are use-after-free (segfault).
+    """
+
+    def _sphere_spacetime(self, n=2):
+        sig = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, sig)
+        st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                               tessera.PREFERRED, tessera.SimplexBoundarySphere(n))
+        st.build()
+        return st
+
+    def test_getSimplices_outlives_spacetime_local(self):
+        def handles():
+            return self._sphere_spacetime(2).getSimplices()  # temporary Spacetime
+        simplices = handles()
+        gc.collect()
+        # S^2 = boundary of a tetrahedron has 4 triangles; accessing them must
+        # not touch freed storage.
+        self.assertEqual(len(simplices), 4)
+        self.assertTrue(all(len(s.getVertices()) == 3 for s in simplices))
+
+    def test_getExternalSimplices_outlives_spacetime_local(self):
+        def handles():
+            sig = tessera.Signature(4, tessera.Lorentzian)
+            metric = tessera.Metric(True, sig)
+            st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                                   tessera.PREFERRED, tessera.SolidSimplex(4))
+            st.build()
+            return st.getExternalSimplices()
+        external = handles()
+        gc.collect()
+        self.assertGreater(len(external), 0)
+        for s in external:
+            _ = s.getVertices()  # no crash
+
+    def test_getRandomVertex_outlives_spacetime_local(self):
+        v = self._sphere_spacetime(2).getRandomVertex()
+        gc.collect()
+        self.assertIsNotNone(v)
+        _ = v.getId()  # no crash
+
+    def test_getRandomTopSimplex_outlives_spacetime_local(self):
+        def handle():
+            sig = tessera.Signature(4, tessera.Lorentzian)
+            metric = tessera.Metric(True, sig)
+            st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                                   tessera.PREFERRED, tessera.Toroid())
+            st.build(50)
+            return st.getRandomTopSimplex()
+        s = handle()
+        gc.collect()
+        self.assertEqual(len(s.getVertices()), 5)  # 4D top simplex
 
 
 if __name__ == '__main__':

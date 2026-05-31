@@ -310,9 +310,28 @@ probability. Sits next to ``modularityOnSkeleton``.
 Uses the topology's builder (e.g. Toroid staircase triangulation) to
 create the initial simplicial complex.  The actual number of simplices
 may differ slightly due to slab quantization.)doc")
-      .def("getSimplices", &Spacetime::getSimplices, py::return_value_policy::copy,
+      // The returned Simplex handles point into this Spacetime's storage, so
+      // each one must keep the Spacetime alive — otherwise
+      // `Spacetime(...).getSimplices()` on a temporary frees the storage before
+      // the handles are used (a use-after-free / segfault). A blanket
+      // keep_alive on the result list does not work (a Python list cannot be a
+      // keep-alive target), so we cast each element with reference_internal,
+      // which ties its lifetime to the Spacetime (self).
+      .def("getSimplices",
+           [](py::object self) {
+             py::list out;
+             for (const auto &s : py::cast<Spacetime &>(self).getSimplices())
+               out.append(py::cast(s, py::return_value_policy::reference_internal, self));
+             return out;
+           },
            "Return all top-dimensional simplices in the complex.")
-      .def("getExternalSimplices", &Spacetime::getExternalSimplices, py::return_value_policy::copy,
+      .def("getExternalSimplices",
+           [](py::object self) {
+             py::list out;
+             for (const auto &s : py::cast<Spacetime &>(self).getExternalSimplices())
+               out.append(py::cast(s, py::return_value_policy::reference_internal, self));
+             return out;
+           },
            "Return simplices on the boundary of the complex.")
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&
@@ -394,10 +413,13 @@ This is the volume-fixing target per [RU] eq. 6.)doc")
       .def("getN32", &Spacetime::getN32,
            "Return N32: the count of (d-1,2) + (2,d-1) type simplices.")
       .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference,
+           py::keep_alive<0, 1>(),  // single handle (weak-referenceable) keeps the Spacetime alive
            "Return a uniformly random simplex from the complex (any dimension).")
       .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference,
+           py::keep_alive<0, 1>(),
            "Return a uniformly random top-dimensional simplex.")
       .def("getRandomVertex", &Spacetime::getRandomVertex, py::return_value_policy::reference,
+           py::keep_alive<0, 1>(),
            "Return a uniformly random vertex.")
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"),
            "Remove a top-dimensional simplex from the complex.")
