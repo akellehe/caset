@@ -27,7 +27,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "cobordism/ChainComplex.h"
 #include "cobordism/CombinatorialDimension.h"
+#include "cobordism/IntegerLinalg.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -59,4 +61,48 @@ Spacetime's declared metric dimension.)doc")
       .def(py::init<>())
       .def("compute", &CombinatorialDimension::compute, py::arg("spacetime"),
            "Return the combinatorial dimension of the given Spacetime as a double.");
+
+  // ----- Homology backbone (#64): chain complex + exact linear algebra -----
+
+  py::class_<ChainComplex>(m, "ChainComplex",
+      R"doc(Simplicial chain complex of a triangulation.
+
+Boundary maps ∂_k over ℤ plus the homology invariants derived from them — Betti
+numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and the
+∂²=0 sanity check. Purely combinatorial (built from vertex sets; no geometry).)doc")
+      .def_static("fromSpacetime", &ChainComplex::fromSpacetime, py::arg("spacetime"),
+                  "Build the chain complex from a triangulation (a Spacetime).")
+      .def("dimension", &ChainComplex::dimension)
+      .def("numSimplices", &ChainComplex::numSimplices, py::arg("k"))
+      .def("fVector", &ChainComplex::fVector)
+      .def("eulerCharacteristic", &ChainComplex::eulerCharacteristic)
+      .def("boundaryMatrix", &ChainComplex::boundaryMatrix, py::arg("k"),
+           "Flat row-major ∂_k (rows=|C_{k-1}|, cols=|C_k|), entries in {-1,0,1}.")
+      .def("boundaryComposesToZero", &ChainComplex::boundaryComposesToZero,
+           "True iff ∂_{k-1}∘∂_k = 0 for all k.")
+      .def("bettiNumbers", &ChainComplex::bettiNumbers, "Betti numbers b_0..b_n over Q.")
+      .def("bettiNumbersGF2", &ChainComplex::bettiNumbersGF2, "Betti numbers over GF(2).")
+      .def("torsion", &ChainComplex::torsion, py::arg("k"),
+           "Torsion coefficients of H_k (invariant factors > 1 of ∂_{k+1}).");
+
+  // Exact integer / GF(2) / inertia primitives (also exposed for direct
+  // testing). Matrices are passed flat row-major with explicit dims.
+  py::class_<SmithNormalForm>(m, "SmithNormalForm")
+      .def_readonly("rank", &SmithNormalForm::rank)
+      .def_readonly("invariant_factors", &SmithNormalForm::invariantFactors);
+  m.def("smith_normal_form", &smithNormalForm, py::arg("matrix"), py::arg("rows"),
+        py::arg("cols"), "Smith Normal Form (rank + invariant factors) over Z.");
+  m.def("integer_rank", &integerRank, py::arg("matrix"), py::arg("rows"), py::arg("cols"),
+        "Rank over Q of an integer matrix.");
+  m.def("gf2_rank", &gf2Rank, py::arg("matrix"), py::arg("rows"), py::arg("cols"),
+        "Rank over GF(2) of a 0/1 matrix.");
+
+  py::class_<Inertia>(m, "Inertia")
+      .def_readonly("n_pos", &Inertia::nPos)
+      .def_readonly("n_neg", &Inertia::nNeg)
+      .def_readonly("n_zero", &Inertia::nZero)
+      .def("signature", &Inertia::signature);
+  m.def("symmetric_inertia", &symmetricInertia, py::arg("matrix"), py::arg("n"),
+        py::arg("tol") = 1e-9,
+        "Inertia (#pos,#neg,#zero eigenvalues) of a symmetric integer matrix.");
 }

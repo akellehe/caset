@@ -160,7 +160,30 @@ class Simplex {
     /// The Facets are the \f$ \sigma^{k-1} \subset \sigma^{k} \f$ faces on which we'll most commonly join two simplices
     /// to form a simplicial complex \f$ K \f$.
     ///
-    /// @return all k-1 simplices contained within this k-simplex.
+    /// ## Canonical order and induced orientation
+    ///
+    /// Facets are returned in **canonical topological order**: facet \f$ i \f$ is
+    /// this simplex with the \f$ i \f$-th vertex of ``getVertices()`` removed, the
+    /// remaining vertices kept in their original relative order. That relative
+    /// order is the facet's *induced orientation* from this simplex.
+    ///
+    /// Consequently the **orientation of facet \f$ i \f$ relative to this simplex
+    /// is simply \f$ (-1)^i \f$** — its coefficient in the simplicial boundary
+    /// \f$ \partial\sigma = \sum_i (-1)^i \,\sigma\!\setminus\! v_i \f$. The
+    /// orientation is therefore already carried by the *return order*: a caller
+    /// reads it from the facet's index, contextual to the simplex ``getFacets``
+    /// was called on. There is deliberately no separate orientation flag or
+    /// per-simplex orientation bit — that would re-implement what the ordering
+    /// already encodes. (The vertex *sorting* used by ``Fingerprint`` is just a
+    /// set-identity key and is unrelated to this orientation.)
+    ///
+    /// Note this is a per-simplex (contextual) orientation; a globally
+    /// consistent boundary operator (\f$ \partial^2 = 0 \f$) additionally
+    /// requires the complex's simplices to share a coherent vertex ordering,
+    /// which is a property of how the complex was built, not of this method.
+    ///
+    /// @return all k-1 simplices contained within this k-simplex, in canonical
+    ///   topological order (facet \f$ i \f$ omits vertex \f$ i \f$).
     [[nodiscard]] const Simplices &getFacets();
 
     bool hasFacets() const;
