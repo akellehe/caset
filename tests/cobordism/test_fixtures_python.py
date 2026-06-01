@@ -212,12 +212,61 @@ class TestRealProjectivePlane(unittest.TestCase):
         self.assertTrue(all(c == 2 for c in edge_count.values()))
 
 
+class TestComplexProjectivePlane(unittest.TestCase):
+    """Kühnel's minimal 9-vertex CP^2: f=(9,36,84,90,36), χ=3,
+    Betti (1,0,1,0,1), orientable with a rank-1 definite intersection form
+    (|signature| = 1)."""
+
+    F_VECTOR = [9, 36, 84, 90, 36]
+
+    def test_f_vector_and_euler(self):
+        st = _build(tessera.ComplexProjectivePlane())
+        tops = _top_tuples(st)
+        self.assertEqual(len(tops), 36)
+        self.assertEqual(_f_vector_from_tops(tops), self.F_VECTOR)
+        self.assertEqual(_materialized_face_counts(st), self.F_VECTOR)
+        self.assertEqual(_euler(self.F_VECTOR), 3)
+        self.assertEqual(cobordism.CombinatorialDimension().compute(st), 4.0)
+
+    def test_closed_pseudomanifold(self):
+        # Every codimension-one face (a tetrahedron, 4 vertices) lies in exactly
+        # two of the 36 four-simplices — the hallmark of a closed manifold.
+        tops = _top_tuples(_build(tessera.ComplexProjectivePlane()))
+        tet_count = {}
+        for t in tops:
+            for tet in itertools.combinations(t, 4):
+                tet_count[tet] = tet_count.get(tet, 0) + 1
+        self.assertEqual(len(tet_count), 90)
+        self.assertTrue(all(c == 2 for c in tet_count.values()))
+
+    def test_homology_and_signature(self):
+        st = _build(tessera.ComplexProjectivePlane())
+        cc = cobordism.ChainComplex.fromSpacetime(st)
+        self.assertEqual(cc.fVector(), self.F_VECTOR)
+        self.assertTrue(cc.boundaryComposesToZero())
+        # Betti numbers of CP^2 agree over Q and GF(2) (the homology is
+        # torsion-free), so there is no 2-torsion to split them apart.
+        self.assertEqual(cc.bettiNumbers(), [1, 0, 1, 0, 1])
+        self.assertEqual(cc.bettiNumbersGF2(), [1, 0, 1, 0, 1])
+        self.assertEqual(cc.eulerCharacteristic(), 3)
+        self.assertEqual(cc.torsion(2), [])
+        self.assertEqual(cc.torsion(3), [])
+        # H^2 is rank one with a definite, unimodular intersection form: the
+        # 1x1 matrix [±1]. |signature| = 1 is the orientation-independent fact
+        # (the sign is a convention fixed by the choice of fundamental class).
+        form = cc.intersectionForm()
+        self.assertEqual(len(form), 1)
+        self.assertEqual(abs(form[0]), 1.0)
+        self.assertEqual(abs(cc.signature()), 1)
+
+
 class TestPreGeometric(unittest.TestCase):
 
     def test_vertices_are_coordinate_free(self):
         for topology in (tessera.SimplexBoundarySphere(3),
                          tessera.SolidSimplex(4),
-                         tessera.RealProjectivePlane()):
+                         tessera.RealProjectivePlane(),
+                         tessera.ComplexProjectivePlane()):
             with self.subTest(topology=type(topology).__name__):
                 st = _build(topology)
                 for v in st.getVertexList().toVector():

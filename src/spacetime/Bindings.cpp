@@ -33,6 +33,7 @@
 #include "spacetime/topologies/SimplexBoundarySphere.h"
 #include "spacetime/topologies/SolidSimplex.h"
 #include "spacetime/topologies/RealProjectivePlane.h"
+#include "spacetime/topologies/ComplexProjectivePlane.h"
 #include "spacetime/topologies/SimplicialProduct.h"
 #include "simulations/CDT.h"
 #include "spacetime/PachnerMove.h"
@@ -132,6 +133,16 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def("build", &RealProjectivePlane::build, py::arg("spacetime"),
            py::arg("numSimplices") = 0,
            "Build the 6-vertex RP^2 (numSimplices ignored).");
+
+  py::class_<ComplexProjectivePlane, Topology,
+             std::shared_ptr<ComplexProjectivePlane> >(m, "ComplexProjectivePlane",
+      "Minimal 9-vertex CP^2 (Kühnel): f=(9,36,84,90,36), χ=3, "
+      "Betti (1,0,1,0,1), orientable with |signature|=1. Exact and "
+      "pre-geometric; build() ignores numSimplices.")
+      .def(py::init<>())
+      .def("build", &ComplexProjectivePlane::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the 9-vertex CP^2 (numSimplices ignored).");
 
   py::class_<SimplicialProduct, Topology, std::shared_ptr<SimplicialProduct> >(
       m, "SimplicialProduct",
