@@ -90,7 +90,11 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")
       .def("signature", &ChainComplex::signature,
-           "Signature b+ - b- of the intersection form (0 if n != 4 or b2 == 0).");
+           "Signature b+ - b- of the intersection form (0 if n != 4 or b2 == 0).")
+      .def("stiefelWhitneyNumbers", &ChainComplex::stiefelWhitneyNumbers,
+           "Mod-2 Stiefel-Whitney numbers <w_{i1}..w_{ir}, [K]> keyed by "
+           "monomial (e.g. 'w4', 'w2^2'); empty for the empty complex. Raises "
+           "if a class needs a deferred higher Steenrod cup-i product (#65).");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.

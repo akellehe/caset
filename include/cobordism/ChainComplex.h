@@ -23,6 +23,8 @@
 #define TESSERA_COBORDISM_CHAINCOMPLEX_H
 
 #include <cstdint>
+#include <map>
+#include <string>
 #include <vector>
 
 // === tessera subsystem ns fwd-decls ===
@@ -94,6 +96,32 @@ class ChainComplex {
     /// Signature \f$ \sigma = b_+ - b_- \f$ of the intersection form
     /// (Sylvester inertia). 0 when \f$ n \neq 4 \f$ or \f$ b_2 = 0 \f$.
     [[nodiscard]] int signature() const;
+
+    /// Mod-2 Stiefel–Whitney numbers of a closed PL \f$ n \f$-manifold:
+    /// \f$ \langle w_{i_1}\cdots w_{i_r}, [K] \rangle \in \mathbb{Z}/2 \f$ for
+    /// every partition \f$ (i_1,\dots,i_r) \f$ of \f$ n \f$ into positive parts,
+    /// keyed by the monomial (e.g. ``"w4"``, ``"w2^2"``, ``"w1^2"``,
+    /// ``"w1w3"``). Empty when the complex is empty.
+    ///
+    /// Computed combinatorially: the mod-2 cohomology \f$ H^*(K;\mathbb{Z}/2) \f$
+    /// (from the boundary maps reduced mod 2), the Alexander–Whitney cup product
+    /// on cochains, and the Wu classes \f$ v_k \f$ — defined by
+    /// \f$ \langle v_k \cup x, [K]\rangle = \langle \mathrm{Sq}^k x, [K]\rangle \f$
+    /// for all \f$ x \in H^{n-k} \f$ — from which the total Stiefel–Whitney class
+    /// is \f$ w = \mathrm{Sq}(v) \f$. The fundamental class \f$ [K] \f$ over
+    /// \f$ \mathbb{Z}/2 \f$ is the sum of all top simplices, and evaluation on it
+    /// is the mod-2 sum of a top-degree cochain over those simplices.
+    ///
+    /// Only the Steenrod squares expressible through the ordinary
+    /// (\f$ \cup_0 \f$) product are implemented: \f$ \mathrm{Sq}^k \f$ on a
+    /// class of degree \f$ k \f$ (the squaring) and the degree-forced zeros.
+    /// These suffice for surfaces and for closed orientable 4-manifolds with
+    /// \f$ b_1 = 0 \f$ (so \f$ \mathbb{RP}^2 \f$, \f$ \mathbb{CP}^2 \f$,
+    /// \f$ S^4 \f$, \f$ S^2\times S^2 \f$, and their disjoint unions).
+    /// @throws std::runtime_error if a required Wu or Stiefel–Whitney class
+    ///   genuinely needs a higher cup-\f$ i \f$ product (\f$ i>0 \f$) — the
+    ///   general Steenrod squares are deferred (see issue #65).
+    [[nodiscard]] std::map<std::string, int> stiefelWhitneyNumbers() const;
 
   private:
     int dimension_{-1};

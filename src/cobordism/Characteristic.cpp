@@ -39,11 +39,10 @@ double Signature::compute(const std::shared_ptr<Spacetime> &spacetime) {
 }
 
 CharacteristicNumbers CharacteristicNumbers::of(const Spacetime &K, bool oriented) {
-  (void)oriented;  // gates Stiefel–Whitney (unoriented) vs oriented numbers once SW lands
   const ChainComplex cc = ChainComplex::fromSpacetime(K);
   CharacteristicNumbers out;
   out.euler = cc.eulerCharacteristic();
-  if (cc.dimension() == 4) {
+  if (oriented && cc.dimension() == 4) {
     try {
       const int signatureValue = cc.signature();
       out.signature = signatureValue;
@@ -54,7 +53,14 @@ CharacteristicNumbers CharacteristicNumbers::of(const Spacetime &K, bool oriente
       // Non-orientable / no fundamental class: signature (hence p1) undefined.
     }
   }
-  // Stiefel–Whitney numbers: pending the Wu-class / Steenrod-square work.
+  // Stiefel–Whitney numbers are unoriented invariants — computed regardless of
+  // the `oriented` flag. A class genuinely needing a deferred higher Steenrod
+  // square (issue #65) leaves the family empty rather than failing the call.
+  try {
+    out.stiefelWhitneyNumbers = cc.stiefelWhitneyNumbers();
+  } catch (const std::exception &) {
+    // Higher cup-i square required (deferred) or not a closed manifold.
+  }
   return out;
 }
 
