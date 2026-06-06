@@ -189,7 +189,7 @@ _EXPORTS = (
     "PeakRadialMajorization",
     # Coarse-grained workflow classes
     "SchwingerModel", "SchwingerQuench", "InteractionSimulation",
-    "Majorization", "Causet", "MutualInformation",
+    "Majorization", "Causet", "MutualInformation", "ChoiJamiolkowski",
     # KI + QuantumSimplex (Van Raamsdonk-metric simplex factory)
     "QuantumSimplex", "QuantumSimplexPosition", "QuantumVertex",
     "createQuantumVertex",

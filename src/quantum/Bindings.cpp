@@ -24,6 +24,7 @@
 
 #include "quantum/CausalCompare.hpp"
 #include "quantum/CausetChain.hpp"
+#include "quantum/ChoiJamiolkowski.h"
 #include "quantum/ChoiState.hpp"
 #include "quantum/DMRGRunner.hpp"
 #include "quantum/Holography.hpp"
@@ -37,6 +38,7 @@
 #include "quantum/TDVPRunner.hpp"
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
 
+#include <pybind11/complex.h>
 #include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -781,6 +783,41 @@ joint reduced density matrices).
             &MutualInformation::edgeLength,
             py::arg("I"), py::arg("epsilon") = 1e-10,
             R"doc(ℓ = -log(I) with infinity floor at -log(epsilon).)doc");
+
+    // ─── ChoiJamiolkowski: dense map–state duality ("bending") ─────────
+    py::class_<ChoiJamiolkowski>(m, "ChoiJamiolkowski",
+            R"doc(Static utility for the dense Choi–Jamiołkowski map–state
+duality ("bending"). Not instantiable; call the methods on the class.
+
+Operators and states are flat, ROW-MAJOR lists of complex numbers: a dA×dB
+operator U has ``U[i*dB + j] = U_{ij}``. Locked conventions:
+
+* ``vec(U) = Σ_{ij} U_{ij} |i⟩_A ⊗ |j⟩_B`` (the row-major flatten);
+* ``vec(|a⟩⟨b|) = a ⊗ conj(b)`` (separable, Schmidt rank 1);
+* ``⟨psiA|U|psiB⟩ = ⟨vec(U_T)|vec(U)⟩ = Tr(U_T^H·U)`` with
+  ``U_T = |psiA⟩⟨psiB|``;
+* Schmidt rank of ``vec(U)`` = number of nonzero singular values of U.
+)doc")
+        .def_static("vectorize", &ChoiJamiolkowski::vectorize,
+            py::arg("U"), py::arg("dA"), py::arg("dB"),
+            R"doc(Vectorise a dA×dB operator: vec(U) = Σ_{ij} U_{ij} |i⟩⊗|j⟩,
+the length-(dA·dB) row-major flatten.)doc")
+        .def_static("singularValues", &ChoiJamiolkowski::singularValues,
+            py::arg("U"), py::arg("dA"), py::arg("dB"),
+            R"doc(Singular values of the dA×dB operator U (descending); the
+Schmidt coefficients of vec(U).)doc")
+        .def_static("schmidtRank", &ChoiJamiolkowski::schmidtRank,
+            py::arg("U"), py::arg("dA"), py::arg("dB"), py::arg("tol") = 1e-10,
+            R"doc(Schmidt rank of vec(U): the number of singular values of U
+exceeding tol·σ_max.)doc")
+        .def_static("transitionOperator", &ChoiJamiolkowski::transitionOperator,
+            py::arg("psiA"), py::arg("psiB"), py::arg("dA"), py::arg("dB"),
+            R"doc(Transition operator U_T = |psiA⟩⟨psiB| (rank one), returned
+flat row-major.)doc")
+        .def_static("transitionAmplitude", &ChoiJamiolkowski::transitionAmplitude,
+            py::arg("psiA"), py::arg("U"), py::arg("psiB"), py::arg("dA"), py::arg("dB"),
+            R"doc(Transition amplitude ⟨psiA|U|psiB⟩ = Σ_{ij}
+conj(psiA_i)·U_{ij}·psiB_j.)doc");
 
     // ─── InteractionSimulation: interaction-history Monte Carlo ────────
     // See docs/source/interaction-history-monte-carlo.md.

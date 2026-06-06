@@ -15,7 +15,9 @@ version = "0.1.0"
 description = "C++/pybind11 extension for lattice spacetime experiments"
 authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.11"
+# Upper-bounded so Poetry can resolve dev deps that cap Python at <4.0 (e.g.
+# pybind11-stubgen); pip resolves per-interpreter and is unaffected.
+requires-python = ">=3.11,<4.0"
 license = { text = "MIT" }
 dependencies = [
     "numpy>=2.0",
@@ -27,7 +29,15 @@ optional-dependencies.examples = [
     "tqdm>=4.66",
 ]
 optional-dependencies.dev = [
-    "tessera[examples]",
+    # The examples extra is inlined here (rather than referenced as
+    # "tessera[examples]") so Poetry can resolve `poetry install --all-extras`:
+    # Poetry 2.x rejects a PEP 621 self-referential extra as a self-dependency.
+    # pip's resolved dependency set is unchanged. Keep in sync with the
+    # optional-dependencies.examples list above.
+    "matplotlib>=3.8",
+    "networkx>=3.0",
+    "scipy>=1.11",
+    "tqdm>=4.66",
     "pytest",
     "scikit-build-core>=0.9",
     "cmake>=3.22",
