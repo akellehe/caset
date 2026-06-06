@@ -27,8 +27,11 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <functional>
 #include <map>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -361,6 +364,323 @@ std::vector<long> ChainComplex::torsion(int k) const {
   for (long d : snf.invariantFactors)
     if (d > 1) out.push_back(d);
   return out;
+}
+
+// ===========================================================================
+// Stiefel–Whitney numbers (mod-2 characteristic numbers)
+// ===========================================================================
+//
+// These are read off the mod-2 cohomology ring. The pipeline is:
+//
+//   1. Mod-2 cohomology H^k(K; Z/2): cocycles modulo coboundaries, with the
+//      coboundary operator being the transpose of the (mod-2) boundary map.
+//   2. Cup product on cochains via the Alexander–Whitney recipe — the same
+//      front/back-face rule used by the integral intersection form, now mod 2
+//      and for arbitrary degrees.
+//   3. Wu classes v_k, defined by <v_k ∪ x, [K]> = <Sq^k x, [K]> for every
+//      x in H^{n-k}. Solving this small linear system (its matrix is the
+//      nondegenerate Poincaré-duality pairing) gives each v_k.
+//   4. The total Stiefel–Whitney class w = Sq(v); then each Stiefel–Whitney
+//      number is a degree-n monomial in the w_i evaluated on the fundamental
+//      class [K] (the mod-2 sum of all top simplices).
+//
+// Only the Steenrod squares expressible through the ordinary cup product are
+// implemented (Sq^k on a degree-k class is the cup square; Sq^k on a lower
+// degree class is zero). The general Sq^i needs higher cup-i products and is
+// deferred (#65); a class that genuinely requires it raises an exception.
+namespace {
+
+using Gf2Vector = std::vector<std::uint8_t>;  // dense vector over GF(2), entries 0/1
+using Gf2Matrix = std::vector<Gf2Vector>;     // a list of rows, each the same length
+
+// Reduce `rows` to reduced row-echelon form in place. Returns the pivot column
+// of each surviving (nonzero) row; its size is the rank.
+std::vector<int> gf2ReduceRows(Gf2Matrix &rows, int numColumns) {
+  std::vector<int> pivotColumns;
+  int pivotRow = 0;
+  for (int column = 0; column < numColumns && pivotRow < static_cast<int>(rows.size());
+       ++column) {
+    int found = -1;
+    for (int r = pivotRow; r < static_cast<int>(rows.size()); ++r)
+      if (rows[r][column]) { found = r; break; }
+    if (found < 0) continue;
+    std::swap(rows[pivotRow], rows[found]);
+    for (int r = 0; r < static_cast<int>(rows.size()); ++r)
+      if (r != pivotRow && rows[r][column])
+        for (int c = 0; c < numColumns; ++c) rows[r][c] ^= rows[pivotRow][c];
+    pivotColumns.push_back(column);
+    ++pivotRow;
+  }
+  return pivotColumns;
+}
+
+// Basis of the null space {x : matrix·x = 0} of a GF(2) matrix with `numColumns`
+// columns (rows may be empty, in which case every standard basis vector is a
+// kernel vector).
+Gf2Matrix gf2Kernel(Gf2Matrix matrix, int numColumns) {
+  const std::vector<int> pivotColumns = gf2ReduceRows(matrix, numColumns);
+  std::vector<char> isPivot(numColumns, 0);
+  for (int p : pivotColumns) isPivot[p] = 1;
+  Gf2Matrix basis;
+  for (int freeColumn = 0; freeColumn < numColumns; ++freeColumn) {
+    if (isPivot[freeColumn]) continue;
+    Gf2Vector x(numColumns, 0);
+    x[freeColumn] = 1;
+    for (int t = 0; t < static_cast<int>(pivotColumns.size()); ++t)
+      x[pivotColumns[t]] = matrix[t][freeColumn];
+    basis.push_back(std::move(x));
+  }
+  return basis;
+}
+
+// Incrementally maintained spanning set (kept in echelon form). add() returns
+// true iff `candidate` was linearly independent of everything added so far
+// (and then records it). Used to split cocycles into cohomology classes.
+struct Gf2Span {
+  Gf2Matrix echelonRows;
+  std::vector<int> leadingColumn;
+  int numColumns;
+  explicit Gf2Span(int columns) : numColumns(columns) {}
+  bool add(Gf2Vector candidate) {
+    for (int t = 0; t < static_cast<int>(echelonRows.size()); ++t)
+      if (candidate[leadingColumn[t]])
+        for (int c = 0; c < numColumns; ++c) candidate[c] ^= echelonRows[t][c];
+    int lead = -1;
+    for (int c = 0; c < numColumns; ++c)
+      if (candidate[c]) { lead = c; break; }
+    if (lead < 0) return false;  // already in the span
+    echelonRows.push_back(std::move(candidate));
+    leadingColumn.push_back(lead);
+    return true;
+  }
+};
+
+// Solve matrix·x = rhs over GF(2) for a square, invertible matrix (the
+// duality pairing). Throws if the system is not uniquely solvable.
+Gf2Vector gf2Solve(const Gf2Matrix &matrix, const Gf2Vector &rhs) {
+  const int n = static_cast<int>(rhs.size());
+  Gf2Matrix augmented(matrix.size(), Gf2Vector(n + 1, 0));
+  for (int r = 0; r < static_cast<int>(matrix.size()); ++r) {
+    for (int c = 0; c < n; ++c) augmented[r][c] = matrix[r][c];
+    augmented[r][n] = rhs[r];
+  }
+  const std::vector<int> pivotColumns = gf2ReduceRows(augmented, n + 1);
+  if (static_cast<int>(pivotColumns.size()) != n || pivotColumns.back() == n)
+    throw std::runtime_error(
+        "ChainComplex::stiefelWhitneyNumbers: the Poincaré-duality pairing is "
+        "not invertible (the complex is not a closed manifold)");
+  Gf2Vector x(n, 0);
+  for (int t = 0; t < n; ++t) x[pivotColumns[t]] = augmented[t][n];
+  return x;
+}
+
+bool isZeroVector(const Gf2Vector &v) {
+  for (std::uint8_t e : v)
+    if (e) return false;
+  return true;
+}
+
+}  // namespace
+
+std::map<std::string, int> ChainComplex::stiefelWhitneyNumbers() const {
+  std::map<std::string, int> numbers;
+  const int n = dimension_;
+  if (n < 0) return numbers;  // empty complex: no characteristic numbers
+
+  const auto countAt = [&](int k) {
+    return (k < 0 || k > n) ? 0 : static_cast<int>(counts_[static_cast<std::size_t>(k)]);
+  };
+
+  // Mod-2 boundary entry ∂_k[row][col] (k-simplex col -> its (k-1)-faces).
+  const auto boundaryBit = [&](int k, int row, int col) -> std::uint8_t {
+    const auto &flat = boundary_[static_cast<std::size_t>(k)];
+    const int cols = countAt(k);
+    return static_cast<std::uint8_t>(
+        std::abs(flat[static_cast<std::size_t>(row) * cols + col]) & 1);
+  };
+
+  // Index of a k-simplex from its sorted vertex ids (for cup-product faces).
+  std::vector<std::map<Face, int>> indexOfFace(n + 1);
+  for (int k = 0; k <= n; ++k)
+    for (int i = 0; i < countAt(k); ++i)
+      indexOfFace[k][faceVerts_[k][static_cast<std::size_t>(i)]] = i;
+
+  // ---- mod-2 cohomology bases, one representative cocycle per class ----
+  // H^k = ker(δ^k) / im(δ^{k-1}); δ^k = (∂_{k+1})^T, coboundaries = rows of ∂_k.
+  std::vector<Gf2Matrix> cohomology(n + 1);  // cohomology[k] = basis cochains in C^k
+  for (int k = 0; k <= n; ++k) {
+    const int dim = countAt(k);
+    // Coboundary operator δ^k as a matrix on length-`dim` cochains, with one
+    // row per (k+1)-simplex: (δ^k α)(τ) = α(∂τ).
+    Gf2Matrix coboundaryOperator;
+    if (k + 1 <= n) {
+      const int higher = countAt(k + 1);
+      coboundaryOperator.assign(higher, Gf2Vector(dim, 0));
+      for (int tau = 0; tau < higher; ++tau)
+        for (int face = 0; face < dim; ++face)
+          coboundaryOperator[tau][face] = boundaryBit(k + 1, face, tau);
+    }
+    const Gf2Matrix cocycles = gf2Kernel(std::move(coboundaryOperator), dim);
+
+    // Span seeded with the coboundaries (rows of ∂_k); cocycles independent of
+    // them are the cohomology generators.
+    Gf2Span span(dim);
+    for (int row = 0; row < countAt(k - 1); ++row) {
+      Gf2Vector coboundary(dim, 0);
+      for (int col = 0; col < dim; ++col) coboundary[col] = boundaryBit(k, row, col);
+      span.add(std::move(coboundary));
+    }
+    for (const Gf2Vector &cocycle : cocycles)
+      if (span.add(cocycle)) cohomology[k].push_back(cocycle);
+  }
+
+  // ---- Alexander–Whitney cup product on cochains (mod 2) ----
+  // (α ∪ β) on a (p+q)-simplex [v0..v_{p+q}] = α(v0..vp) · β(vp..v_{p+q}).
+  const auto cup = [&](const Gf2Vector &alpha, int p, const Gf2Vector &beta,
+                       int q) -> Gf2Vector {
+    const int degree = p + q;
+    const int dim = countAt(degree);
+    Gf2Vector product(dim, 0);
+    if (degree > n) return product;
+    for (int s = 0; s < dim; ++s) {
+      const Face &vertices = faceVerts_[degree][static_cast<std::size_t>(s)];
+      const Face front(vertices.begin(), vertices.begin() + (p + 1));
+      const Face back(vertices.begin() + p, vertices.end());
+      product[s] = static_cast<std::uint8_t>(
+          alpha[indexOfFace[p].at(front)] & beta[indexOfFace[q].at(back)]);
+    }
+    return product;
+  };
+
+  // Evaluate a top-degree cochain on the fundamental class [K]: the mod-2 sum
+  // over all top simplices.
+  const auto evaluateOnFundamentalClass = [&](const Gf2Vector &topCochain) -> int {
+    int total = 0;
+    for (std::uint8_t e : topCochain) total ^= e;
+    return total;
+  };
+
+  // ---- Wu classes v_k (1 ≤ k ≤ n/2; the rest vanish for degree reasons) ----
+  // v_k is the element of H^k with <v_k ∪ x, [K]> = <Sq^k x, [K]> for all
+  // x in H^{n-k}. Sq^k on a degree-(n-k) class is the cup square when k = n-k,
+  // zero when k > n-k, and (deferred) a higher cup-i product when k < n-k.
+  std::vector<Gf2Vector> wuClass(n + 1);
+  for (int k = 0; k <= n; ++k) wuClass[k].assign(countAt(k), 0);
+  for (int k = 1; 2 * k <= n; ++k) {
+    const int complement = n - k;
+    const auto &basisK = cohomology[k];
+    const auto &basisComplement = cohomology[complement];
+    if (basisK.empty()) continue;  // H^k = 0 ⇒ v_k = 0
+    if (basisK.size() != basisComplement.size())
+      throw std::runtime_error(
+          "ChainComplex::stiefelWhitneyNumbers: mod-2 Poincaré duality fails "
+          "(dim H^" + std::to_string(k) + " != dim H^" + std::to_string(complement) +
+          "); the complex is not a closed manifold");
+
+    // Pairing matrix P[j][i] = <e_i ∪ x_j, [K]> and right-hand side
+    // r[j] = <Sq^k x_j, [K]>.
+    Gf2Matrix pairing(basisComplement.size(), Gf2Vector(basisK.size(), 0));
+    Gf2Vector rightHandSide(basisComplement.size(), 0);
+    for (int j = 0; j < static_cast<int>(basisComplement.size()); ++j) {
+      for (int i = 0; i < static_cast<int>(basisK.size()); ++i)
+        pairing[j][i] = static_cast<std::uint8_t>(
+            evaluateOnFundamentalClass(cup(basisK[i], k, basisComplement[j], complement)));
+      if (k == complement)  // Sq^k on a degree-k class is the cup square
+        rightHandSide[j] = static_cast<std::uint8_t>(evaluateOnFundamentalClass(
+            cup(basisComplement[j], complement, basisComplement[j], complement)));
+      // k < complement would need a higher cup-i product; but H^k ≠ 0 with
+      // k < n-k cannot occur for the supported manifolds (it requires a
+      // nonzero low-degree cohomology paired against a higher one). Guard it.
+      else
+        throw std::runtime_error(
+            "ChainComplex::stiefelWhitneyNumbers: Wu class v_" + std::to_string(k) +
+            " requires a higher Steenrod cup-i product (i>0), which is deferred "
+            "(see issue #65)");
+    }
+    const Gf2Vector coefficients = gf2Solve(pairing, rightHandSide);
+    Gf2Vector v(countAt(k), 0);
+    for (int i = 0; i < static_cast<int>(coefficients.size()); ++i)
+      if (coefficients[i])
+        for (int c = 0; c < countAt(k); ++c) v[c] ^= basisK[i][c];
+    wuClass[k] = std::move(v);
+  }
+
+  // ---- Stiefel–Whitney classes w_i = Σ_j Sq^j(v_{i-j}) ----
+  // Sq^0(v_i) = v_i; Sq^j(v_{i-j}) for j ≥ 1 is the cup square when 2j = i
+  // (degree i-j = j) and zero when the Wu class vanishes; anything else is a
+  // deferred higher square. Computed lazily so a deferred term is only hit if
+  // it is actually needed (and nonzero).
+  std::vector<bool> haveW(n + 1, false);
+  std::vector<Gf2Vector> wClass(n + 1);
+  const auto stiefelWhitney = [&](int i) -> const Gf2Vector & {
+    if (haveW[i]) return wClass[i];
+    Gf2Vector w(countAt(i), 0);
+    if (i <= n - i)  // Sq^0(v_i): v_i itself (zero unless 1 ≤ i ≤ n/2)
+      for (int c = 0; c < countAt(i); ++c) w[c] ^= wuClass[i][c];
+    for (int j = 1; j <= i; ++j) {
+      const int m = i - j;  // degree of the Wu class being squared
+      if (isZeroVector(wuClass[m])) continue;  // Sq^j(0) = 0
+      if (j > m) continue;                      // Sq^j on degree m < j is 0
+      if (j == m) {                             // Sq^j on degree j is the square
+        const Gf2Vector square = cup(wuClass[m], m, wuClass[m], m);
+        for (int c = 0; c < countAt(i); ++c) w[c] ^= square[c];
+        continue;
+      }
+      throw std::runtime_error(
+          "ChainComplex::stiefelWhitneyNumbers: Stiefel–Whitney class w_" +
+          std::to_string(i) + " requires a higher Steenrod cup-i product (i>0), "
+          "which is deferred (see issue #65)");
+    }
+    haveW[i] = true;
+    wClass[i] = std::move(w);
+    return wClass[i];
+  };
+
+  // ---- Stiefel–Whitney numbers: every partition of n into positive parts ----
+  // The monomial w_{i_1}···w_{i_r} (parts ascending) cupped together and
+  // evaluated on [K]. Parts are processed smallest-first so a zero factor (e.g.
+  // w_1 = 0 on an orientable manifold) short-circuits before a deferred,
+  // would-be-higher-square factor is ever requested.
+  std::function<void(int, int, std::vector<int> &)> forEachPartition =
+      [&](int remaining, int minimumPart, std::vector<int> &parts) {
+        if (remaining == 0) {
+          // Build a readable monomial key, e.g. {1,1,2} -> "w1^2w2".
+          std::string key;
+          for (int p = 0; p < static_cast<int>(parts.size());) {
+            int q = p;
+            while (q < static_cast<int>(parts.size()) && parts[q] == parts[p]) ++q;
+            const int multiplicity = q - p;
+            key += "w" + std::to_string(parts[p]);
+            if (multiplicity > 1) key += "^" + std::to_string(multiplicity);
+            p = q;
+          }
+          // Evaluate the cup-product monomial, short-circuiting on a zero factor.
+          Gf2Vector accumulator;
+          int accumulatorDegree = 0;
+          bool zero = false;
+          for (int idx = 0; idx < static_cast<int>(parts.size()); ++idx) {
+            const Gf2Vector &factor = stiefelWhitney(parts[idx]);
+            if (idx == 0) {
+              accumulator = factor;
+              accumulatorDegree = parts[idx];
+            } else {
+              accumulator = cup(accumulator, accumulatorDegree, factor, parts[idx]);
+              accumulatorDegree += parts[idx];
+            }
+            if (isZeroVector(accumulator)) { zero = true; break; }
+          }
+          numbers[key] = zero ? 0 : evaluateOnFundamentalClass(accumulator);
+          return;
+        }
+        for (int part = minimumPart; part <= remaining; ++part) {
+          parts.push_back(part);
+          forEachPartition(remaining - part, part, parts);
+          parts.pop_back();
+        }
+      };
+  std::vector<int> parts;
+  forEachPartition(n, 1, parts);
+  return numbers;
 }
 
 }  // namespace tessera::cobordism
