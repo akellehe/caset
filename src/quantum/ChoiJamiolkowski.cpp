@@ -5,6 +5,7 @@
 
 #include <Eigen/Dense>
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -132,6 +133,29 @@ std::complex<double> ChoiJamiolkowski::transitionAmplitude(
     // ⟨psiA|U|psiB⟩ = Σ_{ij} conj(psiA_i)·U_{ij}·psiB_j. Eigen's complex dot()
     // conjugates its first argument: a.dot(M*b) = Σ_i conj(a_i) (M b)_i.
     return a.dot(M * b);
+}
+
+std::vector<std::complex<double>> ChoiJamiolkowski::choiState(
+    const std::vector<std::complex<double>> &U, int d) {
+    requirePositiveDims(d, d, "ChoiJamiolkowski::choiState");
+    asMatrix(U, d, d, "ChoiJamiolkowski::choiState");  // validates U.size() == d*d
+    // |Φ_U⟩ = (U ⊗ I)|Φ⁺⟩ with |Φ⁺⟩ = (1/√d) Σ_k |k⟩|k⟩  ==  (1/√d) · vec(U).
+    const double inv = 1.0 / std::sqrt(static_cast<double>(d));
+    std::vector<std::complex<double>> state = U;
+    for (auto &z : state) z *= inv;
+    return state;
+}
+
+std::vector<std::complex<double>> ChoiJamiolkowski::choiMatrix(
+    const std::vector<std::complex<double>> &U, int d) {
+    const std::vector<std::complex<double>> v = choiState(U, d);
+    const std::size_t n = v.size();  // d*d
+    // J = |v⟩⟨v|, row-major: J[i*n + j] = v_i · conj(v_j).
+    std::vector<std::complex<double>> J(n * n);
+    for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j)
+            J[i * n + j] = v[i] * std::conj(v[j]);
+    return J;
 }
 
 }  // namespace tessera::quantum

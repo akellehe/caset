@@ -14,6 +14,7 @@
 #include "mesh/SimplexFilter.h"
 #include "mesh/Vertex.h"
 #include "observables/MIUnits.hpp"
+#include "quantum/ChoiJamiolkowski.h"
 #include "quantum/Holography.hpp"
 #include "spacetime/Metric.h"
 #include "spacetime/Spacetime.h"
@@ -446,22 +447,20 @@ InteractionSimulation::InteractionSimulation(InteractionConfig config)
         config_.featureChoiSigmaAB = false;
     }
     if (config_.featureChoiSigmaAB) {
-        // |Ω⟩ = (1/4) Σ_{i,j} |i,j⟩_A |i,j⟩_B' on the doubled
-        // ququart space; J(U) = (U ⊗ I_16) |Ω⟩⟨Ω| (U† ⊗ I_16).
-        // We construct |Ω⟩ as a 256-dim column vector with 1/4 at
-        // every "diagonal" (i,j;i,j) index, then apply U on the
-        // first 16-dim subsystem.
-        Eigen::VectorXcd omega = Eigen::VectorXcd::Zero(256);
-        for (int k = 0; k < 16; ++k)
-            omega(k * 16 + k) = cd(0.25, 0.0);   // (1/4) (i,j) (i,j)
-        // Apply U on the first 16-dim factor: reshape omega as 16×16
-        // (rows = first factor, cols = second), multiply by U from
-        // the left, reshape back.
-        Eigen::Map<Eigen::MatrixXcd> omega_mat(omega.data(), 16, 16);
-        Eigen::MatrixXcd shaped = quditInteractionU_ * omega_mat;
-        Eigen::VectorXcd uOmega = Eigen::Map<Eigen::VectorXcd>(
-            shaped.data(), 256);
-        quditChoiU_ = uOmega * uOmega.adjoint();
+        // J(U) = (U ⊗ I_16) |Φ⁺⟩⟨Φ⁺| (U ⊗ I_16)^H, the Choi matrix of the
+        // qudit-pair unitary on the doubled ququart space (|Φ⁺⟩ = (1/4) Σ_k
+        // |k,k⟩). Delegated to quantum::ChoiJamiolkowski::choiMatrix so the
+        // vec(U) convention (standard, row-major) is canonical across the
+        // codebase and shared with the Stage-1 bending oracle.
+        std::vector<cd> uFlat(256);
+        for (int i = 0; i < 16; ++i)
+            for (int j = 0; j < 16; ++j)
+                uFlat[static_cast<std::size_t>(i) * 16 + j] =
+                    quditInteractionU_(i, j);
+        const std::vector<cd> jFlat = ChoiJamiolkowski::choiMatrix(uFlat, 16);
+        quditChoiU_ = Eigen::Map<const Eigen::Matrix<
+            cd, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>(
+            jFlat.data(), 256, 256);
     }
 
     buildInitialLayer();

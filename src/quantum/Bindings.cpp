@@ -817,7 +817,15 @@ flat row-major.)doc")
         .def_static("transitionAmplitude", &ChoiJamiolkowski::transitionAmplitude,
             py::arg("psiA"), py::arg("U"), py::arg("psiB"), py::arg("dA"), py::arg("dB"),
             R"doc(Transition amplitude ⟨psiA|U|psiB⟩ = Σ_{ij}
-conj(psiA_i)·U_{ij}·psiB_j.)doc");
+conj(psiA_i)·U_{ij}·psiB_j.)doc")
+        .def_static("choiState", &ChoiJamiolkowski::choiState,
+            py::arg("U"), py::arg("d"),
+            R"doc(Choi–Jamiołkowski state (U⊗I)|Φ⁺⟩ = (1/√d)·vec(U) of a square
+d×d operator (length d·d, row-major; a unit vector for unitary U).)doc")
+        .def_static("choiMatrix", &ChoiJamiolkowski::choiMatrix,
+            py::arg("U"), py::arg("d"),
+            R"doc(Choi matrix J(U) = |state⟩⟨state| of a square d×d operator
+(flat row-major (d·d)×(d·d); Tr J = 1 for unitary U).)doc");
 
     // ─── InteractionSimulation: interaction-history Monte Carlo ────────
     // See docs/source/interaction-history-monte-carlo.md.
