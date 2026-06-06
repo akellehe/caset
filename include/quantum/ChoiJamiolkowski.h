@@ -1,0 +1,105 @@
+// Choi–Jamiołkowski map–state duality ("bending") over dense complex matrices.
+//
+// The Choi–Jamiołkowski isomorphism bends an operator into a state: a linear
+// map / matrix U on H_A → H_B becomes a vector |vec(U)⟩ in H_A ⊗ H_B. This
+// class is the pure-dense-linear-algebra realisation of that bend — Eigen
+// only, no ITensor, no MPS. It is the algebraic-layer (Stage 1) oracle for the
+// cobordism-correspondence experiment, where the "bending" of an operation
+// into a boundary state is checked against its transition amplitude.
+//
+// ─── Conventions (locked) ──────────────────────────────────────────────────
+//
+// Matrices are passed flat, ROW-MAJOR: a dA×dB matrix U has
+//   U_{ij} = U[i*dB + j],   i ∈ [0, dA),  j ∈ [0, dB).
+//
+// Vectorisation (row-major flatten = tensor index i*dB + j):
+//
+//   vec(U) = Σ_{ij} U_{ij} |i⟩_A ⊗ |j⟩_B.
+//
+// On a rank-one outer product this gives the separable state
+//
+//   vec(|a⟩⟨b|) = a ⊗ conj(b),
+//
+// which has Schmidt rank 1. More generally the Schmidt rank of vec(U) equals
+// the number of nonzero singular values of U (the SVD of U is the Schmidt
+// decomposition of vec(U)).
+//
+// The transition operator of two states is the rank-one map
+//
+//   U_T = |psiA⟩⟨psiB|        ((U_T)_{ij} = psiA_i · conj(psiB_j)),
+//
+// and the central map–state (Hilbert–Schmidt) duality identity is
+//
+//   ⟨psiA|U|psiB⟩ = ⟨vec(U_T)|vec(U)⟩ = Tr(U_T^H · U)
+//                 = Σ_{ij} conj(psiA_i) · U_{ij} · psiB_j.
+//
+// ─── References ─────────────────────────────────────────────────────────────
+//   Choi, *Completely positive linear maps on complex matrices*,
+//     Linear Algebra Appl. 10, 285 (1975).
+//   Jamiołkowski, *Linear transformations which preserve trace and positive
+//     semidefiniteness of operators*, Rep. Math. Phys. 3, 275 (1972).
+
+#pragma once
+
+#include <complex>
+#include <vector>
+
+// === tessera subsystem ns fwd-decls ===
+namespace tessera::graph {}
+namespace tessera::mesh {}
+namespace tessera::observables {}
+namespace tessera::simulations {}
+namespace tessera::spacetime {}
+namespace tessera::quantum {
+using namespace ::tessera::mesh;
+using namespace ::tessera::graph;
+using namespace ::tessera::spacetime;
+using namespace ::tessera::observables;
+using namespace ::tessera::simulations;
+
+/// Dense Choi–Jamiołkowski map–state duality ("bending").
+///
+/// A stateless static-only utility (the `cobordism::Cobordism` pattern): not
+/// instantiable, every operation is a static method. All matrices/vectors are
+/// flat, row-major `std::vector<std::complex<double>>` (see the file header for
+/// the locked conventions); Eigen is used internally for the SVD.
+class ChoiJamiolkowski {
+  public:
+    ChoiJamiolkowski() = delete;
+
+    /// Vectorise a dA×dB operator: vec(U) = Σ_{ij} U_{ij} |i⟩_A ⊗ |j⟩_B.
+    /// With the row-major convention the tensor index is i*dB + j, so vec(U) is
+    /// exactly the row-major flatten of U (length dA·dB). Throws
+    /// std::invalid_argument if U.size() != dA·dB or a dimension is non-positive.
+    [[nodiscard]] static std::vector<std::complex<double>> vectorize(
+        const std::vector<std::complex<double>> &U, int dA, int dB);
+
+    /// Singular values of the dA×dB operator U (Eigen JacobiSVD), in descending
+    /// order; min(dA, dB) of them. These are the Schmidt coefficients of vec(U).
+    [[nodiscard]] static std::vector<double> singularValues(
+        const std::vector<std::complex<double>> &U, int dA, int dB);
+
+    /// Schmidt rank of vec(U): the number of singular values of U that exceed
+    /// tol·σ_max (σ_max the largest singular value). Equals the operator rank of
+    /// U and the bipartite Schmidt rank of the state vec(U).
+    [[nodiscard]] static int schmidtRank(
+        const std::vector<std::complex<double>> &U, int dA, int dB,
+        double tol = 1e-10);
+
+    /// Transition operator U_T = |psiA⟩⟨psiB| (a rank-one dA×dB matrix,
+    /// (U_T)_{ij} = psiA_i · conj(psiB_j)), returned flat row-major. Throws
+    /// std::invalid_argument if psiA.size() != dA or psiB.size() != dB.
+    [[nodiscard]] static std::vector<std::complex<double>> transitionOperator(
+        const std::vector<std::complex<double>> &psiA,
+        const std::vector<std::complex<double>> &psiB, int dA, int dB);
+
+    /// Transition amplitude ⟨psiA|U|psiB⟩ = Σ_{ij} conj(psiA_i)·U_{ij}·psiB_j.
+    /// By the duality identity this equals ⟨vec(U_T)|vec(U)⟩ = Tr(U_T^H·U) for
+    /// U_T = |psiA⟩⟨psiB|. Throws std::invalid_argument on a dimension mismatch.
+    [[nodiscard]] static std::complex<double> transitionAmplitude(
+        const std::vector<std::complex<double>> &psiA,
+        const std::vector<std::complex<double>> &U,
+        const std::vector<std::complex<double>> &psiB, int dA, int dB);
+};
+
+}  // namespace tessera::quantum
