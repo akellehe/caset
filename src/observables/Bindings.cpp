@@ -44,6 +44,7 @@
 #include "observables/SparseGraph.h"
 #include "observables/VolumeProfile.h"
 #include "observables/WilsonLoop.h"
+#include "observables/Spectral.h"
 #include "spacetime/Spacetime.h"
 #include "ForceLayout.h"
 #include "mesh/VertexList.h"
@@ -215,6 +216,22 @@ multiple configurations for averaging.)doc")
            "Compute and accumulate a volume profile measurement for averaging.")
       .def("reset", &VolumeProfile::reset,
            "Reset the accumulated measurements.");
+  // ========================================
+  // Hodge spectral Observables (#95): scalars over cobordism::HodgeLaplacian
+  // ========================================
+  py::class_<SpectralGap, std::shared_ptr<SpectralGap>>(m, "SpectralGap",
+      "Observable: first spectral gap lambda_1 - lambda_0 of the Hermitian-"
+      "weighted Hodge Laplacian (cobordism::HodgeLaplacian, k=0). The gauge-"
+      "invariant interference signature: on the triangle it collapses from 3 to "
+      "0 at flux Phi=pi.")
+      .def(py::init<>())
+      .def("compute", &SpectralGap::compute, py::arg("spacetime"));
+  py::class_<HarmonicDimension, std::shared_ptr<HarmonicDimension>>(m, "HarmonicDimension",
+      "Observable: dim ker L_0 (harmonic zero-mode count) of the Hermitian-"
+      "weighted Hodge Laplacian. Equals b_0 at zero flux; a nonzero U(1) flux "
+      "lifts the zero-mode, dropping it below the topological ChainComplex count.")
+      .def(py::init<>())
+      .def("compute", &HarmonicDimension::compute, py::arg("spacetime"));
   // ========================================
   // WilsonLoop
   // ========================================
