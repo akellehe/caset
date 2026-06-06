@@ -117,6 +117,12 @@ squaredLength * exp(i * phase) used by the Hermitian-weighted Laplacian.
 The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
       .def("setPhase", &Edge::setPhase, py::arg("phase"),
            "Set the U(1) connection phase carried by this edge (radians).")
+      .def("setSquaredLength", &Edge::setSquaredLength, py::arg("squaredLength"),
+           R"doc(Set the squared edge length (the signed weight magnitude).
+
+Paired with the phase it gives the complex edge weight squaredLength * exp(i *
+phase) read by the Hermitian-weighted Laplacian; also used by the Regge solver
+to optimize geometry without rebuilding the mesh.)doc")
       .def("getTarget", &Edge::getTarget, py::return_value_policy::reference,
            "Return the target vertex of this edge.");
   // ========================================
