@@ -14,6 +14,8 @@ experiments.
 overview/index
 earlier-work/index
 charged-cartan/index
+cobordism
+cobordism-plan
 ```
 
 ## Reproducing
