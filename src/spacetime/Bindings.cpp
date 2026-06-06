@@ -204,6 +204,7 @@ Args:
       .value("CDT", SpacetimeType::CDT)
       .value("REGGE", SpacetimeType::REGGE)
       .value("COSET", SpacetimeType::COSET)
+      .value("HERMITIAN_WEIGHTED", SpacetimeType::HERMITIAN_WEIGHTED)
       .export_values();
   // ========================================
   // Spacetime

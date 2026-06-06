@@ -21,6 +21,7 @@
 
 import unittest
 
+import tessera
 from tessera import Edge, Vertex, Spacetime
 
 
@@ -75,6 +76,42 @@ class TestEdge(unittest.TestCase):
         self.assertEqual(e1, e3)
         e4 = Edge(v2, v3)
         self.assertNotEqual(e1, e4)
+
+
+class TestEdgePhase(unittest.TestCase):
+
+    def test_default_phase_is_zero(self):
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [1, 1, 1, 1])
+        edge = Edge(v1, v2)
+        self.assertEqual(edge.getPhase(), 0.0)
+
+    def test_default_phase_is_zero_with_explicit_squared_length(self):
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [1, 1, 1, 1])
+        edge = Edge(v1, v2, 1.0)
+        self.assertEqual(edge.getPhase(), 0.0)
+
+    def test_set_phase_round_trip(self):
+        v1 = Vertex(1, [0, 0, 0, 0])
+        v2 = Vertex(2, [1, 1, 1, 1])
+        edge = Edge(v1, v2)
+        for value in (0.5, -1.25, 3.14159, 0.0):
+            edge.setPhase(value)
+            self.assertEqual(edge.getPhase(), value)
+
+
+class TestHermitianWeightedSpacetimeType(unittest.TestCase):
+
+    def test_hermitian_weighted_value_exists(self):
+        self.assertTrue(hasattr(tessera, "HERMITIAN_WEIGHTED"))
+
+    def test_spacetime_constructs_with_hermitian_weighted(self):
+        signature = tessera.Signature(4, tessera.Lorentzian)
+        metric = tessera.Metric(True, signature)
+        spacetime = tessera.Spacetime(metric, tessera.HERMITIAN_WEIGHTED, 1.0, 1.0,
+                                      tessera.PREFERRED, tessera.Toroid())
+        self.assertIsInstance(spacetime, tessera.Spacetime)
 
 
 if __name__ == '__main__':
