@@ -24,6 +24,7 @@
 // in the Python dependency. This translation unit is always added to
 // _tessera's sources (see CMakeLists.txt, TESSERA_PYBIND_SOURCES).
 
+#include <pybind11/complex.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -31,6 +32,7 @@
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cobordism.h"
 #include "cobordism/CombinatorialDimension.h"
+#include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
@@ -95,6 +97,48 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "Mod-2 Stiefel-Whitney numbers <w_{i1}..w_{ir}, [K]> keyed by "
            "monomial (e.g. 'w4', 'w2^2'); empty for the empty complex. Raises "
            "if a class needs a deferred higher Steenrod cup-i product (#65).");
+
+  // ----- Hermitian-weighted Hodge Laplacian (#90): the k=0 operator -----
+  py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
+      R"doc(Hermitian-weighted Hodge Laplacian on a Spacetime.
+
+Stage 1 implements degree k=0 — the U(1)-weighted graph Laplacian L = D - A on
+the 1-skeleton, assembled from each edge's complex weight
+squaredLength * exp(i*phase). Vertices are indexed by sorted id (0..N-1), so the
+returned flat N*N row-major matrices are reproducible. Adjacency is Hermitian by
+construction (the reverse orientation negates the phase); the degree uses the
+magnitude convention D_ii = sum |squaredLength|. The eigendecomposition (Eigen
+SelfAdjointEigenSolver) is computed lazily and cached.
+
+The API is degree-parameterized (int k) for Stage 2's cochain Laplacians L_k;
+any k != 0 currently raises RuntimeError. This is the operator only — fluxes,
+cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
+           "Build the Hodge Laplacian operator over a triangulation.")
+      .def("adjacency", &HodgeLaplacian::adjacency,
+           "Weighted adjacency A as a flat row-major N*N complex array "
+           "(Hermitian; A_ij = sum squaredLength * exp(i*phase)).")
+      .def("degree", &HodgeLaplacian::degree,
+           "Degree vector (length N, real): D_ii = sum |squaredLength| over "
+           "incident edges (magnitude convention).")
+      .def("laplacian", &HodgeLaplacian::laplacian, py::arg("k") = 0,
+           "Laplacian L = D - A for k=0 as a flat row-major N*N complex array; "
+           "raises for k != 0 (Stage 2 not yet implemented).")
+      .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
+           "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
+      .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,
+           py::arg("t") = 1.0,
+           "Residual ||U U^dagger - I|| of U = e^{-iLt} formed from the "
+           "eigendecomposition (~0 for the Hermitian L).")
+      .def("eigenvalues", &HodgeLaplacian::eigenvalues, py::arg("k") = 0,
+           "Eigenvalues of L_k (real, ascending); raises for k != 0.")
+      .def("eigenvectors", &HodgeLaplacian::eigenvectors, py::arg("k") = 0,
+           "Eigenvectors of L_k as a flat row-major N*N complex array (column j "
+           "is the eigenvector for the j-th ascending eigenvalue); raises for k != 0.")
+      .def("harmonics", &HodgeLaplacian::harmonics, py::arg("k") = 0,
+           py::arg("tol") = 1e-9,
+           "Harmonic representatives (eigenvectors with |lambda| < tol) as a flat "
+           "row-major N*M complex array whose M columns span ker L_k; raises for k != 0.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
