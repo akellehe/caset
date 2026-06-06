@@ -59,7 +59,10 @@ enum class SpacetimeType : uint8_t {
   COSET = 2,
   REGGE_PACHNER = 3,
   GFT_SPIN_FOAM = 4,
-  RICCI_FLOW_DISCRETIZATION = 5
+  RICCI_FLOW_DISCRETIZATION = 5,
+  // Variable complex edge weights (squaredLength * e^{i*phase}) for a
+  // Hermitian-weighted complex, unlike CDT's fixed real edge lengths.
+  HERMITIAN_WEIGHTED = 6
 };
 
 ///

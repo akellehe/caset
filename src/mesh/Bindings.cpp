@@ -109,6 +109,14 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
 Positive = spacelike, negative = timelike, zero = lightlike.
 We work in squared lengths to avoid complex arithmetic for
 timelike (imaginary-length) edges.)doc")
+      .def("getPhase", &Edge::getPhase,
+           R"doc(Return the U(1) connection phase carried by this edge (radians).
+
+Paired with the signed squared length it gives the complex edge weight
+squaredLength * exp(i * phase) used by the Hermitian-weighted Laplacian.
+The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
+      .def("setPhase", &Edge::setPhase, py::arg("phase"),
+           "Set the U(1) connection phase carried by this edge (radians).")
       .def("getTarget", &Edge::getTarget, py::return_value_policy::reference,
            "Return the target vertex of this edge.");
   // ========================================

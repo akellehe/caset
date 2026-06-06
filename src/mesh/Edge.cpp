@@ -49,13 +49,13 @@ class Simplex;
       const VertexPtr &source_,
       const VertexPtr &target_,
       double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_), fingerprint({source_->getId(), target_->getId()}) {
+    ) : source(source_), target(target_), squaredLength(squaredLength_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
     }
 
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_
-    ) : source(source_), target(target_), fingerprint({source_->getId(), target_->getId()}) {
+    ) : source(source_), target(target_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
       // Set squaredLength to a random value between -1 and 1
       squaredLength = random_uniform(); // Fallback: CDT always provides explicit edge lengths.
     }
@@ -70,6 +70,10 @@ class Simplex;
 
     [[nodiscard]] double Edge::getSquaredLength() const noexcept {
       return squaredLength;
+    }
+
+    [[nodiscard]] double Edge::getPhase() const noexcept {
+      return phase;
     }
 
 #ifdef TESSERA_VERBOSE

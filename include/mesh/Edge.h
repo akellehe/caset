@@ -104,6 +104,14 @@ class Edge {
     /// @return The square of the length of the edge.
     [[nodiscard]] double getSquaredLength() const noexcept;
 
+    /// The U(1) connection phase carried on this edge's stored source->target orientation (and
+    /// negated on reversal). With the signed `squaredLength` magnitude it forms the complex edge
+    /// weight \f$ \text{squaredLength}\cdot e^{i\,\text{phase}} \f$ read by the Hermitian-weighted
+    /// Laplacian. The default (`phase = 0`) leaves an ordinary real-weighted CDT edge unchanged.
+    ///
+    /// @return The U(1) connection phase, in radians.
+    [[nodiscard]] double getPhase() const noexcept;
+
 #ifdef TESSERA_VERBOSE
     [[nodiscard]] std::string toString() const noexcept;
 #else
@@ -154,6 +162,10 @@ class Edge {
     /// the geometry without rebuilding the mesh.
     void setSquaredLength(double sq) noexcept { squaredLength = sq; }
 
+    /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
+    /// Laplacian and its gauge transform to rephase the edge without rebuilding the mesh.
+    void setPhase(double p) noexcept { phase = p; }
+
     /// Index into EdgeList::liveVec_ (maintained by EdgeList).
     std::uint32_t liveIdx_{UINT32_MAX};
 
@@ -186,6 +198,7 @@ class Edge {
     VertexPtr target = nullptr;
 
     double squaredLength;
+    double phase = 0.0;
 
     Simplices simplices_{};
 };
