@@ -138,5 +138,53 @@ class TestSchmidtRankAndSingularValues(unittest.TestCase):
         self.assertEqual(ChoiJamiolkowski.schmidtRank(sx, 2, 2), 2)
 
 
+@unittest.skipUnless(HAVE_QUANTUM, "tessera built without the quantum subsystem")
+class TestChoiStateAndMatrix(unittest.TestCase):
+    """Choi state (U⊗I)|Φ⁺⟩ = (1/√d) vec(U) and matrix J(U) = |state⟩⟨state|."""
+
+    def test_choi_state_of_identity_is_maximally_entangled(self) -> None:
+        # (1/√d) vec(I_d) = (1/√d) Σ_k |k,k⟩ — the maximally entangled |Φ⁺⟩.
+        for d in (2, 3, 4):
+            with self.subTest(d=d):
+                state = np.array(ChoiJamiolkowski.choiState(_flat(np.eye(d)), d))
+                np.testing.assert_allclose(
+                    state, np.eye(d).flatten() / np.sqrt(d), atol=1e-12)
+                self.assertAlmostEqual(np.linalg.norm(state), 1.0, delta=1e-12)
+
+    def test_choi_state_is_normalised_vec(self) -> None:
+        rng = np.random.default_rng(11)
+        for d in (2, 3):
+            with self.subTest(d=d):
+                U = _rand_complex(rng, d, d)
+                state = np.array(ChoiJamiolkowski.choiState(_flat(U), d))
+                np.testing.assert_allclose(
+                    state, U.flatten() / np.sqrt(d), atol=1e-12)
+
+    def test_choi_matrix_is_pure_unit_trace_for_unitary(self) -> None:
+        # J(U) = |Φ_U⟩⟨Φ_U|: Hermitian, Tr = 1, rank 1 for unitary U; equals
+        # the outer product of choiState with itself.
+        rng = np.random.default_rng(3)
+        d, n = 2, 4
+        Q, _ = np.linalg.qr(_rand_complex(rng, d, d))   # a unitary
+        J = np.array(ChoiJamiolkowski.choiMatrix(_flat(Q), d)).reshape(n, n)
+        np.testing.assert_allclose(J, J.conj().T, atol=1e-12)        # Hermitian
+        self.assertAlmostEqual(np.trace(J).real, 1.0, delta=1e-12)   # Tr = 1
+        evals = np.linalg.eigvalsh(J)
+        self.assertAlmostEqual(evals[-1], 1.0, delta=1e-12)          # rank 1
+        np.testing.assert_allclose(evals[:-1], 0.0, atol=1e-12)
+        state = np.array(ChoiJamiolkowski.choiState(_flat(Q), d))
+        np.testing.assert_allclose(J, np.outer(state, state.conj()), atol=1e-12)
+
+    def test_choi_matrix_marginal_is_maximally_mixed_for_unitary(self) -> None:
+        # Tracing out the second factor of J(unitary U) gives I/d — the
+        # convention-independent fact behind InteractionSimulation's Q-bookkeeping.
+        rng = np.random.default_rng(5)
+        d = 4
+        Q, _ = np.linalg.qr(_rand_complex(rng, d, d))
+        J4 = np.array(ChoiJamiolkowski.choiMatrix(_flat(Q), d)).reshape(d, d, d, d)
+        rho_A = np.einsum("ijkj->ik", J4)               # trace over factor B
+        np.testing.assert_allclose(rho_A, np.eye(d) / d, atol=1e-12)
+
+
 if __name__ == "__main__":
     unittest.main()

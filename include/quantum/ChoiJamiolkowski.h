@@ -100,6 +100,22 @@ class ChoiJamiolkowski {
         const std::vector<std::complex<double>> &psiA,
         const std::vector<std::complex<double>> &U,
         const std::vector<std::complex<double>> &psiB, int dA, int dB);
+
+    /// Choi–Jamiołkowski *state* of a square d×d operator U: the maximally-
+    /// entangled bend |Φ_U⟩ = (U ⊗ I)|Φ⁺⟩ with |Φ⁺⟩ = (1/√d) Σ_k |k⟩|k⟩, which
+    /// in the row-major convention is the normalised vec, (1/√d)·vec(U) (length
+    /// d·d). For unitary U this is a unit vector. Throws std::invalid_argument
+    /// if U.size() != d·d or d is non-positive.
+    [[nodiscard]] static std::vector<std::complex<double>> choiState(
+        const std::vector<std::complex<double>> &U, int d);
+
+    /// Choi *matrix* J(U) = |Φ_U⟩⟨Φ_U| of a square d×d operator U: the
+    /// (d·d)×(d·d) density matrix of choiState(U, d), returned flat row-major
+    /// (J[i·d² + j] = state_i · conj(state_j)). This is the standard
+    /// (U ⊗ I)|Φ⁺⟩⟨Φ⁺|(U ⊗ I)^H Choi matrix; Tr J = 1 for unitary U. Throws
+    /// std::invalid_argument as choiState.
+    [[nodiscard]] static std::vector<std::complex<double>> choiMatrix(
+        const std::vector<std::complex<double>> &U, int d);
 };
 
 }  // namespace tessera::quantum
