@@ -32,6 +32,7 @@
 #include <utility>
 #include <vector>
 
+#include "cobordism/ChainComplex.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
@@ -46,11 +47,16 @@ namespace tessera::cobordism {
 
 using cd = std::complex<double>;
 
-EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st)
-    : st_(st), laplacian_(std::move(st)) {
+EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st, int degree)
+    : st_(st), degree_(degree), laplacian_(std::move(st)) {
+  if (degree_ < 0)
+    throw std::runtime_error(
+        "EigenstateSynthesis: degree must be >= 0, got " +
+        std::to_string(degree_));
   if (!st_) return;
   capture();
   classifyBoundary();
+  captureDegree();
 }
 
 void EigenstateSynthesis::capture() {
@@ -85,6 +91,7 @@ void EigenstateSynthesis::capture() {
 void EigenstateSynthesis::classifyBoundary() {
   interiorEdgeIdx_.clear();
   boundaryEdgeIdx_.clear();
+  boundaryEdgeKeys_.clear();
   interiorVertexCount_ = 0;
   if (!st_) return;
 
@@ -98,7 +105,6 @@ void EigenstateSynthesis::classifyBoundary() {
   // one top cell. An *edge* sits on the boundary only once codim-1 faces are at
   // least edges themselves (topVerts >= 3); below that there is no boundary —
   // every tunable edge is interior (the free §4b regime, owned by #134).
-  std::set<std::pair<std::uint64_t, std::uint64_t>> boundaryEdgeKeys;
   std::unordered_set<std::uint64_t> boundaryVertexIds;
   if (topVerts >= 3) {
     std::map<std::vector<std::uint64_t>, int> facetCount;
@@ -125,7 +131,7 @@ void EigenstateSynthesis::classifyBoundary() {
       // facet is sorted ascending, so (facet[i], facet[j]) for i<j is ordered.
       for (std::size_t i = 0; i + 1 < facet.size(); ++i)
         for (std::size_t j = i + 1; j < facet.size(); ++j)
-          boundaryEdgeKeys.insert({facet[i], facet[j]});
+          boundaryEdgeKeys_.insert({facet[i], facet[j]});
     }
   }
 
@@ -136,7 +142,7 @@ void EigenstateSynthesis::classifyBoundary() {
     const std::uint64_t b = edges_[e]->getTarget()->getId();
     const std::pair<std::uint64_t, std::uint64_t> key =
         a < b ? std::make_pair(a, b) : std::make_pair(b, a);
-    if (boundaryEdgeKeys.find(key) != boundaryEdgeKeys.end())
+    if (boundaryEdgeKeys_.find(key) != boundaryEdgeKeys_.end())
       boundaryEdgeIdx_.push_back(e);
     else
       interiorEdgeIdx_.push_back(e);
@@ -152,18 +158,75 @@ void EigenstateSynthesis::classifyBoundary() {
   }
 }
 
+void EigenstateSynthesis::captureDegree() {
+  dimension_ = 0;
+  stateSimplices_.clear();
+  boundaryStateIdx_.clear();
+  interiorStateIdx_.clear();
+  if (!st_) return;
+
+  // Boundary vertices = endpoints of the ∂W boundary edges: a vertex lies on ∂W
+  // iff it bounds a boundary facet, i.e. is an endpoint of a boundary edge.
+  std::set<std::uint64_t> boundaryVertices;
+  for (const auto &key : boundaryEdgeKeys_) {
+    boundaryVertices.insert(key.first);
+    boundaryVertices.insert(key.second);
+  }
+
+  if (degree_ == 0) {
+    // psi components are the sorted-id vertices (HodgeLaplacian's k=0 order).
+    std::vector<std::uint64_t> ids;
+    std::unordered_set<std::uint64_t> seen;
+    for (const auto v : st_->getVertexList()->toVector()) {
+      if (v == nullptr) continue;
+      if (!seen.insert(v->getId()).second) continue;
+      ids.push_back(v->getId());
+    }
+    std::sort(ids.begin(), ids.end());
+    dimension_ = ids.size();
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+      if (boundaryVertices.find(ids[i]) != boundaryVertices.end())
+        boundaryStateIdx_.push_back(i);
+      else
+        interiorStateIdx_.push_back(i);
+    }
+    return;
+  }
+
+  // k >= 1: the operator-order k-cells (the canonical ChainComplex column order,
+  // matching HodgeLaplacian's L_k and the harmonic Cochains). A k-cell is on ∂W
+  // iff (k = 1) it is a boundary edge; higher degrees carry no boundary partition
+  // here (all interior).
+  const ChainComplex chain = ChainComplex::fromSpacetime(*st_);
+  stateSimplices_ = chain.kSimplexVertices(degree_);
+  dimension_ = stateSimplices_.size();
+  for (std::size_t i = 0; i < stateSimplices_.size(); ++i) {
+    bool boundary = false;
+    if (degree_ == 1 && stateSimplices_[i].size() == 2) {
+      const std::pair<std::uint64_t, std::uint64_t> key{stateSimplices_[i][0],
+                                                        stateSimplices_[i][1]};
+      boundary = boundaryEdgeKeys_.find(key) != boundaryEdgeKeys_.end();
+    }
+    if (boundary)
+      boundaryStateIdx_.push_back(i);
+    else
+      interiorStateIdx_.push_back(i);
+  }
+}
+
 std::vector<cd> EigenstateSynthesis::apply(const std::vector<cd> &psi) const {
-  const std::size_t N = order_;
+  const std::size_t N = dimension_;
   if (psi.size() != N)
     throw std::runtime_error(
         "EigenstateSynthesis::apply: psi has length " +
         std::to_string(psi.size()) + ", expected " + std::to_string(N));
   std::vector<cd> out(N, cd(0.0, 0.0));
   if (N == 0) return out;
-  // L = D - A reassembled from the live edge weights/phases (the k=0 magnitude
-  // convention). The matrix path does not consult the eigendecomposition cache,
-  // so repeated perturb-then-query is honest.
-  const std::vector<cd> L = laplacian_.laplacian(0);
+  // L_k reassembled from the live edge weights on each call (k=0: L = D - A, the
+  // magnitude convention; k>=1: the metric Hodge Laplacian from the live simplex
+  // volumes). The matrix path does not consult the eigendecomposition cache, so
+  // repeated perturb-then-query is honest.
+  const std::vector<cd> L = laplacian_.laplacian(degree_);
   for (std::size_t i = 0; i < N; ++i) {
     cd acc(0.0, 0.0);
     for (std::size_t j = 0; j < N; ++j) acc += L[i * N + j] * psi[j];
@@ -173,15 +236,15 @@ std::vector<cd> EigenstateSynthesis::apply(const std::vector<cd> &psi) const {
 }
 
 double EigenstateSynthesis::residual(const std::vector<cd> &psi) const {
-  const std::size_t N = order_;
+  const std::size_t N = dimension_;
   if (psi.size() != N)
     throw std::runtime_error(
         "EigenstateSynthesis::residual: psi has length " +
         std::to_string(psi.size()) + ", expected " + std::to_string(N));
   if (N == 0) return 0.0;
 
-  // Normalize: r and the eigenvector condition are scale-invariant, and the spec
-  // writes r for a unit target.
+  // Normalize: r and the eigenvector/harmonic conditions are scale-invariant, and
+  // the spec writes r for a unit target.
   double nrm2 = 0.0;
   for (const cd &c : psi) nrm2 += std::norm(c);
   if (nrm2 <= 0.0) return 0.0;
@@ -190,19 +253,30 @@ double EigenstateSynthesis::residual(const std::vector<cd> &psi) const {
   for (std::size_t i = 0; i < N; ++i) p[i] = psi[i] * inv;
 
   const std::vector<cd> Lp = apply(p);
-  // lambda = p^dagger L p (real for Hermitian L; take the real part).
+
+  if (degree_ >= 1) {
+    // k>=1: the harmonic residual r = ||L_k p||^2 (p unit) — the ker L_k
+    // condition, r = 0 iff p is a harmonic k-form (§5.2). For the metric L_k the
+    // eigenvalues are >= 0, so this is lambda^2 on an eigenvector and isolates
+    // the kernel (lambda = 0), not an arbitrary eigenvector.
+    double r = 0.0;
+    for (std::size_t i = 0; i < N; ++i) r += std::norm(Lp[i]);
+    return r;
+  }
+
+  // k=0: the eigenvalue-agnostic eigenvector residual r = ||L p - lambda p||^2 =
+  // ||(I - p p^dagger) L p||^2 (p unit), lambda = p^dagger L p the Rayleigh
+  // quotient — r = 0 iff p is an eigenvector of L = D - A (§4b).
   cd lam(0.0, 0.0);
   for (std::size_t i = 0; i < N; ++i) lam += std::conj(p[i]) * Lp[i];
   const double lambda = lam.real();
-
-  // r = || L p - lambda p ||^2 = ||(I - p p^dagger) L p||^2 (p unit).
   double r = 0.0;
   for (std::size_t i = 0; i < N; ++i) r += std::norm(Lp[i] - lambda * p[i]);
   return r;
 }
 
 double EigenstateSynthesis::rayleigh(const std::vector<cd> &psi) const {
-  const std::size_t N = order_;
+  const std::size_t N = dimension_;
   if (psi.size() != N)
     throw std::runtime_error(
         "EigenstateSynthesis::rayleigh: psi has length " +
@@ -312,6 +386,14 @@ EigenstateSynthesis::interiorEdges() const {
   return out;
 }
 
+std::vector<std::size_t> EigenstateSynthesis::boundaryStateIndices() const {
+  return boundaryStateIdx_;
+}
+
+std::vector<std::size_t> EigenstateSynthesis::interiorStateIndices() const {
+  return interiorStateIdx_;
+}
+
 bool EigenstateSynthesis::growInterior(std::uint64_t seed) {
   if (!st_) return false;
   // Cone a fresh interior vertex via the boundary-fixed pre-geometric Pachner
@@ -329,6 +411,7 @@ bool EigenstateSynthesis::growInterior(std::uint64_t seed) {
   laplacian_ = HodgeLaplacian(st_);
   capture();
   classifyBoundary();
+  captureDegree();
   return true;
 }
 

@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -97,12 +98,36 @@ using namespace ::tessera::spacetime;
 /// vertices); on a pure 1-complex every edge is interior (the free §4b regime).
 class EigenstateSynthesis {
   public:
-    /// Construct over a fixed triangulation. The vertex order (sorted id) and the
-    /// tunable edge order are captured now; edge weights/phases are read live on
-    /// each residual query. The held `shared_ptr` keeps the spacetime alive.
-    explicit EigenstateSynthesis(std::shared_ptr<Spacetime> st);
+    /// Construct over a fixed triangulation at cochain `degree` (\f$ k \f$). The
+    /// vertex order (sorted id) and the tunable edge order are captured now; edge
+    /// weights/phases are read live on each residual query. The held `shared_ptr`
+    /// keeps the spacetime alive.
+    ///
+    /// `degree = 0` (default) is the §4b graph-Laplacian regime: a `psi` is a
+    /// 0-cochain (vertex amplitudes, length \f$ |V| \f$) and `residual` scores it
+    /// as an **eigenvector** of \f$ L_0 = D - A \f$. `degree = 1` is the §5.2
+    /// regime for the DW bridge: a `psi` is a 1-cochain (edge amplitudes, length
+    /// \f$ |C_1| \f$ in the `HodgeLaplacian`/`ChainComplex` column order) and
+    /// `residual` scores it as a **harmonic** form (\f$ \ker L_1 \f$, the metric
+    /// Hodge Laplacian) — \f$ r = \lVert L_1\psi\rVert^2 \f$. At \f$ k\ge 1 \f$ the
+    /// real metric Laplacian is built from the simplex volumes
+    /// (`Simplex::volume`, live in the edge lengths), so the tunable **weights**
+    /// shape \f$ L_k \f$ while the U(1) **phases** do not enter it.
+    /// @throws std::runtime_error if `degree < 0`.
+    explicit EigenstateSynthesis(std::shared_ptr<Spacetime> st, int degree = 0);
 
-    /// Number of vertices \f$ N \f$ — the required length of any `psi`.
+    /// The cochain degree \f$ k \f$ this synthesizer scores at (0 = vertices /
+    /// eigenvector; 1 = edges / harmonic).
+    [[nodiscard]] int degree() const noexcept { return degree_; }
+
+    /// The required length of any `psi`: the number of \f$ k \f$-cells —
+    /// \f$ |V| \f$ at \f$ k = 0 \f$, \f$ |C_k| \f$ at \f$ k \ge 1 \f$ (the
+    /// `HodgeLaplacian` operator dimension at this degree).
+    [[nodiscard]] std::size_t dimension() const noexcept { return dimension_; }
+
+    /// Number of vertices \f$ N = |V| \f$ — the \f$ k = 0 \f$ `psi` length and the
+    /// vertex budget for the output-boundary support (`= dimension()` at
+    /// \f$ k = 0 \f$).
     [[nodiscard]] std::size_t order() const noexcept { return order_; }
 
     /// Number of tunable edges — the length of `weights()` / `phases()`.
@@ -188,6 +213,21 @@ class EigenstateSynthesis {
     [[nodiscard]] std::vector<std::pair<std::uint64_t, std::uint64_t>>
     interiorEdges() const;
 
+    /// The `psi`-component indices (in the operator / `dimension()` order) whose
+    /// \f$ k \f$-cell lies on \f$ \partial W \f$ — the **boundary support** a
+    /// target boundary state occupies. At \f$ k = 1 \f$ these are the boundary
+    /// edges of \f$ \partial W \f$ (a target harmonic 1-form is carried here); at
+    /// \f$ k = 0 \f$ the boundary vertices. The complement
+    /// (`interiorStateIndices()`) carries the free auxiliary amplitudes a
+    /// fixed-boundary fill solves for. Returned ascending.
+    [[nodiscard]] std::vector<std::size_t> boundaryStateIndices() const;
+
+    /// The `psi`-component indices (operator order) **not** on \f$ \partial W \f$
+    /// — the interior support (free auxiliary amplitudes); the complement of
+    /// `boundaryStateIndices()` in \f$ [0, \text{dimension}()) \f$. Returned
+    /// ascending.
+    [[nodiscard]] std::vector<std::size_t> interiorStateIndices() const;
+
     /// Cone a fresh interior vertex into a top cell via the boundary-fixed
     /// pre-geometric Pachner add (#112): a \f$ 1\!\to\!(d+1) \f$ stellar
     /// subdivision that leaves \f$ \partial W \f$ exactly fixed while enriching the
@@ -201,12 +241,15 @@ class EigenstateSynthesis {
 
   private:
     std::shared_ptr<Spacetime> st_;
-    // The k=0 Hermitian Laplacian operator over the same complex. laplacian(0)
-    // reassembles L = D - A from the live edges on each call, so perturbing the
-    // edges and re-querying is honest (the eigendecomposition cache is untouched
-    // by the matrix path).
+    int degree_{0};  // cochain degree k the residual scores at
+    // The Hodge Laplacian operator over the same complex. laplacian(degree_)
+    // reassembles L_k from the live edges (k=0: L = D - A; k>=1: the metric
+    // Hodge Laplacian from the live simplex volumes) on each call, so perturbing
+    // the edges and re-querying is honest (the eigendecomposition cache is
+    // untouched by the matrix path).
     HodgeLaplacian laplacian_;
-    std::size_t order_{0};  // N = |V|, the sorted-id vertex order
+    std::size_t order_{0};       // N = |V|, the sorted-id vertex order
+    std::size_t dimension_{0};   // psi length = |k-cells| at degree_
     // The tunable edges, in EdgeList order, restricted to those carrying weight
     // in L (both endpoints present, no self-loops). Raw pointers owned by the
     // EdgeList; valid for the complex's lifetime (kept alive via st_). Re-captured
@@ -219,14 +262,30 @@ class EigenstateSynthesis {
     std::vector<std::size_t> interiorEdgeIdx_{};
     std::vector<std::size_t> boundaryEdgeIdx_{};
     std::size_t interiorVertexCount_{0};  // vertices on no boundary face
+    // The ∂W edge key set ((min,max) endpoint ids), shared by classifyBoundary()
+    // (edge-parameter partition) and captureDegree() (psi-component partition).
+    std::set<std::pair<std::uint64_t, std::uint64_t>> boundaryEdgeKeys_{};
+
+    // The operator-order k-cells (degree_), the index space a psi lives over
+    // (ChainComplex column order); used to partition psi components into the
+    // boundary support and the free interior support.
+    std::vector<std::vector<std::uint64_t>> stateSimplices_{};
+    std::vector<std::size_t> boundaryStateIdx_{};  // psi components on ∂W
+    std::vector<std::size_t> interiorStateIdx_{};  // psi components off ∂W
 
     // (Re)build order_ and edges_ from the live vertex/edge lists. Called at
     // construction and after growInterior() mutates the complex.
     void capture();
 
     // (Re)build the interior/boundary edge partition (∂W = codim-1 faces in
-    // exactly one top cell) and interiorVertexCount_ from the live complex.
+    // exactly one top cell), boundaryEdgeKeys_, and interiorVertexCount_ from the
+    // live complex.
     void classifyBoundary();
+
+    // (Re)build dimension_, stateSimplices_, and the psi-component boundary /
+    // interior partition for degree_ from the live complex (after classifyBoundary
+    // has populated boundaryEdgeKeys_). Called at construction and after growth.
+    void captureDegree();
 };
 
 }  // namespace tessera::cobordism

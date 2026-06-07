@@ -160,6 +160,25 @@ class RealizabilityOracle {
                                  int restarts = 64, int maxCones = 4,
                                  std::uint64_t seed = 0);
 
+    /// Decide whether a target **\f$ k=1 \f$ boundary harmonic** is realizable on
+    /// the bulk \f$ W \f$ (the DW bridge lift, #176): the spectral boundary qubit
+    /// is the harmonic 1-forms \f$ \ker L_1(\Sigma) \f$ of \f$ \Sigma=\partial W \f$,
+    /// and the question is whether `target` extends to a harmonic form of the
+    /// **bulk** \f$ \ker L_1(W) \f$ with \f$ \partial W \f$ pinned. `target` is the
+    /// 1-form on \f$ \partial W \f$'s edges — length the bulk's boundary-edge count,
+    /// ordered as `EigenstateSynthesis(W, 1).boundaryStateIndices()` (the boundary
+    /// edges in the canonical column order). Pins \f$ \partial W \f$, fills the
+    /// interior metric (interior edge weights) + free interior amplitudes to drive
+    /// the harmonic residual \f$ r=\lVert L_1\psi\rVert^2\to 0 \f$, and returns the
+    /// `Verdict` (realizable iff \f$ r<\epsilon \f$; otherwise the obstruction
+    /// floor). `state` is the realized bulk 1-form (length \f$ |C_1(W)| \f$);
+    /// `eigenvalue` is its Rayleigh quotient (\f$ \approx 0 \f$ when harmonic).
+    /// @throws std::invalid_argument if `target`'s length \f$ \neq \f$ the bulk's
+    ///   boundary-edge count.
+    [[nodiscard]] Verdict decideBoundaryHarmonic(
+        const std::vector<std::complex<double>> &target, double epsilon = 1e-10,
+        int restarts = 64, int maxCones = 4, std::uint64_t seed = 0);
+
   private:
     // §4b search box — identical to GeometrySynthesizer so the interior fill is
     // the same machinery applied to the interior: per-edge magnitudes in

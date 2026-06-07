@@ -341,23 +341,39 @@ exposes that fixed set). growInterior() cones a fresh interior vertex via the
 boundary-fixed pre-geometric Pachner add (#112), enriching the interior with dW
 untouched; interiorVertexCount / numInteriorEdges report the interior complexity
 reached. On a 1-complex there is no boundary — every edge is interior.)doc")
-      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
-           "Build the synthesizer over a fixed triangulation.")
+      .def(py::init<std::shared_ptr<Spacetime>, int>(), py::arg("spacetime"),
+           py::arg("degree") = 0,
+           "Build the synthesizer over a fixed triangulation at cochain degree k "
+           "(0 = vertices / eigenvector of L = D - A, §4b; 1 = edges / harmonic "
+           "form ker L_1 via the metric Hodge Laplacian, §5.2 DW bridge). At "
+           "k>=1 the tunable weights shape the real metric L_k (the simplex "
+           "volumes, live in the edge lengths) while the phases do not enter it. "
+           "Raises if degree < 0.")
+      .def("degree", &EigenstateSynthesis::degree,
+           "The cochain degree k scored at (0 = vertices/eigenvector; 1 = "
+           "edges/harmonic).")
+      .def("dimension", &EigenstateSynthesis::dimension,
+           "The required length of any psi: |V| at k=0, |C_k| at k>=1 (the "
+           "HodgeLaplacian operator dimension at this degree).")
       .def("order", &EigenstateSynthesis::order,
-           "Number of vertices N — the required length of any psi.")
+           "Number of vertices N = |V| — the k=0 psi length and the vertex budget "
+           "for the output-boundary support (= dimension() at k=0).")
       .def("numEdges", &EigenstateSynthesis::numEdges,
            "Number of tunable edges — the length of weights() / phases().")
       .def("residual", &EigenstateSynthesis::residual, py::arg("psi"),
-           "Eigenvalue-agnostic residual r(psi) = ||(I - psi psi^dagger) L psi||^2 "
-           "against the current edge weights/phases (psi normalized internally). "
-           "r = 0 iff L psi || psi. Raises if len(psi) != order().")
+           "Residual against the current edge weights (psi normalized "
+           "internally), length dimension(). k=0: the eigenvalue-agnostic "
+           "eigenvector residual r = ||(I - psi psi^dagger) L psi||^2 (r = 0 iff "
+           "L psi || psi). k>=1: the harmonic residual r = ||L_k psi||^2 (r = 0 "
+           "iff psi in ker L_k). Raises if len(psi) != dimension().")
       .def("rayleigh", &EigenstateSynthesis::rayleigh, py::arg("psi"),
-           "Rayleigh quotient lambda = psi^dagger L psi / psi^dagger psi (real; L "
-           "Hermitian) — the realized eigenvalue when r = 0. Raises if "
-           "len(psi) != order().")
+           "Rayleigh quotient lambda = psi^dagger L_k psi / psi^dagger psi (real) "
+           "— the realized eigenvalue (~0 for a harmonic at k>=1). Raises if "
+           "len(psi) != dimension().")
       .def("apply", &EigenstateSynthesis::apply, py::arg("psi"),
-           "L psi against the current edge weights/phases (no normalization), for "
-           "direct L psi || psi cross-checks. Raises if len(psi) != order().")
+           "L_k psi against the current edge weights (no normalization), for "
+           "direct ker/eigenvector cross-checks. Raises if len(psi) != "
+           "dimension().")
       .def("weights", &EigenstateSynthesis::weights,
            "Edge magnitudes {w_ij} (squaredLength) in the stable edge order.")
       .def("phases", &EigenstateSynthesis::phases,
@@ -395,6 +411,14 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("interiorEdges", &EigenstateSynthesis::interiorEdges,
            "The interior tunable edges as sorted (min_id, max_id) endpoint tuples "
            "(the complement of boundaryEdges()).")
+      .def("boundaryStateIndices", &EigenstateSynthesis::boundaryStateIndices,
+           "The psi-component indices (operator / dimension() order) whose k-cell "
+           "lies on dW — the boundary support a target boundary state occupies "
+           "(k=1: the boundary edges; k=0: the boundary vertices). A target "
+           "boundary harmonic is ordered to match this (ascending) list.")
+      .def("interiorStateIndices", &EigenstateSynthesis::interiorStateIndices,
+           "The psi-component indices not on dW — the free interior support "
+           "(auxiliary amplitudes); the complement of boundaryStateIndices().")
       .def("growInterior", &EigenstateSynthesis::growInterior, py::arg("seed"),
            "Cone a fresh interior vertex into a top cell via the boundary-fixed "
            "pre-geometric Pachner add (#112): a 1->(d+1) stellar subdivision that "
@@ -536,13 +560,17 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
       .def_readonly("cones_applied", &RealizabilityOracle::Verdict::conesApplied,
                     "Boundary-fixed cones applied during the interior fill.")
       .def_readonly("state", &RealizabilityOracle::Verdict::state,
-                    "The witness state: the realized unit Laplacian eigenvector on "
-                    "W_AB (length = the bulk's vertex count); its first dA*dB "
-                    "components are the output-boundary block matching target. A "
-                    "genuine eigenstate iff realizable.")
+                    "The witness state: the realized unit eigenvector/harmonic on "
+                    "W_AB. decide() (k=0): a 0-cochain (length = vertex count) "
+                    "whose first dA*dB components are the output-boundary block "
+                    "matching target. decideBoundaryHarmonic() (k=1): a 1-form "
+                    "(length |C_1(W)|) whose dW boundary block matches target. A "
+                    "genuine eigenstate/harmonic iff realizable.")
       .def_readonly("target", &RealizabilityOracle::Verdict::target,
-                    "The bent target psi_U = vec(U)/||vec(U)|| (length dA*dB) the "
-                    "output boundary is matched against.")
+                    "The matched target: decide() the bent psi_U = "
+                    "vec(U)/||vec(U)|| (length dA*dB); decideBoundaryHarmonic() "
+                    "the target boundary harmonic (length the dW boundary-edge "
+                    "count).")
       .def_readonly("witness", &RealizabilityOracle::Verdict::witness,
                     "The realized bulk W_AB: the witness cobordism (realizable), or "
                     "the complex on which the residual floors (non-realizable).");
@@ -562,7 +590,22 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
            "amplitudes, growing the interior up to max_cones times), and return "
            "the Verdict. Realizes the held bulk in place. Raises if U.size() != "
            "dA*dB, a dimension is non-positive, or the bulk has fewer vertices "
-           "than dA*dB.");
+           "than dA*dB.")
+      .def("decideBoundaryHarmonic",
+           &RealizabilityOracle::decideBoundaryHarmonic, py::arg("target"),
+           py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
+           py::arg("max_cones") = 4, py::arg("seed") = 0,
+           "Decide whether a target k=1 boundary harmonic extends to a harmonic "
+           "form of the bulk ker L_1(W) with dW pinned (the DW bridge lift, "
+           "#176). target is the 1-form on dW's edges, length the bulk's "
+           "boundary-edge count, ordered as "
+           "EigenstateSynthesis(W, 1).boundaryStateIndices(). Pins dW, fills the "
+           "interior metric (interior edge weights) + free interior amplitudes to "
+           "drive the harmonic residual r = ||L_1 psi||^2 -> 0, and returns the "
+           "Verdict (realizable iff r < epsilon; else the obstruction floor). "
+           "state is the realized bulk 1-form (length |C_1(W)|); eigenvalue is its "
+           "Rayleigh quotient (~0 when harmonic). Raises if len(target) != the "
+           "boundary-edge count.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
