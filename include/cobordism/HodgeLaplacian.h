@@ -60,6 +60,28 @@ using namespace ::tessera::spacetime;
 /// a same-kernel cross-check. A negative \f$ k \f$ throws; a \f$ k \f$ beyond the
 /// top dimension has no \f$ k \f$-cells and yields empty results.
 ///
+/// ## Lorentzian d'Alembertian (§5.6)
+///
+/// The `lorentzian = true` path keeps the same metric-Hodge construction but
+/// weights \f$ W_k \f$ with the **signed** `Simplex::volume()` — the honest,
+/// signature-respecting content in which a timelike edge (\f$ l^2 < 0 \f$) carries
+/// a *negative* volume — instead of \f$ |\text{volume}| \f$. The inner product
+/// then goes **indefinite**: the symmetric \f$ W_k^{1/2} \f$ similarity breaks
+/// (the square root of a negative weight is imaginary), so the operator
+/// \f$ L_k = \partial_k^*\partial_k + \partial_{k+1}\partial_{k+1}^* \f$ with the
+/// *signed* metric adjoint \f$ \partial_k^* = W_k^{-1}\partial_k^{\top}W_{k-1} \f$
+/// is assembled **directly** — \f$ L_k = W_k^{-1}\partial_k^{\top}W_{k-1}\partial_k
+/// + \partial_{k+1}W_{k+1}^{-1}\partial_{k+1}^{\top}W_k \f$ — and is generally
+/// **non-self-adjoint** (a discrete d'Alembertian). It is diagonalized with a
+/// general `Eigen::EigenSolver`, so eigenvalues may be negative or complex. The
+/// clean \f$ \ker L_k \cong H_k \f$ degrades to a pseudo-Hodge decomposition:
+/// "harmonic" becomes the small-\f$ |\lambda| \f$ near-kernel, and a near-kernel
+/// representative \f$ h \f$ may be **null** in the indefinite metric
+/// (\f$ \langle h,h\rangle_W = \sum_i W_{k,i}|h_i|^2 \approx 0 \f$). When every
+/// \f$ l^2 > 0 \f$ the signed content equals \f$ |\text{volume}| \f$ and this path
+/// reproduces the Euclidean spectrum/kernel above. The Euclidean
+/// (`lorentzian = false`) path is untouched.
+///
 /// For \f$ k = 0 \f$ vertices are indexed by a stable order (sorted vertex id
 /// \f$ \to 0..N-1 \f$); for \f$ k \geq 1 \f$ the \f$ k \f$-cells follow the
 /// canonical `ChainComplex` column order (sorted vertex-id tuples), so the
@@ -104,15 +126,22 @@ class HodgeLaplacian {
     /// weights (the combinatorial Laplacian); `metric` is ignored at \f$ k = 0 \f$.
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty for \f$ k \f$ above the
     ///   top dimension.
+    /// With `lorentzian = true` (and `metric`, \f$ k \geq 1 \f$) it is instead the
+    /// **signed-weight d'Alembertian** assembled directly (generally
+    /// non-symmetric; the imaginary parts of the returned entries are still zero,
+    /// the operator being real).
     [[nodiscard]] std::vector<std::complex<double>> laplacian(int k = 0,
-                                                             bool metric = true) const;
+                                                             bool metric = true,
+                                                             bool lorentzian = false) const;
 
     /// Diagonal inner-product weights \f$ W_k \f$ (length \f$ |C_k| \f$) in the
     /// canonical `ChainComplex` column order: the per-\f$ k \f$-simplex Euclidean
     /// volume (`Simplex::volume`, magnitude; degenerate cells fall back to 1 to
     /// keep \f$ W_k \f$ positive). \f$ W_0 = I \f$ (all ones). Empty for \f$ k < 0 \f$
-    /// or \f$ k \f$ above the top dimension.
-    [[nodiscard]] std::vector<double> weights(int k) const;
+    /// or \f$ k \f$ above the top dimension. With `lorentzian = true` the entries
+    /// are the **signed** `Simplex::volume()` (timelike cells negative; degenerate
+    /// cells still fall back to \f$ +1 \f$ so \f$ W_k \f$ stays invertible).
+    [[nodiscard]] std::vector<double> weights(int k, bool lorentzian = false) const;
 
     /// Whether \f$ \| L - L^\dagger \| \le \text{tol} \f$ (Frobenius norm) for
     /// the \f$ k = 0 \f$ Laplacian. True by construction.
@@ -149,6 +178,44 @@ class HodgeLaplacian {
                                                               double tol = 1e-9,
                                                               bool metric = true) const;
 
+    /// === Lorentzian (signed-weight) d'Alembertian, \f$ k \geq 1 \f$ (§5.6) ===
+    ///
+    /// Eigenvalues of the signed-weight \f$ L_k \f$ (the non-self-adjoint
+    /// d'Alembertian), as **complex** numbers sorted ascending by
+    /// \f$ (\mathrm{Re},\mathrm{Im}) \f$ — they may be negative or come in complex
+    /// conjugate pairs. `metric = false` falls back to unit weights (positive, so
+    /// the spectrum is the real combinatorial one). On an all-spacelike complex
+    /// the spectrum reproduces `eigenvalues(k, metric)` (real). For \f$ k = 0 \f$
+    /// this is the signed graph Laplacian \f$ \partial_1 W_1^{-1}\partial_1^\top \f$
+    /// (\f$ W_0 = I \f$), distinct from the Hermitian \f$ k = 0 \f$ path above.
+    /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
+    [[nodiscard]] std::vector<std::complex<double>> lorentzianEigenvalues(
+        int k, bool metric = true) const;
+
+    /// Eigenvectors of the signed-weight \f$ L_k \f$ as a flat row-major
+    /// \f$ M\times M \f$ complex array; column \f$ j \f$ (entries \f$ iM + j \f$)
+    /// is the eigenvector for the \f$ j \f$-th eigenvalue of
+    /// `lorentzianEigenvalues(k, metric)` (same order). @throws for \f$ k < 0 \f$.
+    [[nodiscard]] std::vector<std::complex<double>> lorentzianEigenvectors(
+        int k, bool metric = true) const;
+
+    /// Near-kernel ("harmonic") representatives of the d'Alembertian: the
+    /// eigenvectors with \f$ |\lambda| < \text{tol} \f$, as a flat row-major
+    /// \f$ M\times H \f$ complex array (\f$ H \f$ columns). For an all-spacelike
+    /// complex \f$ H = b_k \f$; with genuine timelike cells the count can differ
+    /// (the pseudo-Hodge decomposition). @throws for \f$ k < 0 \f$.
+    [[nodiscard]] std::vector<std::complex<double>> lorentzianHarmonics(
+        int k, double tol = 1e-9, bool metric = true) const;
+
+    /// The indefinite norms \f$ \langle h,h\rangle_W = \sum_i W_{k,i}|h_i|^2 \f$
+    /// (signed \f$ W_k \f$) of the near-kernel representatives, one per column of
+    /// `lorentzianHarmonics(k, tol, metric)` and in the same order. A value
+    /// \f$ \approx 0 \f$ flags a **null** harmonic (a lightlike kernel direction);
+    /// all entries are positive on an all-spacelike complex. @throws for
+    /// \f$ k < 0 \f$.
+    [[nodiscard]] std::vector<double> lorentzianNullNorms(
+        int k, double tol = 1e-9, bool metric = true) const;
+
   private:
     std::shared_ptr<Spacetime> st_;
 
@@ -174,12 +241,27 @@ class HodgeLaplacian {
     };
     mutable std::unordered_map<long long, MetricSpectrum> metricCache_{};
 
+    // General (non-symmetric) eigendecomposition of the signed-weight d'Alembertian
+    // L_k, cached per (k, metric). Eigenvalues/eigenvectors are complex and sorted
+    // ascending by (Re, Im); `wk` is the signed weight diagonal kept for the
+    // indefinite null-norm <h,h>_W = sum_i wk[i] |h_i|^2.
+    struct LorentzianSpectrum {
+      int dim{0};
+      std::vector<std::complex<double>> evals{};         // sorted, length |C_k|
+      std::vector<std::complex<double>> evecs{};         // flat |C_k|*|C_k|, columns
+      std::vector<double> wk{};                          // signed W_k, length |C_k|
+    };
+    mutable std::unordered_map<long long, LorentzianSpectrum> lorentzianCache_{};
+
     // Throw for k < 0 (no negative-degree chains).
     static void requireNonNegativeDegree(int k);
 
     // Build/fetch the cached symmetric spectrum of L_k^sym (k >= 1). Key folds in
     // `metric` so the metric and combinatorial spectra are cached separately.
     const MetricSpectrum &ensureMetricSpectrum(int k, bool metric) const;
+
+    // Build/fetch the cached general spectrum of the signed-weight d'Alembertian.
+    const LorentzianSpectrum &ensureLorentzianSpectrum(int k, bool metric) const;
 
     // Assemble the adjacency (flat row-major N*N) and degree (length N) from the
     // current edge weights/phases, using the stable vertex order. Kept Eigen-free

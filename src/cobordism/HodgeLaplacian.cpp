@@ -87,15 +87,19 @@ std::vector<std::vector<SimplexPtr>> orderedFaces(const Spacetime &K) {
 // Diagonal weights W_k (length `count`) in ChainComplex column order: the
 // per-k-simplex |volume| (Euclidean content via Simplex::volume), or all ones for
 // k == 0 or the combinatorial path. A degenerate (zero) cell falls back to 1 so
-// W_k stays positive-definite (W_k^{-1/2} is finite).
+// W_k stays positive-definite (W_k^{-1/2} is finite). With `lorentzian` the
+// **signed** volume is used (timelike cells negative ⇒ W_k indefinite); degenerate
+// cells still fall back to +1 so W_k stays invertible (W_k^{-1} is finite).
 std::vector<double> simplexWeights(const std::vector<std::vector<SimplexPtr>> &faces,
-                                   int k, int count, bool metric) {
+                                   int k, int count, bool metric,
+                                   bool lorentzian = false) {
   std::vector<double> w(static_cast<std::size_t>(std::max(count, 0)), 1.0);
   if (!metric || k == 0 || k < 0 || k >= static_cast<int>(faces.size())) return w;
   const auto &fk = faces[static_cast<std::size_t>(k)];
   for (int j = 0; j < count && j < static_cast<int>(fk.size()); ++j) {
-    const double vol = std::abs(fk[static_cast<std::size_t>(j)]->volume());
-    w[static_cast<std::size_t>(j)] = (vol > 0.0) ? vol : 1.0;
+    const double signedVol = fk[static_cast<std::size_t>(j)]->volume();
+    const double vol = lorentzian ? signedVol : std::abs(signedVol);
+    w[static_cast<std::size_t>(j)] = (std::abs(vol) > 0.0) ? vol : 1.0;
   }
   return w;
 }
@@ -149,6 +153,63 @@ Eigen::MatrixXd metricLaplacian(const Spacetime &K, int k, bool metric) {
     const Eigen::MatrixXd Bkp1 =
         wk.sqrt().matrix().asDiagonal() * dkp1 * invSqrtWkp1.matrix().asDiagonal();
     L.noalias() += Bkp1 * Bkp1.transpose();
+  }
+  return L;
+}
+
+// Signed-weight (Lorentzian) metric Hodge Laplacian for k >= 0 — the discrete
+// d'Alembertian. With W indefinite the symmetric W^{1/2} similarity breaks, so the
+// operator is assembled directly from the signed metric adjoint
+// d_k* = W_k^{-1} d_k^T W_{k-1}:
+//   L_k = W_k^{-1} d_k^T W_{k-1} d_k + d_{k+1} W_{k+1}^{-1} d_{k+1}^T W_k.
+// This is similar to the symmetric metricLaplacian when every weight is positive
+// (W_k^{-1/2} L_k W_k^{1/2} = L_k^sym), so the spectrum/kernel coincide there; with
+// signed weights it is generally NON-symmetric (a true d'Alembertian). Returns a
+// |C_k| x |C_k| real matrix (0 x 0 if no k-cells). `metric == false` ⇒ unit weights
+// (the positive combinatorial operator, no Lorentzian content).
+Eigen::MatrixXd signedLaplacian(const Spacetime &K, int k, bool metric) {
+  const ChainComplex cc = ChainComplex::fromSpacetime(K);
+  const int n = cc.dimension();
+  const int nk = static_cast<int>(cc.numSimplices(k));
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(nk, nk);
+  if (nk == 0) return L;
+
+  const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
+  const auto weightArr = [&](int kk) {
+    const std::vector<double> wv = simplexWeights(
+        faces, kk, static_cast<int>(cc.numSimplices(kk)), metric, /*lorentzian=*/true);
+    Eigen::ArrayXd a(static_cast<Eigen::Index>(wv.size()));
+    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
+    return a;
+  };
+  const auto boundary = [&](int kk, int rows, int cols) {
+    const std::vector<long> &flat = cc.boundaryMatrix(kk);
+    Eigen::MatrixXd d(rows, cols);
+    for (int r = 0; r < rows; ++r)
+      for (int c = 0; c < cols; ++c)
+        d(r, c) = static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
+    return d;
+  };
+
+  const Eigen::ArrayXd wk = weightArr(k);
+  const Eigen::ArrayXd invWk = wk.inverse();
+
+  // Term 1: W_k^{-1} d_k^T W_{k-1} d_k (present once there are (k-1)-faces).
+  const int rows = static_cast<int>(cc.numSimplices(k - 1));
+  if (k >= 1 && rows > 0) {
+    const Eigen::MatrixXd dk = boundary(k, rows, nk);
+    const Eigen::ArrayXd wkm1 = weightArr(k - 1);
+    L.noalias() += invWk.matrix().asDiagonal() * dk.transpose() *
+                   wkm1.matrix().asDiagonal() * dk;
+  }
+
+  // Term 2: d_{k+1} W_{k+1}^{-1} d_{k+1}^T W_k (absent when there are no (k+1)-cells).
+  const int cols = (k + 1 <= n) ? static_cast<int>(cc.numSimplices(k + 1)) : 0;
+  if (cols > 0) {
+    const Eigen::MatrixXd dkp1 = boundary(k + 1, nk, cols);
+    const Eigen::ArrayXd invWkp1 = weightArr(k + 1).inverse();
+    L.noalias() += dkp1 * invWkp1.matrix().asDiagonal() * dkp1.transpose() *
+                   wk.matrix().asDiagonal();
   }
   return L;
 }
@@ -223,8 +284,20 @@ std::vector<double> HodgeLaplacian::degree() const {
   return D;
 }
 
-std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
+std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric, bool lorentzian) const {
   requireNonNegativeDegree(k);
+  if (lorentzian && k >= 1) {
+    // The signed-weight d'Alembertian (generally non-symmetric); real operator
+    // returned complex (imag 0) for type parity with the other paths.
+    if (!st_) return {};
+    const Eigen::MatrixXd L = signedLaplacian(*st_, k, metric);
+    const int nk = static_cast<int>(L.rows());
+    std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
+    for (int i = 0; i < nk; ++i)
+      for (int j = 0; j < nk; ++j)
+        out[static_cast<std::size_t>(i) * nk + j] = cd(L(i, j), 0.0);
+    return out;
+  }
   if (k == 0) {
     // k = 0 (unchanged): L = D - A. Off-diagonal entries are -A_ij; the diagonal
     // carries D_ii (the adjacency has no diagonal in a complex without self-loops).
@@ -250,13 +323,13 @@ std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
   return out;
 }
 
-std::vector<double> HodgeLaplacian::weights(int k) const {
+std::vector<double> HodgeLaplacian::weights(int k, bool lorentzian) const {
   if (k < 0 || !st_) return {};
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   if (k > cc.dimension()) return {};
   const int m = static_cast<int>(cc.numSimplices(k));
   if (k == 0) return std::vector<double>(static_cast<std::size_t>(m), 1.0);
-  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true);
+  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true, lorentzian);
 }
 
 const HodgeLaplacian::MetricSpectrum &HodgeLaplacian::ensureMetricSpectrum(
@@ -283,6 +356,45 @@ const HodgeLaplacian::MetricSpectrum &HodgeLaplacian::ensureMetricSpectrum(
     }
   }
   return metricCache_.emplace(key, std::move(sp)).first->second;
+}
+
+const HodgeLaplacian::LorentzianSpectrum &HodgeLaplacian::ensureLorentzianSpectrum(
+    int k, bool metric) const {
+  const long long key = static_cast<long long>(k) * 2 + (metric ? 1 : 0);
+  const auto cached = lorentzianCache_.find(key);
+  if (cached != lorentzianCache_.end()) return cached->second;
+
+  LorentzianSpectrum sp;
+  if (st_) {
+    const Eigen::MatrixXd L = signedLaplacian(*st_, k, metric);
+    const int nk = static_cast<int>(L.rows());
+    sp.dim = nk;
+    sp.evals.assign(static_cast<std::size_t>(nk), cd(0.0, 0.0));
+    sp.evecs.assign(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
+    sp.wk = weights(k, /*lorentzian=*/true);
+    if (nk > 0) {
+      // Indefinite metric ⇒ the operator is non-self-adjoint; a general solver is
+      // needed (eigenvalues may be negative or complex-conjugate pairs).
+      Eigen::EigenSolver<Eigen::MatrixXd> es(L);
+      const Eigen::VectorXcd lam = es.eigenvalues();
+      const Eigen::MatrixXcd V = es.eigenvectors();
+
+      // Stable, reproducible order: ascending by (Re, Im) of the eigenvalue.
+      std::vector<int> order(static_cast<std::size_t>(nk));
+      for (int i = 0; i < nk; ++i) order[static_cast<std::size_t>(i)] = i;
+      std::sort(order.begin(), order.end(), [&](int a, int b) {
+        if (lam[a].real() != lam[b].real()) return lam[a].real() < lam[b].real();
+        return lam[a].imag() < lam[b].imag();
+      });
+      for (int c = 0; c < nk; ++c) {
+        const int src = order[static_cast<std::size_t>(c)];
+        sp.evals[static_cast<std::size_t>(c)] = lam[src];
+        for (int r = 0; r < nk; ++r)
+          sp.evecs[static_cast<std::size_t>(r) * nk + c] = V(r, src);
+      }
+    }
+  }
+  return lorentzianCache_.emplace(key, std::move(sp)).first->second;
 }
 
 void HodgeLaplacian::ensureDecomposition() const {
@@ -396,6 +508,57 @@ std::vector<cd> HodgeLaplacian::harmonics(int k, double tol, bool metric) const 
     for (std::size_t jj = 0; jj < M; ++jj)
       H[i * M + jj] = (*evecs)[i * N + cols[jj]];
   return H;
+}
+
+std::vector<cd> HodgeLaplacian::lorentzianEigenvalues(int k, bool metric) const {
+  requireNonNegativeDegree(k);
+  return ensureLorentzianSpectrum(k, metric).evals;
+}
+
+std::vector<cd> HodgeLaplacian::lorentzianEigenvectors(int k, bool metric) const {
+  requireNonNegativeDegree(k);
+  return ensureLorentzianSpectrum(k, metric).evecs;
+}
+
+std::vector<cd> HodgeLaplacian::lorentzianHarmonics(int k, double tol,
+                                                    bool metric) const {
+  requireNonNegativeDegree(k);
+  const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);
+  const std::size_t N = static_cast<std::size_t>(sp.dim);
+  if (N == 0) return {};
+
+  std::vector<std::size_t> cols;
+  for (std::size_t j = 0; j < N; ++j)
+    if (std::abs(sp.evals[j]) < tol) cols.push_back(j);
+
+  const std::size_t H = cols.size();
+  std::vector<cd> out(N * H, cd(0.0, 0.0));
+  for (std::size_t i = 0; i < N; ++i)
+    for (std::size_t jj = 0; jj < H; ++jj)
+      out[i * H + jj] = sp.evecs[i * N + cols[jj]];
+  return out;
+}
+
+std::vector<double> HodgeLaplacian::lorentzianNullNorms(int k, double tol,
+                                                        bool metric) const {
+  requireNonNegativeDegree(k);
+  const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);
+  const std::size_t N = static_cast<std::size_t>(sp.dim);
+  if (N == 0) return {};
+
+  std::vector<double> norms;
+  for (std::size_t j = 0; j < N; ++j) {
+    if (std::abs(sp.evals[j]) >= tol) continue;
+    // Indefinite W-norm <h,h>_W = sum_i W_{k,i} |h_i|^2 (real; signed W_k). A
+    // value ≈ 0 marks a null (lightlike) harmonic direction.
+    double nrm = 0.0;
+    for (std::size_t i = 0; i < N; ++i) {
+      const cd hi = sp.evecs[i * N + j];
+      nrm += sp.wk[i] * std::norm(hi);  // std::norm = |hi|^2
+    }
+    norms.push_back(nrm);
+  }
+  return norms;
 }
 
 }  // namespace tessera::cobordism
