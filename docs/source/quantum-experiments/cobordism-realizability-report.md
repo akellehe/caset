@@ -70,7 +70,7 @@ of §4b's two-vertex floor, **not** by exhausting triangulations.
 The state–operation–cobordism correspondence makes three formal claims about the
 bulk $W_{AB}$ synthesized for an operation $U$. The capstone evaluates each
 explicitly (`verify_correspondence`) on a realized witness (the zero-mode
-$U=\begin{psmallmatrix}1&1\\1&1\end{psmallmatrix}$); all three hold.
+$U=\left(\begin{smallmatrix}1&1\\1&1\end{smallmatrix}\right)$); all three hold.
 
 1. **$W_{AB} = \mathrm{geo}(U)$ is a cobordism.** The bulk produced by bending $U$
    and filling the interior is a genuine manifold-with-boundary — a nonempty
@@ -134,17 +134,17 @@ $U$:
 
 The three headline cases exercise the three regimes:
 
-- **Minimal-complexity realization (zero mode).** $U=\begin{psmallmatrix}1&1\\1&1\end{psmallmatrix}=2\lvert+\rangle\langle+\rvert$:
+- **Minimal-complexity realization (zero mode).** $U=\left(\begin{smallmatrix}1&1\\1&1\end{smallmatrix}\right)=2\lvert+\rangle\langle+\rvert$:
   $\mathrm{vec}(U)$ is the constant vector, the **exact zero mode** of $L=D-A$ for
   any phase-0 positive-weight boundary. Realized on the bipyramid at minimal
   interior complexity (`interior_vertex_count = 0`): the fill only has to keep the
   lone interior edge at phase 0, so $\lambda=0$.
 - **Realization after interior growth.** A generic $1\times3$ operation
-  $U=\begin{psmallmatrix}1&0.3+0.5i&-0.8+0.2i\end{psmallmatrix}$ on the solid
+  $U=\left(\begin{smallmatrix}1&0.3+0.5i&-0.8+0.2i\end{smallmatrix}\right)$ on the solid
   triangle: not an eigenvector of the bare pinned triangle, so it floors at the
   seed, but the fixed-boundary cone-and-retry grows the interior (one cone) and
   realizes it — the §5.0 analogue of §4b coning, with the boundary pinned.
-- **Certified obstruction.** $U=\begin{psmallmatrix}1&2\\3&4\end{psmallmatrix}$,
+- **Certified obstruction.** $U=\left(\begin{smallmatrix}1&2\\3&4\end{smallmatrix}\right)$,
   $\mathrm{vec}(U)=(1,2,3,4)$: a generic state not realizable as a
   bipyramid-boundary eigenvector against the pinned boundary with a single interior
   edge. With no growth budget the residual floors at $r=2.35\times10^{-2}$,
@@ -154,9 +154,9 @@ The three headline cases exercise the three regimes:
 
 | operation $U$ | bulk | verdict | $r$ / floor | cones | interior $|V|$ | $\lambda$ |
 |---|---|---|---|---|---|---|
-| $\begin{psmallmatrix}1&1\\1&1\end{psmallmatrix}$ (zero mode) | bipyramid | **realizable** | $r=9.49\times10^{-11}$ | 0 | 0 | $0.000000$ |
-| $\begin{psmallmatrix}1&0.3{+}0.5i&-0.8{+}0.2i\end{psmallmatrix}$ ($1\times3$) | triangle | **realizable** | $r=1.19\times10^{-13}$ | 1 | 1 | $3.923719$ |
-| $\begin{psmallmatrix}1&2\\3&4\end{psmallmatrix}$ (generic) | bipyramid | **obstructed** | floor $=2.35\times10^{-2}$ | 0 | 0 | $1.176471$ |
+| $\left(\begin{smallmatrix}1&1\\1&1\end{smallmatrix}\right)$ (zero mode) | bipyramid | **realizable** | $r=9.49\times10^{-11}$ | 0 | 0 | $0.000000$ |
+| $\left(\begin{smallmatrix}1&0.3{+}0.5i&-0.8{+}0.2i\end{smallmatrix}\right)$ ($1\times3$) | triangle | **realizable** | $r=1.19\times10^{-13}$ | 1 | 1 | $3.923719$ |
+| $\left(\begin{smallmatrix}1&2\\3&4\end{smallmatrix}\right)$ (generic) | bipyramid | **obstructed** | floor $=2.35\times10^{-2}$ | 0 | 0 | $1.176471$ |
 
 Boundary synthesis (§4b), the input to the above: the general-amplitude qubit
 $\psi=(\sqrt{0.8},\sqrt{0.2})$, $|c_0|\ne|c_1|$, floors at $r=3.60\times10^{-3}$
@@ -174,7 +174,7 @@ floor is a genuine non-existence certificate, not a stuck optimizer.
 
 1. **The realizability boundary is sharp and an obstruction is generic at fixed
    complexity.** Interpolating $U(t)$ from the uniform zero mode to
-   $\begin{psmallmatrix}1&2\\3&4\end{psmallmatrix}$ on the one-interior-edge
+   $\left(\begin{smallmatrix}1&2\\3&4\end{smallmatrix}\right)$ on the one-interior-edge
    bipyramid (no growth budget), the residual lifts off zero immediately
    ($t=0$: $9.5\times10^{-11}$, realizable; $t=0.1$: $5.3\times10^{-3}$, floored)
    and saturates near $2.4\times10^{-2}$. Obstruction is therefore **not** a

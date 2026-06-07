@@ -348,7 +348,7 @@ of §4b’s two-vertex floor, <strong>not</strong> by exhausting triangulations.
 <p>The state–operation–cobordism correspondence makes three formal claims about the
 bulk <span class="math notranslate nohighlight">\(W_{AB}\)</span> synthesized for an operation <span class="math notranslate nohighlight">\(U\)</span>. The capstone evaluates each
 explicitly (<code class="docutils literal notranslate"><span class="pre">verify_correspondence</span></code>) on a realized witness (the zero-mode
-<span class="math notranslate nohighlight">\(U=\begin{psmallmatrix}1&amp;1\\1&amp;1\end{psmallmatrix}\)</span>); all three hold.</p>
+<span class="math notranslate nohighlight">\(U=\left(\begin{smallmatrix}1&amp;1\\1&amp;1\end{smallmatrix}\right)\)</span>); all three hold.</p>
 <ol class="arabic">
 <li><p><strong><span class="math notranslate nohighlight">\(W_{AB} = \mathrm{geo}(U)\)</span> is a cobordism.</strong> The bulk produced by bending <span class="math notranslate nohighlight">\(U\)</span>
 and filling the interior is a genuine manifold-with-boundary — a nonempty
@@ -411,17 +411,17 @@ cross-checked against an independent numpy global-min over the interior edge.</p
 </ol>
 <p>The three headline cases exercise the three regimes:</p>
 <ul class="simple">
-<li><p><strong>Minimal-complexity realization (zero mode).</strong> <span class="math notranslate nohighlight">\(U=\begin{psmallmatrix}1&amp;1\\1&amp;1\end{psmallmatrix}=2\lvert+\rangle\langle+\rvert\)</span>:
+<li><p><strong>Minimal-complexity realization (zero mode).</strong> <span class="math notranslate nohighlight">\(U=\left(\begin{smallmatrix}1&amp;1\\1&amp;1\end{smallmatrix}\right)=2\lvert+\rangle\langle+\rvert\)</span>:
 <span class="math notranslate nohighlight">\(\mathrm{vec}(U)\)</span> is the constant vector, the <strong>exact zero mode</strong> of <span class="math notranslate nohighlight">\(L=D-A\)</span> for
 any phase-0 positive-weight boundary. Realized on the bipyramid at minimal
 interior complexity (<code class="docutils literal notranslate"><span class="pre">interior_vertex_count</span> <span class="pre">=</span> <span class="pre">0</span></code>): the fill only has to keep the
 lone interior edge at phase 0, so <span class="math notranslate nohighlight">\(\lambda=0\)</span>.</p></li>
 <li><p><strong>Realization after interior growth.</strong> A generic <span class="math notranslate nohighlight">\(1\times3\)</span> operation
-<span class="math notranslate nohighlight">\(U=\begin{psmallmatrix}1&amp;0.3+0.5i&amp;-0.8+0.2i\end{psmallmatrix}\)</span> on the solid
+<span class="math notranslate nohighlight">\(U=\left(\begin{smallmatrix}1&amp;0.3+0.5i&amp;-0.8+0.2i\end{smallmatrix}\right)\)</span> on the solid
 triangle: not an eigenvector of the bare pinned triangle, so it floors at the
 seed, but the fixed-boundary cone-and-retry grows the interior (one cone) and
 realizes it — the §5.0 analogue of §4b coning, with the boundary pinned.</p></li>
-<li><p><strong>Certified obstruction.</strong> <span class="math notranslate nohighlight">\(U=\begin{psmallmatrix}1&amp;2\\3&amp;4\end{psmallmatrix}\)</span>,
+<li><p><strong>Certified obstruction.</strong> <span class="math notranslate nohighlight">\(U=\left(\begin{smallmatrix}1&amp;2\\3&amp;4\end{smallmatrix}\right)\)</span>,
 <span class="math notranslate nohighlight">\(\mathrm{vec}(U)=(1,2,3,4)\)</span>: a generic state not realizable as a
 bipyramid-boundary eigenvector against the pinned boundary with a single interior
 edge. With no growth budget the residual floors at <span class="math notranslate nohighlight">\(r=2.35\times10^{-2}\)</span>,
@@ -432,9 +432,9 @@ bounded away from zero — <strong>certified non-realizable</strong>.</p></li>
 <h2>Results<a class="headerlink" href="#results" title="Link to this heading">¶</a></h2>
 <p>| operation <span class="math notranslate nohighlight">\(U\)</span> | bulk | verdict | <span class="math notranslate nohighlight">\(r\)</span> / floor | cones | interior <span class="math notranslate nohighlight">\(|V|\)</span> | <span class="math notranslate nohighlight">\(\lambda\)</span> |
 |—|—|—|—|—|—|—|
-| <span class="math notranslate nohighlight">\(\begin{psmallmatrix}1&amp;1\\1&amp;1\end{psmallmatrix}\)</span> (zero mode) | bipyramid | <strong>realizable</strong> | <span class="math notranslate nohighlight">\(r=9.49\times10^{-11}\)</span> | 0 | 0 | <span class="math notranslate nohighlight">\(0.000000\)</span> |
-| <span class="math notranslate nohighlight">\(\begin{psmallmatrix}1&amp;0.3{+}0.5i&amp;-0.8{+}0.2i\end{psmallmatrix}\)</span> (<span class="math notranslate nohighlight">\(1\times3\)</span>) | triangle | <strong>realizable</strong> | <span class="math notranslate nohighlight">\(r=1.19\times10^{-13}\)</span> | 1 | 1 | <span class="math notranslate nohighlight">\(3.923719\)</span> |
-| <span class="math notranslate nohighlight">\(\begin{psmallmatrix}1&amp;2\\3&amp;4\end{psmallmatrix}\)</span> (generic) | bipyramid | <strong>obstructed</strong> | floor <span class="math notranslate nohighlight">\(=2.35\times10^{-2}\)</span> | 0 | 0 | <span class="math notranslate nohighlight">\(1.176471\)</span> |</p>
+| <span class="math notranslate nohighlight">\(\left(\begin{smallmatrix}1&amp;1\\1&amp;1\end{smallmatrix}\right)\)</span> (zero mode) | bipyramid | <strong>realizable</strong> | <span class="math notranslate nohighlight">\(r=9.49\times10^{-11}\)</span> | 0 | 0 | <span class="math notranslate nohighlight">\(0.000000\)</span> |
+| <span class="math notranslate nohighlight">\(\left(\begin{smallmatrix}1&amp;0.3{+}0.5i&amp;-0.8{+}0.2i\end{smallmatrix}\right)\)</span> (<span class="math notranslate nohighlight">\(1\times3\)</span>) | triangle | <strong>realizable</strong> | <span class="math notranslate nohighlight">\(r=1.19\times10^{-13}\)</span> | 1 | 1 | <span class="math notranslate nohighlight">\(3.923719\)</span> |
+| <span class="math notranslate nohighlight">\(\left(\begin{smallmatrix}1&amp;2\\3&amp;4\end{smallmatrix}\right)\)</span> (generic) | bipyramid | <strong>obstructed</strong> | floor <span class="math notranslate nohighlight">\(=2.35\times10^{-2}\)</span> | 0 | 0 | <span class="math notranslate nohighlight">\(1.176471\)</span> |</p>
 <p>Boundary synthesis (§4b), the input to the above: the general-amplitude qubit
 <span class="math notranslate nohighlight">\(\psi=(\sqrt{0.8},\sqrt{0.2})\)</span>, <span class="math notranslate nohighlight">\(|c_0|\ne|c_1|\)</span>, floors at <span class="math notranslate nohighlight">\(r=3.60\times10^{-3}\)</span>
 on the two-vertex seed <span class="math notranslate nohighlight">\(K_2\)</span> (it is not a balanced two-vertex eigenvector) and is
@@ -451,7 +451,7 @@ floor is a genuine non-existence certificate, not a stuck optimizer.</p>
 <ol class="arabic simple">
 <li><p><strong>The realizability boundary is sharp and an obstruction is generic at fixed
 complexity.</strong> Interpolating <span class="math notranslate nohighlight">\(U(t)\)</span> from the uniform zero mode to
-<span class="math notranslate nohighlight">\(\begin{psmallmatrix}1&amp;2\\3&amp;4\end{psmallmatrix}\)</span> on the one-interior-edge
+<span class="math notranslate nohighlight">\(\left(\begin{smallmatrix}1&amp;2\\3&amp;4\end{smallmatrix}\right)\)</span> on the one-interior-edge
 bipyramid (no growth budget), the residual lifts off zero immediately
 (<span class="math notranslate nohighlight">\(t=0\)</span>: <span class="math notranslate nohighlight">\(9.5\times10^{-11}\)</span>, realizable; <span class="math notranslate nohighlight">\(t=0.1\)</span>: <span class="math notranslate nohighlight">\(5.3\times10^{-3}\)</span>, floored)
 and saturates near <span class="math notranslate nohighlight">\(2.4\times10^{-2}\)</span>. Obstruction is therefore <strong>not</strong> a
