@@ -144,5 +144,52 @@ class TestFundamentalClass(unittest.TestCase):
                 self.assertEqual(chain.bettiNumbers()[dimension], 1)
 
 
+class TestFundamentalClassRequiresClosedOriented(unittest.TestCase):
+    """fundamentalClass() must raise when dim ker ∂_d ≠ 1 (#160).
+
+    A ball SolidSimplex(n) is contractible (b_n = 0) and ℝP² is closed but
+    non-orientable (b_2(ℝP²; ℚ) = 0); in both, ker ∂_d is 0-dimensional, so no
+    fundamental class exists and the documented contract is to raise.
+
+    Regression for the bug: Eigen's FullPivLU::kernel() returns a single
+    all-zero column for a 0-dimensional kernel (never a zero-column matrix), so
+    the old kernel.cols() != 1 guard never fired — fundamentalClass() instead
+    returned an all-zero ε vector and read one past the end of the generator
+    during sign normalization (undefined behavior).
+    """
+
+    def _assert_no_fundamental_class(self, topology, dimension):
+        chain = cobordism.ChainComplex.fromSpacetime(_build(topology))
+        self.assertEqual(chain.dimension(), dimension)
+        # The reason it must raise: the top Betti number is 0 (ker ∂_d = 0).
+        self.assertEqual(chain.bettiNumbers()[dimension], 0)
+        with self.assertRaises(RuntimeError):
+            chain.fundamentalClass()
+
+    def test_balls_have_no_fundamental_class(self):
+        # SolidSimplex(n) is the n-ball: contractible, so b_n = 0.
+        for n in (2, 3, 4):
+            with self.subTest(n=n):
+                self._assert_no_fundamental_class(tessera.SolidSimplex(n), n)
+
+    def test_real_projective_plane_has_no_fundamental_class(self):
+        # ℝP² is closed but non-orientable: b_2(ℝP²; ℚ) = 0, no [W] over ℤ.
+        self._assert_no_fundamental_class(tessera.RealProjectivePlane(), 2)
+
+    def test_closed_oriented_fixtures_still_return_pm1_class(self):
+        # The fix must leave b_d = 1 untouched: a valid ±1 fundamental class is
+        # still returned (DijkgraafWitten depends on this).
+        for topology, dimension in ((_two_sphere(), 2),
+                                    (_torus(), 2),
+                                    (_three_torus(), 3)):
+            with self.subTest(dimension=dimension):
+                chain = cobordism.ChainComplex.fromSpacetime(_build(topology))
+                self.assertEqual(chain.bettiNumbers()[dimension], 1)
+                epsilon = list(chain.fundamentalClass())
+                self.assertEqual(len(epsilon), chain.numSimplices(dimension))
+                self.assertTrue(all(e in (-1, 1) for e in epsilon))
+                self.assertEqual(next(e for e in epsilon if e != 0), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
