@@ -16,6 +16,7 @@ earlier-work/index
 charged-cartan/index
 cobordism
 cobordism-plan
+cobordism-stage2-report
 ```
 
 ## Reproducing
