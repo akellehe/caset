@@ -160,7 +160,7 @@ print(poset.getNodeCount, poset.covers)
 Other predicates (:class:`LogConcaveMajorization`,
 :class:`PeakRadialMajorization`) plug into the same
 :meth:`Majorization.posetOf(spectra, predicate)` overload — see
-``include/quantum/majorization.hpp`` for the variant references
+``include/quantum/Majorization.hpp`` for the variant references
 (Brändén 2015, Aubrun–Nechita 2008).
 
 ### End-to-end pipeline

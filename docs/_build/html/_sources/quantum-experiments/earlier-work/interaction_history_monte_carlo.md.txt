@@ -224,7 +224,7 @@ are no longer required to escape the ceiling — the model choice was.
 
 - **Cartan model edge MIs** are assigned by
   `InteractionSimulation::computeInteraction` in
-  `src/quantum/interaction_simulation.cpp`. The three structural-zero
+  `src/simulations/InteractionSimulation.cpp`. The three structural-zero
   edges (A–B′, B–A′, A′–B′) are explicitly set to MI = 0 and floor at
   `-log(ε)`. The hub-spoke MIs and the worldline self-MIs use the
   joint and the input entropies respectively.
@@ -271,8 +271,8 @@ are no longer required to escape the ceiling — the model choice was.
 
 The C++ class is
 `tessera::quantum::InteractionSimulation`
-(`src/quantum/interaction_simulation.cpp`,
-`include/quantum/interaction_simulation.hpp`), exercised by
+(`src/simulations/InteractionSimulation.cpp`,
+`include/simulations/InteractionSimulation.h`), exercised by
 `tests/quantum/test_interaction_simulation.cpp`. The β-scatter scan
 script is `/tmp/beta_scatter.py`; the plotter is
 `examples/quantum/plot_cartan_beta_scatter.py`. The full per-run

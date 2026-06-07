@@ -220,7 +220,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../design/v0.1.html">Charged Cartan Monte Carlo — v0.1 design: charge labels + annihilation / pairCreate moves</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../design/v0.2.html">Charged Cartan Monte Carlo — v0.2 design: qudit-basis vertices</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../design/v0.3.html">Charged Cartan Monte Carlo — v0.3 design: gauge mediation</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../design/h_pair_first_cell.html">Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../design/h_pair_first_cell.html">Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation</a></li>
 </ul>
 </li>
 <li class="toctree-l3 current has-children"><a class="reference internal" href="index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
@@ -233,6 +233,8 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../../cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../../cpp_api.html">The Tessera C++ API</a></li>
@@ -317,6 +319,14 @@ the drift should slow as we approach the asymptote.</p>
 <h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">¶</a></h2>
 <p>Two scans, both at γ_CP = 0 in the qudit basis (<code class="docutils literal notranslate"><span class="pre">featureQuditBasis</span> <span class="pre">=</span> <span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">j_chargeCharge</span> <span class="pre">=</span> <span class="pre">1.0</span></code>, <code class="docutils literal notranslate"><span class="pre">j_spinSpin</span> <span class="pre">=</span> <span class="pre">0.25</span></code>, <code class="docutils literal notranslate"><span class="pre">massShift</span> <span class="pre">=</span> <span class="pre">0</span></code>,
 <code class="docutils literal notranslate"><span class="pre">dtPair</span> <span class="pre">=</span> <span class="pre">0.25</span></code>):</p>
+<p>At the time of these scans <code class="docutils literal notranslate"><span class="pre">featureChoiSigmaAB</span></code> was implicitly <code class="docutils literal notranslate"><span class="pre">False</span></code>
+(the I/4 Σ_AB proxy). PR
+<a class="reference external" href="https://github.com/akellehe/tessera/pull/21">#21</a> (issue
+<a class="reference external" href="https://github.com/akellehe/tessera/issues/16">#16</a>) later replaced
+that proxy with the full 256-dim Choi state and flipped the default to
+<code class="docutils literal notranslate"><span class="pre">True</span></code>. Both modes reproduce the plateau to within seed noise — the
+peak D_S at T = 2500 is the same in either, so the flag is not
+load-bearing for the headline result. See <a class="reference internal" href="#reproduce">Reproduce</a> below.</p>
 <p><strong>Scan A — N-scaling at fixed T:</strong></p>
 <ul class="simple">
 <li><p>N ∈ {8, 10, 12, 14}</p></li>
@@ -344,6 +354,49 @@ wall was 31.4 h, essentially all of it in <code class="docutils literal notransl
 </section>
 <section id="reproduce">
 <h2>Reproduce<a class="headerlink" href="#reproduce" title="Link to this heading">¶</a></h2>
+<section id="regression-check-on-current-main">
+<h3>Regression check on current main<a class="headerlink" href="#regression-check-on-current-main" title="Link to this heading">¶</a></h3>
+<p>A committed reproducer runs the Scan A / Scan B baseline cell (N = 8,
+T = 2500, β = 3×10⁻⁴, qudit basis, I/4 Σ_AB proxy) and asserts that
+peak D_S still sits inside the published plateau band:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Quick check (3 seeds, ~15 s on an 8-CPU box):</span>
+python<span class="w"> </span>examples/quantum/regression_check_v02_finite_size.py
+
+<span class="c1"># Full re-validation (10 seeds, parallel):</span>
+python<span class="w"> </span>examples/quantum/regression_check_v02_finite_size.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--seeds<span class="w"> </span><span class="m">10</span><span class="w"> </span>--workers<span class="w"> </span><span class="m">4</span>
+</pre></div>
+</div>
+<p>Exits 0 if the mean peak D_S sits inside the <code class="docutils literal notranslate"><span class="pre">[4.40,</span> <span class="pre">4.90]</span></code> plateau
+band, 1 otherwise. Confirmed on main at the time of writing: 24-seed
+mean peak D_S = 4.620 ± 0.105 — statistically identical to the
+published 4.621 ± 0.060.</p>
+<section id="caveats-when-reproducing">
+<h4>Caveats when reproducing<a class="headerlink" href="#caveats-when-reproducing" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong>Use <code class="docutils literal notranslate"><span class="pre">sim.tune()</span></code>, not <code class="docutils literal notranslate"><span class="pre">sim.thermalize()</span></code>, at T = 2500.</strong> The script
+uses <code class="docutils literal notranslate"><span class="pre">tune()</span></code> only — bringing the complex up to the target volume
+and stopping there. The committed runner script
+<code class="docutils literal notranslate"><span class="pre">examples/quantum/interaction_history_spectral_dimension.py</span></code> calls
+<code class="docutils literal notranslate"><span class="pre">sim.thermalize()</span></code>, which is <code class="docutils literal notranslate"><span class="pre">tune()</span></code> <em>plus</em> up to 1000 equilibration
+sweeps; at T = 2500 each sweep proposes <code class="docutils literal notranslate"><span class="pre">nFrontier·(nFrontier−1)/2</span> <span class="pre">+</span> <span class="pre">interactionCount</span> <span class="pre">≈</span> <span class="pre">3</span> <span class="pre">×</span> <span class="pre">10⁶</span></code> interact/un-interact attempts, so the
+equilibration loop alone is ~3 × 10⁹ attempts per seed (≈ 50 min on
+one core). Empirically the peak D_S is already in the plateau after
+<code class="docutils literal notranslate"><span class="pre">tune()</span></code> — repeated tests show the post-thermalize value sits within
+one seed σ of the post-tune value — so <code class="docutils literal notranslate"><span class="pre">tune()</span></code> is the right call
+for a regression check.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">featureChoiSigmaAB</span></code> was <code class="docutils literal notranslate"><span class="pre">False</span></code> (implicit) when these scans were
+taken.</strong> PR #21 / issue #16 flipped the default to <code class="docutils literal notranslate"><span class="pre">True</span></code>. The peak
+D_S is the same in either mode (verified at T = 2500 across three
+seeds), so the regression check leaves the default in place and does
+not need to override it.</p></li>
+</ul>
+</section>
+</section>
+<section id="original-full-scan-historical">
+<h3>Original full scan (historical)<a class="headerlink" href="#original-full-scan-historical" title="Link to this heading">¶</a></h3>
+<p>The Scan A + Scan B + deep-T anchor results above came from drivers
+that lived in <code class="docutils literal notranslate"><span class="pre">/tmp/</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">OMP_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="nv">OPENBLAS_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
 <span class="nv">MKL_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="nv">BLIS_NUM_THREADS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
 python<span class="w"> </span>/tmp/issue10_scan.py<span class="w">            </span><span class="c1"># Scans A + B</span>
@@ -354,6 +407,7 @@ python<span class="w"> </span>examples/quantum/plot_v02_finite_size.py
 <p>Records land at <code class="docutils literal notranslate"><span class="pre">/tmp/interaction-history/issue10_finite_size.json</span></code>
 and <code class="docutils literal notranslate"><span class="pre">/tmp/interaction-history/issue10_T100k.json</span></code>; plot at
 <code class="docutils literal notranslate"><span class="pre">docs/source/quantum-experiments/figures/v02_finite_size_investigation.png</span></code>.</p>
+</section>
 </section>
 <section id="results">
 <h2>Results<a class="headerlink" href="#results" title="Link to this heading">¶</a></h2>
@@ -665,7 +719,14 @@ this writeup ties back to.</p></li>
 <li><a class="reference internal" href="#context">Context</a></li>
 <li><a class="reference internal" href="#hypothesis">Hypothesis</a></li>
 <li><a class="reference internal" href="#setup">Setup</a></li>
-<li><a class="reference internal" href="#reproduce">Reproduce</a></li>
+<li><a class="reference internal" href="#reproduce">Reproduce</a><ul>
+<li><a class="reference internal" href="#regression-check-on-current-main">Regression check on current main</a><ul>
+<li><a class="reference internal" href="#caveats-when-reproducing">Caveats when reproducing</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#original-full-scan-historical">Original full scan (historical)</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#results">Results</a><ul>
 <li><a class="reference internal" href="#scan-a-peak-d-s-vs-n-at-t-2500">Scan A — peak D_S vs N at T = 2500</a></li>
 <li><a class="reference internal" href="#scan-b-peak-d-s-vs-t-at-n-8-3104">Scan B — peak D_S vs T at N = 8, β = 3×10⁻⁴</a></li>

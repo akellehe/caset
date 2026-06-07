@@ -220,7 +220,7 @@
 <li class="toctree-l4"><a class="reference internal" href="quantum-experiments/charged-cartan/design/v0.1.html">Charged Cartan Monte Carlo — v0.1 design: charge labels + annihilation / pairCreate moves</a></li>
 <li class="toctree-l4"><a class="reference internal" href="quantum-experiments/charged-cartan/design/v0.2.html">Charged Cartan Monte Carlo — v0.2 design: qudit-basis vertices</a></li>
 <li class="toctree-l4"><a class="reference internal" href="quantum-experiments/charged-cartan/design/v0.3.html">Charged Cartan Monte Carlo — v0.3 design: gauge mediation</a></li>
-<li class="toctree-l4"><a class="reference internal" href="quantum-experiments/charged-cartan/design/h_pair_first_cell.html">Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="quantum-experiments/charged-cartan/design/h_pair_first_cell.html">Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation</a></li>
 </ul>
 </li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="quantum-experiments/charged-cartan/experiments/index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -233,6 +233,8 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
@@ -283,7 +285,7 @@ Lieb–Robinson cone, and the causet order on the same label set.</p>
 <p>The motivation, in one sentence: the underlying causal structure of a
 Lorentzian manifold is captured by the <strong>partial order</strong> on its points,
 and a spacetime can be reconstructed up to conformal factor from that
-order alone <span class="bibtex-citation" id="id1">[<a class="reference internal" href="quantum-methodology.html#id42" title="David B. Malament. The class of continuous timelike curves determines the topology of spacetime. J. Math. Phys., 18:1399–1404, 1977. doi:10.1063/1.523436.">1</a>, <a class="reference internal" href="quantum-methodology.html#id41" title="Luca Bombelli, Joohan Lee, David Meyer, and Rafael D. Sorkin. Space-time as a causal set. Phys. Rev. Lett., 59:521–524, 1987. doi:10.1103/PhysRevLett.59.521.">2</a>]</span>. tessera
+order alone <span id="id1">[<a class="reference internal" href="quantum-methodology.html#id42" title="David B. Malament. The class of continuous timelike curves determines the topology of spacetime. J. Math. Phys., 18:1399–1404, 1977. doi:10.1063/1.523436.">1</a>, <a class="reference internal" href="quantum-methodology.html#id41" title="Luca Bombelli, Joohan Lee, David Meyer, and Rafael D. Sorkin. Space-time as a causal set. Phys. Rev. Lett., 59:521–524, 1987. doi:10.1103/PhysRevLett.59.521.">2</a>]</span>. tessera
 exposes this partial order as a concrete data structure
 (<code class="docutils literal notranslate"><span class="pre">tessera.Poset</span></code>) and provides factories that derive it from a
 triangulated <code class="docutils literal notranslate"><span class="pre">tessera.Spacetime</span></code> or from a Schwinger TDVP quench run.</p>
@@ -304,11 +306,11 @@ triangulated <code class="docutils literal notranslate"><span class="pre">tesser
 </tr>
 <tr class="row-odd"><td><p>Spacetime → 1D causet adapter</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tessera.quantum.Causet</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/causet_chain.hpp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/CausetChain.hpp</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Causet-as-data</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tessera.quantum.CausetChain</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/causet_chain.hpp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/CausetChain.hpp</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Pairwise order agreement</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tessera.quantum.OrderAgreement</span></code></p></td>
@@ -320,15 +322,15 @@ triangulated <code class="docutils literal notranslate"><span class="pre">tesser
 </tr>
 <tr class="row-odd"><td><p>(cut, time) label</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tessera.quantum.LabelSpacetime</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/causal_compare.hpp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/CausalCompare.hpp</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Three orders bundle</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tessera.quantum.CausalOrders</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/causal_compare.hpp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/CausalCompare.hpp</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>End-to-end comparison report</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">tessera.quantum.CausalComparisonReport</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/causal_compare.hpp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">include/quantum/CausalCompare.hpp</span></code></p></td>
 </tr>
 </tbody>
 </table>
@@ -558,13 +560,13 @@ position, snapshot index, and physical time.</p>
 <section id="reading-list">
 <h2>Reading list<a class="headerlink" href="#reading-list" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p><span class="bibtex-citation" id="id2">[<a class="reference internal" href="quantum-methodology.html#id42" title="David B. Malament. The class of continuous timelike curves determines the topology of spacetime. J. Math. Phys., 18:1399–1404, 1977. doi:10.1063/1.523436.">1</a>]</span> — the order-reconstructs-conformal-class
+<li><p><span id="id2">[<a class="reference internal" href="quantum-methodology.html#id42" title="David B. Malament. The class of continuous timelike curves determines the topology of spacetime. J. Math. Phys., 18:1399–1404, 1977. doi:10.1063/1.523436.">1</a>]</span> — the order-reconstructs-conformal-class
 theorem.</p></li>
-<li><p><span class="bibtex-citation" id="id3">[<a class="reference internal" href="quantum-methodology.html#id41" title="Luca Bombelli, Joohan Lee, David Meyer, and Rafael D. Sorkin. Space-time as a causal set. Phys. Rev. Lett., 59:521–524, 1987. doi:10.1103/PhysRevLett.59.521.">2</a>]</span> — the causet program; spacetime
+<li><p><span id="id3">[<a class="reference internal" href="quantum-methodology.html#id41" title="Luca Bombelli, Joohan Lee, David Meyer, and Rafael D. Sorkin. Space-time as a causal set. Phys. Rev. Lett., 59:521–524, 1987. doi:10.1103/PhysRevLett.59.521.">2</a>]</span> — the causet program; spacetime
 emerges from a locally finite partial order.</p></li>
-<li><p><span class="bibtex-citation" id="id4">[<a class="reference internal" href="quantum-methodology.html#id32" title="Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. Communications in Mathematical Physics, 28:251–257, 1972. doi:10.1007/BF01645779.">3</a>]</span> — the Lieb–Robinson bound that bounds the
+<li><p><span id="id4">[<a class="reference internal" href="quantum-methodology.html#id32" title="Elliott H. Lieb and Derek W. Robinson. The finite group velocity of quantum spin systems. Communications in Mathematical Physics, 28:251–257, 1972. doi:10.1007/BF01645779.">3</a>]</span> — the Lieb–Robinson bound that bounds the
 <span class="math notranslate nohighlight">\(\preceq_{\rm LR}\)</span> order.</p></li>
-<li><p><span class="bibtex-citation" id="id5">[<a class="reference internal" href="quantum-methodology.html#id33" title="Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. Communications in Mathematical Physics, 265:781–804, 2006. arXiv:math-ph/0507008, doi:10.1007/s00220-006-0030-4.">4</a>]</span> — refined LR bound for lattice systems
+<li><p><span id="id5">[<a class="reference internal" href="quantum-methodology.html#id33" title="Matthew B. Hastings and Tohru Koma. Spectral gap and exponential decay of correlations. Communications in Mathematical Physics, 265:781–804, 2006. arXiv:math-ph/0507008, doi:10.1007/s00220-006-0030-4.">4</a>]</span> — refined LR bound for lattice systems
 relevant to the Schwinger TDVP setup.</p></li>
 </ul>
 <p>See also <code class="docutils literal notranslate"><span class="pre">docs/source/quantum-methodology.md</span></code> §1 and §4.4 for the

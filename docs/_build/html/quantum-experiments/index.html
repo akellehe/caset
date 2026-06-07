@@ -220,7 +220,7 @@
 <li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/v0.1.html">Charged Cartan Monte Carlo — v0.1 design: charge labels + annihilation / pairCreate moves</a></li>
 <li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/v0.2.html">Charged Cartan Monte Carlo — v0.2 design: qudit-basis vertices</a></li>
 <li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/v0.3.html">Charged Cartan Monte Carlo — v0.3 design: gauge mediation</a></li>
-<li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/h_pair_first_cell.html">Charged Cartan — when does <span class="math notranslate nohighlight">\(H_{\mathrm{pair}}\)</span> actually engage? A first-cell derivation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/h_pair_first_cell.html">Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation</a></li>
 </ul>
 </li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="charged-cartan/experiments/index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -233,6 +233,8 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Tessera C++ API</a></li>
@@ -301,6 +303,30 @@ experiments.</p>
 <li class="toctree-l1"><a class="reference internal" href="charged-cartan/index.html">Charged Cartan Monte Carlo</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="charged-cartan/design/index.html">Charged Cartan Monte Carlo — design notes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="charged-cartan/experiments/index.html">Charged Cartan Monte Carlo — experiments</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#objective">0. Objective</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#hypothesis-under-test">1. Hypothesis under test</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#what-to-build-on-in-tessera">2. What to build on in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#notation">3. Notation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#stage-1-algebraic-layer-n-1-pure-linear-algebra">4. Stage 1 — Algebraic layer (<span class="math notranslate nohighlight">\(n=1\)</span>), pure linear algebra</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#b-boundary-state-synthesis-inverse-eigenvector-problem">4b. Boundary-state synthesis (inverse eigenvector problem)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#stage-2-topological-layer-n-3-simplicial-via-tessera">5. Stage 2 — Topological layer (<span class="math notranslate nohighlight">\(n=3\)</span>), simplicial via <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#falsifiable-predictions">6. Falsifiable predictions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#parameter-sweeps">7. Parameter sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html#outputs">8. Outputs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#context">Context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#architecture-reuse-the-two-existing-worlds-build-the-seam">Architecture — reuse the two existing worlds, build the seam</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#fixtures-existing-inline-no-new-graph-classes">Fixtures (existing + inline; no new graph classes)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#mapping-to-the-spec-checks-c1c5">Mapping to the spec checks (C1–C5)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#tickets-cobordism-correspondence-v0-1-issue-first-one-per-pr">Tickets (Cobordism Correspondence v0.1; issue-first, one per PR)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#build-verification">Build &amp; verification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#risks">Risks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#after-stage-1-stage-2-milestone">After Stage 1 (Stage 2 milestone)</a></li>
 </ul>
 </li>
 </ul>
@@ -403,5 +429,7 @@ detailed table.</p>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     </body>
 </html>

@@ -233,6 +233,8 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../../cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../../../cpp_api.html">The Tessera C++ API</a></li>
@@ -693,7 +695,7 @@ and squared length
 </section>
 <section id="the-10-mi-assignments">
 <h3>3.3 The 10 MI assignments<a class="headerlink" href="#the-10-mi-assignments" title="Link to this heading">¶</a></h3>
-<p>From <code class="docutils literal notranslate"><span class="pre">src/quantum/interaction_simulation.cpp</span></code> (lines 786–795):</p>
+<p>From <code class="docutils literal notranslate"><span class="pre">src/simulations/InteractionSimulation.cpp</span></code> (lines 786–795):</p>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
 <thead>
@@ -905,7 +907,7 @@ joint input is a product:</p>
 \]</div>
 </div>
 <p>This idealises the actual code path (which uses a random rank-≤2
-state in each sector, see <code class="docutils literal notranslate"><span class="pre">src/quantum/interaction_simulation.cpp:495</span></code>)
+state in each sector, see <code class="docutils literal notranslate"><span class="pre">src/simulations/InteractionSimulation.cpp:495</span></code>)
 — maximally distributed information <em>within</em> each sector, no
 sector-superposition, no cross-vertex correlation.</p>
 <section id="id1">
@@ -1234,7 +1236,7 @@ move it strongly.</p>
 (rank 1, <span class="math notranslate nohighlight">\(S = 0\)</span>). This makes each vertex maximally distinguishable
 in its sector and gives <span class="math notranslate nohighlight">\(\hat U\)</span> full purchase via <span class="math notranslate nohighlight">\((XX+YY)\)</span>
 rotation. Cost: trivial code change in
-<a class="reference external" href="https://github.com/akellehe/tessera/blob/main/src/quantum/interaction_simulation.cpp#L495"><code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code></a>.</p>
+<a class="reference external" href="https://github.com/akellehe/tessera/blob/main/src/simulations/InteractionSimulation.cpp#L495"><code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code></a>.</p>
 <p>Interpretation: replaces “random spinor in this charge sector”
 (thermal-ish vacuum) with “definite single-particle state”.</p>
 </section>
@@ -1913,7 +1915,7 @@ Schwinger “set of requirements” framing that §7 here extends to
 the first-cell operational level.</p></li>
 <li><p><a class="reference internal" href="../experiments/05-v0.2-h-param-sweep.html"><span class="std std-doc">Experiment 05: H-parameter sweep</span></a>
 — the surface result §6.1 reinterprets.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">src/quantum/interaction_simulation.cpp</span></code> lines 455–525
+<li><p><code class="docutils literal notranslate"><span class="pre">src/simulations/InteractionSimulation.cpp</span></code> lines 455–525
 (<code class="docutils literal notranslate"><span class="pre">buildInitialLayer</span></code>) and 760–810 (<code class="docutils literal notranslate"><span class="pre">computeInteractionQudit</span></code>):
 the code paths this analysis matches.</p></li>
 </ul>
