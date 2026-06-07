@@ -242,7 +242,11 @@ multiple configurations for averaging.)doc")
       .value("DEFICIT_ANGLE", WilsonMode::DEFICIT_ANGLE,
              "Deficit-angle based: W = ((d-2)+2cos(epsilon))/d.")
       .value("CAUSAL", WilsonMode::CAUSAL,
-             "CDT causal orientation changes around the loop.");
+             "CDT causal orientation changes around the loop.")
+      .value("U1_CONNECTION", WilsonMode::U1_CONNECTION,
+             "U(1) connection holonomy: oriented sum of Edge.phase around a "
+             "1-skeleton vertex cycle, reduced mod 2*pi. The Wilson-loop view "
+             "of the Stage-1 cobordism.HodgeLaplacian cycle flux.");
 
   py::enum_<LoopType>(m, "LoopType",
       "Which loop-shape generator to use.")
@@ -283,7 +287,7 @@ tessera computes the Levi-Civita holonomy analogue: closed walks on the
 dual graph (top-simplices as nodes, shared facets as edges), with the
 loop value determined by the deficit angles of enclosed hinges.
 
-Three evaluation modes:
+Four evaluation modes:
 
 * ``COMBINATORIAL``  — dual-graph topology only. ``value`` is the loop
   length; ``enclosedHinges`` counts hinges contained in every loop
@@ -298,6 +302,13 @@ Three evaluation modes:
 * ``CAUSAL``  — CDT causal-orientation winding. ``causalWindingNumber``
   is the signed net change in foliation index around the loop; non-
   zero values mark loops that cross a CDT slice boundary.
+* ``U1_CONNECTION``  — U(1) connection holonomy. The oriented sum of the
+  ``Edge.phase`` carried on the primal 1-skeleton around a closed vertex
+  cycle (``+phase`` along the stored source->target orientation,
+  ``-phase`` reversed), reduced mod 2*pi. Evaluated via
+  ``evaluateU1Connection(cycle)`` (the connection is a primal-edge, not a
+  dual-graph, quantity); ``value`` carries the holonomy. This is the
+  Wilson-loop view of the Stage-1 ``cobordism.HodgeLaplacian`` cycle flux.
 
 Three loop-shape generators:
 
@@ -355,6 +366,23 @@ For multi-hinge loops the U(1) approximation:
 Walks the loop and accumulates a signed winding count from the
 final-time stamps of consecutive simplices. ``causalWindingNumber`` is
 the net winding; ``value`` carries the same number as a double.
+)doc")
+      .def("evaluateU1Connection", &WilsonLoop::evaluateU1Connection,
+           py::arg("cycle"),
+           R"doc(U(1) connection holonomy around a closed vertex cycle.
+
+``cycle`` is an ordered list of vertices on the primal 1-skeleton whose
+consecutive pairs (with wrap-around) are joined by edges. Accumulates each
+edge's ``phase`` along its stored source->target orientation (``+phase``
+forward, ``-phase`` reversed) and returns the total reduced into the
+principal interval ``(-pi, pi]`` in ``value``; ``loopSize`` is the number of
+edges. Returns an empty result (``loopSize == 0``) for a degenerate (fewer
+than two vertices) or open (a consecutive pair with no joining edge) cycle.
+
+This is the Wilson-loop counterpart of the Stage-1 cycle flux carried by the
+Hermitian-weighted ``cobordism.HodgeLaplacian`` — the same oriented phase
+sum. Restricted to phases in ``{0, pi}`` the holonomy lands in ``{0, pi}``
+and reproduces the Z2 flux.
 )doc")
       .def("hingeLoop", &WilsonLoop::hingeLoop,
            py::arg("hinge"),

@@ -243,6 +243,11 @@ WilsonResult WilsonLoop::evaluate(const LoopPath &loop,
         case WilsonMode::COMBINATORIAL: return evaluateCombinatorial(loop);
         case WilsonMode::DEFICIT_ANGLE: return evaluateDeficitAngle(loop);
         case WilsonMode::CAUSAL:        return evaluateCausal(loop);
+        case WilsonMode::U1_CONNECTION:
+            // The U(1) connection lives on the primal 1-skeleton, so its
+            // holonomy is taken around a cycle of vertices rather than a
+            // dual-graph LoopPath. Call evaluateU1Connection(cycle) directly.
+            return {};
     }
     return {};
 }
@@ -345,6 +350,48 @@ WilsonResult WilsonLoop::evaluateCausal(const LoopPath &loop) const {
     }
     r.causalWindingNumber = winding;
     r.value = static_cast<double>(winding);
+    return r;
+}
+
+// ---- U(1) connection holonomy ----
+
+EdgePtr WilsonLoop::edgeBetween(VertexPtr a, VertexPtr b) const {
+    if (!a || !b || a->getId() == b->getId()) return nullptr;
+    // a->getEdges() already contains only edges incident to a, so it is enough
+    // to find the one that also touches b.
+    for (const auto &e : a->getEdges()) {
+        if (e->hasVertex(b->getId())) return e;
+    }
+    return nullptr;
+}
+
+double WilsonLoop::principalAngle(double theta) {
+    constexpr double twoPi = 2.0 * std::numbers::pi;
+    double r = std::remainder(theta, twoPi);   // [-π, π]
+    if (r <= -std::numbers::pi) r += twoPi;     // fold the −π endpoint up to π
+    return r;
+}
+
+WilsonResult WilsonLoop::evaluateU1Connection(
+    const std::vector<VertexPtr> &cycle) const {
+    const int n = static_cast<int>(cycle.size());
+    if (n < 2) return {};  // need at least one edge
+
+    double total = 0.0;
+    for (int i = 0; i < n; ++i) {
+        VertexPtr a = cycle[i];
+        VertexPtr b = cycle[(i + 1) % n];
+        EdgePtr e = edgeBetween(a, b);
+        if (!e) return {};  // open path — not a closed 1-skeleton cycle
+        // +phase along the stored source→target orientation, −phase reversed.
+        const bool forward = (e->getSource()->getId() == a->getId() &&
+                              e->getTarget()->getId() == b->getId());
+        total += forward ? e->getPhase() : -e->getPhase();
+    }
+
+    WilsonResult r;
+    r.loopSize = n;
+    r.value = principalAngle(total);  // holonomy mod 2π, principal value (−π, π]
     return r;
 }
 
