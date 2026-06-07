@@ -34,6 +34,8 @@
 #include <vector>
 
 #include "cobordism/ChainComplex.h"
+#include "cobordism/Cochain.h"
+#include "cobordism/Spectrum.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
@@ -234,6 +236,48 @@ void HodgeLaplacian::requireNonNegativeDegree(int k) {
     throw std::runtime_error(
         "HodgeLaplacian: degree k must be non-negative; requested k=" +
         std::to_string(k));
+}
+
+std::vector<std::vector<std::uint64_t>> HodgeLaplacian::cochainOrdering(
+    int k, bool useVertexSet) const {
+  std::vector<std::vector<std::uint64_t>> ord;
+  if (k < 0 || !st_) return ord;
+  if (useVertexSet && k == 0) {
+    // The Hermitian k=0 operator is indexed over the full sorted-id vertex set
+    // (it reads every vertex, including any lone vertices ChainComplex omits).
+    ord.reserve(ids_.size());
+    for (const std::uint64_t id : ids_) ord.push_back({id});
+    return ord;
+  }
+  // The metric (k>=1) and signed-weight (any k) operators are assembled from the
+  // ChainComplex boundary maps, so the eigenvector components are indexed in the
+  // canonical ChainComplex k-simplex column order — exactly kSimplexVertices(k),
+  // whose count always matches the operator dimension numSimplices(k).
+  return ChainComplex::fromSpacetime(*st_).kSimplexVertices(k);
+}
+
+Spectrum HodgeLaplacian::makeSpectrum(
+    int degree, std::vector<std::vector<std::uint64_t>> ordering,
+    const std::vector<cd> &evals, const std::vector<cd> &evecsFlat, int dim,
+    bool hermitian) {
+  if (dim <= 0) return Spectrum();
+  if (ordering.size() != static_cast<std::size_t>(dim))
+    throw std::runtime_error(
+        "HodgeLaplacian::makeSpectrum: k-simplex ordering size " +
+        std::to_string(ordering.size()) + " != operator dimension " +
+        std::to_string(dim));
+  Eigen::VectorXcd eigenvalues(dim);
+  for (int j = 0; j < dim; ++j)
+    eigenvalues[j] = evals[static_cast<std::size_t>(j)];
+  std::vector<Cochain> eigenvectors;
+  eigenvectors.reserve(static_cast<std::size_t>(dim));
+  for (int j = 0; j < dim; ++j) {
+    Eigen::VectorXcd col(dim);
+    for (int i = 0; i < dim; ++i)
+      col[i] = evecsFlat[static_cast<std::size_t>(i) * dim + j];
+    eigenvectors.emplace_back(degree, ordering, std::move(col));
+  }
+  return Spectrum(std::move(eigenvalues), std::move(eigenvectors), hermitian);
 }
 
 void HodgeLaplacian::assemble(std::vector<cd> &A, std::vector<double> &D) const {
@@ -459,6 +503,22 @@ double HodgeLaplacian::unitarityResidual(double t) const {
   return resid.norm();
 }
 
+Spectrum HodgeLaplacian::spectrum(int k, bool metric) const {
+  requireNonNegativeDegree(k);
+  if (k == 0) {
+    ensureDecomposition();
+    std::vector<cd> evalsC(evals_.size());
+    for (std::size_t i = 0; i < evals_.size(); ++i) evalsC[i] = cd(evals_[i], 0.0);
+    return makeSpectrum(0, cochainOrdering(0, /*useVertexSet=*/true), evalsC,
+                        evecs_, static_cast<int>(order_), /*hermitian=*/true);
+  }
+  const MetricSpectrum &sp = ensureMetricSpectrum(k, metric);
+  std::vector<cd> evalsC(sp.evals.size());
+  for (std::size_t i = 0; i < sp.evals.size(); ++i) evalsC[i] = cd(sp.evals[i], 0.0);
+  return makeSpectrum(k, cochainOrdering(k, /*useVertexSet=*/true), evalsC,
+                      sp.evecs, sp.dim, /*hermitian=*/true);
+}
+
 std::vector<double> HodgeLaplacian::eigenvalues(int k, bool metric) const {
   requireNonNegativeDegree(k);
   if (k == 0) {
@@ -477,37 +537,18 @@ std::vector<cd> HodgeLaplacian::eigenvectors(int k, bool metric) const {
   return ensureMetricSpectrum(k, metric).evecs;
 }
 
-std::vector<cd> HodgeLaplacian::harmonics(int k, double tol, bool metric) const {
+std::vector<Cochain> HodgeLaplacian::harmonics(int k, double tol,
+                                               bool metric) const {
+  // ker L_k as Cochains: the eigenvectors with (near-)zero eigenvalue, a basis
+  // for H_k (the count is b_k). requireNonNegativeDegree runs inside spectrum().
+  return spectrum(k, metric).harmonics(tol);
+}
+
+Spectrum HodgeLaplacian::lorentzianSpectrum(int k, bool metric) const {
   requireNonNegativeDegree(k);
-
-  // The harmonic dimension is b_k: the columns with (near-)zero eigenvalue span
-  // ker L_k. Bind to whichever cached spectrum applies, then share the selection.
-  const std::vector<double> *evals = nullptr;
-  const std::vector<cd> *evecs = nullptr;
-  std::size_t N = 0;
-  if (k == 0) {
-    ensureDecomposition();
-    evals = &evals_;
-    evecs = &evecs_;
-    N = order_;
-  } else {
-    const MetricSpectrum &sp = ensureMetricSpectrum(k, metric);
-    evals = &sp.evals;
-    evecs = &sp.evecs;
-    N = static_cast<std::size_t>(sp.dim);
-  }
-  if (N == 0) return {};
-
-  std::vector<std::size_t> cols;
-  for (std::size_t j = 0; j < N; ++j)
-    if (std::abs((*evals)[j]) < tol) cols.push_back(j);
-
-  const std::size_t M = cols.size();
-  std::vector<cd> H(N * M, cd(0.0, 0.0));
-  for (std::size_t i = 0; i < N; ++i)
-    for (std::size_t jj = 0; jj < M; ++jj)
-      H[i * M + jj] = (*evecs)[i * N + cols[jj]];
-  return H;
+  const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);
+  return makeSpectrum(k, cochainOrdering(k, /*useVertexSet=*/false), sp.evals,
+                      sp.evecs, sp.dim, /*hermitian=*/false);
 }
 
 std::vector<cd> HodgeLaplacian::lorentzianEigenvalues(int k, bool metric) const {
@@ -520,23 +561,11 @@ std::vector<cd> HodgeLaplacian::lorentzianEigenvectors(int k, bool metric) const
   return ensureLorentzianSpectrum(k, metric).evecs;
 }
 
-std::vector<cd> HodgeLaplacian::lorentzianHarmonics(int k, double tol,
-                                                    bool metric) const {
-  requireNonNegativeDegree(k);
-  const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);
-  const std::size_t N = static_cast<std::size_t>(sp.dim);
-  if (N == 0) return {};
-
-  std::vector<std::size_t> cols;
-  for (std::size_t j = 0; j < N; ++j)
-    if (std::abs(sp.evals[j]) < tol) cols.push_back(j);
-
-  const std::size_t H = cols.size();
-  std::vector<cd> out(N * H, cd(0.0, 0.0));
-  for (std::size_t i = 0; i < N; ++i)
-    for (std::size_t jj = 0; jj < H; ++jj)
-      out[i * H + jj] = sp.evecs[i * N + cols[jj]];
-  return out;
+std::vector<Cochain> HodgeLaplacian::lorentzianHarmonics(int k, double tol,
+                                                         bool metric) const {
+  // The near-kernel (pseudo-Hodge) representatives as Cochains; the matching
+  // indefinite W-norms come from lorentzianNullNorms (same order).
+  return lorentzianSpectrum(k, metric).harmonics(tol);
 }
 
 std::vector<double> HodgeLaplacian::lorentzianNullNorms(int k, double tol,

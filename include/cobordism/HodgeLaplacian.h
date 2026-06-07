@@ -28,6 +28,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cobordism/Cochain.h"
+#include "cobordism/Spectrum.h"
+
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
@@ -153,33 +156,51 @@ class HodgeLaplacian {
     /// (Frobenius). ~0 for the Hermitian \f$ L \f$.
     [[nodiscard]] double unitarityResidual(double t = 1.0) const;
 
-    /// Eigenvalues of \f$ L_k \f$ (real, ascending). For \f$ k \geq 1 \f$,
-    /// `metric` selects volume vs. unit weights (ignored at \f$ k = 0 \f$).
+    /// The eigendecomposition of \f$ L_k \f$ as a `Spectrum` (real ascending
+    /// eigenvalues + eigenvectors as `Cochain`s; `Spectrum::isHermitian()` is
+    /// true). The self-adjoint \f$ k = 0 \f$ graph Laplacian and the symmetric
+    /// metric Hodge Laplacian (\f$ k \geq 1 \f$). For \f$ k \geq 1 \f$, `metric`
+    /// selects volume vs. unit weights (ignored at \f$ k = 0 \f$). The eigenvectors
+    /// are indexed over the sorted-id vertex order (\f$ k = 0 \f$) or the canonical
+    /// `ChainComplex` \f$ k \f$-simplex column order (\f$ k \geq 1 \f$).
+    /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
+    [[nodiscard]] Spectrum spectrum(int k = 0, bool metric = true) const;
+
+    /// Eigenvalues of \f$ L_k \f$ (real, ascending), a flat view consistent with
+    /// `spectrum(k, metric)`. For \f$ k \geq 1 \f$, `metric` selects volume vs.
+    /// unit weights (ignored at \f$ k = 0 \f$).
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
     [[nodiscard]] std::vector<double> eigenvalues(int k = 0, bool metric = true) const;
 
     /// Eigenvectors of \f$ L_k \f$ as a flat row-major \f$ M\times M \f$ array
     /// (\f$ M = N \f$ for \f$ k = 0 \f$, else \f$ |C_k| \f$); column \f$ j \f$
     /// (entries at indices \f$ iM + j \f$) is the eigenvector for the
-    /// \f$ j \f$-th ascending eigenvalue. For \f$ k \geq 1 \f$, `metric` selects
+    /// \f$ j \f$-th ascending eigenvalue — a flat view consistent with the
+    /// `Cochain`s of `spectrum(k, metric)`. For \f$ k \geq 1 \f$, `metric` selects
     /// volume vs. unit weights (ignored at \f$ k = 0 \f$).
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
     [[nodiscard]] std::vector<std::complex<double>> eigenvectors(int k = 0,
                                                                bool metric = true) const;
 
     /// Harmonic representatives: the eigenvectors with \f$ |\lambda| < \text{tol} \f$
-    /// (a basis for \f$ \ker L_k \cong H_k \f$), as a flat row-major
-    /// \f$ M\times H \f$ array whose \f$ H \f$ columns are the harmonics (so
-    /// \f$ H = \f$ size/\f$ M \f$, the harmonic dimension \f$ = b_k \f$). For
-    /// \f$ k \geq 1 \f$, `metric` selects volume vs. unit weights (ignored at
-    /// \f$ k = 0 \f$).
-    /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
-    [[nodiscard]] std::vector<std::complex<double>> harmonics(int k = 0,
-                                                              double tol = 1e-9,
-                                                              bool metric = true) const;
+    /// (a basis for \f$ \ker L_k \cong H_k \f$, so the count is the harmonic
+    /// dimension \f$ = b_k \f$), as `Cochain`s over the \f$ k \f$-simplex ordering.
+    /// For \f$ k \geq 1 \f$, `metric` selects volume vs. unit weights (ignored at
+    /// \f$ k = 0 \f$). @throws std::runtime_error for \f$ k < 0 \f$. Empty above the
+    /// top dimension.
+    [[nodiscard]] std::vector<Cochain> harmonics(int k = 0, double tol = 1e-9,
+                                                 bool metric = true) const;
 
     /// === Lorentzian (signed-weight) d'Alembertian, \f$ k \geq 1 \f$ (§5.6) ===
     ///
+    /// The eigendecomposition of the signed-weight \f$ L_k \f$ (the
+    /// non-self-adjoint d'Alembertian) as a `Spectrum` (`isHermitian() == false`):
+    /// complex eigenvalues sorted ascending by \f$ (\mathrm{Re},\mathrm{Im}) \f$,
+    /// paired with eigenvectors as `Cochain`s. `metric = false` falls back to unit
+    /// weights (the real, nonnegative combinatorial spectrum). @throws
+    /// std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
+    [[nodiscard]] Spectrum lorentzianSpectrum(int k, bool metric = true) const;
+
     /// Eigenvalues of the signed-weight \f$ L_k \f$ (the non-self-adjoint
     /// d'Alembertian), as **complex** numbers sorted ascending by
     /// \f$ (\mathrm{Re},\mathrm{Im}) \f$ — they may be negative or come in complex
@@ -200,11 +221,12 @@ class HodgeLaplacian {
         int k, bool metric = true) const;
 
     /// Near-kernel ("harmonic") representatives of the d'Alembertian: the
-    /// eigenvectors with \f$ |\lambda| < \text{tol} \f$, as a flat row-major
-    /// \f$ M\times H \f$ complex array (\f$ H \f$ columns). For an all-spacelike
-    /// complex \f$ H = b_k \f$; with genuine timelike cells the count can differ
-    /// (the pseudo-Hodge decomposition). @throws std::runtime_error for \f$ k < 0 \f$.
-    [[nodiscard]] std::vector<std::complex<double>> lorentzianHarmonics(
+    /// eigenvectors with \f$ |\lambda| < \text{tol} \f$, as `Cochain`s. For an
+    /// all-spacelike complex the count is \f$ b_k \f$; with genuine timelike cells
+    /// it can differ (the pseudo-Hodge decomposition). The matching indefinite
+    /// \f$ W \f$-norms come from `lorentzianNullNorms(k, tol, metric)` (same order).
+    /// @throws std::runtime_error for \f$ k < 0 \f$.
+    [[nodiscard]] std::vector<Cochain> lorentzianHarmonics(
         int k, double tol = 1e-9, bool metric = true) const;
 
     /// The indefinite norms \f$ \langle h,h\rangle_W = \sum_i W_{k,i}|h_i|^2 \f$
@@ -255,6 +277,23 @@ class HodgeLaplacian {
 
     // Throw for k < 0 (no negative-degree chains).
     static void requireNonNegativeDegree(int k);
+
+    // The sorted vertex-id tuples a degree-k Cochain is indexed over.
+    // `useVertexSet` returns the full sorted-id vertex order (the Hermitian k=0
+    // basis, length N); otherwise the canonical ChainComplex k-simplex column
+    // order (the metric / Lorentzian basis, length |C_k|).
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> cochainOrdering(
+        int k, bool useVertexSet) const;
+
+    // Assemble a Spectrum from flat eigenvalues/eigenvectors. `evecsFlat` is
+    // row-major dim*dim with entry [i*dim + j] = component i of eigenvector j
+    // (column j); `ordering` indexes the components; `hermitian` flags the
+    // real-ascending regime.
+    static Spectrum makeSpectrum(
+        int degree, std::vector<std::vector<std::uint64_t>> ordering,
+        const std::vector<std::complex<double>> &evals,
+        const std::vector<std::complex<double>> &evecsFlat, int dim,
+        bool hermitian);
 
     // Build/fetch the cached symmetric spectrum of L_k^sym (k >= 1). Key folds in
     // `metric` so the metric and combinatorial spectra are cached separately.

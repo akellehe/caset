@@ -25,6 +25,8 @@
 // _tessera's sources (see CMakeLists.txt, TESSERA_PYBIND_SOURCES).
 
 #include <pybind11/complex.h>
+#include <pybind11/eigen.h>
+#include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -32,6 +34,7 @@
 #include "cobordism/BoundaryStatePrep.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
+#include "cobordism/Cochain.h"
 #include "cobordism/Cobordism.h"
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/DijkgraafWitten.h"
@@ -39,6 +42,7 @@
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/RealizabilityOracle.h"
+#include "cobordism/Spectrum.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -118,6 +122,70 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "monomial (e.g. 'w4', 'w2^2'); empty for the empty complex. Raises "
            "if a class needs a deferred higher Steenrod cup-i product (#65).");
 
+  // ----- Eigen-backed value objects for the Hodge spectrum (#183) -----
+  py::class_<Cochain>(m, "Cochain",
+      R"doc(A k-cochain: complex amplitudes over a k-simplex ordering.
+
+An Eigen-backed vector of complex amplitudes together with the degree k and the
+k-simplex ordering it indexes (the same HodgeLaplacian / ChainComplex column
+order), so its indices are meaningful. simplices()[i] is the sorted vertex-id
+tuple of the cell carrying coeffs()[i]; at k=0 each tuple is a single vertex id
+(the sorted-id vertex order). Eigen-backed and iTensor-free. The inner product is
+Hermitian, np.vdot convention: <a, b> = sum conj(a_i) b_i.)doc")
+      .def("degree", &Cochain::degree, "The cochain degree k.")
+      .def("size", &Cochain::size,
+           "Number of k-cells (= len(coeffs()) = len(simplices())).")
+      .def("__len__", &Cochain::size)
+      .def("coeffs", &Cochain::coeffs,
+           "The complex amplitudes as a 1-D numpy.ndarray (Eigen-backed).")
+      .def("simplices", &Cochain::simplices,
+           "The k-simplex ordering: simplices()[i] is the sorted vertex-id tuple "
+           "of the cell carrying coeffs()[i].")
+      .def("amplitude", &Cochain::amplitude, py::arg("index"),
+           "Amplitude on the index-th k-cell. Raises IndexError if out of range.")
+      .def("__getitem__", &Cochain::amplitude)
+      .def("amplitudeFor", &Cochain::amplitudeFor, py::arg("simplex"),
+           "Amplitude on the k-cell identified by its sorted vertex-id tuple "
+           "(e.g. (vertexId,) at k=0). Raises IndexError if absent.")
+      .def("innerProduct", &Cochain::innerProduct, py::arg("other"),
+           "The Hermitian inner product <self, other> = sum conj(self_i) other_i "
+           "(= np.vdot). Raises if the degrees or orderings differ.")
+      .def("norm", &Cochain::norm, "The Euclidean norm sqrt(sum |c_i|^2).")
+      .def("normalized", &Cochain::normalized,
+           "A copy scaled to unit norm (the cochain itself if its norm is ~0).");
+
+  py::class_<Spectrum>(m, "Spectrum",
+      R"doc(The eigendecomposition of a Hodge Laplacian L_k as a value object.
+
+Eigenvalues paired with their eigenvectors-as-Cochains, in matching order
+(eigenvalues()[i] is the eigenvalue of eigenvectors()[i]). Eigenvalues are stored
+complex to cover both regimes uniformly: in the Hermitian/metric case
+(isHermitian() == True) they are real (imag 0) and ascending; in the Lorentzian
+(signed-weight d'Alembertian) case they may be negative or complex-conjugate
+pairs, sorted by (Re, Im). harmonics(tol) is the kernel subset |lambda| < tol =
+ker L_k as Cochains. Supports len() and indexing (spectrum[i] is the i-th
+eigenvector Cochain).)doc")
+      .def("eigenvalues", &Spectrum::eigenvalues,
+           "The eigenvalues as a 1-D complex numpy.ndarray (ascending real, "
+           "imag 0, in the Hermitian regime; sorted by (Re, Im) in the Lorentzian "
+           "one).")
+      .def("eigenvectors", &Spectrum::eigenvectors,
+           "The eigenvectors as a list of Cochains, one per eigenvalue.")
+      .def("harmonics", &Spectrum::harmonics, py::arg("tol") = 1e-9,
+           "The harmonic subset: eigenvectors with |lambda| < tol (a basis for "
+           "ker L_k), as a list of Cochains.")
+      .def("size", &Spectrum::size, "The number of modes.")
+      .def("__len__", &Spectrum::size)
+      .def("isHermitian", &Spectrum::isHermitian,
+           "Whether the eigenvalues are guaranteed real and ascending (the "
+           "metric/self-adjoint regime) vs. the indefinite Lorentzian one.")
+      .def("eigenvalue", &Spectrum::eigenvalue, py::arg("i"),
+           "The i-th eigenvalue. Raises IndexError if out of range.")
+      .def("__getitem__",
+           [](const Spectrum &s, std::size_t i) -> const Cochain & { return s[i]; },
+           py::return_value_policy::reference_internal,
+           "The i-th eigenvector Cochain. Raises IndexError if out of range.");
+
   // ----- Hodge Laplacian: k=0 Hermitian graph (#90), k>=1 metric Hodge (#104) -----
   py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
       R"doc(Hodge Laplacian on a Spacetime, degree-parameterized by int k.
@@ -177,24 +245,38 @@ Euclidean spectrum/kernel.)doc")
            py::arg("t") = 1.0,
            "Residual ||U U^dagger - I|| of U = e^{-iLt} formed from the "
            "eigendecomposition (~0 for the Hermitian L).")
+      .def("spectrum", &HodgeLaplacian::spectrum, py::arg("k") = 0,
+           py::arg("metric") = true,
+           "The eigendecomposition of L_k as a Spectrum (real ascending "
+           "eigenvalues + eigenvectors as Cochains; isHermitian()==True). metric "
+           "selects volume vs. unit weights for k>=1 (ignored at k=0). Raises for "
+           "k<0; empty above the top dimension.")
       .def("eigenvalues", &HodgeLaplacian::eigenvalues, py::arg("k") = 0,
            py::arg("metric") = true,
-           "Eigenvalues of L_k (real, ascending). metric selects volume vs. unit "
-           "weights for k>=1 (ignored at k=0). Raises for k<0; empty above the "
-           "top dimension.")
+           "Eigenvalues of L_k (real, ascending), a flat view consistent with "
+           "spectrum(k, metric). metric selects volume vs. unit weights for k>=1 "
+           "(ignored at k=0). Raises for k<0; empty above the top dimension.")
       .def("eigenvectors", &HodgeLaplacian::eigenvectors, py::arg("k") = 0,
            py::arg("metric") = true,
            "Eigenvectors of L_k as a flat row-major M*M complex array (column j "
-           "is the eigenvector for the j-th ascending eigenvalue). metric selects "
+           "is the eigenvector for the j-th ascending eigenvalue), a flat view "
+           "consistent with spectrum(k, metric).eigenvectors(). metric selects "
            "volume vs. unit weights for k>=1. Raises for k<0; empty above the top "
            "dimension.")
       .def("harmonics", &HodgeLaplacian::harmonics, py::arg("k") = 0,
            py::arg("tol") = 1e-9, py::arg("metric") = true,
-           "Harmonic representatives (eigenvectors with |lambda| < tol) as a flat "
-           "row-major M*H complex array whose H columns span ker L_k ~= H_k "
-           "(H = b_k). metric selects volume vs. unit weights for k>=1. Raises "
-           "for k<0; empty above the top dimension.")
+           "Harmonic representatives (eigenvectors with |lambda| < tol) as a list "
+           "of Cochains spanning ker L_k ~= H_k (the count is b_k). metric selects "
+           "volume vs. unit weights for k>=1. Raises for k<0; empty above the top "
+           "dimension.")
       // ----- Lorentzian (signed-weight) d'Alembertian (#105, spec §5.6) -----
+      .def("lorentzianSpectrum", &HodgeLaplacian::lorentzianSpectrum,
+           py::arg("k"), py::arg("metric") = true,
+           "The eigendecomposition of the signed-weight d'Alembertian L_k as a "
+           "Spectrum (isHermitian()==False): complex eigenvalues sorted by "
+           "(Re, Im) + eigenvectors as Cochains. metric=False falls back to unit "
+           "weights (the real combinatorial spectrum). Raises for k<0; empty "
+           "above the top dimension.")
       .def("lorentzianEigenvalues", &HodgeLaplacian::lorentzianEigenvalues,
            py::arg("k"), py::arg("metric") = true,
            "Eigenvalues of the signed-weight d'Alembertian L_k (k>=1) as complex "
@@ -209,9 +291,9 @@ Euclidean spectrum/kernel.)doc")
       .def("lorentzianHarmonics", &HodgeLaplacian::lorentzianHarmonics,
            py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
            "Near-kernel ('harmonic') representatives of the d'Alembertian "
-           "(eigenvectors with |lambda| < tol) as a flat row-major M*H complex "
-           "array. H = b_k on an all-spacelike complex; with timelike cells the "
-           "count can differ (pseudo-Hodge decomposition).")
+           "(eigenvectors with |lambda| < tol) as a list of Cochains. The count "
+           "is b_k on an all-spacelike complex; with timelike cells it can differ "
+           "(pseudo-Hodge decomposition). Matching W-norms: lorentzianNullNorms.")
       .def("lorentzianNullNorms", &HodgeLaplacian::lorentzianNullNorms,
            py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
            "Indefinite W-norms <h,h>_W = sum_i W_{k,i} |h_i|^2 of the near-kernel "

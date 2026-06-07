@@ -26,6 +26,7 @@
 #include <utility>
 
 #include "cobordism/ChainComplex.h"
+#include "cobordism/Cochain.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "spacetime/Spacetime.h"
 
@@ -37,19 +38,26 @@ BoundaryStatePrep::BoundaryStatePrep(std::shared_ptr<Spacetime> sigma,
   if (sigma_ == nullptr)
     throw std::runtime_error("BoundaryStatePrep: the surface Sigma is null");
 
-  // |C_1(Sigma)| fixes the harmonic-form length and lets us recover b_1 from the
-  // flat harmonics array (size = |C_1| * b_1).
+  // |C_1(Sigma)| fixes the harmonic-form length (the row count of the flat
+  // |C_1| x b_1 harmonic basis assembled below).
   numEdges_ = static_cast<int>(ChainComplex::fromSpacetime(*sigma_).numSimplices(1));
 
   // ker L_1(Sigma) via the k=1 Hodge Laplacian — reused, not reimplemented. The
-  // columns are W_k-orthonormal (the symmetric SelfAdjointEigenSolver basis), so
-  // the standard inner product on them is the identity and `prepare` is an
-  // isometry for either weight choice.
-  harmonics_ = HodgeLaplacian(sigma_).harmonics(1, tol, metric);
-  if (numEdges_ > 0)
-    b1_ = static_cast<int>(harmonics_.size()) / numEdges_;
-  else
-    b1_ = 0;  // no edges ⇒ no 1-forms (e.g. a point/empty complex)
+  // basis Cochains are W_k-orthonormal (the symmetric SelfAdjointEigenSolver
+  // eigenvectors), so the standard inner product on them is the identity and
+  // `prepare` is an isometry for either weight choice. Flatten the b_1 harmonic
+  // Cochains into the column-major |C_1| x b_1 layout (element (edge e, harmonic
+  // i) at e*b_1 + i) the prepare/readout math below indexes.
+  const std::vector<Cochain> basis =
+      HodgeLaplacian(sigma_).harmonics(1, tol, metric);
+  b1_ = static_cast<int>(basis.size());  // one Cochain per ker L_1 basis vector
+  harmonics_.assign(
+      static_cast<std::size_t>(numEdges_) * static_cast<std::size_t>(b1_),
+      {0.0, 0.0});
+  for (int i = 0; i < b1_; ++i)
+    for (int e = 0; e < numEdges_; ++e)
+      harmonics_[static_cast<std::size_t>(e) * b1_ + i] =
+          basis[static_cast<std::size_t>(i)].amplitude(static_cast<std::size_t>(e));
 
   // Z(Sigma) = C[H^1(Sigma; Z_2)] has dimension 2^{b_1}; cap at the same nullity
   // the gf2Span materialization refuses, so boundaryDimension() cannot overflow

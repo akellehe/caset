@@ -255,7 +255,8 @@ def _kernel_dim(hl, k, metric=True, tol=TOL_KER):
 def _harmonic_dim(hl, nk, k, metric=True, tol=TOL_KER):
     if nk == 0:
         return 0
-    return len(hl.harmonics(k, tol, metric)) // nk
+    # harmonics() is one Cochain per ker L_k basis vector => its length is b_k.
+    return len(hl.harmonics(k, tol, metric))
 
 
 # --------------------------------------------------------------------------- #
@@ -502,12 +503,12 @@ class TestFluxSpectrum(unittest.TestCase):
         hl = cob.HodgeLaplacian(self._triangle_total_flux(2.0 * PI))
         np.testing.assert_allclose(sorted(hl.eigenvalues()), [0.0, 3.0, 3.0],
                                    atol=1e-10)
-        self.assertEqual(len(hl.harmonics()) // 3, 1)
+        self.assertEqual(len(hl.harmonics()), 1)
 
     def test_harmonic_dimension_tracks_flux(self):
         # Zero (or full-quantum) flux: one harmonic; any intermediate flux: none.
         self.assertEqual(len(cob.HodgeLaplacian(
-            self._triangle_total_flux(0.0)).harmonics()) // 3, 1)
+            self._triangle_total_flux(0.0)).harmonics()), 1)
         for phi in (0.3, 1.0, PI / 2, 2.0):
             with self.subTest(phi=phi):
                 self.assertEqual(len(cob.HodgeLaplacian(
@@ -593,8 +594,10 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
         # The kernel mode is the 1-cycle: |h_i|² = 1/3 on every edge, for any α.
         for alpha in (0.7, 1.3, 2.4):
             with self.subTest(alpha=alpha):
-                h = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
-                             .lorentzianHarmonics(1, 1e-9), dtype=complex)
+                harmonics = (cob.HodgeLaplacian(_triangle_one_timelike(alpha))
+                             .lorentzianHarmonics(1, 1e-9))
+                self.assertEqual(len(harmonics), 1)
+                h = np.asarray(harmonics[0].coeffs())
                 self.assertEqual(h.size, 3)
                 np.testing.assert_allclose(np.abs(h) ** 2, np.full(3, 1.0 / 3.0),
                                            atol=1e-7)

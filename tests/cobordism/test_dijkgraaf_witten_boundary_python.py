@@ -310,19 +310,19 @@ class TestCylinderReproducesInnerProduct(unittest.TestCase):
         # harmonic count, deliberately distinct from the 2^{b₁} = 4 flat ℤ₂
         # connections that index Z(T²) (spec §5.2).
         torus = _build(_torus_topology())
-        harmonics = np.asarray(
-            cobordism.HodgeLaplacian(torus).harmonics(1)).reshape(-1)
+        harmonics = cobordism.HodgeLaplacian(torus).harmonics(1)
         num_edges = cobordism.ChainComplex.fromSpacetime(torus).numSimplices(1)
-        self.assertEqual(harmonics.size % num_edges, 0)
-        self.assertEqual(harmonics.size // num_edges, 2)
+        self.assertEqual(len(harmonics), 2)  # b₁ = 2 harmonic 1-forms (Cochains)
+        self.assertTrue(all(h.degree() == 1 and h.size() == num_edges
+                            for h in harmonics))
 
     def _boundary_states_from_harmonics(self):
         """Two Z(T²) states (length 2^{b₁}=4) seeded by the ker L₁ harmonics."""
         torus = _build(_torus_topology())
-        harmonics = np.asarray(
-            cobordism.HodgeLaplacian(torus).harmonics(1, 1e-9, True))
-        num_edges = cobordism.ChainComplex.fromSpacetime(torus).numSimplices(1)
-        cols = harmonics.reshape(num_edges, -1) if harmonics.size else harmonics
+        harmonics = cobordism.HodgeLaplacian(torus).harmonics(1, 1e-9, True)
+        # columns = the harmonic 1-form Cochains over the edge ordering.
+        cols = (np.column_stack([np.asarray(h.coeffs()) for h in harmonics])
+                if harmonics else np.zeros((0, 0), dtype=complex))
         # Map the two real harmonic 1-forms to two distinct unit vectors in the
         # 4-dim flat-connection Hilbert space Z(T²) (the precise embedding is
         # immaterial for T1: Z(W)=id makes the amplitude the inner product).
