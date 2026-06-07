@@ -340,6 +340,30 @@ triangulations; a flat space too large to materialize is refused.)doc")
       .def("partitionFunction", &DijkgraafWitten::partitionFunction,
            "The partition function Z(W) as a complex number. Raises if W is not "
            "a closed oriented 3-manifold or the flat space is too large.")
+      .def("boundaryVector", &DijkgraafWitten::boundaryVector,
+           "The element of Z(dW) for a 3-manifold W with boundary: the amplitude "
+           "for every joint boundary flat-connection class, flattened row-major "
+           "over the boundary components (each component a closed surface Sigma_i "
+           "with Hilbert dimension 2^{b1(Sigma_i)}). Holds g|dW fixed and sums "
+           "the same prod omega(g01,g12,g23) over the interior gauge classes "
+           "[g] in H^1(W;Z_2). Raises if W is null, not 3D, or closed.")
+      .def("boundaryDimensions", &DijkgraafWitten::boundaryDimensions,
+           "Per-boundary-component Hilbert-space dimensions 2^{b1(Sigma_i)}, in "
+           "the same deterministic component order as boundaryVector()/map().")
+      .def("map", &DijkgraafWitten::map,
+           "The boundary state sum as a linear map Z(Sigma_B) -> Z(Sigma_A) when "
+           "dW has exactly two components: a dense matrix (list of rows), "
+           "rows = 2^{b1(Sigma_A)} (component 0), cols = 2^{b1(Sigma_B)} "
+           "(component 1), in the flat-connection-class basis. For the trivial "
+           "cobordism Sigma x [0,T] this is the identity id_{Z(Sigma)}. Raises "
+           "unless dW has exactly two connected components.")
+      .def("amplitude", &DijkgraafWitten::amplitude, py::arg("psiA"),
+           py::arg("psiB"),
+           "The transition amplitude <psiA| Z(W) |psiB> = sum_ab conj(psiA[a]) "
+           "Z(W)_ab psiB[b] for boundary states in the flat-connection-class "
+           "basis (|psiA| = 2^{b1(Sigma_A)}, |psiB| = 2^{b1(Sigma_B)}); prepared "
+           "from the harmonic 1-forms ker L_1(Sigma). For the cylinder Z(W)=id, "
+           "so this is the inner product <psiA|psiB>.")
       .def_static("isCocycle", &DijkgraafWitten::isCocycle, py::arg("cocycle"),
                   "Whether omega satisfies the normalized 3-cocycle (pentagon) "
                   "identity over Z_2 (brute-forced over all 16 tuples of "
