@@ -238,7 +238,17 @@ HodgeLaplacian (k=0).
 
 Parameters: the per-edge squared-length magnitudes {w_ij} (Edge.setSquaredLength)
 and U(1) phases {theta_ij} (Edge.setPhase), in a stable edge order fixed at
-construction (the weight-carrying edges: both endpoints present, no self-loops).)doc")
+construction (the weight-carrying edges: both endpoints present, no self-loops).
+
+Fixed-boundary interior fill (§5.0): the tunable edges split into a boundary set
+dW (edges on a codim-1 face in exactly one top cell — held fixed) and an interior
+set (free). interiorWeights / interiorPhases + setInteriorWeights /
+setInteriorPhases read/write only the interior edges, so a search drives r -> 0
+for a target output eigenvector while dW stays byte-identical (boundaryEdges()
+exposes that fixed set). growInterior() cones a fresh interior vertex via the
+boundary-fixed pre-geometric Pachner add (#112), enriching the interior with dW
+untouched; interiorVertexCount / numInteriorEdges report the interior complexity
+reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
            "Build the synthesizer over a fixed triangulation.")
       .def("order", &EigenstateSynthesis::order,
@@ -263,7 +273,44 @@ construction (the weight-carrying edges: both endpoints present, no self-loops).
       .def("setWeights", &EigenstateSynthesis::setWeights, py::arg("w"),
            "Write the edge magnitudes in place. Raises if len(w) != numEdges().")
       .def("setPhases", &EigenstateSynthesis::setPhases, py::arg("theta"),
-           "Write the edge phases in place. Raises if len(theta) != numEdges().");
+           "Write the edge phases in place. Raises if len(theta) != numEdges().")
+      // ----- Fixed-boundary interior fill (§5.0, #147) -----
+      .def("numInteriorEdges", &EigenstateSynthesis::numInteriorEdges,
+           "Number of interior tunable edges (not on dW) — the length of "
+           "interiorWeights() / interiorPhases() and the free parameters a "
+           "fixed-boundary search varies.")
+      .def("numBoundaryEdges", &EigenstateSynthesis::numBoundaryEdges,
+           "Number of boundary tunable edges (on dW, held fixed).")
+      .def("interiorVertexCount", &EigenstateSynthesis::interiorVertexCount,
+           "Number of interior vertices (on no boundary face) — the coned-in "
+           "apexes; the interior complexity the synthesis grows / reports.")
+      .def("interiorWeights", &EigenstateSynthesis::interiorWeights,
+           "Interior edge magnitudes {w_ij} in interior-edge order.")
+      .def("interiorPhases", &EigenstateSynthesis::interiorPhases,
+           "Interior edge phases {theta_ij} (radians) in interior-edge order.")
+      .def("setInteriorWeights", &EigenstateSynthesis::setInteriorWeights,
+           py::arg("w"),
+           "Write the interior edge magnitudes in place; the boundary edges are "
+           "left untouched. Raises if len(w) != numInteriorEdges().")
+      .def("setInteriorPhases", &EigenstateSynthesis::setInteriorPhases,
+           py::arg("theta"),
+           "Write the interior edge phases in place; the boundary edges are left "
+           "untouched. Raises if len(theta) != numInteriorEdges().")
+      .def("boundaryEdges", &EigenstateSynthesis::boundaryEdges,
+           "The boundary tunable edges as sorted (min_id, max_id) endpoint "
+           "tuples — the fixed dW edge set, for asserting it is untouched through "
+           "an interior fill / growth sweep.")
+      .def("interiorEdges", &EigenstateSynthesis::interiorEdges,
+           "The interior tunable edges as sorted (min_id, max_id) endpoint tuples "
+           "(the complement of boundaryEdges()).")
+      .def("growInterior", &EigenstateSynthesis::growInterior, py::arg("seed"),
+           "Cone a fresh interior vertex into a top cell via the boundary-fixed "
+           "pre-geometric Pachner add (#112): a 1->(d+1) stellar subdivision that "
+           "leaves dW exactly fixed while enriching the interior. Re-captures the "
+           "vertex order and interior/boundary partition, so order() grows by one "
+           "(extend psi on the new apex, appended last in sorted-id order) and "
+           "numInteriorEdges() grows. Returns False if no top cell can be "
+           "subdivided (e.g. a 1-complex), leaving the complex unchanged.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
