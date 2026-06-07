@@ -28,6 +28,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "cobordism/GeometrySynthesizer.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cobordism.h"
@@ -311,6 +312,81 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "(extend psi on the new apex, appended last in sorted-id order) and "
            "numInteriorEdges() grows. Returns False if no top cell can be "
            "subdivided (e.g. a 1-complex), leaving the complex unchanged.");
+
+  // ----- §4b cone-and-retry synthesis loop → geo(ψ) (#134) -----
+  py::class_<GeometrySynthesizer> gs(m, "GeometrySynthesizer",
+      R"doc(§4b cone-and-retry geometry synthesis loop → geo(ψ).
+
+Given a target qubit (c0, c1), finds the simplest simplicial complex whose k=0
+Hodge Laplacian L = D - A has ψ = (c0, c1, 0, ..., 0) as an eigenvector — the
+two smallest-id (logical) vertices carry the amplitudes, the rest are
+zero-amplitude auxiliaries — and returns that minimal complex, its Hermitian
+edge weights/phases, and the realized eigenvalue λ (the geometric image
+geo(ψ)).
+
+Built on EigenstateSynthesis (#133, the fixed-complex residual + Rayleigh +
+parameter core; reused unmodified — a fresh one per optimize pass) and the
+pre-geometric vertex insertion of the Pachner family (#112). The loop: run the
+non-convex multi-restart optimizer (a bounded Levenberg–Marquardt least-squares
+solver on the residual vector Lψ - λψ, with random restarts); if no restart
+drives r = ||(I - ψψ†)Lψ||² below ε, cone in one vertex (join a fresh apex to
+the current top simplex, Kₙ → Kₙ₊₁, supplying §4b.2's auxiliary freedom while
+preserving the homotopy type of these contractible complexes) and re-optimize;
+accept the first complex with r < ε. Its (|V|, |E|) is the state's
+combinatorial complexity.
+
+A general-amplitude qubit (|c0| ≠ |c1|) cannot be a two-vertex eigenvector
+(residual floor w_min²(|c0|²-|c1|²)² > 0, #133); seeded on a single edge it is
+synthesized only after coning in one auxiliary vertex (the minimal complex).)doc");
+
+  py::class_<GeometrySynthesizer::Geo>(gs, "Geo",
+      "geo(ψ): the accepted complex's size (|V|, |E|) = combinatorial "
+      "complexity, its realized edge weights/phases, the realized eigenvalue λ, "
+      "and whether the loop converged (r < ε).")
+      .def_readonly("converged", &GeometrySynthesizer::Geo::converged,
+                    "True iff the loop reached r < ε within the cone budget.")
+      .def_readonly("residual", &GeometrySynthesizer::Geo::residual,
+                    "Best residual r = ||(I - ψψ†)Lψ||² on the accepted complex.")
+      .def_readonly("eigenvalue", &GeometrySynthesizer::Geo::eigenvalue,
+                    "Realized eigenvalue λ = ψ†Lψ (Rayleigh quotient).")
+      .def_readonly("num_vertices", &GeometrySynthesizer::Geo::numVertices,
+                    "|V| of the accepted complex (with num_edges, the "
+                    "combinatorial complexity).")
+      .def_readonly("num_edges", &GeometrySynthesizer::Geo::numEdges,
+                    "|E| of the accepted complex.")
+      .def_readonly("cones_applied", &GeometrySynthesizer::Geo::conesApplied,
+                    "Number of auxiliary vertices coned in to reach acceptance.")
+      .def_readonly("weights", &GeometrySynthesizer::Geo::weights,
+                    "The accepted complex's edge magnitudes {w_ij} (EdgeList order).")
+      .def_readonly("phases", &GeometrySynthesizer::Geo::phases,
+                    "The accepted complex's edge phases {θ_ij} (EdgeList order).");
+
+  gs.def(py::init<std::shared_ptr<Spacetime>>(), py::arg("seed"),
+          "Build the loop over a seed complex (§4b.4 seeds on a 4-simplex Δ⁴; a "
+          "single edge is the minimal seed exhibiting the §4b.2 two-vertex "
+          "floor). The two smallest-id vertices become the logical pair.")
+      .def("synthesize", &GeometrySynthesizer::synthesize, py::arg("c0"),
+           py::arg("c1"), py::arg("epsilon") = 1e-9, py::arg("restarts") = 64,
+           py::arg("max_cones") = 5, py::arg("seed") = 0,
+           "Run the cone-and-retry loop for the qubit (c0, c1) and return "
+           "geo(ψ). Optimizes the current complex; if it cannot reach r < ε, "
+           "cones in one vertex and retries (up to max_cones). Leaves the "
+           "complex realized at the accepted optimum.")
+      .def("optimize", &GeometrySynthesizer::optimize, py::arg("c0"),
+           py::arg("c1"), py::arg("restarts") = 64, py::arg("seed") = 0,
+           "Optimize the current complex only (no coning): multi-restart "
+           "Levenberg–Marquardt minimizing r(ψ). Leaves the complex at the best "
+           "parameters and returns that best residual — the §4b.2 floor probe.")
+      .def("cone_in_vertex", &GeometrySynthesizer::coneInVertex,
+           "Cone in one auxiliary vertex (join a fresh apex to the current top "
+           "simplex, Kₙ → Kₙ₊₁). Returns False without growing if the simplex "
+           "has reached the Fingerprint vertex capacity.")
+      .def("num_vertices", &GeometrySynthesizer::numVertices,
+           "|V| of the current complex.")
+      .def("num_edges", &GeometrySynthesizer::numEdges,
+           "|E| of the current complex.")
+      .def("spacetime", &GeometrySynthesizer::spacetime,
+           "The current (growing) complex.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
