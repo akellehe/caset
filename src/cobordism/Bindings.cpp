@@ -31,7 +31,7 @@
 #include <pybind11/stl.h>
 
 #include "cobordism/GeometrySynthesizer.h"
-#include "cobordism/BoundaryStatePrep.h"
+#include "cobordism/BoundaryStateSpace.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cochain.h"
@@ -41,6 +41,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
 #include "cobordism/Spectrum.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -132,6 +133,12 @@ order), so its indices are meaningful. simplices()[i] is the sorted vertex-id
 tuple of the cell carrying coeffs()[i]; at k=0 each tuple is a single vertex id
 (the sorted-id vertex order). Eigen-backed and iTensor-free. The inner product is
 Hermitian, np.vdot convention: <a, b> = sum conj(a_i) b_i.)doc")
+      .def(py::init<int, std::vector<std::vector<std::uint64_t>>,
+                    Eigen::VectorXcd>(),
+           py::arg("degree"), py::arg("simplices"), py::arg("coeffs"),
+           "A degree-k cochain over simplices (sorted vertex-id tuples, in the "
+           "indexing order) carrying coeffs (a 1-D complex array). Raises if "
+           "len(simplices) != len(coeffs).")
       .def("degree", &Cochain::degree, "The cochain degree k.")
       .def("size", &Cochain::size,
            "Number of k-cells (= len(coeffs()) = len(simplices())).")
@@ -719,74 +726,126 @@ triangulations; a flat space too large to materialize is refused.)doc")
       .def("amplitude", &DijkgraafWitten::amplitude, py::arg("psiA"),
            py::arg("psiB"),
            "The transition amplitude <psiA| Z(W) |psiB> = sum_ab conj(psiA[a]) "
-           "Z(W)_ab psiB[b] for boundary states in the flat-connection-class "
-           "basis (|psiA| = 2^{b1(Sigma_A)}, |psiB| = 2^{b1(Sigma_B)}); prepared "
-           "from the harmonic 1-forms ker L_1(Sigma). For the cylinder Z(W)=id, "
-           "so this is the inner product <psiA|psiB>.")
+           "Z(W)_ab psiB[b] for already-prepared boundary states (two "
+           "PreparedBoundaryStates, type-safe; reads each one's coeffs() in the "
+           "flat-connection-class basis, |psiA| = 2^{b1(Sigma_A)}, |psiB| = "
+           "2^{b1(Sigma_B)}). For the cylinder Z(W)=id this is the inner product "
+           "<psiA|psiB>; with states from BoundaryStateSpace.prepare it is the "
+           "harmonic overlap.")
       .def_static("isCocycle", &DijkgraafWitten::isCocycle, py::arg("cocycle"),
                   "Whether omega satisfies the normalized 3-cocycle (pentagon) "
                   "identity over Z_2 (brute-forced over all 16 tuples of "
                   "Z_2^4). True for both Trivial and Sign.");
 
-  // ----- §5 spectral→DW boundary preparation: ker L_1(Sigma) → Z(Sigma) (#175) -----
-  py::class_<BoundaryStatePrep>(m, "BoundaryStatePrep",
-      R"doc(Spectral->DW boundary preparation map for a closed surface Sigma.
+  // ----- §5 the DW boundary Hilbert space Z(Sigma) + its states (#175, #187) ----
+  py::class_<BoundaryStateSpace, std::shared_ptr<BoundaryStateSpace>>(
+      m, "BoundaryStateSpace",
+      R"doc(The DW boundary Hilbert space Z(Sigma) of a closed surface Sigma.
 
-Makes explicit (and invertible) the preparation DijkgraafWitten.amplitude() uses
-internally: the Hodge harmonic 1-forms ker L_1(Sigma) (the spectral qubit, dim
-b_1, HodgeLaplacian at k=1) -> the DW boundary Hilbert space
-Z(Sigma) = C[H^1(Sigma; Z_2)] (the flat-connection-class basis, dim 2^{b_1}).
+A per-Sigma context / factory (conceptually Z(Sigma) = C[H^1(Sigma; Z_2)]). It
+owns Sigma and the cached Hodge harmonic basis of ker L_1(Sigma) (HodgeLaplacian
+at k=1, computed once), and manufactures the value objects (PreparedBoundaryState)
+that live in it. Two distinct objects sit on Sigma: the harmonic 1-forms
+ker L_1(Sigma) (the spectral qubit, dim b_1, an orthonormal basis of degree-1
+Cochains) and the flat-connection-class space Z(Sigma) (dim 2^{b_1}).
 
 b_1 vs 2^{b_1}: H^1(Sigma; Z_2) = (Z_2)^{b_1} has b_1 single-generator classes,
-the weight-one holonomy patterns, sitting at gf2Span indices 2^0, 2^1, ...,
-2^{b_1-1} (mask 2^i = basis vector i alone). prepare embeds the spectral qubit
-onto those slots: the i-th orthonormal harmonic 1-form (column i of harmonics(),
-ascending-eigenvalue order) carries its amplitude to Z(Sigma) index 2^i. The
-trivial class (0) and every multi-generator class (non-power-of-two index) carry
-amplitude 0.
+the weight-one holonomy patterns, at gf2Span indices 2^0, 2^1, ..., 2^{b_1-1}
+(mask 2^i = basis vector i alone). This 'harmonic i -> index 2^i' convention is
+owned here (generatorIndices()) — callers never spell out a power of two.
 
-prepare(form): project the 1-form form (length |C_1|) onto the harmonic basis,
-c_i = <h_i, form>, and scatter c_i to index 2^i. readout(state): the adjoint —
-gather c_i = state[2^i] and rebuild sum_i c_i h_i. The harmonic basis is
-orthonormal, so prepare is an isometry (<prepare(psi)|prepare(phi)> = <psi|phi>
-on ker L_1) and readout o prepare = identity on ker L_1; hence on the trivial
-cobordism Sigma x [0,T] (Z(W)=id) DijkgraafWitten.amplitude(prepare(psi),
-prepare(phi)) reproduces <psi|phi>. Reuses HodgeLaplacian (k=1); the basis is
-computed once at construction and cached.)doc")
+prepare(form) embeds a harmonic 1-form Cochain onto those generator slots
+(scatter c_i = <h_i, form> to index 2^i); state(amplitudes) wraps a raw Z(Sigma)
+vector directly. Both return a PreparedBoundaryState bound to this space. The
+harmonic basis is orthonormal, so prepare is an isometry and
+PreparedBoundaryState.readout() (its adjoint) round-trips it; hence on the
+trivial cobordism Sigma x [0,T] (Z(W)=id), DijkgraafWitten.amplitude reproduces
+<psi|phi>. Reuses HodgeLaplacian (k=1); the basis is cached at construction.)doc")
       .def(py::init<std::shared_ptr<Spacetime>, double, bool>(),
            py::arg("sigma"), py::arg("tol") = 1e-9, py::arg("metric") = true,
-           "Build the preparation map over a closed surface Sigma. Computes and "
-           "caches ker L_1(Sigma) (HodgeLaplacian k=1); tol is the |lambda|<tol "
-           "harmonic threshold and metric selects volume vs unit weights (both "
-           "forwarded to harmonics(1, tol, metric); the embedding is isometric "
-           "either way). Raises if Sigma is null or b_1(Sigma) > 24.")
-      .def("harmonicDimension", &BoundaryStatePrep::harmonicDimension,
+           "Build Z(Sigma) over a closed surface Sigma. Computes and caches "
+           "ker L_1(Sigma) (HodgeLaplacian k=1); tol is the |lambda|<tol harmonic "
+           "threshold and metric selects volume vs unit weights (both forwarded to "
+           "harmonics(1, tol, metric); the embedding is isometric either way). "
+           "Raises if Sigma is null or b_1(Sigma) > 24.")
+      .def("harmonicDimension", &BoundaryStateSpace::harmonicDimension,
            "b_1(Sigma) = dim ker L_1(Sigma): the spectral-qubit dimension (the "
            "number of harmonic 1-forms).")
-      .def("boundaryDimension", &BoundaryStatePrep::boundaryDimension,
+      .def("boundaryDimension", &BoundaryStateSpace::boundaryDimension,
            "dim Z(Sigma) = 2^{b_1(Sigma)}: the DW boundary Hilbert-space "
            "dimension (the length of a prepared state).")
-      .def("numEdges", &BoundaryStatePrep::numEdges,
+      .def("numEdges", &BoundaryStateSpace::numEdges,
            "|C_1(Sigma)|: the number of edges — the length of a harmonic 1-form "
            "(the input to prepare / output of readout).")
-      .def("harmonics", &BoundaryStatePrep::harmonics,
-           "The orthonormal harmonic 1-form basis as a flat row-major "
-           "|C_1| x b_1 array (column i, entries at e*b_1 + i, is the i-th basis "
-           "form) — the deterministic basis prepare/readout use.")
-      .def("generatorIndices", &BoundaryStatePrep::generatorIndices,
+      .def("harmonics", &BoundaryStateSpace::harmonics,
+           "The cached orthonormal harmonic 1-form basis as a list of degree-1 "
+           "Cochains (the k=1 simplex ordering), ascending-eigenvalue order — the "
+           "deterministic basis prepare/readout use.")
+      .def("generatorIndices", &BoundaryStateSpace::generatorIndices,
            "The b_1 flat-connection-class indices in Z(Sigma) carrying harmonic "
            "data: (2^0, 2^1, ..., 2^{b_1-1}), the single-generator classes "
            "(harmonic i lands on index 2^i).")
-      .def("prepare", &BoundaryStatePrep::prepare, py::arg("form"),
-           "Prepare a DW boundary state from a harmonic 1-form: ker L_1(Sigma) "
-           "-> Z(Sigma). form is length |C_1|; its harmonic coordinates "
-           "c_i = <h_i, form> are scattered onto the amplitudes at indices 2^i, "
-           "the rest zero. Returns length 2^{b_1}. A non-harmonic component is "
-           "projected out. Raises if len(form) != numEdges().")
-      .def("readout", &BoundaryStatePrep::readout, py::arg("state"),
-           "Read a harmonic 1-form back out of a DW boundary state (the adjoint "
-           "of prepare): Z(Sigma) -> ker L_1(Sigma). Gathers c_i = state[2^i] and "
-           "returns sum_i c_i h_i (length |C_1|). readout(prepare(form)) == form "
-           "for form in ker L_1(Sigma). Raises if len(state) != "
+      .def("prepare", &BoundaryStateSpace::prepare, py::arg("form"),
+           "Prepare a boundary state from a harmonic 1-form: ker L_1(Sigma) -> "
+           "Z(Sigma). form is a degree-1 Cochain of length |C_1|; its harmonic "
+           "coordinates c_i = <h_i, form> are scattered onto the amplitudes at "
+           "indices 2^i, the rest zero. Returns a PreparedBoundaryState. A "
+           "non-harmonic component is projected out. Raises if form.degree() != 1 "
+           "or len(form) != numEdges().")
+      .def("state", &BoundaryStateSpace::state, py::arg("amplitudes"),
+           "Wrap a raw Z(Sigma) amplitude vector (the flat-connection-class "
+           "basis, length 2^{b_1}) as a PreparedBoundaryState over this space — "
+           "the direct counterpart to prepare for states already in the "
+           "holonomy-class basis. Raises if len(amplitudes) != "
            "boundaryDimension().");
+
+  py::class_<PreparedBoundaryState>(m, "PreparedBoundaryState",
+      R"doc(A state in the DW boundary Hilbert space Z(Sigma) of a surface Sigma.
+
+A value object wrapping the 2^{b_1(Sigma)}-long complex amplitude vector (the
+flat-connection-class basis) plus a handle to the BoundaryStateSpace that defines
+Sigma. Produced by BoundaryStateSpace.prepare (from a harmonic 1-form) or
+BoundaryStateSpace.state (from a raw amplitude vector); the held handle keeps its
+space alive. The 'harmonic i -> index 2^i' convention lives in the space, so
+generatorAmplitude(i) and readout() delegate to it.
+
+readout() is the adjoint of prepare: it rebuilds the harmonic 1-form
+sum_i c_i h_i in ker L_1(Sigma) from c_i = coeffs[2^i], so
+space.prepare(form).readout() == form for form in ker L_1. overlap(other) is the
+Hermitian inner product <self, other> = sum conj(self) other (= np.vdot) and, for
+prepared states, reproduces the harmonic overlap.)doc")
+      .def("coeffs", &PreparedBoundaryState::coeffs,
+           "The Z(Sigma) amplitude vector (the flat-connection-class basis) as a "
+           "1-D complex numpy.ndarray (Eigen-backed).")
+      .def("size", &PreparedBoundaryState::size,
+           "dim Z(Sigma) = 2^{b_1(Sigma)}, the number of holonomy classes.")
+      .def("__len__", &PreparedBoundaryState::size)
+      .def("space",
+           [](const PreparedBoundaryState &p) {
+             return std::const_pointer_cast<BoundaryStateSpace>(p.space());
+           },
+           "The BoundaryStateSpace Z(Sigma) this state belongs to.")
+      .def("amplitude", &PreparedBoundaryState::amplitude,
+           py::arg("holonomyClass"),
+           "The amplitude for a single holonomy class (flat-connection class "
+           "index 0..2^{b_1}-1). Raises IndexError if out of range.")
+      .def("__getitem__", &PreparedBoundaryState::amplitude)
+      .def("generatorAmplitude", &PreparedBoundaryState::generatorAmplitude,
+           py::arg("harmonic"),
+           "The amplitude carried by the harmonic-th harmonic 1-form — the "
+           "single-generator class at Z(Sigma) index 2^harmonic (the convention "
+           "owned by the BoundaryStateSpace). Raises IndexError if not in "
+           "[0, b_1).")
+      .def("readout", &PreparedBoundaryState::readout,
+           "Read the harmonic 1-form back out (the adjoint of prepare): the "
+           "degree-1 Cochain sum_i c_i h_i in ker L_1(Sigma) with c_i = "
+           "coeffs[2^i]. space.prepare(form).readout() == form for form in "
+           "ker L_1(Sigma).")
+      .def("overlap", &PreparedBoundaryState::overlap, py::arg("other"),
+           "The Hermitian inner product <self, other> = sum conj(self) other "
+           "(= np.vdot) of the two Z(Sigma) amplitude vectors. For prepared "
+           "states this is the harmonic overlap. Raises if the boundary "
+           "dimensions differ.")
+      .def("norm", &PreparedBoundaryState::norm,
+           "The Euclidean norm sqrt(sum |c_a|^2) of the amplitude vector.");
 }
