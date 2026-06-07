@@ -88,6 +88,16 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
       .def("bettiNumbersGF2", &ChainComplex::bettiNumbersGF2, "Betti numbers over GF(2).")
       .def("torsion", &ChainComplex::torsion, py::arg("k"),
            "Torsion coefficients of H_k (invariant factors > 1 of d_{k+1}).")
+      .def("orientedTopSimplices", &ChainComplex::orientedTopSimplices,
+           "Top simplices as sorted vertex-id tuples, in the canonical column "
+           "order of the top boundary matrix d_d (d = dimension()); the order "
+           "the fundamentalClass() signs refer to. Empty for the empty complex.")
+      .def("fundamentalClass", &ChainComplex::fundamentalClass,
+           "Fundamental class [W] in H_d: the per top-simplex orientation signs "
+           "eps_t = +/-1 (the +/-1 generator of ker d_d) making the top chain a "
+           "cycle (d_d applied to the signed top chain is 0). Sign-normalized so "
+           "the first nonzero entry is +1. Raises if the complex is not a closed "
+           "connected oriented manifold (dim ker d_d != 1) or dimension < 1.")
       .def("intersectionForm", &ChainComplex::intersectionForm,
            "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")

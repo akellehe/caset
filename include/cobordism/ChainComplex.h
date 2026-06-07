@@ -82,6 +82,28 @@ class ChainComplex {
     /// \f$ \mathrm{torsion}(1) = \{2\} \f$.)
     [[nodiscard]] std::vector<long> torsion(int k) const;
 
+    /// The top simplices as sorted vertex-id tuples, in the canonical column
+    /// order of the top boundary matrix \f$ \partial_d \f$ (\f$ d = \f$
+    /// dimension()). This is the ordering the orientation signs from
+    /// fundamentalClass() refer to. Empty for the empty complex.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> orientedTopSimplices() const;
+
+    /// The fundamental class \f$ [W] \in H_d \f$ of a closed oriented
+    /// \f$ d \f$-manifold: the per top-simplex orientation signs
+    /// \f$ \varepsilon_t = \pm 1 \f$ (indexed as orientedTopSimplices(), i.e. the
+    /// columns of \f$ \partial_d \f$) that make the top chain
+    /// \f$ \sum_t \varepsilon_t\, t \f$ a cycle
+    /// (\f$ \partial_d \sum_t \varepsilon_t\, t = 0 \f$, so each codimension-one
+    /// face's two incident top simplices cancel). It is the \f$ \pm 1 \f$
+    /// generator of \f$ \ker \partial_d \f$, which is one-dimensional
+    /// (\f$ b_d = 1 \f$) for a closed connected oriented manifold, hence unique
+    /// up to an overall sign; the sign is fixed deterministically by making the
+    /// first nonzero entry \f$ +1 \f$.
+    /// @throws std::runtime_error if no such class exists — the complex is not a
+    ///   closed connected oriented \f$ d \f$-manifold (\f$ \dim \ker \partial_d
+    ///   \neq 1 \f$) — or \f$ d < 1 \f$.
+    [[nodiscard]] std::vector<int> fundamentalClass() const;
+
     /// The symmetric intersection form \f$ Q_{ij} = \langle \alpha_i \cup
     /// \alpha_j, [K] \rangle \f$ on a basis \f$ \{\alpha_i\} \f$ of the free
     /// part of \f$ H^2 \f$, as a flat row-major \f$ b_2 \times b_2 \f$ matrix.
