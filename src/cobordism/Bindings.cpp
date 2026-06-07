@@ -33,6 +33,7 @@
 #include "cobordism/Cobordism.h"
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/DijkgraafWitten.h"
+#include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -214,6 +215,55 @@ Euclidean spectrum/kernel.)doc")
            "representatives, one per column of lorentzianHarmonics (same order). "
            "A value ~0 flags a NULL (lightlike) harmonic; all positive on an "
            "all-spacelike complex.");
+
+  // ----- §4b eigenstate synthesis: residual + parameter access (#133) -----
+  py::class_<EigenstateSynthesis>(m, "EigenstateSynthesis",
+      R"doc(§4b inverse eigenvector problem on a fixed complex.
+
+Scores how close the complex's current Hermitian edge weights make a target
+state psi to being an eigenvector of the k=0 Hodge Laplacian L = D - A (the
+magnitude convention, via HodgeLaplacian), and reads/writes those weights so a
+search can perturb them. The non-convex, multi-restart search itself (e.g.
+scipy.optimize.minimize L-BFGS-B over the flat {w_ij} + {theta_ij} vector) lives
+in the driver and calls residual() here; the cone-and-retry growth loop is a
+separate stage (this class is fixed-complex only).
+
+Residual: for a unit target, r(psi) = ||(I - psi psi^dagger) L psi||^2 =
+||L psi - lambda psi||^2 with lambda = psi^dagger L psi, so r = 0 iff
+L psi || psi (psi is an eigenvector) and the realized eigenvalue is the Rayleigh
+quotient lambda. A non-unit psi is normalized internally. L is reassembled from
+the live edge weights/phases on every call, so residual() tracks setWeights /
+setPhases in place. psi is indexed in the same sorted-vertex-id order as
+HodgeLaplacian (k=0).
+
+Parameters: the per-edge squared-length magnitudes {w_ij} (Edge.setSquaredLength)
+and U(1) phases {theta_ij} (Edge.setPhase), in a stable edge order fixed at
+construction (the weight-carrying edges: both endpoints present, no self-loops).)doc")
+      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
+           "Build the synthesizer over a fixed triangulation.")
+      .def("order", &EigenstateSynthesis::order,
+           "Number of vertices N — the required length of any psi.")
+      .def("numEdges", &EigenstateSynthesis::numEdges,
+           "Number of tunable edges — the length of weights() / phases().")
+      .def("residual", &EigenstateSynthesis::residual, py::arg("psi"),
+           "Eigenvalue-agnostic residual r(psi) = ||(I - psi psi^dagger) L psi||^2 "
+           "against the current edge weights/phases (psi normalized internally). "
+           "r = 0 iff L psi || psi. Raises if len(psi) != order().")
+      .def("rayleigh", &EigenstateSynthesis::rayleigh, py::arg("psi"),
+           "Rayleigh quotient lambda = psi^dagger L psi / psi^dagger psi (real; L "
+           "Hermitian) — the realized eigenvalue when r = 0. Raises if "
+           "len(psi) != order().")
+      .def("apply", &EigenstateSynthesis::apply, py::arg("psi"),
+           "L psi against the current edge weights/phases (no normalization), for "
+           "direct L psi || psi cross-checks. Raises if len(psi) != order().")
+      .def("weights", &EigenstateSynthesis::weights,
+           "Edge magnitudes {w_ij} (squaredLength) in the stable edge order.")
+      .def("phases", &EigenstateSynthesis::phases,
+           "Edge phases {theta_ij} (radians) in the stable edge order.")
+      .def("setWeights", &EigenstateSynthesis::setWeights, py::arg("w"),
+           "Write the edge magnitudes in place. Raises if len(w) != numEdges().")
+      .def("setPhases", &EigenstateSynthesis::setPhases, py::arg("theta"),
+           "Write the edge phases in place. Raises if len(theta) != numEdges().");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
