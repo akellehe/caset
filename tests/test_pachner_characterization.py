@@ -63,16 +63,18 @@ def _make_cdt(d=4, n_simplices=200, k0=2.2, k4=0.5, delta=0.6,
 def _top_simplex_size(st):
     """Return d+1 (the vertex count of a top simplex) for this spacetime.
 
-    ``getSimplices()`` can contain lazily-materialized lower-dimensional faces:
-    a move's ``propose()`` inspects a simplex's facets via ``getFacets()``,
-    which creates and registers those facet simplices on demand. So the *first*
-    registered simplex is not necessarily top-dimensional — take the maximum
-    vertex count over all simplices to find the true top dimension. (Using the
-    first simplex's size here was the cause of an intermittent failure in
+    ``getTopVertexCount()`` returns ``signature.dimensions + 1`` directly --
+    the engine's single source of truth for top-cell membership -- so it is
+    O(1) and immune to the lazily-materialized lower-dimensional faces that
+    ``getSimplices()`` accumulates. A move's ``propose()`` inspects a simplex's
+    facets via ``getFacets()``, which creates and registers those
+    lower-dimensional facet simplices on demand; scanning ``getSimplices()``
+    for the top dimension is therefore order-dependent. (Using the *first*
+    simplex's size here was the cause of an intermittent failure in
     TestStateUnchangedOnRejection: when a tetrahedron sorted first the snapshot
     began counting tetrahedra, which then grew as more facets materialized.)
     """
-    return max((len(s.getVertices()) for s in st.getSimplices()), default=0)
+    return st.getTopVertexCount()
 
 
 def _state_snapshot(st):
