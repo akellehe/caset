@@ -35,6 +35,7 @@
 #include "spacetime/topologies/RealProjectivePlane.h"
 #include "spacetime/topologies/RealProjectiveSpace.h"
 #include "spacetime/topologies/ComplexProjectivePlane.h"
+#include "spacetime/topologies/LensSpace.h"
 #include "spacetime/topologies/SimplicialProduct.h"
 #include "spacetime/topologies/SphereCircleProduct.h"
 #include "spacetime/topologies/StellarSubdivision.h"
@@ -179,6 +180,20 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def("build", &RealProjectiveSpace::build, py::arg("spacetime"),
            py::arg("numSimplices") = 0,
            "Build the 11-vertex RP^3 (numSimplices ignored).");
+
+  py::class_<LensSpace, Topology, std::shared_ptr<LensSpace> >(m, "LensSpace",
+      "Lens space L(p,q): a closed orientable 3-manifold with H_1 = Z_p, from "
+      "Lutz's vertex-minimal simplicial triangulations. Available (p,q): "
+      "(3,1), (4,1), (5,2) (L(2,1)=RP^3 is RealProjectiveSpace); other (p,q) "
+      "raise ValueError. Betti (1,0,0,1) over Q with torsion(1)=[p], chi=0, "
+      "closed orientable (b_3=1). Exact and pre-geometric; build() ignores "
+      "numSimplices.")
+      .def(py::init<int, int>(), py::arg("p"), py::arg("q"))
+      .def("p", &LensSpace::p, "The order p (H_1 = Z_p).")
+      .def("q", &LensSpace::q, "The gluing parameter q.")
+      .def("build", &LensSpace::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the vertex-minimal L(p,q) (numSimplices ignored).");
 
   py::class_<StellarSubdivision, Topology,
              std::shared_ptr<StellarSubdivision> >(m, "StellarSubdivision",
