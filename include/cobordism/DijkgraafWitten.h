@@ -82,6 +82,52 @@ class DijkgraafWitten {
     ///   to enumerate.
     [[nodiscard]] std::complex<double> partitionFunction() const;
 
+    /// # The cohomology-class (closed-form) Dijkgraaf–Witten state sum
+    ///
+    /// The same invariant as `partitionFunction()`, summed over the **cohomology
+    /// classes** \f$ [g] \in H^1(W;\mathbb{Z}_2) \f$ instead of the
+    /// gauge-redundant cocycle space \f$ Z^1 \f$. The DW weight
+    /// \f$ \prod_t \omega(g_{01},g_{12},g_{23})^{\varepsilon_t} \f$ depends only
+    /// on the class \f$ [g] \f$ (the cup-cube \f$ \langle g^3,[W]\rangle \f$ is a
+    /// cohomology pairing; the trivial class has weight 1), so the sum collapses:
+    /// \f[
+    ///   Z(W) = \frac{1}{2^{b_0}} \sum_{[g] \in H^1(W;\mathbb{Z}_2)}
+    ///          \mathrm{weight}([g]),
+    /// \f]
+    /// i.e. \f$ 2^{b_1} \f$ terms in place of \f$ 2^{\dim Z^1} \f$ — identical in
+    /// value to `partitionFunction()`, but feasible where the brute force is not
+    /// (e.g. \f$ T^3 \f$, \f$ \dim Z^1 = 29 \f$). \f$ H^1 = Z^1/B^1 \f$ is
+    /// enumerated with `gf2Nullspace` (\f$ Z^1 = \ker \partial_2^\top \f$),
+    /// `gf2CohomologyBasis` (quotient by the coboundaries \f$ B^1 = \mathrm{im}\,
+    /// \partial_1^\top \f$), and `gf2Span` (the \f$ 2^{b_1} \f$ classes); a
+    /// runtime guard confirms the weight agrees across representatives of each
+    /// class (gauge-shifts by every elementary coboundary). The \f$ 2^{-b_0} \f$
+    /// factor (\f$ b_0 = \f$ #components \f$ = \dim H^0 \f$) is the residual gauge
+    /// volume that makes this equal the \f$ 2^{-|V|} \sum_{\text{flat }g} \f$
+    /// brute-force sum.
+    /// @throws std::runtime_error if \f$ W \f$ is null or not a closed oriented
+    ///   3-manifold (dimension \f$ \neq 3 \f$, or no fundamental class).
+    [[nodiscard]] std::complex<double> partitionFunctionByCohomology() const;
+
+    /// The enumeration size of each state-sum path, for reporting the cohomology
+    /// collapse's speedup. `partitionFunction()` brute-forces all
+    /// \f$ 2^{\dim Z^1} \f$ flat cocycles; `partitionFunctionByCohomology()` sums
+    /// the \f$ 2^{b_1(W;\mathbb{Z}_2)} \f$ cohomology classes. The classes are
+    /// \f$ 2^{\dim B^1} = 2^{|V|-b_0} \f$-fold fewer, so the speedup is
+    /// \f$ 2^{\dim Z^1 - b_1} \f$.
+    struct StateSumTerms {
+      int firstBetti{0};            ///< \f$ b_1(W;\mathbb{Z}_2) \f$: cohomology-path exponent.
+      int cocycleDimension{0};      ///< \f$ \dim Z^1 \f$: brute-force-path exponent.
+      double cohomologyTerms{1.0};  ///< \f$ 2^{\text{firstBetti}} \f$.
+      double bruteForceTerms{1.0};  ///< \f$ 2^{\text{cocycleDimension}} \f$.
+      double speedup{1.0};          ///< bruteForceTerms / cohomologyTerms.
+    };
+
+    /// Report the two state-sum enumeration sizes (see `StateSumTerms`).
+    /// @throws std::runtime_error if \f$ W \f$ is null or not a 3-manifold
+    ///   (dimension \f$ \neq 3 \f$).
+    [[nodiscard]] StateSumTerms stateSumTerms() const;
+
     /// # The Dijkgraaf–Witten state sum with boundary
     ///
     /// For a 3-manifold \f$ W \f$ **with boundary** \f$ \partial W \f$ the state

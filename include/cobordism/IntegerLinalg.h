@@ -76,6 +76,21 @@ struct SmithNormalForm {
 [[nodiscard]] std::vector<std::vector<int>> gf2Span(
     const std::vector<std::vector<int>> &basis, int cols);
 
+/// A basis of representatives for the GF(2) cohomology quotient H = Z / B. Given
+/// a generating set `cocycles` of the cocycle space Z (e.g. the Z¹ basis from
+/// gf2Nullspace) and a generating set `coboundaries` of the subspace B ⊆ Z (e.g.
+/// the vertex edge-incidence vectors B¹ = im(∂₁ᵀ)), all length-`cols` 0/1 vectors
+/// (entries read mod 2), return the members of `cocycles` that stay independent
+/// modulo B and modulo the representatives already chosen. There are exactly
+/// dim Z − dim B = b₁ of them; together with B they span Z, and — being a
+/// complement of B in Z — their GF(2) span (gf2Span) is a transversal that hits
+/// each coset of B exactly once. This is H¹(W; ℤ₂) for the Dijkgraaf–Witten state
+/// sum: the gauge-inequivalent flat ℤ₂ connections, 2^{dim B} = 2^{|V|−b₀}-fold
+/// fewer than the full cocycle space, so the state sum collapses to 2^{b₁} terms.
+[[nodiscard]] std::vector<std::vector<int>> gf2CohomologyBasis(
+    const std::vector<std::vector<int>> &cocycles,
+    const std::vector<std::vector<int>> &coboundaries, int cols);
+
 /// Inertia of a symmetric integer matrix Q (n x n): the counts of positive,
 /// negative, and zero eigenvalues by Sylvester's law of inertia. The signature
 /// is nPos - nNeg.

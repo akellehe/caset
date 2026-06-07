@@ -166,6 +166,136 @@ std::complex<double> DijkgraafWitten::partitionFunction() const {
   return total;
 }
 
+std::complex<double> DijkgraafWitten::partitionFunctionByCohomology() const {
+  if (W_ == nullptr)
+    throw std::runtime_error(
+        "DijkgraafWitten::partitionFunctionByCohomology: the spacetime is null");
+
+  const ChainComplex chain = ChainComplex::fromSpacetime(*W_);
+  if (chain.dimension() != 3)
+    throw std::runtime_error(
+        "DijkgraafWitten::partitionFunctionByCohomology: a closed oriented "
+        "3-manifold is required (dimension must be 3)");
+
+  const int numEdges = static_cast<int>(chain.numSimplices(1));
+  const int numTriangles = static_cast<int>(chain.numSimplices(2));
+
+  // Cocycles Z^1 = ker(d_1 mod 2), d_1 = ∂_2^T (triangles × edges) — the flat
+  // ℤ₂ connections, exactly as in partitionFunction().
+  const std::vector<long> &boundaryTwo = chain.boundaryMatrix(2);
+  std::vector<int> coboundaryOne(
+      static_cast<std::size_t>(numTriangles) * numEdges, 0);
+  for (int edge = 0; edge < numEdges; ++edge)
+    for (int triangle = 0; triangle < numTriangles; ++triangle)
+      coboundaryOne[static_cast<std::size_t>(triangle) * numEdges + edge] =
+          static_cast<int>(
+              boundaryTwo[static_cast<std::size_t>(edge) * numTriangles +
+                          triangle] &
+              1L);
+  const std::vector<std::vector<int>> cocycleBasis =
+      gf2Nullspace(coboundaryOne, numTriangles, numEdges);
+
+  // Map a sorted vertex pair (v_i, v_j) to its C_1 (edge) index, as in
+  // partitionFunction() — the row order of ∂_2 / kSimplexVertices(1).
+  const std::vector<std::vector<std::uint64_t>> edges = chain.kSimplexVertices(1);
+  std::map<std::pair<std::uint64_t, std::uint64_t>, int> edgeIndex;
+  for (int e = 0; e < numEdges; ++e) edgeIndex[{edges[e][0], edges[e][1]}] = e;
+
+  // Coboundaries B^1 = im(d_0): each vertex's edge-incidence vector (mod 2 it is
+  // d_0 of the vertex indicator — an elementary gauge transformation).
+  std::vector<std::vector<int>> coboundaryBasis;
+  for (const std::vector<std::uint64_t> &vertex : chain.kSimplexVertices(0)) {
+    const std::uint64_t id = vertex[0];
+    std::vector<int> incidence(numEdges, 0);
+    for (int e = 0; e < numEdges; ++e)
+      if (edges[e][0] == id || edges[e][1] == id) incidence[e] = 1;
+    coboundaryBasis.push_back(std::move(incidence));
+  }
+
+  // H^1(W;ℤ₂) = Z^1/B^1: a complement basis of representatives, enumerated to the
+  // 2^{b_1} cohomology classes (one representative per gauge class).
+  const std::vector<std::vector<int>> cohomologyBasis =
+      gf2CohomologyBasis(cocycleBasis, coboundaryBasis, numEdges);
+  const std::vector<std::vector<int>> classes =
+      gf2Span(cohomologyBasis, numEdges);
+
+  // The DW weight ∏_t ω(g_01,g_12,g_23)^{ε_t} on a connection g, read exactly as
+  // in partitionFunction() (same edge map, same orientation signs ε_t from the
+  // fundamental class); for the real ℤ₂ cocycles ε_t is a no-op but kept faithful.
+  const std::vector<std::vector<std::uint64_t>> tetrahedra =
+      chain.orientedTopSimplices();
+  const std::vector<int> epsilon = chain.fundamentalClass();
+  auto weightOf = [&](const std::vector<int> &g) {
+    std::complex<double> weight{1.0, 0.0};
+    for (int t = 0; t < static_cast<int>(tetrahedra.size()); ++t) {
+      const std::vector<std::uint64_t> &v = tetrahedra[t];  // v0 < v1 < v2 < v3
+      const int g01 = g[static_cast<std::size_t>(edgeIndex.at({v[0], v[1]}))];
+      const int g12 = g[static_cast<std::size_t>(edgeIndex.at({v[1], v[2]}))];
+      const int g23 = g[static_cast<std::size_t>(edgeIndex.at({v[2], v[3]}))];
+      std::complex<double> tetWeight = omega(cocycle_, g01, g12, g23);
+      if (epsilon[static_cast<std::size_t>(t)] < 0) tetWeight = std::conj(tetWeight);
+      weight *= tetWeight;
+    }
+    return weight;
+  };
+
+  // Z(W) = (1/2^{b_0}) Σ_{[g] ∈ H^1} weight([g]). Per class, the weight is
+  // computed once for the sum and re-checked against every gauge shift g ⊕ c
+  // (c an elementary coboundary): a genuine 3-cocycle weight is constant on a
+  // class, so a mismatch flags a non-cocycle ω or inconsistent edge indexing —
+  // the same loud guard partitionFunction() applies to flatness.
+  const double tolerance = 1e-9;
+  std::complex<double> total{0.0, 0.0};
+  for (const std::vector<int> &g : classes) {
+    const std::complex<double> weight = weightOf(g);
+    for (const std::vector<int> &c : coboundaryBasis) {
+      std::vector<int> shifted(g.size());
+      for (std::size_t e = 0; e < g.size(); ++e)
+        shifted[e] = (g[e] ^ c[static_cast<std::size_t>(e)]) & 1;
+      if (std::abs(weightOf(shifted) - weight) > tolerance)
+        throw std::runtime_error(
+            "DijkgraafWitten::partitionFunctionByCohomology: the weight is not "
+            "constant on a cohomology class (gauge-shift mismatch) — ω is not a "
+            "3-cocycle or the coboundary/edge indexing is inconsistent");
+    }
+    total += weight;
+  }
+
+  // b_0 = dim H^0 = number of connected components: the residual gauge volume
+  // that makes the cohomology-class sum equal the 2^{-|V|} Σ_{flat g} brute force
+  // (|B^1| = 2^{|V|-b_0} cocycles collapse to each class).
+  const int b0 = chain.bettiNumbersGF2()[0];
+  total /= std::pow(2.0, static_cast<double>(b0));
+  return total;
+}
+
+DijkgraafWitten::StateSumTerms DijkgraafWitten::stateSumTerms() const {
+  if (W_ == nullptr)
+    throw std::runtime_error(
+        "DijkgraafWitten::stateSumTerms: the spacetime is null");
+
+  const ChainComplex chain = ChainComplex::fromSpacetime(*W_);
+  if (chain.dimension() != 3)
+    throw std::runtime_error(
+        "DijkgraafWitten::stateSumTerms: a 3-manifold (dimension 3) is required");
+
+  // dim Z^1 = b_1 + dim B^1 = b_1 + (|V| - b_0): the brute-force path enumerates
+  // all 2^{dim Z^1} flat cocycles, the cohomology path only the 2^{b_1} classes.
+  const std::vector<int> bettiGF2 = chain.bettiNumbersGF2();
+  const int b0 = bettiGF2[0];
+  const int b1 = bettiGF2[1];
+  const int numVertices = static_cast<int>(chain.numSimplices(0));
+  const int dimZ1 = b1 + numVertices - b0;
+
+  StateSumTerms terms;
+  terms.firstBetti = b1;
+  terms.cocycleDimension = dimZ1;
+  terms.cohomologyTerms = std::pow(2.0, static_cast<double>(b1));
+  terms.bruteForceTerms = std::pow(2.0, static_cast<double>(dimZ1));
+  terms.speedup = std::pow(2.0, static_cast<double>(dimZ1 - b1));
+  return terms;
+}
+
 DijkgraafWitten::Boundary DijkgraafWitten::computeBoundary() const {
   if (W_ == nullptr)
     throw std::runtime_error(
@@ -219,24 +349,9 @@ DijkgraafWitten::Boundary DijkgraafWitten::computeBoundary() const {
     for (int &c : v) c &= 1;
     return v;
   };
-  auto isZero = [](const std::vector<int> &v) {
-    return std::all_of(v.begin(), v.end(), [](int x) { return x == 0; });
-  };
-  // Representatives of H^1 = Z^1 / B^1: from the cocycle basis keep exactly those
-  // independent modulo the coboundaries already accumulated (b_1 of them).
-  auto cohomologyReps = [&](const std::vector<std::vector<int>> &cocycles,
-                            std::vector<std::vector<int>> coboundaries,
-                            int cols) {
-    std::vector<std::vector<int>> spanRows = echelon(coboundaries, cols);
-    std::vector<std::vector<int>> reps;
-    for (const std::vector<int> &z : cocycles)
-      if (!isZero(residue(z, spanRows))) {
-        reps.push_back(z);
-        coboundaries.push_back(z);
-        spanRows = echelon(coboundaries, cols);
-      }
-    return reps;
-  };
+  // Representatives of H^1 = Z^1 / B^1 (the b_1 cocycles independent modulo the
+  // coboundaries) come from IntegerLinalg::gf2CohomologyBasis; `echelon` and
+  // `residue` above remain for the per-component class-index lookup below.
 
   // --- bulk: enumerate the gauge classes [g] ∈ H^1(W; ℤ₂) --------------------
   // Flat connections Z^1(W) = ker(d_1 mod 2), d_1 = ∂_2^T (triangles × edges);
@@ -269,7 +384,7 @@ DijkgraafWitten::Boundary DijkgraafWitten::computeBoundary() const {
     coboundaryBasis.push_back(std::move(incidence));
   }
   const std::vector<std::vector<int>> bulkReps =
-      cohomologyReps(cocycleBasis, coboundaryBasis, numEdges);
+      gf2CohomologyBasis(cocycleBasis, coboundaryBasis, numEdges);
   const std::vector<std::vector<int>> bulkClasses = gf2Span(bulkReps, numEdges);
 
   // --- boundary ∂W: components, each a closed surface Σ_i --------------------
@@ -335,7 +450,7 @@ DijkgraafWitten::Boundary DijkgraafWitten::computeBoundary() const {
       localCoboundaryBasis.push_back(std::move(incidence));
     }
     const std::vector<std::vector<int>> localReps =
-        cohomologyReps(localCocycles, localCoboundaryBasis, numLocalEdges);
+        gf2CohomologyBasis(localCocycles, localCoboundaryBasis, numLocalEdges);
     const std::vector<std::vector<int>> localClasses =
         gf2Span(localReps, numLocalEdges);
 

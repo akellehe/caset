@@ -234,6 +234,13 @@ Euclidean spectrum/kernel.)doc")
   m.def("gf2_span", &gf2Span, py::arg("basis"), py::arg("cols"),
         "All 2^k GF(2) combinations of a basis of k length-cols vectors (first "
         "is the zero vector). For a gf2_nullspace basis, the flat Z2 connections.");
+  m.def("gf2_cohomology_basis", &gf2CohomologyBasis, py::arg("cocycles"),
+        py::arg("coboundaries"), py::arg("cols"),
+        "A basis of representatives for the GF(2) quotient H = Z/B: the members "
+        "of `cocycles` (a generating set of Z) independent modulo `coboundaries` "
+        "(a generating set of B subset Z). Returns dim Z - dim B vectors whose "
+        "gf2_span is a transversal hitting each coset of B once. This is "
+        "H^1(W;Z2) = Z^1/B^1 for the Dijkgraaf-Witten state sum.");
 
   py::class_<Inertia>(m, "Inertia")
       .def_readonly("n_pos", &Inertia::nPos)
@@ -338,6 +345,25 @@ Euclidean spectrum/kernel.)doc")
       .value("Trivial", Cocycle::Trivial)
       .value("Sign", Cocycle::Sign);
 
+  py::class_<DijkgraafWitten::StateSumTerms>(m, "StateSumTerms",
+      "Enumeration sizes of the two Dijkgraaf-Witten state-sum paths, for "
+      "reporting the cohomology collapse's speedup: the brute force visits "
+      "2^{cocycle_dimension} = 2^{dim Z^1} flat cocycles, the cohomology path "
+      "only 2^{first_betti} = 2^{b_1(W;Z_2)} classes; speedup = 2^{dim Z^1 - b_1}.")
+      .def_readonly("first_betti", &DijkgraafWitten::StateSumTerms::firstBetti,
+                    "b_1(W;Z_2): the cohomology-path exponent.")
+      .def_readonly("cocycle_dimension",
+                    &DijkgraafWitten::StateSumTerms::cocycleDimension,
+                    "dim Z^1: the brute-force-path exponent.")
+      .def_readonly("cohomology_terms",
+                    &DijkgraafWitten::StateSumTerms::cohomologyTerms,
+                    "2^{first_betti}, the terms the cohomology sum visits.")
+      .def_readonly("brute_force_terms",
+                    &DijkgraafWitten::StateSumTerms::bruteForceTerms,
+                    "2^{cocycle_dimension}, the terms the brute force visits.")
+      .def_readonly("speedup", &DijkgraafWitten::StateSumTerms::speedup,
+                    "brute_force_terms / cohomology_terms = 2^{dim Z^1 - b_1}.");
+
   py::class_<DijkgraafWitten>(m, "DijkgraafWitten",
       R"doc(Dijkgraaf-Witten Z_2 state sum of a closed oriented 3-manifold.
 
@@ -348,8 +374,12 @@ the fundamental class. For connected W the untwisted value is Z_Trivial(W) =
 2^{b_1(W;Z_2) - 1}; the Sign cocycle twists it by (-1)^{<g cup g cup g, [W]>},
 which differs from the trivial value exactly when the mod-2 cup cube is nonzero
 on W (e.g. RP^3), and agrees with it when the cube vanishes (e.g. T^3, S^2xS^1).
-Enumerates the whole flat space (gauge-redundant), so it is intended for small
-triangulations; a flat space too large to materialize is refused.)doc")
+partitionFunction() enumerates the whole flat space (gauge-redundant), so it is
+intended for small triangulations; a flat space too large to materialize is
+refused. partitionFunctionByCohomology() computes the same Z(W) over the
+2^{b_1(W;Z_2)} cohomology classes [g] in H^1(W;Z_2) (with 2^{-b_0} normalization)
+instead of all 2^{dim Z^1} cocycles, so it stays feasible where the brute force is
+not (e.g. T^3, dim Z^1 = 29); stateSumTerms() reports the speedup.)doc")
       .def(py::init<std::shared_ptr<Spacetime>, Cocycle>(), py::arg("W"),
            py::arg("cocycle"),
            "Build the state sum over a closed oriented 3-manifold W with the "
@@ -357,6 +387,18 @@ triangulations; a flat space too large to materialize is refused.)doc")
       .def("partitionFunction", &DijkgraafWitten::partitionFunction,
            "The partition function Z(W) as a complex number. Raises if W is not "
            "a closed oriented 3-manifold or the flat space is too large.")
+      .def("partitionFunctionByCohomology",
+           &DijkgraafWitten::partitionFunctionByCohomology,
+           "The same Z(W), summed over the 2^{b_1(W;Z_2)} cohomology classes "
+           "[g] in H^1(W;Z_2) instead of all 2^{dim Z^1} flat cocycles: "
+           "Z(W) = 2^{-b_0} sum_{[g]} weight([g]). Identical in value to "
+           "partitionFunction() but feasible where the brute force is not (e.g. "
+           "T^3, dim Z^1 = 29). A runtime guard checks the weight is constant on "
+           "each class. Raises if W is not a closed oriented 3-manifold.")
+      .def("stateSumTerms", &DijkgraafWitten::stateSumTerms,
+           "A StateSumTerms reporting the enumeration sizes of the two paths "
+           "(2^{b_1} cohomology classes vs 2^{dim Z^1} flat cocycles) and the "
+           "speedup. Raises if W is not a 3-manifold.")
       .def("boundaryVector", &DijkgraafWitten::boundaryVector,
            "The element of Z(dW) for a 3-manifold W with boundary: the amplitude "
            "for every joint boundary flat-connection class, flattened row-major "

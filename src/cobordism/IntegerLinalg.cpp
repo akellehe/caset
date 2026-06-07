@@ -38,6 +38,48 @@ inline long &at(std::vector<long> &M, int cols, int i, int j) {
   return M[static_cast<std::size_t>(i) * cols + j];
 }
 
+// GF(2) row-echelon basis of the span of `gens` (each read mod 2), the rows
+// kept in increasing pivot-column order with dependent generators dropped. Each
+// row's leftmost 1 (its pivot) is unique to that row, so a vector reduces to
+// zero against the basis iff it lies in the span.
+std::vector<std::vector<int>> gf2Echelon(std::vector<std::vector<int>> gens,
+                                         int cols) {
+  std::vector<std::vector<int>> rows;
+  std::vector<int> pivots;
+  for (std::vector<int> g : gens) {
+    for (int &c : g) c &= 1;
+    for (std::size_t r = 0; r < rows.size(); ++r)
+      if (g[static_cast<std::size_t>(pivots[r])])
+        for (int c = pivots[r]; c < cols; ++c)
+          g[static_cast<std::size_t>(c)] ^= rows[r][static_cast<std::size_t>(c)];
+    int p = -1;
+    for (int c = 0; c < cols; ++c)
+      if (g[static_cast<std::size_t>(c)]) { p = c; break; }
+    if (p < 0) continue;  // dependent on the rows already collected
+    std::size_t pos = 0;
+    while (pos < pivots.size() && pivots[pos] < p) ++pos;
+    rows.insert(rows.begin() + static_cast<long>(pos), std::move(g));
+    pivots.insert(pivots.begin() + static_cast<long>(pos), p);
+  }
+  return rows;
+}
+
+// Reduce `v` against an echelon basis `rows`; the residue is zero iff v is in
+// the span. Linear over GF(2).
+std::vector<int> gf2Residue(std::vector<int> v,
+                            const std::vector<std::vector<int>> &rows) {
+  for (const std::vector<int> &row : rows) {
+    int p = -1;
+    for (int c = 0; c < static_cast<int>(row.size()); ++c)
+      if (row[static_cast<std::size_t>(c)]) { p = c; break; }
+    if (p >= 0 && (v[static_cast<std::size_t>(p)] & 1))
+      for (int c = p; c < static_cast<int>(v.size()); ++c)
+        v[static_cast<std::size_t>(c)] ^= row[static_cast<std::size_t>(c)];
+  }
+  for (int &c : v) c &= 1;
+  return v;
+}
+
 }  // namespace
 
 SmithNormalForm smithNormalForm(std::vector<long> M, int rows, int cols) {
@@ -201,6 +243,27 @@ std::vector<std::vector<int>> gf2Span(const std::vector<std::vector<int>> &basis
     out.push_back(std::move(v));
   }
   return out;
+}
+
+std::vector<std::vector<int>> gf2CohomologyBasis(
+    const std::vector<std::vector<int>> &cocycles,
+    const std::vector<std::vector<int>> &coboundaries, int cols) {
+  // Greedily keep each cocycle that is still independent modulo the coboundaries
+  // B and the representatives chosen so far: its residue against the running
+  // echelon span is nonzero. The kept vectors are a complement of B in Z, so
+  // their span is a transversal of Z/B (one representative per cohomology class).
+  std::vector<std::vector<int>> accumulated = coboundaries;
+  std::vector<std::vector<int>> spanRows = gf2Echelon(accumulated, cols);
+  std::vector<std::vector<int>> reps;
+  for (const std::vector<int> &z : cocycles) {
+    const std::vector<int> residue = gf2Residue(z, spanRows);
+    if (std::any_of(residue.begin(), residue.end(), [](int x) { return x != 0; })) {
+      reps.push_back(z);
+      accumulated.push_back(z);
+      spanRows = gf2Echelon(accumulated, cols);
+    }
+  }
+  return reps;
 }
 
 Inertia symmetricInertia(std::vector<long> Q, int n, double tol) {
