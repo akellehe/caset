@@ -143,5 +143,65 @@ class TestT3Retriangulations(unittest.TestCase):
         self.assertTrue(_is_closed_manifold(_top_simplices(_t3_subdivided())))
 
 
+class TestStellarSubdivisionPreservesTopology(unittest.TestCase):
+    """A stellar (1->d+1) Pachner move changes the triangulation but not the
+    homotopy type. The T^3 case above checks this once; here it is exercised on
+    a different base manifold and under iteration -- the depth axis of the T2
+    Pachner-invariance sweep (#112)."""
+
+    def test_preserves_sphere_circle_product_homology(self):
+        base = tessera.SphereCircleProduct()
+        sub = tessera.StellarSubdivision(base)
+        self.assertEqual(_betti(sub), [1, 1, 1, 1])          # still S^2 x S^1
+        self.assertTrue(_is_closed_manifold(_top_simplices(sub)))
+        b, s = _top_simplices(base), _top_simplices(sub)
+        # the 1->4 move: +1 vertex, +3 tetrahedra ...
+        self.assertEqual(len(s), len(b) + 3)
+        self.assertEqual(len({v for t in s for v in t}),
+                         len({v for t in b for v in t}) + 1)
+        # ... a genuine retriangulation, not a relabeling.
+        self.assertFalse(cobordism.Cobordism.areIsomorphic(b, s))
+
+    def test_iterated_subdivision_preserves_three_torus(self):
+        once = _t3_subdivided()
+        twice = tessera.StellarSubdivision(once)
+        self.assertEqual(_betti(twice), [1, 3, 3, 1])        # still T^3
+        self.assertTrue(_is_closed_manifold(_top_simplices(twice)))
+        o, t = _top_simplices(once), _top_simplices(twice)
+        self.assertEqual(len(t), len(o) + 3)                 # one further move
+        self.assertFalse(cobordism.Cobordism.areIsomorphic(o, t))
+
+
+class TestClosedThreeManifoldInvariants(unittest.TestCase):
+    """Euler-Poincare and orientability -- the properties the Dijkgraaf-Witten
+    state-sum (#108) relies on for these fixtures."""
+
+    @staticmethod
+    def _chain(topology):
+        return cobordism.ChainComplex.fromSpacetime(_build(topology))
+
+    def test_euler_characteristic_zero(self):
+        # A closed odd-dimensional manifold has chi = 0, and Euler-Poincare ties
+        # the face-count chi (from |C_k|) to the homological one (the alternating
+        # Betti sum) -- an independent cross-check of each triangulation.
+        for topo in (tessera.SphereCircleProduct(), _t3_product(), _t3_subdivided()):
+            cc = self._chain(topo)
+            self.assertEqual(cc.eulerCharacteristic(), 0)
+            betti = cc.bettiNumbers()
+            self.assertEqual(sum((-1) ** k * b for k, b in enumerate(betti)), 0)
+
+    def test_orientable_with_unique_fundamental_class(self):
+        # b_3 = 1 and a +/-1 coefficient on every top cell => closed, connected,
+        # oriented: the precondition for the orientation signs eps_t in the DW
+        # weight.
+        for topo in (tessera.SphereCircleProduct(), _t3_product()):
+            cc = self._chain(topo)
+            fundamental = cc.fundamentalClass()
+            tops = cc.orientedTopSimplices()
+            self.assertEqual(cc.bettiNumbers()[3], 1)
+            self.assertEqual(len(fundamental), len(tops))
+            self.assertTrue(all(abs(coeff) == 1 for coeff in fundamental))
+
+
 if __name__ == "__main__":
     unittest.main()
