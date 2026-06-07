@@ -240,18 +240,28 @@ std::vector<int> ChainComplex::fundamentalClass() const {
       topBoundary(r, c) =
           static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
 
-  const Eigen::MatrixXd kernel =
-      Eigen::FullPivLU<Eigen::MatrixXd>(topBoundary).kernel();
-  if (kernel.cols() != 1)
+  // Ask the decomposition for the genuine nullity rather than reading
+  // kernel().cols(): Eigen's FullPivLU::kernel() returns a single all-zero
+  // column for a 0-dimensional kernel (it never hands back a zero-*column*
+  // matrix), so kernel().cols() is always ≥ 1 and cannot tell b_d = 0 (every
+  // ball SolidSimplex(n), ℝP²) apart from b_d = 1. dimensionOfKernel() = cols −
+  // rank reports the true dim ker ∂_d, so the documented contract — a
+  // fundamental class exists only when dim ker ∂_d = 1 — is actually enforced.
+  const Eigen::FullPivLU<Eigen::MatrixXd> decomposition(topBoundary);
+  if (decomposition.dimensionOfKernel() != 1)
     throw std::runtime_error(
         "ChainComplex::fundamentalClass: a closed connected oriented " +
         std::to_string(d) + "-manifold is required (dim ker ∂_" +
         std::to_string(d) + " = b_" + std::to_string(d) +
         " must be 1, so the fundamental class is unique up to sign)");
+  const Eigen::MatrixXd kernel = decomposition.kernel();
 
   // Every entry of this generator has the same magnitude (one orientation per
   // top simplex), so scaling by the first nonzero entry makes the entries
   // exactly ±1; fixing that entry to +1 makes the overall sign deterministic.
+  // dim ker ∂_d = 1 guarantees a genuine (nonzero) generator, so firstNonzero
+  // lands on a real entry; the size() guard keeps sign normalization from ever
+  // indexing past the end even if the generator were numerically zero.
   Eigen::VectorXd generator = kernel.col(0);
   const double scale = generator.cwiseAbs().maxCoeff();
   const double threshold = 1e-9 * (scale > 0.0 ? scale : 1.0);
@@ -259,6 +269,10 @@ std::vector<int> ChainComplex::fundamentalClass() const {
   while (firstNonzero < generator.size() &&
          std::abs(generator[firstNonzero]) <= threshold)
     ++firstNonzero;
+  if (firstNonzero == generator.size())
+    throw std::runtime_error(
+        "ChainComplex::fundamentalClass: the generator of ker ∂_" +
+        std::to_string(d) + " is numerically zero (no fundamental class)");
   generator /= generator[firstNonzero];
 
   std::vector<int> epsilon(static_cast<std::size_t>(cols), 0);
