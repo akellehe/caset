@@ -33,6 +33,7 @@ import unittest
 
 import numpy as np
 
+import tessera
 from tessera import Spacetime
 
 
@@ -101,6 +102,35 @@ def _dihedral_from_cm(B, bi, bj):
         denom = -denom
     cos = max(-1.0, min(1.0, -C[bi, bj] / denom))
     return math.acos(cos)
+
+
+def _regular_squares(vertex_ids, l2=1.0):
+    """Signed-square map for a regular simplex: every edge has the same l^2."""
+    return {frozenset({a, b}): float(l2)
+            for i, a in enumerate(vertex_ids) for b in vertex_ids[i + 1:]}
+
+
+def _orthoscheme_squares(vertex_ids):
+    """Squares for the unit corner d-simplex (origin + unit axes): the d legs
+    from vertex 0 have l^2 = 1, the C(d,2) cross edges have l^2 = 2. Its Gram is
+    the identity, so its content is exactly 1/d!."""
+    origin, axes = vertex_ids[0], vertex_ids[1:]
+    sq = {frozenset({origin, a}): 1.0 for a in axes}
+    for i, a in enumerate(axes):
+        for b in axes[i + 1:]:
+            sq[frozenset({a, b})] = 2.0
+    return sq
+
+
+def _spacetime_nd(dim):
+    """An *unbuilt* dim-dimensional Lorentzian CDT spacetime. Its signature
+    dimension is what makes deficitAngle() count d+1-vertex cells as top cells;
+    the topology is never built, so the complex starts empty and we add cells by
+    hand."""
+    sig = tessera.Signature(dim, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    return tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                             tessera.PREFERRED, tessera.SolidSimplex(dim))
 
 
 class TestSimplexVolume(unittest.TestCase):
@@ -362,6 +392,293 @@ class TestDihedralAngle(unittest.TestCase):
         self.assertAlmostEqual(theta, math.acos(1.0 / math.sqrt(3.0)), places=9)
         self.assertNotAlmostEqual(
             theta, math.pi - math.acos(1.0 / math.sqrt(3.0)), places=6)
+
+
+class TestSimplexVolumeAcrossDims(unittest.TestCase):
+    """volume() is the signed d-content sqrt(det G)/d! at every dimension d,
+    checked against closed-form hand values from 1D to 4D."""
+
+    def setUp(self):
+        self.st = Spacetime()
+
+    def test_edge_content_is_its_length(self):
+        # A 1-simplex's content is its length: sqrt(l^2)/1!.
+        simplex, _, _ = _make_simplex(self.st, [0, 1], {frozenset({0, 1}): 4.0})
+        self.assertAlmostEqual(simplex.volume(), 2.0, places=9)
+
+    def test_timelike_edge_content_is_signed(self):
+        # A timelike 1-simplex (l^2 < 0) keeps the Lorentzian sign: -sqrt(|l^2|),
+        # distinct from the Wick-rotated |l^2| length (+1).
+        simplex, _, _ = _make_simplex(self.st, [0, 1], {frozenset({0, 1}): -1.0})
+        vol = simplex.volume()
+        self.assertAlmostEqual(vol, -1.0, places=9)
+        self.assertFalse(math.isclose(vol, 1.0, abs_tol=1e-6))
+
+    def test_regular_unit_tetrahedron_volume(self):
+        # Regular tetra, all l^2 = 1: det G = 1/2, so volume = sqrt(2)/12.
+        sq = _regular_squares([0, 1, 2, 3], 1.0)
+        simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
+        self.assertAlmostEqual(simplex.volume(), math.sqrt(2.0) / 12.0, places=9)
+
+    def test_pentachoron_volume_matches_hand_value(self):
+        # Unit corner 4-simplex (Gram = I_4): content = 1/4! = 1/24.
+        sq = _orthoscheme_squares([0, 1, 2, 3, 4])
+        simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3, 4], sq)
+        self.assertAlmostEqual(simplex.volume(), 1.0 / 24.0, places=9)
+
+
+class TestDeterminantThroughContent(unittest.TestCase):
+    """Simplex::determinant / cofactorMatrix are static, internal routines (not
+    bound to Python). Their behaviour is exercised through their only
+    Python-reachable consumers: the Gram determinant via volume(), and the
+    cofactor formula via dihedralAngle()/cayleyMengerMatrix() (see the
+    TestCayleyMengerMatrix reconstruction). Here: the determinant's *sign* at
+    d = 3 and its degenerate det = 0 (singular pivot) path."""
+
+    def setUp(self):
+        self.st = Spacetime()
+
+    def test_lorentzian_tetra_content_is_negative(self):
+        # One timelike edge (0,1): honest det G = -1, so volume = -1/6, recording
+        # the signature. The Wick-rotated cell has a positive Gram determinant.
+        sq = {
+            frozenset({0, 1}): -1.0,
+            frozenset({0, 2}): 1.0, frozenset({0, 3}): 1.0,
+            frozenset({1, 2}): 1.0, frozenset({1, 3}): 1.0,
+            frozenset({2, 3}): 1.0,
+        }
+        simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
+        self.assertAlmostEqual(simplex.volume(), -1.0 / 6.0, places=9)
+        self.assertGreater(np.linalg.det(_expected_gram(simplex, sq, True)), 0.0)
+
+    def test_content_squared_recovers_signed_gram_determinant(self):
+        sq = {
+            frozenset({0, 1}): -1.0,
+            frozenset({0, 2}): 1.0, frozenset({0, 3}): 1.0,
+            frozenset({1, 2}): 1.0, frozenset({1, 3}): 1.0,
+            frozenset({2, 3}): 1.0,
+        }
+        simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
+        vol = simplex.volume()
+        det = np.linalg.det(_expected_gram(simplex, sq, wick=False))
+        recovered = math.copysign(vol * vol, vol) * (math.factorial(3) ** 2)
+        self.assertAlmostEqual(recovered, det, places=9)
+        self.assertLess(det, 0.0)
+
+    def test_coplanar_tetra_has_zero_content(self):
+        # Four coplanar points (a flat unit-2 square A,B,C,D, sides l^2 = 4,
+        # diagonals l^2 = 8): the 3-simplex is affinely dependent, det G = 0, so
+        # volume = 0. Exercises the singular pivot path of the n>=3 determinant.
+        sq = {
+            frozenset({0, 1}): 4.0,   # AB
+            frozenset({1, 2}): 4.0,   # BC
+            frozenset({2, 3}): 4.0,   # CD
+            frozenset({0, 3}): 4.0,   # DA
+            frozenset({0, 2}): 8.0,   # AC (diagonal)
+            frozenset({1, 3}): 8.0,   # BD (diagonal)
+        }
+        simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
+        self.assertAlmostEqual(simplex.volume(), 0.0, places=12)
+
+
+class TestSimplexArea(unittest.TestCase):
+    """area() is Heron's formula on the three edge squared lengths of a triangle
+    (a 2-simplex / Regge hinge): signed by default, |l^2| under wickRotate."""
+
+    def setUp(self):
+        self.st = Spacetime()
+
+    def _triangle(self, l01, l02, l12):
+        sq = {frozenset({0, 1}): l01,
+              frozenset({0, 2}): l02,
+              frozenset({1, 2}): l12}
+        simplex, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
+        return simplex
+
+    def test_right_triangle_area(self):
+        # legs 1, 1; area = 1/2.
+        self.assertAlmostEqual(self._triangle(1.0, 1.0, 2.0).area(), 0.5, places=9)
+
+    def test_three_four_five_triangle_area(self):
+        # legs 3, 4 (l^2 9, 16), hypotenuse 5 (l^2 25); area = 6.
+        self.assertAlmostEqual(self._triangle(9.0, 16.0, 25.0).area(), 6.0,
+                               places=9)
+
+    def test_equilateral_triangle_area(self):
+        # unit equilateral; area = sqrt(3)/4.
+        self.assertAlmostEqual(self._triangle(1.0, 1.0, 1.0).area(),
+                               math.sqrt(3.0) / 4.0, places=9)
+
+    def test_degenerate_collinear_triangle_has_zero_area(self):
+        # Collinear 0--1--2 (lengths 1, 2, 1 -> l^2 1, 4, 1): Heron radicand 0.
+        self.assertAlmostEqual(self._triangle(1.0, 4.0, 1.0).area(), 0.0,
+                               places=12)
+
+    def test_lorentzian_triangle_area_signed_vs_wick(self):
+        # A timelike edge drives Heron's radicand negative, so the honest area
+        # clamps to 0 (Heron is undefined for these Lorentzian edge lengths)
+        # while the Wick-rotated |l^2| triangle has a real area sqrt(3)/2.
+        tri = self._triangle(-1.0, 4.0, 3.0)
+        self.assertEqual(tri.area(), 0.0)
+        self.assertEqual(tri.area(wickRotate=False), 0.0)
+        self.assertAlmostEqual(tri.area(wickRotate=True), math.sqrt(3.0) / 2.0,
+                               places=9)
+
+    def test_all_spacelike_area_toggle_is_noop(self):
+        tri = self._triangle(9.0, 16.0, 25.0)
+        self.assertAlmostEqual(tri.area(wickRotate=False),
+                               tri.area(wickRotate=True), places=12)
+
+
+class TestSimplexDihedralKnownValues(unittest.TestCase):
+    """dihedralAngle() against closed-form hand values for regular simplices.
+
+    The Cayley-Menger cofactor formula cos θ = -C_ij/sqrt(|C_ii C_jj|) returns
+    the true interior dihedral in every dimension: the diagonal cofactors C_ii
+    carry the dimension-parity sign (negative for odd-dimensional simplices), and
+    reapplying it to the normalization keeps the interior angle rather than its
+    supplement π - θ (issue #161, fixed). The even-dimensional cases (the
+    equilateral triangle; the regular 4-simplex -- the dimension the 4D CDT/Regge
+    solver runs in) were always correct; the regular tetrahedron (odd) is the
+    regression case."""
+
+    def setUp(self):
+        self.st = Spacetime()
+
+    def test_equilateral_triangle_interior_angle(self):
+        # 2-simplex, vertex hinge: an equilateral triangle's interior angle is
+        # pi/3. Even dimension; checked on the default (honest) path.
+        sq = _regular_squares([0, 1, 2], 1.0)
+        tri, verts, _ = _make_simplex(self.st, [0, 1, 2], sq)
+        hinge, _ = self.st.createSimplex([verts[0]], [])
+        self.assertAlmostEqual(tri.dihedralAngle(hinge), math.pi / 3.0, places=7)
+
+    def test_regular_pentachoron_dihedral_is_arccos_one_quarter(self):
+        # 4-simplex, triangle hinge: the regular 4-simplex dihedral is
+        # arccos(1/4) ~ 75.52 deg -- the production CDT/Regge dimension.
+        # All-spacelike, so honest == Wick.
+        sq = _regular_squares([0, 1, 2, 3, 4], 1.0)
+        cell, verts, edges = _make_simplex(self.st, [0, 1, 2, 3, 4], sq)
+        hinge, _ = self.st.createSimplex(
+            [verts[2], verts[3], verts[4]],
+            [edges[frozenset({2, 3})], edges[frozenset({2, 4})],
+             edges[frozenset({3, 4})]])
+        expected = math.acos(0.25)
+        for wick in (True, False):
+            self.assertAlmostEqual(cell.dihedralAngle(hinge, wickRotate=wick),
+                                   expected, places=7)
+
+    def test_regular_tetrahedron_dihedral_is_interior_angle(self):
+        # 3-simplex (odd dim), edge hinge: the regular tetrahedron's interior
+        # dihedral is arccos(1/3) ~ 70.53 deg, NOT the supplement arccos(-1/3) ~
+        # 109.47 deg. The diagonal cofactors are negative here; carrying that
+        # sign (issue #161, fixed) yields the interior angle. This pinned the
+        # supplement bug as an expectedFailure before the fix landed.
+        sq = _regular_squares([0, 1, 2, 3], 1.0)
+        tet, verts, edges = _make_simplex(self.st, [0, 1, 2, 3], sq)
+        hinge, _ = self.st.createSimplex([verts[2], verts[3]],
+                                         [edges[frozenset({2, 3})]])
+        self.assertAlmostEqual(tet.dihedralAngle(hinge, wickRotate=True),
+                               math.acos(1.0 / 3.0), places=7)
+        self.assertNotAlmostEqual(tet.dihedralAngle(hinge, wickRotate=True),
+                                  math.acos(-1.0 / 3.0), places=6)
+
+
+class TestSimplexDeficitAngle(unittest.TestCase):
+    """deficitAngle() = 2*pi - sum of the (Wick-rotated) dihedral angles of every
+    top cell meeting at a hinge. Verified as that contract on regular tetrahedra
+    fanned around a shared edge: deficitAngle must find all N incident cells and
+    subtract their summed dihedral from 2*pi.
+
+    (These tests check the cell-finding-and-summation contract -- deficitAngle =
+    2*pi - sum of the incident cells' dihedrals -- self-consistently against
+    dihedralAngle(), rather than a hand angle; see TestDihedralAngle for the
+    hand-checked dihedral values. dihedralAngle is correct in every dimension.)"""
+
+    @staticmethod
+    def _fan_around_edge(st, n):
+        """n regular unit tetrahedra all sharing the edge {0, 1}; returns the
+        shared edge as a 1-simplex hinge and the first tetrahedron."""
+        verts = {0: st.createVertex(0), 1: st.createVertex(1)}
+        edge_cache = {}
+
+        def edge(a, b):
+            key = frozenset({a, b})
+            if key not in edge_cache:
+                edge_cache[key] = st.createEdge(verts[a], verts[b], 1.0)
+            return edge_cache[key]
+
+        e01 = edge(0, 1)
+        first = None
+        nid = 2
+        for _ in range(n):
+            a, b = nid, nid + 1
+            nid += 2
+            verts[a] = st.createVertex(a)
+            verts[b] = st.createVertex(b)
+            tet, _ = st.createSimplex(
+                [verts[0], verts[1], verts[a], verts[b]],
+                [edge(0, 1), edge(0, a), edge(0, b),
+                 edge(1, a), edge(1, b), edge(a, b)])
+            if first is None:
+                first = tet
+        hinge, _ = st.createSimplex([verts[0], verts[1]], [e01])
+        return hinge, first
+
+    def test_single_cell_deficit_is_two_pi_minus_its_dihedral(self):
+        st = _spacetime_nd(3)
+        hinge, tet = self._fan_around_edge(st, 1)
+        self.assertAlmostEqual(
+            hinge.deficitAngle(),
+            2.0 * math.pi - tet.dihedralAngle(hinge, wickRotate=True),
+            places=7)
+
+    def test_deficit_sums_dihedrals_of_all_incident_cells(self):
+        st = _spacetime_nd(3)
+        n = 5
+        hinge, tet = self._fan_around_edge(st, n)
+        # All n cells are congruent regular tetrahedra sharing the hinge edge,
+        # so the summed dihedral is exactly n * (single-cell dihedral).
+        single = tet.dihedralAngle(hinge, wickRotate=True)
+        self.assertAlmostEqual(hinge.deficitAngle(),
+                               2.0 * math.pi - n * single, places=7)
+
+
+class TestSignedVsWickNonRegression(unittest.TestCase):
+    """Historically the geometry was always Wick-rotated (|l^2|). For a purely
+    spacelike simplex the signature-aware (signed) path must reproduce those
+    values exactly: the wickRotate toggle is a no-op on every geometry method."""
+
+    def setUp(self):
+        self.st = Spacetime()
+
+    def test_all_spacelike_tetra_methods_match_wick(self):
+        sq = _regular_squares([0, 1, 2, 3], 1.0)
+        tet, verts, edges = _make_simplex(self.st, [0, 1, 2, 3], sq)
+        hinge, _ = self.st.createSimplex([verts[1], verts[2]],
+                                         [edges[frozenset({1, 2})]])
+
+        np.testing.assert_allclose(tet.gramMatrix(wickRotate=False),
+                                   tet.gramMatrix(wickRotate=True))
+        np.testing.assert_allclose(tet.cayleyMengerMatrix(wickRotate=False),
+                                   tet.cayleyMengerMatrix(wickRotate=True))
+        self.assertAlmostEqual(tet.dihedralAngle(hinge, wickRotate=False),
+                               tet.dihedralAngle(hinge, wickRotate=True),
+                               places=12)
+        # volume() is honest-only; on an all-spacelike cell it equals the Wick
+        # reconstruction sqrt(det G_wick)/d!.
+        wick_det = np.linalg.det(
+            np.array(tet.gramMatrix(wickRotate=True)).reshape(3, 3))
+        self.assertAlmostEqual(tet.volume(),
+                               math.sqrt(wick_det) / math.factorial(3),
+                               places=12)
+
+    def test_all_spacelike_triangle_area_matches_wick(self):
+        sq = {frozenset({0, 1}): 9.0, frozenset({0, 2}): 16.0,
+              frozenset({1, 2}): 25.0}
+        tri, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
+        self.assertAlmostEqual(tri.area(wickRotate=False),
+                               tri.area(wickRotate=True), places=12)
 
 
 if __name__ == "__main__":

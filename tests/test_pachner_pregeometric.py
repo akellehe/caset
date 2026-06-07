@@ -145,6 +145,31 @@ def _run_sequence(st, n_moves, classes=_BISTELLAR, boundary_fixed=False,
     return counts
 
 
+def _d2_zero(st):
+    """∂_{k-1} ∘ ∂_k = 0 for the chain complex of the current triangulation —
+    the chain-complex axiom, and a non-corruption check on the moved complex."""
+    return cobordism.ChainComplex.fromSpacetime(st).boundaryComposesToZero()
+
+
+def _is_pseudomanifold_with_boundary(tops):
+    """Every codim-1 face is shared by one or two top cells (1 ⇒ on ∂W)."""
+    counts = _facet_counts(tops)
+    return bool(counts) and all(c in (1, 2) for c in counts.values())
+
+
+def _s2s1():
+    """S^2 x S^1 — the vertex-minimal closed oriented 3-manifold fixture."""
+    return tessera.SphereCircleProduct()
+
+
+def _cylinder(n_simplices=24):
+    """A 3D CDT cylinder Σ x [0, T]: closed spatial slices but open time
+    boundaries, so ∂W (the two end slices) is non-empty."""
+    st = _spacetime(3, tessera.Cylinder())
+    st.build(n_simplices)
+    return st
+
+
 # =====================================================================
 # Pre-geometric validity on the closed 3-torus
 # =====================================================================
@@ -391,6 +416,26 @@ class TestCDTDefaultsUnchanged(unittest.TestCase):
         ok = any(tessera.FlipMove(st, s).propose() for s in range(200))
         self.assertTrue(ok)
 
+    def test_cdt_move_still_applies_on_foliated_complex(self):
+        # The foliated (time-sliced) path is intact: a default CDT move proposes
+        # AND applies on a built CDT spacetime, in CDT mode with no boundary
+        # fixing — unaffected by the pre-geometric / boundary-fixed extensions.
+        st = self._cdt()
+        applied = None
+        for seed in range(400):
+            for cls in (tessera.FlipMove, tessera.ShiftMove, tessera.AddMove):
+                m = cls(st, seed)
+                if m.mode() != tessera.PachnerMode.CDT or m.boundaryFixed():
+                    continue
+                if m.propose() and m.apply():
+                    applied = m
+                    break
+            if applied is not None:
+                break
+        self.assertIsNotNone(applied, "no CDT move applied on the foliated complex")
+        self.assertEqual(applied.mode(), tessera.PachnerMode.CDT)
+        self.assertFalse(applied.boundaryFixed())
+
 
 # =====================================================================
 # Dijkgraaf-Witten Z-invariance — the headline T2 check (#108)
@@ -460,6 +505,103 @@ class TestDijkgraafWittenZInvariance(unittest.TestCase):
         # A 1->4 subdivision changes |V|, hence the 1/2^|V| prefactor and the
         # flat space itself — Z staying put through it is the strong check.
         self.assertGreater(counts["AddMove"], 0, f"no subdivisions fired: {counts}")
+
+
+# =====================================================================
+# Boundary algebra: ∂² = 0 across an interior sweep
+# =====================================================================
+
+class TestPreGeometricBoundaryAlgebra(unittest.TestCase):
+    """A random interior Pachner sweep keeps the simplicial *chain complex*
+    coherent: ∂_{k-1} ∘ ∂_k = 0 at every step (no malformed or duplicated
+    cells), complementing the facet-sharing pseudomanifold check."""
+
+    def test_d_squared_zero_after_each_interior_move_on_t3(self):
+        st = _built(_t3())
+        st.setSeed(31337)
+        self.assertTrue(_d2_zero(st))
+
+        def check(s):
+            self.assertTrue(_d2_zero(s))
+            self.assertTrue(_is_closed_pseudomanifold(_tops(s)))
+
+        counts = _run_sequence(st, n_moves=20, after=check)
+        self.assertGreaterEqual(sum(counts.values()), 20,
+                                f"too few moves fired: {counts}")
+        self.assertTrue(_d2_zero(st))
+
+
+# =====================================================================
+# Homology preserved on S^2 x S^1
+# =====================================================================
+
+class TestPreGeometricHomologyS2xS1(unittest.TestCase):
+    """The other closed 3-manifold from the headline checks: S^2 x S^1, with
+    Betti numbers [1, 1, 1, 1]. A random interior sweep preserves them."""
+
+    BETTI = [1, 1, 1, 1]
+
+    def test_fixture_starts_as_s2xs1(self):
+        st = _built(_s2s1())
+        self.assertEqual(_betti(st), self.BETTI)
+        self.assertTrue(_is_closed_pseudomanifold(_tops(st)))
+        self.assertTrue(_d2_zero(st))
+        self.assertTrue(all(len(t) == 4 for t in _tops(st)))
+
+    def test_random_interior_moves_preserve_homology(self):
+        st = _built(_s2s1())
+        st.setSeed(909)
+        before = set(_tops(st))
+
+        def check(s):
+            self.assertEqual(_betti(s), self.BETTI)
+            self.assertTrue(_is_closed_pseudomanifold(_tops(s)))
+
+        counts = _run_sequence(st, n_moves=18, after=check)
+        self.assertGreaterEqual(sum(counts.values()), 18,
+                                f"too few moves fired: {counts}")
+        self.assertGreater(counts["FlipMove"] + counts["IFlipMove"], 0,
+                           f"no 2<->3 flips fired: {counts}")
+        self.assertEqual(_betti(st), self.BETTI)
+        self.assertTrue(_is_closed_pseudomanifold(_tops(st)))
+        self.assertNotEqual(set(_tops(st)), before)
+
+
+# =====================================================================
+# Boundary-fixed: CDT cylinder Σ x [0, T]  (∂W = the open-time end slices)
+# =====================================================================
+
+class TestBoundaryFixedCylinder(unittest.TestCase):
+    """A 3D CDT cylinder is a bounded complex whose ∂W is the two open-time end
+    slices. Boundary-fixed interior moves (the always-interior 1->4 subdivision
+    in particular) grow the interior while leaving ∂W byte-identical."""
+
+    def test_cylinder_is_a_bounded_pseudomanifold(self):
+        st = _cylinder()
+        tops = _tops(st)
+        self.assertTrue(all(len(t) == 4 for t in tops))
+        self.assertTrue(_is_pseudomanifold_with_boundary(tops))
+        self.assertGreater(len(_boundary(tops)), 0)
+
+    def test_interior_moves_fix_boundary_and_grow_interior(self):
+        st = _cylinder()
+        st.setSeed(2024)
+        boundary_before = _boundary(_tops(st))
+        n0 = st.getVertexCount()
+        ntops0 = len(_tops(st))
+        self.assertGreater(len(boundary_before), 0)
+
+        def check(s):
+            self.assertEqual(_boundary(_tops(s)), boundary_before)
+
+        counts = _run_sequence(st, n_moves=10, boundary_fixed=True, after=check)
+        self.assertGreaterEqual(sum(counts.values()), 10,
+                                f"too few moves fired: {counts}")
+        self.assertGreater(counts["AddMove"], 0, f"no subdivisions fired: {counts}")
+        # ∂W byte-identical; interior genuinely larger.
+        self.assertEqual(_boundary(_tops(st)), boundary_before)
+        self.assertGreater(st.getVertexCount(), n0)
+        self.assertGreater(len(_tops(st)), ntops0)
 
 
 if __name__ == "__main__":
