@@ -81,7 +81,7 @@ TOLERANCE = 1e-12
 
 def _build(topology):
     """Build a closed oriented 3-manifold Spacetime from a topology."""
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    signature = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, topology)

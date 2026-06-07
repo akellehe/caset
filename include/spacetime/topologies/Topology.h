@@ -74,6 +74,24 @@ class Topology {
     /// @param numSimplices Target number of top-dimensional simplices to create
     virtual void build(Spacetime *spacetime, int numSimplices) = 0;
 
+    /// The intrinsic dimension \f$ d \f$ of the manifold this topology
+    /// triangulates — i.e. its top cells are \f$ d \f$-simplices on
+    /// \f$ d+1 \f$ vertices. This is the single source of truth a caller uses
+    /// to pick the matching ``Signature(d, …)`` so the complex's top cells
+    /// register as top-dimensional (``Spacetime::getTopVertexCount`` == d+1);
+    /// without that match ``topSimplicesVec`` stays empty and boundary / random-
+    /// top queries see nothing.
+    ///
+    /// The fixed-triangulation fixtures (``SimplexBoundarySphere``,
+    /// ``SolidSimplex``, ``RealProjectivePlane``, ``RealProjectiveSpace``,
+    /// ``SphereCircleProduct``, ``ComplexProjectivePlane``, ``SimplicialProduct``,
+    /// ``StellarSubdivision``) each report their manifold dimension. The
+    /// dimension-parametric CDT topologies (``Toroid``, ``Sphere``,
+    /// ``Cylinder``) have no intrinsic dimension — theirs is read from the
+    /// spacetime's signature at ``build()`` time — so they inherit this base
+    /// implementation, which throws.
+    [[nodiscard]] virtual int dimension() const;
+
   protected:
     /// Build an explicit, *pre-geometric* triangulation from a combinatorial
     /// description: create `numVertices` **coordinate-free** vertices

@@ -63,6 +63,9 @@ class ComplexProjectivePlane : public Topology {
   public:
     ComplexProjectivePlane() = default;
 
+    /// \f$ \mathbb{CP}^2 \f$ is a closed 4-manifold; its top cells are 4-simplices.
+    [[nodiscard]] int dimension() const override { return 4; }
+
     /// Build the 9-vertex \f$ \mathbb{CP}^2 \f$. ``numSimplices`` is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;
 };

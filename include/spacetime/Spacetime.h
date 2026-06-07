@@ -330,6 +330,16 @@ class Spacetime {
     /// @return A random simplex, or nullptr if the complex is empty
     [[nodiscard]] SimplexPtr getRandomSimplex();
 
+    /// The vertex count of a top-dimensional simplex: \f$ d+1 \f$, where
+    /// \f$ d \f$ is the metric signature's dimension. This is the **single
+    /// source of truth** for "what counts as a top cell": ``registerSimplex``
+    /// pushes a simplex onto ``topSimplicesVec`` exactly when its vertex count
+    /// equals this, and ``getBoundary`` / ``getRandomTopSimplex`` read that set.
+    /// A triangulation whose top cells are \f$ d' \f$-simplices is only seen as
+    /// having top cells when the signature dimension matches it
+    /// (\f$ d = d' \f$); see ``Topology::dimension``.
+    [[nodiscard]] std::size_t getTopVertexCount() const noexcept;
+
     /// Select a uniformly random top-dimensional simplex.
     /// Used by the Metropolis algorithm to pick random move targets.
     /// @return A random d-simplex, or nullptr if none exist

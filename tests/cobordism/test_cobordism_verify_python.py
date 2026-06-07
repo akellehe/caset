@@ -37,7 +37,7 @@ cobordism = tessera.cobordism
 
 
 def _build(topology):
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    signature = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, topology)
@@ -74,7 +74,11 @@ def _product(*topologies):
 def _from_simplices(num_vertices, simplices):
     """Build a Spacetime directly from explicit top-simplex vertex tuples
     (vertices 0..num_vertices-1), for hand-crafted / pathological complexes."""
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    # Signature dimension must match the hand-built top cells (d = max cell
+    # vertex count - 1) so they register as top simplices and getBoundary sees
+    # them. These complexes are not topology-driven, so derive d from the data.
+    dimension = max(len(simplex) for simplex in simplices) - 1
+    signature = tessera.Signature(dimension, tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, tessera.Toroid())

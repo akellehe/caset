@@ -405,6 +405,13 @@ const std::shared_ptr<VertexList> &Spacetime::getVertexList() const noexcept {
   return vertexList;
 }
 
+std::size_t Spacetime::getTopVertexCount() const noexcept {
+  // d+1, the vertex count of a top-dimensional simplex. Single source of truth
+  // for "what is a top cell" (see registerSimplex / updateOrientationCounters /
+  // getBoundary).
+  return static_cast<std::size_t>(metric->getSignature()->getDimensions()) + 1;
+}
+
 std::vector<std::vector<std::uint64_t>> Spacetime::getBoundary() const {
   // Canonical boundary derivation: facet-counting from the top simplices.
   // A codimension-one face is on the boundary iff exactly one top simplex
@@ -413,25 +420,22 @@ std::vector<std::vector<std::uint64_t>> Spacetime::getBoundary() const {
   // lazy-facet problem that the coface-based ``getExternalSimplices`` has to
   // work around — no ``Simplex`` facet objects need to exist.
 
-  // "Top" is the maximal vertex count actually present in the complex. We read
-  // it off ``simplicesVec`` (rather than ``topSimplicesVec``, which is keyed to
-  // the metric dimension d+1) so this is correct for pre-geometric complexes of
-  // any dimension, and robust when ``simplicesVec`` also holds lazily-
-  // materialized lower-dimensional faces.
-  std::size_t topVertexCount = 0;
-  for (const auto &simplex : simplicesVec)
-    topVertexCount = std::max<std::size_t>(topVertexCount, simplex->size());
-  if (topVertexCount == 0) return {};
+  // The top set is ``topSimplicesVec`` — the simplices ``registerSimplex``
+  // keyed as top-dimensional, i.e. those whose vertex count equals
+  // ``getTopVertexCount()`` (= signature d+1). This is exactly the set of top
+  // cells *provided the signature dimension matches the triangulation's*
+  // dimension; build fixtures with ``Signature(Topology::dimension(), …)`` so
+  // it does. (For a complex of the wrong signature ``topSimplicesVec`` is
+  // empty and the boundary comes back empty.)
+  const std::size_t topVertexCount = getTopVertexCount();
 
   // Count, per codimension-one face, how many top simplices own it. Each top
   // simplex's codim-1 faces are obtained by dropping one vertex in turn from
   // its sorted vertex tuple (the remainder stays sorted, so the face is a
-  // canonical key). The ``std::map`` keeps the result in the same sorted face
-  // order the previous facet-counting implementation produced.
+  // canonical key). The ``std::map`` keeps the result in sorted face order.
   std::map<std::vector<std::uint64_t>, int> incidence;
   std::vector<std::uint64_t> verts;
-  for (const auto &simplex : simplicesVec) {
-    if (simplex->size() != topVertexCount) continue;
+  for (const auto &simplex : topSimplicesVec) {
     verts.clear();
     verts.reserve(topVertexCount);
     for (const auto &v : simplex->getVertices()) verts.push_back(v->getId());
@@ -709,8 +713,7 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
   simplicesVec.push_back(simplex);
   simplexIndex_.insert(fp, simplex);
 
-  auto d = metric->getSignature()->getDimensions();
-  if (simplex->size() == static_cast<std::size_t>(d + 1)) {
+  if (simplex->size() == getTopVertexCount()) {
     simplex->topVecIdx_ = static_cast<std::uint32_t>(topSimplicesVec.size());
     topSimplicesVec.push_back(simplex);
   }
@@ -858,7 +861,7 @@ void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) 
   auto d = metric->getSignature()->getDimensions();
   auto nVerts = simplex->size();
   // Only count top-dimensional simplices (d-simplices have d+1 vertices)
-  if (nVerts != static_cast<std::size_t>(d + 1)) return;
+  if (nVerts != getTopVertexCount()) return;
   auto [ti, tf] = simplex->getOrientation().numeric();
   // (d, 1) or (1, d) type
   if ((ti == d && tf == 1) || (ti == 1 && tf == d)) {

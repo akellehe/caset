@@ -81,7 +81,9 @@ ALPHA_SWEEP = (0.25, 0.5, 1.0, 1.5, 2.5, 3.0, 4.0)
 # --------------------------------------------------------------------------- #
 # Fixtures (closed 3-manifolds for the state sum; CDT-built simplicial mesh)
 # --------------------------------------------------------------------------- #
-def _build(topology, dimensions=4):
+def _build(topology, dimensions=None):
+    if dimensions is None:
+        dimensions = topology.dimension()
     sig = tessera.Signature(dimensions, tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
     st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,

@@ -55,7 +55,7 @@ STRUCT_MAX = 7
 
 
 def _build(topology):
-    sig = tessera.Signature(4, tessera.Lorentzian)
+    sig = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
     st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                            tessera.PREFERRED, topology)
