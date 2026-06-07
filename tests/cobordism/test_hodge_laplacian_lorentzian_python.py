@@ -311,9 +311,11 @@ class TestLorentzianDAlembertian(unittest.TestCase):
 
     def test_harmonic_is_the_cycle_with_unit_magnitude_support(self):
         # The kernel mode is the 1-cycle: |h_i|^2 = 1/3 on every edge.
-        h = np.array(cob.HodgeLaplacian(_triangle_one_timelike(1.3))
-                     .lorentzianHarmonics(1, 1e-9), dtype=complex)
-        self.assertEqual(h.size, 3)  # one harmonic (H=1), three edges
+        harmonics = (cob.HodgeLaplacian(_triangle_one_timelike(1.3))
+                     .lorentzianHarmonics(1, 1e-9))
+        self.assertEqual(len(harmonics), 1)  # one harmonic, a degree-1 Cochain
+        h = np.asarray(harmonics[0].coeffs())
+        self.assertEqual(h.size, 3)  # three edges
         np.testing.assert_allclose(np.abs(h) ** 2, np.full(3, 1.0 / 3.0), atol=1e-7)
 
 
@@ -380,12 +382,9 @@ class TestLorentzianBothTerms(unittest.TestCase):
         eigs = _lor_eigs(st, 1)
         self.assertTrue(_is_not_psd(eigs))                  # not PSD
         # near-kernel modes are well-defined and their null-norms line up 1:1
-        h = np.array(cob.HodgeLaplacian(st).lorentzianHarmonics(1, TOL),
-                     dtype=complex)
+        harmonics = cob.HodgeLaplacian(st).lorentzianHarmonics(1, TOL)
         norms = _null_norms(st, 1, tol=TOL)
-        n_edges = _nk(st, 1)
-        n_harm = 0 if n_edges == 0 else h.size // n_edges
-        self.assertEqual(n_harm, len(norms))
+        self.assertEqual(len(harmonics), len(norms))
 
     def test_filled_square_euclidean_limit_recovers_betti(self):
         # alpha -> spacelike (all positive) recovers ker dim = b_1 with no nulls.

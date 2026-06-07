@@ -40,11 +40,9 @@ double SpectralGap::compute(const std::shared_ptr<Spacetime> &spacetime) {
 
 double HarmonicDimension::compute(const std::shared_ptr<Spacetime> &spacetime) {
   if (spacetime == nullptr) return 0.0;
-  const ::tessera::cobordism::HodgeLaplacian hodge(spacetime);
-  const std::size_t order = hodge.eigenvalues().size();  // N = |V|
-  if (order == 0) return 0.0;
-  // harmonics() is a flat N*M array whose M columns span ker L_0; M = dim ker.
-  return static_cast<double>(hodge.harmonics().size() / order);
+  // harmonics() is one Cochain per basis vector of ker L_0, so dim ker = its count.
+  return static_cast<double>(
+      ::tessera::cobordism::HodgeLaplacian(spacetime).harmonics().size());
 }
 
 }  // namespace tessera::observables

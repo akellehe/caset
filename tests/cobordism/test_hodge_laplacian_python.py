@@ -230,10 +230,9 @@ def _kernel_dim_from_eigenvalues(st, k, metric=True, tol=1e-7):
 
 
 def _harmonic_dim(st, k, metric=True, tol=1e-9):
-    nk = cob.ChainComplex.fromSpacetime(st).numSimplices(k)
-    if nk == 0:
-        return 0
-    return len(cob.HodgeLaplacian(st).harmonics(k, tol, metric)) // nk
+    # harmonics() is one Cochain per basis vector of ker L_k, so its length is
+    # the harmonic dimension (= b_k) directly.
+    return len(cob.HodgeLaplacian(st).harmonics(k, tol, metric))
 
 
 # --------------------------------------------------------------------------- #
@@ -371,17 +370,20 @@ class TestFluxSpectrum(unittest.TestCase):
     def test_flux_lifts_the_zero_mode(self):
         # No flux: one harmonic (the constant 0-cochain, b0 = 1). Any flux lifts
         # it, so the harmonic dimension of L0 drops to 0.
-        n = 3
         hl0 = cob.HodgeLaplacian(_triangle())
-        self.assertEqual(len(hl0.harmonics()) // n, 1)
+        self.assertEqual(len(hl0.harmonics()), 1)
         hlpi = cob.HodgeLaplacian(self._triangle_with_flux(math.pi))
         self.assertEqual(len(hlpi.harmonics()), 0)
 
     def test_zero_mode_is_uniform(self):
         # The Φ=0 harmonic is the uniform vector (equal magnitudes on every vertex).
         n = 3
-        vec = np.array(cob.HodgeLaplacian(_triangle()).harmonics(), dtype=complex)
-        self.assertEqual(vec.size, n)  # one harmonic (M=1), length N
+        harmonics = cob.HodgeLaplacian(_triangle()).harmonics()
+        self.assertEqual(len(harmonics), 1)  # one harmonic, a degree-0 Cochain
+        h = harmonics[0]
+        self.assertEqual(h.degree(), 0)
+        vec = np.asarray(h.coeffs())
+        self.assertEqual(vec.size, n)  # length N over the vertex ordering
         np.testing.assert_allclose(np.abs(vec), np.full(n, abs(vec[0])), atol=1e-9)
 
 

@@ -307,9 +307,10 @@ def _boundary_states_from_harmonics():
     """Two Z(T²) states (length 2^{b₁}=4) seeded by the ker L₁(T²) harmonics —
     the b₁ = 2 qubit, distinct from the 2^{b₁} = 4 flat-connection count."""
     torus = _build(_torus_topology())
-    harmonics = np.asarray(cob.HodgeLaplacian(torus).harmonics(1, 1e-9, True))
-    num_edges = cob.ChainComplex.fromSpacetime(torus).numSimplices(1)
-    cols = harmonics.reshape(num_edges, -1) if harmonics.size else harmonics
+    harmonics = cob.HodgeLaplacian(torus).harmonics(1, 1e-9, True)
+    # columns = the harmonic 1-form Cochains over the edge ordering.
+    cols = (np.column_stack([np.asarray(h.coeffs()) for h in harmonics])
+            if harmonics else np.zeros((0, 0), dtype=complex))
     psi_a = np.zeros(4, dtype=complex)
     psi_b = np.zeros(4, dtype=complex)
     seed_a = cols[:, 0]

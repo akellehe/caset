@@ -142,9 +142,9 @@ class TestHarmonicDimension(unittest.TestCase):
     def test_matches_operator_harmonic_count(self):
         st = _triangle()
         hl = cob.HodgeLaplacian(st)
-        n = len(hl.eigenvalues())
+        # harmonics() is one Cochain per ker L_0 basis vector => len == dim ker.
         self.assertEqual(obs.HarmonicDimension().compute(st),
-                         float(len(hl.harmonics()) // n))
+                         float(len(hl.harmonics())))
 
     def test_empty_spacetime_returns_zero(self):
         self.assertEqual(obs.HarmonicDimension().compute(tessera.Spacetime()), 0.0)
