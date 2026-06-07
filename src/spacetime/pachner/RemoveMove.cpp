@@ -3,6 +3,7 @@
 
 #include "spacetime/pachner/RemoveMove.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 
@@ -24,16 +25,21 @@ using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
-RemoveMove::RemoveMove(Spacetime *st, std::mt19937 *rng)
-    : st_(st), ownedRng_(nullptr), rng_(rng) {}
+RemoveMove::RemoveMove(Spacetime *st, std::mt19937 *rng, PachnerMode mode,
+                       bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st), ownedRng_(nullptr), rng_(rng) {}
 
-RemoveMove::RemoveMove(Spacetime *st, std::uint64_t seed)
-    : st_(st),
+RemoveMove::RemoveMove(Spacetime *st, std::uint64_t seed, PachnerMode mode,
+                       bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st),
       ownedRng_(std::make_unique<std::mt19937>(seed)),
       rng_(ownedRng_.get()) {}
 
 bool RemoveMove::propose() {
   if (proposed_) return false;
+  if (mode_ == PachnerMode::PreGeometric) return proposePreGeometric();
   using namespace pachner_detail;
   const int d = spacetimeDim(*st_);
   const int dPlus1 = d + 1;
@@ -122,8 +128,118 @@ bool RemoveMove::propose() {
   return true;
 }
 
+bool RemoveMove::proposePreGeometric() {
+  VertexPtr v = st_->getRandomVertex();
+  if (!v) return false;
+
+  // Read the top-cell vertex count off v's incident cells.
+  int dPlus1 = 0;
+  for (const auto &s : v->getSimplices())
+    dPlus1 = std::max(dPlus1, static_cast<int>(s->size()));
+  if (dPlus1 < 3) return false;
+  const int d = dPlus1 - 1;
+
+  // (d+1)→1 requires v to be incident to exactly d+1 top cells.
+  std::vector<SimplexPtr> incident;
+  for (const auto &s : v->getSimplices())
+    if (static_cast<int>(s->size()) == dPlus1) incident.push_back(s);
+  if (static_cast<int>(incident.size()) != dPlus1) return false;
+
+  // The d+1 link vertices, with how many cells each appears in.
+  std::map<std::uint64_t, VertexPtr> otherVerts;
+  std::map<std::uint64_t, int> counts;
+  for (const auto &s : incident)
+    for (const auto &vert : s->getVertices()) {
+      if (vert->getId() == v->getId()) continue;
+      otherVerts[vert->getId()] = vert;
+      counts[vert->getId()]++;
+    }
+  if (static_cast<int>(otherVerts.size()) != dPlus1) return false;
+  // Each link vertex must be omitted from exactly one cell (present in
+  // exactly d): the signature of a stellar star whose link is ∂(newTop).
+  for (const auto &[vid, c] : counts) {
+    (void)vid;
+    if (c != d) return false;
+  }
+
+  // The single replacement cell is the simplex on the link vertices.
+  VertexPtrs newTop;
+  newTop.reserve(static_cast<std::size_t>(dPlus1));
+  for (const auto &[vid, vp] : otherVerts) {
+    (void)vid;
+    newTop.push_back(vp);
+  }
+  pachner_detail::sortByVertexId(newTop);  // increasing-id orientation
+  if (st_->findSimplexByVerts(newTop)) return false;  // would duplicate a cell
+
+  // The structural check forces v's link to be the (d-1)-sphere
+  // ∂(newTop), so v is interior; the weld never touches ∂W and there is
+  // nothing extra to verify for boundary-fixed mode.
+
+  v_ = v;
+  incident_ = std::move(incident);
+  spatialVerts_ = std::move(newTop);  // the replacement cell's vertices
+  dN41_ = 0;
+  logPrefactor_ = 0.0;
+
+  incidentVerts_.reserve(incident_.size());
+  for (const auto &s : incident_) {
+    const auto &verts = s->getVertices();
+    incidentVerts_.emplace_back(verts.begin(), verts.end());
+  }
+
+  touchedIds_.reserve(static_cast<std::size_t>(dPlus1) + 1);
+  touchedIds_.push_back(v_->getId());
+  for (const auto &vp : spatialVerts_) touchedIds_.push_back(vp->getId());
+
+  proposed_ = true;
+  return true;
+}
+
+bool RemoveMove::applyPreGeometric() {
+  // Capture the vertex and its incident edges for rollback.  Pre-geometric
+  // vertices are coordinate-free, so getCoordinates() would throw; an empty
+  // coordinate vector recreates an identical coordinate-independent vertex
+  // (rollback's createVertex(id, {}) is the same call buildExplicit makes).
+  vertexId_ = v_->getId();
+  vertexCoords_.clear();
+  for (const auto &e : v_->getInEdges())
+    deletedEdges_.push_back({e->getSource(), e->getTarget(),
+                             e->getSquaredLength()});
+  for (const auto &e : v_->getOutEdges())
+    deletedEdges_.push_back({e->getSource(), e->getTarget(),
+                             e->getSquaredLength()});
+
+  // Remove the d+1 incident cells.
+  for (const auto &s : incident_) st_->removeSimplex(s);
+
+  // Remove edges incident to v from both endpoints + the global list.
+  Edges inCopy(v_->getInEdges().begin(), v_->getInEdges().end());
+  for (const auto &e : inCopy) {
+    e->getSource()->removeOutEdge(e);
+    v_->removeInEdge(e);
+    st_->getEdgeList()->remove(e);
+  }
+  Edges outCopy(v_->getOutEdges().begin(), v_->getOutEdges().end());
+  for (const auto &e : outCopy) {
+    e->getTarget()->removeInEdge(e);
+    v_->removeOutEdge(e);
+    st_->getEdgeList()->remove(e);
+  }
+  (void)st_->removeIfIsolated(v_);
+
+  // Weld in the single replacement cell on the link vertices.
+  auto r = st_->createSimplexTracked(spatialVerts_);
+  if (r.created) createdSimplexVerts_.push_back(spatialVerts_);
+  for (const auto &e : r.newEdges) createdEdges_.push_back(e);
+
+  applied_ = true;
+  return true;
+}
+
 bool RemoveMove::apply() {
   if (!proposed_ || applied_) return false;
+  if (mode_ == PachnerMode::PreGeometric) return applyPreGeometric();
 
   // 1. Capture edge data BEFORE deletion (for rollback).
   // Mirrors CDT::remove's edge-cleanup loop.

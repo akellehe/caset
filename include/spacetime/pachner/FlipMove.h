@@ -36,8 +36,10 @@ using namespace ::tessera::quantum;
 /// See ``CDT::flip`` for the original (non-transactional) implementation.
 class FlipMove : public PachnerMove {
 public:
-  FlipMove(Spacetime *st, std::mt19937 *rng);
-  FlipMove(Spacetime *st, std::uint64_t seed);
+  FlipMove(Spacetime *st, std::mt19937 *rng,
+           PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
+  FlipMove(Spacetime *st, std::uint64_t seed,
+           PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
   int dN0() const override { return 0; }
@@ -54,6 +56,13 @@ private:
   Spacetime *st_;
   std::unique_ptr<std::mt19937> ownedRng_;
   std::mt19937 *rng_;
+
+  /// Pre-geometric 2→(d+1) flip: the same combinatorial replacement as
+  /// the CDT path but without the time-slice / CDT-orientation guard,
+  /// with the move dimension read off the chosen top cell and a
+  /// manifold-preservation check (apex edge must not pre-exist).  In
+  /// boundary-fixed mode the operative facet must be interior.
+  bool proposePreGeometric();
 
   bool proposed_ = false;
   std::vector<VertexPtrs> oldSimplexVerts_;

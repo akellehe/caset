@@ -23,18 +23,23 @@ using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
-AddMove::AddMove(Spacetime *st, std::mt19937 *rng, bool relabelEnabled)
-    : st_(st), ownedRng_(nullptr), rng_(rng),
+AddMove::AddMove(Spacetime *st, std::mt19937 *rng, bool relabelEnabled,
+                 PachnerMode mode, bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st), ownedRng_(nullptr), rng_(rng),
       relabelEnabled_(relabelEnabled) {}
 
-AddMove::AddMove(Spacetime *st, std::uint64_t seed, bool relabelEnabled)
-    : st_(st),
+AddMove::AddMove(Spacetime *st, std::uint64_t seed, bool relabelEnabled,
+                 PachnerMode mode, bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st),
       ownedRng_(std::make_unique<std::mt19937>(seed)),
       rng_(ownedRng_.get()),
       relabelEnabled_(relabelEnabled) {}
 
 bool AddMove::propose() {
   if (proposed_) return false;
+  if (mode_ == PachnerMode::PreGeometric) return proposePreGeometric();
   using namespace pachner_detail;
   const int d = spacetimeDim(*st_);
   const int dPlus1 = d + 1;
@@ -129,8 +134,84 @@ bool AddMove::propose() {
   return true;
 }
 
+bool AddMove::proposePreGeometric() {
+  SimplexPtr sigma = st_->getRandomTopSimplex();
+  if (!sigma) return false;
+  const int dPlus1 = static_cast<int>(sigma->size());
+  if (dPlus1 < 3) return false;  // need at least a triangle to subdivide
+
+  // A 1→(d+1) stellar subdivision lives entirely inside one cell, so it
+  // is always interior — nothing to check for boundary-fixed mode.
+  sigma_ = sigma;
+  {
+    const auto &sv = sigma_->getVertices();
+    sigmaVerts_.assign(sv.begin(), sv.end());
+  }
+  // Causal bookkeeping is meaningless without a foliation.
+  dN41_ = 0;
+  logPrefactor_ = 0.0;
+
+  touchedIds_.reserve(sigmaVerts_.size());
+  for (const auto &v : sigmaVerts_) touchedIds_.push_back(v->getId());
+
+  proposed_ = true;
+  return true;
+}
+
+bool AddMove::applyPreGeometric() {
+  // 1. Fresh coordinate-free interior vertex.
+  newVert_ = st_->createVertex();
+
+  // 2. Remove the cell being subdivided.
+  st_->removeSimplex(sigma_);
+
+  // 3. Cone the new vertex over each facet of the old cell: drop one
+  //    original vertex, append the new vertex.  d+1 new cells in total.
+  const std::size_t n = sigmaVerts_.size();
+  for (std::size_t skip = 0; skip < n; ++skip) {
+    VertexPtrs verts;
+    verts.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+      if (i != skip) verts.push_back(sigmaVerts_[i]);
+    }
+    verts.push_back(newVert_);
+    // Increasing-id orientation (the new vertex has the largest id, so
+    // this is already sorted, but keep it explicit and robust).
+    pachner_detail::sortByVertexId(verts);
+    auto r = st_->createSimplexTracked(verts);
+    if (r.created) createdSimplexVerts_.push_back(verts);
+    for (const auto &e : r.newEdges) createdEdges_.push_back(e);
+  }
+
+  applied_ = true;
+  return true;
+}
+
+void AddMove::rollbackPreGeometric() {
+  // Remove the d+1 created cells (resolve by verts; see ShiftMove).
+  for (const auto &verts : createdSimplexVerts_) {
+    if (auto s = st_->findSimplexByVerts(verts)) st_->removeSimplex(s);
+  }
+  createdSimplexVerts_.clear();
+
+  // Remove the freshly-inserted edges (those from the new vertex).
+  pachner_detail::removeAndClearEdges(createdEdges_, st_);
+
+  // Remove the now-isolated new vertex.
+  if (newVert_ != nullptr) {
+    (void)st_->removeIfIsolated(newVert_);
+    newVert_ = nullptr;
+  }
+
+  // Recreate the single original cell.
+  st_->createSimplexTracked(sigmaVerts_);
+
+  applied_ = false;
+}
+
 bool AddMove::apply() {
   if (!proposed_ || applied_) return false;
+  if (mode_ == PachnerMode::PreGeometric) return applyPreGeometric();
   const int d = pachner_detail::spacetimeDim(*st_);
 
   // 1. Create the new vertex at the shared spatial time slice.
@@ -183,6 +264,7 @@ bool AddMove::apply() {
 
 void AddMove::rollback() {
   if (!applied_) return;
+  if (mode_ == PachnerMode::PreGeometric) { rollbackPreGeometric(); return; }
 
   // 1. Reverse the label swap (if any).  ``swapVertexLabels`` is its
   // own inverse — calling it again restores both vertices to their

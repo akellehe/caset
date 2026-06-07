@@ -40,8 +40,10 @@ using namespace ::tessera::quantum;
 /// removing the new vertex.
 class AddMove : public PachnerMove {
 public:
-  AddMove(Spacetime *st, std::mt19937 *rng, bool relabelEnabled = true);
-  AddMove(Spacetime *st, std::uint64_t seed, bool relabelEnabled = true);
+  AddMove(Spacetime *st, std::mt19937 *rng, bool relabelEnabled = true,
+          PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
+  AddMove(Spacetime *st, std::uint64_t seed, bool relabelEnabled = true,
+          PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
   int dN0() const override { return 1; }
@@ -55,6 +57,14 @@ public:
   std::string moveType() const override { return "add"; }
 
 private:
+  // Pre-geometric 1→(d+1) stellar move: insert a fresh interior vertex
+  // into a single top cell and cone it over the cell's facets, replacing
+  // 1 cell with d+1.  Always interior (it never touches ∂W), so it is
+  // unconditionally boundary-fixed-safe.
+  bool proposePreGeometric();
+  bool applyPreGeometric();
+  void rollbackPreGeometric();
+
   Spacetime *st_;
   std::unique_ptr<std::mt19937> ownedRng_;
   std::mt19937 *rng_;

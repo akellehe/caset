@@ -50,9 +50,14 @@ void Topology::buildExplicit(
     const std::vector<std::vector<std::uint64_t>> &topSimplices) {
   std::vector<VertexPtr> verts;
   verts.reserve(numVertices);
-  // Coordinate-free vertices: the triangulation is purely combinatorial here.
+  // Coordinate-free vertices: the triangulation is purely combinatorial
+  // here.  Allocate through the id-counter path (not the explicit-id
+  // overload) so the counter advances past these ids — on a fresh
+  // spacetime this still assigns 0..numVertices-1, but it leaves the
+  // counter able to hand out collision-free ids to anything that later
+  // grows the complex (e.g. a pre-geometric Pachner add move).
   for (std::size_t i = 0; i < numVertices; ++i) {
-    verts.push_back(spacetime->createVertex(static_cast<std::uint64_t>(i)));
+    verts.push_back(spacetime->createVertex());
   }
   for (const auto &simplex : topSimplices) {
     VertexPtrs sv;

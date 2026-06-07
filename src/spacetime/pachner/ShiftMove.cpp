@@ -22,23 +22,34 @@ using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
-ShiftMove::ShiftMove(Spacetime *st, std::mt19937 *rng)
-    : st_(st), ownedRng_(nullptr), rng_(rng) {}
+ShiftMove::ShiftMove(Spacetime *st, std::mt19937 *rng, PachnerMode mode,
+                     bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st), ownedRng_(nullptr), rng_(rng) {}
 
-ShiftMove::ShiftMove(Spacetime *st, std::uint64_t seed)
-    : st_(st),
+ShiftMove::ShiftMove(Spacetime *st, std::uint64_t seed, PachnerMode mode,
+                     bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st),
       ownedRng_(std::make_unique<std::mt19937>(seed)),
       rng_(ownedRng_.get()) {}
 
 bool ShiftMove::propose() {
   if (proposed_) return false;
   using namespace pachner_detail;
-  const int d = spacetimeDim(*st_);
-  const int dPlus1 = d + 1;
-  const int hingeSize = d - 1;
 
   SimplexPtr sigma = st_->getRandomTopSimplex();
   if (!sigma) return false;
+
+  // Pre-geometric complexes can carry a metric whose dimension differs
+  // from the manifold's, so read the move dimension off the actual top
+  // cell in that mode; CDT keeps using the (foliated) metric dimension.
+  const int d = (mode_ == PachnerMode::PreGeometric)
+                    ? static_cast<int>(sigma->size()) - 1
+                    : spacetimeDim(*st_);
+  const int dPlus1 = d + 1;
+  const int hingeSize = d - 1;
+  if (hingeSize < 1) return false;
 
   const auto &sigmaVertsRef = sigma->getVertices();
   if (static_cast<int>(sigmaVertsRef.size()) < hingeSize) return false;
@@ -75,6 +86,23 @@ bool ShiftMove::propose() {
   if (static_cast<int>(sharedVerts.size()) != hingeSize ||
       static_cast<int>(uniqueVerts.size()) != hingeSize) return false;
 
+  // Boundary-fixed: only fire when the whole affected region is interior
+  // (no involved cell carries a face on ∂W), so the shift cannot move
+  // the boundary.  Conservative but always correct.
+  if (boundaryFixed_) {
+    for (const auto &s : sharing) {
+      const auto &sv = s->getVertices();
+      for (std::size_t skip = 0; skip < sv.size(); ++skip) {
+        VertexPtrs fv;
+        fv.reserve(sv.size() - 1);
+        for (std::size_t i = 0; i < sv.size(); ++i) {
+          if (i != skip) fv.push_back(sv[i]);
+        }
+        if (isBoundaryFacet(fv, dPlus1)) return false;
+      }
+    }
+  }
+
   // Old orientation counts.
   int oldN41 = 0, oldN32 = 0;
   for (const auto &s : sharing) {
@@ -93,12 +121,19 @@ bool ShiftMove::propose() {
     }
     for (const auto &u : uniqueVerts) nv.push_back(u);
     if (static_cast<int>(nv.size()) != dPlus1) return false;
+    // Increasing-id orientation on the pre-geometric path (see
+    // pachner_detail::sortByVertexId); CDT cell order is orientation-
+    // bearing and left untouched.
+    if (mode_ == PachnerMode::PreGeometric) sortByVertexId(nv);
     proposedNew.push_back(std::move(nv));
   }
 
-  // Reject if any new simplex would have a non-CDT orientation.
-  for (const auto &nv : proposedNew) {
-    if (!isValidCDTOrientation(nv, d)) return false;
+  // Reject if any new simplex would have a non-CDT orientation.  Dropped
+  // in pre-geometric mode (no foliation to respect).
+  if (mode_ == PachnerMode::CDT) {
+    for (const auto &nv : proposedNew) {
+      if (!isValidCDTOrientation(nv, d)) return false;
+    }
   }
 
   // New orientation counts.

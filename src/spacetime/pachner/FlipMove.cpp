@@ -23,16 +23,21 @@ using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
-FlipMove::FlipMove(Spacetime *st, std::mt19937 *rng)
-    : st_(st), ownedRng_(nullptr), rng_(rng) {}
+FlipMove::FlipMove(Spacetime *st, std::mt19937 *rng, PachnerMode mode,
+                   bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st), ownedRng_(nullptr), rng_(rng) {}
 
-FlipMove::FlipMove(Spacetime *st, std::uint64_t seed)
-    : st_(st),
+FlipMove::FlipMove(Spacetime *st, std::uint64_t seed, PachnerMode mode,
+                   bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st),
       ownedRng_(std::make_unique<std::mt19937>(seed)),
       rng_(ownedRng_.get()) {}
 
 bool FlipMove::propose() {
   if (proposed_) return false;
+  if (mode_ == PachnerMode::PreGeometric) return proposePreGeometric();
   using namespace pachner_detail;
   const int d = spacetimeDim(*st_);
   const int dPlus1 = d + 1;
@@ -115,6 +120,95 @@ bool FlipMove::propose() {
   // Combinatorial prefactor (matches CDT::flip): log(N4 / (N4 + d - 2)).
   double N4 = static_cast<double>(st_->getSimplexCount());
   logPrefactor_ = std::log(N4) - std::log(N4 + d - 2);
+
+  touchedIds_.reserve(d + 2);
+  for (const auto &v : shared) touchedIds_.push_back(v->getId());
+  for (const auto &v : unique) touchedIds_.push_back(v->getId());
+
+  proposed_ = true;
+  return true;
+}
+
+bool FlipMove::proposePreGeometric() {
+  using namespace pachner_detail;
+
+  SimplexPtr sigma = st_->getRandomTopSimplex();
+  if (!sigma) return false;
+  const int dPlus1 = static_cast<int>(sigma->size());
+  const int d = dPlus1 - 1;
+  if (d < 2) return false;
+
+  // Pick a random facet of sigma combinatorially (drop one vertex).  We
+  // deliberately avoid Simplex::getFacets here: it materialises facet
+  // simplices that the mesh never garbage-collects, which would litter
+  // the complex with orphans after the flip removes sigma.
+  const auto &svRef = sigma->getVertices();
+  VertexPtrs sigmaV(svRef.begin(), svRef.end());
+  std::uniform_int_distribution<std::size_t> dropDist(0, sigmaV.size() - 1);
+  const std::size_t drop = dropDist(*rng_);
+  VertexPtrs facetVerts;
+  facetVerts.reserve(static_cast<std::size_t>(d));
+  for (std::size_t i = 0; i < sigmaV.size(); ++i) {
+    if (i != drop) facetVerts.push_back(sigmaV[i]);
+  }
+
+  // The two top cells sharing this facet, found by a local scan so we
+  // don't depend on a pre-materialised coface cache (buildExplicit
+  // fixtures don't have one).
+  auto topCofaces = topCofacesOf(facetVerts, dPlus1);
+  if (topCofaces.size() != 2) return false;  // boundary facet (∂W) or non-manifold
+
+  SimplexPtr s1 = topCofaces[0];
+  SimplexPtr s2 = topCofaces[1];
+
+  auto allVerts = unionVerticesAcross(Simplices{s1, s2});
+  if (static_cast<int>(allVerts.size()) != d + 2) return false;
+
+  VertexPtrs shared, unique;
+  for (const auto &v : allVerts) {
+    if (s1->hasVertex(v) && s2->hasVertex(v)) shared.push_back(v);
+    else unique.push_back(v);
+  }
+  if (static_cast<int>(shared.size()) != d ||
+      static_cast<int>(unique.size()) != 2) return false;
+
+  // Manifold check: the 2→(d+1) flip introduces the apex edge between
+  // the two unique vertices.  If that edge already exists the flip would
+  // create a degenerate (non-embedded) cell, so reject.
+  if (verticesAdjacent(unique[0], unique[1])) return false;
+
+  // Boundary-fixed: the operative facet is interior by construction (it
+  // has exactly two top cofaces), so this flip never touches ∂W.  No
+  // further restriction is needed — see ticket #112.
+
+  std::vector<VertexPtrs> proposedNew;
+  proposedNew.reserve(d);
+  for (int skip = 0; skip < d; ++skip) {
+    VertexPtrs nv;
+    nv.reserve(dPlus1);
+    for (int i = 0; i < d; ++i) {
+      if (i != skip) nv.push_back(shared[i]);
+    }
+    nv.push_back(unique[0]);
+    nv.push_back(unique[1]);
+    if (static_cast<int>(nv.size()) != dPlus1) return false;
+    sortByVertexId(nv);  // increasing-id orientation (see helper)
+    proposedNew.push_back(std::move(nv));
+  }
+
+  oldSimplices_ = {s1, s2};
+  oldSimplexVerts_.reserve(2);
+  for (const auto &s : oldSimplices_) {
+    const auto &verts = s->getVertices();
+    oldSimplexVerts_.emplace_back(verts.begin(), verts.end());
+  }
+  newSimplexVerts_ = std::move(proposedNew);
+  // Causal (N41/N32) bookkeeping is meaningless without a foliation; the
+  // pre-geometric path reports zero and the move is scored by simplex
+  // count only.
+  dN41_ = 0;
+  dN32_ = 0;
+  logPrefactor_ = 0.0;
 
   touchedIds_.reserve(d + 2);
   for (const auto &v : shared) touchedIds_.push_back(v->getId());

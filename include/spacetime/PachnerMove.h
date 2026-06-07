@@ -4,6 +4,7 @@
 #ifndef TESSERA_PACHNERMOVE_H
 #define TESSERA_PACHNERMOVE_H
 
+#include <algorithm>
 #include <cstdint>
 #include <random>
 #include <string>
@@ -103,7 +104,131 @@ inline VertexPtrs unionVerticesAcross(SimplexRange const &simplices) {
   return out;
 }
 
+// ===================================================================
+// Pre-geometric / boundary-fixed helpers.
+//
+// These read the incidence structure straight off the vertices'
+// simplex lists, so they work on a *pre-geometric* complex (one built
+// combinatorially via ``Topology::buildExplicit``, where facet/coface
+// caches are not pre-materialised and the metric dimension may differ
+// from the manifold dimension).  They are also coface-cache-independent
+// in the CDT case, but the CDT move paths deliberately keep using the
+// cached ``getCofaces`` walk so their behaviour is byte-identical.
+// ===================================================================
+
+/// Every top-dimensional simplex (``topVerts`` vertices) that contains
+/// all of ``verts``.  Found by scanning the simplex list of ``verts``'
+/// first vertex — no facet/coface materialisation required.
+inline std::vector<SimplexPtr> topCofacesOf(const VertexPtrs &verts,
+                                            int topVerts) {
+  std::vector<SimplexPtr> out;
+  if (verts.empty()) return out;
+  for (const auto &s : verts.front()->getSimplices()) {
+    if (static_cast<int>(s->size()) != topVerts) continue;
+    bool all = true;
+    for (std::size_t i = 1; i < verts.size(); ++i) {
+      if (!s->hasVertex(verts[i])) { all = false; break; }
+    }
+    if (all) out.push_back(s);
+  }
+  return out;
+}
+
+/// Number of top simplices sharing the (codim-1) face ``facetVerts``.
+inline int topCofaceCount(const VertexPtrs &facetVerts, int topVerts) {
+  return static_cast<int>(topCofacesOf(facetVerts, topVerts).size());
+}
+
+/// A codimension-1 face is on the boundary ``∂W`` iff exactly one top
+/// cell contains it; an interior face is shared by exactly two.
+inline bool isBoundaryFacet(const VertexPtrs &facetVerts, int topVerts) {
+  return topCofaceCount(facetVerts, topVerts) == 1;
+}
+
+/// Order a cell's vertices by ascending id.  ``cobordism::ChainComplex``
+/// (and every coordinate-free fixture) takes the increasing-vertex-id
+/// ordering as each simplex's reference orientation, so the simplicial
+/// boundary signs (facet ``i`` ↦ ``(-1)^i``) glue consistently and
+/// ``∂² = 0`` holds globally.  Pre-geometric moves build new cells from
+/// mixed (shared/unique) vertex lists, so they must re-sort before
+/// committing or the homology of the mutated complex is corrupted.
+inline void sortByVertexId(VertexPtrs &verts) {
+  std::sort(verts.begin(), verts.end(),
+            [](const VertexPtr &a, const VertexPtr &b) {
+              return a->getId() < b->getId();
+            });
+}
+
+/// True iff vertices ``a`` and ``b`` already co-occur in some simplex
+/// (i.e. the edge ``a–b`` already exists).  Used to reject a 2→(d+1)
+/// flip whose new apex edge would collide with existing structure.
+inline bool verticesAdjacent(const VertexPtr &a, const VertexPtr &b) {
+  for (const auto &s : a->getSimplices()) {
+    if (s->hasVertex(b)) return true;
+  }
+  return false;
+}
+
+/// True iff the edge ``a–b`` is interior: no boundary facet contains
+/// both endpoints.  An interior-only (boundary-fixed) ``d→2`` flip
+/// must not collapse an edge that lies on ``∂W``.
+inline bool isInteriorEdge(const VertexPtr &a, const VertexPtr &b,
+                           int topVerts) {
+  for (const auto &s : a->getSimplices()) {
+    if (static_cast<int>(s->size()) != topVerts) continue;
+    if (!s->hasVertex(b)) continue;
+    const auto &sv = s->getVertices();
+    for (std::size_t skip = 0; skip < sv.size(); ++skip) {
+      VertexPtrs facetVerts;
+      facetVerts.reserve(sv.size() - 1);
+      bool hasA = false, hasB = false;
+      for (std::size_t i = 0; i < sv.size(); ++i) {
+        if (i == skip) continue;
+        facetVerts.push_back(sv[i]);
+        if (sv[i]->getId() == a->getId()) hasA = true;
+        if (sv[i]->getId() == b->getId()) hasB = true;
+      }
+      if (hasA && hasB && isBoundaryFacet(facetVerts, topVerts)) return false;
+    }
+  }
+  return true;
+}
+
+/// True iff vertex ``v`` is interior: none of the codim-1 faces
+/// incident to it lies on ``∂W``.  An interior-only (boundary-fixed)
+/// ``(d+1)→1`` move must only delete interior vertices.
+inline bool isInteriorVertex(const VertexPtr &v, int topVerts) {
+  for (const auto &s : v->getSimplices()) {
+    if (static_cast<int>(s->size()) != topVerts) continue;
+    const auto &sv = s->getVertices();
+    for (std::size_t skip = 0; skip < sv.size(); ++skip) {
+      if (sv[skip]->getId() == v->getId()) continue;  // facet would drop v
+      VertexPtrs facetVerts;
+      facetVerts.reserve(sv.size() - 1);
+      for (std::size_t i = 0; i < sv.size(); ++i) {
+        if (i != skip) facetVerts.push_back(sv[i]);
+      }
+      if (isBoundaryFacet(facetVerts, topVerts)) return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace pachner_detail
+
+/// Validity regime a :class:`PachnerMove` runs under.
+///
+/// * ``CDT`` — the original causal-dynamical-triangulations path: every
+///   proposed cell must satisfy the time-sliced CDT orientation
+///   constraint (``pachner_detail::isValidCDTOrientation``) and the
+///   move dimension comes from the metric signature.  This path is left
+///   byte-identical to the pre-#112 behaviour.
+/// * ``PreGeometric`` — the CDT orientation/time-slice guards are
+///   dropped so the bistellar moves run on a coordinate-free simplicial
+///   complex (e.g. a ``SimplicialProduct`` fixture).  The move dimension
+///   is read off the actual top cell rather than the metric, and a
+///   manifold-preservation check stands in for the orientation guard.
+enum class PachnerMode : std::uint8_t { CDT = 0, PreGeometric = 1 };
 
 
 /// Transactional Pachner move: a propose-apply-rollback wrapper around
@@ -149,6 +274,16 @@ class PachnerMove {
 public:
   virtual ~PachnerMove() = default;
 
+  /// The validity regime this move runs under (CDT vs. pre-geometric).
+  /// Defaults to :enumerator:`PachnerMode::CDT` so existing callers and
+  /// the CDT Markov chain are unaffected.
+  PachnerMode mode() const { return mode_; }
+
+  /// True iff the move is restricted to the interior of the complex:
+  /// it only fires when it leaves the boundary face-set ``∂W``
+  /// (codim-1 faces in exactly one top cell) unchanged.
+  bool boundaryFixed() const { return boundaryFixed_; }
+
   /// Pick a target and validate it.  No spacetime mutation.
   /// Returns ``true`` on success, ``false`` if no eligible target.
   virtual bool propose() = 0;
@@ -190,6 +325,16 @@ public:
   /// One of: ``"add"``, ``"remove"``, ``"flip"``, ``"iflip"``,
   /// ``"shift"``.
   virtual std::string moveType() const = 0;
+
+protected:
+  /// CDT-mode move (the default; preserves the pre-#112 behaviour).
+  PachnerMove() = default;
+  /// Move configured with an explicit validity regime / boundary policy.
+  PachnerMove(PachnerMode mode, bool boundaryFixed)
+      : mode_(mode), boundaryFixed_(boundaryFixed) {}
+
+  PachnerMode mode_ = PachnerMode::CDT;
+  bool boundaryFixed_ = false;
 };
 
 }  // namespace tessera
