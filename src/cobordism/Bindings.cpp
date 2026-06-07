@@ -151,6 +151,14 @@ cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
         "Rank over Q of an integer matrix.");
   m.def("gf2_rank", &gf2Rank, py::arg("matrix"), py::arg("rows"), py::arg("cols"),
         "Rank over GF(2) of a 0/1 matrix.");
+  m.def("gf2_nullspace", &gf2Nullspace, py::arg("matrix"), py::arg("rows"),
+        py::arg("cols"),
+        "Basis of the GF(2) kernel of a 0/1 matrix, as a list of nullity "
+        "length-cols vectors (each x with matrix·x == 0 mod 2; independent over "
+        "GF(2); nullity == cols - gf2_rank). The cocycles Z1 = ker(d2^T mod 2).");
+  m.def("gf2_span", &gf2Span, py::arg("basis"), py::arg("cols"),
+        "All 2^k GF(2) combinations of a basis of k length-cols vectors (first "
+        "is the zero vector). For a gf2_nullspace basis, the flat Z2 connections.");
 
   py::class_<Inertia>(m, "Inertia")
       .def_readonly("n_pos", &Inertia::nPos)

@@ -51,6 +51,31 @@ struct SmithNormalForm {
 /// Rank over GF(2) of a 0/1 matrix (flat row-major). Entries are read mod 2.
 [[nodiscard]] int gf2Rank(std::vector<int> M, int rows, int cols);
 
+/// Basis of the GF(2) kernel (nullspace) of a 0/1 matrix M (rows x cols, flat
+/// row-major; entries read mod 2). Each returned vector x has length `cols` and
+/// satisfies M·x ≡ 0 (mod 2); the vectors are linearly independent over GF(2)
+/// and there are exactly nullity = cols - gf2Rank(M) of them, so the whole
+/// kernel is their GF(2) span. The basis is returned as a list of length-`cols`
+/// vectors (one per free column of the reduced row echelon form), the form that
+/// reads naturally for a collection of independent vectors; the count is just
+/// the size of the returned list. Empty when M has full column rank.
+///
+/// This is the cocycle space Z¹ = ker(∂₂ᵀ mod 2) of flat ℤ₂ gauge fields in the
+/// Dijkgraaf–Witten state sum; pair with gf2Span to enumerate the connections.
+[[nodiscard]] std::vector<std::vector<int>> gf2Nullspace(std::vector<int> M,
+                                                         int rows, int cols);
+
+/// All 2^k GF(2) linear combinations of a `basis` of k length-`cols` vectors,
+/// each combination a length-`cols` vector (entries read mod 2). The first
+/// element is always the zero vector (empty combination); `cols` is taken
+/// explicitly so the trivial connection has the right length even when the
+/// basis is empty (k = 0 → a single zero vector). For a cocycle basis from
+/// gf2Nullspace this enumerates the 2^nullity flat ℤ₂ connections. Enumeration
+/// is exponential in k; intended for the small nullities of tiny complexes, it
+/// rejects k large enough to be unmaterializable.
+[[nodiscard]] std::vector<std::vector<int>> gf2Span(
+    const std::vector<std::vector<int>> &basis, int cols);
+
 /// Inertia of a symmetric integer matrix Q (n x n): the counts of positive,
 /// negative, and zero eigenvalues by Sylvester's law of inertia. The signature
 /// is nPos - nNeg.
