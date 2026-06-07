@@ -33,6 +33,7 @@
 #include "spacetime/topologies/SimplexBoundarySphere.h"
 #include "spacetime/topologies/SolidSimplex.h"
 #include "spacetime/topologies/RealProjectivePlane.h"
+#include "spacetime/topologies/RealProjectiveSpace.h"
 #include "spacetime/topologies/ComplexProjectivePlane.h"
 #include "spacetime/topologies/SimplicialProduct.h"
 #include "spacetime/topologies/SphereCircleProduct.h"
@@ -166,6 +167,18 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def("build", &SphereCircleProduct::build, py::arg("spacetime"),
            py::arg("numSimplices") = 0,
            "Build S^2 x S^1 (numSimplices ignored).");
+
+  py::class_<RealProjectiveSpace, Topology,
+             std::shared_ptr<RealProjectiveSpace> >(m, "RealProjectiveSpace",
+      "Minimal 11-vertex RP^3 = L(2,1) (Walkup): f=(11,51,80,40), chi=0, "
+      "Betti (1,0,0,1) over Q and (1,1,1,1) over Z/2 (H_1=Z/2), closed "
+      "orientable. The triple-cup positive control for T^3: the DW sign cocycle "
+      "distinguishes it (Z_Sign=0 != 1=Z_Trivial). Exact and pre-geometric; "
+      "build() ignores numSimplices.")
+      .def(py::init<>())
+      .def("build", &RealProjectiveSpace::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the 11-vertex RP^3 (numSimplices ignored).");
 
   py::class_<StellarSubdivision, Topology,
              std::shared_ptr<StellarSubdivision> >(m, "StellarSubdivision",
