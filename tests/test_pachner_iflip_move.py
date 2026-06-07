@@ -23,9 +23,13 @@ def _make_st(d=4, n_simplices=200):
 
 
 def _top_size(st):
-    for s in st.getSimplices():
-        return len(s.getVertices())
-    return 0
+    # CDT top simplices are (d+1)-vertex; d is the spacetime's declared
+    # (signature) dimension. getTopVertexCount() == signature.dimensions + 1,
+    # the engine's single source of truth for top-cell membership -- O(1) and
+    # immune to the lazily-materialized lower-dimensional facets that
+    # propose()/getFacets() register into getSimplices() (where the first
+    # scanned simplex may be a lower-dimensional face).
+    return st.getTopVertexCount()
 
 
 def _full_snapshot(st):
