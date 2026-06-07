@@ -8,6 +8,11 @@
 \usepackage{amsmath, amssymb, amsthm, mathtools, bm, booktabs}
 \usepackage[hidelinks]{hyperref}
 
+% Long inline-code identifiers (cobordism::DijkgraafWitten, RealizabilityOracle
+% .decide(), ...) cannot hyphenate and otherwise spill into the right margin;
+% let TeX loosen a line as a last resort instead of running over.
+\setlength{\emergencystretch}{3em}
+
 \theoremstyle{plain}
 \newtheorem{theorem}{Theorem}
 \theoremstyle{definition}
@@ -388,8 +393,8 @@ Rayleigh quotient. Minimizing $r$ over the degrees of freedom of $W$ is thus a
 search for a geometry that \emph{realizes} $\psi$ spectrally.
 
 \paragraph{Fixed-boundary fill.} For realizability the boundary is
-\emph{pinned}: $\partial W$ is the synthesized $\geo(\psi_A),\geo(\psi_B)$ and the
-output surface, held fixed. The free parameters $\theta$ are the \emph{interior}
+\emph{pinned}: $\partial W$ is the synthesized $\geo(\psi_A)$, $\geo(\psi_B)$ and
+the output surface, held fixed. The free parameters $\theta$ are the \emph{interior}
 edge weights/phases and --- through boundary-fixed Pachner ``add'' moves (coning)
 --- the interior \emph{topology}. This is the decisive twist: with the ends fixed
 the parameters do \emph{not} outrun the constraints, so realizability becomes a
@@ -430,12 +435,16 @@ $f \leftarrow +\infty$\\[1pt]
 \end{algobox}
 
 \noindent
+% Dense run-on of long inline-code identifiers; localize the line-breaking
+% slack here rather than loosening the whole document.
+\begin{sloppypar}
 In the codebase: \texttt{ChoiJamiolkowski} does the bend;
 \texttt{EigenstateSynthesis} evaluates $r_W$ and the fixed-boundary fill;
 \texttt{LevenbergMarquardt} is the multi-restart solver;
 \texttt{RealizabilityOracle.decide()} is the loop above; the witness $W$ is
 returned as a \texttt{Spacetime}, and \texttt{getBoundary()} recovers
 $\partial W$.
+\end{sloppypar}
 
 \section{The bridge}\label{sec:bridge}
 
