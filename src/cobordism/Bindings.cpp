@@ -37,6 +37,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/RealizabilityOracle.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -387,6 +388,91 @@ synthesized only after coning in one auxiliary vertex (the minimal complex).)doc
            "|E| of the current complex.")
       .def("spacetime", &GeometrySynthesizer::spacetime,
            "The current (growing) complex.");
+
+  // ----- §5.0 realizability oracle: spectral bulk synthesis for U (#138) -----
+  py::class_<RealizabilityOracle> ro(m, "RealizabilityOracle",
+      R"doc(§5.0 realizability oracle — spectral bulk synthesis for an operation U.
+
+Decides whether U : H_B -> H_A is realizable as a bulk cobordism W_AB by
+*synthesizing the bulk spectrally*, not by TQFT membership. U is bent to a
+boundary state via Choi-Jamiolkowski (vec(U), the operator-as-state); the bulk's
+boundary dW (the synthesized geo's / output surface) is *pinned*, and the
+interior — its Hermitian edge weights and, via boundary-fixed Pachner growth, its
+topology — is filled so the output-boundary k=0 graph-Laplacian eigenvector
+matches the bent target, i.e. the §4b residual r = ||(I - psi psi^dagger) L psi||^2
+is driven to 0.
+
+Realizability is itself the test: U is realizable iff r can be driven below
+epsilon, and non-realizable iff r floors away from 0 under the pinned boundary —
+a spectral obstruction, the analogue of §4b's two-vertex floor
+w_min^2(|c0|^2-|c1|^2)^2. The floor IS the certificate (non-existence is certified
+by the residual floor at the explored interior complexity, not by exhausting
+triangulations).
+
+Pure orchestration of the merged building blocks (no new math):
+ChoiJamiolkowski (the bend), EigenstateSynthesis (the fixed-boundary interior-fill
+engine: setInteriorWeights/Phases vary only dW's complement, growInterior is the
+boundary-fixed Pachner add), and LevenbergMarquardt (the same bounded multi-restart
+least-squares solver the §4b GeometrySynthesizer drives, here over the interior
+parameters + the free auxiliary amplitudes).
+
+vec(U) is carried by the first dA*dB sorted-id vertices (the output-surface
+support); remaining vertices (interior + coned-in apices, larger ids) carry free
+auxiliary amplitudes the fill solves for. The caller assembles the bulk and pins
+its boundary edges (Spacetime is built/pinned outside the synthesis classes);
+decide() realizes the held bulk in place and returns it as the witness.)doc");
+
+  py::class_<RealizabilityOracle::Verdict>(ro, "Verdict",
+      "The oracle's verdict on U: the realizability decision, the residual (the "
+      "obstruction floor when non-realizable), the realized witness state and "
+      "bulk W_AB, the realized eigenvalue, and the interior complexity reached.")
+      .def_readonly("realizable", &RealizabilityOracle::Verdict::realizable,
+                    "True iff the interior fill drove r < epsilon within the cone "
+                    "budget (U realizable, witnessed by state on witness).")
+      .def_readonly("residual", &RealizabilityOracle::Verdict::residual,
+                    "Best residual r = ||(I - psi psi^dagger) L psi||^2 reached: "
+                    "< epsilon when realizable, the certified floor otherwise.")
+      .def_readonly("floor", &RealizabilityOracle::Verdict::floor,
+                    "The obstruction floor (== residual when non-realizable, 0 "
+                    "when realizable): no bulk of the explored interior complexity "
+                    "realizes U under the pinned boundary.")
+      .def_readonly("eigenvalue", &RealizabilityOracle::Verdict::eigenvalue,
+                    "Realized eigenvalue lambda = psi^dagger L psi (Rayleigh "
+                    "quotient) of the witness state — meaningful when realizable.")
+      .def_readonly("interior_vertex_count",
+                    &RealizabilityOracle::Verdict::interiorVertexCount,
+                    "Interior vertices coned in to reach the verdict (the interior "
+                    "complexity, the §4b (|V|,|E|) analogue under fixed ends).")
+      .def_readonly("cones_applied", &RealizabilityOracle::Verdict::conesApplied,
+                    "Boundary-fixed cones applied during the interior fill.")
+      .def_readonly("state", &RealizabilityOracle::Verdict::state,
+                    "The witness state: the realized unit Laplacian eigenvector on "
+                    "W_AB (length = the bulk's vertex count); its first dA*dB "
+                    "components are the output-boundary block matching target. A "
+                    "genuine eigenstate iff realizable.")
+      .def_readonly("target", &RealizabilityOracle::Verdict::target,
+                    "The bent target psi_U = vec(U)/||vec(U)|| (length dA*dB) the "
+                    "output boundary is matched against.")
+      .def_readonly("witness", &RealizabilityOracle::Verdict::witness,
+                    "The realized bulk W_AB: the witness cobordism (realizable), or "
+                    "the complex on which the residual floors (non-realizable).");
+
+  ro.def(py::init<std::shared_ptr<Spacetime>>(), py::arg("bulk"),
+          "Build the oracle over the assembled bulk W_AB: a pre-geometric "
+          "Spacetime whose codim-1 boundary is the (pinned) output surface plus "
+          "input boundaries, output-surface vertices on the smallest ids. Raises "
+          "if bulk is null.")
+      .def("decide", &RealizabilityOracle::decide, py::arg("U"), py::arg("dA"),
+           py::arg("dB"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
+           py::arg("max_cones") = 4, py::arg("seed") = 0,
+           "Decide whether the dA x dB operator U (flat row-major) is realizable "
+           "as a bulk cobordism: bend it to vec(U), fill the pinned-boundary "
+           "interior to drive the §4b residual to zero (multi-restart "
+           "Levenberg-Marquardt over the interior weights/phases + auxiliary "
+           "amplitudes, growing the interior up to max_cones times), and return "
+           "the Verdict. Realizes the held bulk in place. Raises if U.size() != "
+           "dA*dB, a dimension is non-positive, or the bulk has fewer vertices "
+           "than dA*dB.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
