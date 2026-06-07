@@ -26,6 +26,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <stdexcept>
+#include <string>
 
 namespace tessera::cobordism {
 
@@ -135,6 +137,70 @@ int gf2Rank(std::vector<int> M, int rows, int cols) {
     ++rank;
   }
   return rank;
+}
+
+std::vector<std::vector<int>> gf2Nullspace(std::vector<int> M, int rows, int cols) {
+  auto idx = [cols](int i, int j) { return static_cast<std::size_t>(i) * cols + j; };
+  for (auto &v : M) v &= 1;
+  // Reduce to RREF (mirroring gf2Rank), recording each pivot's column.
+  std::vector<int> pivotCol;  // pivotCol[r] == pivot column of reduced row r
+  int rank = 0;
+  for (int col = 0; col < cols && rank < rows; ++col) {
+    int piv = -1;
+    for (int i = rank; i < rows; ++i)
+      if (M[idx(i, col)] & 1) { piv = i; break; }
+    if (piv < 0) continue;
+    if (piv != rank)
+      for (int j = 0; j < cols; ++j) std::swap(M[idx(rank, j)], M[idx(piv, j)]);
+    // Eliminate this column from every other row (above and below).
+    for (int i = 0; i < rows; ++i) {
+      if (i != rank && (M[idx(i, col)] & 1))
+        for (int j = col; j < cols; ++j) M[idx(i, j)] ^= M[idx(rank, j)];
+    }
+    pivotCol.push_back(col);
+    ++rank;
+  }
+
+  // Free columns are the non-pivot columns; one kernel vector per free column.
+  std::vector<char> isPivot(static_cast<std::size_t>(cols), 0);
+  for (int c : pivotCol) isPivot[static_cast<std::size_t>(c)] = 1;
+
+  std::vector<std::vector<int>> basis;
+  basis.reserve(static_cast<std::size_t>(cols - rank));
+  for (int f = 0; f < cols; ++f) {
+    if (isPivot[static_cast<std::size_t>(f)]) continue;
+    // Set the free variable to 1; back-substitute each pivot variable to the
+    // (already reduced) coefficient tying it to this free column.
+    std::vector<int> x(static_cast<std::size_t>(cols), 0);
+    x[static_cast<std::size_t>(f)] = 1;
+    for (int r = 0; r < rank; ++r)
+      x[static_cast<std::size_t>(pivotCol[r])] = M[idx(r, f)] & 1;
+    basis.push_back(std::move(x));
+  }
+  return basis;
+}
+
+std::vector<std::vector<int>> gf2Span(const std::vector<std::vector<int>> &basis,
+                                      int cols) {
+  const int k = static_cast<int>(basis.size());
+  // 2^k vectors are materialized; refuse a count that cannot fit in memory (and
+  // would also overflow the shift below).
+  if (k > 24)
+    throw std::invalid_argument(
+        "gf2Span: basis too large to enumerate (2^" + std::to_string(k) +
+        " combinations)");
+  const std::size_t count = std::size_t{1} << k;
+  std::vector<std::vector<int>> out;
+  out.reserve(count);
+  for (std::size_t mask = 0; mask < count; ++mask) {
+    std::vector<int> v(static_cast<std::size_t>(cols), 0);
+    for (int b = 0; b < k; ++b)
+      if (mask & (std::size_t{1} << b))
+        for (int j = 0; j < cols; ++j) v[static_cast<std::size_t>(j)] ^=
+            basis[static_cast<std::size_t>(b)][static_cast<std::size_t>(j)] & 1;
+    out.push_back(std::move(v));
+  }
+  return out;
 }
 
 Inertia symmetricInertia(std::vector<long> Q, int n, double tol) {
