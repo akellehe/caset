@@ -32,6 +32,7 @@
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cobordism.h"
 #include "cobordism/CombinatorialDimension.h"
+#include "cobordism/DijkgraafWitten.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -88,6 +89,11 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
       .def("bettiNumbersGF2", &ChainComplex::bettiNumbersGF2, "Betti numbers over GF(2).")
       .def("torsion", &ChainComplex::torsion, py::arg("k"),
            "Torsion coefficients of H_k (invariant factors > 1 of d_{k+1}).")
+      .def("kSimplexVertices", &ChainComplex::kSimplexVertices, py::arg("k"),
+           "k-simplices as sorted vertex-id tuples in C_k order (the column "
+           "order of d_{k+1} / row order of d_k). k=1 gives the edge ordering "
+           "the rows of boundaryMatrix(2) refer to; k=dimension() equals "
+           "orientedTopSimplices(). Empty when k is out of range.")
       .def("orientedTopSimplices", &ChainComplex::orientedTopSimplices,
            "Top simplices as sorted vertex-id tuples, in the canonical column "
            "order of the top boundary matrix d_d (d = dimension()); the order "
@@ -270,4 +276,36 @@ cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
       .def_static("verify", &Cobordism::verify, py::arg("W"), py::arg("M1"),
                   py::arg("M2"),
                   "Verify W is a cobordism from M1 to M2 (boundary structure).");
+
+  // ----- Capability T3 (#108): Dijkgraaf-Witten Z_2 state sum -----
+  py::enum_<Cocycle>(m, "Cocycle",
+      "The two normalized classes of Z^3(Z_2; U(1)) used as the "
+      "Dijkgraaf-Witten weight: Trivial (omega == 1) and Sign "
+      "(omega(a,b,c) = (-1)^{abc}, the generator of H^3(Z_2; U(1)) = Z_2).")
+      .value("Trivial", Cocycle::Trivial)
+      .value("Sign", Cocycle::Sign);
+
+  py::class_<DijkgraafWitten>(m, "DijkgraafWitten",
+      R"doc(Dijkgraaf-Witten Z_2 state sum of a closed oriented 3-manifold.
+
+Z(W) = (1/2^|V|) sum_{flat g} prod_t omega(g_01, g_12, g_23)^{eps_t}, summed over
+the flat Z_2 connections g in C^1 (the GF(2) nullspace of the coboundary
+d_1 = boundaryMatrix(2)^T), with each tetrahedron's orientation sign eps_t from
+the fundamental class. For connected W the untwisted value is Z_Trivial(W) =
+2^{b_1(W;Z_2) - 1}; the Sign cocycle twists it by (-1)^{<g cup g cup g, [W]>},
+which differs from the trivial value exactly when the mod-2 cup cube is nonzero
+on W (e.g. RP^3), and agrees with it when the cube vanishes (e.g. T^3, S^2xS^1).
+Enumerates the whole flat space (gauge-redundant), so it is intended for small
+triangulations; a flat space too large to materialize is refused.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>, Cocycle>(), py::arg("W"),
+           py::arg("cocycle"),
+           "Build the state sum over a closed oriented 3-manifold W with the "
+           "chosen cocycle.")
+      .def("partitionFunction", &DijkgraafWitten::partitionFunction,
+           "The partition function Z(W) as a complex number. Raises if W is not "
+           "a closed oriented 3-manifold or the flat space is too large.")
+      .def_static("isCocycle", &DijkgraafWitten::isCocycle, py::arg("cocycle"),
+                  "Whether omega satisfies the normalized 3-cocycle (pentagon) "
+                  "identity over Z_2 (brute-forced over all 16 tuples of "
+                  "Z_2^4). True for both Trivial and Sign.");
 }
