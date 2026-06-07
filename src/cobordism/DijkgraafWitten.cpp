@@ -35,6 +35,7 @@
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Cobordism.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/PreparedBoundaryState.h"
 #include "spacetime/Spacetime.h"
 
 namespace tessera::cobordism {
@@ -417,8 +418,7 @@ std::vector<std::vector<std::complex<double>>> DijkgraafWitten::map() const {
 }
 
 std::complex<double> DijkgraafWitten::amplitude(
-    const std::vector<std::complex<double>> &psiA,
-    const std::vector<std::complex<double>> &psiB) const {
+    const PreparedBoundaryState &psiA, const PreparedBoundaryState &psiB) const {
   const Boundary boundary = computeBoundary();
   if (boundary.dims.size() != 2)
     throw std::runtime_error(
@@ -426,17 +426,22 @@ std::complex<double> DijkgraafWitten::amplitude(
         "(⟨ψ_A| Z(W) |ψ_B⟩ needs Σ_A and Σ_B)");
   const int rows = boundary.dims[0];
   const int cols = boundary.dims[1];
-  if (static_cast<int>(psiA.size()) != rows ||
-      static_cast<int>(psiB.size()) != cols)
+  // The states arrive already-prepared; read their flat-connection-class
+  // amplitude vectors (the holonomy-class convention lives in their
+  // BoundaryStateSpace) and contract against the two-component boundary map.
+  const Eigen::VectorXcd &a = psiA.coeffs();
+  const Eigen::VectorXcd &b = psiB.coeffs();
+  if (static_cast<int>(a.size()) != rows ||
+      static_cast<int>(b.size()) != cols)
     throw std::invalid_argument(
         "DijkgraafWitten::amplitude: state lengths must match the map "
         "dimensions (|ψ_A| = 2^{b_1(Σ_A)}, |ψ_B| = 2^{b_1(Σ_B)})");
   std::complex<double> accumulator{0.0, 0.0};
   for (int r = 0; r < rows; ++r)
     for (int c = 0; c < cols; ++c)
-      accumulator += std::conj(psiA[static_cast<std::size_t>(r)]) *
+      accumulator += std::conj(a[r]) *
                      boundary.amplitudes[static_cast<std::size_t>(r) * cols + c] *
-                     psiB[static_cast<std::size_t>(c)];
+                     b[c];
   return accumulator;
 }
 

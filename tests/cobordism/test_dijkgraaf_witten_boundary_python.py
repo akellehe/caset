@@ -50,6 +50,7 @@ import tessera
 
 cobordism = tessera.cobordism
 DijkgraafWitten = cobordism.DijkgraafWitten
+BoundaryStateSpace = cobordism.BoundaryStateSpace
 Cocycle = cobordism.Cocycle
 
 
@@ -338,26 +339,35 @@ class TestCylinderReproducesInnerProduct(unittest.TestCase):
         return psi_a, psi_b
 
     def test_amplitude_equals_inner_product(self):
+        # The states arrive as PreparedBoundaryStates; Z(W)=id makes the amplitude
+        # the inner product regardless of the wrapping space's class ordering.
         dw = DijkgraafWitten(_torus_cylinder(), Cocycle.Trivial)
+        space = BoundaryStateSpace(_build(_torus_topology()))
         psi_a, psi_b = self._boundary_states_from_harmonics()
-        amplitude = dw.amplitude(list(psi_a), list(psi_b))
+        amplitude = dw.amplitude(space.state(np.asarray(psi_a, dtype=complex)),
+                                 space.state(np.asarray(psi_b, dtype=complex)))
         self.assertAlmostEqual(amplitude, np.vdot(psi_a, psi_b), places=9)
 
     def test_amplitude_equals_inner_product_random_states(self):
         dw = DijkgraafWitten(_torus_cylinder(), Cocycle.Trivial)
+        space = BoundaryStateSpace(_build(_torus_topology()))
         rng = np.random.default_rng(109)
         for _ in range(5):
             psi_a = rng.standard_normal(4) + 1j * rng.standard_normal(4)
             psi_b = rng.standard_normal(4) + 1j * rng.standard_normal(4)
-            amplitude = dw.amplitude(list(psi_a), list(psi_b))
+            amplitude = dw.amplitude(space.state(psi_a), space.state(psi_b))
             self.assertAlmostEqual(amplitude, np.vdot(psi_a, psi_b), places=9)
 
     def test_diagonal_amplitudes_are_norms(self):
         # ⟨ψ|Z(W)|ψ⟩ = ‖ψ‖² for the identity cobordism.
         dw = DijkgraafWitten(_torus_cylinder(), Cocycle.Trivial)
+        space = BoundaryStateSpace(_build(_torus_topology()))
         for basis in range(4):
-            psi = [1.0 if i == basis else 0.0 for i in range(4)]
-            self.assertAlmostEqual(dw.amplitude(psi, psi), 1.0, places=9)
+            psi = np.array([1.0 if i == basis else 0.0 for i in range(4)],
+                           dtype=complex)
+            prepared = space.state(psi)
+            self.assertAlmostEqual(dw.amplitude(prepared, prepared), 1.0,
+                                   places=9)
 
 
 # --------------------------------------------------------------------------- #
@@ -411,9 +421,13 @@ class TestBoundaryGuards(unittest.TestCase):
             dw.map()
 
     def test_amplitude_rejects_wrong_length(self):
+        # A state whose Z(Σ) dimension mismatches the cobordism's boundary map
+        # (a sphere state, dim 1, vs the cylinder's dim 4) is rejected.
         dw = DijkgraafWitten(_torus_cylinder(), Cocycle.Trivial)
+        sphere = BoundaryStateSpace(_build(tessera.SimplexBoundarySphere(2)))
+        wrong = sphere.state(np.array([1.0], dtype=complex))
         with self.assertRaises((ValueError, RuntimeError)):
-            dw.amplitude([1.0, 0.0], [1.0, 0.0, 0.0, 0.0])
+            dw.amplitude(wrong, wrong)
 
 
 if __name__ == "__main__":

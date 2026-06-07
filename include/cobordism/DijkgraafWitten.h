@@ -31,6 +31,8 @@ namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
 
+class PreparedBoundaryState;
+
 /// The two normalized classes of \f$ Z^3(\mathbb{Z}_2; U(1)) \f$ used as the
 /// Dijkgraaf–Witten weight: the trivial cocycle \f$ \omega \equiv 1 \f$ and the
 /// nontrivial sign cocycle \f$ \omega(a,b,c) = (-1)^{abc} \f$ (the generator of
@@ -136,19 +138,20 @@ class DijkgraafWitten {
     [[nodiscard]] std::vector<std::vector<std::complex<double>>> map() const;
 
     /// The transition amplitude \f$ \langle \psi_A | Z(W) | \psi_B \rangle \f$
-    /// for boundary states \f$ \psi_A \in Z(\Sigma_A) \f$, \f$ \psi_B \in
-    /// Z(\Sigma_B) \f$ given in the flat-connection-class basis: the contraction
-    /// \f$ \sum_{a,b} \overline{\psi_A[a]}\, Z(W)_{ab}\, \psi_B[b] \f$ with the
-    /// two-component boundary map. For the trivial cobordism (\f$ Z(W) =
-    /// \mathrm{id} \f$) this reduces to the inner product
-    /// \f$ \langle \psi_A | \psi_B \rangle \f$. The boundary states are prepared
-    /// from the harmonic 1-forms \f$ \ker L_1(\Sigma) \f$ (the qubit of dimension
-    /// \f$ b_1 \f$, kept distinct from the \f$ 2^{b_1} \f$ flat-connection count).
+    /// for already-prepared boundary states \f$ \psi_A \in Z(\Sigma_A) \f$,
+    /// \f$ \psi_B \in Z(\Sigma_B) \f$ (`PreparedBoundaryState`s, type-safe — the
+    /// holonomy-class convention lives in their `BoundaryStateSpace`, not here):
+    /// the contraction \f$ \sum_{a,b} \overline{\psi_A[a]}\, Z(W)_{ab}\,
+    /// \psi_B[b] \f$ with the two-component boundary map, reading each state's
+    /// `coeffs()` (the flat-connection-class amplitudes). For the trivial
+    /// cobordism (\f$ Z(W) = \mathrm{id} \f$) this reduces to the inner product
+    /// \f$ \langle \psi_A | \psi_B \rangle \f$; with states prepared from the
+    /// harmonic 1-forms \f$ \ker L_1(\Sigma) \f$ it is the harmonic overlap.
     /// @throws std::runtime_error if \f$ \partial W \f$ is not two components, or
     ///   `std::invalid_argument` if the state lengths do not match the map dims.
     [[nodiscard]] std::complex<double> amplitude(
-        const std::vector<std::complex<double>> &psiA,
-        const std::vector<std::complex<double>> &psiB) const;
+        const PreparedBoundaryState &psiA,
+        const PreparedBoundaryState &psiB) const;
 
     /// Whether the cocycle \f$ \omega \f$ for the given choice satisfies the
     /// normalized 3-cocycle (pentagon) identity over \f$ \mathbb{Z}_2 \f$:
