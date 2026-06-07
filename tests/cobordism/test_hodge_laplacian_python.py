@@ -96,6 +96,21 @@ def _testbed():
     return st
 
 
+def _torus():
+    """T^2 = S^1 x S^1 (the qubit, spec sec 5.2): b = [1, 2, 1]. Built via the
+    proven SimplicialProduct + CDT path the homology tests use, then given unit
+    spacelike edge weights so every cell has a well-defined positive volume."""
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    topology = tessera.SimplicialProduct(tessera.SimplexBoundarySphere(1),
+                                         tessera.SimplexBoundarySphere(1))
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                           topology)
+    st.build()
+    _set_uniform(st, 1.0, 0.0)
+    return st
+
+
 # --------------------------------------------------------------------------- #
 # numpy oracle and small helpers
 # --------------------------------------------------------------------------- #
@@ -162,6 +177,63 @@ def _cluster_ranges(evals, tol=1e-6):
             ranges.append((start, i))
             start = i
     return ranges
+
+
+# --------------------------------------------------------------------------- #
+# Metric Hodge Laplacian (k >= 1): independent numpy oracle and kernel helpers
+# --------------------------------------------------------------------------- #
+def _boundary(cc, k):
+    """Boundary matrix d_k as a dense (|C_{k-1}| x |C_k|) numpy array."""
+    rows, cols = cc.numSimplices(k - 1), cc.numSimplices(k)
+    if rows == 0 or cols == 0:
+        return np.zeros((rows, cols))
+    return np.array(cc.boundaryMatrix(k), dtype=float).reshape(rows, cols)
+
+
+def _np_metric_laplacian(st, k, metric=True):
+    """Independent reconstruction of the symmetric metric Hodge Laplacian
+    L_k^sym = B_k^T B_k + B_{k+1} B_{k+1}^T, B_k = diag(sqrt W_{k-1}) d_k
+    diag(1/sqrt W_k), from the boundary maps (ChainComplex) and the weights W_k
+    (HodgeLaplacian.weights, or unit weights when metric is False)."""
+    cc = cob.ChainComplex.fromSpacetime(st)
+    n = cc.dimension()
+    hl = cob.HodgeLaplacian(st)
+
+    def weight(kk):
+        if not metric or kk == 0:
+            return np.ones(cc.numSimplices(kk))
+        return np.array(hl.weights(kk), dtype=float)
+
+    nk = cc.numSimplices(k)
+    L = np.zeros((nk, nk))
+    if nk == 0:
+        return L
+    inv_sqrt_wk = 1.0 / np.sqrt(weight(k))
+    if k >= 1 and cc.numSimplices(k - 1) > 0:  # B_k^T B_k
+        dk = _boundary(cc, k)
+        bk = np.diag(np.sqrt(weight(k - 1))) @ dk @ np.diag(inv_sqrt_wk)
+        L += bk.T @ bk
+    if k + 1 <= n and cc.numSimplices(k + 1) > 0:  # B_{k+1} B_{k+1}^T
+        dkp1 = _boundary(cc, k + 1)
+        bkp1 = np.diag(np.sqrt(weight(k))) @ dkp1 @ np.diag(1.0 / np.sqrt(weight(k + 1)))
+        L += bkp1 @ bkp1.T
+    return L
+
+
+def _betti(st, k):
+    return cob.ChainComplex.fromSpacetime(st).bettiNumbers()[k]
+
+
+def _kernel_dim_from_eigenvalues(st, k, metric=True, tol=1e-7):
+    evals = np.array(cob.HodgeLaplacian(st).eigenvalues(k, metric))
+    return int(np.sum(np.abs(evals) < tol))
+
+
+def _harmonic_dim(st, k, metric=True, tol=1e-9):
+    nk = cob.ChainComplex.fromSpacetime(st).numSimplices(k)
+    if nk == 0:
+        return 0
+    return len(cob.HodgeLaplacian(st).harmonics(k, tol, metric)) // nk
 
 
 # --------------------------------------------------------------------------- #
@@ -409,20 +481,163 @@ class TestBettiCrossCheck(unittest.TestCase):
 
 class TestDegreeParameterization(unittest.TestCase):
 
-    def test_nonzero_degree_not_implemented(self):
+    def test_negative_degree_raises(self):
         hl = cob.HodgeLaplacian(_triangle())
-        for call in (lambda: hl.laplacian(1),
-                     lambda: hl.eigenvalues(2),
-                     lambda: hl.eigenvectors(1),
-                     lambda: hl.harmonics(3)):
+        for call in (lambda: hl.laplacian(-1),
+                     lambda: hl.eigenvalues(-1),
+                     lambda: hl.eigenvectors(-2),
+                     lambda: hl.harmonics(-1)):
             with self.subTest(call=call):
                 with self.assertRaises(RuntimeError):
                     call()
+
+    def test_degree_above_top_dimension_is_empty(self):
+        # The triangle is S^1 (top dimension 1): there are no 2- or 3-cells, so
+        # L_k is the empty operator (no raise) and ker L_k is trivial.
+        hl = cob.HodgeLaplacian(_triangle())
+        for k in (2, 3):
+            with self.subTest(k=k):
+                self.assertEqual(hl.laplacian(k), [])
+                self.assertEqual(hl.eigenvalues(k), [])
+                self.assertEqual(hl.eigenvectors(k), [])
+                self.assertEqual(hl.harmonics(k), [])
 
     def test_k_zero_is_the_default(self):
         hl = cob.HodgeLaplacian(_triangle())
         np.testing.assert_allclose(np.array(hl.eigenvalues()),
                                    np.array(hl.eigenvalues(0)), atol=1e-12)
+
+    def test_k_zero_ignores_metric_flag(self):
+        # The k=0 path is the edge-weighted graph Laplacian regardless of metric.
+        hl = cob.HodgeLaplacian(_testbed())
+        np.testing.assert_allclose(np.array(hl.eigenvalues(0, True)),
+                                   np.array(hl.eigenvalues(0, False)), atol=1e-12)
+
+
+# --------------------------------------------------------------------------- #
+# Metric Hodge Laplacian at k >= 1 (#104)
+# --------------------------------------------------------------------------- #
+class TestMetricHodgeAssembly(unittest.TestCase):
+    """The C++ assembly equals the independent numpy oracle, for both the metric
+    (volume) and combinatorial (unit) weightings, and its eigenvalues match."""
+
+    CASES = (("triangle", _triangle, 1), ("path", _path, 1),
+             ("testbed", _testbed, 1), ("torus k=1", _torus, 1),
+             ("torus k=2", _torus, 2))
+
+    def test_assembly_matches_numpy_oracle(self):
+        for name, build, k in self.CASES:
+            st = build()
+            for metric in (True, False):
+                with self.subTest(case=name, metric=metric):
+                    nk = cob.ChainComplex.fromSpacetime(st).numSimplices(k)
+                    L_cpp = np.array(cob.HodgeLaplacian(st).laplacian(k, metric),
+                                     dtype=complex).reshape(nk, nk)
+                    L_ref = _np_metric_laplacian(st, k, metric)
+                    np.testing.assert_allclose(L_cpp, L_ref, atol=1e-10)
+                    # symmetric, real, positive semidefinite
+                    np.testing.assert_allclose(L_cpp, L_cpp.conj().T, atol=1e-10)
+                    np.testing.assert_allclose(L_cpp.imag, 0.0, atol=1e-12)
+
+    def test_eigenvalues_match_numpy(self):
+        for name, build, k in self.CASES:
+            st = build()
+            for metric in (True, False):
+                with self.subTest(case=name, metric=metric):
+                    L_ref = _np_metric_laplacian(st, k, metric)
+                    evals = np.array(cob.HodgeLaplacian(st).eigenvalues(k, metric))
+                    np.testing.assert_allclose(evals, np.linalg.eigvalsh(L_ref),
+                                               atol=1e-9)
+                    self.assertGreaterEqual(evals.min(), -1e-9)  # PSD
+
+    def test_assembly_matches_oracle_with_random_weights(self):
+        # Non-uniform positive edge weights make every W_k a genuine non-scalar
+        # diagonal, exercising the full W^{1/2} formula and the column ordering.
+        rng = np.random.default_rng(104)
+        for name, build, k in (("testbed", _testbed, 1), ("torus k=1", _torus, 1),
+                               ("torus k=2", _torus, 2)):
+            st = build()
+            for e in st.getEdgeList().toVector():
+                e.setSquaredLength(float(rng.uniform(0.3, 3.0)))
+                e.setPhase(0.0)
+            with self.subTest(case=name):
+                nk = cob.ChainComplex.fromSpacetime(st).numSimplices(k)
+                L_cpp = np.array(cob.HodgeLaplacian(st).laplacian(k, True),
+                                 dtype=complex).reshape(nk, nk)
+                np.testing.assert_allclose(L_cpp, _np_metric_laplacian(st, k, True),
+                                           atol=1e-10)
+
+
+class TestMetricHodgeKernel(unittest.TestCase):
+    """The discrete Hodge theorem: dim ker L_k = b_k, for metric and
+    combinatorial weights alike, cross-checked against ChainComplex."""
+
+    def test_first_betti_is_first_harmonic_dimension(self):
+        for name, build in (("triangle", _triangle), ("path", _path),
+                            ("testbed", _testbed), ("torus", _torus)):
+            st = build()
+            b1 = _betti(st, 1)
+            with self.subTest(fixture=name):
+                for metric in (True, False):
+                    self.assertEqual(_kernel_dim_from_eigenvalues(st, 1, metric), b1)
+                    self.assertEqual(_harmonic_dim(st, 1, metric), b1)
+
+    def test_torus_first_homology_is_the_qubit(self):
+        # T^2: dim ker L_1 == 2 (spec sec 5.2), == b_1 from ChainComplex.
+        st = _torus()
+        self.assertEqual(_betti(st, 1), 2)
+        for metric in (True, False):
+            with self.subTest(metric=metric):
+                self.assertEqual(_kernel_dim_from_eigenvalues(st, 1, metric), 2)
+                self.assertEqual(_harmonic_dim(st, 1, metric), 2)
+
+    def test_higher_degree_betti_on_the_torus(self):
+        # b_2 = 1 (the fundamental class): dim ker L_2 == 1.
+        st = _torus()
+        self.assertEqual(_betti(st, 2), 1)
+        for metric in (True, False):
+            with self.subTest(metric=metric):
+                self.assertEqual(_kernel_dim_from_eigenvalues(st, 2, metric), 1)
+                self.assertEqual(_harmonic_dim(st, 2, metric), 1)
+
+    def test_random_metric_weights_preserve_the_kernel_dimension(self):
+        # ker L_k = b_k for ANY positive weights (the metric only moves the
+        # representatives and eigenvalues, not the kernel dimension).
+        rng = np.random.default_rng(2)
+        st = _torus()
+        for e in st.getEdgeList().toVector():
+            e.setSquaredLength(float(rng.uniform(0.3, 3.0)))
+            e.setPhase(0.0)
+        self.assertEqual(_kernel_dim_from_eigenvalues(st, 1, True), 2)
+        self.assertEqual(_harmonic_dim(st, 1, True), 2)
+
+
+class TestMetricWeights(unittest.TestCase):
+    """weights(k) is the per-k-simplex volume diagonal, in ChainComplex order."""
+
+    def test_vertex_weights_are_unit(self):
+        st = _testbed()
+        np.testing.assert_allclose(np.array(cob.HodgeLaplacian(st).weights(0)),
+                                   np.ones(4), atol=1e-12)
+
+    def test_edge_weights_are_sqrt_length_in_column_order(self):
+        # Distinct edge lengths pin down both the values (volume of an edge =
+        # sqrt(l^2)) and the canonical sorted-vertex-id column order.
+        st = _from_simplices(4, [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)])
+        lengths = {(0, 1): 1.0, (0, 2): 4.0, (0, 3): 9.0, (1, 2): 16.0, (2, 3): 25.0}
+        for e in st.getEdgeList().toVector():
+            key = tuple(sorted((e.getSource().getId(), e.getTarget().getId())))
+            e.setSquaredLength(lengths[key])
+            e.setPhase(0.0)
+        order = sorted(lengths)  # (0,1),(0,2),(0,3),(1,2),(2,3)
+        expected = [math.sqrt(lengths[t]) for t in order]
+        np.testing.assert_allclose(np.array(cob.HodgeLaplacian(st).weights(1)),
+                                   expected, atol=1e-12)
+
+    def test_weights_out_of_range_are_empty(self):
+        st = _triangle()  # S^1, top dimension 1
+        self.assertEqual(cob.HodgeLaplacian(st).weights(-1), [])
+        self.assertEqual(cob.HodgeLaplacian(st).weights(5), [])
 
 
 if __name__ == "__main__":

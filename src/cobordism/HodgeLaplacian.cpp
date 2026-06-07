@@ -25,12 +25,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <map>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
+#include "cobordism/ChainComplex.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
+#include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
 #include "spacetime/Spacetime.h"
@@ -38,6 +44,116 @@
 namespace tessera::cobordism {
 
 using cd = std::complex<double>;
+
+namespace {
+
+using Face = std::vector<std::uint64_t>;  // sorted vertex ids
+
+// Sorted vertex ids of a simplex — the homological reference ordering, identical
+// to ChainComplex's. Distinct simplices have distinct tuples, so sorting by it is
+// a canonical total order that reproduces ChainComplex's column order exactly.
+Face sortedIds(const SimplexPtr &s) {
+  Face ids;
+  for (const auto &v : s->getVertices()) ids.push_back(v->getId());
+  std::sort(ids.begin(), ids.end());
+  return ids;
+}
+
+// Face-closure of the complex, bucketed by dimension and ordered within each
+// dimension by sorted vertex ids — the same BFS-over-getFacets construction
+// ChainComplex uses, so faces[k][j] is the simplex behind column j of
+// boundaryMatrix(k). Returns the SimplexPtrs (needed for their volumes).
+std::vector<std::vector<SimplexPtr>> orderedFaces(const Spacetime &K) {
+  std::map<int, std::map<Face, SimplexPtr>> byDim;  // dim -> (sorted ids -> simplex)
+  std::unordered_set<std::uint64_t> seen;
+  std::vector<SimplexPtr> stack(K.getSimplices().begin(), K.getSimplices().end());
+  while (!stack.empty()) {
+    SimplexPtr s = stack.back();
+    stack.pop_back();
+    if (s == nullptr) continue;
+    if (!seen.insert(s->fingerprint.fingerprint()).second) continue;
+    const int k = static_cast<int>(s->size()) - 1;
+    byDim[k][sortedIds(s)] = s;
+    if (k >= 1)
+      for (const auto &f : s->getFacets()) stack.push_back(f);
+  }
+  const int n = byDim.empty() ? -1 : byDim.rbegin()->first;
+  std::vector<std::vector<SimplexPtr>> faces(static_cast<std::size_t>(n + 1));
+  for (int k = 0; k <= n; ++k)
+    for (const auto &[face, s] : byDim[k]) faces[static_cast<std::size_t>(k)].push_back(s);
+  return faces;
+}
+
+// Diagonal weights W_k (length `count`) in ChainComplex column order: the
+// per-k-simplex |volume| (Euclidean content via Simplex::volume), or all ones for
+// k == 0 or the combinatorial path. A degenerate (zero) cell falls back to 1 so
+// W_k stays positive-definite (W_k^{-1/2} is finite).
+std::vector<double> simplexWeights(const std::vector<std::vector<SimplexPtr>> &faces,
+                                   int k, int count, bool metric) {
+  std::vector<double> w(static_cast<std::size_t>(std::max(count, 0)), 1.0);
+  if (!metric || k == 0 || k < 0 || k >= static_cast<int>(faces.size())) return w;
+  const auto &fk = faces[static_cast<std::size_t>(k)];
+  for (int j = 0; j < count && j < static_cast<int>(fk.size()); ++j) {
+    const double vol = std::abs(fk[static_cast<std::size_t>(j)]->volume());
+    w[static_cast<std::size_t>(j)] = (vol > 0.0) ? vol : 1.0;
+  }
+  return w;
+}
+
+// Symmetric (W_k-orthonormal) metric Hodge Laplacian for k >= 1:
+//   L_k^sym = B_k^T B_k + B_{k+1} B_{k+1}^T,  B_k = W_{k-1}^{1/2} d_k W_k^{-1/2}.
+// With metric == false all W = I, giving the combinatorial d_k^T d_k +
+// d_{k+1} d_{k+1}^T. Returns a |C_k| x |C_k| real SPD matrix (0 x 0 if no k-cells).
+Eigen::MatrixXd metricLaplacian(const Spacetime &K, int k, bool metric) {
+  const ChainComplex cc = ChainComplex::fromSpacetime(K);
+  const int n = cc.dimension();
+  const int nk = static_cast<int>(cc.numSimplices(k));
+  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(nk, nk);
+  if (nk == 0) return L;
+
+  const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
+  const auto weightArr = [&](int kk) {
+    const std::vector<double> wv =
+        simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), metric);
+    Eigen::ArrayXd a(static_cast<Eigen::Index>(wv.size()));
+    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
+    return a;
+  };
+  const auto boundary = [&](int kk, int rows, int cols) {
+    const std::vector<long> &flat = cc.boundaryMatrix(kk);
+    Eigen::MatrixXd d(rows, cols);
+    for (int r = 0; r < rows; ++r)
+      for (int c = 0; c < cols; ++c)
+        d(r, c) = static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
+    return d;
+  };
+
+  const Eigen::ArrayXd wk = weightArr(k);
+  const Eigen::ArrayXd invSqrtWk = wk.sqrt().inverse();
+
+  // Term 1: B_k^T B_k (always present for k >= 1, since k-simplices have faces).
+  const int rows = static_cast<int>(cc.numSimplices(k - 1));
+  if (rows > 0) {
+    const Eigen::MatrixXd dk = boundary(k, rows, nk);
+    const Eigen::ArrayXd sqrtWkm1 = weightArr(k - 1).sqrt();
+    const Eigen::MatrixXd Bk =
+        sqrtWkm1.matrix().asDiagonal() * dk * invSqrtWk.matrix().asDiagonal();
+    L.noalias() += Bk.transpose() * Bk;
+  }
+
+  // Term 2: B_{k+1} B_{k+1}^T (absent when there are no (k+1)-cells, e.g. k = n).
+  const int cols = (k + 1 <= n) ? static_cast<int>(cc.numSimplices(k + 1)) : 0;
+  if (cols > 0) {
+    const Eigen::MatrixXd dkp1 = boundary(k + 1, nk, cols);
+    const Eigen::ArrayXd invSqrtWkp1 = weightArr(k + 1).sqrt().inverse();
+    const Eigen::MatrixXd Bkp1 =
+        wk.sqrt().matrix().asDiagonal() * dkp1 * invSqrtWkp1.matrix().asDiagonal();
+    L.noalias() += Bkp1 * Bkp1.transpose();
+  }
+  return L;
+}
+
+}  // namespace
 
 HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st) : st_(std::move(st)) {
   if (!st_) return;
@@ -52,11 +168,11 @@ HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st) : st_(std::move(st
   for (std::size_t i = 0; i < order_; ++i) idToIndex_[ids_[i]] = i;
 }
 
-void HodgeLaplacian::requireStageOne(int k) {
-  if (k != 0)
+void HodgeLaplacian::requireNonNegativeDegree(int k) {
+  if (k < 0)
     throw std::runtime_error(
-        "HodgeLaplacian: Stage 2: L_k not yet implemented (only k=0, the graph "
-        "Laplacian, is available); requested k=" + std::to_string(k));
+        "HodgeLaplacian: degree k must be non-negative; requested k=" +
+        std::to_string(k));
 }
 
 void HodgeLaplacian::assemble(std::vector<cd> &A, std::vector<double> &D) const {
@@ -107,18 +223,66 @@ std::vector<double> HodgeLaplacian::degree() const {
   return D;
 }
 
-std::vector<cd> HodgeLaplacian::laplacian(int k) const {
-  requireStageOne(k);
-  std::vector<cd> A;
-  std::vector<double> D;
-  assemble(A, D);
-  const std::size_t N = order_;
-  // L = D - A: off-diagonal entries are -A_ij; the diagonal carries D_ii (the
-  // adjacency has no diagonal in a complex without self-loops).
-  std::vector<cd> L(N * N, cd(0.0, 0.0));
-  for (std::size_t idx = 0; idx < A.size(); ++idx) L[idx] = -A[idx];
-  for (std::size_t i = 0; i < N; ++i) L[i * N + i] += D[i];
-  return L;
+std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
+  requireNonNegativeDegree(k);
+  if (k == 0) {
+    // k = 0 (unchanged): L = D - A. Off-diagonal entries are -A_ij; the diagonal
+    // carries D_ii (the adjacency has no diagonal in a complex without self-loops).
+    std::vector<cd> A;
+    std::vector<double> D;
+    assemble(A, D);
+    const std::size_t N = order_;
+    std::vector<cd> L(N * N, cd(0.0, 0.0));
+    for (std::size_t idx = 0; idx < A.size(); ++idx) L[idx] = -A[idx];
+    for (std::size_t i = 0; i < N; ++i) L[i * N + i] += D[i];
+    return L;
+  }
+  // k >= 1: the symmetric metric (or, with metric == false, combinatorial)
+  // Laplacian L_k^sym, returned complex (imaginary parts zero) for type parity
+  // with the k = 0 operator.
+  if (!st_) return {};
+  const Eigen::MatrixXd L = metricLaplacian(*st_, k, metric);
+  const int nk = static_cast<int>(L.rows());
+  std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
+  for (int i = 0; i < nk; ++i)
+    for (int j = 0; j < nk; ++j)
+      out[static_cast<std::size_t>(i) * nk + j] = cd(L(i, j), 0.0);
+  return out;
+}
+
+std::vector<double> HodgeLaplacian::weights(int k) const {
+  if (k < 0 || !st_) return {};
+  const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
+  if (k > cc.dimension()) return {};
+  const int m = static_cast<int>(cc.numSimplices(k));
+  if (k == 0) return std::vector<double>(static_cast<std::size_t>(m), 1.0);
+  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true);
+}
+
+const HodgeLaplacian::MetricSpectrum &HodgeLaplacian::ensureMetricSpectrum(
+    int k, bool metric) const {
+  const long long key = static_cast<long long>(k) * 2 + (metric ? 1 : 0);
+  const auto cached = metricCache_.find(key);
+  if (cached != metricCache_.end()) return cached->second;
+
+  MetricSpectrum sp;
+  if (st_) {
+    const Eigen::MatrixXd L = metricLaplacian(*st_, k, metric);
+    const int nk = static_cast<int>(L.rows());
+    sp.dim = nk;
+    sp.evals.assign(static_cast<std::size_t>(nk), 0.0);
+    sp.evecs.assign(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
+    if (nk > 0) {
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(L);
+      const Eigen::VectorXd &lam = es.eigenvalues();   // ascending
+      const Eigen::MatrixXd &V = es.eigenvectors();    // orthonormal columns
+      for (int i = 0; i < nk; ++i) sp.evals[static_cast<std::size_t>(i)] = lam[i];
+      for (int i = 0; i < nk; ++i)
+        for (int j = 0; j < nk; ++j)
+          sp.evecs[static_cast<std::size_t>(i) * nk + j] = cd(V(i, j), 0.0);
+    }
+  }
+  return metricCache_.emplace(key, std::move(sp)).first->second;
 }
 
 void HodgeLaplacian::ensureDecomposition() const {
@@ -183,33 +347,54 @@ double HodgeLaplacian::unitarityResidual(double t) const {
   return resid.norm();
 }
 
-std::vector<double> HodgeLaplacian::eigenvalues(int k) const {
-  requireStageOne(k);
-  ensureDecomposition();
-  return evals_;
+std::vector<double> HodgeLaplacian::eigenvalues(int k, bool metric) const {
+  requireNonNegativeDegree(k);
+  if (k == 0) {
+    ensureDecomposition();
+    return evals_;
+  }
+  return ensureMetricSpectrum(k, metric).evals;
 }
 
-std::vector<cd> HodgeLaplacian::eigenvectors(int k) const {
-  requireStageOne(k);
-  ensureDecomposition();
-  return evecs_;
+std::vector<cd> HodgeLaplacian::eigenvectors(int k, bool metric) const {
+  requireNonNegativeDegree(k);
+  if (k == 0) {
+    ensureDecomposition();
+    return evecs_;
+  }
+  return ensureMetricSpectrum(k, metric).evecs;
 }
 
-std::vector<cd> HodgeLaplacian::harmonics(int k, double tol) const {
-  requireStageOne(k);
-  ensureDecomposition();
-  const std::size_t N = order_;
+std::vector<cd> HodgeLaplacian::harmonics(int k, double tol, bool metric) const {
+  requireNonNegativeDegree(k);
+
+  // The harmonic dimension is b_k: the columns with (near-)zero eigenvalue span
+  // ker L_k. Bind to whichever cached spectrum applies, then share the selection.
+  const std::vector<double> *evals = nullptr;
+  const std::vector<cd> *evecs = nullptr;
+  std::size_t N = 0;
+  if (k == 0) {
+    ensureDecomposition();
+    evals = &evals_;
+    evecs = &evecs_;
+    N = order_;
+  } else {
+    const MetricSpectrum &sp = ensureMetricSpectrum(k, metric);
+    evals = &sp.evals;
+    evecs = &sp.evecs;
+    N = static_cast<std::size_t>(sp.dim);
+  }
   if (N == 0) return {};
 
   std::vector<std::size_t> cols;
   for (std::size_t j = 0; j < N; ++j)
-    if (std::abs(evals_[j]) < tol) cols.push_back(j);
+    if (std::abs((*evals)[j]) < tol) cols.push_back(j);
 
   const std::size_t M = cols.size();
   std::vector<cd> H(N * M, cd(0.0, 0.0));
   for (std::size_t i = 0; i < N; ++i)
     for (std::size_t jj = 0; jj < M; ++jj)
-      H[i * M + jj] = evecs_[i * N + cols[jj]];
+      H[i * M + jj] = (*evecs)[i * N + cols[jj]];
   return H;
 }
 
