@@ -195,7 +195,7 @@ class HodgeLaplacian {
     /// Eigenvectors of the signed-weight \f$ L_k \f$ as a flat row-major
     /// \f$ M\times M \f$ complex array; column \f$ j \f$ (entries \f$ iM + j \f$)
     /// is the eigenvector for the \f$ j \f$-th eigenvalue of
-    /// `lorentzianEigenvalues(k, metric)` (same order). @throws for \f$ k < 0 \f$.
+    /// `lorentzianEigenvalues(k, metric)` (same order). @throws std::runtime_error for \f$ k < 0 \f$.
     [[nodiscard]] std::vector<std::complex<double>> lorentzianEigenvectors(
         int k, bool metric = true) const;
 
@@ -203,7 +203,7 @@ class HodgeLaplacian {
     /// eigenvectors with \f$ |\lambda| < \text{tol} \f$, as a flat row-major
     /// \f$ M\times H \f$ complex array (\f$ H \f$ columns). For an all-spacelike
     /// complex \f$ H = b_k \f$; with genuine timelike cells the count can differ
-    /// (the pseudo-Hodge decomposition). @throws for \f$ k < 0 \f$.
+    /// (the pseudo-Hodge decomposition). @throws std::runtime_error for \f$ k < 0 \f$.
     [[nodiscard]] std::vector<std::complex<double>> lorentzianHarmonics(
         int k, double tol = 1e-9, bool metric = true) const;
 
@@ -211,8 +211,8 @@ class HodgeLaplacian {
     /// (signed \f$ W_k \f$) of the near-kernel representatives, one per column of
     /// `lorentzianHarmonics(k, tol, metric)` and in the same order. A value
     /// \f$ \approx 0 \f$ flags a **null** harmonic (a lightlike kernel direction);
-    /// all entries are positive on an all-spacelike complex. @throws for
-    /// \f$ k < 0 \f$.
+    /// all entries are positive on an all-spacelike complex.
+    /// @throws std::runtime_error for \f$ k < 0 \f$.
     [[nodiscard]] std::vector<double> lorentzianNullNorms(
         int k, double tol = 1e-9, bool metric = true) const;
 
