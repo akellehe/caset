@@ -262,22 +262,49 @@ class Simplex {
 
     // ==================== Geometry ====================
 
-    /// Gram matrix of this simplex from its edge lengths (Wick-rotated).
+    /// Gram matrix of this simplex from its edge lengths.
     /// Returns a flat (d x d) row-major matrix where d = size() - 1.
-    /// Vertex 0 is the origin: G_ij = 1/2(|l^2(v0,vi)| + |l^2(v0,vj)| - |l^2(vi,vj)|).
-    [[nodiscard]] std::vector<double> gramMatrix() const;
+    /// Vertex 0 is the origin: G_ij = 1/2(s(v0,vi) + s(v0,vj) - s(vi,vj)),
+    /// where s(.,.) is the squared edge length.
+    ///
+    /// By default the geometry is **signature-aware**: the signed l^2 is kept,
+    /// so a timelike edge (l^2 < 0) carries its Lorentzian sign into G and
+    /// det(G) records the metric signature of the cell. Pass
+    /// ``wickRotate=true`` for the Euclidean/CDT convention that takes |l^2|
+    /// on every edge (det(G) > 0 for a valid cell). For a purely spacelike
+    /// (all l^2 > 0) simplex the two agree, so the toggle is a no-op there.
+    [[nodiscard]] std::vector<double> gramMatrix(bool wickRotate = false) const;
+
+    /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
+    /// row-major matrix with a zero corner, a border of ones, and the squared
+    /// edge-length matrix in the lower-right (d+1) x (d+1) block. Its cofactors
+    /// give the dihedral angles (see ``dihedralAngle``). ``wickRotate`` selects
+    /// signed (default) vs. |l^2| squared lengths, the same toggle as
+    /// ``gramMatrix``.
+    [[nodiscard]] std::vector<double> cayleyMengerMatrix(bool wickRotate = false) const;
 
     /// Dihedral angle at a hinge within this simplex.
     /// The hinge must be a (d-2)-subsimplex of this d-simplex.
-    [[nodiscard]] double dihedralAngle(SimplexPtr hinge) const;
+    /// ``wickRotate`` selects signed vs. |l^2| edge lengths (see ``gramMatrix``).
+    [[nodiscard]] double dihedralAngle(SimplexPtr hinge, bool wickRotate = false) const;
 
     /// Deficit angle at this hinge: 2*pi minus the sum of dihedral angles
     /// from all top-simplices containing this hinge.
     [[nodiscard]] double deficitAngle() const;
 
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
-    /// Uses Heron's formula on |l^2| of the three edges.
-    [[nodiscard]] double area() const;
+    /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``
+    /// selects signed (default) vs. |l^2| (see ``gramMatrix``).
+    [[nodiscard]] double area(bool wickRotate = false) const;
+
+    /// Signed d-content (volume) of this simplex on the honest,
+    /// signature-respecting geometry: sign(det G) * sqrt(|det G|) / d!, with G
+    /// the non-Wick-rotated ``gramMatrix`` and d = size() - 1. For a Euclidean
+    /// (all-spacelike) simplex this is the ordinary positive volume; a
+    /// Lorentzian cell whose tangent metric has a negative Gram determinant
+    /// returns a negative content, recording the signature rather than
+    /// discarding it the way |l^2| would.
+    [[nodiscard]] double volume() const;
 
     /// Determinant of a square matrix (flat row-major, size n x n).
     [[nodiscard]] static double determinant(
