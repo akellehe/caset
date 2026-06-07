@@ -37,7 +37,7 @@ cobordism = tessera.cobordism
 
 
 def _build(topology):
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    signature = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, topology)
@@ -74,7 +74,11 @@ def _product(*topologies):
 def _from_simplices(num_vertices, simplices):
     """Build a Spacetime directly from explicit top-simplex vertex tuples
     (vertices 0..num_vertices-1), for hand-crafted / pathological complexes."""
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    # Signature dimension must match the hand-built top cells (d = max cell
+    # vertex count - 1) so they register as top simplices and getBoundary sees
+    # them. These complexes are not topology-driven, so derive d from the data.
+    dimension = max(len(simplex) for simplex in simplices) - 1
+    signature = tessera.Signature(dimension, tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, tessera.Toroid())
@@ -107,6 +111,55 @@ class TestBoundaryFaces(unittest.TestCase):
         faces = cobordism.Cobordism.boundaryFaces(_cylinder(2))
         comps = cobordism.Cobordism.connectedComponents(faces)
         self.assertEqual(len(comps), 2)
+
+
+class TestSpacetimeGetBoundary(unittest.TestCase):
+    """Spacetime.getBoundary() is the canonical, side-effect-free boundary
+    derivation that Cobordism.boundaryFaces() now delegates to (#162). It must
+    agree with boundaryFaces() and reproduce the known boundary on the fixtures:
+    SolidSimplex -> sphere boundary, cylinder -> two components, closed
+    manifolds -> empty."""
+
+    @staticmethod
+    def _as_set(faces):
+        return {tuple(f) for f in faces}
+
+    def test_agrees_with_boundary_faces(self):
+        for topology in (tessera.SolidSimplex(2), tessera.SolidSimplex(3),
+                         tessera.SolidSimplex(4), tessera.SimplexBoundarySphere(3),
+                         tessera.RealProjectivePlane()):
+            with self.subTest(topology=type(topology).__name__):
+                st = _build(topology)
+                self.assertEqual(
+                    self._as_set(st.getBoundary()),
+                    self._as_set(cobordism.Cobordism.boundaryFaces(st)))
+
+    def test_solid_simplex_boundary_is_a_sphere(self):
+        # The boundary of Delta^n is its n+1 facets = S^{n-1} (each on n verts).
+        for n in range(2, 6):
+            with self.subTest(ball=n):
+                boundary = _build(tessera.SolidSimplex(n)).getBoundary()
+                self.assertEqual(len(boundary), n + 1)
+                self.assertTrue(all(len(f) == n for f in boundary))
+
+    def test_closed_manifold_has_empty_boundary(self):
+        for topology in (tessera.SimplexBoundarySphere(2),
+                         tessera.SimplexBoundarySphere(4),
+                         tessera.RealProjectivePlane()):
+            with self.subTest(manifold=type(topology).__name__):
+                self.assertEqual(_build(topology).getBoundary(), [])
+
+    def test_cylinder_boundary_has_two_components(self):
+        comps = cobordism.Cobordism.connectedComponents(_cylinder(2).getBoundary())
+        self.assertEqual(len(comps), 2)
+
+    def test_get_boundary_is_side_effect_free(self):
+        # Unlike getExternalSimplices, getBoundary() must not materialize facets:
+        # the registered-simplex set is unchanged by the call.
+        st = _build(tessera.SolidSimplex(4))
+        before = len(st.getSimplices())
+        st.getBoundary()
+        self.assertEqual(len(st.getSimplices()), before)
 
 
 class TestIsomorphism(unittest.TestCase):

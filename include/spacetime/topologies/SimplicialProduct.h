@@ -53,6 +53,11 @@ class SimplicialProduct : public Topology {
     SimplicialProduct(std::shared_ptr<Topology> left, std::shared_ptr<Topology> right)
         : left_(std::move(left)), right_(std::move(right)) {}
 
+    /// \f$ \dim(K \times L) = \dim K + \dim L \f$.
+    [[nodiscard]] int dimension() const override {
+      return left_->dimension() + right_->dimension();
+    }
+
     /// Build \f$ K \times L \f$. ``numSimplices`` is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;
 

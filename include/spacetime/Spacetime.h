@@ -330,6 +330,16 @@ class Spacetime {
     /// @return A random simplex, or nullptr if the complex is empty
     [[nodiscard]] SimplexPtr getRandomSimplex();
 
+    /// The vertex count of a top-dimensional simplex: \f$ d+1 \f$, where
+    /// \f$ d \f$ is the metric signature's dimension. This is the **single
+    /// source of truth** for "what counts as a top cell": ``registerSimplex``
+    /// pushes a simplex onto ``topSimplicesVec`` exactly when its vertex count
+    /// equals this, and ``getBoundary`` / ``getRandomTopSimplex`` read that set.
+    /// A triangulation whose top cells are \f$ d' \f$-simplices is only seen as
+    /// having top cells when the signature dimension matches it
+    /// (\f$ d = d' \f$); see ``Topology::dimension``.
+    [[nodiscard]] std::size_t getTopVertexCount() const noexcept;
+
     /// Select a uniformly random top-dimensional simplex.
     /// Used by the Metropolis algorithm to pick random move targets.
     /// @return A random d-simplex, or nullptr if none exist
@@ -393,11 +403,48 @@ class Spacetime {
       return vertexIdCounter++;
     }
 
+    /// The boundary surface of the complex: the codimension-one faces — one
+    /// dimension below the top simplices — that belong to exactly one top
+    /// simplex, returned as sorted vertex-id tuples. An interior face is shared
+    /// by two top simplices and is excluded; a boundary face belongs to just
+    /// one.
+    ///
+    /// This is the canonical, single-source boundary derivation. It is computed
+    /// purely by facet-counting from the top-dimensional simplices (incidence
+    /// \f$ == 1 \f$), so it is **side-effect-free** (``const``) and robust to
+    /// lazily-materialized facets: "top" is the maximal vertex count actually
+    /// present in the complex, and the codimension-one faces are enumerated
+    /// combinatorially from the vertex sets rather than from materialized
+    /// ``Simplex`` facet objects. A closed manifold returns an empty list.
+    ///
+    /// Contrast :func:`getExternalSimplices`, which returns the boundary
+    /// *top cells* (whole d-simplices touching the boundary) and materializes
+    /// facets as a side-effect.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> getBoundary() const;
+
+    /// Force lazy facet materialization to a fixpoint. Facets are created on
+    /// first access by ``Simplex::getFacets()``, which registers each new facet
+    /// back into the complex; a single index pass over the (growing) simplex
+    /// vector therefore materializes every face of every dimension down to the
+    /// vertices, wiring up the coface incidence as it goes. After this call the
+    /// complex's facet/coface structure is complete.
+    ///
+    /// This exposes — as an explicit, separately callable operation — the
+    /// side-effect that :func:`getExternalSimplices` performs internally; call
+    /// it directly when you want the materialization without the boundary scan.
+    void materializeFacets() noexcept;
+
     /// @return Simplices around the boundary of the simplicial complex. These simplices have at
     /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note
     /// that this method does not return 2-simplices as you might expect, but 5-simplices since those are the standard
     /// building blocks. You can get the 2-simplices by calling `getFacets()` on the 5-simplices and their facets until
     /// \f$ k=2 \f$.
+    ///
+    /// Materializes facets to a fixpoint (via :func:`materializeFacets`) as a
+    /// side-effect, since the coface counts that flag a boundary facet are only
+    /// complete once every facet exists. For the side-effect alone, call
+    /// :func:`materializeFacets`; for the codimension-one boundary *faces*
+    /// (rather than the top cells touching them), call :func:`getBoundary`.
     [[nodiscard]] SimplexSet getExternalSimplices() noexcept;
 
     /// Retrieves all simplices with a specific causal orientation.

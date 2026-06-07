@@ -41,6 +41,9 @@ class RealProjectivePlane : public Topology {
   public:
     RealProjectivePlane() = default;
 
+    /// \f$ \mathbb{RP}^2 \f$ is a closed surface; its top cells are triangles.
+    [[nodiscard]] int dimension() const override { return 2; }
+
     /// Build the 6-vertex \f$ \mathbb{RP}^2 \f$. ``numSimplices`` is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;
 };

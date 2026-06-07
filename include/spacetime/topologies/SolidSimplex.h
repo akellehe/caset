@@ -45,6 +45,10 @@ class SolidSimplex : public Topology {
 
     [[nodiscard]] int n() const noexcept { return n_; }
 
+    /// \f$ \Delta^n \f$ is an n-ball (n-manifold with boundary); its single top
+    /// cell is an n-simplex.
+    [[nodiscard]] int dimension() const override { return n_; }
+
     /// Build the solid n-simplex. ``numSimplices`` is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;
 

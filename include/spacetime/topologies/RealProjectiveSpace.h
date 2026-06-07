@@ -64,6 +64,9 @@ class RealProjectiveSpace : public Topology {
   public:
     RealProjectiveSpace() = default;
 
+    /// \f$ \mathbb{RP}^3 \f$ is a closed 3-manifold; its top cells are tetrahedra.
+    [[nodiscard]] int dimension() const override { return 3; }
+
     /// Build the 11-vertex \f$ \mathbb{RP}^3 \f$. ``numSimplices`` is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;
 };

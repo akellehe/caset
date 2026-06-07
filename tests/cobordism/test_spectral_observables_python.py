@@ -41,7 +41,7 @@ obs = tessera.observables  # SpectralGap / HarmonicDimension live in the observa
 # Fixtures (same idioms as the HodgeLaplacian operator tests)
 # --------------------------------------------------------------------------- #
 def _build_topology(topology):
-    sig = tessera.Signature(4, tessera.Lorentzian)
+    sig = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
     st = tessera.Spacetime(metric, tessera.HERMITIAN_WEIGHTED, 1.0, 1.0,
                            tessera.PREFERRED, topology)

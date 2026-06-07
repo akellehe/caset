@@ -79,7 +79,15 @@ void register_spacetime(py::module_ m) {
   // Topologies
   // ========================================
   py::class_<Topology, std::shared_ptr<Topology> >(m, "Topology",
-      "Base class for spatial topologies (Toroid, Sphere, etc.).");
+      "Base class for spatial topologies (Toroid, Sphere, etc.).")
+      .def("dimension", &Topology::dimension,
+           R"doc(The intrinsic manifold dimension d of this topology (top cells
+are d-simplices on d+1 vertices). Use it to pick the matching
+Signature(d, ...) when building a fixture so its top cells register as
+top-dimensional. The fixed-triangulation fixtures report their dimension;
+the dimension-parametric CDT topologies (Toroid, Sphere, Cylinder) raise
+RuntimeError — their dimension comes from the signature, not the
+topology.)doc");
 
   py::class_<Sphere, Topology, std::shared_ptr<Sphere> >(m, "Sphere",
       "Spherical spatial topology S^{d-1}.")
@@ -382,6 +390,24 @@ may differ slightly due to slab quantization.)doc")
              return out;
            },
            "Return simplices on the boundary of the complex.")
+      .def("getBoundary", &Spacetime::getBoundary,
+           R"doc(Return the boundary surface as codimension-one faces.
+
+The faces (one dimension below the top simplices) that belong to exactly
+one top simplex, as sorted vertex-id tuples. Computed by facet-counting
+from the top simplices, so it is side-effect-free and robust to lazily
+materialized facets. A closed manifold returns an empty list.
+
+Unlike getExternalSimplices (which returns whole boundary top cells and
+materializes facets as a side-effect), this returns the boundary faces
+themselves and leaves the complex untouched.)doc")
+      .def("materializeFacets", &Spacetime::materializeFacets,
+           R"doc(Force lazy facet materialization to a fixpoint.
+
+Creates and registers every face of every dimension (down to the
+vertices) and wires up the coface incidence. This is the side-effect
+getExternalSimplices performs internally, exposed for callers that want
+the materialization without the boundary scan.)doc")
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&
              Spacetime::createEdge),
@@ -467,6 +493,14 @@ This is the volume-fixing target per [RU] eq. 6.)doc")
       .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference,
            py::keep_alive<0, 1>(),
            "Return a uniformly random top-dimensional simplex.")
+      .def("getTopVertexCount", &Spacetime::getTopVertexCount,
+           R"doc(Return the vertex count of a top-dimensional simplex (d+1).
+
+d is the metric signature's dimension. This is the single source of truth
+for what registers as a top cell: a simplex joins topSimplicesVec (and is
+seen by getBoundary/getRandomTopSimplex) exactly when its vertex count
+equals this. Build a fixture with Signature(topology.dimension(), ...) so
+its top cells match.)doc")
       .def("getRandomVertex", &Spacetime::getRandomVertex, py::return_value_policy::reference,
            py::keep_alive<0, 1>(),
            "Return a uniformly random vertex.")

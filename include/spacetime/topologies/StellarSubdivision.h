@@ -55,6 +55,9 @@ class StellarSubdivision : public Topology {
     explicit StellarSubdivision(std::shared_ptr<Topology> base)
         : base_(std::move(base)) {}
 
+    /// A stellar subdivision is a PL homeomorphism, so it preserves dimension.
+    [[nodiscard]] int dimension() const override { return base_->dimension(); }
+
     /// Build the base topology and apply one stellar subdivision.
     /// ``numSimplices`` is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;

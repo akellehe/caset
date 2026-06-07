@@ -23,6 +23,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <stdexcept>
 
 #include "spacetime/Spacetime.h"
 #include "mesh/Vertex.h"
@@ -43,6 +44,17 @@ Topology::~Topology() = default;
 // std::vector<std::shared_ptr<Constraint> > Topology::getConstraints() {return {};}
 void Topology::build(Spacetime *spacetime, int numSimplices) {
   std::cout << "Building Topology (base)" << std::endl;
+}
+
+int Topology::dimension() const {
+  // Only the fixed-triangulation fixtures have an intrinsic manifold dimension;
+  // the dimension-parametric CDT topologies (Toroid, Sphere, Cylinder) take
+  // theirs from the spacetime's signature at build() time and so do not
+  // override this.
+  throw std::logic_error(
+      "Topology::dimension(): this topology has no intrinsic manifold dimension "
+      "(it is parametric in the spacetime signature). Build it with an explicit "
+      "Signature(d, …) instead of deriving d from the topology.");
 }
 
 void Topology::buildExplicit(

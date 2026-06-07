@@ -89,7 +89,9 @@ Cocycle = cobordism.Cocycle
 # --------------------------------------------------------------------------- #
 # Fixtures: closed oriented 3-manifolds small enough for the brute-force sum.
 # --------------------------------------------------------------------------- #
-def _build(topology, dimensions=4):
+def _build(topology, dimensions=None):
+    if dimensions is None:
+        dimensions = topology.dimension()
     signature = tessera.Signature(dimensions, tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,

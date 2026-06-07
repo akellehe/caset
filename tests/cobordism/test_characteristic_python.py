@@ -49,7 +49,7 @@ _RP2_TRIANGLES = [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 5), (0, 1, 5),
 
 
 def _build(topology):
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    signature = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, topology)

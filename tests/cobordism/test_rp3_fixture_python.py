@@ -51,7 +51,7 @@ Cocycle = cobordism.Cocycle
 
 
 def _build(topology):
-    signature = tessera.Signature(4, tessera.Lorentzian)
+    signature = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, signature)
     spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                                   tessera.PREFERRED, topology)

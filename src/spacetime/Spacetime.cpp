@@ -25,7 +25,9 @@
 
 // (was: #include <pybind11/pybind11.h> — removed; unreferenced.)
 #include "Logger.h"
+#include <algorithm>
 #include <cmath>
+#include <map>
 #include <memory>
 #include <queue>
 #include <set>
@@ -403,23 +405,71 @@ const std::shared_ptr<VertexList> &Spacetime::getVertexList() const noexcept {
   return vertexList;
 }
 
-SimplexSet Spacetime::getExternalSimplices() noexcept {
-  // Boundary detection needs every facet's coface count to be complete:
-  // a facet is on the boundary iff it has fewer than two cofaces. Facets
-  // are materialized lazily — ``Simplex::getFacets()`` creates them on first
-  // access and registers each one back into ``simplicesVec`` (via
+std::size_t Spacetime::getTopVertexCount() const noexcept {
+  // d+1, the vertex count of a top-dimensional simplex. Single source of truth
+  // for "what is a top cell" (see registerSimplex / updateOrientationCounters /
+  // getBoundary).
+  return static_cast<std::size_t>(metric->getSignature()->getDimensions()) + 1;
+}
+
+std::vector<std::vector<std::uint64_t>> Spacetime::getBoundary() const {
+  // Canonical boundary derivation: facet-counting from the top simplices.
+  // A codimension-one face is on the boundary iff exactly one top simplex
+  // contains it (an interior face is shared by two). This is computed purely
+  // from the vertex sets, so it is side-effect-free and immune to the
+  // lazy-facet problem that the coface-based ``getExternalSimplices`` has to
+  // work around — no ``Simplex`` facet objects need to exist.
+
+  // The top set is ``topSimplicesVec`` — the simplices ``registerSimplex``
+  // keyed as top-dimensional, i.e. those whose vertex count equals
+  // ``getTopVertexCount()`` (= signature d+1). This is exactly the set of top
+  // cells *provided the signature dimension matches the triangulation's*
+  // dimension; build fixtures with ``Signature(Topology::dimension(), …)`` so
+  // it does. (For a complex of the wrong signature ``topSimplicesVec`` is
+  // empty and the boundary comes back empty.)
+  const std::size_t topVertexCount = getTopVertexCount();
+
+  // Count, per codimension-one face, how many top simplices own it. Each top
+  // simplex's codim-1 faces are obtained by dropping one vertex in turn from
+  // its sorted vertex tuple (the remainder stays sorted, so the face is a
+  // canonical key). The ``std::map`` keeps the result in sorted face order.
+  std::map<std::vector<std::uint64_t>, int> incidence;
+  std::vector<std::uint64_t> verts;
+  for (const auto &simplex : topSimplicesVec) {
+    verts.clear();
+    verts.reserve(topVertexCount);
+    for (const auto &v : simplex->getVertices()) verts.push_back(v->getId());
+    std::sort(verts.begin(), verts.end());
+    for (std::size_t omit = 0; omit < verts.size(); ++omit) {
+      std::vector<std::uint64_t> face;
+      face.reserve(verts.size() - 1);
+      for (std::size_t i = 0; i < verts.size(); ++i)
+        if (i != omit) face.push_back(verts[i]);
+      ++incidence[face];
+    }
+  }
+
+  std::vector<std::vector<std::uint64_t>> boundary;
+  for (auto &[face, count] : incidence)
+    if (count == 1) boundary.push_back(face);
+  return boundary;
+}
+
+void Spacetime::materializeFacets() noexcept {
+  // Facets are materialized lazily — ``Simplex::getFacets()`` creates them on
+  // first access and registers each one back into ``simplicesVec`` (via
   // ``registerSimplex``). For CDT-built complexes this already happened during
-  // gluing, so the loop below would converge immediately. For complexes
-  // assembled from scratch (e.g. a hand-built triangulation), the facets do
-  // not exist yet, and materializing them *during* a range-for over
-  // ``simplicesVec`` would both invalidate the iterator (the vector grows) and
-  // read incomplete coface counts (a shared facet looks like a boundary facet
-  // until its second coface registers).
+  // gluing, so the loop below converges immediately. For complexes assembled
+  // from scratch (e.g. a hand-built triangulation), the facets do not exist
+  // yet, and materializing them *during* a range-for over ``simplicesVec``
+  // would both invalidate the iterator (the vector grows) and read incomplete
+  // coface counts (a shared facet looks like a boundary facet until its second
+  // coface registers).
   //
-  // Force lazy facet materialization first. ``getFacets()`` appends any
-  // newly-created facet simplices to ``simplicesVec``; index iteration walks
-  // into them too, so a single pass reaches a fixpoint (dimension strictly
-  // decreases, terminating at vertices whose ``getFacets()`` is a no-op).
+  // ``getFacets()`` appends any newly-created facet simplices to
+  // ``simplicesVec``; index iteration walks into them too, so a single pass
+  // reaches a fixpoint (dimension strictly decreases, terminating at vertices
+  // whose ``getFacets()`` is a no-op).
   //
   // Index iteration — re-reading ``simplicesVec[i]`` and ``size()`` each step —
   // is safe under the growth a range-for would not survive: reallocation moves
@@ -429,6 +479,13 @@ SimplexSet Spacetime::getExternalSimplices() noexcept {
   for (std::size_t i = 0; i < simplicesVec.size(); ++i) {
     simplicesVec[i]->getFacets();
   }
+}
+
+SimplexSet Spacetime::getExternalSimplices() noexcept {
+  // Boundary detection needs every facet's coface count to be complete: a facet
+  // is on the boundary iff it has fewer than two cofaces. Force lazy facet
+  // materialization to a fixpoint first so the coface counts are final.
+  materializeFacets();
 
   // Cofaces are now fully linked; no further simplices will be created, so a
   // direct scan is safe.
@@ -656,8 +713,7 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
   simplicesVec.push_back(simplex);
   simplexIndex_.insert(fp, simplex);
 
-  auto d = metric->getSignature()->getDimensions();
-  if (simplex->size() == static_cast<std::size_t>(d + 1)) {
+  if (simplex->size() == getTopVertexCount()) {
     simplex->topVecIdx_ = static_cast<std::uint32_t>(topSimplicesVec.size());
     topSimplicesVec.push_back(simplex);
   }
@@ -805,7 +861,7 @@ void Spacetime::updateOrientationCounters(const SimplexPtr &simplex, int delta) 
   auto d = metric->getSignature()->getDimensions();
   auto nVerts = simplex->size();
   // Only count top-dimensional simplices (d-simplices have d+1 vertices)
-  if (nVerts != static_cast<std::size_t>(d + 1)) return;
+  if (nVerts != getTopVertexCount()) return;
   auto [ti, tf] = simplex->getOrientation().numeric();
   // (d, 1) or (1, d) type
   if ((ti == d && tf == 1) || (ti == 1 && tf == d)) {

@@ -47,6 +47,9 @@ class SimplexBoundarySphere : public Topology {
 
     [[nodiscard]] int n() const noexcept { return n_; }
 
+    /// \f$ S^n \f$ is an n-manifold; its top cells are n-simplices.
+    [[nodiscard]] int dimension() const override { return n_; }
+
     /// Build \f$ S^n = \partial\Delta^{n+1} \f$. ``numSimplices`` is ignored
     /// (the triangulation is fixed).
     void build(Spacetime *spacetime, int numSimplices) override;

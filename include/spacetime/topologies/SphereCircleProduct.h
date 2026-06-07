@@ -51,6 +51,9 @@ class SphereCircleProduct : public Topology {
   public:
     SphereCircleProduct() = default;
 
+    /// \f$ S^2 \times S^1 \f$ is a closed 3-manifold; its top cells are tetrahedra.
+    [[nodiscard]] int dimension() const override { return 3; }
+
     /// Build \f$ S^2 \times S^1 \f$ via the staircase product. ``numSimplices``
     /// is ignored.
     void build(Spacetime *spacetime, int numSimplices) override;
