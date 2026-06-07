@@ -311,7 +311,24 @@ Euclidean spectrum/kernel.)doc")
                   "tuples) are isomorphic under a vertex relabeling.")
       .def_static("verify", &Cobordism::verify, py::arg("W"), py::arg("M1"),
                   py::arg("M2"),
-                  "Verify W is a cobordism from M1 to M2 (boundary structure).");
+                  "Verify W is a cobordism from M1 to M2 (boundary structure).")
+      .def_static("glue", &Cobordism::glue, py::arg("W1"), py::arg("W2"),
+                  "Glue two cobordisms along a shared boundary surface Sigma_C "
+                  "(the first isomorphic boundary-component pair): identify its "
+                  "two copies by the order-preserving simplicial isomorphism, "
+                  "merge the complexes into one, and return the composite "
+                  "W2 cup_{Sigma_C} W1 as a new Spacetime. Its boundary is the "
+                  "remaining components (Sigma_A from W1, Sigma_B from W2). "
+                  "Raises if the inputs are empty, differ in top dimension, or "
+                  "share no isomorphic boundary surface.")
+      .def_static("selfGlue", &Cobordism::selfGlue, py::arg("W"),
+                  "Close a cobordism by gluing its two boundary components to "
+                  "each other (the mapping torus / categorical trace): they must "
+                  "be isomorphic, and the collar must be thick enough that no "
+                  "top simplex touches both (>= 3 layers in the glued "
+                  "direction). Returns the closed manifold as a new Spacetime. "
+                  "Raises unless dW has exactly two isomorphic components, or if "
+                  "the identification collapses a top simplex.");
 
   // ----- Capability T3 (#108): Dijkgraaf-Witten Z_2 state sum -----
   py::enum_<Cocycle>(m, "Cocycle",

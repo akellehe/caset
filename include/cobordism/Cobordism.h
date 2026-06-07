@@ -23,6 +23,7 @@
 #define TESSERA_COBORDISM_COBORDISM_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -95,6 +96,40 @@ class Cobordism {
     [[nodiscard]] static CobordismResult verify(const Spacetime &W,
                                                 const Spacetime &M1,
                                                 const Spacetime &M2);
+
+    /// # Gluing (composition of cobordisms)
+    ///
+    /// Form the composite \f$ W_2 \cup_{\Sigma_C} W_1 \f$ of two cobordisms that
+    /// share a boundary surface \f$ \Sigma_C \f$: a boundary component of
+    /// \f$ W_1 \f$ that is isomorphic (as a triangulation) to one of \f$ W_2 \f$.
+    /// The two copies of \f$ \Sigma_C \f$ are identified vertex-for-vertex by the
+    /// order-preserving simplicial isomorphism between them (the same
+    /// correspondence `areIsomorphic` certifies), the two complexes are reindexed
+    /// into one dense vertex range, and their top simplices are merged. The
+    /// glued \f$ \Sigma_C \f$ faces, now shared by one top simplex from each
+    /// side, become interior; the result's boundary is the remaining components
+    /// \f$ \partial W_1 \sqcup \partial W_2 \f$ with the two \f$ \Sigma_C \f$
+    /// copies removed. Returned as a fresh pre-geometric `Spacetime` ready for
+    /// `DijkgraafWitten`. The first isomorphic pair (in the deterministic
+    /// component order) is used as \f$ \Sigma_C \f$.
+    /// @throws std::invalid_argument if either input is empty, the top
+    ///   dimensions differ, or no shared boundary surface exists.
+    [[nodiscard]] static std::shared_ptr<Spacetime> glue(const Spacetime &W1,
+                                                         const Spacetime &W2);
+
+    /// Close a cobordism by gluing its two boundary components to each other
+    /// (the categorical trace / mapping torus): \f$ \partial W \f$ must have
+    /// exactly two isomorphic components \f$ \Sigma_C^{(0)}, \Sigma_C^{(1)} \f$,
+    /// which are identified by the order-preserving isomorphism, yielding a
+    /// closed manifold. The collar must be thick enough that no single top
+    /// simplex touches both components (a top simplex spanning both would gain a
+    /// repeated vertex on identification); e.g. \f$ T^2\times[0,T] \f$ needs at
+    /// least three layers in the \f$ [0,T] \f$ direction so the glued circle is a
+    /// non-degenerate triangulation.
+    /// @throws std::invalid_argument if \f$ \partial W \f$ does not have exactly
+    ///   two isomorphic components; `std::runtime_error` if the identification
+    ///   collapses a top simplex (collar too thin).
+    [[nodiscard]] static std::shared_ptr<Spacetime> selfGlue(const Spacetime &W);
 };
 
 }  // namespace tessera::cobordism

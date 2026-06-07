@@ -24,8 +24,11 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+#include <memory>
 #include <numeric>
+#include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 
@@ -85,11 +88,15 @@ std::vector<Face> subfaces(const Face &simplex, std::size_t faceVertexCount) {
 }
 
 // Relabel a simplex list's vertices to a dense range 0..(numVertices-1) and
-// return the relabeled top-simplex set (sorted tuples) plus the vertex count.
+// return the relabeled top-simplex set (sorted tuples), the vertex count, and
+// the dense→real id map (denseToReal[k] is the k-th smallest real vertex id, so
+// the dense labels are assigned in increasing-id order — this is what makes the
+// vertex bijection below order-preserving).
 struct Normalized {
   int numVertices{0};
   std::set<std::vector<int>> simplices{};
   int faceVertexCount{0};
+  std::vector<std::uint64_t> denseToReal{};
 };
 Normalized normalize(const SimplexList &simplices) {
   std::set<std::uint64_t> verts;
@@ -97,8 +104,11 @@ Normalized normalize(const SimplexList &simplices) {
     for (auto v : s) verts.insert(v);
   std::unordered_map<std::uint64_t, int> dense;
   int next = 0;
-  for (auto v : verts) dense[v] = next++;
   Normalized out;
+  for (auto v : verts) {
+    dense[v] = next++;
+    out.denseToReal.push_back(v);  // verts is sorted, so this is increasing
+  }
   out.numVertices = next;
   for (const auto &s : simplices) {
     std::vector<int> relabeled;
@@ -109,6 +119,130 @@ Normalized normalize(const SimplexList &simplices) {
     out.simplices.insert(std::move(relabeled));
   }
   return out;
+}
+
+// A vertex bijection (dense A-label → dense B-label) witnessing that two
+// normalized triangulations are isomorphic, or nullopt if none exists. The
+// search assigns the most-constrained (highest-degree) vertices first, breaking
+// degree ties by ascending dense label and trying targets in ascending order;
+// for two triangulations that are equal after normalization this finds the
+// identity permutation first, so the correspondence it returns is
+// order-preserving on shift-related copies (e.g. the two ends of a product
+// cylinder). The backtracking is the same one `areIsomorphic` reports a bool for.
+std::optional<std::vector<int>> vertexBijection(const Normalized &A,
+                                                const Normalized &B) {
+  if (A.numVertices != B.numVertices) return std::nullopt;
+  if (A.simplices.size() != B.simplices.size()) return std::nullopt;
+  if (A.faceVertexCount != B.faceVertexCount) return std::nullopt;
+  if (A.numVertices == 0) return std::vector<int>{};  // both empty
+
+  const int nv = A.numVertices;
+  auto degrees = [nv](const Normalized &x) {
+    std::vector<int> deg(nv, 0);
+    for (const auto &s : x.simplices)
+      for (int v : s) ++deg[v];
+    return deg;
+  };
+  const std::vector<int> degA = degrees(A);
+  const std::vector<int> degB = degrees(B);
+  {
+    std::vector<int> sa = degA, sb = degB;
+    std::sort(sa.begin(), sa.end());
+    std::sort(sb.begin(), sb.end());
+    if (sa != sb) return std::nullopt;
+  }
+
+  std::vector<std::vector<const std::vector<int> *>> aSimplicesOf(nv);
+  for (const auto &s : A.simplices)
+    for (int v : s) aSimplicesOf[v].push_back(&s);
+
+  std::vector<int> order(nv);
+  std::iota(order.begin(), order.end(), 0);
+  std::sort(order.begin(), order.end(), [&](int x, int y) {
+    if (degA[x] != degA[y]) return degA[x] > degA[y];
+    return x < y;  // ascending-label tie-break → order-preserving preference
+  });
+
+  std::vector<int> mapAtoB(nv, -1);
+  std::vector<char> usedB(nv, 0);
+  std::function<bool(int)> backtrack = [&](int pos) -> bool {
+    if (pos == nv) return true;
+    const int u = order[pos];
+    for (int w = 0; w < nv; ++w) {
+      if (usedB[w] || degB[w] != degA[u]) continue;
+      mapAtoB[u] = w;
+      usedB[w] = 1;
+      bool consistent = true;
+      for (const auto *simplex : aSimplicesOf[u]) {
+        std::vector<int> image;
+        image.reserve(simplex->size());
+        bool fullyAssigned = true;
+        for (int v : *simplex) {
+          if (mapAtoB[v] < 0) { fullyAssigned = false; break; }
+          image.push_back(mapAtoB[v]);
+        }
+        if (!fullyAssigned) continue;
+        std::sort(image.begin(), image.end());
+        if (!B.simplices.count(image)) { consistent = false; break; }
+      }
+      if (consistent && backtrack(pos + 1)) return true;
+      mapAtoB[u] = -1;
+      usedB[w] = 0;
+    }
+    return false;
+  };
+  if (!backtrack(0)) return std::nullopt;
+  return mapAtoB;
+}
+
+// The vertex correspondence (real `from` id → real `to` id) of the
+// order-preserving isomorphism between two same-dimensional triangulations, or
+// nullopt if they are not isomorphic.
+std::optional<std::map<std::uint64_t, std::uint64_t>> vertexCorrespondence(
+    const SimplexList &from, const SimplexList &to) {
+  const Normalized F = normalize(from);
+  const Normalized T = normalize(to);
+  const std::optional<std::vector<int>> bijection = vertexBijection(F, T);
+  if (!bijection) return std::nullopt;
+  std::map<std::uint64_t, std::uint64_t> correspondence;
+  for (int a = 0; a < F.numVertices; ++a)
+    correspondence[F.denseToReal[static_cast<std::size_t>(a)]] =
+        T.denseToReal[static_cast<std::size_t>((*bijection)[static_cast<std::size_t>(a)])];
+  return correspondence;
+}
+
+// Build a fresh pre-geometric Spacetime from an explicit combinatorial
+// description: `numVertices` coordinate-free vertices (ids 0..numVertices-1) and
+// one top simplex per (dense) vertex-id tuple. Mirrors Topology::buildExplicit,
+// reached here through the public Spacetime API so the gluing constructors need
+// not be Topology subclasses — geometry is irrelevant to the homological /
+// state-sum computations these complexes feed.
+std::shared_ptr<Spacetime> buildSpacetime(std::size_t numVertices,
+                                          const SimplexList &topSimplices) {
+  auto spacetime = std::make_shared<Spacetime>();
+  std::vector<VertexPtr> verts;
+  verts.reserve(numVertices);
+  for (std::size_t i = 0; i < numVertices; ++i)
+    verts.push_back(spacetime->createVertex(static_cast<std::uint64_t>(i)));
+  for (const auto &simplex : topSimplices) {
+    VertexPtrs sv;
+    sv.reserve(simplex.size());
+    for (auto id : simplex) sv.push_back(verts.at(static_cast<std::size_t>(id)));
+    spacetime->createSimplex(sv);
+  }
+  return spacetime;
+}
+
+// Boundary surfaces of W as connected components, in the deterministic order
+// (each component's faces sorted, then components sorted) that map()/
+// boundaryVector() also use — so component i here is component i there.
+std::vector<SimplexList> sortedBoundaryComponents(const Spacetime &W) {
+  std::vector<SimplexList> components =
+      Cobordism::connectedComponents(Cobordism::boundaryFaces(W));
+  for (SimplexList &component : components)
+    std::sort(component.begin(), component.end());
+  std::sort(components.begin(), components.end());
+  return components;
 }
 
 }  // namespace
@@ -156,72 +290,10 @@ std::vector<SimplexList> Cobordism::connectedComponents(const SimplexList &simpl
 }
 
 bool Cobordism::areIsomorphic(const SimplexList &a, const SimplexList &b) {
-  const Normalized A = normalize(a);
-  const Normalized B = normalize(b);
-  if (A.numVertices != B.numVertices) return false;
-  if (A.simplices.size() != B.simplices.size()) return false;
-  if (A.faceVertexCount != B.faceVertexCount) return false;
-  if (A.numVertices == 0) return true;  // both empty
-
-  const int nv = A.numVertices;
-  // Per-vertex degree = number of top simplices containing it.
-  auto degrees = [nv](const Normalized &x) {
-    std::vector<int> deg(nv, 0);
-    for (const auto &s : x.simplices)
-      for (int v : s) ++deg[v];
-    return deg;
-  };
-  const std::vector<int> degA = degrees(A);
-  const std::vector<int> degB = degrees(B);
-  {
-    std::vector<int> sa = degA, sb = degB;
-    std::sort(sa.begin(), sa.end());
-    std::sort(sb.begin(), sb.end());
-    if (sa != sb) return false;
-  }
-
-  // Which A-simplices contain each A-vertex (for incremental constraint checks).
-  std::vector<std::vector<const std::vector<int> *>> aSimplicesOf(nv);
-  for (const auto &s : A.simplices)
-    for (int v : s) aSimplicesOf[v].push_back(&s);
-
-  // Assign A-vertices (most-constrained first: highest degree) to B-vertices.
-  std::vector<int> order(nv);
-  std::iota(order.begin(), order.end(), 0);
-  std::sort(order.begin(), order.end(), [&](int x, int y) { return degA[x] > degA[y]; });
-
-  std::vector<int> mapAtoB(nv, -1);
-  std::vector<char> usedB(nv, 0);
-
-  std::function<bool(int)> backtrack = [&](int pos) -> bool {
-    if (pos == nv) return true;
-    const int u = order[pos];
-    for (int w = 0; w < nv; ++w) {
-      if (usedB[w] || degB[w] != degA[u]) continue;
-      mapAtoB[u] = w;
-      usedB[w] = 1;
-      bool consistent = true;
-      // Every A-simplex through u whose vertices are all assigned must map to a
-      // B-simplex.
-      for (const auto *simplex : aSimplicesOf[u]) {
-        std::vector<int> image;
-        image.reserve(simplex->size());
-        bool fullyAssigned = true;
-        for (int v : *simplex) {
-          if (mapAtoB[v] < 0) { fullyAssigned = false; break; }
-          image.push_back(mapAtoB[v]);
-        }
-        if (!fullyAssigned) continue;
-        std::sort(image.begin(), image.end());
-        if (!B.simplices.count(image)) { consistent = false; break; }
-      }
-      if (consistent && backtrack(pos + 1)) return true;
-      mapAtoB[u] = -1;
-      usedB[w] = 0;
-    }
-    return false;
-  };
-  return backtrack(0);
+  // Existence of a vertex relabeling carrying a's simplex set onto b's: the
+  // order-preserving search in vertexBijection (shared with glue()/selfGlue(),
+  // which need the actual correspondence and not just the yes/no).
+  return vertexBijection(normalize(a), normalize(b)).has_value();
 }
 
 CobordismResult Cobordism::verify(const Spacetime &W, const Spacetime &M1,
@@ -275,6 +347,121 @@ CobordismResult Cobordism::verify(const Spacetime &W, const Spacetime &M1,
               "a boundary component is not isomorphic to M1 or M2"};
   }
   return {true, CobordismCheck::Ok, "valid cobordism (boundary structure)"};
+}
+
+std::shared_ptr<Spacetime> Cobordism::glue(const Spacetime &W1,
+                                           const Spacetime &W2) {
+  const SimplexList tops1 = topSimplices(W1);
+  const SimplexList tops2 = topSimplices(W2);
+  if (tops1.empty() || tops2.empty())
+    throw std::invalid_argument(
+        "Cobordism::glue: both inputs must be non-empty triangulations");
+  if (tops1.front().size() != tops2.front().size())
+    throw std::invalid_argument(
+        "Cobordism::glue: the two complexes must have the same top dimension");
+
+  // Σ_C = the first isomorphic (W1 component, W2 component) pair; corr maps the
+  // W2 copy's vertex ids onto the W1 copy's, identifying the shared surface.
+  const std::vector<SimplexList> components1 = sortedBoundaryComponents(W1);
+  const std::vector<SimplexList> components2 = sortedBoundaryComponents(W2);
+  std::optional<std::map<std::uint64_t, std::uint64_t>> correspondence;
+  int sharedComponent2 = -1;
+  for (std::size_t i = 0; i < components1.size() && !correspondence; ++i)
+    for (std::size_t j = 0; j < components2.size(); ++j) {
+      std::optional<std::map<std::uint64_t, std::uint64_t>> candidate =
+          vertexCorrespondence(components2[j], components1[i]);
+      if (candidate) {
+        correspondence = std::move(candidate);
+        sharedComponent2 = static_cast<int>(j);
+        break;
+      }
+    }
+  if (!correspondence)
+    throw std::invalid_argument(
+        "Cobordism::glue: no shared (isomorphic) boundary surface Σ_C between "
+        "the two cobordisms");
+
+  std::set<std::uint64_t> sharedW2;  // W2 vertices lying on Σ_C
+  for (const std::vector<std::uint64_t> &face :
+       components2[static_cast<std::size_t>(sharedComponent2)])
+    for (std::uint64_t v : face) sharedW2.insert(v);
+
+  // Dense reindexing: W1's vertices first (in id order), then W2's non-shared
+  // vertices; each shared W2 vertex collapses onto its W1 partner.
+  std::set<std::uint64_t> vertices1;
+  for (const auto &top : tops1) for (std::uint64_t v : top) vertices1.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense1;
+  std::uint64_t next = 0;
+  for (std::uint64_t v : vertices1) dense1[v] = next++;
+
+  std::set<std::uint64_t> vertices2;
+  for (const auto &top : tops2) for (std::uint64_t v : top) vertices2.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense2;
+  for (std::uint64_t v : vertices2)
+    dense2[v] = sharedW2.count(v) ? dense1.at(correspondence->at(v)) : next++;
+  const std::size_t numVertices = next;
+
+  SimplexList merged;
+  merged.reserve(tops1.size() + tops2.size());
+  for (std::vector<std::uint64_t> top : tops1) {
+    for (std::uint64_t &v : top) v = dense1.at(v);
+    std::sort(top.begin(), top.end());
+    merged.push_back(std::move(top));
+  }
+  for (std::vector<std::uint64_t> top : tops2) {
+    for (std::uint64_t &v : top) v = dense2.at(v);
+    std::sort(top.begin(), top.end());
+    merged.push_back(std::move(top));
+  }
+  return buildSpacetime(numVertices, merged);
+}
+
+std::shared_ptr<Spacetime> Cobordism::selfGlue(const Spacetime &W) {
+  const SimplexList tops = topSimplices(W);
+  if (tops.empty())
+    throw std::invalid_argument(
+        "Cobordism::selfGlue: the input must be a non-empty triangulation");
+  const std::vector<SimplexList> components = sortedBoundaryComponents(W);
+  if (components.size() != 2)
+    throw std::invalid_argument(
+        "Cobordism::selfGlue: ∂W must have exactly two components to glue to "
+        "each other; got " + std::to_string(components.size()));
+  // Identify component 1 onto component 0 by the order-preserving isomorphism.
+  const std::optional<std::map<std::uint64_t, std::uint64_t>> correspondence =
+      vertexCorrespondence(components[1], components[0]);
+  if (!correspondence)
+    throw std::invalid_argument(
+        "Cobordism::selfGlue: the two boundary components are not isomorphic");
+
+  std::set<std::uint64_t> identified;  // component-1 vertices (folded into 0)
+  for (const std::vector<std::uint64_t> &face : components[1])
+    for (std::uint64_t v : face) identified.insert(v);
+
+  // Dense ids for the kept vertices (everything except component 1); each
+  // component-1 vertex takes the id of its component-0 partner.
+  std::set<std::uint64_t> allVertices;
+  for (const auto &top : tops) for (std::uint64_t v : top) allVertices.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense;
+  std::uint64_t next = 0;
+  for (std::uint64_t v : allVertices)
+    if (!identified.count(v)) dense[v] = next++;
+  for (std::uint64_t v : identified)
+    dense[v] = dense.at(correspondence->at(v));
+  const std::size_t numVertices = next;
+
+  SimplexList merged;
+  merged.reserve(tops.size());
+  for (std::vector<std::uint64_t> top : tops) {
+    for (std::uint64_t &v : top) v = dense.at(v);
+    std::sort(top.begin(), top.end());
+    if (std::adjacent_find(top.begin(), top.end()) != top.end())
+      throw std::runtime_error(
+          "Cobordism::selfGlue: the identification collapsed a top simplex (a "
+          "top simplex touches both boundary components — the collar is too "
+          "thin; thicken the glued direction to at least three layers)");
+    merged.push_back(std::move(top));
+  }
+  return buildSpacetime(numVertices, merged);
 }
 
 }  // namespace tessera::cobordism
