@@ -194,6 +194,59 @@ std::vector<int> ChainComplex::bettiNumbersGF2() const {
   return b;
 }
 
+std::vector<std::vector<std::uint64_t>> ChainComplex::orientedTopSimplices() const {
+  if (dimension_ < 0) return {};  // empty complex: no top simplices
+  return faceVerts_[static_cast<std::size_t>(dimension_)];
+}
+
+std::vector<int> ChainComplex::fundamentalClass() const {
+  // [W] ∈ H_d is the ±1 generator of ker ∂_d: the orientation each top simplex
+  // must carry (relative to its increasing-vertex reference orientation) so the
+  // top chain Σ_t ε_t·t is a cycle. For a closed connected oriented d-manifold
+  // this kernel is one-dimensional (b_d = 1), so the generator is unique up to
+  // an overall sign.
+  const int d = dimension_;
+  if (d < 1)
+    throw std::runtime_error(
+        "ChainComplex::fundamentalClass: a closed oriented manifold of "
+        "dimension >= 1 is required");
+  const int rows = static_cast<int>(counts_[static_cast<std::size_t>(d - 1)]);
+  const int cols = static_cast<int>(counts_[static_cast<std::size_t>(d)]);
+  Eigen::MatrixXd topBoundary(rows, cols);
+  const auto &flat = boundary_[static_cast<std::size_t>(d)];
+  for (int r = 0; r < rows; ++r)
+    for (int c = 0; c < cols; ++c)
+      topBoundary(r, c) =
+          static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
+
+  const Eigen::MatrixXd kernel =
+      Eigen::FullPivLU<Eigen::MatrixXd>(topBoundary).kernel();
+  if (kernel.cols() != 1)
+    throw std::runtime_error(
+        "ChainComplex::fundamentalClass: a closed connected oriented " +
+        std::to_string(d) + "-manifold is required (dim ker ∂_" +
+        std::to_string(d) + " = b_" + std::to_string(d) +
+        " must be 1, so the fundamental class is unique up to sign)");
+
+  // Every entry of this generator has the same magnitude (one orientation per
+  // top simplex), so scaling by the first nonzero entry makes the entries
+  // exactly ±1; fixing that entry to +1 makes the overall sign deterministic.
+  Eigen::VectorXd generator = kernel.col(0);
+  const double scale = generator.cwiseAbs().maxCoeff();
+  const double threshold = 1e-9 * (scale > 0.0 ? scale : 1.0);
+  int firstNonzero = 0;
+  while (firstNonzero < generator.size() &&
+         std::abs(generator[firstNonzero]) <= threshold)
+    ++firstNonzero;
+  generator /= generator[firstNonzero];
+
+  std::vector<int> epsilon(static_cast<std::size_t>(cols), 0);
+  for (int i = 0; i < generator.size(); ++i)
+    epsilon[static_cast<std::size_t>(i)] =
+        static_cast<int>(std::lround(generator[i]));
+  return epsilon;
+}
+
 // The intersection form records how the two-dimensional surfaces sitting
 // inside a four-dimensional manifold cross one another: given two such
 // surfaces it returns an integer counting their (signed) crossing points. We
@@ -234,29 +287,13 @@ std::vector<double> ChainComplex::intersectionForm() const {
       boundaryMatrixAsEigen(2, numEdges, numTriangles);          // triangles -> edges
   const Eigen::MatrixXd tetrahedronBoundaries =
       boundaryMatrixAsEigen(3, numTriangles, numTetrahedra);     // tetrahedra -> triangles
-  const Eigen::MatrixXd fourSimplexBoundaries =
-      boundaryMatrixAsEigen(4, numTetrahedra, numFourSimplices); // 4-simplices -> tetrahedra
 
   // Fundamental class: the single way (up to sign) to orient all the
-  // four-simplices coherently so their boundaries cancel. Algebraically it is
-  // the one-dimensional null space of the four-simplex boundary map; its
-  // entries are +/-1, one orientation per four-simplex. A closed orientable
-  // 4-manifold has exactly this; anything else has no fundamental class and no
-  // well-defined signature.
-  const Eigen::MatrixXd topCycles =
-      Eigen::FullPivLU<Eigen::MatrixXd>(fourSimplexBoundaries).kernel();
-  if (topCycles.cols() != 1)
-    throw std::runtime_error(
-        "ChainComplex::intersectionForm: a closed orientable 4-manifold is "
-        "required (the space of top-dimensional cycles is not 1-dimensional, so "
-        "there is no fundamental class)");
-  Eigen::VectorXd orientationPerFourSimplex = topCycles.col(0);
-  int largestEntry = 0;
-  for (int i = 1; i < orientationPerFourSimplex.size(); ++i)
-    if (std::abs(orientationPerFourSimplex[i]) >
-        std::abs(orientationPerFourSimplex[largestEntry]))
-      largestEntry = i;
-  orientationPerFourSimplex /= orientationPerFourSimplex[largestEntry];  // -> entries +/-1
+  // four-simplices coherently so their boundaries cancel — the ±1 generator of
+  // ker ∂_4, one orientation per four-simplex (see fundamentalClass()). A closed
+  // orientable 4-manifold has exactly this; anything else has no fundamental
+  // class and no well-defined signature, and the call throws.
+  const std::vector<int> orientationPerFourSimplex = fundamentalClass();
 
   // Two-dimensional cohomology classes as triangle-cochains:
   //  - "closed" cochains are the null space of the transposed tetrahedron
@@ -309,7 +346,8 @@ std::vector<double> ChainComplex::intersectionForm() const {
         triangleIndexByVertices.at({vertices[0], vertices[1], vertices[2]});
     const int backTriangle =
         triangleIndexByVertices.at({vertices[2], vertices[3], vertices[4]});
-    const double orientation = orientationPerFourSimplex[s];
+    const double orientation =
+        static_cast<double>(orientationPerFourSimplex[static_cast<std::size_t>(s)]);
     for (int a = 0; a < numClasses; ++a)
       for (int b = 0; b < numClasses; ++b)
         intersectionMatrix[static_cast<std::size_t>(a) * numClasses + b] +=
