@@ -28,7 +28,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cobordism/BoundaryStateSynthesis.h"
+#include "cobordism/GeometrySynthesizer.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cobordism.h"
@@ -267,8 +267,8 @@ construction (the weight-carrying edges: both endpoints present, no self-loops).
            "Write the edge phases in place. Raises if len(theta) != numEdges().");
 
   // ----- §4b cone-and-retry synthesis loop → geo(ψ) (#134) -----
-  py::class_<BoundaryStateSynthesis> bss(m, "BoundaryStateSynthesis",
-      R"doc(§4b cone-and-retry boundary-state synthesis loop → geo(ψ).
+  py::class_<GeometrySynthesizer> gs(m, "GeometrySynthesizer",
+      R"doc(§4b cone-and-retry geometry synthesis loop → geo(ψ).
 
 Given a target qubit (c0, c1), finds the simplest simplicial complex whose k=0
 Hodge Laplacian L = D - A has ψ = (c0, c1, 0, ..., 0) as an eigenvector — the
@@ -292,53 +292,53 @@ A general-amplitude qubit (|c0| ≠ |c1|) cannot be a two-vertex eigenvector
 (residual floor w_min²(|c0|²-|c1|²)² > 0, #133); seeded on a single edge it is
 synthesized only after coning in one auxiliary vertex (the minimal complex).)doc");
 
-  py::class_<BoundaryStateSynthesis::Geo>(bss, "Geo",
+  py::class_<GeometrySynthesizer::Geo>(gs, "Geo",
       "geo(ψ): the accepted complex's size (|V|, |E|) = combinatorial "
       "complexity, its realized edge weights/phases, the realized eigenvalue λ, "
       "and whether the loop converged (r < ε).")
-      .def_readonly("converged", &BoundaryStateSynthesis::Geo::converged,
+      .def_readonly("converged", &GeometrySynthesizer::Geo::converged,
                     "True iff the loop reached r < ε within the cone budget.")
-      .def_readonly("residual", &BoundaryStateSynthesis::Geo::residual,
+      .def_readonly("residual", &GeometrySynthesizer::Geo::residual,
                     "Best residual r = ||(I - ψψ†)Lψ||² on the accepted complex.")
-      .def_readonly("eigenvalue", &BoundaryStateSynthesis::Geo::eigenvalue,
+      .def_readonly("eigenvalue", &GeometrySynthesizer::Geo::eigenvalue,
                     "Realized eigenvalue λ = ψ†Lψ (Rayleigh quotient).")
-      .def_readonly("num_vertices", &BoundaryStateSynthesis::Geo::numVertices,
+      .def_readonly("num_vertices", &GeometrySynthesizer::Geo::numVertices,
                     "|V| of the accepted complex (with num_edges, the "
                     "combinatorial complexity).")
-      .def_readonly("num_edges", &BoundaryStateSynthesis::Geo::numEdges,
+      .def_readonly("num_edges", &GeometrySynthesizer::Geo::numEdges,
                     "|E| of the accepted complex.")
-      .def_readonly("cones_applied", &BoundaryStateSynthesis::Geo::conesApplied,
+      .def_readonly("cones_applied", &GeometrySynthesizer::Geo::conesApplied,
                     "Number of auxiliary vertices coned in to reach acceptance.")
-      .def_readonly("weights", &BoundaryStateSynthesis::Geo::weights,
+      .def_readonly("weights", &GeometrySynthesizer::Geo::weights,
                     "The accepted complex's edge magnitudes {w_ij} (EdgeList order).")
-      .def_readonly("phases", &BoundaryStateSynthesis::Geo::phases,
+      .def_readonly("phases", &GeometrySynthesizer::Geo::phases,
                     "The accepted complex's edge phases {θ_ij} (EdgeList order).");
 
-  bss.def(py::init<std::shared_ptr<Spacetime>>(), py::arg("seed"),
+  gs.def(py::init<std::shared_ptr<Spacetime>>(), py::arg("seed"),
           "Build the loop over a seed complex (§4b.4 seeds on a 4-simplex Δ⁴; a "
           "single edge is the minimal seed exhibiting the §4b.2 two-vertex "
           "floor). The two smallest-id vertices become the logical pair.")
-      .def("synthesize", &BoundaryStateSynthesis::synthesize, py::arg("c0"),
+      .def("synthesize", &GeometrySynthesizer::synthesize, py::arg("c0"),
            py::arg("c1"), py::arg("epsilon") = 1e-9, py::arg("restarts") = 64,
            py::arg("max_cones") = 5, py::arg("seed") = 0,
            "Run the cone-and-retry loop for the qubit (c0, c1) and return "
            "geo(ψ). Optimizes the current complex; if it cannot reach r < ε, "
            "cones in one vertex and retries (up to max_cones). Leaves the "
            "complex realized at the accepted optimum.")
-      .def("optimize", &BoundaryStateSynthesis::optimize, py::arg("c0"),
+      .def("optimize", &GeometrySynthesizer::optimize, py::arg("c0"),
            py::arg("c1"), py::arg("restarts") = 64, py::arg("seed") = 0,
            "Optimize the current complex only (no coning): multi-restart "
            "Levenberg–Marquardt minimizing r(ψ). Leaves the complex at the best "
            "parameters and returns that best residual — the §4b.2 floor probe.")
-      .def("cone_in_vertex", &BoundaryStateSynthesis::coneInVertex,
+      .def("cone_in_vertex", &GeometrySynthesizer::coneInVertex,
            "Cone in one auxiliary vertex (join a fresh apex to the current top "
            "simplex, Kₙ → Kₙ₊₁). Returns False without growing if the simplex "
            "has reached the Fingerprint vertex capacity.")
-      .def("num_vertices", &BoundaryStateSynthesis::numVertices,
+      .def("num_vertices", &GeometrySynthesizer::numVertices,
            "|V| of the current complex.")
-      .def("num_edges", &BoundaryStateSynthesis::numEdges,
+      .def("num_edges", &GeometrySynthesizer::numEdges,
            "|E| of the current complex.")
-      .def("spacetime", &BoundaryStateSynthesis::spacetime,
+      .def("spacetime", &GeometrySynthesizer::spacetime,
            "The current (growing) complex.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct

@@ -21,7 +21,7 @@
 
 """§4b cone-and-retry synthesis loop → geo(ψ) (#134).
 
-BoundaryStateSynthesis grows the simplest complex realizing a target qubit as a
+GeometrySynthesizer grows the simplest complex realizing a target qubit as a
 k=0 Hodge-Laplacian eigenvector, building on EigenstateSynthesis (#133, the
 fixed-complex residual/optimizer core, reused unmodified) and the pre-geometric
 vertex insertion (#112). The qubit is embedded as ψ = (c0, c1, 0, ..., 0): the
@@ -109,19 +109,19 @@ W_MIN = 0.1  # the search-box floor (matches the C++ optimizer)
 # --------------------------------------------------------------------------- #
 class StructureTest(unittest.TestCase):
     def test_seed_sizes(self):
-        bss = cob.BoundaryStateSynthesis(_edge_seed())
-        self.assertEqual(bss.num_vertices(), 2)
-        self.assertEqual(bss.num_edges(), 1)
+        gs = cob.GeometrySynthesizer(_edge_seed())
+        self.assertEqual(gs.num_vertices(), 2)
+        self.assertEqual(gs.num_edges(), 1)
 
-        bss4 = cob.BoundaryStateSynthesis(_delta4_seed())
-        self.assertEqual(bss4.num_vertices(), 5)
-        self.assertEqual(bss4.num_edges(), 10)
+        gs4 = cob.GeometrySynthesizer(_delta4_seed())
+        self.assertEqual(gs4.num_vertices(), 5)
+        self.assertEqual(gs4.num_edges(), 10)
 
     def test_too_small_seed_raises(self):
         # One vertex cannot carry a two-amplitude qubit.
         st = _from_simplices(1, [])
         with self.assertRaises(Exception):
-            cob.BoundaryStateSynthesis(st)
+            cob.GeometrySynthesizer(st)
 
 
 class TwoVertexFloorTest(unittest.TestCase):
@@ -129,8 +129,8 @@ class TwoVertexFloorTest(unittest.TestCase):
     the residual floors bounded away from 0 (the motivation for coning)."""
 
     def test_general_qubit_floors(self):
-        bss = cob.BoundaryStateSynthesis(_edge_seed())
-        r = bss.optimize(complex(A_AMP), complex(B_AMP), restarts=48, seed=1)
+        gs = cob.GeometrySynthesizer(_edge_seed())
+        r = gs.optimize(complex(A_AMP), complex(B_AMP), restarts=48, seed=1)
         # Closed-form box minimum: w_min^2 (|c0|^2 - |c1|^2)^2.
         d = A_AMP ** 2 - B_AMP ** 2
         floor = W_MIN ** 2 * d ** 2
@@ -138,9 +138,9 @@ class TwoVertexFloorTest(unittest.TestCase):
         self.assertAlmostEqual(r, floor, delta=1.5e-3)   # ~ the closed form
 
     def test_balanced_qubit_is_realizable_on_two_vertices(self):
-        bss = cob.BoundaryStateSynthesis(_edge_seed())
+        gs = cob.GeometrySynthesizer(_edge_seed())
         amp = 1.0 / math.sqrt(2.0)
-        r = bss.optimize(complex(amp), complex(amp), restarts=48, seed=2)
+        r = gs.optimize(complex(amp), complex(amp), restarts=48, seed=2)
         self.assertLess(r, 1e-9)
 
 
@@ -149,8 +149,8 @@ class ConeAndRetryTest(unittest.TestCase):
     the accepted complex is minimal."""
 
     def test_general_qubit_synthesized_after_coning(self):
-        bss = cob.BoundaryStateSynthesis(_edge_seed())
-        geo = bss.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
+        gs = cob.GeometrySynthesizer(_edge_seed())
+        geo = gs.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
                              restarts=80, max_cones=4, seed=3)
 
         # Synthesized (r < ε) — only after coning in one auxiliary vertex.
@@ -165,20 +165,20 @@ class ConeAndRetryTest(unittest.TestCase):
     def test_accepted_complex_is_minimal(self):
         # The accepted complex has 3 vertices; the only smaller complex (the
         # 2-vertex seed) floors — so 3 is minimal.
-        bss = cob.BoundaryStateSynthesis(_edge_seed())
-        geo = bss.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
+        gs = cob.GeometrySynthesizer(_edge_seed())
+        geo = gs.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
                              restarts=80, max_cones=4, seed=5)
         self.assertEqual(geo.num_vertices, 3)
 
-        smaller = cob.BoundaryStateSynthesis(_edge_seed())
+        smaller = cob.GeometrySynthesizer(_edge_seed())
         r2 = smaller.optimize(complex(A_AMP), complex(B_AMP), restarts=64, seed=5)
         self.assertGreater(r2, 1e-3)             # 2 vertices cannot converge
         self.assertLess(geo.residual, 1e-6 * r2)  # 3 vertices does
 
     def test_realized_state_is_an_eigenvector(self):
         seed = _edge_seed()
-        bss = cob.BoundaryStateSynthesis(seed)
-        geo = bss.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
+        gs = cob.GeometrySynthesizer(seed)
+        geo = gs.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
                              restarts=80, max_cones=4, seed=7)
         self.assertTrue(geo.converged)
 
@@ -210,8 +210,8 @@ class Delta4SeedTest(unittest.TestCase):
     general qubit is realized there with zero cones."""
 
     def test_delta4_realizes_general_qubit_without_coning(self):
-        bss = cob.BoundaryStateSynthesis(_delta4_seed())
-        geo = bss.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
+        gs = cob.GeometrySynthesizer(_delta4_seed())
+        geo = gs.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
                              restarts=64, max_cones=0, seed=11)
         self.assertTrue(geo.converged)
         self.assertLess(geo.residual, 1e-9)
@@ -230,15 +230,15 @@ class HomotopyPreservedTest(unittest.TestCase):
 
     def test_betti_unchanged_across_coning(self):
         seed = _edge_seed()
-        bss = cob.BoundaryStateSynthesis(seed)
+        gs = cob.GeometrySynthesizer(seed)
 
         b = self._betti(seed)               # edge: contractible
         self.assertEqual(b[0], 1)
         self.assertEqual(sum(b[1:]), 0)
 
         for expected_v in (3, 4, 5):
-            self.assertTrue(bss.cone_in_vertex())
-            self.assertEqual(bss.num_vertices(), expected_v)
+            self.assertTrue(gs.cone_in_vertex())
+            self.assertEqual(gs.num_vertices(), expected_v)
             b = self._betti(seed)
             self.assertEqual(b[0], 1)            # still connected
             self.assertEqual(sum(b[1:]), 0)      # still contractible
@@ -246,8 +246,8 @@ class HomotopyPreservedTest(unittest.TestCase):
     def test_betti_unchanged_during_synthesis(self):
         seed = _edge_seed()
         b_before = self._betti(seed)
-        bss = cob.BoundaryStateSynthesis(seed)
-        bss.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
+        gs = cob.GeometrySynthesizer(seed)
+        gs.synthesize(complex(A_AMP), complex(B_AMP), epsilon=1e-9,
                        restarts=80, max_cones=4, seed=13)
         b_after = self._betti(seed)
         # Homotopy type preserved: contractible before and after.

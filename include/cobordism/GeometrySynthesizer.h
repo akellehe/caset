@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef TESSERA_COBORDISM_BOUNDARYSTATESYNTHESIS_H
-#define TESSERA_COBORDISM_BOUNDARYSTATESYNTHESIS_H
+#ifndef TESSERA_COBORDISM_GEOMETRYSYNTHESIZER_H
+#define TESSERA_COBORDISM_GEOMETRYSYNTHESIZER_H
 
 #include <complex>
 #include <cstddef>
@@ -35,21 +35,25 @@ namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
 
-/// # BoundaryStateSynthesis
+class EigenstateSynthesis;
+
+/// # GeometrySynthesizer
 ///
-/// The §4b **cone-and-retry synthesis loop**: given a target qubit
-/// \f$ \psi = (c_0, c_1) \f$, find the *simplest* simplicial complex whose
-/// \f$ k=0 \f$ Hodge Laplacian \f$ L = D - A \f$ has \f$ \psi \f$ (padded with
-/// zero-amplitude auxiliary vertices) as an eigenvector, and return that
-/// minimal complex together with its Hermitian edge weights/phases and the
-/// realized eigenvalue \f$ \lambda \f$ — the geometric image \f$ \mathrm{geo}(\psi) \f$.
+/// Synthesizes \f$ \mathrm{geo}(\psi) \f$ — a state's **geometric image**. Given
+/// a target qubit \f$ \psi = (c_0, c_1) \f$, it grows the *simplest* simplicial
+/// complex whose \f$ k=0 \f$ Hodge Laplacian \f$ L = D - A \f$ has \f$ \psi \f$
+/// (padded with zero-amplitude auxiliary vertices) as an eigenvector, and returns
+/// that minimal complex together with its Hermitian edge weights/phases and the
+/// realized eigenvalue \f$ \lambda \f$.
 ///
-/// This is the growth stage built on top of the fixed-complex
-/// `EigenstateSynthesis` (#133, the residual + Rayleigh + parameter core) and
-/// the pre-geometric vertex-insertion of the Pachner family (#112). It does
-/// **not** modify `EigenstateSynthesis`: it constructs a fresh one over the
-/// current complex on every optimize pass and calls its public residual /
-/// `apply` / parameter surface.
+/// This is the §4b **cone-and-retry synthesis loop**, the growth stage built on
+/// the fixed-complex `EigenstateSynthesis` (#133, the residual + Rayleigh +
+/// parameter core) and the pre-geometric vertex-insertion of the Pachner family
+/// (#112). It is pure orchestration: it embeds the qubit, drives a generic
+/// `LevenbergMarquardt` over a fresh `EigenstateSynthesis` per pass, and cones in
+/// auxiliary vertices when a pass cannot converge. It does **not** modify
+/// `EigenstateSynthesis` — it only calls its public residual / `apply` /
+/// parameter surface.
 ///
 /// ## Embedding (§4b.1)
 ///
@@ -70,12 +74,12 @@ using namespace ::tessera::spacetime;
 ///
 /// ## The loop (§4b.4)
 ///
-/// 1. Run the non-convex, multi-restart optimizer over the per-edge magnitudes
-///    \f$ \{w_{ij}\} \f$ and U(1) phases \f$ \{\theta_{ij}\} \f$, minimizing the
-///    eigenvalue-agnostic residual \f$ r(\psi) = \|(I-\psi\psi^\dagger)L\psi\|^2 \f$.
-///    (A Levenberg–Marquardt least-squares solver on the residual vector
-///    \f$ L\psi - \lambda\psi \f$, with random restarts — the landscape is
-///    non-convex.)
+/// 1. Run the non-convex, multi-restart `LevenbergMarquardt` over the per-edge
+///    magnitudes \f$ \{w_{ij}\} \f$ and U(1) phases \f$ \{\theta_{ij}\} \f$,
+///    minimizing the eigenvalue-agnostic residual
+///    \f$ r(\psi) = \|(I-\psi\psi^\dagger)L\psi\|^2 \f$ via its least-squares
+///    residual vector \f$ L\psi - \lambda\psi \f$ (the landscape is non-convex,
+///    hence the random restarts).
 /// 2. If no restart drives \f$ r < \epsilon \f$, **cone in one vertex** and
 ///    re-optimize. The cone joins a fresh apex to the current top simplex,
 ///    enlarging the parameter space; for the contractible boundary-state
@@ -87,7 +91,7 @@ using namespace ::tessera::spacetime;
 /// 3. Accept the first complex reaching \f$ r < \epsilon \f$. Its \f$ (|V|,|E|) \f$
 ///    is the combinatorial complexity; the realized eigenvalue is the Rayleigh
 ///    quotient \f$ \lambda = \psi^\dagger L\psi \f$.
-class BoundaryStateSynthesis {
+class GeometrySynthesizer {
   public:
     /// The geometric image \f$ \mathrm{geo}(\psi) \f$ of an accepted synthesis:
     /// the minimal complex's size, its realized edge parameters, and \f$ \lambda \f$.
@@ -110,12 +114,13 @@ class BoundaryStateSynthesis {
       std::vector<double> phases{};
     };
 
-    /// Construct the loop over a seed complex (§4b.4 seeds it on a 4-simplex
-    /// \f$ \Delta^4 \f$; a single edge is the minimal seed that exhibits the
-    /// §4b.2 two-vertex floor). The two smallest-id vertices become the logical
-    /// pair; coned-in apices take larger ids, so the logical pair stays the
-    /// \f$ \psi \f$ head. The held `shared_ptr` keeps the (growing) complex alive.
-    explicit BoundaryStateSynthesis(std::shared_ptr<Spacetime> seed);
+    /// Construct the synthesizer over a seed complex (§4b.4 seeds it on a
+    /// 4-simplex \f$ \Delta^4 \f$; a single edge is the minimal seed that exhibits
+    /// the §4b.2 two-vertex floor). The two smallest-id vertices become the
+    /// logical pair; coned-in apices take larger ids, so the logical pair stays
+    /// the \f$ \psi \f$ head. The held `shared_ptr` keeps the (growing) complex
+    /// alive.
+    explicit GeometrySynthesizer(std::shared_ptr<Spacetime> seed);
 
     /// Run the cone-and-retry loop for the qubit \f$ (c_0, c_1) \f$ and return
     /// \f$ \mathrm{geo}(\psi) \f$. Optimizes the current complex; if it cannot
@@ -155,6 +160,17 @@ class BoundaryStateSynthesis {
     [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return st_; }
 
   private:
+    // §4b.3 search box (matching the #133 driver): per-edge magnitudes in
+    // [kWMin, kWMax], U(1) phases in [-kThetaBound, kThetaBound]. The two-vertex
+    // floor w_min²(|c0|²-|c1|²)² is taken at kWMin, so a positive kWMin keeps the
+    // floor demonstrably nonzero while the box still contains the exact
+    // eigenvector solutions on the coned-up complexes.
+    static constexpr double kPi = 3.14159265358979323846;
+    static constexpr double kWMin = 0.1;
+    static constexpr double kWMax = 10.0;
+    static constexpr double kThetaBound = 2.0 * kPi;
+    static constexpr int kMaxIterations = 200;  // LM iterations per descent
+
     std::shared_ptr<Spacetime> st_;
     std::uint64_t logicalId0_{0};  // smallest vertex id  -> amplitude c0
     std::uint64_t logicalId1_{0};  // 2nd smallest id     -> amplitude c1
@@ -166,8 +182,18 @@ class BoundaryStateSynthesis {
     // == current |V|.
     [[nodiscard]] std::vector<std::complex<double>> embed(
         std::complex<double> c0, std::complex<double> c1) const;
+
+    // Fit the edge parameters of the fixed complex behind `es` so the (normalized)
+    // target `psi` is a Laplacian eigenvector: the multi-restart bounded
+    // Levenberg–Marquardt over the §4b box. Leaves `es` realized at the best
+    // parameters found and returns that best residual r(ψ). The per-pass core of
+    // both `optimize` (epsilon = 0 ⇒ no early-out) and `synthesize`.
+    [[nodiscard]] double runOptimizer(EigenstateSynthesis &es,
+                                      const std::vector<std::complex<double>> &psi,
+                                      int restarts, std::uint64_t seed,
+                                      double epsilon) const;
 };
 
 }  // namespace tessera::cobordism
 
-#endif  // TESSERA_COBORDISM_BOUNDARYSTATESYNTHESIS_H
+#endif  // TESSERA_COBORDISM_GEOMETRYSYNTHESIZER_H
