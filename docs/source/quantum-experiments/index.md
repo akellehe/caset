@@ -17,6 +17,7 @@ charged-cartan/index
 cobordism
 cobordism-plan
 cobordism-stage2-report
+cobordism-realizability-report
 ```
 
 ## Reproducing
