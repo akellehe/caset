@@ -671,17 +671,19 @@ std::vector<double> Simplex::cofactorMatrix(
     return C;
 }
 
-std::vector<double> Simplex::gramMatrix() const {
+std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
     int dPlus1 = static_cast<int>(vertices.size());
     int d = dPlus1 - 1;
     if (d < 1) return {};
 
-    // Build squared-distance lookup using Wick-rotated (absolute) values.
+    // Squared-distance lookup. Honor the signed l^2 so the Lorentzian sign of
+    // timelike edges survives into G; wickRotate takes |l^2| (Euclidean/CDT).
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = std::abs(e->getSquaredLength());
+        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
+                               : e->getSquaredLength();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -699,7 +701,37 @@ std::vector<double> Simplex::gramMatrix() const {
     return G;
 }
 
-double Simplex::dihedralAngle(SimplexPtr hinge) const {
+std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
+    int dPlus1 = static_cast<int>(vertices.size());
+    if (dPlus1 < 1) return {};
+
+    // Squared-distance lookup; signed by default, |l^2| under wickRotate.
+    std::unordered_map<std::uint64_t, double> sqMap;
+    for (const auto &e : edges) {
+        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
+                  Fingerprint::mix64(e->getTarget()->getId());
+        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
+                               : e->getSquaredLength();
+    }
+    auto getSq = [&](int i, int j) -> double {
+        if (i == j) return 0.0;
+        auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
+                  Fingerprint::mix64(vertices[j]->getId());
+        auto it = sqMap.find(fp);
+        return it != sqMap.end() ? it->second : 0.0;
+    };
+
+    // Bordered matrix: zero corner, a border of ones, squared distances inside.
+    int n = dPlus1 + 1;
+    std::vector<double> B(n * n, 0.0);
+    for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
+    for (int i = 0; i < dPlus1; ++i)
+        for (int j = 0; j < dPlus1; ++j)
+            B[(i + 1) * n + (j + 1)] = getSq(i, j);
+    return B;
+}
+
+double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
     int dPlus1 = static_cast<int>(vertices.size());
 
     // Find the two vertices in this simplex but not in the hinge.
@@ -714,28 +746,9 @@ double Simplex::dihedralAngle(SimplexPtr hinge) const {
     if (opposite.size() != 2) return 0.0;
     int vi = opposite[0], vj = opposite[1];
 
-    // Cayley-Menger bordered matrix approach.
-    std::unordered_map<std::uint64_t, double> sqMap;
-    for (const auto &e : edges) {
-        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
-                  Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = std::abs(e->getSquaredLength());
-    }
-    auto getSq = [&](int i, int j) -> double {
-        if (i == j) return 0.0;
-        auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
-                  Fingerprint::mix64(vertices[j]->getId());
-        auto it = sqMap.find(fp);
-        return it != sqMap.end() ? it->second : 0.0;
-    };
-
+    // Cayley-Menger bordered matrix; its cofactors give the dihedral angle.
     int n = dPlus1 + 1;
-    std::vector<double> B(n * n, 0.0);
-    for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
-    for (int i = 0; i < dPlus1; ++i)
-        for (int j = 0; j < dPlus1; ++j)
-            B[(i + 1) * n + (j + 1)] = getSq(i, j);
-
+    auto B = cayleyMengerMatrix(wickRotate);
     auto cof = cofactorMatrix(B, n);
     int bi = vi + 1, bj = vj + 1;
     double Cij = cof[bi * n + bj];
@@ -762,20 +775,45 @@ double Simplex::deficitAngle() const {
         for (std::size_t i = 1; i < vertices.size(); ++i)
             if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
         if (containsAll)
-            sum += sigma->dihedralAngle(const_cast<Simplex*>(this));
+            // Deficit angles drive the CDT/Regge action, which is defined on
+            // the Wick-rotated (Euclidean) geometry — request |l^2| explicitly.
+            sum += sigma->dihedralAngle(const_cast<Simplex*>(this), /*wickRotate=*/true);
     }
     return 2.0 * std::numbers::pi - sum;
 }
 
-double Simplex::area() const {
+double Simplex::area(bool wickRotate) const {
     if (edges.size() < 3) return 0.0;
-    double a2 = std::abs(edges[0]->getSquaredLength());
-    double b2 = std::abs(edges[1]->getSquaredLength());
-    double c2 = std::abs(edges[2]->getSquaredLength());
+    auto sq = [&](std::size_t k) -> double {
+        return wickRotate ? std::abs(edges[k]->getSquaredLength())
+                          : edges[k]->getSquaredLength();
+    };
+    double a2 = sq(0);
+    double b2 = sq(1);
+    double c2 = sq(2);
     double val = 2.0 * (a2 * b2 + b2 * c2 + c2 * a2)
                  - (a2 * a2 + b2 * b2 + c2 * c2);
     if (val <= 0.0) return 0.0;
     return std::sqrt(val) / 4.0;
+}
+
+double Simplex::volume() const {
+    int d = static_cast<int>(vertices.size()) - 1;
+    if (d < 1) return 0.0;
+
+    // Honest, signature-respecting Gram matrix: timelike edges keep l^2 < 0,
+    // so det(G) can be negative for a Lorentzian cell.
+    const std::vector<double> G = gramMatrix(/*wickRotate=*/false);
+    if (static_cast<int>(G.size()) != d * d) return 0.0;
+
+    const double detG = determinant(G, d);
+    double factorial = 1.0;
+    for (int i = 2; i <= d; ++i) factorial *= static_cast<double>(i);
+
+    // Signed d-content: sqrt(det G)/d! with the sign of det(G) carried out so
+    // the result stays real and records the signature instead of |det G|.
+    const double sign = (detG < 0.0) ? -1.0 : 1.0;
+    return sign * std::sqrt(std::abs(detG)) / factorial;
 }
 
 }

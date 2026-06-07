@@ -30,9 +30,11 @@ bool PositiveGramDeterminantFilter::accept(SimplexPtr const& simplex) const {
     // Vertex 0 is the origin; G is positive-definite for a non-degenerate
     // Euclidean k-simplex, so det(G) > 0 is the validity criterion. (The
     // simplex's k-volume is √(det(G) / k!²); det(G) > 0 ⇔ real positive
-    // volume.) Any NaN / inf in edge lengths propagates through the Gram
-    // build and we reject the simplex defensively.
-    std::vector<double> gram = simplex->gramMatrix();
+    // volume.) This is a Euclidean validity test, so request the Wick-rotated
+    // (|l^2|) Gram — a Lorentzian cell with timelike edges would otherwise have
+    // a sign-indefinite det(G). Any NaN / inf in edge lengths propagates
+    // through the Gram build and we reject the simplex defensively.
+    std::vector<double> gram = simplex->gramMatrix(/*wickRotate=*/true);
     const int d = static_cast<int>(k1) - 1;
     if (static_cast<int>(gram.size()) != d * d) return false;
 

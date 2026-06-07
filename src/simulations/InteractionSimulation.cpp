@@ -385,7 +385,7 @@ double cellHingeAction(const double edgeSq[10]) {
     for (SimplexPtr facet : cell->getFacets())
         for (SimplexPtr hinge : facet->getFacets())
             if (hinge->getVertices().size() == 3)
-                s += hinge->area() * hinge->deficitAngle();
+                s += hinge->area(/*wickRotate=*/true) * hinge->deficitAngle();
     return s;
 }
 
@@ -991,7 +991,7 @@ bool InteractionSimulation::interact() {
     for (SimplexPtr facet : cell->getFacets())
         for (SimplexPtr hinge : facet->getFacets())
             if (hinge->getVertices().size() == 3)
-                hingeAction_[hinge] = hinge->area() * hinge->deficitAngle();
+                hingeAction_[hinge] = hinge->area(/*wickRotate=*/true) * hinge->deficitAngle();
 
     stateOf_[xp] = res.statePrimeX;
     stateOf_[ab] = res.stateAB;
