@@ -3,10 +3,10 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Overview" href="overview/index.html"><link rel="prev" title="Emergent Spectral Dimension from the Schwinger TDVP State" href="../holography-causal-ordering-emergent-dimension.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Cobordism experiment — synthesis &amp; realizability: results" href="cobordism-realizability-report.html"><link rel="prev" title="Cobordism correspondence — Stage 1 (algebraic layer) implementation plan" href="cobordism-plan.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
-        <title>Quantum experiments - tessera 0.1.0 documentation</title>
+        <title>Cobordism experiment — Stage 2 (topological layer): results - tessera 0.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
     <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -200,7 +200,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
-<li class="toctree-l1 current has-children current-page"><a class="current reference internal" href="#">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="overview/index.html">Overview</a><input aria-label="Toggle navigation of Overview" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l3"><a class="reference internal" href="overview/intellectual_lineage.html">4D Charged Cartan Monte Carlo: milestones and motivation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="overview/h_ds4_status.html">Charged Cartan Monte Carlo — Overview: H_DS4 status</a></li>
@@ -235,7 +235,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html">Cobordism experiment — Stage 2 (topological layer): results</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Cobordism experiment — Stage 2 (topological layer): results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html">Cobordism experiment — synthesis &amp; realizability: results</a></li>
 </ul>
 </li>
@@ -260,7 +260,7 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="../_sources/quantum-experiments/index.md.txt" title="View this page">
+  <a class="muted-link" href="../_sources/quantum-experiments/cobordism-stage2-report.md.txt" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
@@ -278,104 +278,150 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="quantum-experiments">
-<h1>Quantum experiments<a class="headerlink" href="#quantum-experiments" title="Link to this heading">¶</a></h1>
-<p>The project’s progression toward an emergent 4D spacetime construction.</p>
-<p>For orientation, start with the <a class="reference internal" href="overview/intellectual_lineage.html"><span class="std std-doc">intellectual lineage</span></a>
-which describes the sequence of ideas — from van Raamsdonk to the
-current state — and the <a class="reference internal" href="overview/h_ds4_status.html"><span class="std std-doc">H_DS4 status page</span></a>
-which tracks where the central hypothesis stands across all
-experiments.</p>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="overview/index.html">Overview</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="overview/intellectual_lineage.html">4D Charged Cartan Monte Carlo: milestones and motivation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview/h_ds4_status.html">Charged Cartan Monte Carlo — Overview: H_DS4 status</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview/from_schwinger_to_lattice.html">From the Schwinger model to an abstract lattice construction</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="earlier-work/index.html">Earlier work</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="earlier-work/lightcone_vs_majorization.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
-<li class="toctree-l2"><a class="reference internal" href="earlier-work/emergent_spectral_dimension.html">Emergent spectral dimension — first run</a></li>
-<li class="toctree-l2"><a class="reference internal" href="earlier-work/temporally_connected_entangled_spacetime.html">Temporally-connected entangled spacetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="earlier-work/interaction_branching_simplex.html">Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane</a></li>
-<li class="toctree-l2"><a class="reference internal" href="earlier-work/interaction_history_monte_carlo.html">Interaction-history Monte Carlo: the search for spectral dimension 4</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="charged-cartan/index.html">Charged Cartan Monte Carlo</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="charged-cartan/design/index.html">Charged Cartan Monte Carlo — design notes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="charged-cartan/experiments/index.html">Charged Cartan Monte Carlo — experiments</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#objective">0. Objective</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#hypothesis-under-test">1. Hypothesis under test</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#what-to-build-on-in-tessera">2. What to build on in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#notation">3. Notation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#stage-1-algebraic-layer-n-1-pure-linear-algebra">4. Stage 1 — Algebraic layer (<span class="math notranslate nohighlight">\(n=1\)</span>), pure linear algebra</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#b-boundary-state-synthesis-inverse-eigenvector-problem">4b. Boundary-state synthesis (inverse eigenvector problem)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#stage-2-topological-layer-n-3-simplicial-via-tessera">5. Stage 2 — Topological layer (<span class="math notranslate nohighlight">\(n=3\)</span>), simplicial via <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#falsifiable-predictions">6. Falsifiable predictions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#parameter-sweeps">7. Parameter sweeps</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism.html#outputs">8. Outputs</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#context">Context</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#architecture-reuse-the-two-existing-worlds-build-the-seam">Architecture — reuse the two existing worlds, build the seam</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#fixtures-existing-inline-no-new-graph-classes">Fixtures (existing + inline; no new graph classes)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#mapping-to-the-spec-checks-c1c5">Mapping to the spec checks (C1–C5)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#tickets-cobordism-correspondence-v0-1-issue-first-one-per-pr">Tickets (Cobordism Correspondence v0.1; issue-first, one per PR)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#build-verification">Build &amp; verification</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#risks">Risks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html#after-stage-1-stage-2-milestone">After Stage 1 (Stage 2 milestone)</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="cobordism-stage2-report.html">Cobordism experiment — Stage 2 (topological layer): results</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#verdict">Verdict</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#what-was-built">What was built</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#the-checks">The checks</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#key-findings">Key findings</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#conventions">Conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#reproduce">Reproduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html#beyond-stage-2">Beyond Stage 2</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="cobordism-realizability-report.html">Cobordism experiment — synthesis &amp; realizability: results</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#verdict">Verdict</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#reframed-realizability-is-spectral-bulk-synthesis">§5.0 reframed: realizability is spectral bulk synthesis</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#the-three-correspondence-hypotheses">The three correspondence hypotheses</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#method">Method</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#results">Results</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#key-findings">Key findings</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#conventions">Conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html#reproduce">Reproduce</a></li>
-</ul>
-</li>
-</ul>
+          <section class="tex2jax_ignore mathjax_ignore" id="cobordism-experiment-stage-2-topological-layer-results">
+<h1>Cobordism experiment — Stage 2 (topological layer): results<a class="headerlink" href="#cobordism-experiment-stage-2-topological-layer-results" title="Link to this heading">¶</a></h1>
+<blockquote>
+<div><p>What the Stage-2 (<span class="math notranslate nohighlight">\(n=3\)</span>, simplicial) topological layer built, and what it
+shows. Companion to the runnable oracle
+<code class="docutils literal notranslate"><span class="pre">examples/cobordism/topological_correspondence.py</span></code> and to the Stage-1 plan
+<code class="docutils literal notranslate"><span class="pre">cobordism-plan.md</span></code>; the experiment charter is <code class="docutils literal notranslate"><span class="pre">cobordism.md</span></code> §5.</p>
+</div></blockquote>
+<section id="verdict">
+<h2>Verdict<a class="headerlink" href="#verdict" title="Link to this heading">¶</a></h2>
+<p>The State–Operation–Cobordism correspondence is <strong>supported</strong> at the topological
+layer. The <span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span> Dijkgraaf–Witten state-sum <span class="math notranslate nohighlight">\(Z(W)\)</span> is a well-defined,
+triangulation-invariant cobordism functor whose behaviour matches the hypothesis:
+the falsifiable predictions <strong>P1, P2, P3 all hold</strong> (checks T1–T3), with T4, T5 and
+the §5.6 Lorentzian variant as structural corroboration. The oracle runs clean and
+deterministic:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>State-Operation-Cobordism correspondence -- Stage 2 (topological oracle)
+
+  check                            result   residual  detail
+  ----------------------------------------------------------------------------------
+  T1  cylinder = identity          PASS     6.28e-16  map(T²×I)=id₄; ⟨ψ_A|Z|ψ_B⟩=⟨ψ_A|ψ_B⟩
+  T2  Pachner invariance           PASS     0.00e+00  Z(S²×S¹) drift 0 over 18 interior moves
+  T3  sign is an invariant         PASS     0.00e+00  Z_Sign(RP³)=0 ≠ Z_Triv(RP³)=1; negs S²×S¹,T³
+  T4  cross-layer holonomy         PASS     0.00e+00  holonomy == Stage-1 flux Φ_γ (mod 2π)
+  T5  composition / functoriality  PASS     0.00e+00  map(glue(W₁,W₂)) == map(W₂)·map(W₁) == id₄
+  §5.6  Lorentzian null-harmonic   PASS     3.36e-15  ⟨h,h⟩_W=(2-α)/3: +below, null at, −above α=2
+  ----------------------------------------------------------------------------------
+
+  P1, P2, P3 supported: YES   (P4, P5 carried from Stage 1)
+</pre></div>
 </div>
-<section id="reproducing">
-<h2>Reproducing<a class="headerlink" href="#reproducing" title="Link to this heading">¶</a></h2>
-<p>Every experiment writeup names the example script that produced its
-numbers and the command-line arguments used. The scripts live in
-<code class="docutils literal notranslate"><span class="pre">examples/quantum/</span></code> and write reproducibility records (JSON or
-plain-text snapshots) into <code class="docutils literal notranslate"><span class="pre">/tmp/interaction-history</span></code>; archive
-those alongside the writeup if you want to pin a result.</p>
 </section>
-<section id="current-state-at-a-glance">
-<h2>Current state at a glance<a class="headerlink" href="#current-state-at-a-glance" title="Link to this heading">¶</a></h2>
+<section id="what-was-built">
+<h2>What was built<a class="headerlink" href="#what-was-built" title="Link to this heading">¶</a></h2>
+<p>The Stage-2 machinery extends the Stage-1 seam (mesh/topology ↔ operator/state) from
+degree 0 to degree <span class="math notranslate nohighlight">\(k\ge 1\)</span> and adds the discrete TQFT partition function. All of it
+is class-organized in the existing namespaces; no parallel hierarchies.</p>
 <ul class="simple">
-<li><p><strong>H_DS4 status</strong>: near-pass with ~1.5% offset; peak D_S = 4.245 at
-T = 20k, extrapolates to ≈ 4.07 at T → ∞.</p></li>
-<li><p><strong>Latest version</strong>: v0.2 (qudit basis + Choi-state Σ_AB).</p></li>
-<li><p><strong>Open milestone</strong>:
-<a class="reference external" href="https://github.com/akellehe/tessera/milestone/1">v0.2</a> (plateau
-investigation + qudit-basis follow-ups),
-<a class="reference external" href="https://github.com/akellehe/tessera/milestone/2">v0.3</a> (gauge
-mediation).</p></li>
+<li><p><strong>Metric Hodge Laplacian, <span class="math notranslate nohighlight">\(k\ge 1\)</span></strong> (<code class="docutils literal notranslate"><span class="pre">cobordism::HodgeLaplacian</span></code>). Assembles
+<span class="math notranslate nohighlight">\(L_k=\partial_k^\ast\partial_k+\partial_{k+1}\partial_{k+1}^\ast\)</span> from <code class="docutils literal notranslate"><span class="pre">ChainComplex</span></code>
+boundary matrices with simplex-volume weights; <span class="math notranslate nohighlight">\(\ker L_k\cong H_k\)</span> gives the qubit
+<span class="math notranslate nohighlight">\(\ker L_1(T^2)=\mathbb{C}^2\)</span>. A combinatorial fast path (<span class="math notranslate nohighlight">\(W_k=I\)</span>) is kept as a
+cross-check.</p></li>
+<li><p><strong>Lorentzian d’Alembertian</strong> (§5.6). With signed simplex volumes the inner product
+goes indefinite, <span class="math notranslate nohighlight">\(L_k\)</span> becomes non-self-adjoint (a general eigensolver), and
+<span class="math notranslate nohighlight">\(\ker L_k\cong H_k\)</span> degrades to a pseudo-Hodge decomposition with null-norm modes.</p></li>
+<li><p><strong>Foundations.</strong> <code class="docutils literal notranslate"><span class="pre">IntegerLinalg::gf2Nullspace</span></code> (flat <span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span> connections),
+<code class="docutils literal notranslate"><span class="pre">ChainComplex::orientedTopSimplices</span></code>/<code class="docutils literal notranslate"><span class="pre">fundamentalClass</span></code>/<code class="docutils literal notranslate"><span class="pre">kSimplexVertices</span></code> (the
+orientation signs <span class="math notranslate nohighlight">\(\epsilon_t\)</span> and the C₁ ordering), and signature-aware
+<code class="docutils literal notranslate"><span class="pre">Simplex::volume</span></code>/<code class="docutils literal notranslate"><span class="pre">cayleyMengerMatrix</span></code> (honest signed geometry; Wick rotation made
+explicit so CDT/Regge are unchanged).</p></li>
+<li><p><strong>The state-sum</strong> (<code class="docutils literal notranslate"><span class="pre">cobordism::DijkgraafWitten</span></code>). Closed <span class="math notranslate nohighlight">\(Z(W)=\frac{1}{2^{|V|}}
+\sum_{\text{flat }g}\prod_t\omega(g)^{\epsilon_t}\)</span> for both cocycle classes
+(<span class="math notranslate nohighlight">\(\omega\equiv1\)</span> and <span class="math notranslate nohighlight">\(\omega(a,b,c)=(-1)^{abc}\)</span>), and the boundary reading
+<span class="math notranslate nohighlight">\(Z(W):Z(\Sigma_B)\to Z(\Sigma_A)\)</span> (fix <span class="math notranslate nohighlight">\(g|_{\partial W}\)</span>, sum interior).</p></li>
+<li><p><strong>Fixtures.</strong> <code class="docutils literal notranslate"><span class="pre">SphereCircleProduct</span></code> (<span class="math notranslate nohighlight">\(S^2\times S^1\)</span>), the Walkup 11-vertex
+<code class="docutils literal notranslate"><span class="pre">RealProjectiveSpace</span></code> (<span class="math notranslate nohighlight">\(\mathbb{RP}^3\)</span>), and <code class="docutils literal notranslate"><span class="pre">StellarSubdivision</span></code> (retriangulations).</p></li>
+<li><p><strong>Moves &amp; gluing.</strong> The existing <code class="docutils literal notranslate"><span class="pre">PachnerMove</span></code> family generalized to pre-geometric,
+boundary-fixed interior moves; <code class="docutils literal notranslate"><span class="pre">Cobordism::glue</span></code>/<code class="docutils literal notranslate"><span class="pre">selfGlue</span></code> for composition.</p></li>
+<li><p><strong>Cross-layer probe.</strong> <code class="docutils literal notranslate"><span class="pre">WilsonLoop</span></code>’s <code class="docutils literal notranslate"><span class="pre">U1_CONNECTION</span></code> mode (holonomy of the
+<code class="docutils literal notranslate"><span class="pre">Edge::phase</span></code> connection).</p></li>
 </ul>
-<p>See the <a class="reference internal" href="overview/h_ds4_status.html"><span class="std std-doc">H_DS4 status page</span></a> for the
-detailed table.</p>
+</section>
+<section id="the-checks">
+<h2>The checks<a class="headerlink" href="#the-checks" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>T1 — cylinder = identity (P1).</strong> For <span class="math notranslate nohighlight">\(W=\Sigma\times[0,T]\)</span>, <span class="math notranslate nohighlight">\(Z(W)\)</span> is the identity
+on <span class="math notranslate nohighlight">\(Z(\partial\Sigma)\)</span>: <code class="docutils literal notranslate"><span class="pre">map(T²×I)</span></code> is exactly <span class="math notranslate nohighlight">\(\mathrm{id}_4\)</span>, and
+<span class="math notranslate nohighlight">\(\langle\psi_A|Z(W)|\psi_B\rangle=\langle\psi_A|\psi_B\rangle\)</span> for harmonic-1-form
+boundary states <span class="math notranslate nohighlight">\(\psi\in\ker L_1(T^2)\)</span>.</p></li>
+<li><p><strong>T2 — triangulation independence (P2), the make-or-break.</strong> <span class="math notranslate nohighlight">\(Z(W)\)</span> is invariant to
+machine precision across interior Pachner sequences (including <span class="math notranslate nohighlight">\(1\!\to\!4\)</span> moves
+that change <span class="math notranslate nohighlight">\(|V|\)</span>) and across distinct triangulations of <span class="math notranslate nohighlight">\(S^2\times S^1\)</span>, for both
+cocycle classes.</p></li>
+<li><p><strong>T3 — the sign carries an invariant (P3).</strong> <span class="math notranslate nohighlight">\(Z_{\text{sign}}(\mathbb{RP}^3)=0\ne
+1=Z_{\text{triv}}(\mathbb{RP}^3)\)</span>, while the two coincide on the negative controls.</p></li>
+<li><p><strong>T4 — cross-layer consistency.</strong> The bulk <span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span> holonomy equals the
+Stage-1 cycle flux restricted to <span class="math notranslate nohighlight">\(\{0,\pi\}\)</span>.</p></li>
+<li><p><strong>T5 — composition / functoriality.</strong> <span class="math notranslate nohighlight">\(Z(W_2\cup_{\Sigma_C}W_1)=Z(W_2)\,Z(W_1)\)</span>
+(matrix product), with <span class="math notranslate nohighlight">\(\operatorname{Tr}(\text{map})=Z_{\text{closed}}\)</span> on the
+self-glue.</p></li>
+</ul>
+</section>
+<section id="key-findings">
+<h2>Key findings<a class="headerlink" href="#key-findings" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><strong>The sign cocycle does <em>not</em> distinguish <span class="math notranslate nohighlight">\(T^3\)</span>.</strong> The twist is the mod-2 cup-cube
+<span class="math notranslate nohighlight">\((-1)^{\langle g^3,[W]\rangle}\)</span>. In <span class="math notranslate nohighlight">\(H^*(T^3;\mathbb{Z}_2)=\Lambda(x,y,z)\)</span> every
+degree-1 class has <span class="math notranslate nohighlight">\(g^2=0\)</span>, hence <span class="math notranslate nohighlight">\(g^3=0\)</span> — so <span class="math notranslate nohighlight">\(T^3\)</span> (and <span class="math notranslate nohighlight">\(S^2\times S^1\)</span>) are
+<strong>negative</strong> controls. The positive control requires a 1-class with <span class="math notranslate nohighlight">\(g^3\ne0\)</span>, i.e.
+<span class="math notranslate nohighlight">\(\mathbb{RP}^3\)</span> (<span class="math notranslate nohighlight">\(H^*=\mathbb{Z}_2[t]/t^4\)</span>, <span class="math notranslate nohighlight">\(t^3\ne0\)</span>). The 2-torsion in
+<span class="math notranslate nohighlight">\(H_1(\mathbb{RP}^3)=\mathbb{Z}_2\)</span> is exactly what separates it from <span class="math notranslate nohighlight">\(S^2\times S^1\)</span>
+(same <span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span> Betti numbers, free <span class="math notranslate nohighlight">\(H_1\)</span>). The untwisted normalization is
+<span class="math notranslate nohighlight">\(Z_{\text{triv}}(W)=2^{b_1(\mathbb{Z}_2)-1}\)</span>.</p></li>
+<li><p><strong>Lorentzian harmonics go null at <span class="math notranslate nohighlight">\(\alpha=2\)</span>.</strong> On the 3-cycle with one timelike
+edge (<span class="math notranslate nohighlight">\(l^2=-\alpha^2\)</span>) the spectrum is exactly <span class="math notranslate nohighlight">\(\{0,3,1-2/\alpha\}\)</span> (non-PSD for
+<span class="math notranslate nohighlight">\(\alpha&lt;2\)</span>); the harmonic’s indefinite norm <span class="math notranslate nohighlight">\((2-\alpha)/3\)</span> crosses zero at
+<span class="math notranslate nohighlight">\(\alpha=2\)</span> — a concrete realization of the §5.6 “harmonic representative becomes
+null.”</p></li>
+<li><p><strong>A <code class="docutils literal notranslate"><span class="pre">ChainComplex</span></code> homology bug, found and fixed.</strong> <code class="docutils literal notranslate"><span class="pre">fromSpacetime</span></code> traversed <em>all</em>
+registered simplices, but the mesh leaves orphaned lazy facets after a move,
+corrupting the chain groups (negative Betti) on mutated complexes; fixed by seeding
+from top cells only — required for the state-sum to survive Pachner moves.</p></li>
+<li><p><strong>The brute-force state-sum bounds fixture size.</strong> Flat-connection enumeration is
+<span class="math notranslate nohighlight">\(2^{\dim Z^1}\)</span>, capped at <span class="math notranslate nohighlight">\(\dim Z^1\le 24\)</span>. So the DW partition function runs on
+small manifolds (<span class="math notranslate nohighlight">\(S^3\)</span>, <span class="math notranslate nohighlight">\(S^2\times S^1\)</span>, <span class="math notranslate nohighlight">\(\mathbb{RP}^3\)</span>); <span class="math notranslate nohighlight">\(T^3\)</span> (27 vertices,
+<span class="math notranslate nohighlight">\(\dim Z^1=29\)</span>) is used only for the combinatorial/homology (T2) checks, and its
+<span class="math notranslate nohighlight">\(g^3=0\)</span> status is read off its torsion-free <span class="math notranslate nohighlight">\(H_1\)</span>.</p></li>
+</ol>
+</section>
+<section id="conventions">
+<h2>Conventions<a class="headerlink" href="#conventions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Operators are flat row-major; vec is the row-major flatten (Stage 1).</p></li>
+<li><p>The <span class="math notranslate nohighlight">\(k=0\)</span> Laplacian keeps the <strong>magnitude</strong> degree convention <span class="math notranslate nohighlight">\(D_{ii}=\sum_j|A_{ij}|\)</span>
+(Hermitian, unitary evolution); the <span class="math notranslate nohighlight">\(k\ge1\)</span> metric weights <span class="math notranslate nohighlight">\(W_k\)</span> are honest signed
+simplex volumes (Euclidean = <span class="math notranslate nohighlight">\(|l^2|\)</span>; Lorentzian preserves the sign).</p></li>
+<li><p>Wick rotation is explicit/opt-in in <code class="docutils literal notranslate"><span class="pre">Simplex</span></code> geometry, so the CDT/Regge path is
+byte-unchanged.</p></li>
+</ul>
+</section>
+<section id="reproduce">
+<h2>Reproduce<a class="headerlink" href="#reproduce" title="Link to this heading">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">poetry</span> <span class="n">install</span> <span class="o">--</span><span class="nb">all</span><span class="o">-</span><span class="n">extras</span> <span class="o">&amp;&amp;</span> <span class="n">poetry</span> <span class="n">run</span> <span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="o">.</span>
+<span class="n">poetry</span> <span class="n">run</span> <span class="n">python</span> <span class="n">examples</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">topological_correspondence</span><span class="o">.</span><span class="n">py</span>   <span class="c1"># the table above</span>
+<span class="n">poetry</span> <span class="n">run</span> <span class="n">pytest</span> <span class="n">tests</span><span class="o">/</span><span class="n">cobordism</span>                                     <span class="c1"># the per-check tests</span>
+</pre></div>
+</div>
+<p>Parameter sweeps (flux, Pachner depth, <span class="math notranslate nohighlight">\(\alpha\)</span>) and figures are written to
+<code class="docutils literal notranslate"><span class="pre">/tmp/cobordism/</span></code>; they are not committed.</p>
+</section>
+<section id="beyond-stage-2">
+<h2>Beyond Stage 2<a class="headerlink" href="#beyond-stage-2" title="Link to this heading">¶</a></h2>
+<p>Not built here, the natural continuations:</p>
+<ul class="simple">
+<li><p><strong>Boundary-state synthesis (§4b)</strong> — the inverse eigenvector problem: the simplest
+complex whose <span class="math notranslate nohighlight">\(L_k\)</span> has a target state as an eigenvector, grown by topology-preserving
+coning / Pachner-add.</p></li>
+<li><p><strong>Realizability search (§5.0)</strong> — given an operation <span class="math notranslate nohighlight">\(U\)</span>, <em>find</em> a bulk <span class="math notranslate nohighlight">\(W\)</span> with
+<span class="math notranslate nohighlight">\(Z(W)=U\)</span> or prove none exists, and characterize the realizable set <span class="math notranslate nohighlight">\(\{Z(W)\}\)</span> (for
+<span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span>-DW on <span class="math notranslate nohighlight">\(T^2\)</span>, <span class="math notranslate nohighlight">\(Z(T^2)=\mathbb{C}^4\)</span> generated by the modular <span class="math notranslate nohighlight">\(S,T\)</span>).</p></li>
+<li><p><strong>More fixtures</strong> — lens-space families <span class="math notranslate nohighlight">\(L(p,q)\)</span>, mapping tori, genus-<span class="math notranslate nohighlight">\(g\)</span> surfaces;
+and a non-brute-force state-sum to lift the <span class="math notranslate nohighlight">\(\dim Z^1\le 24\)</span> ceiling.</p></li>
+</ul>
 </section>
 </section>
 
@@ -384,23 +430,23 @@ detailed table.</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="overview/index.html">
+          <a class="next-page" href="cobordism-realizability-report.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Overview</div>
+                <div class="title">Cobordism experiment — synthesis &amp; realizability: results</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="../holography-causal-ordering-emergent-dimension.html">
+          <a class="prev-page" href="cobordism-plan.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">Emergent Spectral Dimension from the Schwinger TDVP State</div>
+                <div class="title">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</div>
                 
               </div>
             </a>
@@ -434,9 +480,14 @@ detailed table.</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Quantum experiments</a><ul>
-<li><a class="reference internal" href="#reproducing">Reproducing</a></li>
-<li><a class="reference internal" href="#current-state-at-a-glance">Current state at a glance</a></li>
+<li><a class="reference internal" href="#">Cobordism experiment — Stage 2 (topological layer): results</a><ul>
+<li><a class="reference internal" href="#verdict">Verdict</a></li>
+<li><a class="reference internal" href="#what-was-built">What was built</a></li>
+<li><a class="reference internal" href="#the-checks">The checks</a></li>
+<li><a class="reference internal" href="#key-findings">Key findings</a></li>
+<li><a class="reference internal" href="#conventions">Conventions</a></li>
+<li><a class="reference internal" href="#reproduce">Reproduce</a></li>
+<li><a class="reference internal" href="#beyond-stage-2">Beyond Stage 2</a></li>
 </ul>
 </li>
 </ul>
