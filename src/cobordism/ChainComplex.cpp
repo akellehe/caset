@@ -66,7 +66,24 @@ ChainComplex ChainComplex::fromSpacetime(const Spacetime &K) {
   // sign below, which mesh facets don't carry.
   std::map<int, std::vector<SimplexPtr>> byDim;
   std::unordered_set<std::uint64_t> seen;
-  std::vector<SimplexPtr> stack(K.getSimplices().begin(), K.getSimplices().end());
+  // Seed the downward BFS from the top-dimensional cells only.  Genuine
+  // lower-dimensional faces are reached through getFacets below; starting
+  // from *every* registered simplex would also pull in orphaned
+  // sub-simplices that the mesh creates lazily (Simplex::getFacets) and
+  // never garbage-collects once their cofaces are removed — e.g. the
+  // shared facet a 2->3 Pachner flip deletes, or any facet materialised
+  // by a previous fromSpacetime() call whose top cell a later move
+  // removed.  Such orphans are faces of no current top cell and would
+  // corrupt the chain groups (spurious cycles, even negative Betti
+  // numbers).  For a pure complex — every manifold/fixture here — the top
+  // cells' face-closure is exactly the chain complex, so on a freshly
+  // built complex this seeds the identical simplex set as before.
+  std::size_t topSize = 0;
+  for (const auto &s : K.getSimplices())
+    if (s != nullptr) topSize = std::max(topSize, static_cast<std::size_t>(s->size()));
+  std::vector<SimplexPtr> stack;
+  for (const auto &s : K.getSimplices())
+    if (s != nullptr && s->size() == topSize) stack.push_back(s);
   while (!stack.empty()) {
     SimplexPtr s = stack.back();
     stack.pop_back();

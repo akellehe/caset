@@ -521,6 +521,26 @@ Args:
   // ========================================
   // PachnerMove (transactional Pachner moves)
   // ========================================
+  py::enum_<PachnerMode>(m, "PachnerMode",
+      R"doc(Validity regime a Pachner move runs under.
+
+  - CDT:          the causal-dynamical-triangulations path. Every
+                  proposed cell must satisfy the time-sliced CDT
+                  orientation constraint and the move dimension comes
+                  from the metric signature. This path is byte-identical
+                  to the pre-generalization behaviour.
+  - PreGeometric: the CDT orientation/time-slice guards are dropped so
+                  the bistellar moves run on a coordinate-free
+                  (non-time-sliced) simplicial complex. The move
+                  dimension is read off the actual top cell and a
+                  manifold-preservation check stands in for the
+                  orientation guard.)doc")
+      .value("CDT", PachnerMode::CDT)
+      .value("PreGeometric", PachnerMode::PreGeometric);
+      // NB: no export_values() — that would inject a module-level ``CDT``
+      // that shadows ``SpacetimeType.CDT`` (``tessera.CDT``).  Access the
+      // members as ``tessera.PachnerMode.CDT`` / ``.PreGeometric``.
+
   py::class_<PachnerMove>(m, "PachnerMove",
       R"doc(Abstract base class for transactional Pachner moves.
 
@@ -561,7 +581,11 @@ See ``docs/source/modularity-plan.md`` for the design rationale.)doc")
            "Used for informed (community-aware) proposals.")
       .def("moveType", &PachnerMove::moveType,
            "Move-type tag: one of 'add', 'remove', 'flip', 'iflip', "
-           "'shift'.");
+           "'shift'.")
+      .def("mode", &PachnerMove::mode,
+           "Validity regime: PachnerMode.CDT or PachnerMode.PreGeometric.")
+      .def("boundaryFixed", &PachnerMove::boundaryFixed,
+           "True iff the move is restricted to the interior (∂W fixed).");
 
   py::class_<AddMove, PachnerMove>(m, "AddMove",
       R"doc(Transactional (2,2d) add (vertex insertion) move.
@@ -574,14 +598,19 @@ spatial time slice.  ``dN0 = +1``; ``dN41 = +(2d-2) = +6`` in 4D;
 Vertex relabeling (per [BGL] Sec. 2.2.1) is enabled by default.
 Pass ``relabel=False`` to disable for tests that need stable
 fingerprints across moves.)doc")
-      .def(py::init<Spacetime *, std::uint64_t, bool>(),
+      .def(py::init<Spacetime *, std::uint64_t, bool, PachnerMode, bool>(),
            py::arg("spacetime"), py::arg("seed"),
            py::arg("relabel") = true,
+           py::arg("mode") = PachnerMode::CDT,
+           py::arg("boundaryFixed") = false,
            py::keep_alive<1, 2>(),
            "Construct an add move bound to ``spacetime`` with a fresh "
            "RNG seeded from ``seed``.  ``relabel`` controls whether the "
            "new vertex's ID is swap-relabeled with a random existing "
-           "vertex on apply().");
+           "vertex on apply().  ``mode=PachnerMode.PreGeometric`` runs "
+           "the 1->(d+1) stellar subdivision on a coordinate-free "
+           "complex; ``boundaryFixed`` restricts the move to the "
+           "interior (a no-op for add, which never touches ∂W).");
 
   py::class_<FlipMove, PachnerMove>(m, "FlipMove",
       R"doc(Transactional (2,d) flip move.
@@ -589,11 +618,17 @@ fingerprints across moves.)doc")
 Removes 2 d-simplices sharing a (d-1)-face and creates d new
 d-simplices sharing an edge.  ``dN0 = 0``; ``ΔN4 = d - 2 = +2`` in 4D.
 Inverse: :class:`IFlipMove`.)doc")
-      .def(py::init<Spacetime *, std::uint64_t>(),
+      .def(py::init<Spacetime *, std::uint64_t, PachnerMode, bool>(),
            py::arg("spacetime"), py::arg("seed"),
+           py::arg("mode") = PachnerMode::CDT,
+           py::arg("boundaryFixed") = false,
            py::keep_alive<1, 2>(),
            "Construct a (2,d) flip move bound to ``spacetime`` with a "
-           "fresh ``std::mt19937`` seeded with ``seed``.");
+           "fresh ``std::mt19937`` seeded with ``seed``.  "
+           "``mode=PachnerMode.PreGeometric`` runs the 2->(d+1) bistellar "
+           "flip on a coordinate-free complex (drops the CDT orientation "
+           "guard, adds a manifold check); ``boundaryFixed`` keeps it "
+           "interior (∂W fixed).");
 
   py::class_<RemoveMove, PachnerMove>(m, "RemoveMove",
       R"doc(Transactional (2d, 2) remove (vertex deletion) move.
@@ -606,11 +641,16 @@ simplices.  ``dN0 = -1``; ``dN41 = -(2d-2) = -6`` in 4D;
 Rollback recreates the deleted vertex (with original ID and
 coordinates), reinserts its incident edges (with original squared
 lengths), and recreates the 2d removed simplices.)doc")
-      .def(py::init<Spacetime *, std::uint64_t>(),
+      .def(py::init<Spacetime *, std::uint64_t, PachnerMode, bool>(),
            py::arg("spacetime"), py::arg("seed"),
+           py::arg("mode") = PachnerMode::CDT,
+           py::arg("boundaryFixed") = false,
            py::keep_alive<1, 2>(),
            "Construct a remove move bound to ``spacetime`` with a fresh "
-           "RNG seeded from ``seed``.");
+           "RNG seeded from ``seed``.  ``mode=PachnerMode.PreGeometric`` "
+           "runs the (d+1)->1 stellar weld (inverse of the pre-geometric "
+           "add) on a coordinate-free complex; the move is interior by "
+           "construction, so ``boundaryFixed`` adds no restriction.");
 
   py::class_<IFlipMove, PachnerMove>(m, "IFlipMove",
       R"doc(Transactional inverse (d, 2) flip move.
@@ -621,11 +661,16 @@ Inverse: :class:`FlipMove`.
 
 Includes a manifold-preservation check in propose() — rejects if
 either new simplex would already exist in the lattice.)doc")
-      .def(py::init<Spacetime *, std::uint64_t>(),
+      .def(py::init<Spacetime *, std::uint64_t, PachnerMode, bool>(),
            py::arg("spacetime"), py::arg("seed"),
+           py::arg("mode") = PachnerMode::CDT,
+           py::arg("boundaryFixed") = false,
            py::keep_alive<1, 2>(),
            "Construct an inverse flip bound to ``spacetime`` with a "
-           "fresh ``std::mt19937`` seeded with ``seed``.");
+           "fresh ``std::mt19937`` seeded with ``seed``.  "
+           "``mode=PachnerMode.PreGeometric`` runs the (d+1)->2 bistellar "
+           "flip on a coordinate-free complex; ``boundaryFixed`` rejects "
+           "flips that would collapse an edge on ∂W.");
 
   py::class_<ShiftMove, PachnerMove>(m, "ShiftMove",
       R"doc(Transactional (3,3) shift move.
@@ -634,11 +679,16 @@ Picks a random top simplex and a random (d-2)-face.  If exactly d-1
 top simplices share that face, replaces them with d-1 new simplices
 sharing the complementary (d-2)-face.  Self-inverse — dN0 = 0 and
 dN41 + dN32 = 0.)doc")
-      .def(py::init<Spacetime *, std::uint64_t>(),
+      .def(py::init<Spacetime *, std::uint64_t, PachnerMode, bool>(),
            py::arg("spacetime"), py::arg("seed"),
+           py::arg("mode") = PachnerMode::CDT,
+           py::arg("boundaryFixed") = false,
            py::keep_alive<1, 2>(),
            R"doc(Construct a shift move bound to ``spacetime``, using a
 fresh ``std::mt19937`` seeded with ``seed`` for the proposal.
+
+``mode=PachnerMode.PreGeometric`` drops the CDT orientation guard;
+``boundaryFixed`` only fires shifts whose whole region is interior.
 
 For sweeps that share a single Markov chain across many moves, drive
 moves via ``CDT.proposeShift()`` instead.)doc");

@@ -39,8 +39,10 @@ using namespace ::tessera::quantum;
 /// advertised changes.
 class IFlipMove : public PachnerMove {
 public:
-  IFlipMove(Spacetime *st, std::mt19937 *rng);
-  IFlipMove(Spacetime *st, std::uint64_t seed);
+  IFlipMove(Spacetime *st, std::mt19937 *rng,
+            PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
+  IFlipMove(Spacetime *st, std::uint64_t seed,
+            PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
   int dN0() const override { return 0; }

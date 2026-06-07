@@ -24,22 +24,33 @@ using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
-IFlipMove::IFlipMove(Spacetime *st, std::mt19937 *rng)
-    : st_(st), ownedRng_(nullptr), rng_(rng) {}
+IFlipMove::IFlipMove(Spacetime *st, std::mt19937 *rng, PachnerMode mode,
+                     bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st), ownedRng_(nullptr), rng_(rng) {}
 
-IFlipMove::IFlipMove(Spacetime *st, std::uint64_t seed)
-    : st_(st),
+IFlipMove::IFlipMove(Spacetime *st, std::uint64_t seed, PachnerMode mode,
+                     bool boundaryFixed)
+    : PachnerMove(mode, boundaryFixed),
+      st_(st),
       ownedRng_(std::make_unique<std::mt19937>(seed)),
       rng_(ownedRng_.get()) {}
 
 bool IFlipMove::propose() {
   if (proposed_) return false;
   using namespace pachner_detail;
-  const int d = spacetimeDim(*st_);
-  const int dPlus1 = d + 1;
 
   SimplexPtr sigma = st_->getRandomTopSimplex();
   if (!sigma) return false;
+
+  // Pre-geometric complexes can carry a metric whose dimension differs
+  // from the manifold's, so read the move dimension off the actual top
+  // cell in that mode; CDT keeps using the (foliated) metric dimension.
+  const int d = (mode_ == PachnerMode::PreGeometric)
+                    ? static_cast<int>(sigma->size()) - 1
+                    : spacetimeDim(*st_);
+  const int dPlus1 = d + 1;
+  if (d < 2) return false;
 
   const auto &edges = sigma->getEdges();
   if (edges.empty()) return false;
@@ -71,6 +82,20 @@ bool IFlipMove::propose() {
       unique.push_back(v);
   }
   if (shared.size() != 2 || static_cast<int>(unique.size()) != d) return false;
+
+  // Boundary-fixed: a d→2 flip collapses the shared edge (v1,v2).  If
+  // that edge lies on ∂W the move would change the boundary, so reject.
+  if (boundaryFixed_ &&
+      !pachner_detail::isInteriorEdge(v1, v2, dPlus1)) return false;
+
+  // Pre-geometric manifold check: the welded (d-1)-facet is the simplex
+  // on the link (unique) vertices.  If any current top cell already
+  // contains all of them that facet is already present, so the weld
+  // would over-share it (>2 cofaces) and tear the pseudomanifold.  This
+  // subsumes the CDT "new cells already exist" check below (a pre-
+  // existing cell on those verts would be counted here).
+  if (mode_ == PachnerMode::PreGeometric &&
+      pachner_detail::topCofaceCount(unique, dPlus1) != 0) return false;
 
   // Manifold check: would either proposed new simplex already exist?
   // We look for a top simplex incident to unique[0] that contains all
@@ -106,11 +131,19 @@ bool IFlipMove::propose() {
     VertexPtrs nv(unique.begin(), unique.end());
     nv.push_back(shared[i]);
     if (static_cast<int>(nv.size()) != dPlus1) return false;
+    // Increasing-id orientation so the mutated complex's homology is
+    // well-defined (see pachner_detail::sortByVertexId).  CDT cell order
+    // is orientation-bearing, so only re-sort on the pre-geometric path.
+    if (mode_ == PachnerMode::PreGeometric) sortByVertexId(nv);
     proposedNew.push_back(std::move(nv));
   }
 
-  for (const auto &nv : proposedNew) {
-    if (!isValidCDTOrientation(nv, d)) return false;
+  // The CDT orientation/time-slice guard is dropped in pre-geometric
+  // mode; the manifold check above stands in for it.
+  if (mode_ == PachnerMode::CDT) {
+    for (const auto &nv : proposedNew) {
+      if (!isValidCDTOrientation(nv, d)) return false;
+    }
   }
 
   int newN41 = 0, newN32 = 0;
@@ -130,8 +163,14 @@ bool IFlipMove::propose() {
   dN32_ = newN32 - oldN32;
 
   // Combinatorial prefactor (matches CDT::iflip): log(N4 / (N4 - d + 2)).
-  double N4 = static_cast<double>(st_->getSimplexCount());
-  logPrefactor_ = std::log(N4) - std::log(N4 - d + 2);
+  // The Metropolis prefactor is a CDT-sampling quantity; the
+  // pre-geometric path is not Metropolis-driven, so it reports 0.
+  if (mode_ == PachnerMode::PreGeometric) {
+    logPrefactor_ = 0.0;
+  } else {
+    double N4 = static_cast<double>(st_->getSimplexCount());
+    logPrefactor_ = std::log(N4) - std::log(N4 - d + 2);
+  }
 
   touchedIds_.reserve(d + 2);
   for (const auto &v : shared) touchedIds_.push_back(v->getId());

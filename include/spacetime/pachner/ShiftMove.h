@@ -41,11 +41,13 @@ class ShiftMove : public PachnerMove {
 public:
   /// Construct with a caller-owned RNG (used by CDT internally so all
   /// moves share the same Markov chain).
-  ShiftMove(Spacetime *st, std::mt19937 *rng);
+  ShiftMove(Spacetime *st, std::mt19937 *rng,
+            PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   /// Construct with an internally-owned RNG seeded from ``seed``
   /// (convenient for one-shot use from Python tests).
-  ShiftMove(Spacetime *st, std::uint64_t seed);
+  ShiftMove(Spacetime *st, std::uint64_t seed,
+            PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
   int dN0() const override { return 0; }

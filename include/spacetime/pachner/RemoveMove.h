@@ -39,8 +39,10 @@ using namespace ::tessera::quantum;
 /// by ``apply()`` before the geometry is mutated.
 class RemoveMove : public PachnerMove {
 public:
-  RemoveMove(Spacetime *st, std::mt19937 *rng);
-  RemoveMove(Spacetime *st, std::uint64_t seed);
+  RemoveMove(Spacetime *st, std::mt19937 *rng,
+             PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
+  RemoveMove(Spacetime *st, std::uint64_t seed,
+             PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
   int dN0() const override { return -1; }
@@ -54,6 +56,16 @@ public:
   std::string moveType() const override { return "remove"; }
 
 private:
+  // Pre-geometric (d+1)→1 stellar weld: the inverse of the 1→(d+1)
+  // add.  Picks a vertex whose star is exactly the cone over the
+  // boundary of one d-simplex (degree d+1, link = a (d-1)-sphere),
+  // deletes it and its d+1 cells, and welds in the single cell on the
+  // link vertices.  The structural check guarantees the vertex is
+  // interior, so the move never touches ∂W.  rollback() is shared with
+  // the CDT path (it is generic over the removed-cell count).
+  bool proposePreGeometric();
+  bool applyPreGeometric();
+
   Spacetime *st_;
   std::unique_ptr<std::mt19937> ownedRng_;
   std::mt19937 *rng_;
