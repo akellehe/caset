@@ -382,6 +382,24 @@ may differ slightly due to slab quantization.)doc")
              return out;
            },
            "Return simplices on the boundary of the complex.")
+      .def("getBoundary", &Spacetime::getBoundary,
+           R"doc(Return the boundary surface as codimension-one faces.
+
+The faces (one dimension below the top simplices) that belong to exactly
+one top simplex, as sorted vertex-id tuples. Computed by facet-counting
+from the top simplices, so it is side-effect-free and robust to lazily
+materialized facets. A closed manifold returns an empty list.
+
+Unlike getExternalSimplices (which returns whole boundary top cells and
+materializes facets as a side-effect), this returns the boundary faces
+themselves and leaves the complex untouched.)doc")
+      .def("materializeFacets", &Spacetime::materializeFacets,
+           R"doc(Force lazy facet materialization to a fixpoint.
+
+Creates and registers every face of every dimension (down to the
+vertices) and wires up the coface incidence. This is the side-effect
+getExternalSimplices performs internally, exposed for callers that want
+the materialization without the boundary scan.)doc")
       .def("createEdge",
            static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &) const>(&
              Spacetime::createEdge),

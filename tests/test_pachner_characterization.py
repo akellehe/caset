@@ -497,9 +497,9 @@ class TestLazyFacetMaterializationIsBenign(unittest.TestCase):
         before = _bookkeeping(st)
         simplices_before = len(st.getSimplices())
 
-        # getExternalSimplices() forces facet materialization to a fixpoint —
-        # the same lazy getFacets() machinery a move's propose() triggers.
-        st.getExternalSimplices()
+        # materializeFacets() forces facet materialization to a fixpoint — the
+        # same lazy getFacets() machinery a move's propose() triggers.
+        st.materializeFacets()
 
         self.assertEqual(_bookkeeping(st), before,
                          "facet materialization changed the CDT bookkeeping")
@@ -512,7 +512,7 @@ class TestLazyFacetMaterializationIsBenign(unittest.TestCase):
         # dimensions; _top_simplex_size must still report the true top (d+1=5).
         cdt, st = _make_cdt(d=4)
         _grow(cdt, n=100)
-        st.getExternalSimplices()
+        st.materializeFacets()
         sizes = {len(s.getVertices()) for s in st.getSimplices()}
         self.assertIn(5, sizes)            # top simplices present
         self.assertTrue(sizes - {5})       # and lower-dim faces too

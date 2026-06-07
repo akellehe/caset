@@ -248,17 +248,13 @@ std::vector<SimplexList> sortedBoundaryComponents(const Spacetime &W) {
 }  // namespace
 
 SimplexList Cobordism::boundaryFaces(const Spacetime &W) {
-  const SimplexList tops = topSimplices(W);
-  if (tops.empty()) return {};
-  const std::size_t topVertexCount = tops.front().size();
-  // Count how many top simplices each codimension-one face belongs to.
-  std::map<Face, int> incidence;
-  for (const auto &top : tops)
-    for (auto &face : subfaces(top, topVertexCount - 1)) ++incidence[face];
-  SimplexList boundary;
-  for (auto &[face, count] : incidence)
-    if (count == 1) boundary.push_back(face);
-  return boundary;
+  // Thin wrapper over the canonical, Spacetime-owned boundary derivation
+  // (#162). ``Spacetime::getBoundary`` does the same facet-counting from the
+  // top simplices (codimension-one faces with incidence == 1), returning the
+  // identical sorted vertex-id tuples. Kept as a static entry point for the
+  // existing cobordism callers (``verify``, ``connectedComponents`` consumers,
+  // ``DijkgraafWitten``) and their tests.
+  return W.getBoundary();
 }
 
 std::vector<SimplexList> Cobordism::connectedComponents(const SimplexList &simplices) {

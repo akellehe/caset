@@ -91,8 +91,8 @@ def _euler(fvec):
 
 def _materialized_face_counts(st):
     """Count tessera's own k-simplices once all facets are materialized.
-    getExternalSimplices() forces lazy facet materialization to a fixpoint."""
-    st.getExternalSimplices()
+    materializeFacets() forces lazy facet materialization to a fixpoint."""
+    st.materializeFacets()
     counts = {}
     for s in st.getSimplices():
         k = len(s.getVertices()) - 1
@@ -143,7 +143,7 @@ class TestSimplexBoundarySphere(unittest.TestCase):
         for n in range(1, STRUCT_MAX + 1):
             with self.subTest(n=n):
                 st = _build(tessera.SimplexBoundarySphere(n))
-                st.getExternalSimplices()  # materialize facets/cofaces
+                st.materializeFacets()  # materialize facets/cofaces
                 checked = 0
                 for s in st.getSimplices():
                     if len(s.getVertices()) == n + 1:  # a top n-simplex
