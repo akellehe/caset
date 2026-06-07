@@ -245,6 +245,145 @@ std::vector<SimplexList> sortedBoundaryComponents(const Spacetime &W) {
   return components;
 }
 
+// The vertex ids appearing in a list of faces (a boundary component).
+std::set<std::uint64_t> componentVertexSet(const SimplexList &component) {
+  std::set<std::uint64_t> verts;
+  for (const auto &face : component)
+    for (std::uint64_t v : face) verts.insert(v);
+  return verts;
+}
+
+// The face set of a component as sorted vertex tuples (for iso comparison).
+std::set<Face> faceSet(const SimplexList &component) {
+  std::set<Face> faces;
+  for (Face face : component) {
+    std::sort(face.begin(), face.end());
+    faces.insert(std::move(face));
+  }
+  return faces;
+}
+
+std::set<std::uint64_t> mapKeys(
+    const std::map<std::uint64_t, std::uint64_t> &m) {
+  std::set<std::uint64_t> keys;
+  for (const auto &[k, v] : m) keys.insert(k);
+  return keys;
+}
+std::set<std::uint64_t> mapValues(
+    const std::map<std::uint64_t, std::uint64_t> &m) {
+  std::set<std::uint64_t> values;
+  for (const auto &[k, v] : m) values.insert(v);
+  return values;
+}
+
+// The boundary component whose vertex set equals `target`, or nullptr.
+const SimplexList *findComponentByVertexSet(
+    const std::vector<SimplexList> &components,
+    const std::set<std::uint64_t> &target) {
+  for (const SimplexList &component : components)
+    if (componentVertexSet(component) == target) return &component;
+  return nullptr;
+}
+
+// Whether `bijection` is a simplicial isomorphism carrying the surface `from`
+// onto the surface `to`: a vertex bijection between their vertex sets whose
+// induced map sends from's face set exactly onto to's. This is the check the
+// explicit-bijection glue/selfGlue use to certify the supplied identification
+// really is an isomorphism of the shared boundary surface Σ_C (not just any
+// vertex relabeling), so the merged complex stays a manifold.
+bool isSimplicialIsomorphism(
+    const SimplexList &from, const SimplexList &to,
+    const std::map<std::uint64_t, std::uint64_t> &bijection) {
+  const std::set<std::uint64_t> fromV = componentVertexSet(from);
+  if (bijection.size() != fromV.size()) return false;
+  std::set<std::uint64_t> image;
+  for (std::uint64_t v : fromV) {
+    auto it = bijection.find(v);
+    if (it == bijection.end()) return false;
+    image.insert(it->second);
+  }
+  if (image != componentVertexSet(to)) return false;  // sizes match ⇒ injective
+  std::set<Face> mapped;
+  for (const Face &face : from) {
+    Face img;
+    img.reserve(face.size());
+    for (std::uint64_t v : face) img.push_back(bijection.at(v));
+    std::sort(img.begin(), img.end());
+    mapped.insert(std::move(img));
+  }
+  return mapped == faceSet(to);
+}
+
+// Reindex W1 (vertices first, in id order) then W2's non-shared vertices into a
+// single dense range, collapsing each shared W2 vertex onto its W1 partner under
+// `correspondence` (real W2 id → real W1 id), and merge the two top-simplex sets
+// into one fresh Spacetime. The shared correspondence machinery behind both the
+// auto-found and the explicit-bijection glue.
+std::shared_ptr<Spacetime> mergeAlongSurface(
+    const SimplexList &tops1, const SimplexList &tops2,
+    const std::set<std::uint64_t> &sharedW2,
+    const std::map<std::uint64_t, std::uint64_t> &correspondence) {
+  std::set<std::uint64_t> vertices1;
+  for (const auto &top : tops1) for (std::uint64_t v : top) vertices1.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense1;
+  std::uint64_t next = 0;
+  for (std::uint64_t v : vertices1) dense1[v] = next++;
+
+  std::set<std::uint64_t> vertices2;
+  for (const auto &top : tops2) for (std::uint64_t v : top) vertices2.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense2;
+  for (std::uint64_t v : vertices2)
+    dense2[v] = sharedW2.count(v) ? dense1.at(correspondence.at(v)) : next++;
+  const std::size_t numVertices = next;
+
+  SimplexList merged;
+  merged.reserve(tops1.size() + tops2.size());
+  for (std::vector<std::uint64_t> top : tops1) {
+    for (std::uint64_t &v : top) v = dense1.at(v);
+    std::sort(top.begin(), top.end());
+    merged.push_back(std::move(top));
+  }
+  for (std::vector<std::uint64_t> top : tops2) {
+    for (std::uint64_t &v : top) v = dense2.at(v);
+    std::sort(top.begin(), top.end());
+    merged.push_back(std::move(top));
+  }
+  return buildSpacetime(numVertices, merged);
+}
+
+// Fold the `identified` boundary vertices onto their partners under
+// `correspondence` (real identified id → real kept id), densely reindex the
+// kept vertices, and rebuild — the shared machinery behind both the auto-found
+// and the explicit-bijection selfGlue. Throws if the identification collapses a
+// top simplex (collar too thin).
+std::shared_ptr<Spacetime> foldBoundary(
+    const SimplexList &tops, const std::set<std::uint64_t> &identified,
+    const std::map<std::uint64_t, std::uint64_t> &correspondence) {
+  std::set<std::uint64_t> allVertices;
+  for (const auto &top : tops) for (std::uint64_t v : top) allVertices.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense;
+  std::uint64_t next = 0;
+  for (std::uint64_t v : allVertices)
+    if (!identified.count(v)) dense[v] = next++;
+  for (std::uint64_t v : identified)
+    dense[v] = dense.at(correspondence.at(v));
+  const std::size_t numVertices = next;
+
+  SimplexList merged;
+  merged.reserve(tops.size());
+  for (std::vector<std::uint64_t> top : tops) {
+    for (std::uint64_t &v : top) v = dense.at(v);
+    std::sort(top.begin(), top.end());
+    if (std::adjacent_find(top.begin(), top.end()) != top.end())
+      throw std::runtime_error(
+          "Cobordism::selfGlue: the identification collapsed a top simplex (a "
+          "top simplex touches both boundary components — the collar is too "
+          "thin; thicken the glued direction to at least three layers)");
+    merged.push_back(std::move(top));
+  }
+  return buildSpacetime(numVertices, merged);
+}
+
 }  // namespace
 
 SimplexList Cobordism::boundaryFaces(const Spacetime &W) {
@@ -386,34 +525,38 @@ std::shared_ptr<Spacetime> Cobordism::glue(const Spacetime &W1,
        components2[static_cast<std::size_t>(sharedComponent2)])
     for (std::uint64_t v : face) sharedW2.insert(v);
 
-  // Dense reindexing: W1's vertices first (in id order), then W2's non-shared
-  // vertices; each shared W2 vertex collapses onto its W1 partner.
-  std::set<std::uint64_t> vertices1;
-  for (const auto &top : tops1) for (std::uint64_t v : top) vertices1.insert(v);
-  std::map<std::uint64_t, std::uint64_t> dense1;
-  std::uint64_t next = 0;
-  for (std::uint64_t v : vertices1) dense1[v] = next++;
+  return mergeAlongSurface(tops1, tops2, sharedW2, *correspondence);
+}
 
-  std::set<std::uint64_t> vertices2;
-  for (const auto &top : tops2) for (std::uint64_t v : top) vertices2.insert(v);
-  std::map<std::uint64_t, std::uint64_t> dense2;
-  for (std::uint64_t v : vertices2)
-    dense2[v] = sharedW2.count(v) ? dense1.at(correspondence->at(v)) : next++;
-  const std::size_t numVertices = next;
+std::shared_ptr<Spacetime> Cobordism::glue(
+    const Spacetime &W1, const Spacetime &W2,
+    const std::map<std::uint64_t, std::uint64_t> &boundaryBijection) {
+  const SimplexList tops1 = topSimplices(W1);
+  const SimplexList tops2 = topSimplices(W2);
+  if (tops1.empty() || tops2.empty())
+    throw std::invalid_argument(
+        "Cobordism::glue: both inputs must be non-empty triangulations");
+  if (tops1.front().size() != tops2.front().size())
+    throw std::invalid_argument(
+        "Cobordism::glue: the two complexes must have the same top dimension");
 
-  SimplexList merged;
-  merged.reserve(tops1.size() + tops2.size());
-  for (std::vector<std::uint64_t> top : tops1) {
-    for (std::uint64_t &v : top) v = dense1.at(v);
-    std::sort(top.begin(), top.end());
-    merged.push_back(std::move(top));
-  }
-  for (std::vector<std::uint64_t> top : tops2) {
-    for (std::uint64_t &v : top) v = dense2.at(v);
-    std::sort(top.begin(), top.end());
-    merged.push_back(std::move(top));
-  }
-  return buildSpacetime(numVertices, merged);
+  // The supplied bijection must identify a whole boundary component of W2 with
+  // a whole boundary component of W1, as a simplicial isomorphism (the shared
+  // surface Σ_C). The W2 component is the "from" side (its ids are the keys),
+  // collapsing onto the matching W1 component.
+  const std::set<std::uint64_t> sharedW2 = mapKeys(boundaryBijection);
+  const std::set<std::uint64_t> sharedW1 = mapValues(boundaryBijection);
+  const std::vector<SimplexList> components1 = sortedBoundaryComponents(W1);
+  const std::vector<SimplexList> components2 = sortedBoundaryComponents(W2);
+  const SimplexList *from = findComponentByVertexSet(components2, sharedW2);
+  const SimplexList *to = findComponentByVertexSet(components1, sharedW1);
+  if (from == nullptr || to == nullptr ||
+      !isSimplicialIsomorphism(*from, *to, boundaryBijection))
+    throw std::invalid_argument(
+        "Cobordism::glue: the supplied boundary bijection is not a simplicial "
+        "isomorphism from a boundary component of W2 onto one of W1");
+
+  return mergeAlongSurface(tops1, tops2, sharedW2, boundaryBijection);
 }
 
 std::shared_ptr<Spacetime> Cobordism::selfGlue(const Spacetime &W) {
@@ -437,31 +580,36 @@ std::shared_ptr<Spacetime> Cobordism::selfGlue(const Spacetime &W) {
   for (const std::vector<std::uint64_t> &face : components[1])
     for (std::uint64_t v : face) identified.insert(v);
 
-  // Dense ids for the kept vertices (everything except component 1); each
-  // component-1 vertex takes the id of its component-0 partner.
-  std::set<std::uint64_t> allVertices;
-  for (const auto &top : tops) for (std::uint64_t v : top) allVertices.insert(v);
-  std::map<std::uint64_t, std::uint64_t> dense;
-  std::uint64_t next = 0;
-  for (std::uint64_t v : allVertices)
-    if (!identified.count(v)) dense[v] = next++;
-  for (std::uint64_t v : identified)
-    dense[v] = dense.at(correspondence->at(v));
-  const std::size_t numVertices = next;
+  return foldBoundary(tops, identified, *correspondence);
+}
 
-  SimplexList merged;
-  merged.reserve(tops.size());
-  for (std::vector<std::uint64_t> top : tops) {
-    for (std::uint64_t &v : top) v = dense.at(v);
-    std::sort(top.begin(), top.end());
-    if (std::adjacent_find(top.begin(), top.end()) != top.end())
-      throw std::runtime_error(
-          "Cobordism::selfGlue: the identification collapsed a top simplex (a "
-          "top simplex touches both boundary components — the collar is too "
-          "thin; thicken the glued direction to at least three layers)");
-    merged.push_back(std::move(top));
-  }
-  return buildSpacetime(numVertices, merged);
+std::shared_ptr<Spacetime> Cobordism::selfGlue(
+    const Spacetime &W,
+    const std::map<std::uint64_t, std::uint64_t> &boundaryBijection) {
+  const SimplexList tops = topSimplices(W);
+  if (tops.empty())
+    throw std::invalid_argument(
+        "Cobordism::selfGlue: the input must be a non-empty triangulation");
+  const std::vector<SimplexList> components = sortedBoundaryComponents(W);
+  if (components.size() != 2)
+    throw std::invalid_argument(
+        "Cobordism::selfGlue: ∂W must have exactly two components to glue to "
+        "each other; got " + std::to_string(components.size()));
+
+  // The bijection's keys are the folded (identified) component, its values the
+  // kept one; they must be the two distinct boundary components and the map a
+  // simplicial isomorphism between them.
+  const std::set<std::uint64_t> identified = mapKeys(boundaryBijection);
+  const std::set<std::uint64_t> kept = mapValues(boundaryBijection);
+  const SimplexList *from = findComponentByVertexSet(components, identified);
+  const SimplexList *to = findComponentByVertexSet(components, kept);
+  if (from == nullptr || to == nullptr || from == to ||
+      !isSimplicialIsomorphism(*from, *to, boundaryBijection))
+    throw std::invalid_argument(
+        "Cobordism::selfGlue: the supplied boundary bijection is not a "
+        "simplicial isomorphism between the two boundary components");
+
+  return foldBoundary(tops, identified, boundaryBijection);
 }
 
 }  // namespace tessera::cobordism

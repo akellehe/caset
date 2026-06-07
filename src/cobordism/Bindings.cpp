@@ -35,6 +35,7 @@
 #include "cobordism/DijkgraafWitten.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/TorusTwist.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -312,23 +313,112 @@ Euclidean spectrum/kernel.)doc")
       .def_static("verify", &Cobordism::verify, py::arg("W"), py::arg("M1"),
                   py::arg("M2"),
                   "Verify W is a cobordism from M1 to M2 (boundary structure).")
-      .def_static("glue", &Cobordism::glue, py::arg("W1"), py::arg("W2"),
-                  "Glue two cobordisms along a shared boundary surface Sigma_C "
-                  "(the first isomorphic boundary-component pair): identify its "
-                  "two copies by the order-preserving simplicial isomorphism, "
-                  "merge the complexes into one, and return the composite "
-                  "W2 cup_{Sigma_C} W1 as a new Spacetime. Its boundary is the "
-                  "remaining components (Sigma_A from W1, Sigma_B from W2). "
-                  "Raises if the inputs are empty, differ in top dimension, or "
-                  "share no isomorphic boundary surface.")
-      .def_static("selfGlue", &Cobordism::selfGlue, py::arg("W"),
-                  "Close a cobordism by gluing its two boundary components to "
-                  "each other (the mapping torus / categorical trace): they must "
-                  "be isomorphic, and the collar must be thick enough that no "
-                  "top simplex touches both (>= 3 layers in the glued "
-                  "direction). Returns the closed manifold as a new Spacetime. "
-                  "Raises unless dW has exactly two isomorphic components, or if "
-                  "the identification collapses a top simplex.");
+      .def_static(
+          "glue",
+          static_cast<std::shared_ptr<Spacetime> (*)(const Spacetime &,
+                                                     const Spacetime &)>(
+              &Cobordism::glue),
+          py::arg("W1"), py::arg("W2"),
+          "Glue two cobordisms along a shared boundary surface Sigma_C "
+          "(the first isomorphic boundary-component pair): identify its "
+          "two copies by the order-preserving simplicial isomorphism, "
+          "merge the complexes into one, and return the composite "
+          "W2 cup_{Sigma_C} W1 as a new Spacetime. Its boundary is the "
+          "remaining components (Sigma_A from W1, Sigma_B from W2). "
+          "Raises if the inputs are empty, differ in top dimension, or "
+          "share no isomorphic boundary surface.")
+      .def_static(
+          "glue",
+          static_cast<std::shared_ptr<Spacetime> (*)(
+              const Spacetime &, const Spacetime &,
+              const std::map<std::uint64_t, std::uint64_t> &)>(
+              &Cobordism::glue),
+          py::arg("W1"), py::arg("W2"), py::arg("boundary_bijection"),
+          "Twisted glue: identify the shared surface Sigma_C by the supplied "
+          "vertex bijection (a dict mapping one W2 boundary component's vertex "
+          "ids onto one W1 boundary component's, as a simplicial isomorphism) "
+          "instead of the auto-found order-preserving one. The identity "
+          "correspondence reproduces glue(W1, W2). Raises if the inputs are "
+          "empty / differ in top dimension, or the bijection is not such a "
+          "simplicial isomorphism of a shared boundary surface.")
+      .def_static(
+          "selfGlue",
+          static_cast<std::shared_ptr<Spacetime> (*)(const Spacetime &)>(
+              &Cobordism::selfGlue),
+          py::arg("W"),
+          "Close a cobordism by gluing its two boundary components to "
+          "each other (the mapping torus / categorical trace): they must "
+          "be isomorphic, and the collar must be thick enough that no "
+          "top simplex touches both (>= 3 layers in the glued "
+          "direction). Returns the closed manifold as a new Spacetime. "
+          "Raises unless dW has exactly two isomorphic components, or if "
+          "the identification collapses a top simplex.")
+      .def_static(
+          "selfGlue",
+          static_cast<std::shared_ptr<Spacetime> (*)(
+              const Spacetime &,
+              const std::map<std::uint64_t, std::uint64_t> &)>(
+              &Cobordism::selfGlue),
+          py::arg("W"), py::arg("boundary_bijection"),
+          "Twisted self-glue: fold the two boundary components together by the "
+          "supplied vertex bijection (a dict whose keys are one component's "
+          "vertex ids and values the other's, a simplicial isomorphism between "
+          "them) instead of the canonical one. Closing Sigma x [0,T] this way "
+          "builds the mapping torus of the boundary self-map; the identity gives "
+          "Sigma x S^1, while a non-trivial torus automorphism gives a "
+          "non-trivial torus bundle. Same thick-collar requirement as "
+          "selfGlue(W). Raises unless "
+          "dW has exactly two components and the bijection is a simplicial "
+          "isomorphism between them, or if a top simplex collapses.");
+
+  // ----- §5.0 (#135): torus mapping classes (modular S/T) for twisted gluing --
+  py::class_<TorusTwist>(m, "TorusTwist",
+      R"doc(A mapping-class element of the torus T^2 (an element of GL(2,Z)).
+
+Wraps an integer 2x2 matrix [[a,b],[c,d]] acting on H_1(T^2)=Z^2 and realizes it
+on the product-lattice torus SimplicialProduct(S^1,S^1): vertex (i,j) (id i*n+j,
+n = |V(S^1)|) maps to (a i + b j, c i + d j) mod n. Provides the SL(2,Z)
+generators S = [[0,-1],[1,0]] and the Dehn twist T = [[1,1],[0,1]] (which obey
+S^4 = I and (ST)^3 = S^2 exactly), plus the coordinate flip [[0,1],[1,0]] — the
+one non-trivial linear *simplicial* automorphism of the staircase product torus
+(S and T are not, since that triangulation is not vertex-transitive). The flip's
+mapping torus, built by Cobordism.selfGlue with flip's vertexPermutation, is a
+non-trivial torus bundle.)doc")
+      .def(py::init<long, long, long, long>(), py::arg("a"), py::arg("b"),
+           py::arg("c"), py::arg("d"),
+           "The mapping class with matrix [[a,b],[c,d]] on H_1(T^2)=Z^2.")
+      .def_static("identity", &TorusTwist::identity, "The identity I.")
+      .def_static("S", &TorusTwist::S,
+                  "The SL(2,Z) generator S = [[0,-1],[1,0]] (order 4).")
+      .def_static("T", &TorusTwist::T,
+                  "The Dehn twist T = [[1,1],[0,1]] (shear (i,j)->(i+j,j)).")
+      .def_static("flip", &TorusTwist::flip,
+                  "The coordinate flip [[0,1],[1,0]] — the realizable "
+                  "simplicial twist of the staircase product torus.")
+      .def("compose", &TorusTwist::compose, py::arg("rhs"),
+           "Matrix product (this)*(rhs).")
+      .def("power", &TorusTwist::power, py::arg("k"),
+           "The k-th power (k >= 0; 0 is the identity).")
+      .def("equals", &TorusTwist::equals, py::arg("rhs"),
+           "Entry-wise equality of the matrices.")
+      .def("determinant", &TorusTwist::determinant,
+           "ad - bc (+1 orientation-preserving, -1 reversing).")
+      .def("matrix", &TorusTwist::matrix,
+           "The matrix entries [a,b,c,d] (row-major).")
+      .def("vertexPermutation", &TorusTwist::vertexPermutation, py::arg("n"),
+           "The vertex permutation (i,j)->(a i+b j, c i+d j) mod n on the n x n "
+           "product torus (vertex id i*n+j), as a real id->id dict for "
+           "Cobordism.selfGlue / glue. Requires n >= 1.")
+      .def_static("isSimplicialAutomorphism",
+                  &TorusTwist::isSimplicialAutomorphism, py::arg("torus"),
+                  py::arg("permutation"),
+                  "Whether the vertex id->id permutation carries every top "
+                  "simplex of the torus complex to a top simplex (a genuine "
+                  "simplicial automorphism).")
+      .def_static("satisfiesModularRelations",
+                  &TorusTwist::satisfiesModularRelations,
+                  "Whether S^4 = I and (ST)^3 = S^2 hold (exact integer "
+                  "matrices; triangulation-independent).");
 
   // ----- Capability T3 (#108): Dijkgraaf-Witten Z_2 state sum -----
   py::enum_<Cocycle>(m, "Cocycle",

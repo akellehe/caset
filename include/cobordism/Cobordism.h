@@ -23,6 +23,7 @@
 #define TESSERA_COBORDISM_COBORDISM_H
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -117,6 +118,24 @@ class Cobordism {
     [[nodiscard]] static std::shared_ptr<Spacetime> glue(const Spacetime &W1,
                                                          const Spacetime &W2);
 
+    /// # Twisted gluing along a *specified* boundary identification
+    ///
+    /// Like `glue(W1, W2)`, but the shared surface \f$ \Sigma_C \f$ is identified
+    /// by the **caller-supplied** vertex bijection rather than the canonical
+    /// order-preserving isomorphism. `boundaryBijection` must map the vertex ids
+    /// of one whole boundary component of \f$ W_2 \f$ onto the vertex ids of one
+    /// whole boundary component of \f$ W_1 \f$, and do so as a *simplicial
+    /// isomorphism* (it carries the \f$ W_2 \f$ component's face set exactly onto
+    /// the \f$ W_1 \f$ component's). This is the building block for gluing through
+    /// a non-trivial mapping-class element (a Dehn twist of the boundary torus):
+    /// pass a twist composed with the canonical correspondence. With the identity
+    /// (order-preserving) correspondence it reproduces `glue(W1, W2)` exactly.
+    /// @throws std::invalid_argument if the inputs are empty / differ in top
+    ///   dimension, or the bijection is not such a simplicial isomorphism.
+    [[nodiscard]] static std::shared_ptr<Spacetime> glue(
+        const Spacetime &W1, const Spacetime &W2,
+        const std::map<std::uint64_t, std::uint64_t> &boundaryBijection);
+
     /// Close a cobordism by gluing its two boundary components to each other
     /// (the categorical trace / mapping torus): \f$ \partial W \f$ must have
     /// exactly two isomorphic components \f$ \Sigma_C^{(0)}, \Sigma_C^{(1)} \f$,
@@ -130,6 +149,27 @@ class Cobordism {
     ///   two isomorphic components; `std::runtime_error` if the identification
     ///   collapses a top simplex (collar too thin).
     [[nodiscard]] static std::shared_ptr<Spacetime> selfGlue(const Spacetime &W);
+
+    /// # Twisted self-gluing (the mapping torus of a boundary self-map)
+    ///
+    /// Like `selfGlue(W)`, but the two boundary components are identified by the
+    /// caller-supplied `boundaryBijection` instead of the canonical
+    /// order-preserving isomorphism. Its key set must be exactly one boundary
+    /// component's vertex ids and its value set exactly the other's, and it must
+    /// be a simplicial isomorphism between them; the keyed component is folded
+    /// onto the valued one. Closing \f$ \Sigma\times[0,T] \f$ this way realizes
+    /// the **mapping torus** \f$ \Sigma\times_\varphi S^1 \f$ of the boundary
+    /// self-map \f$ \varphi \f$ (the bijection): with the identity it is the
+    /// trivial bundle \f$ \Sigma\times S^1 \f$, and with a non-trivial torus
+    /// automorphism it is a non-trivial torus bundle. The collar must be thick
+    /// enough (no top simplex touching both components), exactly as for
+    /// `selfGlue(W)`.
+    /// @throws std::invalid_argument if \f$ \partial W \f$ does not have exactly
+    ///   two components or the bijection is not a simplicial isomorphism between
+    ///   them; `std::runtime_error` if the identification collapses a top simplex.
+    [[nodiscard]] static std::shared_ptr<Spacetime> selfGlue(
+        const Spacetime &W,
+        const std::map<std::uint64_t, std::uint64_t> &boundaryBijection);
 };
 
 }  // namespace tessera::cobordism
