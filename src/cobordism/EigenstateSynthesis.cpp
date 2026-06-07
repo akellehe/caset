@@ -32,6 +32,7 @@
 #include <utility>
 #include <vector>
 
+#include "cobordism/ChainComplex.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
@@ -46,8 +47,12 @@ namespace tessera::cobordism {
 
 using cd = std::complex<double>;
 
-EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st)
-    : st_(st), laplacian_(std::move(st)) {
+EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st, int k)
+    : st_(st), k_(k), laplacian_(std::move(st)) {
+  if (k_ < 0)
+    throw std::runtime_error(
+        "EigenstateSynthesis: degree k must be non-negative; got k=" +
+        std::to_string(k_));
   if (!st_) return;
   capture();
   classifyBoundary();
@@ -56,14 +61,26 @@ EigenstateSynthesis::EigenstateSynthesis(std::shared_ptr<Spacetime> st)
 void EigenstateSynthesis::capture() {
   order_ = 0;
   edges_.clear();
+  cellOrdering_.clear();
   if (!st_) return;
 
-  // Stable vertex order (sorted id), matching HodgeLaplacian's k=0 indexing so a
-  // psi entry aligns with the operator's row/column for that vertex.
+  // The psi ordering: at k=0 the sorted-id vertex set (one component per vertex),
+  // matching HodgeLaplacian's k=0 indexing; at k>=1 the canonical ChainComplex
+  // k-cell column order, matching the metric L_k the operator assembles. order_
+  // is the operator dimension N either way.
   std::unordered_set<std::uint64_t> idset;
   for (const auto v : st_->getVertexList()->toVector())
     if (v != nullptr) idset.insert(v->getId());
-  order_ = idset.size();
+
+  if (k_ == 0) {
+    std::vector<std::uint64_t> ids(idset.begin(), idset.end());
+    std::sort(ids.begin(), ids.end());
+    cellOrdering_.reserve(ids.size());
+    for (const std::uint64_t id : ids) cellOrdering_.push_back({id});
+  } else {
+    cellOrdering_ = ChainComplex::fromSpacetime(*st_).kSimplexVertices(k_);
+  }
+  order_ = cellOrdering_.size();
 
   // Stable edge order: the tunable edges in EdgeList order — those that actually
   // carry weight in L = D - A (both endpoints present in the vertex set, not a
@@ -160,10 +177,12 @@ std::vector<cd> EigenstateSynthesis::apply(const std::vector<cd> &psi) const {
         std::to_string(psi.size()) + ", expected " + std::to_string(N));
   std::vector<cd> out(N, cd(0.0, 0.0));
   if (N == 0) return out;
-  // L = D - A reassembled from the live edge weights/phases (the k=0 magnitude
-  // convention). The matrix path does not consult the eigendecomposition cache,
-  // so repeated perturb-then-query is honest.
-  const std::vector<cd> L = laplacian_.laplacian(0);
+  // L_k reassembled from the live edges on each call: at k=0 the k=0 magnitude
+  // convention L = D - A; at k>=1 the symmetric metric Hodge Laplacian whose
+  // volume weights W_k are read live from the edge squared-lengths. The matrix
+  // path does not consult the eigendecomposition cache, so repeated
+  // perturb-then-query is honest.
+  const std::vector<cd> L = laplacian_.laplacian(k_);
   for (std::size_t i = 0; i < N; ++i) {
     cd acc(0.0, 0.0);
     for (std::size_t j = 0; j < N; ++j) acc += L[i * N + j] * psi[j];

@@ -39,11 +39,26 @@ using namespace ::tessera::spacetime;
 
 /// # EigenstateSynthesis
 ///
-/// The §4b inverse eigenvector problem on a **fixed** complex: given a target
-/// state \f$ \psi \f$, score how close the complex's current Hermitian edge
-/// weights make \f$ \psi \f$ to being an eigenvector of the \f$ k=0 \f$ Hodge
-/// Laplacian \f$ L = D - A \f$ (the magnitude convention, via
-/// `HodgeLaplacian`), and read/write those weights so a search can perturb them.
+/// The §4b inverse eigenvector problem on a **fixed** complex, degree-parameterized
+/// by `int k`: given a target state \f$ \psi \f$, score how close the complex's
+/// current Hermitian edge weights make \f$ \psi \f$ to being an eigenvector of the
+/// degree-\f$ k \f$ Hodge Laplacian \f$ L_k \f$ (via `HodgeLaplacian`), and
+/// read/write those weights so a search can perturb them.
+///
+/// At \f$ k = 0 \f$ \f$ L_0 = D - A \f$ is the U(1)-weighted graph Laplacian (the
+/// magnitude convention) and \f$ \psi \f$ is a vertex vector (length \f$ |V| \f$,
+/// sorted-id order). At \f$ k \geq 1 \f$ \f$ L_k \f$ is the **metric Hodge
+/// Laplacian** on \f$ k \f$-cochains and \f$ \psi \f$ is a \f$ k \f$-form (length
+/// \f$ |C_k| \f$, the canonical `ChainComplex` \f$ k \f$-cell order); the tunable
+/// parameters stay the **edge** squared-lengths (`Edge::setSquaredLength`), which
+/// feed the per-simplex volume weights \f$ W_k \f$ of \f$ L_k \f$ through
+/// `Simplex::volume` (the U(1) phases enter only the \f$ k = 0 \f$ operator). This
+/// lifts the §5.0 fixed-boundary interior fill from the \f$ k = 0 \f$ 2-complex
+/// setting to the \f$ k = 1 \f$ boundary harmonic of a 3-manifold-with-boundary
+/// (#176): a 3-manifold \f$ W \f$ whose \f$ \ker L_1(\partial W) \f$ is matched by
+/// pinning \f$ \partial W \f$ and filling the interior. `cellSimplices()` gives the
+/// sorted vertex-id tuple of each \f$ \psi \f$ component, so a caller can pin the
+/// boundary \f$ k \f$-cells to a target form and leave the interior free.
 ///
 /// The search itself (non-convex, multi-restart, e.g. `scipy.optimize.minimize`
 /// L-BFGS-B over the flat \f$ \{w_{ij}\}\cup\{\theta_{ij}\} \f$ vector) drives
@@ -97,13 +112,31 @@ using namespace ::tessera::spacetime;
 /// vertices); on a pure 1-complex every edge is interior (the free §4b regime).
 class EigenstateSynthesis {
   public:
-    /// Construct over a fixed triangulation. The vertex order (sorted id) and the
+    /// Construct over a fixed triangulation at degree `k` (default \f$ 0 \f$, the
+    /// vertex graph Laplacian). The \f$ k \f$-cell order (`cellSimplices()`) and the
     /// tunable edge order are captured now; edge weights/phases are read live on
     /// each residual query. The held `shared_ptr` keeps the spacetime alive.
-    explicit EigenstateSynthesis(std::shared_ptr<Spacetime> st);
+    /// @throws std::runtime_error if `k < 0`.
+    explicit EigenstateSynthesis(std::shared_ptr<Spacetime> st, int k = 0);
 
-    /// Number of vertices \f$ N \f$ — the required length of any `psi`.
+    /// The cochain degree \f$ k \f$ this synthesizer scores against (the
+    /// `HodgeLaplacian` degree of \f$ L_k \f$).
+    [[nodiscard]] int degree() const noexcept { return k_; }
+
+    /// The operator dimension \f$ N \f$ — the required length of any `psi`:
+    /// \f$ |V| \f$ at \f$ k = 0 \f$, else \f$ |C_k| \f$ (the number of
+    /// \f$ k \f$-cells).
     [[nodiscard]] std::size_t order() const noexcept { return order_; }
+
+    /// The sorted vertex-id tuple of each \f$ \psi \f$ component, in operator
+    /// order (length `order()`): a single-vertex tuple per component at
+    /// \f$ k = 0 \f$, else the \f$ k \f$-cell vertex tuples in the canonical
+    /// `ChainComplex` column order. Lets a caller identify which components are the
+    /// boundary \f$ k \f$-cells carrying a target form vs. the interior ones.
+    [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &cellSimplices()
+        const noexcept {
+      return cellOrdering_;
+    }
 
     /// Number of tunable edges — the length of `weights()` / `phases()`.
     [[nodiscard]] std::size_t numEdges() const noexcept { return edges_.size(); }
@@ -190,23 +223,32 @@ class EigenstateSynthesis {
 
     /// Cone a fresh interior vertex into a top cell via the boundary-fixed
     /// pre-geometric Pachner add (#112): a \f$ 1\!\to\!(d+1) \f$ stellar
-    /// subdivision that leaves \f$ \partial W \f$ exactly fixed while enriching the
-    /// interior. Re-captures the vertex order, tunable edges, and interior/boundary
-    /// partition, so `order()` grows by one (a `psi` must be extended on the new
-    /// apex, appended last in sorted-id order) and `numInteriorEdges()` grows. The
-    /// RNG `seed` makes the target-cell choice reproducible. Returns `false` if no
-    /// top cell can be subdivided (e.g. a 1-complex, top cells of \f$ <3 \f$
-    /// vertices), leaving the complex unchanged.
+    /// subdivision (valid in any dimension — \f$ 1\!\to\!4 \f$ on a tetrahedron in
+    /// 3D) that leaves \f$ \partial W \f$ exactly fixed while enriching the
+    /// interior. Re-captures the \f$ k \f$-cell order (`cellSimplices()`), tunable
+    /// edges, and interior/boundary partition, so `order()` and
+    /// `numInteriorEdges()` grow. At \f$ k = 0 \f$ the new apex is the largest id,
+    /// appended last, so existing `psi` indices are preserved; at \f$ k \geq 1 \f$
+    /// the new \f$ k \f$-cells interleave in the canonical order, so re-identify
+    /// the boundary/interior components via `cellSimplices()` (by sorted vertex-id
+    /// tuple) after each grow. The RNG `seed` makes the target-cell choice
+    /// reproducible. Returns `false` if no top cell can be subdivided (e.g. a
+    /// 1-complex, top cells of \f$ <3 \f$ vertices), leaving the complex unchanged.
     bool growInterior(std::uint64_t seed);
 
   private:
     std::shared_ptr<Spacetime> st_;
-    // The k=0 Hermitian Laplacian operator over the same complex. laplacian(0)
-    // reassembles L = D - A from the live edges on each call, so perturbing the
-    // edges and re-querying is honest (the eigendecomposition cache is untouched
-    // by the matrix path).
+    int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
+    // The Hodge Laplacian operator over the same complex. laplacian(k_)
+    // reassembles L_k from the live edges/volumes on each call, so perturbing the
+    // edge squared-lengths and re-querying is honest (the eigendecomposition
+    // cache is untouched by the matrix path).
     HodgeLaplacian laplacian_;
-    std::size_t order_{0};  // N = |V|, the sorted-id vertex order
+    std::size_t order_{0};  // N = operator dimension (|V| at k=0, else |C_k|)
+    // The sorted vertex-id tuple of each psi component, in operator order: the
+    // sorted-id vertices at k=0, else the ChainComplex k-cell column order.
+    // Re-captured after growInterior() mutates the complex.
+    std::vector<std::vector<std::uint64_t>> cellOrdering_{};
     // The tunable edges, in EdgeList order, restricted to those carrying weight
     // in L (both endpoints present, no self-loops). Raw pointers owned by the
     // EdgeList; valid for the complex's lifetime (kept alive via st_). Re-captured
@@ -220,8 +262,9 @@ class EigenstateSynthesis {
     std::vector<std::size_t> boundaryEdgeIdx_{};
     std::size_t interiorVertexCount_{0};  // vertices on no boundary face
 
-    // (Re)build order_ and edges_ from the live vertex/edge lists. Called at
-    // construction and after growInterior() mutates the complex.
+    // (Re)build order_, cellOrdering_ and edges_ from the live complex (the
+    // k-cell order at k_, plus the tunable edges). Called at construction and
+    // after growInterior() mutates the complex.
     void capture();
 
     // (Re)build the interior/boundary edge partition (∂W = codim-1 faces in
