@@ -28,7 +28,8 @@ using namespace ::tessera::quantum;
 enum class WilsonMode : uint8_t {
     COMBINATORIAL,   ///< Dual-graph topology only (loop length, enclosed hinges)
     DEFICIT_ANGLE,   ///< Uses deficit angles: W = ((d-2)+2cos(ε))/d
-    CAUSAL           ///< CDT causal orientation changes around the loop
+    CAUSAL,          ///< CDT causal orientation changes around the loop
+    U1_CONNECTION    ///< U(1) connection holonomy: oriented Σ Edge::phase around a 1-skeleton cycle (mod 2π)
 };
 
 /// Which loop-shape generator to use.
@@ -56,10 +57,13 @@ struct WilsonResult {
 
 /// Wilson loop observable on a triangulated spacetime.
 ///
-/// Computes holonomy-like quantities around closed paths in the dual graph
-/// (top-simplices as nodes, shared facets as edges).  Three evaluation modes
-/// let users choose between purely combinatorial, curvature-based, and
-/// causal-structure analyses.
+/// Computes holonomy-like quantities around closed paths.  The dual-graph
+/// modes (top-simplices as nodes, shared facets as edges) let users choose
+/// between purely combinatorial, curvature-based, and causal-structure
+/// analyses.  The ``U1_CONNECTION`` mode instead accumulates the U(1)
+/// connection (``Edge::phase``) around a cycle on the primal 1-skeleton,
+/// returning the gauge-invariant holonomy (mod 2π) — the Wilson-loop view of
+/// the Stage-1 ``cobordism::HodgeLaplacian`` cycle flux.
 ///
 /// Usage:
 /// @code
@@ -82,6 +86,21 @@ class WilsonLoop {
     [[nodiscard]] WilsonResult evaluateCombinatorial(const LoopPath &loop) const;
     [[nodiscard]] WilsonResult evaluateDeficitAngle(const LoopPath &loop) const;
     [[nodiscard]] WilsonResult evaluateCausal(const LoopPath &loop) const;
+
+    /// U(1) connection holonomy around a closed cycle of vertices on the
+    /// primal 1-skeleton.  Accumulates ``Edge::phase`` oriented along the
+    /// stored source→target direction (``+phase`` forward, ``−phase`` on
+    /// reversal) and reduces the total into the principal interval (−π, π].
+    /// ``value`` carries the holonomy; ``loopSize`` the number of edges.
+    /// Returns an empty result if the cycle has fewer than two vertices or any
+    /// consecutive pair is not joined by an edge (an open path).
+    ///
+    /// This is the Wilson-loop counterpart of the Stage-1 cycle flux carried
+    /// by the Hermitian-weighted ``cobordism::HodgeLaplacian`` (the same
+    /// oriented phase sum); restricted to phases in {0, π} it reproduces the
+    /// ℤ₂ flux.
+    [[nodiscard]] WilsonResult evaluateU1Connection(
+        const std::vector<VertexPtr> &cycle) const;
 
     // ==================== Loop generators ====================
 
@@ -113,6 +132,12 @@ class WilsonLoop {
 
     /// Shared facet between two adjacent top-simplices (or nullptr).
     [[nodiscard]] SimplexPtr findSharedFacet(SimplexPtr a, SimplexPtr b) const;
+
+    /// Edge joining two vertices on the primal 1-skeleton (nullptr if none).
+    [[nodiscard]] EdgePtr edgeBetween(VertexPtr a, VertexPtr b) const;
+
+    /// Fold an angle into the principal holonomy interval (−π, π].
+    [[nodiscard]] static double principalAngle(double theta);
 
     /// Build a LoopPath from an ordered vector of simplices.
     [[nodiscard]] LoopPath buildLoopPath(
