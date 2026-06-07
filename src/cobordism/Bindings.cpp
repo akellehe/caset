@@ -130,7 +130,15 @@ d_{k+1} d_{k+1}^T) as a same-kernel cross-check. k-cells follow the canonical
 ChainComplex column order, so the matrices align with boundaryMatrix(k) and
 weights(k). Negative k raises; k above the top dimension yields empty results.
 Spectra are computed lazily and cached. This is the operator only — fluxes,
-cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
+cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.
+
+Lorentzian d'Alembertian (§5.6): the lorentzian* methods weight W_k with the
+SIGNED Simplex.volume (timelike l^2 < 0 ⇒ negative volumes), so the inner product
+goes indefinite and L_k = d_k* d_k + d_{k+1} d_{k+1}* is assembled directly and is
+generally non-self-adjoint — eigenvalues may be negative or complex. ker L_k ~= H_k
+degrades: 'harmonic' becomes the small-|lambda| near-kernel and a representative h
+can be null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0). All-spacelike ⇒ reproduces the
+Euclidean spectrum/kernel.)doc")
       .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
            "Build the Hodge Laplacian operator over a triangulation.")
       .def("adjacency", &HodgeLaplacian::adjacency,
@@ -140,15 +148,19 @@ cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
            "Degree vector (length N, real): D_ii = sum |squaredLength| over "
            "incident edges (magnitude convention).")
       .def("laplacian", &HodgeLaplacian::laplacian, py::arg("k") = 0,
-           py::arg("metric") = true,
+           py::arg("metric") = true, py::arg("lorentzian") = false,
            "Laplacian L_k as a flat row-major complex array: N*N for k=0 "
            "(L = D - A), else |C_k|*|C_k| (the symmetric metric Laplacian; "
            "imag 0). metric=False uses unit weights (combinatorial) for k>=1 and "
-           "is ignored at k=0. Raises for k<0; empty above the top dimension.")
+           "is ignored at k=0. lorentzian=True (k>=1) assembles the signed-weight "
+           "d'Alembertian directly (generally non-symmetric; still real). Raises "
+           "for k<0; empty above the top dimension.")
       .def("weights", &HodgeLaplacian::weights, py::arg("k"),
+           py::arg("lorentzian") = false,
            "Diagonal inner-product weights W_k (length |C_k|) in ChainComplex "
-           "column order: per-k-simplex |volume| (W_0 = I). Empty for k<0 or k "
-           "above the top dimension.")
+           "column order: per-k-simplex |volume| (W_0 = I). lorentzian=True returns "
+           "the signed volume (timelike cells negative). Empty for k<0 or k above "
+           "the top dimension.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
            "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
       .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,
@@ -171,7 +183,31 @@ cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
            "Harmonic representatives (eigenvectors with |lambda| < tol) as a flat "
            "row-major M*H complex array whose H columns span ker L_k ~= H_k "
            "(H = b_k). metric selects volume vs. unit weights for k>=1. Raises "
-           "for k<0; empty above the top dimension.");
+           "for k<0; empty above the top dimension.")
+      // ----- Lorentzian (signed-weight) d'Alembertian (#105, spec §5.6) -----
+      .def("lorentzianEigenvalues", &HodgeLaplacian::lorentzianEigenvalues,
+           py::arg("k"), py::arg("metric") = true,
+           "Eigenvalues of the signed-weight d'Alembertian L_k (k>=1) as complex "
+           "numbers sorted ascending by (Re, Im): may be negative or complex-"
+           "conjugate pairs (the indefinite metric ⇒ non-self-adjoint operator). "
+           "On an all-spacelike complex they reproduce eigenvalues(k). Raises for "
+           "k<0; empty above the top dimension.")
+      .def("lorentzianEigenvectors", &HodgeLaplacian::lorentzianEigenvectors,
+           py::arg("k"), py::arg("metric") = true,
+           "Eigenvectors of the signed-weight L_k as a flat row-major M*M complex "
+           "array; column j is the eigenvector for lorentzianEigenvalues(k)[j].")
+      .def("lorentzianHarmonics", &HodgeLaplacian::lorentzianHarmonics,
+           py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
+           "Near-kernel ('harmonic') representatives of the d'Alembertian "
+           "(eigenvectors with |lambda| < tol) as a flat row-major M*H complex "
+           "array. H = b_k on an all-spacelike complex; with timelike cells the "
+           "count can differ (pseudo-Hodge decomposition).")
+      .def("lorentzianNullNorms", &HodgeLaplacian::lorentzianNullNorms,
+           py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
+           "Indefinite W-norms <h,h>_W = sum_i W_{k,i} |h_i|^2 of the near-kernel "
+           "representatives, one per column of lorentzianHarmonics (same order). "
+           "A value ~0 flags a NULL (lightlike) harmonic; all positive on an "
+           "all-spacelike complex.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
