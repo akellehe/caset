@@ -194,9 +194,13 @@ std::vector<int> ChainComplex::bettiNumbersGF2() const {
   return b;
 }
 
+std::vector<std::vector<std::uint64_t>> ChainComplex::kSimplexVertices(int k) const {
+  if (k < 0 || k > dimension_) return {};  // out of range: no such simplices
+  return faceVerts_[static_cast<std::size_t>(k)];
+}
+
 std::vector<std::vector<std::uint64_t>> ChainComplex::orientedTopSimplices() const {
-  if (dimension_ < 0) return {};  // empty complex: no top simplices
-  return faceVerts_[static_cast<std::size_t>(dimension_)];
+  return kSimplexVertices(dimension_);  // empty complex (d < 0) yields {}
 }
 
 std::vector<int> ChainComplex::fundamentalClass() const {

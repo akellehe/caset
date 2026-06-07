@@ -82,6 +82,15 @@ class ChainComplex {
     /// \f$ \mathrm{torsion}(1) = \{2\} \f$.)
     [[nodiscard]] std::vector<long> torsion(int k) const;
 
+    /// The k-simplices as sorted vertex-id tuples, in the canonical order of
+    /// \f$ C_k \f$ — the column order of \f$ \partial_{k+1} \f$ and, equally, the
+    /// row order of \f$ \partial_k \f$. For \f$ k = \f$ dimension() this is
+    /// orientedTopSimplices(); for \f$ k = 1 \f$ it is the edge ordering the
+    /// rows of boundaryMatrix(2) refer to, which is needed to read a
+    /// \f$ \mathbb{Z}_2 \f$ connection \f$ g \in C^1 \f$ on a simplex's edges.
+    /// Empty when \f$ k \f$ is out of range.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> kSimplexVertices(int k) const;
+
     /// The top simplices as sorted vertex-id tuples, in the canonical column
     /// order of the top boundary matrix \f$ \partial_d \f$ (\f$ d = \f$
     /// dimension()). This is the ordering the orientation signs from
