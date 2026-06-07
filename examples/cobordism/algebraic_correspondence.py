@@ -220,7 +220,7 @@ def write_plots(out_dir, flux_pts):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        print("  (matplotlib not installed; skipping plots -- `poetry install --all-extras`)")
+        print('  (matplotlib not installed; skipping plots -- `pip install -e ".[examples]"`)')
         return []
     phis = np.linspace(0.0, 2 * math.pi, max(flux_pts, 50))
     spectrum = np.array([sorted(cob.HodgeLaplacian(_triangle(p)).eigenvalues()) for p in phis])

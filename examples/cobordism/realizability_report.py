@@ -320,7 +320,7 @@ def write_figures(out_dir, seed, restarts):
         import matplotlib.pyplot as plt
     except ImportError:
         print("  (matplotlib not installed; skipping figures -- "
-              "`poetry install --all-extras`)")
+              '`pip install -e ".[examples]"`)')
         return []
     os.makedirs(out_dir, exist_ok=True)
     paths = []
