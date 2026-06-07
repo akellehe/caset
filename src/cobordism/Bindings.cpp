@@ -108,20 +108,28 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "monomial (e.g. 'w4', 'w2^2'); empty for the empty complex. Raises "
            "if a class needs a deferred higher Steenrod cup-i product (#65).");
 
-  // ----- Hermitian-weighted Hodge Laplacian (#90): the k=0 operator -----
+  // ----- Hodge Laplacian: k=0 Hermitian graph (#90), k>=1 metric Hodge (#104) -----
   py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
-      R"doc(Hermitian-weighted Hodge Laplacian on a Spacetime.
+      R"doc(Hodge Laplacian on a Spacetime, degree-parameterized by int k.
 
-Stage 1 implements degree k=0 — the U(1)-weighted graph Laplacian L = D - A on
-the 1-skeleton, assembled from each edge's complex weight
-squaredLength * exp(i*phase). Vertices are indexed by sorted id (0..N-1), so the
-returned flat N*N row-major matrices are reproducible. Adjacency is Hermitian by
-construction (the reverse orientation negates the phase); the degree uses the
-magnitude convention D_ii = sum |squaredLength|. The eigendecomposition (Eigen
-SelfAdjointEigenSolver) is computed lazily and cached.
+k=0: the U(1)-weighted graph Laplacian L = D - A on the 1-skeleton, assembled
+from each edge's complex weight squaredLength * exp(i*phase). Vertices are
+indexed by sorted id (0..N-1). Adjacency is Hermitian (the reverse orientation
+negates the phase); the degree uses the magnitude convention
+D_ii = sum |squaredLength|. (Unchanged.)
 
-The API is degree-parameterized (int k) for Stage 2's cochain Laplacians L_k;
-any k != 0 currently raises RuntimeError. This is the operator only — fluxes,
+k>=1: the metric Hodge Laplacian from the integer boundary maps d_k, d_{k+1}
+(ChainComplex) and diagonal weights W_k = the per-k-simplex Euclidean volumes
+(Simplex.volume; W_0 = I). With d_k* = W_k^-1 d_k^T W_{k-1}, the operator is
+L_k = d_k* d_k + d_{k+1} d_{k+1}*, returned in its symmetric (W_k-orthonormal)
+form W_k^{1/2} L_k W_k^{-1/2} = B_k^T B_k + B_{k+1} B_{k+1}^T,
+B_k = W_{k-1}^{1/2} d_k W_k^{-1/2} (symmetric PSD; SelfAdjointEigenSolver). By the
+discrete Hodge theorem ker L_k ~= H_k, so dim ker L_k = b_k for any positive
+weights; metric=False uses unit weights (the combinatorial d_k^T d_k +
+d_{k+1} d_{k+1}^T) as a same-kernel cross-check. k-cells follow the canonical
+ChainComplex column order, so the matrices align with boundaryMatrix(k) and
+weights(k). Negative k raises; k above the top dimension yields empty results.
+Spectra are computed lazily and cached. This is the operator only — fluxes,
 cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
       .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
            "Build the Hodge Laplacian operator over a triangulation.")
@@ -132,8 +140,15 @@ cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
            "Degree vector (length N, real): D_ii = sum |squaredLength| over "
            "incident edges (magnitude convention).")
       .def("laplacian", &HodgeLaplacian::laplacian, py::arg("k") = 0,
-           "Laplacian L = D - A for k=0 as a flat row-major N*N complex array; "
-           "raises for k != 0 (Stage 2 not yet implemented).")
+           py::arg("metric") = true,
+           "Laplacian L_k as a flat row-major complex array: N*N for k=0 "
+           "(L = D - A), else |C_k|*|C_k| (the symmetric metric Laplacian; "
+           "imag 0). metric=False uses unit weights (combinatorial) for k>=1 and "
+           "is ignored at k=0. Raises for k<0; empty above the top dimension.")
+      .def("weights", &HodgeLaplacian::weights, py::arg("k"),
+           "Diagonal inner-product weights W_k (length |C_k|) in ChainComplex "
+           "column order: per-k-simplex |volume| (W_0 = I). Empty for k<0 or k "
+           "above the top dimension.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
            "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
       .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,
@@ -141,14 +156,22 @@ cycle bases, and Betti numbers belong to WilsonLoop / ChainComplex.)doc")
            "Residual ||U U^dagger - I|| of U = e^{-iLt} formed from the "
            "eigendecomposition (~0 for the Hermitian L).")
       .def("eigenvalues", &HodgeLaplacian::eigenvalues, py::arg("k") = 0,
-           "Eigenvalues of L_k (real, ascending); raises for k != 0.")
+           py::arg("metric") = true,
+           "Eigenvalues of L_k (real, ascending). metric selects volume vs. unit "
+           "weights for k>=1 (ignored at k=0). Raises for k<0; empty above the "
+           "top dimension.")
       .def("eigenvectors", &HodgeLaplacian::eigenvectors, py::arg("k") = 0,
-           "Eigenvectors of L_k as a flat row-major N*N complex array (column j "
-           "is the eigenvector for the j-th ascending eigenvalue); raises for k != 0.")
+           py::arg("metric") = true,
+           "Eigenvectors of L_k as a flat row-major M*M complex array (column j "
+           "is the eigenvector for the j-th ascending eigenvalue). metric selects "
+           "volume vs. unit weights for k>=1. Raises for k<0; empty above the top "
+           "dimension.")
       .def("harmonics", &HodgeLaplacian::harmonics, py::arg("k") = 0,
-           py::arg("tol") = 1e-9,
+           py::arg("tol") = 1e-9, py::arg("metric") = true,
            "Harmonic representatives (eigenvectors with |lambda| < tol) as a flat "
-           "row-major N*M complex array whose M columns span ker L_k; raises for k != 0.");
+           "row-major M*H complex array whose H columns span ker L_k ~= H_k "
+           "(H = b_k). metric selects volume vs. unit weights for k>=1. Raises "
+           "for k<0; empty above the top dimension.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
