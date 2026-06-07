@@ -62,7 +62,7 @@ cob = tessera.cobordism
 # Fixture builders.
 # --------------------------------------------------------------------------- #
 def _build(topology):
-    sig = tessera.Signature(4, tessera.Lorentzian)
+    sig = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
     st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
                            tessera.PREFERRED, topology)
@@ -277,36 +277,27 @@ class TestOrientedTopSimplices(unittest.TestCase):
 # 2b. fundamentalClass() contract — documents a real production bug (#153).
 # --------------------------------------------------------------------------- #
 class TestFundamentalClassContract(unittest.TestCase):
-    """``ChainComplex.fundamentalClass()`` is contracted to *raise* when no
-    fundamental class exists — when ``dim ker ∂_d ≠ 1`` (the header's @throws,
-    and ChainComplex.cpp's own comment: "anything else has no fundamental class
-    … and the call throws"). It does not, for any complex whose top boundary
+    """``ChainComplex.fundamentalClass()`` raises when no fundamental class
+    exists — when ``dim ker ∂_d ≠ 1`` (the header's @throws, and
+    ChainComplex.cpp's own comment: "anything else has no fundamental class …
+    and the call throws"). This holds for every complex whose top boundary
     ``∂_d`` has full column rank (trivial kernel, ``b_d = 0``): every ball
     ``Δⁿ`` and the non-orientable ``RP²``.
 
-    Root cause (ChainComplex.cpp ``fundamentalClass()``): Eigen's
-    ``FullPivLU::kernel()`` returns a single all-zero *column* — never a
-    zero-column matrix — when the kernel is 0-dimensional, so the guard
-    ``kernel.cols() != 1`` never fires; the method then returns an all-zero ε
-    vector (and divides by ``generator[firstNonzero]`` with
-    ``firstNonzero == generator.size()``, reading one past the end). A correct
-    guard would test the kernel column for nonzero / compare the rank, but #153
-    is test-only — no production change here.
-
-    The two contract checks are marked ``expectedFailure`` rather than rewritten
-    to accept the buggy output, so the assertion stays the *correct* contract and
-    flips to an unexpected pass the moment the guard is fixed. The closed
-    oriented case (``b_d = 1``, where the kernel genuinely has one column) is
-    correct and covered by the homology sweep above.
+    The guard was fixed in #163: ``FullPivLU::dimensionOfKernel()`` (plus a
+    past-the-end ``firstNonzero`` check) replaced the ``kernel.cols() != 1``
+    test, which never fired for a 0-dimensional kernel — Eigen's
+    ``FullPivLU::kernel()`` returns a single all-zero column there rather than a
+    zero-column matrix, so the old guard returned an all-zero ε vector and read
+    one past the end of the generator. The closed oriented case (``b_d = 1``,
+    kernel of one column) is covered by the homology sweep above.
     """
 
-    @unittest.expectedFailure
     def test_ball_should_raise_without_fundamental_class(self):
         # Δ³ is contractible (b_3 = 0): no fundamental class ⇒ must raise.
         with self.assertRaises(RuntimeError):
             _chain(tessera.SolidSimplex(3)).fundamentalClass()
 
-    @unittest.expectedFailure
     def test_non_orientable_should_raise_without_fundamental_class(self):
         # RP² is closed but non-orientable (b_2 = 0): must raise.
         with self.assertRaises(RuntimeError):
