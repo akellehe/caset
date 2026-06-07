@@ -757,6 +757,13 @@ double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
 
     double denom = std::sqrt(std::abs(Cii * Cjj));
     if (denom < 1e-15) return 0.0;
+    // The diagonal Cayley–Menger cofactors C_ii, C_jj share the
+    // dimension-parity sign (-1)^d: positive in even dimension, negative in odd
+    // (e.g. -3 for a unit tetrahedron). Taking |C_ii·C_jj| under the sqrt drops
+    // that sign, so the normalization must reapply it — otherwise
+    // cos θ = -C_ij / sqrt(C_ii·C_jj) collapses to its supplement (π - θ) for
+    // odd-dimensional simplices. In even dimension C_ii > 0 and this is a no-op.
+    if (Cii < 0.0) denom = -denom;
     double cosTheta = std::clamp(-Cij / denom, -1.0, 1.0);
     return std::acos(cosTheta);
 }

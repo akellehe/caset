@@ -86,11 +86,19 @@ def _cofactor(M):
 
 def _dihedral_from_cm(B, bi, bj):
     """Dihedral angle from a Cayley-Menger matrix, mirroring the C++ cofactor
-    formula (including the abs under the sqrt and the cos clamp)."""
+    formula (including the cos clamp).
+
+    The diagonal cofactors C_ii, C_jj carry the dimension-parity sign (-1)^d
+    (negative for odd-dimensional simplices, e.g. -3 for a unit tetrahedron).
+    That sign is reapplied to the normalization; without it the angle collapses
+    to its supplement (pi - theta) in odd dimension (issue #161).
+    """
     C = _cofactor(B)
     denom = math.sqrt(abs(C[bi, bi] * C[bj, bj]))
     if denom < 1e-15:
         return 0.0
+    if C[bi, bi] < 0.0:
+        denom = -denom
     cos = max(-1.0, min(1.0, -C[bi, bj] / denom))
     return math.acos(cos)
 
@@ -261,6 +269,99 @@ class TestCayleyMengerMatrix(unittest.TestCase):
             reconstructed = _dihedral_from_cm(B, bi, bj)
             actual = simplex.dihedralAngle(hinge, wickRotate=wick)
             self.assertAlmostEqual(actual, reconstructed, places=7)
+
+
+class TestDihedralAngle(unittest.TestCase):
+    """Interior dihedral angles via the Cayley-Menger cofactor formula.
+
+    The sign of the diagonal cofactors must be carried through the
+    normalization so the result is the true interior dihedral in every
+    dimension -- not its supplement (pi - theta), which is what the unsigned
+    formula returned for odd-dimensional simplices (issue #161). The
+    even-dimensional cases (triangle, pentachoron) must be left unchanged,
+    since the 4D Regge/CDT deficit-angle path sums dihedrals of 4-simplices
+    about their triangular hinges.
+    """
+
+    def setUp(self):
+        self.st = Spacetime()
+
+    def _unit_simplex(self, dim):
+        """Regular ``dim``-simplex with every squared edge length == 1."""
+        ids = list(range(dim + 1))
+        sq = {frozenset({i, j}): 1.0 for i in ids for j in ids if i < j}
+        simplex, verts, edges = _make_simplex(self.st, ids, sq)
+        return simplex, verts, edges
+
+    def _corner_tetra(self):
+        """Trirectangular ("corner") tetra: unit legs along x, y, z axes at
+        vertex 0, hypotenuse faces of squared length 2."""
+        sq = {
+            frozenset({0, 1}): 1.0, frozenset({0, 2}): 1.0,
+            frozenset({0, 3}): 1.0, frozenset({1, 2}): 2.0,
+            frozenset({1, 3}): 2.0, frozenset({2, 3}): 2.0,
+        }
+        return _make_simplex(self.st, [0, 1, 2, 3], sq)
+
+    def test_regular_tetrahedron_is_interior_not_supplement(self):
+        # 3-simplex (odd dim): the regression case. Interior dihedral is
+        # arccos(1/3) ~ 70.53 deg, NOT the supplement arccos(-1/3) ~ 109.47.
+        simplex, verts, edges = self._unit_simplex(3)
+        # Hinge = edge (2, 3); the two opposite vertices are 0 and 1.
+        hinge, _ = self.st.createSimplex(
+            [verts[2], verts[3]], [edges[frozenset({2, 3})]])
+        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        self.assertAlmostEqual(theta, math.acos(1.0 / 3.0), places=9)
+        self.assertAlmostEqual(math.degrees(theta), 70.528779, places=4)
+        # Explicitly NOT the supplement the unsigned formula produced.
+        self.assertNotAlmostEqual(theta, math.acos(-1.0 / 3.0), places=6)
+
+    def test_equilateral_triangle_unchanged(self):
+        # 2-simplex (even dim): the angle at a vertex hinge = pi/3. Even
+        # dimension is untouched by the fix.
+        simplex, verts, _ = self._unit_simplex(2)
+        # Hinge is the 0-simplex {vertex 0}; opposite vertices are 1 and 2.
+        hinge, _ = self.st.createSimplex([verts[0]])
+        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        self.assertAlmostEqual(theta, math.pi / 3.0, places=9)
+
+    def test_regular_pentachoron_unchanged(self):
+        # 4-simplex (even dim): dihedral = arccos(1/4) ~ 75.52 deg. This is the
+        # parity the 4D Regge deficit-angle path relies on; it must not move.
+        simplex, verts, edges = self._unit_simplex(4)
+        # Hinge = triangle (2, 3, 4); the two opposite vertices are 0 and 1.
+        hinge, _ = self.st.createSimplex(
+            [verts[2], verts[3], verts[4]],
+            [edges[frozenset({2, 3})], edges[frozenset({2, 4})],
+             edges[frozenset({3, 4})]])
+        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        self.assertAlmostEqual(theta, math.acos(0.25), places=9)
+
+    def test_right_angle_dihedral_in_corner_tetrahedron(self):
+        # Odd dim, right angle: the dihedral along a leg edge of the corner
+        # tetra is exactly pi/2 (the two faces lie in orthogonal coordinate
+        # planes). C_ij = 0 here, so this stays correct either way -- a guard
+        # that the fix does not perturb right angles in odd dimension.
+        simplex, verts, edges = self._corner_tetra()
+        # Hinge = leg edge (0, 1); opposite vertices are 2 and 3.
+        hinge, _ = self.st.createSimplex(
+            [verts[0], verts[1]], [edges[frozenset({0, 1})]])
+        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        self.assertAlmostEqual(theta, math.pi / 2.0, places=9)
+
+    def test_irregular_tetrahedron_interior_dihedral(self):
+        # Odd dim, irregular, non-right: dihedral along a hypotenuse edge of
+        # the corner tetra, between the base and the slanted face, is
+        # arccos(1/sqrt 3) ~ 54.74 deg. The unsigned formula returned its
+        # supplement ~ 125.26 deg -- this pins the general (non-symmetric) fix.
+        simplex, verts, edges = self._corner_tetra()
+        # Hinge = hypotenuse edge (1, 2); opposite vertices are 0 and 3.
+        hinge, _ = self.st.createSimplex(
+            [verts[1], verts[2]], [edges[frozenset({1, 2})]])
+        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        self.assertAlmostEqual(theta, math.acos(1.0 / math.sqrt(3.0)), places=9)
+        self.assertNotAlmostEqual(
+            theta, math.pi - math.acos(1.0 / math.sqrt(3.0)), places=6)
 
 
 if __name__ == "__main__":
