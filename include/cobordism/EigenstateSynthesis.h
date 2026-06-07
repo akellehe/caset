@@ -24,7 +24,9 @@
 
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "cobordism/HodgeLaplacian.h"
@@ -72,6 +74,27 @@ using namespace ::tessera::spacetime;
 /// read them; `setWeights()` / `setPhases()` write them back in place — no mesh
 /// rebuild. `psi` components are indexed in the same sorted-vertex-id order as
 /// `HodgeLaplacian` (\f$ k=0 \f$), so they align with the operator.
+///
+/// ## Fixed-boundary interior fill (§5.0)
+///
+/// The realizability oracle (#138) fills the **interior** of a bulk \f$ W_{AB} \f$
+/// whose boundary is *pinned* — the §4b cone-and-retry restricted to the interior.
+/// The tunable edges split into the **boundary** set \f$ \partial W \f$ (those on a
+/// codimension-one face belonging to exactly one top cell — held fixed) and the
+/// **interior** set (everything else — free). `interiorWeights()` / `interiorPhases()`
+/// and `setInteriorWeights()` / `setInteriorPhases()` read/write *only* the interior
+/// edges, so a search drives \f$ r\to 0 \f$ for a target output eigenvector while
+/// \f$ \partial W \f$ stays byte-identical; `boundaryEdges()` exposes that fixed set
+/// for verification. `growInterior()` cones a fresh interior vertex into a top cell
+/// via the boundary-fixed pre-geometric Pachner add (#112) — a topology-preserving
+/// \f$ 1\!\to\!(d+1) \f$ stellar subdivision that enriches the interior with
+/// \f$ \partial W \f$ untouched — and re-captures the partition, so the loop can
+/// optimize, then grow, then re-optimize. `interiorVertexCount()` /
+/// `numInteriorEdges()` report the interior complexity reached: a reachable target
+/// drives \f$ r\to 0 \f$ at some minimal complexity, an unreachable one floors at a
+/// positive residual (the spectral obstruction the oracle consumes). The boundary
+/// edge classification needs genuine codim-one structure (top cells of \f$ \ge 3 \f$
+/// vertices); on a pure 1-complex every edge is interior (the free §4b regime).
 class EigenstateSynthesis {
   public:
     /// Construct over a fixed triangulation. The vertex order (sorted id) and the
@@ -118,6 +141,64 @@ class EigenstateSynthesis {
     /// @throws std::runtime_error if `theta.size() != numEdges()`.
     void setPhases(const std::vector<double> &theta);
 
+    // === Fixed-boundary interior fill (§5.0) ===
+
+    /// Number of interior tunable edges (not on \f$ \partial W \f$) — the length
+    /// of `interiorWeights()` / `interiorPhases()` and the free parameters a
+    /// fixed-boundary search varies.
+    [[nodiscard]] std::size_t numInteriorEdges() const noexcept {
+      return interiorEdgeIdx_.size();
+    }
+
+    /// Number of boundary tunable edges (on \f$ \partial W \f$, held fixed).
+    [[nodiscard]] std::size_t numBoundaryEdges() const noexcept {
+      return boundaryEdgeIdx_.size();
+    }
+
+    /// Number of interior vertices (on no boundary face) — the coned-in apexes;
+    /// the interior complexity the synthesis grows / reports.
+    [[nodiscard]] std::size_t interiorVertexCount() const noexcept {
+      return interiorVertexCount_;
+    }
+
+    /// The interior edge magnitudes \f$ \{w_{ij}\} \f$ in interior-edge order,
+    /// length `numInteriorEdges()`.
+    [[nodiscard]] std::vector<double> interiorWeights() const;
+
+    /// The interior edge phases \f$ \{\theta_{ij}\} \f$ in interior-edge order,
+    /// length `numInteriorEdges()`.
+    [[nodiscard]] std::vector<double> interiorPhases() const;
+
+    /// Write the interior edge magnitudes in place; the boundary edges are left
+    /// untouched. @throws std::runtime_error if `w.size() != numInteriorEdges()`.
+    void setInteriorWeights(const std::vector<double> &w);
+
+    /// Write the interior edge phases in place; the boundary edges are left
+    /// untouched. @throws std::runtime_error if `theta.size() != numInteriorEdges()`.
+    void setInteriorPhases(const std::vector<double> &theta);
+
+    /// The boundary tunable edges as sorted \f$ (\min\text{id},\max\text{id}) \f$
+    /// endpoint pairs — the fixed \f$ \partial W \f$ edge set, for asserting it is
+    /// untouched through an interior fill / growth sweep.
+    [[nodiscard]] std::vector<std::pair<std::uint64_t, std::uint64_t>>
+    boundaryEdges() const;
+
+    /// The interior tunable edges as sorted \f$ (\min\text{id},\max\text{id}) \f$
+    /// endpoint pairs (the complement of `boundaryEdges()`).
+    [[nodiscard]] std::vector<std::pair<std::uint64_t, std::uint64_t>>
+    interiorEdges() const;
+
+    /// Cone a fresh interior vertex into a top cell via the boundary-fixed
+    /// pre-geometric Pachner add (#112): a \f$ 1\!\to\!(d+1) \f$ stellar
+    /// subdivision that leaves \f$ \partial W \f$ exactly fixed while enriching the
+    /// interior. Re-captures the vertex order, tunable edges, and interior/boundary
+    /// partition, so `order()` grows by one (a `psi` must be extended on the new
+    /// apex, appended last in sorted-id order) and `numInteriorEdges()` grows. The
+    /// RNG `seed` makes the target-cell choice reproducible. Returns `false` if no
+    /// top cell can be subdivided (e.g. a 1-complex, top cells of \f$ <3 \f$
+    /// vertices), leaving the complex unchanged.
+    bool growInterior(std::uint64_t seed);
+
   private:
     std::shared_ptr<Spacetime> st_;
     // The k=0 Hermitian Laplacian operator over the same complex. laplacian(0)
@@ -128,8 +209,24 @@ class EigenstateSynthesis {
     std::size_t order_{0};  // N = |V|, the sorted-id vertex order
     // The tunable edges, in EdgeList order, restricted to those carrying weight
     // in L (both endpoints present, no self-loops). Raw pointers owned by the
-    // EdgeList; valid for the fixed complex's lifetime (kept alive via st_).
+    // EdgeList; valid for the complex's lifetime (kept alive via st_). Re-captured
+    // after growInterior() adds a vertex.
     std::vector<::tessera::mesh::Edge *> edges_{};
+
+    // Indices into edges_ partitioning the tunable edges into interior (free) and
+    // boundary (on ∂W, held fixed) by classifyBoundary(). Interior-order is the
+    // stable parameter order for setInteriorWeights / setInteriorPhases.
+    std::vector<std::size_t> interiorEdgeIdx_{};
+    std::vector<std::size_t> boundaryEdgeIdx_{};
+    std::size_t interiorVertexCount_{0};  // vertices on no boundary face
+
+    // (Re)build order_ and edges_ from the live vertex/edge lists. Called at
+    // construction and after growInterior() mutates the complex.
+    void capture();
+
+    // (Re)build the interior/boundary edge partition (∂W = codim-1 faces in
+    // exactly one top cell) and interiorVertexCount_ from the live complex.
+    void classifyBoundary();
 };
 
 }  // namespace tessera::cobordism
