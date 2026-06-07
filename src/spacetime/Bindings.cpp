@@ -35,6 +35,8 @@
 #include "spacetime/topologies/RealProjectivePlane.h"
 #include "spacetime/topologies/ComplexProjectivePlane.h"
 #include "spacetime/topologies/SimplicialProduct.h"
+#include "spacetime/topologies/SphereCircleProduct.h"
+#include "spacetime/topologies/StellarSubdivision.h"
 #include "simulations/CDT.h"
 #include "spacetime/PachnerMove.h"
 #include "spacetime/pachner/AddMove.h"
@@ -154,6 +156,28 @@ Pachner moves (add, remove, flip, iflip, shift).)doc")
       .def("build", &SimplicialProduct::build, py::arg("spacetime"),
            py::arg("numSimplices") = 0,
            "Build the product complex (numSimplices ignored).");
+
+  py::class_<SphereCircleProduct, Topology,
+             std::shared_ptr<SphereCircleProduct> >(m, "SphereCircleProduct",
+      "S^2 x S^1: the closed oriented 3-manifold ∂Δ^3 × ∂Δ^2 (12 vertices, "
+      "36 tetrahedra), χ=0, Betti (1,1,1,1). The triple-cup negative control "
+      "for T^3. Exact and pre-geometric; build() ignores numSimplices.")
+      .def(py::init<>())
+      .def("build", &SphereCircleProduct::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build S^2 x S^1 (numSimplices ignored).");
+
+  py::class_<StellarSubdivision, Topology,
+             std::shared_ptr<StellarSubdivision> >(m, "StellarSubdivision",
+      "Refines a base topology by one stellar 1->(n+1) subdivision (star the "
+      "lexicographically smallest top simplex at a fresh vertex). Same manifold "
+      "and homology as the base, but a genuinely distinct (non-isomorphic) "
+      "labelled complex — e.g. StellarSubdivision(T^3) retriangulates T^3. "
+      "Exact and pre-geometric; build() ignores numSimplices.")
+      .def(py::init<std::shared_ptr<Topology> >(), py::arg("base"))
+      .def("build", &StellarSubdivision::build, py::arg("spacetime"),
+           py::arg("numSimplices") = 0,
+           "Build the subdivided complex (numSimplices ignored).");
   // ========================================
   // Metric
   // ========================================
