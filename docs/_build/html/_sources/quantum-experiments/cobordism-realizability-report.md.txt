@@ -218,10 +218,10 @@ floor is a genuine non-existence certificate, not a stuck optimizer.
 ## Reproduce
 
 ```
-poetry run pip install -e .
-poetry run python examples/cobordism/realizability_report.py   # the table above
-poetry run python -m pytest tests/cobordism/test_realizability_oracle_python.py
-poetry run python -m pytest tests/cobordism/test_geometry_synthesizer_python.py
+pip install -e ".[dev]"
+python examples/cobordism/realizability_report.py   # the table above
+python -m pytest tests/cobordism/test_realizability_oracle_python.py
+python -m pytest tests/cobordism/test_geometry_synthesizer_python.py
 ```
 
 `--seed` (default 0), `--restarts` (default 80), and `--no-plot` are available;

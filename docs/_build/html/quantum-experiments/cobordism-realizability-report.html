@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="The Tessera C++ API" href="../cpp_api.html"><link rel="prev" title="Cobordism experiment — Stage 2 (topological layer): results" href="cobordism-stage2-report.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Cobordism experiment — the DW–spectral bridge: results" href="cobordism-bridge-report.html"><link rel="prev" title="Cobordism experiment — Stage 2 (topological layer): results" href="cobordism-stage2-report.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
         <title>Cobordism experiment — synthesis &amp; realizability: results - tessera 0.1.0 documentation</title>
@@ -237,6 +237,8 @@
 <li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html">Cobordism experiment — Stage 2 (topological layer): results</a></li>
 <li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Cobordism experiment — synthesis &amp; realizability: results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-bridge-report.html">Cobordism experiment — the DW–spectral bridge: results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-realizable-image-report.html">Cobordism experiment — the realizable image: results</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Tessera C++ API</a></li>
@@ -497,10 +499,10 @@ bounded above <span class="math notranslate nohighlight">\(10^{-2}\)</span> (and
 </section>
 <section id="reproduce">
 <h2>Reproduce<a class="headerlink" href="#reproduce" title="Link to this heading">¶</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">poetry</span> <span class="n">run</span> <span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="o">.</span>
-<span class="n">poetry</span> <span class="n">run</span> <span class="n">python</span> <span class="n">examples</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">realizability_report</span><span class="o">.</span><span class="n">py</span>   <span class="c1"># the table above</span>
-<span class="n">poetry</span> <span class="n">run</span> <span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pytest</span> <span class="n">tests</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">test_realizability_oracle_python</span><span class="o">.</span><span class="n">py</span>
-<span class="n">poetry</span> <span class="n">run</span> <span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pytest</span> <span class="n">tests</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">test_geometry_synthesizer_python</span><span class="o">.</span><span class="n">py</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;.[dev]&quot;</span>
+<span class="n">python</span> <span class="n">examples</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">realizability_report</span><span class="o">.</span><span class="n">py</span>   <span class="c1"># the table above</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pytest</span> <span class="n">tests</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">test_realizability_oracle_python</span><span class="o">.</span><span class="n">py</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pytest</span> <span class="n">tests</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">test_geometry_synthesizer_python</span><span class="o">.</span><span class="n">py</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">--seed</span></code> (default 0), <code class="docutils literal notranslate"><span class="pre">--restarts</span></code> (default 80), and <code class="docutils literal notranslate"><span class="pre">--no-plot</span></code> are available;
@@ -516,12 +518,12 @@ pin a result.</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../cpp_api.html">
+          <a class="next-page" href="cobordism-bridge-report.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">The Tessera C++ API</div>
+                <div class="title">Cobordism experiment — the DW–spectral bridge: results</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

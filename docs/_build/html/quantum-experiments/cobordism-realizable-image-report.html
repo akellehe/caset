@@ -1,0 +1,716 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="The Tessera C++ API" href="../cpp_api.html"><link rel="prev" title="Cobordism experiment — the DW–spectral bridge: results" href="cobordism-bridge-report.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.09.25 -->
+        <title>Cobordism experiment — the realizable image: results - tessera 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=580074bf" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">tessera 0.1.0 documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">tessera 0.1.0 documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">CDT Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../benchmarks.html">Benchmarks</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../causal_sets.html">Causal sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../wilson_loops.html">Wilson loops</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quantum.html">Quantum subsystem (Schwinger MPS / DMRG)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quantum-methodology.html">Emergent Causal Order from Entanglement: Hypothesis and Methodology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../holography-causal-ordering-emergent-dimension.html">Emergent Spectral Dimension from the Schwinger TDVP State</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Quantum experiments</a><input aria-label="Toggle navigation of Quantum experiments" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="overview/index.html">Overview</a><input aria-label="Toggle navigation of Overview" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="overview/intellectual_lineage.html">4D Charged Cartan Monte Carlo: milestones and motivation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="overview/h_ds4_status.html">Charged Cartan Monte Carlo — Overview: H_DS4 status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="overview/from_schwinger_to_lattice.html">From the Schwinger model to an abstract lattice construction</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="earlier-work/index.html">Earlier work</a><input aria-label="Toggle navigation of Earlier work" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3"><a class="reference internal" href="earlier-work/lightcone_vs_majorization.html">Lightcone vs. majorization — first hypothesis-test scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="earlier-work/emergent_spectral_dimension.html">Emergent spectral dimension — first run</a></li>
+<li class="toctree-l3"><a class="reference internal" href="earlier-work/temporally_connected_entangled_spacetime.html">Temporally-connected entangled spacetime</a></li>
+<li class="toctree-l3"><a class="reference internal" href="earlier-work/interaction_branching_simplex.html">Interaction-branching simplex: the t+2dt closure rotates the cell out of the plane</a></li>
+<li class="toctree-l3"><a class="reference internal" href="earlier-work/interaction_history_monte_carlo.html">Interaction-history Monte Carlo: the search for spectral dimension 4</a></li>
+</ul>
+</li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="charged-cartan/index.html">Charged Cartan Monte Carlo</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="charged-cartan/design/index.html">Charged Cartan Monte Carlo — design notes</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — design notes" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/v0.1.html">Charged Cartan Monte Carlo — v0.1 design: charge labels + annihilation / pairCreate moves</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/v0.2.html">Charged Cartan Monte Carlo — v0.2 design: qudit-basis vertices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/v0.3.html">Charged Cartan Monte Carlo — v0.3 design: gauge mediation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/design/h_pair_first_cell.html">Charged Cartan — what the pair Hamiltonian must satisfy: a first-cell derivation</a></li>
+</ul>
+</li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="charged-cartan/experiments/index.html">Charged Cartan Monte Carlo — experiments</a><input aria-label="Toggle navigation of Charged Cartan Monte Carlo — experiments" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/experiments/01-v0.1-BplusIII-comparison.html">Charged Cartan Monte Carlo — Experiment 01: v0.1 + B + iii (annihilation as worldline termination + photon emission)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/experiments/02-v0.2-beta-scan.html">Charged Cartan Monte Carlo — Experiment 02: v0.2 β-scan finds peak D_S ≈ 4.6 plateau</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/experiments/03-v0.2-finite-size.html">Charged Cartan Monte Carlo — Experiment 03: v0.2 plateau finite-size investigation (4.6 → 4.09 asymptote)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/experiments/04-v0.2-choi-q-conservation.html">Charged Cartan Monte Carlo — Experiment 04: Σ_AB Choi-state Q-conservation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="charged-cartan/experiments/05-v0.2-h-param-sweep.html">Charged Cartan Monte Carlo — Experiment 05: H-parameter sweep (J_c, J_s, δ_m, γ_CP)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism.html">Testing the State–Operation–Cobordism Correspondence in <code class="docutils literal notranslate"><span class="pre">tessera</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-stage2-report.html">Cobordism experiment — Stage 2 (topological layer): results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-realizability-report.html">Cobordism experiment — synthesis &amp; realizability: results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cobordism-bridge-report.html">Cobordism experiment — the DW–spectral bridge: results</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Cobordism experiment — the realizable image: results</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cpp_api.html">The Tessera C++ API</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../_sources/quantum-experiments/cobordism-realizable-image-report.md.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section class="tex2jax_ignore mathjax_ignore" id="cobordism-experiment-the-realizable-image-results">
+<h1>Cobordism experiment — the realizable image: results<a class="headerlink" href="#cobordism-experiment-the-realizable-image-results" title="Link to this heading">¶</a></h1>
+<blockquote>
+<div><p>What the re-run sweep shows once the realizable Dijkgraaf–Witten 2-boundary map
+image is no longer a single point. The twisted-cylinder builder (#193) grew the
+image from <span class="math notranslate nohighlight">\(\{I_4\}\)</span> to the full <span class="math notranslate nohighlight">\(S_3\cong SL(2,\mathbb{Z}_2)\)</span> of holonomy
+permutations; this experiment re-runs the labeled operation sweep against that
+enriched image and reports the now non-degenerate separating property. Companion
+to the runnable <code class="docutils literal notranslate"><span class="pre">examples/cobordism/realizable_image_sweep.py</span></code>; mirrors the
+bridge report (<code class="docutils literal notranslate"><span class="pre">cobordism-bridge-report.md</span></code>) and the realizability report
+(<code class="docutils literal notranslate"><span class="pre">cobordism-realizability-report.md</span></code>); grounds in the charter <code class="docutils literal notranslate"><span class="pre">cobordism.md</span></code> §5.</p>
+</div></blockquote>
+<section id="verdict">
+<h2>Verdict<a class="headerlink" href="#verdict" title="Link to this heading">¶</a></h2>
+<p><strong>An operation <span class="math notranslate nohighlight">\(U\)</span> on <span class="math notranslate nohighlight">\(Z(T^2)=\mathbb{C}[H^1(T^2;\mathbb{Z}_2)]=\mathbb{C}^4\)</span> is
+DW-realizable if and only if it is one of the six holonomy permutations — the
+permutation representation of a <span class="math notranslate nohighlight">\(GL(2,\mathbb{Z}_2)=SL(2,\mathbb{Z}_2)\)</span>
+automorphism of <span class="math notranslate nohighlight">\(H^1(T^2;\mathbb{Z}_2)\)</span>, fixing the trivial class (index 0) and
+permuting the three non-trivial classes <span class="math notranslate nohighlight">\(\{[a],[b],[a{+}b]\}=\{1,2,3\}\)</span>.</strong> The
+prior sweep (#191) found the realizable set was the single point <span class="math notranslate nohighlight">\(\{I_4\}\)</span>, so the
+realizability-trend question was degenerate — every distinguishing property looked
+the same as “<span class="math notranslate nohighlight">\(U=I_4\)</span>”. With <code class="docutils literal notranslate"><span class="pre">Cobordism.twistedCylinder</span></code> the realizable set is now
+the 6-element group <span class="math notranslate nohighlight">\(S_3\)</span>, and the separation is clean: of the <strong>24</strong> of <span class="math notranslate nohighlight">\(S_4\)</span>’s
+<span class="math notranslate nohighlight">\(4\times4\)</span> permutation matrices, exactly the <strong>6</strong> that fix index 0 are realizable;
+the other <strong>18</strong> are not. The discriminating property is no longer
+distance-to-<span class="math notranslate nohighlight">\(I_4\)</span> but <strong>distance-to-<span class="math notranslate nohighlight">\(S_3\)</span></strong>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Realizable DW image: the enriched S_3 holonomy-permutation group
+  swap  (order 2): [0 2 1 3]   3-cycle (order 3): [0 2 3 1]
+  &lt;swap, 3-cycle&gt; closes to 6 matrices (asserted == S_3 = GL(2,Z_2) fixing class [0]):
+      [0 1 2 3]  [0 1 3 2]  [0 2 1 3]  [0 2 3 1]  [0 3 1 2]  [0 3 2 1]   (all GF(2)-linear, fix [0])
+
+24 S_4 permutation matrices: 6 realizable (exactly those fixing index 0), 18 not.
+
+Separator cross-tabulation (predicate vs realizable verdict):
+   predicate                                             P&amp;W  P&amp;!W  !P&amp;W  !P&amp;!W  clean?
+   is_holonomy_perm (fixes [0] &amp; permutes {1,2,3})        19     0     0    210  YES
+   is_permutation (any 0/1 perm of 4 classes)             19    22     0    188  no
+   fixes_trivial_class [0]                                19    21     0    189  no
+   is_diagonal_in_holonomy                                 7    55    12    155  no
+   near_I4 (gap_to_I4 &lt; 1e-7)                              7     0    12    210  no
+</pre></div>
+</div>
+</section>
+<section id="the-enrichment-i-4-to-s-3">
+<h2>The enrichment: <span class="math notranslate nohighlight">\(\{I_4\}\to S_3\)</span><a class="headerlink" href="#the-enrichment-i-4-to-s-3" title="Link to this heading">¶</a></h2>
+<p>The DW functor sends a cobordism <span class="math notranslate nohighlight">\(W:T^2\to T^2\)</span> to a linear map on
+<span class="math notranslate nohighlight">\(Z(T^2)=\mathbb{C}^4\)</span> (the flat-<span class="math notranslate nohighlight">\(\mathbb{Z}_2\)</span>-connection basis, classes indexed
+<span class="math notranslate nohighlight">\(0=[\text{trivial}]\)</span>, <span class="math notranslate nohighlight">\(1=[a]\)</span>, <span class="math notranslate nohighlight">\(2=[b]\)</span>, <span class="math notranslate nohighlight">\(3=[a{+}b]\)</span>, the
+<code class="docutils literal notranslate"><span class="pre">BoundaryStateSpace::generatorIndex</span></code> convention <span class="math notranslate nohighlight">\(i\mapsto 2^i\)</span>). With only the
+order-preserving product cylinder available — the one <code class="docutils literal notranslate"><span class="pre">glue</span></code>/<code class="docutils literal notranslate"><span class="pre">selfGlue</span></code> produce —
+the realizable image collapsed to the single map <span class="math notranslate nohighlight">\(I_4\)</span>. <code class="docutils literal notranslate"><span class="pre">Cobordism.twistedCylinder(</span> <span class="pre">\Sigma,\varphi)</span></code> threads the two boundary copies of <span class="math notranslate nohighlight">\(\Sigma\)</span> through a finite-order
+<strong>simplicial automorphism</strong> <span class="math notranslate nohighlight">\(\varphi\)</span> instead of the identity, so the interior
+monodromy is <span class="math notranslate nohighlight">\(\varphi\)</span> and <code class="docutils literal notranslate"><span class="pre">DijkgraafWitten.map()</span></code> returns the permutation
+<span class="math notranslate nohighlight">\(\varphi\)</span> induces on the holonomy classes. Two generators close the group:</p>
+<ul class="simple">
+<li><p>the <strong>coordinate swap</strong> <span class="math notranslate nohighlight">\(\varphi:(u,v)\mapsto(v,u)\)</span> on the 9-vertex product torus
+<span class="math notranslate nohighlight">\(T^2=\texttt{SimplicialProduct}(\partial\Delta^2,\partial\Delta^2)\)</span> — the
+transposition <span class="math notranslate nohighlight">\((1\,2)\)</span> that exchanges <span class="math notranslate nohighlight">\([a]\leftrightarrow[b]\)</span> and fixes
+<span class="math notranslate nohighlight">\([0],[a{+}b]\)</span> (its <span class="math notranslate nohighlight">\(\bmod\,2\)</span> reduction is the modular
+<span class="math notranslate nohighlight">\(S=\bigl(\begin{smallmatrix}0&amp;1\\1&amp;0\end{smallmatrix}\bigr)\)</span>);</p></li>
+<li><p>the <strong>multiplier</strong> <span class="math notranslate nohighlight">\(\varphi:i\mapsto 2i\pmod 7\)</span> on the 7-vertex Möbius torus —
+the order-3 rotation <span class="math notranslate nohighlight">\((1\,2\,3)\)</span> that cycles <span class="math notranslate nohighlight">\([a]\to[b]\to[a{+}b]\)</span> and fixes
+<span class="math notranslate nohighlight">\([0]\)</span>.</p></li>
+</ul>
+<p>The two surfaces differ (9 vs 7 vertices), but both maps fix the trivial-class
+index 0 and act on the same three non-trivial indices <span class="math notranslate nohighlight">\(\{1,2,3\}\)</span> in
+<code class="docutils literal notranslate"><span class="pre">DijkgraafWitten.computeBoundary</span></code>’s class order, so they compose. Generated by
+matrix multiplication, <span class="math notranslate nohighlight">\(\langle\,\mathrm{DW(swap)},\mathrm{DW(3\text{-}cycle)}\,
+\rangle\)</span> closes to a group of exactly <strong>6</strong> elements: a transposition and a
+3-cycle on the same 3-element set generate the full <span class="math notranslate nohighlight">\(S_3\)</span>. That group <strong>is</strong> the
+realizable image.</p>
+</section>
+<section id="why-s-3-is-the-full-symmetric-group-the-separator">
+<h2>Why <span class="math notranslate nohighlight">\(S_3\)</span> is the <em>full</em> symmetric group (the separator)<a class="headerlink" href="#why-s-3-is-the-full-symmetric-group-the-separator" title="Link to this heading">¶</a></h2>
+<p>The three non-trivial holonomy classes are precisely the three non-zero vectors of
+<span class="math notranslate nohighlight">\((\mathbb{Z}_2)^2\)</span>: <span class="math notranslate nohighlight">\([a]=(1,0)\)</span>, <span class="math notranslate nohighlight">\([b]=(0,1)\)</span>, <span class="math notranslate nohighlight">\([a{+}b]=(1,1)\)</span>. A permutation
+<span class="math notranslate nohighlight">\(\sigma\)</span> of these three is induced by a <span class="math notranslate nohighlight">\(GL(2,\mathbb{Z}_2)\)</span>-linear map iff
+<span class="math notranslate nohighlight">\(\sigma([a{+}b])=\sigma([a])+\sigma([b])\)</span> — but this is <strong>automatic</strong>: any two
+distinct non-zero vectors of <span class="math notranslate nohighlight">\((\mathbb{Z}_2)^2\)</span> are linearly independent, hence a
+basis, so <span class="math notranslate nohighlight">\(\sigma([a])+\sigma([b])\)</span> is the unique remaining non-zero vector, which
+is exactly <span class="math notranslate nohighlight">\(\sigma([a{+}b])\)</span>. Therefore <strong>every</strong> permutation of the three
+non-trivial classes is <span class="math notranslate nohighlight">\(GF(2)\)</span>-linear, and the permutation representation
+<span class="math notranslate nohighlight">\(GL(2,\mathbb{Z}_2)\to S_3\)</span> is an isomorphism onto the full symmetric group. This
+is why the realizable image is the entire <span class="math notranslate nohighlight">\(S_3\)</span> and not a proper subgroup, and it
+hands us the clean separator:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[ U\text{ is DW-realizable}\iff U\text{ is a }0/1\text{ permutation matrix that fixes the trivial class}\iff U\in\text{the }GL(2,\mathbb{Z}_2)\text{ rep on }\mathbb{C}[H^1]. \]</div>
+</div>
+<p>In the sweep this is the <strong>only</strong> candidate property that separates the realizable
+operations from the rest with no false positives and no false negatives (the
+<code class="docutils literal notranslate"><span class="pre">is_holonomy_perm</span></code> row above: <span class="math notranslate nohighlight">\(P\&amp;\overline{W}=0\)</span>, <span class="math notranslate nohighlight">\(\overline{P}\&amp;W=0\)</span>). The
+weaker properties leak: <em>being a permutation</em> admits the 18 that move index 0;
+<em>fixing the trivial class</em> admits diagonal sign matrices; <em>being diagonal</em> and
+<em>flux-commuting</em> miss the off-diagonal swaps entirely.</p>
+</section>
+<section id="the-gap-is-governed-by-distance-to-s-3-not-distance-to-i-4">
+<h2>The gap is governed by distance-to-<span class="math notranslate nohighlight">\(S_3\)</span>, not distance-to-<span class="math notranslate nohighlight">\(I_4\)</span><a class="headerlink" href="#the-gap-is-governed-by-distance-to-s-3-not-distance-to-i-4" title="Link to this heading">¶</a></h2>
+<p>Because <span class="math notranslate nohighlight">\(I_4\in S_3\)</span>, the new metric never exceeds the old one,
+<span class="math notranslate nohighlight">\(\texttt{gap\_to\_S3}(U)=\min_{g\in S_3}\lVert U-g\rVert\le\lVert U-I_4\rVert=
+\texttt{gap\_to\_I4}(U)\)</span>, and for the realizable maps other than <span class="math notranslate nohighlight">\(I_4\)</span> the two
+diverge sharply: the swap sits at <span class="math notranslate nohighlight">\(\texttt{gap\_to\_I4}=2\)</span> but <span class="math notranslate nohighlight">\(\texttt{gap\_to\_S3}
+=0\)</span>. The old “near-<span class="math notranslate nohighlight">\(I_4\)</span>” test is now visibly degenerate — it flags only the seven
+copies of the identity in the families and misses the other twelve realizable maps
+(the <code class="docutils literal notranslate"><span class="pre">near_I4</span></code> row: 7 caught, 12 missed). Distance-to-<span class="math notranslate nohighlight">\(S_3\)</span> is the metric that
+tracks realizability.</p>
+</section>
+<section id="results">
+<h2>Results<a class="headerlink" href="#results" title="Link to this heading">¶</a></h2>
+<p>Representative operations spanning the realizable and non-realizable families
+(the full table — 229 operations — is the reproducibility artifact, written to
+<code class="docutils literal notranslate"><span class="pre">/tmp/cobordism/realizable_image_sweep.{csv,md}</span></code> and <strong>not</strong> committed):</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>operation <span class="math notranslate nohighlight">\(U\)</span></p></th>
+<th class="head"><p>family</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">gap_to_S3</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">gap_to_I4</span></code></p></th>
+<th class="head"><p>realizable?</p></th>
+<th class="head"><p>holonomy perm?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(I_4\)</span> (<code class="docutils literal notranslate"><span class="pre">s3_0123</span></code>)</p></td>
+<td><p>realizable_s3</p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>yes</p></td>
+</tr>
+<tr class="row-odd"><td><p>swap <span class="math notranslate nohighlight">\((1\,2)\)</span> (<code class="docutils literal notranslate"><span class="pre">s3_0213</span></code>)</p></td>
+<td><p>realizable_s3</p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>yes</p></td>
+</tr>
+<tr class="row-even"><td><p>3-cycle <span class="math notranslate nohighlight">\((1\,2\,3)\)</span> (<code class="docutils literal notranslate"><span class="pre">s3_0231</span></code>)</p></td>
+<td><p>realizable_s3</p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.45\)</span></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SWAP</span></code> gate</p></td>
+<td><p>gate</p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>yes</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CNOT</span></code> gate</p></td>
+<td><p>gate</p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>yes</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">perm_0312</span></code> <span class="math notranslate nohighlight">\((1\,3\,2)\)</span></p></td>
+<td><p>permutation</p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.45\)</span></p></td>
+<td><p><strong>yes</strong></p></td>
+<td><p>yes</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">perm_1023</span></code> (<span class="math notranslate nohighlight">\(0\!\to\!1\)</span>)</p></td>
+<td><p>permutation</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">perm_2301</span></code> (<span class="math notranslate nohighlight">\(0\!\to\!2\)</span>)</p></td>
+<td><p>permutation</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.83\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pauli_XX</span></code> (<span class="math notranslate nohighlight">\(0\!\to\!3\)</span>)</p></td>
+<td><p>gate</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.83\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CZ</span></code> <span class="math notranslate nohighlight">\(=\mathrm{diag}(1,1,1,-1)\)</span></p></td>
+<td><p>gate</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">diag_pmpm</span></code></p></td>
+<td><p>diagonal</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.83\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hadamard4</span></code> <span class="math notranslate nohighlight">\(=H{\otimes}H\)</span></p></td>
+<td><p>mixing</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.00\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.83\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dft4</span></code></p></td>
+<td><p>mixing</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.45\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.45\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">haar_0</span></code></p></td>
+<td><p>mixing</p></td>
+<td><p><span class="math notranslate nohighlight">\(2.52\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(2.74\)</span></p></td>
+<td><p>no</p></td>
+<td><p>no</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Realizable rate by family (229 operations, 19 realizable):</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>family</p></th>
+<th class="head"><p>realizable / total</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>realizable_s3</p></td>
+<td><p>6 / 6</p></td>
+</tr>
+<tr class="row-odd"><td><p>permutation (the 24 of <span class="math notranslate nohighlight">\(S_4\)</span>)</p></td>
+<td><p>6 / 24</p></td>
+</tr>
+<tr class="row-even"><td><p>gate</p></td>
+<td><p>3 / 23</p></td>
+</tr>
+<tr class="row-odd"><td><p>interp</p></td>
+<td><p>3 / 33</p></td>
+</tr>
+<tr class="row-even"><td><p>diagonal</p></td>
+<td><p>1 / 48</p></td>
+</tr>
+<tr class="row-odd"><td><p>signed_perm</p></td>
+<td><p>0 / 20</p></td>
+</tr>
+<tr class="row-even"><td><p>mixing (Hadamard / DFT / Haar / GL)</p></td>
+<td><p>0 / 75</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The gates row is the instructive surprise: <code class="docutils literal notranslate"><span class="pre">SWAP</span></code> (<span class="math notranslate nohighlight">\(=\)</span> the swap <span class="math notranslate nohighlight">\((1\,2)\)</span>) and
+<code class="docutils literal notranslate"><span class="pre">CNOT</span></code> (<span class="math notranslate nohighlight">\(=\)</span> the transposition <span class="math notranslate nohighlight">\((2\,3)\)</span> on the holonomy classes) are realizable
+because they happen to be holonomy permutations fixing the trivial class, while
+<code class="docutils literal notranslate"><span class="pre">CZ</span></code>, <code class="docutils literal notranslate"><span class="pre">iSWAP</span></code>, <code class="docutils literal notranslate"><span class="pre">CPHASE</span></code>, and the Hadamards are not — realizability is a property of
+the <em>holonomy action</em>, indifferent to the operation’s name in the qubit gate set.</p>
+</section>
+<section id="method">
+<h2>Method<a class="headerlink" href="#method" title="Link to this heading">¶</a></h2>
+<p>The example is pure orchestration of the merged, separately-tested classes —
+<code class="docutils literal notranslate"><span class="pre">Cobordism.twistedCylinder</span></code> + <code class="docutils literal notranslate"><span class="pre">DijkgraafWitten.map</span></code> (the realizable maps),
+<code class="docutils literal notranslate"><span class="pre">ChoiJamiolkowski.transitionAmplitude</span></code> and <code class="docutils literal notranslate"><span class="pre">BoundaryStateSpace.state</span></code> /
+<code class="docutils literal notranslate"><span class="pre">DijkgraafWitten.amplitude</span></code> (the genuine operation reading). The recipe:</p>
+<ol class="arabic simple">
+<li><p><strong>Build the realizable set.</strong> <code class="docutils literal notranslate"><span class="pre">DW(swap)</span></code> from the 9-vertex product torus and
+<code class="docutils literal notranslate"><span class="pre">DW(3-cycle)</span></code> from the 7-vertex Möbius torus (the #193 fixtures, reused so the
+two generators share the holonomy-class indexing), then close the matrix group
+by breadth-first multiplication and certify it is the 6-element <span class="math notranslate nohighlight">\(S_3\)</span> — every
+element a <span class="math notranslate nohighlight">\(0/1\)</span> permutation fixing index 0 and <span class="math notranslate nohighlight">\(GF(2)\)</span>-linear, and the set equal
+to exactly the <span class="math notranslate nohighlight">\(S_4\)</span> permutations that fix index 0.</p></li>
+<li><p><strong>Read each operation through the machinery.</strong> <span class="math notranslate nohighlight">\(\langle e_i|U|e_j\rangle\)</span> via
+<code class="docutils literal notranslate"><span class="pre">ChoiJamiolkowski.transitionAmplitude</span></code> over the holonomy basis reconstructs the
+<span class="math notranslate nohighlight">\(4\times4\)</span> matrix; the product cylinder’s metric-free state sum read through
+<code class="docutils literal notranslate"><span class="pre">DijkgraafWitten.amplitude</span></code> on <code class="docutils literal notranslate"><span class="pre">BoundaryStateSpace.state</span></code> is <span class="math notranslate nohighlight">\(I_4\)</span>, anchoring the
+identity reading in two independent code paths.</p></li>
+<li><p><strong>Score.</strong> <span class="math notranslate nohighlight">\(\texttt{gap\_to\_S3}=\min_{g\in S_3}\lVert U-g\rVert\)</span> and the old
+<span class="math notranslate nohighlight">\(\texttt{gap\_to\_I4}=\lVert U-I_4\rVert\)</span>, with <span class="math notranslate nohighlight">\(\texttt{realizable}:=
+\texttt{gap\_to\_S3}&lt;10^{-7}\)</span>, plus the candidate separating properties.</p></li>
+<li><p><strong>Discriminate.</strong> The full 24 of <span class="math notranslate nohighlight">\(S_4\)</span>’s permutation matrices are the
+discriminating family; cross-tabulate each candidate property against the
+realizable verdict to find the one that separates cleanly.</p></li>
+</ol>
+<p>The realizable closure and the <span class="math notranslate nohighlight">\(GF(2)\)</span>-linearity of every realized map are
+re-derived independently in <code class="docutils literal notranslate"><span class="pre">tests/cobordism/test_realizable_image_python.py</span></code> (a
+separate code path from the example), which also checks the genuine-machinery
+reading reconstructs <span class="math notranslate nohighlight">\(U\)</span> and that the committed example self-verifies.</p>
+</section>
+<section id="key-findings">
+<h2>Key findings<a class="headerlink" href="#key-findings" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><strong>The realizable image is exactly <span class="math notranslate nohighlight">\(S_3\cong GL(2,\mathbb{Z}_2)\)</span>.</strong> The swap and
+the 3-cycle DW maps generate, by matrix multiplication, a group of exactly six
+<span class="math notranslate nohighlight">\(0/1\)</span> permutation matrices — the full symmetric group on the three non-trivial
+holonomy classes, fixing the trivial one. The old realizable set <span class="math notranslate nohighlight">\(\{I_4\}\)</span> is the
+identity element of this group.</p></li>
+<li><p><strong>The 6-of-24 separation is clean.</strong> Of the 24 of <span class="math notranslate nohighlight">\(S_4\)</span>’s permutation matrices
+exactly the 6 that fix index 0 are realizable; the 18 that move the trivial class
+are not. No operation is misclassified by the holonomy-permutation property.</p></li>
+<li><p><strong>The separator is <span class="math notranslate nohighlight">\(GF(2)\)</span>-linearity of the holonomy action.</strong> Realizable <span class="math notranslate nohighlight">\(\iff\)</span>
+<span class="math notranslate nohighlight">\(U\)</span> is a <span class="math notranslate nohighlight">\(0/1\)</span> permutation fixing the trivial class <span class="math notranslate nohighlight">\(\iff\)</span> <span class="math notranslate nohighlight">\(U\)</span> is the permutation
+rep of a <span class="math notranslate nohighlight">\(GL(2,\mathbb{Z}_2)\)</span> automorphism of <span class="math notranslate nohighlight">\(H^1(T^2;\mathbb{Z}_2)\)</span>. Because
+every permutation of the three non-zero vectors of <span class="math notranslate nohighlight">\((\mathbb{Z}_2)^2\)</span> is
+automatically linear, the realizable image is the <em>full</em> <span class="math notranslate nohighlight">\(S_3\)</span>.</p></li>
+<li><p><strong>Distance-to-<span class="math notranslate nohighlight">\(S_3\)</span> replaces distance-to-<span class="math notranslate nohighlight">\(I_4\)</span>.</strong> The old near-<span class="math notranslate nohighlight">\(I_4\)</span> metric is
+degenerate against the enriched image — it catches only the identity copies and
+misses the twelve other realizable maps. The gap for a non-realizable operation
+is now governed by its distance to <span class="math notranslate nohighlight">\(S_3\)</span>.</p></li>
+<li><p><strong>Realizability is a holonomy property, not a gate-set property.</strong> <code class="docutils literal notranslate"><span class="pre">SWAP</span></code> and
+<code class="docutils literal notranslate"><span class="pre">CNOT</span></code> are realizable; <code class="docutils literal notranslate"><span class="pre">CZ</span></code>, <code class="docutils literal notranslate"><span class="pre">iSWAP</span></code>, the Hadamards, the DFT, and Haar-random
+<span class="math notranslate nohighlight">\(U(4)\)</span> are not — entirely determined by whether the operation permutes the
+holonomy classes fixing the trivial one. This answers the realizability question
+the prior sweep left open: the discrete DW image is the <span class="math notranslate nohighlight">\(GL(2,\mathbb{Z}_2)\)</span>
+holonomy-permutation group, period.</p></li>
+</ol>
+</section>
+<section id="conventions">
+<h2>Conventions<a class="headerlink" href="#conventions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Holonomy classes index <span class="math notranslate nohighlight">\(0=[\text{trivial}]\)</span>, <span class="math notranslate nohighlight">\(1=[a]\)</span>, <span class="math notranslate nohighlight">\(2=[b]\)</span>, <span class="math notranslate nohighlight">\(3=[a{+}b]\)</span>; the
+spectral generator <span class="math notranslate nohighlight">\(i\)</span> maps to class <span class="math notranslate nohighlight">\(2^i\)</span> (<code class="docutils literal notranslate"><span class="pre">BoundaryStateSpace::generatorIndex</span></code>).</p></li>
+<li><p>Operators are flat <strong>row-major</strong>; <span class="math notranslate nohighlight">\(\mathrm{vec}(U)\)</span> is the row-major flatten
+(<code class="docutils literal notranslate"><span class="pre">ChoiJamiolkowski.vectorize</span></code>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(\lVert\cdot\rVert\)</span> is the Frobenius norm; <span class="math notranslate nohighlight">\(\texttt{gap\_to\_S3}=\min_{g\in S_3}
+\lVert U-g\rVert\)</span>, <span class="math notranslate nohighlight">\(\texttt{realizable}:=\texttt{gap\_to\_S3}&lt;10^{-7}\)</span>.</p></li>
+<li><p>The DW maps are read <strong>metric-free</strong> (topology + cocycle only); both the trivial
+and sign cocycles give the same permutation (the mod-2 cup cube vanishes on the
+cylinder).</p></li>
+<li><p>Seeded and reproducible; the 10-CPU cap is honored (thread env set at launch).</p></li>
+</ul>
+</section>
+<section id="reproduce">
+<h2>Reproduce<a class="headerlink" href="#reproduce" title="Link to this heading">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;.[dev]&quot;</span>
+<span class="n">python</span> <span class="n">examples</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">realizable_image_sweep</span><span class="o">.</span><span class="n">py</span>        <span class="c1"># the tables above</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pytest</span> <span class="n">tests</span><span class="o">/</span><span class="n">cobordism</span><span class="o">/</span><span class="n">test_realizable_image_python</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+<p>The raw full sweep table (all 229 rows, CSV + Markdown) defaults to
+<code class="docutils literal notranslate"><span class="pre">/tmp/cobordism/realizable_image_sweep.{csv,md}</span></code> and is <strong>not committed</strong> — the
+script is the committed artifact. Attach it to the issue/PR to pin a result.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../cpp_api.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">The Tessera C++ API</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="cobordism-bridge-report.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Cobordism experiment — the DW–spectral bridge: results</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Cobordism experiment — the realizable image: results</a><ul>
+<li><a class="reference internal" href="#verdict">Verdict</a></li>
+<li><a class="reference internal" href="#the-enrichment-i-4-to-s-3">The enrichment: <span class="math notranslate nohighlight">\(\{I_4\}\to S_3\)</span></a></li>
+<li><a class="reference internal" href="#why-s-3-is-the-full-symmetric-group-the-separator">Why <span class="math notranslate nohighlight">\(S_3\)</span> is the <em>full</em> symmetric group (the separator)</a></li>
+<li><a class="reference internal" href="#the-gap-is-governed-by-distance-to-s-3-not-distance-to-i-4">The gap is governed by distance-to-<span class="math notranslate nohighlight">\(S_3\)</span>, not distance-to-<span class="math notranslate nohighlight">\(I_4\)</span></a></li>
+<li><a class="reference internal" href="#results">Results</a></li>
+<li><a class="reference internal" href="#method">Method</a></li>
+<li><a class="reference internal" href="#key-findings">Key findings</a></li>
+<li><a class="reference internal" href="#conventions">Conventions</a></li>
+<li><a class="reference internal" href="#reproduce">Reproduce</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]]}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    </body>
+</html>

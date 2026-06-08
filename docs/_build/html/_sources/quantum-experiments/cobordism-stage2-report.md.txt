@@ -115,9 +115,9 @@ is class-organized in the existing namespaces; no parallel hierarchies.
 ## Reproduce
 
 ```
-poetry install --all-extras && poetry run pip install -e .
-poetry run python examples/cobordism/topological_correspondence.py   # the table above
-poetry run pytest tests/cobordism                                     # the per-check tests
+pip install -e ".[dev]"
+python examples/cobordism/topological_correspondence.py   # the table above
+python -m pytest tests/cobordism                                      # the per-check tests
 ```
 
 Parameter sweeps (flux, Pachner depth, $\alpha$) and figures are written to

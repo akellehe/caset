@@ -235,6 +235,8 @@
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism-plan.html">Cobordism correspondence — Stage 1 (algebraic layer) implementation plan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism-stage2-report.html">Cobordism experiment — Stage 2 (topological layer): results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism-realizability-report.html">Cobordism experiment — synthesis &amp; realizability: results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism-bridge-report.html">Cobordism experiment — the DW–spectral bridge: results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantum-experiments/cobordism-realizable-image-report.html">Cobordism experiment — the realizable image: results</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cpp_api.html">The Tessera C++ API</a></li>
@@ -1183,9 +1185,13 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism9Cobordism19connectedComponentsERK11SimplexList">tessera::cobordism::Cobordism::connectedComponents (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism9Cobordism13disjointUnionERK9SpacetimeRK9Spacetime">tessera::cobordism::Cobordism::disjointUnion (C++ function)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism9Cobordism4glueERK9SpacetimeRK9Spacetime">tessera::cobordism::Cobordism::glue (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism9Cobordism8selfGlueERK9Spacetime">tessera::cobordism::Cobordism::selfGlue (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism9Cobordism15twistedCylinderERK9SpacetimeRKNSt6vectorINSt8uint64_tEEE">tessera::cobordism::Cobordism::twistedCylinder (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism9Cobordism6verifyERK9SpacetimeRK9SpacetimeRK9Spacetime">tessera::cobordism::Cobordism::verify (C++ function)</a>
 </li>
@@ -1219,7 +1225,7 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism15DijkgraafWittenE">tessera::cobordism::DijkgraafWitten (C++ class)</a>
 </li>
-        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism15DijkgraafWitten9amplitudeERKNSt6vectorINSt7complexIdEEEERKNSt6vectorINSt7complexIdEEEE">tessera::cobordism::DijkgraafWitten::amplitude (C++ function)</a>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism15DijkgraafWitten9amplitudeERK21PreparedBoundaryStateRK21PreparedBoundaryState">tessera::cobordism::DijkgraafWitten::amplitude (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism15DijkgraafWitten8BoundaryE">tessera::cobordism::DijkgraafWitten::Boundary (C++ struct)</a>
 </li>
@@ -1251,17 +1257,41 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis5applyERKNSt6vectorINSt7complexIdEEEE">tessera::cobordism::EigenstateSynthesis::apply (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis20attachInteriorVertexERKNSt6vectorINSt6vectorINSt8uint64_tEEEEE">tessera::cobordism::EigenstateSynthesis::attachInteriorVertex (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis10AttachmentE">tessera::cobordism::EigenstateSynthesis::Attachment (C++ struct)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis10Attachment12createdEdgesE">tessera::cobordism::EigenstateSynthesis::Attachment::createdEdges (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis10Attachment16createdSimplicesE">tessera::cobordism::EigenstateSynthesis::Attachment::createdSimplices (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis10Attachment6vertexE">tessera::cobordism::EigenstateSynthesis::Attachment::vertex (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis12attachments_E">tessera::cobordism::EigenstateSynthesis::attachments_ (C++ member)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis16boundaryEdgeIdx_E">tessera::cobordism::EigenstateSynthesis::boundaryEdgeIdx_ (C++ member)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis13boundaryEdgesEv">tessera::cobordism::EigenstateSynthesis::boundaryEdges (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis17boundaryVertexIdsEv">tessera::cobordism::EigenstateSynthesis::boundaryVertexIds (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis24boundaryVertexIdsSorted_E">tessera::cobordism::EigenstateSynthesis::boundaryVertexIdsSorted_ (C++ member)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis7captureEv">tessera::cobordism::EigenstateSynthesis::capture (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis13cellOrdering_E">tessera::cobordism::EigenstateSynthesis::cellOrdering_ (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis13cellSimplicesEv">tessera::cobordism::EigenstateSynthesis::cellSimplices (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis16classifyBoundaryEv">tessera::cobordism::EigenstateSynthesis::classifyBoundary (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis6degreeEv">tessera::cobordism::EigenstateSynthesis::degree (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis24detachLastInteriorVertexEv">tessera::cobordism::EigenstateSynthesis::detachLastInteriorVertex (C++ function)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis6edges_E">tessera::cobordism::EigenstateSynthesis::edges_ (C++ member)</a>
 </li>
-        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis19EigenstateSynthesisENSt10shared_ptrI9SpacetimeEE">tessera::cobordism::EigenstateSynthesis::EigenstateSynthesis (C++ function)</a>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis19EigenstateSynthesisENSt10shared_ptrI9SpacetimeEEi">tessera::cobordism::EigenstateSynthesis::EigenstateSynthesis (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis12growInteriorENSt8uint64_tE">tessera::cobordism::EigenstateSynthesis::growInterior (C++ function)</a>
 </li>
@@ -1276,6 +1306,8 @@
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis20interiorVertexCount_E">tessera::cobordism::EigenstateSynthesis::interiorVertexCount_ (C++ member)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis15interiorWeightsEv">tessera::cobordism::EigenstateSynthesis::interiorWeights (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis2k_E">tessera::cobordism::EigenstateSynthesis::k_ (C++ member)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis10laplacian_E">tessera::cobordism::EigenstateSynthesis::laplacian_ (C++ member)</a>
 </li>
@@ -1295,6 +1327,8 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis8residualERKNSt6vectorINSt7complexIdEEEE">tessera::cobordism::EigenstateSynthesis::residual (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis18rollbackAttachmentERK10Attachment">tessera::cobordism::EigenstateSynthesis::rollbackAttachment (C++ function)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis17setInteriorPhasesERKNSt6vectorIdEE">tessera::cobordism::EigenstateSynthesis::setInteriorPhases (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis18setInteriorWeightsERKNSt6vectorIdEE">tessera::cobordism::EigenstateSynthesis::setInteriorWeights (C++ function)</a>
@@ -1304,6 +1338,10 @@
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis10setWeightsERKNSt6vectorIdEE">tessera::cobordism::EigenstateSynthesis::setWeights (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism19EigenstateSynthesis3st_E">tessera::cobordism::EigenstateSynthesis::st_ (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis8topCellsEv">tessera::cobordism::EigenstateSynthesis::topCells (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis9vertexIdsEv">tessera::cobordism::EigenstateSynthesis::vertexIds (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism19EigenstateSynthesis7weightsEv">tessera::cobordism::EigenstateSynthesis::weights (C++ function)</a>
 </li>
@@ -1316,6 +1354,8 @@
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism14HodgeLaplacian9adjacencyEv">tessera::cobordism::HodgeLaplacian::adjacency (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism14HodgeLaplacian8assembleERNSt6vectorINSt7complexIdEEEERNSt6vectorIdEE">tessera::cobordism::HodgeLaplacian::assemble (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism14HodgeLaplacian15cochainOrderingEib">tessera::cobordism::HodgeLaplacian::cochainOrdering (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian11decomposed_E">tessera::cobordism::HodgeLaplacian::decomposed_ (C++ member)</a>
 </li>
@@ -1357,6 +1397,8 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism14HodgeLaplacian19lorentzianNullNormsEidb">tessera::cobordism::HodgeLaplacian::lorentzianNullNorms (C++ function)</a>
 </li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism14HodgeLaplacian18lorentzianSpectrumEib">tessera::cobordism::HodgeLaplacian::lorentzianSpectrum (C++ function)</a>
+</li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian18LorentzianSpectrumE">tessera::cobordism::HodgeLaplacian::LorentzianSpectrum (C++ struct)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian18LorentzianSpectrum3dimE">tessera::cobordism::HodgeLaplacian::LorentzianSpectrum::dim (C++ member)</a>
@@ -1366,6 +1408,8 @@
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian18LorentzianSpectrum5evecsE">tessera::cobordism::HodgeLaplacian::LorentzianSpectrum::evecs (C++ member)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian18LorentzianSpectrum2wkE">tessera::cobordism::HodgeLaplacian::LorentzianSpectrum::wk (C++ member)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian12makeSpectrumEiNSt6vectorINSt6vectorINSt8uint64_tEEEEERKNSt6vectorINSt7complexIdEEEERKNSt6vectorINSt7complexIdEEEEib">tessera::cobordism::HodgeLaplacian::makeSpectrum (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian12metricCache_E">tessera::cobordism::HodgeLaplacian::metricCache_ (C++ member)</a>
 </li>
@@ -1380,6 +1424,8 @@
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian6order_E">tessera::cobordism::HodgeLaplacian::order_ (C++ member)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian24requireNonNegativeDegreeEi">tessera::cobordism::HodgeLaplacian::requireNonNegativeDegree (C++ function)</a>
+</li>
+        <li><a href="cpp_api.html#_CPPv4NK7tessera9cobordism14HodgeLaplacian8spectrumEib">tessera::cobordism::HodgeLaplacian::spectrum (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera9cobordism14HodgeLaplacian3st_E">tessera::cobordism::HodgeLaplacian::st_ (C++ member)</a>
 </li>
@@ -2645,6 +2691,8 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera7quantum16HolographyConfig8validateEv">tessera::quantum::HolographyConfig::validate (C++ function)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="cpp_api.html#_CPPv4N7tessera7quantum16HolographyConfig9vertexIdsE">tessera::quantum::HolographyConfig::vertexIds (C++ member)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4N7tessera7quantum8IntervalE">tessera::quantum::Interval (C++ struct)</a>
@@ -2667,8 +2715,6 @@
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera7quantum16KoashiImotoBlock12getCoreStateEv">tessera::quantum::KoashiImotoBlock::getCoreState (C++ function)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="cpp_api.html#_CPPv4NK7tessera7quantum16KoashiImotoBlock11getDimLeftAEv">tessera::quantum::KoashiImotoBlock::getDimLeftA (C++ function)</a>
 </li>
         <li><a href="cpp_api.html#_CPPv4NK7tessera7quantum16KoashiImotoBlock11getDimLeftBEv">tessera::quantum::KoashiImotoBlock::getDimLeftB (C++ function)</a>
