@@ -32,7 +32,7 @@
 #include "cobordism/HodgeLaplacian.h"
 
 // === tessera subsystem ns fwd-decls ===
-namespace tessera::mesh { class Edge; }
+namespace tessera::mesh { class Edge; class Vertex; class Simplex; }
 namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
@@ -236,6 +236,56 @@ class EigenstateSynthesis {
     /// 1-complex, top cells of \f$ <3 \f$ vertices), leaving the complex unchanged.
     bool growInterior(std::uint64_t seed);
 
+    // === Free interior connectivity (general growth primitive, #200) ===
+
+    /// Add a fresh interior vertex with an **arbitrary** specified set of incident
+    /// simplices — the cone-free generalization of `growInterior`. Each entry of
+    /// `incidentSimplices` is a set of **existing** vertex ids; the new vertex
+    /// together with that set forms one new simplex, whose 1-skeleton (every
+    /// pairwise edge) is materialized. So a singleton entry \f$ \{u\} \f$ wires the
+    /// new vertex to \f$ u \f$ by an edge, and the \f$ d \f$ facets of a top cell
+    /// reproduce that cell's cone connectivity — coning is one special case.
+    ///
+    /// The new vertex takes the largest id (it appends last in sorted-id order, so
+    /// the boundary-support \f$ \psi \f$ prefix is preserved). The move is **purely
+    /// additive** (nothing is removed) and validates **only** the two invariants
+    /// the experiment allows: (a) the result is a valid downward-closed abstract
+    /// simplicial complex (every pair within each new simplex carries an edge), and
+    /// (b) the pinned boundary \f$ \partial W \f$ is **bit-exact** untouched (same
+    /// edge set, same weights/phases). **No** manifold / pseudomanifold /
+    /// orientability / purity / topology constraint is imposed. Re-captures the
+    /// operator and the interior/boundary partition.
+    ///
+    /// Returns `false`, leaving the complex **unchanged** (rolled back), if a spec
+    /// is empty, references a missing vertex, repeats a vertex, or the attach would
+    /// perturb \f$ \partial W \f$. Because only the k=0 graph Laplacian's edges feed
+    /// `residual()`, wiring the interior vertex by edges (singleton specs) is always
+    /// boundary-safe: a new edge to a brand-new vertex creates no new top cell and
+    /// changes no facet count among the pinned boundary.
+    bool attachInteriorVertex(
+        const std::vector<std::vector<std::uint64_t>> &incidentSimplices);
+
+    /// Undo the most recent `attachInteriorVertex` (LIFO): remove the simplices
+    /// and edges it created and the interior vertex it added, restoring the
+    /// complex bit-exactly, and re-capture. Returns `false` if there is no attach
+    /// to undo. Lets a connectivity search try a candidate, score it, and roll
+    /// back to try the next.
+    bool detachLastInteriorVertex();
+
+    /// All vertex ids in the complex, sorted ascending — the candidate pool a
+    /// connectivity search wires a fresh interior vertex into.
+    [[nodiscard]] std::vector<std::uint64_t> vertexIds() const;
+
+    /// The boundary (\f$ \partial W \f$) vertex ids, sorted ascending — the
+    /// vertices on a codim-one face of exactly one top cell. A "boundary-star"
+    /// connectivity candidate wires the new vertex to these.
+    [[nodiscard]] std::vector<std::uint64_t> boundaryVertexIds() const;
+
+    /// The top cells as sorted vertex-id tuples (the \f$ d+1 \f$-vertex simplices).
+    /// The "cone-equivalent" connectivity candidate wires the new vertex to one of
+    /// these cells' vertices, reproducing `growInterior`'s 1-skeleton.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> topCells() const;
+
   private:
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
@@ -261,6 +311,24 @@ class EigenstateSynthesis {
     std::vector<std::size_t> interiorEdgeIdx_{};
     std::vector<std::size_t> boundaryEdgeIdx_{};
     std::size_t interiorVertexCount_{0};  // vertices on no boundary face
+    // Boundary (∂W) vertex ids, sorted ascending — persisted from
+    // classifyBoundary() for boundaryVertexIds().
+    std::vector<std::uint64_t> boundaryVertexIdsSorted_{};
+
+    // One attachInteriorVertex() record, for exact rollback (detach) and for the
+    // boundary-fixed connectivity search. Raw pointers owned by the Spacetime
+    // (stable-address storage), valid for its lifetime (kept alive via st_).
+    struct Attachment {
+      ::tessera::mesh::Vertex *vertex{nullptr};
+      std::vector<::tessera::mesh::Edge *> createdEdges{};
+      std::vector<::tessera::mesh::Simplex *> createdSimplices{};
+    };
+    std::vector<Attachment> attachments_{};
+
+    // Remove everything an attachment created (its simplices, then its freshly
+    // inserted edges, then its vertex) — the inverse of attachInteriorVertex's
+    // mesh mutation. Does not re-capture (callers do).
+    void rollbackAttachment(const Attachment &att);
 
     // (Re)build order_, cellOrdering_ and edges_ from the live complex (the
     // k-cell order at k_, plus the tunable edges). Called at construction and
