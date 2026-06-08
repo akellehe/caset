@@ -118,6 +118,20 @@ class Cochain;
 /// the returned `witness` is that realized \f$ W_{AB} \f$.
 class RealizabilityOracle {
   public:
+    /// How the interior fill grows when a pass cannot reach \f$ r<\epsilon \f$.
+    enum class GrowthMode {
+      /// The historical biased move: cone a fresh interior vertex into one top
+      /// cell (`EigenstateSynthesis::growInterior`), wiring it to exactly the
+      /// \f$ d+1 \f$ vertices of that cell.
+      Cone,
+      /// **Free interior connectivity** (#200): at each growth step search a
+      /// bounded set of candidate interior connectivities for the new vertex
+      /// (which existing vertices it wires to), score each by the residual it
+      /// reaches after the weight/phase optimization, and keep the best — so the
+      /// realized topology is what the residual selects, not a cone artifact.
+      FreeConnectivity
+    };
+
     /// The oracle's verdict on \f$ U \f$: the realizability decision, the
     /// residual (the obstruction floor when non-realizable), the witness state
     /// and bulk, and the interior complexity reached.
@@ -142,6 +156,19 @@ class RealizabilityOracle {
       /// Boundary-fixed cones applied during the fill (== `interiorVertexCount`
       /// for a single-top-cell seed; reported for the cone-and-retry trace).
       int conesApplied{0};
+      /// Interior tunable edges in the realized witness — the **emergent
+      /// connectivity** size. Cone growth adds exactly \f$ d+1 \f$ per vertex;
+      /// free-connectivity growth can differ (this is the headline observable).
+      std::size_t interiorEdgeCount{0};
+      /// Candidate interior connectivities **scored per growth step**
+      /// (`FreeConnectivity` only; 0 under `Cone`). The bounded breadth of the
+      /// connectivity search.
+      int connectivityCandidates{0};
+      /// The full per-step incidence space the candidates are pruned from:
+      /// \f$ 2^{N}-1 \f$ nonempty vertex subsets at the last growth step (`N` =
+      /// vertices then). `connectivityCandidates` \f$ \ll \f$ this documents the
+      /// cap — the search is bounded, not exhaustive, and logs what it skips.
+      std::size_t connectivitySpaceSize{0};
       /// The witness state: the realized full Laplacian eigenvector on
       /// \f$ W_{AB} \f$ (unit norm, length = the bulk's vertex count), whose
       /// first \f$ d_A d_B \f$ components are the output-boundary block matching
@@ -173,13 +200,21 @@ class RealizabilityOracle {
     /// @param maxCones boundary-fixed interior cones to try (0 ⇒ decide at the
     ///                 seed interior complexity — the bare obstruction floor).
     /// @param seed     RNG seed for the restart draws (reproducible).
+    /// @param mode      `Cone` (default) keeps the historical cone-only growth;
+    ///                  `FreeConnectivity` searches interior connectivity at each
+    ///                  growth step (the new vertex's incidence is a free variable).
+    /// @param connectivityCandidates  bounded number of candidate connectivities
+    ///                  scored per growth step under `FreeConnectivity` (ignored
+    ///                  under `Cone`). The candidate set is documented + logged.
     /// @throws std::invalid_argument if \f$ U \f$'s size \f$ \neq d_A d_B \f$, a
     ///   dimension is non-positive, or the bulk has fewer vertices than
     ///   \f$ d_A d_B \f$ (no room for the output-boundary support).
     [[nodiscard]] Verdict decide(const std::vector<std::complex<double>> &U,
                                  int dA, int dB, double epsilon = 1e-10,
                                  int restarts = 64, int maxCones = 4,
-                                 std::uint64_t seed = 0);
+                                 std::uint64_t seed = 0,
+                                 GrowthMode mode = GrowthMode::Cone,
+                                 int connectivityCandidates = 8);
 
     /// Decide whether a target **boundary harmonic** \f$ k \f$-form (\f$ k =
     /// \texttt{target.degree()} \f$, the \f$ k=1 \f$ DW setting) is realizable on
@@ -227,19 +262,58 @@ class RealizabilityOracle {
     // by sorted vertex-id tuple) carry the fixed target amplitudes; the remaining
     // (interior) k-cells carry free auxiliary amplitudes. Drives r(psi) -> 0 by
     // varying the interior edge weights (and, at k=0 only, phases) via `es` plus
-    // the auxiliary amplitudes; grows the interior (boundary-fixed Pachner add)
-    // and retries while unconverged and within `maxCones`, re-identifying the
-    // boundary/interior partition on the new k-cell order after each grow. Leaves
-    // `es`'s complex realized at the best parameters, writes the realized unit
-    // witness state to `witnessOut`, records the cones applied, and returns the
-    // best residual (the floor if it never converges). Reuses LevenbergMarquardt
-    // exactly as GeometrySynthesizer::runOptimizer does.
+    // the auxiliary amplitudes; grows the interior (`mode`: cone, or the bounded
+    // free-connectivity search) and retries while unconverged and within
+    // `maxCones`, re-identifying the boundary/interior partition on the new
+    // k-cell order after each grow. Leaves `es`'s complex realized at the best
+    // parameters, writes the realized unit witness state to `witnessOut`, records
+    // the cones applied and (free mode) the last step's candidate breadth into
+    // `candidatesOut` / `spaceSizeOut`, and returns the best residual (the floor
+    // if it never converges). Reuses LevenbergMarquardt exactly as
+    // GeometrySynthesizer::runOptimizer does.
     [[nodiscard]] double fillInterior(
         EigenstateSynthesis &es,
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
         double epsilon, int restarts, int maxCones, std::uint64_t seed,
-        std::vector<std::complex<double>> &witnessOut, int &conesApplied) const;
+        GrowthMode mode, int connectivityCandidates,
+        std::vector<std::complex<double>> &witnessOut, int &conesApplied,
+        int &candidatesOut, std::size_t &spaceSizeOut) const;
+
+    // One fixed-complex optimization pass over the current `es`: the
+    // multi-restart bounded Levenberg–Marquardt on r(psi) for the target encoded
+    // by `pinnedByTuple`, seeded by `passSeed`. Leaves `es` realized at the best
+    // parameters, writes the realized unit witness to `witnessOut`, and returns
+    // the best residual. Extracted from the fill loop so the connectivity search
+    // can score a candidate complex with exactly the same machinery.
+    [[nodiscard]] double optimizePass(
+        EigenstateSynthesis &es,
+        const std::map<std::vector<std::uint64_t>, std::complex<double>>
+            &pinnedByTuple,
+        double epsilon, int restarts, std::uint64_t passSeed,
+        std::vector<std::complex<double>> &witnessOut) const;
+
+    // One free-connectivity growth step: generate a bounded set of candidate
+    // interior connectivities for a fresh interior vertex (which existing
+    // vertices it wires to), score each by `optimizePass` after attaching it,
+    // detach, and commit the best. Reports the candidate breadth scored vs. the
+    // full 2^N-1 incidence space (logged — no silent cap) into `candidatesOut` /
+    // `spaceSizeOut`. Returns true if a vertex was committed (falls back to the
+    // cone move if no candidate could attach).
+    [[nodiscard]] bool growBestConnectivity(
+        EigenstateSynthesis &es,
+        const std::map<std::vector<std::uint64_t>, std::complex<double>>
+            &pinnedByTuple,
+        double epsilon, int restarts, std::uint64_t seed, int nCandidates,
+        int &candidatesOut, std::size_t &spaceSizeOut) const;
+
+    // The bounded, documented candidate-connectivity generator: deterministic
+    // anchors (cone-equivalent — the d+1 vertices of a top cell; full-star — all
+    // vertices; boundary-star — all boundary vertices) plus reproducible random
+    // vertex subsets, deduplicated and capped at `nCandidates`. Each candidate is
+    // the set of existing vertices the new interior vertex wires to by an edge.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> connectivityCandidates(
+        const EigenstateSynthesis &es, int nCandidates, std::uint64_t seed) const;
 };
 
 }  // namespace tessera::cobordism
