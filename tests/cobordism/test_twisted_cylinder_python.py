@@ -47,6 +47,12 @@ Functoriality: ``φ`` of order ``n`` ⇒ a DW map of order ``n`` (the swap is an
 involution, ``map² = I₄``), and composing twists composes the permutations
 (``twistedCylinder(φ∘φ) = map(φ)²``).
 
+The order-3 stretch lands on the minimal 7-vertex (Möbius) torus, whose
+multiplier automorphism ``i ↦ 2i`` (mod 7) is an order-3 rotation that 3-cycles
+the three non-trivial holonomy classes (``map³ = I₄``, ``map² ≠ I₄``). The swap
+and this 3-cycle together generate the full ``S₃ ≅ SL(2, ℤ₂)`` of holonomy-class
+permutations — the realizable monodromy image, end to end.
+
 The Dehn twist ``T = [[1,1],[0,1]]`` is *not* realizable this way — it is
 infinite-order, hence not a finite-order simplicial automorphism of any fixed
 triangulation. That is exactly why the map image was stuck at ``{I₄}``: only the
@@ -98,6 +104,33 @@ def _torus():
 # (0, 4, 8) and pairs (1,3), (2,6), (5,7).
 _SWAP = [v * 3 + u for u in range(3) for v in range(3)]
 _IDENTITY = list(range(9))
+
+
+# The minimal 7-vertex triangulation of T² (the Möbius torus): the two ℤ₇-orbits
+# of {0,1,3} and {0,2,3} under i ↦ i+1 (14 triangles, 21 edges, every vertex pair
+# an edge). Its multiplier automorphisms i ↦ m·i (m a unit mod 7) act on
+# H¹(T²;ℤ₂): i ↦ 2i has order 3 (2³ ≡ 1 mod 7) and is an order-3 rotation that
+# 3-cycles the three non-trivial holonomy classes — the order-3 element the 3×3
+# product torus (which realizes only the order-2 swap) cannot carry.
+_SEVEN_VERTEX_TRIANGLES = sorted({
+    tuple(sorted(((i) % 7, (i + step) % 7, (i + 3) % 7)))
+    for i in range(7) for step in (1, 2)})
+
+
+def _seven_vertex_torus():
+    signature = tessera.Signature(2, tessera.Lorentzian)
+    metric = tessera.Metric(True, signature)
+    spacetime = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0,
+                                  tessera.PREFERRED, None)
+    vertices = [spacetime.createVertex(i) for i in range(7)]
+    for triangle in _SEVEN_VERTEX_TRIANGLES:
+        spacetime.createSimplex([vertices[i] for i in triangle])
+    return spacetime
+
+
+def _multiplier(m, n):
+    """The multiplier automorphism i ↦ m·i (mod n)."""
+    return [(m * i) % n for i in range(n)]
 
 
 def _top_triangles(spacetime):
@@ -240,10 +273,21 @@ def _oracle_matrix(triangles, phi):
     return matrix
 
 
-def _map(phi, cocycle=Cocycle.Trivial):
-    """The DW map of the φ-twisted T² cylinder, as a numpy array."""
+def _twisted_map(surface, phi, cocycle=Cocycle.Trivial):
+    """The DW map of the φ-twisted cylinder over a surface, as a numpy array."""
     return np.asarray(DijkgraafWitten(
-        Cobordism.twistedCylinder(_torus(), phi), cocycle).map())
+        Cobordism.twistedCylinder(surface, phi), cocycle).map())
+
+
+def _map(phi, cocycle=Cocycle.Trivial):
+    """The DW map of the φ-twisted T² (3×3 product torus) cylinder."""
+    return _twisted_map(_torus(), phi, cocycle)
+
+
+def _permutation_from_matrix(matrix):
+    """A 0/1 permutation matrix as a {row: column} dict."""
+    rounded = np.round(np.asarray(matrix).real).astype(int)
+    return {r: int(np.argmax(rounded[r])) for r in range(rounded.shape[0])}
 
 
 # --------------------------------------------------------------------------- #
@@ -425,6 +469,83 @@ class TestGuards(unittest.TestCase):
         circle = _build(_circle())
         with self.assertRaises((ValueError, RuntimeError)):
             Cobordism.twistedCylinder(circle, [0, 1, 2])
+
+
+class TestOrderThreeRotation(unittest.TestCase):
+    """The stretch goal: an order-3 rotation 3-cycles the holonomy classes."""
+
+    ROTATION = _multiplier(2, 7)  # i ↦ 2i, order 3 (2³ ≡ 1 mod 7)
+
+    def test_seven_vertex_torus_is_a_torus(self):
+        # b = (1, 2, 1): a genuine T², so Z(T²) is again 4-dimensional.
+        chain = cobordism.ChainComplex.fromSpacetime(_seven_vertex_torus())
+        self.assertEqual(chain.bettiNumbers(), [1, 2, 1])
+
+    def test_rotation_map_is_an_order_three_three_cycle(self):
+        matrix = _twisted_map(_seven_vertex_torus(), self.ROTATION).real
+        self.assertFalse(np.allclose(matrix, np.eye(4)))  # ≠ I₄
+        # Order exactly 3: map³ = I₄ but map² ≠ I₄ and map ≠ I₄.
+        np.testing.assert_allclose(np.linalg.matrix_power(matrix, 3),
+                                   np.eye(4), atol=1e-9)
+        self.assertFalse(np.allclose(matrix @ matrix, np.eye(4)))
+        # Fixes the trivial class [0]; the three non-trivial classes form a
+        # single 3-cycle (none fixed).
+        self.assertAlmostEqual(matrix[0, 0], 1.0, places=9)
+        perm = _permutation_from_matrix(matrix)
+        self.assertEqual(perm[0], 0)
+        self.assertEqual(sorted(perm[i] for i in (1, 2, 3)), [1, 2, 3])
+        self.assertTrue(all(perm[i] != i for i in (1, 2, 3)))
+
+    def test_rotation_map_matches_independent_numpy_oracle(self):
+        oracle = _oracle_matrix(_SEVEN_VERTEX_TRIANGLES, self.ROTATION)
+        np.testing.assert_allclose(
+            _twisted_map(_seven_vertex_torus(), self.ROTATION), oracle, atol=1e-9)
+
+    def test_rotation_map_is_a_unitary_permutation(self):
+        matrix = _twisted_map(_seven_vertex_torus(), self.ROTATION)
+        np.testing.assert_allclose(matrix.conj().T @ matrix, np.eye(4), atol=1e-9)
+        real = matrix.real
+        self.assertTrue(np.all(np.isclose(real, 0) | np.isclose(real, 1)))
+
+    def test_translation_acts_trivially(self):
+        # i ↦ i+1 is a simplicial automorphism but isotopic to the identity, so
+        # it acts trivially on H¹ → DW map = I₄ (a negative control: not every
+        # automorphism twists the map).
+        translation = [(i + 1) % 7 for i in range(7)]
+        np.testing.assert_allclose(
+            _twisted_map(_seven_vertex_torus(), translation), np.eye(4),
+            atol=1e-9)
+
+
+class TestSwapAndRotationGenerateS3(unittest.TestCase):
+    """swap (order 2) + 3-cycle (order 3) generate S₃ ≅ SL(2, ℤ₂)."""
+
+    def test_generate_the_full_symmetric_group_on_nontrivial_classes(self):
+        # Read both permutations straight off the realized DW maps (the swap from
+        # the 3×3 product torus, the 3-cycle from the 7-vertex torus).
+        swap = _permutation_from_matrix(_map(_SWAP))
+        rotation = _permutation_from_matrix(
+            _twisted_map(_seven_vertex_torus(), _multiplier(2, 7)))
+        # Both fix the trivial class [0] and permute {[a], [b], [a+b]}.
+        self.assertEqual((swap[0], rotation[0]), (0, 0))
+
+        def compose(f, g):
+            return {i: f[g[i]] for i in range(4)}
+
+        identity = {i: i for i in range(4)}
+        group = {tuple(sorted(identity.items()))}
+        frontier = [identity]
+        while frontier:
+            element = frontier.pop()
+            for generator in (swap, rotation):
+                product = compose(generator, element)
+                key = tuple(sorted(product.items()))
+                if key not in group:
+                    group.add(key)
+                    frontier.append(product)
+        # The realizable monodromy permutations are all of S₃ (order 6) on the
+        # three non-trivial holonomy classes — the full SL(2, ℤ₂).
+        self.assertEqual(len(group), 6)
 
 
 if __name__ == "__main__":
