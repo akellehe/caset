@@ -19,6 +19,7 @@ cobordism-plan
 cobordism-stage2-report
 cobordism-realizability-report
 cobordism-bridge-report
+cobordism-realizable-image-report
 ```
 
 ## Reproducing
