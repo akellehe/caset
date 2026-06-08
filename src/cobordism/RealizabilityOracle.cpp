@@ -23,13 +23,16 @@
 
 #include <Eigen/Dense>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <random>
 #include <stdexcept>
 #include <vector>
 
+#include "cobordism/Cochain.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/LevenbergMarquardt.h"
 #include "quantum/ChoiJamiolkowski.h"
@@ -58,50 +61,70 @@ std::vector<cd> RealizabilityOracle::bend(const std::vector<cd> &U, int dA,
   return psi;
 }
 
-double RealizabilityOracle::fillInterior(EigenstateSynthesis &es,
-                                         const std::vector<cd> &target,
-                                         double epsilon, int restarts,
-                                         int maxCones, std::uint64_t seed,
-                                         std::vector<cd> &witnessOut,
-                                         int &conesApplied) const {
-  const std::size_t L = target.size();  // the pinned boundary-support length
+double RealizabilityOracle::fillInterior(
+    EigenstateSynthesis &es,
+    const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
+    int restarts, int maxCones, std::uint64_t seed, std::vector<cd> &witnessOut,
+    int &conesApplied) const {
+  // The U(1) phases enter only the k=0 graph Laplacian; the metric Hodge L_k
+  // (k>=1) is assembled from integer boundary maps and real volume weights, so
+  // interior phases are not tuned there (they would be wasted search dimensions).
+  const bool usePhases = (es.degree() == 0);
   double bestR = std::numeric_limits<double>::infinity();
   conesApplied = 0;
 
   for (int cone = 0;; ++cone) {
-    const std::size_t order = es.order();       // total vertices this pass
-    const std::size_t m = es.numInteriorEdges();  // free interior edges
-    const std::size_t nAux = order - L;           // free auxiliary amplitudes
-    const std::size_t nParams = 2 * m + 2 * nAux;
+    const std::size_t order = es.order();         // operator dim this pass
+    const std::size_t m = es.numInteriorEdges();  // free interior edge weights
 
-    // Assemble ψ from a parameter vector: the boundary support is the fixed
-    // target (first L sorted-id vertices); the auxiliary amplitudes (interior /
-    // coned-in apices) come from the tail of x (real, imag per vertex).
-    const auto buildPsi = [&target, L, m, nAux,
-                           order](const Eigen::VectorXd &x) -> std::vector<cd> {
-      std::vector<cd> psi = target;
-      psi.resize(order, cd(0.0, 0.0));
+    // Re-identify, on the current k-cell order, which ψ components are pinned
+    // boundary cells (their sorted vertex-id tuple is a key of pinnedByTuple, the
+    // target form on ∂W) vs. free interior cells (auxiliary amplitudes). Growth
+    // changes the k-cell order, so this is rebuilt every pass.
+    const std::vector<std::vector<std::uint64_t>> &cells = es.cellSimplices();
+    std::vector<cd> pinnedValue(order, cd(0.0, 0.0));
+    std::vector<std::size_t> freeIdx;
+    for (std::size_t i = 0; i < order; ++i) {
+      const auto it = pinnedByTuple.find(cells[i]);
+      if (it != pinnedByTuple.end())
+        pinnedValue[i] = it->second;
+      else
+        freeIdx.push_back(i);
+    }
+    const std::size_t nAux = freeIdx.size();
+    const std::size_t nW = m;
+    const std::size_t nTheta = usePhases ? m : 0;
+    const std::size_t nParams = nW + nTheta + 2 * nAux;
+
+    // Assemble ψ from a parameter vector: the boundary cells hold the fixed
+    // target form; the auxiliary amplitudes (interior / coned-in cells) come from
+    // the tail of x (real, imag per free cell).
+    const auto buildPsi = [&pinnedValue, &freeIdx, nW, nTheta,
+                           nAux](const Eigen::VectorXd &x) -> std::vector<cd> {
+      std::vector<cd> psi = pinnedValue;
       for (std::size_t k = 0; k < nAux; ++k) {
-        const auto re = static_cast<Eigen::Index>(2 * m + 2 * k);
-        psi[L + k] = cd(x[re], x[re + 1]);
+        const auto re = static_cast<Eigen::Index>(nW + nTheta + 2 * k);
+        psi[freeIdx[k]] = cd(x[re], x[re + 1]);
       }
       return psi;
     };
 
-    // Residual: write the interior weights/phases onto ∂W's complement (∂W
-    // itself is never touched), normalize the assembled ψ, and return the
-    // stacked g = Lψ - λψ ([Re; Im], length 2·order) whose ‖g‖² is r(ψ) — the
-    // §4b residual the Levenberg–Marquardt loop drives to zero.
-    const auto residual =
-        [&es, &buildPsi, m, order](const Eigen::VectorXd &x) -> Eigen::VectorXd {
+    // Residual: write the interior weights (and phases at k=0) onto ∂W's
+    // complement (∂W itself is never touched), normalize the assembled ψ, and
+    // return the stacked g = L_kψ - λψ ([Re; Im], length 2·order) whose ‖g‖² is
+    // r(ψ) — the residual the Levenberg–Marquardt loop drives to zero.
+    const auto residual = [&es, &buildPsi, m, nW, usePhases,
+                           order](const Eigen::VectorXd &x) -> Eigen::VectorXd {
       if (m > 0) {
-        std::vector<double> w(m), th(m);
-        for (std::size_t i = 0; i < m; ++i) {
-          w[i] = x[static_cast<Eigen::Index>(i)];
-          th[i] = x[static_cast<Eigen::Index>(m + i)];
-        }
+        std::vector<double> w(m);
+        for (std::size_t i = 0; i < m; ++i) w[i] = x[static_cast<Eigen::Index>(i)];
         es.setInteriorWeights(w);
-        es.setInteriorPhases(th);
+        if (usePhases) {
+          std::vector<double> th(m);
+          for (std::size_t i = 0; i < m; ++i)
+            th[i] = x[static_cast<Eigen::Index>(nW + i)];
+          es.setInteriorPhases(th);
+        }
       }
       std::vector<cd> psi = buildPsi(x);
       double nrm = 0.0;
@@ -123,18 +146,21 @@ double RealizabilityOracle::fillInterior(EigenstateSynthesis &es,
       return f;
     };
 
-    // Clamp interior weights/phases into the §4b box and the auxiliary
-    // amplitudes into [-kAuxBound, kAuxBound].
-    const auto clamp = [m, nAux](const Eigen::VectorXd &x) -> Eigen::VectorXd {
+    // Clamp interior weights (and phases at k=0) into the §4b box and the
+    // auxiliary amplitudes into [-kAuxBound, kAuxBound].
+    const auto clamp = [nW, nTheta, nAux](const Eigen::VectorXd &x)
+        -> Eigen::VectorXd {
       Eigen::VectorXd c = x;
-      for (std::size_t i = 0; i < m; ++i) {
+      for (std::size_t i = 0; i < nW; ++i) {
         const auto wi = static_cast<Eigen::Index>(i);
-        const auto ti = static_cast<Eigen::Index>(m + i);
         c[wi] = std::min(std::max(c[wi], kWMin), kWMax);
+      }
+      for (std::size_t i = 0; i < nTheta; ++i) {
+        const auto ti = static_cast<Eigen::Index>(nW + i);
         c[ti] = std::min(std::max(c[ti], -kThetaBound), kThetaBound);
       }
       for (std::size_t k = 0; k < 2 * nAux; ++k) {
-        const auto ai = static_cast<Eigen::Index>(2 * m + k);
+        const auto ai = static_cast<Eigen::Index>(nW + nTheta + k);
         c[ai] = std::min(std::max(c[ai], -kAuxBound), kAuxBound);
       }
       return c;
@@ -145,15 +171,15 @@ double RealizabilityOracle::fillInterior(EigenstateSynthesis &es,
     std::uniform_real_distribution<double> wDist(kWMin, kWMax);
     std::uniform_real_distribution<double> tDist(-kPi, kPi);
     std::uniform_real_distribution<double> aDist(-1.0, 1.0);
-    const auto sample = [m, nAux, wDist, tDist,
+    const auto sample = [nW, nTheta, nAux, wDist, tDist,
                          aDist](std::mt19937_64 &rng) mutable -> Eigen::VectorXd {
-      Eigen::VectorXd x0(static_cast<Eigen::Index>(2 * m + 2 * nAux));
-      for (std::size_t i = 0; i < m; ++i) {
+      Eigen::VectorXd x0(static_cast<Eigen::Index>(nW + nTheta + 2 * nAux));
+      for (std::size_t i = 0; i < nW; ++i)
         x0[static_cast<Eigen::Index>(i)] = wDist(rng);
-        x0[static_cast<Eigen::Index>(m + i)] = tDist(rng);
-      }
+      for (std::size_t i = 0; i < nTheta; ++i)
+        x0[static_cast<Eigen::Index>(nW + i)] = tDist(rng);
       for (std::size_t k = 0; k < 2 * nAux; ++k)
-        x0[static_cast<Eigen::Index>(2 * m + k)] = aDist(rng);
+        x0[static_cast<Eigen::Index>(nW + nTheta + k)] = aDist(rng);
       return x0;
     };
 
@@ -190,17 +216,80 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
     int maxCones, std::uint64_t seed) {
   const std::vector<cd> target = bend(U, dA, dB);  // ψ_U, length dA·dB
 
-  EigenstateSynthesis es(bulk_);
+  EigenstateSynthesis es(bulk_);  // k = 0: the vertex graph Laplacian
   if (es.order() < target.size())
     throw std::invalid_argument(
         "RealizabilityOracle: the bulk has fewer vertices than the bent target "
         "needs on its output-boundary support (dA*dB).");
 
+  // The output-boundary support is the first dA·dB sorted-id vertices (the
+  // established k=0 embedding idiom): pin those vertex cells to ψ_U. The apex
+  // growInterior cones in has the largest id, so the first dA·dB tuples are
+  // preserved across growth.
+  const std::vector<std::vector<std::uint64_t>> &cells = es.cellSimplices();
+  std::map<std::vector<std::uint64_t>, cd> pinnedByTuple;
+  for (std::size_t i = 0; i < target.size(); ++i)
+    pinnedByTuple[cells[i]] = target[i];
+
   Verdict v;
   v.target = target;
-  const double r =
-      fillInterior(es, target, epsilon, restarts, maxCones, seed, v.state,
-                   v.conesApplied);
+  const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
+                                seed, v.state, v.conesApplied);
+  v.residual = r;
+  v.realizable = (r < epsilon);
+  v.floor = v.realizable ? 0.0 : r;
+  v.eigenvalue = es.rayleigh(v.state);
+  v.interiorVertexCount = es.interiorVertexCount();
+  v.witness = bulk_;
+  return v;
+}
+
+RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
+    const Cochain &target, double epsilon, int restarts, int maxCones,
+    std::uint64_t seed) {
+  const int k = target.degree();
+  if (k < 0 || target.size() == 0)
+    throw std::invalid_argument(
+        "RealizabilityOracle::decideHarmonic: the target must be a non-empty "
+        "k-form (degree >= 0).");
+
+  EigenstateSynthesis es(bulk_, k);
+
+  // Pin the boundary k-cells to the target form, matched to the bulk's k-cell
+  // order by sorted vertex-id tuple. Normalize the target so its boundary block
+  // has unit norm (comparable to the auxiliary-amplitude box); the residual is
+  // scale-invariant either way. Record the normalized boundary values in the
+  // verdict's `target` for traceability.
+  const Eigen::VectorXcd &coeffs = target.coeffs();
+  double tnrm = 0.0;
+  for (Eigen::Index i = 0; i < coeffs.size(); ++i) tnrm += std::norm(coeffs[i]);
+  const double inv = (tnrm > 0.0) ? 1.0 / std::sqrt(tnrm) : 1.0;
+
+  std::map<std::vector<std::uint64_t>, cd> pinnedByTuple;
+  std::vector<cd> targetOut;
+  targetOut.reserve(target.simplices().size());
+  for (std::size_t i = 0; i < target.simplices().size(); ++i) {
+    std::vector<std::uint64_t> key = target.simplices()[i];
+    std::sort(key.begin(), key.end());
+    const cd value = coeffs[static_cast<Eigen::Index>(i)] * inv;
+    pinnedByTuple[key] = value;
+    targetOut.push_back(value);
+  }
+
+  // The surface must actually be ∂W: at least one target k-cell has to land on a
+  // boundary cell of the bulk (else the form is over a mismatched complex).
+  bool anyMatch = false;
+  for (const std::vector<std::uint64_t> &cell : es.cellSimplices())
+    if (pinnedByTuple.find(cell) != pinnedByTuple.end()) { anyMatch = true; break; }
+  if (!anyMatch)
+    throw std::invalid_argument(
+        "RealizabilityOracle::decideHarmonic: none of the target form's k-cells "
+        "are cells of the bulk — the surface does not match the bulk boundary.");
+
+  Verdict v;
+  v.target = targetOut;
+  const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
+                                seed, v.state, v.conesApplied);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;

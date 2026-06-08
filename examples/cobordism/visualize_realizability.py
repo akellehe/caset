@@ -240,7 +240,10 @@ def _amp_rgba(z, max_mag, *, alpha=0.97, floor=0.42):
         return (0.55, 0.55, 0.58, alpha)
     hue = (np.angle(z) % (2.0 * np.pi)) / (2.0 * np.pi)
     val = floor + (1.0 - floor) * frac
-    return (*mcolors.hsv_to_rgb([hue, 0.85, val]), alpha)
+    # Clamp the rounding overshoot at val == 1 (hsv_to_rgb can return e.g.
+    # 1.0 + 2e-16, which matplotlib >= 3.10 rejects as out of the [0, 1] range).
+    rgb = np.clip(mcolors.hsv_to_rgb([hue, 0.85, val]), 0.0, 1.0)
+    return (*rgb, alpha)
 
 
 def _amp_size(z, max_mag, *, lo=45.0, hi=320.0):

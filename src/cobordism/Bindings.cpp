@@ -310,12 +310,19 @@ Euclidean spectrum/kernel.)doc")
 
   // ----- §4b eigenstate synthesis: residual + parameter access (#133) -----
   py::class_<EigenstateSynthesis>(m, "EigenstateSynthesis",
-      R"doc(§4b inverse eigenvector problem on a fixed complex.
+      R"doc(§4b inverse eigenvector problem on a fixed complex, degree-k.
 
 Scores how close the complex's current Hermitian edge weights make a target
-state psi to being an eigenvector of the k=0 Hodge Laplacian L = D - A (the
-magnitude convention, via HodgeLaplacian), and reads/writes those weights so a
-search can perturb them. The non-convex, multi-restart search itself (e.g.
+state psi to being an eigenvector of the degree-k Hodge Laplacian L_k (via
+HodgeLaplacian), and reads/writes those weights so a search can perturb them.
+At k=0 L_0 = D - A is the graph Laplacian (magnitude convention) and psi is a
+vertex vector (|V|, sorted-id order). At k>=1 L_k is the metric Hodge Laplacian
+on k-forms (|C_k|, ChainComplex k-cell order); the tunable parameters stay the
+edge squared-lengths, which feed the volume weights W_k of L_k via Simplex.volume
+(phases enter only k=0). cellSimplices() gives each psi component's vertex tuple,
+so a caller can pin the boundary k-cells to a target form (the #176 k=1
+3-manifold boundary-harmonic synthesis). The non-convex, multi-restart search
+itself (e.g.
 scipy.optimize.minimize L-BFGS-B over the flat {w_ij} + {theta_ij} vector) lives
 in the driver and calls residual() here; the cone-and-retry growth loop is a
 separate stage (this class is fixed-complex only).
@@ -341,10 +348,22 @@ exposes that fixed set). growInterior() cones a fresh interior vertex via the
 boundary-fixed pre-geometric Pachner add (#112), enriching the interior with dW
 untouched; interiorVertexCount / numInteriorEdges report the interior complexity
 reached. On a 1-complex there is no boundary — every edge is interior.)doc")
-      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
-           "Build the synthesizer over a fixed triangulation.")
+      .def(py::init<std::shared_ptr<Spacetime>, int>(), py::arg("spacetime"),
+           py::arg("k") = 0,
+           "Build the synthesizer over a fixed triangulation at Hodge degree k "
+           "(default 0, the vertex graph Laplacian; k=1 is the metric Hodge "
+           "Laplacian on edge 1-forms for the 3-manifold boundary-harmonic "
+           "synthesis). Raises if k < 0.")
+      .def("degree", &EigenstateSynthesis::degree,
+           "The cochain degree k of L_k this synthesizer scores against.")
       .def("order", &EigenstateSynthesis::order,
-           "Number of vertices N — the required length of any psi.")
+           "Operator dimension N — the required length of any psi (|V| at k=0, "
+           "else |C_k|, the number of k-cells).")
+      .def("cellSimplices", &EigenstateSynthesis::cellSimplices,
+           "The sorted vertex-id tuple of each psi component, in operator order "
+           "(a single-vertex tuple per component at k=0, else the k-cell tuples "
+           "in canonical ChainComplex column order) — used to pin the boundary "
+           "k-cells to a target form and leave the interior free.")
       .def("numEdges", &EigenstateSynthesis::numEdges,
            "Number of tunable edges — the length of weights() / phases().")
       .def("residual", &EigenstateSynthesis::residual, py::arg("psi"),
@@ -562,7 +581,22 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
            "amplitudes, growing the interior up to max_cones times), and return "
            "the Verdict. Realizes the held bulk in place. Raises if U.size() != "
            "dA*dB, a dimension is non-positive, or the bulk has fewer vertices "
-           "than dA*dB.");
+           "than dA*dB.")
+      .def("decideHarmonic", &RealizabilityOracle::decideHarmonic,
+           py::arg("target"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
+           py::arg("max_cones") = 4, py::arg("seed") = 0,
+           "Decide whether a target boundary harmonic k-form (a degree-k Cochain, "
+           "k = target.degree(); the k=1 DW setting) is realizable on the held "
+           "3-manifold-with-boundary bulk W: pin the boundary surface dW byte-"
+           "fixed, fill the interior (interior edge squared-lengths + boundary-"
+           "fixed Pachner growth) to drive r = ||(I - psi psi^dagger) L_k psi||^2 "
+           "to 0, and return the Verdict. target is matched to the bulk's boundary "
+           "k-cells by sorted vertex-id tuple (the readout of a "
+           "PreparedBoundaryState); interior k-cells carry free auxiliary "
+           "amplitudes. Realizable iff r < epsilon, else the floor certifies non-"
+           "realizability at the explored complexity. Realizes the held bulk in "
+           "place. Raises if target is empty/negative-degree or none of its "
+           "k-cells are boundary cells of the bulk.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.

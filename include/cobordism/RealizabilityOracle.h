@@ -25,6 +25,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -34,6 +35,7 @@ namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
 
 class EigenstateSynthesis;
+class Cochain;
 
 /// # RealizabilityOracle
 ///
@@ -54,6 +56,25 @@ class EigenstateSynthesis;
 /// the analogue of §4b's two-vertex floor \f$ w_{\min}^2(|c_0|^2-|c_1|^2)^2 \f$.
 /// The floor **is** the certificate: non-existence is certified by the residual
 /// floor, **not** by exhausting triangulations.
+///
+/// ## `k=1` boundary harmonics on a 3-manifold-with-boundary (#176)
+///
+/// `decideHarmonic` lifts the same pipeline from the reduced \f$ k=0 \f$ 2-complex
+/// to the DW-native \f$ k=1 \f$, 3-manifold setting. The target is a boundary
+/// **harmonic 1-form** in \f$ \ker L_1(\partial W) \f$ (a degree-1 `Cochain`,
+/// typically the readout of a `PreparedBoundaryState` — the bent \f$ U \f$
+/// expressed in the prepared DW boundary basis via `BoundaryStateSpace`). The
+/// bulk \f$ W \f$ is a 3-manifold-with-boundary (e.g. a solid torus, boundary
+/// \f$ T^2 \f$); its boundary surface \f$ \partial W \f$ is pinned byte-fixed and
+/// the interior is filled — interior edge squared-lengths (the metric content of
+/// \f$ L_1 \f$ via the simplex volumes) plus boundary-fixed Pachner growth
+/// (\f$ 1\!\to\!4 \f$ in 3D) — driving \f$ r = \lVert(I-\psi\psi^\dagger)L_1\psi
+/// \rVert^2 \to 0 \f$ so the bulk carries the target as a (near-)harmonic whose
+/// boundary restriction matches it. Realizable iff \f$ r<\epsilon \f$; otherwise
+/// the floor certifies non-realizability — exactly as at \f$ k=0 \f$. The boundary
+/// harmonic carried by the manifold (the restriction of \f$ \ker L_1(W) \f$, e.g.
+/// the solid torus's longitude) is realizable; a class that bounds in the bulk
+/// (the meridian) floors.
 ///
 /// ## Pure orchestration (no new math)
 ///
@@ -160,6 +181,26 @@ class RealizabilityOracle {
                                  int restarts = 64, int maxCones = 4,
                                  std::uint64_t seed = 0);
 
+    /// Decide whether a target **boundary harmonic** \f$ k \f$-form (\f$ k =
+    /// \texttt{target.degree()} \f$, the \f$ k=1 \f$ DW setting) is realizable on
+    /// the held 3-manifold bulk \f$ W \f$: pin the boundary surface
+    /// \f$ \partial W \f$ byte-fixed, fill the interior (interior edge
+    /// squared-lengths + boundary-fixed Pachner growth) to drive the \f$ k \f$-form
+    /// residual \f$ r=\lVert(I-\psi\psi^\dagger)L_k\psi\rVert^2\to 0 \f$, and return
+    /// the `Verdict`. `target` is a degree-\f$ k \f$ `Cochain` over \f$ \partial W \f$'s
+    /// \f$ k \f$-cells (the readout of a `PreparedBoundaryState`); it is matched to
+    /// the bulk's boundary \f$ k \f$-cells by sorted vertex-id tuple, the remaining
+    /// (interior) \f$ k \f$-cells carrying free auxiliary amplitudes. The witness
+    /// `state` is the realized \f$ L_k(W) \f$ (near-)eigenvector whose boundary
+    /// block matches `target`; realizable iff \f$ r<\epsilon \f$, else the floor
+    /// certifies non-realizability at the explored complexity.
+    /// @throws std::invalid_argument if `target` is empty, its degree is negative,
+    ///   or none of its \f$ k \f$-cells are boundary cells of the bulk (the surface
+    ///   does not match \f$ \partial W \f$).
+    [[nodiscard]] Verdict decideHarmonic(const Cochain &target,
+                                         double epsilon = 1e-10, int restarts = 64,
+                                         int maxCones = 4, std::uint64_t seed = 0);
+
   private:
     // §4b search box — identical to GeometrySynthesizer so the interior fill is
     // the same machinery applied to the interior: per-edge magnitudes in
@@ -181,19 +222,23 @@ class RealizabilityOracle {
     [[nodiscard]] static std::vector<std::complex<double>> bend(
         const std::vector<std::complex<double>> &U, int dA, int dB);
 
-    // The §4b cone-and-retry restricted to the interior: drive r(psi) -> 0 for
-    // the target on its first `target.size()` (boundary-support) components with
-    // the remaining (interior/auxiliary) components free, varying only the
-    // interior edge weights/phases via `es`; grow the interior (boundary-fixed
-    // Pachner add) and retry while unconverged and within `maxCones`. Leaves
+    // The §4b cone-and-retry restricted to the interior, degree-agnostic. The
+    // boundary k-cells (the keys of `pinnedByTuple`, matched to es.cellSimplices()
+    // by sorted vertex-id tuple) carry the fixed target amplitudes; the remaining
+    // (interior) k-cells carry free auxiliary amplitudes. Drives r(psi) -> 0 by
+    // varying the interior edge weights (and, at k=0 only, phases) via `es` plus
+    // the auxiliary amplitudes; grows the interior (boundary-fixed Pachner add)
+    // and retries while unconverged and within `maxCones`, re-identifying the
+    // boundary/interior partition on the new k-cell order after each grow. Leaves
     // `es`'s complex realized at the best parameters, writes the realized unit
     // witness state to `witnessOut`, records the cones applied, and returns the
     // best residual (the floor if it never converges). Reuses LevenbergMarquardt
     // exactly as GeometrySynthesizer::runOptimizer does.
     [[nodiscard]] double fillInterior(
         EigenstateSynthesis &es,
-        const std::vector<std::complex<double>> &target, double epsilon,
-        int restarts, int maxCones, std::uint64_t seed,
+        const std::map<std::vector<std::uint64_t>, std::complex<double>>
+            &pinnedByTuple,
+        double epsilon, int restarts, int maxCones, std::uint64_t seed,
         std::vector<std::complex<double>> &witnessOut, int &conesApplied) const;
 };
 
