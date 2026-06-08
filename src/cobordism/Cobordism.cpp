@@ -426,6 +426,48 @@ std::shared_ptr<Spacetime> Cobordism::glue(const Spacetime &W1,
   return buildSpacetime(numVertices, merged);
 }
 
+std::shared_ptr<Spacetime> Cobordism::disjointUnion(const Spacetime &W1,
+                                                    const Spacetime &W2) {
+  const SimplexList tops1 = topSimplices(W1);
+  const SimplexList tops2 = topSimplices(W2);
+  if (tops1.empty() || tops2.empty())
+    throw std::invalid_argument(
+        "Cobordism::disjointUnion: both inputs must be non-empty triangulations");
+  if (tops1.front().size() != tops2.front().size())
+    throw std::invalid_argument(
+        "Cobordism::disjointUnion: the two complexes must have the same top "
+        "dimension");
+
+  // Dense reindexing into one id range: W1's vertices first (in id order), then
+  // W2's in a fresh range strictly above. No vertex is shared, so the two
+  // complexes stay disjoint — ∂(W1 ⊔ W2) = ∂W1 ⊔ ∂W2 with no face glued across.
+  std::set<std::uint64_t> vertices1;
+  for (const auto &top : tops1) for (std::uint64_t v : top) vertices1.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense1;
+  std::uint64_t next = 0;
+  for (std::uint64_t v : vertices1) dense1[v] = next++;
+
+  std::set<std::uint64_t> vertices2;
+  for (const auto &top : tops2) for (std::uint64_t v : top) vertices2.insert(v);
+  std::map<std::uint64_t, std::uint64_t> dense2;
+  for (std::uint64_t v : vertices2) dense2[v] = next++;
+  const std::size_t numVertices = next;
+
+  SimplexList merged;
+  merged.reserve(tops1.size() + tops2.size());
+  for (std::vector<std::uint64_t> top : tops1) {
+    for (std::uint64_t &v : top) v = dense1.at(v);
+    std::sort(top.begin(), top.end());
+    merged.push_back(std::move(top));
+  }
+  for (std::vector<std::uint64_t> top : tops2) {
+    for (std::uint64_t &v : top) v = dense2.at(v);
+    std::sort(top.begin(), top.end());
+    merged.push_back(std::move(top));
+  }
+  return buildSpacetime(numVertices, merged);
+}
+
 std::shared_ptr<Spacetime> Cobordism::selfGlue(const Spacetime &W) {
   const SimplexList tops = topSimplices(W);
   if (tops.empty())
