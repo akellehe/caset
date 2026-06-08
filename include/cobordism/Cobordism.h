@@ -117,6 +117,29 @@ class Cobordism {
     [[nodiscard]] static std::shared_ptr<Spacetime> glue(const Spacetime &W1,
                                                          const Spacetime &W2);
 
+    /// # Disjoint union (the disconnected cobordism)
+    ///
+    /// The disjoint union \f$ W_1 \sqcup W_2 \f$ of two triangulations:
+    /// \f$ W_2 \f$'s vertices are shifted into a fresh id range above
+    /// \f$ W_1 \f$'s so the two complexes share no vertex, and their top
+    /// simplices are concatenated into a single `Spacetime`. Nothing is
+    /// identified, so \f$ \partial(W_1\sqcup W_2) = \partial W_1 \sqcup
+    /// \partial W_2 \f$ and the bulk is disconnected. Two solid tori
+    /// \f$ S^1\times D^2 \f$ (each \f$ \partial = T^2 \f$) thus give a bulk with
+    /// \f$ \partial W = T^2 \sqcup T^2 \f$: the **cap-and-create** cobordism
+    /// \f$ T^2 \to T^2 \f$ that is *not* a mapping cylinder. Its DW map
+    /// factorizes over the components to the rank-1 outer product
+    /// \f$ |st\rangle\langle st| \f$ (\f$ |st\rangle \f$ the solid-torus boundary
+    /// state) — a **non-invertible** boundary map, unreachable by any cylinder
+    /// (whose map is always an invertible permutation). The result is a fresh
+    /// pre-geometric `Spacetime` ready for `DijkgraafWitten::map()`, whose
+    /// two-component requirement it satisfies while the bulk need not be
+    /// connected.
+    /// @throws std::invalid_argument if either input is empty or the two top
+    ///   dimensions differ.
+    [[nodiscard]] static std::shared_ptr<Spacetime> disjointUnion(
+        const Spacetime &W1, const Spacetime &W2);
+
     /// Close a cobordism by gluing its two boundary components to each other
     /// (the categorical trace / mapping torus): \f$ \partial W \f$ must have
     /// exactly two isomorphic components \f$ \Sigma_C^{(0)}, \Sigma_C^{(1)} \f$,

@@ -704,6 +704,18 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
                   "remaining components (Sigma_A from W1, Sigma_B from W2). "
                   "Raises if the inputs are empty, differ in top dimension, or "
                   "share no isomorphic boundary surface.")
+      .def_static("disjointUnion", &Cobordism::disjointUnion, py::arg("W1"),
+                  py::arg("W2"),
+                  "Disjoint union W1 ⊔ W2: shift W2's vertices into a fresh id "
+                  "range above W1's (nothing identified) and concatenate the top "
+                  "simplices into one Spacetime. ∂(W1 ⊔ W2) = ∂W1 ⊔ ∂W2 and the "
+                  "bulk is disconnected, so two solid tori S¹×D² give the cap-and-"
+                  "create cobordism T² → T² (∂W = T² ⊔ T²) — not a mapping "
+                  "cylinder — whose DijkgraafWitten.map() is the rank-1, non-"
+                  "invertible outer product |st⟩⟨st|. Returns the new Spacetime, "
+                  "ready for DijkgraafWitten.map() (whose two-component boundary "
+                  "requirement it meets while the bulk need not be connected). "
+                  "Raises if either input is empty or their top dimensions differ.")
       .def_static("selfGlue", &Cobordism::selfGlue, py::arg("W"),
                   "Close a cobordism by gluing its two boundary components to "
                   "each other (the mapping torus / categorical trace): they must "
