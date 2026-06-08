@@ -160,10 +160,20 @@ class RealizabilityOracle {
       /// connectivity** size. Cone growth adds exactly \f$ d+1 \f$ per vertex;
       /// free-connectivity growth can differ (this is the headline observable).
       std::size_t interiorEdgeCount{0};
-      /// Candidate interior connectivities **scored per growth step**
-      /// (`FreeConnectivity` only; 0 under `Cone`). The bounded breadth of the
-      /// connectivity search.
+      /// Candidate interior **edge** connectivities (singleton specs) scored per
+      /// growth step (`FreeConnectivity` only; 0 under `Cone`). The bounded
+      /// breadth of the 1-skeleton connectivity search — the only spectrally
+      /// relevant atom at \f$ k=0 \f$ (`L_0 = D-A` sees just the 1-skeleton).
       int connectivityCandidates{0};
+      /// Candidate interior **2-simplex (triangle)** connectivities scored per
+      /// growth step (`FreeConnectivity` at \f$ k\geq 1 \f$ only; 0 at \f$ k=0 \f$
+      /// and under `Cone`). At \f$ k\geq 1 \f$ the metric \f$ L_k \f$ depends on
+      /// the 2-cells through \f$ \partial_2 \f$, so the search must also propose
+      /// triangle attachments — these are **not** spectrally inert at \f$ k=1 \f$
+      /// the way they are at \f$ k=0 \f$. Reported alongside `connectivityCandidates`
+      /// so the full scored breadth (edges + triangles) is surfaced, never capped
+      /// silently.
+      int triangleCandidates{0};
       /// The full per-step incidence space the candidates are pruned from:
       /// \f$ 2^{N}-1 \f$ nonempty vertex subsets at the last growth step (`N` =
       /// vertices then). `connectivityCandidates` \f$ \ll \f$ this documents the
@@ -229,12 +239,26 @@ class RealizabilityOracle {
     /// `state` is the realized \f$ L_k(W) \f$ (near-)eigenvector whose boundary
     /// block matches `target`; realizable iff \f$ r<\epsilon \f$, else the floor
     /// certifies non-realizability at the explored complexity.
+    /// @param mode      `Cone` (default) keeps the historical cone-only growth
+    ///                  (the boundary-fixed \f$ 1\to(d+1) \f$ Pachner add);
+    ///                  `FreeConnectivity` searches interior connectivity at each
+    ///                  growth step. At \f$ k\geq 1 \f$ this proposes **both** edge
+    ///                  (1-simplex) and **triangle (2-simplex)** attachments — the
+    ///                  triangles are what the metric \f$ L_k \f$ sees through
+    ///                  \f$ \partial_2 \f$, so the free search is not 1-skeleton-inert
+    ///                  the way a pure edge search would be at \f$ k\geq 1 \f$.
+    /// @param connectivityCandidates  bounded number of candidate connectivities
+    ///                  scored **per atom kind** per growth step under
+    ///                  `FreeConnectivity` (edges and, at \f$ k\geq 1 \f$, triangles
+    ///                  each capped here); ignored under `Cone`. Documented + logged.
     /// @throws std::invalid_argument if `target` is empty, its degree is negative,
     ///   or none of its \f$ k \f$-cells are boundary cells of the bulk (the surface
     ///   does not match \f$ \partial W \f$).
     [[nodiscard]] Verdict decideHarmonic(const Cochain &target,
                                          double epsilon = 1e-10, int restarts = 64,
-                                         int maxCones = 4, std::uint64_t seed = 0);
+                                         int maxCones = 4, std::uint64_t seed = 0,
+                                         GrowthMode mode = GrowthMode::Cone,
+                                         int connectivityCandidates = 8);
 
   private:
     // §4b search box — identical to GeometrySynthesizer so the interior fill is
@@ -278,7 +302,8 @@ class RealizabilityOracle {
         double epsilon, int restarts, int maxCones, std::uint64_t seed,
         GrowthMode mode, int connectivityCandidates,
         std::vector<std::complex<double>> &witnessOut, int &conesApplied,
-        int &candidatesOut, std::size_t &spaceSizeOut) const;
+        int &candidatesOut, int &triangleCandidatesOut,
+        std::size_t &spaceSizeOut) const;
 
     // One fixed-complex optimization pass over the current `es`: the
     // multi-restart bounded Levenberg–Marquardt on r(psi) for the target encoded
@@ -293,19 +318,31 @@ class RealizabilityOracle {
         double epsilon, int restarts, std::uint64_t passSeed,
         std::vector<std::complex<double>> &witnessOut) const;
 
-    // One free-connectivity growth step: generate a bounded set of candidate
-    // interior connectivities for a fresh interior vertex (which existing
-    // vertices it wires to), score each by `optimizePass` after attaching it,
-    // detach, and commit the best. Reports the candidate breadth scored vs. the
-    // full 2^N-1 incidence space (logged — no silent cap) into `candidatesOut` /
-    // `spaceSizeOut`. Returns true if a vertex was committed (falls back to the
-    // cone move if no candidate could attach).
+    // One free-connectivity growth step. Generates the bounded candidate breadth
+    // — edge fans at every degree and, at k>=1, the triangle (2-simplex) fans the
+    // metric L_k reads through ∂_2 — reporting the counts into `candidatesOut` /
+    // `triangleCandidatesOut` and the 2^N-1 vertex-incidence space into
+    // `spaceSizeOut` (logged — no silent cap).
+    //
+    // At k=0 the edge fans are scored by `optimizePass` (attach, score, detach)
+    // and the best is committed; the historical path is byte-for-byte preserved.
+    // At k>=1 every additive candidate is provably spectrally inert —
+    // ChainComplex::fromSpacetime builds only the top cells' downward closure, so a
+    // dangling edge/triangle is dropped from L_k, and an additive *top-cell* attach
+    // is boundary-locked (it introduces new boundary edges incident to the new
+    // vertex, which the bit-exact ∂W guard rejects). Both are certified by the test
+    // suite, so the additive candidates are enumerated + logged but not scored
+    // (scoring would only confirm no improvement while perturbing the vertex-id
+    // allocator), and the step uses the one boundary-fixed move that DOES enrich
+    // L_k: the stellar Pachner subdivision (`growInterior`). Returns true if a
+    // vertex was committed.
     [[nodiscard]] bool growBestConnectivity(
         EigenstateSynthesis &es,
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
         double epsilon, int restarts, std::uint64_t seed, int nCandidates,
-        int &candidatesOut, std::size_t &spaceSizeOut) const;
+        int &candidatesOut, int &triangleCandidatesOut,
+        std::size_t &spaceSizeOut) const;
 
     // The bounded, documented candidate-connectivity generator: deterministic
     // anchors (cone-equivalent — the d+1 vertices of a top cell; full-star — all
@@ -314,6 +351,19 @@ class RealizabilityOracle {
     // the set of existing vertices the new interior vertex wires to by an edge.
     [[nodiscard]] std::vector<std::vector<std::uint64_t>> connectivityCandidates(
         const EigenstateSynthesis &es, int nCandidates, std::uint64_t seed) const;
+
+    // The bounded, documented **triangle** candidate generator (k>=1 only): each
+    // candidate is a list of 2-vertex specs {u,w} over **existing edges**, so the
+    // fresh interior vertex cones a fan of 2-simplices {v_new,u,w} — the cells the
+    // metric L_k reads through ∂_2. Deterministic anchors (a top cell's edges; all
+    // edges; all boundary edges; all interior edges) plus reproducible random edge
+    // subsets, deduplicated and capped at `nCandidates`. In 3D these never create a
+    // tetrahedron, so ∂W's facet count is untouched and the attach is boundary-safe;
+    // any spec that would still perturb ∂W is rejected by attachInteriorVertex and
+    // skipped. Returns the spec-lists ready to hand to attachInteriorVertex.
+    [[nodiscard]] std::vector<std::vector<std::vector<std::uint64_t>>>
+    triangleConnectivityCandidates(const EigenstateSynthesis &es, int nCandidates,
+                                   std::uint64_t seed) const;
 };
 
 }  // namespace tessera::cobordism

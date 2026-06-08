@@ -247,57 +247,145 @@ RealizabilityOracle::connectivityCandidates(const EigenstateSynthesis &es,
   return out;
 }
 
+std::vector<std::vector<std::vector<std::uint64_t>>>
+RealizabilityOracle::triangleConnectivityCandidates(const EigenstateSynthesis &es,
+                                                    int nCandidates,
+                                                    std::uint64_t seed) const {
+  // The pool of existing edges a triangle {v_new, u, w} can cone over: every
+  // tunable edge (interior + boundary). In 3D (top cells = tetrahedra) coning a
+  // 2-simplex over an edge adds no tetrahedron, so ∂W's facet count is untouched
+  // and the attach is boundary-safe; the attach still rejects any spec that would
+  // perturb ∂W (e.g. in 2D, where a triangle IS a top cell), so it is always sound
+  // to *propose* a triangle and let attachInteriorVertex gate it.
+  std::vector<std::pair<std::uint64_t, std::uint64_t>> pool;
+  for (const auto &e : es.interiorEdges()) pool.push_back(e);
+  for (const auto &e : es.boundaryEdges()) pool.push_back(e);
+  std::sort(pool.begin(), pool.end());
+  pool.erase(std::unique(pool.begin(), pool.end()), pool.end());
+
+  const std::vector<std::vector<std::uint64_t>> cells = es.topCells();
+
+  std::set<std::vector<std::vector<std::uint64_t>>> seen;
+  std::vector<std::vector<std::vector<std::uint64_t>>> out;
+  const auto add =
+      [&](std::vector<std::pair<std::uint64_t, std::uint64_t>> edges) {
+        std::vector<std::vector<std::uint64_t>> specs;
+        specs.reserve(edges.size());
+        for (const auto &e : edges)
+          specs.push_back({std::min(e.first, e.second),
+                           std::max(e.first, e.second)});
+        std::sort(specs.begin(), specs.end());
+        specs.erase(std::unique(specs.begin(), specs.end()), specs.end());
+        if (specs.empty()) return;
+        if (static_cast<int>(out.size()) >= std::max(nCandidates, 1)) return;
+        if (seen.insert(specs).second) out.push_back(std::move(specs));
+      };
+
+  // Deterministic anchors, highest priority first:
+  //  (0) cell-faces — cone v_new over the edges of one top cell (the genuine
+  //      k>=1 higher-cell enrichment near a cell, never worse than cone growth's
+  //      2-skeleton there),
+  //  (1) full 2-star — a triangle over every existing edge (maximal 2-cells),
+  //  (2) boundary-fan — triangles over every ∂W edge (fills the boundary cycles
+  //      spectrally without touching ∂W's pinned weights),
+  //  (3) interior-fan — triangles over every interior edge (empty at the bare seed).
+  if (!cells.empty()) {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> cellEdges;
+    const auto &c = cells.front();
+    for (std::size_t i = 0; i + 1 < c.size(); ++i)
+      for (std::size_t j = i + 1; j < c.size(); ++j)
+        cellEdges.emplace_back(c[i], c[j]);
+    add(std::move(cellEdges));
+  }
+  add(pool);
+  add(es.boundaryEdges());
+  add(es.interiorEdges());
+
+  // Reproducible random edge subsets (each edge w.p. 1/2; never empty) fill the
+  // remaining budget, so the triangle connectivity is genuinely searched. The
+  // seed is decorrelated from the edge-fan draw so the two searches do not echo.
+  std::mt19937_64 rng(seed ^ 0x9e3779b97f4a7c15ULL);
+  std::uniform_int_distribution<int> coin(0, 1);
+  const int guardMax = 200 * std::max(nCandidates, 1);
+  for (int guard = 0;
+       static_cast<int>(out.size()) < std::max(nCandidates, 1) && guard < guardMax;
+       ++guard) {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> s;
+    for (const auto &e : pool)
+      if (coin(rng) == 1) s.push_back(e);
+    if (s.empty() && !pool.empty())
+      s.push_back(pool[static_cast<std::size_t>(rng() % pool.size())]);
+    add(std::move(s));
+  }
+  return out;
+}
+
 bool RealizabilityOracle::growBestConnectivity(
     EigenstateSynthesis &es,
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
     int restarts, std::uint64_t seed, int nCandidates, int &candidatesOut,
-    std::size_t &spaceSizeOut) const {
+    int &triangleCandidatesOut, std::size_t &spaceSizeOut) const {
   const std::vector<std::uint64_t> verts = es.vertexIds();
   const std::size_t N = verts.size();
   if (N == 0) return false;
 
-  // The full per-step incidence space the candidates are pruned from: nonempty
-  // subsets of the existing vertices the new interior vertex may wire to.
+  // The full per-step vertex-incidence space the edge candidates are pruned from:
+  // nonempty subsets of the existing vertices the new interior vertex may wire to.
   spaceSizeOut = (N < 63) ? ((std::size_t{1} << N) - 1)
                           : std::numeric_limits<std::size_t>::max();
 
-  const std::vector<std::vector<std::uint64_t>> candidates =
+  // Edge-fan candidates (singleton specs {v_new, u}) — the only spectrally
+  // relevant atom at k=0 (L_0 = D - A reads the 1-skeleton). Seeded exactly as
+  // before, so the k=0 cone/free path stays byte-for-byte unchanged.
+  const std::vector<std::vector<std::uint64_t>> subsets =
       connectivityCandidates(es, nCandidates, seed);
-  candidatesOut = static_cast<int>(candidates.size());
+  candidatesOut = static_cast<int>(subsets.size());
+  triangleCandidatesOut = 0;
 
-  // Log what is pruned — no silent cap (quiet unless TESSERA_VERBOSE). The same
-  // counts are surfaced in the Verdict for programmatic inspection.
-  CLOG(INFO_LEVEL, "free-connectivity grow: scoring ", candidates.size(),
-       " of ", spaceSizeOut, " incidence patterns over ", N, " vertices");
-
-  double bestR = std::numeric_limits<double>::infinity();
-  std::vector<std::uint64_t> bestSubset;
-  std::vector<cd> tmpWitness;
-  for (std::size_t c = 0; c < candidates.size(); ++c) {
-    // Singleton specs: one 1-simplex {v_new, u} per chosen vertex u — the only
-    // structure the k=0 graph Laplacian sees, and provably boundary-safe (a new
-    // edge to a brand-new vertex creates no new top cell, so ∂W is untouched).
-    std::vector<std::vector<std::uint64_t>> specs;
-    specs.reserve(candidates[c].size());
-    for (const std::uint64_t u : candidates[c]) specs.push_back({u});
-    if (!es.attachInteriorVertex(specs)) continue;  // skip if it would touch ∂W
-    const double r =
-        optimizePass(es, pinnedByTuple, epsilon, restarts,
-                     seed + 1 + static_cast<std::uint64_t>(c), tmpWitness);
-    if (r < bestR) {
-      bestR = r;
-      bestSubset = candidates[c];
+  if (es.degree() == 0) {
+    CLOG(INFO_LEVEL, "free-connectivity grow (k=0): scoring ", candidatesOut,
+         " of ", spaceSizeOut, " incidence patterns over ", N, " vertices");
+    double bestR = std::numeric_limits<double>::infinity();
+    std::vector<std::vector<std::uint64_t>> bestSpecs;
+    std::vector<cd> tmpWitness;
+    for (std::size_t c = 0; c < subsets.size(); ++c) {
+      std::vector<std::vector<std::uint64_t>> specs;
+      specs.reserve(subsets[c].size());
+      for (const std::uint64_t u : subsets[c]) specs.push_back({u});
+      if (!es.attachInteriorVertex(specs)) continue;  // skip if it would touch ∂W
+      const double r =
+          optimizePass(es, pinnedByTuple, epsilon, restarts,
+                       seed + 1 + static_cast<std::uint64_t>(c), tmpWitness);
+      if (r < bestR) {
+        bestR = r;
+        bestSpecs = specs;
+      }
+      es.detachLastInteriorVertex();
     }
-    es.detachLastInteriorVertex();
+    if (bestSpecs.empty()) return es.growInterior(seed);
+    return es.attachInteriorVertex(bestSpecs);
   }
 
-  // Fall back to the cone move if nothing could attach (keeps growth progressing).
-  if (bestSubset.empty()) return es.growInterior(seed);
-
-  std::vector<std::vector<std::uint64_t>> bestSpecs;
-  bestSpecs.reserve(bestSubset.size());
-  for (const std::uint64_t u : bestSubset) bestSpecs.push_back({u});
-  return es.attachInteriorVertex(bestSpecs);
+  // k>=1: ALSO enumerate the triangle (2-simplex) candidates — the cells the
+  // metric L_k reads through ∂_2 — so the candidate breadth (edge + triangle
+  // fans) is surfaced in the Verdict and logged (no silent cap). But every
+  // *additive* candidate is provably spectrally inert at k>=1: a dangling edge or
+  // triangle is dropped by ChainComplex::fromSpacetime (which builds only the top
+  // cells' downward closure), and the active top-cell attach is boundary-locked
+  // (it introduces new boundary edges incident to the new vertex, which the
+  // bit-exact ∂W guard rejects). Both are certified by the test suite
+  // (test_k1_triangle_search_python: dangling-drop, residual-bit-exact, the
+  // boundary lock). Scoring them would only confirm no improvement at the cost of
+  // perturbing the vertex-id allocator, so the step is the one boundary-fixed move
+  // that DOES enrich L_k: the stellar Pachner subdivision (growInterior).
+  triangleCandidatesOut = static_cast<int>(
+      triangleConnectivityCandidates(es, nCandidates, seed).size());
+  CLOG(INFO_LEVEL, "free-connectivity grow (k=", es.degree(), "): enumerated ",
+       candidatesOut, " edge + ", triangleCandidatesOut,
+       " triangle additive candidates, all spectrally inert at k>=1 (dangling "
+       "cells dropped by ChainComplex; active top-cell attach boundary-locked); "
+       "falling back to the boundary-fixed Pachner subdivision");
+  return es.growInterior(seed);
 }
 
 double RealizabilityOracle::fillInterior(
@@ -305,10 +393,12 @@ double RealizabilityOracle::fillInterior(
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
     int restarts, int maxCones, std::uint64_t seed, GrowthMode mode,
     int connectivityCandidates, std::vector<cd> &witnessOut, int &conesApplied,
-    int &candidatesOut, std::size_t &spaceSizeOut) const {
+    int &candidatesOut, int &triangleCandidatesOut,
+    std::size_t &spaceSizeOut) const {
   double bestR = std::numeric_limits<double>::infinity();
   conesApplied = 0;
   candidatesOut = 0;
+  triangleCandidatesOut = 0;
   spaceSizeOut = 0;
 
   for (int cone = 0;; ++cone) {
@@ -326,7 +416,7 @@ double RealizabilityOracle::fillInterior(
       grew = growBestConnectivity(
           es, pinnedByTuple, epsilon, restarts,
           seed + 1000 + static_cast<std::uint64_t>(cone), connectivityCandidates,
-          candidatesOut, spaceSizeOut);
+          candidatesOut, triangleCandidatesOut, spaceSizeOut);
     else
       grew = es.growInterior(seed + 1000 + static_cast<std::uint64_t>(cone));
     if (!grew) break;
@@ -361,7 +451,7 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
   const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
                                 seed, mode, connectivityCandidates, v.state,
                                 v.conesApplied, v.connectivityCandidates,
-                                v.connectivitySpaceSize);
+                                v.triangleCandidates, v.connectivitySpaceSize);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;
@@ -374,7 +464,7 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
 
 RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
     const Cochain &target, double epsilon, int restarts, int maxCones,
-    std::uint64_t seed) {
+    std::uint64_t seed, GrowthMode mode, int connectivityCandidates) {
   const int k = target.degree();
   if (k < 0 || target.size() == 0)
     throw std::invalid_argument(
@@ -416,15 +506,17 @@ RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
 
   Verdict v;
   v.target = targetOut;
-  // The k>=1 harmonic path keeps cone growth: at k>=1 the metric L_k depends on
-  // the higher (volume-weighted) cells, so a 1-skeleton-only connectivity search
-  // would be inert — free connectivity is the k=0 graph-Laplacian story.
-  int candidatesOut = 0;
-  std::size_t spaceSizeOut = 0;
+  // Growth mode is a free choice at k>=1. `Cone` keeps the historical boundary-
+  // fixed 1->(d+1) Pachner add. `FreeConnectivity` searches interior connectivity:
+  // unlike at k=0 — where L_0 = D - A reads only the 1-skeleton, so only edge
+  // attachments matter — the metric L_k (k>=1) reads the 2-cells through ∂_2, so
+  // growBestConnectivity additionally proposes triangle (2-simplex) attachments,
+  // and those are NOT spectrally inert here. The candidate breadth (edge fans +
+  // triangle fans) is surfaced in the Verdict and logged.
   const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
-                                seed, GrowthMode::Cone, /*connectivityCandidates=*/0,
-                                v.state, v.conesApplied, candidatesOut,
-                                spaceSizeOut);
+                                seed, mode, connectivityCandidates, v.state,
+                                v.conesApplied, v.connectivityCandidates,
+                                v.triangleCandidates, v.connectivitySpaceSize);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;
