@@ -421,7 +421,35 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "vertex order and interior/boundary partition, so order() grows by one "
            "(extend psi on the new apex, appended last in sorted-id order) and "
            "numInteriorEdges() grows. Returns False if no top cell can be "
-           "subdivided (e.g. a 1-complex), leaving the complex unchanged.");
+           "subdivided (e.g. a 1-complex), leaving the complex unchanged.")
+      // ----- Free interior connectivity (general growth primitive, #200) -----
+      .def("attachInteriorVertex", &EigenstateSynthesis::attachInteriorVertex,
+           py::arg("incident_simplices"),
+           "Add a fresh interior vertex with an arbitrary specified set of "
+           "incident simplices — the cone-free generalization of growInterior. "
+           "incident_simplices is a list of vertex-id lists; the new vertex + each "
+           "such set forms one new simplex (its full 1-skeleton is materialized), "
+           "so a singleton [u] wires the new vertex to u by an edge and the d "
+           "facets of a top cell reproduce coning. The new vertex takes the "
+           "largest id. Validates ONLY (a) a valid downward-closed complex and "
+           "(b) the pinned boundary dW bit-exact; no manifold/topology constraint. "
+           "Returns False, leaving the complex unchanged, on an invalid spec "
+           "(missing/repeated vertex, empty) or any perturbation of dW.")
+      .def("detachLastInteriorVertex",
+           &EigenstateSynthesis::detachLastInteriorVertex,
+           "Undo the most recent attachInteriorVertex (LIFO): remove its created "
+           "simplices/edges and the interior vertex, restoring the complex bit-"
+           "exactly, and re-capture. Returns False if there is no attach to undo. "
+           "Lets a search try a candidate connectivity, score it, and roll back.")
+      .def("vertexIds", &EigenstateSynthesis::vertexIds,
+           "All vertex ids, sorted — the candidate pool a connectivity search "
+           "wires a fresh interior vertex into.")
+      .def("boundaryVertexIds", &EigenstateSynthesis::boundaryVertexIds,
+           "The boundary (dW) vertex ids, sorted — the vertices on a codim-one "
+           "face of exactly one top cell (a 'boundary-star' candidate).")
+      .def("topCells", &EigenstateSynthesis::topCells,
+           "The top cells as sorted vertex-id tuples (the d+1-vertex simplices); "
+           "wiring the new vertex to one reproduces growInterior's 1-skeleton.");
 
   // ----- §4b cone-and-retry synthesis loop → geo(ψ) (#134) -----
   py::class_<GeometrySynthesizer> gs(m, "GeometrySynthesizer",
@@ -531,6 +559,17 @@ auxiliary amplitudes the fill solves for. The caller assembles the bulk and pins
 its boundary edges (Spacetime is built/pinned outside the synthesis classes);
 decide() realizes the held bulk in place and returns it as the witness.)doc");
 
+  py::enum_<RealizabilityOracle::GrowthMode>(ro, "GrowthMode",
+      "How the interior fill grows when a pass cannot reach r < epsilon.")
+      .value("CONE", RealizabilityOracle::GrowthMode::Cone,
+             "Cone a fresh interior vertex into one top cell (the historical "
+             "biased move, wiring it to exactly the d+1 cell vertices).")
+      .value("FREE_CONNECTIVITY",
+             RealizabilityOracle::GrowthMode::FreeConnectivity,
+             "Free interior connectivity (#200): search a bounded set of candidate "
+             "interior connectivities for the new vertex at each growth step and "
+             "keep the one reaching the lowest residual — topology is emergent.");
+
   py::class_<RealizabilityOracle::Verdict>(ro, "Verdict",
       "The oracle's verdict on U: the realizability decision, the residual (the "
       "obstruction floor when non-realizable), the realized witness state and "
@@ -554,6 +593,20 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
                     "complexity, the §4b (|V|,|E|) analogue under fixed ends).")
       .def_readonly("cones_applied", &RealizabilityOracle::Verdict::conesApplied,
                     "Boundary-fixed cones applied during the interior fill.")
+      .def_readonly("interior_edge_count",
+                    &RealizabilityOracle::Verdict::interiorEdgeCount,
+                    "Interior tunable edges in the realized witness — the emergent "
+                    "connectivity size. Cone growth adds exactly d+1 per vertex; "
+                    "free-connectivity growth can differ (the headline observable).")
+      .def_readonly("connectivity_candidates",
+                    &RealizabilityOracle::Verdict::connectivityCandidates,
+                    "Candidate interior connectivities scored per growth step "
+                    "(FREE_CONNECTIVITY only; 0 under CONE).")
+      .def_readonly("connectivity_space_size",
+                    &RealizabilityOracle::Verdict::connectivitySpaceSize,
+                    "Full per-step incidence space (2^N - 1 nonempty vertex "
+                    "subsets) the candidates are pruned from at the last growth "
+                    "step — connectivity_candidates << this documents the bound.")
       .def_readonly("state", &RealizabilityOracle::Verdict::state,
                     "The witness state: the realized unit Laplacian eigenvector on "
                     "W_AB (length = the bulk's vertex count); its first dA*dB "
@@ -574,14 +627,19 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
       .def("decide", &RealizabilityOracle::decide, py::arg("U"), py::arg("dA"),
            py::arg("dB"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
            py::arg("max_cones") = 4, py::arg("seed") = 0,
+           py::arg("growth_mode") = RealizabilityOracle::GrowthMode::Cone,
+           py::arg("connectivity_candidates") = 8,
            "Decide whether the dA x dB operator U (flat row-major) is realizable "
            "as a bulk cobordism: bend it to vec(U), fill the pinned-boundary "
            "interior to drive the §4b residual to zero (multi-restart "
            "Levenberg-Marquardt over the interior weights/phases + auxiliary "
            "amplitudes, growing the interior up to max_cones times), and return "
-           "the Verdict. Realizes the held bulk in place. Raises if U.size() != "
-           "dA*dB, a dimension is non-positive, or the bulk has fewer vertices "
-           "than dA*dB.")
+           "the Verdict. growth_mode=CONE (default) keeps the historical cone-only "
+           "growth; growth_mode=FREE_CONNECTIVITY searches connectivity_candidates "
+           "interior connectivities per growth step and keeps the best by residual "
+           "(the new vertex's incidence is a free variable; topology is emergent). "
+           "Realizes the held bulk in place. Raises if U.size() != dA*dB, a "
+           "dimension is non-positive, or the bulk has fewer vertices than dA*dB.")
       .def("decideHarmonic", &RealizabilityOracle::decideHarmonic,
            py::arg("target"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
            py::arg("max_cones") = 4, py::arg("seed") = 0,
