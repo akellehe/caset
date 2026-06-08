@@ -711,7 +711,24 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
                   "top simplex touches both (>= 3 layers in the glued "
                   "direction). Returns the closed manifold as a new Spacetime. "
                   "Raises unless dW has exactly two isomorphic components, or if "
-                  "the identification collapses a top simplex.");
+                  "the identification collapses a top simplex.")
+      .def_static("twistedCylinder", &Cobordism::twistedCylinder,
+                  py::arg("sigma"), py::arg("phi"),
+                  "Build the phi-twisted product cobordism Sigma x [0,T] : "
+                  "Sigma -> Sigma whose two boundary copies of the surface Sigma "
+                  "are threaded through a finite-order simplicial automorphism "
+                  "phi (phi[x] = image of vertex x; Sigma's vertices must be "
+                  "0..|V|-1). The ordinary product cylinder (phi = identity) has "
+                  "DW map the identity; a phi acting non-trivially on "
+                  "H^1(Sigma; Z_2) makes DijkgraafWitten.map() the corresponding "
+                  "non-identity permutation of the holonomy classes Z(Sigma) — "
+                  "e.g. the coordinate swap (x,y)->(y,x) of a square-product "
+                  "torus transposes [a]<->[b]. Three stacked Sigma levels (ids "
+                  "x, |V|+x, 2|V|+x) with the twist carried only by the seam "
+                  "(level 1) identification; returns the new Spacetime, ready for "
+                  "DijkgraafWitten.map(). Raises if Sigma is not a 2D "
+                  "triangulation with vertices 0..|V|-1, or phi is not a length-"
+                  "|V| permutation / not a simplicial automorphism of Sigma.");
 
   // ----- Capability T3 (#108): Dijkgraaf-Witten Z_2 state sum -----
   py::enum_<Cocycle>(m, "Cocycle",

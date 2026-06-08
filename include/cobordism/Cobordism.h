@@ -130,6 +130,61 @@ class Cobordism {
     ///   two isomorphic components; `std::runtime_error` if the identification
     ///   collapses a top simplex (collar too thin).
     [[nodiscard]] static std::shared_ptr<Spacetime> selfGlue(const Spacetime &W);
+
+    /// # Twisted cylinder (a non-identity DW boundary map)
+    ///
+    /// The \f$ \varphi \f$-twisted product cobordism \f$ \Sigma\times[0,T] :
+    /// \Sigma \to \Sigma \f$, whose two boundary copies of the surface
+    /// \f$ \Sigma \f$ are threaded through a finite-order *simplicial
+    /// automorphism* \f$ \varphi \f$ of the triangulated \f$ \Sigma \f$. The
+    /// ordinary product cylinder — the one `glue`/`selfGlue` produce, identified
+    /// by the order-preserving (identity) isomorphism — has DW map the identity
+    /// on \f$ Z(\Sigma) \f$; that identity identification is the single home of
+    /// the "\f$ \to I \f$" collapse. Putting \f$ \varphi \f$ there instead makes
+    /// the interior monodromy from the bottom boundary to the top boundary equal
+    /// \f$ \varphi \f$, so `DijkgraafWitten::map()` returns the permutation
+    /// \f$ \varphi \f$ induces on the holonomy classes
+    /// \f$ Z(\Sigma)=\mathbb{C}[H^1(\Sigma;\mathbb{Z}_2)] \f$. For the
+    /// coordinate-swap \f$ \varphi:(x,y)\mapsto(y,x) \f$ of a square-product
+    /// torus \f$ T^2=S^1\times S^1 \f$ this transposes the holonomy classes
+    /// \f$ [a]\leftrightarrow[b] \f$ while fixing \f$ [0] \f$ and \f$ [a{+}b] \f$
+    /// — a non-identity \f$ 4\times4 \f$ permutation (\f$ \varphi\bmod 2 \f$ is
+    /// the modular \f$ S=\bigl(\begin{smallmatrix}0&1\\1&0\end{smallmatrix}\bigr)
+    /// \f$).
+    ///
+    /// Construction: three stacked copies of \f$ \Sigma \f$ (levels 0,1,2 at
+    /// vertex ids \f$ x,\;|V|{+}x,\;2|V|{+}x \f$). The level-0\f$ \to \f$1 prism
+    /// is the ordinary Eilenberg–Zilber product \f$ \Sigma\times[0,1] \f$ (the
+    /// same staircase `SimplicialProduct` uses); the level-1\f$ \to \f$2 prism is
+    /// the same product but its lower face is glued to the shared seam through
+    /// \f$ \varphi \f$ (the level-1 vertex of \f$ \varphi(x) \f$ carries the seam
+    /// id of \f$ x \f$). Because \f$ \varphi \f$ is a simplicial automorphism the
+    /// two prisms induce the *same* triangulation on the seam, so it closes up;
+    /// the seam (level 1) is interior, and \f$ \partial W \f$ is the two
+    /// \f$ \Sigma \f$ copies at levels 0 and 2 (\f$ \geq 3 \f$ layers, so no top
+    /// simplex touches both boundaries). The result is a fresh pre-geometric
+    /// `Spacetime` ready for `DijkgraafWitten::map()`.
+    ///
+    /// \f$ \varphi \f$ of order \f$ n \f$ gives a DW map of order \f$ n \f$
+    /// (`map`\f$ {}^n=I \f$), and composing twists composes the permutations —
+    /// the functoriality of the DW functor. Only the finite-order modular
+    /// elements (orders 2,3,4,6) are realizable this way: the Dehn twist
+    /// \f$ T=\bigl(\begin{smallmatrix}1&1\\0&1\end{smallmatrix}\bigr) \f$ is
+    /// infinite-order, hence *not* a finite-order simplicial automorphism of any
+    /// fixed triangulation — which is exactly why a fixed-triangulation cobordism
+    /// could only ever realize the identity until now.
+    ///
+    /// @param sigma a closed triangulated surface \f$ \Sigma \f$ whose vertices
+    ///   are exactly \f$ 0..|V|-1 \f$ (as the product-torus fixtures produce).
+    /// @param phi a vertex permutation (`phi[x]` is the image of vertex
+    ///   \f$ x \f$) that is a simplicial automorphism of \f$ \Sigma \f$ — both
+    ///   validated.
+    /// @throws std::invalid_argument if \f$ \Sigma \f$ is not a 2-dimensional
+    ///   triangulation with vertices \f$ 0..|V|-1 \f$, or `phi` is not a length-
+    ///   \f$ |V| \f$ permutation, or `phi` is not a simplicial automorphism of
+    ///   \f$ \Sigma \f$ (some top triangle's image is not a triangle).
+    [[nodiscard]] static std::shared_ptr<Spacetime> twistedCylinder(
+        const Spacetime &sigma, const std::vector<std::uint64_t> &phi);
 };
 
 }  // namespace tessera::cobordism

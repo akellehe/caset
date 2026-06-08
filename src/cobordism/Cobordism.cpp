@@ -474,4 +474,88 @@ std::shared_ptr<Spacetime> Cobordism::selfGlue(const Spacetime &W) {
   return buildSpacetime(numVertices, merged);
 }
 
+std::shared_ptr<Spacetime> Cobordism::twistedCylinder(
+    const Spacetime &sigma, const std::vector<std::uint64_t> &phi) {
+  // Σ's top cells must be triangles (a 2-dimensional surface).
+  const SimplexList triangles = topSimplices(sigma);
+  if (triangles.empty())
+    throw std::invalid_argument(
+        "Cobordism::twistedCylinder: Σ must be a non-empty triangulation");
+  for (const std::vector<std::uint64_t> &triangle : triangles)
+    if (triangle.size() != 3)
+      throw std::invalid_argument(
+          "Cobordism::twistedCylinder: Σ must be a 2-dimensional surface (its "
+          "top cells must be triangles)");
+
+  // The vertices must be exactly 0..n-1: φ is supplied as a flat per-id vector
+  // and the level offsets below assume a dense [0, n) id range (the
+  // product-torus fixtures number their vertices this way).
+  std::set<std::uint64_t> vertexSet;
+  for (const std::vector<std::uint64_t> &triangle : triangles)
+    for (std::uint64_t v : triangle) vertexSet.insert(v);
+  const std::uint64_t n = static_cast<std::uint64_t>(vertexSet.size());
+  if (vertexSet.empty() || *vertexSet.rbegin() != n - 1)
+    throw std::invalid_argument(
+        "Cobordism::twistedCylinder: Σ's vertices must be exactly 0..|V|-1");
+
+  // φ must be a length-n permutation of 0..n-1 ...
+  if (static_cast<std::uint64_t>(phi.size()) != n)
+    throw std::invalid_argument(
+        "Cobordism::twistedCylinder: phi must have one entry per Σ vertex "
+        "(length |V|)");
+  const std::set<std::uint64_t> phiImage(phi.begin(), phi.end());
+  if (static_cast<std::uint64_t>(phiImage.size()) != n ||
+      *phiImage.rbegin() != n - 1)
+    throw std::invalid_argument(
+        "Cobordism::twistedCylinder: phi must be a permutation of 0..|V|-1");
+  // ... and a simplicial automorphism: every top triangle's φ-image is a
+  // triangle (this is what makes the two prisms induce one shared seam, and what
+  // limits the realizable maps to the finite-order modular elements).
+  const std::set<std::vector<std::uint64_t>> triangleSet(triangles.begin(),
+                                                         triangles.end());
+  for (const std::vector<std::uint64_t> &triangle : triangles) {
+    std::vector<std::uint64_t> image{phi[triangle[0]], phi[triangle[1]],
+                                     phi[triangle[2]]};
+    std::sort(image.begin(), image.end());
+    if (!triangleSet.count(image))
+      throw std::invalid_argument(
+          "Cobordism::twistedCylinder: phi is not a simplicial automorphism of "
+          "Σ (a top triangle's image is not a triangle)");
+  }
+
+  // Three stacked copies of Σ: level ℓ vertex x at id ℓ·n + x. Each triangle
+  // (a < b < c) spans a prism (a 2-simplex × [0,1]) cut into the three
+  // Eilenberg–Zilber tetrahedra {β(a),β(b),β(c),τ(c)}, {β(a),β(b),τ(b),τ(c)},
+  // {β(a),τ(a),τ(b),τ(c)} for a lower-face map β and an upper-face map τ — the
+  // same staircase SimplicialProduct lays down for Σ×[0,1], the diagonal fixed
+  // by Σ's vertex order so adjacent prisms (and the seam) glue consistently.
+  auto addPrism = [](SimplexList &tops, const std::vector<std::uint64_t> &tri,
+                     auto beta, auto tau) {
+    const std::uint64_t a = tri[0], b = tri[1], c = tri[2];
+    auto push = [&tops](std::vector<std::uint64_t> tet) {
+      std::sort(tet.begin(), tet.end());
+      tops.push_back(std::move(tet));
+    };
+    push({beta(a), beta(b), beta(c), tau(c)});
+    push({beta(a), beta(b), tau(b), tau(c)});
+    push({beta(a), tau(a), tau(b), tau(c)});
+  };
+
+  const auto level0 = [](std::uint64_t x) { return x; };
+  const auto level1 = [n](std::uint64_t x) { return n + x; };
+  const auto level2 = [n](std::uint64_t x) { return 2 * n + x; };
+  // The seam (level 1) read through φ: the level-1 copy of vertex φ(x) carries
+  // x's slot, so the monodromy from the bottom boundary (level 0) up to the top
+  // boundary (level 2) is exactly φ — the whole twist lives in this one map.
+  const auto seam = [n, &phi](std::uint64_t x) { return n + phi[x]; };
+
+  SimplexList tops;
+  tops.reserve(triangles.size() * 6);
+  for (const std::vector<std::uint64_t> &triangle : triangles) {
+    addPrism(tops, triangle, level0, level1);  // bottom prism Σ×[0,1] (identity)
+    addPrism(tops, triangle, seam, level2);    // top prism Σ×[1,2] (φ-threaded)
+  }
+  return buildSpacetime(static_cast<std::size_t>(3 * n), tops);
+}
+
 }  // namespace tessera::cobordism
