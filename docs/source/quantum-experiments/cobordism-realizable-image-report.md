@@ -202,6 +202,67 @@ reading reconstructs $U$ and that the committed example self-verifies.
    the prior sweep left open: the discrete DW image is the $GL(2,\mathbb{Z}_2)$
    holonomy-permutation group, period.
 
+## Quantum gate support
+
+Which standard quantum gates does the cobordism theory *support* — i.e. which
+gates equal a buildable DW map $Z(W)$? Building the realizable set through the
+genuine machinery (`Cobordism.twistedCylinder` for the six $S_3$ maps,
+`Cobordism.disjointUnion` of two solid tori for the non-invertible projector
+$|st\rangle\langle st|$) and testing a comprehensive standard gate set on
+$Z(T^2)=\mathbb{C}^4=\mathbb{C}^2\otimes\mathbb{C}^2$ — the two holonomy qubits
+being the $\mathbb{Z}_2$ flux around the two cycles, vacuum $|00\rangle$ = the
+trivial class (index 0) — answers it. A gate is **supported iff it equals a
+realizable $Z(W)$**; for the (unitary) gates this is membership in the six $S_3$
+maps, which is exactly the separator above: a $0/1$ permutation matrix fixing the
+vacuum. Every verdict below is computed through the machinery *and* cross-checked
+against that separator — they agree on every gate
+(`tests/cobordism/test_gate_support_python.py`).
+
+| gate | supported? | reason (which $S_3$ element, or which property fails) |
+|---|---|---|
+| $I\otimes I$ | **yes** | $S_3$ identity — fixes the vacuum, permutes nothing |
+| `SWAP` | **yes** | $S_3$ transposition $(1\,2)$ — swaps $[a]\leftrightarrow[b]$ |
+| `CNOT` (control $q_0$) | **yes** | $S_3$ transposition $(2\,3)$ — swaps $[b]\leftrightarrow[a{+}b]$ |
+| `CNOT` (control $q_1$) | **yes** | $S_3$ transposition $(1\,3)$ — swaps $[a]\leftrightarrow[a{+}b]$ |
+| `DCX` | **yes** | $S_3$ 3-cycle $(1\,3\,2)$ |
+| $X\otimes I$, $I\otimes X$ | no | $0/1$ permutation, but **moves** the vacuum $[0]$ |
+| $X\otimes X$ | no | genuine $0/1$ permutation, but **moves** the vacuum $[0]\!\to\![a{+}b]$ |
+| $Y\otimes I$, $I\otimes Y$ | no | moves the vacuum $[0]$ (and carries a $\pm i$ phase) |
+| $Z\otimes I$, $I\otimes Z$ | no | phase (sign flip) — not $0/1$ |
+| $S,\ S^\dagger,\ T$ (either embedding) | no | phase — not $0/1$ |
+| $H\otimes I$, $I\otimes H$ | no | superposition — not a permutation |
+| $\sqrt{X}$ (either embedding) | no | superposition — not a permutation |
+| `CZ` $=\mathrm{diag}(1,1,1,-1)$ | no | phase — not $0/1$ |
+| `CS` | no | phase — not $0/1$ |
+| `CY` | no | phase ($\pm i$) — not $0/1$ |
+| `iSWAP` | no | phase ($\pm i$) — not $0/1$ |
+| $\sqrt{\texttt{SWAP}}$ | no | superposition — not a permutation |
+| `CH` | no | superposition — not a permutation |
+| `ECR` | no | superposition — not a permutation |
+| `B` (Berkeley) | no | superposition (perfect entangler) — not a permutation |
+| $\mathrm{DFT}_4$ | no | superposition — not a permutation |
+| Bell entangler $(H\otimes I)\cdot\texttt{CNOT}$ | no | superposition (entangler) — not a permutation |
+
+Supported, end to end: $I\otimes I$, both `CNOT` orientations, `SWAP`, and `DCX`.
+The three transpositions of $S_3$ are realized *exactly* by `SWAP`, `CNOT`
+($q_0$) and `CNOT` ($q_1$); one 3-cycle is `DCX` $=(1\,3\,2)$ and the other,
+$(1\,2\,3)$, is its inverse — reachable as a product of supported gates (e.g.
+$\texttt{CNOT}\cdot\texttt{SWAP}$), so the full $S_3$ is covered.
+
+Two subtleties the table makes explicit:
+
+- **The non-invertible sector adds no gates.** Gates are unitary; the realizable
+  non-invertible maps are rank-1 projectors ($|st\rangle\langle st|$, $\det=0$),
+  and no unitary equals a projector. The supported set is *identical* whether or
+  not the projector is included in the realizable set — every supported gate
+  comes from the six $S_3$ unitaries, and the $\{I_4\}\to S_3\to\langle S_3,
+  |st\rangle\langle st|\rangle$ enlargement of the *algebra* buys no new *gate*.
+- **The criterion is "fixes the vacuum," not merely "permutation."** $X$, $Y$ and
+  $X\otimes X$ are permutations — $X\otimes X$ a genuine $0/1$ one — yet each
+  **moves** $|00\rangle$ off itself, so none is supported. Fixing the trivial
+  holonomy class, not just permuting the four classes, is the cut: $X\otimes X$
+  sends $[0]\to[a{+}b]$, which no DW cobordism $Z(W)$ can do.
+
 ## Conventions
 
 - Holonomy classes index $0=[\text{trivial}]$, $1=[a]$, $2=[b]$, $3=[a{+}b]$; the
