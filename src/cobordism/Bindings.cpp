@@ -600,8 +600,17 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
                     "free-connectivity growth can differ (the headline observable).")
       .def_readonly("connectivity_candidates",
                     &RealizabilityOracle::Verdict::connectivityCandidates,
-                    "Candidate interior connectivities scored per growth step "
-                    "(FREE_CONNECTIVITY only; 0 under CONE).")
+                    "Candidate interior EDGE (1-simplex) connectivities scored per "
+                    "growth step (FREE_CONNECTIVITY only; 0 under CONE). The only "
+                    "spectrally relevant atom at k=0.")
+      .def_readonly("triangle_candidates",
+                    &RealizabilityOracle::Verdict::triangleCandidates,
+                    "Candidate interior TRIANGLE (2-simplex) connectivities scored "
+                    "per growth step (FREE_CONNECTIVITY at k>=1 only; 0 at k=0 and "
+                    "under CONE). At k>=1 the metric L_k reads the 2-cells through "
+                    "d_2, so the search must also propose triangle attachments — "
+                    "reported alongside connectivity_candidates so the full scored "
+                    "breadth (edges + triangles) is surfaced, never capped silently.")
       .def_readonly("connectivity_space_size",
                     &RealizabilityOracle::Verdict::connectivitySpaceSize,
                     "Full per-step incidence space (2^N - 1 nonempty vertex "
@@ -643,18 +652,25 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
       .def("decideHarmonic", &RealizabilityOracle::decideHarmonic,
            py::arg("target"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
            py::arg("max_cones") = 4, py::arg("seed") = 0,
+           py::arg("growth_mode") = RealizabilityOracle::GrowthMode::Cone,
+           py::arg("connectivity_candidates") = 8,
            "Decide whether a target boundary harmonic k-form (a degree-k Cochain, "
            "k = target.degree(); the k=1 DW setting) is realizable on the held "
            "3-manifold-with-boundary bulk W: pin the boundary surface dW byte-"
            "fixed, fill the interior (interior edge squared-lengths + boundary-"
-           "fixed Pachner growth) to drive r = ||(I - psi psi^dagger) L_k psi||^2 "
+           "fixed growth) to drive r = ||(I - psi psi^dagger) L_k psi||^2 "
            "to 0, and return the Verdict. target is matched to the bulk's boundary "
            "k-cells by sorted vertex-id tuple (the readout of a "
            "PreparedBoundaryState); interior k-cells carry free auxiliary "
-           "amplitudes. Realizable iff r < epsilon, else the floor certifies non-"
-           "realizability at the explored complexity. Realizes the held bulk in "
-           "place. Raises if target is empty/negative-degree or none of its "
-           "k-cells are boundary cells of the bulk.");
+           "amplitudes. growth_mode=CONE (default) keeps the boundary-fixed "
+           "1->(d+1) Pachner add; growth_mode=FREE_CONNECTIVITY searches interior "
+           "connectivity per growth step — at k>=1 proposing both edge (1-simplex) "
+           "and TRIANGLE (2-simplex) attachments, the latter being what L_k reads "
+           "through d_2 (connectivity_candidates per atom kind, surfaced as "
+           "connectivity_candidates / triangle_candidates). Realizable iff "
+           "r < epsilon, else the floor certifies non-realizability at the explored "
+           "complexity. Realizes the held bulk in place. Raises if target is "
+           "empty/negative-degree or none of its k-cells are boundary cells.");
 
   // Exact integer / GF(2) / inertia primitives (also exposed for direct
   // testing). Matrices are passed flat row-major with explicit dims.
