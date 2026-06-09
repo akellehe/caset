@@ -48,6 +48,10 @@ markers = [
 
 [tool.scikit-build]
 build-dir = "cmake-build-debug/{wheel_tag}"
+# Default Release (-O3) — perf/compute. Fast dev compiles want Debug (-O1, ccache-friendly):
+#   pip install -e ".[dev]" -C cmake.build-type=Debug
+# but the Debug build currently aborts at `import tessera` (free(): invalid pointer) — a
+# latent invalid-free that -O3 masks. Fix that before relying on the Debug dev build.
 cmake.build-type = "Release"
 wheel.packages = ["tessera"]
 # Do NOT add a [tool.scikit-build.cmake.define] override for Python_EXECUTABLE.

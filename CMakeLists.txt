@@ -38,6 +38,24 @@ if (NOT "$ENV{TESSERA_CCACHE}" STREQUAL "0")
     endif()
 endif()
 
+# ---- Faster linker (mold / lld) ----
+# Linking _tessera against ITensor + Eigen + a BLAS/LAPACK backend is link-heavy;
+# mold and lld cut link time sharply versus the default BFD ld. Preferred order
+# mold > lld. Auto-enabled when found; set TESSERA_FAST_LINKER=0 to opt out.
+if (NOT "$ENV{TESSERA_FAST_LINKER}" STREQUAL "0")
+    find_program(MOLD_PROGRAM mold)
+    find_program(LLD_PROGRAM ld.lld)
+    if (MOLD_PROGRAM)
+        add_link_options(-fuse-ld=mold)
+        message(STATUS "Fast linker enabled: mold")
+    elseif (LLD_PROGRAM)
+        add_link_options(-fuse-ld=lld)
+        message(STATUS "Fast linker enabled: lld")
+    else()
+        message(STATUS "Fast linker not found — install lld or mold for faster links.")
+    endif()
+endif()
+
 option(TESSERA_ASAN "Build tessera with AddressSanitizer/UBSan" $ENV{TESSERA_ASAN})
 if(NOT TESSERA_ASAN)
     set(TESSERA_ASAN OFF)
