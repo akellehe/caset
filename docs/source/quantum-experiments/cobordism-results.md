@@ -8,8 +8,10 @@
 > `topological_correspondence.py` (the Stage-2 TQFT checks T1–T5),
 > `realizability_report.py` (boundary synthesis + bulk realizability),
 > `dw_spectral_bridge.py` (the DW–spectral bridge), and
-> `realizable_image_sweep.py` / `loosened_gate_retest.py` (the gate set, pinned
-> and loosened) — all under `examples/cobordism/`.
+> `realizable_image_sweep.py` / `loosened_gate_retest.py` /
+> `spectral_gate_realizability.py` (the gate set: pinned ($S_3$), loosened at
+> $k=0$, and the staged spectral synthesis with the boundary synthesized
+> ($S_3+H{\otimes}H+\sqrt{\mathrm{SWAP}}$)) — all under `examples/cobordism/`.
 
 ## The correspondence
 
@@ -324,6 +326,105 @@ discrete lattice that a generic superposition/entangling $U$ is uniformly bounde
 away from (gap median $1.03$ over 200 Haar $U(4)$), and the continuous freedom the hole
 supplies lives in the *state* — the spectral $Z$ — not in new realizable maps.
 
+## The gate set with the boundary synthesized: $S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}}$
+
+The $S_3$ image above pins the cobordism's boundary bit-exact — it is the restriction of
+one global form on a fixed twisted cylinder, and that integrality is exactly what holds
+the realizable set down to the six holonomy permutations. A third construction
+(`spectral_gate_realizability.py`) **synthesizes the boundary instead of pinning it**: it
+runs each gate through a *staged spectral synthesis* and decides realizability by the
+**continuous spectral method** — the genuine Hodge Laplacian spectrum, $\ker L_1$ of the
+surgery-grown bulk read by eigendecomposition — with **no** Levenberg–Marquardt
+weight/topology fill. The hypothesis it tests directly: synthesizing the boundary too,
+rather than pinning it, relaxes the integrality over-constraint and so realizes *more*
+gates.
+
+**The construction — a 3-stage staged spectral synthesis (per gate $U$).** The register
+is the torus holonomy $\mathbb{C}^4=\mathbb{C}[H^1(T^2;\mathbb{Z}_2)]$; the three
+non-trivial classes $\{[a],[b],[a{+}b]\}$ are carried as three vertex-disjoint boundary
+1-cycles on an **$S^2$ bulk** (a triangulated icosahedron), and a gate acts on the
+register by its $\{[a],[b],[a{+}b]\}$ block.
+
+1. **Synthesize each state independently** (the §4b boundary synthesis). $\mathrm{geo}(\psi_A)$
+   and $\mathrm{geo}(\psi_B)$ are grown *separately* into the minimal complex whose metric
+   Hodge $L_1$ carries the register state as a **harmonic** ($\psi\in\ker L_1$), confirmed
+   by the genuine spectral residual $\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2\to0$ — each
+   on its own, the input and output geometries never meeting at this stage.
+2. **Fix their union as the boundary.** $\partial W=\mathrm{geo}(\psi_A)\sqcup\mathrm{geo}(\psi_B)$
+   is held as the (pinned) boundary. Because the two were grown apart, $\partial W$ is
+   **not** the bit-exact restriction of one global form — the relaxation the hypothesis
+   turns on.
+3. **Grow the bulk to the known post-interaction state, with surgery, and decide by the
+   spectrum.** The topology-changing surgery move `removeInteriorCell` opens the three
+   holonomy holes so $b_1$ and $\ker L_1$ **emerge** $0\to2$ (the closed sphere has
+   $\ker L_1=0$): the carried register $V$ becomes the 2-dimensional $S_3$ standard
+   representation. Realizability is then the **spectral** statement of
+   $Z_{\text{spec}}(W)=\langle\psi_A|U|\psi_B\rangle$: form the post-interaction state
+   $U|\psi_B\rangle$ as a boundary 1-form and measure its genuine Hodge residual
+   $r(U)=\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2$ on the grown bulk. $r\to0$ **iff**
+   $U|\psi_B\rangle$ lies in $\ker L_1$ — i.e. iff the post-interaction state is *carried*.
+   The decision is the eigendecomposition of the real $L_1$, continuous and exact (no
+   restart noise).
+
+The carried register is the $\Sigma=0$ subspace of the three holonomy-cycle periods (the
+boundary periods of a 3-hole sphere sum to zero, with the induced-orientation signs
+$(+,+,-)$ read off the bulk and symmetrized). A single $(\psi_A,\psi_B)$ probes $U$ on one
+register vector, so the spectral test is driven on a **$V$-generic input** ($\Sigma=0$,
+all components non-zero), whose $U$-image leaks for *any* $U$ that does not preserve the
+whole register; the leakage $|\Sigma(U|\psi_B\rangle)|$ is reported alongside as the
+analytic cross-check.
+
+**The identity sanity check (the falsifiable core), decided spectrally.** Surgery grows
+$\ker L_1$ as $0\to0\to1\to2$ (the closed $S^2$, then the disk, the annulus, the 3-hole
+sphere). The identity post-interaction state ($U=I$, $Z_{\text{spec}}=\langle\psi_A|\psi_B\rangle$)
+**floors** on every seed with $\ker L_1<2$ ($r\approx1.1\times10^{1}$ — no register to
+carry it) and **realizes** only once surgery opens $b_1\,0\to2$ ($r\approx1\times10^{-29}$,
+machine zero): the emergent register is load-bearing, exactly the state-test mechanism.
+Stage 1 likewise reads $\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2\approx10^{-29}$ for each
+synthesized $\mathrm{geo}(\psi)$ — carried.
+
+**The realizable set (the spectral output).** Scored by the genuine $L_1$ residual of
+$U|\psi_B\rangle$ on the surgery-grown register ($b_1=2$ throughout):
+
+| gate | family | spectral residual $r(U)$ | leak $\lvert\Sigma\rvert$ | realizes? |
+|---|---|---|---|---|
+| Identity | $S_3$ control | $1.1\times10^{-29}$ | $0$ | **yes** |
+| `SWAP` | $S_3$ control | $2.9\times10^{-29}$ | $0$ | **yes** |
+| `CNOT` | $S_3$ control | $7.8\times10^{-29}$ | $0$ | **yes** |
+| reversed-`CNOT` | $S_3$ control | $2.9\times10^{-29}$ | $0$ | **yes** |
+| 3-cycle $(0231)$ | $S_3$ control | $5.7\times10^{-29}$ | $0$ | **yes** |
+| 3-cycle $(0312)$ | $S_3$ control | $5.9\times10^{-29}$ | $0$ | **yes** |
+| $H{\otimes}H$ | superposition | $3.7\times10^{-29}$ | $0$ | **yes** |
+| $\sqrt{\mathrm{SWAP}}$ | superposition | $2.8\times10^{-29}$ | $0$ | **yes** |
+| $I{\otimes}H$ | superposition | $0.54$ | $0.28$ | no |
+| $T{\otimes}I$ | phase | $2.87$ | $0.77$ | no |
+| $\sqrt{\mathrm{iSWAP}}$ | superposition | $4.21$ | $1.00$ | no |
+| `CPHASE`$(\pi/4)$ | phase/entangler | $4.34$ | $1.00$ | no |
+| $H{\otimes}I$ | superposition | $5.62$ | $1.20$ | no |
+| $S{\otimes}I$ | phase | $6.96$ | $1.41$ | no |
+| `CZ`, $Z{\otimes}Z$ | phase / sign | $7.30$ | $2.60$ | no |
+| `iSWAP` | phase/entangler | $8.16$ | $1.84$ | no |
+| $X{\otimes}X$ | Pauli perm | $8.44$ | $1.30$ | no |
+
+The realizable set is $\{I,\,\mathrm{SWAP},\,\mathrm{CNOT},\,\text{reversed-CNOT},\,
+(0231),\,(0312),\,H{\otimes}H,\,\sqrt{\mathrm{SWAP}}\}$ — **8 gates**, the full $S_3$ plus
+$H{\otimes}H$ plus $\sqrt{\mathrm{SWAP}}$. The realize/floor split is $\sim28$ orders of
+magnitude: the carried gates hit machine zero (genuine harmonics of $L_1$), the others
+floor at $0.5$–$8.4$, each a certified obstruction (its post-interaction state leaks out
+of $\ker L_1$, $\Sigma\neq0$).
+
+**The verdict (boundary synthesized).** The staged spectral synthesis realizes
+**$S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}} = 8$** — *one more* than the pinned
+fixed-boundary $S_3 + H{\otimes}H = 7$, and far more than the topology-free $\{I\}$. The
+extra gate is $\sqrt{\mathrm{SWAP}}$: a **non-integer** register automorphism whose
+post-interaction state still lands in the carried register $\ker L_1$, admissible only
+once the boundary is *synthesized* rather than pinned to an integer monodromy. This is
+exactly the relaxation the hypothesis predicted — synthesizing the boundary, not pinning
+it bit-exact, lifts the integrality constraint and enlarges the realizable set. What still
+floors is genuine register *leakage* ($\Sigma\neq0$): a holonomy superposition or
+off-lattice phase that no emergent $b_1$ can carry, the $k=1$ analogue of the sign-flipped
+meridian that floors on every filling.
+
 ## Figures
 
 A per-output force-directed render of the simplicial complexes the experiments
@@ -391,7 +492,8 @@ python examples/cobordism/realizability_report.py         # boundary synthesis +
 python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral bridge
 python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
-python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test
+python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
+python examples/cobordism/spectral_gate_realizability.py  # the staged gate set (S₃ + H⊗H + √SWAP)
 python -m pytest tests/cobordism
 ```
 
