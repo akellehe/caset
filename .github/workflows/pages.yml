@@ -29,7 +29,11 @@ jobs:
           python-version: "3.12"  # or match your project
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y doxygen
+        # The docs build compiles the C++ extension (`pip install ".[dev]"`), so it
+        # needs the same packages as build.yml: pybind11-dev for the
+        # find_package(pybind11) cmake config, plus liblapack/libblas for the
+        # quantum subsystem. Without them the build — and the whole deploy — fails.
+        run: sudo apt-get update && sudo apt-get install -y doxygen pybind11-dev liblapack-dev libblas-dev
 
       - name: Install dependencies
         run: |
