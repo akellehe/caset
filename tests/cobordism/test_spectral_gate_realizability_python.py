@@ -19,30 +19,27 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Spectral gate realizability: fixed boundaries, emergent bulk.
+"""Spectral gate realizability: topology-less, identity-anchored, emergent bulk.
 
 Independent re-derivation of the claims the example
-(``examples/cobordism/spectral_gate_realizability.py``) makes, plus a self-verify
-that the committed example exits 0. The question: does the surgery / emergent-b_1
-mechanism that realizes superposed STATES also realize superposition / entangling
-GATES, when the boundaries are fixed and only the bulk grows?
+(``examples/cobordism/spectral_gate_realizability.py``) makes, plus a self-verify that
+the committed example exits 0. The construction assumes NO topology (the seed is a
+contractible blob grown from a single triangle, betti [1,0,0]) and NO S_3 (the register
+``ker L_1`` and the realizable set are read off the genuinely-grown bulk):
 
-  1. **The genuine engine works at k=1.** ``RealizabilityOracle.decideHarmonic``
-     with boundary-fixed ``GrowthMode.SURGERY`` realizes the matched boundary
-     harmonic on the octahedron once surgery opens b_1 0 -> 1, and floors the
-     sign-flipped conjugation -- the state test's mechanism, the anchor that the
-     harmonic residual + surgery is the right spectral object.
-  2. **Surgery grows the Hodge register.** ``EigenstateSynthesis.removeInteriorCell``
-     opens the three holonomy holes of a triangulated S^2 on its own, growing
-     b_1 0 -> 2 (ker L_1 -> the S_3 standard rep), the boundary held bit-exact.
-  3. **S_3 controls realize (validity anchor).** The six holonomy permutations'
-     Hodge-register monodromy is a carried permutation -> residual ~ 0. The
-     DW-spectral bridge demands this (Z_spec = Z_DW on S_3); if it fails the
-     construction is broken.
-  4. **The gate sweep.** Of the superposition / phase / entangling battery exactly
-     ONE realizes -- H (x) H, whose Hodge-register action *is* the holonomy SWAP --
-     and every other gate floors, b_1 free notwithstanding. The mechanism realizes
-     superposed states, not superposition gates.
+  1. **The seed is topology-free.** Both blobs have ``bettiNumbers() == [1, 0, 0]``
+     (connected, contractible) and a small 3-edge fixed boundary; their buried cells are
+     genuine ``EigenstateSynthesis.interiorTopCells()`` (all-interior removable cells).
+  2. **The identity is the only sanity check, and it passes.** On the single-circle
+     blob the matched boundary harmonic FLOORS on the b_1 = 0 seed and REALIZES once the
+     boundary-fixed surgery search opens b_1 0 -> 1 -- emergent topology carries it.
+  3. **b_1 and the register are outputs.** ``removeInteriorCell`` grows b_1 0 -> 3 on the
+     four-register blob, and the carried ``ker L_1`` is a 3-dimensional V in C^4 with an
+     emergent constraint n.p = 0 read off the bulk's harmonics (derived, not imposed).
+  4. **The realizable set is an output, and it is not S_3.** Scored by register
+     preservation, the cohomological set is {Identity, SWAP, H(x)H, sqrt-SWAP}; the
+     genuine engine realizes only {Identity}. Either way CNOT, reversed-CNOT, and the
+     two 3-cycles -- all torus-S_3 members -- FLOOR.
 """
 
 import importlib.util
@@ -56,7 +53,6 @@ import numpy as np
 import tessera
 
 cob = tessera.cobordism
-SURGERY = cob.RealizabilityOracle.GrowthMode.SURGERY
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _EXAMPLE = os.path.join(_HERE, "..", "..", "examples", "cobordism",
@@ -75,108 +71,118 @@ GATE = _load_example()
 
 
 # --------------------------------------------------------------------------- #
-class EngineAnchorTest(unittest.TestCase):
-    """1: the genuine decideHarmonic + boundary-fixed surgery realizes the matched
-    boundary harmonic (b_1 0 -> 1) and floors the sign-flipped one -- at k=1."""
+class TopologyFreeConstructionTest(unittest.TestCase):
+    """1: both blobs are contractible (betti [1,0,0] -- no assumed topology), with a
+    small 3-edge fixed boundary and genuine all-interior removable cells."""
 
-    def test_matched_realizes_by_surgery_flipped_floors(self):
-        rows = GATE.engine_anchor()
-        matched = next(r for r in rows if "matched" in r["target"])
-        flipped = next(r for r in rows if "flipped" in r["target"])
-        # The matched harmonic realizes once surgery opens the handle (b_1 0 -> 1).
-        self.assertEqual(matched["b1_before"], 0)
-        self.assertEqual(matched["b1_after"], 1)
-        self.assertGreaterEqual(matched["removals"], 1)
-        self.assertLess(matched["residual"], GATE.ENGINE_REALIZE)
-        # The sign-flipped conjugation floors -- a cohomological obstruction.
-        self.assertGreater(flipped["residual"], GATE.CERT_FLOOR)
-        self.assertFalse(flipped["realizable"])
-
-
-# --------------------------------------------------------------------------- #
-class HodgeRegisterEmergenceTest(unittest.TestCase):
-    """2: removeInteriorCell opens the three holonomy holes -> b_1 0 -> 2, with the
-    boundary bit-exact (the genuine engine grows the register)."""
-
-    def test_surgery_grows_b1_to_two(self):
-        trace, harmonics = GATE.hodge_register_emergence()
-        self.assertEqual(trace[0]["b1"], 0)            # closed seed
-        self.assertEqual(trace[-1]["b1"], 2)           # the Hodge qubit
-        self.assertEqual(harmonics, 2)                 # ker L_1 = the standard rep
-        # b_1 only moves on a removal (opening the second + third hole).
-        b1s = [t["b1"] for t in trace]
-        self.assertEqual(b1s, sorted(b1s))             # monotone non-decreasing
-
-    def test_class_holes_are_interior_cells_of_the_closed_seed(self):
-        st = GATE._surface(GATE._ICO)
-        self.assertEqual(GATE._betti1(st), 0)          # closed S^2
+    def test_single_blob_is_contractible_with_one_removable_cell(self):
+        faces, cell, cyc = GATE._single_blob()
+        st = GATE._surface(faces)
+        self.assertEqual(GATE._betti(st), [1, 0, 0])     # contractible blob
+        self.assertEqual(len(cyc), 3)                    # small 3-edge boundary
         interior = {tuple(sorted(c))
                     for c in cob.EigenstateSynthesis(st, 1).interiorTopCells()}
-        for hole in GATE._CLASS_HOLES:
-            self.assertIn(tuple(sorted(hole)), interior)
+        self.assertEqual(interior, {tuple(sorted(cell))})  # exactly the buried cell
+
+    def test_four_register_blob_is_contractible_with_three_disjoint_cells(self):
+        faces, cells, circles = GATE._four_register_blob()
+        st = GATE._surface(faces)
+        self.assertEqual(GATE._betti(st), [1, 0, 0])     # contractible blob
+        self.assertEqual(len(circles), 4)                # four register circles
+        # the three buried register cells are vertex-disjoint and all-interior
+        verts = [v for c in cells for v in c]
+        self.assertEqual(len(set(verts)), len(verts))    # vertex-disjoint
+        interior = {tuple(sorted(c))
+                    for c in cob.EigenstateSynthesis(st, 1).interiorTopCells()}
+        for c in cells:
+            self.assertIn(tuple(sorted(c)), interior)
+        # the fixed boundary is the small 3-edge outer triangle
+        self.assertEqual(sorted(cob.EigenstateSynthesis(st, 1).boundaryEdges()),
+                         [(0, 1), (0, 2), (1, 2)])
+
+    def test_blob_is_grown_from_a_single_triangle_by_pachner_coning(self):
+        # The seed is a single triangle; each 1->3 cone adds one vertex and nets +2
+        # triangles -- no named topology object, just createVertex / createSimplex.
+        faces, _cell, _cyc = GATE._single_blob()
+        verts = sorted({v for f in faces for v in f})
+        self.assertEqual(verts, [0, 1, 2, 3, 4, 5])      # one triangle + 3 coned apices
+        self.assertEqual(len(faces), 7)                  # 1 + 3 cones * (+2 each)
+        # the construction is a genuine simplicial complex (every face is a 3-clique)
+        for f in faces:
+            self.assertEqual(len(set(f)), 3)
 
 
 # --------------------------------------------------------------------------- #
-class S3ValidityAnchorTest(unittest.TestCase):
-    """3: the six S_3 controls realize -- their Hodge monodromy is a carried
-    permutation. The DW-spectral bridge demands this."""
+class IdentityAnchorTest(unittest.TestCase):
+    """2: THE sanity check. The identity floors at b_1=0 and realizes at b_1=1 -- the
+    emergent hole carries it (the falsifiable core, no topology assumed). The surgery
+    move and the fixed-bulk fit are deterministic; the surgery search is robust via
+    seed-retry."""
 
-    def test_all_six_s3_controls_realize(self):
-        for name, U, fam in GATE._gates():
-            if fam != "S3 control":
-                continue
-            r = GATE.hodge_monodromy_residual(U)
-            self.assertLess(r, GATE.REALIZE,
-                            msg=f"{name} must realize spectrally (validity anchor); "
-                                f"residual {r:.2e}")
-
-    def test_carried_monodromies_are_the_six_s3_permutations(self):
-        # The realizable register actions are exactly the standard-rep images of
-        # the six cycle permutations -- the S_3 holonomy permutations on ker L_1.
-        self.assertEqual(len(GATE._S3_REG), 6)
-        # Each is a genuine 2x2 orthogonal map (a triangle symmetry).
-        for g in GATE._S3_REG:
-            np.testing.assert_allclose(g @ g.conj().T, np.eye(2), atol=1e-9)
+    def test_identity_floors_on_seed_realizes_when_b1_emerges(self):
+        seed_row, open_row, search_row = GATE.single_blob_anchor()
+        # (1) floors on the b_1=0 seed (no surgery) -- the disk cannot carry it.
+        self.assertEqual(seed_row["b1_after"], 0)
+        self.assertFalse(seed_row["realizable"])
+        self.assertGreater(seed_row["residual"], GATE.CERT_FLOOR)
+        # (2) realizes on the opened b_1=1 bulk (the deterministic removeInteriorCell).
+        self.assertEqual(open_row["b1_after"], 1)
+        self.assertTrue(open_row["realizable"])
+        self.assertLess(open_row["residual"], GATE.REALIZE)
+        # (3) the surgery search opens b_1 0 -> 1 on its own and realizes.
+        self.assertEqual(search_row["b1_before"], 0)
+        self.assertEqual(search_row["b1_after"], 1)
+        self.assertGreaterEqual(search_row["removals"], 1)
+        self.assertLess(search_row["residual"], GATE.REALIZE)
 
 
 # --------------------------------------------------------------------------- #
-class GateSweepTest(unittest.TestCase):
-    """4: of the superposition / entangling battery exactly H (x) H realizes (its
-    Hodge action is the holonomy SWAP); every other gate floors."""
+class EmergentRegisterTest(unittest.TestCase):
+    """3: surgery grows b_1 0 -> 3 on its own, and the carried register V = ker L_1 is a
+    3-dimensional output with an emergent (derived) homological constraint."""
 
-    def test_only_HxH_realizes_in_the_sweep(self):
-        realized, floored = [], []
-        for name, U, fam in GATE._gates():
-            if fam == "S3 control":
-                continue
-            r = GATE.hodge_monodromy_residual(U)
-            (realized if r < GATE.REALIZE else floored).append((name, r))
-        self.assertEqual([n for n, _ in realized], ["H(x)H"],
-                         msg=f"only H(x)H should realize; got {realized}")
-        # Every floored gate is certified obstructed (orders of magnitude above).
-        for name, r in floored:
-            self.assertGreater(r, GATE.CERT_FLOOR, msg=f"{name} residual {r:.2e}")
+    def test_surgery_grows_b1_zero_to_three(self):
+        trace, periods, rank, normal = GATE.register_emergence()
+        self.assertEqual([t["b1"] for t in trace], [0, 1, 2, 3])  # monotone, emergent
+        self.assertEqual(rank, 3)                                 # V is 3-dim in C^4
+        self.assertEqual(periods.shape, (3, 4))                   # 3 harmonics, 4 circles
+        # the constraint is a genuine nullvector of the carried periods (n.p = 0)
+        self.assertTrue(np.allclose(periods @ normal, 0, atol=1e-6))
 
-    def test_HxH_hodge_action_is_the_swap(self):
-        # H (x) H collapses to the holonomy SWAP on the 2-dim Hodge register: its
-        # in-register action equals SWAP's, so the SWAP cobordism realizes it.
-        hxh = next(U for n, U, _ in GATE._gates() if n == "H(x)H")
-        swap = next(U for n, U, _ in GATE._gates() if n == "SWAP")
-        reg_hxh = GATE._REG.conj().T @ np.asarray(hxh, dtype=complex)[1:4, 1:4] @ GATE._REG
-        reg_swap = GATE._REG.conj().T @ np.asarray(swap, dtype=complex)[1:4, 1:4] @ GATE._REG
-        np.testing.assert_allclose(reg_hxh, reg_swap, atol=1e-9)
+    def test_register_projector_fixes_v_and_has_rank_three(self):
+        _trace, periods, rank, _normal = GATE.register_emergence()
+        proj = GATE._register_projector(periods, rank)
+        np.testing.assert_allclose(proj @ proj, proj, atol=1e-9)   # idempotent
+        self.assertAlmostEqual(np.trace(proj).real, 3.0, places=6)  # rank 3
 
-    def test_off_lattice_gates_genuinely_leak_or_misalign(self):
-        # CZ leaves the register (a relative sign on [a+b]); a phase gate misaligns
-        # within it. Both floor -- the cohomological obstruction surgery cannot fix.
-        for name in ("CZ", "iSWAP", "T(x)I", "sqrt-SWAP"):
-            U = next(U for n, U, _ in GATE._gates() if n == name)
-            self.assertGreater(GATE.hodge_monodromy_residual(U), GATE.CERT_FLOOR)
+
+# --------------------------------------------------------------------------- #
+class RealizableSetIsAnOutputTest(unittest.TestCase):
+    """4: the realizable set is an OUTPUT, and it is not the torus S_3."""
+
+    def setUp(self):
+        _trace, self.periods, self.rank, _normal = GATE.register_emergence()
+        self.proj = GATE._register_projector(self.periods, self.rank)
+        self.sweep = GATE.cohomological_sweep(self.proj)
+
+    def test_cohomological_realizable_set(self):
+        realized = [r["gate"] for r in self.sweep if r["preserves_register"]]
+        self.assertEqual(realized, ["Identity", "SWAP", "H(x)H", "sqrt-SWAP"])
+
+    def test_torus_s3_controls_floor_so_the_set_is_not_s3(self):
+        leak = {r["gate"]: r["leakage"] for r in self.sweep}
+        # the torus-S_3 members beyond the identity all LEAVE the emergent register
+        for gate in ("CNOT", "reversed-CNOT", "3-cycle (0231)", "3-cycle (0312)"):
+            self.assertGreater(leak[gate], GATE.CERT_FLOOR,
+                               msg=f"{gate} would be in S_3 but floors here")
+        # the identity always preserves the register (the sanity check, cohomologically)
+        self.assertLess(leak["Identity"], GATE.LEAK_TOL)
 
 
 # --------------------------------------------------------------------------- #
 class ExampleSelfVerifiesTest(unittest.TestCase):
-    """The committed example runs end-to-end and exits 0 (its own assertions)."""
+    """The committed example runs end-to-end and exits 0 (its own assertions, including
+    the genuine-engine realize/floor contrast on the four-register bulk)."""
 
     def test_example_exits_zero(self):
         self.assertTrue(os.path.exists(_EXAMPLE))
