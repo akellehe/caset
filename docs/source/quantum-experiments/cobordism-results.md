@@ -8,8 +8,9 @@
 > `topological_correspondence.py` (the Stage-2 TQFT checks T1–T5),
 > `realizability_report.py` (boundary synthesis + bulk realizability),
 > `dw_spectral_bridge.py` (the DW–spectral bridge), and
-> `realizable_image_sweep.py` / `loosened_gate_retest.py` (the gate set, pinned
-> and loosened) — all under `examples/cobordism/`.
+> `realizable_image_sweep.py` / `loosened_gate_retest.py` /
+> `spectral_gate_realizability.py` (the gate set, pinned, loosened at $k=0$, and
+> spectral at $k=1$) — all under `examples/cobordism/`.
 
 ## The correspondence
 
@@ -324,6 +325,65 @@ discrete lattice that a generic superposition/entangling $U$ is uniformly bounde
 away from (gap median $1.03$ over 200 Haar $U(4)$), and the continuous freedom the hole
 supplies lives in the *state* — the spectral $Z$ — not in new realizable maps.
 
+## The gate set at the correct degree: $S_3$ plus the one Hodge-collapse
+
+The operation-level table above scored each gate's Choi state
+$\operatorname{vec}(U)$ as a **degree-0** vertex cochain, where $\ker L_0$ is the
+locally-constant functions ($\dim b_0=1$ on a connected bulk) — so opening a $b_1$
+handle is spectrally inert and *every* gate floors, the six $S_3$ controls included.
+That is the wrong spectral object: a 2-qubit operation read at $k=0$ cannot see the
+handle. Read at the **same degree the state test uses** ($k=1$, the boundary harmonic
+/ metric Hodge residual) the picture is different, and the $S_3$ controls realize as
+required (`spectral_gate_realizability.py`).
+
+The construction is the emergent-bulk state test with **both boundaries fixed**: the
+three non-trivial $\mathbb{Z}_2$ holonomy classes $\{[a],[b],[a{+}b]\}$ are three
+boundary 1-cycles of a triangulated $S^2$, the boundary-fixed surgery move
+(`removeInteriorCell`) opens them on its own ($b_1:0\to2$, $\partial W$ bit-exact), and
+$\ker L_1$ grows into the $S_3$ **standard representation** — the 2-dimensional Hodge
+qubit (the homology, where $[a{+}b]=[a]+[b]$, *not* the group-algebra DW basis). A gate
+realizes iff its Hodge-register **monodromy** is a *carried* holonomy permutation, i.e.
+$Z_{\text{spec}}(W)=\langle\psi_A|U|\psi_B\rangle$ with residual $\to0$. The genuine
+`RealizabilityOracle.decideHarmonic` + boundary-fixed `SURGERY` engine anchors the
+mechanism at $k=1$ (the matched boundary harmonic realizes once surgery opens
+$b_1\,0\to1$, $r=3.1\times10^{-4}$; the sign-flipped conjugation floors, $r=0.22$).
+
+All six $S_3$ controls **realize** ($r\sim10^{-16}$) on the emergent $b_1=2$ register —
+their Hodge monodromy is a carried permutation, the validity anchor
+$Z_{\text{spec}}=Z_{DW}$ on $S_3$. The sweep then enlarges the realizable set by
+**exactly one** gate:
+
+| gate | family | Hodge residual | realizes? |
+|---|---|---|---|
+| Identity, `SWAP`, `CNOT`, rev-`CNOT`, the two 3-cycles | $S_3$ control | $\sim10^{-16}$ | **yes** |
+| $H{\otimes}H$ | superposition | $7.2\times10^{-16}$ | **yes** |
+| $H{\otimes}I$, $I{\otimes}H$ | superposition | $2.1$ | no |
+| $\sqrt{\mathrm{SWAP}}$, $\sqrt{\mathrm{iSWAP}}$ | superposition | $1.4$, $1.1$ | no |
+| `CZ`, `CPHASE`, `iSWAP` | phase/entangler | $2.0$, $0.77$, $2.0$ | no |
+| $T{\otimes}I$, $S{\otimes}I$ | phase | $1.1$, $2.0$ | no |
+| $X{\otimes}X$, $Z{\otimes}Z$ | Pauli / sign | $1.1$, $1.3$ | no |
+
+The single expansion is $H{\otimes}H$, whose Hodge-qubit monodromy **is** the holonomy
+`SWAP` — the symmetric double-Hadamard collapses to the swap on the 2-dimensional
+standard rep, so the `SWAP` cobordism reproduces its amplitudes. This is a continuous
+gate the integer DW-map metric floors ($\texttt{gap\_to\_S3}=2.0$); the spectral
+continuum realizes it, the *quantized-shadow* extension made concrete on a gate. But
+every **genuinely off-lattice** superposition / phase / entangling gate floors
+($r\sim0.77$–$2.1$), $b_1$ free notwithstanding: their Hodge action leaks out of
+$\ker L_1$ (a relative sign/phase, like the state test's flipped meridian) or misaligns
+within it, and surgery grows the topology without touching that cohomological
+obstruction.
+
+**The corrected verdict.** The emergent-$b_1$ mechanism realizes the $S_3$ gate
+*operations* spectrally — the earlier degree-0 floor of $S_3$ was a scoring artifact,
+not a result — and it expands the realizable set beyond the DW $S_3$ by exactly the
+gates whose Hodge-qubit monodromy coincides with a holonomy permutation ($H{\otimes}H$
+here). It does **not** realize a generic superposition or entangling operation: the
+Hodge qubit is a coarser invariant than the full $\mathbb{C}^4$ DW image, so the
+expansion is the measure-zero set of Hodge-collapse coincidences, and surgery realizes
+superposed *states* (any harmonic the register carries) far more freely than
+superposition *gates* (a monodromy it can carry).
+
 ## Figures
 
 A per-output force-directed render of the simplicial complexes the experiments
@@ -391,7 +451,8 @@ python examples/cobordism/realizability_report.py         # boundary synthesis +
 python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral bridge
 python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
-python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test
+python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
+python examples/cobordism/spectral_gate_realizability.py  # the gate set at k=1 (S₃ + H⊗H)
 python -m pytest tests/cobordism
 ```
 
