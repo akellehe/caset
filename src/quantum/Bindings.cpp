@@ -22,6 +22,28 @@
 // Plus the existing data classes (QuantumConfig, GroundStateResult,
 // SchmidtSpectra, …) and the MajorizationPredicate hierarchy.
 
+// pybind11 must be included *before* any quantum header that transitively pulls
+// in <itensor/all.h> (ChoiState.hpp, MutualInformation.hpp, Schmidt.hpp) — i.e.
+// before the rest of this translation unit. ITensor's itensor/global.h does an
+// unconditional `#define NDEBUG` to silence its own asserts. pybind11 auto-
+// enables PYBIND11_DETAILED_ERROR_MESSAGES only while NDEBUG is *un*defined
+// (detail/common.h), and that flag adds a `std::string type` member to
+// pybind11::arg_v. Every other binding TU is ITensor-free, so it parses pybind11
+// with NDEBUG undefined and gets the larger arg_v; letting ITensor's NDEBUG leak
+// reach pybind11 here first gives this one TU the smaller arg_v instead. The two
+// layouts are an ODR violation: arg_v's vague-linkage destructor is merged
+// across TUs, and the size-mismatched copy over-reads the `type` member and
+// frees a borrowed string-literal pointer at import — `free(): invalid pointer`,
+// which aborts every Debug build. (Release defines NDEBUG uniformly up front, so
+// both sides agree and the bug stays latent.) Parsing pybind11 first locks
+// arg_v's layout to match the rest of the module regardless of ITensor's later
+// #define, because the member's `#if` is resolved when cast.h is parsed.
+#include <pybind11/complex.h>
+#include <pybind11/eigen.h>
+#include <pybind11/functional.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
 #include "quantum/CausalCompare.hpp"
 #include "quantum/CausetChain.hpp"
 #include "quantum/ChoiJamiolkowski.h"
@@ -37,12 +59,6 @@
 #include "quantum/Schmidt.hpp"
 #include "quantum/TDVPRunner.hpp"
 #include "spacetime/Spacetime.h"  // full type needed for py::cast<Spacetime*>()
-
-#include <pybind11/complex.h>
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 
 namespace py = pybind11;
 
