@@ -42,7 +42,20 @@ endif()
 # Linking _tessera against ITensor + Eigen + a BLAS/LAPACK backend is link-heavy;
 # mold and lld cut link time sharply versus the default BFD ld. Preferred order
 # mold > lld. Auto-enabled when found; set TESSERA_FAST_LINKER=0 to opt out.
-if (NOT "$ENV{TESSERA_FAST_LINKER}" STREQUAL "0")
+#
+# Release is DELIBERATELY excluded. The Release module links with LTO
+# (-flto=auto, enabled by pybind11) at -O3, and lld 18.1.3 silently emits an
+# empty _tessera.so with no PyInit__tessera for that link, so `import tessera`
+# fails (#212). The identical Release objects link correctly under the default
+# BFD ld (and gold), and lld links Debug fine. CI is build-only and never
+# imports, so it slipped through. mold + Release is untested, so it is treated
+# as equally unsafe. The fast linker therefore only applies to non-Release
+# configs (Debug etc.), where it both links and runs and dev builds want the
+# speed; Release falls back to the system default linker. This is a
+# single-config build (scikit-build sets CMAKE_BUILD_TYPE), so a plain
+# CMAKE_BUILD_TYPE guard is sufficient.
+if (NOT "$ENV{TESSERA_FAST_LINKER}" STREQUAL "0"
+        AND NOT CMAKE_BUILD_TYPE STREQUAL "Release")
     find_program(MOLD_PROGRAM mold)
     find_program(LLD_PROGRAM ld.lld)
     if (MOLD_PROGRAM)
