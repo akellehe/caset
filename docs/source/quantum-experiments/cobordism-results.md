@@ -8,8 +8,9 @@
 > `topological_correspondence.py` (the Stage-2 TQFT checks T1–T5),
 > `realizability_report.py` (boundary synthesis + bulk realizability),
 > `dw_spectral_bridge.py` (the DW–spectral bridge), and
-> `realizable_image_sweep.py` / `loosened_gate_retest.py` (the gate set, pinned
-> and loosened) — all under `examples/cobordism/`.
+> `realizable_image_sweep.py` (the pinned gate set $S_3$) /
+> `loosened_topology_gateset.py` (the fully-loosened gate set — states and
+> operations both emergent) — all under `examples/cobordism/`.
 
 ## The correspondence
 
@@ -246,82 +247,97 @@ identity copies). The realizable rate by family makes the same point:
 | signed_perm | 0 / 20 |
 | mixing (Hadamard / DFT / Haar / GL) | 0 / 75 |
 
-## What the $b_1$ hole adds: superposed states, not new gates
+## Loosening the topology: a larger operation image and state space, the same gate set $S_3$
 
-The pinned image above fixes the bulk topology in advance; it need not. The
-emergent-bulk work loosened it — handing the realizability search a
-**topology-changing surgery move** (a boundary-fixed interior-cell *remove*) so the
-first Betti number $b_1$ becomes an **output** rather than an input — on the
-conjecture that the resulting $b_1=1$ hole, which carries a superposed boundary
-state, would bring the floored superposition/entangling gates into the realizable
-set. `loosened_gate_retest.py` tests that conjecture directly, two ways, and reports
+The pinned image above fixes the bulk topology to a twisted cylinder; it need not.
+**Loosening the cobordism topology** — letting *both* the boundary states and the
+operation bulk be **emergent**, pinned to nothing (not tori, not disks, not circles)
+— genuinely enlarges what is realizable, yet the enlargement misses the
+superposition/entangling gates entirely. `loosened_topology_gateset.py` reads the
+realizable image as the metric-free $Z(W)=\texttt{DijkgraafWitten.map()}$ of
+cobordisms whose topology is an **output**, with $b_1$ grown by surgery, and reports
 the residuals — not a hoped-for answer.
 
-**As operations, the hole adds nothing — every gate floors.** Bending each gate to
-its Choi state $\operatorname{vec}(U)$ (length $d_Ad_B=16$) and handing it to the
-surgery oracle with $b_1$ free — `decide(vec(U),4,4,growth_mode=SURGERY,
-harmonic=True)` on a filled-disk bulk ($b_1=0$, 19 vertices, the rim the pinned
-output support) whose interior core triangle the search may remove — **every gate
-floors** at $r\approx0.38$–$0.41$: the six $S_3$ controls (the identity included,
-$r=0.40$) and every superposition/entangling gate alike, none below the
-$\texttt{REALIZE}=10^{-3}$ line.
+(An earlier pass, `loosened_gate_retest.py` §A, instead bent each gate to its
+length-16 Choi state $\operatorname{vec}(U)$ and scored it as a degree-$k{=}0$
+**vertex** cochain. There $\ker L_0$ is the locally-constant functions $(b_0{=}1)$,
+so $b_1$ is irrelevant and **every** gate floors at $r\approx0.4$ — the six $S_3$
+controls $(r{=}0.40)$ right alongside the rest. A construction that floors the
+*known-realizable* controls cannot characterize the others; it is a wrong/too-small
+construction, not a verdict about gates. The operation-level reading below — at the
+genuine DW-map level, on a boundary large enough to encode a 2-qubit space — replaces
+it.)
 
-| gate | family | pinned DW ($\texttt{gap\_to\_S3}$) | superposition? | entangling? | loosened operation ($r$, $b_1$) |
+**The validity anchor — the $S_3$ controls realize (gap $0$).** Read as the DW map of
+an emergent mapping cylinder, each of Identity, `SWAP`, `CNOT`, reversed-`CNOT`, and
+the two 3-cycles is realized **exactly** (gap $=0$ to the realizable image, machine
+precision). Only once the positive controls realize is the test of the other gates
+valid — the exact check the earlier pass failed.
+
+**As operations, loosening EXPANDS the realizable image beyond $S_3$ — to
+non-invertible integer maps.** Alongside the mapping cylinders (the $S_3$ holonomy
+permutations) the disconnected **cap-and-create** cobordism
+$W=\mathrm{ST}\sqcup\mathrm{ST}$ (`disjointUnion`, bulk $b_0=2$ — *not* a cylinder) is
+realizable, its DW map the rank-1 projector $|st\rangle\langle st|$ — a non-invertible
+operation **outside** $S_3$. The realizable matrix algebra grows from $5$-dim
+($\langle S_3\rangle$) to $10$-dim ($\langle S_3,\,|st\rangle\langle st|\rangle$), a
+proper subalgebra of the $16$-dim $\mathrm{End}(\mathbb{C}^4)$ (the non-cylinder
+`disjointUnion` cap result). The bulk topology ($b_0$, $b_1$) is an output the map
+depends on.
+
+**But the realizable GATE set stays exactly $S_3$.** Every superposition/entangling
+gate floors at $\texttt{gap}\in[0.77,2.27]$ to the realizable image, hole open or
+closed — and the loosened gap never beats the pinned gap-to-$S_3$ (the rank-1 cap
+never approaches a unitary), so the expansion is orthogonal to the gate question. The
+reason is structural and **topology-independent**: every $\mathbb{Z}_2$-DW map is
+integer-quantized in the flat-connection basis, while these gates carry
+irrational/complex amplitudes ($1/\sqrt2$, $e^{i\pi/4}$, $i$) no integer map can hit.
+Integer-ness is necessary, not sufficient — `CZ` and $Z{\otimes}Z$ (diagonal signs)
+and $X{\otimes}X$ (which *moves* the trivial class) are on the lattice yet still
+outside $S_3\cup\{\text{cap orbit}\}$, so they floor too.
+
+| gate | family | pinned gap-to-$S_3$ | loosened gap-to-image | realizable? | reason |
 |---|---|---|---|---|---|
-| Identity | $S_3$ control | **realizable** ($0.00$) | no | no | floor ($0.40$, $b_1=0$) |
-| `SWAP` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| `CNOT` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1=0$) |
-| reversed-`CNOT` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| 3-cycles | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.38$, $b_1:0\to1$) |
-| `DCNOT` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| $H{\otimes}I$ | superposition | floor ($2.27$) | yes | no | floor ($0.39$, $b_1:0\to1$) |
-| $I{\otimes}H$ | superposition | floor ($2.27$) | yes | no | floor ($0.40$, $b_1=0$) |
-| $H{\otimes}H$ | superposition | floor ($2.00$) | yes | no | floor ($0.38$, $b_1=0$) |
-| $\sqrt{\mathrm{SWAP}}$ | superposition | floor ($1.41$) | yes | yes | floor ($0.38$, $b_1:0\to1$) |
-| $\sqrt{\mathrm{iSWAP}}$ | superposition | floor ($1.08$) | yes | yes | floor ($0.39$, $b_1:0\to1$) |
-| `CZ` | phase/entangler | floor ($2.00$) | no | yes | floor ($0.41$, $b_1:0\to1$) |
-| `CPHASE`$(\pi/4)$ | phase/entangler | floor ($0.77$) | no | yes | floor ($0.40$, $b_1=0$) |
-| $T{\otimes}I$ | phase | floor ($1.08$) | no | no | floor ($0.40$, $b_1=0$) |
-| $S{\otimes}I$ | phase | floor ($2.00$) | no | no | floor ($0.40$, $b_1:0\to1$) |
-| `iSWAP` | phase/entangler | floor ($2.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| $X{\otimes}X$ | Pauli perm | floor ($2.00$) | no | no | floor ($0.39$, $b_1:0\to1$) |
-| $Z{\otimes}Z$ | diagonal sign | floor ($2.00$) | no | no | floor ($0.40$, $b_1:0\to1$) |
+| Identity | $S_3$ control | $0.00$ | $0.00$ | **yes** | mapping-cylinder DW map (fixes every class) |
+| `SWAP`, `CNOT`, r-`CNOT` | $S_3$ control | $0.00$ | $0.00$ | **yes** | holonomy transpositions (`twistedCylinder`) |
+| 3-cycles $(0231),(0312)$ | $S_3$ control | $0.00$ | $0.00$ | **yes** | order-3 holonomy rotation (Möbius torus) |
+| $H{\otimes}I$, $I{\otimes}H$ | superposition | $2.27$ | $2.27$ | no | $1/\sqrt2$ off the integer lattice |
+| $H{\otimes}H$ | superposition | $2.00$ | $2.00$ | no | superposes the holonomy classes |
+| $\sqrt{\mathrm{SWAP}}$ | superposition | $1.41$ | $1.41$ | no | complex root, off the lattice |
+| $\sqrt{\mathrm{iSWAP}}$ | superposition | $1.08$ | $1.08$ | no | complex, off the lattice |
+| `CZ` | phase/entangler | $2.00$ | $2.00$ | no | integer **sign**, not a realizable DW map |
+| `CPHASE`$(\pi/4)$ | phase/entangler | $0.77$ | $0.77$ | no | diagonal phase $e^{i\pi/4}$ |
+| $T{\otimes}I$ / $S{\otimes}I$ | phase | $1.08$ / $2.00$ | $1.08$ / $2.00$ | no | diagonal phase / $i$ |
+| `iSWAP` | phase/entangler | $2.00$ | $2.00$ | no | $i$ phases (complex permutation) |
+| `CNOT`$\cdot(H{\otimes}I)$ | entangling Clifford | $2.27$ | $2.27$ | no | Hadamard factor, off the lattice |
+| $X{\otimes}X$ | Pauli perm | $2.00$ | $2.00$ | no | integer, but **moves** the trivial class |
+| $Z{\otimes}Z$ | diagonal sign | $2.00$ | $2.00$ | no | integer **sign**, not a permutation |
 
-The surgery search opens the handle ($b_1:0\to1$) for many gates, yet the residual
-floors regardless: **$b_1$ development is decoupled from realizability.** The reason
-is structural — at the Choi-vec degree $k=0$ the harmonic kernel $\ker L_0$ is the
-locally-constant functions (dimension $b_0=1$ on a connected bulk), so opening a
-$b_1$ handle cannot enlarge it; the hole is spectrally inert for an operation
-target. (The eigenvalue-agnostic mode is under-constrained and is *not* a
-topological realization: `harmonic=False` drives $H{\otimes}H$ to $r=9.9\times10^{-4}$
-but at $\lambda=2.93$ — a non-harmonic eigenvector, accepted only because that
-criterion asks for *any* eigenvector, not a $\ker L$ one.)
+**As states, the emergent $b_1$ carries the superposition — now without flooring the
+controls.** The boundary is free to grow holes: from a closed icosahedron ($b_1=0$,
+$\dim Z=1$) the surgery remove move (`removeInteriorCell`) opens three
+pairwise-disjoint faces, $b_1\!:0\to1\to2$, so $\dim\ker L_1$ (the spectral-qubit
+content) and hence $\dim Z=2^{b_1}$ scale $1\to2\to4$ — the boundary reaches the
+2-qubit space $\mathbb{C}^4$ the earlier $b_1\le1$ construction structurally lacked.
+At the Hodge degree $k=1$ the superposed meridian carried on both boundary circles
+(the state an `H`-type gate creates) **floors on the disk** ($b_1=0$,
+$r=4.5\times10^{-1}$) and **realizes once surgery opens** $b_1=1$
+($r\approx1\times10^{-4}$); the $S_3$-control state (the carried meridian) realizes
+too ($r=4.2\times10^{-10}$, **not** floored — the state-level anchor the earlier pass
+also failed), while the period-mismatched conjugation floors on every filling
+($r\approx0.20$) — a cohomological obstruction no topology fixes
+(`emergent_bulk_realizability.py`). The realizable *state* set is exactly
+$\mathrm{image}\big(H_1(\partial W)\to H_1(W)\big)$ for the $W$ the search grows.
 
-**As states, the hole adds the superposition — that is exactly what it carries.** At
-the Hodge-qubit degree $k=1$ the same surgery move makes $b_1$ an output for a
-boundary *1-cycle*. The superposed meridian carried on both boundary circles — the
-state an `H`-type gate would create — **floors on the disk** ($b_1=0$,
-$r=4.5\times10^{-1}$) and **realizes on the annulus** ($b_1=1$, $r=6.9\times10^{-8}$,
-$\lambda\to0$); from the disk seed the surgery search opens the handle on its own
-($b_1:0\to1$, scored purely by the harmonic residual, $\partial W$ held bit-exact)
-and the meridian then realizes ($r\sim10^{-5}$), while the sign-flipped (non-closed)
-conjugation floors on every filling ($r\approx0.22$) — the period-matching
-obstruction is genuinely separate from the topological one
-(`emergent_bulk_realizability.py`). Removal is the load-bearing move — boundary-fixed
-*additive* growth is topology-preserving at $k\ge1$ — so the realizable *state* set
-is exactly $\mathrm{image}\big(H_1(\partial W)\to H_1(W)\big)$ for the $W$ the search
-grows.
-
-**The verdict.** $S_3$ is and remains the realizable *operation* image of the pinned
-DW construction. Loosening the topology so $b_1$ emerges does **not** enlarge it: no
-superposition or entangling gate realizes as an operation, hole open or closed. What
-the hole enlarges is the realizable *state* space — a superposed/entangled boundary
-cycle, unrealizable on the $b_1=0$ filling, realizes once surgery opens $b_1=1$. The
-hole represents superposition, as the conjecture held — but it does so for **states**
-(homology classes on $\partial W$), not for gate operations. The H3 quantized-shadow
-reading says the same from the value side: the $\mathbb{Z}_2$-DW operation image is a
-discrete lattice that a generic superposition/entangling $U$ is uniformly bounded
-away from (gap median $1.03$ over 200 Haar $U(4)$), and the continuous freedom the hole
+**The verdict.** Loosening the cobordism topology does **not** enlarge the realizable
+*gate* set: $S_3$ is and remains the realizable unitary image, its controls realizing
+exactly. What loosening enlarges is (i) the realizable **non-unitary operation**
+image — the integer cap/projector sector, algebra $5\to10$ dim — and (ii) the
+realizable **state** space — a superposed/entangled boundary cycle, unrealizable at
+$b_1=0$, realizes once surgery opens the handle. The superposition/entangling gates
+are unreachable at *every* topology: the $\mathbb{Z}_2$-DW operation image is an
+integer lattice a generic $U$ is uniformly bounded away from (gap median $1.03$ over
+200 Haar $U(4)$, the H3 quantized-shadow reading), and the continuum the hole
 supplies lives in the *state* — the spectral $Z$ — not in new realizable maps.
 
 ## Figures
@@ -391,7 +407,8 @@ python examples/cobordism/realizability_report.py         # boundary synthesis +
 python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral bridge
 python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
-python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test
+python examples/cobordism/loosened_gate_retest.py         # the first loosened re-test (states, #215)
+python examples/cobordism/loosened_topology_gateset.py    # the fully-loosened gate set (states + operations)
 python -m pytest tests/cobordism
 ```
 
