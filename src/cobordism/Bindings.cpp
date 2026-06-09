@@ -449,7 +449,29 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "face of exactly one top cell (a 'boundary-star' candidate).")
       .def("topCells", &EigenstateSynthesis::topCells,
            "The top cells as sorted vertex-id tuples (the d+1-vertex simplices); "
-           "wiring the new vertex to one reproduces growInterior's 1-skeleton.");
+           "wiring the new vertex to one reproduces growInterior's 1-skeleton.")
+      // ----- Surgery: the topology-changing interior remove move (#196) -----
+      .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
+           "The interior top cells (all-interior vertices, on no dW face) as "
+           "sorted vertex-id tuples — the surgery removal candidates. Removing one "
+           "(removeInteriorCell) cannot touch dW, so it is the boundary-fixed "
+           "TOPOLOGY-CHANGING move that can open a hole/handle and MOVE b_k, unlike "
+           "growInterior's subdivision and the additive attach.")
+      .def("removeInteriorCell", &EigenstateSynthesis::removeInteriorCell,
+           py::arg("cell"),
+           "Surgery (#196): remove the interior top cell `cell` (a tuple from "
+           "interiorTopCells()) and any edges it leaves orphaned, keeping a valid "
+           "downward-closed complex. Topology-CHANGING: b_k moves (a filled disk "
+           "b_1=0 becomes an annulus b_1=1). dW is held bit-exact — the cell has no "
+           "boundary vertex, and the move is rejected if a dW edge would vanish; "
+           "the EXPOSED interior boundary (the opened hole) is allowed. Records the "
+           "removal for restoreLastRemoval. Returns False, complex unchanged, if "
+           "`cell` is not an interior top cell or the removal would touch dW.")
+      .def("restoreLastRemoval", &EigenstateSynthesis::restoreLastRemoval,
+           "Undo the most recent removeInteriorCell (LIFO): re-create the removed "
+           "top cell and the edges it orphaned, restoring their weights/phases bit-"
+           "exactly, and re-capture. Returns False if there is no removal to undo. "
+           "Lets a surgery search try a removal, score it, and roll back.");
 
   // ----- §4b cone-and-retry synthesis loop → geo(ψ) (#134) -----
   py::class_<GeometrySynthesizer> gs(m, "GeometrySynthesizer",
@@ -568,7 +590,16 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
              RealizabilityOracle::GrowthMode::FreeConnectivity,
              "Free interior connectivity (#200): search a bounded set of candidate "
              "interior connectivities for the new vertex at each growth step and "
-             "keep the one reaching the lowest residual — topology is emergent.");
+             "keep the one reaching the lowest residual — topology is emergent.")
+      .value("SURGERY", RealizabilityOracle::GrowthMode::Surgery,
+             "Surgery (#196): the topology-CHANGING move-set. At each step score "
+             "every interior-top-cell removal (removeInteriorCell, which opens a "
+             "hole/handle with dW held bit-exact) and commit the best improving "
+             "one. Unlike FREE_CONNECTIVITY (additive only — spectrally inert at "
+             "k>=1, so b_k is frozen at the seed), removal lets the search reach an "
+             "arbitrary valid complex with the fixed boundary: b_k MOVES on its "
+             "own. The companion of harmonic=True (realizable iff the boundary "
+             "class is carried by H_k(W)).");
 
   py::class_<RealizabilityOracle::Verdict>(ro, "Verdict",
       "The oracle's verdict on U: the realizability decision, the residual (the "
@@ -616,6 +647,12 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
                     "Full per-step incidence space (2^N - 1 nonempty vertex "
                     "subsets) the candidates are pruned from at the last growth "
                     "step — connectivity_candidates << this documents the bound.")
+      .def_readonly("surgery_removals",
+                    &RealizabilityOracle::Verdict::surgeryRemovals,
+                    "Interior top-cell removals committed by the surgery search "
+                    "(SURGERY mode only; 0 otherwise). Each is a topology-changing "
+                    "move that can shift b_k of the witness — the emergent-topology "
+                    "trace (read the grown b_k off the witness with ChainComplex).")
       .def_readonly("state", &RealizabilityOracle::Verdict::state,
                     "The witness state: the realized unit Laplacian eigenvector on "
                     "W_AB (length = the bulk's vertex count); its first dA*dB "
@@ -637,7 +674,7 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
            py::arg("dB"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
            py::arg("max_cones") = 4, py::arg("seed") = 0,
            py::arg("growth_mode") = RealizabilityOracle::GrowthMode::Cone,
-           py::arg("connectivity_candidates") = 8,
+           py::arg("connectivity_candidates") = 8, py::arg("harmonic") = false,
            "Decide whether the dA x dB operator U (flat row-major) is realizable "
            "as a bulk cobordism: bend it to vec(U), fill the pinned-boundary "
            "interior to drive the §4b residual to zero (multi-restart "
@@ -653,7 +690,7 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
            py::arg("target"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
            py::arg("max_cones") = 4, py::arg("seed") = 0,
            py::arg("growth_mode") = RealizabilityOracle::GrowthMode::Cone,
-           py::arg("connectivity_candidates") = 8,
+           py::arg("connectivity_candidates") = 8, py::arg("harmonic") = false,
            "Decide whether a target boundary harmonic k-form (a degree-k Cochain, "
            "k = target.degree(); the k=1 DW setting) is realizable on the held "
            "3-manifold-with-boundary bulk W: pin the boundary surface dW byte-"

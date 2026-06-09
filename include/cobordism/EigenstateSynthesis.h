@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -286,6 +287,40 @@ class EigenstateSynthesis {
     /// these cells' vertices, reproducing `growInterior`'s 1-skeleton.
     [[nodiscard]] std::vector<std::vector<std::uint64_t>> topCells() const;
 
+    // === Surgery: the topology-changing interior remove move (#196) ===
+
+    /// The interior top cells eligible for surgery removal: top cells whose
+    /// vertices are **all interior** (on no \f$ \partial W \f$ face), as sorted
+    /// vertex-id tuples. Removing such a cell (`removeInteriorCell`) cannot touch
+    /// \f$ \partial W \f$ — none of its faces is a boundary face — so it is the
+    /// boundary-fixed **topology-CHANGING** move: unlike `growInterior`'s
+    /// topology-preserving stellar subdivision and the purely additive
+    /// `attachInteriorVertex`, removing a cell can open a hole / handle, so
+    /// \f$ b_k \f$ of the complex **moves** (the emergent topology the experiment
+    /// reads off the witness). The candidate pool a surgery search enumerates.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> interiorTopCells() const;
+
+    /// Surgery (#196): remove the interior top cell `cell` (a sorted vertex-id
+    /// tuple from `interiorTopCells()`) together with any of its edges left
+    /// **orphaned** — belonging to no remaining top cell — so the result stays a
+    /// valid downward-closed complex. This is **topology-changing**: removing the
+    /// cell opens a hole/handle, so \f$ b_k \f$ **moves** (e.g. a filled disk
+    /// \f$ b_1\!=\!0 \f$ becomes an annulus \f$ b_1\!=\!1 \f$). The pinned boundary
+    /// \f$ \partial W \f$ is held bit-exact: the cell has no boundary vertex
+    /// (so no \f$ \partial W \f$ face is removed) and the move is **rejected**
+    /// (complex unchanged) if any \f$ \partial W \f$ edge would vanish or change;
+    /// the newly EXPOSED interior boundary (the opened hole) is allowed — that is
+    /// the emergent surgery. Records the removal for `restoreLastRemoval`
+    /// (try / score / roll back). Returns `false`, complex unchanged, if `cell`
+    /// is not an interior top cell or the removal would touch \f$ \partial W \f$.
+    bool removeInteriorCell(const std::vector<std::uint64_t> &cell);
+
+    /// Undo the most recent `removeInteriorCell` (LIFO): re-create the removed top
+    /// cell and the edges it orphaned, restoring their squared-lengths and phases
+    /// bit-exactly, and re-capture. Returns `false` if there is no removal to undo.
+    /// The surgery analogue of `detachLastInteriorVertex`.
+    bool restoreLastRemoval();
+
   private:
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
@@ -324,6 +359,22 @@ class EigenstateSynthesis {
       std::vector<::tessera::mesh::Simplex *> createdSimplices{};
     };
     std::vector<Attachment> attachments_{};
+
+    // One removeInteriorCell() record, for exact restore. The removed top cell's
+    // sorted vertex tuple (its vertices are kept — only the top simplex and its
+    // orphaned edges are deleted), plus each orphaned edge as (u, v, squaredLength,
+    // phase) so restoreLastRemoval re-creates them bit-exactly.
+    struct Removal {
+      std::vector<std::uint64_t> cell{};
+      std::vector<std::tuple<std::uint64_t, std::uint64_t, double, double>>
+          removedEdges{};
+    };
+    std::vector<Removal> removals_{};
+
+    // Re-create the top cell of a Removal (createSimplexTracked rebuilds its
+    // missing edges = the orphaned ones) and restore those edges' weights/phases.
+    // Does not re-capture (callers do). Returns false if a cell vertex is gone.
+    bool applyRestore(const Removal &rem);
 
     // Remove everything an attachment created (its simplices, then its freshly
     // inserted edges, then its vertex) — the inverse of attachInteriorVertex's
