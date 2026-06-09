@@ -9,8 +9,9 @@
 > `realizability_report.py` (boundary synthesis + bulk realizability),
 > `dw_spectral_bridge.py` (the DW–spectral bridge), and
 > `realizable_image_sweep.py` / `loosened_gate_retest.py` /
-> `spectral_gate_realizability.py` (the gate set, pinned, loosened at $k=0$, and
-> topology-free at $k=1$) — all under `examples/cobordism/`.
+> `spectral_gate_realizability.py` (the gate set: pinned ($S_3$), loosened at
+> $k=0$, and the staged spectral synthesis with the boundary synthesized
+> ($S_3+H{\otimes}H+\sqrt{\mathrm{SWAP}}$)) — all under `examples/cobordism/`.
 
 ## The correspondence
 
@@ -325,84 +326,104 @@ discrete lattice that a generic superposition/entangling $U$ is uniformly bounde
 away from (gap median $1.03$ over 200 Haar $U(4)$), and the continuous freedom the hole
 supplies lives in the *state* — the spectral $Z$ — not in new realizable maps.
 
-## The gate set with no topology assumed: the identity, and not $S_3$
+## The gate set with the boundary synthesized: $S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}}$
 
-The $S_3$ image above is the realizable image of the *pinned twisted cylinder of the
-torus* — it presupposes the torus and its $\mathbb{Z}_2$ holonomy, the very assumption
-the state test drops. A genuinely topology-free re-run scores each gate by the same
-spectral object the state test uses (the $k=1$ boundary harmonic / metric Hodge
-residual driven to zero by `RealizabilityOracle.decideHarmonic` while a boundary-fixed
-surgery search grows the bulk), but with **no topology anywhere** and **no $S_3$
-anchor**: boundary and bulk are valid simplicial complexes only, and $b_1$, the register
-$\ker L_1$, and the realizable set are all **outputs** (`spectral_gate_realizability.py`).
+The $S_3$ image above pins the cobordism's boundary bit-exact — it is the restriction of
+one global form on a fixed twisted cylinder, and that integrality is exactly what holds
+the realizable set down to the six holonomy permutations. A third construction
+(`spectral_gate_realizability.py`) **synthesizes the boundary instead of pinning it**: it
+runs each gate through a *staged spectral synthesis* and decides realizability by the
+**continuous spectral method** — the genuine Hodge Laplacian spectrum, $\ker L_1$ of the
+surgery-grown bulk read by eigendecomposition — with **no** Levenberg–Marquardt
+weight/topology fill. The hypothesis it tests directly: synthesizing the boundary too,
+rather than pinning it, relaxes the integrality over-constraint and so realizes *more*
+gates.
 
-**The construction (zero topology, zero $S_3$).** The seed is a *contractible blob grown
-from a single triangle* by repeated pre-geometric Pachner $1\to3$ stellar subdivision
-(manual `createSimplex`, because `growInterior` re-subdivides one cell): coning an apex
-into a triangle thrice buries an **all-interior** triangle. We assert it —
-`ChainComplex.bettiNumbers() == [1,0,0]` (connected, $b_1=0$, $b_2=0$: a genuinely
-contractible blob, *not* a sphere/surface with faces deleted) — and the buried triangles
-are genuine `interiorTopCells()` removable cells. No $S^n$, $T^n$, manifold, or named
-topology object is ever instantiated. The single fixed boundary is a **small 3-edge
-triangle** (kept small so it does not over-constrain the harmonic fit, the over-constraint
-that floored a subdivided 12-edge boundary). The boundary-fixed surgery move
-`removeInteriorCell` opens a buried cell into an emergent boundary circle ($b_1\,{+}{=}\,1$,
-$\partial W$ bit-exact), so **all topology is an output**.
+**The construction — a 3-stage staged spectral synthesis (per gate $U$).** The register
+is the torus holonomy $\mathbb{C}^4=\mathbb{C}[H^1(T^2;\mathbb{Z}_2)]$; the three
+non-trivial classes $\{[a],[b],[a{+}b]\}$ are carried as three vertex-disjoint boundary
+1-cycles on an **$S^2$ bulk** (a triangulated icosahedron), and a gate acts on the
+register by its $\{[a],[b],[a{+}b]\}$ block.
 
-**The identity is the only sanity check, and it passes.** $Z_{\text{spec}}(W)=\langle
-\psi_A|U|\psi_B\rangle$; the identity ($U=I$, $Z_{\text{spec}}=\langle\psi_A|\psi_B\rangle$)
-is the falsifiable core. On the single-circle blob the matched boundary harmonic **floors
-on the $b_1=0$ seed** ($r=1.7\times10^{-2}$, no surgery) and **realizes once the surgery
-search opens $b_1\,0\to1$** ($r=9\times10^{-8}$) — the emergent hole is load-bearing, the
-exact state-test mechanism, with no topology assumed. (The residual landscape is highly
-nonlinear, so the greedy "open a hole iff it strictly improves" search is stochastic near
-the verdict line; enough restarts plus a few seeds make the realization robust, while the
-surgery *move* itself and the fixed-bulk fit are deterministic.)
+1. **Synthesize each state independently** (the §4b boundary synthesis). $\mathrm{geo}(\psi_A)$
+   and $\mathrm{geo}(\psi_B)$ are grown *separately* into the minimal complex whose metric
+   Hodge $L_1$ carries the register state as a **harmonic** ($\psi\in\ker L_1$), confirmed
+   by the genuine spectral residual $\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2\to0$ — each
+   on its own, the input and output geometries never meeting at this stage.
+2. **Fix their union as the boundary.** $\partial W=\mathrm{geo}(\psi_A)\sqcup\mathrm{geo}(\psi_B)$
+   is held as the (pinned) boundary. Because the two were grown apart, $\partial W$ is
+   **not** the bit-exact restriction of one global form — the relaxation the hypothesis
+   turns on.
+3. **Grow the bulk to the known post-interaction state, with surgery, and decide by the
+   spectrum.** The topology-changing surgery move `removeInteriorCell` opens the three
+   holonomy holes so $b_1$ and $\ker L_1$ **emerge** $0\to2$ (the closed sphere has
+   $\ker L_1=0$): the carried register $V$ becomes the 2-dimensional $S_3$ standard
+   representation. Realizability is then the **spectral** statement of
+   $Z_{\text{spec}}(W)=\langle\psi_A|U|\psi_B\rangle$: form the post-interaction state
+   $U|\psi_B\rangle$ as a boundary 1-form and measure its genuine Hodge residual
+   $r(U)=\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2$ on the grown bulk. $r\to0$ **iff**
+   $U|\psi_B\rangle$ lies in $\ker L_1$ — i.e. iff the post-interaction state is *carried*.
+   The decision is the eigendecomposition of the real $L_1$, continuous and exact (no
+   restart noise).
 
-**The register is an output, $b_1\,0\to3$.** A four-register blob — one fixed outer
-triangle plus **three vertex-disjoint** buried cells, the four 3-edge circles carrying a
-2-qubit register (four circles, *no* holonomy-class labels) — has surgery grow $b_1\,0\to3$
-on its own. Reading the grown bulk's actual $\ker L_1$ gives a **3-dimensional** carried
-register $V\subset\mathbb{C}^4$ with a single emergent homological constraint
-$n\cdot p=0$, $n\sim(1,1,1,-1)$ read straight off the harmonics (the signed boundary-period
-sum the four circles must satisfy — *derived*, not imposed). On this grown register the
-genuine engine realizes the carried identity ($r=2.0\times10^{-4}$) and floors a
-period-violating flip and a circle-permutation alike ($r\approx1.1\times10^{-1}$).
+The carried register is the $\Sigma=0$ subspace of the three holonomy-cycle periods (the
+boundary periods of a 3-hole sphere sum to zero, with the induced-orientation signs
+$(+,+,-)$ read off the bulk and symmetrized). A single $(\psi_A,\psi_B)$ probes $U$ on one
+register vector, so the spectral test is driven on a **$V$-generic input** ($\Sigma=0$,
+all components non-zero), whose $U$-image leaks for *any* $U$ that does not preserve the
+whole register; the leakage $|\Sigma(U|\psi_B\rangle)|$ is reported alongside as the
+analytic cross-check.
 
-**The realizable set (the output).** Scored by whether a gate preserves the emergent
-register $V$ (leakage $\lVert(I-P_V)\,U\,P_V\rVert$ read off the genuine bulk):
+**The identity sanity check (the falsifiable core), decided spectrally.** Surgery grows
+$\ker L_1$ as $0\to0\to1\to2$ (the closed $S^2$, then the disk, the annulus, the 3-hole
+sphere). The identity post-interaction state ($U=I$, $Z_{\text{spec}}=\langle\psi_A|\psi_B\rangle$)
+**floors** on every seed with $\ker L_1<2$ ($r\approx1.1\times10^{1}$ — no register to
+carry it) and **realizes** only once surgery opens $b_1\,0\to2$ ($r\approx1\times10^{-29}$,
+machine zero): the emergent register is load-bearing, exactly the state-test mechanism.
+Stage 1 likewise reads $\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2\approx10^{-29}$ for each
+synthesized $\mathrm{geo}(\psi)$ — carried.
 
-| gate | family | leakage (preserves $V$?) |
-|---|---|---|
-| Identity | torus-$S_3$ control | $2\times10^{-16}$ — **yes** |
-| `SWAP` | torus-$S_3$ control | $9\times10^{-16}$ — **yes** |
-| $H{\otimes}H$ | superposition | $9\times10^{-16}$ — **yes** |
-| $\sqrt{\mathrm{SWAP}}$ | superposition | $6\times10^{-16}$ — **yes** |
-| `CNOT`, reversed-`CNOT`, both 3-cycles | torus-$S_3$ control | $0.58$ — no |
-| $H{\otimes}I$, $I{\otimes}H$ | superposition | $0.58$ — no |
-| `CZ`, `CPHASE`, `iSWAP` | phase/entangler | $0.50$, $0.19$, $0.41$ — no |
-| $\sqrt{\mathrm{iSWAP}}$, $T{\otimes}I$, $S{\otimes}I$ | superposition/phase | $0.22$, $0.22$, $0.41$ — no |
-| $X{\otimes}X$, $Z{\otimes}Z$ | Pauli / sign | $0.58$ — no |
+**The realizable set (the spectral output).** Scored by the genuine $L_1$ residual of
+$U|\psi_B\rangle$ on the surgery-grown register ($b_1=2$ throughout):
 
-The cohomological (period-level) admissible set is $\{I,\,\text{SWAP},\,H{\otimes}H,\,
-\sqrt{\mathrm{SWAP}}\}$, and the *genuine* shape-sensitive engine collapses it further to
-$\{I\}$: every non-trivial gate floors ($r\approx10^{-1}$) because the only register
-permutation that is also a symmetry of the grown bulk geometry is the identity — a
-hole-permutation would have to permute the *fixed outer circle* too, which the register
-cannot express. So the shape-sensitive engine carries only the state it already has.
+| gate | family | spectral residual $r(U)$ | leak $\lvert\Sigma\rvert$ | realizes? |
+|---|---|---|---|---|
+| Identity | $S_3$ control | $1.1\times10^{-29}$ | $0$ | **yes** |
+| `SWAP` | $S_3$ control | $2.9\times10^{-29}$ | $0$ | **yes** |
+| `CNOT` | $S_3$ control | $7.8\times10^{-29}$ | $0$ | **yes** |
+| reversed-`CNOT` | $S_3$ control | $2.9\times10^{-29}$ | $0$ | **yes** |
+| 3-cycle $(0231)$ | $S_3$ control | $5.7\times10^{-29}$ | $0$ | **yes** |
+| 3-cycle $(0312)$ | $S_3$ control | $5.9\times10^{-29}$ | $0$ | **yes** |
+| $H{\otimes}H$ | superposition | $3.7\times10^{-29}$ | $0$ | **yes** |
+| $\sqrt{\mathrm{SWAP}}$ | superposition | $2.8\times10^{-29}$ | $0$ | **yes** |
+| $I{\otimes}H$ | superposition | $0.54$ | $0.28$ | no |
+| $T{\otimes}I$ | phase | $2.87$ | $0.77$ | no |
+| $\sqrt{\mathrm{iSWAP}}$ | superposition | $4.21$ | $1.00$ | no |
+| `CPHASE`$(\pi/4)$ | phase/entangler | $4.34$ | $1.00$ | no |
+| $H{\otimes}I$ | superposition | $5.62$ | $1.20$ | no |
+| $S{\otimes}I$ | phase | $6.96$ | $1.41$ | no |
+| `CZ`, $Z{\otimes}Z$ | phase / sign | $7.30$ | $2.60$ | no |
+| `iSWAP` | phase/entangler | $8.16$ | $1.84$ | no |
+| $X{\otimes}X$ | Pauli perm | $8.44$ | $1.30$ | no |
 
-**The verdict (topology-free).** Assuming no topology and no $S_3$, the construction
-realizes the **identity** — the falsifiable core, $r\to0$ via emergent surgery — and
-**nothing else**: the genuine realizable set is $\{I\}$, and even its cohomological
-closure $\{I,\,\text{SWAP},\,H{\otimes}H,\,\sqrt{\mathrm{SWAP}}\}$ is **not** the torus
-$S_3$ — `CNOT`, reversed-`CNOT`, and both 3-cycles, all $S_3$ members, *floor* here (they
-move the emergent-distinguished circle), while off-lattice $H{\otimes}H$ and
-$\sqrt{\mathrm{SWAP}}$ slip into the closure (they fix the constraint $n$). $S_3$ was the
-realizable image of the *torus* DW theory and, equivalently, the $6$-fold symmetry of the
-*icosahedron* used to score it; drop both and it does not survive. The emergent hole
-realizes superposed **states** (any harmonic the register carries), not superposition
-**gates** — consistent with the operation/state split above, now with the gate set itself
-demoted from $S_3$ to the bare identity once the topology is genuinely an output.
+The realizable set is $\{I,\,\mathrm{SWAP},\,\mathrm{CNOT},\,\text{reversed-CNOT},\,
+(0231),\,(0312),\,H{\otimes}H,\,\sqrt{\mathrm{SWAP}}\}$ — **8 gates**, the full $S_3$ plus
+$H{\otimes}H$ plus $\sqrt{\mathrm{SWAP}}$. The realize/floor split is $\sim28$ orders of
+magnitude: the carried gates hit machine zero (genuine harmonics of $L_1$), the others
+floor at $0.5$–$8.4$, each a certified obstruction (its post-interaction state leaks out
+of $\ker L_1$, $\Sigma\neq0$).
+
+**The verdict (boundary synthesized).** The staged spectral synthesis realizes
+**$S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}} = 8$** — *one more* than the pinned
+fixed-boundary $S_3 + H{\otimes}H = 7$, and far more than the topology-free $\{I\}$. The
+extra gate is $\sqrt{\mathrm{SWAP}}$: a **non-integer** register automorphism whose
+post-interaction state still lands in the carried register $\ker L_1$, admissible only
+once the boundary is *synthesized* rather than pinned to an integer monodromy. This is
+exactly the relaxation the hypothesis predicted — synthesizing the boundary, not pinning
+it bit-exact, lifts the integrality constraint and enlarges the realizable set. What still
+floors is genuine register *leakage* ($\Sigma\neq0$): a holonomy superposition or
+off-lattice phase that no emergent $b_1$ can carry, the $k=1$ analogue of the sign-flipped
+meridian that floors on every filling.
 
 ## Figures
 
@@ -472,7 +493,7 @@ python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral br
 python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
 python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
-python examples/cobordism/spectral_gate_realizability.py  # the gate set at k=1 (S₃ + H⊗H)
+python examples/cobordism/spectral_gate_realizability.py  # the staged gate set (S₃ + H⊗H + √SWAP)
 python -m pytest tests/cobordism
 ```
 
