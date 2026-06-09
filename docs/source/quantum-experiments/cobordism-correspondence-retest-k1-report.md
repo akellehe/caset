@@ -1,366 +1,282 @@
-# Cobordism experiment — re-testing the correspondence at k=1: results
+# Cobordism experiment — emergent-bulk realizability at k=1: surgery makes b₁ an output
 
-> What happens when the **free-interior-connectivity** realizability engine (#201)
-> is turned on the three State–Operation–Cobordism hypotheses at the Hodge-qubit
-> degree ($k=1$, harmonic 1-forms). The engine first had to be extended to $k=1$
-> (the search now proposes 2-simplex/triangle attachments, since $L_1$ reads the
-> 2-cells through $\partial_2$); then H1/H2/H3 are re-run on the solid-torus bulk
-> and the realizable set is compared across three engines — free-connectivity,
-> cone-only, and the discrete Dijkgraaf–Witten $S_3$ shadow. Companion to the
-> runnable capstone `examples/cobordism/correspondence_retest_k1.py` and the
-> diagram generator `examples/cobordism/visualize_correspondence_retest_k1.py`;
-> mirrors the realizability report (`cobordism-realizability-report.md`) and the
-> realizable-image report (`cobordism-realizable-image-report.md`); grounds in the
+> What happens when, at the Hodge-qubit degree $k=1$, you stop **pinning** the
+> bulk topology and let it emerge? The earlier re-test assembled the bulk as a
+> solid torus *before* asking which boundary harmonics it carries — so
+> "longitude realizes / meridian floors" was just the chosen filling's $H_1$ read
+> back out, a property of the **input**, not an output. This report corrects that:
+> fix only the boundary, grow the interior with a **topology-changing surgery
+> move** (a boundary-fixed interior-cell *remove*, #196), and read $b_1$ **off the
+> witness**. The headline is sharp and now genuinely emergent — $b_1$ moves on its
+> own, the matched two-boundary meridian realizes **iff** the grown filling has
+> $b_1=1$, and a sign-flipped control floors on *every* filling. Companion to the
+> runnable example `examples/cobordism/emergent_bulk_realizability.py` and the
+> diagram generator `examples/cobordism/visualize_emergent_bulk.py`; grounds in the
 > charter `cobordism.md` §4b, §5.0.
 
 ## Verdict
 
-**The three hypotheses hold at $k=1$ — and the headline is an honest reversal of
-the $k=0$ result.** With **free connectivity == cone, to ~30 digits, on every
-target**, the realizable set is exactly the **carried homology class**: the
-**longitude** of the solid torus (the cycle that survives in $H_1(W)$) is
-realizable ($r\approx 9.5\times10^{-29}$); the **meridian** (which bounds a disk
-and dies in $H_1(W)$) and the raw $\ker L_1(T^2)$ basis **floor**
-($r\approx 15.3,\ 1.88,\ 16.7$). Free connectivity does **not** enlarge the
-realizable set — the **opposite** of the $k=0$ fan win (#201). The capstone runs
-clean, deterministic, and `exit 0`:
+**At $k=1$ the realizability obstruction does NOT have to be installed by a
+hand-picked filling — it falls out of the topology the search grows.** With the
+boundary-fixed surgery move-set the bulk's first Betti number $b_1$ is a pure
+**output**, and two distinct obstructions separate cleanly:
 
-```
-State-Operation-Cobordism re-test at k=1 (the Hodge qubit) with the free-connectivity engine
+- **A topological one (does the handle exist?).** The matched two-boundary meridian
+  **floors on the disk filling** ($b_1=0$: it bounds) and **realizes as a bulk
+  harmonic on the annulus filling** ($b_1=1$: the cobordism carries it),
+  $r\approx7\times10^{-8}$, eigenvalue $\to 0$. The surgery search, handed only the
+  disk seed, **opens the handle on its own** ($b_1:0\to1$) and the floored meridian
+  realizes.
+- **A cohomological one (do the periods match?).** Flip the sign of *one* of the two
+  boundary meridians (the cobordism conjugation $\mathrm{geo}(\psi_A)\sqcup
+  \mathrm{conj}(\mathrm{geo}(\psi_B))$) and the target **floors on every filling,
+  even after surgery opens the handle** — opposite periods are not the restriction
+  of any closed form, so no bulk topology can carry them.
 
-  discrete-DW S_3 shadow: <swap, 3-cycle> closes to 6 maps on Z(T^2)=C^4 (the GL(2,Z_2) holonomy permutations)
+The example runs clean, deterministic at the seed verdict, and `exit 0`.
 
-  H1  realizable set on the boundary qubit (free-k1 vs cone; the DW shadow realizes operations, not states):
-      target                         free    r (free)   cone    r (cone) tri_cand  agree
-      ----------------------------------------------------------------------------------
-      longitude (carried)             YES   9.493e-29    YES   9.493e-29        0    yes
-      meridian (bounds a disk)         no   1.526e+01     no   1.526e+01        8    yes
-      ker L_1 basis #0                 no   1.879e+00     no   1.879e+00        8    yes
-      ker L_1 basis #1                 no   1.672e+01     no   1.672e+01        8    yes
+![emergent-bulk composite: the disk floors, the annulus realizes, surgery opens the handle](https://github.com/akellehe/tessera/releases/download/issue-attachments/emergent_bulk_composite.png)
 
-  H2  dW = the two states, held bit-exact through growth: PASS  (Pachner growth applied: True; every boundary edge byte-identical)
+## The methodological fix
 
-  H3  Z(W_AB) = <psi_A|U|psi_B> on the realized longitude: PASS
-      witness is an L_1(W) harmonic (lambda=2.24e-16 ~ 0), its boundary block reproduces the target form (overlap=1.000000); the Choi transition-amplitude identity holds (True).
+The earlier $k=1$ re-test built the bulk as `SimplicialProduct(SolidSimplex(2),
+S^1)` — the solid torus $W=D^2\times S^1$ — *before* asking which boundary
+harmonics it carries. But $H_1(W)=\mathbb{Z}\langle\text{longitude}\rangle$ is
+*built into that choice*: the longitude survives $H_1(\partial W)\to H_1(W)$, the
+meridian bounds the disk and dies. "Longitude realizes, meridian floors" was the
+chosen filling's homology read back out; the topology was an **input**.
 
-  Verdict: SUPPORTED -- at k=1 the free engine realizes EXACTLY the carried harmonics that
-  cone growth does; additive free connectivity does not enlarge the realizable set, and
-  H2/H3 hold on the realized longitude.
-```
+The fix demotes the bulk topology from input to output. Nothing is hardcoded as a
+torus / solid torus / disk / cone. The bulk is built **generically from a face
+list** — an octahedron (a triangulated $S^2$) with faces deleted — and the
+realizability engine is given a **topology-changing** move it never had before: a
+boundary-fixed interior-cell **remove** (`EigenstateSynthesis::removeInteriorCell`,
+exposed as `RealizabilityOracle.GrowthMode.SURGERY`). Removing an interior top cell
+opens a hole/handle while the pinned boundary $\partial W$ stays **bit-exact**, so
+$b_1$ **moves**. The realizability test is the physical one (`harmonic=True`): a
+boundary class realizes iff it is *carried* as a bulk harmonic, i.e. it is the
+restriction of a closed-and-coclosed 1-form on $W$ — equivalently it lies in
+$\mathrm{image}\big(H^1(W)\to H^1(\partial W)\big)$.
 
-## Setup: the $k=1$ Hodge qubit on a solid-torus bulk
+## Setup: the octahedron surface family and the two-boundary meridian
 
-The bulk is the **solid torus** $W = D^2\times S^1$ — a 3-manifold with boundary
-$\partial W = T^2$, assembled as `SimplicialProduct(SolidSimplex(2), S^1)` and
-pinned Hermitian (all boundary edges weight $1$, phase $0$). Its degree-1 homology
-is $H_1(W)=\mathbb{Z}$, generated by the **longitude** (the $S^1$ direction the
-disk is swept along).
+The whole story runs at $k=1$ on a **surface** bulk $W$ (top cells = triangles),
+the faithful low-dimensional analogue of the 3-manifold meridian/longitude setting.
+The octahedron has eight triangular faces; deleting antipodal faces opens boundary
+circles:
 
-The **boundary qubit** is $\ker L_1(T^2)$, the harmonic 1-forms on the boundary
-torus. Because $b_1(T^2)=2$, this is a 2-dimensional space — a *qubit* — with two
-distinguished cycles:
+- **delete one face** $\Rightarrow$ a **disk** ($b_1=0$): the one circle bounds, and
+  the antipodal triangle $\{3,4,5\}$ is still **filled**, so the second meridian
+  bounds it too;
+- **delete the two antipodal faces** $\Rightarrow$ an **annulus** ($b_1=1$): the two
+  boundary circles are homologous, each surviving in $H_1$ — the cobordism between
+  them.
 
-- the **longitude**, the cycle the solid torus *carries*: it is the boundary
-  restriction of the bulk harmonic $h\in\ker L_1(W)$ (which is 1-dimensional,
-  $b_1(W)=1$), so it survives the inclusion $H_1(T^2)\to H_1(W)$;
-- the **meridian**, the cycle that **bounds a disk** $D^2\times\{pt\}$ inside $W$
-  and therefore **dies** in $H_1(W)$ — it is in the kernel of $H_1(T^2)\to H_1(W)$.
+Drawn as a Schlegel diagram (hole A $=\{0,1,2\}$ the outer triangle, hole B
+$=\{3,4,5\}$ the inner triangle, six band cells between), the disk is a fully
+**filled** triangle and the annulus is that triangle with the inner cell **punched
+out** (a ring):
 
-A target boundary harmonic $U$ (a degree-1 `Cochain`) is **realizable** iff the
-pinned-boundary interior fill can drive the $k=1$ residual
-$r=\lVert(I-\psi\psi^\dagger)\,L_1\psi\rVert^2$ to $0$ — exactly the §5.0 spectral
-test of the realizability report, now at $k=1$ on a 3-manifold-with-boundary
-instead of $k=0$ on a wheel. The engine pins $\partial W$ byte-for-byte and fills
-the interior (interior edge squared-lengths, plus boundary-fixed growth).
+![the two boundary meridians geo(psi_A) || geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/emergent_bulk_boundary.png)
 
-### Extending the free search to $k=1$ (the prerequisite)
+The **target** is the meridian carried on *both* boundary circles, read off the
+annulus's own $H_1$ generator (`HodgeLaplacian(annulus).harmonics(1)[0]`) restricted
+to the two cycles, built two ways:
 
-#201's free-connectivity search proposed only **edge** (1-simplex) candidates —
-correct at $k=0$, where $L_0=D-A$ reads just the 1-skeleton. At $k=1$,
-$L_1=\partial_1^\top\partial_1+\partial_2\partial_2^\top$ reads the **2-simplices**
-through $\partial_2$, so the search was extended to also propose **triangle**
-(2-simplex) attachments, surfaced as `Verdict.triangle_candidates` (bounded and
-logged, never silently capped), with `decideHarmonic` gaining
-`growth_mode`/`connectivity_candidates`. The triangles *are* proposed at every
-growth step (`tri_cand=8` on every floored target below) — and the finding is that
-they are **provably inert** under the pinned boundary.
+| target | construction | period $p_A$ | period $p_B$ | $p_A/p_B$ |
+|---|---|---|---|---|
+| **matched** | the harmonic's restriction (equal periods) | $-1.095$ | $-1.095$ | $+1$ |
+| **flipped** | negate circle B's period (the conjugation) | $-1.095$ | $+1.095$ | $-1$ |
 
-## H1 — the realizable set: free vs cone vs the DW $S_3$ shadow
+A closed 1-form on the annulus has **equal** periods on its two homologous boundary
+circles (the flow is conserved through the tube), so the matched target is the
+restriction of a genuine harmonic and the flipped one cannot be — the sign flip is
+a deliberate negative control.
 
-The seed-complex verdict (`max_cones=0`, so the residual is exact and bit-exact
-reproducible across runs):
+## E1 — the 2×2: realizable iff $b_1=1$ **and** the periods match
 
-| target | free | $r$ (free) | cone | $r$ (cone) | `tri_cand` | agree |
-|---|---|---|---|---|---|---|
-| **longitude** (carried) | **YES** | $9.493\times10^{-29}$ | **YES** | $9.493\times10^{-29}$ | $0$ | yes |
-| meridian (bounds a disk) | no | $1.526\times10^{1}$ | no | $1.526\times10^{1}$ | $8$ | yes |
-| $\ker L_1$ basis #0 | no | $1.879\times10^{0}$ | no | $1.879\times10^{0}$ | $8$ | yes |
-| $\ker L_1$ basis #1 | no | $1.672\times10^{1}$ | no | $1.672\times10^{1}$ | $8$ | yes |
+Both targets against both validity-only fillings, seed verdict (`max_cones=0`, so
+the residual is exact and bit-exact reproducible across runs):
 
-Two facts read straight off the table:
+| target | filling | $b_1$ | realizable | residual $r$ | eigenvalue $\lambda$ |
+|---|---|---|---|---|---|
+| **matched** | disk | $0$ | no | $4.52\times10^{-1}$ | $4.81\times10^{-1}$ |
+| **matched** | **annulus** | $1$ | **YES** | $6.90\times10^{-8}$ | $6.32\times10^{-9}$ |
+| flipped | disk | $0$ | no | $9.92\times10^{-1}$ | $9.25\times10^{-1}$ |
+| flipped | annulus | $1$ | no | $2.03\times10^{-1}$ | $4.51\times10^{-1}$ |
 
-1. **Free $\equiv$ cone, bit-for-bit, on every target.** The free residual equals
-   the cone residual to the last digit (`agree=yes` in every row). The triangle
-   candidates are enumerated and logged (`tri_cand=8`), then found inert; the free
-   search falls back to the stellar (cone) Pachner move. Free connectivity buys
-   **nothing** at $k=1$.
-2. **The realizable set is the topological image $H_1(\Sigma)\to H_1(W)$.** Exactly
-   one target realizes — the **longitude**, the generator of $H_1(W)$ — and it
-   realizes to $r\sim10^{-29}$. The meridian (which dies in $H_1(W)$) and the two
-   raw basis harmonics floor far above $\epsilon$. *Realizable $\iff$ the boundary
-   class is the carried homology class.*
+Read straight off the table:
 
-The **residual floor tracks the homology map.** The basis-#0 floor ($1.88$) sits
-well below basis-#1 ($16.7$) and the meridian ($15.3$) because basis-#0 has the
-larger overlap with the carried longitude (qubit $(-0.993,\,0.116)$ in the
-generator frame) — the spectral obstruction is a continuous measure of *how far*
-the requested boundary class lies from the image of $H_1(\Sigma)\to H_1(W)$, zero
-exactly on the image.
+1. **MATCHED realizes only on the annulus.** Same boundary, same target — the
+   *disk* filling ($b_1=0$) floors it ($r\approx0.45$) and the *annulus* ($b_1=1$)
+   realizes it to $r\sim10^{-8}$ with eigenvalue $\to0$ (carried as a harmonic).
+   The verdict flips with the filling's $b_1$.
+2. **FLIPPED floors on both.** Even on the annulus, where the topology is right, the
+   sign-flipped meridian floors ($r\approx0.20$, $\lambda\approx0.45\neq0$): opposite
+   periods are not the restriction of any closed form. The realizable set is exactly
+   $\mathrm{image}\big(H^1(W)\to H^1(\partial W)\big)$ — for the disk that image is
+   $\{p=0\}$ (any nonzero meridian floors), for the annulus it is the diagonal
+   $\{p_A=p_B\}$ (matched realizes, flipped does not).
 
-### The discrete-DW $S_3$ shadow (for contrast)
+![disk filling (b1=0): the matched meridian floors](https://github.com/akellehe/tessera/releases/download/issue-attachments/emergent_bulk_disk.png)
+![annulus filling (b1=1): the matched meridian realizes as a harmonic](https://github.com/akellehe/tessera/releases/download/issue-attachments/emergent_bulk_annulus.png)
 
-For contrast, the **discrete** Dijkgraaf–Witten state-sum realizes a different kind
-of thing: it realizes **operations** on $Z(T^2)=\mathbb{C}^4$, not boundary states.
-Rebuilt from `Cobordism.twistedCylinder` (#194), the two generators
-$\langle\,\mathrm{DW(swap)},\mathrm{DW(3\text{-}cycle)}\,\rangle$ close to a group
-of exactly **6** maps — the $GL(2,\mathbb{Z}_2)=S_3$ holonomy permutations (the
-realizable-image report). The two notions of "realizable" answer different
-questions: the spectral engine asks which boundary *state* a fixed bulk carries
-(the carried homology class); the state-sum asks which *operation* the topological
-theory induces (the holonomy automorphisms).
+The disk panel is a fully filled triangle (the inner cell $\{3,4,5\}$ is present, so
+circle B bounds it); the annulus panel is the same triangle with the inner cell
+punched out — a ring — and its edges are colored by the realized **carried harmonic
+1-form** (the `Verdict.state`), the meridian the cobordism carries.
 
-## Per-hypothesis verdicts
+The sign-flip is a clean negative control: the **same** annulus ($b_1=1$), only
+circle B's period negated, floors exactly where the matched meridian realizes — the
+cohomological obstruction made visible side by side (matched left, flipped right):
 
-**H1 ✅ — $W_{AB}=\mathrm{geo}(U)$ is a cobordism iff $U$ is the carried class.**
-The longitude is realized with its solid-torus witness ($r\to0$); the meridian and
-the raw basis floor. Free $\equiv$ cone on every target; neither realizes what the
-discrete theory cannot. The realizable set is precisely the image of
-$H_1(\Sigma)\to H_1(W)$.
+![matched vs flipped on the same annulus — the period sign decides realizability](https://github.com/akellehe/tessera/releases/download/issue-attachments/emergent_bulk_flipped.png)
 
-**H2 ✅ — $\partial W$ stays the two states, held bit-exact through growth.** The
-boundary edges of $\partial W=T^2$ are byte-identical before and after the whole
-(Pachner) growth — the interior fill rewrites only interior edges, and the
-boundary-fixed guard rejects any move that would touch $\partial W$. (`PASS`, with
-a Pachner cone genuinely applied during the meridian growth.)
+## E2 — surgery moves $b_1$ on its own (the obstruction is emergent)
 
-**H3 ✅ — $Z(W_{AB})=\langle\psi_A|U|\psi_B\rangle$ on the realized witness.** The
-realized longitude witness is a genuine $L_1(W)$ harmonic
-($\lambda=2.24\times10^{-16}\approx0$) whose boundary block reproduces the target
-form (overlap $=1.000000$); and the Choi–Jamiołkowski transition-amplitude identity
-$\langle\psi_A|U|\psi_B\rangle=\langle\mathrm{vec}(U_T)|\mathrm{vec}(U)\rangle$ holds
-independently (the bulk-independent algebraic anchor reused from the v0.3 report).
+From the **disk seed** ($b_1=0$, the meridian floored) the SURGERY search scores
+every interior-top-cell removal by the harmonic residual it reaches and commits the
+best improving one. There is exactly one interior top cell — $\{3,4,5\}$ — and
+removing it opens the handle. Across seeds:
 
-## The diagrams
+| target | seed | removals | $b_1$ | realizable | residual $r$ |
+|---|---|---|---|---|---|
+| **matched** | 0 | 1 | $0\to1$ | **YES** | $4.76\times10^{-5}$ |
+| **matched** | 1 | 1 | $0\to1$ | **YES** | $1.06\times10^{-4}$ |
+| **matched** | 2 | 1 | $0\to1$ | **YES** | $5.31\times10^{-5}$ |
+| **matched** | 3 | 1 | $0\to1$ | **YES** | $3.48\times10^{-5}$ |
+| flipped | 0 | 1 | $0\to1$ | no | $2.25\times10^{-1}$ |
+| flipped | 1 | 1 | $0\to1$ | no | $2.20\times10^{-1}$ |
+| flipped | 2 | 1 | $0\to1$ | no | $2.21\times10^{-1}$ |
+| flipped | 3 | 1 | $0\to1$ | no | $2.19\times10^{-1}$ |
 
-For **every** operator/target the re-test exercises, four diagrams make the
-State–Operation–Cobordism story legible, all rendered through the project's
-existing layout/render infrastructure (`tessera.utils.plot`'s
-`layout_from_spacetime`/`render_frame`/`draw_edges`/`pca_align`, with the panel
-helpers reused from `visualize_realizability.py` — no hand-rolled plotter):
+$b_1$ moves $0\to1$ **on its own** for *both* targets (the opened handle always
+lowers the residual, so the removal is committed) — scored purely by the harmonic
+residual, with $\partial W$ held bit-exact. The grown $b_1$ is a pure **output**.
+But only the **matched** meridian then realizes; the **flipped** one still floors on
+the opened handle. Surgery delivers the *topology*; the leftover period mismatch is
+the *cohomological* obstruction no filling can fix. The before/after — the red
+interior cell $\{3,4,5\}$ punched out to a white hole, $b_1:0\to1$:
 
-1. **`geo(ψ_A)`** — the geometric image of the boundary state the operator asks the
-   bulk to carry (the target harmonic in its $\ker L_1(T^2)$ qubit coordinates),
-   synthesized by `GeometrySynthesizer` (#134): the minimal complex whose $k=0$
-   Hodge-Laplacian has $\psi_A$ as an eigenvector. Vertices colored by
-   $|\text{amplitude}|$, phase $\to$ hue.
-2. **`geo(ψ_B)`** — the same for $\psi_B$. For the four boundary-harmonic targets,
-   $\psi_B$ is the **homology class the solid torus actually carries** (the
-   longitude, the generator of $H_1(W)$) — the invariant the re-test compares
-   against, so this panel is the same carried class across those four rows; for the
-   H3 case it is the genuine right boundary state $\psi_B=(0.6,0.8)$.
-3. **The candidate operator cobordism `W`** — the grown solid-torus complex the
-   free-connectivity engine builds for that target (`decideHarmonic`'s `witness`).
-   The boundary $\partial W=T^2$ is drawn thick/solid, the filled interior
-   thin/dashed, and every edge is colored by the realized **$k=1$ harmonic 1-form**
-   (the `Verdict.state`). *To make the Pachner cone visible, the floored targets
-   are grown one step (`max_cones=1`) here, so a W-panel residual is the
-   post-cone value and differs from the exact seed-complex table above; the
-   verdict (realizable vs floored) is unchanged.*
-4. **Everything connected** — `geo(ψ_A) ⊔ W ⊔ geo(ψ_B)` assembled in one shared
-   layout. The realizability verdict reads off directly: **a target is realizable
-   iff `geo(ψ_A)` matches `geo(ψ_B)`** — iff the requested boundary harmonic *is*
-   the carried homology class.
+![surgery: disk -> annulus, b1 moves 0 -> 1 on its own](https://github.com/akellehe/tessera/releases/download/issue-attachments/emergent_bulk_surgery.png)
 
-(The diagram PNGs are reproducibility artifacts, **not** committed to the repo
-tree: they are generated to `/tmp/cobordism/` by the visualizer and uploaded to the
-[`issue-attachments`](https://github.com/akellehe/tessera/releases/tag/issue-attachments)
-release; the images below are referenced by their release URLs.)
+## E3 — only removal moves $b_1$; additive growth is frozen
 
-### Longitude (carried) — realizable, $r\approx9.5\times10^{-29}$
+The contrast that makes "surgery is the load-bearing move" precise. Without the
+remove move, $b_1$ cannot budge:
 
-`geo(ψ_A)` and `geo(ψ_B)` are the **same** carried-class qubit, so the two
-geometric images coincide and the assembled cobordism has *matching ends* — the
-visual signature of a realizable target. The witness is the bare 9-vertex
-solid torus (no growth: `cones=0`).
+| growth | $b_1$ | matched realizable | note |
+|---|---|---|---|
+| none (seed only, `max_cones=0`) | $0\to0$ | no ($r=4.5\times10^{-1}$) | the bare disk floor |
+| additive attach (`attachInteriorVertex`) | $0\to0$ | rejected | wiring a triangle in grows $\partial W$ |
 
-![longitude geo(psi_A)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_longitude_geoA.png)
-![longitude geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_longitude_geoB.png)
-![longitude operator cobordism W](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_longitude_W.png)
-![longitude assembled geo(psi_A) ⊔ W ⊔ geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_longitude_assembled.png)
+The additive `attachInteriorVertex` (the `FREE_CONNECTIVITY` atom) and the stellar
+Pachner subdivision (`growInterior`) are **topology-preserving** at $k\ge1$:
+a dangling additive cell is dropped by the downward-closure `ChainComplex`, and an
+additive top-cell attach introduces boundary edges the bit-exact $\partial W$ guard
+rejects. So no boundary-fixed *additive* move can move $b_1$ — the boundary-fixed
+**remove** is the one move that does.
 
-### Meridian (bounds a disk) — floored, $r\approx15.3$ (seed)
+## Headline finding: the obstruction is emergent, not installed
 
-The meridian qubit is **orthogonal** to the carried longitude, so `geo(ψ_A)`
-(meridian) and `geo(ψ_B)` (carried longitude) are **different** complexes — the
-assembled cobordism has *mismatched ends*, the signature of a floored target. The
-witness shows the one boundary-fixed move the engine has to fall back on: a stellar
-Pachner **cone** (10 vertices, the dangling apex wired by the dashed interior
-edges) — which still cannot match the meridian.
+Putting the pieces together, the emergent-bulk methodology — fix the boundary, grow
+with surgery, let the obstruction fall out — **works at $k=1$**, and it resolves the
+earlier "obstruction is installed by the filling" diagnosis:
 
-![meridian geo(psi_A)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_meridian_geoA.png)
-![meridian geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_meridian_geoB.png)
-![meridian operator cobordism W](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_meridian_W.png)
-![meridian assembled geo(psi_A) ⊔ W ⊔ geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_meridian_assembled.png)
+- The disk seed floors the matched meridian; the surgery search opens the handle
+  ($b_1:0\to1$) **on its own**, scored only by the residual, and the meridian
+  realizes (E2). The topology is selected by the spectral residual, not by the
+  experimenter.
+- Realizability is two conditions, and the experiment separates them: a
+  **topological** one ($b_1=1$, the handle exists — E1's disk/annulus split, E2's
+  surgery) and a **cohomological** one (matched periods — E1's matched/flipped
+  split, E2's flipped-still-floors). The sign-flipped meridian floors on *every*
+  filling, so the period obstruction is genuinely distinct from the topological one.
+- The move that moves $b_1$ is **removal**; the additive moves are frozen at $k\ge1$
+  (E3).
 
-### $\ker L_1$ basis #0 — floored, $r\approx1.88$ (seed)
-
-A raw generator of the boundary qubit. It has the larger overlap with the carried
-longitude (hence the smallest floor of the three non-realizable targets), but it is
-still not the carried class — `geo(ψ_A)` and `geo(ψ_B)` differ, and the witness
-floors after the cone.
-
-![basis0 geo(psi_A)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis0_geoA.png)
-![basis0 geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis0_geoB.png)
-![basis0 operator cobordism W](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis0_W.png)
-![basis0 assembled geo(psi_A) ⊔ W ⊔ geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis0_assembled.png)
-
-### $\ker L_1$ basis #1 — floored, $r\approx16.7$ (seed)
-
-The other raw generator, nearly orthogonal to the carried class — the largest floor
-in the battery. Same picture: mismatched geometric ends, a coned witness that
-floors.
-
-![basis1 geo(psi_A)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis1_geoA.png)
-![basis1 geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis1_geoB.png)
-![basis1 operator cobordism W](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis1_W.png)
-![basis1 assembled geo(psi_A) ⊔ W ⊔ geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_basis1_assembled.png)
-
-### H3 — the transition $(\psi_A,\psi_B,U=I)$ — the Choi anchor
-
-The genuine two-state transition: $\psi_A=(1,\,0.5i)$ and $\psi_B=(0.6,\,0.8)$ are
-distinct boundary states (note the imaginary amplitude rendering green via the
-phase $\to$ hue map), $U=I$, and `W` is the realized longitude cobordism the re-test
-reads $Z(W)$ off. This is the case where $\psi_A$ and $\psi_B$ are literally the two
-ends of the operation, not a state-vs-carried-class comparison.
-
-![h3 geo(psi_A)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_h3_geoA.png)
-![h3 geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_h3_geoB.png)
-![h3 operator cobordism W](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_h3_W.png)
-![h3 assembled geo(psi_A) ⊔ W ⊔ geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/retest_k1_h3_assembled.png)
-
-## Headline finding: free $\equiv$ cone at $k=1$ — the honest reversal
-
-At $k=0$ (#201), free interior connectivity was a genuine win: $L_0=D-A$ reads the
-1-skeleton, so a freely-wired interior edge (the "fan") changes the spectrum, and
-the free engine realized operations the cone could not. **At $k=1$ the result
-reverses, and the reason is structural.** `ChainComplex::fromSpacetime` builds only
-the **downward closure of the top cells**. Two consequences pin the engine:
-
-- An **additively attached dangling** edge or triangle is *dropped* from $L_k$ —
-  it is not in any top cell's closure — so it leaves the operator dimension and the
-  residual **bit-exact**. It is spectrally **inert**.
-- An additive **top-cell** attach (a new tetrahedron) is **boundary-locked**: it
-  introduces boundary edges incident to the new vertex, which the bit-exact
-  $\partial W$ guard rejects.
-
-So the only boundary-fixed move that *enriches* $L_k$ is the **stellar Pachner
-subdivision** (the cone). The free search dutifully enumerates and logs its edge +
-triangle candidates (`tri_cand=8` on every floored target), finds them provably
-inert, and falls back to the cone — hence **free $\equiv$ cone, to ~30 digits, on
-every target**. The 2-cell *is* spectrally real at $k=1$ (a filled vs hollow
-triangle shifts the $k=1$ residual while leaving $k=0$ bit-exact — checked in the
-tests); the *additive* engine simply cannot realize one under the pinned boundary.
-
-The consequence for the correspondence is clean and topological: **free
-connectivity does not enlarge the realizable set.** The realizable set at $k=1$ is
-exactly the **topological image** $H_1(\Sigma)\to H_1(W)$ — the carried longitude,
-nothing more — and the spectral residual is a continuous certificate of distance
-from that image. This is the opposite of the $k=0$ fan win, and it is reported as
-the finding (the issue's stop-condition asked for the precise wall, win or lose),
-not papered over.
+So the realizable set at $k=1$ is exactly $\mathrm{image}\big(H^1(W)\to
+H^1(\partial W)\big)$ for the $W$ the **search grows** — the earlier re-test's
+result, now produced as an *output* (with $b_1$ read off the witness) rather than
+installed by a pinned solid torus, and refined by the period-matching control.
 
 ## Method
 
-The capstone is pure orchestration of the merged, separately-tested classes — no
-new math in the example:
+The example is pure orchestration of the merged, separately-tested classes — no new
+math:
 
-1. **Build the boundary qubit and the two distinguished cycles.**
-   `BoundaryStateSpace(T^2)` gives the two $\ker L_1$ generators; the carried
-   **longitude** is the boundary restriction of `HodgeLaplacian(W).harmonics(1)[0]`
-   prepared onto the boundary state space, and the **meridian** is its orthogonal
-   complement in the qubit.
-2. **Decide each target, free vs cone.** `RealizabilityOracle(W).decideHarmonic`
-   with `growth_mode=FREE_CONNECTIVITY` (`connectivity_candidates=8`) and with
-   `growth_mode=CONE`, on a fresh pinned solid torus each time; record realizable /
-   residual / `triangle_candidates`, and assert the free and cone residuals agree.
-3. **Check H2 and H3 explicitly.** Snapshot $\partial W$ before/after a growing run
-   and assert every boundary edge is byte-identical; read the realized longitude
-   witness back as an $L_1(W)$ harmonic and assert its boundary overlap is $1$ and
-   $\lambda\approx0$; and cross-check the Choi transition-amplitude identity in two
-   independent code paths.
-4. **Rebuild the DW $S_3$ shadow.** Close
-   $\langle\,\mathrm{DW(swap)},\mathrm{DW(3\text{-}cycle)}\,\rangle$ from
-   `Cobordism.twistedCylinder` and certify it is the 6-element $GL(2,\mathbb{Z}_2)$.
+1. **Build the boundary and the meridian targets.** The octahedron-minus-faces disk
+   and annulus are built from a face list (`_surface`); the matched / flipped
+   meridians are the annulus's `HodgeLaplacian.harmonics(1)[0]` restricted to the
+   two boundary cycles, with circle B's period optionally negated.
+2. **E1 — the 2×2.** `RealizabilityOracle(W).decideHarmonic(growth_mode=SURGERY,
+   max_cones=0, harmonic=True)` on each (target, filling); record realizable /
+   residual / eigenvalue, and `ChainComplex.bettiNumbers` of each filling.
+3. **E2 — surgery emergence.** Re-run from the disk seed with `max_cones=3` across
+   seeds; read `Verdict.surgery_removals` and the witness $b_1$ before/after.
+4. **E3 — frozen without surgery.** Seed-only verdict, plus a direct
+   `EigenstateSynthesis.attachInteriorVertex` probe showing the additive move is
+   refused.
 
-The $k=1$ search extension, the inertness of the additive attach, and the activeness
-of the 2-cell at $k=1$ are re-derived independently in `tests/cobordism` (a separate
-code path from the example), which also checks the committed example self-verifies.
+The surgery primitive (remove / restore, $b_1$ moves, $\partial W$ bit-exact), the
+2×2, the surgery emergence, and the additive lock are re-derived independently in
+`tests/cobordism/test_emergent_bulk_python.py` (a separate code path from the
+example), which also checks the committed example self-verifies.
 
 ## Key findings
 
-1. **Free $\equiv$ cone at $k=1$.** The free residual equals the cone residual
-   bit-for-bit on every target; free interior connectivity does not enlarge the
-   realizable set. The opposite of the $k=0$ fan win (#201).
-2. **The realizable set is the topological image $H_1(\Sigma)\to H_1(W)$.** Exactly
-   the carried longitude is realizable ($r\sim10^{-29}$); the meridian (which dies
-   in $H_1(W)$) and the raw basis floor. *Realizable $\iff$ the boundary class is
-   the carried homology class.*
-3. **The spectral residual tracks the homology map.** The floor is a continuous
-   measure of distance from the image of $H_1(\Sigma)\to H_1(W)$ — smallest for the
-   basis harmonic with the largest overlap with the longitude, zero exactly on it.
-4. **The 2-cell is spectrally real but additively unrealizable.** A filled vs
-   hollow triangle shifts the $k=1$ residual (leaving $k=0$ bit-exact), so $L_1$
-   genuinely reads 2-cells; but a dangling additive 2-cell is dropped by the
-   downward-closure `ChainComplex` and a top-cell attach is boundary-locked, so the
-   only active boundary-fixed move is the stellar cone.
-5. **H1/H2/H3 hold; the DW $S_3$ shadow is the operation-realizing contrast.** The
-   correspondence stands at $k=1$; $\partial W$ is bit-exact through growth; the
-   realized witness reproduces the target form and the Choi identity; and the
-   discrete state-sum's $S_3=GL(2,\mathbb{Z}_2)$ image realizes *operations*, a
-   different question than the spectral *state* realizability.
+1. **$b_1$ is an output.** The surgery search opens the handle ($b_1:0\to1$) on its
+   own from the disk seed, scored only by the harmonic residual, with $\partial W$
+   bit-exact. Topology is read off the witness, not pinned.
+2. **The matched meridian realizes iff $b_1=1$.** It floors on the disk ($b_1=0$,
+   $r\approx0.45$) and realizes on the annulus ($b_1=1$, $r\approx7\times10^{-8}$,
+   $\lambda\to0$); the surgery-grown annulus realizes it too ($r\sim10^{-5}$).
+3. **The sign-flip floors everywhere.** Opposite periods ($p_A=-p_B$) are not the
+   restriction of any closed form, so the flipped meridian floors on the disk *and*
+   the annulus *and* the surgery-grown handle — a cohomological obstruction distinct
+   from the topological one.
+4. **Removal is the load-bearing move.** No boundary-fixed *additive* move (attach /
+   Pachner subdivision) moves $b_1$ at $k\ge1$; the boundary-fixed remove is the one
+   that does.
+5. **The realizable set is $\mathrm{image}(H^1(W)\to H^1(\partial W))$.** Read as a
+   continuous spectral certificate: zero on the image (carried), a positive floor
+   off it whose size tracks the distance from the image.
 
 ## Conventions
 
-- The bulk is `SimplicialProduct(SolidSimplex(2), S^1)` (the solid torus
-  $D^2\times S^1$), pinned Hermitian (all boundary edges weight $1$, phase $0$);
-  $\partial W=T^2$, $b_1(W)=1$, $b_1(T^2)=2$.
+- The bulk family is built **generically from a face list** (no `SimplicialProduct`,
+  no `Toroid`, no `SolidSimplex`): an octahedron (triangulated $S^2$); the disk is it
+  minus one face ($b_1=0$), the annulus minus two antipodal faces ($b_1=1$). All
+  edges pinned Hermitian (weight $1$, phase $0$).
 - The $k=1$ Laplacian is $L_1=\partial_1^\top\partial_1+\partial_2\partial_2^\top$;
-  the residual is $r=\lVert(I-\psi\psi^\dagger)L_1\psi\rVert^2$ and the eigenvalue is
-  the Rayleigh quotient $\lambda=\psi^\dagger L_1\psi$.
-- Realizable iff $r<\epsilon=10^{-9}$; a floored target sits far above it (the
-  certified obstruction floor). The H1 table uses `max_cones=0` so the residual is
-  exact and bit-exact reproducible; the W diagrams use `max_cones=1` to make the
-  Pachner cone visible (growth is non-deterministic — the #201 `AddMove` global
-  counter — but the floored verdict holds regardless).
-- $\psi_B$ in the diagrams is the **carried homology class** (the longitude) for
-  the four boundary-harmonic targets, and the genuine right state for the H3 case.
-- The DW maps are read **metric-free** (topology + cocycle only); the $S_3$ shadow
-  is the $GL(2,\mathbb{Z}_2)$ holonomy-permutation group on $Z(T^2)=\mathbb{C}^4$.
-- Seeded and reproducible; the 10-CPU cap is honored (thread env set at launch);
-  matplotlib uses the headless `Agg` backend.
+  with `harmonic=True` the residual is $r=\lVert L_1\psi\rVert^2$ (distance from
+  $\ker L_1=H_1(W)$) and the eigenvalue is the Rayleigh quotient
+  $\lambda=\psi^\dagger L_1\psi$.
+- Realizable iff $r<\texttt{REALIZE}=10^{-3}$; floored when $r>\texttt{CERT\_FLOOR}=
+  10^{-2}$ (the certified obstruction floor). The LM tolerance `DEEP_EPS`$=10^{-7}$
+  polishes below the verdict line; the verdict is read off the realized residual.
+- Topology is read **off the witness** as an output: `ChainComplex.bettiNumbers`.
+  The $E1$ seed verdict (`max_cones=0`) is exact and bit-exact reproducible; the
+  surgery removal count and $b_1:0\to1$ hold across seeds (the residuals vary in the
+  last digits with the seeded restart draws).
+- The diagrams use a fixed Schlegel layout so the only visible change between
+  fillings is which 2-cell is filled; every panel carries a large title and an
+  explicit legend. Seeded and reproducible; the 10-CPU cap is honored (thread env set
+  at launch); matplotlib uses the headless `Agg` backend.
 
 ## Reproduce
 
 ```
-pip install -e ".[dev]"
-python examples/cobordism/correspondence_retest_k1.py             # the verdict + H1 table
-python examples/cobordism/visualize_correspondence_retest_k1.py   # the 4 diagrams per operator
+pip install -e ".[dev]"        # default Release; the fast linker is auto-gated off Release (bfd links the LTO _tessera)
+python examples/cobordism/emergent_bulk_realizability.py   # the 2x2 + surgery tables
+python examples/cobordism/visualize_emergent_bulk.py       # the panels + composite
 python -m pytest tests/cobordism
 ```
 
-The raw comparison table and the diagram PNGs default to `/tmp/cobordism/` and are
-**not committed** — the two scripts are the committed artifacts. The diagrams are
-uploaded to the
+The raw table defaults to `/tmp/cobordism/emergent_bulk_realizability.json` and the
+diagram PNGs to `/tmp/cobordism/`, both **not committed** — the example, the
+visualizer, and this report are the committed artifacts. The diagrams are uploaded to
+the
 [`issue-attachments`](https://github.com/akellehe/tessera/releases/tag/issue-attachments)
 release and referenced above by their release URLs; attach the raw table to the
 issue/PR to pin a result.

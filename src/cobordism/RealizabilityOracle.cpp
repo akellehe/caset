@@ -66,7 +66,8 @@ std::vector<cd> RealizabilityOracle::bend(const std::vector<cd> &U, int dA,
 double RealizabilityOracle::optimizePass(
     EigenstateSynthesis &es,
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
-    int restarts, std::uint64_t passSeed, std::vector<cd> &witnessOut) const {
+    int restarts, std::uint64_t passSeed, bool harmonic,
+    std::vector<cd> &witnessOut) const {
   // The U(1) phases enter only the k=0 graph Laplacian; the metric Hodge L_k
   // (k>=1) is assembled from integer boundary maps and real volume weights, so
   // interior phases are not tuned there (they would be wasted search dimensions).
@@ -110,7 +111,7 @@ double RealizabilityOracle::optimizePass(
   // complement (∂W itself is never touched), normalize the assembled ψ, and
   // return the stacked g = L_kψ - λψ ([Re; Im], length 2·order) whose ‖g‖² is
   // r(ψ) — the residual the Levenberg–Marquardt loop drives to zero.
-  const auto residual = [&es, &buildPsi, m, nW, usePhases,
+  const auto residual = [&es, &buildPsi, m, nW, usePhases, harmonic,
                          order](const Eigen::VectorXd &x) -> Eigen::VectorXd {
     if (m > 0) {
       std::vector<double> w(m);
@@ -131,9 +132,12 @@ double RealizabilityOracle::optimizePass(
       for (cd &z : psi) z *= inv;
     }
     const std::vector<cd> Lp = es.apply(psi);
+    // Eigenvalue-agnostic residual subtracts the Rayleigh-quotient component
+    // (accepts ANY eigenvalue); the harmonic residual pins λ = 0, so the cost is
+    // ‖Lψ‖² — the distance from ker L, i.e. whether ψ is carried as a HARMONIC.
     cd lam(0.0, 0.0);
     for (std::size_t i = 0; i < order; ++i) lam += std::conj(psi[i]) * Lp[i];
-    const double lambda = lam.real();
+    const double lambda = harmonic ? 0.0 : lam.real();
     Eigen::VectorXd f(static_cast<Eigen::Index>(2 * order));
     for (std::size_t i = 0; i < order; ++i) {
       const cd g = Lp[i] - lambda * psi[i];
@@ -323,8 +327,9 @@ RealizabilityOracle::triangleConnectivityCandidates(const EigenstateSynthesis &e
 bool RealizabilityOracle::growBestConnectivity(
     EigenstateSynthesis &es,
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
-    int restarts, std::uint64_t seed, int nCandidates, int &candidatesOut,
-    int &triangleCandidatesOut, std::size_t &spaceSizeOut) const {
+    int restarts, std::uint64_t seed, int nCandidates, bool harmonic,
+    int &candidatesOut, int &triangleCandidatesOut,
+    std::size_t &spaceSizeOut) const {
   const std::vector<std::uint64_t> verts = es.vertexIds();
   const std::size_t N = verts.size();
   if (N == 0) return false;
@@ -355,7 +360,8 @@ bool RealizabilityOracle::growBestConnectivity(
       if (!es.attachInteriorVertex(specs)) continue;  // skip if it would touch ∂W
       const double r =
           optimizePass(es, pinnedByTuple, epsilon, restarts,
-                       seed + 1 + static_cast<std::uint64_t>(c), tmpWitness);
+                       seed + 1 + static_cast<std::uint64_t>(c), harmonic,
+                       tmpWitness);
       if (r < bestR) {
         bestR = r;
         bestSpecs = specs;
@@ -388,35 +394,90 @@ bool RealizabilityOracle::growBestConnectivity(
   return es.growInterior(seed);
 }
 
+bool RealizabilityOracle::growBestSurgery(
+    EigenstateSynthesis &es,
+    const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
+    int restarts, std::uint64_t seed, bool harmonic, double currentResidual,
+    int &removalsOut) const {
+  // Enumerate the topology-changing candidates: every interior top cell whose
+  // removal opens a hole/handle with ∂W held bit-exact. Score each by the
+  // residual it reaches after the weight optimization (try → score → restore),
+  // and commit the single best one iff it strictly improves on the current
+  // residual AND keeps every pinned boundary tuple present (so the target form
+  // still has its support). The committed move shifts b_k — emergent topology.
+  const std::vector<std::vector<std::uint64_t>> cells = es.interiorTopCells();
+  CLOG(INFO_LEVEL, "surgery grow (k=", es.degree(), "): scoring ", cells.size(),
+       " interior-top-cell removals against residual ", currentResidual);
+  if (cells.empty()) return false;
+
+  double bestR = currentResidual;
+  std::vector<std::uint64_t> bestCell;
+  std::vector<cd> tmpWitness;
+  for (std::size_t c = 0; c < cells.size(); ++c) {
+    if (!es.removeInteriorCell(cells[c])) continue;  // would touch ∂W: skip
+    // The pinned boundary k-cells must all survive the removal, else the target
+    // form loses its support and the score is meaningless.
+    bool pinnedIntact = true;
+    {
+      std::set<std::vector<std::uint64_t>> live(es.cellSimplices().begin(),
+                                                es.cellSimplices().end());
+      for (const auto &kv : pinnedByTuple)
+        if (live.find(kv.first) == live.end()) { pinnedIntact = false; break; }
+    }
+    if (pinnedIntact) {
+      const double r =
+          optimizePass(es, pinnedByTuple, epsilon, restarts,
+                       seed + 1 + static_cast<std::uint64_t>(c), harmonic,
+                       tmpWitness);
+      if (r < bestR) {
+        bestR = r;
+        bestCell = cells[c];
+      }
+    }
+    es.restoreLastRemoval();
+  }
+  if (bestCell.empty()) return false;  // no improving removal
+  if (!es.removeInteriorCell(bestCell)) return false;
+  ++removalsOut;
+  return true;
+}
+
 double RealizabilityOracle::fillInterior(
     EigenstateSynthesis &es,
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
     int restarts, int maxCones, std::uint64_t seed, GrowthMode mode,
-    int connectivityCandidates, std::vector<cd> &witnessOut, int &conesApplied,
-    int &candidatesOut, int &triangleCandidatesOut,
-    std::size_t &spaceSizeOut) const {
+    int connectivityCandidates, bool harmonic, std::vector<cd> &witnessOut,
+    int &conesApplied, int &candidatesOut, int &triangleCandidatesOut,
+    int &surgeryRemovals, std::size_t &spaceSizeOut) const {
   double bestR = std::numeric_limits<double>::infinity();
   conesApplied = 0;
   candidatesOut = 0;
   triangleCandidatesOut = 0;
+  surgeryRemovals = 0;
   spaceSizeOut = 0;
 
   for (int cone = 0;; ++cone) {
     // Optimize the current complex (seed + cone preserves the cone-path seed
     // sequence exactly, so the historical decide() is byte-for-byte unchanged).
     bestR = optimizePass(es, pinnedByTuple, epsilon, restarts,
-                         seed + static_cast<std::uint64_t>(cone), witnessOut);
+                         seed + static_cast<std::uint64_t>(cone), harmonic,
+                         witnessOut);
 
     // Stop on convergence, an exhausted budget, or a complex that cannot grow
     // (growth is the capacity/structure gate; it leaves ∂W byte-fixed).
     if (bestR < epsilon) break;
     if (cone >= maxCones) break;
     bool grew;
-    if (mode == GrowthMode::FreeConnectivity)
+    if (mode == GrowthMode::Surgery)
+      // The topology-changing move-set: commit the best b_k-shifting removal.
+      grew = growBestSurgery(es, pinnedByTuple, epsilon, restarts,
+                             seed + 1000 + static_cast<std::uint64_t>(cone),
+                             harmonic, bestR, surgeryRemovals);
+    else if (mode == GrowthMode::FreeConnectivity)
       grew = growBestConnectivity(
           es, pinnedByTuple, epsilon, restarts,
           seed + 1000 + static_cast<std::uint64_t>(cone), connectivityCandidates,
-          candidatesOut, triangleCandidatesOut, spaceSizeOut);
+          harmonic, candidatesOut, triangleCandidatesOut, spaceSizeOut);
     else
       grew = es.growInterior(seed + 1000 + static_cast<std::uint64_t>(cone));
     if (!grew) break;
@@ -428,7 +489,7 @@ double RealizabilityOracle::fillInterior(
 RealizabilityOracle::Verdict RealizabilityOracle::decide(
     const std::vector<cd> &U, int dA, int dB, double epsilon, int restarts,
     int maxCones, std::uint64_t seed, GrowthMode mode,
-    int connectivityCandidates) {
+    int connectivityCandidates, bool harmonic) {
   const std::vector<cd> target = bend(U, dA, dB);  // ψ_U, length dA·dB
 
   EigenstateSynthesis es(bulk_);  // k = 0: the vertex graph Laplacian
@@ -449,9 +510,10 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
   Verdict v;
   v.target = target;
   const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
-                                seed, mode, connectivityCandidates, v.state,
-                                v.conesApplied, v.connectivityCandidates,
-                                v.triangleCandidates, v.connectivitySpaceSize);
+                                seed, mode, connectivityCandidates, harmonic,
+                                v.state, v.conesApplied, v.connectivityCandidates,
+                                v.triangleCandidates, v.surgeryRemovals,
+                                v.connectivitySpaceSize);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;
@@ -464,7 +526,8 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
 
 RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
     const Cochain &target, double epsilon, int restarts, int maxCones,
-    std::uint64_t seed, GrowthMode mode, int connectivityCandidates) {
+    std::uint64_t seed, GrowthMode mode, int connectivityCandidates,
+    bool harmonic) {
   const int k = target.degree();
   if (k < 0 || target.size() == 0)
     throw std::invalid_argument(
@@ -514,9 +577,10 @@ RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
   // and those are NOT spectrally inert here. The candidate breadth (edge fans +
   // triangle fans) is surfaced in the Verdict and logged.
   const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
-                                seed, mode, connectivityCandidates, v.state,
-                                v.conesApplied, v.connectivityCandidates,
-                                v.triangleCandidates, v.connectivitySpaceSize);
+                                seed, mode, connectivityCandidates, harmonic,
+                                v.state, v.conesApplied, v.connectivityCandidates,
+                                v.triangleCandidates, v.surgeryRemovals,
+                                v.connectivitySpaceSize);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;

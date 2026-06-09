@@ -129,7 +129,19 @@ class RealizabilityOracle {
       /// (which existing vertices it wires to), score each by the residual it
       /// reaches after the weight/phase optimization, and keep the best — so the
       /// realized topology is what the residual selects, not a cone artifact.
-      FreeConnectivity
+      FreeConnectivity,
+      /// **Surgery** (#196): the topology-CHANGING move-set. Alongside the
+      /// additive attach, at each step score every interior-top-cell **removal**
+      /// (`EigenstateSynthesis::removeInteriorCell`, which opens a hole/handle
+      /// with \f$ \partial W \f$ held bit-exact) by the residual it reaches after
+      /// the weight optimization, and commit the best **improving** move. Unlike
+      /// `FreeConnectivity` (additive only — spectrally inert at \f$ k\geq 1 \f$,
+      /// so \f$ b_k \f$ is frozen at the seed), removal lets the search reach an
+      /// arbitrary valid complex with the fixed boundary: \f$ b_k \f$ **moves on
+      /// its own**, so the realizability obstruction either falls out of the grown
+      /// topology or dissolves. The intended companion of the `harmonic` criterion
+      /// (a boundary class is realizable iff it is **carried** by \f$ H_k(W) \f$).
+      Surgery
     };
 
     /// The oracle's verdict on \f$ U \f$: the realizability decision, the
@@ -187,6 +199,10 @@ class RealizabilityOracle {
       /// The bent target \f$ \psi_U=\mathrm{vec}(U)/\lVert\cdot\rVert \f$
       /// (length \f$ d_A d_B \f$) the output boundary is matched against.
       std::vector<std::complex<double>> target{};
+      /// Interior top-cell **removals** committed by the surgery search
+      /// (`Surgery` mode only; 0 otherwise). Each is a topology-changing move that
+      /// can shift \f$ b_k \f$ of the witness — the emergent-topology trace.
+      int surgeryRemovals{0};
       /// The realized bulk \f$ W_{AB} \f$ — the witness cobordism (realizable),
       /// or the complex on which the residual floors (non-realizable).
       std::shared_ptr<Spacetime> witness{};
@@ -219,12 +235,21 @@ class RealizabilityOracle {
     /// @throws std::invalid_argument if \f$ U \f$'s size \f$ \neq d_A d_B \f$, a
     ///   dimension is non-positive, or the bulk has fewer vertices than
     ///   \f$ d_A d_B \f$ (no room for the output-boundary support).
+    /// @param harmonic  when `true`, score the **harmonic** residual
+    ///                  \f$ \lVert L\psi\rVert^2 \f$ (distance from \f$ \ker L \f$)
+    ///                  instead of the eigenvalue-agnostic
+    ///                  \f$ \lVert(I-\psi\psi^\dagger)L\psi\rVert^2 \f$: realizable
+    ///                  then means \f$ \psi \f$ is **carried as a harmonic**
+    ///                  (eigenvalue \f$ \to 0 \f$), i.e. the boundary class lies in
+    ///                  \f$ \mathrm{image}(H_k(\partial W)\to H_k(W)) \f$ — the
+    ///                  physical realizability test that distinguishes topologies.
     [[nodiscard]] Verdict decide(const std::vector<std::complex<double>> &U,
                                  int dA, int dB, double epsilon = 1e-10,
                                  int restarts = 64, int maxCones = 4,
                                  std::uint64_t seed = 0,
                                  GrowthMode mode = GrowthMode::Cone,
-                                 int connectivityCandidates = 8);
+                                 int connectivityCandidates = 8,
+                                 bool harmonic = false);
 
     /// Decide whether a target **boundary harmonic** \f$ k \f$-form (\f$ k =
     /// \texttt{target.degree()} \f$, the \f$ k=1 \f$ DW setting) is realizable on
@@ -254,11 +279,20 @@ class RealizabilityOracle {
     /// @throws std::invalid_argument if `target` is empty, its degree is negative,
     ///   or none of its \f$ k \f$-cells are boundary cells of the bulk (the surface
     ///   does not match \f$ \partial W \f$).
+    /// @param harmonic  when `true`, score \f$ \lVert L_k\psi\rVert^2 \f$ (the
+    ///                  distance from \f$ \ker L_k = H_k(W) \f$) so realizable
+    ///                  means the boundary \f$ k \f$-form is **carried as a bulk
+    ///                  harmonic** (the meridian/longitude survival test): the
+    ///                  class lies in \f$ \mathrm{image}(H_k(\partial W)\to H_k(W))
+    ///                  \f$. The default (`false`) keeps the eigenvalue-agnostic
+    ///                  residual (any eigenvalue), which is under-constrained on
+    ///                  small boundaries (it accepts a non-harmonic eigenvector).
     [[nodiscard]] Verdict decideHarmonic(const Cochain &target,
                                          double epsilon = 1e-10, int restarts = 64,
                                          int maxCones = 4, std::uint64_t seed = 0,
                                          GrowthMode mode = GrowthMode::Cone,
-                                         int connectivityCandidates = 8);
+                                         int connectivityCandidates = 8,
+                                         bool harmonic = false);
 
   private:
     // §4b search box — identical to GeometrySynthesizer so the interior fill is
@@ -300,9 +334,9 @@ class RealizabilityOracle {
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
         double epsilon, int restarts, int maxCones, std::uint64_t seed,
-        GrowthMode mode, int connectivityCandidates,
+        GrowthMode mode, int connectivityCandidates, bool harmonic,
         std::vector<std::complex<double>> &witnessOut, int &conesApplied,
-        int &candidatesOut, int &triangleCandidatesOut,
+        int &candidatesOut, int &triangleCandidatesOut, int &surgeryRemovals,
         std::size_t &spaceSizeOut) const;
 
     // One fixed-complex optimization pass over the current `es`: the
@@ -315,8 +349,23 @@ class RealizabilityOracle {
         EigenstateSynthesis &es,
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
-        double epsilon, int restarts, std::uint64_t passSeed,
+        double epsilon, int restarts, std::uint64_t passSeed, bool harmonic,
         std::vector<std::complex<double>> &witnessOut) const;
+
+    // One surgery growth step (`Surgery` mode): score every interior-top-cell
+    // removal (`EigenstateSynthesis::interiorTopCells` /`removeInteriorCell`) by
+    // the residual it reaches after `optimizePass`, restoring after each trial,
+    // and COMMIT the single best removal iff it strictly improves on
+    // `currentResidual` (and leaves every pinned boundary tuple present). The
+    // committed move is topology-changing — it can shift b_k — so the realized
+    // bulk topology is what the residual selects. Returns true (and increments
+    // `removalsOut`) iff a removal was committed.
+    [[nodiscard]] bool growBestSurgery(
+        EigenstateSynthesis &es,
+        const std::map<std::vector<std::uint64_t>, std::complex<double>>
+            &pinnedByTuple,
+        double epsilon, int restarts, std::uint64_t seed, bool harmonic,
+        double currentResidual, int &removalsOut) const;
 
     // One free-connectivity growth step. Generates the bounded candidate breadth
     // — edge fans at every degree and, at k>=1, the triangle (2-simplex) fans the
@@ -341,7 +390,7 @@ class RealizabilityOracle {
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
         double epsilon, int restarts, std::uint64_t seed, int nCandidates,
-        int &candidatesOut, int &triangleCandidatesOut,
+        bool harmonic, int &candidatesOut, int &triangleCandidatesOut,
         std::size_t &spaceSizeOut) const;
 
     // The bounded, documented candidate-connectivity generator: deterministic
