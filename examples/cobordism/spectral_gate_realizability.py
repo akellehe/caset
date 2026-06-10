@@ -207,6 +207,36 @@ def _progress():
     return SingleTaskProgress() if sys.stderr.isatty() else _NoProgress()
 
 
+def _gate_label(prog):
+    """Sweep progress callback: advance the counter AND show the gate just scored as the
+    spinner's label (SingleTaskProgress surfaces the `extra` field after the counter, so
+    the line reads e.g. `scoring gates  12/52  CSX`). The no-op stub just absorbs it."""
+    def cb(row):
+        if isinstance(row, dict) and row.get("gate"):
+            prog._extra = row["gate"]
+        prog.on_tick()
+    return cb
+
+
+def _search_label(prog):
+    """Surgery-search progress callback. Each scored item is a whole TOPOLOGY (it runs the
+    full battery), so there is no single 'current gate'; instead show a running tally of
+    the realizable set across genuine registers, and flag any gate found beyond the
+    criterion set the moment it appears (the question the search exists to answer)."""
+    state = {"max": 0, "beyond": set()}
+
+    def cb(r):
+        if isinstance(r, dict) and r.get("genuine"):
+            state["max"] = max(state["max"], r.get("n_realized", 0))
+            state["beyond"].update(r.get("extends") or [])
+        if state["max"]:
+            prog._extra = (f"{state['max']} realized"
+                           + (f" -- BEYOND: {', '.join(sorted(state['beyond']))}"
+                              if state["beyond"] else " -- 0 beyond"))
+        prog.on_tick()
+    return cb
+
+
 # --------------------------------------------------------------------------- #
 # Generic surface builder (top cells = triangles) from a face list -- the
 # octahedron / icosahedron idiom, no named topology object.
@@ -593,10 +623,11 @@ def gate_sweep(reg, on_progress=None):
     rows = []
     for name, U, fam in _gates():
         res, b1, leak = post_interaction(reg, U)
-        rows.append({"gate": name, "family": fam, "residual": res, "b1": b1,
-                     "leak": leak, "realizable": bool(res < REALIZE)})
+        row = {"gate": name, "family": fam, "residual": res, "b1": b1,
+               "leak": leak, "realizable": bool(res < REALIZE)}
+        rows.append(row)
         if on_progress is not None:
-            on_progress()
+            on_progress(row)
     return rows
 
 
@@ -801,9 +832,10 @@ def _parallel_map(func, items, jobs, on_progress=None):
     def _serial():
         out = []
         for x in items:
-            out.append(func(x))
+            r = func(x)
+            out.append(r)
             if on_progress is not None:
-                on_progress()
+                on_progress(r)
         return out
 
     if jobs <= 1 or len(items) <= 1:
@@ -820,7 +852,7 @@ def _parallel_map(func, items, jobs, on_progress=None):
             out = []
             for r in pool.imap_unordered(func, items, chunksize=chunk):
                 out.append(r)
-                on_progress()
+                on_progress(r)
             return out
     except Exception as _exc:
         if os.environ.get("SPECTRAL_GATE_DEBUG"):
@@ -1164,7 +1196,7 @@ def run_single_gate(args, jobs):
         sprog = _progress()
         sprog.phase("surgery-topology search", total=args.retries)
         search = surgery_search(args.retries, jobs, base_seed=args.seed,
-                                on_progress=sprog.on_tick)
+                                on_progress=_search_label(sprog))
         sprog.finish(f"scored {search['scored']} topologies")
         _print_search(search)
         if name not in CANONICAL_SET:
@@ -1235,7 +1267,7 @@ def main():
 
     # ---- STAGE 3: the per-gate spectral sweep (the finding), parallelized ---- #
     prog.phase("scoring gates", total=len(_gates()))
-    rows = run_sweep(reg, jobs, on_progress=prog.on_tick)
+    rows = run_sweep(reg, jobs, on_progress=_gate_label(prog))
     prog.finish(f"scored {len(rows)} gates")
     print(f"\n  STAGE 3 gate sweep (spectral residual of U|psi_B> on the surgery-grown "
           f"register; realized iff r -> 0; scored across {jobs} worker(s)):")
@@ -1279,7 +1311,7 @@ def main():
         sprog = _progress()
         sprog.phase("surgery-topology search", total=args.retries)
         search = surgery_search(args.retries, jobs, base_seed=args.seed,
-                                on_progress=sprog.on_tick)
+                                on_progress=_search_label(sprog))
         sprog.finish(f"scored {search['scored']} topologies")
         _print_search(search)
         _check("no genuine emergent register carries a gate beyond the criterion set",
