@@ -28,6 +28,8 @@
 
 #include <vector>
 #include <memory>
+#include <cmath>
+#include <limits>
 
 
 // === tessera subsystem ns fwd-decls ===
@@ -135,6 +137,30 @@ class Simplex;
         }
       }
     }
+
+double Edge::vanRaamsdonkSquaredLength(double I, double iMax,
+                                       double epsilon) noexcept {
+  const double cap = -std::log(epsilon);  // floor on d_VR ⇒ finite squared length
+  const double x = (iMax > 0.0 && I > 0.0) ? (I / iMax) : 0.0;
+  double dVR = (x > 0.0) ? -std::log(x)
+                         : std::numeric_limits<double>::infinity();
+  if (!std::isfinite(dVR) || dVR > cap) {
+    dVR = cap;
+  }
+  return dVR * dVR;
+}
+
+double Edge::vanRaamsdonkSquaredLengthFor(double I, double iMax,
+                                          double epsilon) const {
+  const VertexPtr s = getSource();
+  const VertexPtr t = getTarget();
+  // Forward-time worldline edge (endpoints on different time slices) → null.
+  if (s != nullptr && t != nullptr &&
+      std::abs(s->getTime() - t->getTime()) > 1e-12) {
+    return 0.0;
+  }
+  return vanRaamsdonkSquaredLength(I, iMax, epsilon);  // spacelike
+}
 
 }
 

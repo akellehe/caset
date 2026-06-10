@@ -30,6 +30,8 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 // === tessera subsystem ns fwd-decls ===
@@ -821,6 +823,46 @@ double Simplex::volume() const {
     // the result stays real and records the signature instead of |det G|.
     const double sign = (detG < 0.0) ? -1.0 : 1.0;
     return sign * std::sqrt(std::abs(detG)) / factorial;
+}
+
+void Simplex::assertSpacelikeAdmissible(double tol) const {
+    const int n = static_cast<int>(size());  // vertices = d + 1
+    if (n < 2) return;                        // trivially admissible
+    const int d = n - 1;
+
+    // Skip simplices that contain any null/timelike (worldline) edge: their
+    // admissibility is Lorentzian, not the spacelike triangle inequalities. The
+    // Cayley-Menger bordered matrix carries the squared edge lengths in its
+    // lower-right (d+1)x(d+1) block, offset (1, 1) of the (d+2)x(d+2) array.
+    const std::vector<double> cm = cayleyMengerMatrix(/*wickRotate=*/false);
+    const int mm = n + 1;  // CM is (d+2) x (d+2)
+    for (int a = 0; a < n; ++a) {
+        for (int b = a + 1; b < n; ++b) {
+            const double s = cm[static_cast<std::size_t>(1 + a) * mm + (1 + b)];
+            if (s <= tol) return;  // null/timelike edge → not a spacelike cell
+        }
+    }
+
+    // All edges spacelike: the Gram matrix must be positive-definite. Check via
+    // Sylvester's criterion (every leading principal minor > 0) so the test
+    // stays Eigen-free, reusing the existing determinant helper.
+    const std::vector<double> g = gramMatrix(/*wickRotate=*/false);
+    for (int k = 1; k <= d; ++k) {
+        std::vector<double> sub(static_cast<std::size_t>(k) * k);
+        for (int i = 0; i < k; ++i)
+            for (int j = 0; j < k; ++j)
+                sub[static_cast<std::size_t>(i) * k + j] =
+                    g[static_cast<std::size_t>(i) * d + j];
+        const double minor = determinant(sub, k);
+        if (!(minor > tol)) {
+            throw std::runtime_error(
+                "Simplex::assertSpacelikeAdmissible: inadmissible spacelike "
+                "simplex — Gram matrix is not positive-definite (leading minor "
+                + std::to_string(k) + " = " + std::to_string(minor) +
+                "); the spacelike triangle inequalities are violated. The metric "
+                "is not silently repaired.");
+        }
+    }
 }
 
 }

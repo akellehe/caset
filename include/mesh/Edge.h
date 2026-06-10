@@ -166,6 +166,24 @@ class Edge {
     /// Laplacian and its gauge transform to rephase the edge without rebuilding the mesh.
     void setPhase(double p) noexcept { phase = p; }
 
+    /// The Van Raamsdonk metric law: the spacelike signed squared length for a
+    /// given mutual information ``I`` — the value to store as ``squaredLength``
+    /// on a same-time-slice edge. Returns (−log(I/iMax))², with the length
+    /// floored to −log(epsilon) (so the squared length stays finite) when
+    /// I < epsilon·iMax (and when iMax ≤ 0 or I ≤ 0). Always ≥ 0 (spacelike).
+    [[nodiscard]] static double
+    vanRaamsdonkSquaredLength(double I, double iMax,
+                              double epsilon = 1e-10) noexcept;
+
+    /// Time-aware Van Raamsdonk signed squared length for THIS edge, given the
+    /// mutual information ``I`` between its endpoints (the one-forward-step
+    /// convention): a worldline edge whose endpoints lie on different time
+    /// slices (``Vertex::getTime``) is null and returns 0; a same-slice edge is
+    /// spacelike and returns ``vanRaamsdonkSquaredLength(I, iMax, epsilon)``.
+    [[nodiscard]] double
+    vanRaamsdonkSquaredLengthFor(double I, double iMax,
+                                 double epsilon = 1e-10) const;
+
     /// Index into EdgeList::liveVec_ (maintained by EdgeList).
     std::uint32_t liveIdx_{UINT32_MAX};
 
