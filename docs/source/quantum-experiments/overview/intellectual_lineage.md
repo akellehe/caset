@@ -221,7 +221,7 @@ content of `U` as a state we can put on the Σ_AB vertex.
 
 In v0.2 we use a placeholder (the maximally-mixed `I/4`) for the
 Σ_AB marginal, which is what the [finite-size
-investigation](../charged-cartan/experiments/03-v0.2-finite-size.md) surfaces as a real
+investigation](../earlier-work/charged-cartan/experiments/03-v0.2-finite-size.md) surfaces as a real
 inconsistency. The principled fix — Σ_AB carrying the actual Choi
 state of `U` — is [GitHub issue
 #16](https://github.com/akellehe/tessera/issues/16).
@@ -243,7 +243,7 @@ Two consequences emerge from this reading:
   photon vertex carrying away the joint content. Already implemented
   as `featurePhotonOnAnnihilate`.
 - **Gauge force as photon-mediated correlation** is what
-  [v0.3](../charged-cartan/design/v0.3.md) implements: between two
+  [v0.3](../earlier-work/charged-cartan/design/v0.3.md) implements: between two
   charged vertices `i`, `j`, the *existence of photon paths in the
   graph* mediates a Coulomb-like amplitude that conditions their
   next interaction's input state.
@@ -409,10 +409,10 @@ exists a regime where this `D_S` reaches 4, signalling an emergent
 > **boundary** MI complex. Reconciling this is tracked in [issue
 > #31](https://github.com/akellehe/tessera/issues/31).
 
-The v0.2 β-scan ([writeup](../charged-cartan/experiments/02-v0.2-beta-scan.md))
+The v0.2 β-scan ([writeup](../earlier-work/charged-cartan/experiments/02-v0.2-beta-scan.md))
 finds a stable plateau at peak `D_S ≈ 4.6 ± 0.1` across a decade of
 `β`. The [finite-size
-investigation](../charged-cartan/experiments/03-v0.2-finite-size.md) then shows that this
+investigation](../earlier-work/charged-cartan/experiments/03-v0.2-finite-size.md) then shows that this
 plateau drifts *toward 4* as the lattice grows (T-scaling), with
 naive geometric extrapolation projecting to D_S(T → ∞) ≈ 4.07 — i.e.,
 **the H_DS4 target is plausibly reached in the asymptotic limit**.
@@ -449,7 +449,7 @@ whether the plateau lands cleanly at 4 with those couplings in place.
   reviews](https://arxiv.org/abs/1203.3591) — spectral dimension as
   the emergent-4D diagnostic.
 - The construction's own design notes:
-  [v0.1](../charged-cartan/design/v0.1.md),
-  [v0.2](../charged-cartan/design/v0.2.md),
-  [v0.3](../charged-cartan/design/v0.3.md).
+  [v0.1](../earlier-work/charged-cartan/design/v0.1.md),
+  [v0.2](../earlier-work/charged-cartan/design/v0.2.md),
+  [v0.3](../earlier-work/charged-cartan/design/v0.3.md).
 - [Why Schwinger isn't load-bearing](from_schwinger_to_lattice.md).

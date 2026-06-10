@@ -3,7 +3,7 @@
 First experimental run of `tessera.quantum.SchwingerQuench.compareCausalOrders`
 across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
 addresses the **strong falsification** criterion of
-`docs/source/quantum-experiments/emergent-causal-order-from-majorization.md` §1, criterion 1:
+`docs/source/quantum-experiments/earlier-work/emergent-causal-order-from-majorization.md` §1, criterion 1:
 
 > If $\preceq_{\mathrm{maj}}$ contains pairs whose spatial separation
 > exceeds the Lieb–Robinson cone at the corresponding time difference,

@@ -1,6 +1,6 @@
 // Implementation of the emergent-spectral-dimension submodule. See
 // include/quantum/Holography.hpp for the architectural overview and
-// docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md for the
+// docs/source/quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md for the
 // scientific charter and falsification criteria.
 
 #include "quantum/Holography.hpp"

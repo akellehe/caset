@@ -342,7 +342,7 @@ Anyone with a tessera build at or after the `ChoiPropagator` and
 - [temporally_connected_entangled_spacetime.md](temporally_connected_entangled_spacetime.md)
   — the graph-level spectral-dimension experiment this single-cell test
   sits underneath.
-- [emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md)
+- [emergent-spectral-dimension-schwinger-tdvp.md](emergent-spectral-dimension-schwinger-tdvp.md)
   §3.4 — the `d = -log I` edge-length convention.
 - Van Raamsdonk, *Building up spacetime with quantum entanglement*,
   [1005.3035](https://arxiv.org/abs/1005.3035) — distance from mutual

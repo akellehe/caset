@@ -1,6 +1,6 @@
 // Emergent spectral dimension from the Schwinger TDVP state.
 //
-// See docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md for
+// See docs/source/quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md for
 // the scientific charter and falsification criteria. This header
 // declares the C++-side classes that implement that charter:
 //

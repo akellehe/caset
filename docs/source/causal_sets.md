@@ -271,7 +271,7 @@ position, snapshot index, and physical time.
 * {cite}`HastingsKoma2006` — refined LR bound for lattice systems
   relevant to the Schwinger TDVP setup.
 
-See also [Emergent Causal Order from Majorization](quantum-experiments/emergent-causal-order-from-majorization.md) §1 and §4.4 for the
+See also [Emergent Causal Order from Majorization](quantum-experiments/earlier-work/emergent-causal-order-from-majorization.md) §1 and §4.4 for the
 scientific motivation behind the three-order comparison, and
-[Emergent Spectral Dimension from the Schwinger TDVP State](quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md) §5 for
+[Emergent Spectral Dimension from the Schwinger TDVP State](quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md) §5 for
 the integration of `CausetChain` with the holography pipeline.

@@ -327,7 +327,7 @@ recorded with each output for reproducibility.
 ## 6. Recorded runs
 
 The first hypothesis-test scan is written up in
-[Lightcone vs. majorization](earlier-work/lightcone_vs_majorization.md).
+[Lightcone vs. majorization](lightcone_vs_majorization.md).
 Its headline: on the regular 1+1D chain the strong-falsification
 criterion (§1, criterion 1) fires — at the physical
 $v_{\mathrm{LR}} = 1$ roughly half of all majorization-related label

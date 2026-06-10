@@ -11,7 +11,7 @@ flux-tube dynamics are visible at a glance.
 
 Runs the TDVP quench pipeline of ``docs/source/quantum-plan.md``. The
 hypothesis under test is described in
-``docs/source/quantum-experiments/emergent-causal-order-from-majorization.md`` — this script runs the simulation
+``docs/source/quantum-experiments/earlier-work/emergent-causal-order-from-majorization.md`` — this script runs the simulation
 that produces the entanglement / electric-field / charge data that the
 downstream causal-order comparison mines for the majorization vs.
 Lieb-Robinson vs. causet comparison.

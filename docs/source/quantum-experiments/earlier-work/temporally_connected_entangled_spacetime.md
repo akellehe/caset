@@ -45,7 +45,7 @@ $(t, t')$, and shares the van Raamsdonk-style "distance is a function
 of MI" interpretation when fed into the weighted Laplacian (edge
 weights enter as $W = \mathcal{I}$, so $\ell = -\log \mathcal{I}$ is
 the implicit edge length per
-[emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md)
+[emergent-spectral-dimension-schwinger-tdvp.md](emergent-spectral-dimension-schwinger-tdvp.md)
 §3.4). The averaged-endpoint surrogate does not capture the pure-time
 correlations that the unitary evolution generates *between* snapshots
 — it captures the part of the cross-time MI that is consistent with
@@ -387,7 +387,7 @@ fix can regenerate every number above.
 
 - [emergent_spectral_dimension.md](emergent_spectral_dimension.md)
   — the causet dual-lattice baseline this experiment varies from.
-- [emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md)
+- [emergent-spectral-dimension-schwinger-tdvp.md](emergent-spectral-dimension-schwinger-tdvp.md)
   §3.4 — the weighted-Laplacian convention $W = I$, $\ell = -\log I$.
 - [causal_sets.md](../../causal_sets.md) — the partial-order machinery
   the causet temporal edges were drawn from.

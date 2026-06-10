@@ -92,7 +92,7 @@ public:
     // power the bond-cut spectral-dimension pipeline that uses
     // bipartitions of the chain as graph vertices (one per bond, one
     // per snapshot). See
-    // ``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md``
+    // ``docs/source/quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md``
     // §3 (Dual lattice / bond-cut graph) for the construction.
 
     // Bipartite entanglement entropy at bond ``k`` (1-based, between

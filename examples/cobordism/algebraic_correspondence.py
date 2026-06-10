@@ -22,7 +22,7 @@
 """Stage-1 correctness oracle for the State-Operation-Cobordism correspondence.
 
 Runs the algebraic-layer checks C1-C5 from
-``docs/source/quantum-experiments/cobordism.md`` (the n=1 layer that needs no mesh
+``docs/source/quantum-experiments/state-operation-cobordism/cobordism.md`` (the n=1 layer that needs no mesh
 dynamics) and prints a pass/fail table with residuals, then sweeps the U(1) flux
 and writes the spectrum-vs-flux and gap-vs-flux curves.
 
