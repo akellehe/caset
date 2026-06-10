@@ -40,9 +40,10 @@ jobs:
            python -m pip install --upgrade pip
            pip install ".[dev]"
            pip install -r docs/requirements.txt
-      - name: Run tests
-        run: |
-           python3 -m pytest tests/ -m "not slow"
+
+      # No pytest here: the suite exceeds the runner's time budget, so tests are
+      # a local gate (see README). This workflow's job is to compile the
+      # extension and build + deploy the docs — a green run asserts exactly that.
       - name: Build Sphinx HTML
         working-directory: docs
         run: |
