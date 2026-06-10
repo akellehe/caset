@@ -83,22 +83,25 @@ and a gate acts on the register by its {[a],[b],[a+b]} block. The three stages:
   set; a V-special input -- e.g. a gate's own eigenvector -- could mask a leak, so a
   generic one is used and the leakage cross-check is reported alongside.)
 
-The realizable set is the OUTPUT (no S_3 grading is imposed)
------------------------------------------------------------
+The realizable set is the OUTPUT -- and it is a CRITERION, not a hand-set count
+------------------------------------------------------------------------------
 The S_3 controls are reported FIRST as the validity anchor (Z_spec = Z_DW on S_3
-demands they realize). The full battery -- the S_3 controls plus the superposition /
-phase / entangling families (the same matrices as `realizable_image_sweep.py`) -- is
-then scored by the spectrum, and whichever gates reach r -> 0 ARE the finding. The
-contrast: the pinned fixed-boundary run gave S_3 + H(x)H = 7 (it required an INTEGER
-carried monodromy); the topology-free run gave {I}. The staged synthesis, asking only
-that U|psi_B> stay in the carried register (a continuous, non-integer condition),
-realizes S_3 + H(x)H + sqrt-SWAP = 8 -- one more than the fixed-boundary run, exactly
-the relaxation the hypothesis predicted: sqrt-SWAP's register action is a non-integer
-element of GL(V) that still preserves the register, admissible only once the boundary
-is synthesized rather than pinned to an integer monodromy.
+demands they realize). The full standard battery is then scored by the spectrum, and
+whichever gates reach r -> 0 ARE the finding. That output has a closed form: U realizes
+iff its {[a],[b],[a+b]} block CONSERVES total holonomy charge -- the block's three column
+sums are equal, so the all-ones covector c = [1,1,1] is preserved and Sigma(U|psi_B>) = 0
+for EVERY register input (`conserves_charge`). The spectral test and this algebraic
+criterion agree gate-by-gate (the example asserts it). The criterion cuts out a
+CONTINUOUS group, so the realizable set is not a single number -- it is "every charge-
+conserving gate". Among the standard named gates the criterion-satisfying ones are these
+13: S_3 (the 6 permutations), H(x)H, the controlled-sqrt-X-power family on either qubit
+(CSX, CSXdg, rev-CSX, rev-CSXdg), and the sqrt-SWAP roots (sqrt-SWAP, sqrt-SWAP-dg). A
+SMALLER battery undercounts -- an earlier 18-gate battery saw only S_3 + H(x)H + sqrt-SWAP
+and reported "8", but that was its realizable SUBSET, not the criterion: it simply did not
+contain CSX or sqrt-SWAP-dg. The number tracks the battery; the criterion is the result.
 
-Parameters (additive -- the default run is the verified 8-gate sweep)
---------------------------------------------------------------------
+Parameters (additive -- the default run is the verified criterion sweep)
+------------------------------------------------------------------------
   --gate <name>   Solve for ONE gate (e.g. --gate H_x_H, --gate sqrt-SWAP, --gate CNOT);
                   `--gate help` (or any unknown name) prints the battery. Runs the same
                   staged synthesis (synthesize states -> union as boundary -> grow by
@@ -109,7 +112,8 @@ Parameters (additive -- the default run is the verified 8-gate sweep)
                   subdivisions -- varied vertex-disjoint holonomy-hole triples, and
                   extra `removeInteriorCell` surgeries that grow b_1) to ask whether a
                   BIGGER topology search finds a richer emergent register carrying a
-                  currently-floored gate beyond the 8. Parallel; scales to large N.
+                  currently-floored gate beyond the criterion set (it cannot -- the
+                  criterion is topology-free). Parallel; scales to large N.
   --jobs J        Worker processes (clamped to the 10-CPU cap). Each worker is pinned to
                   ONE BLAS thread, so procs x threads <= 10 (default 10 x 1).
   --all-plots     Render force-directed simplicial-complex PNGs for every output (the
@@ -162,11 +166,16 @@ cob = tessera.cobordism
 REALIZE = 1e-9
 CERT_FLOOR = 1e-2
 
-# The verified realizable set (the spectral output of the canonical construction). The
-# surgery search measures itself against this: does a richer emergent register carry a
-# gate NOT in this set?
+# The realizable set: every gate whose {[a],[b],[a+b]} block conserves total holonomy
+# charge (see conserves_charge) -- a CRITERION (a continuous group), not a hand-set count.
+# With the full standard battery the criterion-satisfying named gates are these 13: the S_3
+# permutations (6), H(x)H, the controlled-sqrt-X-power family on either qubit
+# (CSX, CSXdg, rev-CSX, rev-CSXdg), and the sqrt-SWAP roots (sqrt-SWAP, sqrt-SWAP-dg). The
+# first six are the S_3 controls (CANONICAL_SET[:6]). The surgery search measures itself
+# against this: it cannot carry a gate outside it, because the criterion is topology-free.
 CANONICAL_SET = ("Identity", "SWAP", "CNOT", "reversed-CNOT", "3-cycle (0231)",
-                 "3-cycle (0312)", "H(x)H", "sqrt-SWAP")
+                 "3-cycle (0312)", "H(x)H", "CSX", "CSXdg", "rev-CSX", "rev-CSXdg",
+                 "sqrt-SWAP", "sqrt-SWAP-dg")
 
 
 def _set_threads(n):
@@ -422,42 +431,132 @@ def _root(U):
     return (vec * np.sqrt(w)) @ np.linalg.inv(vec)
 
 
+def _ctrl(U):
+    """Controlled-U with control = qubit A (the high bit), target = qubit B: the 2x2
+    block U fills the |1>_A subspace, the |0>_A subspace stays the identity."""
+    m = np.eye(4, dtype=complex)
+    m[2:4, 2:4] = U
+    return m
+
+
+def _ctrlB(U):
+    """Controlled-U with control = qubit B (the low bit), target = qubit A: U acts on the
+    {|01>, |11>} block (the B = 1 subspace). The mirror of _ctrl, so every controlled gate
+    has a control-A and a control-B form (reversed-CNOT is _ctrlB(X))."""
+    m = np.eye(4, dtype=complex)
+    idx = (1, 3)
+    for i, a in enumerate(idx):
+        for j, b in enumerate(idx):
+            m[a, b] = U[i, j]
+    return m
+
+
 def _gates():
-    h2 = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+    """The full standard 1- and 2-qubit gate battery (4-dim register). Every gate is
+    scored the SAME way -- the spectral residual of U|psi_B> on the surgery-grown
+    register -- so the realizable set is purely the OUTPUT. The S_3 controls are the only
+    family asserted to realize; everything else is a falsifiable candidate."""
+    # --- single-qubit primitives (and daggers) ---
     i2 = np.eye(2, dtype=complex)
     x = np.array([[0, 1], [1, 0]], dtype=complex)
+    y = np.array([[0, -1j], [1j, 0]], dtype=complex)
     z = np.array([[1, 0], [0, -1]], dtype=complex)
-    t1 = np.diag([1, cmath.exp(1j * np.pi / 4)]).astype(complex)
-    s1 = np.diag([1, 1j]).astype(complex)
+    h2 = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+    s1 = np.diag([1, 1j]).astype(complex)                            # S = sqrt(Z)
+    sdg = np.diag([1, -1j]).astype(complex)                          # S^dagger
+    t1 = np.diag([1, cmath.exp(1j * np.pi / 4)]).astype(complex)     # T = sqrt(S)
+    tdg = np.diag([1, cmath.exp(-1j * np.pi / 4)]).astype(complex)   # T^dagger
+    sx = _root(x)                                                    # sqrt-X (V)
+    sxdg = sx.conj().T                                               # sqrt-X^dagger
+    # --- two-qubit primitives ---
+    swap = _perm((0, 2, 1, 3))
     cnot = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],
                     dtype=complex)
     rcnot = np.array([[1, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0]],
                      dtype=complex)
     iswap = np.array([[1, 0, 0, 0], [0, 0, 1j, 0], [0, 1j, 0, 0], [0, 0, 0, 1]],
                      dtype=complex)
-    swap = _perm((0, 2, 1, 3))
+    magic = np.array([[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
+                     dtype=complex) / np.sqrt(2)                     # Bell/magic basis
+    ms = np.array([[1, 0, 0, -1j], [0, 1, -1j, 0], [0, -1j, 1, 0], [-1j, 0, 0, 1]],
+                  dtype=complex) / np.sqrt(2)                        # Molmer-Sorensen XX(pi/2)
     return [
+        # --- S_3 controls: the six 0/1 permutations fixing |00> (the realizable core) ---
         ("Identity", np.eye(4, dtype=complex), "S3 control"),
         ("SWAP", swap, "S3 control"),
         ("CNOT", cnot, "S3 control"),
         ("reversed-CNOT", rcnot, "S3 control"),
         ("3-cycle (0231)", _perm((0, 2, 3, 1)), "S3 control"),
         ("3-cycle (0312)", _perm((0, 3, 1, 2)), "S3 control"),
+        # --- single-qubit Pauli, tensored onto A and B ---
+        ("X(x)I", np.kron(x, i2), "Pauli"),
+        ("I(x)X", np.kron(i2, x), "Pauli"),
+        ("Y(x)I", np.kron(y, i2), "Pauli"),
+        ("I(x)Y", np.kron(i2, y), "Pauli"),
+        ("Z(x)I", np.kron(z, i2), "Pauli"),
+        ("I(x)Z", np.kron(i2, z), "Pauli"),
+        ("X(x)X", np.kron(x, x), "Pauli"),
+        ("Y(x)Y", np.kron(y, y), "Pauli"),
+        ("Z(x)Z", np.kron(z, z), "Pauli"),
+        ("X(x)Z", np.kron(x, z), "Pauli"),
+        ("Z(x)X", np.kron(z, x), "Pauli"),
+        # --- Hadamard / superposition ---
         ("H(x)I", np.kron(h2, i2), "superposition"),
         ("I(x)H", np.kron(i2, h2), "superposition"),
         ("H(x)H", np.kron(h2, h2), "superposition"),
-        ("sqrt-SWAP", _root(swap), "superposition"),
-        ("sqrt-iSWAP", _root(iswap), "superposition"),
-        ("CZ", np.diag([1, 1, 1, -1]).astype(complex), "phase/entangler"),
+        # --- sqrt-X (single-qubit superposition root, and its dagger) ---
+        ("SX(x)I", np.kron(sx, i2), "superposition"),
+        ("I(x)SX", np.kron(i2, sx), "superposition"),
+        ("SXdg(x)I", np.kron(sxdg, i2), "superposition"),
+        ("I(x)SXdg", np.kron(i2, sxdg), "superposition"),
+        # --- single-qubit phase: Clifford S and non-Clifford T (and daggers) ---
+        ("S(x)I", np.kron(s1, i2), "phase"),
+        ("I(x)S", np.kron(i2, s1), "phase"),
+        ("Sdg(x)I", np.kron(sdg, i2), "phase"),
+        ("I(x)Sdg", np.kron(i2, sdg), "phase"),
+        ("T(x)I", np.kron(t1, i2), "phase"),
+        ("I(x)T", np.kron(i2, t1), "phase"),
+        ("Tdg(x)I", np.kron(tdg, i2), "phase"),
+        ("I(x)Tdg", np.kron(i2, tdg), "phase"),
+        # --- controlled (control = A): the entangling controlled-U family ---
+        ("CZ", _ctrl(z), "phase/entangler"),
+        ("CY", _ctrl(y), "phase/entangler"),
+        ("CH", _ctrl(h2), "phase/entangler"),
+        ("CS", _ctrl(s1), "phase/entangler"),
+        ("CSX", _ctrl(sx), "phase/entangler"),
+        ("CSXdg", _ctrl(sxdg), "phase/entangler"),
         ("CPHASE(pi/4)",
          np.diag([1, 1, 1, cmath.exp(1j * np.pi / 4)]).astype(complex),
          "phase/entangler"),
-        ("T(x)I", np.kron(t1, i2), "phase"),
-        ("S(x)I", np.kron(s1, i2), "phase"),
+        # --- controlled (control = B): the mirror family, so each gate appears both ways ---
+        ("rev-CZ", _ctrlB(z), "phase/entangler"),
+        ("rev-CY", _ctrlB(y), "phase/entangler"),
+        ("rev-CH", _ctrlB(h2), "phase/entangler"),
+        ("rev-CS", _ctrlB(s1), "phase/entangler"),
+        ("rev-CSX", _ctrlB(sx), "phase/entangler"),
+        ("rev-CSXdg", _ctrlB(sxdg), "phase/entangler"),
+        # --- SWAP / iSWAP family (roots and daggers) ---
+        ("sqrt-SWAP", _root(swap), "superposition"),
+        ("sqrt-SWAP-dg", _root(swap).conj().T, "entangler"),
         ("iSWAP", iswap, "phase/entangler"),
-        ("X(x)X", np.kron(x, x), "Pauli perm"),
-        ("Z(x)Z", np.kron(z, z), "diagonal sign"),
+        ("iSWAP-dg", iswap.conj().T, "phase/entangler"),
+        ("sqrt-iSWAP", _root(iswap), "entangler"),
+        # --- hardware-native entanglers ---
+        ("Magic", magic, "entangler"),
+        ("Molmer-Sorensen", ms, "entangler"),
     ]
+
+
+def conserves_charge(U, tol=1e-9):
+    """The realizability criterion in closed form: U|psi_B> is carried by the register for
+    EVERY register input iff U's {[a],[b],[a+b]} block conserves the total holonomy charge
+    -- the all-ones covector c = [1,1,1] is a left-eigenvector, i.e. the block's three
+    column sums are equal. This is the algebraic shadow of the spectral test (ker L_1 is
+    the Sigma = 0 subspace); the example asserts the two agree gate-by-gate, so the
+    realizable set is a CRITERION, not a hand-listed number."""
+    block = np.asarray(U, dtype=complex)[1:4, 1:4]
+    s = block.sum(axis=0)
+    return bool(np.allclose(s, s[0], atol=tol))
 
 
 # The generic register input psi_B: consistent-orientation periods, Sigma = 0, every
@@ -512,7 +611,8 @@ def resolve_gate(name):
 # subdivisions -- a strictly bigger topology search), the vertex-disjoint holonomy-hole
 # TRIPLE, and extra `removeInteriorCell` surgeries that grow b_1, then re-decides the
 # full battery by the same Hodge L_1 spectrum. The question: does a richer emergent
-# register carry a currently-floored gate beyond the 8?
+# register carry a currently-floored gate beyond the criterion set? (It cannot -- the
+# charge-conservation criterion is a property of the gate, not the topology.)
 # --------------------------------------------------------------------------- #
 _SEED_CACHE = {}
 
@@ -945,7 +1045,7 @@ def _emergence_and_anchor(reg, check):
 
 def _print_search(search):
     """Report the surgery-topology search: genuine vs saturated registers, genuine
-    realizable-set sizes, and whether the realizable set grows beyond the 8."""
+    realizable-set sizes, and whether the realizable set grows beyond the criterion set."""
     print(f"\n  Surgery-topology search ({search['scored']}/{search['retries']} "
           f"randomized surgery-grown topologies scored in parallel; seeds = "
           f"icosahedron + geodesic subdivisions up to |V|={search['max_nV']}, "
@@ -953,21 +1053,22 @@ def _print_search(search):
     print(f"      genuine registers (proper carried V, rank < #holes, S_3 anchor intact)"
           f": {search['n_genuine']}")
     print(f"      saturated registers (rank == #holes: V is the whole period space, so "
-          f"ALL 18 gates trivially 'realize' -- no obstruction left): "
+          f"ALL gates trivially 'realize' -- no obstruction left): "
           f"{search['n_saturated']}")
     if search["n_invalid"]:
         print(f"      invalid draws (S_3 anchor not met): {search['n_invalid']}")
     sizes = ", ".join(f"{n} gates x{c}" for n, c in search["genuine_sizes"])
     print(f"      genuine realizable-set sizes: {sizes or '(none)'}")
     if search["grows"]:
-        print(f"        => the search GROWS the set beyond 8: a genuine emergent "
-              f"register carries {', '.join(search['new_gates'])}.")
+        print(f"        => the search GROWS the set beyond the criterion: a genuine "
+              f"emergent register carries {', '.join(search['new_gates'])}.")
     else:
-        print("        => NO genuine register carries any gate beyond the 8. Growing "
-              "b_1 only SATURATES the holonomy-period space (rank -> #holes), which "
-              "dissolves the register (every gate trivially 'realizes' because nothing "
-              "can leak) rather than carrying a specific new gate. The bigger search "
-              "CONFIRMS the realizable set is 8 = S_3 + H(x)H + sqrt-SWAP.")
+        print("        => NO genuine register carries any gate beyond the criterion set. "
+              "Growing b_1 only SATURATES the holonomy-period space (rank -> #holes), "
+              "which dissolves the register (every gate trivially 'realizes' because "
+              "nothing can leak) rather than carrying a specific new gate. The bigger "
+              "search CONFIRMS the result is the charge-conservation criterion -- "
+              "topology-free; surgery grows the state space, not the criterion.")
 
 
 def run_single_gate(args, jobs):
@@ -1095,20 +1196,25 @@ def main():
     floored = [r for r in rows if not r["realizable"]]
     s3 = [r for r in rows if r["family"] == "S3 control"]
     print(f"        => realizable set (the OUTPUT): {', '.join(realized_set)}")
-    print(f"           the S_3 controls all realize (validity anchor); the rest floor "
-          f"(r ~ {min(r['residual'] for r in floored):.2f}-"
+    print(f"           {len(realized_set)} named gates -- the S_3 controls (validity "
+          f"anchor) plus every gate whose [a],[b],[a+b] block conserves charge; the rest "
+          f"floor (r ~ {min(r['residual'] for r in floored):.2f}-"
           f"{max(r['residual'] for r in floored):.2f}).")
-    print("           Contrast: pinned fixed-boundary gave S_3 + H(x)H = 7 (integer "
-          "monodromy required); topology-free gave {I}. Synthesizing the boundary "
-          "realizes ONE more -- sqrt-SWAP -- a non-integer register automorphism the "
-          "bit-exact pin forbade.")
+    print(f"           Closed form: realize iff the block's three column sums are equal "
+          f"(Sigma conserved). The spectral test and conserves_charge agree on all "
+          f"{len(rows)} gates, so the realizable set is a CRITERION (a continuous group), "
+          f"not a fixed count.")
 
     _check("the six S_3 controls all realize (validity anchor)",
            all(r["realizable"] for r in s3))
     _check("the identity realizes (the sanity check)",
            rows[0]["realizable"] and rows[0]["gate"] == "Identity")
-    _check("realizable set == S_3 + H(x)H + sqrt-SWAP (8; one more than fixed-boundary)",
+    _check(f"realizable set == the {len(CANONICAL_SET)} charge-conserving named gates",
            realized_set == list(CANONICAL_SET))
+    _check("the closed-form criterion (conserves_charge) matches the spectral test on "
+           "every gate",
+           all(conserves_charge(U) == r["realizable"]
+               for r, (_n, U, _f) in zip(rows, _gates())))
     _check("every floored gate is certified (residual > CERT_FLOOR and leaks)",
            all(r["residual"] > CERT_FLOOR and r["leak"] > 1e-6 for r in floored))
 
@@ -1117,7 +1223,7 @@ def main():
     if args.retries > 0:
         search = surgery_search(args.retries, jobs, base_seed=args.seed)
         _print_search(search)
-        _check("no genuine emergent register carries a gate beyond the 8",
+        _check("no genuine emergent register carries a gate beyond the criterion set",
                not search["grows"])
 
     # ---- the figures (--all-plots) ----------------------------------------- #
@@ -1154,14 +1260,15 @@ def main():
     print("\n  Verdict: " + (
         "SUPPORTED -- the staged spectral synthesis (synthesize geo(psi_A), geo(psi_B) "
         "independently; union as the boundary; grow the bulk to <psi_A|U|psi_B> with "
-        "surgery, ker L_1 0 -> 2 emergent; decide by the Hodge spectrum) realizes "
-        "S_3 + H(x)H + sqrt-SWAP = 8 gates -- ONE MORE than the pinned fixed-boundary "
-        "S_3 + H(x)H = 7, exactly the relaxation the hypothesis predicted: synthesizing "
-        "the boundary (rather than pinning it to an integer monodromy) admits sqrt-SWAP, "
-        "a non-integer register automorphism. Every genuinely register-leaving gate "
-        "still floors -- the cohomological obstruction no emergent b_1 can repair."
+        "surgery, ker L_1 0 -> 2 emergent; decide by the Hodge spectrum) realizes exactly "
+        "the gates whose holonomy-class block conserves total charge -- a CRITERION (a "
+        f"continuous group), {len(CANONICAL_SET)} named members: S_3, H(x)H, the "
+        "controlled-sqrt-X-power family on either qubit, and the sqrt-SWAP roots. The "
+        "spectral test and the closed-form criterion (conserves_charge) agree on every "
+        "gate. Every genuinely register-leaving gate still floors -- the cohomological "
+        "obstruction no emergent b_1 can repair."
         + (" The surgery-topology search confirms it: no genuine emergent register "
-           "carries any gate beyond the 8."
+           "carries any gate beyond the criterion set (the criterion is topology-free)."
            if search is not None and not search["grows"] else "")
         if ok else
         "NOT SUPPORTED -- a claim failed; inspect the FAILED checks above."))
