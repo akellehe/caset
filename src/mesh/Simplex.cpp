@@ -865,4 +865,109 @@ void Simplex::assertSpacelikeAdmissible(double tol) const {
     }
 }
 
+namespace {
+
+// Signed real square root: sign(x)·sqrt(|x|). The signed-content convention
+// (matching Simplex::volume), so a timelike circumcentric height contributes
+// negative content rather than throwing on a negative radicand.
+double signedSqrt(double x) {
+    return (x < 0.0) ? -std::sqrt(-x) : std::sqrt(x);
+}
+
+// Circumcenter (barycentric) + signed R² from the Gram matrix G (flat d×d,
+// relative to vertex 0). Solves G β = ½·diag(G) Eigen-free via the adjugate
+// (cofactorᵀ/det); λ_0 = 1−Σβ, λ_i = β_i; R² = Σ_i β_i·(½ G_ii).
+void circumFromGram(const std::vector<double>& G, int d,
+                    std::vector<double>& bary, double& r2) {
+    bary.assign(static_cast<std::size_t>(d) + 1, 0.0);
+    if (d <= 0) { bary[0] = 1.0; r2 = 0.0; return; }  // single vertex
+    std::vector<double> halfDiag(d);
+    for (int i = 0; i < d; ++i)
+        halfDiag[i] = 0.5 * G[static_cast<std::size_t>(i) * d + i];
+    const double detG = ::tessera::mesh::Simplex::determinant(G, d);
+    const std::vector<double> cof =
+        ::tessera::mesh::Simplex::cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
+    // β_i = Σ_j (G⁻¹)_ij·halfDiag_j, with (G⁻¹)_ij = adj_ij/det = C_ji/det.
+    std::vector<double> beta(d, 0.0);
+    double sum = 0.0;
+    for (int i = 0; i < d; ++i) {
+        double acc = 0.0;
+        for (int j = 0; j < d; ++j)
+            acc += cof[static_cast<std::size_t>(j) * d + i] * halfDiag[j];
+        beta[i] = (detG != 0.0) ? acc / detG : 0.0;
+        bary[static_cast<std::size_t>(i) + 1] = beta[i];
+        sum += beta[i];
+    }
+    bary[0] = 1.0 - sum;
+    r2 = 0.0;
+    for (int i = 0; i < d; ++i) r2 += beta[i] * halfDiag[i];
+}
+
+// Sign (±1) of the circumcenter of coface `cf` at the vertex of `cf` not in its
+// facet `s` — the side of the facet's hull on which c(cf) sits.
+double oppositeVertexSign(const ::tessera::mesh::Simplex* cf,
+                          const ::tessera::mesh::Simplex* s) {
+    const auto& cfv = cf->getVertices();
+    const auto& sv = s->getVertices();
+    int oppIdx = -1;
+    for (std::size_t i = 0; i < cfv.size(); ++i) {
+        bool inS = false;
+        for (const auto* w : sv)
+            if (w->getId() == cfv[i]->getId()) { inS = true; break; }
+        if (!inS) { oppIdx = static_cast<int>(i); break; }
+    }
+    if (oppIdx < 0) return 1.0;
+    const std::vector<double> bary = cf->circumcenterBarycentric();
+    return (bary[static_cast<std::size_t>(oppIdx)] < 0.0) ? -1.0 : 1.0;
+}
+
+// Recursive signed circumcentric dual content of `s` in an n-complex.
+double dualVolRec(const ::tessera::mesh::Simplex* s, int n) {
+    const int k = static_cast<int>(s->size()) - 1;
+    if (k >= n) return 1.0;  // top cell: dual is a point (content 1)
+    const double rk2 = s->circumradiusSquared();
+    double acc = 0.0;
+    for (const auto& cf : s->getCofaces()) {
+        const double h =
+            oppositeVertexSign(cf, s) * signedSqrt(cf->circumradiusSquared() - rk2);
+        acc += h * dualVolRec(cf, n);
+    }
+    return acc / static_cast<double>(n - k);
+}
+
+}  // namespace
+
+std::vector<double> Simplex::circumcenterBarycentric() const {
+    const int d = static_cast<int>(size()) - 1;
+    std::vector<double> bary;
+    double r2 = 0.0;
+    circumFromGram(gramMatrix(/*wickRotate=*/false), d, bary, r2);
+    return bary;
+}
+
+double Simplex::circumradiusSquared() const {
+    const int d = static_cast<int>(size()) - 1;
+    std::vector<double> bary;
+    double r2 = 0.0;
+    circumFromGram(gramMatrix(/*wickRotate=*/false), d, bary, r2);
+    return r2;
+}
+
+double Simplex::dualVolume() const {
+    // Ambient top dimension: walk up cofaces to a top simplex (empty cofaces).
+    const Simplex* top = this;
+    while (!top->getCofaces().empty()) top = top->getCofaces()[0];
+    const int n = static_cast<int>(top->size()) - 1;
+    return dualVolRec(this, n);
+}
+
+double Simplex::hodgeStar() const {
+    const double v = volume();
+    if (v == 0.0) {
+        throw std::runtime_error(
+            "Simplex::hodgeStar: primal volume is zero (degenerate simplex)");
+    }
+    return dualVolume() / v;
+}
+
 }
