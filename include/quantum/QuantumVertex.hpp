@@ -83,6 +83,39 @@ class QuantumVertex : public ::tessera::mesh::Vertex {
     vanRaamsdonkDistanceTo(const ::tessera::mesh::Vertex* other,
                            double                          iMax) const;
 
+    /// The Van Raamsdonk metric law: the **spacelike** signed squared length
+    /// for a given mutual information ``I`` — the value to store in
+    /// ``Edge::squaredLength`` for a same-time-slice edge. Returns
+    /// (−log(I/iMax))², with the length floored to −log(epsilon) (so the
+    /// squared length is finite) when I < epsilon·iMax, and likewise when
+    /// iMax ≤ 0 or I ≤ 0. Always ≥ 0 (spacelike). This is the static law used
+    /// when a mutual information is already in hand; ``vanRaamsdonkDistanceTo``
+    /// computes I from the product joint of two vertices.
+    [[nodiscard]] static double
+    vanRaamsdonkSquaredLength(double I, double iMax,
+                              double epsilon = 1e-10) noexcept;
+
+    /// Time-aware Van Raamsdonk **signed squared length** to ``other`` for
+    /// the one-forward-step convention — the value written into
+    /// ``Edge::squaredLength`` (spacelike > 0, null = 0, timelike < 0):
+    ///
+    ///   • different time slices (a forward-time *worldline* edge, e.g.
+    ///     t=0 → t=1): returns 0 (null). A system propagating to its own
+    ///     future is perfectly correlated with itself (I = iMax ⇒
+    ///     d_VR = 0); its timelike content is carried by rapidity in the
+    ///     Regge action, not by a spacelike length.
+    ///   • same time slice (a spacelike edge): returns +d_VR² with
+    ///     d_VR = −log(I/iMax), floored so d_VR ≤ −log(epsilon) (finite)
+    ///     when I < epsilon·iMax.
+    ///
+    /// The time slice is read from ``Vertex::getTime`` (a vertex with no
+    /// coordinates reads as t=0, the boundary slice). ``other`` must be a
+    /// QuantumVertex — throws otherwise.
+    [[nodiscard]] double
+    vanRaamsdonkSquaredLengthTo(const ::tessera::mesh::Vertex* other,
+                                double                          iMax,
+                                double                          epsilon = 1e-10) const;
+
     /// Convenience downcast: pulls a QuantumVertex* out of a
     /// Vertex* via dynamic_cast and throws if the dynamic type is
     /// wrong.

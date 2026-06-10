@@ -157,6 +157,9 @@ and containing simplices.)doc")
            "Return all simplices (of any dimension) containing this vertex.")
       .def("getTime", &Vertex::getTime,
            "Return the time coordinate of this vertex (first coordinate).")
+      .def("setTime", &Vertex::setTime, py::arg("time"),
+           "Set the time coordinate (first coordinate) of this vertex; "
+           "creates a 1-D coordinate when the vertex had none.")
       .def("moveEdgesTo", &Vertex::moveEdgesTo, py::arg("vertex"), py::arg("spacetime"),
            "Transfer all edges from this vertex to another vertex.")
       .def("removeInEdge", &Vertex::removeInEdge, py::arg("edge"),
