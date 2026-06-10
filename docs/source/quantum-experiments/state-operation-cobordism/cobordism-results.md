@@ -57,16 +57,19 @@ outcomes the hypothesis predicts. A **realizable** $U$ is realized with its bulk
 $W_{AB}$ ($r\to0$); an **obstructed** $U$ is certified non-realizable by a
 **residual floor** bounded away from zero — a spectral obstruction under the
 fixed-boundary constraint, not a failure to search hard enough
-(`realizability_report.py`):
+(`realizability_report.py`; the growable witnesses run with **additions as
+well as surgical cuts**, the added vertices capped by
+`--max-additional-vertices`, default 20, while the floor control stays pinned
+at fixed complexity):
 
-| operation $U$ | bulk | verdict | $r$ / floor | cones | interior $\lvert V\rvert$ | $\lambda$ |
+| operation $U$ | bulk | verdict | $r$ / floor | added $\lvert V\rvert$ | cuts | $\lambda$ |
 |---|---|---|---|---|---|---|
 | $\left(\begin{smallmatrix}1&1\\1&1\end{smallmatrix}\right)$ (zero mode) | bipyramid | **realizable** | $r=9.49\times10^{-11}$ | 0 | 0 | $0.000000$ |
-| $\left(\begin{smallmatrix}1&0.3{+}0.5i&-0.8{+}0.2i\end{smallmatrix}\right)$ ($1\times3$) | triangle | **realizable** | $r=1.19\times10^{-13}$ | 1 | 1 | $3.923719$ |
+| $\left(\begin{smallmatrix}1&0.3{+}0.5i&-0.8{+}0.2i\end{smallmatrix}\right)$ ($1\times3$) | triangle | **realizable** | $r=3.52\times10^{-11}$ | 1 | 0 | $3.955356$ |
 | $\left(\begin{smallmatrix}1&2\\3&4\end{smallmatrix}\right)$ (generic) | bipyramid | **obstructed** | floor $=2.35\times10^{-2}$ | 0 | 0 | $1.176471$ |
 
-The realizable residuals ($\sim10^{-11}$, $\sim10^{-13}$) sit **nine to twelve
-orders of magnitude** below the obstruction floor ($2.35\times10^{-2}$): the
+The realizable residuals ($\sim10^{-11}$) sit **nine orders of magnitude**
+below the obstruction floor ($2.35\times10^{-2}$): the
 separation is unambiguous. The floor is a genuine non-existence certificate, not
 a stuck optimizer — it is seed-independent, equals $2/85$ to machine precision,
 and matches an independent numpy global-min over the lone interior edge

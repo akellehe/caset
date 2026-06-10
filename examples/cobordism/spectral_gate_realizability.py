@@ -117,11 +117,17 @@ Parameters (additive -- the default run is the verified criterion sweep)
                   certificate, and bulk independence across re-grown genuine registers.
   --retries N     The surgery-topology search: score N RANDOMIZED surgery-grown
                   topologies (varied S^2 seeds -- the icosahedron and its geodesic
-                  subdivisions -- varied vertex-disjoint holonomy-hole triples, and
-                  extra `removeInteriorCell` surgeries that grow b_1) to ask whether a
-                  BIGGER topology search finds a richer emergent register carrying a
-                  currently-floored gate beyond the criterion set (it cannot -- the
-                  criterion is topology-free). Parallel; scales to large N.
+                  subdivisions -- varied vertex-disjoint holonomy-hole triples, extra
+                  `removeInteriorCell` surgeries that grow b_1, and ADDED vertices via
+                  seeded growInterior stellar subdivisions) to ask whether a BIGGER
+                  topology search -- cuts and additions both -- finds a richer emergent
+                  register carrying a currently-floored gate beyond the criterion set
+                  (it cannot -- the criterion is topology-free). Parallel; scales to
+                  large N.
+  --max-additional-vertices M
+                  Cap on the vertices a search draw may ADD (each --retries draw adds
+                  0..M via seeded stellar subdivision, alongside its cuts; default 20).
+                  The default sweep, --gate, and --h3 use the canonical register.
   --jobs J        Worker processes (clamped to the 10-CPU cap). Each worker is pinned to
                   ONE BLAS thread, so procs x threads <= 10 (default 10 x 1).
   --all-plots     Render force-directed simplicial-complex PNGs for every output (the
@@ -300,13 +306,16 @@ class Register:
     Sigma = 0. All OUTPUTS read off the grown bulk.
 
     The default `Register()` is the verified icosahedron / 3-canonical-hole register.
-    The optional `faces` / `class_holes` / `extra_holes` parameters drive the surgery-
-    topology search (`--retries`): a different triangulated-S^2 seed, a different
-    vertex-disjoint holonomy-hole triple, and extra `removeInteriorCell` surgeries that
-    grow b_1 -- the same construction on a richer grown topology.
+    The optional `faces` / `class_holes` / `extra_holes` / `grow_vertices` parameters
+    drive the surgery-topology search (`--retries`): a different triangulated-S^2 seed,
+    a different vertex-disjoint holonomy-hole triple, extra `removeInteriorCell`
+    surgeries that grow b_1, and ADDITIVE growth -- seeded `growInterior` stellar
+    subdivisions that add interior vertices (capped by --max-additional-vertices) --
+    so the search space holds additions as well as surgical cuts.
     """
 
-    def __init__(self, faces=_ICO, class_holes=_CLASS_HOLES, extra_holes=()):
+    def __init__(self, faces=_ICO, class_holes=_CLASS_HOLES, extra_holes=(),
+                 grow_vertices=0, grow_seed=0):
         self.faces = list(faces)
         self.class_holes = [tuple(sorted(h)) for h in class_holes]
         self.reg_edges = [e for tri in self.class_holes for e in _cedges(tri)]
@@ -316,6 +325,7 @@ class Register:
         self.es = cob.EigenstateSynthesis(self.st, 1)
         for hole in self.class_holes:                       # the holonomy holes
             self.es.removeInteriorCell(list(hole))
+        self.grown = self._stellar_grow(grow_vertices, grow_seed)
         self.extra_opened = []                              # extra surgery (b_1 growth)
         for cell in extra_holes:
             cs = tuple(sorted(cell))
@@ -337,6 +347,31 @@ class Register:
         self.n = (n_raw / n_raw[np.argmax(np.abs(n_raw))]).real
         self.sign = np.sign(self.n)
         self.sign[self.sign == 0] = 1.0
+
+    def _stellar_grow(self, n, seed):
+        """ADD up to *n* interior vertices by boundary-fixed stellar subdivision,
+        composed from the two documented surgery primitives: cone a fresh vertex
+        onto an interior top cell's three edges (`attachInteriorVertex` with the
+        triangle fan — dW untouched, the new edges interior), then remove the
+        subdivided face (`removeInteriorCell` — its edges keep two faces, so dW
+        stays bit-exact). Each application adds exactly ONE vertex and preserves
+        ker L_1 (the fan is homotopic to the face it replaces); sites are drawn
+        by the seeded RNG from the current interior top cells."""
+        rng = random.Random(int(seed))
+        grown = 0
+        for _ in range(int(n)):
+            cells = sorted(tuple(sorted(int(v) for v in c))
+                           for c in self.es.interiorTopCells())
+            if not cells:
+                break
+            a, b, c = rng.choice(cells)
+            if not self.es.attachInteriorVertex([[a, b], [b, c], [a, c]]):
+                continue
+            if not self.es.removeInteriorCell([a, b, c]):
+                self.es.detachLastInteriorVertex()
+                continue
+            grown += 1
+        return grown
 
     def _period(self, vec, tri):
         """The induced (raw) oriented loop sum of a register-edge 1-form on `tri`."""
@@ -1007,12 +1042,14 @@ def _extra_holes(faces, holes, n, rng):
     return out
 
 
-def score_variant(faces, holes, extra):
+def score_variant(faces, holes, extra, grow=0, grow_seed=0):
     """Build the staged-synthesis register on one surgery-grown topology and re-decide
     the full battery by the genuine Hodge L_1 spectrum. Returns a compact, picklable
-    summary: the topology (seed size, b_1, ker L_1, carried-period rank), the realized
-    set, and the validity/classification flags."""
-    reg = Register(faces=faces, class_holes=holes, extra_holes=extra)
+    summary: the topology (seed size, b_1, ker L_1, carried-period rank, vertices
+    added by stellar growth), the realized set, and the validity/classification
+    flags."""
+    reg = Register(faces=faces, class_holes=holes, extra_holes=extra,
+                   grow_vertices=grow, grow_seed=grow_seed)
     realized, by_name = [], {}
     for name, U, _fam in _gates():
         res, _b1, _leak = post_interaction(reg, U)
@@ -1035,6 +1072,7 @@ def score_variant(faces, holes, extra):
         "level": None, "nV": int(reg.st.getVertexList().size()),
         "b1": _betti1(reg.st), "dim": reg.dim, "rank": rank,
         "n_holes": n_holes, "n_extra": len(reg.extra_opened),
+        "n_grown": reg.grown,
         "realized": realized, "n_realized": len(realized),
         "identity": identity_ok, "s3_all": s3_all,
         "saturated": bool(rank >= n_holes), "genuine": genuine, "extends": extends,
@@ -1073,8 +1111,9 @@ def _sweep_worker(name):
 
 def _retry_worker(task):
     """One surgery-topology retry: pick a seed surface, a vertex-disjoint holonomy-hole
-    triple, and extra surgeries by the retry's RNG, then score the variant."""
-    idx, base_seed, kmax = task
+    triple, extra surgeries, and a count of ADDED vertices (seeded stellar growth, at
+    most --max-additional-vertices) by the retry's RNG, then score the variant."""
+    idx, base_seed, kmax, max_add = task
     rng = random.Random(base_seed * 1_000_003 + idx)
     level = rng.choices([0, 1, 2], weights=[3, 4, 1])[0]
     faces = _seed_surface(level)
@@ -1083,8 +1122,10 @@ def _retry_worker(task):
         return None
     n_extra = rng.randint(0, kmax)
     extra = _extra_holes(faces, holes, n_extra, rng)
+    n_grow = rng.randint(0, max(int(max_add), 0))
+    grow_seed = rng.randrange(1, 2**31)
     try:
-        out = score_variant(faces, holes, extra)
+        out = score_variant(faces, holes, extra, grow=n_grow, grow_seed=grow_seed)
     except Exception:                                       # a degenerate draw
         return None
     out["level"] = level
@@ -1148,12 +1189,15 @@ def run_sweep(reg, jobs, on_progress=None):
     return rows
 
 
-def surgery_search(retries, jobs, base_seed=12345, kmax=3, on_progress=None):
+def surgery_search(retries, jobs, base_seed=12345, kmax=3, max_add=20,
+                   on_progress=None):
     """Score *retries* randomized surgery-grown topologies in parallel and aggregate:
     how many genuine vs saturated vs invalid registers, the genuine realizable-set
     sizes, and whether ANY genuine variant carries a gate beyond the criterion set.
+    Each draw may both CUT (the holonomy holes + extra removals) and ADD (seeded
+    stellar growth, 0..max_add vertices — the --max-additional-vertices cap).
     *on_progress* ticks per scored topology (the live counter)."""
-    tasks = [(i, base_seed, kmax) for i in range(retries)]
+    tasks = [(i, base_seed, kmax, max_add) for i in range(retries)]
     results = [r for r in _parallel_map(_retry_worker, tasks, jobs,
                                         on_progress=on_progress) if r]
     genuine = [r for r in results if r["genuine"]]
@@ -1170,6 +1214,8 @@ def surgery_search(retries, jobs, base_seed=12345, kmax=3, on_progress=None):
         "levels": sorted(Counter(r["level"] for r in results).items()),
         "max_b1": max((r["b1"] for r in results), default=0),
         "max_nV": max((r["nV"] for r in results), default=0),
+        "max_grown": max((r.get("n_grown", 0) for r in results), default=0),
+        "max_add": max_add,
         "genuine_sizes": sorted(genuine_sizes.items()),
         "max_genuine_set": sorted(max_genuine),
         "extensions": extensions, "new_gates": new_gates,
@@ -1394,7 +1440,9 @@ def _print_search(search):
     print(f"\n  Surgery-topology search ({search['scored']}/{search['retries']} "
           f"randomized surgery-grown topologies scored in parallel; seeds = "
           f"icosahedron + geodesic subdivisions up to |V|={search['max_nV']}, "
-          f"max b_1 grown = {search['max_b1']}):")
+          f"max b_1 grown = {search['max_b1']}; cuts AND additions — up to "
+          f"{search.get('max_add', 0)} added vertices allowed, "
+          f"{search.get('max_grown', 0)} actually added in one draw):")
     print(f"      genuine registers (proper carried V, rank < #holes, S_3 anchor intact)"
           f": {search['n_genuine']}")
     print(f"      saturated registers (rank == #holes: V is the whole period space, so "
@@ -1465,6 +1513,7 @@ def run_single_gate(args, jobs):
         sprog = _progress()
         sprog.phase("surgery-topology search", total=args.retries)
         search = surgery_search(args.retries, jobs, base_seed=args.seed,
+                                max_add=args.max_additional_vertices,
                                 on_progress=sprog.on_tick)
         sprog.finish(f"scored {search['scored']} topologies")
         _print_search(search)
@@ -1511,6 +1560,12 @@ def main():
     ap.add_argument("--retries", type=int, default=0,
                     help="surgery-topology search: score N randomized surgery-grown "
                          "topologies in parallel (>0 enables it).")
+    ap.add_argument("--max-additional-vertices", type=int, default=20,
+                    help="cap on the vertices a search draw may ADD via seeded "
+                         "growInterior stellar subdivisions, alongside the "
+                         "surgical cuts; each --retries draw adds 0..N of them "
+                         "(default 20). The default sweep, --gate, and --h3 use "
+                         "the canonical register (no additions).")
     ap.add_argument("--jobs", type=int, default=min(10, os.cpu_count() or 1),
                     help="worker processes (clamped to the 10-CPU cap; each pinned to "
                          "1 BLAS thread, so procs x threads <= 10).")
@@ -1601,6 +1656,7 @@ def main():
         sprog = _progress()
         sprog.phase("surgery-topology search", total=args.retries)
         search = surgery_search(args.retries, jobs, base_seed=args.seed,
+                                max_add=args.max_additional_vertices,
                                 on_progress=sprog.on_tick)
         sprog.finish(f"scored {search['scored']} topologies")
         _print_search(search)

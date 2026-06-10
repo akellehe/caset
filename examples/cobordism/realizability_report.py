@@ -221,15 +221,19 @@ def synthesize_boundary(c0, c1, seed, restarts=80, max_cones=4):
 # --------------------------------------------------------------------------- #
 # §5.0 realizability decisions.
 # --------------------------------------------------------------------------- #
-def decide(bulk_factory, U, dA, dB, seed, restarts, max_cones):
+def decide(bulk_factory, U, dA, dB, seed, restarts, max_cones, growth_mode=None):
     """Bend U → vec(U), pin the bulk boundary, and let the oracle fill the
-    interior. Returns the Verdict."""
+    interior. `growth_mode` defaults to the historical cone-only growth;
+    SURGERY_AND_CONE allows additions as well as surgical cuts (max_cones then
+    budgets the added vertices only). Returns the Verdict."""
     bulk = bulk_factory()
     _pin_all(bulk, w=1.0, phase=0.0)
     target = _bend(U, dA, dB)
     oracle = cob.RealizabilityOracle(bulk)
+    if growth_mode is None:
+        growth_mode = cob.RealizabilityOracle.GrowthMode.CONE
     return oracle.decide(target, dA, dB, epsilon=EPSILON, restarts=restarts,
-                         max_cones=max_cones, seed=seed)
+                         max_cones=max_cones, seed=seed, growth_mode=growth_mode)
 
 
 def _np_floor_oracle(U, dA, dB, w_bounds=(0.1, 10.0), n=60):
@@ -440,6 +444,14 @@ def main():
                     help="synthesis / sweep seed (default 0).")
     ap.add_argument("--restarts", type=int, default=80,
                     help="multi-restart count for the LM solver (default 80).")
+    ap.add_argument("--max-additional-vertices", type=int, default=20,
+                    help="cap on the vertices the growth may ADD: the cone "
+                         "budget of the §4b boundary synthesis and of the "
+                         "growable realizability cases, which run with "
+                         "additions as well as surgical cuts "
+                         "(SURGERY_AND_CONE). The obstruction-floor controls "
+                         "stay pinned at budget 0 — they certify floors at "
+                         "fixed complexity by design (default 20).")
     ap.add_argument("--out", default="/tmp/cobordism",
                     help="directory for sweeps + figures (default /tmp/cobordism).")
     ap.add_argument("--no-plot", action="store_true", help="skip the figures.")
@@ -453,7 +465,8 @@ def main():
     # cone-and-retry grows the minimal complex (the triangle K_3) realizing it.
     c0, c1 = math.sqrt(0.8), math.sqrt(0.2)
     geo, floor_seed = synthesize_boundary(complex(c0), complex(c1), seed=args.seed,
-                                          restarts=args.restarts)
+                                          restarts=args.restarts,
+                                          max_cones=args.max_additional_vertices)
     print("  §4b  boundary-state synthesis  geo(ψ),  "
           f"ψ = (√0.8, √0.2)  (|c0| ≠ |c1|)")
     print(f"       two-vertex seed floors at r = {floor_seed:.3e}  "
@@ -463,35 +476,47 @@ def main():
           f"cones={geo.cones_applied}  λ={geo.eigenvalue:.6f}\n")
 
     # ---- §5.0: realizability decisions ------------------------------------ #
+    # The growable cases run with the composed move-set (additions as well as
+    # surgical cuts, the added vertices capped by --max-additional-vertices);
+    # the obstruction-floor control stays pinned at budget 0 / cone mode so it
+    # certifies the floor at fixed complexity, cross-checked below against the
+    # single-interior-edge numpy oracle.
+    both = cob.RealizabilityOracle.GrowthMode.SURGERY_AND_CONE
+    cone = cob.RealizabilityOracle.GrowthMode.CONE
+    grow = args.max_additional_vertices
     cases = [
         ("[[1,1],[1,1]] zero-mode", _bipyramid,
-         [[1.0 + 0j, 1.0 + 0j], [1.0 + 0j, 1.0 + 0j]], 2, 2, 0, True),
+         [[1.0 + 0j, 1.0 + 0j], [1.0 + 0j, 1.0 + 0j]], 2, 2, grow, both, True),
         ("[[1,.3+.5j,-.8+.2j]] 1×3", _solid_triangle,
-         [[1.0 + 0j, 0.3 + 0.5j, -0.8 + 0.2j]], 1, 3, 4, True),
+         [[1.0 + 0j, 0.3 + 0.5j, -0.8 + 0.2j]], 1, 3, grow, both, True),
         ("[[1,2],[3,4]] generic", _bipyramid,
-         [[1.0 + 0j, 2.0 + 0j], [3.0 + 0j, 4.0 + 0j]], 2, 2, 0, False),
+         [[1.0 + 0j, 2.0 + 0j], [3.0 + 0j, 4.0 + 0j]], 2, 2, 0, cone, False),
     ]
 
     print("  §5.0  realizability of U : H_B → H_A  (bend → pin dW → fill "
-          "interior → residual verdict)\n")
+          "interior → residual verdict;")
+    print(f"        growable cases: additions + surgical cuts, at most "
+          f"{grow} added vertices; the floor control: budget 0, fixed "
+          f"complexity)\n")
     header = (f"  {'operation U':26} {'bulk':11} {'verdict':11} "
-              f"{'r / floor':>12}  {'cones':>5} {'interior':>8} {'λ (Rayleigh)':>13}")
+              f"{'r / floor':>12}  {'steps':>5} {'cuts':>4} {'interior':>8} "
+              f"{'λ (Rayleigh)':>13}")
     print(header)
     print("  " + "-" * (len(header) - 2))
 
     all_ok = True
     verdicts = []
-    for name, factory, U, dA, dB, max_cones, expect_real in cases:
+    for name, factory, U, dA, dB, max_cones, mode, expect_real in cases:
         v = decide(factory, U, dA, dB, seed=args.seed, restarts=args.restarts,
-                   max_cones=max_cones)
+                   max_cones=max_cones, growth_mode=mode)
         verdicts.append((name, v, expect_real))
         bulk = "bipyramid" if factory is _bipyramid else "triangle"
         verdict = "REALIZABLE" if v.realizable else "OBSTRUCTED"
         metric = (f"r={v.residual:.2e}" if v.realizable
                   else f"f={v.floor:.2e}")
         print(f"  {_fmt_op(name):26} {bulk:11} {verdict:11} {metric:>12}  "
-              f"{v.cones_applied:>5} {v.interior_vertex_count:>8} "
-              f"{v.eigenvalue:>13.6f}")
+              f"{v.cones_applied:>5} {v.surgery_removals:>4} "
+              f"{v.interior_vertex_count:>8} {v.eigenvalue:>13.6f}")
 
         # Acceptance: realizable cases reach r < ε; the obstructed floor is a
         # certificate bounded above CERT_FLOOR (and floor == residual there).
