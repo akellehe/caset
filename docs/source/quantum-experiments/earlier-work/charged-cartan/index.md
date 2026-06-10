@@ -1,6 +1,7 @@
 # Charged Cartan Monte Carlo
 
-The current line of work. Design notes describe each version's spec;
+The Monte Carlo line that preceded the State–Operation–Cobordism
+Correspondence work. Design notes describe each version's spec;
 experiment writeups document what each scan found. Versions are
 incremental — each builds on the prior version's lessons.
 
