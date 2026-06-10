@@ -45,9 +45,10 @@ extensions = [
     "sphinxcontrib.bibtex",
 ]
 
-# Bibliographic references for the quantum-methodology page (and any future
-# pages that need {cite}). All bib entries live in references.bib next to
-# this conf.py so they're auto-discovered by sphinx-build.
+# Bibliographic references for the pages that use {cite} (the causal-order
+# charter, causal_sets, wilson_loops, ...). All bib entries live in
+# references.bib next to this conf.py so they're auto-discovered by
+# sphinx-build.
 bibtex_bibfiles = ["references.bib"]
 bibtex_default_style = "unsrt"
 bibtex_reference_style = "label"
@@ -94,11 +95,12 @@ suppress_warnings = [
     # Real same-file labels still work for navigation in our hand-
     # written pages; this only silences the imported Doxygen pages.
     "autosectionlabel.cpp_api",
-    # quantum.md renders the tessera.quantum module docstring via
-    # autodoc; that docstring repeats section titles ("Quickstart",
-    # "Causal-order comparison", ...) that also appear as hand-written
-    # headings in quantum.md, colliding at autosectionlabel time.
-    "autosectionlabel.quantum",
+    # The Schwinger subsystem page renders the tessera.quantum module
+    # docstring via autodoc; that docstring repeats section titles
+    # ("Quickstart", "Causal-order comparison", ...) that also appear as
+    # hand-written headings on the page, colliding at autosectionlabel
+    # time.
+    "autosectionlabel.quantum-experiments/spectral-dimension-schwinger-mps-dmrg",
 ]
 
 
