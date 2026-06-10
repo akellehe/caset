@@ -18,7 +18,7 @@ Runs the full tessera.quantum causal-comparison pipeline:
      fraction, Hasse-graph edit distance).
 
 This is the experimental harness for the causal-order charter
-(``docs/source/quantum-experiments/emergent-causal-order-from-majorization.md``):
+(``docs/source/quantum-experiments/earlier-work/emergent-causal-order-from-majorization.md``):
 
     Hypothesis (H): the three partial orders coincide on the cut family
     × time-sample restriction.

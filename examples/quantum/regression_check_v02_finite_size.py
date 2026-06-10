@@ -1,7 +1,7 @@
 """Regression check for the v0.2 plateau finite-size result (issue #10).
 
 Reproduces the Scan A / Scan B baseline cell from
-docs/source/quantum-experiments/charged-cartan/experiments/03-v0.2-finite-size.md
+docs/source/quantum-experiments/earlier-work/charged-cartan/experiments/03-v0.2-finite-size.md
 on the current main and asserts that peak D_S at T = 2500 is still in
 the published plateau.
 

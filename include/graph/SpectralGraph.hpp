@@ -99,7 +99,7 @@ public:
     // slope. Endpoints use a one-sided window. ``windowSize`` must be
     // odd and ≥ ``polyOrder + 1``. Default (window 5, poly 2) matches
     // the spec recommendation in
-    // ``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md``
+    // ``docs/source/quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md``
     // §8.
     static std::vector<double> spectralDimensionSmoothed(
         std::vector<double> const& sigmas,

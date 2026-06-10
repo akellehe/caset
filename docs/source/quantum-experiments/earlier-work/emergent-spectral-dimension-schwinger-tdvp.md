@@ -12,7 +12,7 @@ user-facing API and the
 [causal-order charter](emergent-causal-order-from-majorization.md) for
 the broader entanglement → causal-order programme. An experimental run
 is recorded in
-[earlier-work/emergent_spectral_dimension.md](earlier-work/emergent_spectral_dimension.md).
+[emergent_spectral_dimension.md](emergent_spectral_dimension.md).
 
 The graph is the boundary state's mutual-information structure made
 flat; the spectral dimension is its random-walk return probability.

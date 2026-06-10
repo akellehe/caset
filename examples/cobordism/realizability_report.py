@@ -23,7 +23,7 @@
 
 The runnable synthesis + realizability capstone, mirroring the Stage-1 / Stage-2 oracles
 (``algebraic_correspondence.py``, ``topological_correspondence.py``). It runs the
-two synthesis tasks from ``docs/source/quantum-experiments/cobordism.md``:
+two synthesis tasks from ``docs/source/quantum-experiments/state-operation-cobordism/cobordism.md``:
 
 * §4b boundary-state synthesis -- the inverse eigenvector problem. Given a target
   qubit ψ, ``GeometrySynthesizer`` (#134) grows the *simplest* Hermitian-weighted

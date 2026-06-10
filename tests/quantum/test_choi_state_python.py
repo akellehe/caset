@@ -1,7 +1,7 @@
 """Acceptance tests for the Choi-state temporal mutual information.
 
 Mirrors the §H2 acceptance list in
-``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md``:
+``docs/source/quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md``:
 
   • Identity channel: $I(i_\\mathrm{in} : i_\\mathrm{out}) = 2 \\ln 2$, all
     off-diagonal entries zero.

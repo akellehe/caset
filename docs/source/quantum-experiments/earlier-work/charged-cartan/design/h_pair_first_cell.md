@@ -75,7 +75,7 @@ framework can carry — a conserved charge, operator-level C/CP, a
 baryogenesis channel, a mass term, and a geometry that the
 Hamiltonian (not the bare lattice topology) actually shapes. This is
 consistent with
-[`from_schwinger_to_lattice.md`](../../overview/from_schwinger_to_lattice.md),
+[`from_schwinger_to_lattice.md`](../../../overview/from_schwinger_to_lattice.md),
 whose glossary already states the construction is "**Not.** A
 simulation of … the Standard Model."
 
@@ -97,7 +97,7 @@ propagating); §10 places it all in the path integral.
 ### 2.1 The kinematic layer: per-vertex qudits
 
 Each vertex carries a
-[qudit](../../overview/intellectual_lineage.md#5-the-qudit-basis-charge-intrinsic-to-the-state)
+[qudit](../../../overview/intellectual_lineage.md#5-the-qudit-basis-charge-intrinsic-to-the-state)
 state $\rho_v$ — a density matrix on a $d$-dimensional Hilbert space
 $\mathcal H_v$. The construction requires of $\mathcal H_v$ only that
 it carry **(i)** a *charge grading* — a decomposition into sectors
@@ -311,7 +311,7 @@ five vertices $\{X, Y, X', AB, Y'\}$ together form a **4-simplex**
 
 ![Two gen-0 vertices interact via $\hat U$ to produce three gen-1
 vertices; the five vertices form a 4-simplex with 10 labeled
-edges](../../figures/h_pair_first_cell_diagram.svg)
+edges](../../../figures/h_pair_first_cell_diagram.svg)
 
 The 10 edges fall into three classes by MI semantics:
 
@@ -332,7 +332,7 @@ schematic:
 
 ![Discrete event step $n=0 \to n=1$: input $\rho_X \otimes \rho_Y$
 goes through $\hat U$ producing $\rho_{X'}, \rho_{Y'}$, and the Choi
-state $\rho_{AB}$](../../figures/h_pair_first_cell_schematic.svg)
+state $\rho_{AB}$](../../../figures/h_pair_first_cell_schematic.svg)
 
 ### 3.2 The three product states
 
@@ -742,7 +742,7 @@ increments $\Delta S_n$ (§10).
 model's long-range Coulomb $\sigma^z_i \sigma^z_j$ term — cannot be
 written as a per-pair $\hat U$; there is no per-event unitary to
 attach to a (2,3) cell. This is exactly the truncation
-[`from_schwinger_to_lattice.md`](../../overview/from_schwinger_to_lattice.md)
+[`from_schwinger_to_lattice.md`](../../../overview/from_schwinger_to_lattice.md)
 documents, and its price is the gauge / Coulomb channel, deferred to
 v0.3's photon mediation.
 
@@ -976,7 +976,7 @@ the spacetime, referenced by both cells' MI tables:
 the shared $X'$-$Y'$ edge; cell 1 produces $X', AB_1, Y'$ from
 $X, Y$ at generation $n=1$, and cell 2 produces $X'', AB_2, Y''$
 from $X', Y'$ at generation
-$n=2$.](../../figures/h_pair_two_generations_diagram.svg)
+$n=2$.](../../../figures/h_pair_two_generations_diagram.svg)
 
 The input joint to cell 2 is then **not** a product of marginals —
 it's the stored $\rho_{AB_1}$:
@@ -1085,7 +1085,7 @@ layer. That's the "cross-history merging" topology:
 meet in a second-generation cell C; cell C inputs are
 $X_1'$ from cell A and $X_2'$ from cell B, with no stored joint
 between
-them.](../../figures/h_pair_merging_cells_diagram.svg)
+them.](../../../figures/h_pair_merging_cells_diagram.svg)
 
 At cell C, since the two inputs $X_1'$ and $X_2'$ don't share an
 interaction history, there is **no entry in `quditJointOf_`** for
@@ -1342,10 +1342,10 @@ Conversely, the things this derivation makes vivid:
   introduces the Choi-state $\Sigma_{AB}$; its "Open question" on
   the arbitrariness of the default $H_{\mathrm{pair}}$ is what §1
   here responds to.
-- [from_schwinger_to_lattice.md](../../overview/from_schwinger_to_lattice.md)
+- [from_schwinger_to_lattice.md](../../../overview/from_schwinger_to_lattice.md)
   — the Schwinger model read as a set of requirements rather than
   dynamics; the locality truncation behind R5.
-- [Intellectual lineage](../../overview/intellectual_lineage.md#5-the-qudit-basis-charge-intrinsic-to-the-state)
+- [Intellectual lineage](../../../overview/intellectual_lineage.md#5-the-qudit-basis-charge-intrinsic-to-the-state)
   — the qudit-basis story this builds on; §4 there gives the
   Schwinger "set of requirements" framing that §7 here extends to
   the first-cell operational level.

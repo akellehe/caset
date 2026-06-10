@@ -22,7 +22,7 @@
 """Stage-2 correctness oracle for the State-Operation-Cobordism correspondence.
 
 Runs the topological-layer checks T1-T5 from
-``docs/source/quantum-experiments/cobordism.md`` (the n=3 layer, where the sign
+``docs/source/quantum-experiments/state-operation-cobordism/cobordism.md`` (the n=3 layer, where the sign
 becomes a genuine topological invariant) and prints a pass/fail table with
 residuals, then writes the parameter sweeps (sec 7) and figures (sec 8). It is
 the Stage-2 capstone, mirroring the Stage-1 algebraic oracle

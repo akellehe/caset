@@ -35,7 +35,7 @@ closes at T → ∞? An artifact of the current Hamiltonian parameter
 choice `(J_c=1.0, J_s=0.25, δ_m=0)`? Or a real structural number?
 A deeper T = 100k scan is queued for the first question; the
 Hamiltonian-parameter scan
-([Experiment 05](../charged-cartan/experiments/05-v0.2-h-param-sweep.md),
+([Experiment 05](../earlier-work/charged-cartan/experiments/05-v0.2-h-param-sweep.md),
 issue [#11](https://github.com/akellehe/tessera/issues/11)) has
 since answered the second:
 
@@ -86,14 +86,14 @@ each version's best β.
 ## Where each result is documented
 
 - **v0 results**: [`earlier-work/interaction_history_monte_carlo.md`](../earlier-work/interaction_history_monte_carlo.md)
-- **v0.1 + B + iii results**: [`../charged-cartan/experiments/01-v0.1-BplusIII-comparison.md`](../charged-cartan/experiments/01-v0.1-BplusIII-comparison.md)
-- **v0.2 plateau**: [`../charged-cartan/experiments/02-v0.2-beta-scan.md`](../charged-cartan/experiments/02-v0.2-beta-scan.md)
-- **Finite-size T-scaling**: [`../charged-cartan/experiments/03-v0.2-finite-size.md`](../charged-cartan/experiments/03-v0.2-finite-size.md)
+- **v0.1 + B + iii results**: [`../earlier-work/charged-cartan/experiments/01-v0.1-BplusIII-comparison.md`](../earlier-work/charged-cartan/experiments/01-v0.1-BplusIII-comparison.md)
+- **v0.2 plateau**: [`../earlier-work/charged-cartan/experiments/02-v0.2-beta-scan.md`](../earlier-work/charged-cartan/experiments/02-v0.2-beta-scan.md)
+- **Finite-size T-scaling**: [`../earlier-work/charged-cartan/experiments/03-v0.2-finite-size.md`](../earlier-work/charged-cartan/experiments/03-v0.2-finite-size.md)
 - **Choi-state Q-conservation fix** (sanity, headline numbers
-  unchanged): [`../charged-cartan/experiments/04-v0.2-choi-q-conservation.md`](../charged-cartan/experiments/04-v0.2-choi-q-conservation.md)
+  unchanged): [`../earlier-work/charged-cartan/experiments/04-v0.2-choi-q-conservation.md`](../earlier-work/charged-cartan/experiments/04-v0.2-choi-q-conservation.md)
 - **H-parameter sweep** (J_s identified as the dominant knob, J_s=0
   reproduces the default-H T → ∞ asymptote at small T):
-  [`../charged-cartan/experiments/05-v0.2-h-param-sweep.md`](../charged-cartan/experiments/05-v0.2-h-param-sweep.md)
+  [`../earlier-work/charged-cartan/experiments/05-v0.2-h-param-sweep.md`](../earlier-work/charged-cartan/experiments/05-v0.2-h-param-sweep.md)
 
 ## What would close the 0.07 gap
 
@@ -103,7 +103,7 @@ Three plausible paths, in increasing complexity:
    refutes the geometric extrapolation. If the trend continues, the
    asymptote is ≈ 4.07 or possibly lower.
 2. **Hamiltonian-parameter scan** ([issue #11](https://github.com/akellehe/tessera/issues/11),
-   [Experiment 05](../charged-cartan/experiments/05-v0.2-h-param-sweep.md)):
+   [Experiment 05](../earlier-work/charged-cartan/experiments/05-v0.2-h-param-sweep.md)):
    **done.** The dominant knob is `J_s` — turning it off pulls the
    *finite-T* plateau to 4.08 ± 0.002, matching the v0.2 default's
    T → ∞ asymptote. Remaining work: a T-scaling check *at* `J_s = 0`
