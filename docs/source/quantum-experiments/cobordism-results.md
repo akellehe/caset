@@ -11,7 +11,7 @@
 > `realizable_image_sweep.py` / `loosened_gate_retest.py` /
 > `spectral_gate_realizability.py` (the gate set: pinned ($S_3$), loosened at
 > $k=0$, and the staged spectral synthesis with the boundary synthesized
-> ($S_3+H{\otimes}H+\sqrt{\mathrm{SWAP}}$)) — all under `examples/cobordism/`.
+> (the charge-conservation criterion; 13 named gates)) — all under `examples/cobordism/`.
 
 ## The correspondence
 
@@ -326,7 +326,7 @@ discrete lattice that a generic superposition/entangling $U$ is uniformly bounde
 away from (gap median $1.03$ over 200 Haar $U(4)$), and the continuous freedom the hole
 supplies lives in the *state* — the spectral $Z$ — not in new realizable maps.
 
-## The gate set with the boundary synthesized: $S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}}$
+## The gate set with the boundary synthesized: the charge-conservation criterion
 
 The $S_3$ image above pins the cobordism's boundary bit-exact — it is the restriction of
 one global form on a fixed twisted cylinder, and that integrality is exactly what holds
@@ -372,7 +372,12 @@ $(+,+,-)$ read off the bulk and symmetrized). A single $(\psi_A,\psi_B)$ probes 
 register vector, so the spectral test is driven on a **$V$-generic input** ($\Sigma=0$,
 all components non-zero), whose $U$-image leaks for *any* $U$ that does not preserve the
 whole register; the leakage $|\Sigma(U|\psi_B\rangle)|$ is reported alongside as the
-analytic cross-check.
+analytic cross-check. Because $V$ is exactly the $\Sigma=0$ subspace, $U$ preserves it
+**iff** its $\{[a],[b],[a{+}b]\}$ block conserves total charge — the block's three column
+sums are equal (the all-ones covector $c=[1,1,1]$ is a left-eigenvector). This
+**closed-form criterion** (`conserves_charge`) agrees with the spectral residual on
+*every* gate in the battery, so the realizable set is a *criterion*, not a hand-listed
+number — and being a property of $U$'s action, it is independent of the bulk topology.
 
 **The identity sanity check (the falsifiable core), decided spectrally.** Surgery grows
 $\ker L_1$ as $0\to0\to1\to2$ (the closed $S^2$, then the disk, the annulus, the 3-hole
@@ -396,53 +401,57 @@ $U|\psi_B\rangle$ on the surgery-grown register ($b_1=2$ throughout):
 | 3-cycle $(0312)$ | $S_3$ control | $5.9\times10^{-29}$ | $0$ | **yes** |
 | $H{\otimes}H$ | superposition | $3.7\times10^{-29}$ | $0$ | **yes** |
 | $\sqrt{\mathrm{SWAP}}$ | superposition | $2.8\times10^{-29}$ | $0$ | **yes** |
-| $I{\otimes}H$ | superposition | $0.54$ | $0.28$ | no |
-| $T{\otimes}I$ | phase | $2.87$ | $0.77$ | no |
-| $\sqrt{\mathrm{iSWAP}}$ | superposition | $4.21$ | $1.00$ | no |
-| `CPHASE`$(\pi/4)$ | phase/entangler | $4.34$ | $1.00$ | no |
-| $H{\otimes}I$ | superposition | $5.62$ | $1.20$ | no |
-| $S{\otimes}I$ | phase | $6.96$ | $1.41$ | no |
-| `CZ`, $Z{\otimes}Z$ | phase / sign | $7.30$ | $2.60$ | no |
-| `iSWAP` | phase/entangler | $8.16$ | $1.84$ | no |
-| $X{\otimes}X$ | Pauli perm | $8.44$ | $1.30$ | no |
+| $\sqrt{\mathrm{SWAP}}^\dagger$ | superposition | $2.8\times10^{-29}$ | $0$ | **yes** |
+| `CSX` (ctrl-$\sqrt{X}$) | controlled | $4.4\times10^{-29}$ | $0$ | **yes** |
+| `CSXdg` | controlled | $5.5\times10^{-29}$ | $0$ | **yes** |
+| `rev-CSX` | controlled | $2.2\times10^{-29}$ | $0$ | **yes** |
+| `rev-CSXdg` | controlled | $1.7\times10^{-29}$ | $0$ | **yes** |
+| the other **39** (Paulis, $H/S/T$ singles, `CZ`/`CY`/`CH`/`CS`, `iSWAP`, $\sqrt{\mathrm{iSWAP}}$, Magic, Mølmer–Sørensen, …) | superposition / phase / entangler | $0.2$–$8.5$ | $0.2$–$2.6$ | **no** (certified) |
 
-The realizable set is $\{I,\,\mathrm{SWAP},\,\mathrm{CNOT},\,\text{reversed-CNOT},\,
-(0231),\,(0312),\,H{\otimes}H,\,\sqrt{\mathrm{SWAP}}\}$ — **8 gates**, the full $S_3$ plus
-$H{\otimes}H$ plus $\sqrt{\mathrm{SWAP}}$. The realize/floor split is $\sim28$ orders of
-magnitude: the carried gates hit machine zero (genuine harmonics of $L_1$), the others
-floor at $0.5$–$8.4$, each a certified obstruction (its post-interaction state leaks out
-of $\ker L_1$, $\Sigma\neq0$).
+The realizable set is a **criterion**, not a number: $U$ realizes iff its
+$\{[a],[b],[a{+}b]\}$ block conserves total charge (equal column sums), and that closed
+form agrees with the spectral residual on every gate. The criterion cuts out a continuous
+group; among the standard named gates **13** satisfy it — the full $S_3$ (6),
+$H{\otimes}H$, the controlled-$\sqrt{X}$-power family on either qubit ($\mathrm{CSX}$,
+$\mathrm{CSX}^\dagger$, and their control-$B$ mirrors), and the $\sqrt{\mathrm{SWAP}}$
+roots ($\sqrt{\mathrm{SWAP}}$, $\sqrt{\mathrm{SWAP}}^\dagger$). The realize/floor split is
+$\sim28$ orders of magnitude: the carried gates hit machine zero (genuine harmonics of
+$L_1$), the other 39 floor at $0.2$–$8.5$, each a certified obstruction (its
+post-interaction state leaks out of $\ker L_1$, $\Sigma\neq0$).
 
-**The verdict (boundary synthesized).** The staged spectral synthesis realizes
-**$S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}} = 8$** — *one more* than the pinned
-fixed-boundary $S_3 + H{\otimes}H = 7$, and far more than the topology-free $\{I\}$. The
-extra gate is $\sqrt{\mathrm{SWAP}}$: a **non-integer** register automorphism whose
-post-interaction state still lands in the carried register $\ker L_1$, admissible only
-once the boundary is *synthesized* rather than pinned to an integer monodromy. This is
-exactly the relaxation the hypothesis predicted — synthesizing the boundary, not pinning
-it bit-exact, lifts the integrality constraint and enlarges the realizable set. What still
-floors is genuine register *leakage* ($\Sigma\neq0$): a holonomy superposition or
-off-lattice phase that no emergent $b_1$ can carry, the $k=1$ analogue of the sign-flipped
-meridian that floors on every filling.
+**The verdict (boundary synthesized).** The staged spectral synthesis realizes exactly the
+gates whose holonomy-class block **conserves charge** — a closed-form criterion, not a
+count. Synthesizing the boundary (rather than pinning it bit-exact) lifts the integrality
+constraint that held the DW image down to the six permutations, and what replaces it is
+not a slightly longer list but a **continuous group**: every charge-conserving gate. Among
+standard named gates that is the full $S_3$, $H{\otimes}H$, the controlled-$\sqrt{X}$-power
+family on either qubit, and the $\sqrt{\mathrm{SWAP}}$ roots — **13** in this battery, with
+the count tracking the battery, not the physics. (An earlier 18-gate battery reported
+"$S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}} = 8$"; that was its realizable *subset*, missing
+$\mathrm{CSX}$ and $\sqrt{\mathrm{SWAP}}^\dagger$.) What still floors is genuine register
+*leakage* ($\Sigma\neq0$): a holonomy superposition or off-lattice phase that no emergent
+$b_1$ can carry, the $k=1$ analogue of the sign-flipped meridian that floors on every
+filling.
 
-**The bigger search confirms 8.** A parallelized high-retry surgery-topology search
-(`spectral_gate_realizability.py --retries N --jobs 10` — ten worker processes, each pinned
-to one BLAS thread, so $\text{procs}\times\text{threads}\le10$) asks directly whether a
-*richer* emergent register carries a currently-floored gate beyond the 8. Each retry re-runs
-the identical staged synthesis on a randomized surgery-grown bulk: a different
-triangulated-$S^2$ seed (the icosahedron and its geodesic subdivisions, up to $|V|=162$), a
-different vertex-disjoint holonomy-hole triple, and extra `removeInteriorCell` surgeries that
-grow $b_1$ (up to $5$ here). Over **10 000** topologies the realizable set never exceeds 8.
-The **4 225 genuine** registers — a *proper* carried subspace ($\mathrm{rank}\,P<\#\text{holes}$,
+**The bigger search confirms the criterion.** A parallelized high-retry surgery-topology
+search (`spectral_gate_realizability.py --retries N --jobs 10` — ten worker processes, each
+pinned to one BLAS thread, so $\text{procs}\times\text{threads}\le10$) asks directly whether
+a *richer* emergent register carries a gate beyond the criterion set. Each retry re-runs the
+identical staged synthesis on a randomized surgery-grown bulk: a different triangulated-$S^2$
+seed (the icosahedron and its geodesic subdivisions, up to $|V|=162$), a different
+vertex-disjoint holonomy-hole triple, and extra `removeInteriorCell` surgeries that grow
+$b_1$ (up to $5$ here). Over **3 000** topologies the realizable set never grows. The
+**1 282 genuine** registers — a *proper* carried subspace ($\mathrm{rank}\,P<\#\text{holes}$,
 with the identity and all six $S_3$ controls still realizing) — each realize *exactly* the
-same 8. The other **5 775** draws **saturate** the holonomy-period space
-($\mathrm{rank}\,P=\#\text{holes}$): $V$ becomes the whole period space, so every gate
-trivially "realizes" — but that is the **dissolution** of the register, not the carrying of a
-new gate (no proper subspace is left for a state to leak out of, so the obstruction, and with
-it the discriminating content of "realizable", is gone). Growing $b_1$ therefore buys no new
-*operations*; with the $S_3$ validity anchor and a genuine register the realizable set is
-**8**, exactly the canonical output. This is the operation-side echo of the $b_1$-hole result
-above — surgery enlarges the realizable *state* space, not the realizable *gate* set.
+same charge-conserving gates (the 13). The other **1 718** draws **saturate** the
+holonomy-period space ($\mathrm{rank}\,P=\#\text{holes}$): $V$ becomes the whole period
+space, so every gate trivially "realizes" — but that is the **dissolution** of the register,
+not the carrying of a new gate (no proper subspace is left for a state to leak out of, so the
+obstruction, and with it the discriminating content of "realizable", is gone). This is no
+accident: the criterion is a property of $U$'s holonomy-class block, *not* of the bulk
+topology, so no surgery can change it. Growing $b_1$ buys no new *operations* — the
+operation-side echo of the $b_1$-hole result above: surgery enlarges the realizable *state*
+space, not the realizable *gate* set.
 
 ## Figures
 
@@ -534,9 +543,9 @@ python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral br
 python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
 python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
-python examples/cobordism/spectral_gate_realizability.py                   # the staged gate set (S₃ + H⊗H + √SWAP)
-python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP   # solve for one named gate
-python examples/cobordism/spectral_gate_realizability.py --retries 10000 --jobs 10  # parallel surgery-topology search (confirms 8)
+python examples/cobordism/spectral_gate_realizability.py                   # the staged gate set (charge-conservation criterion, 13 named)
+python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP   # solve for one named gate (52-gate battery)
+python examples/cobordism/spectral_gate_realizability.py --retries 10000 --jobs 10  # parallel surgery-topology search (confirms the criterion)
 python examples/cobordism/spectral_gate_realizability.py --all-plots        # force-directed renders → issue-attachments
 python -m pytest tests/cobordism
 ```
