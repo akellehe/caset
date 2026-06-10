@@ -38,10 +38,13 @@ Hodge Laplacian's ker L_1 read by eigendecomposition, not a Levenberg-Marquardt 
   3. **The identity is the sanity check, decided spectrally, and it passes.** The
      identity post-interaction state floors on every seed with ker L_1 < 2 and realizes
      only once surgery has grown the full register (b_1 = 2) -- surgery is load-bearing.
-  4. **Stage 3: the realizable set is the spectral OUTPUT, and it is 8.** Scored by the
-     genuine L_1 residual of U|psi_B>, the realizable set is S_3 + H(x)H + sqrt-SWAP --
-     ONE more than the pinned fixed-boundary S_3 + H(x)H = 7 (the relaxation the
-     synthesized boundary buys), and not {I} (the topology-free result).
+  4. **Stage 3: the realizable set is the spectral OUTPUT, and it is a CRITERION.** Scored
+     by the genuine L_1 residual of U|psi_B>, a gate realizes iff its {[a],[b],[a+b]} block
+     conserves total holonomy charge (the three column sums are equal); the spectral test
+     and the closed-form ``conserves_charge`` agree on every gate in the battery. The
+     criterion cuts out a continuous group, so the realizable set is not a fixed number --
+     the standard battery's criterion-satisfying named gates are 13: S_3, H(x)H, the
+     controlled-sqrt-X-power family on either qubit, and the sqrt-SWAP roots.
 """
 
 import importlib.util
@@ -161,20 +164,29 @@ class StagedSynthesisTest(unittest.TestCase):
 
 # --------------------------------------------------------------------------- #
 class RealizableSetIsTheSpectralOutputTest(unittest.TestCase):
-    """Stage 3: the realizable set is the spectral OUTPUT -- S_3 + H(x)H + sqrt-SWAP = 8,
-    one more than the pinned fixed-boundary S_3 + H(x)H = 7, and not the topology-free
-    {I}."""
+    """Stage 3: the realizable set is the spectral OUTPUT, and it is a CRITERION -- every
+    gate whose {[a],[b],[a+b]} block conserves total holonomy charge (equal column sums).
+    The closed-form criterion agrees with the spectral test on every gate; the standard
+    battery's criterion-satisfying named gates number 13."""
 
     def setUp(self):
         self.reg = GATE.Register()
         self.rows = GATE.gate_sweep(self.reg)
 
-    def test_realizable_set_is_s3_plus_hxh_plus_sqrtswap(self):
-        realized = [r["gate"] for r in self.rows if r["realizable"]]
-        self.assertEqual(realized,
-                         ["Identity", "SWAP", "CNOT", "reversed-CNOT",
-                          "3-cycle (0231)", "3-cycle (0312)", "H(x)H", "sqrt-SWAP"])
-        self.assertEqual(len(realized), 8)                   # one more than 7
+    def test_realizable_set_is_the_charge_conserving_gates(self):
+        realized = {r["gate"] for r in self.rows if r["realizable"]}
+        self.assertEqual(realized, set(GATE.CANONICAL_SET))
+        # the 13 standard-named gates the charge-conservation criterion admits
+        self.assertEqual(realized, {
+            "Identity", "SWAP", "CNOT", "reversed-CNOT", "3-cycle (0231)",
+            "3-cycle (0312)", "H(x)H", "CSX", "CSXdg", "rev-CSX", "rev-CSXdg",
+            "sqrt-SWAP", "sqrt-SWAP-dg"})
+
+    def test_spectral_test_equals_the_closed_form_criterion(self):
+        # the realizable set is a CRITERION: U realizes (spectral) iff its [a],[b],[a+b]
+        # block conserves charge (equal column sums) -- they agree on EVERY battery gate
+        for r, (_n, U, _f) in zip(self.rows, GATE._gates()):
+            self.assertEqual(GATE.conserves_charge(U), r["realizable"], msg=r["gate"])
 
     def test_the_six_s3_controls_all_realize(self):
         s3 = [r for r in self.rows if r["family"] == "S3 control"]
@@ -183,14 +195,15 @@ class RealizableSetIsTheSpectralOutputTest(unittest.TestCase):
             self.assertTrue(r["realizable"])
             self.assertLess(r["residual"], GATE.REALIZE)     # machine-zero (the spectrum)
 
-    def test_sqrtswap_is_the_extra_gate_the_synthesized_boundary_buys(self):
+    def test_the_realizers_beyond_s3_are_charge_conserving(self):
         by = {r["gate"]: r for r in self.rows}
-        # sqrt-SWAP realizes here though the integer-monodromy fixed-boundary run floored
-        # it: a non-integer register automorphism admissible once the boundary is grown
-        self.assertTrue(by["sqrt-SWAP"]["realizable"])
-        self.assertLess(by["sqrt-SWAP"]["residual"], GATE.REALIZE)
-        # H(x)H (the 7th, shared with the fixed-boundary run) also realizes
-        self.assertTrue(by["H(x)H"]["realizable"])
+        # beyond the S_3 permutations the criterion admits H(x)H, the sqrt-SWAP roots, and
+        # the controlled-sqrt-X-power family on either qubit -- all charge-conserving, all
+        # carried at machine zero (these are the gates an 18-gate battery undercounted)
+        for g in ("H(x)H", "sqrt-SWAP", "sqrt-SWAP-dg", "CSX", "CSXdg",
+                  "rev-CSX", "rev-CSXdg"):
+            self.assertTrue(by[g]["realizable"], msg=g)
+            self.assertLess(by[g]["residual"], GATE.REALIZE, msg=g)
 
     def test_every_floored_gate_is_a_certified_obstruction(self):
         floored = [r for r in self.rows if not r["realizable"]]
