@@ -8,7 +8,6 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
-#include <string>
 #include <utility>
 
 namespace tessera::quantum {
@@ -323,45 +322,6 @@ QuantumSimplex::fromTargetMutualInformation(
         else              hi = mid;
     }
     return buildSimplexFromJoint(spacetime, qva, qvb, rhoAB, iMax, tol);
-}
-
-void
-QuantumSimplex::assertSpacelikeAdmissible(
-    const ::tessera::mesh::Simplex& simplex,
-    double                          tol) {
-    const int n = static_cast<int>(simplex.size());  // vertices = d + 1
-    if (n < 2) return;                                // trivially admissible
-    const int d = n - 1;
-
-    // Skip simplices that contain any null/timelike (worldline) edge: their
-    // admissibility is Lorentzian, not the spacelike triangle inequalities. The
-    // Cayley-Menger bordered matrix carries the squared edge lengths in its
-    // lower-right (d+1)x(d+1) block, offset (1, 1) of the (d+2)x(d+2) array.
-    const std::vector<double> cm = simplex.cayleyMengerMatrix(/*wickRotate=*/false);
-    const int m = n + 1;  // CM is (d+2) x (d+2)
-    for (int a = 0; a < n; ++a) {
-        for (int b = a + 1; b < n; ++b) {
-            const double s = cm[static_cast<std::size_t>(1 + a) * m + (1 + b)];
-            if (s <= tol) return;  // null/timelike edge → not a spacelike cell
-        }
-    }
-
-    // All edges spacelike: the Gram matrix must be positive-definite.
-    const std::vector<double> g = simplex.gramMatrix(/*wickRotate=*/false);
-    Eigen::MatrixXd gram(d, d);
-    for (int i = 0; i < d; ++i)
-        for (int j = 0; j < d; ++j)
-            gram(i, j) = g[static_cast<std::size_t>(i) * d + j];
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(gram, Eigen::EigenvaluesOnly);
-    const double minEig = es.eigenvalues().minCoeff();
-    if (!(minEig > tol)) {
-        throw std::runtime_error(
-            "QuantumSimplex::assertSpacelikeAdmissible: inadmissible spacelike "
-            "simplex — Gram matrix is not positive-definite (min eigenvalue " +
-            std::to_string(minEig) +
-            "); the spacelike triangle inequalities are violated. The metric is "
-            "not silently repaired.");
-    }
 }
 
 } // namespace tessera::quantum

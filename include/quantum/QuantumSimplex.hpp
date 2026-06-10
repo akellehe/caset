@@ -119,23 +119,6 @@ class QuantumSimplex {
                                 double                           targetMI,
                                 double                           iMax,
                                 const KoashiImotoTolerances&     tol = {});
-
-    // Fail-loudly admissibility check for a purely-spacelike simplex.
-    //
-    // "Spacelike" means every edge has squaredLength > tol (the Edge
-    // convention: spacelike > 0, null = 0, timelike < 0). For such a cell the
-    // Gram matrix relative to vertex 0 must be positive-definite — equivalently
-    // the generalized triangle inequalities hold and the cell has real, nonzero
-    // d-content. If it does not, the simplex is inadmissible and this throws
-    // ``std::runtime_error`` rather than silently repairing it.
-    //
-    // A simplex containing any null or timelike (worldline) edge is **skipped**
-    // (returns without checking): its admissibility is governed by the
-    // Lorentzian/rapidity structure, not the spacelike triangle inequalities.
-    // Simplices with fewer than two vertices are trivially admissible.
-    static void
-    assertSpacelikeAdmissible(const ::tessera::mesh::Simplex& simplex,
-                              double tol = 1e-12);
 };
 
 } // namespace tessera::quantum

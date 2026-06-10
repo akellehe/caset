@@ -46,43 +46,4 @@ QuantumVertex::vanRaamsdonkDistanceTo(
     return -std::log(I / iMax);
 }
 
-double
-QuantumVertex::vanRaamsdonkSquaredLength(double I, double iMax,
-                                         double epsilon) noexcept {
-    const double cap = -std::log(epsilon);  // floor on d_VR ⇒ finite squared length
-    const double x = (iMax > 0.0 && I > 0.0) ? (I / iMax) : 0.0;
-    double dVR = (x > 0.0) ? -std::log(x)
-                           : std::numeric_limits<double>::infinity();
-    if (!std::isfinite(dVR) || dVR > cap) {
-        dVR = cap;
-    }
-    return dVR * dVR;
-}
-
-double
-QuantumVertex::vanRaamsdonkSquaredLengthTo(
-    const ::tessera::mesh::Vertex* other,
-    double                          iMax,
-    double                          epsilon) const {
-    if (other == nullptr) {
-        throw std::invalid_argument(
-            "QuantumVertex::vanRaamsdonkSquaredLengthTo: other is null");
-    }
-    // Forward-time worldline edge (different time slice) → null (squaredLength
-    // 0). I = iMax there, so the spacelike length would be 0 anyway; we return
-    // it directly and let the Lorentzian/rapidity structure (Regge action)
-    // supply the timelike content.
-    if (std::abs(getTime() - other->getTime()) > 1e-12) {
-        return 0.0;
-    }
-    // Spacelike edge (same slice): +d_VR², floored to a finite value when
-    // I < epsilon·iMax so a vanishing-correlation edge cannot blow the cell up.
-    double dVR = vanRaamsdonkDistanceTo(other, iMax);
-    const double cap = -std::log(epsilon);
-    if (!std::isfinite(dVR) || dVR > cap) {
-        dVR = cap;
-    }
-    return dVR * dVR;
-}
-
 } // namespace tessera::quantum

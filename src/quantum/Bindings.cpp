@@ -1434,23 +1434,7 @@ inherited correlation. Returns +∞ when I = 0.
 
 The KI cell factory uses this for the nine non-(A, B) edges and
 computes d_VR for the (A, B) edge directly from the input joint
-ρ_AB.)doc")
-        .def("vanRaamsdonkSquaredLengthTo",
-             &::tessera::quantum::QuantumVertex::vanRaamsdonkSquaredLengthTo,
-             py::arg("other"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
-             R"doc(Time-aware Van Raamsdonk signed squared length to
-``other`` for the one-forward-step convention — the value stored in
-Edge.squaredLength. A worldline edge (different time slice, e.g.
-t=0 → t=1) returns 0 (null); a spacelike edge (same slice) returns
-+d_VR² = (−log(I/iMax))², floored to a finite value when
-I < epsilon·iMax. Time slices are read from getTime() (a vertex with
-no coordinates reads as t=0).)doc")
-        .def_static("vanRaamsdonkSquaredLength",
-             &::tessera::quantum::QuantumVertex::vanRaamsdonkSquaredLength,
-             py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
-             R"doc(The Van Raamsdonk metric law: the spacelike signed squared
-length (−log(I/iMax))² for a given mutual information I, floored to a
-finite value (length −log(epsilon)) when I < epsilon·iMax. Always ≥ 0.)doc");
+ρ_AB.)doc");
 
     py::class_<::tessera::quantum::QuantumSimplex>(m, "QuantumSimplex",
             R"doc(Static-only utility: KI factories for a 5-vertex
@@ -1511,15 +1495,7 @@ on qva, qvb.)doc")
             R"doc(Binary-search α in
 ρ_AB(α) = (1-α)·(ρ_A ⊗ ρ_B) + α·ρ_AB^Schmidt
 to hit ``targetMI``. Requires matched spectra of ρ_A, ρ_B; throws
-if ``targetMI`` lies outside [0, 2·H(λ)].)doc")
-        .def_static("assertSpacelikeAdmissible",
-            &::tessera::quantum::QuantumSimplex::assertSpacelikeAdmissible,
-            py::arg("simplex"), py::arg("tol") = 1e-12,
-            R"doc(Fail-loudly admissibility check for a purely-spacelike
-simplex: raises RuntimeError when the Gram matrix is not
-positive-definite (the spacelike triangle inequalities are violated).
-A simplex containing any null/timelike (worldline) edge is skipped;
-fewer than two vertices is trivially admissible.)doc");
+if ``targetMI`` lies outside [0, 2·H(λ)].)doc");
 
     py::enum_<::tessera::quantum::QuantumSimplex::Position>(
             m, "QuantumSimplexPosition")

@@ -117,6 +117,17 @@ squaredLength * exp(i * phase) used by the Hermitian-weighted Laplacian.
 The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
       .def("setPhase", &Edge::setPhase, py::arg("phase"),
            "Set the U(1) connection phase carried by this edge (radians).")
+      .def_static("vanRaamsdonkSquaredLength", &Edge::vanRaamsdonkSquaredLength,
+                  py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
+                  "Van Raamsdonk metric law: the spacelike squared length "
+                  "(-log(I/iMax))^2, floored to a finite value when "
+                  "I < epsilon*iMax. Always >= 0.")
+      .def("vanRaamsdonkSquaredLengthFor", &Edge::vanRaamsdonkSquaredLengthFor,
+           py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
+           "Time-aware Van Raamsdonk signed squared length for this edge given "
+           "the mutual information I between its endpoints: 0 (null) when the "
+           "endpoints lie on different time slices (a forward-time worldline "
+           "edge), else the spacelike vanRaamsdonkSquaredLength.")
       .def("setSquaredLength", &Edge::setSquaredLength, py::arg("squaredLength"),
            R"doc(Set the squared edge length (the signed weight magnitude).
 
@@ -276,6 +287,13 @@ their vertex IDs.)doc")
            "Return all simplices of one dimension higher that contain this simplex as a face.")
       .def("getEdges", &Simplex::getEdges, py::return_value_policy::copy,
            "Return the edges (1-faces) of this simplex.")
+      .def("assertSpacelikeAdmissible", &Simplex::assertSpacelikeAdmissible,
+           py::arg("tol") = 1e-12,
+           "Fail-loudly admissibility check for a purely-spacelike simplex: "
+           "raises RuntimeError when the Gram matrix is not positive-definite "
+           "(the spacelike triangle inequalities are violated). A simplex with "
+           "any null/timelike (worldline) edge is skipped; fewer than two "
+           "vertices is trivially admissible.")
       .def("getFacets", &Simplex::getFacets, py::return_value_policy::copy,
            R"doc(Return the (k-1)-dimensional faces of this k-simplex.
 

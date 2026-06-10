@@ -306,6 +306,21 @@ class Simplex {
     /// discarding it the way |l^2| would.
     [[nodiscard]] double volume() const;
 
+    /// Fail-loudly admissibility check for a purely-spacelike simplex.
+    ///
+    /// "Spacelike" means every edge has squared length > tol (the Edge
+    /// convention: spacelike > 0, null = 0, timelike < 0). For such a cell the
+    /// Gram matrix relative to vertex 0 must be positive-definite —
+    /// equivalently the generalized triangle inequalities hold and the cell has
+    /// real, nonzero d-content. If it does not, the simplex is inadmissible and
+    /// this throws ``std::runtime_error`` rather than silently repairing it
+    /// (positive-definiteness is checked Eigen-free via Sylvester's criterion
+    /// on the leading principal minors). A simplex containing any null or
+    /// timelike (worldline) edge is **skipped** (returns without checking): its
+    /// admissibility is governed by the Lorentzian structure, not the spacelike
+    /// triangle inequalities. Fewer than two vertices is trivially admissible.
+    void assertSpacelikeAdmissible(double tol = 1e-12) const;
+
     /// Determinant of a square matrix (flat row-major, size n x n).
     [[nodiscard]] static double determinant(
         const std::vector<double> &M, int n);
