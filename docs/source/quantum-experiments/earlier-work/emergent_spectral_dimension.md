@@ -1,7 +1,7 @@
 # Emergent spectral dimension — first run
 
 First experimental run of `tessera.quantum.holography.EmergentSpectralDimension` against the hypothesis (H_SD) laid out in
-[holography-causal-ordering-emergent-dimension.md](../../holography-causal-ordering-emergent-dimension.md) §1.
+[emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md) §1.
 
 ## Hypothesis recap
 
@@ -50,7 +50,7 @@ python examples/quantum/run_emergent_spectral_dimension.py \
     --out-png /tmp/holography-results/spectral_dimension.png
 ```
 
-Single JSON record per $m/g$ is written matching the schema in [holography-causal-ordering-emergent-dimension.md](../../holography-causal-ordering-emergent-dimension.md).
+Single JSON record per $m/g$ is written matching the schema in [emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md).
 
 ## Numerical findings
 
@@ -210,7 +210,7 @@ Three findings change the picture from the $N = 8$ baseline:
    graph is ~3.5× denser in edges ($|E_G|$ went from ~680 to ~2400+), and the spectral-dimension
    estimator picks up the extra connectivity directly.
 2. **The $m/g$ ordering is no longer monotonic.** $N = 8$ had light > medium > heavy in peak $D_S$ —
-   what the methodology charter predicts on physical grounds. $N = 16$ has light > heavy > medium: the
+   what the spectral-dimension charter predicts on physical grounds. $N = 16$ has light > heavy > medium: the
    heavy-quark peak jumped from 1.33 to 2.36, the largest relative move of the three. Two physical
    readings are consistent with this and we cannot yet discriminate:
    (a) at larger $N$ the heavy-quark vacuum sits on a *longer* Néel chain, so the static-Coulomb-driven
@@ -350,7 +350,7 @@ The JSON records at `/tmp/holography-results/mg_*.json` (single-trajectory, $N =
 `/tmp/holography-N16-bootstrap/mg_*_i0_*.json` ($N = 16$ bootstrap) capture the full input config,
 snapshot diagnostics, graph counts, $\sigma$/$P$/$D_S$ arrays, the Ambjorn-Loll fit, and a provenance
 block — the JSON-record schema documented in
-[holography-causal-ordering-emergent-dimension.md](../../holography-causal-ordering-emergent-dimension.md).
+[emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md).
 Each bootstrap directory additionally contains `aggregate.json`, the $i_0$-aggregated peak-$D_S$ table
 that feeds the corresponding bootstrap section above. Anyone with the same JSON records and a
 `tessera` build of matching version (at or after the `twoSiteReducedDensity` memory-scaling fix) can
@@ -358,8 +358,8 @@ regenerate every number in this writeup.
 
 ## See also
 
-- [holography-causal-ordering-emergent-dimension.md](../../holography-causal-ordering-emergent-dimension.md)
+- [emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md)
   — the spec this experiment tests.
-- [quantum.md](../../quantum.md) — the user-facing reference for the entire Schwinger pipeline.
+- [spectral-dimension-schwinger-mps-dmrg.md](../spectral-dimension-schwinger-mps-dmrg.md) — the user-facing reference for the entire Schwinger pipeline.
 - [lightcone_vs_majorization.md](lightcone_vs_majorization.md) — the companion
   causal-order-comparison experiment on the same TDVP snapshots.

@@ -2,22 +2,27 @@
 myst:
   html_meta:
     description: |
-      Hypothesis and methodology for testing whether the causal order
-      defined by majorization on Schmidt spectra of a real-time-evolved
-      lattice Schwinger-model state agrees with the Lieb-Robinson light
-      cone and with a prescribed causet structure.
+      Whether the causal order defined by majorization on Schmidt
+      spectra of a real-time-evolved lattice Schwinger-model state
+      agrees with the Lieb-Robinson light cone and with a prescribed
+      causet structure: hypothesis, falsification criteria,
+      methodology, and recorded runs.
 ---
 
-# Emergent Causal Order from Entanglement: Hypothesis and Methodology
+# Emergent Causal Order from Majorization
 
 ```{contents}
 :local:
 :depth: 2
 ```
 
-This page is the scientific charter for the [Schwinger / DMRG / TDVP
-subsystem](quantum.md). It states *what the question is*; the API page
-documents *how to drive the code that answers it*.
+This document is the complete statement of the emergent-causal-order
+question: the hypothesis and its falsification criteria, the lattice
+system the question is posed on, the numerical methodology that
+answers it, and where the recorded runs live. The machinery that
+executes it — MPO + DMRG ground states, the q-q̄ quench, TDVP
+evolution, and the three-order comparison harness — is documented in
+the [subsystem reference](spectral-dimension-schwinger-mps-dmrg.md).
 
 ## Abstract
 
@@ -160,8 +165,9 @@ Expanding $L_n^2$ produces a Hamiltonian with $\mathcal{O}(N^2)$ long-range
 $Z_m Z_{m'}$ terms; the resulting MPO bond dimension grows accordingly and is
 handled with the AutoMPO machinery described below.
 
-This is the same Hamiltonian implemented by `tessera.quantum`; see
-[quantum.md](quantum.md) for the API surface and convention details, and
+This is the same Hamiltonian implemented by `tessera.quantum`; see the
+[subsystem reference](spectral-dimension-schwinger-mps-dmrg.md) for the
+API surface and convention details, and
 `include/quantum/SchwingerModel.hpp` for the algebraic expansion of
 $L_n^2$ into operator and c-number pieces.
 
@@ -318,7 +324,23 @@ diagrams, and (v) the comparison statistics with bootstrap intervals. Random
 seeds, Trotter schedule, bond-dimension caps, and cutoff $\Lambda$ are
 recorded with each output for reproducibility.
 
-## References
+## 6. Recorded runs
+
+The first hypothesis-test scan is written up in
+[Lightcone vs. majorization](earlier-work/lightcone_vs_majorization.md).
+Its headline: on the regular 1+1D chain the strong-falsification
+criterion (§1, criterion 1) fires — at the physical
+$v_{\mathrm{LR}} = 1$ roughly half of all majorization-related label
+pairs lie outside the Lieb–Robinson cone, across every $(N, m/g, T)$
+regime scanned — so the hypothesis as stated is rejected on the
+regular chain. Because $\preceq_{\mathrm{cs}}$ is trivial there
+(§1, criterion 3), the discriminating follow-up is the
+causet-embedded re-run, where the within-slice structure of a
+non-trivial causet either recovers the agreement or refutes the
+hypothesis outright.
+
+The scan scripts are `examples/quantum/lightcone_vs_majorization.py`
+and its N-scaling and cone-overflow companions in the same directory.
 
 ```{bibliography}
 :style: unsrt

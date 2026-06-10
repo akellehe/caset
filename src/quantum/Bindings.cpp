@@ -990,7 +990,7 @@ uncorrelated product ρ_x ⊗ ρ_y.)doc")
     auto holo = m.def_submodule("holography",
         R"doc(Emergent spectral dimension from the Schwinger TDVP state.
 
-See ``docs/source/holography-causal-ordering-emergent-dimension.md`` for
+See ``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md`` for
 the scientific charter. The pipeline runs through one workflow class:
 
 >>> from tessera.quantum import TDVPConfig
@@ -1063,7 +1063,7 @@ Each undirected edge appears twice (v→w and w→v).
 
 Edge weights are mutual-information values; the Laplacian L = D - W
 follows the convention from
-docs/source/holography-causal-ordering-emergent-dimension.md §3.4.
+docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md §3.4.
 )doc")
         .def(py::init<MutualInformationProfile const&>(), py::arg("profile"))
         .def_property_readonly("nVertices", &EmergentGraph::nVertices)

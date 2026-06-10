@@ -12,7 +12,7 @@ on those spectra. Runs the Schmidt / majorization-poset pipeline of
 
 The output is the foundation for the comparison with the Lieb-Robinson
 order and the causet order described in
-``docs/source/quantum-methodology.md`` (Phases 4-5 of the plan).
+``docs/source/quantum-experiments/emergent-causal-order-from-majorization.md``.
 
 Theory
 ------

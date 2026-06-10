@@ -6,7 +6,7 @@ majorization poset on those spectra, a q-qbar quench + 2-site TDVP
 pipeline that produces real-time-evolution snapshots, and an end-to-end
 causal-order comparison between the majorization order, the Lieb-
 Robinson cone, and the (regular-chain) causet order — the experimental
-harness for the methodology page (``docs/source/quantum-methodology.md``).
+harness for the causal-order charter (``docs/source/quantum-experiments/emergent-causal-order-from-majorization.md``).
 The C++ backend is ITensor v3 vendored under ``third_party/itensor``;
 this Python layer is a thin result viewer per the architectural
 principle in PLAN.md §1 ("minimize Python/C++ crossings"). No MPS or

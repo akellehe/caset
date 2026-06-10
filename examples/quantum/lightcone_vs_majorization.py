@@ -7,7 +7,7 @@ SchwingerQuench.compareCausalOrders harness; for each point, prints
 Kendall-τ, discordant fraction, and Hasse edit distance for the three
 pairwise comparisons (maj↔LR, maj↔cs, LR↔cs). The maj↔LR row is the
 substrate for the strong-falsification criterion in
-quantum-methodology.md §1; the cone-overflow companion script reports
+emergent-causal-order-from-majorization.md §1; the cone-overflow companion script reports
 the explicit n_only metric.
 
 Output: a single tabulated report. No claims, just numbers.

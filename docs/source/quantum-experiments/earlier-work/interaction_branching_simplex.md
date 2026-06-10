@@ -208,7 +208,7 @@ temporal MI over `dt`. This is *not* a glued simplicial manifold and
 the construction does not assume one; it is the weighted graph the
 time-evolution logic produces, nothing more. The weighted-Laplacian
 convention is `W = I` (per
-holography-causal-ordering-emergent-dimension.md §3.4), and
+emergent-spectral-dimension-schwinger-tdvp.md §3.4), and
 `D_S(σ) = -2 d log P / d log σ` is read off the heat-kernel return
 probability, with the three-parameter Ambjorn-Loll fit.
 
@@ -342,7 +342,7 @@ Anyone with a tessera build at or after the `ChoiPropagator` and
 - [temporally_connected_entangled_spacetime.md](temporally_connected_entangled_spacetime.md)
   — the graph-level spectral-dimension experiment this single-cell test
   sits underneath.
-- [holography-causal-ordering-emergent-dimension.md](../../holography-causal-ordering-emergent-dimension.md)
+- [emergent-spectral-dimension-schwinger-tdvp.md](../emergent-spectral-dimension-schwinger-tdvp.md)
   §3.4 — the `d = -log I` edge-length convention.
 - Van Raamsdonk, *Building up spacetime with quantum entanglement*,
   [1005.3035](https://arxiv.org/abs/1005.3035) — distance from mutual

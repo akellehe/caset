@@ -1,19 +1,20 @@
-# Quantum subsystem (Schwinger MPS / DMRG)
+# Spectral Dimension from Schwinger MPS/DMRG + Majorization + Entanglement
 
 The `tessera.quantum` subpackage extends tessera with a tensor-network
 treatment of the 1+1D Kogut-Susskind Schwinger model — the simplest
 non-trivial gauge theory and a standard benchmark for lattice tensor-
 network methods. It exposes MPO + DMRG ground states, Schmidt spectra
 and the majorization poset, the q-qbar quench + 2-site TDVP pipeline,
-the causal-order comparison harness, and the tessera-spacetime →
-causet-chain adapter.
+the causal-order comparison harness, the tessera-spacetime →
+causet-chain adapter, and the emergent-spectral-dimension observable
+built on top of all of them.
 
 This page is the **user-facing** reference: how to build the subsystem,
 how to call the Python API, what each diagnostic field means.
-[quantum-methodology.md](quantum-methodology.md) is the scientific
-charter — the hypothesis being tested (majorization order vs.
-Lieb–Robinson cone vs. causet order), the falsification criteria,
-and the scope and limitations.
+The [causal-order charter](emergent-causal-order-from-majorization.md)
+is the scientific statement — the hypothesis being tested
+(majorization order vs. Lieb–Robinson cone vs. causet order), the
+falsification criteria, and the scope and limitations.
 
 The C++ backend is [ITensor v3](https://itensor.org), vendored as a git
 submodule under `third_party/itensor/`. The Python layer is a thin
@@ -124,8 +125,9 @@ Continuum approach: ω₀ → -1/π ≈ -0.318310 as x → ∞
 
 ## Schmidt spectra and the majorization poset
 
-This is the entanglement-structure data that the methodology charter
-(`docs/source/quantum-methodology.md`) builds its hypothesis around.
+This is the entanglement-structure data that the
+[causal-order charter](emergent-causal-order-from-majorization.md)
+builds its hypothesis around.
 For each contiguous interval $A = [i, j]$ on the
 chain, the Schmidt spectrum $\lambda_A$ is the list of eigenvalues of
 $\rho_A = \mathrm{Tr}_{\bar A}|\psi\rangle\langle\psi|$, sorted
@@ -315,10 +317,10 @@ et al. study. Try ``--m-over-g 0.5 --T 4.0`` to see it in action.
 ## Causal-order comparison
 
 This ties the ground-state, Schmidt, and quench pipelines together to
-test the methodology charter's hypothesis
-(`docs/source/quantum-methodology.md`): on a TDVP-evolved Schwinger
-state, three independently-defined partial orders on the (cut, time)
-label set agree.
+test the hypothesis of the
+[causal-order charter](emergent-causal-order-from-majorization.md):
+on a TDVP-evolved Schwinger state, three independently-defined partial
+orders on the (cut, time) label set agree.
 
 ### The three orders
 
@@ -364,7 +366,8 @@ print(f"LR vs cs:  τ = {report.lrVsCs.kendallTau:.4f}  "
 The function forces ``recordSpectra = True`` regardless of the input,
 because the spectra are required to build ≼_maj. ``vLr`` defaults to
 1.0 (free-fermion group velocity for our hopping coefficient); the
-plan §7 mentions OTOC-based extraction for higher-precision use.
+charter's §3.3 mentions OTOC-based extraction for higher-precision
+use.
 
 ### vLr-monotonicity sanity
 
@@ -484,8 +487,8 @@ probability $P_G(\sigma)$, and read off the spectral dimension
 $D_S^{(G)}(\sigma) = -2\, d\log P_G / d\log\sigma$.
 
 The full scientific charter, falsification criteria, and integration
-plan live in
-[holography-causal-ordering-emergent-dimension.md](holography-causal-ordering-emergent-dimension.md);
+plan live in the
+[spectral-dimension charter](emergent-spectral-dimension-schwinger-tdvp.md);
 the API lives in :mod:`tessera.quantum.holography`. Quickstart:
 
 ```python
@@ -514,7 +517,7 @@ falsification checks from the charter §1.
 
 The first experimental run with hypothesis-check, convergence sweep,
 and plots is written up in
-[quantum-experiments/earlier-work/emergent_spectral_dimension.md](quantum-experiments/earlier-work/emergent_spectral_dimension.md).
+[earlier-work/emergent_spectral_dimension.md](earlier-work/emergent_spectral_dimension.md).
 Headline: $D_S(\sigma)$ peaks at ≈ 2.1 in the light-quark regime
 ($m/g = 0.25$) and falls to a small-world plateau at long σ, with
 strong $m/g$ sensitivity — all five hypothesis falsification criteria
@@ -607,8 +610,9 @@ The C++ and Python test suites cross-check every layer of the pipeline:
 
 ## See also
 
-* [`docs/source/quantum-methodology.md`](quantum-methodology.md) — the
-  scientific charter for the entanglement → causal-order programme.
-* [`docs/source/holography-causal-ordering-emergent-dimension.md`](holography-causal-ordering-emergent-dimension.md)
+* [Emergent Causal Order from Majorization](emergent-causal-order-from-majorization.md)
+  — the scientific charter for the entanglement → causal-order
+  programme.
+* [Emergent Spectral Dimension from the Schwinger TDVP State](emergent-spectral-dimension-schwinger-tdvp.md)
   — scientific charter for the emergent spectral-dimension observable,
   exposed by :mod:`tessera.quantum.holography`.

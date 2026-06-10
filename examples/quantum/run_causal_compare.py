@@ -17,8 +17,8 @@ Runs the full tessera.quantum causal-comparison pipeline:
   5. Compute pairwise agreement statistics (Kendall-τ, discordant
      fraction, Hasse-graph edit distance).
 
-This is the experimental harness for the methodology page
-(``docs/source/quantum-methodology.md``):
+This is the experimental harness for the causal-order charter
+(``docs/source/quantum-experiments/emergent-causal-order-from-majorization.md``):
 
     Hypothesis (H): the three partial orders coincide on the cut family
     × time-sample restriction.

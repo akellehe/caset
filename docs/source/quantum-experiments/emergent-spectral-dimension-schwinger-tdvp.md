@@ -6,12 +6,13 @@ vertices are (lattice-site, snapshot-time) pairs and whose edge
 lengths come uniformly from mutual information. It sits alongside the
 existing causal-order comparison; it does not replace it.
 
-The observable is exposed by `tessera.quantum.holography`. See
-[quantum.md](quantum.md) for the user-facing API and
-[quantum-methodology.md](quantum-methodology.md) for the broader
-entanglement → causal-order charter. An experimental run is recorded
-in
-[quantum-experiments/earlier-work/emergent_spectral_dimension.md](quantum-experiments/earlier-work/emergent_spectral_dimension.md).
+The observable is exposed by `tessera.quantum.holography`. See the
+[subsystem reference](spectral-dimension-schwinger-mps-dmrg.md) for the
+user-facing API and the
+[causal-order charter](emergent-causal-order-from-majorization.md) for
+the broader entanglement → causal-order programme. An experimental run
+is recorded in
+[earlier-work/emergent_spectral_dimension.md](earlier-work/emergent_spectral_dimension.md).
 
 The graph is the boundary state's mutual-information structure made
 flat; the spectral dimension is its random-walk return probability.
@@ -43,7 +44,8 @@ The hypothesis is descriptive, not predictive of a number; we are not claiming a
 
 ## 2. Limitations and scope conditions
 
-These bound the interpretive weight of any result and mirror `quantum-methodology` §2:
+These bound the interpretive weight of any result and mirror §2 of the
+[causal-order charter](emergent-causal-order-from-majorization.md):
 
 - *Pure-state, contiguous-cut regime for I*. All mutual information is between site-singletons or contiguous intervals on a pure global state. Non-contiguous regions are not in scope.
 - *Closed unitary dynamics.* The Schwinger TDVP propagator is unitary, so the temporal Choi state is pure and $I(i_s : j_t)$ has the entanglement-entropy-of-the-purification interpretation. Open-system extension is out of scope here.
@@ -341,7 +343,7 @@ def computeEmergentSpectralDimension(config: HolographyConfig) -> SpectralDimens
       9. return SpectralDimensionResult(...)
 
     All numerical parameters and random seeds are stored in tdvp_summary
-    for reproducibility, per quantum-methodology §5.
+    for reproducibility, per the causal-order charter §5.
     """
     ...
 ```
@@ -364,7 +366,10 @@ Each integration point is a use of something that already exists in the codebase
 | `tessera.Spacetime.getDualAdjacency()` | Convention reuse for `MutualInformationProfile.asWeightedAdjacency()` (COO format with `(rows, cols, weights, N)`). |
 | ITensor v3 (C++ side) | Choi-state construction is added as a new C++ helper, `quantum/choi_state.{hpp,cpp}`, that takes the TDVP propagator MPO over an interval and constructs the Choi MPS. **The Choi MPS never crosses the language boundary** — only its two-site reduced density matrices do (small numpy arrays). |
 
-The C++/Python contract from `quantum.md` is preserved: "scalar config in / scalar diagnostics out, no MPS or MPO objects cross the language barrier."
+The C++/Python contract from the
+[subsystem reference](spectral-dimension-schwinger-mps-dmrg.md) is
+preserved: "scalar config in / scalar diagnostics out, no MPS or MPO
+objects cross the language barrier."
 
 ---
 
@@ -443,7 +448,8 @@ D_inf, C, B, chi2 = fitAmbjornLollProfile(sigmas, D_S)
 
 ## 7. Threats to validity
 
-Beyond the standard `quantum-methodology` §4.5 list:
+Beyond the standard §4.5 list of the
+[causal-order charter](emergent-causal-order-from-majorization.md):
 
 - *Edge-cutoff sensitivity.* $D_S(\sigma)$ depends on $\varepsilon_I$ because the graph topology changes when $\varepsilon_I$ crosses a mutual-info value. $D_\infty$ should be reported as a function of $\log_{10}\varepsilon_I$.
 
@@ -457,7 +463,8 @@ Beyond the standard `quantum-methodology` §4.5 list:
 
 ## 8. Tested benchmarks
 
-Following the test table format of `quantum.md`:
+Following the test table format of the
+[subsystem reference](spectral-dimension-schwinger-mps-dmrg.md):
 
 | Test | Layer | What it verifies |
 | --- | --- | --- |
@@ -476,7 +483,9 @@ Following the test table format of `quantum.md`:
 
 ## 9. JSON record
 
-Each run writes a single JSON record (matching the recorded-config convention in `quantum-methodology` §5):
+Each run writes a single JSON record (matching the recorded-config
+convention of the
+[causal-order charter](emergent-causal-order-from-majorization.md) §5):
 
 ```text
 {
@@ -497,7 +506,9 @@ The JSON is sufficient to regenerate every figure; the same `HolographyConfig` r
 
 ## 10. What this is not
 
-- *Not* a new Hamiltonian. The Schwinger model from `quantum.md` is the only physical system.
+- *Not* a new Hamiltonian. The Schwinger model from the
+  [subsystem reference](spectral-dimension-schwinger-mps-dmrg.md) is
+  the only physical system.
 - *Not* a new evolution scheme. The existing TDVP integrator is the only propagator.
 - *Not* a claim about quantum gravity. The construction is a mutual-information graph of a 1+1D gauge theory; agreement of $D_S$ with any continuum-gravity number (CDT, asymptotic safety) at this $N$ would be coincidence.
 - *Not* a replacement for the causal-order comparison. The majorization-order comparison and the spectral-dimension test answer different questions on the same data; both should be reported.

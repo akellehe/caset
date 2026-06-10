@@ -23,7 +23,7 @@ Construction
   consecutive snapshots carry the Choi-propagator temporal MI over
   ``dt``. Edges below the MI floor are dropped. The weighted graph
   Laplacian uses ``W = I`` directly, per
-  holography-causal-ordering-emergent-dimension.md §3.4.
+  emergent-spectral-dimension-schwinger-tdvp.md §3.4.
 
 * **No thermalization** -- the Poisson-Delaunay layer already supplies
   the randomized connectivity.

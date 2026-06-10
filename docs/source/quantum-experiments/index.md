@@ -8,10 +8,22 @@ current state — and the [H_DS4 status page](overview/h_ds4_status.md)
 which tracks where the central hypothesis stands across all
 experiments.
 
+The three Schwinger-era pages after the overview are the foundation
+the experiment writeups build on: the
+[causal-order charter](emergent-causal-order-from-majorization.md)
+states the original hypothesis, the
+[subsystem reference](spectral-dimension-schwinger-mps-dmrg.md)
+documents the MPS/DMRG/TDVP machinery that runs it, and the
+[spectral-dimension charter](emergent-spectral-dimension-schwinger-tdvp.md)
+defines the observable the later experiments chase to $D_S = 4$.
+
 ```{toctree}
 :maxdepth: 2
 
 overview/index
+emergent-causal-order-from-majorization
+spectral-dimension-schwinger-mps-dmrg
+emergent-spectral-dimension-schwinger-tdvp
 earlier-work/index
 charged-cartan/index
 cobordism
