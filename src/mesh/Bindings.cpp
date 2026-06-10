@@ -344,7 +344,20 @@ facet.getCofaces() includes this simplex.)doc")
            "default; wickRotate=True takes |l^2|.")
       .def("volume", &Simplex::volume,
            "Signed d-content sqrt(det G)/d! on the honest (non-Wick-rotated) "
-           "geometry; negative for a Lorentzian cell with timelike content.");
+           "geometry; negative for a Lorentzian cell with timelike content.")
+      .def("circumcenterBarycentric", &Simplex::circumcenterBarycentric,
+           "Circumcenter in barycentric coordinates (sum 1), intrinsic from the "
+           "signature-aware edge lengths; entry i weights getVertices()[i].")
+      .def("circumradiusSquared", &Simplex::circumradiusSquared,
+           "Signed circumradius squared R^2 (intrinsic, signature-aware); can be "
+           "negative for a timelike circumcenter displacement.")
+      .def("dualVolume", &Simplex::dualVolume,
+           "Signed circumcentric dual cell content |*sigma| in the surrounding "
+           "complex (DEC recursion over cofaces, n = top dimension). "
+           "Signature-aware; negative content is meaningful.")
+      .def("hodgeStar", &Simplex::hodgeStar,
+           "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
+           "content).");
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
       .def(py::init<>());

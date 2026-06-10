@@ -321,6 +321,35 @@ class Simplex {
     /// triangle inequalities. Fewer than two vertices is trivially admissible.
     void assertSpacelikeAdmissible(double tol = 1e-12) const;
 
+    /// Circumcenter of this simplex in **barycentric** coordinates
+    /// (λ_0..λ_d, Σλ = 1), computed intrinsically from the signature-aware edge
+    /// lengths (no embedding). λ_i is the weight on ``getVertices()[i]``. Solves
+    /// G β = ½·diag(G) with G the Gram matrix relative to vertex 0, then
+    /// λ_0 = 1 − Σβ, λ_i = β_i. Eigen-free (uses the determinant/cofactor
+    /// helpers). A vertex falling outside the simplex has a negative λ.
+    [[nodiscard]] std::vector<double> circumcenterBarycentric() const;
+
+    /// Signed circumradius squared R² of this simplex (intrinsic, signature-
+    /// aware): R² = ½·Σ_i β_i G_ii. Positive for a spacelike simplex; can be
+    /// negative when the circumcenter–vertex displacement is timelike.
+    [[nodiscard]] double circumradiusSquared() const;
+
+    /// Signed **circumcentric dual cell volume** |★σ| of this k-simplex in the
+    /// surrounding complex (the dual is (n−k)-dimensional, n = top dimension
+    /// reached via cofaces). Built from circumcenters by the standard DEC
+    /// recursion |★σ_k| = (1/(n−k)) Σ_{σ_{k+1}⊃σ_k} h·|★σ_{k+1}|, with a top
+    /// cell's dual a point (volume 1) and h the signed circumcentric height
+    /// between c(σ_k) and c(σ_{k+1}); signs follow the circumcenter's
+    /// barycentric coordinate at the opposite vertex. Signature-aware: a
+    /// timelike height contributes signed content (sign·√|h²|), matching
+    /// ``volume()``. Negative content is meaningful, not an error.
+    [[nodiscard]] double dualVolume() const;
+
+    /// Diagonal Hodge-star ratio ⋆ = |★σ| / |σ| (dual content over primal
+    /// content) for this simplex — the bridge between the primal Laplacian
+    /// weights and the dual Regge action.
+    [[nodiscard]] double hodgeStar() const;
+
     /// Determinant of a square matrix (flat row-major, size n x n).
     [[nodiscard]] static double determinant(
         const std::vector<double> &M, int n);
