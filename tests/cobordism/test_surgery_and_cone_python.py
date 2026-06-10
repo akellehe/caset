@@ -171,6 +171,19 @@ class RegisterAdditiveGrowthTest(unittest.TestCase):
             self.assertEqual(bool(res < self.GATE.REALIZE),
                              self.GATE.conserves_charge(U), msg=name)
 
+    def test_grown_register_keeps_the_unit_cochain_metric(self):
+        """attachInteriorVertex's new edges inherit createSimplexTracked's
+        time rule (timelike l^2 < 0 on a time difference) rather than
+        Simplex::cone's causal vertex placement; _stellar_grow re-pins the
+        bulk uniform so the register's unit metric holds BY CONSTRUCTION.
+        Every edge must be spacelike at exactly 1.0 with zero phase, and the
+        k=1 Hodge weights exactly unit."""
+        w = np.asarray(cob.HodgeLaplacian(self.reg.st).weights(1), dtype=float)
+        self.assertEqual(float(np.max(np.abs(w - 1.0))), 0.0)
+        for e in self.reg.st.getEdgeList().toVector():
+            self.assertEqual(e.getSquaredLength(), 1.0)
+            self.assertEqual(e.getPhase(), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
