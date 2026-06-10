@@ -3,17 +3,18 @@
 > The consolidated results companion to the specification
 > [`cobordism.md`](cobordism.md). The spec (§1) states the correspondence as
 > three hypotheses **H1/H2/H3**; this report organizes the numerical evidence
-> under each, ending with the realizable gate set and a per-output gallery.
-> Every number below names the runnable example that produced it:
-> `topological_correspondence.py` (the Stage-2 TQFT checks T1–T5),
-> `realizability_report.py` (boundary synthesis + bulk realizability),
-> `dw_spectral_bridge.py` (the DW–spectral bridge), and
-> `realizable_image_sweep.py` / `loosened_gate_retest.py` /
-> `spectral_gate_realizability.py` (the gate set: pinned ($S_3$), loosened at
-> $k=0$, and the staged spectral synthesis with the boundary synthesized
-> (the charge-conservation criterion; 13 named gates); its `--h3` mode
-> validates the value equation $Z_{\text{spec}}=\langle\psi_A|U|\psi_B\rangle$
-> on the realized set, spectrally) — all under `examples/cobordism/`.
+> under each — all of it read off the **continuous spectral method** (the
+> genuine Hodge spectrum) — ending with the realizable gate set and a
+> per-output gallery. Every number below names the runnable example that
+> produced it: `realizability_report.py` (boundary synthesis + bulk
+> realizability) and `spectral_gate_realizability.py` (the staged spectral
+> synthesis: the charge-conservation gate criterion, 13 named gates; its
+> `--h3` mode validates the value equation
+> $Z_{\text{spec}}=\langle\psi_A|U|\psi_B\rangle$ on the realized set) — both
+> under `examples/cobordism/`. The Dijkgraaf–Witten layer that scaffolded and
+> calibrated this method — the state-sum functoriality checks, the sign
+> invariant, the bridge, and the pinned $S_3$ image — is recorded in
+> [the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md).
 
 ## The correspondence
 
@@ -27,14 +28,23 @@ it computes. Concretely (spec §1):
 - **H3.** $Z(W_{AB})=\langle\psi_A|\,U\,|\psi_B\rangle$, with
   $\operatorname{rank}(U)=\text{Schmidt rank of }\operatorname{vec}(U)=\text{connectivity of }W_{AB}$.
 
-**The falsifiable core.** The correspondence is *supported* iff (i) the cylinder
-cobordism reproduces the inner product, (ii) $Z(W)$ is invariant under interior
-re-triangulation, and (iii) a nontrivial sign class produces a $Z(W)$ distinct
-from the trivial one — and *refuted* if any fails. All three hold: (i) the
-torus cylinder is exactly the identity (T1, residual $6.28\times10^{-16}$); (ii)
-$Z$ drifts by $0$ over 18 interior Pachner moves (T2); (iii)
-$Z_{\text{sign}}(\mathbb{RP}^3)=0\neq1=Z_{\text{triv}}(\mathbb{RP}^3)$ (T3). The
-sections below place the rest of the evidence under the hypothesis it bears on.
+**The falsifiable core, read spectrally.** The correspondence is *supported*
+iff (i) the trivial cobordism reproduces the inner product, (ii) the value is
+invariant under interior re-triangulation, and (iii) an obstructed class is
+genuinely distinguished — and *refuted* if any fails. All three hold on the
+spectral data (`spectral_gate_realizability.py --h3`): (i) the identity's
+spectral value equals $\langle\psi_A|\psi_B\rangle$ on every carried pair
+(worst $4.5\times10^{-16}$), and it realizes *only* once surgery has grown the
+full register — on every smaller seed it floors; (ii) the value carries over
+**exactly** to a symmetry-preserving re-triangulation (drift
+$9.7\times10^{-16}$), and a generic re-grown bulk deviates by precisely its
+register Gram defect, $a^\dagger(G-I)b$, matched to $\sim10^{-15}$; (iii) a
+leaked class has **no value at all** — every floored gate's post-state leaves
+the carried register ($\lvert\Sigma\rvert=0.21$–$2.60$), the value-level
+obstruction certificate. (The original Dijkgraaf–Witten formulation of this
+core — T1/T2 on the state sum and the T3 sign invariant — is recorded in
+[the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md).) The sections
+below place the rest of the evidence under the hypothesis it bears on.
 
 ## H1 — the operation is a cobordism
 
@@ -70,28 +80,18 @@ realization where the topology allows it — the $1\times3$ operation floors at
 $9.6\times10^{-1}$ with no budget and drops to $1.2\times10^{-13}$ after a single
 boundary-fixed cone.
 
-### The bulk is a triangulation-invariant TQFT (T1, T2, T5)
+Triangulation invariance of the bulk is certified at the value level by the
+H3 bulk-independence result below (the value carries exactly over a
+symmetry-preserving re-triangulation, and a generic re-grown bulk deviates by
+precisely its measured Gram defect); the state-sum functoriality checks that
+first established it (T1/T2/T5 on the Dijkgraaf–Witten functor) are recorded
+in [the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md).
 
-On the topological layer ($n=3$, simplicial), the $\mathbb{Z}_2$
-Dijkgraaf–Witten state sum $Z(W)$ is a well-defined cobordism functor
-(`topological_correspondence.py`):
-
-- **T1 — cylinder $=$ identity.** For $W=\Sigma\times[0,T]$, $\texttt{map}(T^2\times I)$
-  is exactly $\mathrm{id}_4$ and $\langle\psi_A|Z(W)|\psi_B\rangle=\langle\psi_A|\psi_B\rangle$
-  for harmonic-1-form boundary states $\psi\in\ker L_1(T^2)$; residual
-  $6.28\times10^{-16}$.
-- **T2 — triangulation independence (make-or-break).** $Z(S^2\times S^1)$ drifts by
-  $0.00$ over 18 interior Pachner moves (including $1\!\to\!4$ moves that change
-  $\lvert V\rvert$), for both cocycle classes — $Z$ is invariant to machine
-  precision with $\partial W$ fixed.
-- **T5 — composition / functoriality.** $\texttt{map}(\texttt{glue}(W_1,W_2))=
-  \texttt{map}(W_2)\,\texttt{map}(W_1)$ (the matrix product), with
-  $\operatorname{Tr}(\texttt{map})=Z_{\text{closed}}$ on the self-glue.
-
-(The §5.6 Lorentzian variant corroborates: on the 3-cycle with one timelike edge
-the spectrum is exactly $\{0,3,1-2/\alpha\}$ and the harmonic's indefinite norm
-$(2-\alpha)/3$ crosses zero at $\alpha=2$ — a concrete "harmonic representative
-becomes null," residual $3.36\times10^{-15}$.)
+(The §5.6 Lorentzian variant corroborates the spectral layer
+(`topological_correspondence.py`): on the 3-cycle with one timelike edge the
+spectrum is exactly $\{0,3,1-2/\alpha\}$ and the harmonic's indefinite norm
+$(2-\alpha)/3$ crosses zero at $\alpha=2$ — a concrete "harmonic
+representative becomes null," residual $3.36\times10^{-15}$.)
 
 ### rank $=$ Schmidt rank $=$ connectivity
 
@@ -179,208 +179,22 @@ the inner product only once surgery has grown the full register (the T1
 anchor), and a leaked class produces *no* value at all rather than a wrong
 one.
 
-### The DW–spectral bridge: three independent readings agree (and only on the lattice)
+Before this validation existed, the value equation was certified by
+cross-calibrating three independent readings — the DW state sum, the operator
+amplitude, and the spectral harmonic — on the torus cylinder, where the DW
+invariant turned out to be the **quantized shadow** of the continuous spectral
+$Z$. That bridge, together with the T3 sign invariant, is recorded in
+[the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md); H3 on this
+page no longer rests on it.
 
-On a shared boundary surface $\Sigma=T^2$ (with $b_1=2$, $Z(\Sigma)=\mathbb{C}^4$,
-spectral qubit $\ker L_1(T^2)=\mathbb{C}^2$) the value of the cobordism at a pair
-of prepared boundary states is computed three *independent* ways — the
-topological Dijkgraaf–Witten state sum $Z_{DW}$ (metric-free: topology and cocycle
-only), the operation's transition amplitude $\langle\psi_A|U|\psi_B\rangle$, and
-the spectral Hodge harmonic $Z_{\text{spec}}$ — testing
-$Z_{DW}(W_{AB})=\langle\psi_A|U|\psi_B\rangle=Z_{\text{spec}}$
-(`dw_spectral_bridge.py`). On longitude-aligned states all three agree to
-$\sim10^{-15}$:
+## The realizable gate set: the charge-conservation criterion
 
-| $(a,b)$ | $Z_{DW}$ (topo) | $\langle\psi_A|\,\mathrm{id}\,|\psi_B\rangle$ (op) | $Z_{\text{spec}}$ (Hodge) | max $\Delta$ |
-|---|---|---|---|---|
-| $1,\,1$ | $+1.000000+0.000000i$ | $+1.000000+0.000000i$ | $+1.000000+0.000000i$ | $1.1\times10^{-15}$ |
-| $e^{i\pi/3},\,0.6{+}0.8i$ | $+0.992820-0.119615i$ | $+0.992820-0.119615i$ | $+0.992820-0.119615i$ | $7.8\times10^{-16}$ |
-| $0.5{-}0.5i,\,i$ | $-0.500000+0.500000i$ | $-0.500000+0.500000i$ | $-0.500000+0.500000i$ | $7.9\times10^{-16}$ |
-| $2,\,0.25{+}0.97i$ | $+0.500000+1.940000i$ | $+0.500000+1.940000i$ | $+0.500000+1.940000i$ | $1.4\times10^{-15}$ |
-
-The spectral side is a certified harmonic: the longitude is realized on the solid
-torus at $r=9.65\times10^{-29}$, $\lambda=-4.25\times10^{-17}$ with witness
-boundary-block overlap $1.000000$, while the meridian — which bounds a disk and
-dies in $H_1(W)$ — floors at $15.2567$ (matching an independent numpy Hodge oracle
-to $\Delta=5.3\times10^{-15}$). Crucially, the bridge holds **on the
-DW-representable subset and only there**. With the cobordism (hence $Z_{DW}$) held
-fixed, a generic $U$ departs from $Z_{DW}$:
-
-| operation $U$ | representable? | $\langle\psi_A|U|\psi_B\rangle$ | $\Delta=\lvert\text{amp}-Z_{DW}\rvert$ |
-|---|---|---|---|
-| $\mathrm{id}_4\;(=Z(T^2\times[0,T]))$ | **yes** | $+0.992820-0.119615i$ | $0.0$ |
-| Hadamard on the qubit block | no | $+0.521099-0.062782i$ | $4.75\times10^{-1}$ |
-| Haar-random $U(4)$ (seed 7) | no | $-0.291344+0.172837i$ | $1.32\times10^{0}$ |
-| Haar-random $U(4)$ (seed 23) | no | $-0.553146+0.040816i$ | $1.55\times10^{0}$ |
-
-The $\mathbb{Z}_2$ DW maps are integer-quantized in the flat-connection basis
-($\mathrm{id}_4$ for both cocycles, solid-torus cap $[1,0,1,0]$); a generic complex
-amplitude cannot be hit. Over 200 Haar $U(4)$ the gap has minimum $0.218$ and
-median $1.03$ — a generic $U$ is uniformly bounded away from the DW image, not a
-measure-zero accident. **The DW invariant is the quantized shadow of the
-continuous spectral $Z$:** the spectral oracle realizes the longitude *and a
-neighborhood of it*, so $\{Z(W)\}_{\mathbb{Z}_2\text{-DW}}\subsetneq\{\text{spectrally
-realizable}\}$, and the two coincide exactly where the operation lands on the
-lattice.
-
-### The sign carries an invariant (T3), and the holonomy is consistent (T4)
-
-The nontrivial cocycle is a genuine topological invariant, not a phase artefact:
-$Z_{\text{sign}}(\mathbb{RP}^3)=0\neq1=Z_{\text{triv}}(\mathbb{RP}^3)$ (T3,
-`topological_correspondence.py`). The twist is the mod-2 cup-cube
-$(-1)^{\langle g^3,[W]\rangle}$, so the positive control needs a 1-class with
-$g^3\neq0$: $\mathbb{RP}^3$ ($H^*=\mathbb{Z}_2[t]/t^4$, $t^3\neq0$), whose
-2-torsion $H_1=\mathbb{Z}_2$ is exactly what separates it from the **negative
-controls** $S^2\times S^1$ and $T^3$ (free $H_1$, $g^3=0$). The untwisted
-normalization is $Z_{\text{triv}}(W)=2^{\,b_1(\mathbb{Z}_2)-1}$. Cross-layer
-consistency holds too (T4, residual $0.00$): the bulk $\mathbb{Z}_2$ holonomy
-equals the cycle flux $\Phi_\gamma$ restricted to $\{0,\pi\}$. (The brute-force
-flat-connection enumeration is $2^{\dim Z^1}$, capped at $\dim Z^1\le24$, so the
-state sum runs on small manifolds — $S^3$, $S^2\times S^1$, $\mathbb{RP}^3$ — and
-$T^3$, $\dim Z^1=29$, is used only for the combinatorial T2 checks.)
-
-## The realizable gate set: $S_3$ is the pinned operation image
-
-When is an operation $U$ on $Z(T^2)=\mathbb{C}[H^1(T^2;\mathbb{Z}_2)]=\mathbb{C}^4$
-DW-realizable on a **pinned** cobordism — a twisted cylinder of fixed topology?
-Exactly when it is one of the **six holonomy permutations** — the permutation
-representation of a $GL(2,\mathbb{Z}_2)=SL(2,\mathbb{Z}_2)$ automorphism of
-$H^1(T^2;\mathbb{Z}_2)$, fixing the trivial class (index 0) and permuting the three
-non-trivial classes $\{[a],[b],[a{+}b]\}=\{1,2,3\}$. Two twisted cylinders generate
-the group (`realizable_image_sweep.py`): the coordinate **swap** $(1\,2)$ on the
-9-vertex product torus (its mod-2 reduction is the modular $S$) and the order-3
-**multiplier** $(1\,2\,3)$ on the 7-vertex Möbius torus. Every permutation of the
-three non-zero vectors of $(\mathbb{Z}_2)^2$ is automatically $GF(2)$-linear, so the
-pinned realizable image is the *full* $S_3$.
-
-The content of $S_3$ is **holonomy-class permutation without superposition** — and
-that is *not* computational separability. Several computational **entanglers** are
-holonomy permutations and so realize: `CNOT`, reversed-`CNOT`, `SWAP`, and the
-double-`CNOT` each permute the holonomy classes (each fixes $[0]$), so each is
-DW-realizable despite entangling in the computational basis (operator-Schmidt
-rank $2$–$4$). What floors is **holonomy superposition** — a gate that sends a
-holonomy class to a *superposition* of classes (`H`-type), or that lands off the
-$0/1$ permutation lattice with a phase or sign (`CZ`, `T`, `S`, `iSWAP`, `CPHASE`,
-$\sqrt{\mathrm{SWAP}}$). Realizability is a property of the holonomy action,
-indifferent to a gate's name:
-
-| gate | realizable? | reason (action on the holonomy classes) |
-|---|---|---|
-| Identity | **yes** | fixes every class (the trivial permutation) |
-| `SWAP` $=(1\,2)$ | **yes** | exchanges $[a]\leftrightarrow[b]$, fixes $[0]$ |
-| `CNOT` $=(2\,3)$ | **yes** | transposes $[b]\leftrightarrow[a{+}b]$, fixes $[0]$ |
-| reversed-`CNOT` $=(1\,3)$ | **yes** | transposes $[a]\leftrightarrow[a{+}b]$, fixes $[0]$ |
-| 3-cycles $(1\,2\,3),(1\,3\,2)$ | **yes** | cycle the three non-trivial classes, fix $[0]$ |
-| Hadamard ($H{\otimes}H$) | no | mixing — off the permutation lattice ($\texttt{gap}=2.00$) |
-| `T`, `S` | no | diagonal phase, not a $0/1$ permutation |
-| `CZ` $=\mathrm{diag}(1,1,1,-1)$ | no | diagonal sign, not a permutation |
-| `iSWAP` | no | permutes with $i$ phases (complex permutation), not $0/1$ |
-| `CPHASE` | no | diagonal phase, not a permutation |
-| Pauli-`X` | no | moves the trivial class ($0\to3$) |
-
-The separator is clean. Of $S_4$'s 24 permutation matrices, exactly the **6**
-fixing index 0 are realizable; the **18** that move the trivial class are not.
-Across the full labeled sweep, the predicate `is_holonomy_perm` (fixes $[0]$ and
-permutes $\{1,2,3\}$) is the *only* property that separates the pinned image with no
-errors — **19 TP / 0 FP / 0 FN / 210 TN over 229 operations**. Every weaker
-predicate leaks (*is a permutation* admits the 18 that move index 0; *fixes the
-trivial class* admits diagonal sign matrices; *near-$I_4$* catches only the seven
-identity copies). The realizable rate by family makes the same point:
-
-| family | realizable / total |
-|---|---|
-| `realizable_s3` | 6 / 6 |
-| permutation (the 24 of $S_4$) | 6 / 24 |
-| gate | 3 / 23 |
-| interp | 3 / 33 |
-| diagonal | 1 / 48 |
-| signed_perm | 0 / 20 |
-| mixing (Hadamard / DFT / Haar / GL) | 0 / 75 |
-
-## What the $b_1$ hole adds: superposed states, not new gates
-
-The pinned image above fixes the bulk topology in advance; it need not. The
-emergent-bulk work loosened it — handing the realizability search a
-**topology-changing surgery move** (a boundary-fixed interior-cell *remove*) so the
-first Betti number $b_1$ becomes an **output** rather than an input — on the
-conjecture that the resulting $b_1=1$ hole, which carries a superposed boundary
-state, would bring the floored superposition/entangling gates into the realizable
-set. `loosened_gate_retest.py` tests that conjecture directly, two ways, and reports
-the residuals — not a hoped-for answer.
-
-**As operations, the hole adds nothing — every gate floors.** Bending each gate to
-its Choi state $\operatorname{vec}(U)$ (length $d_Ad_B=16$) and handing it to the
-surgery oracle with $b_1$ free — `decide(vec(U),4,4,growth_mode=SURGERY,
-harmonic=True)` on a filled-disk bulk ($b_1=0$, 19 vertices, the rim the pinned
-output support) whose interior core triangle the search may remove — **every gate
-floors** at $r\approx0.38$–$0.41$: the six $S_3$ controls (the identity included,
-$r=0.40$) and every superposition/entangling gate alike, none below the
-$\texttt{REALIZE}=10^{-3}$ line.
-
-| gate | family | pinned DW ($\texttt{gap\_to\_S3}$) | superposition? | entangling? | loosened operation ($r$, $b_1$) |
-|---|---|---|---|---|---|
-| Identity | $S_3$ control | **realizable** ($0.00$) | no | no | floor ($0.40$, $b_1=0$) |
-| `SWAP` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| `CNOT` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1=0$) |
-| reversed-`CNOT` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| 3-cycles | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.38$, $b_1:0\to1$) |
-| `DCNOT` | $S_3$ control | **realizable** ($0.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| $H{\otimes}I$ | superposition | floor ($2.27$) | yes | no | floor ($0.39$, $b_1:0\to1$) |
-| $I{\otimes}H$ | superposition | floor ($2.27$) | yes | no | floor ($0.40$, $b_1=0$) |
-| $H{\otimes}H$ | superposition | floor ($2.00$) | yes | no | floor ($0.38$, $b_1=0$) |
-| $\sqrt{\mathrm{SWAP}}$ | superposition | floor ($1.41$) | yes | yes | floor ($0.38$, $b_1:0\to1$) |
-| $\sqrt{\mathrm{iSWAP}}$ | superposition | floor ($1.08$) | yes | yes | floor ($0.39$, $b_1:0\to1$) |
-| `CZ` | phase/entangler | floor ($2.00$) | no | yes | floor ($0.41$, $b_1:0\to1$) |
-| `CPHASE`$(\pi/4)$ | phase/entangler | floor ($0.77$) | no | yes | floor ($0.40$, $b_1=0$) |
-| $T{\otimes}I$ | phase | floor ($1.08$) | no | no | floor ($0.40$, $b_1=0$) |
-| $S{\otimes}I$ | phase | floor ($2.00$) | no | no | floor ($0.40$, $b_1:0\to1$) |
-| `iSWAP` | phase/entangler | floor ($2.00$) | no | yes | floor ($0.39$, $b_1:0\to1$) |
-| $X{\otimes}X$ | Pauli perm | floor ($2.00$) | no | no | floor ($0.39$, $b_1:0\to1$) |
-| $Z{\otimes}Z$ | diagonal sign | floor ($2.00$) | no | no | floor ($0.40$, $b_1:0\to1$) |
-
-The surgery search opens the handle ($b_1:0\to1$) for many gates, yet the residual
-floors regardless: **$b_1$ development is decoupled from realizability.** The reason
-is structural — at the Choi-vec degree $k=0$ the harmonic kernel $\ker L_0$ is the
-locally-constant functions (dimension $b_0=1$ on a connected bulk), so opening a
-$b_1$ handle cannot enlarge it; the hole is spectrally inert for an operation
-target. (The eigenvalue-agnostic mode is under-constrained and is *not* a
-topological realization: `harmonic=False` drives $H{\otimes}H$ to $r=9.9\times10^{-4}$
-but at $\lambda=2.93$ — a non-harmonic eigenvector, accepted only because that
-criterion asks for *any* eigenvector, not a $\ker L$ one.)
-
-**As states, the hole adds the superposition — that is exactly what it carries.** At
-the Hodge-qubit degree $k=1$ the same surgery move makes $b_1$ an output for a
-boundary *1-cycle*. The superposed meridian carried on both boundary circles — the
-state an `H`-type gate would create — **floors on the disk** ($b_1=0$,
-$r=4.5\times10^{-1}$) and **realizes on the annulus** ($b_1=1$, $r=6.9\times10^{-8}$,
-$\lambda\to0$); from the disk seed the surgery search opens the handle on its own
-($b_1:0\to1$, scored purely by the harmonic residual, $\partial W$ held bit-exact)
-and the meridian then realizes ($r\sim10^{-5}$), while the sign-flipped (non-closed)
-conjugation floors on every filling ($r\approx0.22$) — the period-matching
-obstruction is genuinely separate from the topological one
-(`emergent_bulk_realizability.py`). Removal is the load-bearing move — boundary-fixed
-*additive* growth is topology-preserving at $k\ge1$ — so the realizable *state* set
-is exactly $\mathrm{image}\big(H_1(\partial W)\to H_1(W)\big)$ for the $W$ the search
-grows.
-
-**The verdict.** $S_3$ is and remains the realizable *operation* image of the pinned
-DW construction. Loosening the topology so $b_1$ emerges does **not** enlarge it: no
-superposition or entangling gate realizes as an operation, hole open or closed. What
-the hole enlarges is the realizable *state* space — a superposed/entangled boundary
-cycle, unrealizable on the $b_1=0$ filling, realizes once surgery opens $b_1=1$. The
-hole represents superposition, as the conjecture held — but it does so for **states**
-(homology classes on $\partial W$), not for gate operations. The H3 quantized-shadow
-reading says the same from the value side: the $\mathbb{Z}_2$-DW operation image is a
-discrete lattice that a generic superposition/entangling $U$ is uniformly bounded
-away from (gap median $1.03$ over 200 Haar $U(4)$), and the continuous freedom the hole
-supplies lives in the *state* — the spectral $Z$ — not in new realizable maps.
-
-## The gate set with the boundary synthesized: the charge-conservation criterion
-
-The $S_3$ image above pins the cobordism's boundary bit-exact — it is the restriction of
-one global form on a fixed twisted cylinder, and that integrality is exactly what holds
-the realizable set down to the six holonomy permutations. A third construction
-(`spectral_gate_realizability.py`) **synthesizes the boundary instead of pinning it**: it
+The first construction pinned the cobordism's boundary bit-exact — the restriction of
+one global form on a fixed twisted cylinder — and that integrality held its realizable
+image down to the six holonomy permutations ($S_3$; recorded with the
+$b_1$-hole retest in
+[the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md)). The final
+construction (`spectral_gate_realizability.py`) **synthesizes the boundary instead of pinning it**: it
 runs each gate through a *staged spectral synthesis* and decides realizability by the
 **continuous spectral method** — the genuine Hodge Laplacian spectrum, $\ker L_1$ of the
 surgery-grown bulk read by eigendecomposition — with **no** Levenberg–Marquardt
@@ -479,8 +293,10 @@ the count tracking the battery, not the physics. (An earlier 18-gate battery rep
 "$S_3 + H{\otimes}H + \sqrt{\mathrm{SWAP}} = 8$"; that was its realizable *subset*, missing
 $\mathrm{CSX}$ and $\sqrt{\mathrm{SWAP}}^\dagger$.) What still floors is genuine register
 *leakage* ($\Sigma\neq0$): a holonomy superposition or off-lattice phase that no emergent
-$b_1$ can carry, the $k=1$ analogue of the sign-flipped meridian that floors on every
-filling.
+$b_1$ can carry — the $k=1$ analogue of the sign-flipped meridian that floors on every
+filling
+([the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md) records that
+result).
 
 **The bigger search confirms the criterion.** A parallelized high-retry surgery-topology
 search (`spectral_gate_realizability.py --retries N --jobs 10` — ten worker processes, each
@@ -499,8 +315,9 @@ not the carrying of a new gate (no proper subspace is left for a state to leak o
 obstruction, and with it the discriminating content of "realizable", is gone). This is no
 accident: the criterion is a property of $U$'s holonomy-class block, *not* of the bulk
 topology, so no surgery can change it. Growing $b_1$ buys no new *operations* — the
-operation-side echo of the $b_1$-hole result above: surgery enlarges the realizable *state*
-space, not the realizable *gate* set.
+operation-side echo of the $b_1$-hole result in
+[the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md): surgery
+enlarges the realizable *state* space, not the realizable *gate* set.
 
 ## Figures
 
@@ -508,63 +325,45 @@ A per-output force-directed render of the simplicial complexes the experiments
 build (`force_layout_3d` / `layout_from_spacetime`, vertices colored by
 amplitude magnitude where a state is carried).
 
-![A realizable gate's cobordism W: the SWAP twisted cylinder](https://github.com/akellehe/tessera/releases/download/issue-attachments/cobordism_results_gate_W.png)
-*Figure 1 — A realizable gate as a cobordism.* The `SWAP` gate's bulk
-$W=\texttt{twistedCylinder}(T^2,\,\text{swap})$ — the $(1\,2)$ holonomy
-permutation. `SWAP` is realizable because it fixes the trivial class and exchanges
-$[a]\leftrightarrow[b]$.
-
 ![A synthesized boundary state geo(psi)](https://github.com/akellehe/tessera/releases/download/issue-attachments/cobordism_results_geo_psi.png)
-*Figure 2 — A synthesized boundary state $\mathrm{geo}(\psi_A)$.* The minimal
+*Figure 1 — A synthesized boundary state $\mathrm{geo}(\psi_A)$.* The minimal
 Hermitian-weighted complex whose $k=0$ Laplacian carries $\psi_A$ as an
 eigenvector; vertices are colored by $\lvert\psi\rvert$ (phase $\to$ hue),
 auxiliary zero-amplitude vertices desaturated.
-
-![The disk filling, b1=0](https://github.com/akellehe/tessera/releases/download/issue-attachments/cobordism_results_disk.png)
-*Figure 3 — The disk filling ($b_1=0$).* The octahedron minus one face: the
-boundary meridian bounds the still-filled antipodal cell, so it floors.
-
-![The annulus filling, b1=1](https://github.com/akellehe/tessera/releases/download/issue-attachments/cobordism_results_annulus.png)
-*Figure 4 — The annulus filling ($b_1=1$).* The octahedron minus two antipodal
-faces: the meridian survives in $H_1$, so the cobordism carries it as a bulk
-harmonic.
-
-![The surgery-grown bulk](https://github.com/akellehe/tessera/releases/download/issue-attachments/cobordism_results_surgery.png)
-*Figure 5 — The surgery-grown bulk.* From the disk seed, the boundary-fixed remove
-opens the handle ($b_1:0\to1$) on its own under residual minimization, and the
-floored meridian realizes.
 
 The staged spectral synthesis renders its own outputs with the same idiom
 (`spectral_gate_realizability.py --all-plots`): holonomy-hole edges thickened, edges
 colored by the carried 1-form (hue $=$ phase, brightness $=|\text{amp}|$).
 
 ![The surgery-grown S^2 bulk](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_grown_bulk.png)
-*Figure 6 — The surgery-grown bulk $W$ (staged synthesis).* The icosahedral $S^2$ with the
+*Figure 2 — The surgery-grown bulk $W$ (staged synthesis).* The icosahedral $S^2$ with the
 three holonomy holes opened by `removeInteriorCell` ($b_1=2$); the thick edges are the three
 boundary 1-cycles $\{[a],[b],[a{+}b]\}$.
 
 ![The emergent register ker L_1](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_register.png)
-*Figure 7 — The emergent register $V=\ker L_1$.* The 2-dimensional $S_3$ standard
+*Figure 3 — The emergent register $V=\ker L_1$.* The 2-dimensional $S_3$ standard
 representation read from the spectrum (one carried harmonic shown on the register edges).
 
 ![A synthesized boundary state geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_geo_psiB.png)
-*Figure 8 — A synthesized boundary state $\mathrm{geo}(\psi_B)$.* The generic register
+*Figure 4 — A synthesized boundary state $\mathrm{geo}(\psi_B)$.* The generic register
 input, carried as a harmonic of $L_1$ (the stage-1 synthesis).
 
 ![A realized gate sqrt-SWAP](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_realized_sqrtswap.png)
-*Figure 9 — A realized gate, $\sqrt{\mathrm{SWAP}}$.* The post-interaction state
+*Figure 5 — A realized gate, $\sqrt{\mathrm{SWAP}}$.* The post-interaction state
 $U|\psi_B\rangle$ stays in $\ker L_1$ ($r\to0$) — the non-integer register automorphism the
 synthesized boundary admits.
+
+(The renders of the pinned twisted-cylinder cobordism and the disk/annulus/
+surgery meridian fillings live with their experiments in
+[the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md).)
 
 ## Method, conventions, and reproduction
 
 All experiments are pure orchestration of separately-tested classes —
-`ChoiJamiolkowski` (the bend), `HodgeLaplacian` (the $k=0$ and $k\ge1$
-Laplacians), `EigenstateSynthesis` / `RealizabilityOracle` (the fixed-boundary
-interior fill and its `decideHarmonic` / surgery modes), `DijkgraafWitten` (the
-$\mathbb{Z}_2$ state sum + `map` / `amplitude`), `BoundaryStateSpace` (the
-$\ker L_1(\Sigma)\to Z(\Sigma)$ preparation), and `Cobordism.twistedCylinder` (the
-realizable maps). Conventions held throughout:
+`ChoiJamiolkowski` (the bend and the operator amplitude), `HodgeLaplacian`
+(the $k=0$ and $k\ge1$ Laplacians, `weights`, `harmonics`), and
+`EigenstateSynthesis` / `RealizabilityOracle` (the fixed-boundary interior
+fill and its `decideHarmonic` / surgery modes). Conventions held throughout:
 
 - Operators are flat **row-major**; $\operatorname{vec}(U)$ is the row-major
   flatten (`ChoiJamiolkowski.vectorize`), the Choi bend.
@@ -577,21 +376,13 @@ realizable maps). Conventions held throughout:
   $\epsilon=10^{-10}$; an obstruction is a residual floor bounded above $10^{-2}$
   and cross-checked against an independent numpy global-min. The boundary
   $\partial W$ is **pinned** — the fill rewrites only interior edges.
-- The DW reading is **metric-free** (topology + cocycle only); the Frobenius norm
-  $\lVert\cdot\rVert$ scores $\texttt{gap\_to\_S3}=\min_{g\in S_3}\lVert U-g\rVert$,
-  with $\texttt{realizable}:=\texttt{gap\_to\_S3}<10^{-7}$.
 
 To reproduce (default Release build; the fast linker is auto-gated off Release so
 `bfd` links the LTO `_tessera`):
 
 ```
 pip install -e ".[dev]" -C cmake.define.TESSERA_CUDA=OFF
-python examples/cobordism/topological_correspondence.py   # T1–T5 + Lorentzian
 python examples/cobordism/realizability_report.py         # boundary synthesis + realizability
-python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral bridge
-python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
-python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
-python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
 python examples/cobordism/spectral_gate_realizability.py                   # the staged gate set (charge-conservation criterion, 13 named)
 python examples/cobordism/spectral_gate_realizability.py --h3              # H3 at the value level: Z_spec = <psi_A|U|psi_B> on the realized set
 python -m pytest tests/cobordism/test_spectral_h3_python.py                # the pinned H3 invariants

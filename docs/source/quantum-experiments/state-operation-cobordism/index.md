@@ -9,8 +9,11 @@ Hermitian-weighted simplicial complex.
 The [specification](cobordism.md) states the correspondence as three
 hypotheses (H1/H2/H3) and defines the algebraic and topological test
 layers; the [results companion](cobordism-results.md) organizes the
-numerical evidence under each hypothesis, ending with the realizable
-gate set and the per-output gallery.
+numerical evidence under each hypothesis — all of it decided by the
+continuous spectral method — ending with the realizable gate set (the
+charge-conservation criterion) and the per-output gallery. The
+Dijkgraaf–Witten layer that scaffolded the method is recorded in
+[earlier work](../earlier-work/dijkgraaf-witten-scaffold.md).
 
 ```{toctree}
 :maxdepth: 1
