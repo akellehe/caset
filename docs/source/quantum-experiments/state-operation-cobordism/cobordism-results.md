@@ -80,7 +80,7 @@ on the one-interior-edge bipyramid, the residual lifts off zero immediately
 ($t{=}0$: $9.5\times10^{-11}$, realizable; $t{=}0.1$: $5.3\times10^{-3}$, floored)
 and saturates near $2.4\times10^{-2}$. Growth converts an obstruction into a
 realization where the topology allows it — the $1\times3$ operation floors at
-$9.6\times10^{-1}$ with no budget and drops to $1.2\times10^{-13}$ after a single
+$9.6\times10^{-1}$ with no budget and drops to $3.5\times10^{-11}$ after a single
 boundary-fixed cone.
 
 Triangulation invariance of the bulk is certified at the value level by the
