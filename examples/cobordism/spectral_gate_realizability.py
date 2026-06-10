@@ -107,6 +107,14 @@ Parameters (additive -- the default run is the verified criterion sweep)
                   staged synthesis (synthesize states -> union as boundary -> grow by
                   surgery -> spectral L_1 residual) and reports that gate's residual,
                   realize/floor verdict, and emergent b_1.
+  --h3            H3 at the VALUE level, on the spectral data alone: Z_spec(W; psi_A,
+                  U psi_B) -- the Hodge pairing of the carried harmonic representatives
+                  on the surgery-grown bulk, with ONE scale fixed by the T1 anchor --
+                  equals <psi_A|U|psi_B> for every realized gate, over the V-generic
+                  input and a battery of random carried psi_A. Also reports the register
+                  Gram (the period-map isometry; Schur/S_3-equivariance), the
+                  Choi/operator cross-check, the floored gates' no-carried-post-state
+                  certificate, and bulk independence across re-grown genuine registers.
   --retries N     The surgery-topology search: score N RANDOMIZED surgery-grown
                   topologies (varied S^2 seeds -- the icosahedron and its geodesic
                   subdivisions -- varied vertex-disjoint holonomy-hole triples, and
@@ -122,6 +130,7 @@ Parameters (additive -- the default run is the verified criterion sweep)
                   release, printing the embed URLs (--no-upload renders locally only).
 
 Run:  python examples/cobordism/spectral_gate_realizability.py
+      python examples/cobordism/spectral_gate_realizability.py --h3
       python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP
       python examples/cobordism/spectral_gate_realizability.py --retries 5000 --jobs 10
       python examples/cobordism/spectral_gate_realizability.py --all-plots
@@ -598,6 +607,298 @@ def gate_sweep(reg, on_progress=None):
         if on_progress is not None:
             on_progress()
     return rows
+
+
+# --------------------------------------------------------------------------- #
+# --h3: H3 at the VALUE level, on the spectral data alone. The staged synthesis
+# proves U|psi_B> is CARRIED (r -> 0); this leg checks the value equation itself,
+# Z_spec(W; psi_A, U psi_B) = <psi_A|U|psi_B>, for every gate the construction
+# realizes -- no DW input anywhere. Z_spec is the Hodge pairing of the carried
+# harmonic representatives on the surgery-grown bulk (the eigendecomposition's
+# ker L_1; the register bulk has the unit cochain metric, so the pairing is the
+# plain Hermitian contraction). ONE global scale is fixed by the T1 anchor
+# (Z_spec(psi_B, psi_B) = <psi_B|psi_B>); after that every number -- every pair,
+# every gate, every re-grown topology -- is a prediction with no freedom left.
+# --------------------------------------------------------------------------- #
+def _carried_form(reg, raw_periods):
+    """The pure ker-L_1 representative of `raw_periods` on the surgery-grown bulk
+    (the register harmonics combined by least squares; NO leak correction), as a
+    full edge vector, plus the norm of the un-carried period remainder. The state
+    is a boundary state of the register iff that remainder is ~ 0."""
+    raw = np.asarray(raw_periods, dtype=complex)
+    coeffs, *_ = np.linalg.lstsq(reg.P.T, raw, rcond=None)
+    full = (coeffs @ reg.H_full).astype(complex)
+    leak = raw - coeffs @ reg.P
+    return full, float(np.linalg.norm(leak))
+
+
+def random_carried_states(n, seed):
+    """n random unit register states: signed periods cp with Sigma = 0 (the carried
+    subspace V), every component bounded away from zero (V-generic)."""
+    rng = np.random.default_rng(seed)
+    out = []
+    while len(out) < n:
+        z = rng.standard_normal(3) + 1j * rng.standard_normal(3)
+        z = z - z.mean()                                  # project onto Sigma = 0
+        if float(np.min(np.abs(z))) < 1e-2:               # V-generic only
+            continue
+        out.append(z / np.linalg.norm(z))
+    return out
+
+
+def register_gram(reg, scale):
+    """The register Gram in period coordinates: G_kl = scale * <h(e_k), h(e_l)> on a
+    flat-orthonormal basis {e_k} of the Sigma = 0 subspace. H3 at the value level is
+    G = I -- the period map V -> ker L_1 is a scaled isometry. By Schur's lemma that
+    is exactly S_3-equivariance of the carried register: V is the irreducible S_3
+    standard rep, so any invariant inner product on it is proportional to the flat
+    one, and the single proportionality constant is what the T1 anchor fixes."""
+    e1 = np.array([1.0, -1.0, 0.0]) / np.sqrt(2.0)
+    e2 = np.array([1.0, 1.0, -2.0]) / np.sqrt(6.0)
+    forms = [_carried_form(reg, reg.sign * e.astype(complex))[0] for e in (e1, e2)]
+    return scale * np.array([[complex(np.vdot(a, b)) for b in forms] for a in forms])
+
+
+def _amp_choi(U, cp_a, cp_out_unused, cp_b):
+    """The operator/Choi reading of the same matrix element: <psi_A|U|psi_B> through
+    quantum::ChoiJamiolkowski.transitionAmplitude on the C^4 holonomy embedding
+    (zero trivial-class component). The independent operator-side cross-check."""
+    cj = tessera.quantum.ChoiJamiolkowski
+    psi_a = [complex(0.0)] + [complex(z) for z in cp_a]
+    psi_b = [complex(0.0)] + [complex(z) for z in cp_b]
+    u_flat = [complex(z) for z in np.asarray(U, dtype=complex).reshape(-1)]
+    return complex(cj.transitionAmplitude(psi_a, u_flat, psi_b, 4, 4))
+
+
+def h3_value_sweep(reg, n_states=8, seed=2026, on_progress=None):
+    """H3 on the spectral data, against every gate the construction realizes: for the
+    V-generic input psi_B and a battery of random carried psi_A, compare the spectral
+    value Z_spec = scale * <h(psi_A), h(U psi_B)> (Hodge pairing of the carried
+    harmonic representatives, scale fixed once on the T1 anchor) with the flat
+    register amplitude <psi_A|U|psi_B> and with the Choi/operator reading. A floored
+    gate has NO carried post-state (its periods leak out of V), so it has no spectral
+    value -- the value-level obstruction certificate. Returns (rows, info)."""
+    hodge = cob.HodgeLaplacian(reg.st)
+    w1 = np.asarray(hodge.weights(1), dtype=float)
+    info = {"unit_metric_dev": float(np.max(np.abs(w1 - 1.0)))}
+
+    cp_b = (_CP_IN / np.linalg.norm(_CP_IN)).astype(complex)
+    h_b, leak_b = _carried_form(reg, reg.sign * cp_b)
+    info["psi_b_leak"] = leak_b
+    scale = 1.0 / float(np.vdot(h_b, h_b).real)           # the T1 anchor
+    info["scale"] = scale
+    info["gram"] = register_gram(reg, scale)
+    info["gram_dev"] = float(np.max(np.abs(info["gram"] - np.eye(2))))
+
+    states = [cp_b] + random_carried_states(n_states, seed)
+    forms_a = [_carried_form(reg, reg.sign * cp)[0] for cp in states]
+
+    rows = []
+    for name, U, fam in _gates():
+        u_reg = np.asarray(U, dtype=complex)[1:4, 1:4]
+        cp_out = u_reg @ cp_b
+        res, _b1, leak = post_interaction(reg, U)
+        realized = bool(res < REALIZE)
+        if not realized:
+            rows.append({"gate": name, "family": fam, "realizable": False,
+                         "residual": res, "leak": leak,
+                         "max_dev": None, "choi_dev": None, "n_pairs": 0})
+            if on_progress is not None:
+                on_progress()
+            continue
+        h_out, _ = _carried_form(reg, reg.sign * cp_out)
+        devs, choi_devs = [], []
+        for cp_a, h_a in zip(states, forms_a):
+            amp = complex(np.vdot(cp_a, cp_out))          # <psi_A|U|psi_B>, flat
+            z = scale * complex(np.vdot(h_a, h_out))      # Z_spec, the Hodge pairing
+            devs.append(abs(z - amp))
+            choi_devs.append(abs(_amp_choi(U, cp_a, cp_out, cp_b) - amp))
+        rows.append({"gate": name, "family": fam, "realizable": True,
+                     "residual": res, "leak": leak,
+                     "max_dev": float(max(devs)), "choi_dev": float(max(choi_devs)),
+                     "n_pairs": len(states)})
+        if on_progress is not None:
+            on_progress()
+    return rows, info
+
+
+def _equivariant_variant():
+    """The symmetry-preserving re-triangulation: one geodesic subdivision of the
+    icosahedron with each holonomy hole re-placed on the CENTRAL CHILD of its
+    original hole face (the triangle of the three edge midpoints). Subdivision
+    commutes with the simplicial symmetries, so the register equivariance that makes
+    the Gram the identity is preserved -- the genuine bulk-independence witness."""
+    nxt = [max(v for f in _ICO for v in f) + 1]
+    mid = {}
+
+    def m(a, b):
+        key = (min(a, b), max(a, b))
+        if key not in mid:
+            mid[key] = nxt[0]
+            nxt[0] += 1
+        return mid[key]
+
+    faces, central = [], {}
+    for (a, b, c) in _ICO:
+        ab, bc, ca = m(a, b), m(b, c), m(c, a)
+        faces += [(a, ab, ca), (b, bc, ab), (c, ca, bc), (ab, bc, ca)]
+        central[tuple(sorted((a, b, c)))] = tuple(sorted((ab, bc, ca)))
+    holes = [central[h] for h in _CLASS_HOLES]
+    return Register(faces=[tuple(sorted(f)) for f in faces], class_holes=holes)
+
+
+def _anisotropic_variant_registers(n_variants, seed):
+    """Re-grown GENUINE registers with generic (seeded, vertex-disjoint) hole triples
+    on the subdivided sphere -- carried, but with no symmetry to enforce an isometric
+    period chart. Their Gram defect is the control the equivariant witness is read
+    against."""
+    rng = random.Random(seed)
+    out, tries = [], 0
+    faces = _seed_surface(1)
+    while len(out) < n_variants and tries < 60:
+        tries += 1
+        holes = _vertex_disjoint_holes(faces, 3, rng)
+        if holes is None:
+            continue
+        reg = Register(faces=faces, class_holes=holes)
+        if reg.dim != 2 or reg.rank >= len(reg.class_holes):
+            continue                                      # saturated / degenerate draw
+        if post_interaction(reg, _gates()[0][1])[0] >= REALIZE:
+            continue                                      # identity anchor must hold
+        out.append(reg)
+    return out
+
+
+def h3_invariance(n_variants=2, n_states=4, seed=2026, on_progress=None):
+    """Bulk independence of the value, and what it turns on. The H3 table is re-run on
+    re-grown genuine registers with the SAME state battery. On the symmetry-preserving
+    re-triangulation (`_equivariant_variant`) the value carries over exactly. On
+    generic hole draws the period chart is anisotropic (Gram != I), and the deviation
+    from the amplitude is predicted EXACTLY by the Gram defect: Z - amp =
+    a^dag (G - I) b in the flat-orthonormal coordinates of V. The value-level H3 is
+    the residual-level criterion PLUS the isometric (equivariant) register chart."""
+    cp_b = (_CP_IN / np.linalg.norm(_CP_IN)).astype(complex)
+    states = [cp_b] + random_carried_states(n_states, seed)
+    realized = [(name, np.asarray(U, dtype=complex)[1:4, 1:4])
+                for name, U, _f in _gates() if conserves_charge(U)]
+    e_basis = np.array([[1.0, -1.0, 0.0] / np.sqrt(2.0),
+                        [1.0, 1.0, -2.0] / np.sqrt(6.0)])
+
+    def survey(reg):
+        h_b, _ = _carried_form(reg, reg.sign * cp_b)
+        scale = 1.0 / float(np.vdot(h_b, h_b).real)
+        gram = register_gram(reg, scale)
+        forms_a = [_carried_form(reg, reg.sign * cp)[0] for cp in states]
+        vals, defect = {}, 0.0
+        for name, u_reg in realized:
+            cp_out = u_reg @ cp_b
+            h_out, _ = _carried_form(reg, reg.sign * cp_out)
+            b = e_basis @ cp_out
+            zs = []
+            for cp_a, h_a in zip(states, forms_a):
+                z = scale * complex(np.vdot(h_a, h_out))
+                amp = complex(np.vdot(cp_a, cp_out))
+                a = e_basis @ cp_a
+                predicted = complex(np.conj(a) @ (gram - np.eye(2)) @ b)
+                defect = max(defect, abs((z - amp) - predicted))
+                zs.append(z)
+            vals[name] = zs
+        return vals, float(np.max(np.abs(gram - np.eye(2)))), defect
+
+    base_vals, _gd, _dd = survey(Register())
+    if on_progress is not None:
+        on_progress()
+
+    def drift_vs_base(vals):
+        return float(max(abs(vals[name][k] - base_vals[name][k])
+                         for name in vals for k in range(len(states))))
+
+    eq = _equivariant_variant()
+    eq_vals, eq_gram_dev, eq_defect = survey(eq)
+    equivariant = {"nV": int(eq.st.getVertexList().size()), "rank": eq.rank,
+                   "gram_dev": eq_gram_dev, "drift": drift_vs_base(eq_vals),
+                   "defect_residual": eq_defect}
+    if on_progress is not None:
+        on_progress()
+
+    anisotropic = []
+    for reg in _anisotropic_variant_registers(n_variants, seed):
+        vals, gram_dev, defect = survey(reg)
+        anisotropic.append({"nV": int(reg.st.getVertexList().size()),
+                            "rank": reg.rank, "gram_dev": gram_dev,
+                            "drift": drift_vs_base(vals),
+                            "defect_residual": defect})
+        if on_progress is not None:
+            on_progress()
+    return {"equivariant": equivariant, "anisotropic": anisotropic,
+            "n_gates": len(realized), "n_pairs": len(states)}
+
+
+def _print_h3(rows, info, inv, check):
+    """Report the H3 value table in the house style and register its checks."""
+    realized = [r for r in rows if r["realizable"]]
+    floored = [r for r in rows if not r["realizable"]]
+    print("\n  H3 at the VALUE level (spectral data only; one scale fixed by the T1 "
+          "anchor, then every number is a prediction):")
+    print(f"      unit cochain metric: max|w_1 - 1| = {info['unit_metric_dev']:.1e}  "
+          f"(the Hodge pairing is the plain Hermitian contraction)")
+    g = info["gram"]
+    print(f"      register Gram on V (flat-orthonormal basis of Sigma=0): "
+          f"[[{g[0, 0]:.6f}, {g[0, 1]:.6f}], [{g[1, 0]:.6f}, {g[1, 1]:.6f}]]  "
+          f"max|G - I| = {info['gram_dev']:.2e}")
+    print("        (G = I is the period-map isometry -- by Schur, exactly the "
+          "S_3-equivariance of the carried register.)")
+    header = (f"      {'gate':16} {'family':16} {'r(U)':>10} "
+              f"{'max|Z_spec - amp|':>18} {'choi dev':>10} {'pairs':>6}")
+    print(header)
+    print("      " + "-" * (len(header) - 6))
+    for r in realized:
+        print(f"      {r['gate']:16} {r['family']:16} {r['residual']:>10.1e} "
+              f"{r['max_dev']:>18.2e} {r['choi_dev']:>10.1e} {r['n_pairs']:>6}")
+    lo = min(r["leak"] for r in floored)
+    hi = max(r["leak"] for r in floored)
+    print(f"      ({len(floored)} floored gates: no carried post-state -- leak "
+          f"|Sigma| in {lo:.2f}..{hi:.2f} -- so no spectral value exists; the "
+          f"value-level obstruction certificate.)")
+    eq = inv["equivariant"]
+    print(f"      bulk independence ({inv['n_gates']} gates x {inv['n_pairs']} pairs "
+          f"each): the symmetry-preserving re-triangulation (|V|={eq['nV']}, the "
+          f"subdivided icosahedron, central-child holes) carries the value EXACTLY -- "
+          f"Gram dev {eq['gram_dev']:.1e}, drift {eq['drift']:.2e}.")
+    for v in inv["anisotropic"]:
+        print(f"        generic hole draw (|V|={v['nV']}): Gram dev "
+              f"{v['gram_dev']:.2e}, value deviation {v['drift']:.2e} -- equal to the "
+              f"Gram-defect prediction a*(G-I)b to {v['defect_residual']:.1e}.")
+    print("        => the value is carried by every bulk whose register chart is "
+          "isometric (Gram = I, the equivariant draws); a generic draw deviates by "
+          "exactly its Gram defect. The value-level H3 is the residual-level "
+          "criterion PLUS the isometric register chart.")
+    worst = max(r["max_dev"] for r in realized)
+    worst_choi = max(r["choi_dev"] for r in realized)
+    print(f"        => Z_spec = <psi_A|U|psi_B> on every realized gate "
+          f"(worst pair deviation {worst:.2e}); the Choi/operator reading agrees "
+          f"(worst {worst_choi:.2e}).")
+    check("the register bulk has the unit cochain metric",
+          info["unit_metric_dev"] < 1e-12)
+    check("psi_B is carried (its periods lie in V)", info["psi_b_leak"] < 1e-9)
+    check("the register Gram is the identity (period map is a scaled isometry)",
+          info["gram_dev"] < 1e-9)
+    check("T1 anchor: the identity's spectral value is <psi_A|psi_B> on every pair",
+          realized[0]["gate"] == "Identity" and realized[0]["max_dev"] < 1e-9)
+    check("H3: Z_spec = <psi_A|U|psi_B> for EVERY realized gate, on every pair",
+          worst < 1e-9)
+    check("the Choi/operator reading agrees with the flat amplitude",
+          worst_choi < 1e-9)
+    check("every floored gate has no carried post-state (leak != 0)",
+          all(r["leak"] > 1e-6 for r in floored))
+    check("the value carries over exactly to the symmetry-preserving "
+          "re-triangulation (bulk independence)",
+          eq["gram_dev"] < 1e-9 and eq["drift"] < 1e-9)
+    check("a generic hole draw's value deviation equals its register Gram defect "
+          "(the value-level H3 selects the isometric chart)",
+          len(inv["anisotropic"]) >= 1
+          and all(v["defect_residual"] < 1e-9 for v in inv["anisotropic"]))
+    return worst
 
 
 # --------------------------------------------------------------------------- #
@@ -1201,6 +1502,12 @@ def main():
     ap.add_argument("--gate", default=None,
                     help="solve for ONE gate (e.g. H_x_H, sqrt-SWAP, CNOT); "
                          "'--gate help' lists the battery. Default: the full sweep.")
+    ap.add_argument("--h3", action="store_true",
+                    help="validate H3 at the value level on the spectral data: "
+                         "Z_spec(W; psi_A, U psi_B) = <psi_A|U|psi_B> for every "
+                         "realized gate (one scale fixed by the T1 anchor), plus the "
+                         "register Gram, the Choi/operator cross-check, and bulk "
+                         "independence across re-grown genuine registers.")
     ap.add_argument("--retries", type=int, default=0,
                     help="surgery-topology search: score N randomized surgery-grown "
                          "topologies in parallel (>0 enables it).")
@@ -1273,6 +1580,21 @@ def main():
     _check("every floored gate is certified (residual > CERT_FLOOR and leaks)",
            all(r["residual"] > CERT_FLOOR and r["leak"] > 1e-6 for r in floored))
 
+    # ---- H3 at the value level (--h3): Z_spec = <psi_A|U|psi_B> on the realized set #
+    h3_payload = None
+    if args.h3:
+        hprog = _progress()
+        hprog.phase("H3 value sweep", total=len(_gates()) + 4)
+        h3_rows, h3_info = h3_value_sweep(reg, on_progress=hprog.on_tick)
+        inv = h3_invariance(on_progress=hprog.on_tick)
+        hprog.finish("H3 value sweep done")
+        _print_h3(h3_rows, h3_info, inv, _check)
+        h3_payload = {"rows": h3_rows, "scale": h3_info["scale"],
+                      "gram": [[z.real, z.imag] for z in h3_info["gram"].reshape(-1)],
+                      "gram_dev": h3_info["gram_dev"],
+                      "unit_metric_dev": h3_info["unit_metric_dev"],
+                      "invariance": inv}
+
     # ---- the surgery-topology search (--retries): does the set grow past the criterion? #
     search = None
     if args.retries > 0:
@@ -1305,7 +1627,8 @@ def main():
         with open(path, "w") as handle:
             json.dump({"register_trace": trace, "register_constraint": reg.n.tolist(),
                        "identity_anchor": anchor, "stage1": stage1,
-                       "gate_sweep": rows, "surgery_search": search,
+                       "gate_sweep": rows, "h3": h3_payload,
+                       "surgery_search": search,
                        "plot_urls": plot_urls}, handle, indent=2)
         print(f"\n  raw table (PR artifact, not committed): {path}")
 
