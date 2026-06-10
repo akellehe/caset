@@ -11,7 +11,9 @@
 > `realizable_image_sweep.py` / `loosened_gate_retest.py` /
 > `spectral_gate_realizability.py` (the gate set: pinned ($S_3$), loosened at
 > $k=0$, and the staged spectral synthesis with the boundary synthesized
-> (the charge-conservation criterion; 13 named gates)) — all under `examples/cobordism/`.
+> (the charge-conservation criterion; 13 named gates); its `--h3` mode
+> validates the value equation $Z_{\text{spec}}=\langle\psi_A|U|\psi_B\rangle$
+> on the realized set, spectrally) — all under `examples/cobordism/`.
 
 ## The correspondence
 
@@ -129,6 +131,53 @@ outgoing $\mathrm{geo}(\psi_A)$ and the orientation-reversed incoming
 $\mathrm{geo}(\psi_B)$.
 
 ## H3 — the value is the amplitude
+
+### H3 on the spectral data: $Z_{\text{spec}}$ equals the amplitude on every realized gate
+
+The value equation is validated on the staged-synthesis register itself —
+no DW input anywhere (`spectral_gate_realizability.py --h3`). The spectral
+value $Z_{\text{spec}}(W;\psi_A,U\psi_B)$ is the Hodge pairing of the
+carried harmonic representatives on the surgery-grown bulk (the register
+bulk carries the unit cochain metric, so the pairing is the plain Hermitian
+contraction), with **one** global scale fixed by the T1 anchor
+$Z_{\text{spec}}(\psi_B,\psi_B)=\langle\psi_B|\psi_B\rangle$; after that,
+every number — every pair, every gate, every re-grown bulk — is a
+prediction with no freedom left.
+
+- **The register chart is a scaled isometry.** The Gram of the period map
+  $V\to\ker L_1$ on a flat-orthonormal basis of the $\Sigma=0$ subspace is
+  the identity to $7.8\times10^{-16}$. By Schur's lemma this is exactly the
+  $S_3$-equivariance of the carried register: $V$ is the irreducible
+  standard representation, so any invariant inner product on it is
+  proportional to the flat one — the proportionality constant being the one
+  scale T1 fixes.
+- **$Z_{\text{spec}}=\langle\psi_A|U|\psi_B\rangle$ for every realized
+  gate.** Worst pair deviation $5.0\times10^{-16}$ across the 13 criterion
+  gates $\times$ 9 carried pairs (the $V$-generic input plus 8 random
+  carried $\psi_A$); the independent Choi/operator reading
+  (`quantum::ChoiJamiolkowski.transitionAmplitude` on the $\mathbb{C}^4$
+  holonomy embedding) agrees to $1.6\times10^{-16}$.
+- **A floored gate has no spectral value.** Its post-interaction periods
+  leak out of $V$ ($\lvert\Sigma\rvert=0.21$–$2.60$ across the 39 floored
+  gates), so no carried representative exists — the value-level
+  obstruction certificate, the same mechanism as the residual floor.
+- **Bulk independence, with its mechanism.** The symmetry-preserving
+  re-triangulation (one geodesic subdivision, each holonomy hole re-placed
+  on the central child of its original hole face) carries the value
+  *exactly*: Gram defect $7.6\times10^{-16}$, value drift
+  $9.7\times10^{-16}$. A generic vertex-disjoint hole draw still realizes
+  the same gates, but its chart is anisotropic (Gram defects $0.11$ and
+  $0.25$ on two draws) and its value deviation ($0.14$, $0.26$) equals the
+  Gram-defect prediction $a^\dagger(G-I)b$ to $\sim10^{-15}$. **The
+  value-level H3 is the charge-conservation criterion plus the isometric
+  register chart**: surgery decides *which* gates are carried
+  (topology-free), and equivariance makes the carried pairing *be* the
+  amplitude.
+
+Read at the value level, the falsifiable core says: the identity reproduces
+the inner product only once surgery has grown the full register (the T1
+anchor), and a leaked class produces *no* value at all rather than a wrong
+one.
 
 ### The DW–spectral bridge: three independent readings agree (and only on the lattice)
 
@@ -544,6 +593,8 @@ python examples/cobordism/realizable_image_sweep.py       # the pinned gate set 
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
 python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
 python examples/cobordism/spectral_gate_realizability.py                   # the staged gate set (charge-conservation criterion, 13 named)
+python examples/cobordism/spectral_gate_realizability.py --h3              # H3 at the value level: Z_spec = <psi_A|U|psi_B> on the realized set
+python -m pytest tests/cobordism/test_spectral_h3_python.py                # the pinned H3 invariants
 python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP   # solve for one named gate (52-gate battery)
 python examples/cobordism/spectral_gate_realizability.py --retries 10000 --jobs 10  # parallel surgery-topology search (confirms the criterion)
 python examples/cobordism/spectral_gate_realizability.py --all-plots        # force-directed renders → issue-attachments
