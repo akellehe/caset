@@ -306,18 +306,28 @@ search (`spectral_gate_realizability.py --retries N --jobs 10` — ten worker pr
 pinned to one BLAS thread, so $\text{procs}\times\text{threads}\le10$) asks directly whether
 a *richer* emergent register carries a gate beyond the criterion set. Each retry re-runs the
 identical staged synthesis on a randomized surgery-grown bulk: a different triangulated-$S^2$
-seed (the icosahedron and its geodesic subdivisions, up to $|V|=162$), a different
-vertex-disjoint holonomy-hole triple, and extra `removeInteriorCell` surgeries that grow
-$b_1$ (up to $5$ here). Over **3 000** topologies the realizable set never grows. The
+seed (the icosahedron and its geodesic subdivisions), a different vertex-disjoint
+holonomy-hole triple, extra `removeInteriorCell` surgeries that grow $b_1$ (up to $5$
+here), and the move-set's **additive half** — up to `--max-additional-vertices` (default
+$20$) vertices added per draw by boundary-fixed stellar subdivision, composed from the two
+surgery primitives (the cone fan attached over an interior top cell's edges, the face then
+removed: $\partial W$ bit-exact, $\ker L_1$ preserved, the bulk re-pinned to the unit
+cochain metric by construction). Over **3 000** cuts-only topologies (seeds up to
+$|V|=162$) the realizable set never grows. The
 **1 282 genuine** registers — a *proper* carried subspace ($\mathrm{rank}\,P<\#\text{holes}$,
 with the identity and all six $S_3$ controls still realizing) — each realize *exactly* the
 same charge-conserving gates (the 13). The other **1 718** draws **saturate** the
 holonomy-period space ($\mathrm{rank}\,P=\#\text{holes}$): $V$ becomes the whole period
 space, so every gate trivially "realizes" — but that is the **dissolution** of the register,
 not the carrying of a new gate (no proper subspace is left for a state to leak out of, so the
-obstruction, and with it the discriminating content of "realizable", is gone). This is no
+obstruction, and with it the discriminating content of "realizable", is gone). With the
+additive move enabled the conclusion is unchanged: over **300** further draws mixing cuts
+with up to $20$ added vertices (one draw using all $20$; refined bulks reaching
+$|V|=182$), the **161 genuine** registers again realize exactly the 13 and the remaining
+**139** saturate. This is no
 accident: the criterion is a property of $U$'s holonomy-class block, *not* of the bulk
-topology, so no surgery can change it. Growing $b_1$ buys no new *operations* — the
+topology, so no surgery — subtractive or additive — can change it. Growing $b_1$, or
+refining the bulk with added vertices, buys no new *operations* — the
 operation-side echo of the $b_1$-hole result in
 [the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md): surgery
 enlarges the realizable *state* space, not the realizable *gate* set.
@@ -390,7 +400,7 @@ python examples/cobordism/spectral_gate_realizability.py                   # the
 python examples/cobordism/spectral_gate_realizability.py --h3              # H3 at the value level: Z_spec = <psi_A|U|psi_B> on the realized set
 python -m pytest tests/cobordism/test_spectral_h3_python.py                # the pinned H3 invariants
 python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP   # solve for one named gate (52-gate battery)
-python examples/cobordism/spectral_gate_realizability.py --retries 10000 --jobs 10  # parallel surgery-topology search (confirms the criterion)
+python examples/cobordism/spectral_gate_realizability.py --retries 10000 --jobs 10  # parallel surgery-topology search, cuts + additions (--max-additional-vertices caps the added vertices, default 20)
 python examples/cobordism/spectral_gate_realizability.py --all-plots        # force-directed renders → issue-attachments
 python -m pytest tests/cobordism
 ```
