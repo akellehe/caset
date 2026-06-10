@@ -154,6 +154,7 @@ from collections import Counter  # noqa: E402
 import numpy as np  # noqa: E402
 
 import tessera  # noqa: E402
+from tessera.utils.progress import SingleTaskProgress  # noqa: E402
 
 cob = tessera.cobordism
 
@@ -183,6 +184,27 @@ def _set_threads(n):
     is spawned and again in each worker's initializer, so procs x threads <= 10)."""
     for v in THREAD_VARS:
         os.environ[v] = str(n)
+
+
+class _NoProgress:
+    """Silent stand-in for SingleTaskProgress, so piped / CI runs and the test stay
+    quiet (no spinner frames written to a non-interactive stderr)."""
+
+    def phase(self, *_a, **_k):
+        pass
+
+    def on_tick(self, *_a, **_k):
+        pass
+
+    def finish(self, *_a, **_k):
+        pass
+
+
+def _progress():
+    """A live single-line spinner + counter on an interactive stderr (the idiom the CDT
+    examples use, e.g. spectral_dimension.py), else a silent no-op. The spinner draws to
+    stderr, so it never interleaves with the result table on stdout."""
+    return SingleTaskProgress() if sys.stderr.isatty() else _NoProgress()
 
 
 # --------------------------------------------------------------------------- #
@@ -564,15 +586,17 @@ def conserves_charge(U, tol=1e-9):
 _CP_IN = np.array([1.0, 0.3, -1.3])
 
 
-def gate_sweep(reg):
+def gate_sweep(reg, on_progress=None):
     """STAGE 3 over the full battery: the genuine spectral residual of U|psi_B> on the
     surgery-grown register, per gate. Realized iff r -> 0 (carried). The realizable set
-    is the OUTPUT."""
+    is the OUTPUT. *on_progress* (if given) is pinged once per scored gate."""
     rows = []
     for name, U, fam in _gates():
         res, b1, leak = post_interaction(reg, U)
         rows.append({"gate": name, "family": fam, "residual": res, "b1": b1,
                      "leak": leak, "realizable": bool(res < REALIZE)})
+        if on_progress is not None:
+            on_progress()
     return rows
 
 
@@ -766,12 +790,24 @@ def _retry_worker(task):
     return out
 
 
-def _parallel_map(func, items, jobs):
+def _parallel_map(func, items, jobs, on_progress=None):
     """Map *func* over *items* across at most *jobs* spawn workers (each one BLAS
-    thread), with a serial fallback. The cap holds: jobs <= 10 and threads = 1."""
+    thread), with a serial fallback. The cap holds: jobs <= 10 and threads = 1. If
+    *on_progress* is given it is pinged once per completed item (the parallel path uses
+    `imap_unordered` so the counter advances live; results stay order-independent, and
+    callers that need order re-sort)."""
     items = list(items)
+
+    def _serial():
+        out = []
+        for x in items:
+            out.append(func(x))
+            if on_progress is not None:
+                on_progress()
+        return out
+
     if jobs <= 1 or len(items) <= 1:
-        return [func(x) for x in items]
+        return _serial()
     saved = {v: os.environ.get(v) for v in THREAD_VARS}
     try:
         _set_threads(1)                                     # children inherit at spawn
@@ -779,12 +815,18 @@ def _parallel_map(func, items, jobs):
         chunk = max(1, len(items) // (jobs * 8) or 1)
         with ctx.Pool(processes=min(jobs, len(items)),
                       initializer=_worker_init) as pool:
-            return pool.map(func, items, chunksize=chunk)
+            if on_progress is None:
+                return pool.map(func, items, chunksize=chunk)
+            out = []
+            for r in pool.imap_unordered(func, items, chunksize=chunk):
+                out.append(r)
+                on_progress()
+            return out
     except Exception as _exc:
         if os.environ.get("SPECTRAL_GATE_DEBUG"):
             import traceback
             traceback.print_exc()
-        return [func(x) for x in items]                     # robust serial fallback
+        return _serial()                                    # robust serial fallback
     finally:
         for v, val in saved.items():                        # restore the parent
             if val is None:
@@ -793,24 +835,26 @@ def _parallel_map(func, items, jobs):
                 os.environ[v] = val
 
 
-def run_sweep(reg, jobs):
+def run_sweep(reg, jobs, on_progress=None):
     """The STAGE 3 battery sweep, parallelized over gates (each worker rebuilds the
     deterministic canonical Register, so the rows are identical to the serial sweep).
-    Falls back to the in-process `reg` when jobs == 1."""
+    Falls back to the in-process `reg` when jobs == 1. *on_progress* ticks per gate."""
     if jobs <= 1:
-        return gate_sweep(reg)
-    rows = _parallel_map(_sweep_worker, gate_names(), jobs)
+        return gate_sweep(reg, on_progress=on_progress)
+    rows = _parallel_map(_sweep_worker, gate_names(), jobs, on_progress=on_progress)
     order = {n: i for i, n in enumerate(gate_names())}
     rows.sort(key=lambda r: order[r["gate"]])
     return rows
 
 
-def surgery_search(retries, jobs, base_seed=12345, kmax=3):
+def surgery_search(retries, jobs, base_seed=12345, kmax=3, on_progress=None):
     """Score *retries* randomized surgery-grown topologies in parallel and aggregate:
     how many genuine vs saturated vs invalid registers, the genuine realizable-set
-    sizes, and whether ANY genuine variant carries a gate beyond the canonical 8."""
+    sizes, and whether ANY genuine variant carries a gate beyond the criterion set.
+    *on_progress* ticks per scored topology (the live counter)."""
     tasks = [(i, base_seed, kmax) for i in range(retries)]
-    results = [r for r in _parallel_map(_retry_worker, tasks, jobs) if r]
+    results = [r for r in _parallel_map(_retry_worker, tasks, jobs,
+                                        on_progress=on_progress) if r]
     genuine = [r for r in results if r["genuine"]]
     saturated = [r for r in results if r["saturated"]]
     invalid = [r for r in results if not r["genuine"] and not r["saturated"]]
@@ -1093,7 +1137,10 @@ def run_single_gate(args, jobs):
         return bool(passed)
 
     reg = Register()
+    prog = _progress()
+    prog.phase("growing the register + synthesizing states")
     _emergence_and_anchor(reg, check)
+    prog.finish("register ready")
 
     res, b1, leak = post_interaction(reg, U)
     realized = bool(res < REALIZE)
@@ -1114,7 +1161,11 @@ def run_single_gate(args, jobs):
               (not realized) and res > CERT_FLOOR and leak > 1e-6)
 
     if args.retries > 0:
-        search = surgery_search(args.retries, jobs, base_seed=args.seed)
+        sprog = _progress()
+        sprog.phase("surgery-topology search", total=args.retries)
+        search = surgery_search(args.retries, jobs, base_seed=args.seed,
+                                on_progress=sprog.on_tick)
+        sprog.finish(f"scored {search['scored']} topologies")
         _print_search(search)
         if name not in CANONICAL_SET:
             carried = name in search["new_gates"]
@@ -1178,10 +1229,14 @@ def main():
         return bool(passed)
 
     reg = Register()
+    prog = _progress()
+    prog.phase("growing the register + synthesizing states")
     trace, anchor, stage1 = _emergence_and_anchor(reg, _check)
 
     # ---- STAGE 3: the per-gate spectral sweep (the finding), parallelized ---- #
-    rows = run_sweep(reg, jobs)
+    prog.phase("scoring gates", total=len(_gates()))
+    rows = run_sweep(reg, jobs, on_progress=prog.on_tick)
+    prog.finish(f"scored {len(rows)} gates")
     print(f"\n  STAGE 3 gate sweep (spectral residual of U|psi_B> on the surgery-grown "
           f"register; realized iff r -> 0; scored across {jobs} worker(s)):")
     header = (f"      {'gate':16} {'family':16} {'residual':>11} {'b_1':>5} "
@@ -1218,10 +1273,14 @@ def main():
     _check("every floored gate is certified (residual > CERT_FLOOR and leaks)",
            all(r["residual"] > CERT_FLOOR and r["leak"] > 1e-6 for r in floored))
 
-    # ---- the surgery-topology search (--retries): does the set grow beyond 8? -- #
+    # ---- the surgery-topology search (--retries): does the set grow past the criterion? #
     search = None
     if args.retries > 0:
-        search = surgery_search(args.retries, jobs, base_seed=args.seed)
+        sprog = _progress()
+        sprog.phase("surgery-topology search", total=args.retries)
+        search = surgery_search(args.retries, jobs, base_seed=args.seed,
+                                on_progress=sprog.on_tick)
+        sprog.finish(f"scored {search['scored']} topologies")
         _print_search(search)
         _check("no genuine emergent register carries a gate beyond the criterion set",
                not search["grows"])
