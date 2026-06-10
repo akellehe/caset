@@ -371,6 +371,18 @@ class Register:
                 self.es.detachLastInteriorVertex()
                 continue
             grown += 1
+        if grown:
+            # attachInteriorVertex wires the new edges through
+            # createSimplexTracked, whose metric follows the endpoints' TIME
+            # rule (timelike l^2 = -alpha*a on a time difference) rather than
+            # Simplex::cone's causal vertex placement. On the all-same-time
+            # register seeds that already yields spacelike unit edges, but the
+            # documented unit cochain metric should hold by construction, not
+            # by the default-time coincidence: re-pin the bulk uniform exactly
+            # as _surface does at build.
+            for e in self.st.getEdgeList().toVector():
+                e.setSquaredLength(1.0)
+                e.setPhase(0.0)
         return grown
 
     def _period(self, vec, tri):
