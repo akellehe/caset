@@ -599,7 +599,16 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
              "k>=1, so b_k is frozen at the seed), removal lets the search reach an "
              "arbitrary valid complex with the fixed boundary: b_k MOVES on its "
              "own. The companion of harmonic=True (realizable iff the boundary "
-             "class is carried by H_k(W)).");
+             "class is carried by H_k(W)).")
+      .value("SURGERY_AND_CONE",
+             RealizabilityOracle::GrowthMode::SurgeryAndCone,
+             "The composed move-set: additions as well as surgical cuts. Each "
+             "growth step commits the best IMPROVING interior-top-cell removal "
+             "(the SURGERY step); when no cut improves it falls back to the "
+             "additive cone (growInterior). max_cones budgets the ADDITIVE "
+             "commits only — the added vertices, the resource a caller's "
+             "--max-additional-vertices flag caps; cuts are bounded by the "
+             "improving-only rule and the finite interior-cell set.");
 
   py::class_<RealizabilityOracle::Verdict>(ro, "Verdict",
       "The oracle's verdict on U: the realizability decision, the residual (the "

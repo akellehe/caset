@@ -456,6 +456,7 @@ double RealizabilityOracle::fillInterior(
   surgeryRemovals = 0;
   spaceSizeOut = 0;
 
+  int conesUsed = 0;  // additive commits — the budgeted resource in SurgeryAndCone
   for (int cone = 0;; ++cone) {
     // Optimize the current complex (seed + cone preserves the cone-path seed
     // sequence exactly, so the historical decide() is byte-for-byte unchanged).
@@ -466,20 +467,45 @@ double RealizabilityOracle::fillInterior(
     // Stop on convergence, an exhausted budget, or a complex that cannot grow
     // (growth is the capacity/structure gate; it leaves ∂W byte-fixed).
     if (bestR < epsilon) break;
-    if (cone >= maxCones) break;
     bool grew;
-    if (mode == GrowthMode::Surgery)
-      // The topology-changing move-set: commit the best b_k-shifting removal.
+    if (mode == GrowthMode::SurgeryAndCone) {
+      // The composed move-set: the best IMPROVING cut wins the step; when no
+      // cut improves, fall back to the additive cone. `maxCones` budgets the
+      // additive commits only (the added vertices); cuts are bounded by the
+      // improving-only rule and the finite interior-cell set.
       grew = growBestSurgery(es, pinnedByTuple, epsilon, restarts,
                              seed + 1000 + static_cast<std::uint64_t>(cone),
                              harmonic, bestR, surgeryRemovals);
-    else if (mode == GrowthMode::FreeConnectivity)
-      grew = growBestConnectivity(
-          es, pinnedByTuple, epsilon, restarts,
-          seed + 1000 + static_cast<std::uint64_t>(cone), connectivityCandidates,
-          harmonic, candidatesOut, triangleCandidatesOut, spaceSizeOut);
-    else
-      grew = es.growInterior(seed + 1000 + static_cast<std::uint64_t>(cone));
+      if (!grew && conesUsed < maxCones) {
+        // The additive fallback rides the Pachner add; on complexes where the
+        // move proposer cannot produce a valid cone (it can throw on degenerate
+        // proposals) the step is logged and skipped — the verdict then floors
+        // at the explored complexity rather than losing the decision.
+        try {
+          grew = es.growInterior(seed + 2000 + static_cast<std::uint64_t>(cone));
+        } catch (const std::exception &e) {
+          CLOG(WARN_LEVEL, "SurgeryAndCone: additive grow failed (", e.what(),
+               "); stopping growth at the explored complexity");
+          grew = false;
+        }
+        if (grew) ++conesUsed;
+      }
+    } else {
+      if (cone >= maxCones) break;
+      if (mode == GrowthMode::Surgery)
+        // The topology-changing move-set: commit the best b_k-shifting removal.
+        grew = growBestSurgery(es, pinnedByTuple, epsilon, restarts,
+                               seed + 1000 + static_cast<std::uint64_t>(cone),
+                               harmonic, bestR, surgeryRemovals);
+      else if (mode == GrowthMode::FreeConnectivity)
+        grew = growBestConnectivity(
+            es, pinnedByTuple, epsilon, restarts,
+            seed + 1000 + static_cast<std::uint64_t>(cone),
+            connectivityCandidates, harmonic, candidatesOut,
+            triangleCandidatesOut, spaceSizeOut);
+      else
+        grew = es.growInterior(seed + 1000 + static_cast<std::uint64_t>(cone));
+    }
     if (!grew) break;
     ++conesApplied;
   }

@@ -141,7 +141,18 @@ class RealizabilityOracle {
       /// its own**, so the realizability obstruction either falls out of the grown
       /// topology or dissolves. The intended companion of the `harmonic` criterion
       /// (a boundary class is realizable iff it is **carried** by \f$ H_k(W) \f$).
-      Surgery
+      Surgery,
+      /// **Surgery + cone**: the composed move-set — additions as well as
+      /// surgical cuts. Each growth step first scores every interior-top-cell
+      /// removal (try → score → restore, exactly the `Surgery` step) and commits
+      /// the best **improving** cut; when no cut improves, it falls back to the
+      /// additive cone (`EigenstateSynthesis::growInterior`). Under this mode
+      /// `maxCones` budgets the **additive commits only** (the added vertices —
+      /// the resource a caller's `--max-additional-vertices` flag caps); cuts are
+      /// bounded by the improving-only rule and the finite interior-cell set, so
+      /// the fill terminates at convergence, an exhausted additive budget with no
+      /// improving cut left, or a complex that cannot grow.
+      SurgeryAndCone
     };
 
     /// The oracle's verdict on \f$ U \f$: the realizability decision, the
