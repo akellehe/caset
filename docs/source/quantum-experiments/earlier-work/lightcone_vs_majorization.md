@@ -3,7 +3,7 @@
 First experimental run of `tessera.quantum.SchwingerQuench.compareCausalOrders`
 across a small (m/g, T, N) × vLr grid on a regular 1+1D chain. This
 addresses the **strong falsification** criterion of
-`docs/source/quantum-methodology.md` §1.2:
+`docs/source/quantum-experiments/emergent-causal-order-from-majorization.md` §1, criterion 1:
 
 > If $\preceq_{\mathrm{maj}}$ contains pairs whose spatial separation
 > exceeds the Lieb–Robinson cone at the corresponding time difference,
@@ -75,7 +75,7 @@ follow-up scans live in the same directory under
 - **`τ(LR, cs) = 1.0` everywhere.** Verified out of band — `≼_LR` is a
   strict subset of `≼_cs` on the regular chain because `≼_cs` is just
   time-only, and any LR-related pair is necessarily cross-time. This
-  is the methodology page's criterion-3 caveat in observational form.
+  is the charter's criterion-3 caveat in observational form.
 - **`n_comp(LR, cs)` grows monotonically in vLr.** As the cone widens
   more pairs become LR-comparable. By the time we hit vLr = 16 with
   effective Δt = 0.5, the cone reaches 8 sites — close to (but not
@@ -189,7 +189,7 @@ related label pairs lie outside the Lieb–Robinson cone:
 | 20 | 0.5 | 44,906   | 87,959  | 51.1%                |
 
 The fraction is *near 50% across all four regimes* and *grows weakly
-with N*. By the strict reading of methodology §1.2 #1, the hypothesis
+with N*. By the strict reading of the charter's §1, criterion 1, the hypothesis
 is decisively rejected on the regular chain.
 
 **At `vLr = 16` (a 16× looser cone, well above any physical
@@ -227,7 +227,7 @@ subset, but each has a piece the other doesn't see.
   one DMRG/TDVP trajectory per regime. Bootstrapping over seeds would
   be needed before quoting these numbers in any external context.
 - **Trotter / bond-dim sensitivity.** Single-seed run, fixed
-  bond-dim 80, fixed dt 0.1. The methodology page calls for
+  bond-dim 80, fixed dt 0.1. The charter calls for
   bootstrap-over-Trotter-seeds to put a confidence band on these τ
   values. Until that is done, the τ ranges above are point estimates
   only.

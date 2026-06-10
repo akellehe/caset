@@ -1,6 +1,6 @@
 """tessera.quantum.holography — emergent spectral dimension from a Schwinger TDVP state.
 
-See ``docs/source/holography-causal-ordering-emergent-dimension.md`` for the
+See ``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md`` for the
 scientific charter, falsification criteria, and the relationship to the
 causal-order comparison in ``tessera.quantum``.
 

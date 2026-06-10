@@ -1,7 +1,7 @@
 """Python acceptance tests for the holography submodule.
 
 Mirrors the test plan in
-``docs/source/holography-causal-ordering-emergent-dimension.md`` §9:
+``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md`` §9:
 
 * MutualInformationProfile and EmergentGraph construction on a TDVP run.
 * Spectral-dimension self-consistency (P monotone decreasing in σ;

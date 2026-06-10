@@ -138,7 +138,7 @@ private:
 //
 // The five counts (concordant, discordant, only_a, only_b, neither) form
 // a partition of the C(nLabels, 2) unordered pairs. The
-// strong-falsification criterion (quantum-methodology.md §1.2 #1) reads
+// strong-falsification criterion (emergent-causal-order-from-majorization.md §1, criterion 1) reads
 // directly off `only_a` when (A, B) = (≼_maj, ≼_LR): it's the count of
 // majorization pairs whose endpoints lie OUTSIDE the LR cone. Symmetric
 // for `only_b`.

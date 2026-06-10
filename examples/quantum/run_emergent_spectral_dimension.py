@@ -6,7 +6,7 @@ Emergent spectral dimension from a Schwinger TDVP state.
 Drives the ``tessera.quantum.holography.EmergentSpectralDimension`` workflow
 at several m/g values and reports the resulting D_S(σ) profiles. Mirrors
 the experiment described in
-``docs/source/holography-causal-ordering-emergent-dimension.md`` §6.
+``docs/source/quantum-experiments/emergent-spectral-dimension-schwinger-tdvp.md`` §6.
 
 Hypothesis under test (H_SD, spec §1):
 
