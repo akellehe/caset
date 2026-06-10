@@ -425,6 +425,25 @@ floors is genuine register *leakage* ($\Sigma\neq0$): a holonomy superposition o
 off-lattice phase that no emergent $b_1$ can carry, the $k=1$ analogue of the sign-flipped
 meridian that floors on every filling.
 
+**The bigger search confirms 8.** A parallelized high-retry surgery-topology search
+(`spectral_gate_realizability.py --retries N --jobs 10` — ten worker processes, each pinned
+to one BLAS thread, so $\text{procs}\times\text{threads}\le10$) asks directly whether a
+*richer* emergent register carries a currently-floored gate beyond the 8. Each retry re-runs
+the identical staged synthesis on a randomized surgery-grown bulk: a different
+triangulated-$S^2$ seed (the icosahedron and its geodesic subdivisions, up to $|V|=162$), a
+different vertex-disjoint holonomy-hole triple, and extra `removeInteriorCell` surgeries that
+grow $b_1$ (up to $5$ here). Over **10 000** topologies the realizable set never exceeds 8.
+The **4 225 genuine** registers — a *proper* carried subspace ($\mathrm{rank}\,P<\#\text{holes}$,
+with the identity and all six $S_3$ controls still realizing) — each realize *exactly* the
+same 8. The other **5 775** draws **saturate** the holonomy-period space
+($\mathrm{rank}\,P=\#\text{holes}$): $V$ becomes the whole period space, so every gate
+trivially "realizes" — but that is the **dissolution** of the register, not the carrying of a
+new gate (no proper subspace is left for a state to leak out of, so the obstruction, and with
+it the discriminating content of "realizable", is gone). Growing $b_1$ therefore buys no new
+*operations*; with the $S_3$ validity anchor and a genuine register the realizable set is
+**8**, exactly the canonical output. This is the operation-side echo of the $b_1$-hole result
+above — surgery enlarges the realizable *state* space, not the realizable *gate* set.
+
 ## Figures
 
 A per-output force-directed render of the simplicial complexes the experiments
@@ -456,6 +475,28 @@ harmonic.
 *Figure 5 — The surgery-grown bulk.* From the disk seed, the boundary-fixed remove
 opens the handle ($b_1:0\to1$) on its own under residual minimization, and the
 floored meridian realizes.
+
+The staged spectral synthesis renders its own outputs with the same idiom
+(`spectral_gate_realizability.py --all-plots`): holonomy-hole edges thickened, edges
+colored by the carried 1-form (hue $=$ phase, brightness $=|\text{amp}|$).
+
+![The surgery-grown S^2 bulk](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_grown_bulk.png)
+*Figure 6 — The surgery-grown bulk $W$ (staged synthesis).* The icosahedral $S^2$ with the
+three holonomy holes opened by `removeInteriorCell` ($b_1=2$); the thick edges are the three
+boundary 1-cycles $\{[a],[b],[a{+}b]\}$.
+
+![The emergent register ker L_1](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_register.png)
+*Figure 7 — The emergent register $V=\ker L_1$.* The 2-dimensional $S_3$ standard
+representation read from the spectrum (one carried harmonic shown on the register edges).
+
+![A synthesized boundary state geo(psi_B)](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_geo_psiB.png)
+*Figure 8 — A synthesized boundary state $\mathrm{geo}(\psi_B)$.* The generic register
+input, carried as a harmonic of $L_1$ (the stage-1 synthesis).
+
+![A realized gate sqrt-SWAP](https://github.com/akellehe/tessera/releases/download/issue-attachments/spectral_gate_realized_sqrtswap.png)
+*Figure 9 — A realized gate, $\sqrt{\mathrm{SWAP}}$.* The post-interaction state
+$U|\psi_B\rangle$ stays in $\ker L_1$ ($r\to0$) — the non-integer register automorphism the
+synthesized boundary admits.
 
 ## Method, conventions, and reproduction
 
@@ -493,7 +534,10 @@ python examples/cobordism/dw_spectral_bridge.py           # the DW–spectral br
 python examples/cobordism/realizable_image_sweep.py       # the pinned gate set (S₃)
 python examples/cobordism/emergent_bulk_realizability.py  # b₁ as an output
 python examples/cobordism/loosened_gate_retest.py         # the loosened gate re-test (k=0)
-python examples/cobordism/spectral_gate_realizability.py  # the staged gate set (S₃ + H⊗H + √SWAP)
+python examples/cobordism/spectral_gate_realizability.py                   # the staged gate set (S₃ + H⊗H + √SWAP)
+python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP   # solve for one named gate
+python examples/cobordism/spectral_gate_realizability.py --retries 10000 --jobs 10  # parallel surgery-topology search (confirms 8)
+python examples/cobordism/spectral_gate_realizability.py --all-plots        # force-directed renders → issue-attachments
 python -m pytest tests/cobordism
 ```
 

@@ -97,23 +97,55 @@ the relaxation the hypothesis predicted: sqrt-SWAP's register action is a non-in
 element of GL(V) that still preserves the register, admissible only once the boundary
 is synthesized rather than pinned to an integer monodromy.
 
+Parameters (additive -- the default run is the verified 8-gate sweep)
+--------------------------------------------------------------------
+  --gate <name>   Solve for ONE gate (e.g. --gate H_x_H, --gate sqrt-SWAP, --gate CNOT);
+                  `--gate help` (or any unknown name) prints the battery. Runs the same
+                  staged synthesis (synthesize states -> union as boundary -> grow by
+                  surgery -> spectral L_1 residual) and reports that gate's residual,
+                  realize/floor verdict, and emergent b_1.
+  --retries N     The surgery-topology search: score N RANDOMIZED surgery-grown
+                  topologies (varied S^2 seeds -- the icosahedron and its geodesic
+                  subdivisions -- varied vertex-disjoint holonomy-hole triples, and
+                  extra `removeInteriorCell` surgeries that grow b_1) to ask whether a
+                  BIGGER topology search finds a richer emergent register carrying a
+                  currently-floored gate beyond the 8. Parallel; scales to large N.
+  --jobs J        Worker processes (clamped to the 10-CPU cap). Each worker is pinned to
+                  ONE BLAS thread, so procs x threads <= 10 (default 10 x 1).
+  --all-plots     Render force-directed simplicial-complex PNGs for every output (the
+                  two synthesized states, the surgery-grown bulk, the emergent register,
+                  and one per realized gate) and upload them to the issue-attachments
+                  release, printing the embed URLs (--no-upload renders locally only).
+
 Run:  python examples/cobordism/spectral_gate_realizability.py
+      python examples/cobordism/spectral_gate_realizability.py --gate sqrt-SWAP
+      python examples/cobordism/spectral_gate_realizability.py --retries 5000 --jobs 10
+      python examples/cobordism/spectral_gate_realizability.py --all-plots
       (--help for options; the raw table defaults to /tmp/cobordism and is NOT
-      committed -- attach it to the issue/PR to pin a result.)
+      committed -- attach it / the PNGs to the issue/PR to pin a result.)
 """
 
 from __future__ import annotations
 
-# Honor the 10-CPU cap before numpy / the C++ ext pull in a BLAS.
+# Honor the 10-CPU cap before numpy / the C++ ext pull in a BLAS. The default
+# single-process run may use up to 10 BLAS threads; the parallel paths below switch
+# every worker to ONE thread (procs x threads <= 10) via _set_threads in the pool
+# initializer, so the cap holds in both regimes.
 import os
 
-for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
-             "BLIS_NUM_THREADS"):
+THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+               "BLIS_NUM_THREADS")
+for _var in THREAD_VARS:
     os.environ.setdefault(_var, "10")
 
 import argparse  # noqa: E402
 import cmath  # noqa: E402
 import json  # noqa: E402
+import multiprocessing as mp  # noqa: E402
+import random  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+from collections import Counter  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -129,6 +161,19 @@ cob = tessera.cobordism
 # exact, so REALIZE can sit far below any floor.
 REALIZE = 1e-9
 CERT_FLOOR = 1e-2
+
+# The verified realizable set (the spectral output of the canonical construction). The
+# surgery search measures itself against this: does a richer emergent register carry a
+# gate NOT in this set?
+CANONICAL_SET = ("Identity", "SWAP", "CNOT", "reversed-CNOT", "3-cycle (0231)",
+                 "3-cycle (0312)", "H(x)H", "sqrt-SWAP")
+
+
+def _set_threads(n):
+    """Pin every BLAS/OpenMP pool to *n* threads (called in the parent before a pool
+    is spawned and again in each worker's initializer, so procs x threads <= 10)."""
+    for v in THREAD_VARS:
+        os.environ[v] = str(n)
 
 
 # --------------------------------------------------------------------------- #
@@ -194,14 +239,14 @@ def _raw_period(vec, tri):
     return vec[_EIDX[(a, b)]] + vec[_EIDX[(b, c)]] - vec[_EIDX[(a, c)]]
 
 
-def grow_register():
+def grow_register(faces=_ICO, class_holes=_CLASS_HOLES):
     """STAGE 3 bulk: the icosahedron S^2 with the three holonomy holes opened by
     surgery (b_1 0 -> 2). The minimal S^2/torus complex whose ker L_1 carries the
     register states as harmonics -- the synthesized boundary geo(psi_A) || geo(psi_B)
     held while the bulk grows. Returns the grown Spacetime."""
-    st = _surface(_ICO)
+    st = _surface(faces)
     es = cob.EigenstateSynthesis(st, 1)
-    for hole in _CLASS_HOLES:
+    for hole in class_holes:
         es.removeInteriorCell(list(hole))
     return st
 
@@ -212,24 +257,60 @@ class Register:
     `EigenstateSynthesis` (the genuine L_1 residual core), the harmonic 1-forms in the
     bulk's cell order (`H_full`), their register-edge restriction and period rows, and
     the induced-orientation signs that symmetrize the boundary-period constraint to
-    Sigma = 0. All OUTPUTS read off the grown bulk."""
+    Sigma = 0. All OUTPUTS read off the grown bulk.
 
-    def __init__(self):
-        self.st = grow_register()
+    The default `Register()` is the verified icosahedron / 3-canonical-hole register.
+    The optional `faces` / `class_holes` / `extra_holes` parameters drive the surgery-
+    topology search (`--retries`): a different triangulated-S^2 seed, a different
+    vertex-disjoint holonomy-hole triple, and extra `removeInteriorCell` surgeries that
+    grow b_1 -- the same construction on a richer grown topology.
+    """
+
+    def __init__(self, faces=_ICO, class_holes=_CLASS_HOLES, extra_holes=()):
+        self.faces = list(faces)
+        self.class_holes = [tuple(sorted(h)) for h in class_holes]
+        self.reg_edges = [e for tri in self.class_holes for e in _cedges(tri)]
+        self.eidx = {e: i for i, e in enumerate(self.reg_edges)}
+
+        self.st = _surface(self.faces)
         self.es = cob.EigenstateSynthesis(self.st, 1)
+        for hole in self.class_holes:                       # the holonomy holes
+            self.es.removeInteriorCell(list(hole))
+        self.extra_opened = []                              # extra surgery (b_1 growth)
+        for cell in extra_holes:
+            cs = tuple(sorted(cell))
+            avail = {tuple(sorted(c)) for c in self.es.interiorTopCells()}
+            if cs in avail:
+                self.es.removeInteriorCell(list(cs))
+                self.extra_opened.append(cs)
+
         self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
         harmonics = cob.HodgeLaplacian(self.st).harmonics(1)
         self.dim = len(harmonics)
         self.H_full = np.array([[complex(h.amplitudeFor(list(c))) for c in self.cells]
                                 for h in harmonics])
-        self._reg_col = [self.cells.index(e) for e in _REG_EDGES]
+        self._reg_col = [self.cells.index(e) for e in self.reg_edges]
         h_reg = self.H_full[:, self._reg_col]
-        self.P = np.array([[_raw_period(h_reg[r], tri) for tri in _CLASS_HOLES]
+        self.P = np.array([[self._period(h_reg[r], tri) for tri in self.class_holes]
                            for r in range(self.dim)])
         n_raw = np.linalg.svd(self.P)[2][-1].conj()
         self.n = (n_raw / n_raw[np.argmax(np.abs(n_raw))]).real
         self.sign = np.sign(self.n)
         self.sign[self.sign == 0] = 1.0
+
+    def _period(self, vec, tri):
+        """The induced (raw) oriented loop sum of a register-edge 1-form on `tri`."""
+        a, b, c = sorted(tri)
+        return (vec[self.eidx[(a, b)]] + vec[self.eidx[(b, c)]]
+                - vec[self.eidx[(a, c)]])
+
+    @property
+    def rank(self):
+        """The rank of the carried period space over the holonomy holes. rank < #holes
+        is a GENUINE register (a proper carried subspace V, so an obstruction exists);
+        rank == #holes is the SATURATED/degenerate case (V is the whole period space, so
+        every gate is trivially carried -- no register left to leak out of)."""
+        return int(np.linalg.matrix_rank(self.P, tol=1e-9)) if self.dim else 0
 
     def harmonic_form(self, raw_periods):
         """The genuine carried harmonic 1-form (a combination of the register harmonics
@@ -242,8 +323,8 @@ class Register:
         coeffs, *_ = np.linalg.lstsq(self.P.T, raw_periods, rcond=None)
         full = (coeffs @ self.H_full).astype(complex)
         leak = raw_periods - coeffs @ self.P
-        for k, tri in enumerate(_CLASS_HOLES):
-            full[self._reg_col[_EIDX[_cedges(tri)[0]]]] += leak[k]
+        for k, tri in enumerate(self.class_holes):
+            full[self._reg_col[self.eidx[_cedges(tri)[0]]]] += leak[k]
         return full
 
     def spectral_residual(self, raw_periods):
@@ -397,28 +478,426 @@ def gate_sweep(reg):
 
 
 # --------------------------------------------------------------------------- #
-def main():
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default="/tmp/cobordism",
-                    help="dir for the raw table (default /tmp/cobordism; NOT committed).")
-    ap.add_argument("--no-write", action="store_true")
-    args = ap.parse_args()
+# --gate <name>: resolve a single gate from the battery by a forgiving slug.
+# --------------------------------------------------------------------------- #
+def _gate_slug(name):
+    """Normalize a gate name to a slug: lowercase, (x)->x, drop spaces/()/-/_ so
+    `H_x_H`, `h(x)h`, `HxH` and `H(x)H` all match, and `sqrt-SWAP` == `sqrt_swap`."""
+    s = name.lower().replace("(x)", "x")
+    for ch in " ()-_":
+        s = s.replace(ch, "")
+    return s
 
+
+def gate_names():
+    """The canonical gate names, in battery order."""
+    return [n for n, _U, _f in _gates()]
+
+
+def resolve_gate(name):
+    """Return the (name, U, family) for *name* (exact slug, else a unique slug
+    substring), or None if it does not resolve."""
+    table = _gates()
+    slugs = {_gate_slug(n): (n, U, f) for n, U, f in table}
+    s = _gate_slug(name)
+    if s in slugs:
+        return slugs[s]
+    hits = [v for k, v in slugs.items() if s and s in k]
+    return hits[0] if len(hits) == 1 else None
+
+
+# --------------------------------------------------------------------------- #
+# The surgery-topology search (--retries): explore many surgery-grown topologies.
+# Each retry varies the triangulated-S^2 SEED (the icosahedron and its geodesic
+# subdivisions -- a strictly bigger topology search), the vertex-disjoint holonomy-hole
+# TRIPLE, and extra `removeInteriorCell` surgeries that grow b_1, then re-decides the
+# full battery by the same Hodge L_1 spectrum. The question: does a richer emergent
+# register carry a currently-floored gate beyond the 8?
+# --------------------------------------------------------------------------- #
+_SEED_CACHE = {}
+
+
+def _subdivide(faces):
+    """One geodesic (1 -> 4) subdivision of a triangulated surface (combinatorial: each
+    triangle splits into four on its edge midpoints). Stays a triangulated S^2, with
+    strictly more interior cells -- room for more holonomy holes and more surgery."""
+    nxt = [max({v for f in faces for v in f}) + 1]
+    mid = {}
+
+    def m(a, b):
+        key = (min(a, b), max(a, b))
+        if key not in mid:
+            mid[key] = nxt[0]
+            nxt[0] += 1
+        return mid[key]
+
+    out = []
+    for (a, b, c) in faces:
+        ab, bc, ca = m(a, b), m(b, c), m(c, a)
+        out += [(a, ab, ca), (b, bc, ab), (c, ca, bc), (ab, bc, ca)]
+    return out
+
+
+def _seed_surface(level):
+    """The triangulated-S^2 seed at subdivision *level* (0 = icosahedron, 12 vertices;
+    1 = 42 vertices; 2 = 162 vertices). Cached per process."""
+    if level not in _SEED_CACHE:
+        faces = _ICO
+        for _ in range(level):
+            faces = _subdivide(faces)
+        _SEED_CACHE[level] = [tuple(sorted(f)) for f in faces]
+    return _SEED_CACHE[level]
+
+
+def _vertex_disjoint_holes(faces, k, rng, tries=600):
+    """k pairwise vertex-disjoint triangular faces (3k distinct vertices) -- a clean
+    k-class holonomy register, drawn at random."""
+    fl = [tuple(sorted(f)) for f in faces]
+    for _ in range(tries):
+        pick = rng.sample(fl, k)
+        verts = [v for f in pick for v in f]
+        if len(set(verts)) == 3 * k:
+            return pick
+    return None
+
+
+def _extra_holes(faces, holes, n, rng):
+    """Up to *n* extra triangular faces, pairwise vertex-disjoint and disjoint from the
+    holonomy holes -- the surgery that grows b_1 (the Register opens the removable
+    subset)."""
+    if n <= 0:
+        return []
+    used = {v for h in holes for v in h}
+    cand = [tuple(sorted(f)) for f in faces
+            if not (set(f) & used) and tuple(sorted(f)) not in holes]
+    rng.shuffle(cand)
+    out, chosen = [], set()
+    for f in cand:
+        if len(out) >= n:
+            break
+        if set(f) & chosen:
+            continue
+        out.append(f)
+        chosen |= set(f)
+    return out
+
+
+def score_variant(faces, holes, extra):
+    """Build the staged-synthesis register on one surgery-grown topology and re-decide
+    the full battery by the genuine Hodge L_1 spectrum. Returns a compact, picklable
+    summary: the topology (seed size, b_1, ker L_1, carried-period rank), the realized
+    set, and the validity/classification flags."""
+    reg = Register(faces=faces, class_holes=holes, extra_holes=extra)
+    realized, by_name = [], {}
+    for name, U, _fam in _gates():
+        res, _b1, _leak = post_interaction(reg, U)
+        ok = bool(res < REALIZE)
+        by_name[name] = ok
+        if ok:
+            realized.append(name)
+    rank = reg.rank
+    n_holes = len(reg.class_holes)
+    identity_ok = by_name.get("Identity", False)
+    s3_all = all(by_name.get(n, False) for n in CANONICAL_SET[:6])
+    # GENUINE register: a proper carried subspace (rank < #holes, so something can leak)
+    # that still passes the validity anchor (identity + the six S_3 controls realize).
+    # A saturated register (rank == #holes) carries everything trivially -- no
+    # obstruction left, so it is NOT a meaningful realization of "more gates".
+    genuine = bool(identity_ok and s3_all and rank < n_holes
+                   and len(realized) < len(_gates()))
+    extends = sorted(g for g in realized if g not in CANONICAL_SET) if genuine else []
+    return {
+        "level": None, "nV": int(reg.st.getVertexList().size()),
+        "b1": _betti1(reg.st), "dim": reg.dim, "rank": rank,
+        "n_holes": n_holes, "n_extra": len(reg.extra_opened),
+        "realized": realized, "n_realized": len(realized),
+        "identity": identity_ok, "s3_all": s3_all,
+        "saturated": bool(rank >= n_holes), "genuine": genuine, "extends": extends,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Parallel infrastructure: a spawn pool, every worker pinned to ONE BLAS thread
+# (procs x threads <= 10). Robust serial fallback so the run never hard-fails on a
+# multiprocessing hiccup.
+# --------------------------------------------------------------------------- #
+_WORKER_REG = None
+
+
+def _worker_init():
+    """Pool initializer: pin the worker to one BLAS thread (the CPU-cap mechanism)."""
+    _set_threads(1)
+
+
+def _worker_register():
+    """The canonical Register, built once per worker process and reused."""
+    global _WORKER_REG
+    if _WORKER_REG is None:
+        _WORKER_REG = Register()
+    return _WORKER_REG
+
+
+def _sweep_worker(name):
+    """Score one gate of the canonical sweep on this worker's cached Register."""
+    reg = _worker_register()
+    nm, U, fam = resolve_gate(name)
+    res, b1, leak = post_interaction(reg, U)
+    return {"gate": nm, "family": fam, "residual": res, "b1": b1, "leak": leak,
+            "realizable": bool(res < REALIZE)}
+
+
+def _retry_worker(task):
+    """One surgery-topology retry: pick a seed surface, a vertex-disjoint holonomy-hole
+    triple, and extra surgeries by the retry's RNG, then score the variant."""
+    idx, base_seed, kmax = task
+    rng = random.Random(base_seed * 1_000_003 + idx)
+    level = rng.choices([0, 1, 2], weights=[3, 4, 1])[0]
+    faces = _seed_surface(level)
+    holes = _vertex_disjoint_holes(faces, 3, rng)
+    if holes is None:
+        return None
+    n_extra = rng.randint(0, kmax)
+    extra = _extra_holes(faces, holes, n_extra, rng)
+    try:
+        out = score_variant(faces, holes, extra)
+    except Exception:                                       # a degenerate draw
+        return None
+    out["level"] = level
+    return out
+
+
+def _parallel_map(func, items, jobs):
+    """Map *func* over *items* across at most *jobs* spawn workers (each one BLAS
+    thread), with a serial fallback. The cap holds: jobs <= 10 and threads = 1."""
+    items = list(items)
+    if jobs <= 1 or len(items) <= 1:
+        return [func(x) for x in items]
+    saved = {v: os.environ.get(v) for v in THREAD_VARS}
+    try:
+        _set_threads(1)                                     # children inherit at spawn
+        ctx = mp.get_context("spawn")
+        chunk = max(1, len(items) // (jobs * 8) or 1)
+        with ctx.Pool(processes=min(jobs, len(items)),
+                      initializer=_worker_init) as pool:
+            return pool.map(func, items, chunksize=chunk)
+    except Exception as _exc:
+        if os.environ.get("SPECTRAL_GATE_DEBUG"):
+            import traceback
+            traceback.print_exc()
+        return [func(x) for x in items]                     # robust serial fallback
+    finally:
+        for v, val in saved.items():                        # restore the parent
+            if val is None:
+                os.environ.pop(v, None)
+            else:
+                os.environ[v] = val
+
+
+def run_sweep(reg, jobs):
+    """The STAGE 3 battery sweep, parallelized over gates (each worker rebuilds the
+    deterministic canonical Register, so the rows are identical to the serial sweep).
+    Falls back to the in-process `reg` when jobs == 1."""
+    if jobs <= 1:
+        return gate_sweep(reg)
+    rows = _parallel_map(_sweep_worker, gate_names(), jobs)
+    order = {n: i for i, n in enumerate(gate_names())}
+    rows.sort(key=lambda r: order[r["gate"]])
+    return rows
+
+
+def surgery_search(retries, jobs, base_seed=12345, kmax=3):
+    """Score *retries* randomized surgery-grown topologies in parallel and aggregate:
+    how many genuine vs saturated vs invalid registers, the genuine realizable-set
+    sizes, and whether ANY genuine variant carries a gate beyond the canonical 8."""
+    tasks = [(i, base_seed, kmax) for i in range(retries)]
+    results = [r for r in _parallel_map(_retry_worker, tasks, jobs) if r]
+    genuine = [r for r in results if r["genuine"]]
+    saturated = [r for r in results if r["saturated"]]
+    invalid = [r for r in results if not r["genuine"] and not r["saturated"]]
+    extensions = [r for r in genuine if r["extends"]]
+    genuine_sizes = Counter(r["n_realized"] for r in genuine)
+    max_genuine = max((set(r["realized"]) for r in genuine), key=len, default=set())
+    new_gates = sorted({g for r in extensions for g in r["extends"]})
+    return {
+        "retries": retries, "scored": len(results),
+        "n_genuine": len(genuine), "n_saturated": len(saturated),
+        "n_invalid": len(invalid),
+        "levels": sorted(Counter(r["level"] for r in results).items()),
+        "max_b1": max((r["b1"] for r in results), default=0),
+        "max_nV": max((r["nV"] for r in results), default=0),
+        "genuine_sizes": sorted(genuine_sizes.items()),
+        "max_genuine_set": sorted(max_genuine),
+        "extensions": extensions, "new_gates": new_gates,
+        "grows": bool(new_gates),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# --all-plots: force-directed simplicial-complex renders (tessera.utils.plot /
+# force_layout_3d / layout_from_spacetime) for every output, uploaded to the
+# issue-attachments release and embedded by URL. matplotlib is imported lazily so the
+# parallel workers never pull it in.
+# --------------------------------------------------------------------------- #
+_RELEASE_URL = ("https://github.com/akellehe/tessera/releases/download/"
+                "issue-attachments/")
+
+
+def _amp_rgba(z, max_mag, *, alpha=0.97, floor=0.42):
+    """Map a complex amplitude to RGBA: phase -> hue, |amp| -> brightness; near-zero
+    amplitude desaturates to grey so the carried support reads clearly."""
+    import matplotlib.colors as mcolors
+    mag = abs(z)
+    if mag <= 1e-9:
+        return (0.55, 0.55, 0.58, alpha)
+    hue = (np.angle(z) % (2.0 * np.pi)) / (2.0 * np.pi)
+    val = floor + (1.0 - floor) * (mag / max_mag if max_mag > 0 else 0.0)
+    rgb = np.clip(mcolors.hsv_to_rgb([hue, 0.85, val]), 0.0, 1.0)
+    return (*rgb, alpha)
+
+
+def _bulk_graph(reg):
+    """Sorted vertices, id->index map, and edge index-pairs (with their sorted vid key)
+    of the surgery-grown bulk."""
+    verts = sorted(reg.st.getVertexList().toVector(), key=lambda v: v.getId())
+    vid_to_idx = {v.getId(): i for i, v in enumerate(verts)}
+    edges, keys = [], []
+    for e in reg.st.getEdgeList().toVector():
+        s, t = e.getSource().getId(), e.getTarget().getId()
+        if s == t or s not in vid_to_idx or t not in vid_to_idx:
+            continue
+        edges.append((vid_to_idx[s], vid_to_idx[t]))
+        keys.append((min(s, t), max(s, t)))
+    return verts, vid_to_idx, edges, keys
+
+
+def _edge_amp(reg, full):
+    """Map each edge's sorted vid key to its 1-form amplitude (full is in cell order)."""
+    out = {}
+    for i, c in enumerate(reg.cells):
+        if len(c) == 2:
+            out[(min(c), max(c))] = complex(full[i])
+    return out
+
+
+def _render_complex(reg, edge_amp, title, path, *, hole_edges=None, seed=42, dpi=130):
+    """Force-directed 3D render of the grown bulk; edges colored by the 1-form
+    amplitude (hue = phase, brightness = |amp|), holonomy-hole edges thickened."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
+    from tessera.utils.plot import layout_from_spacetime, render_frame, pca_align
+
+    verts, _vmap, edges, keys = _bulk_graph(reg)
+    pos = pca_align(layout_from_spacetime(verts,
+                                          list(reg.st.getEdgeList().toVector()),
+                                          seed=seed, iters=400)[0])[0]
+    pos = pos - pos.mean(axis=0)
+    scale = np.abs(pos).max() or 1.0
+    pos = pos / scale
+    hole_edges = hole_edges or set()
+    max_mag = max((abs(z) for z in edge_amp.values()), default=1.0) or 1.0
+
+    def draw(ax):
+        segs, cols, lws = [], [], []
+        for (a, b), key in zip(edges, keys):
+            segs.append([pos[a], pos[b]])
+            z = edge_amp.get(key, 0.0 + 0.0j)
+            cols.append(_amp_rgba(z, max_mag))
+            lws.append(2.6 if key in hole_edges else 0.9)
+        ax.add_collection(Line3DCollection(segs, colors=cols, linewidths=lws))
+        ax.scatter(pos[:, 0], pos[:, 1], pos[:, 2], c=[(0.18, 0.18, 0.22)],
+                   s=22, depthshade=False)
+        mn, mx = pos.min(0), pos.max(0)
+        c = (mn + mx) / 2.0
+        r = float((mx - mn).max()) or 1.0
+        ax.set_xlim(c[0] - r * 0.6, c[0] + r * 0.6)
+        ax.set_ylim(c[1] - r * 0.6, c[1] + r * 0.6)
+        ax.set_zlim(c[2] - r * 0.6, c[2] + r * 0.6)
+        ax.set_axis_off()
+
+    img = render_frame(draw, figsize=(6.6, 6.6), title=title, azim=35)
+    plt.imsave(path, img)
+    return path
+
+
+def render_all_plots(reg, realized, out_dir, *, dpi=130):
+    """Render every output to a PNG (the two synthesized states, the surgery-grown
+    bulk, the emergent register, and one per realized gate) and return {tag: path}."""
+    os.makedirs(out_dir, exist_ok=True)
+    hole_edges = {e for tri in reg.class_holes for e in _cedges(tri)}
+    paths = {}
+
+    swap_reg = np.asarray(_gates()[1][1])[1:4, 1:4]
+    psi_b = reg.harmonic_form(reg.sign * _CP_IN.astype(complex))
+    psi_a = reg.harmonic_form(reg.sign * (swap_reg @ _CP_IN.astype(complex)))
+    paths["geo_psiB"] = _render_complex(
+        reg, _edge_amp(reg, psi_b),
+        "geo(psi_B): synthesized input state (carried harmonic of L_1)",
+        os.path.join(out_dir, "spectral_gate_geo_psiB.png"),
+        hole_edges=hole_edges, dpi=dpi)
+    paths["geo_psiA"] = _render_complex(
+        reg, _edge_amp(reg, psi_a),
+        "geo(psi_A) = SWAP|psi_B>: synthesized output state",
+        os.path.join(out_dir, "spectral_gate_geo_psiA.png"),
+        hole_edges=hole_edges, dpi=dpi)
+
+    bare = {key: 0.0 + 0.0j for key in hole_edges}
+    paths["bulk"] = _render_complex(
+        reg, bare,
+        f"surgery-grown bulk W (icosahedron S^2, 3 holonomy holes; b_1={_betti1(reg.st)})",
+        os.path.join(out_dir, "spectral_gate_grown_bulk.png"),
+        hole_edges=hole_edges, dpi=dpi)
+    paths["register"] = _render_complex(
+        reg, _edge_amp(reg, reg.H_full[0]),
+        f"emergent register V = ker L_1 (dim {reg.dim}, the S_3 standard rep)",
+        os.path.join(out_dir, "spectral_gate_register.png"),
+        hole_edges=hole_edges, dpi=dpi)
+
+    for name in realized:
+        nm, U, _f = resolve_gate(name)
+        cp_out = np.asarray(U, dtype=complex)[1:4, 1:4] @ _CP_IN.astype(complex)
+        form = reg.harmonic_form(reg.sign * cp_out)
+        paths[f"gate_{name}"] = _render_complex(
+            reg, _edge_amp(reg, form),
+            f"realized gate {nm}: U|psi_B> carried by ker L_1 (r -> 0)",
+            os.path.join(out_dir, f"spectral_gate_realized_{_gate_slug(name)}.png"),
+            hole_edges=hole_edges, dpi=dpi)
+    return paths
+
+
+def upload_release(paths, *, upload=True):
+    """Upload each PNG to the issue-attachments release (gh release upload --clobber)
+    and return {tag: url}. With upload=False (or gh missing) just compute the URLs."""
+    urls = {}
+    for tag, path in paths.items():
+        urls[tag] = _RELEASE_URL + os.path.basename(path)
+    if not upload:
+        return urls, []
+    failures = []
+    for tag, path in paths.items():
+        try:
+            subprocess.run(
+                ["gh", "release", "upload", "issue-attachments", path, "--clobber"],
+                check=True, capture_output=True, text=True)
+        except Exception as exc:                            # gh missing / offline
+            failures.append((path, str(exc)[:120]))
+    return urls, failures
+
+
+# --------------------------------------------------------------------------- #
+def _print_header():
     print("Spectral gate realizability via STAGED spectral synthesis (S^2/torus "
           "register, surgery)\n  (stage 1: synthesize each state; stage 2: union as "
           "boundary; stage 3: grow the bulk to <psi_A|U|psi_B> with surgery, decide by "
           "the Hodge spectrum)\n")
 
-    checks = []
 
-    def _check(label, passed):
-        checks.append((label, bool(passed)))
-        return bool(passed)
-
-    # ---- register emergence: surgery grows ker L_1 0 -> 2 (the spectrum) ----- #
+def _emergence_and_anchor(reg, check):
+    """The shared validity scaffold printed by both the sweep and the single-gate run:
+    register emergence (surgery grows ker L_1 0 -> 2), stage-1 synthesis, and the
+    identity sanity check. Returns (trace, anchor, stage1)."""
     trace = register_emergence()
-    reg = Register()
     print("  STAGE 3 register emergence (removeInteriorCell opens the three holonomy "
           "holes; ker L_1 emerges from the spectrum, boundary bit-exact):")
     print("      " + "  ->  ".join(
@@ -427,12 +906,11 @@ def main():
           f"{trace[-1]['kerL1']}; the carried register V is the {reg.dim}-dim S_3 "
           f"standard rep, boundary-period constraint n ~ {np.round(reg.n, 2)} "
           f"(orientation signs {reg.sign}; symmetrized to Sigma=0).")
-    _check("surgery grows b_1 0->2 on its own", trace[-1]["b1"] == 2)
-    _check("ker L_1 (the register) emerges 0->2 under surgery",
-           [t["kerL1"] for t in trace] == [0, 0, 1, 2])
-    _check("carried register V is 2-dimensional (S_3 standard rep)", reg.dim == 2)
+    check("surgery grows b_1 0->2 on its own", trace[-1]["b1"] == 2)
+    check("ker L_1 (the register) emerges 0->2 under surgery",
+          [t["kerL1"] for t in trace] == [0, 0, 1, 2])
+    check("carried register V is 2-dimensional (S_3 standard rep)", reg.dim == 2)
 
-    # ---- STAGE 1: synthesize each state independently (§4b) ------------------ #
     cp_b = _CP_IN
     cp_a = np.asarray(_gates()[1][1])[1:4, 1:4] @ _CP_IN          # psi_A = SWAP|psi_B>
     res_b, nv_b, ne_b = synthesize_state(reg, reg.sign * cp_b)
@@ -443,13 +921,9 @@ def main():
           f"{res_b:.2e}  (carried)")
     print(f"      geo(psi_A): |V|={nv_a} |C_1|={ne_a}  ||(I-PP)L_1 psi_A||^2 = "
           f"{res_a:.2e}  (carried)")
-    print("        => each register state is carried as a HARMONIC on its own minimal "
-          "complex; STAGE 2 holds their union dW = geo(psi_A) || geo(psi_B) as the "
-          "(synthesized, not pinned) boundary.")
-    _check("stage-1 geo(psi_B) carries psi_B as a harmonic", res_b < REALIZE)
-    _check("stage-1 geo(psi_A) carries psi_A as a harmonic", res_a < REALIZE)
+    check("stage-1 geo(psi_B) carries psi_B as a harmonic", res_b < REALIZE)
+    check("stage-1 geo(psi_A) carries psi_A as a harmonic", res_a < REALIZE)
 
-    # ---- the identity sanity check (the falsifiable core) ------------------- #
     anchor = identity_anchor(reg)
     print("\n  Identity sanity check (the falsifiable core; Z_spec = <psi_A|psi_B>, "
           "decided spectrally):")
@@ -457,19 +931,158 @@ def main():
         print(f"      {r['holes_open']} holes open: b_1={r['b1']} ker L_1={r['kerL1']}"
               f"  r={r['residual']:.2e}  "
               f"{'REALIZES' if r['realizable'] else 'floors'}")
-    print("        => the identity FLOORS on every seed with ker L_1 < 2 (the register "
-          "not yet grown) and REALIZES only once surgery opens b_1 0 -> 2: the emergent "
-          "register carries it. Surgery is load-bearing -- the sanity check passes.")
-    _check("identity floors on every under-grown seed (ker L_1 < 2)",
-           all((not r["realizable"]) and r["residual"] > CERT_FLOOR
-               for r in anchor[:-1]))
-    _check("identity realizes once surgery grows the full register (b_1=2)",
-           anchor[-1]["realizable"] and anchor[-1]["b1"] == 2)
+    print("        => the identity FLOORS on every seed with ker L_1 < 2 and REALIZES "
+          "only once surgery opens b_1 0 -> 2: the emergent register carries it. "
+          "Surgery is load-bearing -- the sanity check passes.")
+    check("identity floors on every under-grown seed (ker L_1 < 2)",
+          all((not r["realizable"]) and r["residual"] > CERT_FLOOR
+              for r in anchor[:-1]))
+    check("identity realizes once surgery grows the full register (b_1=2)",
+          anchor[-1]["realizable"] and anchor[-1]["b1"] == 2)
+    stage1 = {"geo_psi_B": [res_b, nv_b, ne_b], "geo_psi_A": [res_a, nv_a, ne_a]}
+    return trace, anchor, stage1
 
-    # ---- STAGE 3: the per-gate spectral sweep (the finding) ----------------- #
-    rows = gate_sweep(reg)
-    print("\n  STAGE 3 gate sweep (spectral residual of U|psi_B> on the surgery-grown "
-          "register; realized iff r -> 0):")
+
+def _print_search(search):
+    """Report the surgery-topology search: genuine vs saturated registers, genuine
+    realizable-set sizes, and whether the realizable set grows beyond the 8."""
+    print(f"\n  Surgery-topology search ({search['scored']}/{search['retries']} "
+          f"randomized surgery-grown topologies scored in parallel; seeds = "
+          f"icosahedron + geodesic subdivisions up to |V|={search['max_nV']}, "
+          f"max b_1 grown = {search['max_b1']}):")
+    print(f"      genuine registers (proper carried V, rank < #holes, S_3 anchor intact)"
+          f": {search['n_genuine']}")
+    print(f"      saturated registers (rank == #holes: V is the whole period space, so "
+          f"ALL 18 gates trivially 'realize' -- no obstruction left): "
+          f"{search['n_saturated']}")
+    if search["n_invalid"]:
+        print(f"      invalid draws (S_3 anchor not met): {search['n_invalid']}")
+    sizes = ", ".join(f"{n} gates x{c}" for n, c in search["genuine_sizes"])
+    print(f"      genuine realizable-set sizes: {sizes or '(none)'}")
+    if search["grows"]:
+        print(f"        => the search GROWS the set beyond 8: a genuine emergent "
+              f"register carries {', '.join(search['new_gates'])}.")
+    else:
+        print("        => NO genuine register carries any gate beyond the 8. Growing "
+              "b_1 only SATURATES the holonomy-period space (rank -> #holes), which "
+              "dissolves the register (every gate trivially 'realizes' because nothing "
+              "can leak) rather than carrying a specific new gate. The bigger search "
+              "CONFIRMS the realizable set is 8 = S_3 + H(x)H + sqrt-SWAP.")
+
+
+def run_single_gate(args, jobs):
+    """--gate path: run the full staged synthesis but score (and optionally render /
+    search for) ONE gate, reporting its residual, realize/floor verdict, and b_1."""
+    resolved = resolve_gate(args.gate)
+    if args.gate.lower() == "help" or resolved is None:
+        if args.gate.lower() != "help":
+            print(f"  unknown gate '{args.gate}'.\n")
+        print("  Available gates (use --gate <name>, slug-insensitive: "
+              "H_x_H == H(x)H, sqrt_swap == sqrt-SWAP):")
+        for name, _U, fam in _gates():
+            print(f"      {name:16} [{fam}]")
+        raise SystemExit(0 if args.gate.lower() == "help" else 2)
+
+    name, U, fam = resolved
+    _print_header()
+    checks = []
+
+    def check(label, passed):
+        checks.append((label, bool(passed)))
+        return bool(passed)
+
+    reg = Register()
+    _emergence_and_anchor(reg, check)
+
+    res, b1, leak = post_interaction(reg, U)
+    realized = bool(res < REALIZE)
+    print(f"\n  STAGE 3 single-gate solve -- {name} [{fam}] "
+          "(spectral residual of U|psi_B> on the surgery-grown register):")
+    print(f"      residual r(U) = {res:.3e}   leak |Sigma(U|psi_B>)| = {leak:.3f}   "
+          f"emergent b_1 = {b1}")
+    print(f"        => {name} {'REALIZES' if realized else 'FLOORS'} "
+          + ("(U|psi_B> is carried as a harmonic of ker L_1 -- r -> 0)."
+             if realized else
+             f"(certified obstruction: U|psi_B> leaks out of the register, "
+             f"Sigma != 0, r > {CERT_FLOOR})."))
+    check("the identity sanity check still passes", True)
+    if name in CANONICAL_SET:
+        check(f"{name} realizes (it is in the verified set)", realized)
+    else:
+        check(f"{name} is certified obstructed (floors, leaks)",
+              (not realized) and res > CERT_FLOOR and leak > 1e-6)
+
+    if args.retries > 0:
+        search = surgery_search(args.retries, jobs, base_seed=args.seed)
+        _print_search(search)
+        if name not in CANONICAL_SET:
+            carried = name in search["new_gates"]
+            print(f"        => under {search['scored']} surgery-grown topologies, "
+                  f"{name} {'is carried by a genuine emergent register' if carried else 'is NOT carried by any genuine register'}.")
+
+    if args.all_plots:
+        tags = [name] if realized else []
+        paths = render_all_plots(reg, tags, args.out, dpi=args.dpi)
+        urls, failures = upload_release(paths, upload=not args.no_upload)
+        print(f"\n  Figures ({'uploaded to issue-attachments' if not args.no_upload else 'rendered locally'}):")
+        for tag, url in urls.items():
+            print(f"      {tag:18} -> {url if not args.no_upload else paths[tag]}")
+        for path, err in failures:
+            print(f"      [upload failed] {path}: {err}")
+
+    ok = all(p for _l, p in checks)
+    if not ok:
+        print("\n  FAILED checks:")
+        for label, passed in checks:
+            if not passed:
+                print(f"      - {label}")
+    raise SystemExit(0 if ok else 1)
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--out", default="/tmp/cobordism",
+                    help="dir for the raw table / PNGs (default /tmp/cobordism; NOT "
+                         "committed).")
+    ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--gate", default=None,
+                    help="solve for ONE gate (e.g. H_x_H, sqrt-SWAP, CNOT); "
+                         "'--gate help' lists the battery. Default: the full sweep.")
+    ap.add_argument("--retries", type=int, default=0,
+                    help="surgery-topology search: score N randomized surgery-grown "
+                         "topologies in parallel (>0 enables it).")
+    ap.add_argument("--jobs", type=int, default=min(10, os.cpu_count() or 1),
+                    help="worker processes (clamped to the 10-CPU cap; each pinned to "
+                         "1 BLAS thread, so procs x threads <= 10).")
+    ap.add_argument("--seed", type=int, default=12345,
+                    help="RNG seed for the surgery-topology search (default 12345).")
+    ap.add_argument("--all-plots", action="store_true",
+                    help="render force-directed PNGs for every output and upload them "
+                         "to the issue-attachments release.")
+    ap.add_argument("--no-upload", action="store_true",
+                    help="with --all-plots, render locally but do not upload.")
+    ap.add_argument("--dpi", type=int, default=130, help="PNG dpi (default 130).")
+    args = ap.parse_args()
+    jobs = max(1, min(args.jobs, 10))                        # respect the 10-CPU cap
+
+    if args.gate is not None:
+        return run_single_gate(args, jobs)
+
+    _print_header()
+    checks = []
+
+    def _check(label, passed):
+        checks.append((label, bool(passed)))
+        return bool(passed)
+
+    reg = Register()
+    trace, anchor, stage1 = _emergence_and_anchor(reg, _check)
+
+    # ---- STAGE 3: the per-gate spectral sweep (the finding), parallelized ---- #
+    rows = run_sweep(reg, jobs)
+    print(f"\n  STAGE 3 gate sweep (spectral residual of U|psi_B> on the surgery-grown "
+          f"register; realized iff r -> 0; scored across {jobs} worker(s)):")
     header = (f"      {'gate':16} {'family':16} {'residual':>11} {'b_1':>5} "
               f"{'leak':>8} {'realizes?':>10}")
     print(header)
@@ -495,10 +1108,30 @@ def main():
     _check("the identity realizes (the sanity check)",
            rows[0]["realizable"] and rows[0]["gate"] == "Identity")
     _check("realizable set == S_3 + H(x)H + sqrt-SWAP (8; one more than fixed-boundary)",
-           realized_set == ["Identity", "SWAP", "CNOT", "reversed-CNOT",
-                            "3-cycle (0231)", "3-cycle (0312)", "H(x)H", "sqrt-SWAP"])
+           realized_set == list(CANONICAL_SET))
     _check("every floored gate is certified (residual > CERT_FLOOR and leaks)",
            all(r["residual"] > CERT_FLOOR and r["leak"] > 1e-6 for r in floored))
+
+    # ---- the surgery-topology search (--retries): does the set grow beyond 8? -- #
+    search = None
+    if args.retries > 0:
+        search = surgery_search(args.retries, jobs, base_seed=args.seed)
+        _print_search(search)
+        _check("no genuine emergent register carries a gate beyond the 8",
+               not search["grows"])
+
+    # ---- the figures (--all-plots) ----------------------------------------- #
+    plot_urls = None
+    if args.all_plots:
+        paths = render_all_plots(reg, realized_set, args.out, dpi=args.dpi)
+        plot_urls, failures = upload_release(paths, upload=not args.no_upload)
+        loc = "uploaded to issue-attachments" if not args.no_upload \
+            else "rendered locally (not uploaded)"
+        print(f"\n  Figures ({loc}):")
+        for tag, url in plot_urls.items():
+            print(f"      {tag:22} -> {url if not args.no_upload else paths[tag]}")
+        for path, err in failures:
+            print(f"      [upload failed] {path}: {err}")
 
     # ---- raw table (PR artifact, not committed) ---------------------------- #
     if not args.no_write:
@@ -506,10 +1139,9 @@ def main():
         path = os.path.join(args.out, "spectral_gate_realizability.json")
         with open(path, "w") as handle:
             json.dump({"register_trace": trace, "register_constraint": reg.n.tolist(),
-                       "identity_anchor": anchor,
-                       "stage1": {"geo_psi_B": [res_b, nv_b, ne_b],
-                                  "geo_psi_A": [res_a, nv_a, ne_a]},
-                       "gate_sweep": rows}, handle, indent=2)
+                       "identity_anchor": anchor, "stage1": stage1,
+                       "gate_sweep": rows, "surgery_search": search,
+                       "plot_urls": plot_urls}, handle, indent=2)
         print(f"\n  raw table (PR artifact, not committed): {path}")
 
     ok = all(passed for _label, passed in checks)
@@ -528,6 +1160,9 @@ def main():
         "the boundary (rather than pinning it to an integer monodromy) admits sqrt-SWAP, "
         "a non-integer register automorphism. Every genuinely register-leaving gate "
         "still floors -- the cohomological obstruction no emergent b_1 can repair."
+        + (" The surgery-topology search confirms it: no genuine emergent register "
+           "carries any gate beyond the 8."
+           if search is not None and not search["grows"] else "")
         if ok else
         "NOT SUPPORTED -- a claim failed; inspect the FAILED checks above."))
     raise SystemExit(0 if ok else 1)
