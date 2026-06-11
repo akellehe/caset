@@ -412,7 +412,7 @@ class Spacetime {
     /// inserting a vertex with this id (otherwise the id is
     /// simply unused).
     [[nodiscard]] std::uint64_t reserveVertexId() noexcept {
-      return vertexIdCounter++;
+      return nextFreeVertexId();
     }
 
     /// The boundary surface of the complex: the codimension-one faces — one
@@ -653,6 +653,12 @@ class Spacetime {
     void unregisterSimplex(const SimplexPtr &simplex);
 
   private:
+    // The next vertex id not already in use: advances vertexIdCounter past any
+    // explicitly-assigned ids so a no-arg/reserved id never aliases an existing
+    // vertex (VertexList::add returns the existing vertex on a duplicate id;
+    // coning that alias makes a self-edge — #267).
+    [[nodiscard]] std::uint64_t nextFreeVertexId() noexcept;
+
     std::shared_ptr<EdgeList> edgeList = std::make_shared<EdgeList>();
     std::shared_ptr<VertexList> vertexList = std::make_shared<VertexList>();
 
