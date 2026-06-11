@@ -37,18 +37,31 @@ using namespace ::tessera::quantum;
 ReggeSolver::ReggeSolver(std::shared_ptr<Spacetime> spacetime,
                          MatterConfiguration matter)
     : spacetime_(std::move(spacetime)), matter_(std::move(matter)) {
-    // Ensure all sub-simplices down to hinges (d-2) are registered.
-    // Top-simplices → facets (d-1) are registered during build().
-    // We need facets of facets → hinges (d-2).
-    // Use index-based iteration since getFacets() may grow simplicesVec.
-    {
-        int d = spacetime_->getMetric()->getSignature()->getDimensions();
-        auto nBefore = spacetime_->getSimplices().size();
-        for (std::size_t i = 0; i < nBefore; ++i) {
-            auto s = spacetime_->getSimplices()[i];
-            if (static_cast<int>(s->size()) == d) // (d-1)-simplices
-                (void)s->getFacets(); // registers (d-2)-simplices (hinges)
-        }
+    // Materialize the facet/coface lattice down to the (d-2)-hinges, in C++.
+    //
+    // dualVolume() walks a hinge UP through its cofaces to a top cell, so every
+    // coface link from the hinge up to the top must exist.  getFacets() on a
+    // k-simplex creates its (k-1)-facets and registers itself as their coface,
+    // so we must call it on every simplex of size >= d: the top d-cells (size
+    // d+1) register the (d-1)-facets, and the (d-1)-facets (size d) register the
+    // (d-2)-hinges.  build() does not guarantee the (d-1)-facets exist (e.g. a
+    // freshly built SolidSimplex holds only its top cells), so we start from the
+    // tops rather than assuming the facets are already present.
+    //
+    // This MUST run in C++.  The Python getFacets()/getCofaces() bindings use
+    // return_value_policy::copy, so driving materialization from Python would
+    // register *copies* of the sub-simplices — each carrying an incomplete
+    // coface list — onto the shared vertices, and the fingerprint-keyed
+    // hasCoface() guard would then block the canonical facets.  dualVolume()
+    // would then see half the cofaces it should.
+    //
+    // getFacets() grows simplicesVec as it registers new sub-simplices, so the
+    // loop re-reads size() each iteration rather than snapshotting it.
+    const int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    for (std::size_t i = 0; i < spacetime_->getSimplices().size(); ++i) {
+        auto s = spacetime_->getSimplices()[i];
+        if (static_cast<int>(s->size()) >= d)
+            (void)s->getFacets();
     }
 }
 
@@ -98,6 +111,17 @@ double ReggeSolver::reggeAction() const {
     double S = 0.0;
     for (const auto &h : collectHinges()) {
         S += hingeArea(h) * deficitAngle(h);
+    }
+    return S;
+}
+
+std::complex<double> ReggeSolver::dualReggeAction() const {
+    // S_Regge(W*) = sum_h |*h| * eps_h: the circumcentric dual content of each
+    // (d-2)-hinge weighted by its complex Lorentzian deficit. Hinges must be
+    // registered (sub-simplices materialize via getFacets), as for reggeAction().
+    std::complex<double> S(0.0, 0.0);
+    for (const auto &h : collectHinges()) {
+        S += h->dualVolume() * h->lorentzianDeficitAngle();
     }
     return S;
 }

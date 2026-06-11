@@ -275,6 +275,11 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "Area of a triangular hinge (Heron's formula).")
       .def("reggeAction", &ReggeSolver::reggeAction,
            "Gravitational Regge action: S_grav = Σ_h A_h · ε_h.")
+      .def("dualReggeAction", &ReggeSolver::dualReggeAction,
+           "Dual Lorentzian Regge action S_Regge(W*) = Σ_h |*h| · ε_h: each "
+           "(d-2)-hinge's circumcentric dual content (Simplex.dualVolume) times "
+           "its complex Lorentzian deficit. Returns a Python complex (real = "
+           "angle-defect curvature, imag = boost/light-cone content).")
       .def("matterAction", &ReggeSolver::matterAction,
            "Point-particle matter action: S_matter = -M Σ √(-ℓ²) along worldlines.")
       .def("totalAction", &ReggeSolver::totalAction,

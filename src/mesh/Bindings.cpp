@@ -357,7 +357,17 @@ facet.getCofaces() includes this simplex.)doc")
            "Signature-aware; negative content is meaningful.")
       .def("hodgeStar", &Simplex::hodgeStar,
            "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
-           "content).");
+           "content).")
+      .def("lorentzianDihedralAngle", &Simplex::lorentzianDihedralAngle,
+           py::arg("hinge"),
+           "Complex Lorentzian (Sorkin) dihedral angle at the hinge: real for "
+           "an ordinary wedge, complex (imaginary part = boost rapidity) for a "
+           "timelike normal plane. Unlike dihedralAngle it is not clamped/Wick-"
+           "rotated, so boosts survive.")
+      .def("lorentzianDeficitAngle", &Simplex::lorentzianDeficitAngle,
+           "Complex Lorentzian deficit 2π − Σ lorentzianDihedralAngle over the "
+           "top cells at this hinge; real for an all-spacelike neighbourhood, "
+           "complex when timelike cells contribute boosts.");
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
       .def(py::init<>());

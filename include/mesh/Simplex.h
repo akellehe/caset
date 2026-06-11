@@ -23,6 +23,7 @@
 #define TESSERA_SIMPLEX_H
 
 #include "mesh/ForwardDeclarations.h"
+#include <complex>
 #include <memory>
 #include <vector>
 #include <functional>
@@ -291,6 +292,25 @@ class Simplex {
     /// Deficit angle at this hinge: 2*pi minus the sum of dihedral angles
     /// from all top-simplices containing this hinge.
     [[nodiscard]] double deficitAngle() const;
+
+    /// Lorentzian (Sorkin) dihedral angle at ``hinge`` within this top simplex,
+    /// as a complex number. Built from the **signed** (non-Wick) Cayley-Menger
+    /// cofactor ratio r, UN-clamped: for an ordinary (spacelike-normal-plane)
+    /// wedge |r| <= 1 and this returns the real Euclidean angle; for a timelike
+    /// normal plane |r| > 1 (the boost regime) ``std::acos`` returns a complex
+    /// value whose imaginary part is the rapidity (boost) and whose real part
+    /// (0 or pi) carries the light-cone-crossing structure (Sorkin's N pi/2).
+    /// Unlike ``dihedralAngle`` (which Wick-rotates and clamps), this keeps the
+    /// boost. Refs: Regge (1961); Sorkin, Lorentzian angles & trigonometry;
+    /// Asante-Dittrich-Padua-Arguelles, arXiv:2104.00485 Eq. (10).
+    [[nodiscard]] std::complex<double>
+    lorentzianDihedralAngle(SimplexPtr hinge) const;
+
+    /// Complex Lorentzian deficit at this hinge: 2*pi minus the sum of
+    /// ``lorentzianDihedralAngle`` over the top simplices containing it. Real
+    /// for an all-spacelike (Euclidean) neighbourhood (the ordinary angle
+    /// defect); complex when timelike cells contribute boosts.
+    [[nodiscard]] std::complex<double> lorentzianDeficitAngle() const;
 
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
     /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``

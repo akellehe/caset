@@ -3,6 +3,7 @@
 
 #include "mesh/ForwardDeclarations.h"
 #include "matter/MatterConfiguration.h"
+#include <complex>
 #include <functional>
 #include <memory>
 #include <tuple>
@@ -78,6 +79,19 @@ class ReggeSolver {
 
     /// Gravitational Regge action: \f$S_{\text{grav}} = \sum_h A_h\,\varepsilon_h\f$.
     [[nodiscard]] double reggeAction() const;
+
+    /// **Dual** Lorentzian Regge action on \f$W^*\f$:
+    /// \f$S_{\text{Regge}}(W^*) = \sum_h |\!\star\! h|\,\varepsilon_h\f$, the
+    /// circumcentric **dual** content of each (d-2)-hinge
+    /// (``Simplex::dualVolume``) weighted by its **complex Lorentzian** deficit
+    /// (``Simplex::lorentzianDeficitAngle``). Returns ``std::complex``: the real
+    /// part is the angle-defect curvature, the imaginary part the boost
+    /// (rapidity / light-cone) content from timelike-normal-plane hinges. Pure
+    /// gravity (matter-independent); the gravitational prior for the
+    /// Regge-mediated synthesis objective. Refs: Regge (1961);
+    /// Ambjorn-Jurkiewicz-Loll (Lorentzian CDT); Sorkin (Lorentzian angles);
+    /// Asante-Dittrich arXiv:2104.00485.
+    [[nodiscard]] std::complex<double> dualReggeAction() const;
 
     /// Point-particle matter action: \f$S_{\text{matter}} = -M \sum_{e \in W} \sqrt{-\ell^2_e}\f$.
     [[nodiscard]] double matterAction() const;

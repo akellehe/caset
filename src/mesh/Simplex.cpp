@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <numbers>
 #include <stdexcept>
 #include <string>
@@ -789,6 +790,55 @@ double Simplex::deficitAngle() const {
             sum += sigma->dihedralAngle(const_cast<Simplex*>(this), /*wickRotate=*/true);
     }
     return 2.0 * std::numbers::pi - sum;
+}
+
+std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
+    const int dPlus1 = static_cast<int>(vertices.size());
+    // The two vertices of this simplex not in the hinge.
+    const auto hingeVerts = hinge->getVertices();
+    std::vector<int> opposite;
+    for (int k = 0; k < dPlus1; ++k) {
+        bool inHinge = false;
+        for (const auto &hv : hingeVerts)
+            if (hv->getId() == vertices[k]->getId()) { inHinge = true; break; }
+        if (!inHinge) opposite.push_back(k);
+    }
+    if (opposite.size() != 2) return {0.0, 0.0};
+    const int vi = opposite[0], vj = opposite[1];
+
+    // Signed (non-Wick) Cayley-Menger cofactors → the dihedral cosine ratio r,
+    // UN-clamped. std::acos on its complex extension returns the ordinary angle
+    // for |r| <= 1 and a boost (complex) for |r| > 1 — see the header.
+    const int n = dPlus1 + 1;
+    const auto B = cayleyMengerMatrix(/*wickRotate=*/false);
+    const auto cof = cofactorMatrix(B, n);
+    const int bi = vi + 1, bj = vj + 1;
+    const double Cij = cof[static_cast<std::size_t>(bi) * n + bj];
+    const double Cii = cof[static_cast<std::size_t>(bi) * n + bi];
+    const double Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
+    double denom = std::sqrt(std::abs(Cii * Cjj));
+    if (denom < 1e-15) return {0.0, 0.0};
+    if (Cii < 0.0) denom = -denom;  // (-1)^d diagonal-sign fix (see dihedralAngle)
+    const double r = -Cij / denom;
+    return std::acos(std::complex<double>(r, 0.0));
+}
+
+std::complex<double> Simplex::lorentzianDeficitAngle() const {
+    using cd = std::complex<double>;
+    const cd twoPi(2.0 * std::numbers::pi, 0.0);
+    if (!spacetime || vertices.empty()) return twoPi;
+    const int topSize =
+        spacetime->getMetric()->getSignature()->getDimensions() + 1;
+    cd sum(0.0, 0.0);
+    for (const auto &sigma : vertices[0]->getSimplices()) {
+        if (static_cast<int>(sigma->size()) != topSize) continue;
+        bool containsAll = true;
+        for (std::size_t i = 1; i < vertices.size(); ++i)
+            if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
+        if (containsAll)
+            sum += sigma->lorentzianDihedralAngle(const_cast<Simplex *>(this));
+    }
+    return twoPi - sum;
 }
 
 double Simplex::area(bool wickRotate) const {
