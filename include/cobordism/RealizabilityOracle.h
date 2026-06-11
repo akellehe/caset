@@ -214,6 +214,15 @@ class RealizabilityOracle {
       /// (`Surgery` mode only; 0 otherwise). Each is a topology-changing move that
       /// can shift \f$ b_k \f$ of the witness — the emergent-topology trace.
       int surgeryRemovals{0};
+      /// The realized geometry's **dual Lorentzian Regge action magnitude**
+      /// \f$ |S_{\mathrm{Regge}}(W^{*})| \f$ — the modulus of
+      /// `ReggeSolver::dualReggeAction` on the witness's circumcentric dual. The
+      /// gravitational cost the mediated objective \f$ F_\beta=r_U+\beta\,|S| \f$
+      /// trades against the residual; reported at every \f$ \beta \f$ (including
+      /// the \f$ \beta=0 \f$ base layer, so the \f$ \beta \f$-sweep can compare the
+      /// chosen fillings' action). \f$ 0 \f$ if the witness has no hinges. Not
+      /// finite (and logged) if the realized geometry is degenerate.
+      double reggeAction{0.0};
       /// The realized bulk \f$ W_{AB} \f$ — the witness cobordism (realizable),
       /// or the complex on which the residual floors (non-realizable).
       std::shared_ptr<Spacetime> witness{};
@@ -254,13 +263,29 @@ class RealizabilityOracle {
     ///                  (eigenvalue \f$ \to 0 \f$), i.e. the boundary class lies in
     ///                  \f$ \mathrm{image}(H_k(\partial W)\to H_k(W)) \f$ — the
     ///                  physical realizability test that distinguishes topologies.
+    /// @param beta      coupling of the **mediated objective**
+    ///                  \f$ F_\beta=r_U+\beta\,|S_{\mathrm{Regge}}(W^{*})| \f$:
+    ///                  candidate moves are scored by \f$ F_\beta \f$ (the
+    ///                  realizability residual plus \f$ \beta \f$ times the dual
+    ///                  Regge action **magnitude** on the candidate's dual), so
+    ///                  the search prefers gravitationally cheaper fillings.
+    ///                  \f$ \beta=0 \f$ (default) reproduces the base-layer search
+    ///                  **bit-for-bit** (the \f$ |S| \f$ term is not even computed).
+    ///                  Only the cone+surgery move-sets (`Surgery`,
+    ///                  `SurgeryAndCone`) act on it; realizability is still the
+    ///                  primal \f$ r_U<\epsilon \f$, so a large \f$ \beta \f$ can
+    ///                  starve a gate of an improving move and drop it from the set.
+    /// @param maxVertices the volume bound \f$ \abs{W} \f$: additive growth stops
+    ///                  once the bulk reaches this many vertices (the conformal-mode
+    ///                  regularizer). Surgery (removal) is unaffected.
     [[nodiscard]] Verdict decide(const std::vector<std::complex<double>> &U,
                                  int dA, int dB, double epsilon = 1e-10,
                                  int restarts = 64, int maxCones = 4,
                                  std::uint64_t seed = 0,
                                  GrowthMode mode = GrowthMode::Cone,
                                  int connectivityCandidates = 8,
-                                 bool harmonic = false);
+                                 bool harmonic = false, double beta = 0.0,
+                                 int maxVertices = 16);
 
     /// Decide whether a target **boundary harmonic** \f$ k \f$-form (\f$ k =
     /// \texttt{target.degree()} \f$, the \f$ k=1 \f$ DW setting) is realizable on
@@ -298,12 +323,18 @@ class RealizabilityOracle {
     ///                  \f$. The default (`false`) keeps the eigenvalue-agnostic
     ///                  residual (any eigenvalue), which is under-constrained on
     ///                  small boundaries (it accepts a non-harmonic eigenvector).
+    /// @param beta      coupling of the mediated objective
+    ///                  \f$ F_\beta=r_U+\beta\,|S_{\mathrm{Regge}}(W^{*})| \f$
+    ///                  (see `decide`); \f$ \beta=0 \f$ reproduces the base layer
+    ///                  bit-for-bit.
+    /// @param maxVertices the \f$ \abs{W} \f$ volume bound on additive growth.
     [[nodiscard]] Verdict decideHarmonic(const Cochain &target,
                                          double epsilon = 1e-10, int restarts = 64,
                                          int maxCones = 4, std::uint64_t seed = 0,
                                          GrowthMode mode = GrowthMode::Cone,
                                          int connectivityCandidates = 8,
-                                         bool harmonic = false);
+                                         bool harmonic = false, double beta = 0.0,
+                                         int maxVertices = 16);
 
   private:
     // §4b search box — identical to GeometrySynthesizer so the interior fill is
@@ -345,10 +376,10 @@ class RealizabilityOracle {
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
         double epsilon, int restarts, int maxCones, std::uint64_t seed,
-        GrowthMode mode, int connectivityCandidates, bool harmonic,
-        std::vector<std::complex<double>> &witnessOut, int &conesApplied,
-        int &candidatesOut, int &triangleCandidatesOut, int &surgeryRemovals,
-        std::size_t &spaceSizeOut) const;
+        GrowthMode mode, int connectivityCandidates, bool harmonic, double beta,
+        int maxVertices, std::vector<std::complex<double>> &witnessOut,
+        int &conesApplied, int &candidatesOut, int &triangleCandidatesOut,
+        int &surgeryRemovals, std::size_t &spaceSizeOut) const;
 
     // One fixed-complex optimization pass over the current `es`: the
     // multi-restart bounded Levenberg–Marquardt on r(psi) for the target encoded
@@ -371,12 +402,31 @@ class RealizabilityOracle {
     // committed move is topology-changing — it can shift b_k — so the realized
     // bulk topology is what the residual selects. Returns true (and increments
     // `removalsOut`) iff a removal was committed.
+    //
+    // `beta` activates the **mediated** score: a removal candidate is ranked by
+    // \f$ F_\beta=r_U+\beta\,|S_{\mathrm{Regge}}(W^{*})| \f$ rather than \f$ r_U \f$
+    // alone, and committed iff it improves \f$ F_\beta \f$ over the current
+    // complex — so the surgery the search keeps is the one that best trades
+    // residual against gravitational action. With `beta == 0` the \f$ |S| \f$ term
+    // is not computed and the ranking/commit rule is byte-for-byte the historical
+    // residual-only one.
     [[nodiscard]] bool growBestSurgery(
         EigenstateSynthesis &es,
         const std::map<std::vector<std::uint64_t>, std::complex<double>>
             &pinnedByTuple,
         double epsilon, int restarts, std::uint64_t seed, bool harmonic,
-        double currentResidual, int &removalsOut) const;
+        double currentResidual, double beta, int &removalsOut) const;
+
+    // The mediated objective term: the magnitude of the dual Lorentzian Regge
+    // action on the **current** complex held by `bulk_` (which `es` mutates in
+    // place), \f$ |S_{\mathrm{Regge}}(W^{*})| =
+    // |\texttt{ReggeSolver::dualReggeAction}| \f$. Builds the ReggeSolver in C++
+    // (its ctor materializes the facet/coface lattice the dual volumes need; the
+    // added sub-simplices are invisible to the top-cell-filtered fill, verified
+    // byte-for-byte). A degenerate geometry (non-finite action) is logged and
+    // returned as +infinity so the offending candidate is rejected by the
+    // min-\f$ F_\beta \f$ selection — surfaced, never silently repaired.
+    [[nodiscard]] double reggeActionMagnitude() const;
 
     // One free-connectivity growth step. Generates the bounded candidate breadth
     // — edge fans at every degree and, at k>=1, the triangle (2-simplex) fans the

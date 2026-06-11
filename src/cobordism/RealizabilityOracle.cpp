@@ -37,7 +37,9 @@
 #include "cobordism/Cochain.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/LevenbergMarquardt.h"
+#include "matter/MatterConfiguration.h"
 #include "quantum/ChoiJamiolkowski.h"
+#include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
 
 namespace tessera::cobordism {
@@ -394,11 +396,36 @@ bool RealizabilityOracle::growBestConnectivity(
   return es.growInterior(seed);
 }
 
+double RealizabilityOracle::reggeActionMagnitude() const {
+  // |S_Regge(W*)|: build the ReggeSolver on the live bulk_ (its ctor materializes
+  // the facet/coface lattice the dual volumes walk; the added sub-simplices are
+  // sub-top, so the top-cell-filtered fill is unaffected — verified byte-for-bit).
+  // A degenerate geometry yields a non-finite action; log it and return +inf so
+  // the candidate is rejected by the min-F_beta selection (surfaced, not masked).
+  try {
+    const cd S = ::tessera::simulations::ReggeSolver(
+                     bulk_, ::tessera::MatterConfiguration())
+                     .dualReggeAction();
+    const double mag = std::abs(S);
+    if (!std::isfinite(mag)) {
+      CLOG(WARN_LEVEL,
+           "reggeActionMagnitude: non-finite dual Regge action |S|=", mag,
+           " (degenerate geometry); rejecting candidate");
+      return std::numeric_limits<double>::infinity();
+    }
+    return mag;
+  } catch (const std::exception &e) {
+    CLOG(WARN_LEVEL, "reggeActionMagnitude: dual Regge action failed (", e.what(),
+         ") (degenerate geometry); rejecting candidate");
+    return std::numeric_limits<double>::infinity();
+  }
+}
+
 bool RealizabilityOracle::growBestSurgery(
     EigenstateSynthesis &es,
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
     int restarts, std::uint64_t seed, bool harmonic, double currentResidual,
-    int &removalsOut) const {
+    double beta, int &removalsOut) const {
   // Enumerate the topology-changing candidates: every interior top cell whose
   // removal opens a hole/handle with ∂W held bit-exact. Score each by the
   // residual it reaches after the weight optimization (try → score → restore),
@@ -407,10 +434,19 @@ bool RealizabilityOracle::growBestSurgery(
   // still has its support). The committed move shifts b_k — emergent topology.
   const std::vector<std::vector<std::uint64_t>> cells = es.interiorTopCells();
   CLOG(INFO_LEVEL, "surgery grow (k=", es.degree(), "): scoring ", cells.size(),
-       " interior-top-cell removals against residual ", currentResidual);
+       " interior-top-cell removals by ", (beta > 0.0 ? "F_beta" : "residual"),
+       " against ", currentResidual, " (beta=", beta, ")");
   if (cells.empty()) return false;
 
-  double bestR = currentResidual;
+  // The mediated score F_β = r_U + β·|S_Regge(W*)|: |S| is read on whichever
+  // complex is live at the call. β=0 ⇒ |S| is never computed and the ranking is
+  // byte-for-byte the historical residual-only rule.
+  const auto score = [this, beta](double r) {
+    return beta > 0.0 ? r + beta * reggeActionMagnitude() : r;
+  };
+  const double currentScore = score(currentResidual);  // current complex is live
+
+  double bestScore = currentScore;
   std::vector<std::uint64_t> bestCell;
   std::vector<cd> tmpWitness;
   for (std::size_t c = 0; c < cells.size(); ++c) {
@@ -429,14 +465,15 @@ bool RealizabilityOracle::growBestSurgery(
           optimizePass(es, pinnedByTuple, epsilon, restarts,
                        seed + 1 + static_cast<std::uint64_t>(c), harmonic,
                        tmpWitness);
-      if (r < bestR) {
-        bestR = r;
+      const double s = score(r);  // candidate complex is live
+      if (s < bestScore) {
+        bestScore = s;
         bestCell = cells[c];
       }
     }
     es.restoreLastRemoval();
   }
-  if (bestCell.empty()) return false;  // no improving removal
+  if (bestCell.empty()) return false;  // no F_β-improving removal
   if (!es.removeInteriorCell(bestCell)) return false;
   ++removalsOut;
   return true;
@@ -446,9 +483,17 @@ double RealizabilityOracle::fillInterior(
     EigenstateSynthesis &es,
     const std::map<std::vector<std::uint64_t>, cd> &pinnedByTuple, double epsilon,
     int restarts, int maxCones, std::uint64_t seed, GrowthMode mode,
-    int connectivityCandidates, bool harmonic, std::vector<cd> &witnessOut,
-    int &conesApplied, int &candidatesOut, int &triangleCandidatesOut,
-    int &surgeryRemovals, std::size_t &spaceSizeOut) const {
+    int connectivityCandidates, bool harmonic, double beta, int maxVertices,
+    std::vector<cd> &witnessOut, int &conesApplied, int &candidatesOut,
+    int &triangleCandidatesOut, int &surgeryRemovals,
+    std::size_t &spaceSizeOut) const {
+  // |W| volume bound: additive growth (cone / free-connectivity) stops once the
+  // bulk reaches maxVertices vertices — the conformal-mode regularizer. Surgery
+  // (removal) never adds vertices, so it is never gated by this.
+  const auto atVertexCap = [this, maxVertices]() {
+    return bulk_ && bulk_->getVertexList() &&
+           static_cast<int>(bulk_->getVertexList()->size()) >= maxVertices;
+  };
   double bestR = std::numeric_limits<double>::infinity();
   conesApplied = 0;
   candidatesOut = 0;
@@ -475,8 +520,8 @@ double RealizabilityOracle::fillInterior(
       // improving-only rule and the finite interior-cell set.
       grew = growBestSurgery(es, pinnedByTuple, epsilon, restarts,
                              seed + 1000 + static_cast<std::uint64_t>(cone),
-                             harmonic, bestR, surgeryRemovals);
-      if (!grew && conesUsed < maxCones) {
+                             harmonic, bestR, beta, surgeryRemovals);
+      if (!grew && conesUsed < maxCones && !atVertexCap()) {
         // The additive fallback rides the Pachner add; on complexes where the
         // move proposer cannot produce a valid cone (it can throw on degenerate
         // proposals) the step is logged and skipped — the verdict then floors
@@ -493,10 +538,15 @@ double RealizabilityOracle::fillInterior(
     } else {
       if (cone >= maxCones) break;
       if (mode == GrowthMode::Surgery)
-        // The topology-changing move-set: commit the best b_k-shifting removal.
+        // The topology-changing move-set: commit the best b_k-shifting removal
+        // (no vertex added, so the |W| cap never gates it).
         grew = growBestSurgery(es, pinnedByTuple, epsilon, restarts,
                                seed + 1000 + static_cast<std::uint64_t>(cone),
-                               harmonic, bestR, surgeryRemovals);
+                               harmonic, bestR, beta, surgeryRemovals);
+      else if (atVertexCap())
+        // The additive modes (free-connectivity / cone) each add a vertex; stop
+        // at the |W| volume bound.
+        break;
       else if (mode == GrowthMode::FreeConnectivity)
         grew = growBestConnectivity(
             es, pinnedByTuple, epsilon, restarts,
@@ -515,7 +565,7 @@ double RealizabilityOracle::fillInterior(
 RealizabilityOracle::Verdict RealizabilityOracle::decide(
     const std::vector<cd> &U, int dA, int dB, double epsilon, int restarts,
     int maxCones, std::uint64_t seed, GrowthMode mode,
-    int connectivityCandidates, bool harmonic) {
+    int connectivityCandidates, bool harmonic, double beta, int maxVertices) {
   const std::vector<cd> target = bend(U, dA, dB);  // ψ_U, length dA·dB
 
   EigenstateSynthesis es(bulk_);  // k = 0: the vertex graph Laplacian
@@ -535,17 +585,21 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
 
   Verdict v;
   v.target = target;
-  const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
-                                seed, mode, connectivityCandidates, harmonic,
-                                v.state, v.conesApplied, v.connectivityCandidates,
-                                v.triangleCandidates, v.surgeryRemovals,
-                                v.connectivitySpaceSize);
+  const double r = fillInterior(
+      es, pinnedByTuple, epsilon, restarts, maxCones, seed, mode,
+      connectivityCandidates, harmonic, beta, maxVertices, v.state,
+      v.conesApplied, v.connectivityCandidates, v.triangleCandidates,
+      v.surgeryRemovals, v.connectivitySpaceSize);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;
   v.eigenvalue = es.rayleigh(v.state);
   v.interiorVertexCount = es.interiorVertexCount();
   v.interiorEdgeCount = es.numInteriorEdges();
+  // Report the realized geometry's gravitational cost |S_Regge(W*)| at every β
+  // (so the β-sweep can compare fillings). Computed on the realized witness;
+  // independent of the search path, so the β=0 decision is unchanged.
+  v.reggeAction = reggeActionMagnitude();
   v.witness = bulk_;
   return v;
 }
@@ -553,7 +607,7 @@ RealizabilityOracle::Verdict RealizabilityOracle::decide(
 RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
     const Cochain &target, double epsilon, int restarts, int maxCones,
     std::uint64_t seed, GrowthMode mode, int connectivityCandidates,
-    bool harmonic) {
+    bool harmonic, double beta, int maxVertices) {
   const int k = target.degree();
   if (k < 0 || target.size() == 0)
     throw std::invalid_argument(
@@ -602,17 +656,21 @@ RealizabilityOracle::Verdict RealizabilityOracle::decideHarmonic(
   // growBestConnectivity additionally proposes triangle (2-simplex) attachments,
   // and those are NOT spectrally inert here. The candidate breadth (edge fans +
   // triangle fans) is surfaced in the Verdict and logged.
-  const double r = fillInterior(es, pinnedByTuple, epsilon, restarts, maxCones,
-                                seed, mode, connectivityCandidates, harmonic,
-                                v.state, v.conesApplied, v.connectivityCandidates,
-                                v.triangleCandidates, v.surgeryRemovals,
-                                v.connectivitySpaceSize);
+  const double r = fillInterior(
+      es, pinnedByTuple, epsilon, restarts, maxCones, seed, mode,
+      connectivityCandidates, harmonic, beta, maxVertices, v.state,
+      v.conesApplied, v.connectivityCandidates, v.triangleCandidates,
+      v.surgeryRemovals, v.connectivitySpaceSize);
   v.residual = r;
   v.realizable = (r < epsilon);
   v.floor = v.realizable ? 0.0 : r;
   v.eigenvalue = es.rayleigh(v.state);
   v.interiorVertexCount = es.interiorVertexCount();
   v.interiorEdgeCount = es.numInteriorEdges();
+  // Report the realized geometry's gravitational cost |S_Regge(W*)| at every β
+  // (so the β-sweep can compare fillings). Computed on the realized witness;
+  // independent of the search path, so the β=0 decision is unchanged.
+  v.reggeAction = reggeActionMagnitude();
   v.witness = bulk_;
   return v;
 }
