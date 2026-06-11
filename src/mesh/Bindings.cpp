@@ -283,8 +283,13 @@ their vertex IDs.)doc")
       .def("__eq__",
            static_cast<bool (Simplex::*)(const Simplex &) const noexcept>(&Simplex::operator==),
            py::arg("other"))
-      .def("getCofaces", &Simplex::getCofaces, py::return_value_policy::copy,
-           "Return all simplices of one dimension higher that contain this simplex as a face.")
+      .def("getCofaces", &Simplex::getCofaces,
+           py::return_value_policy::reference_internal,
+           "Return all simplices of one dimension higher that contain this simplex "
+           "as a face. Returned by reference to the canonical Spacetime-owned "
+           "simplices (not copies): driving facet/coface materialization from "
+           "Python therefore registers the real cofaces, matching the C++ path "
+           "(issue #261).")
       .def("getEdges", &Simplex::getEdges, py::return_value_policy::copy,
            "Return the edges (1-faces) of this simplex.")
       .def("assertSpacelikeAdmissible", &Simplex::assertSpacelikeAdmissible,
@@ -294,12 +299,20 @@ their vertex IDs.)doc")
            "(the spacelike triangle inequalities are violated). A simplex with "
            "any null/timelike (worldline) edge is skipped; fewer than two "
            "vertices is trivially admissible.")
-      .def("getFacets", &Simplex::getFacets, py::return_value_policy::copy,
+      .def("getFacets", &Simplex::getFacets,
+           py::return_value_policy::reference_internal,
            R"doc(Return the (k-1)-dimensional faces of this k-simplex.
 
 For a top d-simplex with d+1 vertices, returns d+1 facets each with
 d vertices.  Also registers coface relationships so that
-facet.getCofaces() includes this simplex.)doc")
+facet.getCofaces() includes this simplex.
+
+Returned by reference to the canonical Spacetime-owned facets (not copies).
+Previously bound return_value_policy::copy, which handed Python detached
+copies of the sub-simplices: calling getFacets() on such a copy registered
+the copy (with an incomplete coface list) onto the shared vertices, so a
+Python-driven materialization corrupted dualVolume(). Reference fixes it
+(issue #261).)doc")
       .def("getNumberOfFaces", &Simplex::getNumberOfFaces,
            "Return the number of sub-faces at each dimension.")
       .def("getOrientation", &Simplex::getOrientation,
