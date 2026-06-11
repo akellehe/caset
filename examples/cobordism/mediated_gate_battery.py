@@ -187,11 +187,66 @@ def summarize(rows, betas):
     return out
 
 
+def make_plots(summary, rows, outdir):
+    """The two #250 deliverable plots: (a) realizable-gates-vs-beta, (b) the H3
+    amplitude error of each realized gate vs beta. matplotlib is imported lazily so
+    a plain sweep never pulls it in. Returns the two file paths."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    os.makedirs(outdir, exist_ok=True)
+    betas = [s["beta"] for s in summary]
+    x = list(range(len(betas)))
+    labels = ["0" if b == 0 else f"{b:g}" for b in betas]
+
+    # (a) realizable gate count vs beta -- the contraction curve.
+    fig, ax = plt.subplots(figsize=(6.5, 4.0))
+    ax.plot(x, [s["n_realizable"] for s in summary], marker="o", color="#1f77b4")
+    ax.axhline(13, ls="--", color="grey", alpha=0.6, label="base layer (13 gates)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlabel(r"$\beta$  (gravitational coupling)")
+    ax.set_ylabel("# realizable gates")
+    ax.set_title(r"Realizable gates vs $\beta$  ($F_\beta = r_U + \beta\,|S_{Regge}|$)")
+    ax.set_ylim(-0.5, 14.0)
+    ax.legend()
+    fig.tight_layout()
+    pa = os.path.join(outdir, "regge_mediated_realizable_vs_beta.png")
+    fig.savefig(pa, dpi=140)
+    plt.close(fig)
+
+    # (b) H3 amplitude error per realized gate vs beta -- fidelity under mediation.
+    fig, ax = plt.subplots(figsize=(6.5, 4.0))
+    for i, b in enumerate(betas):
+        leaks = [r["charge_leak"] for r in rows if r["beta"] == b and r["realizable"]]
+        if leaks:
+            ax.scatter([i] * len(leaks), [max(v, 1e-18) for v in leaks],
+                       s=20, color="#2ca02c", alpha=0.6,
+                       label="realized gate" if i == 0 else None)
+    ax.set_yscale("log")
+    ax.set_ylim(1e-18, 1e-8)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.axhline(1e-15, ls="--", color="grey", alpha=0.6, label=r"$\sim 10^{-15}$ target")
+    ax.set_xlabel(r"$\beta$")
+    ax.set_ylabel(r"$|Z - \langle\psi_A|U|\psi_B\rangle|$  (per realized gate)")
+    ax.set_title(r"H3 amplitude error vs $\beta$")
+    ax.legend()
+    fig.tight_layout()
+    pb = os.path.join(outdir, "regge_mediated_h3_vs_beta.png")
+    fig.savefig(pb, dpi=140)
+    plt.close(fig)
+    return pa, pb
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--betas", type=float, nargs="+", default=BETAS_DEFAULT)
     ap.add_argument("--canonical-only", action="store_true",
                     help="restrict to the 13-gate CANONICAL_SET (a fast slice)")
+    ap.add_argument("--plots", metavar="DIR", default=None,
+                    help="also write the two deliverable plots (#250) to DIR")
     ap.add_argument("--out", default="/tmp/cobordism/mediated_gate_battery.json")
     args = ap.parse_args()
 
@@ -220,6 +275,10 @@ def main():
     if base_set is not None:
         print(f"\nbeta=0 realized set ({len(base_set)} gates): {base_set}")
     print(f"\nwrote {args.out}")
+
+    if args.plots:
+        pa, pb = make_plots(summary, rows, args.plots)
+        print(f"wrote plots:\n  {pa}\n  {pb}")
 
 
 if __name__ == "__main__":
