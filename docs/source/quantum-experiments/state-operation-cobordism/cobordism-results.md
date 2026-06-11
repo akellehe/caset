@@ -32,6 +32,28 @@ it computes. Concretely (spec §1):
 - **H3.** $Z(W_{AB})=\langle\psi_A|\,U\,|\psi_B\rangle$, with
   $\operatorname{rank}(U)=\text{Schmidt rank of }\operatorname{vec}(U)=\text{connectivity of }W_{AB}$.
 
+**What $\mathrm{geo}(\cdot)$ denotes.** $\mathrm{geo}(\psi)$ is a **carrier**
+of the state $\psi$ — a Hermitian-weighted simplicial complex whose (Hodge)
+Laplacian has $\psi$ as a distinguished eigenvector (a *harmonic*,
+$\psi\in\ker L_k$, on the register layer) — and $\mathrm{geo}(U)$ is a carrier
+of the bent state $\operatorname{vec}(U)$, synthesized with its boundary
+pinned; the overline in H2 is orientation reversal. The notation is ours, and
+it is not a canonical map: carriers need not exist — H1 *is* the existence
+question, and the residual floors below are its certified failures — and they
+are never unique (all 1443 genuine registers of the topology search below
+carry the same gate set). $\mathrm{geo}(\cdot)$ names the **witness the
+synthesis returns** (the spec's §4b inverse eigenvector problem for
+boundaries; the fixed-boundary interior fill for bulks). What *is* canonical
+runs the other way — the field-theoretic assignment of a boundary state to a
+bounding geometry
+{cite}`R-Atiyah1988TQFT, R-HartleHawking1983WaveFunction, R-Oeckl2003GeneralBoundary`
+— and a carrier is a pointwise section of it, found variationally; choosing
+*among* the carriers of a realizable operation is exactly the
+geometry-selection question the Regge-mediation track takes up. Categorically,
+the bent state $\operatorname{vec}(U)$ is the **name** of the morphism $U$
+{cite}`R-AbramskyCoecke2004Categorical`; the carrier of a state has no
+standard counterpart in the literature.
+
 **The falsifiable core, read spectrally.** The correspondence is *supported*
 iff (i) the trivial cobordism reproduces the inner product, (ii) the value is
 invariant under interior re-triangulation (the Pachner-move test
