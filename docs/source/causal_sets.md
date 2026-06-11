@@ -8,7 +8,7 @@ Lieb–Robinson cone, and the causet order on the same label set.
 The motivation, in one sentence: the underlying causal structure of a
 Lorentzian manifold is captured by the **partial order** on its points,
 and a spacetime can be reconstructed up to conformal factor from that
-order alone {cite}`MalamentSorkin1977,BombelliLeeMeyerSorkin1987`. tessera
+order alone {cite}`C-MalamentSorkin1977, C-BombelliLeeMeyerSorkin1987`. tessera
 exposes this partial order as a concrete data structure
 (`tessera.Poset`) and provides factories that derive it from a
 triangulated `tessera.Spacetime` or from a Schwinger TDVP quench run.
@@ -262,16 +262,25 @@ position, snapshot index, and physical time.
 
 ## Reading list
 
-* {cite}`MalamentSorkin1977` — the order-reconstructs-conformal-class
+* {cite}`C-MalamentSorkin1977` — the order-reconstructs-conformal-class
   theorem.
-* {cite}`BombelliLeeMeyerSorkin1987` — the causet program; spacetime
+* {cite}`C-BombelliLeeMeyerSorkin1987` — the causet program; spacetime
   emerges from a locally finite partial order.
-* {cite}`LiebRobinson1972` — the Lieb–Robinson bound that bounds the
+* {cite}`C-LiebRobinson1972` — the Lieb–Robinson bound that bounds the
   $\preceq_{\rm LR}$ order.
-* {cite}`HastingsKoma2006` — refined LR bound for lattice systems
+* {cite}`C-HastingsKoma2006` — refined LR bound for lattice systems
   relevant to the Schwinger TDVP setup.
 
 See also [Emergent Causal Order from Majorization](quantum-experiments/earlier-work/emergent-causal-order-from-majorization.md) §1 and §4.4 for the
 scientific motivation behind the three-order comparison, and
 [Emergent Spectral Dimension from the Schwinger TDVP State](quantum-experiments/earlier-work/emergent-spectral-dimension-schwinger-tdvp.md) §5 for
 the integration of `CausetChain` with the holography pipeline.
+
+## References
+
+```{bibliography}
+:filter: docname in docnames
+:keyprefix: C-
+:labelprefix: C
+:style: unsrt
+```
