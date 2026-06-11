@@ -324,11 +324,20 @@ class Spacetime {
     /// Select a uniformly random vertex from the vertex list.
     /// Used by the (2d,2) delete move for blind-guessing vertex selection.
     /// @return A random vertex, or nullptr if none exist
+    ///
+    /// The no-argument form draws from the spacetime's own ``rng`` (seeded from
+    /// ``std::random_device`` unless ``setSeed`` was called). The overload draws
+    /// from a **caller-supplied** generator so a move with its own seeded engine
+    /// (e.g. ``AddMove``) selects reproducibly from that seed — without this, a
+    /// seeded move still made its random picks against the global ``rng`` and so
+    /// was nondeterministic (issue #262).
     [[nodiscard]] VertexPtr getRandomVertex();
+    [[nodiscard]] VertexPtr getRandomVertex(std::mt19937 &generator);
 
     /// Select a uniformly random simplex from the parallel access vector.
     /// @return A random simplex, or nullptr if the complex is empty
     [[nodiscard]] SimplexPtr getRandomSimplex();
+    [[nodiscard]] SimplexPtr getRandomSimplex(std::mt19937 &generator);
 
     /// The vertex count of a top-dimensional simplex: \f$ d+1 \f$, where
     /// \f$ d \f$ is the metric signature's dimension. This is the **single
@@ -343,7 +352,10 @@ class Spacetime {
     /// Select a uniformly random top-dimensional simplex.
     /// Used by the Metropolis algorithm to pick random move targets.
     /// @return A random d-simplex, or nullptr if none exist
+    /// The overload draws from a caller-supplied generator (see
+    /// ``getRandomVertex``; issue #262).
     [[nodiscard]] SimplexPtr getRandomTopSimplex();
+    [[nodiscard]] SimplexPtr getRandomTopSimplex(std::mt19937 &generator);
 
     /// Select a uniformly random simplex with a specific causal orientation.
     /// Tries random sampling first (fast when many match), then falls back

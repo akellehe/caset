@@ -487,10 +487,14 @@ minimal test lattices, e.g. createSimplex((1, 4)) for a (1,4) simplex.)doc")
 This is the volume-fixing target per [RU] eq. 6.)doc")
       .def("getN32", &Spacetime::getN32,
            "Return N32: the count of (d-1,2) + (2,d-1) type simplices.")
-      .def("getRandomSimplex", &Spacetime::getRandomSimplex, py::return_value_policy::reference,
+      .def("getRandomSimplex",
+           static_cast<SimplexPtr (Spacetime::*)()>(&Spacetime::getRandomSimplex),
+           py::return_value_policy::reference,
            py::keep_alive<0, 1>(),  // single handle (weak-referenceable) keeps the Spacetime alive
            "Return a uniformly random simplex from the complex (any dimension).")
-      .def("getRandomTopSimplex", &Spacetime::getRandomTopSimplex, py::return_value_policy::reference,
+      .def("getRandomTopSimplex",
+           static_cast<SimplexPtr (Spacetime::*)()>(&Spacetime::getRandomTopSimplex),
+           py::return_value_policy::reference,
            py::keep_alive<0, 1>(),
            "Return a uniformly random top-dimensional simplex.")
       .def("getTopVertexCount", &Spacetime::getTopVertexCount,
@@ -501,7 +505,9 @@ for what registers as a top cell: a simplex joins topSimplicesVec (and is
 seen by getBoundary/getRandomTopSimplex) exactly when its vertex count
 equals this. Build a fixture with Signature(topology.dimension(), ...) so
 its top cells match.)doc")
-      .def("getRandomVertex", &Spacetime::getRandomVertex, py::return_value_policy::reference,
+      .def("getRandomVertex",
+           static_cast<VertexPtr (Spacetime::*)()>(&Spacetime::getRandomVertex),
+           py::return_value_policy::reference,
            py::keep_alive<0, 1>(),
            "Return a uniformly random vertex.")
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"),

@@ -809,23 +809,29 @@ const std::vector<SimplexPtr>& Spacetime::getSimplices() const noexcept {
   return simplicesVec;
 }
 
-VertexPtr Spacetime::getRandomVertex() {
+VertexPtr Spacetime::getRandomVertex() { return getRandomVertex(rng); }
+
+VertexPtr Spacetime::getRandomVertex(std::mt19937 &generator) {
   const auto &verts = vertexList->liveVector();
   if (verts.empty()) return nullptr;
   std::uniform_int_distribution<std::size_t> dist(0, verts.size() - 1);
-  return verts[dist(rng)];
+  return verts[dist(generator)];
 }
 
-SimplexPtr Spacetime::getRandomSimplex() {
+SimplexPtr Spacetime::getRandomSimplex() { return getRandomSimplex(rng); }
+
+SimplexPtr Spacetime::getRandomSimplex(std::mt19937 &generator) {
   if (simplicesVec.empty()) return nullptr;
   std::uniform_int_distribution<std::size_t> dist(0, simplicesVec.size() - 1);
-  return simplicesVec[dist(rng)];
+  return simplicesVec[dist(generator)];
 }
 
-SimplexPtr Spacetime::getRandomTopSimplex() {
+SimplexPtr Spacetime::getRandomTopSimplex() { return getRandomTopSimplex(rng); }
+
+SimplexPtr Spacetime::getRandomTopSimplex(std::mt19937 &generator) {
   if (topSimplicesVec.empty()) return nullptr;
   std::uniform_int_distribution<std::size_t> dist(0, topSimplicesVec.size() - 1);
-  return topSimplicesVec[dist(rng)];
+  return topSimplicesVec[dist(generator)];
 }
 
 SimplexPtr Spacetime::findSimplexByVerts(
