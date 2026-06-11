@@ -48,7 +48,7 @@ bool AddMove::propose() {
   // (rejection-sample with linear-scan fallback).
   SimplexPtr sigma = nullptr;
   for (int attempt = 0; attempt < 100; ++attempt) {
-    auto s = st_->getRandomTopSimplex();
+    auto s = st_->getRandomTopSimplex(*rng_);  // this move's seeded rng (#262)
     if (s && static_cast<int>(s->size()) == dPlus1 && isN41Type(s, d)) {
       sigma = s;
       break;
@@ -135,7 +135,7 @@ bool AddMove::propose() {
 }
 
 bool AddMove::proposePreGeometric() {
-  SimplexPtr sigma = st_->getRandomTopSimplex();
+  SimplexPtr sigma = st_->getRandomTopSimplex(*rng_);  // seeded rng (#262)
   if (!sigma) return false;
   const int dPlus1 = static_cast<int>(sigma->size());
   if (dPlus1 < 3) return false;  // need at least a triangle to subdivide
@@ -251,7 +251,7 @@ bool AddMove::apply() {
   // 4. Optional vertex relabeling.  Save the swap partner so rollback
   // can un-swap.
   if (relabelEnabled_) {
-    VertexPtr partner = st_->getRandomVertex();
+    VertexPtr partner = st_->getRandomVertex(*rng_);  // seeded rng (#262)
     if (partner && partner->getId() != newVert_->getId()) {
       st_->swapVertexLabels(newVert_, partner);
       swapPartner_ = partner;
