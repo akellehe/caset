@@ -256,8 +256,17 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(std::size_t k) {
   return createSimplex(vertices, edges);
 }
 
+std::uint64_t Spacetime::nextFreeVertexId() noexcept {
+  // Advance past any id already in use (explicit createVertex(id) or a topology
+  // builder) so a no-arg / reserved id never collides with an existing vertex.
+  // VertexList::add on a duplicate id returns the EXISTING vertex — a silent
+  // alias that, when coned, makes a self-edge (#267).
+  while (vertexList->contains(vertexIdCounter)) ++vertexIdCounter;
+  return vertexIdCounter++;
+}
+
 VertexPtr Spacetime::createVertex() noexcept {
-  return vertexList->add(vertexIdCounter++);
+  return vertexList->add(nextFreeVertexId());
 }
 
 VertexPtr Spacetime::createVertex(const std::uint64_t id) const noexcept {
@@ -269,7 +278,7 @@ VertexPtr Spacetime::createVertex(const std::uint64_t id, const std::vector<doub
 }
 
 VertexPtr Spacetime::createVertex(const std::vector<double> &coords) noexcept {
-  return vertexList->add(vertexIdCounter++, coords);
+  return vertexList->add(nextFreeVertexId(), coords);
 }
 
 EdgePtr Spacetime::createEdge(
