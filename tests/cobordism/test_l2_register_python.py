@@ -184,6 +184,82 @@ class BulkIndependenceTest(unittest.TestCase):
             self.assertLess(v["defect_residual"], 1e-9)
 
 
+class DualComplexValidityTest(unittest.TestCase):
+    """The mediated objective scores the DUAL complex, so topology moves are
+    accepted only if the dual stays a valid cell complex -- equivalently the
+    primal stays a combinatorial manifold with boundary. These tests pin the
+    invariant on every register the suite builds, prove the checker has teeth
+    on hand-built violations, and document why the condition cannot currently
+    fail through the surgery API (the vertex-based interiority guard)."""
+
+    def test_canonical_register_keeps_a_valid_dual(self):
+        self.assertTrue(_REG.dual_valid, _REG.dual_reason)
+        ok, why = L2.register_dual_valid(_REG.es)
+        self.assertTrue(ok, why)
+
+    def test_symmetric_variant_keeps_a_valid_dual(self):
+        eq = L2._equivariant_variant()
+        self.assertTrue(eq.dual_valid, eq.dual_reason)
+
+    def test_grown_register_keeps_a_valid_dual(self):
+        reg = L2.RegisterL2(cells=L2._join_cells(8, 8),
+                            class_holes=L2._stride_holes(8, 8, 2),
+                            grow_vertices=2, grow_seed=5)
+        self.assertGreaterEqual(reg.grown, 1)
+        self.assertTrue(reg.dual_valid, reg.dual_reason)
+
+    def test_2d_canonical_register_keeps_a_valid_dual(self):
+        # the same checker at n=2: the icosahedron minus the three holonomy
+        # holes, with the full edge list as the facet universe
+        holes = set(L2.BASE._CLASS_HOLES)
+        faces = [f for f in (tuple(sorted(t)) for t in L2.BASE._ICO)
+                 if f not in holes]
+        edges = {e for t in L2.BASE._ICO for e in L2.BASE._cedges(tuple(sorted(t)))}
+        ok, why = L2.dual_complex_is_valid(faces, 2, facet_cells=sorted(edges))
+        self.assertTrue(ok, why)
+
+    def test_checker_rejects_a_facet_sharing_double_cut(self):
+        # removing two tets that share a triangle leaves that triangle with
+        # zero cofaces -- a dangling facet the Hodge Laplacian still sees, and
+        # a pinched (non-manifold) dual
+        t1 = tuple(sorted((0, 1, 6, 7)))
+        t2 = tuple(sorted((1, 2, 6, 7)))
+        remaining = [c for c in L2._HEXJOIN if c not in (t1, t2)]
+        all_facets = sorted({f for c in L2._HEXJOIN
+                             for f, _s in L2._tet_facets(c)})
+        ok, why = L2.dual_complex_is_valid(remaining, 3,
+                                           facet_cells=all_facets)
+        self.assertFalse(ok)
+        self.assertIn("dangling", why)
+
+    def test_checker_rejects_pinched_complexes(self):
+        # two tets glued at exactly one vertex: the link of that vertex is
+        # disconnected, so the dual block at it is not a cell
+        ok, why = L2.dual_complex_is_valid([(0, 1, 2, 3), (0, 4, 5, 6)], 3)
+        self.assertFalse(ok)
+        self.assertIn("disconnected", why)
+        # the 2d bowtie fails the same way
+        ok2, why2 = L2.dual_complex_is_valid([(0, 1, 2), (0, 3, 4)], 2)
+        self.assertFalse(ok2)
+        self.assertIn("disconnected", why2)
+
+    def test_checker_accepts_the_closed_seeds(self):
+        self.assertTrue(L2.dual_complex_is_valid(L2._HEXJOIN, 3)[0])
+        self.assertTrue(L2.dual_complex_is_valid(
+            [tuple(sorted(t)) for t in L2.BASE._ICO], 2)[0])
+
+    def test_api_already_refuses_the_facet_sharing_cut(self):
+        # why the condition cannot currently fail through this API: opening a
+        # hole puts its vertices on the boundary, and the vertex-based
+        # interiority guard then refuses every facet-adjacent removal
+        st = L2._bulk(L2._HEXJOIN)
+        es = L2.cob.EigenstateSynthesis(st, 2)
+        self.assertTrue(es.removeInteriorCell([0, 1, 6, 7]))
+        self.assertFalse(es.removeInteriorCell([1, 2, 6, 7]))
+        ok, why = L2.register_dual_valid(es)
+        self.assertTrue(ok, why)
+
+
 class AdditiveGrowthTest(unittest.TestCase):
     """4: the 3d composed stellar move grows interior vertices and preserves
     the register."""

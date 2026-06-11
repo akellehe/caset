@@ -65,6 +65,8 @@ import json
 import os
 import random
 import sys
+from collections import Counter, defaultdict
+from itertools import combinations
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -150,6 +152,140 @@ def _bulk(cells, weight=1.0, phase=0.0):
     return st
 
 
+# --------------------------------------------------------------------------- #
+# Dual-complex validity. The mediated objective scores the DUAL complex
+# (ReggeSolver::dualReggeAction on W*), and the Poincare/Lefschetz dual block
+# decomposition is a valid cell complex iff the primal is a combinatorial
+# manifold(-with-boundary). For n <= 3 the classification of surfaces makes
+# this fully decidable: facet coface counts in {1,2}, no dangling facets,
+# ridge links single paths/cycles, and (n=3) vertex links spheres or disks.
+# Topology moves are accepted only if this condition survives -- validity in
+# the dual space, not merely scoreability on the primal lattice. (Metric
+# dual-validity -- non-degenerate circumcentric volumes -- is the mediation
+# layer's separate concern; on unit-metric register bulks circumcenters are
+# barycentric and fine automatically.)
+# --------------------------------------------------------------------------- #
+def dual_complex_is_valid(top_cells, n, facet_cells=None):
+    """(ok, reason): is the dual block complex of this pure n-complex a valid
+    cell decomposition -- equivalently, is the primal a combinatorial manifold
+    with boundary? *facet_cells*, when given (the complex's full (n-1)-cell
+    list), also catches dangling facets: (n-1)-cells with zero cofaces that
+    the Hodge Laplacian still sees even though no top cell carries them."""
+    cells = [tuple(sorted(int(v) for v in c)) for c in top_cells]
+    if not cells:
+        return False, "no top cells"
+    if any(len(c) != n + 1 for c in cells):
+        return False, "mixed top-cell dimension"
+    if len(set(cells)) != len(cells):
+        return False, "duplicate top cell"
+
+    cofaces = Counter()
+    for c in cells:
+        for f in combinations(c, n):
+            cofaces[f] += 1
+    for f, k in cofaces.items():
+        if k > 2:
+            return False, f"facet {f} has {k} cofaces"
+    if facet_cells is not None:
+        for f in facet_cells:
+            fs = tuple(sorted(int(v) for v in f))
+            if cofaces.get(fs, 0) == 0:
+                return False, f"dangling facet {fs} (0 cofaces)"
+
+    # ridge links: the top cells around each (n-2)-simplex, glued along the
+    # facets that contain it, must form ONE path or cycle (no pinches).
+    at_ridge = defaultdict(list)
+    for ci, c in enumerate(cells):
+        for r in combinations(c, n - 1):
+            at_ridge[r].append(ci)
+    for r, cis in at_ridge.items():
+        if len(cis) == 1:
+            continue
+        by_facet = defaultdict(list)
+        for ci in cis:
+            for v in cells[ci]:
+                if v not in r:
+                    by_facet[tuple(sorted(r + (v,)))].append(ci)
+        adj = defaultdict(set)
+        for fc in by_facet.values():
+            if len(fc) == 2:
+                adj[fc[0]].add(fc[1])
+                adj[fc[1]].add(fc[0])
+        seen, stack = {cis[0]}, [cis[0]]
+        while stack:
+            for y in adj[stack.pop()]:
+                if y not in seen:
+                    seen.add(y)
+                    stack.append(y)
+        if len(seen) != len(cis):
+            return False, f"ridge {r}: link is disconnected (pinch)"
+    if n == 2:
+        return True, "ok"
+
+    # n == 3: vertex links must be 2-spheres (interior) or disks (boundary).
+    at_vertex = defaultdict(list)
+    for c in cells:
+        for v in c:
+            at_vertex[v].append(c)
+    for v, cs in at_vertex.items():
+        link_faces = [tuple(sorted(u for u in c if u != v)) for c in cs]
+        edge_faces = defaultdict(list)
+        for i, lf in enumerate(link_faces):
+            for le in combinations(lf, 2):
+                edge_faces[le].append(i)
+        boundary_edges = []
+        adj = defaultdict(set)
+        for le, fs in edge_faces.items():
+            if len(fs) == 2:
+                adj[fs[0]].add(fs[1])
+                adj[fs[1]].add(fs[0])
+            elif len(fs) == 1:
+                boundary_edges.append(le)
+            else:
+                return False, f"vertex {v}: link edge {le} in {len(fs)} faces"
+        seen, stack = {0}, [0]
+        while stack:
+            for y in adj[stack.pop()]:
+                if y not in seen:
+                    seen.add(y)
+                    stack.append(y)
+        if len(seen) != len(link_faces):
+            return False, f"vertex {v}: link is disconnected (pinch)"
+        n_lv = len({u for lf in link_faces for u in lf})
+        chi = n_lv - len(edge_faces) + len(link_faces)
+        if not boundary_edges:
+            if chi != 2:
+                return False, f"vertex {v}: closed link has chi={chi}, not S^2"
+        else:
+            if chi != 1:
+                return False, f"vertex {v}: bounded link has chi={chi}, not a disk"
+            badj = defaultdict(set)
+            for a, b in boundary_edges:
+                badj[a].add(b)
+                badj[b].add(a)
+            if any(len(s) != 2 for s in badj.values()):
+                return False, f"vertex {v}: link boundary is not a 1-manifold"
+            start = boundary_edges[0][0]
+            seen_b, stack_b = {start}, [start]
+            while stack_b:
+                for y in badj[stack_b.pop()]:
+                    if y not in seen_b:
+                        seen_b.add(y)
+                        stack_b.append(y)
+            if len(seen_b) != len(badj):
+                return False, f"vertex {v}: link boundary has several circles"
+    return True, "ok"
+
+
+def register_dual_valid(es, n=3):
+    """The dual-validity verdict for a synthesis object's CURRENT complex: top
+    cells from the surgery state, facet cells from the (n-1)-cell list the
+    Hodge Laplacian is built over."""
+    tops = [tuple(int(v) for v in c) for c in es.topCells()]
+    facets = [tuple(int(v) for v in c) for c in es.cellSimplices()]
+    return dual_complex_is_valid(tops, n, facet_cells=facets)
+
+
 def _betti2(st):
     return [int(b) for b in cob.ChainComplex.fromSpacetime(st).bettiNumbers()][2]
 
@@ -195,7 +331,12 @@ class RegisterL2:
             avail = {tuple(sorted(int(v) for v in c))
                      for c in self.es.interiorTopCells()}
             if cs in avail and self.es.removeInteriorCell(list(cs)):
+                ok, _why = register_dual_valid(self.es)
+                if not ok:                  # accept moves only if the DUAL stays
+                    self.es.restoreLastRemoval()            # a valid complex
+                    continue
                 self.extra_opened.append(cs)
+        self.dual_valid, self.dual_reason = register_dual_valid(self.es)
 
         self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
         harmonics = cob.HodgeLaplacian(self.st).harmonics(2)
@@ -242,6 +383,11 @@ class RegisterL2:
             if not self.es.attachInteriorVertex(fan):
                 continue
             if not self.es.removeInteriorCell(list(cell)):
+                self.es.detachLastInteriorVertex()
+                continue
+            ok, _why = register_dual_valid(self.es)
+            if not ok:                      # accept moves only if the DUAL stays
+                self.es.restoreLastRemoval()                # a valid complex
                 self.es.detachLastInteriorVertex()
                 continue
             grown += 1
@@ -588,6 +734,7 @@ def score_variant(cells, holes, extra, grow=0, grow_seed=0):
     identity_ok = by_name.get("Identity", False)
     s3_all = all(by_name.get(n, False) for n in CANONICAL_SET[:6])
     genuine = bool(identity_ok and s3_all and rank < n_holes
+                   and reg.dual_valid
                    and len(realized) < len(BASE._gates()))
     extends = sorted(g for g in realized if g not in CANONICAL_SET) if genuine else []
     return {
@@ -595,6 +742,7 @@ def score_variant(cells, holes, extra, grow=0, grow_seed=0):
         "b2": _betti2(reg.st), "dim": reg.dim, "rank": rank,
         "n_holes": n_holes, "n_extra": len(reg.extra_opened),
         "n_grown": reg.grown,
+        "dual_valid": reg.dual_valid,
         "realized": realized, "n_realized": len(realized),
         "identity": identity_ok, "s3_all": s3_all,
         "saturated": bool(rank >= n_holes), "genuine": genuine, "extends": extends,
@@ -628,7 +776,6 @@ def surgery_search(retries, jobs, base_seed=12345, kmax=3, max_add=20,
                    on_progress=None):
     """Score *retries* randomized surgery-grown 3-topologies in parallel and
     aggregate -- the degree-2 twin of the 2d search."""
-    from collections import Counter
     tasks = [(i, base_seed, kmax, max_add) for i in range(retries)]
     results = [r for r in BASE._parallel_map(_retry_worker, tasks, jobs,
                                              on_progress=on_progress) if r]
@@ -642,6 +789,7 @@ def surgery_search(retries, jobs, base_seed=12345, kmax=3, max_add=20,
         "retries": retries, "scored": len(results),
         "n_genuine": len(genuine), "n_saturated": len(saturated),
         "n_invalid": len(invalid),
+        "n_dual_invalid": sum(1 for r in results if not r["dual_valid"]),
         "seeds": sorted(Counter(r["seed"] for r in results).items()),
         "max_b2": max((r["b2"] for r in results), default=0),
         "max_nV": max((r["nV"] for r in results), default=0),
@@ -677,6 +825,8 @@ def _emergence_and_anchor(reg, check):
     check("ker L_2 (the register) emerges 0->2 under surgery",
           [t["kerL2"] for t in trace] == [0, 0, 1, 2])
     check("carried register V is 2-dimensional", reg.dim == 2)
+    check("the dual complex is a valid cell complex (the primal is a "
+          "combinatorial manifold with boundary)", reg.dual_valid)
 
     cp_b = _CP_IN
     cp_a = np.asarray(BASE._gates()[1][1])[1:4, 1:4] @ _CP_IN  # psi_A = SWAP|psi_B>
@@ -815,10 +965,16 @@ def _print_search(search, check):
         print("        => NO genuine register carries any gate beyond the "
               "criterion set: the conservation law is dimension-free as well as "
               "topology-free.")
+    print(f"      dual-complex validity: every accepted move is gated on the "
+          f"dual staying a valid cell complex (combinatorial manifold with "
+          f"boundary); draws whose final state violates it: "
+          f"{search['n_dual_invalid']}")
     check("no genuine register carries a gate beyond the criterion set",
           not search["grows"])
     check("every genuine register realizes exactly the criterion set",
           all(n == len(CANONICAL_SET) for n, _c in search["genuine_sizes"]))
+    check("every scored draw keeps a valid dual complex",
+          search["n_dual_invalid"] == 0)
 
 
 def main():
