@@ -662,6 +662,14 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
                     "(SURGERY mode only; 0 otherwise). Each is a topology-changing "
                     "move that can shift b_k of the witness — the emergent-topology "
                     "trace (read the grown b_k off the witness with ChainComplex).")
+      .def_readonly("regge_action", &RealizabilityOracle::Verdict::reggeAction,
+                    "The realized geometry's dual Lorentzian Regge action magnitude "
+                    "|S_Regge(W*)| (modulus of ReggeSolver.dualReggeAction on the "
+                    "witness's circumcentric dual) — the gravitational cost the "
+                    "mediated objective F_beta = r_U + beta*|S| trades against the "
+                    "residual. Reported at every beta (incl. the beta=0 base layer, "
+                    "so the beta-sweep can compare fillings). 0 if no hinges; "
+                    "non-finite (and logged) if the realized geometry is degenerate.")
       .def_readonly("state", &RealizabilityOracle::Verdict::state,
                     "The witness state: the realized unit Laplacian eigenvector on "
                     "W_AB (length = the bulk's vertex count); its first dA*dB "
@@ -684,6 +692,7 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
            py::arg("max_cones") = 4, py::arg("seed") = 0,
            py::arg("growth_mode") = RealizabilityOracle::GrowthMode::Cone,
            py::arg("connectivity_candidates") = 8, py::arg("harmonic") = false,
+           py::arg("beta") = 0.0, py::arg("max_vertices") = 16,
            "Decide whether the dA x dB operator U (flat row-major) is realizable "
            "as a bulk cobordism: bend it to vec(U), fill the pinned-boundary "
            "interior to drive the §4b residual to zero (multi-restart "
@@ -693,13 +702,19 @@ decide() realizes the held bulk in place and returns it as the witness.)doc");
            "growth; growth_mode=FREE_CONNECTIVITY searches connectivity_candidates "
            "interior connectivities per growth step and keeps the best by residual "
            "(the new vertex's incidence is a free variable; topology is emergent). "
-           "Realizes the held bulk in place. Raises if U.size() != dA*dB, a "
+           "beta>0 activates the MEDIATED objective F_beta = r_U + beta*|S_Regge(W*)|: "
+           "cone+surgery candidates are ranked by the residual plus beta times the "
+           "dual Regge action magnitude, so the search prefers gravitationally "
+           "cheaper fillings (beta=0 reproduces the base layer bit-for-bit; |S| is "
+           "not even computed). max_vertices is the |W| volume bound on additive "
+           "growth. Realizes the held bulk in place. Raises if U.size() != dA*dB, a "
            "dimension is non-positive, or the bulk has fewer vertices than dA*dB.")
       .def("decideHarmonic", &RealizabilityOracle::decideHarmonic,
            py::arg("target"), py::arg("epsilon") = 1e-10, py::arg("restarts") = 64,
            py::arg("max_cones") = 4, py::arg("seed") = 0,
            py::arg("growth_mode") = RealizabilityOracle::GrowthMode::Cone,
            py::arg("connectivity_candidates") = 8, py::arg("harmonic") = false,
+           py::arg("beta") = 0.0, py::arg("max_vertices") = 16,
            "Decide whether a target boundary harmonic k-form (a degree-k Cochain, "
            "k = target.degree(); the k=1 DW setting) is realizable on the held "
            "3-manifold-with-boundary bulk W: pin the boundary surface dW byte-"
