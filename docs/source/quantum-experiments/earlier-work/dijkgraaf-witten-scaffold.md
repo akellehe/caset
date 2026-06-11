@@ -1,8 +1,12 @@
 # The Dijkgraaf–Witten scaffold: the quantized shadow of the spectral Z
 
-The $\mathbb{Z}_2$ Dijkgraaf–Witten state sum was the topological layer the
+The $\mathbb{Z}_2$ Dijkgraaf–Witten state sum
+{cite}`S-DijkgraafWitten1990Topological` — in its triangulation/state-sum form
+{cite}`S-Wakui1992DWInvariant`, rigorously quantized as a functorial TQFT in
+{cite}`S-FreedQuinn1993FiniteGauge` — was the topological layer the
 State–Operation–Cobordism programme was built on: it certified that the bulk
-$Z$ is a genuine cobordism functor, carried the sign invariant, calibrated the
+$Z$ is a genuine cobordism functor {cite}`S-Atiyah1988TQFT`, carried the sign
+invariant, calibrated the
 spectral reading against an independent metric-free oracle, and supplied the
 first (pinned) realizable-gate image. With H3 now validated on the spectral
 data alone — the value equation
@@ -30,7 +34,9 @@ Dijkgraaf–Witten state sum $Z(W)$ is a well-defined cobordism functor
   for harmonic-1-form boundary states $\psi\in\ker L_1(T^2)$; residual
   $6.28\times10^{-16}$.
 - **T2 — triangulation independence (make-or-break).** $Z(S^2\times S^1)$ drifts by
-  $0.00$ over 18 interior Pachner moves (including $1\!\to\!4$ moves that change
+  $0.00$ over 18 interior Pachner moves
+  {cite}`S-Pachner1987Bistellar, S-Pachner1991Shellings` (including $1\!\to\!4$
+  moves that change
   $\lvert V\rvert$), for both cocycle classes — $Z$ is invariant to machine
   precision with $\partial W$ fixed.
 - **T5 — composition / functoriality.** $\texttt{map}(\texttt{glue}(W_1,W_2))=
@@ -106,10 +112,13 @@ representation of a $GL(2,\mathbb{Z}_2)=SL(2,\mathbb{Z}_2)$ automorphism of
 $H^1(T^2;\mathbb{Z}_2)$, fixing the trivial class (index 0) and permuting the three
 non-trivial classes $\{[a],[b],[a{+}b]\}=\{1,2,3\}$. Two twisted cylinders generate
 the group (`realizable_image_sweep.py`): the coordinate **swap** $(1\,2)$ on the
-9-vertex product torus (its mod-2 reduction is the modular $S$) and the order-3
+9-vertex product torus (its mod-2 reduction is the modular $S$ of the torus
+state space {cite}`S-FreedQuinn1993FiniteGauge, S-DVVV1989Orbifold`) and the order-3
 **multiplier** $(1\,2\,3)$ on the 7-vertex Möbius torus. Every permutation of the
 three non-zero vectors of $(\mathbb{Z}_2)^2$ is automatically $GF(2)$-linear, so the
-pinned realizable image is the *full* $S_3$.
+pinned realizable image is the *full* $S_3$ — the finite mapping-class image
+the topological-quantum-computation literature leads one to expect of an
+abelian theory {cite}`S-Freedman2003TQC, S-NaiduRowell2011PropertyF`.
 
 The content of $S_3$ is **holonomy-class permutation without superposition** — and
 that is *not* computational separability. Several computational **entanglers** are
@@ -302,3 +311,12 @@ Raw tables and figures are written to `/tmp/cobordism/` and are **not
 committed**; the figures above are uploaded to the
 [`issue-attachments`](https://github.com/akellehe/tessera/releases/tag/issue-attachments)
 release and embedded by URL. The 10-CPU cap is honored (thread env set at launch).
+
+## References
+
+```{bibliography}
+:filter: docname in docnames
+:keyprefix: S-
+:labelprefix: S
+:style: unsrt
+```

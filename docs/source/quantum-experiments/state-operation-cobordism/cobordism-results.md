@@ -20,7 +20,11 @@
 
 A quantum operation $U:\mathcal H_B\to\mathcal H_A$ between two states is read as a
 **cobordism** whose boundary is the two states and whose TQFT value is their
-transition amplitude. The manifold is the operation; the amplitude is the number
+transition amplitude — the functorial reading of field theory
+{cite}`R-Atiyah1988TQFT, R-Segal2004Definition`, with states prepared by bounding
+geometries and amplitudes assigned to general boundaries
+{cite}`R-HartleHawking1983WaveFunction, R-Oeckl2003GeneralBoundary`. The manifold
+is the operation; the amplitude is the number
 it computes. Concretely (spec §1):
 
 - **H1.** $W_{AB}=\mathrm{geo}(U)$ is an $n$-cobordism.
@@ -30,8 +34,9 @@ it computes. Concretely (spec §1):
 
 **The falsifiable core, read spectrally.** The correspondence is *supported*
 iff (i) the trivial cobordism reproduces the inner product, (ii) the value is
-invariant under interior re-triangulation, and (iii) an obstructed class is
-genuinely distinguished — and *refuted* if any fails. All three hold on the
+invariant under interior re-triangulation (the Pachner-move test
+{cite}`R-Pachner1987Bistellar, R-Pachner1991Shellings`), and (iii) an obstructed
+class is genuinely distinguished — and *refuted* if any fails. All three hold on the
 spectral data (`spectral_gate_realizability.py --h3`): (i) the identity's
 spectral value equals $\langle\psi_A|\psi_B\rangle$ on every carried pair
 (worst $4.5\times10^{-16}$), and it realizes *only* once surgery has grown the
@@ -41,7 +46,8 @@ $9.7\times10^{-16}$), and a generic re-grown bulk deviates by precisely its
 register Gram defect, $a^\dagger(G-I)b$, matched to $\sim10^{-15}$; (iii) a
 leaked class has **no value at all** — every floored gate's post-state leaves
 the carried register ($\lvert\Sigma\rvert=0.21$–$2.60$), the value-level
-obstruction certificate. (The original Dijkgraaf–Witten formulation of this
+obstruction certificate. (The original Dijkgraaf–Witten
+{cite}`R-DijkgraafWitten1990Topological` formulation of this
 core — T1/T2 on the state sum and the T3 sign invariant — is recorded in
 [the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md).) The sections
 below place the rest of the evidence under the hypothesis it bears on.
@@ -98,8 +104,12 @@ representative becomes null," residual $3.36\times10^{-15}$.)
 
 ### rank $=$ Schmidt rank $=$ connectivity
 
-The engine of H1 is map–state duality (Choi–Jamiołkowski "bending"):
-$\operatorname{rank}(U)$ equals the Schmidt rank of $\operatorname{vec}(U)$, which
+The engine of H1 is map–state duality (Choi–Jamiołkowski "bending"
+{cite}`R-Choi1975CompletelyPositive, R-Jamiolkowski1972LinearTransformations`, the
+wire-bending of categorical quantum mechanics
+{cite}`R-AbramskyCoecke2004Categorical`):
+$\operatorname{rank}(U)$ equals the Schmidt rank of $\operatorname{vec}(U)$
+(the operator-Schmidt rank {cite}`R-Nielsen2003DynamicsResource`), which
 equals the connectivity of $W_{AB}$. A rank-1 $U$ factors through the unit object,
 so its cobordism is **disconnected** (a separable bent state); a full-rank $U$
 gives a **connected** cobordism (an entangled bent state). The realized witnesses
@@ -140,7 +150,9 @@ $\mathrm{geo}(\psi_B)$.
 The value equation is validated on the staged-synthesis register itself —
 no DW input anywhere (`spectral_gate_realizability.py --h3`). The spectral
 value $Z_{\text{spec}}(W;\psi_A,U\psi_B)$ is the Hodge pairing of the
-carried harmonic representatives on the surgery-grown bulk (the register
+carried harmonic representatives — harmonic cochains in the sense of
+discrete Hodge theory {cite}`R-Eckmann1945Harmonische, R-Lim2020HodgeLaplacians`
+— on the surgery-grown bulk (the register
 bulk carries the unit cochain metric, so the pairing is the plain Hermitian
 contraction), with **one** global scale fixed by the T1 anchor
 $Z_{\text{spec}}(\psi_B,\psi_B)=\langle\psi_B|\psi_B\rangle$; after that,
@@ -332,6 +344,54 @@ operation-side echo of the $b_1$-hole result in
 [the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md): surgery
 enlarges the realizable *state* space, not the realizable *gate* set.
 
+## Relation to the literature
+
+The correspondence itself is the functorial reading of field theory
+{cite}`R-Atiyah1988TQFT, R-Segal2004Definition` instantiated on discrete data;
+what this report tests is whether tessera's machinery genuinely realizes it.
+The gate-set question — *which unitaries does a topological theory realize?*
+— is the founding question of topological quantum computation
+{cite}`R-Freedman2003TQC, R-FreedmanKitaevWang2002Simulation, R-FreedmanLarsenWang2002Universal`, where the known answer-shape for abelian
+theories is a **finite** braiding/mapping-class image (the Property-F
+circle {cite}`R-NaiduRowell2011PropertyF`): the pinned $S_3$ image recorded in
+[the DW scaffold](../earlier-work/dijkgraaf-witten-scaffold.md) is exactly
+that expectation. The move that enlarged it — topology change as the
+computational operation itself — has established cousins in lattice surgery
+{cite}`R-Horsman2012LatticeSurgery` and in twist defects and genons enlarging
+the power of abelian phases
+{cite}`R-Bombin2010Twist, R-BarkeshliJianQi2013TwistDefects`, formulated there
+in stabilizer-code rather than spectral language.
+
+The spectral value reading has a precise neighborhood without, to our
+knowledge, a direct precedent. Laplacian data enter TQFT classically as
+*determinant prefactors*: abelian BF/Chern–Simons partition functions equal
+Ray–Singer analytic torsion {cite}`R-RaySinger1971RTorsion, R-Schwarz1978Torsion, R-Witten1989Jones`, reproduced on triangulations by simplicial Hodge theory
+{cite}`R-Adams1996RTorsion, R-Adams1997DoubledCS`. Harmonic zero modes serve as
+the abelian Chern–Simons state space in canonical quantization
+{cite}`R-BosNair1989Blocks`; cellular BF theory builds boundary state spaces
+from the cohomology of a cellular cobordism
+{cite}`R-CattaneoMnevReshetikhin2020Cellular`; and projections onto
+$\ker L_k$ with overlaps against harmonic representatives are the
+operational core of quantum topological-data analysis
+{cite}`R-Lloyd2016TopologicalData`. What this report adds to that neighborhood
+is the amplitude itself read as a T1-anchored Hodge pairing of carried
+harmonic representatives on a *synthesized* triangulated cobordism, validated
+against the operator amplitude at machine precision.
+
+The realizability methodology likewise has strong cousins: which boundary
+*operators* admit an interior geometry, with non-existence certified by
+obstructions rather than enumeration, is classical for circular planar
+resistor networks {cite}`R-CurtisIngermanMorrow1998Circular`; existence-as-
+optimization with rigorous non-existence certificates is the shape of the
+quantum marginal hierarchy {cite}`R-Yu2021MarginalHierarchy`; *which boundary
+data admit a bulk geometry* is the holographic entropy cone
+{cite}`R-Bao2015EntropyCone`; and least-squares formulations of inverse
+spectral problems are canonical {cite}`R-ChuGolub2005InverseEigenvalue`. The
+instantiation here — an eigenvector-residual floor on synthesized simplicial
+bulks, cross-checked against independent global minima, as the
+non-realizability certificate — is the report's own combination of those
+ingredients.
+
 ## Figures
 
 A per-output force-directed render of the simplicial complexes the experiments
@@ -410,3 +470,12 @@ Parameter sweeps, raw tables, and figures are written to `/tmp/cobordism/` and a
 artifacts; the figures above are uploaded to the
 [`issue-attachments`](https://github.com/akellehe/tessera/releases/tag/issue-attachments)
 release and embedded by URL. The 10-CPU cap is honored (thread env set at launch).
+
+## References
+
+```{bibliography}
+:filter: docname in docnames
+:keyprefix: R-
+:labelprefix: R
+:style: unsrt
+```

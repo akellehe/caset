@@ -37,7 +37,7 @@ analogue is the holonomy of the Levi-Civita connection, which in 2D
 reduces to $W = \cos(\sum_h \varepsilon_h)$ with $\varepsilon_h$ the
 deficit angle at each enclosed hinge, and in higher $d$ obeys
 $W = \frac{(d-2) + 2\cos\varepsilon}{d}$ for an elementary hinge loop
-in U(1) approximation {cite}`Regge1961,Williams1992`. tessera computes
+in U(1) approximation {cite}`B-Regge1961, B-Williams1992`. tessera computes
 exactly this in `DEFICIT_ANGLE` mode; the other two modes give
 complementary topological and causal probes of the same loop.
 
@@ -359,12 +359,21 @@ holonomy up to choice of normal frame. Higher-rank Wilson loops
 
 ## Reading list
 
-* {cite}`Regge1961` — Regge's discrete general relativity and deficit
+* {cite}`B-Regge1961` — Regge's discrete general relativity and deficit
   angles.
-* {cite}`Williams1992` — Wilson loops on Regge triangulations.
-* {cite}`AmbjornJurkiewiczLoll2005` — causal dynamical triangulations,
+* {cite}`B-Williams1992` — Wilson loops on Regge triangulations.
+* {cite}`B-AmbjornJurkiewiczLoll2005` — causal dynamical triangulations,
   causal foliation, time-orientation structure.
 
 See also `docs/source/theory.md` for the broader Regge / CDT
 background and `docs/source/simplices.md` for the mesh primitives that
 underlie `LoopPath`.
+
+## References
+
+```{bibliography}
+:filter: docname in docnames
+:keyprefix: B-
+:labelprefix: B
+:style: unsrt
+```

@@ -343,5 +343,7 @@ The scan scripts are `examples/quantum/lightcone_vs_majorization.py`
 and its N-scaling and cone-overflow companions in the same directory.
 
 ```{bibliography}
+:filter: docname in docnames
+:labelprefix: A
 :style: unsrt
 ```
