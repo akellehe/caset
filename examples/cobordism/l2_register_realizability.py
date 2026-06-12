@@ -237,27 +237,23 @@ class RegisterL2:
                 self.extra_opened.append(cs)
         self.dual_valid, self.dual_reason = register_dual_valid(self.es)
 
+        # The register core reads off the C++ layer (#286), exactly as the 2d
+        # Register: harmonic amplitude matrix, sphere-period rows with the
+        # boundary operator's signs, and the deterministic end sign covector
+        # from the surface's fundamental chain.
         self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
-        harmonics = cob.HodgeLaplacian(self.st).harmonics(2)
-        self.dim = len(harmonics)
-        if self.dim:
-            self.H_full = np.array(
-                [[complex(h.amplitudeFor(list(c))) for c in self.cells]
-                 for h in harmonics])
-        else:
-            self.H_full = np.zeros((0, len(self.cells)), dtype=complex)
+        self.H_full = np.asarray(
+            cob.HodgeLaplacian(self.st).harmonicMatrix(2),
+            dtype=complex).reshape(-1, len(self.cells))
+        self.dim = int(self.H_full.shape[0])
         self._reg_col = [self.cells.index(f) for f in self.reg_facets]
-        h_reg = self.H_full[:, self._reg_col]
-        self.P = np.array(
-            [[self._period(h_reg[r], hole) for hole in self.class_holes]
-             for r in range(self.dim)]).reshape(self.dim, len(self.class_holes))
-        if self.dim:
-            n_raw = np.linalg.svd(self.P)[2][-1].conj()
-            self.n = (n_raw / n_raw[np.argmax(np.abs(n_raw))]).real
-        else:
-            self.n = np.ones(len(self.class_holes))
-        self.sign = np.sign(self.n)
-        self.sign[self.sign == 0] = 1.0
+        self.P = np.asarray(
+            self.es.cyclePeriods([list(h) for h in self.class_holes]),
+            dtype=complex).reshape(self.dim, len(self.class_holes))
+        self.n = np.asarray(cob.ChainComplex.endSignCovector(
+            [[int(v) for v in c] for c in self.es.topCells()],
+            [list(h) for h in self.class_holes]), dtype=float)
+        self.sign = self.n.copy()
 
     def _stellar_grow(self, n, seed):
         """ADD up to *n* interior vertices by boundary-fixed stellar subdivision,
@@ -300,11 +296,6 @@ class RegisterL2:
                 e.setPhase(0.0)
         return grown
 
-    def _period(self, vec, hole):
-        """The induced (raw) oriented 2-sphere period of a hole: the signed sum of
-        the 2-form over the hole's four boundary triangles."""
-        return sum(s * vec[self.fidx[f]] for f, s in _tet_facets(hole))
-
     @property
     def rank(self):
         """The rank of the carried period space over the holonomy holes -- same
@@ -327,9 +318,11 @@ class RegisterL2:
     def spectral_residual(self, raw_periods):
         """The genuine Hodge residual ||(I-psi psi^dag) L_2 psi||^2 of the 2-form
         with the given raw periods -- the continuous spectral realizability score.
-        -> 0 iff the periods lie in the carried register V."""
-        psi = self.harmonic_form(raw_periods)
-        return float(self.es.residual([complex(z) for z in psi]))
+        -> 0 iff the periods lie in the carried register V.
+        One C++ call (the lstsq-project-leak-residual verdict primitive)."""
+        return float(self.es.residualForPeriods(
+            [list(h) for h in self.class_holes],
+            [complex(z) for z in np.asarray(raw_periods, dtype=complex)]))
 
 
 # --------------------------------------------------------------------------- #

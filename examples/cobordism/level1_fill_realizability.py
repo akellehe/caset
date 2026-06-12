@@ -116,18 +116,15 @@ _GAMMA = {0: 3, 1: 7, 2: 8, 3: 4, 4: 0, 5: 2,
           6: 11, 7: 9, 8: 5, 9: 1, 10: 6, 11: 10}
 _IDENT = {v: v for v in range(_N_REG)}
 
-_REG_SIGN_CACHE = []
-
-
-def _reg_sign():
-    """The level-0 register's induced-orientation sign pattern (``reg.sign``).
-    It is a property of the end SURFACE, not of the fill: each end's three
-    circles bound that end's fundamental 2-chain, so every fill's harmonics
-    satisfy the same signed charge constraint at each end. Deterministic --
-    no per-fill null-vector normalization."""
-    if not _REG_SIGN_CACHE:
-        _REG_SIGN_CACHE.append(BASE.Register().sign.copy())
-    return _REG_SIGN_CACHE[0]
+def _end_sign(faces, circles):
+    """An end's induced-orientation sign pattern (the level-0 ``reg.sign``
+    analog). It is a property of the end SURFACE, not of the fill: each end's
+    three circles bound that end's fundamental 2-chain, so every fill's
+    harmonics satisfy the same signed charge constraint at each end.
+    Deterministic -- ``ChainComplex.endSignCovector`` reads it straight off
+    the fundamental chain, no per-fill null-vector normalization."""
+    return np.asarray(cob.ChainComplex.endSignCovector(
+        [list(f) for f in faces], [list(t) for t in circles]), dtype=float)
 
 
 def _compose(g, h):
@@ -193,6 +190,12 @@ class Level1Fill:
         self.reg_edges = [e for tri in (self.circles0 + self.circles1)
                           for e in BASE._cedges(tri)]
         self.eidx = {e: i for i, e in enumerate(self.reg_edges)}
+        # Each end's surface faces, for the sign covector: layer 0 carries the
+        # identity labeling, the top layer the shifted one (a twist permutes
+        # the face set among itself, so the set is labeling-equal either way).
+        self.end_faces0 = [tuple(sorted(f)) for f in faces]
+        self.end_faces1 = [tuple(sorted(v + 12 * self.layers for v in f))
+                           for f in faces]
 
         self.st = L2._bulk(cells)
         self.es = cob.EigenstateSynthesis(self.st, 1)
@@ -219,30 +222,17 @@ class Level1Fill:
         ok, why = self.es.dualComplexValid()
         self.dual_valid, self.dual_reason = bool(ok), str(why)
         self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
-        harmonics = cob.HodgeLaplacian(self.st).harmonics(1)
-        self.dim = len(harmonics)
-        if self.dim:
-            self.H_full = np.array(
-                [[complex(h.amplitudeFor(list(c))) for c in self.cells]
-                 for h in harmonics])
-        else:
-            self.H_full = np.zeros((0, len(self.cells)), dtype=complex)
+        self.H_full = np.asarray(
+            cob.HodgeLaplacian(self.st).harmonicMatrix(1),
+            dtype=complex).reshape(-1, len(self.cells))
+        self.dim = int(self.H_full.shape[0])
         self._reg_col = [self.cells.index(e) for e in self.reg_edges]
-        h_reg = self.H_full[:, self._reg_col] if self.dim else self.H_full
-        rows = []
-        for r in range(self.dim):
-            p0 = [self._period(h_reg[r], tri) for tri in self.circles0]
-            p1 = [self._period(h_reg[r], tri) for tri in self.circles1]
-            rows.append(p0 + p1)
-        self.P6 = np.array(rows).reshape(self.dim, 6)
-        self.sign0 = _reg_sign()
-        self.sign1 = _reg_sign()
+        self.P6 = np.asarray(
+            self.es.cyclePeriods([list(t) for t in (self.circles0 + self.circles1)]),
+            dtype=complex).reshape(self.dim, 6)
+        self.sign0 = _end_sign(self.end_faces0, self.circles0)
+        self.sign1 = _end_sign(self.end_faces1, self.circles1)
         return self
-
-    def _period(self, vec, tri):
-        a, b, c = sorted(tri)
-        return (vec[self.eidx[(a, b)]] + vec[self.eidx[(b, c)]]
-                - vec[self.eidx[(a, c)]])
 
     def _stellar_grow(self, n, seed):
         """ADD up to *n* interior vertices by the gated composed stellar move
@@ -304,9 +294,11 @@ class Level1Fill:
 
     def spectral_residual(self, pair6):
         """The genuine Hodge residual of the 1-form with the given six
-        periods on the fill -> 0 iff the pair (p_0, p_1) is carried by R."""
-        psi = self.harmonic_form(np.asarray(pair6, dtype=complex))
-        return float(self.es.residual([complex(z) for z in psi]))
+        periods on the fill -> 0 iff the pair (p_0, p_1) is carried by R.
+        One C++ call (the lstsq-project-leak-residual verdict primitive)."""
+        return float(self.es.residualForPeriods(
+            [list(t) for t in (self.circles0 + self.circles1)],
+            [complex(z) for z in np.asarray(pair6, dtype=complex)]))
 
     def emergent_gate(self):
         """The V-block u' with R = graph(u'), in the flat-orthonormal basis

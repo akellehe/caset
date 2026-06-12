@@ -275,14 +275,6 @@ _ICO = [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 5), (0, 5, 1),
 # Three vertex-disjoint faces = the three holonomy-class holes [a], [b], [a+b].
 _CLASS_HOLES = [tuple(sorted(h)) for h in [(0, 1, 2), (3, 7, 8), (4, 9, 5)]]
 _REG_EDGES = [e for tri in _CLASS_HOLES for e in _cedges(tri)]   # the 9 register edges
-_EIDX = {e: i for i, e in enumerate(_REG_EDGES)}
-
-
-def _raw_period(vec, tri):
-    """The induced (raw) oriented loop sum of a 1-form (given on the register edges) on
-    circle `tri`'s edges."""
-    a, b, c = sorted(tri)
-    return vec[_EIDX[(a, b)]] + vec[_EIDX[(b, c)]] - vec[_EIDX[(a, c)]]
 
 
 def grow_register(faces=_ICO, class_holes=_CLASS_HOLES):
@@ -334,19 +326,25 @@ class Register:
                 self.es.removeInteriorCell(list(cs))
                 self.extra_opened.append(cs)
 
+        # The register core reads off the C++ layer (#286): the harmonic
+        # amplitude matrix in the bulk's cell order, the circle-period rows
+        # with the boundary operator's induced-orientation signs, and the end
+        # sign covector from the surface's fundamental chain — deterministic,
+        # where the old per-register SVD null-vector normalization was
+        # sign-unstable.
         self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
-        harmonics = cob.HodgeLaplacian(self.st).harmonics(1)
-        self.dim = len(harmonics)
-        self.H_full = np.array([[complex(h.amplitudeFor(list(c))) for c in self.cells]
-                                for h in harmonics])
+        self.H_full = np.asarray(
+            cob.HodgeLaplacian(self.st).harmonicMatrix(1),
+            dtype=complex).reshape(-1, len(self.cells))
+        self.dim = int(self.H_full.shape[0])
         self._reg_col = [self.cells.index(e) for e in self.reg_edges]
-        h_reg = self.H_full[:, self._reg_col]
-        self.P = np.array([[self._period(h_reg[r], tri) for tri in self.class_holes]
-                           for r in range(self.dim)])
-        n_raw = np.linalg.svd(self.P)[2][-1].conj()
-        self.n = (n_raw / n_raw[np.argmax(np.abs(n_raw))]).real
-        self.sign = np.sign(self.n)
-        self.sign[self.sign == 0] = 1.0
+        self.P = np.asarray(
+            self.es.cyclePeriods([list(h) for h in self.class_holes]),
+            dtype=complex).reshape(self.dim, len(self.class_holes))
+        self.n = np.asarray(cob.ChainComplex.endSignCovector(
+            [[int(v) for v in c] for c in self.es.topCells()],
+            [list(h) for h in self.class_holes]), dtype=float)
+        self.sign = self.n.copy()
 
     def _stellar_grow(self, n, seed):
         """ADD up to *n* interior vertices by boundary-fixed stellar subdivision,
@@ -385,12 +383,6 @@ class Register:
                 e.setPhase(0.0)
         return grown
 
-    def _period(self, vec, tri):
-        """The induced (raw) oriented loop sum of a register-edge 1-form on `tri`."""
-        a, b, c = sorted(tri)
-        return (vec[self.eidx[(a, b)]] + vec[self.eidx[(b, c)]]
-                - vec[self.eidx[(a, c)]])
-
     @property
     def rank(self):
         """The rank of the carried period space over the holonomy holes. rank < #holes
@@ -417,9 +409,11 @@ class Register:
     def spectral_residual(self, raw_periods):
         """The genuine Hodge residual ||(I-psi psi^dag) L_1 psi||^2 of the 1-form with
         the given raw periods, on the surgery-grown bulk -- the continuous spectral
-        realizability score. -> 0 iff the periods lie in the carried register V."""
-        psi = self.harmonic_form(raw_periods)
-        return float(self.es.residual([complex(z) for z in psi]))
+        realizability score. -> 0 iff the periods lie in the carried register V.
+        One C++ call (the lstsq-project-leak-residual verdict primitive)."""
+        return float(self.es.residualForPeriods(
+            [list(h) for h in self.class_holes],
+            [complex(z) for z in np.asarray(raw_periods, dtype=complex)]))
 
 
 def register_emergence():
