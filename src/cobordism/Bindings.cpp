@@ -126,6 +126,21 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "cycle (d_d applied to the signed top chain is 0). Sign-normalized so "
            "the first nonzero entry is +1. Raises if the complex is not a closed "
            "connected oriented manifold (dim ker d_d != 1) or dimension < 1.")
+      .def_static(
+          "endSignCovector", &ChainComplex::endSignCovector,
+          py::arg("surface_cells"), py::arg("holes"),
+          "The end sign covector sigma in {+/-1}^len(holes): the induced-"
+          "orientation charge pattern of an end surface, from its fundamental "
+          "chain. surface_cells are the end's top cells, holes the removed "
+          "cells whose boundary cycles carry the periods; the union is "
+          "oriented by sign propagation (component roots = lex-smallest "
+          "cells, +1) and sigma_k is the orientation coefficient of "
+          "holes[k], so every closed form's signed periods obey "
+          "sum_k sigma_k p_k = 0 end by end. Deterministic -- a property of "
+          "the end surface, not of any fill or spectrum -- and equivariant "
+          "under order-preserving relabelings (e.g. a layer shift). Raises "
+          "on mixed-dimension cells, a facet with > 2 cofaces, or a "
+          "non-orientable surface.")
       .def("intersectionForm", &ChainComplex::intersectionForm,
            "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")
@@ -289,6 +304,16 @@ Euclidean spectrum/kernel.)doc")
            "of Cochains spanning ker L_k ~= H_k (the count is b_k). metric selects "
            "volume vs. unit weights for k>=1. Raises for k<0; empty above the top "
            "dimension.")
+      .def("harmonicMatrix", &HodgeLaplacian::harmonicMatrix, py::arg("k") = 0,
+           py::arg("tol") = 1e-9, py::arg("metric") = true,
+           "The harmonic amplitude matrix: the harmonics(k, tol, metric) "
+           "representatives stacked as the ROWS of a flat row-major "
+           "(dim ker L_k) x M complex array (M = |V| at k=0, else |C_k|), "
+           "columns in the canonical cell order (cellSimplices / "
+           "kSimplexVertices). Entry [r*M + c] equals "
+           "harmonics(k)[r].amplitude(c) exactly -- one call instead of one "
+           "amplitudeFor round-trip per cell per harmonic. Raises for k<0; "
+           "empty when the kernel is empty or k is above the top dimension.")
       // ----- Lorentzian (signed-weight) d'Alembertian (#105, spec §5.6) -----
       .def("lorentzianSpectrum", &HodgeLaplacian::lorentzianSpectrum,
            py::arg("k"), py::arg("metric") = true,
@@ -468,6 +493,29 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "complex -- top cells from the surgery state, with the k-cell "
            "universe checked for dangling facets when k = n-1 (the register "
            "layers). Accept topology moves only while this stays true.")
+      // ----- The carried register read-outs (#286) -----
+      .def("cyclePeriods", &EigenstateSynthesis::cyclePeriods, py::arg("holes"),
+           "The period matrix of the current harmonics over the boundary "
+           "cycles of the given (removed) cells: flat row-major "
+           "(dim ker L_k) x len(holes), complex. Entry [r*m + q] sums "
+           "harmonic r over hole q's facets with the boundary operator's "
+           "induced-orientation signs (facet j of the sorted hole drops v_j, "
+           "sign (-1)^j) -- degree-general: circles at k=1, spheres at k=2. "
+           "Harmonics are read fresh from the live complex, rows ascending "
+           "by eigenvalue. Raises if a hole is not a (k+2)-vertex tuple "
+           "whose facets are all current k-cells.")
+      .def("residualForPeriods", &EigenstateSynthesis::residualForPeriods,
+           py::arg("holes"), py::arg("target_periods"),
+           "The verdict primitive in one call: the genuine residual of the "
+           "carried representative of target_periods over the holes' cycles. "
+           "Least-squares-projects the targets onto the carried period rows "
+           "(minimum-norm, as numpy.linalg.lstsq), forms the harmonic "
+           "combination, attaches each hole's uncarried remainder (the "
+           "minimal leak) to the hole's first walk-order facet (the (a,b) "
+           "edge of a circle at k=1, the drop-v0 facet otherwise; boundary "
+           "sign +1), and returns residual(psi): -> 0 iff the targets lie "
+           "in the carried register, floored otherwise. Raises on a "
+           "hole/target length mismatch or a malformed hole.")
       // ----- Surgery: the topology-changing interior remove move (#196) -----
       .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
            "The interior top cells (all-interior vertices, on no dW face) as "

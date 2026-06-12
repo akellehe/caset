@@ -544,6 +544,34 @@ std::vector<Cochain> HodgeLaplacian::harmonics(int k, double tol,
   return spectrum(k, metric).harmonics(tol);
 }
 
+std::vector<cd> HodgeLaplacian::harmonicMatrix(int k, double tol,
+                                               bool metric) const {
+  requireNonNegativeDegree(k);
+  // The same cached eigendecompositions harmonics() reads, emitted column-by-
+  // selected-column so no Cochain objects are materialized.
+  const std::vector<double> *evals = nullptr;
+  const std::vector<cd> *evecs = nullptr;
+  int dim = 0;
+  if (k == 0) {
+    ensureDecomposition();
+    evals = &evals_;
+    evecs = &evecs_;
+    dim = static_cast<int>(order_);
+  } else {
+    const MetricSpectrum &sp = ensureMetricSpectrum(k, metric);
+    evals = &sp.evals;
+    evecs = &sp.evecs;
+    dim = sp.dim;
+  }
+  std::vector<cd> rows;
+  for (int j = 0; j < dim; ++j) {
+    if (std::abs((*evals)[static_cast<std::size_t>(j)]) >= tol) continue;
+    for (int i = 0; i < dim; ++i)
+      rows.push_back((*evecs)[static_cast<std::size_t>(i) * dim + j]);
+  }
+  return rows;
+}
+
 Spectrum HodgeLaplacian::lorentzianSpectrum(int k, bool metric) const {
   requireNonNegativeDegree(k);
   const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);

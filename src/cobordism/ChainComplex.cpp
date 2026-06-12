@@ -30,10 +30,12 @@
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "cobordism/IntegerLinalg.h"
@@ -934,6 +936,101 @@ std::pair<bool, std::string> ChainComplex::dualComplexIsValid(
     }
   }
   return {true, "ok"};
+}
+
+std::vector<int> ChainComplex::endSignCovector(
+    const std::vector<std::vector<std::uint64_t>> &surfaceCells,
+    const std::vector<std::vector<std::uint64_t>> &holes) {
+  using Cell = std::vector<std::uint64_t>;
+  const auto joinIds = [](const Cell &c) {
+    std::string out = "(";
+    for (std::size_t i = 0; i < c.size(); ++i) {
+      if (i) out += ",";
+      out += std::to_string(c[i]);
+    }
+    return out + ")";
+  };
+  if (holes.empty()) return {};
+
+  // The oriented complex is the union surface ∪ holes (the capped end), as
+  // sorted-unique sorted tuples — the lexicographic order makes the component
+  // roots, and with them the whole covector, deterministic.
+  std::set<Cell> uniq;
+  const std::size_t nv = holes.front().size();
+  const auto addCell = [&](const Cell &raw) {
+    if (raw.size() != nv)
+      throw std::runtime_error(
+          "ChainComplex::endSignCovector: cell " + joinIds(raw) + " has " +
+          std::to_string(raw.size()) + " vertices, expected " +
+          std::to_string(nv) + " (one dimension throughout)");
+    Cell c = raw;
+    std::sort(c.begin(), c.end());
+    uniq.insert(std::move(c));
+  };
+  for (const auto &raw : holes) addCell(raw);
+  for (const auto &raw : surfaceCells) addCell(raw);
+  const std::vector<Cell> cells(uniq.begin(), uniq.end());
+
+  // facet -> its cofaces as (cell index, boundary sign of the facet in that
+  // cell): facet j of a sorted cell drops vertex j and carries (-1)^j.
+  std::map<Cell, std::vector<std::pair<std::size_t, int>>> cofaces;
+  for (std::size_t ci = 0; ci < cells.size(); ++ci)
+    for (std::size_t j = 0; j < nv; ++j) {
+      Cell f;
+      f.reserve(nv - 1);
+      for (std::size_t i = 0; i < nv; ++i)
+        if (i != j) f.push_back(cells[ci][i]);
+      cofaces[f].emplace_back(ci, (j % 2 == 0) ? 1 : -1);
+    }
+  for (const auto &[f, at] : cofaces)
+    if (at.size() > 2)
+      throw std::runtime_error(
+          "ChainComplex::endSignCovector: facet " + joinIds(f) + " has " +
+          std::to_string(at.size()) + " cofaces (not a pseudomanifold)");
+
+  // Orient by propagation: across an interior facet the two induced signs must
+  // cancel (eps_b = -eps_a * s_a * s_b); boundary facets (one coface) impose
+  // nothing. Component roots are the lex-smallest unvisited cells, eps = +1.
+  std::vector<int> eps(cells.size(), 0);
+  for (std::size_t root = 0; root < cells.size(); ++root) {
+    if (eps[root] != 0) continue;
+    eps[root] = 1;
+    std::vector<std::size_t> stack{root};
+    while (!stack.empty()) {
+      const std::size_t a = stack.back();
+      stack.pop_back();
+      for (std::size_t j = 0; j < nv; ++j) {
+        Cell f;
+        f.reserve(nv - 1);
+        for (std::size_t i = 0; i < nv; ++i)
+          if (i != j) f.push_back(cells[a][i]);
+        const int sa = (j % 2 == 0) ? 1 : -1;
+        for (const auto &[b, sb] : cofaces.at(f)) {
+          if (b == a) continue;
+          const int want = -eps[a] * sa * sb;
+          if (eps[b] == 0) {
+            eps[b] = want;
+            stack.push_back(b);
+          } else if (eps[b] != want) {
+            throw std::runtime_error(
+                "ChainComplex::endSignCovector: orientation propagation "
+                "contradicts itself at facet " + joinIds(f) +
+                " (the end surface is non-orientable)");
+          }
+        }
+      }
+    }
+  }
+
+  std::vector<int> sigma;
+  sigma.reserve(holes.size());
+  for (const auto &raw : holes) {
+    Cell h = raw;
+    std::sort(h.begin(), h.end());
+    const auto it = std::lower_bound(cells.begin(), cells.end(), h);
+    sigma.push_back(eps[static_cast<std::size_t>(it - cells.begin())]);
+  }
+  return sigma;
 }
 
 }  // namespace tessera::cobordism

@@ -191,6 +191,23 @@ class HodgeLaplacian {
     [[nodiscard]] std::vector<Cochain> harmonics(int k = 0, double tol = 1e-9,
                                                  bool metric = true) const;
 
+    /// The harmonic amplitude matrix: the same representatives as
+    /// `harmonics(k, tol, metric)` — the eigenvectors with
+    /// \f$ |\lambda| < \text{tol} \f$, in ascending-eigenvalue order — stacked
+    /// as the **rows** of a flat row-major \f$ \dim\ker L_k \times M \f$
+    /// complex array (\f$ M = N \f$ at \f$ k = 0 \f$, else \f$ |C_k| \f$),
+    /// columns in the same sorted-vertex / canonical `ChainComplex`
+    /// \f$ k \f$-cell order the `Cochain`s index. One call replaces the
+    /// per-cell `amplitudeFor` round-trips a register layer makes to read its
+    /// harmonics; entry \f$ [\,r\,M + c\,] \f$ equals
+    /// `harmonics(k, tol, metric)[r].amplitude(c)` exactly. Empty when the
+    /// kernel is empty (\f$ b_k = 0 \f$) or \f$ k \f$ is above the top
+    /// dimension. For \f$ k \geq 1 \f$, `metric` selects volume vs. unit
+    /// weights (ignored at \f$ k = 0 \f$).
+    /// @throws std::runtime_error for \f$ k < 0 \f$.
+    [[nodiscard]] std::vector<std::complex<double>> harmonicMatrix(
+        int k = 0, double tol = 1e-9, bool metric = true) const;
+
     /// === Lorentzian (signed-weight) d'Alembertian, \f$ k \geq 1 \f$ (§5.6) ===
     ///
     /// The eigendecomposition of the signed-weight \f$ L_k \f$ (the

@@ -21,6 +21,8 @@
 
 #include "cobordism/EigenstateSynthesis.h"
 
+#include <Eigen/Dense>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -747,6 +749,137 @@ std::pair<bool, std::string> EigenstateSynthesis::dualComplexValid() const {
       tops, dim,
       facetDegree ? cellSimplices()
                   : std::vector<std::vector<std::uint64_t>>{});
+}
+
+EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleRegisterReadout(
+    const std::vector<std::vector<std::uint64_t>> &holes) const {
+  const auto joinIds = [](const std::vector<std::uint64_t> &c) {
+    std::string out = "(";
+    for (std::size_t i = 0; i < c.size(); ++i) {
+      if (i) out += ",";
+      out += std::to_string(c[i]);
+    }
+    return out + ")";
+  };
+
+  RegisterReadout out;
+  const std::size_t n = order_;
+  // Harmonics fresh from the live complex — surgery between calls moves them,
+  // and the operator's own spectral cache is keyed to construction time.
+  out.H = HodgeLaplacian(st_).harmonicMatrix(k_, 1e-9, /*metric=*/true);
+  if (n == 0) {
+    if (!holes.empty())
+      throw std::runtime_error(
+          "EigenstateSynthesis::assembleRegisterReadout: the complex has no "
+          "k-cells to carry periods");
+    return out;
+  }
+  if (out.H.size() % n != 0)
+    throw std::runtime_error(
+        "EigenstateSynthesis::assembleRegisterReadout: the harmonic matrix "
+        "width " + std::to_string(out.H.size()) +
+        " is not a multiple of the captured operator dimension " +
+        std::to_string(n) + " (the complex changed behind the synthesizer)");
+  out.dim = out.H.size() / n;
+
+  std::map<std::vector<std::uint64_t>, std::size_t> col;
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
+
+  const std::size_t m = holes.size();
+  const std::size_t hv = static_cast<std::size_t>(k_) + 2;
+  out.P.assign(out.dim * m, cd(0.0, 0.0));
+  out.leakColumns.reserve(m);
+  for (std::size_t q = 0; q < m; ++q) {
+    std::vector<std::uint64_t> h = holes[q];
+    std::sort(h.begin(), h.end());
+    if (h.size() != hv)
+      throw std::runtime_error(
+          "EigenstateSynthesis::assembleRegisterReadout: hole " + joinIds(h) +
+          " has " + std::to_string(h.size()) + " vertices; a degree-" +
+          std::to_string(k_) + " period needs a removed (k+1)-cell of " +
+          std::to_string(hv));
+    // Facets are visited in the degree's established walk order — the
+    // (a,b),(b,c),(a,c) edge walk of a circle at k = 1 (so the period
+    // accumulates in exactly the register layers' summation order, bit for
+    // bit), the canonical drop-v_j order otherwise. The hole's leak facet is
+    // the first of the walk — the (a,b) edge / the drop-v_0 facet — which
+    // carries boundary sign +1 in both conventions, so adding the leak there
+    // moves that hole's period by exactly the leak.
+    std::vector<std::size_t> walk(hv);
+    for (std::size_t i = 0; i < hv; ++i) walk[i] = i;
+    if (k_ == 1) std::rotate(walk.begin(), walk.end() - 1, walk.end());
+    for (std::size_t w = 0; w < hv; ++w) {
+      const std::size_t j = walk[w];
+      std::vector<std::uint64_t> f;
+      f.reserve(hv - 1);
+      for (std::size_t i = 0; i < hv; ++i)
+        if (i != j) f.push_back(h[i]);
+      const auto it = col.find(f);
+      if (it == col.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::assembleRegisterReadout: facet " +
+            joinIds(f) + " of hole " + joinIds(h) +
+            " is not a k-cell of the complex (not a boundary cycle here)");
+      if (w == 0) out.leakColumns.push_back(it->second);
+      // The induced-orientation boundary sign: facet j of the sorted hole
+      // drops vertex v_j and carries (-1)^j.
+      const double s = (j % 2 == 0) ? 1.0 : -1.0;
+      for (std::size_t r = 0; r < out.dim; ++r)
+        out.P[r * m + q] += s * out.H[r * n + it->second];
+    }
+  }
+  return out;
+}
+
+std::vector<cd> EigenstateSynthesis::cyclePeriods(
+    const std::vector<std::vector<std::uint64_t>> &holes) const {
+  return assembleRegisterReadout(holes).P;
+}
+
+double EigenstateSynthesis::residualForPeriods(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+  if (targetPeriods.size() != holes.size())
+    throw std::runtime_error(
+        "EigenstateSynthesis::residualForPeriods: " +
+        std::to_string(targetPeriods.size()) + " target periods for " +
+        std::to_string(holes.size()) + " holes");
+  const RegisterReadout ro = assembleRegisterReadout(holes);
+  const std::size_t n = order_;
+  const std::size_t m = holes.size();
+  if (n == 0) return 0.0;
+
+  // The minimum-norm least-squares projection onto the carried period rows
+  // (what numpy.linalg.lstsq returns): c = (P^T)^+ target via the SVD.
+  Eigen::VectorXcd t(static_cast<Eigen::Index>(m));
+  for (std::size_t q = 0; q < m; ++q)
+    t[static_cast<Eigen::Index>(q)] = targetPeriods[q];
+  Eigen::VectorXcd c(static_cast<Eigen::Index>(ro.dim));
+  if (ro.dim > 0) {
+    Eigen::MatrixXcd Pt(static_cast<Eigen::Index>(m),
+                        static_cast<Eigen::Index>(ro.dim));
+    for (std::size_t q = 0; q < m; ++q)
+      for (std::size_t r = 0; r < ro.dim; ++r)
+        Pt(static_cast<Eigen::Index>(q), static_cast<Eigen::Index>(r)) =
+            ro.P[r * m + q];
+    c = Pt.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(t);
+  }
+
+  // The carried representative plus the minimal leak: psi = sum_r c_r h_r,
+  // then each hole's uncarried remainder lands on its leak column, so the
+  // cochain's periods are exactly the targets.
+  std::vector<cd> psi(n, cd(0.0, 0.0));
+  for (std::size_t r = 0; r < ro.dim; ++r) {
+    const cd cr = c[static_cast<Eigen::Index>(r)];
+    for (std::size_t i = 0; i < n; ++i) psi[i] += cr * ro.H[r * n + i];
+  }
+  for (std::size_t q = 0; q < m; ++q) {
+    cd carried(0.0, 0.0);
+    for (std::size_t r = 0; r < ro.dim; ++r)
+      carried += c[static_cast<Eigen::Index>(r)] * ro.P[r * m + q];
+    psi[ro.leakColumns[q]] += targetPeriods[q] - carried;
+  }
+  return residual(psi);
 }
 
 }  // namespace tessera::cobordism
