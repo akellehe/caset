@@ -65,8 +65,7 @@ import json
 import os
 import random
 import sys
-from collections import Counter, defaultdict
-from itertools import combinations
+from collections import Counter
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -156,11 +155,10 @@ def _bulk(cells, weight=1.0, phase=0.0):
 # Dual-complex validity. The mediated objective scores the DUAL complex
 # (ReggeSolver::dualReggeAction on W*), and the Poincare/Lefschetz dual block
 # decomposition is a valid cell complex iff the primal is a combinatorial
-# manifold(-with-boundary). For n <= 3 the classification of surfaces makes
-# this fully decidable: facet coface counts in {1,2}, no dangling facets,
-# ridge links single paths/cycles, and (n=3) vertex links spheres or disks.
-# Topology moves are accepted only if this condition survives -- validity in
-# the dual space, not merely scoreability on the primal lattice. (Metric
+# manifold(-with-boundary). The check itself lives in C++
+# (ChainComplex::dualComplexIsValid, EigenstateSynthesis::dualComplexValid)
+# so every layer -- the registers here, and the C++ growth/surgery paths --
+# can gate moves on it; these are thin delegating wrappers. (Metric
 # dual-validity -- non-degenerate circumcentric volumes -- is the mediation
 # layer's separate concern; on unit-metric register bulks circumcenters are
 # barycentric and fine automatically.)
@@ -170,120 +168,21 @@ def dual_complex_is_valid(top_cells, n, facet_cells=None):
     cell decomposition -- equivalently, is the primal a combinatorial manifold
     with boundary? *facet_cells*, when given (the complex's full (n-1)-cell
     list), also catches dangling facets: (n-1)-cells with zero cofaces that
-    the Hodge Laplacian still sees even though no top cell carries them."""
-    cells = [tuple(sorted(int(v) for v in c)) for c in top_cells]
-    if not cells:
-        return False, "no top cells"
-    if any(len(c) != n + 1 for c in cells):
-        return False, "mixed top-cell dimension"
-    if len(set(cells)) != len(cells):
-        return False, "duplicate top cell"
-
-    cofaces = Counter()
-    for c in cells:
-        for f in combinations(c, n):
-            cofaces[f] += 1
-    for f, k in cofaces.items():
-        if k > 2:
-            return False, f"facet {f} has {k} cofaces"
-    if facet_cells is not None:
-        for f in facet_cells:
-            fs = tuple(sorted(int(v) for v in f))
-            if cofaces.get(fs, 0) == 0:
-                return False, f"dangling facet {fs} (0 cofaces)"
-
-    # ridge links: the top cells around each (n-2)-simplex, glued along the
-    # facets that contain it, must form ONE path or cycle (no pinches).
-    at_ridge = defaultdict(list)
-    for ci, c in enumerate(cells):
-        for r in combinations(c, n - 1):
-            at_ridge[r].append(ci)
-    for r, cis in at_ridge.items():
-        if len(cis) == 1:
-            continue
-        by_facet = defaultdict(list)
-        for ci in cis:
-            for v in cells[ci]:
-                if v not in r:
-                    by_facet[tuple(sorted(r + (v,)))].append(ci)
-        adj = defaultdict(set)
-        for fc in by_facet.values():
-            if len(fc) == 2:
-                adj[fc[0]].add(fc[1])
-                adj[fc[1]].add(fc[0])
-        seen, stack = {cis[0]}, [cis[0]]
-        while stack:
-            for y in adj[stack.pop()]:
-                if y not in seen:
-                    seen.add(y)
-                    stack.append(y)
-        if len(seen) != len(cis):
-            return False, f"ridge {r}: link is disconnected (pinch)"
-    if n == 2:
-        return True, "ok"
-
-    # n == 3: vertex links must be 2-spheres (interior) or disks (boundary).
-    at_vertex = defaultdict(list)
-    for c in cells:
-        for v in c:
-            at_vertex[v].append(c)
-    for v, cs in at_vertex.items():
-        link_faces = [tuple(sorted(u for u in c if u != v)) for c in cs]
-        edge_faces = defaultdict(list)
-        for i, lf in enumerate(link_faces):
-            for le in combinations(lf, 2):
-                edge_faces[le].append(i)
-        boundary_edges = []
-        adj = defaultdict(set)
-        for le, fs in edge_faces.items():
-            if len(fs) == 2:
-                adj[fs[0]].add(fs[1])
-                adj[fs[1]].add(fs[0])
-            elif len(fs) == 1:
-                boundary_edges.append(le)
-            else:
-                return False, f"vertex {v}: link edge {le} in {len(fs)} faces"
-        seen, stack = {0}, [0]
-        while stack:
-            for y in adj[stack.pop()]:
-                if y not in seen:
-                    seen.add(y)
-                    stack.append(y)
-        if len(seen) != len(link_faces):
-            return False, f"vertex {v}: link is disconnected (pinch)"
-        n_lv = len({u for lf in link_faces for u in lf})
-        chi = n_lv - len(edge_faces) + len(link_faces)
-        if not boundary_edges:
-            if chi != 2:
-                return False, f"vertex {v}: closed link has chi={chi}, not S^2"
-        else:
-            if chi != 1:
-                return False, f"vertex {v}: bounded link has chi={chi}, not a disk"
-            badj = defaultdict(set)
-            for a, b in boundary_edges:
-                badj[a].add(b)
-                badj[b].add(a)
-            if any(len(s) != 2 for s in badj.values()):
-                return False, f"vertex {v}: link boundary is not a 1-manifold"
-            start = boundary_edges[0][0]
-            seen_b, stack_b = {start}, [start]
-            while stack_b:
-                for y in badj[stack_b.pop()]:
-                    if y not in seen_b:
-                        seen_b.add(y)
-                        stack_b.append(y)
-            if len(seen_b) != len(badj):
-                return False, f"vertex {v}: link boundary has several circles"
-    return True, "ok"
+    the Hodge Laplacian still sees even though no top cell carries them.
+    Delegates to ``ChainComplex.dualComplexIsValid``."""
+    ok, why = cob.ChainComplex.dualComplexIsValid(
+        [[int(v) for v in c] for c in top_cells], int(n),
+        [[int(v) for v in f] for f in (facet_cells or [])])
+    return bool(ok), str(why)
 
 
 def register_dual_valid(es, n=3):
     """The dual-validity verdict for a synthesis object's CURRENT complex: top
     cells from the surgery state, facet cells from the (n-1)-cell list the
-    Hodge Laplacian is built over."""
-    tops = [tuple(int(v) for v in c) for c in es.topCells()]
-    facets = [tuple(int(v) for v in c) for c in es.cellSimplices()]
-    return dual_complex_is_valid(tops, n, facet_cells=facets)
+    Hodge Laplacian is built over. Delegates to
+    ``EigenstateSynthesis.dualComplexValid``."""
+    ok, why = es.dualComplexValid()
+    return bool(ok), str(why)
 
 
 def _betti2(st):

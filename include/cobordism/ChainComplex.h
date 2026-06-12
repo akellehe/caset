@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 // === tessera subsystem ns fwd-decls ===
@@ -69,6 +70,25 @@ class ChainComplex {
 
     /// Check ∂_{k-1} ∘ ∂_k = 0 for all k (chain-complex axiom / V3 sanity check).
     [[nodiscard]] bool boundaryComposesToZero() const;
+
+    /// Whether the Poincaré/Lefschetz **dual block decomposition** of a pure
+    /// \f$ n \f$-complex is a valid cell complex — equivalently, whether the
+    /// primal is a combinatorial manifold-with-boundary. Decidable for
+    /// \f$ n \le 3 \f$ by the classification of surfaces; checked as: facet
+    /// coface counts in \f$ \{1, 2\} \f$; no dangling facets (when
+    /// `facetCells` is non-empty it is the full \f$ (n-1) \f$-cell universe —
+    /// e.g. the cells a Hodge Laplacian is built over — and every entry must
+    /// be carried by at least one top cell); ridge links single paths/cycles
+    /// (no pinches); and, at \f$ n = 3 \f$, vertex links that are 2-spheres
+    /// (interior) or disks (boundary), decided by connectivity, Euler
+    /// characteristic, and a single boundary circle. Returns (ok, reason)
+    /// with the first violation named. Pure combinatorics on sorted
+    /// vertex-id tuples — no geometry required. Topology-changing moves
+    /// should be accepted only if this survives: validity in the dual space,
+    /// not merely scoreability on the primal lattice.
+    [[nodiscard]] static std::pair<bool, std::string> dualComplexIsValid(
+        const std::vector<std::vector<std::uint64_t>> &topCells, int dim,
+        const std::vector<std::vector<std::uint64_t>> &facetCells = {});
 
     /// Betti numbers b_0..b_n over ℚ (free ranks of H_k):
     /// b_k = |C_k| − rank ∂_k − rank ∂_{k+1}.
