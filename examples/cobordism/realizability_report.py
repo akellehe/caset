@@ -221,11 +221,15 @@ def synthesize_boundary(c0, c1, seed, restarts=80, max_cones=4):
 # --------------------------------------------------------------------------- #
 # §5.0 realizability decisions.
 # --------------------------------------------------------------------------- #
-def decide(bulk_factory, U, dA, dB, seed, restarts, max_cones, growth_mode=None):
+def decide(bulk_factory, U, dA, dB, seed, restarts, max_cones, growth_mode=None,
+           beta=0.0):
     """Bend U → vec(U), pin the bulk boundary, and let the oracle fill the
     interior. `growth_mode` defaults to the historical cone-only growth;
     SURGERY_AND_CONE allows additions as well as surgical cuts (max_cones then
-    budgets the added vertices only). Returns the Verdict."""
+    budgets the added vertices only). `beta` couples the mediated objective
+    F_beta = r_U + beta * |S_Regge(W*)|: candidate moves are ranked by F_beta
+    rather than the bare residual (beta = 0, the default, is the base-layer
+    search). Returns the Verdict."""
     bulk = bulk_factory()
     _pin_all(bulk, w=1.0, phase=0.0)
     target = _bend(U, dA, dB)
@@ -233,7 +237,8 @@ def decide(bulk_factory, U, dA, dB, seed, restarts, max_cones, growth_mode=None)
     if growth_mode is None:
         growth_mode = cob.RealizabilityOracle.GrowthMode.CONE
     return oracle.decide(target, dA, dB, epsilon=EPSILON, restarts=restarts,
-                         max_cones=max_cones, seed=seed, growth_mode=growth_mode)
+                         max_cones=max_cones, seed=seed, growth_mode=growth_mode,
+                         beta=beta)
 
 
 def _np_floor_oracle(U, dA, dB, w_bounds=(0.1, 10.0), n=60):
@@ -455,6 +460,12 @@ def main():
     ap.add_argument("--out", default="/tmp/cobordism",
                     help="directory for sweeps + figures (default /tmp/cobordism).")
     ap.add_argument("--no-plot", action="store_true", help="skip the figures.")
+    ap.add_argument("--beta", type=float, nargs="+", default=[0.0], metavar="B",
+                    help="Regge-mediation coupling(s) for the mediated objective "
+                         "F_beta = r_U + beta*|S_Regge(W*)| (#249/#250). With any "
+                         "beta > 0 the §5.0 realizability cases are re-decided as a "
+                         "sweep over these values; beta = 0 (default) is the "
+                         "base-layer search and leaves the output unchanged.")
     args = ap.parse_args()
 
     print("State-Operation-Cobordism correspondence -- synthesis + "
@@ -549,6 +560,35 @@ def main():
     print(f"  and the three correspondence claims -- (1) W_AB is a cobordism, "
           f"(2) ∂W_AB = the pinned geo's, (3) Z(W_AB) = <ψ_A|U|ψ_B> -- hold "
           f"({'SUPPORTED' if all_ok else 'NOT SUPPORTED -- a check failed'}).")
+
+    # ---- Regge mediation sweep (--beta) ----------------------------------- #
+    # Authoritative verdict stays anchored to the beta = 0 decisions above; the
+    # sweep re-decides the §5.0 cases under F_beta only when beta > 0 is asked for.
+    if any(b > 0 for b in args.beta):
+        print("\n  Regge mediation (--beta): §5.0 cases re-decided under "
+              "F_beta = r_U + beta*|S_Regge(W*)|:")
+        header = (f"  {'operation U':26} {'beta':>6} {'verdict':11} "
+                  f"{'r / floor':>12} {'cuts':>5} {'|S_Regge|':>11}")
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for name, factory, U, dA, dB, max_cones, mode, _expect in cases:
+            for beta in args.beta:
+                v = decide(factory, U, dA, dB, seed=args.seed,
+                           restarts=args.restarts, max_cones=max_cones,
+                           growth_mode=mode, beta=beta)
+                verdict = "REALIZABLE" if v.realizable else "OBSTRUCTED"
+                metric = (f"r={v.residual:.2e}" if v.realizable
+                          else f"f={v.floor:.2e}")
+                print(f"  {_fmt_op(name):26} {beta:>6g} {verdict:11} "
+                      f"{metric:>12} {v.surgery_removals:>5} "
+                      f"{abs(v.regge_action):>11.3f}")
+        print("        => beta is applied (candidate cuts are ranked by F_beta), but "
+              "the verdicts do NOT contract here: these cases realize by cone growth "
+              "(0 surgical cuts), so a surgery-ranking beta has nothing to gate, and "
+              "where surgery is used the oracle scores |S_Regge| on the optimized "
+              "geometry, so realizing does not raise it. The fixed-geometry "
+              "contraction is in spectral_gate_realizability.py (13 -> 11 -> 0); "
+              "see #276.")
 
     if not args.no_plot:
         print("\n  §7 sweeps:")

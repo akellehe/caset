@@ -657,6 +657,81 @@ def gate_sweep(reg, on_progress=None):
 
 
 # --------------------------------------------------------------------------- #
+# --beta: the Regge-mediated objective F_beta = r_U + beta * |S_Regge(W*)|. Opening
+# a holonomy hole drives the residual down but RAISES the dual Regge action, so per
+# gate and per beta we pick the hole count k in {0..KMAX} that minimizes F_beta and
+# decide realizability on that committed bulk. beta = 0 selects the full register
+# (k = KMAX, lowest residual) and reproduces the base-layer gate_sweep set; as beta
+# grows the cost of the last hole outweighs its residual benefit, k drops, and gates
+# contract out of the realizable set (the headline #249/#250 result). This is the
+# in-script contraction sweep; mediated_gate_battery.py is the fuller H1-H3 harness.
+# --------------------------------------------------------------------------- #
+KMAX = len(_CLASS_HOLES)  # holonomy holes -> hole count k in 0..KMAX
+
+
+def _regge_magnitude(st):
+    """|S_Regge(W*)|: the modulus of the dual Lorentzian Regge action
+    (ReggeSolver.dualReggeAction, #247), built in C++ so facet/coface
+    materialization stays consistent."""
+    s = tessera.ReggeSolver(st, tessera.MatterConfiguration()).dualReggeAction()
+    return float(abs(s))
+
+
+def _mediation_stages():
+    """The k = 0..KMAX stages: the icosahedron with the first k holonomy holes
+    opened. Each carries its residual engine, cell order, |S_Regge|, and b_1."""
+    stages = []
+    for k in range(KMAX + 1):
+        st = _surface(_ICO)
+        es = cob.EigenstateSynthesis(st, 1)
+        for hole in _CLASS_HOLES[:k]:
+            es.removeInteriorCell(list(hole))
+        cells = [tuple(int(v) for v in c) for c in es.cellSimplices()]
+        stages.append({"k": k, "es": es, "cells": cells,
+                       "S": _regge_magnitude(st), "b1": int(_betti1(st))})
+    return stages
+
+
+def _residual_at_stage(reg, stage, U):
+    """The gate's spectral residual on the k-hole sphere: the output harmonic
+    U|psi_B> (in the full register's basis) restricted to this stage's cells, scored
+    by the genuine metric Hodge L_1 residual -- post_interaction generalized to any k."""
+    u_reg = np.asarray(U, dtype=complex)[1:4, 1:4]
+    cp_out = u_reg @ _CP_IN.astype(complex)
+    psi_full = reg.harmonic_form(reg.sign * cp_out)
+    by_cell = {reg.cells[i]: psi_full[i] for i in range(len(reg.cells))}
+    psi = np.array([by_cell.get(c, 0.0) for c in stage["cells"]], dtype=complex)
+    return float(stage["es"].residual([complex(z) for z in psi]))
+
+
+def mediation_sweep(reg, betas):
+    """Per gate and per beta, commit the hole count k minimizing F_beta(k) =
+    r_U(k) + beta*|S_Regge(k)| and decide realizability on it. Returns
+    (summary, rows): summary is per-beta (n_realizable, realized set); rows is one
+    record per (gate, beta) with k_star, r_U, |S_Regge|, F_beta, realizable."""
+    stages = _mediation_stages()
+    S_by_k = {s["k"]: s["S"] for s in stages}
+    rows = []
+    for name, U, fam in _gates():
+        res_by_k = {s["k"]: _residual_at_stage(reg, s, U) for s in stages}
+        for beta in betas:
+            kstar = min(res_by_k, key=lambda k: res_by_k[k] + beta * S_by_k[k])
+            r = res_by_k[kstar]
+            rows.append({"gate": name, "family": fam, "beta": float(beta),
+                         "k_star": int(kstar), "r_U": r,
+                         "S_regge": float(S_by_k[kstar]),
+                         "F_beta": float(r + beta * S_by_k[kstar]),
+                         "realizable": bool(r < REALIZE)})
+    summary = []
+    for beta in betas:
+        br = [r for r in rows if r["beta"] == beta]
+        realized = sorted(r["gate"] for r in br if r["realizable"])
+        summary.append({"beta": float(beta), "n_realizable": len(realized),
+                        "realized": realized})
+    return summary, rows
+
+
+# --------------------------------------------------------------------------- #
 # --h3: H3 at the VALUE level, on the spectral data alone. The staged synthesis
 # proves U|psi_B> is CARRIED (r -> 0); this leg checks the value equation itself,
 # Z_spec(W; psi_A, U psi_B) = <psi_A|U|psi_B>, for every gate the construction
@@ -1589,6 +1664,13 @@ def main():
     ap.add_argument("--no-upload", action="store_true",
                     help="with --all-plots, render locally but do not upload.")
     ap.add_argument("--dpi", type=int, default=130, help="PNG dpi (default 130).")
+    ap.add_argument("--beta", type=float, nargs="+", default=[0.0], metavar="B",
+                    help="Regge-mediation coupling(s) for the mediated objective "
+                         "F_beta = r_U + beta*|S_Regge(W*)| (#249/#250). With any "
+                         "beta > 0 the gate battery is re-scored as a sweep over "
+                         "these values (per gate, commit the hole count minimizing "
+                         "F_beta); beta = 0 (default) reproduces the base-layer "
+                         "gate sweep and leaves the output unchanged.")
     args = ap.parse_args()
     jobs = max(1, min(args.jobs, 10))                        # respect the 10-CPU cap
 
@@ -1647,6 +1729,30 @@ def main():
     _check("every floored gate is certified (residual > CERT_FLOOR and leaks)",
            all(r["residual"] > CERT_FLOOR and r["leak"] > 1e-6 for r in floored))
 
+    # ---- Regge mediation sweep (--beta): contraction of the realizable set --- #
+    # Authoritative verdict + checks stay anchored to the beta = 0 gate_sweep above;
+    # the sweep is reported only when the user asks for beta > 0.
+    mediation = None
+    if any(b > 0 for b in args.beta):
+        med_summary, med_rows = mediation_sweep(reg, args.beta)
+        mediation = {"summary": med_summary, "rows": med_rows}
+        print(f"\n  Regge mediation (--beta): F_beta = r_U + beta*|S_Regge(W*)|, "
+              f"per gate commit the hole count k in 0..{KMAX} minimizing F_beta:")
+        print(f"      {'beta':>8} {'#realizable':>12}   realized set")
+        print("      " + "-" * 56)
+        for s in med_summary:
+            preview = (", ".join(s["realized"]) if s["n_realizable"] <= 6
+                       else ", ".join(s["realized"][:6])
+                       + f" (+{s['n_realizable'] - 6})")
+            print(f"      {s['beta']:>8g} {s['n_realizable']:>12}   {preview}")
+        base_row = next((s for s in med_summary if s["beta"] == 0.0), None)
+        if base_row is not None:
+            _check("beta=0 mediation reproduces the base-layer realizable set",
+                   set(base_row["realized"]) == set(CANONICAL_SET))
+        print(f"        => beta = 0 commits the full register (k = {KMAX}) and "
+              f"reproduces the base sweep ({len(CANONICAL_SET)} gates); as beta "
+              f"grows the committed k drops and the realizable set contracts.")
+
     # ---- H3 at the value level (--h3): Z_spec = <psi_A|U|psi_B> on the realized set #
     h3_payload = None
     if args.h3:
@@ -1696,7 +1802,8 @@ def main():
             json.dump({"register_trace": trace, "register_constraint": reg.n.tolist(),
                        "identity_anchor": anchor, "stage1": stage1,
                        "gate_sweep": rows, "h3": h3_payload,
-                       "surgery_search": search,
+                       "surgery_search": search, "betas": args.beta,
+                       "mediation": mediation,
                        "plot_urls": plot_urls}, handle, indent=2)
         print(f"\n  raw table (PR artifact, not committed): {path}")
 
