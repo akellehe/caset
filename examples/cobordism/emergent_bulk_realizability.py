@@ -223,13 +223,19 @@ def _meridian_target(flip=False):
     return cob.Cochain(1, edges, np.asarray(vals, dtype=complex)), edges, vals
 
 
-def _decide(st, target, *, mode, max_cones, seed=1, restarts=RESTARTS):
+def _decide(st, target, *, mode, max_cones, seed=1, restarts=RESTARTS, beta=0.0):
     """Harmonic realizability: drive ||L_1 psi||^2 -> 0 with the pinned boundary,
     growing via `mode` up to `max_cones` steps. harmonic=True so realizable means
-    the meridian is CARRIED as a bulk harmonic (in image(H_1(dW) -> H_1(W)))."""
+    the meridian is CARRIED as a bulk harmonic (in image(H_1(dW) -> H_1(W))).
+
+    `beta` couples the mediated objective F_beta = r_U + beta * |S_Regge(W*)|: the
+    surgery search ranks candidate removals by F_beta rather than the bare residual,
+    so a larger beta makes the gravitational cost of opening the handle outweigh its
+    residual benefit. beta = 0 (default) is the base-layer search."""
     return cob.RealizabilityOracle(st).decideHarmonic(
         target, epsilon=DEEP_EPS, restarts=restarts, max_cones=max_cones,
-        seed=seed, growth_mode=mode, connectivity_candidates=8, harmonic=True)
+        seed=seed, growth_mode=mode, connectivity_candidates=8, harmonic=True,
+        beta=beta)
 
 
 # --------------------------------------------------------------------------- #
@@ -303,12 +309,50 @@ def frozen_without_surgery(target):
 
 
 # --------------------------------------------------------------------------- #
+# Regge mediation: re-run the E2 surgery search under F_beta = r_U + beta*|S_Regge|.
+# --------------------------------------------------------------------------- #
+def mediation_sweep(targets, betas, seed=0):
+    """For each beta, re-run the disk-seed SURGERY search (E2) under the mediated
+    objective F_beta = r_U + beta*|S_Regge(W*)|. Reports per (beta, target):
+    removals, b_1 after, realizable, residual, and |S_Regge(W*)|.
+
+    NOTE -- the verdict does NOT contract with beta on this fixture, and the reason
+    is structural. The oracle scores |S_Regge| on the residual-OPTIMIZED geometry;
+    a floored disk inflates the edge lengths the optimizer settles on (unit-length
+    |S| ~ 7.7 -> optimized ~ 111), while the realized annulus stays moderate (~28.7).
+    So realizing the meridian (opening the handle) LOWERS the optimized |S_Regge|,
+    and F_beta favors realizing at every beta. Contraction needs |S_Regge| to RISE
+    with the realizing move, which holds for fixed-geometry surgery -- the
+    k-selection in spectral_gate_realizability.py (13 -> 11 -> 0). See #276."""
+    rows = []
+    for beta in betas:
+        for tname, (target, _edges, _vals) in targets.items():
+            st = _disk()
+            before = _betti(st)[1]
+            v = _decide(st, target, mode=SURGERY, max_cones=GROW_STEPS,
+                        seed=seed, beta=beta)
+            rows.append({"beta": float(beta), "target": tname,
+                         "b1_before": before, "b1_after": _betti(st)[1],
+                         "removals": int(v.surgery_removals),
+                         "realizable": bool(v.residual < REALIZE),
+                         "residual": float(v.residual),
+                         "S_regge": float(abs(v.regge_action))})
+    return rows
+
+
+# --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="/tmp/cobordism",
                     help="dir for the raw table (default /tmp/cobordism; NOT committed).")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--beta", type=float, nargs="+", default=[0.0], metavar="B",
+                    help="Regge-mediation coupling(s) for the mediated objective "
+                         "F_beta = r_U + beta*|S_Regge(W*)| (#249/#250). With any "
+                         "beta > 0 the E2 surgery search is re-run as a sweep over "
+                         "these values; beta = 0 (default) is the base-layer search "
+                         "and leaves the output unchanged.")
     args = ap.parse_args()
 
     print("Emergent-bulk realizability at k=1: grow the bulk by surgery, let b_1 "
@@ -399,6 +443,30 @@ def main():
     ok &= all(r["b1_before"] == r["b1_after"] == 0 for r in e3)
     ok &= not e3[1]["attach_accepted"]
 
+    # ---- Regge mediation sweep (--beta): contraction of the realizable set - #
+    # Authoritative verdict stays anchored to the beta = 0 experiment above; the
+    # sweep is reported only when the user asks for beta > 0.
+    med = None
+    if any(b > 0 for b in args.beta):
+        med = mediation_sweep(targets, args.beta)
+        print("\n  Regge mediation (--beta): the E2 disk-seed SURGERY search under "
+              "F_beta = r_U + beta*|S_Regge(W*)|:")
+        header = (f"      {'beta':>6} {'target':>8} {'removals':>9} {'b_1':>9} "
+                  f"{'realizable':>11} {'residual':>11} {'|S_Regge|':>11}")
+        print(header)
+        print("      " + "-" * (len(header) - 6))
+        for r in med:
+            print(f"      {r['beta']:>6g} {r['target']:>8} {r['removals']:>9} "
+                  f"{str(r['b1_before'])+'->'+str(r['b1_after']):>9} "
+                  f"{'YES' if r['realizable'] else 'floored':>11} "
+                  f"{r['residual']:>11.2e} {r['S_regge']:>11.3f}")
+        print("        => beta scales the search but the verdict does NOT contract "
+              "here: realizing opens the handle, which LOWERS the optimized "
+              "|S_Regge| (the floored disk inflates the optimizer's edge lengths), "
+              "so F_beta favors realizing at every beta. Contraction needs |S_Regge| "
+              "to RISE with the realizing move -- the fixed-geometry k-selection in "
+              "spectral_gate_realizability.py (13 -> 11 -> 0); see #276.")
+
     # ---- raw table (PR artifact, not committed) --------------------------- #
     if not args.no_write:
         os.makedirs(args.out, exist_ok=True)
@@ -412,7 +480,8 @@ def main():
                 "period_A": [p_a.real, p_a.imag],
                 "period_B": [p_b.real, p_b.imag]}
         raw = {"degree": 1, "targets": target_raw, "E1_two_by_two": e1,
-               "E2_surgery_emergence": e2, "E3_frozen_without_surgery": e3}
+               "E2_surgery_emergence": e2, "E3_frozen_without_surgery": e3,
+               "betas": args.beta, "mediation_sweep": med}
         with open(path, "w") as handle:
             json.dump(raw, handle, indent=2)
         print(f"\n  raw table (PR artifact, not committed): {path}")
