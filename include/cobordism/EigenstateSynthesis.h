@@ -287,6 +287,15 @@ class EigenstateSynthesis {
     /// these cells' vertices, reproducing `growInterior`'s 1-skeleton.
     [[nodiscard]] std::vector<std::vector<std::uint64_t>> topCells() const;
 
+    /// The dual-complex validity verdict (`ChainComplex::dualComplexIsValid`)
+    /// for the synthesizer's **current** complex: top cells from the surgery
+    /// state and, when the degree sits at \f$ k = n - 1 \f$ (the register
+    /// layers), the \f$ k \f$-cell universe (`cellSimplices()`) checked for
+    /// dangling facets. Topology-changing moves should be accepted only while
+    /// this stays true — validity in the dual space, not merely scoreability
+    /// on the primal lattice.
+    [[nodiscard]] std::pair<bool, std::string> dualComplexValid() const;
+
     // === Surgery: the topology-changing interior remove move (#196) ===
 
     /// The interior top cells eligible for surgery removal: top cells whose

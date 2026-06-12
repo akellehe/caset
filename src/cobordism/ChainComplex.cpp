@@ -756,4 +756,184 @@ std::map<std::string, int> ChainComplex::stiefelWhitneyNumbers() const {
   return numbers;
 }
 
+std::pair<bool, std::string> ChainComplex::dualComplexIsValid(
+    const std::vector<std::vector<std::uint64_t>> &topCells, int dim,
+    const std::vector<std::vector<std::uint64_t>> &facetCells) {
+  using Cell = std::vector<std::uint64_t>;
+  const auto joinIds = [](const Cell &c) {
+    std::string out = "(";
+    for (std::size_t i = 0; i < c.size(); ++i) {
+      if (i) out += ",";
+      out += std::to_string(c[i]);
+    }
+    return out + ")";
+  };
+  const auto connectedFrom = [](int start, int count,
+                                const std::map<int, std::vector<int>> &adj) {
+    std::vector<int> stack{start};
+    std::map<int, bool> seen{{start, true}};
+    while (!stack.empty()) {
+      const int x = stack.back();
+      stack.pop_back();
+      const auto it = adj.find(x);
+      if (it == adj.end()) continue;
+      for (const int y : it->second)
+        if (!seen.count(y)) {
+          seen[y] = true;
+          stack.push_back(y);
+        }
+    }
+    return static_cast<int>(seen.size()) == count;
+  };
+
+  if (topCells.empty()) return {false, "no top cells"};
+  const std::size_t nv = static_cast<std::size_t>(dim) + 1;
+  std::vector<Cell> cells;
+  cells.reserve(topCells.size());
+  for (const auto &raw : topCells) {
+    if (raw.size() != nv) return {false, "mixed top-cell dimension"};
+    Cell c = raw;
+    std::sort(c.begin(), c.end());
+    cells.push_back(std::move(c));
+  }
+  {
+    auto dedup = cells;
+    std::sort(dedup.begin(), dedup.end());
+    if (std::adjacent_find(dedup.begin(), dedup.end()) != dedup.end())
+      return {false, "duplicate top cell"};
+  }
+
+  // Facet coface counts in {1, 2}; the dangling-facet check against the
+  // supplied (n-1)-cell universe.
+  std::map<Cell, int> cofaces;
+  for (const auto &c : cells)
+    for (std::size_t j = 0; j < nv; ++j) {
+      Cell f;
+      f.reserve(nv - 1);
+      for (std::size_t i = 0; i < nv; ++i)
+        if (i != j) f.push_back(c[i]);
+      ++cofaces[f];
+    }
+  for (const auto &[f, count] : cofaces)
+    if (count > 2)
+      return {false,
+              "facet " + joinIds(f) + " has " + std::to_string(count) + " cofaces"};
+  for (const auto &raw : facetCells) {
+    Cell f = raw;
+    std::sort(f.begin(), f.end());
+    if (!cofaces.count(f))
+      return {false, "dangling facet " + joinIds(f) + " (0 cofaces)"};
+  }
+
+  // Ridge links: the top cells around each (n-2)-simplex, glued along the
+  // facets containing it, must form ONE path or cycle (no pinches).
+  std::map<Cell, std::vector<int>> atRidge;
+  for (std::size_t ci = 0; ci < cells.size(); ++ci) {
+    const Cell &c = cells[ci];
+    for (std::size_t a = 0; a < nv; ++a)
+      for (std::size_t b = a + 1; b < nv; ++b) {
+        Cell r;
+        r.reserve(nv - 2);
+        for (std::size_t i = 0; i < nv; ++i)
+          if (i != a && i != b) r.push_back(c[i]);
+        atRidge[r].push_back(static_cast<int>(ci));
+      }
+  }
+  for (const auto &[r, cis] : atRidge) {
+    if (cis.size() < 2) continue;
+    std::map<Cell, std::vector<int>> byFacet;
+    for (const int ci : cis)
+      for (const std::uint64_t v : cells[static_cast<std::size_t>(ci)])
+        if (!std::binary_search(r.begin(), r.end(), v)) {
+          Cell f = r;
+          f.insert(std::upper_bound(f.begin(), f.end(), v), v);
+          byFacet[f].push_back(ci);
+        }
+    std::map<int, std::vector<int>> adj;
+    for (const auto &[f, fc] : byFacet)
+      if (fc.size() == 2) {
+        adj[fc[0]].push_back(fc[1]);
+        adj[fc[1]].push_back(fc[0]);
+      }
+    if (!connectedFrom(cis.front(), static_cast<int>(cis.size()), adj))
+      return {false, "ridge " + joinIds(r) + ": link is disconnected (pinch)"};
+  }
+  if (dim == 2) return {true, "ok"};
+
+  // n == 3: vertex links must be 2-spheres (interior) or disks (boundary).
+  std::map<std::uint64_t, std::vector<Cell>> atVertex;
+  for (const auto &c : cells)
+    for (const std::uint64_t v : c) {
+      Cell lf;
+      lf.reserve(nv - 1);
+      for (const std::uint64_t u : c)
+        if (u != v) lf.push_back(u);
+      atVertex[v].push_back(lf);
+    }
+  for (const auto &[v, linkFaces] : atVertex) {
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<int>> edgeFaces;
+    for (std::size_t i = 0; i < linkFaces.size(); ++i) {
+      const Cell &lf = linkFaces[i];
+      for (std::size_t a = 0; a < lf.size(); ++a)
+        for (std::size_t b = a + 1; b < lf.size(); ++b)
+          edgeFaces[{lf[a], lf[b]}].push_back(static_cast<int>(i));
+    }
+    std::map<int, std::vector<int>> adj;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> boundaryEdges;
+    for (const auto &[le, fs] : edgeFaces) {
+      if (fs.size() == 2) {
+        adj[fs[0]].push_back(fs[1]);
+        adj[fs[1]].push_back(fs[0]);
+      } else if (fs.size() == 1) {
+        boundaryEdges.push_back(le);
+      } else {
+        return {false, "vertex " + std::to_string(v) + ": link edge in " +
+                           std::to_string(fs.size()) + " faces"};
+      }
+    }
+    if (!connectedFrom(0, static_cast<int>(linkFaces.size()), adj))
+      return {false,
+              "vertex " + std::to_string(v) + ": link is disconnected (pinch)"};
+    std::map<std::uint64_t, int> linkVertexDegree;
+    for (const auto &lf : linkFaces)
+      for (const std::uint64_t u : lf) linkVertexDegree[u] = 0;
+    const int chi = static_cast<int>(linkVertexDegree.size()) -
+                    static_cast<int>(edgeFaces.size()) +
+                    static_cast<int>(linkFaces.size());
+    if (boundaryEdges.empty()) {
+      if (chi != 2)
+        return {false, "vertex " + std::to_string(v) + ": closed link has chi=" +
+                           std::to_string(chi) + ", not S^2"};
+    } else {
+      if (chi != 1)
+        return {false, "vertex " + std::to_string(v) + ": bounded link has chi=" +
+                           std::to_string(chi) + ", not a disk"};
+      std::map<std::uint64_t, std::vector<std::uint64_t>> badj;
+      for (const auto &[a, b] : boundaryEdges) {
+        badj[a].push_back(b);
+        badj[b].push_back(a);
+      }
+      for (const auto &[u, nbrs] : badj)
+        if (nbrs.size() != 2)
+          return {false, "vertex " + std::to_string(v) +
+                             ": link boundary is not a 1-manifold"};
+      std::vector<std::uint64_t> stack{boundaryEdges.front().first};
+      std::map<std::uint64_t, bool> seen{{boundaryEdges.front().first, true}};
+      while (!stack.empty()) {
+        const std::uint64_t x = stack.back();
+        stack.pop_back();
+        for (const std::uint64_t y : badj[x])
+          if (!seen.count(y)) {
+            seen[y] = true;
+            stack.push_back(y);
+          }
+      }
+      if (seen.size() != badj.size())
+        return {false, "vertex " + std::to_string(v) +
+                           ": link boundary has several circles"};
+    }
+  }
+  return {true, "ok"};
+}
+
 }  // namespace tessera::cobordism

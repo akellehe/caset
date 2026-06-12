@@ -94,6 +94,19 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
            "Flat row-major ∂_k (rows=|C_{k-1}|, cols=|C_k|), entries in {-1,0,1}.")
       .def("boundaryComposesToZero", &ChainComplex::boundaryComposesToZero,
            "True iff ∂_{k-1}∘∂_k = 0 for all k.")
+      .def_static(
+          "dualComplexIsValid", &ChainComplex::dualComplexIsValid,
+          py::arg("top_cells"), py::arg("dim"),
+          py::arg("facet_cells") = std::vector<std::vector<std::uint64_t>>{},
+          "(ok, reason): is the dual block decomposition of this pure "
+          "n-complex a valid cell complex -- equivalently, is the primal a "
+          "combinatorial manifold with boundary? Facet coface counts in "
+          "{1,2}; no dangling facets against the optional (n-1)-cell "
+          "universe; ridge links single paths/cycles; at n=3, vertex links "
+          "2-spheres or disks. Pure combinatorics on sorted vertex-id "
+          "tuples; rigorous for n <= 3. Accept topology moves only while "
+          "this holds: validity in the DUAL space, not merely scoreability "
+          "on the primal lattice.")
       .def("bettiNumbers", &ChainComplex::bettiNumbers, "Betti numbers b_0..b_n over Q.")
       .def("bettiNumbersGF2", &ChainComplex::bettiNumbersGF2, "Betti numbers over GF(2).")
       .def("torsion", &ChainComplex::torsion, py::arg("k"),
@@ -450,6 +463,11 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("topCells", &EigenstateSynthesis::topCells,
            "The top cells as sorted vertex-id tuples (the d+1-vertex simplices); "
            "wiring the new vertex to one reproduces growInterior's 1-skeleton.")
+      .def("dualComplexValid", &EigenstateSynthesis::dualComplexValid,
+           "(ok, reason): ChainComplex.dualComplexIsValid for the CURRENT "
+           "complex -- top cells from the surgery state, with the k-cell "
+           "universe checked for dangling facets when k = n-1 (the register "
+           "layers). Accept topology moves only while this stays true.")
       // ----- Surgery: the topology-changing interior remove move (#196) -----
       .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
            "The interior top cells (all-interior vertices, on no dW face) as "

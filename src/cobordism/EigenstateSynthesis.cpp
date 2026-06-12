@@ -734,4 +734,19 @@ std::vector<std::vector<std::uint64_t>> EigenstateSynthesis::topCells() const {
   return cells;
 }
 
+std::pair<bool, std::string> EigenstateSynthesis::dualComplexValid() const {
+  const auto tops = topCells();
+  if (tops.empty()) return {false, "no top cells"};
+  const int dim = static_cast<int>(tops.front().size()) - 1;
+  // The dangling-facet check needs the (n-1)-cell universe; cellSimplices()
+  // is exactly that when the synthesis degree sits one below the top
+  // dimension (the register layers). At other degrees the facet universe is
+  // not tracked here, so only the top-cell conditions are checked.
+  const bool facetDegree = (k_ == dim - 1);
+  return ChainComplex::dualComplexIsValid(
+      tops, dim,
+      facetDegree ? cellSimplices()
+                  : std::vector<std::vector<std::uint64_t>>{});
+}
+
 }  // namespace tessera::cobordism
