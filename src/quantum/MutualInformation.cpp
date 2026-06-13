@@ -201,6 +201,17 @@ MutualInformation::vonNeumannEntropy(Eigen::MatrixXcd const& rho, double tol) {
 }
 
 double
+MutualInformation::vonNeumannEntropy(std::vector<double> const& eigenvalues,
+                                     double tol) {
+    // Already-diagonal input: entropy is -Σ pᵢ log pᵢ directly, matching
+    // entropyFromEigenvalues (no re-diagonalisation).
+    double S = 0.0;
+    for (double p : eigenvalues)
+        if (p > tol) S -= p * std::log(p);
+    return S;
+}
+
+double
 MutualInformation::siteSite(itensor::MPS const& psi, int i, int j) {
     if (i == j) return 0.0;
     if (i > j) std::swap(i, j);
@@ -246,6 +257,14 @@ double
 MutualInformation::edgeLength(double I, double epsilon) noexcept {
     if (I < epsilon) return std::numeric_limits<double>::infinity();
     return -std::log(I);
+}
+
+Eigen::MatrixXd
+MutualInformation::edgeLength(Eigen::MatrixXd const& I, double epsilon) {
+    return I.unaryExpr([epsilon](double v) {
+        return v < epsilon ? std::numeric_limits<double>::infinity()
+                           : -std::log(v);
+    });
 }
 
 // ─── Dual / bond-cut observables ─────────────────────────────────────

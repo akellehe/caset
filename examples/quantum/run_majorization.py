@@ -56,26 +56,19 @@ import sys
 from typing import Iterable
 
 try:
-    from tessera.quantum import QuantumConfig, SchwingerModel
+    from tessera.quantum import MutualInformation, QuantumConfig, SchwingerModel
 except ImportError as e:
     print(f"tessera.quantum unavailable: {e}", file=sys.stderr)
     print("\nRebuild with: TESSERA_QUANTUM=1 pip install -e .", file=sys.stderr)
     sys.exit(1)
 
 
-def _entropy(spectrum: list[float]) -> float:
-    """Shannon (von Neumann) entropy of a Schmidt spectrum, base e."""
-    s = 0.0
-    for p in spectrum:
-        if p > 1e-15:
-            s -= p * math.log(p)
-    return s
-
-
 def _print_intervals_table(intervals, spectra, top_k: int | None) -> None:
     rows = []
     for iv, spec in zip(intervals, spectra):
-        rows.append((iv.i, iv.j, _entropy(spec), len(spec), spec))
+        # von Neumann / Shannon entropy of the Schmidt spectrum (nats).
+        S = MutualInformation.vonNeumannEntropy(list(spec))
+        rows.append((iv.i, iv.j, S, len(spec), spec))
     # Sort by entropy descending so the most-entangled intervals are
     # surfaced first.
     rows.sort(key=lambda r: -r[2])
