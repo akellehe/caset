@@ -90,6 +90,31 @@ class VolumeProfile : public Observable {
     /// @return The average volume profile over all recorded measurements.
     [[nodiscard]] std::vector<double> getAverageProfile() const;
 
+    /// Peak-centered average of the recorded measurements.
+    ///
+    /// Equivalent to ::centeredAverage applied to the accumulated
+    /// measurements (see ::measure).  See that overload for the algorithm.
+    [[nodiscard]] std::vector<double> getCenteredAverageProfile(
+        bool subtractStalk = false, bool normalizePeak = false) const;
+
+    /// Peak-centered average of a set of volume profiles.
+    ///
+    /// On a torus the de Sitter blob can sit at any time slice and its
+    /// position diffuses along the Markov chain, so naive bin-by-bin
+    /// averaging smears it into uniform noise.  Each profile is therefore
+    /// zero-padded to the longest length and circularly rolled so its peak
+    /// aligns at @c T/2 before the bin-wise mean is taken (Ambjorn,
+    /// Jurkiewicz, Loll, *Reconstructing the Universe*, 2005).
+    ///
+    /// @param profiles     The per-configuration volume profiles to average
+    /// @param subtractStalk Subtract each (padded) profile's minimum before
+    ///                       centering, removing the constant stalk volume
+    /// @param normalizePeak Rescale the result so its peak equals 1
+    /// @return The peak-centered average profile (empty if @p profiles is)
+    [[nodiscard]] static std::vector<double> centeredAverage(
+        const std::vector<std::vector<double>> &profiles,
+        bool subtractStalk = false, bool normalizePeak = false);
+
     /// Record the current volume profile for later averaging.
     /// Call this after each decorrelated Monte Carlo measurement to build statistics.
     ///

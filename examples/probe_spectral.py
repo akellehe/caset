@@ -49,19 +49,18 @@ def slice_widths(st):
     return {t: len(st.getVerticesAtTime(t)) for t in times}
 
 
-def volume_profile(st, d=4):
-    """N4(t) profile: count of (d+1)-simplices whose minimum-time vertex is at t."""
-    profile = {}
-    dPlus1 = d + 1
-    for s in st.getSimplices():
-        verts = s.getVertices()
-        if len(verts) != dPlus1:
-            continue
-        ts = sorted(int(v.getTime()) for v in verts)
-        if len(set(ts)) != 2:
-            continue
-        profile[ts[0]] = profile.get(ts[0], 0) + 1
-    return profile
+def volume_profile(st):
+    """N4(t): per-slab top-simplex counts via the C++ VolumeProfile.
+
+    ``VolumeProfile`` counts every top simplex by its minimum-time slice
+    (``getTi()``); for a well-formed CDT this is identical to the old
+    2-distinct-times filter, since every causal top simplex spans exactly
+    two adjacent slices.  We drop empty interior slices so the reported
+    stats still describe populated slabs.
+    """
+    vp = tessera.VolumeProfile()
+    vp.compute(st)
+    return [c for c in vp.getProfile() if c > 0]
 
 
 def report(label, st, max_sigma=200.0, n_walks=20, seed=0):
@@ -88,9 +87,9 @@ def report(label, st, max_sigma=200.0, n_walks=20, seed=0):
         ds_small = ds_large = float("nan")
 
     if profile:
-        n4_min = min(profile.values())
-        n4_max = max(profile.values())
-        n4_mean = sum(profile.values()) / len(profile)
+        n4_min = min(profile)
+        n4_max = max(profile)
+        n4_mean = sum(profile) / len(profile)
         n_slabs = len(profile)
     else:
         n4_min = n4_max = n4_mean = n_slabs = 0

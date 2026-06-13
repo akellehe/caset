@@ -279,22 +279,10 @@ def main():
     lengths = [len(p) for p in profiles]
     T = max(lengths)
 
-    # Center each profile on its peak (circular roll) and subtract stalk.
-    centered = []
-    for p in profiles:
-        arr = np.zeros(T)
-        arr[:len(p)] = p
-        stalk = float(arr.min())
-        arr -= stalk
-        peak_idx = int(np.argmax(arr))
-        shift = T // 2 - peak_idx
-        arr = np.roll(arr, shift)       # peak now at T//2
-        centered.append(arr)
-
-    avg_centered = np.mean(centered, axis=0)
-    peak_val = avg_centered.max()
-    if peak_val > 0:
-        avg_centered /= peak_val        # normalise to peak = 1
+    # Center on peak, subtract the stalk, and normalise the peak to 1 in a
+    # single shared C++ pass (see VolumeProfile.centeredAverage).
+    avg_centered = np.asarray(tessera.VolumeProfile.centeredAverage(
+        profiles, subtractStalk=True, normalizePeak=True))
 
     # x-axis: centered time so peak is at 0
     tau_centered = np.arange(T) - T // 2

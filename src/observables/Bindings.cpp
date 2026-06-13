@@ -252,6 +252,26 @@ multiple configurations for averaging.)doc")
            "Return the most recent volume profile as a list.")
       .def("getAverageProfile", &VolumeProfile::getAverageProfile,
            "Return the time-averaged volume profile (over all measure() calls).")
+      .def("getCenteredAverageProfile",
+           &VolumeProfile::getCenteredAverageProfile,
+           py::arg("subtractStalk") = false,
+           py::arg("normalizePeak") = false,
+           "Peak-centered average of all measure() calls (see centeredAverage).")
+      .def_static("centeredAverage", &VolumeProfile::centeredAverage,
+           py::arg("profiles"),
+           py::arg("subtractStalk") = false,
+           py::arg("normalizePeak") = false,
+           R"doc(Peak-centered average of a set of volume profiles.
+
+Each profile is zero-padded to the longest length and circularly rolled so
+its peak sits at T//2 before the bin-wise mean is taken, preventing the de
+Sitter blob from smearing when its position fluctuates along the chain
+(Ambjorn, Jurkiewicz, Loll, 2005).
+
+Args:
+    profiles: Per-configuration volume profiles (lists of counts).
+    subtractStalk: Subtract each padded profile's minimum before centering.
+    normalizePeak: Rescale the result so its peak equals 1.)doc")
       .def("measure", &VolumeProfile::measure, py::arg("spacetime"),
            "Compute and accumulate a volume profile measurement for averaging.")
       .def("reset", &VolumeProfile::reset,
