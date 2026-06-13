@@ -142,22 +142,9 @@ def _prism_cells(faces=_W_FACES, layers=1, twist=None):
     rule, so the complex is consistent. *twist* (a vertex permutation of the
     register surface, e.g. _GAMMA) is applied cumulatively per layer, gluing
     the top end through the symmetry -- the mapping-torus-style twisted
-    product whose harmonics transport periods through the twist."""
-    twist = twist or _IDENT
-    phi = [_IDENT]
-    for _ in range(layers):
-        phi.append(_compose(twist, phi[-1]))
-    cells = []
-    for ell in range(layers):
-        lo, hi = phi[ell], phi[ell + 1]
-        for (a, b, c) in faces:
-            a0, b0, c0 = (lo[a] + 12 * ell, lo[b] + 12 * ell, lo[c] + 12 * ell)
-            a1, b1, c1 = (hi[a] + 12 * (ell + 1), hi[b] + 12 * (ell + 1),
-                          hi[c] + 12 * (ell + 1))
-            cells += [tuple(sorted((a0, b0, c0, c1))),
-                      tuple(sorted((a0, b0, b1, c1))),
-                      tuple(sorted((a0, a1, b1, c1)))]
-    return sorted(set(cells)), phi[layers]
+    product whose harmonics transport periods through the twist. The staircase
+    is the dimension-generic prism builder; this is its 3d face."""
+    return tessera.Spacetime.prismCells([list(f) for f in faces], layers, twist)
 
 
 def _hole_circles(shift, perm=None):
@@ -181,7 +168,7 @@ class Level1Fill:
     def __init__(self, faces=_W_FACES, layers=1, twist=None, extra_holes=(),
                  grow_vertices=0, grow_seed=0):
         self.layers = int(layers)
-        cells, _top_perm = _prism_cells(faces, self.layers, twist)
+        cells = _prism_cells(faces, self.layers, twist)
         self.seed_cells = cells
         # Each end is labeled by its OWN canonical register classes: the top
         # copy's hole set equals the canonical holes shifted into its layer

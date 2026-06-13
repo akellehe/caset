@@ -367,6 +367,58 @@ probability. Sits next to ``modularityOnSkeleton``.
 Uses the topology's builder (e.g. Toroid staircase triangulation) to
 create the initial simplicial complex.  The actual number of simplices
 may differ slightly due to slab quantization.)doc")
+      .def_static("fromCells", &Spacetime::fromCells,
+           py::arg("dimensions"), py::arg("cells"),
+           py::arg("weight") = 1.0, py::arg("phase") = 0.0,
+           py::arg("vertexTimes") = std::optional<std::vector<double>>{},
+           R"doc(Build a pre-geometric complex from an explicit list of top cells.
+
+The cells-to-Spacetime factory the register/fill builders share. Creates a
+coordinate-free Lorentzian ``dimensions``-D CDT spacetime, one vertex per
+distinct id, one top simplex per cell (edges auto-wired), and sets the edge
+geometry by one of two explicit rules:
+
+  - Uniform Hermitian pin (vertexTimes=None): every edge is pinned to squared
+    length ``weight`` and phase ``phase``.
+  - Tracked metric (vertexTimes given): each vertex ``v`` carries the single
+    time coordinate ``vertexTimes[v]``, so the tracked metric rule assigns
+    spacelike (equal-time) and timelike (differing-time) edges automatically.
+    ``weight`` and ``phase`` are ignored.
+
+The time coordinate is always arity one — a vertex carries ``[t]`` or no
+coordinate, never the length-2/3 vector that makes ``Vertex.getTime`` throw.
+
+Args:
+    dimensions: Metric/signature dimension d; pass (d+1)-vertex cells so they
+        register as top simplices.
+    cells: Top cells as vertex-id tuples (sorted internally).
+    weight: Uniform-pin squared length (ignored when vertexTimes is given).
+    phase: Uniform-pin Hermitian phase (ignored when vertexTimes is given).
+    vertexTimes: Optional per-vertex time indexed by vertex id; its presence
+        selects the tracked-metric rule. Must index every vertex id in cells.)doc")
+      .def_static("prismCells", &Spacetime::prismCells,
+           py::arg("cells"), py::arg("layers") = 1,
+           py::arg("twist") =
+               std::optional<std::unordered_map<std::uint64_t, std::uint64_t>>{},
+           R"doc(The dimension-generic staircase (prism) triangulation of K x [0, layers].
+
+For each base cell (v_0 < ... < v_{m-1}) and each layer, emits the m cells
+S_j = {lo[v_0..v_j]} u {hi[v_j..v_{m-1}]}, with lo[x] = phi^l(x) + s*l and
+hi[x] = phi^{l+1}(x) + s*(l+1), where s is the per-layer vertex stride (one
+past the largest base id). The same rule in every dimension: m=3 gives
+tetrahedra over triangles, m=4 gives 4-simplices over tetrahedra, and so on —
+the single source replacing the separate 3d and 4d copies.
+
+Args:
+    cells: Base top cells as vertex-id tuples.
+    layers: Number of product layers (>= 1).
+    twist: Optional vertex permutation phi of the base (a dict {id: id}),
+        applied cumulatively per layer to glue the top end through a symmetry
+        (the mapping-torus twisted product). Identity when None; a missing key
+        maps to itself.
+
+Returns:
+    The prism's top cells as sorted vertex-id tuples, uniqued and sorted.)doc")
       // The returned Simplex handles point into this Spacetime's storage, so
       // each one must keep the Spacetime alive — otherwise
       // `Spacetime(...).getSimplices()` on a temporary frees the storage before

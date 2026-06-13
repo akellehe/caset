@@ -103,17 +103,10 @@ def _layered_time_bulk(layers, twist=None):
     assignment): the tracked metric rule then makes intra-layer edges
     spacelike (equal times) and inter-layer edges timelike (time difference
     one). No unit re-pin -- this is the Lorentzian-native fill."""
-    cells, _ = L1._prism_cells(layers=layers, twist=twist)
-    sig = tessera.Signature(3, tessera.Lorentzian)
-    st = tessera.Spacetime(tessera.Metric(True, sig), tessera.CDT, 1.0, 1.0,
-                           tessera.PREFERRED, None)
-    vmap = {}
-    for i in sorted({v for c in cells for v in c}):
-        vmap[i] = st.createVertex(i, [float(i // 12)])   # time-only coordinate
-    for c in cells:
-        t = sorted(c)
-        st.createSimplex([vmap[t[0]], vmap[t[1]], vmap[t[2]], vmap[t[3]]])
-    return st
+    cells = L1._prism_cells(layers=layers, twist=twist)
+    n = max(v for c in cells for v in c) + 1
+    times = [float(i // 12) for i in range(n)]   # vertex i sits in layer i // 12
+    return tessera.Spacetime.fromCells(3, cells, vertexTimes=times)
 
 
 def _cut_variant(seed, n_cut):

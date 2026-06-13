@@ -138,17 +138,7 @@ def _tet_facets(cell):
 def _bulk(cells, weight=1.0, phase=0.0):
     """A pre-geometric 3-complex (top cells = tetrahedra) from a tet list, all
     edges pinned to a uniform Hermitian weight -- the 3d twin of the 2d builder."""
-    sig = tessera.Signature(3, tessera.Lorentzian)
-    st = tessera.Spacetime(tessera.Metric(True, sig), tessera.CDT, 1.0, 1.0,
-                           tessera.PREFERRED, None)
-    vmap = {i: st.createVertex(i) for i in sorted({v for c in cells for v in c})}
-    for c in cells:
-        t = sorted(c)
-        st.createSimplex([vmap[t[0]], vmap[t[1]], vmap[t[2]], vmap[t[3]]])
-    for e in st.getEdgeList().toVector():
-        e.setSquaredLength(weight)
-        e.setPhase(phase)
-    return st
+    return tessera.Spacetime.fromCells(3, [list(c) for c in cells], weight, phase)
 
 
 # --------------------------------------------------------------------------- #
