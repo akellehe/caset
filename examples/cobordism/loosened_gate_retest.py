@@ -191,7 +191,12 @@ def creates_superposition(U, tol=1e-9):
 def operator_schmidt_rank(U, tol=1e-9):
     """1 iff U factors as a one-qubit tensor product (local); >1 iff entangling."""
     reshaped = np.asarray(U).reshape(2, 2, 2, 2).transpose(0, 2, 1, 3).reshape(4, 4)
-    s = np.linalg.svd(reshaped, compute_uv=False)
+    # Operator-Schmidt singular values via the C++ SVD primitive.  The
+    # realignment above is the operator bipartition (distinct from
+    # ChoiJamiolkowski's vec(U) Choi bipartition), so only the singular-value
+    # computation is shared; the threshold count stays here.
+    s = np.asarray(tessera.quantum.ChoiJamiolkowski.singularValues(
+        [complex(x) for x in reshaped.ravel()], 4, 4))
     return int(np.sum(s > tol * max(s[0], 1.0)))
 
 

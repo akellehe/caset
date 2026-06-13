@@ -108,24 +108,6 @@ def _testbed():
     return st
 
 
-def _edge(st, a, b):
-    for e in st.getEdgeList().toVector():
-        if {e.getSource().getId(), e.getTarget().getId()} == {a, b}:
-            return e
-    raise KeyError((a, b))
-
-
-def _cycle_flux(st, cycle):
-    total = 0.0
-    n = len(cycle)
-    for k in range(n):
-        a, b = cycle[k], cycle[(k + 1) % n]
-        e = _edge(st, a, b)
-        sign = 1.0 if (e.getSource().getId(), e.getTarget().getId()) == (a, b) else -1.0
-        total += sign * e.getPhase()
-    return total
-
-
 def _rand_state(rng, dim=2):
     v = rng.normal(size=dim) + 1j * rng.normal(size=dim)
     return [complex(x) for x in v / np.linalg.norm(v)]
@@ -169,14 +151,19 @@ def check_c3(rng):
         e.setPhase(float(rng.uniform(-math.pi, math.pi)))
     ids = sorted(v.getId() for v in st.getVertexList().toVector())
     cycles = ([0, 1, 2], [0, 2, 3])
+    wl = tessera.WilsonLoop(st)
+    by_id = {v.getId(): v for v in st.getVertexList().toVector()}
     e0 = np.array(sorted(cob.HodgeLaplacian(st).eigenvalues()))
-    f0 = np.array([_cycle_flux(st, c) for c in cycles])
+    # Cycle flux = WilsonLoop U(1)-connection holonomy (oriented Edge.phase sum
+    # around the vertex cycle, reduced mod 2pi).  Reduction cancels in the
+    # dphi residual below, so the gauge-invariance check is unchanged.
+    f0 = np.array([wl.evaluateU1Connection([by_id[i] for i in c]).value for c in cycles])
     alpha = {vid: float(rng.uniform(-math.pi, math.pi)) for vid in ids}
     for e in st.getEdgeList().toVector():
         s, t = e.getSource().getId(), e.getTarget().getId()
         e.setPhase(e.getPhase() + alpha[s] - alpha[t])
     e1 = np.array(sorted(cob.HodgeLaplacian(st).eigenvalues()))
-    f1 = np.array([_cycle_flux(st, c) for c in cycles])
+    f1 = np.array([wl.evaluateU1Connection([by_id[i] for i in c]).value for c in cycles])
     dphi = np.angle(np.exp(1j * (f1 - f0)))  # flux residual mod 2pi
     res = max(float(np.max(np.abs(e1 - e0))), float(np.max(np.abs(dphi))))
     return res < 1e-10, res, "spec(L) and both cycle fluxes invariant under vertex rephasing"

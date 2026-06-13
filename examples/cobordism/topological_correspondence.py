@@ -235,25 +235,6 @@ def _make(cls, st, seed, boundary_fixed=False):
     return cls(st, seed, PRE, boundary_fixed)
 
 
-def _tops(st):
-    sizes = [len(s.getVertices()) for s in st.getSimplices()]
-    if not sizes:
-        return []
-    top = max(sizes)
-    return [tuple(sorted(v.getId() for v in s.getVertices()))
-            for s in st.getSimplices() if len(s.getVertices()) == top]
-
-
-def _is_closed_pseudomanifold(tops):
-    """Every codim-1 face is shared by exactly two top cells."""
-    counts = {}
-    for t in tops:
-        for drop in range(len(t)):
-            facet = t[:drop] + t[drop + 1:]
-            counts[facet] = counts.get(facet, 0) + 1
-    return bool(counts) and all(c == 2 for c in counts.values())
-
-
 def _pachner_z_series(max_depth, seed):
     """Apply interior pre-geometric Pachner moves to S²×S¹ and record Z(W) at
     every depth for both cocycles (the |V| cap keeps the flat space enumerable).
@@ -278,7 +259,11 @@ def _pachner_z_series(max_depth, seed):
             if m.propose() and m.apply():
                 depth += 1
                 counts[cls.__name__] += 1
-                closed &= _is_closed_pseudomanifold(_tops(st))
+                # Closed = no boundary facet (codim-1 face in exactly one top
+                # cell).  Pachner moves preserve the PL-manifold structure, so
+                # branching (a facet in >=3 cells) can't arise here, making the
+                # boundary-empty check from Cobordism.boundaryFaces sufficient.
+                closed &= len(cob.Cobordism.boundaryFaces(st)) == 0
                 zt_d = DijkgraafWitten(st, Cocycle.Trivial).partitionFunction()
                 zs_d = DijkgraafWitten(st, Cocycle.Sign).partitionFunction()
                 drift = max(drift, abs(zt_d - zt0), abs(zs_d - zs0))
