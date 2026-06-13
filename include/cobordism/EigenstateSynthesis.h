@@ -339,6 +339,22 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    /// The **carried representative** \f$ \psi \f$ that `residualForPeriods`
+    /// scores — exposed as a cochain in its own right (the read-out
+    /// `residualForPeriods` builds internally but does not return). Builds the
+    /// period matrix \f$ P \f$ (`cyclePeriods`), least-squares-projects
+    /// `targetPeriods` onto the carried period rows (minimum-norm, as
+    /// `numpy.linalg.lstsq`), forms the harmonic combination
+    /// \f$ \psi = \sum_r c_r h_r \f$, and attaches each hole's uncarried
+    /// remainder (the minimal leak) to the hole's first walk-order facet, so the
+    /// returned cochain's periods are exactly `targetPeriods`. A full
+    /// `order()`-length cell vector; `residual` of it is `residualForPeriods`.
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()` or a
+    ///   hole is malformed (see `cyclePeriods`).
+    [[nodiscard]] std::vector<std::complex<double>> carriedRepresentative(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     // === Surgery: the topology-changing interior remove move (#196) ===
 
     /// The interior top cells eligible for surgery removal: top cells whose
