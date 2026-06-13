@@ -240,7 +240,10 @@ if (TESSERA_CUDA)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     find_package(CUDAToolkit REQUIRED)
-    target_link_libraries(tessera_cuda PRIVATE CUDA::cudart)
+    # cusolver/cublas back the opt-in GPU dense eigensolver for HodgeLaplacian
+    # (hodge_eigensolver_cuda.cu); cudart for the Regge kernels.
+    target_link_libraries(tessera_cuda PRIVATE
+        CUDA::cudart CUDA::cusolver CUDA::cublas)
 endif()
 
 # ---- <tessera_core static library> ----------------------------------------
