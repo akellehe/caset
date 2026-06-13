@@ -155,6 +155,12 @@ class CellsFill:
     def __init__(self, cells, layers=1):
         self.circles0 = L1._hole_circles(0)
         self.circles1 = L1._hole_circles(12 * layers)
+        # the end register surfaces (the holed icosahedron at each end,
+        # shifted by 12*layers on the top) -- the faces _end_sign reads the
+        # induced-orientation charge covector off, mirroring Level1Fill
+        self.end_faces0 = [tuple(sorted(f)) for f in L1._W_FACES]
+        self.end_faces1 = [tuple(sorted(v + 12 * layers for v in f))
+                           for f in L1._W_FACES]
         self.reg_edges = [e for tri in (self.circles0 + self.circles1)
                           for e in BASE._cedges(tri)]
         self.eidx = {e: i for i, e in enumerate(self.reg_edges)}
@@ -178,8 +184,8 @@ class CellsFill:
             p1 = [self._period(h_reg[r], t) for t in self.circles1]
             rows.append(p0 + p1)
         self.P6 = np.array(rows).reshape(self.dim, 6)
-        self.sign0 = L1._reg_sign()
-        self.sign1 = L1._reg_sign()
+        self.sign0 = L1._end_sign(self.end_faces0, self.circles0)
+        self.sign1 = L1._end_sign(self.end_faces1, self.circles1)
 
     def _period(self, vec, tri):
         a, b, c = sorted(tri)
