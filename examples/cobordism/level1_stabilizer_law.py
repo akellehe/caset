@@ -165,17 +165,14 @@ def _bulk4(cells):
     return st
 
 
-_REG_SIGN_CACHE = []
-
-
-def _reg_sign():
-    """The hexjoin L_2 register's induced-orientation sign pattern -- a
-    property of the end, applied deterministically at both ends (the level-1
-    icosahedron run showed per-fill null-vector normalization is
-    sign-unstable)."""
-    if not _REG_SIGN_CACHE:
-        _REG_SIGN_CACHE.append(L2.RegisterL2().sign.copy())
-    return _REG_SIGN_CACHE[0]
+def _end_sign(cells, holes):
+    """An end's induced-orientation sign pattern -- a property of the end,
+    applied deterministically at both ends (the level-1 icosahedron run
+    showed per-fill null-vector normalization is sign-unstable).
+    ``ChainComplex.endSignCovector`` reads it off the end's fundamental
+    chain."""
+    return np.asarray(cob.ChainComplex.endSignCovector(
+        [list(c) for c in cells], [list(h) for h in holes]), dtype=float)
 
 
 class Level1FillS3:
@@ -196,27 +193,17 @@ class Level1FillS3:
         self.st = _bulk4(self.cells4)
         self.es = cob.EigenstateSynthesis(self.st, 2)
         self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
-        harmonics = cob.HodgeLaplacian(self.st).harmonics(2)
-        self.dim = len(harmonics)
-        if self.dim:
-            self.H_full = np.array(
-                [[complex(h.amplitudeFor(list(c))) for c in self.cells]
-                 for h in harmonics])
-        else:
-            self.H_full = np.zeros((0, len(self.cells)), dtype=complex)
+        self.H_full = np.asarray(
+            cob.HodgeLaplacian(self.st).harmonicMatrix(2),
+            dtype=complex).reshape(-1, len(self.cells))
+        self.dim = int(self.H_full.shape[0])
         self._reg_col = [self.cells.index(f) for f in self.reg_facets]
-        h_reg = self.H_full[:, self._reg_col] if self.dim else self.H_full
-        rows = []
-        for r in range(self.dim):
-            p0 = [self._period(h_reg[r], hole) for hole in self.holes0]
-            p1 = [self._period(h_reg[r], hole) for hole in self.holes1]
-            rows.append(p0 + p1)
-        self.P6 = np.array(rows).reshape(self.dim, 6)
-        self.sign0 = _reg_sign()
-        self.sign1 = _reg_sign()
-
-    def _period(self, vec, hole):
-        return sum(s * vec[self.fidx[f]] for f, s in L2._tet_facets(hole))
+        self.P6 = np.asarray(
+            self.es.cyclePeriods([list(h) for h in (self.holes0 + self.holes1)]),
+            dtype=complex).reshape(self.dim, 6)
+        self.sign0 = _end_sign(_W3_CELLS, self.holes0)
+        self.sign1 = _end_sign([tuple(v + 12 for v in c) for c in _W3_CELLS],
+                               self.holes1)
 
     @property
     def rank(self):
@@ -238,8 +225,9 @@ class Level1FillS3:
         return full
 
     def spectral_residual(self, pair6):
-        psi = self.harmonic_form(np.asarray(pair6, dtype=complex))
-        return float(self.es.residual([complex(z) for z in psi]))
+        return float(self.es.residualForPeriods(
+            [list(h) for h in (self.holes0 + self.holes1)],
+            [complex(z) for z in np.asarray(pair6, dtype=complex)]))
 
     def emergent_gate(self):
         if self.dim != 2:

@@ -296,6 +296,49 @@ class EigenstateSynthesis {
     /// on the primal lattice.
     [[nodiscard]] std::pair<bool, std::string> dualComplexValid() const;
 
+    // === The carried register read-outs (#286) ===
+
+    /// The **period matrix** of the current harmonics over the boundary cycles
+    /// of the given (removed) cells: a flat row-major
+    /// \f$ \dim\ker L_k \times |\text{holes}| \f$ complex array whose entry
+    /// \f$ [\,r\,|\text{holes}| + q\,] \f$ is harmonic \f$ r \f$ summed over
+    /// hole \f$ q \f$'s facets with the induced-orientation signs of the
+    /// boundary operator — facet \f$ j \f$ of the sorted hole drops vertex
+    /// \f$ v_j \f$ and carries \f$ (-1)^j \f$, so a circle (a triangle hole at
+    /// \f$ k = 1 \f$) contributes \f$ +(a,b) + (b,c) - (a,c) \f$ and a sphere
+    /// (a tetrahedron hole at \f$ k = 2 \f$) its four \f$ (-1)^j \f$-signed
+    /// triangles: degree-general. Each hole is a \f$ (k\!+\!2) \f$-vertex
+    /// tuple (sorted internally) whose facets must all be \f$ k \f$-cells of
+    /// the **current** complex — the cycles surgery (`removeInteriorCell`)
+    /// leaves behind. Harmonics are read fresh from the live complex
+    /// (`HodgeLaplacian::harmonicMatrix`, \f$ |\lambda| < 10^{-9} \f$, metric
+    /// weights), rows in ascending-eigenvalue order. Empty when
+    /// \f$ \ker L_k = 0 \f$.
+    /// @throws std::runtime_error if a hole has the wrong vertex count or one
+    ///   of its facets is not a \f$ k \f$-cell of the complex.
+    [[nodiscard]] std::vector<std::complex<double>> cyclePeriods(
+        const std::vector<std::vector<std::uint64_t>> &holes) const;
+
+    /// The **verdict primitive** every realizability experiment flows through,
+    /// in one call: the genuine residual of the carried representative of
+    /// `targetPeriods` over the `holes` cycles. Builds the period matrix
+    /// \f$ P \f$ (`cyclePeriods`), solves the least-squares projection
+    /// \f$ \min_c \|P^{\top} c - \text{target}\| \f$ (minimum-norm, so a
+    /// rank-deficient carried space matches `numpy.linalg.lstsq`), forms the
+    /// harmonic combination \f$ \psi = \sum_r c_r h_r \f$, attaches the
+    /// uncarried remainder (the **minimal leak**) to one facet per hole so the
+    /// cochain's periods are exactly `targetPeriods` — the hole's first facet
+    /// in the degree's established walk order, both of boundary sign
+    /// \f$ +1 \f$: the \f$ (a,b) \f$ edge of a circle at \f$ k = 1 \f$, the
+    /// drop-\f$ v_0 \f$ facet at every other degree — and returns
+    /// `residual(psi)`: \f$ \to 0 \f$ iff the targets lie in the carried
+    /// period space, floored otherwise, with the leak the certificate.
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`
+    ///   or a hole is malformed (see `cyclePeriods`).
+    [[nodiscard]] double residualForPeriods(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     // === Surgery: the topology-changing interior remove move (#196) ===
 
     /// The interior top cells eligible for surgery removal: top cells whose
@@ -379,6 +422,21 @@ class EigenstateSynthesis {
           removedEdges{};
     };
     std::vector<Removal> removals_{};
+
+    // The shared register read-out assembly (#286): the fresh harmonic matrix
+    // H (flat row-major dim × order(), HodgeLaplacian::harmonicMatrix on the
+    // live complex), the period matrix P (flat row-major dim × |holes|, the
+    // boundary-operator-signed facet sums), and each hole's leak column (the
+    // cochain index its uncarried remainder attaches to). Backs cyclePeriods
+    // and residualForPeriods.
+    struct RegisterReadout {
+      std::vector<std::complex<double>> H{};
+      std::vector<std::complex<double>> P{};
+      std::vector<std::size_t> leakColumns{};
+      std::size_t dim{0};
+    };
+    [[nodiscard]] RegisterReadout assembleRegisterReadout(
+        const std::vector<std::vector<std::uint64_t>> &holes) const;
 
     // Re-create the top cell of a Removal (createSimplexTracked rebuilds its
     // missing edges = the orphaned ones) and restore those edges' weights/phases.

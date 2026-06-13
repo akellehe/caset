@@ -133,6 +133,33 @@ class ChainComplex {
     ///   \neq 1 \f$) — or \f$ d < 1 \f$.
     [[nodiscard]] std::vector<int> fundamentalClass() const;
 
+    /// The **end sign covector**: the induced-orientation charge pattern
+    /// \f$ \sigma \in \{\pm 1\}^{|\text{holes}|} \f$ of an end surface, read off
+    /// its fundamental chain. `surfaceCells` are the end's top cells (sorted
+    /// vertex-id tuples, all of one dimension) and `holes` the removed cells
+    /// whose boundary cycles carry the periods; the union is oriented by sign
+    /// propagation across shared facets (facet \f$ j \f$ of a sorted cell is the
+    /// drop-\f$ v_j \f$ tuple with boundary sign \f$ (-1)^j \f$), each connected
+    /// component normalized so its lexicographically smallest cell carries
+    /// \f$ +1 \f$, and \f$ \sigma_k \f$ is the coefficient the orientation
+    /// \f$ \varepsilon \f$ assigns to `holes[k]`. Since
+    /// \f$ \partial\big(\sum_{\text{kept}} \varepsilon_c\, c\big) =
+    /// -\sum_k \varepsilon_{H_k}\, \partial H_k \f$ on the hole cycles, every
+    /// closed form's signed periods obey \f$ \sum_k \sigma_k p_k = 0 \f$ end by
+    /// end — the symmetrized charge constraint the register layers apply — for
+    /// **either** global sign; this normalization is the deterministic one
+    /// (a property of the end surface, not of any fill or spectrum: no
+    /// per-fill null-vector normalization, which is sign-unstable). Each
+    /// entry is independent of the others, so reordering `holes` permutes
+    /// \f$ \sigma \f$ without flips, and relabeling the vertices by any
+    /// order-preserving map (e.g. a layer shift) leaves it unchanged.
+    /// @throws std::runtime_error if the cells are not all of one dimension,
+    ///   a facet has more than two cofaces (not a pseudomanifold), or the
+    ///   orientation propagation contradicts itself (non-orientable).
+    [[nodiscard]] static std::vector<int> endSignCovector(
+        const std::vector<std::vector<std::uint64_t>> &surfaceCells,
+        const std::vector<std::vector<std::uint64_t>> &holes);
+
     /// The symmetric intersection form \f$ Q_{ij} = \langle \alpha_i \cup
     /// \alpha_j, [K] \rangle \f$ on a basis \f$ \{\alpha_i\} \f$ of the free
     /// part of \f$ H^2 \f$, as a flat row-major \f$ b_2 \times b_2 \f$ matrix.
