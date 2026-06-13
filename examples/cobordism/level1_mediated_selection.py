@@ -120,11 +120,8 @@ def _cut_variant(seed, n_cut):
     rng.shuffle(sites)
     cut = 0
     for cell in sites[:n_cut]:
-        if fill.es.removeInteriorCell(list(cell)):
-            ok, _why = fill.es.dualComplexValid()
-            if not ok:
-                fill.es.restoreLastRemoval()
-                continue
+        ok, _why = fill.es.removeInteriorCellChecked(list(cell))
+        if ok:
             cut += 1
     fill.read_spectral()
     return fill, cut

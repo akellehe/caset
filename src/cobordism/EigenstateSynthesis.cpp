@@ -714,6 +714,69 @@ bool EigenstateSynthesis::restoreLastRemoval() {
   return true;
 }
 
+// === Gated topology moves: the checked cut and the composed stellar move ===
+
+std::pair<bool, std::string> EigenstateSynthesis::removeInteriorCellChecked(
+    const std::vector<std::uint64_t> &cell) {
+  if (!removeInteriorCell(cell))
+    return {false,
+            "not an interior top cell (or the removal would touch dW)"};
+  const auto verdict = dualComplexValid();  // {true, "ok"} when the dual holds
+  if (!verdict.first) restoreLastRemoval();
+  return verdict;
+}
+
+std::pair<bool, std::string> EigenstateSynthesis::stellarSubdivideInterior(
+    const std::vector<std::uint64_t> &cell) {
+  if (!st_) return {false, "no spacetime"};
+  const int d = st_->getMetric()->getSignature()->getDimensions();
+  const std::size_t topVerts = (d >= 0) ? static_cast<std::size_t>(d) + 1 : 0;
+  if (topVerts < 2 || cell.size() != topVerts)
+    return {false, "cell is not a top cell (" + std::to_string(cell.size()) +
+                       " vertices, expected " + std::to_string(topVerts) + ")"};
+
+  // The facet fan: `cell` with each vertex dropped in turn (its d+1 codim-one
+  // facets). The attach cones the fresh vertex onto every facet, so the parent
+  // cell's 1-skeleton survives its removal (each parent edge keeps a fan
+  // coface) and the subdivision is exactly 1 -> (d+1).
+  std::vector<std::uint64_t> want(cell.begin(), cell.end());
+  std::sort(want.begin(), want.end());
+  std::vector<std::vector<std::uint64_t>> fan;
+  fan.reserve(want.size());
+  for (std::size_t skip = 0; skip < want.size(); ++skip) {
+    std::vector<std::uint64_t> facet;
+    facet.reserve(want.size() - 1);
+    for (std::size_t i = 0; i < want.size(); ++i)
+      if (i != skip) facet.push_back(want[i]);
+    fan.push_back(std::move(facet));
+  }
+
+  if (!attachInteriorVertex(fan))
+    return {false, "attach rejected (invalid fan spec, or dW perturbed)"};
+  if (!removeInteriorCell(want)) {
+    detachLastInteriorVertex();
+    return {false,
+            "not an interior top cell (or the removal would touch dW)"};
+  }
+  const auto verdict = dualComplexValid();
+  if (!verdict.first) {
+    // LIFO rollback: the removal happened after the attach.
+    restoreLastRemoval();
+    detachLastInteriorVertex();
+    return verdict;
+  }
+
+  // The uniform re-pin: the seeds are built with every edge at squared length 1
+  // and phase 0 (the unit cochain metric), and the move must hold that by
+  // construction, not by the time-rule coincidence on all-same-time seeds.
+  for (const auto e : st_->getEdgeList()->toVector()) {
+    if (e == nullptr) continue;
+    e->setSquaredLength(1.0);
+    e->setPhase(0.0);
+  }
+  return verdict;  // {true, "ok"}
+}
+
 std::vector<std::vector<std::uint64_t>> EigenstateSynthesis::topCells() const {
   std::vector<std::vector<std::uint64_t>> cells;
   if (!st_) return cells;

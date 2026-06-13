@@ -192,11 +192,10 @@ class Level1Fill:
             cs = tuple(sorted(cell))
             avail = {tuple(sorted(int(v) for v in c))
                      for c in self.es.interiorTopCells()}
-            if cs in avail and self.es.removeInteriorCell(list(cs)):
-                ok, _why = self.es.dualComplexValid()
-                if not ok:
-                    self.es.restoreLastRemoval()
-                    continue
+            if cs not in avail:
+                continue
+            ok, _why = self.es.removeInteriorCellChecked(list(cs))
+            if ok:
                 self.extra_opened.append(cs)
         self.read_spectral()
 
@@ -222,11 +221,13 @@ class Level1Fill:
         return self
 
     def _stellar_grow(self, n, seed):
-        """ADD up to *n* interior vertices by the gated composed stellar move
-        (cone a vertex onto an interior tet's four faces, then remove the
-        parent), exactly as the L_2 register does. Pure prisms have interior
-        tets only at three or more layers (every tet spans adjacent layers),
-        so the budget is unused on thin fills -- documented geometry."""
+        """ADD up to *n* interior vertices by the boundary-fixed composed stellar
+        move (``EigenstateSynthesis.stellarSubdivideInterior``: attach a vertex
+        onto an interior tet's facet fan, remove the parent, gate on dual
+        validity, re-pin to the unit cochain metric) -- the same C++
+        implementation the L_2 register uses. Pure prisms have interior tets
+        only at three or more layers (every tet spans adjacent layers), so the
+        budget is unused on thin fills -- documented geometry."""
         rng = random.Random(int(seed))
         grown = 0
         for _ in range(int(n)):
@@ -234,23 +235,9 @@ class Level1Fill:
                            for c in self.es.interiorTopCells())
             if not sites:
                 break
-            cell = rng.choice(sites)
-            fan = [list(f) for f, _s in L2._tet_facets(cell)]
-            if not self.es.attachInteriorVertex(fan):
-                continue
-            if not self.es.removeInteriorCell(list(cell)):
-                self.es.detachLastInteriorVertex()
-                continue
-            ok, _why = self.es.dualComplexValid()
-            if not ok:
-                self.es.restoreLastRemoval()
-                self.es.detachLastInteriorVertex()
-                continue
-            grown += 1
-        if grown:
-            for e in self.st.getEdgeList().toVector():
-                e.setSquaredLength(1.0)
-                e.setPhase(0.0)
+            ok, _why = self.es.stellarSubdivideInterior(list(rng.choice(sites)))
+            if ok:
+                grown += 1
         return grown
 
     # ---- the level-1 register read-outs ---------------------------------- #
@@ -379,11 +366,8 @@ def _catalog_worker(task):
     rng.shuffle(sites)
     cut = []
     for cell in sites[:rng.randint(0, max_cut)]:
-        if fill.es.removeInteriorCell(list(cell)):
-            ok, _why = fill.es.dualComplexValid()
-            if not ok:
-                fill.es.restoreLastRemoval()
-                continue
+        ok, _why = fill.es.removeInteriorCellChecked(list(cell))
+        if ok:
             cut.append(cell)
     # re-read the spectral state after the catalog's own cuts
     try:
