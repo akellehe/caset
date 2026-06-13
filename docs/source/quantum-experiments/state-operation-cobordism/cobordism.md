@@ -14,7 +14,7 @@ Let $\mathrm{geo}(\cdot)$ map a finite-dimensional Hilbert space to a simplicial
 
 $$ W_{AB} = \mathrm{geo}(U) \quad\text{is an } n\text{-cobordism}, $$
 
-$$ \partial W_{AB} = \overline{\mathrm{geo}(\psi_B)}\ \sqcup\ \mathrm{geo}(\psi_A), $$
+$$ \partial W_{AB} = \mathrm{geo}(\psi_A)\ \sqcup\ \mathrm{geo}(\psi_B), $$
 
 $$ Z(W_{AB}) = \langle \psi_A \,|\, U \,|\, \psi_B \rangle . $$
 
@@ -22,7 +22,11 @@ The manifold is the operation; the amplitude is the number it computes. The engi
 
 $$ \operatorname{rank}(U) \;=\; \text{Schmidt rank of } \operatorname{vec}(U) \;=\; \text{connectivity of } W_{AB}. $$
 
-**Falsifiable core.** The hypothesis is *supported* iff (i) the cylinder cobordism reproduces the inner product, (ii) $Z(W)$ is invariant under interior re-triangulation, and (iii) the nontrivial sign class produces a $Z(W)$ distinct from the trivial one. It is *refuted* if any of these fails.
+**This is a merge, not a transport.** The two states are *not* an input and an output joined by a tube. They are two **co-incoming** systems: $\mathrm{geo}(\psi_A)$ and $\mathrm{geo}(\psi_B)$ are both **purely spatial on the same time slice $t$**, and together they are the boundary $\partial W_{AB}=\mathrm{geo}(\psi_A)\sqcup\mathrm{geo}(\psi_B)$ of the bulk that **merges** them — the simplicial pair-of-pants. The synthesized bulk $W_{AB}=\mathrm{geo}(U)$ is then itself a single object situated at $t+1$; so two merge results $\mathrm{geo}(U_{AB})$, $\mathrm{geo}(U_{CD})$ (each at $t+1$) become the two co-incoming inputs of a *new* merge $\mathrm{geo}(U_{ABCD})$ at $t+2$. **Time is the interaction level**: pre-interaction systems sit at $t$, the bulk realizing the interaction at $t+1$, and the sequence recurses. (The orientation-reversed *transport* reading $\partial W=\overline{\mathrm{geo}(\psi_B)}\sqcup\mathrm{geo}(\psi_A)$ — one input at $t$, one output at $t+1$, joined by a prism — is the degenerate single-step special case; the cylinder of §2 is its identity anchor. The realizability and value content below is the same either way, because it is read off the carried states, which are framing-independent.)
+
+**The causal structure is coordinate-free.** There are no vertex coordinates and no CDT constant-length scaffold — the geometry *is* the signed squared edge lengths. The arrow of the merge (the $t\to t{+}1$ direction, from the co-incoming states up to the bulk) is carried by the **sign of $\ell^2$** on the primal edges: the edges crossing the slice (input$\to$bulk) are **timelike** ($\ell^2<0$), the intra-slice edges **spacelike** ($\ell^2>0$). The dual inherits this causal character canonically (Lorentzian DEC), so the dual Regge action of the mediation track is complex (Sorkin). The register of §5 is read off the **magnitude** (Riemannian, positive-definite) metric — it is the quantum Hilbert space — while the Lorentzian structure lives on the bulk geometry and its dual.
+
+**Falsifiable core.** The hypothesis is *supported* iff (i) the cylinder (identity) cobordism reproduces the inner product, (ii) $Z(W)$ is invariant under interior re-triangulation, and (iii) the nontrivial sign class produces a $Z(W)$ distinct from the trivial one. It is *refuted* if any of these fails.
 
 ---
 
@@ -84,7 +88,7 @@ Compute the Schmidt rank of $\operatorname{vec}(U)$ by SVD of the matrix $U$.
 
 ### 4.4 The cobordism reading
 
-$W_{AB}$ is the support graph of $U$; its boundary components are $\mathrm{geo}(\psi_A)$ and $\mathrm{geo}(\psi_B)$. A rank-1 $U$ factors through the unit object,
+$W_{AB}$ is the support graph of $U$; its two boundary components are the co-incoming states $\mathrm{geo}(\psi_A)$ and $\mathrm{geo}(\psi_B)$, both on slice $t$, which the bulk merges to the single object $\mathrm{geo}(U_{AB})$ at $t+1$. A rank-1 $U$ factors through the unit object,
 
 $$ \mathcal{H}_B \xrightarrow{\ \langle\psi_B|\ } \mathbb{C} \xrightarrow{\ |\psi_A\rangle\ } \mathcal{H}_A , $$
 
@@ -151,7 +155,7 @@ Now states live on closed 2-surfaces and the cobordism is a 3-manifold. This is 
 
 ### 5.0 Synthesis is the task
 
-Given the operation $U:\mathcal{H}_B\to\mathcal{H}_A$ (e.g. the entangling coupling $\gamma_{AB}$ relating the synthesized boundaries), **find a bulk** 3-manifold $W_{AB}$ realizing it — do not assume one. Bend $U$ to a boundary *state* via Choi–Jamiołkowski ($\mathrm{vec}(U)$, the operator-as-state), then **synthesize the bulk spectrally**: holding the synthesized boundaries $\mathrm{geo}(\psi_A)$, $\mathrm{geo}(\psi_B)$ and the output surface *fixed*, fill the interior of $W_{AB}$ — its topology and Hermitian edge weights — so the final state's graph-Laplacian eigenvector(s) match the bent target (drive the §4b residual $r=\lVert(I-\psi\psi^\dagger)L\psi\rVert^2\to 0$). The operation lives in the bulk, not in the cylinder.
+Given the operation $U:\mathcal{H}_B\to\mathcal{H}_A$ (e.g. the entangling coupling $\gamma_{AB}$ relating the synthesized boundaries), **find a bulk** 3-manifold $W_{AB}$ realizing it — do not assume one. Bend $U$ to a boundary *state* via Choi–Jamiołkowski ($\mathrm{vec}(U)$, the operator-as-state), then **synthesize the merge bulk spectrally**: pin the two co-incoming states $\mathrm{geo}(\psi_A)$, $\mathrm{geo}(\psi_B)$ on slice $t$ and fill the interior of $W_{AB}$ — its topology and Hermitian edge weights — so the carried state of the bulk that merges them up to $t+1$ matches the bent target (drive the §4b residual $r=\lVert(I-\psi\psi^\dagger)L\psi\rVert^2\to 0$). The interior edges crossing the slice are timelike (coordinate-free, the sign of $\ell^2$); the merge runs from the two inputs at $t$ to the single result at $t+1$. The operation lives in the bulk, not in a transport cylinder.
 
 **Realizability is itself the test.** The boundaries are *pinned* (the synthesized $\mathrm{geo}$'s), so this is **not** the free coning of §4b — where parameters outrun constraints and any single eigenvector is eventually realizable — but an *interior fill with fixed ends*. A target is **realizable** iff the residual can be driven to zero, and **unrealizable** iff it floors away from zero: a spectral/topological obstruction under the fixed-boundary constraint (the analogue of §4b's two-vertex floor $w_{\min}^2(|c_0|^2-|c_1|^2)^2$). Non-existence is thus certified by an *obstruction* (a residual floor), **not** by exhausting triangulations. Whether such obstructions exist — which operations $U$ have no bulk — is the sharpest form of the hypothesis. (An earlier draft framed this as TQFT-membership $Z(W)=U$ generated by the modular $S,T$; that route is set aside — the Dijkgraaf–Witten state-sum of §5.3–5.5 remains the topological invariant tested by T1–T5, while realizability is decided spectrally as above.)
 

@@ -28,16 +28,31 @@ is the operation; the amplitude is the number
 it computes. Concretely (spec §1):
 
 - **H1.** $W_{AB}=\mathrm{geo}(U)$ is an $n$-cobordism.
-- **H2.** $\partial W_{AB}=\overline{\mathrm{geo}(\psi_B)}\sqcup\mathrm{geo}(\psi_A)$.
+- **H2.** $\partial W_{AB}=\mathrm{geo}(\psi_A)\sqcup\mathrm{geo}(\psi_B)$.
 - **H3.** $Z(W_{AB})=\langle\psi_A|\,U\,|\psi_B\rangle$, with
   $\operatorname{rank}(U)=\text{Schmidt rank of }\operatorname{vec}(U)=\text{connectivity of }W_{AB}$.
+
+**The interaction is a merge.** The two states are co-incoming, not an
+input/output pair: $\mathrm{geo}(\psi_A)$ and $\mathrm{geo}(\psi_B)$ sit
+**purely spatial on the same time slice $t$**, and the bulk merges them — the
+simplicial pair-of-pants — into the single object $\mathrm{geo}(U_{AB})$ at
+$t+1$. Two such results then become the co-incoming inputs of a new merge
+($\mathrm{geo}(U_{AB}),\mathrm{geo}(U_{CD})\to\mathrm{geo}(U_{ABCD})$); time is
+the interaction level. The merge is coordinate-free — its $t\to t{+}1$ arrow is
+the **sign of $\ell^2$** (the input$\to$bulk edges timelike), so the dual Regge
+action goes complex (Lorentzian) without any vertex coordinates. The
+orientation-reversed *transport* reading (one input at $t$, one output at
+$t+1$) is the degenerate single-step case anchored by the cylinder; every
+realizability and value result below is read off the carried states and so is
+the same in either framing. The merge machinery is
+[`examples/cobordism/merge_cobordism.py`](https://github.com/akellehe/tessera/blob/main/examples/cobordism/merge_cobordism.py).
 
 **What $\mathrm{geo}(\cdot)$ denotes.** $\mathrm{geo}(\psi)$ is a **carrier**
 of the state $\psi$ — a Hermitian-weighted simplicial complex whose (Hodge)
 Laplacian has $\psi$ as a distinguished eigenvector (a *harmonic*,
 $\psi\in\ker L_k$, on the register layer) — and $\mathrm{geo}(U)$ is a carrier
 of the bent state $\operatorname{vec}(U)$, synthesized with its boundary
-pinned; the overline in H2 is orientation reversal. The notation is ours, and
+pinned (the two co-incoming states of the merge). The notation is ours, and
 it is not a canonical map: carriers need not exist — H1 *is* the existence
 question, and the residual floors below are its certified failures — and they
 are never unique (all 1443 genuine registers of the topology search below
