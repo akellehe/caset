@@ -120,7 +120,7 @@ class TestSpectralDimension(unittest.TestCase):
         os.unlink(path)
 
     def test_builds_dual_adjacency(self):
-        """Should report diffusion walks were collected."""
+        """Should report the dual-graph return probabilities were collected."""
         rc, out, err, path = run_example(
             "spectral_dimension.py",
             ["--n-simplices", "80", "--n-therm", "2",
@@ -128,7 +128,8 @@ class TestSpectralDimension(unittest.TestCase):
              "--max-sigma", "10", "--sweeps-between", "1",
              "--workers", "1"])
         self.assertEqual(rc, 0, f"stderr:\n{err}")
-        self.assertIn("diffusion walks", out)
+        self.assertIn("Collected", out)
+        self.assertIn("configurations", out)
         if os.path.exists(path):
             os.unlink(path)
 
