@@ -38,43 +38,47 @@ def _skey(s):
 def _build_dual_complex(st):
     """Build the full dual complex: nodes = top-simplices, edges = shared facets.
 
-    Returns (key_to_idx, all_keys, dual_edges, key_to_simplex).
+    Topology comes straight from ``Spacetime.getDualAdjacency()`` (computed in
+    C++ — far faster than walking simplices/facets/cofaces from Python, and it
+    sidesteps the ``getCofaces`` detached-copy hazard).  Node ``i`` is the
+    ``i``-th entry of ``getTopSimplices()``, matching the COO indexing.
+
+    The per-edge timelike flag is the only thing not in the COO: two adjacent
+    top simplices share exactly their common ``(d-1)``-facet, i.e. the
+    intersection of their vertex-id sets, so we classify it as timelike when
+    those shared vertices span more than one time slice.
+
+    Returns (key_to_idx, top_simplices, dual_edges, edge_types).
     """
-    # Find top-simplex size from data
-    top_size = 0
-    for s in st.getSimplices():
-        sz = len(s.getVertices())
-        if sz > top_size:
-            top_size = sz
+    top_simplices = st.getTopSimplices()
+    key_to_idx = {}
+    vid_sets = []
+    vid_time = {}
+    for i, s in enumerate(top_simplices):
+        verts = s.getVertices()
+        ids = frozenset(v.getId() for v in verts)
+        key_to_idx[ids] = i
+        vid_sets.append(ids)
+        for v in verts:
+            vid_time[v.getId()] = round(v.getTime())
 
-    all_simplices = {}
-    for s in st.getSimplices():
-        if len(s.getVertices()) == top_size:
-            all_simplices[_skey(s)] = s
+    rows, cols, _n = st.getDualAdjacency()
+    edge_list = []
+    edge_types = []
+    seen = set()
+    for a, b in zip(rows, cols):
+        if a == b:
+            continue
+        edge = (a, b) if a < b else (b, a)
+        if edge in seen:
+            continue
+        seen.add(edge)
+        shared = vid_sets[edge[0]] & vid_sets[edge[1]]
+        is_tl = len({vid_time[v] for v in shared}) > 1
+        edge_list.append(edge)
+        edge_types.append(is_tl)
 
-    key_list = sorted(all_simplices.keys(), key=lambda k: sorted(k))
-    key_to_idx = {k: i for i, k in enumerate(key_list)}
-
-    dual_edges = {}  # (a, b) -> is_timelike
-    for k in key_list:
-        s = all_simplices[k]
-        for facet in s.getFacets():
-            for coface in facet.getCofaces():
-                ck = _skey(coface)
-                if ck in key_to_idx and ck != k:
-                    a, b = key_to_idx[k], key_to_idx[ck]
-                    edge = (min(a, b), max(a, b))
-                    if edge not in dual_edges:
-                        # Classify by shared facet: timelike if vertices
-                        # span multiple time slices
-                        fv = facet.getVertices()
-                        t0 = round(fv[0].getTime())
-                        is_tl = any(round(v.getTime()) != t0 for v in fv)
-                        dual_edges[edge] = is_tl
-
-    edge_list = list(dual_edges.keys())
-    edge_types = [dual_edges[e] for e in edge_list]
-    return key_to_idx, key_list, edge_list, edge_types, all_simplices
+    return key_to_idx, top_simplices, edge_list, edge_types
 
 
 def _loop_indices(loop, key_to_idx):
@@ -287,9 +291,9 @@ def main():
 
     # Build full dual-complex layout (shared across all loop types)
     prog.phase("layouting", extra="dual complex")
-    key_to_idx, key_list, dual_edges, edge_types, _ = _build_dual_complex(st)
+    key_to_idx, top_simplices, dual_edges, edge_types = _build_dual_complex(st)
     dual_pos = force_layout_3d(
-        len(key_list), dual_edges,
+        len(top_simplices), dual_edges,
         spring_k=0.05, repulsion_k=0.3, repulsion_cap=300, iters=300)
 
     # Render GIF: for each loop type, show rotating views
