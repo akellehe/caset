@@ -15,7 +15,7 @@ the canonical ``from tessera.spacetime import Spacetime``.
 """
 
 # Root-namespace classes / free functions (Poset, OrderAgreement,
-# MatterConfiguration, HingeType, renderSpacetime, forceLayout3D, ...).
+# MatterConfiguration, HingeType, renderSpacetime, ForceLayout, ...).
 from tessera._tessera import *                              # noqa: F401,F403
 from tessera._tessera import __doc__                        # noqa: F401
 

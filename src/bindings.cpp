@@ -180,7 +180,9 @@ Returns a list of vertices, one per time slice, ordered by time.)doc")
   // ========================================
   // ForceLayout
   // ========================================
-  m.def("forceLayout3D", &forceLayout3D,
+  py::class_<ForceLayout>(m, "ForceLayout",
+        "Fruchterman-Reingold spring-electrical graph layout.")
+      .def_static("layout3D", &ForceLayout::layout3D,
         py::arg("n"),
         py::arg("edges"),
         py::arg("centerIdx") = -1,
@@ -208,6 +210,47 @@ Args:
     iters: Number of iterations (default 300).
     cooling: Step-size decay per iteration (default 0.995).
     repulsionCap: Max nodes for O(n^2) repulsion (default 200).
+    seed: Random seed (default 42).)doc")
+      .def_static("layout2D", &ForceLayout::layout2D,
+        py::arg("n"),
+        py::arg("edges"),
+        py::arg("targetRadii") = std::vector<double>{},
+        py::arg("groups") = std::vector<int>{},
+        py::arg("centerIdx") = -1,
+        py::arg("initPos") = std::vector<double>{},
+        py::arg("restLengths") = std::vector<double>{},
+        py::arg("springK") = 0.02,
+        py::arg("repulsionK") = 0.3,
+        py::arg("iters") = 200,
+        py::arg("cooling") = 0.995,
+        py::arg("repulsionCap") = 200,
+        py::arg("initialStep") = 0.5,
+        py::arg("seed") = 42,
+        R"doc(Spring-electrical force-directed layout in 2D.
+
+Returns a flat list of n*2 floats (row-major x,y positions).
+Reshape to (n, 2) with numpy: ``np.array(result).reshape(n, 2)``.
+
+Two optional constraints (independent, may be combined):
+  * targetRadii (length n) pins each node's radius — only the angle is
+    solved (tangential forces, radii re-snapped each step).
+  * groups (length n) scopes repulsion to nodes sharing a group id;
+    when empty, repulsion is global (capped).
+
+Args:
+    n: Number of nodes.
+    edges: List of (i, j) index pairs.
+    targetRadii: Per-node pinned radius (length n enables radial mode).
+    groups: Per-node group id (length n scopes repulsion).
+    centerIdx: Pin this node at the origin (-1 to disable).
+    initPos: Flat initial positions (length n*2). Random if empty.
+    restLengths: Per-edge rest lengths. Unit if empty.
+    springK: Spring constant (default 0.02).
+    repulsionK: Coulomb constant (default 0.3).
+    iters: Number of iterations (default 200).
+    cooling: Step-size decay per iteration (default 0.995).
+    repulsionCap: Max nodes per repulsion group (default 200).
+    initialStep: Initial max displacement per iteration (default 0.5).
     seed: Random seed (default 42).)doc");
 
 #ifdef TESSERA_VERSION

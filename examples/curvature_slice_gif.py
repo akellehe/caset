@@ -28,7 +28,7 @@ from PIL import Image
 import tessera
 from tessera.utils.memory_monitor import MemoryMonitor
 from tessera.utils.plot import (build_spacetime, time_slices, spatial_subgraph,
-                              bfs_distances, save_gif)
+                              bfs_distances, save_gif, radial_layout_2d)
 from tessera.utils.progress import SingleTaskProgress
 
 
@@ -65,6 +65,12 @@ def _radial_layout_2d(verts, edges, center_vid, bfs_dist, *,
                       iters=200, prev_angles=None, seed=42):
     """Place vertices in 2D: radius = BFS distance, angles from force layout.
 
+    The radius-constrained angular solve runs in C++
+    (``tessera.ForceLayout.layout2D`` via :func:`radial_layout_2d`); this
+    wrapper keeps the per-frame angular-continuity bookkeeping in Python:
+    seeding initial angles from the previous frame and recording the solved
+    angles for the next one.
+
     Returns (pos_2d, vid_to_idx, edge_idx, angles_by_dist) where
     angles_by_dist maps BFS distance to list of (angle, vid) for seeding
     the next frame.
@@ -77,14 +83,17 @@ def _radial_layout_2d(verts, edges, center_vid, bfs_dist, *,
     # Group vertices by BFS distance
     max_d = max(bfs_dist.values()) if bfs_dist else 1
 
-    # Initialize: place on circles by BFS distance with angular spread
-    pos = np.zeros((n, 2))
+    # Initialize: place on circles by BFS distance with angular spread.
+    # Radius is pinned to the BFS distance; the center stays at the origin.
+    init_pos = np.zeros((n, 2))
+    target_radii = np.zeros(n)
     for v in verts:
         idx = vid_to_idx[v.getId()]
         d = bfs_dist.get(v.getId(), max_d + 1)
         if v.getId() == center_vid:
             continue
         r = float(d)
+        target_radii[idx] = r
         # Try to use previous frame's angular structure for stability
         if prev_angles and d in prev_angles and prev_angles[d]:
             # Pick the angle closest to a uniform distribution
@@ -96,7 +105,7 @@ def _radial_layout_2d(verts, edges, center_vid, bfs_dist, *,
             angle = base_angle + 2 * math.pi * used / max(n_at_d, 1)
         else:
             angle = rng.uniform(0, 2 * math.pi)
-        pos[idx] = [r * math.cos(angle), r * math.sin(angle)]
+        init_pos[idx] = [r * math.cos(angle), r * math.sin(angle)]
 
     # Build edge index
     edge_idx = []
@@ -106,61 +115,9 @@ def _radial_layout_2d(verts, edges, center_vid, bfs_dist, *,
         if si is not None and ti is not None:
             edge_idx.append((si, ti))
 
-    # Force-directed refinement (angular only — preserve radii)
-    step = 0.3
-    eps = 1e-6
-    for _ in range(iters):
-        forces = np.zeros_like(pos)
-
-        # Spring forces along edges
-        for si, ti in edge_idx:
-            d = pos[ti] - pos[si]
-            dist = max(np.linalg.norm(d), eps)
-            f = 0.02 * (dist - 1.0) * d / dist
-            forces[si] += f
-            forces[ti] -= f
-
-        # Repulsion between vertices at the same BFS distance
-        cap = min(n, 200)
-        for a in range(cap):
-            for b in range(a + 1, cap):
-                d = pos[a] - pos[b]
-                d2 = np.dot(d, d) + eps
-                f = 0.3 / d2 * d / math.sqrt(d2)
-                forces[a] += f
-                forces[b] -= f
-
-        # Pin center
-        forces[center_idx] = 0.0
-
-        # Project forces to preserve radii (tangential only)
-        for i in range(n):
-            if i == center_idx:
-                continue
-            r = np.linalg.norm(pos[i])
-            if r < eps:
-                continue
-            radial = pos[i] / r
-            # Remove radial component of force
-            f_radial = np.dot(forces[i], radial)
-            forces[i] -= f_radial * radial
-
-        norms = np.linalg.norm(forces, axis=1, keepdims=True)
-        norms = np.maximum(norms, eps)
-        forces = np.where(norms > step, forces / norms * step, forces)
-        pos += forces
-
-        # Re-snap to correct radii
-        for i in range(n):
-            if i == center_idx:
-                continue
-            vid = verts[i].getId()
-            target_r = float(bfs_dist.get(vid, max_d + 1))
-            r = np.linalg.norm(pos[i])
-            if r > eps:
-                pos[i] = pos[i] / r * target_r
-
-        step *= 0.995
+    # Radius-constrained, tangential-only angular solve (C++).
+    pos = radial_layout_2d(n, edge_idx, target_radii, center_idx=center_idx,
+                           init_pos=init_pos, iters=iters, seed=seed)
 
     # Record angles for next frame
     angles_by_dist = {}
