@@ -9,6 +9,8 @@
 #include <cmath>
 #include <limits>
 #include <queue>
+#include <stdexcept>
+#include <unordered_map>
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -110,6 +112,41 @@ bool SparseGraph::isBipartite() const {
     }
   }
   return true;
+}
+
+double SparseGraph::modularity(const std::vector<int> &labels) const {
+  if (labels.size() != nNodes_) {
+    throw std::invalid_argument(
+        "SparseGraph::modularity: labels length must equal nNodes()");
+  }
+  if (nNodes_ == 0 || nEdges_ == 0) return 0.0;
+
+  // Sum of degrees = 2m (no self-loops in the CSR), the Q denominator.
+  const double twoM = 2.0 * static_cast<double>(nEdges_);
+
+  // Intra-community edge contribution. The CSR stores each undirected
+  // edge in both directions, so this directed scan counts 2·L_c summed
+  // over communities — exactly twoM · Σ_c (L_c/m).
+  double intra = 0.0;
+  for (std::size_t i = 0; i < nNodes_; ++i) {
+    const int ci = labels[i];
+    for (auto k = indptr_[i]; k < indptr_[i + 1]; ++k) {
+      if (labels[indices_[k]] == ci) intra += 1.0;
+    }
+  }
+
+  // Per-community summed degree D_c.
+  std::unordered_map<int, double> degByComm;
+  for (std::size_t i = 0; i < nNodes_; ++i) {
+    degByComm[labels[i]] += static_cast<double>(degree(static_cast<std::uint32_t>(i)));
+  }
+
+  double Q = intra / twoM;
+  for (const auto &[comm, dc] : degByComm) {
+    const double frac = dc / twoM;
+    Q -= frac * frac;
+  }
+  return Q;
 }
 
 std::vector<double> SparseGraph::diagonalHeatKernel(

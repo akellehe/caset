@@ -87,6 +87,52 @@ class TestSparseGraphBipartite(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Generic Newman-Girvan modularity on an arbitrary SparseGraph
+# ---------------------------------------------------------------------------
+
+
+class TestSparseGraphModularity(unittest.TestCase):
+    """SparseGraph.modularity(labels) — the generic Q = Σ_c [L_c/m -
+    (D_c/2m)²] used by examples/modularity.py."""
+
+    @staticmethod
+    def _two_triangles():
+        # Disjoint triangles {0,1,2} and {3,4,5}: m=6, each node deg 2.
+        rows = [0, 1, 2, 3, 4, 5]
+        cols = [1, 2, 0, 4, 5, 3]
+        return tessera.SparseGraph.fromCOO(rows, cols, 6)
+
+    def test_perfect_split_matches_closed_form(self):
+        # Each triangle one community: Q = 2·[3/6 - (6/12)²] = 0.5.
+        g = self._two_triangles()
+        self.assertAlmostEqual(g.modularity([0, 0, 0, 1, 1, 1]), 0.5, places=12)
+
+    def test_labels_need_not_be_dense(self):
+        g = self._two_triangles()
+        self.assertAlmostEqual(
+            g.modularity([10, 10, 10, 99, 99, 99]), 0.5, places=12)
+
+    def test_single_community_is_zero(self):
+        # All edges intra, D_c = 2m → Q = 1 - 1 = 0.
+        g = self._two_triangles()
+        self.assertAlmostEqual(g.modularity([0] * 6), 0.0, places=12)
+
+    def test_anti_community_is_negative(self):
+        # Split every triangle across communities: no intra edges.
+        g = self._two_triangles()
+        self.assertLess(g.modularity([0, 1, 0, 1, 0, 1]), 0.0)
+
+    def test_edgeless_graph_is_zero(self):
+        g = tessera.SparseGraph.fromCOO([], [], 5)
+        self.assertEqual(g.modularity([0, 1, 2, 3, 4]), 0.0)
+
+    def test_label_length_mismatch_raises(self):
+        g = self._two_triangles()
+        with self.assertRaises(ValueError):
+            g.modularity([0, 0, 1])
+
+
+# ---------------------------------------------------------------------------
 # Spectral dimension on toy graphs
 # ---------------------------------------------------------------------------
 

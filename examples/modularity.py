@@ -45,6 +45,8 @@ from scipy import sparse
 
 import tessera
 
+import tessera
+
 
 logger = logging.getLogger(__name__)
 
@@ -404,6 +406,20 @@ class Graph:
         return [(int(i), int(j))
                 for i, j in zip(coo.row.tolist(), coo.col.tolist())]
 
+    def _sparse_graph(self):
+        """Build the bound C++ ``tessera.SparseGraph`` for this topology.
+
+        The abstract graph is binary and undirected, so its edge list maps
+        directly onto a ``SparseGraph`` (which collapses duplicates and adds
+        both directions).  Structural queries (bipartiteness, modularity)
+        delegate here rather than re-implementing the C++ formulas.
+        """
+        rows, cols = [], []
+        for i, j in self.edges():
+            rows.append(i)
+            cols.append(j)
+        return tessera.SparseGraph.fromCOO(rows, cols, self.n_nodes)
+
     # --- structural queries -------------------------------------------
 
     def is_bipartite(self):
@@ -413,13 +429,15 @@ class Graph:
         no monochromatic edge -- equivalently, contains no odd cycle.
         Empty / zero-edge graphs are trivially bipartite.
 
+        Delegates to ``SparseGraph.isBipartite`` (BFS 2-coloring in C++).
+
         Returns
         -------
         bool
         """
         if self.n_nodes == 0 or self._A.nnz == 0:
             return True
-        return nx.is_bipartite(nx.from_scipy_sparse_array(self._A))
+        return self._sparse_graph().isBipartite()
 
     # --- spectral dimension -------------------------------------------
 
@@ -528,19 +546,9 @@ class Graph:
                 f"labels has length {len(labels)} but graph has {n} nodes")
         if n == 0:
             return 0.0
-        deg = self.degree
-        m2 = float(deg.sum())
-        if m2 == 0:
-            return 0.0
-        labels_arr = np.asarray(labels)
-        A_dense = self._A.toarray()
-        Q = 0.0
-        for c in np.unique(labels_arr):
-            nodes = np.where(labels_arr == c)[0]
-            intra = float(A_dense[np.ix_(nodes, nodes)].sum())
-            d_c = float(deg[nodes].sum())
-            Q += intra / m2 - (d_c / m2) ** 2
-        return Q
+        # Newman-Girvan Q in C++ (SparseGraph.modularity); edgeless graphs
+        # return 0.0 there, matching the previous behaviour.
+        return self._sparse_graph().modularity([int(c) for c in labels])
 
     # --- transformations ----------------------------------------------
 

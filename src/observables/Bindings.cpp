@@ -88,6 +88,14 @@ dimension on the dual graph.)doc")
            "Degree of node ``i`` (number of incident undirected edges).")
       .def("isBipartite", &SparseGraph::isBipartite,
            "True iff the graph is 2-colorable (no odd cycle).")
+      .def("modularity", &SparseGraph::modularity, py::arg("labels"),
+           R"doc(Newman-Girvan modularity Q for a node partition.
+
+Q = sum_c [L_c/m - (D_c/2m)^2] over communities c, where L_c is the
+intra-community edge count, D_c the summed degree, and m the edge count.
+``labels`` has one community id per node (length nNodes()); distinct
+values are distinct communities and need not be dense. Returns 0 for an
+empty / edgeless graph; raises ValueError if len(labels) != nNodes().)doc")
       .def("diagonalHeatKernel",
            [](const SparseGraph &self,
               const std::vector<std::uint32_t> &starts,
