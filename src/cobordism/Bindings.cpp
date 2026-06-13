@@ -43,6 +43,7 @@
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
+#include "cobordism/Register.h"
 #include "cobordism/Spectrum.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
@@ -504,6 +505,17 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "Harmonics are read fresh from the live complex, rows ascending "
            "by eigenvalue. Raises if a hole is not a (k+2)-vertex tuple "
            "whose facets are all current k-cells.")
+      .def("carriedRepresentative", &EigenstateSynthesis::carriedRepresentative,
+           py::arg("holes"), py::arg("target_periods"),
+           "The carried representative psi that residualForPeriods scores, as a "
+           "cochain in its own right (it builds this internally but does not "
+           "return it). Least-squares-projects target_periods onto the carried "
+           "period rows (minimum-norm, as numpy.linalg.lstsq), forms the harmonic "
+           "combination psi = sum_r c_r h_r, and attaches each hole's uncarried "
+           "remainder (the minimal leak) to the hole's first walk-order facet so "
+           "psi's periods are exactly target_periods. A full order()-length cell "
+           "vector; residual(psi) is residualForPeriods. Raises on a hole/target "
+           "length mismatch or a malformed hole.")
       .def("residualForPeriods", &EigenstateSynthesis::residualForPeriods,
            py::arg("holes"), py::arg("target_periods"),
            "The verdict primitive in one call: the genuine residual of the "
@@ -563,6 +575,107 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "phase 0) — the unit cochain metric the register/fill seeds are built "
            "with, held by construction rather than by the createSimplexTracked "
            "time-rule coincidence on all-same-time seeds.");
+
+  // ----- The carried spectral register V = ker L_1 (#303) -----
+  py::class_<Register>(m, "Register",
+      R"doc(The carried spectral register V = ker L_1 of a surgery-grown surface.
+
+The continuous spectral object the staged spectral-gate realizability test scores
+against (the spectral_gate_realizability example, the #249 scoring core). A thin
+aggregator over the existing spectrum tooling: it holds one EigenstateSynthesis at
+k=1 with the holonomy holes opened, and the period/residual math flows through that
+class's carried-register read-outs (cyclePeriods / carriedRepresentative /
+residualForPeriods) — no Hodge/period algebra is re-derived. The one quantity it
+adds is the induced-orientation constraint n / sign (the right null vector of the
+period matrix), which the read-outs do not expose.
+
+Construction opens each class hole (a holonomy-class triangle) by the boundary-fixed
+topology-changing surgery (removeInteriorCell), so b_1 grows 0 -> 2 and ker L_1
+emerges as the S_3 standard representation (the 2-dim Hodge register V). Any
+extra_holes still removable as interior top cells are opened too (the b_1-growth
+surgery the topology search drives); the subset actually opened is extra_opened.
+
+harmonic_form(raw_periods) is the carried harmonic 1-form whose hole-periods are the
+projection of raw_periods onto the carried space, plus the minimal leak so its
+periods are exactly raw_periods (full edge vector, cell order).
+spectral_residual(raw_periods) is that form's genuine Hodge residual on the grown
+bulk -> 0 iff the periods lie in the carried register V.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>,
+                    std::vector<std::vector<std::uint64_t>>,
+                    std::vector<std::vector<std::uint64_t>>, int, std::uint64_t>(),
+           py::arg("spacetime"), py::arg("class_holes"),
+           py::arg("extra_holes") = std::vector<std::vector<std::uint64_t>>{},
+           py::arg("grow_vertices") = 0, py::arg("grow_seed") = 0,
+           "Build the register over `spacetime` (a triangulated surface): open the "
+           "class_holes (each a sorted vertex-id triangle) by surgery, add "
+           "grow_vertices interior vertices by the seeded boundary-fixed stellar "
+           "move, then open any extra_holes still removable as interior top cells. "
+           "The surgery/growth mutate the spacetime in place, so `st` reflects the "
+           "grown bulk. Raises if a class hole is not a removable interior top cell.")
+      .def_property_readonly("st", &Register::spacetime,
+           "The surgery-grown bulk (the spacetime passed in, holes opened) — for "
+           "vertex/edge lists, Betti numbers, etc.")
+      .def("order", &Register::order,
+           "Operator dimension N = |C_1| — the length of a harmonic_form cell "
+           "vector (delegates to the underlying k=1 EigenstateSynthesis).")
+      .def_property_readonly("dim", &Register::dimension,
+           "The carried-register dimension dim V = dim ker L_1 = b_1.")
+      .def_property_readonly("rank", &Register::rank,
+           "The rank of the period matrix P over the holonomy holes. rank < "
+           "#holes is a GENUINE register (a proper carried subspace, so an "
+           "obstruction can exist); equality is the SATURATED/degenerate case.")
+      .def_property_readonly("grown", &Register::grown,
+           "The number of interior vertices actually added by the stellar growth "
+           "move (0 unless grow_vertices was passed).")
+      .def_property_readonly("cells",
+           [](const Register &r) {
+             // Return hashable tuples (callers key dicts by cell), matching the
+             // Python register's `[tuple(...) for c in cellSimplices()]`.
+             py::list out;
+             for (const auto &c : r.cells()) {
+               py::tuple t(c.size());
+               for (std::size_t i = 0; i < c.size(); ++i) t[i] = c[i];
+               out.append(t);
+             }
+             return out;
+           },
+           "The 1-cells of the grown bulk as sorted vertex-id tuples, in operator "
+           "order — the indexing of any harmonic_form cell vector and the columns "
+           "of H_full.")
+      .def_property_readonly("class_holes", &Register::classHoles,
+           "The class holes (holonomy-class triangles) as sorted vertex-id tuples.")
+      .def_property_readonly("extra_opened", &Register::openedExtraHoles,
+           "The subset of the requested extra_holes actually opened (those still "
+           "removable as interior top cells), as sorted vertex-id tuples.")
+      .def_property_readonly("P", &Register::periodMatrix,
+           "The period matrix P (dim x #holes) as a complex numpy array: each "
+           "harmonic's oriented loop sum around each class hole (cyclePeriods).")
+      .def_property_readonly("H_full", &Register::harmonicMatrix,
+           "The dim harmonic 1-forms of L_1 as a dim x |C_1| complex numpy array, "
+           "each row a full edge vector in the bulk's cell order (cells) — "
+           "HodgeLaplacian.harmonicMatrix(1) reshaped.")
+      .def_property_readonly("n", &Register::constraint,
+           "The induced-orientation boundary-period constraint n — the +-1 "
+           "ChainComplex.endSignCovector of the grown surface over the holes (the "
+           "deterministic end-surface covector that annihilates P: P @ n = 0).")
+      .def_property_readonly("sign", &Register::sign,
+           "The induced-orientation signs — identical to n (the +-1 end-sign "
+           "covector) — that symmetrize the boundary-period constraint to Sigma=0.")
+      .def("harmonic_form", &Register::harmonicForm, py::arg("raw_periods"),
+           "The carried harmonic 1-form whose hole-periods are the projection of "
+           "raw_periods onto the carried period space, plus the minimal leak so "
+           "the returned cochain's periods are exactly raw_periods (full edge "
+           "vector, length order()). Delegates to "
+           "EigenstateSynthesis.carriedRepresentative. Raises if "
+           "len(raw_periods) != len(class_holes).")
+      .def("spectral_residual", &Register::spectralResidual,
+           py::arg("raw_periods"),
+           "The genuine Hodge residual ||(I - psi psi^dagger) L_1 psi||^2 of the "
+           "1-form with the given hole-periods, on the surgery-grown bulk — the "
+           "continuous spectral realizability score. -> 0 iff the periods lie in "
+           "the carried register V. Delegates to "
+           "EigenstateSynthesis.residualForPeriods. Raises if "
+           "len(raw_periods) != len(class_holes).");
 
   // ----- §4b cone-and-retry synthesis loop → geo(ψ) (#134) -----
   py::class_<GeometrySynthesizer> gs(m, "GeometrySynthesizer",

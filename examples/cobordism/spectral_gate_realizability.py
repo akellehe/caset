@@ -267,127 +267,28 @@ _CLASS_HOLES = [tuple(sorted(h)) for h in [(0, 1, 2), (3, 7, 8), (4, 9, 5)]]
 _REG_EDGES = [e for tri in _CLASS_HOLES for e in _cedges(tri)]   # the 9 register edges
 
 
-def grow_register(faces=_ICO, class_holes=_CLASS_HOLES):
-    """STAGE 3 bulk: the icosahedron S^2 with the three holonomy holes opened by
-    surgery (b_1 0 -> 2). The minimal S^2/torus complex whose ker L_1 carries the
-    register states as harmonics -- the synthesized boundary geo(psi_A) || geo(psi_B)
-    held while the bulk grows. Returns the grown Spacetime."""
-    st = _surface(faces)
-    es = cob.EigenstateSynthesis(st, 1)
-    for hole in class_holes:
-        es.removeInteriorCell(list(hole))
-    return st
+def Register(faces=_ICO, class_holes=_CLASS_HOLES, extra_holes=(),
+             grow_vertices=0, grow_seed=0):
+    """The carried register V = ker L_1 of a surgery-grown S^2, built in C++
+    (`tessera.cobordism.Register`). A thin factory: it lays the pre-geometric surface
+    from a face list (`_surface`, generic spacetime scaffolding) and hands it to the C++
+    register, which opens the three holonomy holes by the boundary-fixed surgery
+    (b_1 0 -> 2, ker L_1 -> the S_3 standard rep), optionally grows the bulk, and reads
+    off -- all from the shared carried-register tooling -- the harmonic basis (`.H_full`,
+    HodgeLaplacian.harmonicMatrix), the circle-period matrix (`.P`, cyclePeriods), the
+    deterministic end-orientation covector (`.n` == `.sign`, ChainComplex.endSignCovector),
+    and the spectral scoring (`.harmonic_form` / `.spectral_residual`, the lstsq-project-
+    leak-residual verdict primitive). All OUTPUTS read off the grown bulk.
 
-
-class Register:
-    """The carried register V = ker L_1 of the surgery-grown S^2, read by the
-    eigendecomposition (the continuous spectral object). Holds the grown bulk, its
-    `EigenstateSynthesis` (the genuine L_1 residual core), the harmonic 1-forms in the
-    bulk's cell order (`H_full`), their register-edge restriction and period rows, and
-    the induced-orientation signs that symmetrize the boundary-period constraint to
-    Sigma = 0. All OUTPUTS read off the grown bulk.
-
-    The default `Register()` is the verified icosahedron / 3-canonical-hole register.
-    The optional `faces` / `class_holes` / `extra_holes` / `grow_vertices` parameters
-    drive the surgery-topology search (`--retries`): a different triangulated-S^2 seed,
-    a different vertex-disjoint holonomy-hole triple, extra `removeInteriorCell`
-    surgeries that grow b_1, and ADDITIVE growth -- seeded `growInterior` stellar
-    subdivisions that add interior vertices (capped by --max-additional-vertices) --
-    so the search space holds additions as well as surgical cuts.
-    """
-
-    def __init__(self, faces=_ICO, class_holes=_CLASS_HOLES, extra_holes=(),
-                 grow_vertices=0, grow_seed=0):
-        self.faces = list(faces)
-        self.class_holes = [tuple(sorted(h)) for h in class_holes]
-        self.reg_edges = [e for tri in self.class_holes for e in _cedges(tri)]
-        self.eidx = {e: i for i, e in enumerate(self.reg_edges)}
-
-        self.st = _surface(self.faces)
-        self.es = cob.EigenstateSynthesis(self.st, 1)
-        for hole in self.class_holes:                       # the holonomy holes
-            self.es.removeInteriorCell(list(hole))
-        self.grown = self._stellar_grow(grow_vertices, grow_seed)
-        self.extra_opened = []                              # extra surgery (b_1 growth)
-        for cell in extra_holes:
-            cs = tuple(sorted(cell))
-            avail = {tuple(sorted(c)) for c in self.es.interiorTopCells()}
-            if cs in avail:
-                self.es.removeInteriorCell(list(cs))
-                self.extra_opened.append(cs)
-
-        # The register core reads off the C++ layer (#286): the harmonic
-        # amplitude matrix in the bulk's cell order, the circle-period rows
-        # with the boundary operator's induced-orientation signs, and the end
-        # sign covector from the surface's fundamental chain — deterministic,
-        # where the old per-register SVD null-vector normalization was
-        # sign-unstable.
-        self.cells = [tuple(int(v) for v in c) for c in self.es.cellSimplices()]
-        self.H_full = np.asarray(
-            cob.HodgeLaplacian(self.st).harmonicMatrix(1),
-            dtype=complex).reshape(-1, len(self.cells))
-        self.dim = int(self.H_full.shape[0])
-        self._reg_col = [self.cells.index(e) for e in self.reg_edges]
-        self.P = np.asarray(
-            self.es.cyclePeriods([list(h) for h in self.class_holes]),
-            dtype=complex).reshape(self.dim, len(self.class_holes))
-        self.n = np.asarray(cob.ChainComplex.endSignCovector(
-            [[int(v) for v in c] for c in self.es.topCells()],
-            [list(h) for h in self.class_holes]), dtype=float)
-        self.sign = self.n.copy()
-
-    def _stellar_grow(self, n, seed):
-        """ADD up to *n* interior vertices by the boundary-fixed composed stellar
-        move (``EigenstateSynthesis.stellarSubdivideInterior``): attach a fresh
-        vertex onto an interior top cell's facet fan, remove the subdivided
-        parent, gate on dual validity, and re-pin the bulk to the unit cochain
-        metric -- one C++ implementation, shared with the 3d registers and the
-        level-1 fill. Each accepted move adds exactly ONE vertex and preserves
-        ker L_1 (the fan is homotopic to the face it replaces); sites are drawn
-        by the seeded RNG from the current interior top cells."""
-        rng = random.Random(int(seed))
-        grown = 0
-        for _ in range(int(n)):
-            cells = sorted(tuple(sorted(int(v) for v in c))
-                           for c in self.es.interiorTopCells())
-            if not cells:
-                break
-            ok, _why = self.es.stellarSubdivideInterior(list(rng.choice(cells)))
-            if ok:
-                grown += 1
-        return grown
-
-    @property
-    def rank(self):
-        """The rank of the carried period space over the holonomy holes. rank < #holes
-        is a GENUINE register (a proper carried subspace V, so an obstruction exists);
-        rank == #holes is the SATURATED/degenerate case (V is the whole period space, so
-        every gate is trivially carried -- no register left to leak out of)."""
-        return int(np.linalg.matrix_rank(self.P, tol=1e-9)) if self.dim else 0
-
-    def harmonic_form(self, raw_periods):
-        """The genuine carried harmonic 1-form (a combination of the register harmonics
-        `H_full`) whose three circle-periods are the projection of `raw_periods` onto
-        the carried period space, plus a minimal leak 1-form carrying the un-carried
-        remainder so the cochain's periods are EXACTLY `raw_periods`. In V (periods in
-        the carried space) the leak is zero and the form is an exact harmonic of L_1;
-        out of V the leak is the non-harmonic component the spectrum floors on. Returned
-        as a FULL edge vector in the bulk's cell order."""
-        coeffs, *_ = np.linalg.lstsq(self.P.T, raw_periods, rcond=None)
-        full = (coeffs @ self.H_full).astype(complex)
-        leak = raw_periods - coeffs @ self.P
-        for k, tri in enumerate(self.class_holes):
-            full[self._reg_col[self.eidx[_cedges(tri)[0]]]] += leak[k]
-        return full
-
-    def spectral_residual(self, raw_periods):
-        """The genuine Hodge residual ||(I-psi psi^dag) L_1 psi||^2 of the 1-form with
-        the given raw periods, on the surgery-grown bulk -- the continuous spectral
-        realizability score. -> 0 iff the periods lie in the carried register V.
-        One C++ call (the lstsq-project-leak-residual verdict primitive)."""
-        return float(self.es.residualForPeriods(
-            [list(h) for h in self.class_holes],
-            [complex(z) for z in np.asarray(raw_periods, dtype=complex)]))
+    The default `Register()` is the verified icosahedron / 3-canonical-hole register; the
+    `faces` / `class_holes` / `extra_holes` / `grow_vertices` parameters drive the
+    `--retries` surgery-topology search (a different triangulated-S^2 seed, a different
+    vertex-disjoint holonomy-hole triple, extra `removeInteriorCell` surgeries that grow
+    b_1, and ADDITIVE seeded stellar growth -- capped by --max-additional-vertices)."""
+    return cob.Register(_surface(faces),
+                        [[int(v) for v in h] for h in class_holes],
+                        [[int(v) for v in h] for h in extra_holes],
+                        int(grow_vertices), int(grow_seed))
 
 
 def register_emergence():
@@ -418,7 +319,7 @@ def synthesize_state(reg, raw_periods):
     L_1 carries psi as a harmonic; confirm it with the genuine metric Hodge residual
     (the real L_1 applied, no optimization) -> 0. Returns (residual, |V|, |C_1|)."""
     res = reg.spectral_residual(raw_periods)
-    return res, int(reg.st.getVertexList().size()), int(reg.es.order())
+    return res, int(reg.st.getVertexList().size()), int(reg.order())
 
 
 def identity_anchor(reg):

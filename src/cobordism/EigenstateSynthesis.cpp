@@ -899,18 +899,18 @@ std::vector<cd> EigenstateSynthesis::cyclePeriods(
   return assembleRegisterReadout(holes).P;
 }
 
-double EigenstateSynthesis::residualForPeriods(
+std::vector<cd> EigenstateSynthesis::carriedRepresentative(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
   if (targetPeriods.size() != holes.size())
     throw std::runtime_error(
-        "EigenstateSynthesis::residualForPeriods: " +
+        "EigenstateSynthesis::carriedRepresentative: " +
         std::to_string(targetPeriods.size()) + " target periods for " +
         std::to_string(holes.size()) + " holes");
   const RegisterReadout ro = assembleRegisterReadout(holes);
   const std::size_t n = order_;
   const std::size_t m = holes.size();
-  if (n == 0) return 0.0;
+  if (n == 0) return {};
 
   // The minimum-norm least-squares projection onto the carried period rows
   // (what numpy.linalg.lstsq returns): c = (P^T)^+ target via the SVD.
@@ -942,6 +942,14 @@ double EigenstateSynthesis::residualForPeriods(
       carried += c[static_cast<Eigen::Index>(r)] * ro.P[r * m + q];
     psi[ro.leakColumns[q]] += targetPeriods[q] - carried;
   }
+  return psi;
+}
+
+double EigenstateSynthesis::residualForPeriods(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+  const std::vector<cd> psi = carriedRepresentative(holes, targetPeriods);
+  if (psi.empty()) return 0.0;  // no k-cells to carry periods
   return residual(psi);
 }
 
