@@ -102,7 +102,7 @@ Each panel shows the "shape of the universe" in that phase -- the radius at each
 Solve the discrete Einstein equations for a point mass and watch curvature concentrate around the source:
 
 ```bash
-python examples/regge_point_mass.py --n-simplices 50 --mass 1.0 \
+python examples/curvature_slice_gif.py --n-simplices 50 --mass 1.0 \
     --save point_mass.gif
 ```
 

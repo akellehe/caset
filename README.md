@@ -101,10 +101,10 @@ converged, F, iters = solver.solve(tol=1e-8, max_iters=5000)
 ```
 
 ```bash
-python examples/regge_point_mass.py --mass 2.0 --n-simplices 200
+python examples/curvature_slice_gif.py --mass 2.0 --n-simplices 200
 ```
 
-This produces both a simplicial-complex GIF and a per-time-slice curvature heat map.
+This produces a per-time-slice curvature heat-map GIF.
 
 ### Paper validation
 

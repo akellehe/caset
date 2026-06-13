@@ -10,7 +10,7 @@ visual center.
 Usage (standalone):
     python examples/curvature_slice_gif.py --n-simplices 50 --mass 1.0
 
-Usage (from regge_point_mass.py):
+Usage (as a library):
     from curvature_slice_gif import render_curvature_gif
     render_curvature_gif(st, solver, worldline, "curvature.gif")
 """
