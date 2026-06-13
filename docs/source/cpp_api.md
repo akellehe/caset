@@ -150,6 +150,22 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} CombinatorialDimension.h
 ```
+```{doxygenfile} Cochain.h
+```
+```{doxygenfile} Spectrum.h
+```
+```{doxygenfile} LevenbergMarquardt.h
+```
+```{doxygenfile} GeometrySynthesizer.h
+```
+```{doxygenfile} RealizabilityOracle.h
+```
+```{doxygenfile} BoundaryStateSpace.h
+```
+```{doxygenfile} PreparedBoundaryState.h
+```
+```{doxygenfile} Register.h
+```
 
 ## Quantum
 
