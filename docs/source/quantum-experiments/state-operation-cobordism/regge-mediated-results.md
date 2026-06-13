@@ -11,6 +11,20 @@
 > (the design is `docs/design/cobordism-implementation-details.pdf` §8–§11). The
 > framing is spectral/continuous throughout — no Dijkgraaf–Witten layer.
 
+**Merge framing, and the spacetime as the emergent dual.** The bulk scored
+and synthesized here is the **merge** cobordism: two co-incoming states on
+slice $t$ are pinned, and the interior is filled so the bulk merges them into a
+single object at $t+1$ (the simplicial pair-of-pants;
+[`examples/cobordism/merge_cobordism.py`](https://github.com/akellehe/tessera/blob/main/examples/cobordism/merge_cobordism.py)).
+We do **not** build the spacetime — it *emerges as the dual* $W^{*}$ once the
+residual fixes the carrier and the action selects among carriers. The merge is
+coordinate-free: its $t\to t{+}1$ arrow is the **sign of $\ell^2$** on the
+primal (the input$\to$bulk edges timelike), and the dual inherits that causal
+character canonically, so $S_{\mathrm{Regge}}(W^{*})$ is the complex
+(Sorkin) Lorentzian action — no vertex coordinates, no CDT constant lengths.
+The realizability residual reads the **Riemannian** (magnitude) register; the
+Lorentzian structure lives only on the bulk geometry and its dual.
+
 ## The mediated objective
 
 Each bulk candidate $W$ is scored by
