@@ -43,6 +43,8 @@ import networkx as nx
 import numpy as np
 from scipy import sparse
 
+import tessera
+
 
 logger = logging.getLogger(__name__)
 
@@ -419,95 +421,7 @@ class Graph:
             return True
         return nx.is_bipartite(nx.from_scipy_sparse_array(self._A))
 
-    # --- random walk / spectral dimension -----------------------------
-
-    def random_walk_laplacian(self):
-        """Build the random-walk Laplacian ``L_rw = I - T``.
-
-        ``T[i, j] = A[i, j] / deg(j)`` is the column-stochastic
-        transition matrix; ``L_rw`` has eigenvalues in ``[0, 2]`` with
-        the constant eigenvector at ``λ = 0``.  The continuous-time
-        random walk is the matrix exponential ``e^{-t L_rw}`` (it
-        coincides with a discrete-step walk that waits ``Exp(1)`` time
-        at each node before jumping according to ``T``).  Isolated
-        nodes get a zero column (we substitute ``deg = 1`` to avoid
-        division by zero), which leaves them as fixed points of the
-        walk -- the correct behavior.
-
-        Returns
-        -------
-        scipy.sparse.csc_matrix or None
-            ``None`` if the graph has no nodes; otherwise the
-            ``(n, n)`` random-walk Laplacian.
-        """
-        if self.n_nodes == 0:
-            return None
-        deg = self.degree.astype(float)
-        deg[deg == 0] = 1.0
-        T = self._A @ sparse.diags(1.0 / deg)
-        n = self.n_nodes
-        return (sparse.eye(n, format='csc') - T).tocsc()
-
-    def diffuse(self, starts, times):
-        """Continuous-time random-walk return probability via the
-        heat kernel ``K(t) = e^{-t L_rw}``.
-
-        For each ``start``, evaluates ``K(t)[start, start]`` at every
-        ``t`` in ``times`` by Krylov-subspace evaluation of the matrix
-        exponential applied to an indicator vector
-        (``scipy.sparse.linalg.expm_multiply``).  Cost per ``t`` is
-        ``O(k * nnz)`` where ``k`` is the Krylov dimension at default
-        tolerance (~30); the sparse adjacency is never densified, so
-        this scales to graphs with millions of nodes.
-
-        Continuous time eliminates the discrete walker's bipartite
-        parity zeros: ``K(t)`` is strictly positive and smooth on
-        ``t > 0`` for any connected graph, so the centered-difference
-        D_S estimator is well-conditioned even on trees.
-
-        Parameters
-        ----------
-        starts : array-like of int
-            Indices of the start nodes; one diffusion process per
-            start.  Shape ``(n_diffusion_walks,)``.
-        times : array-like of float
-            Diffusion times to evaluate.  Must be strictly positive.
-            Spacing is unconstrained -- per-time Krylov solves are
-            issued, so log-spaced ``times`` (the natural choice for
-            log-log slope extraction) cost the same per sample as
-            linearly-spaced.
-
-        Returns
-        -------
-        numpy.ndarray of float
-            Return probabilities, shape
-            ``(n_diffusion_walks, len(times))``.  Entry ``[w, j]`` is
-            ``K(times[j])[starts[w], starts[w]]``.
-        """
-        n = self.n_nodes
-        starts = np.asarray(starts, dtype=int)
-        times = np.asarray(times, dtype=float)
-        n_starts = len(starts)
-        n_t = len(times)
-
-        if n == 0 or n_starts == 0:
-            return np.zeros((n_starts, n_t))
-        if not np.all(times > 0):
-            raise ValueError("times must be strictly positive")
-        if self._A.nnz == 0:
-            # No edges: walker stays at its start, K(t)[i, i] = 1 for all t.
-            return np.ones((n_starts, n_t))
-
-        L_rw = self.random_walk_laplacian()
-
-        B = np.zeros((n, n_starts))
-        B[starts, np.arange(n_starts)] = 1.0
-
-        K_diag = np.empty((n_starts, n_t))
-        for j, t in enumerate(times):
-            Kt = sparse.linalg.expm_multiply(-float(t) * L_rw, B)
-            K_diag[:, j] = Kt[starts, np.arange(n_starts)]
-        return K_diag
+    # --- spectral dimension -------------------------------------------
 
     def spectral_dimension(self, n_diffusion_walks, max_sigma, rng,
                            tail_fraction=0.2, n_times=40, t_min=0.5):
@@ -563,25 +477,22 @@ class Graph:
         """
         if self.n_nodes == 0:
             return float('nan'), float('nan')
-        n = min(n_diffusion_walks, self.n_nodes)
-        starts = rng.choice(self.n_nodes, size=n, replace=False)
-
-        times = np.geomspace(t_min, float(max_sigma), n_times)
-        K_avg = self.diffuse(starts, times).mean(axis=0)
-
-        valid = (K_avg > 0) & np.isfinite(K_avg)
-        if valid.sum() < 2:
-            return float('nan'), float('nan')
-
-        log_t = np.log(times[valid])
-        log_K = np.log(K_avg[valid])
-        ds = np.empty(len(log_t))
-        ds[1:-1] = (log_K[2:] - log_K[:-2]) / (log_t[2:] - log_t[:-2])
-        ds[0] = (log_K[1] - log_K[0]) / (log_t[1] - log_t[0])
-        ds[-1] = (log_K[-1] - log_K[-2]) / (log_t[-1] - log_t[-2])
-        D_S = -2.0 * ds
-        n_tail = max(1, int(len(D_S) * tail_fraction))
-        return float(np.mean(D_S[:n_tail])), float(np.mean(D_S[-n_tail:]))
+        # Delegate to the C++ SparseGraph heat-kernel estimator: it runs
+        # the same Krylov-Lanczos diffusion + centered-difference D_S
+        # extraction this method used to do in SciPy.  L_sym (SparseGraph)
+        # and L_rw (used here previously) share the heat-kernel diagonal,
+        # so the (small, large) pair is numerically identical.  ``rng``
+        # seeds the start-vertex subsample for reproducibility.
+        coo = self._A.tocoo()
+        sg = tessera.SparseGraph.fromCOO(
+            coo.row.astype(np.uint32).tolist(),
+            coo.col.astype(np.uint32).tolist(),
+            int(self.n_nodes))
+        seed = int(rng.integers(0, 2**63 - 1))
+        return sg.spectralDimension(
+            nWalks=int(n_diffusion_walks), maxSigma=float(max_sigma),
+            seed=seed, tailFraction=float(tail_fraction),
+            nTimes=int(n_times), tMin=float(t_min))
 
     # --- modularity ---------------------------------------------------
 

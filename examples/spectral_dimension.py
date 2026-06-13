@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
 # MIT License -- Copyright (c) 2025 Andrew Kelleher
 """
-Spectral dimension measurement via discrete diffusion.
+Spectral dimension measurement via dual-graph heat-kernel diffusion.
 
 Reproduces Figures 9-10 from:
   Ambjorn, Jurkiewicz, Loll, "Reconstructing the Universe",
   Phys. Rev. D 72 (2005) [hep-th/0505154]
 
-The spectral dimension D_S(sigma) is measured by running a discrete
-diffusion process on the dual graph of the triangulation (where each
-d-simplex is a node and neighbors share a (d-1)-face).
+The spectral dimension D_S(sigma) is measured by diffusing on the dual
+graph of the triangulation (each d-simplex is a node; neighbours share a
+(d-1)-face).  The return probability
 
-The return probability P(sigma) -- the probability that a random walker
-returns to its starting simplex after sigma steps -- scales as
+    P(sigma) = (1/|V|) Tr exp(-sigma L_sym)
+
+-- the probability that a diffusing walker returns to its starting
+simplex after diffusion time sigma -- scales as
 
     P(sigma) ~ sigma^{-D_S/2}
 
 so the spectral dimension is extracted via
 
     D_S(sigma) = -2  d log P(sigma) / d log sigma
+
+The dual-graph construction, the Krylov-Lanczos heat-kernel diffusion,
+and the finite-difference D_S extraction all run in C++:
+``st.getDualGraph()`` returns a :class:`tessera.SparseGraph`, whose
+``returnProbability`` / ``spectralDimensionCurve`` methods are the same
+machinery the modularity sweep and the emergent-geometry pipeline use.
 
 Key results from the paper (k0=2.2, Delta=0.6, t=80):
   D_S(sigma -> infinity) = 4.02 +/- 0.1   (large-scale dimension)
@@ -35,17 +43,17 @@ To reproduce the paper results (Figs 9-10):
 Parallelization
 ---------------
 Each "configuration" is an independent Markov chain: it builds its own
-spacetime, thermalizes from a cold start, and runs its own diffusion
-walks.  Because no state is shared between configurations, they can run
-concurrently in threads (--workers).  The GIL is released inside the
+spacetime, thermalizes from a cold start, and measures its own return
+probability.  Because no state is shared between configurations, they can
+run concurrently in threads (--workers).  The GIL is released inside the
 C++ sweep() call, so threads achieve real parallelism without forking
 separate processes and without duplicating memory.
 
-The final D_S(sigma) curve is the average over return probabilities
-collected from all configurations.  Mixing independent chains is
-standard practice in lattice Monte Carlo — it is statistically
-equivalent to (and better decorrelated than) taking the same number of
-measurements from a single long chain.
+The final D_S(sigma) curve is the average over the per-configuration
+return-probability curves.  Mixing independent chains is standard
+practice in lattice Monte Carlo -- it is statistically equivalent to (and
+better decorrelated than) taking the same number of measurements from a
+single long chain.
 """
 import argparse
 import os
@@ -54,7 +62,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import sparse
 
 import tessera
 from tessera.utils.memory_monitor import MemoryMonitor
@@ -62,61 +69,17 @@ from tessera.utils.progress import ProgressDisplay, make_tune_cb
 
 
 # ---------------------------------------------------------------------------
-# Dual-graph construction
+# Diffusion-time grid
 # ---------------------------------------------------------------------------
 
-def build_transition_matrix(st):
-    """Build the sparse row-stochastic transition matrix for diffusion on
-    the dual graph of the triangulation.
+def make_sigma_grid(max_sigma, n_sigma, sigma_min=1.0):
+    """Log-spaced diffusion-time grid in [sigma_min, max_sigma].
 
-    Each top-dimensional simplex is a node.  Two nodes are adjacent if their
-    simplices share a (d-1)-face.  The transition probability is uniform over
-    neighbours: T[j,i] = 1/deg(i) for every neighbour j of i.
-
-    Returns (T, N) where T is a CSC sparse matrix and N the number of nodes.
+    A geometric grid samples the small-sigma (UV) and large-sigma (IR)
+    regimes evenly in log space, which is where the centered
+    finite-difference D_S(sigma) is read off.
     """
-    rows, cols, N = st.getDualAdjacency()
-    if N == 0 or len(rows) == 0:
-        return None, N
-
-    rows = np.asarray(rows, dtype=np.int32)
-    cols = np.asarray(cols, dtype=np.int32)
-
-    # Build adjacency, remove duplicate edges, then normalise
-    A = sparse.csc_matrix((np.ones(len(rows)), (rows, cols)),
-                          shape=(N, N))
-    # Eliminate duplicates (summed) – set all nonzeros to 1
-    A.data[:] = 1.0
-    # Row-stochastic: divide each column by its sum (= degree of that node)
-    deg = np.array(A.sum(axis=0)).ravel()
-    deg[deg == 0] = 1.0
-    T = A @ sparse.diags(1.0 / deg)
-    return T.tocsc(), N
-
-
-def diffuse_sparse(T, starts, max_sigma):
-    """Run diffusion for multiple starting nodes simultaneously using sparse
-    matrix–vector products.
-
-    Returns an array of shape (len(starts), max_sigma+1) with P(sigma) for
-    each starting node.
-    """
-    N = T.shape[0]
-    n_walks = len(starts)
-    return_probs = np.zeros((n_walks, max_sigma + 1))
-    return_probs[:, 0] = 1.0
-
-    # prob[:, w] is the probability vector for walk w
-    prob = np.zeros((N, n_walks))
-    for w, s in enumerate(starts):
-        prob[s, w] = 1.0
-
-    walk_idx = np.arange(n_walks)
-    for sigma in range(1, max_sigma + 1):
-        prob = T @ prob                       # sparse mat × dense mat
-        return_probs[:, sigma] = prob[starts, walk_idx]
-
-    return return_probs
+    return np.geomspace(sigma_min, max_sigma, n_sigma)
 
 
 # ---------------------------------------------------------------------------
@@ -124,12 +87,14 @@ def diffuse_sparse(T, starts, max_sigma):
 # ---------------------------------------------------------------------------
 
 def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
-            n_walks, max_sigma, sweep_cb=None, phase_cb=None):
+            n_walks, sigmas, sweep_cb=None, phase_cb=None):
     """Run one independent configuration: build spacetime, thermalize,
-    build dual graph, run diffusion walks.  Returns list of return-prob arrays.
+    then read the dual-graph return probability P(sigma) from C++.
 
-    GIL is released during sweep() calls, so multiple threads get real
-    C++ parallelism without duplicating process memory.
+    Returns ``(cfg_id, P, N, avg_degree, elapsed)`` where ``P`` is the
+    return-probability curve over ``sigmas`` (or None for an empty/edgeless
+    dual graph).  The GIL is released during sweep(), so multiple threads
+    get real C++ parallelism without duplicating process memory.
     """
     _ph = lambda p, done=0, total=0: phase_cb(cfg_id, p, done, total) if phase_cb else None
 
@@ -166,47 +131,37 @@ def _worker(cfg_id, n_simplices, n_therm, sweeps_between,
 
     _ph("diffusing")
     t0 = time.time()
-    T, N = build_transition_matrix(st)
-    if T is None or N == 0:
-        return cfg_id, [], 0, 0.0, 0.0
+    sg = st.getDualGraph()
+    N = sg.nNodes()
+    if N == 0 or sg.nEdges() == 0:
+        return cfg_id, None, 0, 0.0, 0.0
 
-    starts = np.random.choice(N, size=min(n_walks, N), replace=False)
-    rp = diffuse_sparse(T, starts, max_sigma)
-
-    deg = np.array(T.sum(axis=0)).ravel()
-    avg_nbr = deg.mean()
+    # Heat-kernel return probability on the dual graph, averaged over
+    # min(n_walks, N) random start vertices.  The Krylov-Lanczos diffusion
+    # and Hutchinson trace estimate run inside SparseGraph; seeding with
+    # cfg_id keeps each configuration's start-vertex subsample reproducible.
+    P = sg.returnProbability(list(sigmas), m=n_walks, seed=cfg_id)
+    avg_nbr = 2.0 * sg.nEdges() / N
     elapsed = time.time() - t0
-    return cfg_id, rp.tolist(), N, avg_nbr, elapsed
+    return cfg_id, P, N, avg_nbr, elapsed
 
 
 # ---------------------------------------------------------------------------
 # Spectral dimension extraction
 # ---------------------------------------------------------------------------
 
-def compute_spectral_dimension(return_prob):
-    """Compute D_S(sigma) = -2 d(log P) / d(log sigma).
+def compute_spectral_dimension(sigmas, P):
+    """D_S(sigma) = -2 d(log P) / d(log sigma) via the C++ centered
+    finite-difference (``SparseGraph.spectralDimensionCurve``).
 
-    Uses centered finite differences on log-log data.
-    Returns (sigma_values, D_S_values) excluding endpoints and zeros.
+    Returns ``(sigma_values, D_S_values)`` over the finite entries of the
+    curve (NaNs, where P <= 0, are dropped).
     """
-    sigma = np.arange(len(return_prob))
-    valid = (sigma > 1) & (return_prob > 0)
-    s = sigma[valid].astype(float)
-    p = return_prob[valid]
-
-    log_s = np.log(s)
-    log_p = np.log(p)
-
-    if len(log_s) < 2:
-        return s, np.zeros(len(s))
-
-    ds = np.zeros(len(log_s))
-    ds[1:-1] = (log_p[2:] - log_p[:-2]) / (log_s[2:] - log_s[:-2])
-    ds[0] = (log_p[1] - log_p[0]) / (log_s[1] - log_s[0])
-    ds[-1] = (log_p[-1] - log_p[-2]) / (log_s[-1] - log_s[-2])
-
-    D_S = -2.0 * ds
-    return s, D_S
+    sigmas = np.asarray(sigmas, dtype=float)
+    ds = np.asarray(
+        tessera.SparseGraph.spectralDimensionCurve(list(sigmas), list(P)))
+    finite = np.isfinite(ds)
+    return sigmas[finite], ds[finite]
 
 
 # ---------------------------------------------------------------------------
@@ -230,9 +185,14 @@ def main():
     parser.add_argument("--n-configs", type=int, default=20,
                         help="Number of independent configurations to average")
     parser.add_argument("--n-walks", type=int, default=50,
-                        help="Diffusion processes per configuration")
-    parser.add_argument("--max-sigma", type=int, default=400,
-                        help="Maximum diffusion time")
+                        help="Random start vertices per configuration "
+                             "(Hutchinson subsample for the trace estimate)")
+    parser.add_argument("--max-sigma", type=float, default=400.0,
+                        help="Maximum diffusion time sigma")
+    parser.add_argument("--sigma-min", type=float, default=1.0,
+                        help="Minimum diffusion time sigma")
+    parser.add_argument("--n-sigma", type=int, default=60,
+                        help="Number of log-spaced sigma grid points")
     parser.add_argument("--sweeps-between", type=int, default=80,
                         help="Sweeps between configurations for decorrelation")
     parser.add_argument("--workers", type=int,
@@ -243,19 +203,20 @@ def main():
     args = parser.parse_args()
 
     n_workers = max(1, args.workers)
+    sigmas = make_sigma_grid(args.max_sigma, args.n_sigma, args.sigma_min)
 
     print("=" * 64)
-    print("  Spectral Dimension Measurement via Discrete Diffusion")
+    print("  Spectral Dimension Measurement via Dual-Graph Heat Kernel")
     print("  Reproduces Figs 9-10, Ambjorn, Jurkiewicz, Loll (2005)")
     print("  Parameters: k0=2.2, Delta=0.6")
     print(f"  Configs: {args.n_configs}, walks/config: {args.n_walks}, "
-          f"max sigma: {args.max_sigma}")
+          f"sigma: [{args.sigma_min:g}, {args.max_sigma:g}] ({args.n_sigma} pts)")
     print(f"  Workers: {n_workers} (threads, shared memory)")
     print("=" * 64)
 
     t_total = time.time()
 
-    all_return_probs = []
+    all_P = []
 
     sweeps_per_cfg = args.n_therm + args.sweeps_between
     total_sweeps = args.n_configs * sweeps_per_cfg
@@ -269,17 +230,16 @@ def main():
         futures = {
             pool.submit(
                 _worker, cfg, args.n_simplices, args.n_therm,
-                args.sweeps_between, args.n_walks, args.max_sigma,
+                args.sweeps_between, args.n_walks, sigmas,
                 progress.on_sweep, progress.on_phase
             ): cfg
             for cfg in range(args.n_configs)
         }
         for future in as_completed(futures):
-            cfg_id, rps, N, avg_nbr, elapsed = future.result()
-            if rps:
-                all_return_probs.extend(rps)
-                cfg_avg = np.mean(np.asarray(rps), axis=0)
-                _, ds = compute_spectral_dimension(cfg_avg)
+            cfg_id, P, N, avg_nbr, elapsed = future.result()
+            if P is not None:
+                all_P.append(P)
+                _, ds = compute_spectral_dimension(sigmas, P)
                 if len(ds):
                     n_tail = max(1, len(ds) // 5)
                     ds_small = float(np.mean(ds[:n_tail]))
@@ -293,25 +253,16 @@ def main():
 
     progress.finish()
 
-    if not all_return_probs:
+    if not all_P:
         print("No data collected.")
         return
 
-    all_return_probs = [np.array(rp) for rp in all_return_probs]
-    print(f"\nCollected {len(all_return_probs)} diffusion walks")
+    print(f"\nCollected {len(all_P)} configurations")
 
-    # Average return probability
-    max_len = max(len(rp) for rp in all_return_probs)
-    avg_rp = np.zeros(max_len)
-    counts = np.zeros(max_len)
-    for rp in all_return_probs:
-        avg_rp[:len(rp)] += rp
-        counts[:len(rp)] += 1
-    counts[counts == 0] = 1
-    avg_rp /= counts
-
-    # Compute spectral dimension
-    sigma_vals, D_S_vals = compute_spectral_dimension(avg_rp)
+    # Average the per-configuration return-probability curves, then extract
+    # the spectral dimension from the grand-mean curve.
+    avg_P = np.mean(np.asarray(all_P), axis=0)
+    sigma_vals, D_S_vals = compute_spectral_dimension(sigmas, avg_P)
 
     # --- Plot (Fig 9/10 style) ---
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))

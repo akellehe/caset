@@ -84,6 +84,8 @@ dimension on the dual graph.)doc")
            "Number of nodes.")
       .def("nEdges", &SparseGraph::nEdges,
            "Number of undirected edges.")
+      .def("degree", &SparseGraph::degree, py::arg("i"),
+           "Degree of node ``i`` (number of incident undirected edges).")
       .def("isBipartite", &SparseGraph::isBipartite,
            "True iff the graph is 2-colorable (no odd cycle).")
       .def("diagonalHeatKernel",
@@ -121,7 +123,45 @@ dimension on the dual graph.)doc")
            R"doc(Estimate spectral dimension at small / large diffusion times.
 
 Returns ``(D_S_small, D_S_large)``.  Mirrors the Python implementation
-in ``examples/modularity.py:Graph.spectral_dimension``.)doc");
+in ``examples/modularity.py:Graph.spectral_dimension``.)doc")
+      // ── Per-sigma return probability + spectral-dimension curve ──────────
+      // Inherited from SpectralGraph (SparseGraph::applyLaplacian installs
+      // the symmetric-normalised Laplacian L_sym).  Exposed here so the
+      // examples can read the full D_S(sigma) curve straight off the dual
+      // graph instead of re-implementing dual-graph diffusion + finite
+      // differences in NumPy/SciPy.  Mirrors the EmergentGraph bindings.
+      .def("returnProbability",
+           &::tessera::graph::SpectralGraph::returnProbability,
+           py::arg("sigmas"), py::arg("krylovDim") = 30,
+           py::arg("m") = 0, py::arg("seed") = 0,
+           R"doc(P(sigma) = (1/|V|) Tr exp(-sigma L_sym) via Krylov-Lanczos
+diagonal estimation, evaluated at each diffusion time in ``sigmas``.
+
+``m`` is the Hutchinson-style subsample of start vertices: 0 (the default)
+uses ``min(nNodes(), 3000)``; pass ``m = nNodes()`` for the exact trace.
+``seed`` controls the subset RNG for reproducibility.
+
+This is the continuous-diffusion counterpart of the discrete random-walk
+return probability the modularity / spectral-dimension examples used to
+build by hand; feed the result to ``spectralDimensionCurve`` (or
+``spectralDimensionSmoothed``) to extract D_S(sigma).)doc")
+      .def_static("spectralDimensionCurve",
+                  &::tessera::graph::SpectralGraph::spectralDimension,
+                  py::arg("sigmas"), py::arg("P"),
+                  R"doc(D_S(sigma) = -2 d log P / d log sigma via centered finite
+differences (one-sided at the endpoints); NaN where P <= 0 or non-finite.
+
+The full per-sigma curve, aligned with ``sigmas``.  Distinct from the
+``spectralDimension(nWalks, maxSigma, ...)`` instance method above, which
+random-walk samples and returns only the (small, large) summary pair.)doc")
+      .def_static("spectralDimensionSmoothed",
+                  &::tessera::graph::SpectralGraph::spectralDimensionSmoothed,
+                  py::arg("sigmas"), py::arg("P"),
+                  py::arg("windowSize") = 5, py::arg("polyOrder") = 2,
+                  R"doc(Savitzky-Golay-smoothed D_S(sigma): a local polynomial of
+order ``polyOrder`` is fit over a centered ``windowSize`` window in
+(log sigma, log P) and its slope read off at each point.  ``windowSize``
+must be odd and >= ``polyOrder + 1``.)doc");
   // ========================================
   // ModularityOptimizer
   // ========================================

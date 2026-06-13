@@ -8,62 +8,39 @@ We measure:
   * Spectral dimension at sigma -> 0 and large sigma at three checkpoints:
       (0) post-build, (1) post-tune, (2) post-therm.
 
+The dual-graph diffusion + spectral-dimension extraction run in C++:
+``st.getDualGraph()`` returns a :class:`tessera.SparseGraph` whose
+``returnProbability`` / ``spectralDimensionCurve`` give the heat-kernel
+return probability and D_S(sigma) curve.
+
 Run it small first to sanity-check, then larger.  Resource-friendly:
 single thread, single configuration.
 """
 import argparse
-import os
 import time
 
 import numpy as np
-from scipy import sparse
 
 import tessera
 
-
-def build_transition_matrix(st):
-    rows, cols, N = st.getDualAdjacency()
-    if N == 0 or len(rows) == 0:
-        return None, N
-    rows = np.asarray(rows, dtype=np.int32)
-    cols = np.asarray(cols, dtype=np.int32)
-    A = sparse.csc_matrix((np.ones(len(rows)), (rows, cols)), shape=(N, N))
-    A.data[:] = 1.0
-    deg = np.array(A.sum(axis=0)).ravel()
-    deg[deg == 0] = 1.0
-    T = A @ sparse.diags(1.0 / deg)
-    return T.tocsc(), N
+# Log-spaced sigma grid resolution for the D_S(sigma) curve.
+N_SIGMA = 48
 
 
-def diffuse(T, starts, max_sigma):
-    N = T.shape[0]
-    n_walks = len(starts)
-    rp = np.zeros((n_walks, max_sigma + 1))
-    rp[:, 0] = 1.0
-    prob = np.zeros((N, n_walks))
-    for w, s in enumerate(starts):
-        prob[s, w] = 1.0
-    walk_idx = np.arange(n_walks)
-    for sigma in range(1, max_sigma + 1):
-        prob = T @ prob
-        rp[:, sigma] = prob[starts, walk_idx]
-    return rp
+def dual_spectral_dimension(st, sigmas, n_walks, seed):
+    """Heat-kernel D_S(sigma) curve on the dual graph via SparseGraph.
 
-
-def spectral_dim(rp_avg):
-    sigma = np.arange(len(rp_avg))
-    valid = (sigma > 1) & (rp_avg > 0)
-    s = sigma[valid].astype(float)
-    p = rp_avg[valid]
-    log_s = np.log(s)
-    log_p = np.log(p)
-    if len(log_s) < 2:
-        return s, np.zeros(len(s))
-    ds = np.zeros(len(log_s))
-    ds[1:-1] = (log_p[2:] - log_p[:-2]) / (log_s[2:] - log_s[:-2])
-    ds[0] = (log_p[1] - log_p[0]) / (log_s[1] - log_s[0])
-    ds[-1] = (log_p[-1] - log_p[-2]) / (log_s[-1] - log_s[-2])
-    return s, -2.0 * ds
+    Returns ``(sg, ds)`` where ``ds`` is the spectral-dimension curve
+    aligned with ``sigmas`` (NaN where the return probability is
+    non-positive), or ``(sg, None)`` for an empty / edgeless dual graph.
+    """
+    sg = st.getDualGraph()
+    if sg.nNodes() == 0 or sg.nEdges() == 0:
+        return sg, None
+    P = sg.returnProbability(list(sigmas), m=n_walks, seed=seed)
+    ds = np.asarray(
+        tessera.SparseGraph.spectralDimensionCurve(list(sigmas), list(P)))
+    return sg, ds
 
 
 def slice_widths(st):
@@ -87,7 +64,7 @@ def volume_profile(st, d=4):
     return profile
 
 
-def report(label, st, max_sigma=200, n_walks=20):
+def report(label, st, max_sigma=200.0, n_walks=20, seed=0):
     N = st.getSimplexCount()
     n41 = st.getN41()
     n32 = st.getN32()
@@ -95,18 +72,20 @@ def report(label, st, max_sigma=200, n_walks=20):
     profile = volume_profile(st)
     widths = slice_widths(st)
 
-    T, N_dual = build_transition_matrix(st)
-    if T is None:
+    sigmas = np.geomspace(1.0, float(max_sigma), N_SIGMA)
+    sg, ds = dual_spectral_dimension(st, sigmas, n_walks, seed)
+    if ds is None:
         print(f"[{label}] empty triangulation")
         return
-    deg = np.array(T.astype(bool).sum(axis=0)).ravel()
-    starts = np.random.choice(N_dual, size=min(n_walks, N_dual), replace=False)
-    rp = diffuse(T, starts, max_sigma).mean(axis=0)
-    sig, ds = spectral_dim(rp)
-    n_head = max(1, len(ds) // 5)
-    n_tail = max(1, len(ds) // 5)
-    ds_small = float(np.mean(ds[:n_head]))
-    ds_large = float(np.mean(ds[-n_tail:]))
+    deg = np.array([sg.degree(i) for i in range(sg.nNodes())])
+    finite = ds[np.isfinite(ds)]
+    if finite.size:
+        n_head = max(1, len(finite) // 5)
+        n_tail = max(1, len(finite) // 5)
+        ds_small = float(np.mean(finite[:n_head]))
+        ds_large = float(np.mean(finite[-n_tail:]))
+    else:
+        ds_small = ds_large = float("nan")
 
     if profile:
         n4_min = min(profile.values())
@@ -131,8 +110,8 @@ def report(label, st, max_sigma=200, n_walks=20):
           f"{n4_min}/{n4_mean:.1f}/{n4_max}")
     print(f"  Dual-graph degree min/mean/max="
           f"{deg.min()}/{deg.mean():.2f}/{deg.max()}")
-    print(f"  D_S(small ~sigma=2..{n_head+1})={ds_small:.2f}  "
-          f"D_S(large ~sigma={max_sigma-n_tail+1}..{max_sigma})={ds_large:.2f}")
+    print(f"  D_S(small sigma~{sigmas[0]:.0f})={ds_small:.2f}  "
+          f"D_S(large sigma~{sigmas[-1]:.0f})={ds_large:.2f}")
 
 
 def main():
@@ -142,12 +121,11 @@ def main():
                     help="Cap initial build at this many simplices "
                          "(80*20=1600 is current default).")
     ap.add_argument("--n-therm", type=int, default=200)
-    ap.add_argument("--max-sigma", type=int, default=200)
+    ap.add_argument("--max-sigma", type=float, default=200.0)
     ap.add_argument("--n-walks", type=int, default=30)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
-    np.random.seed(args.seed)
     print(f"Probe: n_simplices={args.n_simplices} max_build={args.max_build} "
           f"n_therm={args.n_therm}")
 
@@ -159,13 +137,13 @@ def main():
     target = st.getN41() if args.n_simplices <= args.max_build else args.n_simplices // 2
     print(f"Initial build done.  N4={st.getSimplexCount()} "
           f"N41={st.getN41()}  target N41={target}")
-    report("post-build", st, args.max_sigma, args.n_walks)
+    report("post-build", st, args.max_sigma, args.n_walks, args.seed)
 
     cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 1.0 / target, target)
     t0 = time.time()
     cdt.tune()
     print(f"\nTune done in {time.time()-t0:.1f}s")
-    report("post-tune", st, args.max_sigma, args.n_walks)
+    report("post-tune", st, args.max_sigma, args.n_walks, args.seed)
 
     t0 = time.time()
     chunk = max(1, args.n_therm // 10)
@@ -177,7 +155,7 @@ def main():
                   f"N4={st.getSimplexCount()} N41={st.getN41()}  "
                   f"elapsed={time.time()-t0:.1f}s")
     print(f"Thermalization done in {time.time()-t0:.1f}s")
-    report("post-therm", st, args.max_sigma, args.n_walks)
+    report("post-therm", st, args.max_sigma, args.n_walks, args.seed)
 
 
 if __name__ == "__main__":
