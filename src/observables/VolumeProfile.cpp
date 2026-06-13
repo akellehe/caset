@@ -85,6 +85,58 @@ std::vector<double> VolumeProfile::getAverageProfile() const {
   return avg;
 }
 
+std::vector<double> VolumeProfile::getCenteredAverageProfile(
+    bool subtractStalk, bool normalizePeak) const {
+  std::vector<std::vector<double>> profiles;
+  profiles.reserve(measurements.size());
+  for (const auto &m : measurements)
+    profiles.emplace_back(m.begin(), m.end());
+  return centeredAverage(profiles, subtractStalk, normalizePeak);
+}
+
+std::vector<double> VolumeProfile::centeredAverage(
+    const std::vector<std::vector<double>> &profiles,
+    bool subtractStalk, bool normalizePeak) {
+  if (profiles.empty()) return {};
+
+  std::size_t maxLen = 0;
+  for (const auto &p : profiles) maxLen = std::max(maxLen, p.size());
+  if (maxLen == 0) return {};
+
+  std::vector<double> avg(maxLen, 0.0);
+  std::vector<double> arr(maxLen, 0.0);
+  const std::size_t mid = maxLen / 2;
+
+  for (const auto &p : profiles) {
+    // Zero-pad to the common length.
+    std::fill(arr.begin(), arr.end(), 0.0);
+    for (std::size_t i = 0; i < p.size(); ++i) arr[i] = p[i];
+
+    // Remove the constant stalk volume (min of the padded profile).
+    if (subtractStalk) {
+      double stalk = *std::min_element(arr.begin(), arr.end());
+      for (auto &v : arr) v -= stalk;
+    }
+
+    // Circularly roll so the peak (first max) sits at maxLen/2.  Matches
+    // numpy.roll: result[(i + shift) mod n] = arr[i].
+    std::size_t peakIdx = static_cast<std::size_t>(
+        std::max_element(arr.begin(), arr.end()) - arr.begin());
+    std::size_t shift = (mid + maxLen - peakIdx % maxLen) % maxLen;
+    for (std::size_t i = 0; i < maxLen; ++i)
+      avg[(i + shift) % maxLen] += arr[i];
+  }
+
+  for (auto &v : avg) v /= static_cast<double>(profiles.size());
+
+  if (normalizePeak) {
+    double peak = *std::max_element(avg.begin(), avg.end());
+    if (peak > 0.0)
+      for (auto &v : avg) v /= peak;
+  }
+  return avg;
+}
+
 void VolumeProfile::reset() {
   currentProfile.clear();
   measurements.clear();

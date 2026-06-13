@@ -87,35 +87,16 @@ def _phase_worker(phase_id, label, k0, delta, n_simplices, n_therm, n_meas,
     return label, profiles, cdt.getAcceptanceRates(), cdt.getK4()
 
 
-def average_profile(profiles, center=True):
-    """Average volume profiles, optionally centering on the peak first.
+def average_profile(profiles):
+    """Peak-centered average of volume profiles via the C++ VolumeProfile.
 
     On a torus the de Sitter blob can sit at any time slice and its
     position diffuses along the Markov chain.  Naive bin-by-bin averaging
-    smears the blob into uniform noise.  When *center=True* (default),
-    each profile is circularly rolled so its peak aligns at T//2 before
-    averaging — the same technique used in effective_action.py and
+    smears the blob into uniform noise, so each profile is circularly
+    rolled to align its peak at T//2 before averaging — the technique
     described in the CDT literature (Ambjorn et al., 2005).
     """
-    max_len = max(len(p) for p in profiles)
-    if center:
-        centered = []
-        for p in profiles:
-            arr = np.zeros(max_len)
-            arr[:len(p)] = p
-            peak_idx = int(np.argmax(arr))
-            shift = max_len // 2 - peak_idx
-            arr = np.roll(arr, shift)
-            centered.append(arr)
-        return np.mean(centered, axis=0)
-    else:
-        avg = np.zeros(max_len)
-        counts = np.zeros(max_len)
-        for p in profiles:
-            avg[:len(p)] += p
-            counts[:len(p)] += 1
-        counts[counts == 0] = 1
-        return avg / counts
+    return np.asarray(tessera.VolumeProfile.centeredAverage(profiles))
 
 
 def plot_universe_surface(profile, title, ax, color_map=cm.coolwarm):
