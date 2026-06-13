@@ -84,6 +84,8 @@ dimension on the dual graph.)doc")
            "Number of nodes.")
       .def("nEdges", &SparseGraph::nEdges,
            "Number of undirected edges.")
+      .def("degree", &SparseGraph::degree, py::arg("i"),
+           "Degree of node ``i`` (number of incident undirected edges).")
       .def("isBipartite", &SparseGraph::isBipartite,
            "True iff the graph is 2-colorable (no odd cycle).")
       .def("diagonalHeatKernel",
