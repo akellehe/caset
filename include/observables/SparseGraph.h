@@ -74,6 +74,16 @@ public:
   /// BFS-based; empty graphs are trivially bipartite.
   bool isBipartite() const;
 
+  /// Newman-Girvan modularity Q of the partition given by per-node
+  /// community ``labels`` (length nNodes()):
+  ///   Q = Σ_c [ L_c/m − (D_c/2m)² ]
+  /// where L_c is the intra-community edge count, D_c the summed degree
+  /// of community c, and m the total edge count. Distinct label values
+  /// are distinct communities; labels need not be dense or zero-based.
+  /// Returns 0 for an empty or edgeless graph. Throws std::invalid_argument
+  /// when ``labels.size() != nNodes()``.
+  [[nodiscard]] double modularity(const std::vector<int> &labels) const;
+
   /// Diagonal of the heat kernel ``e^{-t L_sym}`` for each
   /// (start, t) pair.
   ///
