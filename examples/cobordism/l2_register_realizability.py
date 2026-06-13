@@ -229,11 +229,10 @@ class RegisterL2:
             cs = tuple(sorted(cell))
             avail = {tuple(sorted(int(v) for v in c))
                      for c in self.es.interiorTopCells()}
-            if cs in avail and self.es.removeInteriorCell(list(cs)):
-                ok, _why = register_dual_valid(self.es)
-                if not ok:                  # accept moves only if the DUAL stays
-                    self.es.restoreLastRemoval()            # a valid complex
-                    continue
+            if cs not in avail:
+                continue
+            ok, _why = self.es.removeInteriorCellChecked(list(cs))   # gated cut
+            if ok:                          # accepted only if the DUAL stays valid
                 self.extra_opened.append(cs)
         self.dual_valid, self.dual_reason = register_dual_valid(self.es)
 
@@ -256,16 +255,16 @@ class RegisterL2:
         self.sign = self.n.copy()
 
     def _stellar_grow(self, n, seed):
-        """ADD up to *n* interior vertices by boundary-fixed stellar subdivision,
-        composed from the two surgery primitives exactly as in 2d: cone a fresh
-        vertex onto an interior tetrahedron's four faces (``attachInteriorVertex``
-        with the facet fan -- dW untouched), then remove the subdivided tet
-        (``removeInteriorCell`` -- its faces keep two cofaces, so dW stays
-        bit-exact). Each application adds ONE vertex and preserves ker L_2 (the
-        fan is homotopic to the tet it replaces); sites are drawn by the seeded
-        RNG from the current interior top cells. On seeds whose holes consume
-        every vertex (the canonical hexagon join) there is no interior site and
-        the budget is simply unused."""
+        """ADD up to *n* interior vertices by the boundary-fixed composed stellar
+        move (``EigenstateSynthesis.stellarSubdivideInterior``): attach a fresh
+        vertex onto an interior tetrahedron's facet fan, remove the subdivided
+        parent, gate on dual validity, and re-pin to the unit cochain metric --
+        one C++ implementation, shared with the 2d register and the level-1
+        fill. Each accepted move adds ONE vertex and preserves ker L_2 (the fan
+        is homotopic to the tet it replaces); sites are drawn by the seeded RNG
+        from the current interior top cells. On seeds whose holes consume every
+        vertex (the canonical hexagon join) there is no interior site and the
+        budget is simply unused."""
         rng = random.Random(int(seed))
         grown = 0
         for _ in range(int(n)):
@@ -273,27 +272,9 @@ class RegisterL2:
                            for c in self.es.interiorTopCells())
             if not sites:
                 break
-            cell = rng.choice(sites)
-            fan = [list(f) for f, _s in _tet_facets(cell)]
-            if not self.es.attachInteriorVertex(fan):
-                continue
-            if not self.es.removeInteriorCell(list(cell)):
-                self.es.detachLastInteriorVertex()
-                continue
-            ok, _why = register_dual_valid(self.es)
-            if not ok:                      # accept moves only if the DUAL stays
-                self.es.restoreLastRemoval()                # a valid complex
-                self.es.detachLastInteriorVertex()
-                continue
-            grown += 1
-        if grown:
-            # attachInteriorVertex wires the new cells through the endpoint
-            # TIME rule rather than a causal cone placement; re-pin the bulk
-            # uniform so the documented unit cochain metric holds by
-            # construction (the 2d register does the same).
-            for e in self.st.getEdgeList().toVector():
-                e.setSquaredLength(1.0)
-                e.setPhase(0.0)
+            ok, _why = self.es.stellarSubdivideInterior(list(rng.choice(sites)))
+            if ok:
+                grown += 1
         return grown
 
     @property

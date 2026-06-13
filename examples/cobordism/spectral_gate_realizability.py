@@ -347,12 +347,12 @@ class Register:
         self.sign = self.n.copy()
 
     def _stellar_grow(self, n, seed):
-        """ADD up to *n* interior vertices by boundary-fixed stellar subdivision,
-        composed from the two documented surgery primitives: cone a fresh vertex
-        onto an interior top cell's three edges (`attachInteriorVertex` with the
-        triangle fan — dW untouched, the new edges interior), then remove the
-        subdivided face (`removeInteriorCell` — its edges keep two faces, so dW
-        stays bit-exact). Each application adds exactly ONE vertex and preserves
+        """ADD up to *n* interior vertices by the boundary-fixed composed stellar
+        move (``EigenstateSynthesis.stellarSubdivideInterior``): attach a fresh
+        vertex onto an interior top cell's facet fan, remove the subdivided
+        parent, gate on dual validity, and re-pin the bulk to the unit cochain
+        metric -- one C++ implementation, shared with the 3d registers and the
+        level-1 fill. Each accepted move adds exactly ONE vertex and preserves
         ker L_1 (the fan is homotopic to the face it replaces); sites are drawn
         by the seeded RNG from the current interior top cells."""
         rng = random.Random(int(seed))
@@ -362,25 +362,9 @@ class Register:
                            for c in self.es.interiorTopCells())
             if not cells:
                 break
-            a, b, c = rng.choice(cells)
-            if not self.es.attachInteriorVertex([[a, b], [b, c], [a, c]]):
-                continue
-            if not self.es.removeInteriorCell([a, b, c]):
-                self.es.detachLastInteriorVertex()
-                continue
-            grown += 1
-        if grown:
-            # attachInteriorVertex wires the new edges through
-            # createSimplexTracked, whose metric follows the endpoints' TIME
-            # rule (timelike l^2 = -alpha*a on a time difference) rather than
-            # Simplex::cone's causal vertex placement. On the all-same-time
-            # register seeds that already yields spacelike unit edges, but the
-            # documented unit cochain metric should hold by construction, not
-            # by the default-time coincidence: re-pin the bulk uniform exactly
-            # as _surface does at build.
-            for e in self.st.getEdgeList().toVector():
-                e.setSquaredLength(1.0)
-                e.setPhase(0.0)
+            ok, _why = self.es.stellarSubdivideInterior(list(rng.choice(cells)))
+            if ok:
+                grown += 1
         return grown
 
     @property

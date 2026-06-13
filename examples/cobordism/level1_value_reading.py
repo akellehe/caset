@@ -310,10 +310,7 @@ def _cut_variant(seed, n_cut=2):
                    for c in fill.es.interiorTopCells())
     rng.shuffle(sites)
     for cell in sites[:n_cut]:
-        if fill.es.removeInteriorCell(list(cell)):
-            ok, _why = fill.es.dualComplexValid()
-            if not ok:
-                fill.es.restoreLastRemoval()
+        fill.es.removeInteriorCellChecked(list(cell))   # gated cut, dual-validity
     fill.read_spectral()
     return fill
 

@@ -537,7 +537,32 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "Undo the most recent removeInteriorCell (LIFO): re-create the removed "
            "top cell and the edges it orphaned, restoring their weights/phases bit-"
            "exactly, and re-capture. Returns False if there is no removal to undo. "
-           "Lets a surgery search try a removal, score it, and roll back.");
+           "Lets a surgery search try a removal, score it, and roll back.")
+      // ----- Gated moves: the checked cut and the composed stellar move -----
+      .def("removeInteriorCellChecked",
+           &EigenstateSynthesis::removeInteriorCellChecked, py::arg("cell"),
+           "(ok, reason): the gated surgery cut — removeInteriorCell(cell), then "
+           "the dual-validity gate (dualComplexValid), rolled back via "
+           "restoreLastRemoval when the cut violates the dual. (True, 'ok') means "
+           "the cut is applied and the dual complex stayed valid; (False, reason) "
+           "means the complex is unchanged — the cell was not a removable interior "
+           "top cell, or the reason names the dual violation. The gate is rigorous "
+           "for n <= 3; dimension-4 callers use explicit constructions, not gated "
+           "moves.")
+      .def("stellarSubdivideInterior",
+           &EigenstateSynthesis::stellarSubdivideInterior, py::arg("cell"),
+           "(ok, reason): the composed gated stellar move — attach a fresh "
+           "interior vertex onto `cell`'s facet fan (attachInteriorVertex with "
+           "the d+1 codim-one facets; dW untouched), remove the subdivided parent "
+           "(removeInteriorCell; its facets keep two cofaces, so dW stays "
+           "bit-exact), gate on dualComplexValid, and roll back BOTH in LIFO "
+           "order (restoreLastRemoval, then detachLastInteriorVertex) on "
+           "violation. Each accepted move adds exactly ONE interior vertex and "
+           "preserves ker L_k (the fan is homotopic to the cell it replaces). On "
+           "acceptance the bulk's edges are re-pinned uniform (squaredLength 1, "
+           "phase 0) — the unit cochain metric the register/fill seeds are built "
+           "with, held by construction rather than by the createSimplexTracked "
+           "time-rule coincidence on all-same-time seeds.");
 
   // ----- §4b cone-and-retry synthesis loop → geo(ψ) (#134) -----
   py::class_<GeometrySynthesizer> gs(m, "GeometrySynthesizer",

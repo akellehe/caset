@@ -373,6 +373,45 @@ class EigenstateSynthesis {
     /// The surgery analogue of `detachLastInteriorVertex`.
     bool restoreLastRemoval();
 
+    // === Gated topology moves: the checked cut and the composed stellar move ===
+
+    /// The gated surgery cut: `removeInteriorCell(cell)`, then the dual-validity
+    /// gate (`dualComplexValid`), rolled back via `restoreLastRemoval` when the
+    /// cut violates the dual — the accept-a-move-only-while-the-dual-stays-valid
+    /// composition the register / fill layers apply, as one move. Returns
+    /// `{true, "ok"}` with the cut applied, or `{false, reason}` with the
+    /// complex unchanged: either the cell is not a removable interior top cell
+    /// (`removeInteriorCell` rejected it) or the gate verdict names the dual
+    /// violation. The gate is rigorous for \f$ n \leq 3 \f$
+    /// (`ChainComplex::dualComplexIsValid`); dimension-4 callers use explicit
+    /// constructions, not gated moves.
+    [[nodiscard]] std::pair<bool, std::string> removeInteriorCellChecked(
+        const std::vector<std::uint64_t> &cell);
+
+    /// The composed gated stellar move — the boundary-fixed interior
+    /// \f$ 1 \to (d+1) \f$ subdivision built from the two surgery primitives:
+    /// attach a fresh interior vertex onto `cell`'s facet fan
+    /// (`attachInteriorVertex` with the \f$ d+1 \f$ codim-one facets —
+    /// \f$ \partial W \f$ untouched, the new edges interior), remove the
+    /// subdivided parent (`removeInteriorCell` — its facets keep two cofaces, so
+    /// \f$ \partial W \f$ stays bit-exact), then gate on `dualComplexValid`,
+    /// rolling back **both** in LIFO order (`restoreLastRemoval`, then
+    /// `detachLastInteriorVertex`) on violation. Each accepted move adds exactly
+    /// one interior vertex and preserves \f$ \ker L_k \f$ (the fan is homotopic
+    /// to the cell it replaces).
+    ///
+    /// On acceptance the bulk's edges are re-pinned uniform — squared length 1,
+    /// phase 0, the unit cochain metric the register / fill seeds are built
+    /// with: the attach wires the fan edges through `createSimplexTracked`,
+    /// whose tracked metric follows the endpoints' TIME rule (timelike
+    /// \f$ l^2 \f$ on a time difference) rather than a causal cone placement.
+    /// On all-same-time seeds that already yields spacelike unit edges, but the
+    /// documented unit metric holds by construction, not by the default-time
+    /// coincidence. Returns `{true, "ok"}` on acceptance, or `{false, reason}`
+    /// with the complex unchanged (and no re-pin).
+    [[nodiscard]] std::pair<bool, std::string> stellarSubdivideInterior(
+        const std::vector<std::uint64_t> &cell);
+
   private:
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
