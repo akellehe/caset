@@ -770,6 +770,16 @@ operations (vonNeumannEntropy, edgeLength) on numpy data without
 needing an MPS in hand.
 )doc")
         .def_static("vonNeumannEntropy",
+            static_cast<double(*)(std::vector<double> const&, double)>(
+                &MutualInformation::vonNeumannEntropy),
+            py::arg("eigenvalues"), py::arg("tol") = 1e-12,
+            R"doc(Von Neumann / Shannon entropy of an already-diagonal spectrum
+(e.g. a Schmidt spectrum), in nats: -sum p_i log p_i over p_i > tol.
+
+Pass the eigenvalue / probability list directly — no need to wrap it in a
+diagonal density matrix (which the matrix overload would re-diagonalise).
+)doc")
+        .def_static("vonNeumannEntropy",
             [](py::array_t<std::complex<double>,
                             py::array::c_style | py::array::forcecast> rho,
                 double tol) -> double {
@@ -796,9 +806,17 @@ pipeline we only need 2×2 (single-site marginals) and 4×4 (two-site
 joint reduced density matrices).
 )doc")
         .def_static("edgeLength",
-            &MutualInformation::edgeLength,
+            static_cast<double(*)(double, double) noexcept>(
+                &MutualInformation::edgeLength),
             py::arg("I"), py::arg("epsilon") = 1e-10,
-            R"doc(ℓ = -log(I) with infinity floor at -log(epsilon).)doc");
+            R"doc(ℓ = -log(I) with infinity floor at -log(epsilon).)doc")
+        .def_static("edgeLength",
+            static_cast<Eigen::MatrixXd(*)(Eigen::MatrixXd const&, double)>(
+                &MutualInformation::edgeLength),
+            py::arg("I"), py::arg("epsilon") = 1e-10,
+            R"doc(Elementwise edge length on a matrix of mutual-information values:
+ell_{ij} = -log(I_{ij}), with +inf where I_{ij} < epsilon. Vectorised form of
+the scalar overload, so a B x B bond-MI matrix maps in one call.)doc");
 
     // ─── ChoiJamiolkowski: dense map–state duality ("bending") ─────────
     py::class_<ChoiJamiolkowski>(m, "ChoiJamiolkowski",

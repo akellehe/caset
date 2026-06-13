@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tessera.quantum import SchwingerQuench, TDVPConfig
+from tessera.quantum import MutualInformation, SchwingerQuench, TDVPConfig
 from examples.quantum.temporally_connected_entangled_spacetime import (
     _bond_matrices,
 )
@@ -57,14 +57,21 @@ def _config(N, mg, T, dt, max_bond):
 
 
 def _spatial_dvr(bond_mi, eps_floor=1e-300):
-    """For each snapshot t, return (|n-m|, d=-log MI) arrays."""
+    """For each snapshot t, return (|n-m|, d=-log MI) arrays.
+
+    The van Raamsdonk map ℓ = −log(I) is applied by the canonical
+    ``MutualInformation.edgeLength`` (vectorised over the whole bond-MI
+    matrix); MI below ``eps_floor`` maps to +inf ("no edge") and is
+    dropped downstream rather than plotted at an arbitrary floor.
+    """
     K, B, _ = bond_mi.shape
     per_t = []
     for t in range(K):
         ii, jj = np.triu_indices(B, k=1)
         seps   = (jj - ii).astype(np.int64)
         mi     = bond_mi[t][ii, jj]
-        d      = -np.log(np.clip(mi, eps_floor, None))
+        dmat   = np.asarray(MutualInformation.edgeLength(bond_mi[t], eps_floor))
+        d      = dmat[ii, jj]
         per_t.append((seps, d, mi))
     return per_t
 
@@ -77,11 +84,12 @@ def _bin_mean(xs, ys, n_bins):
     std  = np.full(n_bins, np.nan, dtype=float)
     n    = np.zeros(n_bins, dtype=int)
     for k, c in enumerate(centers):
-        mask = (xs == c)
-        if mask.any():
-            mean[k] = ys[mask].mean()
-            std[k]  = ys[mask].std()
-            n[k]    = int(mask.sum())
+        yv = ys[(xs == c)]
+        yv = yv[np.isfinite(yv)]   # drop +inf edges (MI below the floor)
+        if yv.size:
+            mean[k] = yv.mean()
+            std[k]  = yv.std()
+            n[k]    = int(yv.size)
     return centers, mean, std, n
 
 
@@ -166,9 +174,10 @@ def main():
     mean_mat = np.full((K, B - 1), np.nan, dtype=float)
     for t, (seps, d, _) in enumerate(per_t):
         for k in range(B - 1):
-            mask = (seps == k + 1)
-            if mask.any():
-                mean_mat[t, k] = d[mask].mean()
+            dv = d[(seps == k + 1)]
+            dv = dv[np.isfinite(dv)]   # drop +inf edges (MI below the floor)
+            if dv.size:
+                mean_mat[t, k] = dv.mean()
     im = axBL.imshow(mean_mat, aspect="auto", origin="lower", cmap="magma",
                       extent=[0.5, B - 0.5, -0.5, K - 0.5])
     axBL.set_xlabel(r"bond separation $|n-m|$")
@@ -193,7 +202,7 @@ def main():
                 vals.extend(avg[mask].tolist())
             if vals:
                 vals = np.array(vals)
-                d_mean = -np.log(np.clip(vals.mean(), 1e-300, None))
+                d_mean = MutualInformation.edgeLength(float(vals.mean()), 1e-300)
                 means_per_stride.append(d_mean)
             else:
                 means_per_stride.append(np.nan)

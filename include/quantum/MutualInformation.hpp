@@ -20,6 +20,7 @@
 
 #include <Eigen/Dense>
 #include <itensor/all.h>
+#include <vector>
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -69,6 +70,15 @@ public:
     [[nodiscard]] static double
     vonNeumannEntropy(Eigen::MatrixXcd const& rho, double tol = 1e-12);
 
+    // Von Neumann / Shannon entropy directly from an already-diagonal
+    // spectrum (e.g. a Schmidt spectrum or density-matrix eigenvalues),
+    // in nats: -Σ pᵢ log pᵢ over pᵢ > tol. Same convention as the matrix
+    // overloads (the spectrum is assumed trace-normalised); avoids
+    // re-diagonalising a diagonal input.
+    [[nodiscard]] static double
+    vonNeumannEntropy(std::vector<double> const& eigenvalues,
+                      double tol = 1e-12);
+
     // Site-site mutual information I({i} : {j}) on the MPS, in nats.
     // = S(ρ_i) + S(ρ_j) - S(ρ_{ij}).
     [[nodiscard]] static double
@@ -85,6 +95,13 @@ public:
     // mutual information to a metric weight.
     [[nodiscard]] static double
     edgeLength(double I, double epsilon = 1e-10) noexcept;
+
+    // Elementwise edge length on a matrix of mutual-information values:
+    // ℓ_{ij} = -log(I_{ij}), with +inf where I_{ij} < epsilon. Same map
+    // as the scalar overload, vectorised so callers (e.g. a B×B bond-MI
+    // matrix) need not loop in Python.
+    [[nodiscard]] static Eigen::MatrixXd
+    edgeLength(Eigen::MatrixXd const& I, double epsilon = 1e-10);
 
     // ── Dual / bond-cut observables (van Raamsdonk graph) ──────────────
     //
