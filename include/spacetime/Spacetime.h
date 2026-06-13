@@ -277,6 +277,80 @@ class Spacetime {
     /// @param numSimplices The number of simplices to add to the initial complex
     void build(int numSimplices=3);
 
+    /// Factory: build a pre-geometric simplicial complex from an explicit list
+    /// of top \p cells (each a vertex-id tuple) — the cells-to-Spacetime
+    /// builder the register/fill examples share. Creates a coordinate-free
+    /// Lorentzian \f$ d \f$-dimensional CDT Spacetime, one vertex per distinct
+    /// id, one top simplex per cell (auto-wiring the edges via
+    /// :func:`createSimplex`), and sets the edge geometry by one of two
+    /// explicit rules:
+    ///
+    ///   - **Uniform Hermitian pin** (when \p vertexTimes is absent): every
+    ///     edge is pinned to squared length \p weight and phase \p phase. The
+    ///     pre-geometric register/bulk surfaces use this.
+    ///   - **Tracked metric** (when \p vertexTimes is present): each vertex
+    ///     \f$ v \f$ is created carrying the single time coordinate
+    ///     \f$ \text{vertexTimes}[v] \f$, so the tracked metric rule assigns
+    ///     spacelike (equal-time) and timelike (differing-time) edges
+    ///     automatically — the CDT-natural layered fill. \p weight and \p phase
+    ///     are ignored.
+    ///
+    /// The time coordinate is always arity one: a vertex carries \f$ \{t\} \f$
+    /// or no coordinate at all, never the length-2/3 vector that makes
+    /// @ref Vertex::getTime throw (the coordinate-arity trap).
+    ///
+    /// @param dimensions The metric/signature dimension \f$ d \f$; cells should
+    ///   be \f$ (d{+}1) \f$-vertex tuples to register as top simplices.
+    /// @param cells Top cells as vertex-id tuples (order within a cell does not
+    ///   matter; it is sorted).
+    /// @param weight Uniform-pin squared length (ignored when \p vertexTimes is
+    ///   given).
+    /// @param phase Uniform-pin Hermitian phase (ignored when \p vertexTimes is
+    ///   given).
+    /// @param vertexTimes Optional per-vertex time, indexed by vertex id; its
+    ///   presence selects the tracked-metric rule. Must be long enough to index
+    ///   every vertex id appearing in \p cells.
+    /// @return The freshly built Spacetime.
+    [[nodiscard]] static std::shared_ptr<Spacetime> fromCells(
+        int dimensions,
+        const std::vector<std::vector<std::uint64_t>> &cells,
+        double weight = 1.0,
+        double phase = 0.0,
+        const std::optional<std::vector<double>> &vertexTimes = std::nullopt);
+
+    /// The dimension-generic staircase ("prism") triangulation of
+    /// \f$ K \times [0, \text{layers}] \f$ from the top cells of a base
+    /// complex \f$ K \f$. For each base cell \f$ (v_0 < \dots < v_{m-1}) \f$
+    /// (an \f$ (m{-}1) \f$-simplex) and each layer, emits the \f$ m \f$ cells
+    /// \f[
+    ///   S_j = \{\mathrm{lo}[v_0], \dots, \mathrm{lo}[v_j]\} \cup
+    ///         \{\mathrm{hi}[v_j], \dots, \mathrm{hi}[v_{m-1}]\},
+    ///   \quad j = 0 \dots m-1,
+    /// \f]
+    /// where the lower copy in layer \f$ \ell \f$ is
+    /// \f$ \mathrm{lo}[x] = \varphi^{\ell}(x) + s\,\ell \f$ and the upper copy
+    /// is \f$ \mathrm{hi}[x] = \varphi^{\ell+1}(x) + s\,(\ell{+}1) \f$, with
+    /// \f$ s \f$ the per-layer vertex stride (one past the largest base id).
+    /// Adjacent prisms split shared walls by the same vertex-order rule, so the
+    /// result is a consistent complex. This is the single source of the
+    /// staircase the register fills carried as separate 3d and 4d copies; the
+    /// rule is identical in every dimension (\f$ m = 3 \f$ gives tetrahedra
+    /// over triangles, \f$ m = 4 \f$ gives 4-simplices over tetrahedra, …).
+    ///
+    /// @param cells Base top cells as vertex-id tuples.
+    /// @param layers Number of product layers (\f$ \ge 1 \f$).
+    /// @param twist Optional vertex permutation \f$ \varphi \f$ of the base,
+    ///   applied cumulatively per layer (gluing the top end through a symmetry —
+    ///   the mapping-torus-style twisted product). Identity when absent; keys
+    ///   are base vertex ids and a missing id maps to itself.
+    /// @return The prism's top cells as sorted vertex-id tuples, uniqued and
+    ///   sorted.
+    [[nodiscard]] static std::vector<std::vector<std::uint64_t>> prismCells(
+        const std::vector<std::vector<std::uint64_t>> &cells,
+        int layers = 1,
+        const std::optional<std::unordered_map<std::uint64_t, std::uint64_t>>
+            &twist = std::nullopt);
+
     // ========================================
     // Query Methods
     // ========================================

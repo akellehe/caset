@@ -315,6 +315,120 @@ void Spacetime::build(int numSimplices) {
   return topology->build(this, numSimplices);
 }
 
+std::shared_ptr<Spacetime> Spacetime::fromCells(
+  int dimensions,
+  const std::vector<std::vector<std::uint64_t>> &cells,
+  double weight,
+  double phase,
+  const std::optional<std::vector<double>> &vertexTimes
+) {
+  auto metric = std::make_shared<Metric>(
+    true, Signature(dimensions, SignatureType::Lorentzian));
+  auto st = std::make_shared<Spacetime>(
+    metric, SpacetimeType::CDT, 1.0, 1.0, Foliation::PREFERRED, std::nullopt);
+
+  // One vertex per distinct id, created in ascending id order so the labels are
+  // deterministic. Under the tracked-metric rule each vertex carries its single
+  // time coordinate (arity one — never the length-2/3 vector getTime() rejects).
+  std::set<std::uint64_t> ids;
+  for (const auto &cell : cells)
+    for (auto v : cell) ids.insert(v);
+  std::unordered_map<std::uint64_t, VertexPtr> vmap;
+  vmap.reserve(ids.size());
+  for (auto id : ids) {
+    if (vertexTimes) {
+      if (id >= vertexTimes->size())
+        throw std::out_of_range(
+          "Spacetime::fromCells: vertexTimes too short to index vertex id "
+          + std::to_string(id));
+      vmap[id] = st->createVertex(id, {(*vertexTimes)[id]});
+    } else {
+      vmap[id] = st->createVertex(id);
+    }
+  }
+
+  // One top simplex per cell; createSimplex auto-wires the edges, assigning
+  // spacelike (+a) / timelike (-alpha*a) lengths from the vertex times under the
+  // tracked rule, or all-spacelike when the vertices are coordinate-free.
+  for (const auto &cell : cells) {
+    std::vector<std::uint64_t> sortedIds(cell.begin(), cell.end());
+    std::sort(sortedIds.begin(), sortedIds.end());
+    VertexPtrs verts;
+    verts.reserve(sortedIds.size());
+    for (auto v : sortedIds) verts.push_back(vmap[v]);
+    st->createSimplex(verts);
+  }
+
+  // Uniform Hermitian pin: overwrite every edge's geometry. Skipped under the
+  // tracked-metric rule, where the auto-wired causal lengths are the geometry.
+  if (!vertexTimes) {
+    for (const auto &edge : st->getEdgeList()->toVector()) {
+      edge->setSquaredLength(weight);
+      edge->setPhase(phase);
+    }
+  }
+  return st;
+}
+
+std::vector<std::vector<std::uint64_t>> Spacetime::prismCells(
+  const std::vector<std::vector<std::uint64_t>> &cells,
+  int layers,
+  const std::optional<std::unordered_map<std::uint64_t, std::uint64_t>> &twist
+) {
+  // Per-layer vertex stride: one past the largest base id. Each layer l offsets
+  // its vertices by stride*l, so the layers occupy disjoint id ranges.
+  std::uint64_t stride = 0;
+  for (const auto &cell : cells)
+    for (auto v : cell) stride = std::max(stride, v + 1);
+
+  // The base permutation phi (identity unless a twist is supplied), indexed by
+  // id. A missing twist key maps to itself.
+  std::vector<std::uint64_t> phi1(stride);
+  for (std::uint64_t v = 0; v < stride; ++v) {
+    phi1[v] = v;
+    if (twist) {
+      auto it = twist->find(v);
+      if (it != twist->end()) phi1[v] = it->second;
+    }
+  }
+
+  // phi[ell] = phi1 composed with itself ell times (phi[0] = identity), so the
+  // twist is applied cumulatively as the layers climb.
+  std::vector<std::vector<std::uint64_t>> phi;
+  phi.reserve(static_cast<std::size_t>(layers) + 1);
+  std::vector<std::uint64_t> ident(stride);
+  for (std::uint64_t v = 0; v < stride; ++v) ident[v] = v;
+  phi.push_back(std::move(ident));
+  for (int l = 0; l < layers; ++l) {
+    const auto &prev = phi.back();
+    std::vector<std::uint64_t> next(stride);
+    for (std::uint64_t v = 0; v < stride; ++v) next[v] = phi1[prev[v]];
+    phi.push_back(std::move(next));
+  }
+
+  std::set<std::vector<std::uint64_t>> out;
+  for (int ell = 0; ell < layers; ++ell) {
+    const auto &lo = phi[ell];
+    const auto &hi = phi[ell + 1];
+    const std::uint64_t loOff = stride * static_cast<std::uint64_t>(ell);
+    const std::uint64_t hiOff = stride * static_cast<std::uint64_t>(ell + 1);
+    for (const auto &cell : cells) {
+      std::vector<std::uint64_t> base(cell.begin(), cell.end());
+      std::sort(base.begin(), base.end());
+      const std::size_t m = base.size();
+      for (std::size_t j = 0; j < m; ++j) {
+        std::vector<std::uint64_t> s;
+        s.reserve(m + 1);
+        for (std::size_t i = 0; i <= j; ++i) s.push_back(lo[base[i]] + loOff);
+        for (std::size_t i = j; i < m; ++i) s.push_back(hi[base[i]] + hiOff);
+        std::sort(s.begin(), s.end());
+        out.insert(std::move(s));
+      }
+    }
+  }
+  return {out.begin(), out.end()};
+}
+
 // ========================================
 // Query Methods
 // ========================================

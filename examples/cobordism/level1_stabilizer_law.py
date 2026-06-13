@@ -135,34 +135,14 @@ def _prism4_cells(cells=_W3_CELLS, twist=None):
     """The staircase triangulation of (holed S^3) x I: for each tetrahedron
     (a<b<c<d), the four 4-simplices (a0,b0,c0,d0,d1), (a0,b0,c0,c1,d1),
     (a0,b0,b1,c1,d1), (a0,a1,b1,c1,d1) with x1 = twist(x) + 12. Adjacent
-    prisms split shared walls by the same vertex-order rule."""
-    twist = twist or _IDENT
-    out = []
-    for c in cells:
-        a, b, cc, d = sorted(c)
-        a1, b1, c1, d1 = (twist[a] + 12, twist[b] + 12,
-                          twist[cc] + 12, twist[d] + 12)
-        out += [tuple(sorted((a, b, cc, d, d1))),
-                tuple(sorted((a, b, cc, c1, d1))),
-                tuple(sorted((a, b, b1, c1, d1))),
-                tuple(sorted((a, a1, b1, c1, d1)))]
-    return sorted(set(out))
+    prisms split shared walls by the same vertex-order rule. The staircase is
+    the dimension-generic prism builder; this is its 4d (single-layer) face."""
+    return tessera.Spacetime.prismCells([list(c) for c in cells], 1, twist)
 
 
 def _bulk4(cells):
     """A pre-geometric 4-complex (top cells = 4-simplices), unit edge pin."""
-    sig = tessera.Signature(4, tessera.Lorentzian)
-    st = tessera.Spacetime(tessera.Metric(True, sig), tessera.CDT, 1.0, 1.0,
-                           tessera.PREFERRED, None)
-    vmap = {i: st.createVertex(i)
-            for i in sorted({v for c in cells for v in c})}
-    for c in cells:
-        t = sorted(c)
-        st.createSimplex([vmap[v] for v in t])
-    for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
-        e.setPhase(0.0)
-    return st
+    return tessera.Spacetime.fromCells(4, [list(c) for c in cells])
 
 
 def _end_sign(cells, holes):

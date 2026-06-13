@@ -229,17 +229,7 @@ def _progress():
 def _surface(faces, weight=1.0, phase=0.0):
     """A pre-geometric 2-complex (top cells = triangles) from a face list, all edges
     pinned to a uniform Hermitian weight. No topology object is used."""
-    sig = tessera.Signature(2, tessera.Lorentzian)
-    st = tessera.Spacetime(tessera.Metric(True, sig), tessera.CDT, 1.0, 1.0,
-                           tessera.PREFERRED, None)
-    vmap = {i: st.createVertex(i) for i in sorted({v for f in faces for v in f})}
-    for f in faces:
-        t = sorted(f)
-        st.createSimplex([vmap[t[0]], vmap[t[1]], vmap[t[2]]])
-    for e in st.getEdgeList().toVector():
-        e.setSquaredLength(weight)
-        e.setPhase(phase)
-    return st
+    return tessera.Spacetime.fromCells(2, [list(f) for f in faces], weight, phase)
 
 
 def _betti(st):
