@@ -433,7 +433,19 @@ Returns:
                out.append(py::cast(s, py::return_value_policy::reference_internal, self));
              return out;
            },
-           "Return all top-dimensional simplices in the complex.")
+           "Return all simplices (every dimension) registered in the complex.")
+      .def("getTopSimplices",
+           [](py::object self) {
+             py::list out;
+             for (const auto &s : py::cast<Spacetime &>(self).getTopSimplices())
+               out.append(py::cast(s, py::return_value_policy::reference_internal, self));
+             return out;
+           },
+           R"doc(Return the top-dimensional simplices in dual-node order.
+
+Element i is dual node i in getDualAdjacency(), so per-node data (vertex
+sets, times, ...) can be attached to the dual COO without re-deriving the
+top-simplex indexing from Python.)doc")
       .def("getExternalSimplices",
            [](py::object self) {
              py::list out;

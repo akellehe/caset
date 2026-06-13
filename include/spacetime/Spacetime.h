@@ -375,6 +375,12 @@ class Spacetime {
     /// (all simplices of all dimensions registered in the complex).
     [[nodiscard]] const std::vector<SimplexPtr>& getSimplices() const noexcept;
 
+    /// @return Const reference to the top-dimensional simplices only, in the
+    /// same order used by @ref getDualAdjacency (i.e. element \a i is dual
+    /// node \a i).  Lets callers attach per-node data to the dual COO without
+    /// re-deriving the top-simplex indexing from Python.
+    [[nodiscard]] const std::vector<SimplexPtr>& getTopSimplices() const noexcept;
+
     /// Deterministically seed the spacetime's internal RNG. The RNG drives
     /// the @ref getRandomVertex / @ref getRandomSimplex / @ref getRandomTopSimplex
     /// family used by Pachner moves' first-step sigma selection. Call this

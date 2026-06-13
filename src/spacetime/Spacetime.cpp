@@ -932,6 +932,10 @@ const std::vector<SimplexPtr>& Spacetime::getSimplices() const noexcept {
   return simplicesVec;
 }
 
+const std::vector<SimplexPtr>& Spacetime::getTopSimplices() const noexcept {
+  return topSimplicesVec;
+}
+
 VertexPtr Spacetime::getRandomVertex() { return getRandomVertex(rng); }
 
 VertexPtr Spacetime::getRandomVertex(std::mt19937 &generator) {
