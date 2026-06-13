@@ -130,11 +130,11 @@ def force_layout_3d(n, edges, *, center_idx=None, init_pos=None,
                     seed=42):
     """Spring-electrical force-directed layout in 3D.
 
-    Delegates to ``tessera.forceLayout3D`` (C++) for performance.
+    Delegates to ``tessera.ForceLayout.layout3D`` (C++) for performance.
 
     Returns an ``(n, 3)`` numpy array of positions.
     """
-    flat = tessera.forceLayout3D(
+    flat = tessera.ForceLayout.layout3D(
         n=n,
         edges=edges,
         centerIdx=center_idx if center_idx is not None else -1,
@@ -148,6 +148,35 @@ def force_layout_3d(n, edges, *, center_idx=None, init_pos=None,
         seed=seed,
     )
     return np.array(flat).reshape(n, 3)
+
+
+def radial_layout_2d(n, edges, target_radii, *, center_idx=None,
+                     init_pos=None, spring_k=0.02, repulsion_k=0.3,
+                     rest_lengths=None, iters=200, cooling=0.995,
+                     repulsion_cap=200, initial_step=0.3, seed=42):
+    """Radius-constrained 2D radial force-directed layout.
+
+    Delegates to ``tessera.ForceLayout.layout2D`` (C++).  Each node's radius
+    is pinned to ``target_radii``; only the angular coordinate is solved.
+
+    Returns an ``(n, 2)`` numpy array of positions.
+    """
+    flat = tessera.ForceLayout.layout2D(
+        n=n,
+        edges=edges,
+        targetRadii=list(target_radii),
+        centerIdx=center_idx if center_idx is not None else -1,
+        initPos=list(init_pos.ravel()) if init_pos is not None else [],
+        restLengths=list(rest_lengths) if rest_lengths is not None else [],
+        springK=spring_k,
+        repulsionK=repulsion_k,
+        iters=iters,
+        cooling=cooling,
+        repulsionCap=repulsion_cap,
+        initialStep=initial_step,
+        seed=seed,
+    )
+    return np.array(flat).reshape(n, 2)
 
 
 def layout_from_spacetime(verts, edges, **kwargs):

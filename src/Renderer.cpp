@@ -1,6 +1,7 @@
 // MIT License -- Copyright (c) 2025 Andrew Kelleher
 #include "Renderer.h"
 
+#include "ForceLayout.h"
 #include "spacetime/Spacetime.h"
 #include "mesh/Vertex.h"
 #include "mesh/Edge.h"
@@ -480,60 +481,32 @@ LayoutData computeLayout(const Spacetime &st, int maxIters) {
     else if (N > 5000) iters = std::min(iters, 50);
     else if (N > 1000) iters = std::min(iters, 200);
 
-    constexpr double springK = 0.01;
-    constexpr double repulsionK = 0.5;
-    constexpr double restLength = 1.0;
-    constexpr double eps = 1e-6;
-    constexpr double cooling = 0.995;
-    constexpr std::size_t repulsionCap = 200;
-    double step = 0.5;
+    // Solve the spatial (x, z) coordinates with the shared 2D layout engine:
+    // each vertex's time slice is a repulsion group, so nodes spread only
+    // against others in the same slice; the y/time coordinate stays fixed.
+    std::vector<std::pair<int, int>> layoutEdges;
+    layoutEdges.reserve(layout.edges.size());
+    for (const auto &e : layout.edges)
+        layoutEdges.emplace_back(static_cast<int>(e.src),
+                                 static_cast<int>(e.tgt));
 
-    std::vector<Vec3> forces(N);
+    std::vector<int> groups(N);
+    std::vector<double> initPos(N * 2);
+    for (std::size_t i = 0; i < N; ++i) {
+        groups[i] = static_cast<int>(std::round(times[i]));
+        initPos[i * 2]     = layout.pos[i].x;
+        initPos[i * 2 + 1] = layout.pos[i].z;
+    }
 
-    for (int iter = 0; iter < iters; ++iter) {
-        for (auto &f : forces) f = {0, 0, 0};
+    auto solved = ForceLayout::layout2D(
+        static_cast<int>(N), layoutEdges, /*targetRadii=*/{}, groups,
+        /*centerIdx=*/-1, initPos, /*restLengths=*/{},
+        /*springK=*/0.01, /*repulsionK=*/0.5, iters, /*cooling=*/0.995,
+        /*repulsionCap=*/200, /*initialStep=*/0.5);
 
-        // Spring forces (edges): attract toward rest length
-        for (const auto &e : layout.edges) {
-            Vec3 d = layout.pos[e.tgt] - layout.pos[e.src];
-            double dx = d.x, dz = d.z;
-            double dist = std::sqrt(dx * dx + dz * dz + eps);
-            double f = springK * (dist - restLength);
-            Vec3 force = {f * dx / dist, 0, f * dz / dist};
-            forces[e.src] += force;
-            forces[e.tgt] += force * (-1.0);
-        }
-
-        // Repulsion within same time slice
-        for (auto &[t, indices] : slices) {
-            auto n = std::min(indices.size(), repulsionCap);
-            for (std::size_t a = 0; a < n; ++a) {
-                for (std::size_t b = a + 1; b < n; ++b) {
-                    auto i = indices[a], j = indices[b];
-                    double dx = layout.pos[i].x - layout.pos[j].x;
-                    double dz = layout.pos[i].z - layout.pos[j].z;
-                    double dist2 = dx * dx + dz * dz + eps;
-                    double dist = std::sqrt(dist2);
-                    double f = repulsionK / dist2;
-                    Vec3 force = {f * dx / dist, 0, f * dz / dist};
-                    forces[i] += force;
-                    forces[j] += force * (-1.0);
-                }
-            }
-        }
-
-        // Apply forces (x, z only; y/time stays fixed)
-        for (std::size_t i = 0; i < N; ++i) {
-            double fx = forces[i].x, fz = forces[i].z;
-            double mag = std::sqrt(fx * fx + fz * fz + eps);
-            if (mag > step) {
-                fx = fx / mag * step;
-                fz = fz / mag * step;
-            }
-            layout.pos[i].x += fx;
-            layout.pos[i].z += fz;
-        }
-        step *= cooling;
+    for (std::size_t i = 0; i < N; ++i) {
+        layout.pos[i].x = solved[i * 2];
+        layout.pos[i].z = solved[i * 2 + 1];
     }
 
     return layout;

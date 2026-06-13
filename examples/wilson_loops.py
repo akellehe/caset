@@ -12,7 +12,6 @@ Usage:
 """
 import argparse
 import math
-from collections import defaultdict, deque
 
 import numpy as np
 import matplotlib
@@ -23,68 +22,8 @@ from PIL import Image
 
 import tessera
 from tessera.utils.memory_monitor import MemoryMonitor
+from tessera.utils.plot import force_layout_3d
 from tessera.utils.progress import SingleTaskProgress
-
-
-# =========================================================================
-# Layout helpers (adapted from curvature_slice_gif.py)
-# =========================================================================
-
-def _slice_subgraph(st, t):
-    verts = [v for v in st.getVertexList().toVector()
-             if round(v.getTime()) == t]
-    vid_set = {v.getId() for v in verts}
-    edges = []
-    seen = set()
-    for v in verts:
-        for e in v.getEdges():
-            fp = id(e)
-            if fp in seen:
-                continue
-            seen.add(fp)
-            s, t_ = e.getSource().getId(), e.getTarget().getId()
-            if s in vid_set and t_ in vid_set and e.getSquaredLength() > 0:
-                edges.append(e)
-    return verts, edges
-
-
-def _force_layout_3d(verts, edges, *, iters=200, rng=None):
-    if rng is None:
-        rng = np.random.default_rng(42)
-    n = len(verts)
-    vid_to_idx = {v.getId(): i for i, v in enumerate(verts)}
-    pos = rng.standard_normal((n, 3)) * 0.5
-
-    edge_idx = []
-    for e in edges:
-        si = vid_to_idx.get(e.getSource().getId())
-        ti = vid_to_idx.get(e.getTarget().getId())
-        if si is not None and ti is not None:
-            edge_idx.append((si, ti))
-
-    step = 0.5
-    for _ in range(iters):
-        forces = np.zeros_like(pos)
-        for si, ti in edge_idx:
-            d = pos[ti] - pos[si]
-            dist = max(np.linalg.norm(d), 1e-6)
-            f = 0.01 * (dist - 1.0) * d / dist
-            forces[si] += f
-            forces[ti] -= f
-        cap = min(n, 200)
-        for a in range(cap):
-            for b in range(a + 1, cap):
-                d = pos[a] - pos[b]
-                d2 = np.dot(d, d) + 1e-6
-                f = 0.5 / d2 * d / math.sqrt(d2)
-                forces[a] += f
-                forces[b] -= f
-        norms = np.linalg.norm(forces, axis=1, keepdims=True)
-        norms = np.maximum(norms, 1e-6)
-        forces = np.where(norms > step, forces / norms * step, forces)
-        pos += forces
-        step *= 0.995
-    return pos, vid_to_idx, edge_idx
 
 
 # =========================================================================
@@ -136,37 +75,6 @@ def _build_dual_complex(st):
     edge_list = list(dual_edges.keys())
     edge_types = [dual_edges[e] for e in edge_list]
     return key_to_idx, key_list, edge_list, edge_types, all_simplices
-
-
-def _dual_complex_layout(key_list, dual_edges, n, *, iters=300, rng=None):
-    """Force-directed layout of the full dual complex."""
-    if rng is None:
-        rng = np.random.default_rng(42)
-
-    pos = rng.standard_normal((n, 3)) * 1.0
-    step = 0.5
-    for _ in range(iters):
-        forces = np.zeros_like(pos)
-        for a, b in dual_edges:
-            d = pos[b] - pos[a]
-            dist = max(np.linalg.norm(d), 1e-6)
-            f = 0.05 * (dist - 1.0) * d / dist
-            forces[a] += f
-            forces[b] -= f
-        cap = min(n, 300)
-        for a in range(cap):
-            for b in range(a + 1, cap):
-                d = pos[a] - pos[b]
-                d2 = np.dot(d, d) + 1e-6
-                f = 0.3 / d2 * d / math.sqrt(d2)
-                forces[a] += f
-                forces[b] -= f
-        norms = np.linalg.norm(forces, axis=1, keepdims=True)
-        norms = np.maximum(norms, 1e-6)
-        forces = np.where(norms > step, forces / norms * step, forces)
-        pos += forces
-        step *= 0.995
-    return pos
 
 
 def _loop_indices(loop, key_to_idx):
@@ -380,7 +288,9 @@ def main():
     # Build full dual-complex layout (shared across all loop types)
     prog.phase("layouting", extra="dual complex")
     key_to_idx, key_list, dual_edges, edge_types, _ = _build_dual_complex(st)
-    dual_pos = _dual_complex_layout(key_list, dual_edges, len(key_list))
+    dual_pos = force_layout_3d(
+        len(key_list), dual_edges,
+        spring_k=0.05, repulsion_k=0.3, repulsion_cap=300, iters=300)
 
     # Render GIF: for each loop type, show rotating views
     prog.phase("rendering", extra=args.save)
