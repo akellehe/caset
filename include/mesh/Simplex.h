@@ -384,6 +384,20 @@ class Simplex {
     /// ``volume()``. Negative content is meaningful, not an error.
     [[nodiscard]] double dualVolume() const;
 
+    /// Exact analytic gradient of this hinge's ``dualVolume`` with respect to the
+    /// squared length of each surrounding edge:
+    /// \f$ \partial |\!\star\!\sigma| / \partial \ell^2_e \f$. Differentiates the
+    /// DEC recursion through the circumradii, with
+    /// \f$ R^2 = h^\top G^{-1} h \f$ (h = ½ diag G) so
+    /// \f$ \partial R^2 = 2(\partial h)^\top\beta - \beta^\top(\partial G)\beta \f$,
+    /// \f$ \beta = G^{-1}h \f$ (the Gram matrix is linear in \f$ \ell^2 \f$).
+    /// Implemented for the \f$ (n-2) \f$-hinge case the Regge action needs (an
+    /// edge in 3D), the dual being the two-level edge→facet→top recursion. Keyed
+    /// by sorted vertex-id edge over the top cells touching the hinge. Returns an
+    /// empty map for other codimensions.
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+    dualVolumeGradient() const;
+
     /// Diagonal Hodge-star ratio ⋆ = |★σ| / |σ| (dual content over primal
     /// content) for this simplex — the bridge between the primal Laplacian
     /// weights and the dual Regge action.

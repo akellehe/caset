@@ -14,8 +14,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <map>
 #include <numbers>
 #include <set>
+#include <utility>
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -175,6 +178,32 @@ std::vector<double> ReggeSolver::actionGradient() const {
         double Sm = totalAction();
         g[i] = (Sp - Sm) / (2.0 * h);
         edges[i]->setSquaredLength(origSq);
+    }
+    return g;
+}
+
+std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
+    using cd = std::complex<double>;
+    const auto edges = spacetime_->getEdgeList()->toVector();
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> eidx;
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        const std::uint64_t a = edges[i]->getSource()->getId();
+        const std::uint64_t b = edges[i]->getTarget()->getId();
+        eidx[{std::min(a, b), std::max(a, b)}] = i;
+    }
+    std::vector<cd> g(edges.size(), cd(0.0, 0.0));
+    // dS/dl^2_e = sum_h [ d|*h|/dl^2_e * eps_h + |*h| * d eps_h/dl^2_e ]
+    for (const auto &h : collectHinges()) {
+        const cd eps = h->lorentzianDeficitAngle();
+        const double dv = h->dualVolume();
+        for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
+            const auto it = eidx.find(e);
+            if (it != eidx.end()) g[it->second] += dv * dEps;
+        }
+        for (const auto &[e, dDv] : h->dualVolumeGradient()) {
+            const auto it = eidx.find(e);
+            if (it != eidx.end()) g[it->second] += dDv * eps;
+        }
     }
     return g;
 }
