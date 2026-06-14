@@ -125,6 +125,34 @@ class ExactActionGradientTest(unittest.TestCase):
             worst = max(worst, abs(float(grad[e]) - fd))
         self.assertLess(worst, _TOL)
 
+    # --- the Lorentzian action is genuinely complex; never reduce it to Re ---
+    # These guard a recurring mistake: building a variational principle / EOM / diagnostic
+    # on Re S alone. The imaginary part (boost & spacelike-hinge contributions) is real
+    # physics; a stationary-action objective is delta S = 0 for the FULL complex S, i.e.
+    # the gradient norm Sum|dS/dl^2|^2 must include |d Im S|^2. Dropping it lets the
+    # geometry drift along directions the imaginary part actually constrains (observed:
+    # the Re-only objective drifted up in overall scale because d Im S -- which curbs that
+    # drift -- was missing). The margins below are comfortably met (~0.6) on the merge;
+    # the threshold catches a regression that silently zeroes the imaginary part.
+
+    def test_action_is_materially_complex(self):
+        S = self._action()
+        self.assertGreater(
+            abs(S.imag), 0.1 * abs(S.real),
+            f"Im S={S.imag:.3f} is not material vs Re S={S.real:.3f}; the Lorentzian "
+            "action is complex and its imaginary part must not be dropped")
+
+    def test_stationarity_residual_requires_imaginary_part(self):
+        rs = tessera.ReggeSolver(self.st, tessera.MatterConfiguration())
+        g = [complex(z) for z in rs.actionGradientExact()]
+        reN = sum(z.real * z.real for z in g)   # ||d Re S||^2
+        imN = sum(z.imag * z.imag for z in g)   # ||d Im S||^2
+        # A Re-only stationary-action objective would use reN and miss imN entirely.
+        self.assertGreater(
+            imN, 0.1 * reN,
+            f"||d Im S||^2={imN:.2f} is not material vs ||d Re S||^2={reN:.2f}; the "
+            "stationary-action objective must use the full complex gradient Sum|dS|^2")
+
 
 if __name__ == "__main__":
     unittest.main()
