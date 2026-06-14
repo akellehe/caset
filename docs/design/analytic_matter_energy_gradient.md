@@ -1,10 +1,17 @@
 # Analytic matter-energy gradient (Part B) — implementation plan
 
-Status: **resolved — building** the `F_β = r_U + β|S|` form (see "Resolved design"
-below; this supersedes the `∇G` form quoted next). Part A (the exact dual-action
-gradient) is done, native C++, FD-verified, and regression-guarded
-(`ReggeSolver::actionGradientExact`, `Simplex::lorentzianDeficitAngleGradient`,
-`Simplex::dualVolumeGradient`). This document plans **Part B**: the exact analytic
+Status: **Part A landed; the objective evolved past this doc.** What lands here is
+**Part A** — the exact dual-action gradient (`ReggeSolver::actionGradientExact`,
+`Simplex::lorentzianDeficitAngleGradient`, `Simplex::dualVolumeGradient`), native C++,
+FD-verified, with regression + complex-action guards. The objective sketched below
+(`F_β = r_U + β|S|`) was a checkpoint and has since been superseded, in order:
+`r_U + β|S|` collapses to the action's zero set (`|S|→0`), so we moved to **stationary
+action** `‖∇S‖² + Γ·r_U` (full complex `δS=0`, *not* `Re`-only), and then found the
+genuine saddle needs **complex edge lengths** (timelike ⟺ `|Im(l)| > ε`, `ℓ² = l²`),
+which land in a follow-up PR. The Part-B/`∇G` material below is kept as the historical
+design trail. Original framing:
+
+This document plans **Part B**: the exact analytic
 gradient of the matter energy `E`, the last piece of
 
 ```
