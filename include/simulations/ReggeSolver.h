@@ -104,6 +104,16 @@ class ReggeSolver {
     /// Non-negative; zero exactly when the Regge equations are satisfied.
     [[nodiscard]] double actionGradientNorm() const;
 
+    /// **Exact analytic** gradient of the complex dual (Sorkin) Regge action
+    /// ``dualReggeAction`` = Σ_h |★h|·ε_h: ∂S/∂ℓ²_e for each edge, in the
+    /// ``getEdgeList()`` order (matching ``actionGradient``). Assembled by the
+    /// product rule Σ_h [∂|★h|·ε_h + |★h|·∂ε_h] from the per-hinge analytic
+    /// gradients ``Simplex::dualVolumeGradient`` and
+    /// ``lorentzianDeficitAngleGradient`` — no finite differences. Complex (Re S
+    /// and Im S together). Matches a central-difference of ``dualReggeAction`` to
+    /// machine precision but at one pass, not 2·|E| action evaluations.
+    [[nodiscard]] std::vector<std::complex<double>> actionGradientExact() const;
+
     // ==================== Solver ====================
 
     /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.

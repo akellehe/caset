@@ -286,6 +286,12 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "Total action: S = S_grav + S_matter.  Stationary point = Einstein eqs.")
       .def("actionGradientNorm", &ReggeSolver::actionGradientNorm,
            "||∇S||² = Σ_e (∂S/∂ℓ²_e)².  Zero = Regge equations solved.")
+      .def("actionGradientExact", &ReggeSolver::actionGradientExact,
+           "Exact analytic gradient of the complex dual (Sorkin) Regge action: "
+           "∂S/∂ℓ²_e per edge (getEdgeList order), as a list of complex. "
+           "Assembled from the per-hinge dualVolume/deficit analytic gradients "
+           "(no finite differences); matches FD of dualReggeAction to machine "
+           "precision in one pass.")
       .def("step", &ReggeSolver::step,
            py::arg("learningRate") = 0.001,
            "One gradient-descent step on F = ||∇S||². Returns F before the update.")

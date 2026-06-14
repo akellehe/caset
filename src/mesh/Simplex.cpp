@@ -31,6 +31,7 @@
 #include <cmath>
 #include <complex>
 #include <numbers>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -841,6 +842,86 @@ std::complex<double> Simplex::lorentzianDeficitAngle() const {
     return twoPi - sum;
 }
 
+std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+Simplex::lorentzianDeficitAngleGradient() const {
+    using cd = std::complex<double>;
+    std::map<std::pair<std::uint64_t, std::uint64_t>, cd> grad;
+    if (!spacetime || vertices.empty()) return grad;
+    const int topSize =
+        spacetime->getMetric()->getSignature()->getDimensions() + 1;
+
+    // The top cells containing this hinge -- the same set lorentzianDeficitAngle
+    // sums over. d(eps)/dl^2 = -sum_tau d(theta_tau)/dl^2.
+    for (const auto &tau : vertices[0]->getSimplices()) {
+        if (static_cast<int>(tau->size()) != topSize) continue;
+        bool containsAll = true;
+        for (std::size_t i = 1; i < vertices.size(); ++i)
+            if (!tau->hasVertex(vertices[i])) { containsAll = false; break; }
+        if (!containsAll) continue;
+
+        const auto &tv = tau->getVertices();
+        const int m = static_cast<int>(tv.size());          // d + 1
+        // local indices of the two vertices NOT in the hinge
+        std::vector<int> opp;
+        for (int k = 0; k < m; ++k) {
+            bool inHinge = false;
+            for (const auto &hv : vertices)
+                if (hv->getId() == tv[k]->getId()) { inHinge = true; break; }
+            if (!inHinge) opp.push_back(k);
+        }
+        if (opp.size() != 2) continue;
+        const int bi = opp[0] + 1, bj = opp[1] + 1;          // CM border offset
+
+        const int n = m + 1;                                 // CM is (d+2)x(d+2)
+        const std::vector<double> B = tau->cayleyMengerMatrix(/*wickRotate=*/false);
+        const double detB = determinant(B, n);
+        if (std::abs(detB) < 1e-300) continue;
+        const std::vector<double> C = cofactorMatrix(B, n);
+        // B^-1 = adj(B)/det = cof^T/det ; B symmetric => Binv symmetric.
+        std::vector<double> Binv(static_cast<std::size_t>(n) * n);
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+                Binv[i * n + j] = C[j * n + i] / detB;
+
+        const double Cij = C[bi * n + bj];
+        const double Cii = C[bi * n + bi];
+        const double Cjj = C[bj * n + bj];
+        const double sC = (Cii >= 0.0) ? 1.0 : -1.0;
+        const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
+        const double D = std::sqrt(std::abs(Cii * Cjj));
+        if (D < 1e-300) continue;
+        const double denom = sC * D;
+        const double r = -Cij / denom;
+        const cd theta = std::acos(cd(r, 0.0));
+        const cd sinTheta = std::sin(theta);
+        if (std::abs(sinTheta) < 1e-300) continue;           // flat/folded: skip
+        const cd dthetaDr = cd(-1.0, 0.0) / sinTheta;        // boost-safe branch
+
+        // dC_pq for the edge (a,b): dB is the indicator at (a+1,b+1)&(b+1,a+1);
+        // dC = det[ tr(B^-1 dB) B^-1 - B^-1 dB B^-1 ], extracted entrywise.
+        auto dCof = [&](int p, int q, int a, int b) -> double {
+            const double bab = Binv[(a + 1) * n + (b + 1)];
+            return detB * (2.0 * bab * Binv[p * n + q]
+                           - (Binv[p * n + (a + 1)] * Binv[(b + 1) * n + q]
+                              + Binv[p * n + (b + 1)] * Binv[(a + 1) * n + q]));
+        };
+        for (int a = 0; a < m; ++a) {
+            for (int b = a + 1; b < m; ++b) {
+                const double dCij = dCof(bi, bj, a, b);
+                const double dCii = dCof(bi, bi, a, b);
+                const double dCjj = dCof(bj, bj, a, b);
+                const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
+                const double ddenom = sC * dD;
+                const double dr =
+                    -(dCij * denom - Cij * ddenom) / (denom * denom);
+                const std::uint64_t va = tv[a]->getId(), vb = tv[b]->getId();
+                grad[{std::min(va, vb), std::max(va, vb)}] -= dthetaDr * dr;
+            }
+        }
+    }
+    return grad;
+}
+
 double Simplex::area(bool wickRotate) const {
     if (edges.size() < 3) return 0.0;
     auto sq = [&](std::size_t k) -> double {
@@ -985,6 +1066,44 @@ double dualVolRec(const ::tessera::mesh::Simplex* s, int n) {
     return acc / static_cast<double>(n - k);
 }
 
+// Exact d(R^2)/d(l^2_e) for simplex `s` w.r.t. edge (ea,eb): R^2 = h^T G^-1 h
+// (h = 1/2 diag G), so dR^2 = 2(dh)^T beta - beta^T (dG) beta, beta = G^-1 h.
+// The Gram matrix is linear in l^2, so dG/dh are indicator matrices.
+double dCircumR2(const ::tessera::mesh::Simplex* s,
+                 std::uint64_t ea, std::uint64_t eb) {
+    const int d = static_cast<int>(s->size()) - 1;
+    if (d <= 0) return 0.0;
+    const auto& sv = s->getVertices();
+    const std::vector<double> G = s->gramMatrix(/*wickRotate=*/false);
+    const double detG = ::tessera::mesh::Simplex::determinant(G, d);
+    if (std::abs(detG) < 1e-300) return 0.0;
+    const std::vector<double> cofG =
+        ::tessera::mesh::Simplex::cofactorMatrix(G, d);
+    std::vector<double> h(d), beta(d, 0.0);
+    for (int i = 0; i < d; ++i) h[i] = 0.5 * G[i * d + i];
+    for (int i = 0; i < d; ++i) {              // beta = G^-1 h, (G^-1)_ij=cof_ji/det
+        double a = 0.0;
+        for (int j = 0; j < d; ++j) a += cofG[j * d + i] * h[j];
+        beta[i] = a / detG;
+    }
+    const std::uint64_t lo = std::min(ea, eb), hi = std::max(ea, eb);
+    auto ind = [&](int p, int q) -> double {
+        if (p == q) return 0.0;
+        const std::uint64_t a = sv[p]->getId(), b = sv[q]->getId();
+        return (std::min(a, b) == lo && std::max(a, b) == hi) ? 1.0 : 0.0;
+    };
+    std::vector<double> dG(static_cast<std::size_t>(d) * d), dh(d);
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            dG[i * d + j] = 0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
+    for (int i = 0; i < d; ++i) dh[i] = 0.5 * dG[i * d + i];
+    double r = 0.0;
+    for (int i = 0; i < d; ++i) r += 2.0 * dh[i] * beta[i];
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j) r -= beta[i] * dG[i * d + j] * beta[j];
+    return r;
+}
+
 }  // namespace
 
 std::vector<double> Simplex::circumcenterBarycentric() const {
@@ -1009,6 +1128,65 @@ double Simplex::dualVolume() const {
     while (!top->getCofaces().empty()) top = top->getCofaces()[0];
     const int n = static_cast<int>(top->size()) - 1;
     return dualVolRec(this, n);
+}
+
+std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+Simplex::dualVolumeGradient() const {
+    std::map<std::pair<std::uint64_t, std::uint64_t>, double> grad;
+    if (vertices.empty()) return grad;
+    const Simplex* top = this;
+    while (!top->getCofaces().empty()) top = top->getCofaces()[0];
+    const int n = static_cast<int>(top->size()) - 1;
+    const int k = static_cast<int>(size()) - 1;
+    if (k != n - 2) return grad;          // the (n-2) hinge the Regge action needs
+
+    const double Rh2 = circumradiusSquared();
+    struct Facet {
+        const Simplex* cf; double sgn; double R1; double inner;
+        std::vector<std::pair<const Simplex*, std::pair<double, double>>> tops;
+    };
+    std::vector<Facet> fs;
+    std::set<std::pair<std::uint64_t, std::uint64_t>> edges;
+    for (const auto& cf : getCofaces()) {
+        Facet f;
+        f.cf = cf; f.sgn = oppositeVertexSign(cf, this);
+        f.R1 = cf->circumradiusSquared(); f.inner = 0.0;
+        for (const auto& tp : cf->getCofaces()) {
+            const double sgn2 = oppositeVertexSign(tp, cf);
+            const double R2 = tp->circumradiusSquared();
+            f.inner += sgn2 * signedSqrt(R2 - f.R1);
+            f.tops.push_back({tp, {sgn2, R2}});
+            const auto& tv = tp->getVertices();
+            for (std::size_t i = 0; i < tv.size(); ++i)
+                for (std::size_t j = i + 1; j < tv.size(); ++j) {
+                    const std::uint64_t a = tv[i]->getId(), b = tv[j]->getId();
+                    edges.insert({std::min(a, b), std::max(a, b)});
+                }
+        }
+        fs.push_back(std::move(f));
+    }
+    const double inv = 1.0 / (static_cast<double>(n - k) * (n - k - 1));
+    for (const auto& e : edges) {
+        const double dRh = dCircumR2(this, e.first, e.second);
+        double dV = 0.0;
+        for (const auto& f : fs) {
+            const double dR1 = dCircumR2(f.cf, e.first, e.second);
+            const double x1 = f.R1 - Rh2;
+            const double ss1 = signedSqrt(x1);
+            const double dss1 = 1.0 / (2.0 * std::sqrt(std::abs(x1) + 1e-300));
+            double dinner = 0.0;
+            for (const auto& t : f.tops) {
+                const double R2 = t.second.second, sgn2 = t.second.first;
+                const double dR2 = dCircumR2(t.first, e.first, e.second);
+                const double x2 = R2 - f.R1;
+                dinner += sgn2 * (dR2 - dR1)
+                          / (2.0 * std::sqrt(std::abs(x2) + 1e-300));
+            }
+            dV += f.sgn * (dss1 * (dR1 - dRh) * f.inner + ss1 * dinner);
+        }
+        grad[e] = dV * inv;
+    }
+    return grad;
 }
 
 double Simplex::hodgeStar() const {

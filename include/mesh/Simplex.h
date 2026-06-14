@@ -24,7 +24,10 @@
 
 #include "mesh/ForwardDeclarations.h"
 #include <complex>
+#include <cstdint>
+#include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 #include <functional>
 
@@ -312,6 +315,22 @@ class Simplex {
     /// defect); complex when timelike cells contribute boosts.
     [[nodiscard]] std::complex<double> lorentzianDeficitAngle() const;
 
+    /// Exact analytic gradient of this hinge's ``lorentzianDeficitAngle`` with
+    /// respect to the squared length of each surrounding edge:
+    /// \f$ \partial \varepsilon / \partial \ell^2_e \f$. The deficit is
+    /// \f$ 2\pi - \sum_\tau \theta_\tau \f$ over the top cells \f$ \tau \f$
+    /// containing the hinge, with \f$ \theta = \arccos r \f$ and
+    /// \f$ r = -C_{ij}/\pm\sqrt{|C_{ii}C_{jj}|} \f$ a ratio of cofactors of the
+    /// (signed) Cayley-Menger matrix \f$ B \f$ (linear in \f$ \ell^2 \f$). Since
+    /// \f$ C = \det(B)\,(B^{-1})^\top \f$ the cofactor derivatives are closed
+    /// form; the boost branch uses \f$ d\theta/dr = -1/\sin\theta \f$ so it
+    /// matches ``std::acos`` exactly. Keyed by sorted vertex-id edge; only the
+    /// edges of the top cells touching the hinge appear. Complex (the boost part
+    /// is carried, not truncated).
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>,
+                           std::complex<double>>
+    lorentzianDeficitAngleGradient() const;
+
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
     /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``
     /// selects signed (default) vs. |l^2| (see ``gramMatrix``).
@@ -364,6 +383,20 @@ class Simplex {
     /// timelike height contributes signed content (sign·√|h²|), matching
     /// ``volume()``. Negative content is meaningful, not an error.
     [[nodiscard]] double dualVolume() const;
+
+    /// Exact analytic gradient of this hinge's ``dualVolume`` with respect to the
+    /// squared length of each surrounding edge:
+    /// \f$ \partial |\!\star\!\sigma| / \partial \ell^2_e \f$. Differentiates the
+    /// DEC recursion through the circumradii, with
+    /// \f$ R^2 = h^\top G^{-1} h \f$ (h = ½ diag G) so
+    /// \f$ \partial R^2 = 2(\partial h)^\top\beta - \beta^\top(\partial G)\beta \f$,
+    /// \f$ \beta = G^{-1}h \f$ (the Gram matrix is linear in \f$ \ell^2 \f$).
+    /// Implemented for the \f$ (n-2) \f$-hinge case the Regge action needs (an
+    /// edge in 3D), the dual being the two-level edge→facet→top recursion. Keyed
+    /// by sorted vertex-id edge over the top cells touching the hinge. Returns an
+    /// empty map for other codimensions.
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+    dualVolumeGradient() const;
 
     /// Diagonal Hodge-star ratio ⋆ = |★σ| / |σ| (dual content over primal
     /// content) for this simplex — the bridge between the primal Laplacian
