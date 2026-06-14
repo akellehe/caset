@@ -109,6 +109,19 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
 Positive = spacelike, negative = timelike, zero = lightlike.
 We work in squared lengths to avoid complex arithmetic for
 timelike (imaginary-length) edges.)doc")
+      .def("getLength", &Edge::getLength,
+           R"doc(Return the (possibly complex) edge length — the metric DOF.
+
+Real for spacelike, imaginary for timelike, general complex for an
+analytically-continued geometry. Square it to recover the squared length.
+Distinct from getPhase() (the U(1) connection).)doc")
+      .def("isTimelike", &Edge::isTimelike,
+           "Timelike iff the length has a non-negligible imaginary part "
+           "(supersedes the fragile sign(l^2) test).")
+      .def("isSpacelike", &Edge::isSpacelike,
+           "Spacelike iff the length is real and nonzero.")
+      .def("isNull", &Edge::isNull,
+           "Null/lightlike iff the length is ~zero.")
       .def("getPhase", &Edge::getPhase,
            R"doc(Return the U(1) connection phase carried by this edge (radians).
 

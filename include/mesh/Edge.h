@@ -26,6 +26,7 @@
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/EdgeKey.h"
 
+#include <complex>
 #include <random>
 #include <memory>
 
@@ -111,6 +112,25 @@ class Edge {
     ///
     /// @return The U(1) connection phase, in radians.
     [[nodiscard]] double getPhase() const noexcept;
+
+    /// The (possibly complex) edge length — the metric DOF, distinct from the U(1)
+    /// `phase`. Real for spacelike, imaginary for timelike, general complex for an
+    /// analytically-continued geometry (the Picard–Lefschetz saddle). Currently
+    /// derived from the stored squared length on the principal branch
+    /// (\f$\sqrt{l^2}\f$ for \f$l^2\ge 0\f$, \f$i\sqrt{|l^2|}\f$ for \f$l^2<0\f$);
+    /// a later step stores it directly so it can leave the real/imaginary axes.
+    /// To recover \f$l^2\f$, square the result (`getLength()*getLength()`).
+    [[nodiscard]] std::complex<double> getLength() const noexcept;
+
+    /// Causal character read from the LENGTH, not the fragile `sign(l^2)`: an edge
+    /// is timelike iff its length has a (non-negligible) imaginary part. A genuinely
+    /// spacelike (real) length has `Im == 0`; the epsilon only guards float noise.
+    /// These supersede the scattered `getSquaredLength() < 0` / `>= 0` tests.
+    static constexpr double kCausalEpsilon = 1e-12;
+    [[nodiscard]] bool isTimelike() const noexcept;
+    [[nodiscard]] bool isSpacelike() const noexcept;
+    [[nodiscard]] bool isNull() const noexcept;
+    [[nodiscard]] EdgeDisposition disposition() const noexcept;
 
 #ifdef TESSERA_VERBOSE
     [[nodiscard]] std::string toString() const noexcept;

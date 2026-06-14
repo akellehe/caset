@@ -78,6 +78,30 @@ class Simplex;
       return phase;
     }
 
+    [[nodiscard]] std::complex<double> Edge::getLength() const noexcept {
+      // Principal branch: spacelike -> real, timelike -> imaginary. (Storage
+      // becomes complex in a later step; this keeps getLength() exact on-axis.)
+      if (squaredLength >= 0.0) return {std::sqrt(squaredLength), 0.0};
+      return {0.0, std::sqrt(-squaredLength)};
+    }
+
+    [[nodiscard]] bool Edge::isNull() const noexcept {
+      return std::abs(getLength()) <= kCausalEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isTimelike() const noexcept {
+      return std::abs(getLength().imag()) > kCausalEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isSpacelike() const noexcept {
+      return !isNull() && !isTimelike();
+    }
+
+    [[nodiscard]] EdgeDisposition Edge::disposition() const noexcept {
+      if (isNull()) return EdgeDisposition::Lightlike;
+      return isTimelike() ? EdgeDisposition::Timelike : EdgeDisposition::Spacelike;
+    }
+
 #ifdef TESSERA_VERBOSE
     [[nodiscard]] std::string Edge::toString() const noexcept {
       return source->toString() + "->" + target->toString();
