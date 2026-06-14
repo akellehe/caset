@@ -1,6 +1,7 @@
 # Analytic matter-energy gradient (Part B) — implementation plan
 
-Status: **for review** before implementation. Part A (the exact dual-action
+Status: **resolved — building** the `F_β = r_U + β|S|` form (see "Resolved design"
+below; this supersedes the `∇G` form quoted next). Part A (the exact dual-action
 gradient) is done, native C++, FD-verified, and regression-guarded
 (`ReggeSolver::actionGradientExact`, `Simplex::lorentzianDeficitAngleGradient`,
 `Simplex::dualVolumeGradient`). This document plans **Part B**: the exact analytic
@@ -13,8 +14,54 @@ gradient of the matter energy `E`, the last piece of
 needed for the per-edge backreaction relaxation (#313) to converge without the
 1764×-per-step finite-difference factor.
 
-There is **one substantive decision for you in §4** (a latent basis-dependence in
-the #312 *Python* energy). Everything else follows once that's settled.
+## Resolved design (build this)
+
+After review, the relaxation objective is **not** the #312 backreaction
+`Re S + κE + λ|Im S|`. It is the **mediation** free energy
+
+```
+F_β(W) = r_U(W) + β · |S_Regge(W)|
+```
+
+— the eigenvector **realizability residual** `r_U` (`residualForPeriods`), mediated by
+the **full** dual Regge action's **magnitude** `|S| = |Re S + i·Im S|`, weighted by `β`.
+Decisions behind this:
+
+- **No Dirichlet source.** Matter enters *only* as `r_U`: the geometry must carry the
+  register (the charge). Curvature near the charge is **emergent** — it must fall out of
+  minimizing `F_β`, not be injected by a `⟨ψ, w₁ ψ⟩` energy. **`E` is never computed.**
+- **The action mediates the runaway.** `|S|` *grows* with the conformal runaway
+  (`|S|: 1658 → 2062` over the level-2 scan), so `β|S|` opposes it — there is no
+  `Re S → −∞` for the optimizer to fall into. The old `Re S` *and* `λ|Im S|` both
+  *decreased* with the runaway; only `κE` opposed it, so the action was **not** the
+  mediator. The magnitude is. This is what "mediated by the Regge action" should mean.
+- **`r_U` is basis-invariant** — built on the self-consistent `carriedRepresentative`
+  (metric harmonics throughout), so §4's basis question is moot.
+
+### Gradient
+`∇F = ∂r_U + β·∂|S|`, with
+- `∂|S| = (Re S · ∂Re S + Im S · ∂Im S) / |S|` — from Part A (`actionGradientExact`,
+  already native + FD-verified).
+- `∂r_U` — the residual derivative. `r_U = ‖(M − λI)p‖²`, `p = ψ/‖ψ‖`,
+  `λ = pᵀMp` (real, M=metric L₁). Because `ρ := (M−λI)p ⟂ p`, the `∂λ` term drops:
+  ```
+  ∂r_U = 2·Re[ ρ†(∂M)p ] + (2/n)·Re[ ρ†(M−λI)∂ψ ] − (2 r_U/n)·Re[ p†∂ψ ]
+  ```
+  This **reuses** the Part B machinery below — `∂M` and `∂ψ` (via the basis-invariant
+  `∂Π`) — but the assembled scalar is `∂r_U`, *not* `∂E`.
+
+### Guards — "no Dirichlet source" is a checked invariant, not a hope
+1. **Fresh module, no `E` code.** `energy()`/`grad_E` do not exist in the relaxation;
+   the `∂Π/∂M/∂ψ` sub-machinery is reused, the final quantity is `∂r_U`.
+2. **Single-source matter term** — only `residualForPeriods`; never a `w₁`-weighted norm
+   of `ψ`.
+3. **Definitional assertion**, every objective eval:
+   `assert |F − (residualForPeriods(circles,target) + β·|dualReggeAction()|)| < 1e-12`.
+   Any stray term (a `κE`, a `λ|Im S|`, anything) trips it on the spot.
+4. **FD-verify `∇F` against FD of that exact `F`.** A stray `∂E` in the gradient fails it.
+
+§1–§8 below document the original `∂E` derivation. Its sub-machinery (`∂Π`, `∂M`, `∂ψ`)
+is what `∂r_U` reuses; `E` itself is not part of the objective.
 
 ---
 
