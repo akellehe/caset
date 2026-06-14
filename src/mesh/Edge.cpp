@@ -86,10 +86,14 @@ class Simplex;
     }
 
     [[nodiscard]] bool Edge::isNull() const noexcept {
+      // std::abs of a std::complex is the MODULUS sqrt(Re^2 + Im^2) -- the whole
+      // length magnitude, not the real part -- so a timelike (imaginary) length is
+      // correctly non-null.
       return std::abs(getLength()) <= kCausalEpsilon;
     }
 
     [[nodiscard]] bool Edge::isTimelike() const noexcept {
+      // .imag() is a double, so std::abs here is the ordinary real |Im(l)|.
       return std::abs(getLength().imag()) > kCausalEpsilon;
     }
 
