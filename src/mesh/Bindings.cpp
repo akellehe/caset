@@ -380,7 +380,13 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
       .def("lorentzianDeficitAngle", &Simplex::lorentzianDeficitAngle,
            "Complex Lorentzian deficit 2π − Σ lorentzianDihedralAngle over the "
            "top cells at this hinge; real for an all-spacelike neighbourhood, "
-           "complex when timelike cells contribute boosts.");
+           "complex when timelike cells contribute boosts.")
+      .def("lorentzianDeficitAngleGradient",
+           &Simplex::lorentzianDeficitAngleGradient,
+           "Exact analytic d(deficit)/d(l^2_e) for each surrounding edge, as a "
+           "dict {(v0,v1): complex}. Cofactor-derivative of the Cayley-Menger "
+           "dihedral with the boost-safe sin(theta) branch; matches finite "
+           "differences to machine precision.");
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
       .def(py::init<>());

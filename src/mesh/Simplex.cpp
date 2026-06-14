@@ -841,6 +841,86 @@ std::complex<double> Simplex::lorentzianDeficitAngle() const {
     return twoPi - sum;
 }
 
+std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
+Simplex::lorentzianDeficitAngleGradient() const {
+    using cd = std::complex<double>;
+    std::map<std::pair<std::uint64_t, std::uint64_t>, cd> grad;
+    if (!spacetime || vertices.empty()) return grad;
+    const int topSize =
+        spacetime->getMetric()->getSignature()->getDimensions() + 1;
+
+    // The top cells containing this hinge -- the same set lorentzianDeficitAngle
+    // sums over. d(eps)/dl^2 = -sum_tau d(theta_tau)/dl^2.
+    for (const auto &tau : vertices[0]->getSimplices()) {
+        if (static_cast<int>(tau->size()) != topSize) continue;
+        bool containsAll = true;
+        for (std::size_t i = 1; i < vertices.size(); ++i)
+            if (!tau->hasVertex(vertices[i])) { containsAll = false; break; }
+        if (!containsAll) continue;
+
+        const auto &tv = tau->getVertices();
+        const int m = static_cast<int>(tv.size());          // d + 1
+        // local indices of the two vertices NOT in the hinge
+        std::vector<int> opp;
+        for (int k = 0; k < m; ++k) {
+            bool inHinge = false;
+            for (const auto &hv : vertices)
+                if (hv->getId() == tv[k]->getId()) { inHinge = true; break; }
+            if (!inHinge) opp.push_back(k);
+        }
+        if (opp.size() != 2) continue;
+        const int bi = opp[0] + 1, bj = opp[1] + 1;          // CM border offset
+
+        const int n = m + 1;                                 // CM is (d+2)x(d+2)
+        const std::vector<double> B = tau->cayleyMengerMatrix(/*wickRotate=*/false);
+        const double detB = determinant(B, n);
+        if (std::abs(detB) < 1e-300) continue;
+        const std::vector<double> C = cofactorMatrix(B, n);
+        // B^-1 = adj(B)/det = cof^T/det ; B symmetric => Binv symmetric.
+        std::vector<double> Binv(static_cast<std::size_t>(n) * n);
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+                Binv[i * n + j] = C[j * n + i] / detB;
+
+        const double Cij = C[bi * n + bj];
+        const double Cii = C[bi * n + bi];
+        const double Cjj = C[bj * n + bj];
+        const double sC = (Cii >= 0.0) ? 1.0 : -1.0;
+        const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
+        const double D = std::sqrt(std::abs(Cii * Cjj));
+        if (D < 1e-300) continue;
+        const double denom = sC * D;
+        const double r = -Cij / denom;
+        const cd theta = std::acos(cd(r, 0.0));
+        const cd sinTheta = std::sin(theta);
+        if (std::abs(sinTheta) < 1e-300) continue;           // flat/folded: skip
+        const cd dthetaDr = cd(-1.0, 0.0) / sinTheta;        // boost-safe branch
+
+        // dC_pq for the edge (a,b): dB is the indicator at (a+1,b+1)&(b+1,a+1);
+        // dC = det[ tr(B^-1 dB) B^-1 - B^-1 dB B^-1 ], extracted entrywise.
+        auto dCof = [&](int p, int q, int a, int b) -> double {
+            const double bab = Binv[(a + 1) * n + (b + 1)];
+            return detB * (2.0 * bab * Binv[p * n + q]
+                           - (Binv[p * n + (a + 1)] * Binv[(b + 1) * n + q]
+                              + Binv[p * n + (b + 1)] * Binv[(a + 1) * n + q]));
+        };
+        for (int a = 0; a < m; ++a) {
+            for (int b = a + 1; b < m; ++b) {
+                const double dCij = dCof(bi, bj, a, b);
+                const double dCii = dCof(bi, bi, a, b);
+                const double dCjj = dCof(bj, bj, a, b);
+                const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
+                const double ddenom = sC * dD;
+                const double dr =
+                    -(dCij * denom - Cij * ddenom) / (denom * denom);
+                const std::uint64_t va = tv[a]->getId(), vb = tv[b]->getId();
+                grad[{std::min(va, vb), std::max(va, vb)}] -= dthetaDr * dr;
+            }
+        }
+    }
+    return grad;
+}
+
 double Simplex::area(bool wickRotate) const {
     if (edges.size() < 3) return 0.0;
     auto sq = [&](std::size_t k) -> double {
