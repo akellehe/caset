@@ -4,7 +4,7 @@ import importlib.util, os, sys, time
 from collections import defaultdict, deque
 import numpy as np
 
-HERE = os.path.expanduser("~/deep-merge/examples/cobordism")
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # examples/cobordism
 sys.path.insert(0, HERE)
 spec = importlib.util.spec_from_file_location(
     "merge_cobordism", os.path.join(HERE, "merge_cobordism.py"))
@@ -82,7 +82,7 @@ def curvature_profile(st, dist):
     return bins
 
 
-for level in (0, 1, 2):
+for level in ((0, 1, 2) if __name__ == "__main__" else ()):  # importable: no side effects
     t0 = time.time()
     st, nreg, holes, hole_vs, cells = build_merge(level)
     nE = len(st.getEdgeList().toVector())
