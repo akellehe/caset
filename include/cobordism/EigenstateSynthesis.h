@@ -352,6 +352,22 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    /// FP32 cuBLAS (SGEMM) GPU port of `residualForPeriodsGradient` (#348): the
+    /// identical analytic gradient, but the dominant per-edge GEMMs
+    /// (\f$ U_{nn}^\top f_a \f$, the core product, \f$ dU_n = U_{nn}(\dots) \f$,
+    /// \f$ dM\,p \f$ and \f$ M\,d\psi \f$) run in single precision on the GPU,
+    /// while the dense eigensolve and the cheap small-dimension per-edge algebra
+    /// (and the final \f$ O(n_1) \f$ dot-product reductions) stay on the CPU in
+    /// FP64. FP32 in those GEMMs is the only approximation (pre-approved: ~1e-5
+    /// relative vs FP64 at level-2, identical descent direction); the FP64
+    /// `residualForPeriodsGradient` above is the default and the correctness
+    /// oracle. Requires a `TESSERA_CUDA` build; otherwise throws.
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`, or
+    ///   if tessera was built without CUDA.
+    [[nodiscard]] std::vector<double> residualForPeriodsGradientGpu(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     /// The **carried representative** \f$ \psi \f$ that `residualForPeriods`
     /// scores — exposed as a cochain in its own right (the read-out
     /// `residualForPeriods` builds internally but does not return). Builds the

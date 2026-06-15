@@ -537,6 +537,16 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "the per-edge low-rank dM/dl^2 through eigenvector perturbation theory "
            "and the pseudo-inverse derivative (the C++ port of the relaxation's "
            "Python drU). Raises on a hole/target length mismatch.")
+      .def("residualForPeriodsGradientGpu",
+           &EigenstateSynthesis::residualForPeriodsGradientGpu,
+           py::arg("holes"), py::arg("target_periods"),
+           "FP32 cuBLAS (SGEMM) GPU port of residualForPeriodsGradient (#348): "
+           "the identical analytic gradient, with the dominant per-edge GEMMs run "
+           "in single precision on the GPU and the eigensolve + cheap small-dim "
+           "algebra + final reductions kept on the CPU in FP64. FP32 is the only "
+           "approximation (~1e-5 vs FP64); residualForPeriodsGradient stays the "
+           "default and the correctness oracle. Requires a TESSERA_CUDA build "
+           "(raises otherwise), and raises on a hole/target length mismatch.")
       // ----- Surgery: the topology-changing interior remove move (#196) -----
       .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
            "The interior top cells (all-interior vertices, on no dW face) as "
