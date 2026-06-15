@@ -25,6 +25,7 @@ optional-dependencies.examples = [
     "networkx>=3.0",
     "scipy>=1.11",
     "tqdm>=4.66",
+    "pyscf>=2.13",
 ]
 optional-dependencies.dev = [
     "tessera[examples]",
