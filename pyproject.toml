@@ -29,6 +29,7 @@ optional-dependencies.examples = [
 optional-dependencies.dev = [
     "tessera[examples]",
     "pytest",
+    "pytest-xdist",
     "scikit-build-core>=0.9",
     "cmake>=3.22",
     "ninja",

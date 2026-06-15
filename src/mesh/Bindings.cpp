@@ -91,11 +91,13 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
         py::init<
           const VertexPtr &,
           const VertexPtr &,
-          double>(),
+          std::complex<double>>(),
         py::arg("source"),
         py::arg("target"),
         py::arg("squaredLength"),
-        "Create an edge between two vertices with a specified squared length."
+        "Create an edge with a specified (possibly complex) squared length l^2, "
+        "stored exactly. The length is derived as its sqrt (real = spacelike, "
+        "imaginary = timelike). A real value is a real l^2, not a length."
       )
       .def("__str__", &Edge::toString)
       .def("__repr__", &Edge::toString)
@@ -104,17 +106,38 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
       .def("getSource", &Edge::getSource, py::return_value_policy::reference,
            "Return the source vertex of this edge.")
       .def("getSquaredLength", &Edge::getSquaredLength,
-           R"doc(Return the squared edge length.
+           R"doc(Return the exact (possibly complex) squared length l^2.
 
-Positive = spacelike, negative = timelike, zero = lightlike.
-We work in squared lengths to avoid complex arithmetic for
-timelike (imaginary-length) edges.)doc")
+Stored verbatim — NOT getLength()**2 — so the action never sees a sqrt/square
+round-trip. Real-signed for an ordinary Lorentzian edge, complex for a saddle
+geometry. This is what all geometry/action math reads.)doc")
+      .def("getLength", &Edge::getLength,
+           R"doc(Return the (possibly complex) edge length — the causal DOF.
+
+Real for spacelike, imaginary for timelike, general complex for an
+analytically-continued (saddle) geometry. Causal character is read from THIS
+(Im(length)). Distinct from l^2 (getSquaredLength) and getPhase() (the U(1)
+connection).)doc")
+      .def("isTimelike", &Edge::isTimelike,
+           "Timelike iff the length has a non-negligible imaginary part "
+           "(supersedes the fragile sign(l^2) test).")
+      .def("isSpacelike", &Edge::isSpacelike,
+           "Spacelike iff the length is real and nonzero.")
+      .def("isNull", &Edge::isNull,
+           "Null/lightlike iff the length is ~zero.")
       .def("getPhase", &Edge::getPhase,
            R"doc(Return the U(1) connection phase carried by this edge (radians).
 
 Paired with the signed squared length it gives the complex edge weight
 squaredLength * exp(i * phase) used by the Hermitian-weighted Laplacian.
 The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
+      .def("setSquaredLength", &Edge::setSquaredLength, py::arg("squaredLength"),
+           "Set the exact (complex) squared length l^2; the length is kept in sync "
+           "as its sqrt. Prefer this when the geometry is given by a squared value "
+           "(CDT, Van Raamsdonk, the backreaction scan) so l^2 is stored exactly.")
+      .def("setLength", &Edge::setLength, py::arg("length"),
+           "Set the (complex) edge length: real=spacelike, imaginary=timelike, "
+           "general complex for the off-axis saddle. l^2 is kept in sync as l*l.")
       .def("setPhase", &Edge::setPhase, py::arg("phase"),
            "Set the U(1) connection phase carried by this edge (radians).")
       .def_static("vanRaamsdonkSquaredLength", &Edge::vanRaamsdonkSquaredLength,
@@ -128,12 +151,6 @@ The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
            "the mutual information I between its endpoints: 0 (null) when the "
            "endpoints lie on different time slices (a forward-time worldline "
            "edge), else the spacelike vanRaamsdonkSquaredLength.")
-      .def("setSquaredLength", &Edge::setSquaredLength, py::arg("squaredLength"),
-           R"doc(Set the squared edge length (the signed weight magnitude).
-
-Paired with the phase it gives the complex edge weight squaredLength * exp(i *
-phase) read by the Hermitian-weighted Laplacian; also used by the Regge solver
-to optimize geometry without rebuilding the mesh.)doc")
       .def("getTarget", &Edge::getTarget, py::return_value_policy::reference,
            "Return the target vertex of this edge.");
   // ========================================

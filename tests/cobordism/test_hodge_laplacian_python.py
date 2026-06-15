@@ -132,7 +132,7 @@ def _np_laplacian(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength()
+        w = e.getSquaredLength().real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)

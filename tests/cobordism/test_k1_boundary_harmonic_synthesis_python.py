@@ -285,7 +285,7 @@ class RealizableTest(unittest.TestCase):
             L1_sigma @ np.asarray(longitude.coeffs()), 0.0, atol=1e-7)
 
         boundary_before = {(min(a, b), max(a, b)):
-                           (e.getSquaredLength(), e.getPhase())
+                           (e.getSquaredLength().real, e.getPhase())
                            for e in W.getEdgeList().toVector()
                            for a, b in [(e.getSource().getId(),
                                          e.getTarget().getId())]}
@@ -318,7 +318,7 @@ class RealizableTest(unittest.TestCase):
         self.assertAlmostEqual(overlap, 1.0, places=7)
 
         # dW was pinned byte-identical (the fill never touched the boundary).
-        live = {(min(a, b), max(a, b)): (e.getSquaredLength(), e.getPhase())
+        live = {(min(a, b), max(a, b)): (e.getSquaredLength().real, e.getPhase())
                 for e in W.getEdgeList().toVector()
                 for a, b in [(e.getSource().getId(), e.getTarget().getId())]}
         self.assertEqual(live, boundary_before)

@@ -26,6 +26,7 @@
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/EdgeKey.h"
 
+#include <complex>
 #include <random>
 #include <memory>
 
@@ -74,10 +75,14 @@ enum class EdgeDisposition : uint8_t {
 ///
 class Edge {
   public:
+    /// Construct from the (possibly complex) squared length \f$l^2\f$ — the exact metric
+    /// value, stored verbatim. The complex length is derived as \f$\sqrt{l^2}\f$ (real =
+    /// spacelike, imaginary = timelike). A real `double` binds here as a real \f$l^2\f$
+    /// (`complex(l2, 0)`) — that is the intended meaning, not a length.
     Edge(
       const VertexPtr &source,
       const VertexPtr &target,
-      double squaredLength_
+      std::complex<double> squaredLength
     );
 
     Edge(
@@ -95,15 +100,6 @@ class Edge {
     /// memory. But seriously, though, `getTarget` gives the vertex on one end, and `getSource` gives the other.
     [[nodiscard]] const VertexPtr &getTarget() const noexcept;
 
-    /// We work in squared edge lengths because imaginary numbers don't play so nicely with floating point arithmetic.
-    /// To be less cryptic: timelike edges have imaginary length. Their squared edge length is negative. Something I've
-    /// always thought was kind of neat is a right triangle with the opposite and adjacent edges of length \f$ i \f$
-    /// and \f$ 1 \f$ respectively. So the hypotenuse is zero. So timelike edges have imaginary length, spacelike edges
-    /// have a positive length, and lightlike edges have zero length.
-    ///
-    /// @return The square of the length of the edge.
-    [[nodiscard]] double getSquaredLength() const noexcept;
-
     /// The U(1) connection phase carried on this edge's stored source->target orientation (and
     /// negated on reversal). With the signed `squaredLength` magnitude it forms the complex edge
     /// weight \f$ \text{squaredLength}\cdot e^{i\,\text{phase}} \f$ read by the Hermitian-weighted
@@ -111,6 +107,30 @@ class Edge {
     ///
     /// @return The U(1) connection phase, in radians.
     [[nodiscard]] double getPhase() const noexcept;
+
+    /// The exact (possibly complex) squared length \f$l^2\f$ — stored verbatim, NOT
+    /// `getLength()*getLength()`. ALL geometry/action math reads this so it never incurs
+    /// a `sqrt`→`square` round-trip; that ~1-ULP round-trip detonates in the
+    /// ill-conditioned Lorentzian action at near-degenerate simplices (dual-volume
+    /// circumradius blows up as the Cayley–Menger determinant → 0). Real-signed for an
+    /// ordinary Lorentzian edge; complex for an analytically-continued (saddle) geometry.
+    [[nodiscard]] std::complex<double> getSquaredLength() const noexcept;
+
+    /// The (possibly complex) edge length — the causal DOF, distinct from the U(1)
+    /// `phase` and from \f$l^2\f$. Real for spacelike, imaginary for timelike, general
+    /// complex for the Picard–Lefschetz saddle. Causal character is read from THIS
+    /// (`Im(length)`) — the timelike disambiguation a real signed \f$l^2\f$ cannot give.
+    [[nodiscard]] std::complex<double> getLength() const noexcept;
+
+    /// Causal character read from the LENGTH, not the fragile `sign(l^2)`: an edge
+    /// is timelike iff its length has a (non-negligible) imaginary part. A genuinely
+    /// spacelike (real) length has `Im == 0`; the epsilon only guards float noise.
+    /// These supersede the scattered `getSquaredLength() < 0` / `>= 0` tests.
+    static constexpr double kCausalEpsilon = 1e-12;
+    [[nodiscard]] bool isTimelike() const noexcept;
+    [[nodiscard]] bool isSpacelike() const noexcept;
+    [[nodiscard]] bool isNull() const noexcept;
+    [[nodiscard]] EdgeDisposition disposition() const noexcept;
 
 #ifdef TESSERA_VERBOSE
     [[nodiscard]] std::string toString() const noexcept;
@@ -158,9 +178,23 @@ class Edge {
     /// @returns A tuple of {sourceId, targetId}.
     EdgeKey getKey() const noexcept;
 
-    /// Set the squared edge length.  Used by the Regge solver to optimize
-    /// the geometry without rebuilding the mesh.
-    void setSquaredLength(double sq) noexcept { squaredLength = sq; }
+    /// Set the exact (complex) squared length \f$l^2\f$; the complex length is kept in
+    /// sync as \f$\sqrt{l^2}\f$. Prefer this when the geometry is specified by a squared
+    /// value (CDT, Van Raamsdonk, the backreaction scan) so \f$l^2\f$ is stored exactly
+    /// and the action never sees a round-trip.
+    void setSquaredLength(std::complex<double> l2) noexcept {
+      squaredLength_ = l2;
+      length_ = std::sqrt(l2);
+    }
+
+    /// Set the (complex) edge length; the squared length is kept in sync as `l*l`. Use
+    /// when the geometry is specified by a length directly — the off-axis
+    /// (Picard–Lefschetz) saddle the Regge solver explores. Real for spacelike,
+    /// imaginary for timelike, general complex for the saddle.
+    void setLength(std::complex<double> l) noexcept {
+      length_ = l;
+      squaredLength_ = l * l;
+    }
 
     /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
     /// Laplacian and its gauge transform to rephase the edge without rebuilding the mesh.
@@ -215,7 +249,13 @@ class Edge {
     VertexPtr source = nullptr;
     VertexPtr target = nullptr;
 
-    double squaredLength;
+    /// The exact (possibly complex) squared length \f$l^2\f$ — the metric value read by
+    /// the action and all geometry math. `length_` is its principal `sqrt`; the two are
+    /// kept in sync by `setSquaredLength`/`setLength`.
+    std::complex<double> squaredLength_{};
+    /// The complex length (causal DOF, distinct from the U(1) `phase`). Causal character
+    /// is `Im(length_)`; carries the sqrt-branch a real \f$l^2\f$ cannot express.
+    std::complex<double> length_{};
     double phase = 0.0;
 
     Simplices simplices_{};

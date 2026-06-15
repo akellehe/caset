@@ -181,7 +181,7 @@ class RegisterAdditiveGrowthTest(unittest.TestCase):
         w = np.asarray(cob.HodgeLaplacian(self.reg.st).weights(1), dtype=float)
         self.assertEqual(float(np.max(np.abs(w - 1.0))), 0.0)
         for e in self.reg.st.getEdgeList().toVector():
-            self.assertEqual(e.getSquaredLength(), 1.0)
+            self.assertEqual(e.getSquaredLength().real, 1.0)
             self.assertEqual(e.getPhase(), 0.0)
 
 

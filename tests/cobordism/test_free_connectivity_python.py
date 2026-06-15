@@ -199,7 +199,7 @@ class AttachInteriorVertexTest(unittest.TestCase):
         st = _bipyramid()
         _pin_all(st, w=1.0, phase=0.0)
         es = cob.EigenstateSynthesis(st)
-        before = {k: (e.getSquaredLength(), e.getPhase())
+        before = {k: (e.getSquaredLength().real, e.getPhase())
                   for k, e in _edge_map(st).items()
                   if k in set(es.boundaryEdges())}
 
@@ -207,7 +207,7 @@ class AttachInteriorVertexTest(unittest.TestCase):
 
         live = _edge_map(st)
         for k, (w, ph) in before.items():
-            self.assertEqual((live[k].getSquaredLength(), live[k].getPhase()),
+            self.assertEqual((live[k].getSquaredLength().real, live[k].getPhase()),
                              (w, ph))
         # The boundary edge *set* is preserved exactly.
         self.assertEqual(set(es.boundaryEdges()), set(before.keys()))
@@ -239,7 +239,7 @@ class DetachInteriorVertexTest(unittest.TestCase):
         order0 = es.order()
         edges0 = _edge_keys(st)
         verts0 = _vertex_ids(st)
-        weights0 = {k: (e.getSquaredLength(), e.getPhase())
+        weights0 = {k: (e.getSquaredLength().real, e.getPhase())
                     for k, e in _edge_map(st).items()}
         boundary0 = set(es.boundaryEdges())
 
@@ -256,7 +256,7 @@ class DetachInteriorVertexTest(unittest.TestCase):
         self.assertEqual(set(es.boundaryEdges()), boundary0)
         live = _edge_map(st)
         for k, (w, ph) in weights0.items():
-            self.assertEqual((live[k].getSquaredLength(), live[k].getPhase()),
+            self.assertEqual((live[k].getSquaredLength().real, live[k].getPhase()),
                              (w, ph))
 
     def test_detach_with_nothing_to_undo_returns_false(self):

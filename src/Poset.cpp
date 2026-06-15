@@ -186,7 +186,7 @@ Poset Poset::fromSpacetime(Spacetime const& st) {
             auto const& src = e->getSource();
             auto const& dst = e->getTarget();
             if (!src || !dst) continue;
-            if (e->getSquaredLength() >= 0.0) continue;  // spacelike or null
+            if (!e->isTimelike()) continue;  // spacelike or null
 
             const double t_s = src->getTime();
             const double t_d = dst->getTime();

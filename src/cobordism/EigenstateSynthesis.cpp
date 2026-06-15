@@ -253,7 +253,7 @@ double EigenstateSynthesis::rayleigh(const std::vector<cd> &psi) const {
 std::vector<double> EigenstateSynthesis::weights() const {
   std::vector<double> w;
   w.reserve(edges_.size());
-  for (const auto e : edges_) w.push_back(e->getSquaredLength());
+  for (const auto e : edges_) w.push_back(e->getSquaredLength().real());
   return w;
 }
 
@@ -270,7 +270,7 @@ void EigenstateSynthesis::setWeights(const std::vector<double> &w) {
         "EigenstateSynthesis::setWeights: got " + std::to_string(w.size()) +
         " weights, expected " + std::to_string(edges_.size()));
   for (std::size_t i = 0; i < edges_.size(); ++i)
-    edges_[i]->setSquaredLength(w[i]);
+    edges_[i]->setSquaredLength(std::complex<double>{w[i], 0.0});
 }
 
 void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
@@ -287,7 +287,8 @@ void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
 std::vector<double> EigenstateSynthesis::interiorWeights() const {
   std::vector<double> w;
   w.reserve(interiorEdgeIdx_.size());
-  for (const auto i : interiorEdgeIdx_) w.push_back(edges_[i]->getSquaredLength());
+  for (const auto i : interiorEdgeIdx_)
+    w.push_back(edges_[i]->getSquaredLength().real());
   return w;
 }
 
@@ -305,7 +306,7 @@ void EigenstateSynthesis::setInteriorWeights(const std::vector<double> &w) {
         std::to_string(w.size()) + " weights, expected " +
         std::to_string(interiorEdgeIdx_.size()));
   for (std::size_t k = 0; k < interiorEdgeIdx_.size(); ++k)
-    edges_[interiorEdgeIdx_[k]]->setSquaredLength(w[k]);
+    edges_[interiorEdgeIdx_[k]]->setSquaredLength(std::complex<double>{w[k], 0.0});
 }
 
 void EigenstateSynthesis::setInteriorPhases(const std::vector<double> &theta) {
@@ -412,7 +413,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
+        edges_[i]->getSquaredLength().real(), edges_[i]->getPhase()};
   }
 
   // Fresh interior vertex with the largest id (sorts last; preserves the
@@ -472,7 +473,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
       const auto it =
           boundaryBefore.find({std::min(a, b), std::max(a, b)});
       if (it == boundaryBefore.end() ||
-          it->second.first != edges_[i]->getSquaredLength() ||
+          it->second.first != edges_[i]->getSquaredLength().real() ||
           it->second.second != edges_[i]->getPhase()) {
         valid = false;
         break;
@@ -611,8 +612,9 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(u, v, it->second->getSquaredLength(),
-                                    it->second->getPhase());
+      rem.removedEdges.emplace_back(
+          u, v, it->second->getSquaredLength().real(),
+          it->second->getPhase());
       toRemove.push_back(it->second);
     }
 
@@ -623,7 +625,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
+        edges_[i]->getSquaredLength().real(), edges_[i]->getPhase()};
   }
 
   // Mutate: drop the top cell, then its orphaned edges.
@@ -646,7 +648,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t b = e->getTarget()->getId();
     const std::pair<std::uint64_t, std::uint64_t> key{std::min(a, b),
                                                       std::max(a, b)};
-    liveWeights[key] = {e->getSquaredLength(), e->getPhase()};
+    liveWeights[key] = {e->getSquaredLength().real(), e->getPhase()};
   }
   for (const auto &[key, wp] : boundaryBefore) {
     const auto it = liveWeights.find(key);
@@ -696,7 +698,7 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
   for (const auto &[u, v, w, theta] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setSquaredLength(w);
+      it->second->setSquaredLength(std::complex<double>{w, 0.0});
       it->second->setPhase(theta);
     }
   }
@@ -771,7 +773,7 @@ std::pair<bool, std::string> EigenstateSynthesis::stellarSubdivideInterior(
   // construction, not by the time-rule coincidence on all-same-time seeds.
   for (const auto e : st_->getEdgeList()->toVector()) {
     if (e == nullptr) continue;
-    e->setSquaredLength(1.0);
+    e->setLength({1.0, 0.0});  // spacelike unit length
     e->setPhase(0.0);
   }
   return verdict;  // {true, "ok"}

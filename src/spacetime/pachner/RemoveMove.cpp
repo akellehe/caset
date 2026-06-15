@@ -205,10 +205,10 @@ bool RemoveMove::applyPreGeometric() {
   vertexCoords_.clear();
   for (const auto &e : v_->getInEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength()});
+                             e->getSquaredLength().real()});
   for (const auto &e : v_->getOutEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength()});
+                             e->getSquaredLength().real()});
 
   // Remove the d+1 incident cells.
   for (const auto &s : incident_) st_->removeSimplex(s);
@@ -251,11 +251,11 @@ bool RemoveMove::apply() {
   // remove.)
   for (const auto &e : v_->getInEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength()});
+                             e->getSquaredLength().real()});
   }
   for (const auto &e : v_->getOutEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength()});
+                             e->getSquaredLength().real()});
   }
 
   // 2. Remove the 2d incident simplices.

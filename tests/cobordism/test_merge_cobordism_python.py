@@ -97,7 +97,7 @@ class LorentzianFromLabelingTest(unittest.TestCase):
         sl = {}
         for e in _M.st.getEdgeList().toVector():
             a, b = e.getSource().getId(), e.getTarget().getId()
-            sl[(min(a, b), max(a, b))] = e.getSquaredLength()
+            sl[(min(a, b), max(a, b))] = e.getSquaredLength().real
         for (a, b), s in sl.items():
             crossing = (a >= 24) != (b >= 24)
             if crossing:

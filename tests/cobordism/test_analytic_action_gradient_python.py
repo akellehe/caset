@@ -82,7 +82,7 @@ class ExactActionGradientTest(unittest.TestCase):
     def _set(self, edge):
         def setter(val):
             if val is None:
-                return edge.getSquaredLength()
+                return edge.getSquaredLength().real
             edge.setSquaredLength(float(val)); self.st.materializeFacets()
             return None
         return setter

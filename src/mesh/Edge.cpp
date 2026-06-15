@@ -50,16 +50,20 @@ class Simplex;
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_,
-      double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
+      std::complex<double> squaredLength
+    ) : source(source_), target(target_),
+        squaredLength_(squaredLength), length_(std::sqrt(squaredLength)),
+        phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
     }
 
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_
     ) : source(source_), target(target_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
-      // Set squaredLength to a random value between -1 and 1
-      squaredLength = random_uniform(); // Fallback: CDT always provides explicit edge lengths.
+      // Fallback (CDT always provides explicit edge lengths): a random real,
+      // i.e. spacelike, length; keep l^2 in sync.
+      length_ = {random_uniform(), 0.0};
+      squaredLength_ = length_ * length_;
     }
 
     [[nodiscard]] const VertexPtr &Edge::getSource() const noexcept {
@@ -70,12 +74,37 @@ class Simplex;
       return target;
     }
 
-    [[nodiscard]] double Edge::getSquaredLength() const noexcept {
-      return squaredLength;
-    }
-
     [[nodiscard]] double Edge::getPhase() const noexcept {
       return phase;
+    }
+
+    [[nodiscard]] std::complex<double> Edge::getSquaredLength() const noexcept {
+      return squaredLength_;
+    }
+
+    [[nodiscard]] std::complex<double> Edge::getLength() const noexcept {
+      return length_;
+    }
+
+    [[nodiscard]] bool Edge::isNull() const noexcept {
+      // std::abs of a std::complex is the MODULUS sqrt(Re^2 + Im^2) -- the whole
+      // length magnitude, not the real part -- so a timelike (imaginary) length is
+      // correctly non-null.
+      return std::abs(getLength()) <= kCausalEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isTimelike() const noexcept {
+      // .imag() is a double, so std::abs here is the ordinary real |Im(l)|.
+      return std::abs(getLength().imag()) > kCausalEpsilon;
+    }
+
+    [[nodiscard]] bool Edge::isSpacelike() const noexcept {
+      return !isNull() && !isTimelike();
+    }
+
+    [[nodiscard]] EdgeDisposition Edge::disposition() const noexcept {
+      if (isNull()) return EdgeDisposition::Lightlike;
+      return isTimelike() ? EdgeDisposition::Timelike : EdgeDisposition::Spacelike;
     }
 
 #ifdef TESSERA_VERBOSE

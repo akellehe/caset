@@ -16,14 +16,18 @@ using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
 std::uint32_t EdgeList::allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength) {
+  // Factory layer speaks the CDT "signed squared length" unit; store it as the exact
+  // complex l^2 (real-signed, Im = 0) so the action never sees a sqrt/square round-trip.
+  // The Edge derives its complex length as sqrt(l^2) (real = spacelike, imag = timelike).
+  const std::complex<double> squared{squaredLength, 0.0};
   std::uint32_t slot;
   if (!freeSlots_.empty()) {
     slot = freeSlots_.back();
     freeSlots_.pop_back();
-    pool_[slot] = Edge(source, target, squaredLength);
+    pool_[slot] = Edge(source, target, squared);
   } else {
     slot = static_cast<std::uint32_t>(pool_.size());
-    pool_.emplace_back(source, target, squaredLength);
+    pool_.emplace_back(source, target, squared);
   }
   return slot;
 }
@@ -88,7 +92,8 @@ void EdgeList::remove(const EdgePtr &edge) noexcept {
 
 void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
   remove(toRemove);
-  add(toAdd->getSource(), toAdd->getTarget(), toAdd->getSquaredLength());
+  add(toAdd->getSource(), toAdd->getTarget(),
+      toAdd->getSquaredLength().real());
 }
 
 void EdgeList::rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp) {

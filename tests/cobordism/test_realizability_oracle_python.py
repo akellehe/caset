@@ -129,7 +129,7 @@ def _np_L(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength()
+        w = e.getSquaredLength().real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -164,7 +164,7 @@ class RealizableTest(unittest.TestCase):
         # complexity — the fill only has to drive the lone interior edge to phase 0.
         st = _bipyramid()
         _pin_all(st, w=1.0, phase=0.0)
-        boundary_before = {k: (e.getSquaredLength(), e.getPhase())
+        boundary_before = {k: (e.getSquaredLength().real, e.getPhase())
                            for k, e in _edge_map(st).items()
                            if k != (0, 1)}
 
@@ -207,7 +207,7 @@ class RealizableTest(unittest.TestCase):
         # touched them).
         live = _edge_map(st)
         for k, (w, ph) in boundary_before.items():
-            self.assertEqual((live[k].getSquaredLength(), live[k].getPhase()),
+            self.assertEqual((live[k].getSquaredLength().real, live[k].getPhase()),
                              (w, ph))
 
     def test_realizable_only_after_interior_growth(self):
