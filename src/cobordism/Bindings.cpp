@@ -528,6 +528,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "sign +1), and returns residual(psi): -> 0 iff the targets lie "
            "in the carried register, floored otherwise. Raises on a "
            "hole/target length mismatch or a malformed hole.")
+      .def("residualForPeriodsGradient",
+           &EigenstateSynthesis::residualForPeriodsGradient,
+           py::arg("holes"), py::arg("target_periods"),
+           "The analytic gradient d r_U / d l^2 of residualForPeriods w.r.t. each "
+           "edge's squared length, in cellSimplices() (k=1 cell) order. "
+           "Eigendecomposes M = L1, builds the same carried psi, then propagates "
+           "the per-edge low-rank dM/dl^2 through eigenvector perturbation theory "
+           "and the pseudo-inverse derivative (the C++ port of the relaxation's "
+           "Python drU). Raises on a hole/target length mismatch.")
       // ----- Surgery: the topology-changing interior remove move (#196) -----
       .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
            "The interior top cells (all-interior vertices, on no dW face) as "

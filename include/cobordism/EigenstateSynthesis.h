@@ -339,6 +339,19 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    /// The analytic gradient \f$ \partial r_U / \partial l^2_e \f$ of
+    /// `residualForPeriods` w.r.t. each edge's squared length, returned in
+    /// `cellSimplices()` (\f$ k = 1 \f$ cell) order. Eigendecomposes the metric
+    /// Laplacian \f$ M = L_1 \f$, builds the same carried representative \f$ \psi \f$,
+    /// then propagates the per-edge low-rank \f$ dM/dl^2 \f$ through first-order
+    /// eigenvector perturbation theory and the pseudo-inverse derivative — the C++
+    /// port of the Python relaxation's `drU` (verified against it and a finite
+    /// difference). \f$ O(n_1^3) \f$ (one dense eigensolve plus a per-edge sweep).
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`.
+    [[nodiscard]] std::vector<double> residualForPeriodsGradient(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     /// The **carried representative** \f$ \psi \f$ that `residualForPeriods`
     /// scores — exposed as a cochain in its own right (the read-out
     /// `residualForPeriods` builds internally but does not return). Builds the

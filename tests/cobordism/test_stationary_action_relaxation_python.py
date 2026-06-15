@@ -63,6 +63,7 @@ _RX = SAR.StationaryActionRelaxer(gamma=1e3)    # one shared level-0 relaxer
 class StationaryActionRelaxationTest(unittest.TestCase):
     def setUp(self):
         _RX.set_var(_RX.x0)            # reset the geometry before each test
+        _RX.use_cpp_gradient = True    # the default path (C++ r_U gradient)
 
     def test_objective_no_dirichlet_full_complex_action(self):
         """Φ = ‖∇S‖² + Γ·r_U, the matter term is r_U ALONE (no Dirichlet), and
@@ -101,6 +102,25 @@ class StationaryActionRelaxationTest(unittest.TestCase):
         self.assertLess(srf, sr0)                        # ‖∇S‖² descended
         self.assertLess(rUf, 1e-3)                       # realizability maintained
         self.assertGreater(abs(Sf.imag), 1e-6)           # still Lorentzian
+
+    def test_cpp_gradient_matches_python_oracle_and_fd(self):
+        """The C++ residualForPeriodsGradient (the wired-in r_U gradient) matches
+        the Python perturbation-theory oracle to ~machine precision, and the full
+        Φ gradient still matches a finite difference — checked at a perturbed
+        geometry where r_U > 0 (at the base r_U ≈ 0, so dr_U is trivially ~0)."""
+        x = _RX.x0.copy()
+        x[::2] *= 1.3                                     # non-uniform -> r_U > 0
+        _RX.use_cpp_gradient = True
+        _, g_cpp, _, rU_cpp, _ = _RX.objective(x)
+        _RX.use_cpp_gradient = False
+        _, g_py, _, rU_py, _ = _RX.objective(x)
+        _RX.use_cpp_gradient = True
+        self.assertGreater(rU_cpp, 1e-4)                 # a non-trivial test point
+        self.assertAlmostEqual(rU_cpp, rU_py, places=10)
+        # the C++ dr_U equals the Python oracle (the gradients differ only in the
+        # gamma*dr_U term; statres is identical), to ~machine precision.
+        self.assertLess(float(np.max(np.abs(g_cpp - g_py))) / _RX.gamma, 1e-9)
+        self.assertLess(_RX.check_gradient(x=x, n=2), 1e-3)   # full grad == FD at x
 
 
 if __name__ == "__main__":

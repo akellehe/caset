@@ -96,8 +96,11 @@ class StationaryActionRelaxer:
     the emergent-dual geometry. The input (slice-t) spatial edges are held fixed.
     """
 
-    def __init__(self, gamma=1e3, merge=None):
+    def __init__(self, gamma=1e3, merge=None, use_cpp_gradient=True):
         self.gamma = float(gamma)
+        # the analytic r_U gradient: the C++ residualForPeriodsGradient (fast) or
+        # the Python low-rank perturbation below (the correctness oracle).
+        self.use_cpp_gradient = bool(use_cpp_gradient)
         self.m = merge if merge is not None else MC.MergeCobordism()
         self.m.st.materializeFacets()
         self.st = self.m.st
@@ -253,27 +256,37 @@ class StationaryActionRelaxer:
         statres = float(np.vdot(g, g).real)
 
         # MATTER: d r_U over VAR via the single-spectrum low-rank dM.
-        invlam = 1.0 / (0.0 - lam[notnull])
-        Unn = U[:, notnull]
-        K2 = self.d2 @ np.diag(1.0 / W2) @ self.d2.T
-        D1d, D1pd = 1.0 / sW1, sW1
-        drU = np.empty(len(self.VAR))
-        for vi, ek in enumerate(self.VAR):
-            fa, fb = self._dM_factors(ek, W1, W2, K2, D1d, D1pd)
-            dMp = fa @ (fb.T @ p)
-            core = (Unn.T @ fa) @ (fb.T @ Un)
-            dUn = Unn @ (core * invlam[:, None])
-            dA = self.Q @ dUn
-            dAplus = -AtAi @ (dA.T @ A + A.T @ dA) @ AtAi @ A.T + AtAi @ dA.T
-            dc = dAplus @ self.target
-            dh = dUn @ c + Un @ dc
-            dcarried = self.Q @ dh
-            dpsi = dh.astype(complex).copy()
-            for q in range(self.M_HOLES):
-                dpsi[self.leakCol[q]] += -dcarried[q]
-            drU[vi] = (2.0 * np.real(np.vdot(rho, dMp))
-                       + (2.0 / nrm) * np.real(np.vdot(rho, M @ dpsi - lamR * dpsi))
-                       - (2.0 * rU / nrm) * np.real(np.vdot(p, dpsi)))
+        if self.use_cpp_gradient:
+            # C++ analytic gradient (residualForPeriodsGradient), returned per
+            # cellSimplices cell; map to the VAR-edge order. Verified == the
+            # Python oracle below == FD.
+            g_all = np.asarray(
+                self.es.residualForPeriodsGradient(self.holes, self.target_c), float)
+            drU = np.array([g_all[self.cidx1[k]] for k in self.VAR])
+        else:
+            # Python oracle: the low-rank dM/dl² + spectral pseudo-inverse
+            # perturbation per VAR edge (the reference the C++ port reproduces).
+            invlam = 1.0 / (0.0 - lam[notnull])
+            Unn = U[:, notnull]
+            K2 = self.d2 @ np.diag(1.0 / W2) @ self.d2.T
+            D1d, D1pd = 1.0 / sW1, sW1
+            drU = np.empty(len(self.VAR))
+            for vi, ek in enumerate(self.VAR):
+                fa, fb = self._dM_factors(ek, W1, W2, K2, D1d, D1pd)
+                dMp = fa @ (fb.T @ p)
+                core = (Unn.T @ fa) @ (fb.T @ Un)
+                dUn = Unn @ (core * invlam[:, None])
+                dA = self.Q @ dUn
+                dAplus = -AtAi @ (dA.T @ A + A.T @ dA) @ AtAi @ A.T + AtAi @ dA.T
+                dc = dAplus @ self.target
+                dh = dUn @ c + Un @ dc
+                dcarried = self.Q @ dh
+                dpsi = dh.astype(complex).copy()
+                for q in range(self.M_HOLES):
+                    dpsi[self.leakCol[q]] += -dcarried[q]
+                drU[vi] = (2.0 * np.real(np.vdot(rho, dMp))
+                           + (2.0 / nrm) * np.real(np.vdot(rho, M @ dpsi - lamR * dpsi))
+                           - (2.0 * rU / nrm) * np.real(np.vdot(p, dpsi)))
 
         # d statres = 2 Re(H conj(g)) = 2[Re(H·Re g) + Im(H·Im g)]; each
         # Hessian-vector is ONE FD step of the exact complex actionGradientExact.
