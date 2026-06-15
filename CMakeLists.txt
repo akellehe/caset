@@ -240,7 +240,8 @@ if (TESSERA_CUDA)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     find_package(CUDAToolkit REQUIRED)
-    target_link_libraries(tessera_cuda PRIVATE CUDA::cudart)
+    # cuBLAS (SGEMM) backs the FP32 r_U-gradient GPU path (eigenstate_cuda.cu).
+    target_link_libraries(tessera_cuda PRIVATE CUDA::cudart CUDA::cublas)
 endif()
 
 # ---- <tessera_core static library> ----------------------------------------
@@ -291,7 +292,7 @@ target_compile_definitions(tessera_core PUBLIC
 if (TESSERA_CUDA)
     message(STATUS "CUDA acceleration turned ON.")
     target_compile_definitions(tessera_core PUBLIC TESSERA_CUDA=1)
-    target_link_libraries(tessera_core PUBLIC tessera_cuda CUDA::cudart)
+    target_link_libraries(tessera_core PUBLIC tessera_cuda CUDA::cudart CUDA::cublas)
 else()
     message(STATUS "CUDA acceleration turned OFF.")
 endif()

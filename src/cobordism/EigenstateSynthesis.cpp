@@ -47,6 +47,10 @@
 #include "spacetime/Spacetime.h"
 #include "spacetime/pachner/AddMove.h"
 
+#ifdef TESSERA_CUDA
+#include "cuda/eigenstate_cuda.h"
+#endif
+
 namespace tessera::cobordism {
 
 using cd = std::complex<double>;
@@ -1147,6 +1151,257 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
                (2.0 * rU / nrm) * (p.dot(dpsi)).real();
   }
   return grad;
+}
+
+std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+#ifndef TESSERA_CUDA
+  (void)holes;
+  (void)targetPeriods;
+  throw std::runtime_error(
+      "EigenstateSynthesis::residualForPeriodsGradientGpu: tessera was built "
+      "without CUDA (TESSERA_CUDA=OFF); use the CPU residualForPeriodsGradient.");
+#else
+  using Eigen::Index;
+  using Eigen::MatrixXd;
+  using Eigen::MatrixXf;
+  using Eigen::VectorXcd;
+  using Eigen::VectorXd;
+  // The setup below MIRRORS residualForPeriodsGradient verbatim through r_U so
+  // the FP64 CPU method stays the untouched correctness oracle; only the
+  // dominant per-edge GEMMs are offloaded to FP32 cuBLAS (the sole
+  // approximation). Any divergence here would be a bug, not a design choice.
+  const std::size_t n1 = order_;
+  std::vector<double> grad(n1, 0.0);
+  const std::size_t m = holes.size();
+  if (n1 == 0 || m == 0) return grad;
+  if (targetPeriods.size() != m)
+    throw std::runtime_error(
+        "EigenstateSynthesis::residualForPeriodsGradientGpu: " +
+        std::to_string(targetPeriods.size()) + " target periods for " +
+        std::to_string(m) + " holes");
+  static constexpr double kNullTol = 1e-7;
+  const Index N = static_cast<Index>(n1);
+
+  // ---- chain complex, weights, and the metric Laplacian M = L1 ----
+  const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
+  const std::vector<std::vector<std::uint64_t>> &cells1 = cellSimplices();
+  const auto tris = cc.kSimplexVertices(2);
+  const std::size_t n2 = tris.size();
+  const std::vector<long> &d1flat = cc.boundaryMatrix(1);  // n0 x n1
+  const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
+  const std::size_t n0 = d1flat.size() / n1;
+  const HodgeLaplacian hl(st_);
+  const std::vector<double> W1v = hl.weights(1);  // n1
+  const std::vector<double> W2v = hl.weights(2);  // n2
+  const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
+
+  MatrixXd M(N, N);
+  for (std::size_t i = 0; i < n1; ++i)
+    for (std::size_t j = 0; j < n1; ++j)
+      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j].real();
+  VectorXd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
+  for (std::size_t i = 0; i < n1; ++i) {
+    W1[static_cast<Index>(i)] = W1v[i];
+    D1pd[static_cast<Index>(i)] = std::sqrt(W1v[i]);
+    D1d[static_cast<Index>(i)] = 1.0 / std::sqrt(W1v[i]);
+  }
+  MatrixXd d1m(static_cast<Index>(n0), N);
+  for (std::size_t v = 0; v < n0; ++v)
+    for (std::size_t c = 0; c < n1; ++c)
+      d1m(static_cast<Index>(v), static_cast<Index>(c)) =
+          static_cast<double>(d1flat[v * n1 + c]);
+  MatrixXd d2m(N, static_cast<Index>(n2));
+  for (std::size_t c = 0; c < n1; ++c)
+    for (std::size_t t = 0; t < n2; ++t)
+      d2m(static_cast<Index>(c), static_cast<Index>(t)) =
+          static_cast<double>(d2flat[c * n2 + t]);
+  const MatrixXd K1 = d1m.transpose() * d1m;  // n1 x n1
+  VectorXd W2inv(static_cast<Index>(n2));
+  for (std::size_t t = 0; t < n2; ++t) W2inv[static_cast<Index>(t)] = 1.0 / W2v[t];
+  const MatrixXd K2 = d2m * W2inv.asDiagonal() * d2m.transpose();  // n1 x n1
+
+  // ---- index maps: cell -> index, edge -> l^2, edge -> incident triangles ----
+  auto key = [](std::uint64_t a, std::uint64_t b) {
+    return std::pair<std::uint64_t, std::uint64_t>(std::min(a, b), std::max(a, b));
+  };
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
+  for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
+  for (auto *e : edges_)
+    l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
+        e->getSquaredLength().real();
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
+  for (std::size_t ti = 0; ti < n2; ++ti)
+    for (int i = 0; i < 3; ++i)
+      for (int j = i + 1; j < 3; ++j)
+        trisOf[key(tris[ti][i], tris[ti][j])].push_back(ti);
+  auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
+    if (a == b) return 0.0;
+    auto it = l2map.find(key(a, b));
+    return it == l2map.end() ? 0.0 : it->second;
+  };
+
+  // ---- Q (hole-boundary covector) + each hole's leak column ----
+  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  std::vector<std::size_t> leakCol(m);
+  for (std::size_t q = 0; q < m; ++q) {
+    const auto &h = holes[q];
+    for (int j = 0; j < 3; ++j) {
+      std::vector<std::uint64_t> facet;
+      for (int i = 0; i < 3; ++i)
+        if (i != j) facet.push_back(h[i]);
+      Q(static_cast<Index>(q), static_cast<Index>(cidx1.at(key(facet[0], facet[1])))) +=
+          (j % 2 == 0 ? 1.0 : -1.0);
+    }
+    leakCol[q] = cidx1.at(key(h[0], h[1]));
+  }
+
+  // ---- eigendecomposition of M; harmonic (null) / non-null split ----
+  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(M);
+  const VectorXd lam = eig.eigenvalues();
+  const MatrixXd U = eig.eigenvectors();
+  std::vector<Index> nullIdx, nnIdx;
+  for (Index i = 0; i < N; ++i) (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
+  const Index nd = static_cast<Index>(nullIdx.size());
+  const Index nnd = static_cast<Index>(nnIdx.size());
+  if (nd == 0) return grad;  // no harmonics -> nothing carried
+  MatrixXd Un(N, nd), Unn(N, nnd);
+  for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
+  for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
+  VectorXd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
+  for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
+
+  // ---- carried representative psi (via Un / Q / pseudo-inverse), p, rho, r_U ----
+  VectorXcd target(static_cast<Index>(m));
+  for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
+  const MatrixXd A = Q * Un;                            // m x nd
+  const MatrixXd AtAi = (A.transpose() * A).inverse();  // nd x nd
+  const VectorXcd c = (AtAi * A.transpose()).cast<cd>() * target;  // nd
+  VectorXcd psi = Un.cast<cd>() * c;                    // n1
+  const VectorXcd carried = Q.cast<cd>() * psi;         // m
+  for (std::size_t q = 0; q < m; ++q)
+    psi[static_cast<Index>(leakCol[q])] +=
+        target[static_cast<Index>(q)] - carried[static_cast<Index>(q)];
+  const double nrm = psi.norm();
+  if (nrm <= 0.0) return grad;
+  const VectorXcd p = psi / nrm;
+  const VectorXcd Mp = M.cast<cd>() * p;
+  const double lamR = (p.dot(Mp)).real();
+  const VectorXcd rho = Mp - lamR * p;
+  const double rU = rho.squaredNorm();
+  if (nnd == 0) return grad;  // eigenvector perturbation needs a non-null block
+
+  // ---- upload the loop-invariant blocks (FP32, column-major) to the GPU ----
+  // UnnS = Unn * diag(invlam): by associativity this hoists the per-edge
+  // diagonal so dUn = UnnS * core == Unn * (invlam.asDiagonal() * core).
+  const MatrixXf UnnF = Unn.cast<float>();
+  const MatrixXf UnnSF = (Unn * invlam.asDiagonal()).cast<float>();
+  const MatrixXf UnF = Un.cast<float>();
+  const MatrixXf MF = M.cast<float>();
+  MatrixXf P2F(N, 2);
+  P2F.col(0) = p.real().cast<float>();
+  P2F.col(1) = p.imag().cast<float>();
+  // rmax: the widest per-edge low-rank dM = fa*fb^T (the 2 fixed [e,w] columns
+  // plus one per incident triangle) — sizes the GPU scratch once.
+  std::size_t rmax = 2;
+  for (const auto &kv : trisOf) rmax = std::max(rmax, 2 + kv.second.size());
+
+  cuda::RuGradientGpu gpu(static_cast<int>(N), static_cast<int>(nnd),
+                          static_cast<int>(nd), static_cast<int>(rmax),
+                          UnnF.data(), UnnSF.data(), UnF.data(), MF.data(),
+                          P2F.data());
+
+  // ---- per-edge analytic gradient d r_U / d l^2 (FP32 GEMMs on GPU) ----
+  std::vector<float> dUnBuf(static_cast<std::size_t>(N) * nd);
+  std::vector<float> dMp2Buf(static_cast<std::size_t>(N) * 2);
+  std::vector<float> dpsi2Buf(static_cast<std::size_t>(N) * 2);
+  std::vector<float> Mdpsi2Buf(static_cast<std::size_t>(N) * 2);
+  for (std::size_t je = 0; je < n1; ++je) {
+    const Index j = static_cast<Index>(je);
+    const auto ek = key(cells1[je][0], cells1[je][1]);
+    const double l2 = l2map.at(ek);
+    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
+    const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
+    const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
+    const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
+                       s2 * K2.row(j).transpose().cwiseProduct(D1pd);
+    // dM = fa * fb^T (symmetric, low rank): columns [e, w] then one per triangle.
+    std::vector<VectorXd> colsA, colsB;
+    VectorXd ev = VectorXd::Zero(N);
+    ev[j] = 1.0;
+    colsA.push_back(ev);
+    colsB.push_back(w);
+    colsA.push_back(w);
+    colsB.push_back(ev);
+    for (std::size_t ti : trisOf[ek]) {
+      const auto &t = tris[ti];
+      Eigen::Matrix2d G;
+      for (int i = 0; i < 2; ++i)
+        for (int jj = 0; jj < 2; ++jj)
+          G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
+      const double detG = G.determinant();
+      const double W2ti = W2v[ti];
+      if (std::abs(std::sqrt(std::abs(detG)) / 2.0 - W2ti) > 1e-9 || std::abs(detG) < 1e-12)
+        continue;
+      auto ind = [&](int pp, int qq) -> double {
+        return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
+      };
+      Eigen::Matrix2d dG;
+      for (int i = 0; i < 2; ++i)
+        for (int jj = 0; jj < 2; ++jj)
+          dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
+      const double dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
+      const VectorXd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
+      colsA.push_back(cj);
+      colsB.push_back((-dW2ti / (W2ti * W2ti)) * cj);
+    }
+    const int r = static_cast<int>(colsA.size());
+    MatrixXf fa(N, r), fb(N, r);
+    for (int k = 0; k < r; ++k) {
+      fa.col(k) = colsA[static_cast<std::size_t>(k)].cast<float>();
+      fb.col(k) = colsB[static_cast<std::size_t>(k)].cast<float>();
+    }
+
+    // GPU stage 1 (FP32 GEMMs): dUn (N x nd) and dMp = dM*p (N, complex).
+    gpu.edgeStage1(fa.data(), fb.data(), r, dUnBuf.data(), dMp2Buf.data());
+    const MatrixXd dUn =
+        Eigen::Map<const MatrixXf>(dUnBuf.data(), N, nd).cast<double>();
+    VectorXcd dMp(N);
+    for (Index i = 0; i < N; ++i)
+      dMp[i] = cd(dMp2Buf[static_cast<std::size_t>(i)],
+                  dMp2Buf[static_cast<std::size_t>(N + i)]);
+
+    // Cheap small-dimension algebra stays FP64 on the host (as the oracle does):
+    // pseudo-inverse perturbation, dc, dpsi, and the minimal-leak adjustment.
+    const MatrixXd dA = Q * dUn;                                          // m x nd
+    const MatrixXd dAplus =
+        -AtAi * (dA.transpose() * A + A.transpose() * dA) * AtAi * A.transpose() +
+        AtAi * dA.transpose();                                            // nd x m
+    const VectorXcd dc = dAplus.cast<cd>() * target;                      // nd
+    VectorXcd dpsi = dUn.cast<cd>() * c + Un.cast<cd>() * dc;             // n1
+    const VectorXcd dcarried = Q.cast<cd>() * dpsi;                       // m
+    for (std::size_t q = 0; q < m; ++q)
+      dpsi[static_cast<Index>(leakCol[q])] += -dcarried[static_cast<Index>(q)];
+
+    // GPU stage 2 (FP32 GEMV): Mdpsi = M*dpsi for the post-leak perturbation.
+    for (Index i = 0; i < N; ++i) {
+      dpsi2Buf[static_cast<std::size_t>(i)] = static_cast<float>(dpsi[i].real());
+      dpsi2Buf[static_cast<std::size_t>(N + i)] = static_cast<float>(dpsi[i].imag());
+    }
+    gpu.edgeStage2(dpsi2Buf.data(), Mdpsi2Buf.data());
+    VectorXcd Mdpsi(N);
+    for (Index i = 0; i < N; ++i)
+      Mdpsi[i] = cd(Mdpsi2Buf[static_cast<std::size_t>(i)],
+                    Mdpsi2Buf[static_cast<std::size_t>(N + i)]);
+
+    grad[je] = 2.0 * (rho.dot(dMp)).real() +
+               (2.0 / nrm) * (rho.dot(Mdpsi - lamR * dpsi)).real() -
+               (2.0 * rU / nrm) * (p.dot(dpsi)).real();
+  }
+  return grad;
+#endif
 }
 
 }  // namespace tessera::cobordism
