@@ -74,6 +74,8 @@ See issue #350 for the full design and hard constraints.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 # Register holonomy basis order, shared with spectral_gate_realizability.py:
@@ -162,6 +164,43 @@ def reference_curve(distances_angstrom):
     return rows
 
 
+def _register_path():
+    """Import the working gate-realizability path (needs the tessera C++ build).
+    We reuse its primitives so U_H2 is fed through the EXACT existing input -- no new
+    register, no new modality. Honors the 16-CPU cap before the BLAS is pulled in."""
+    for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+               "BLIS_NUM_THREADS"):
+        os.environ.setdefault(_v, "16")
+    import spectral_gate_realizability as sgr
+    return sgr
+
+
+def synthesize_bulk(distances_angstrom, sgr=None, reg=None):
+    """STAGE 2: feed each U_H2(d) through the existing path UNCHANGED. post_interaction
+    extracts U_H2's {[a],[b],[a+b]} block, applies it to the generic register input
+    psi_B (Sigma = 0), and scores the genuine Hodge L_1 residual of the post-interaction
+    state on the surgery-grown bulk -- r -> 0 iff U_H2|psi_B> is carried by ker L_1.
+
+    This is the genuine spectral verdict (the stage-1 charge defect was only its
+    algebraic shadow). Returns one row per distance.
+    """
+    if sgr is None:
+        sgr = _register_path()
+    if reg is None:
+        reg = sgr.Register()
+    rows = []
+    for d in distances_angstrom:
+        u, energy, theta = compose_h2_circuit(d)
+        residual, b1, leak = sgr.post_interaction(reg, u)
+        defect, _ = holonomy_charge_defect(u)
+        rows.append({"d": float(d), "energy": energy,
+                     "theta_deg": float(np.degrees(theta)),
+                     "residual": float(residual), "b1": int(b1), "leak": float(leak),
+                     "charge_defect": defect,
+                     "realizable": bool(residual < sgr.REALIZE)})
+    return rows
+
+
 def _main():
     distances = [0.4, 0.5, 0.6, 0.7414, 0.9, 1.1, 1.4, 1.8, 2.5, 3.5]
     rows = reference_curve(distances)
@@ -176,8 +215,25 @@ def _main():
     print(f"\nEmergent equilibrium: d = {eq['d']:.4f} A, E = {eq['energy']:.6f} Ha "
           f"(reference {EQUILIBRIUM_ANGSTROM} A, -1.1373 Ha)")
     print("Finding: holonomy-charge defect grows with theta (toward dissociation) "
-          "-- the predicted U(1)-into-Z2^2 mismatch. Stages 2-5 (tessera path) "
-          "compute the genuine spectral residual + geometry.")
+          "-- the predicted U(1)-into-Z2^2 mismatch.")
+
+    try:
+        sgr = _register_path()
+    except ImportError as exc:
+        print(f"\n[stage 2 skipped: tessera C++ path unavailable -- {exc}]")
+        return
+
+    print("\nSTAGE 2 -- genuine spectral residual of U_H2|psi_B> on the surgery-grown "
+          "register (the working path, fed unchanged)")
+    reg = sgr.Register()
+    s2 = synthesize_bulk(distances, sgr=sgr, reg=reg)
+    print(f"{'d (A)':>7} {'theta (deg)':>12} {'r_U (residual)':>16} "
+          f"{'b1':>4} {'leak |Sigma|':>13} {'realizable':>11}")
+    for r in s2:
+        print(f"{r['d']:7.4f} {r['theta_deg']:12.4f} {r['residual']:16.3e} "
+              f"{r['b1']:4d} {r['leak']:13.6f} {str(r['realizable']):>11}")
+    print("Compare leak/residual vs the stage-1 charge defect: the genuine spectral "
+          "test should track the algebraic shadow. Stages 3-5 mediate + relax.")
 
 
 if __name__ == "__main__":
