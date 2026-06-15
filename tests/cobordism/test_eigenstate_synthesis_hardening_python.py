@@ -111,7 +111,7 @@ def _np_L(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength()
+        w = e.getSquaredLength().real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -316,7 +316,7 @@ class ParameterOrderTest(unittest.TestCase):
 
         # The k-th parameter is the k-th EdgeList edge (the stable order).
         live = st.getEdgeList().toVector()
-        self.assertTrue(np.allclose([e.getSquaredLength() for e in live], w))
+        self.assertTrue(np.allclose([e.getSquaredLength().real for e in live], w))
         self.assertTrue(np.allclose([e.getPhase() for e in live], th))
 
         # And the operator (apply) is built in that same edge order: it agrees

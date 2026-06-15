@@ -363,7 +363,7 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
   // tracked-metric rule, where the auto-wired causal lengths are the geometry.
   if (!vertexTimes) {
     for (const auto &edge : st->getEdgeList()->toVector()) {
-      edge->setSquaredLength(weight);
+      edge->setSquaredLength(std::complex<double>{weight, 0.0});
       edge->setPhase(phase);
     }
   }
@@ -485,7 +485,7 @@ std::pair<VertexPtrs, Edges> Spacetime::getSpatialSubgraph(int t) const {
       seen.insert(fp);
       if (vidSet.count(e->getSource()->getId())
           && vidSet.count(e->getTarget()->getId())
-          && e->getSquaredLength() > 0)
+          && e->isSpacelike())
         spatial.push_back(e);
     }
   }
@@ -1101,7 +1101,7 @@ Spacetime::getSpectralDimensionOnSkeleton(
       const int ib = idx.at(b);
       const auto key = std::minmax(ia, ib);
       if (!seen.insert({key.first, key.second}).second) continue;
-      const double len = std::sqrt(std::abs(e->getSquaredLength()));
+      const double len = std::abs(e->getLength());  // |l| = sqrt(|l^2|)
       const double w   = ::tessera::observables::kIMax * std::exp(-len);
       edgeList.emplace_back(ia, ib, w);
     }

@@ -141,7 +141,7 @@ def _edge_keys(st):
 
 
 def _boundary_snapshot(st):
-    return {(min(a, b), max(a, b)): (e.getSquaredLength(), e.getPhase())
+    return {(min(a, b), max(a, b)): (e.getSquaredLength().real, e.getPhase())
             for e in st.getEdgeList().toVector()
             for a, b in [(e.getSource().getId(), e.getTarget().getId())]}
 

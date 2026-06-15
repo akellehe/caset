@@ -50,16 +50,20 @@ class Simplex;
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_,
-      double squaredLength_
-    ) : source(source_), target(target_), squaredLength(squaredLength_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
+      std::complex<double> squaredLength
+    ) : source(source_), target(target_),
+        squaredLength_(squaredLength), length_(std::sqrt(squaredLength)),
+        phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
     }
 
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_
     ) : source(source_), target(target_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
-      // Set squaredLength to a random value between -1 and 1
-      squaredLength = random_uniform(); // Fallback: CDT always provides explicit edge lengths.
+      // Fallback (CDT always provides explicit edge lengths): a random real,
+      // i.e. spacelike, length; keep l^2 in sync.
+      length_ = {random_uniform(), 0.0};
+      squaredLength_ = length_ * length_;
     }
 
     [[nodiscard]] const VertexPtr &Edge::getSource() const noexcept {
@@ -70,19 +74,16 @@ class Simplex;
       return target;
     }
 
-    [[nodiscard]] double Edge::getSquaredLength() const noexcept {
-      return squaredLength;
-    }
-
     [[nodiscard]] double Edge::getPhase() const noexcept {
       return phase;
     }
 
+    [[nodiscard]] std::complex<double> Edge::getSquaredLength() const noexcept {
+      return squaredLength_;
+    }
+
     [[nodiscard]] std::complex<double> Edge::getLength() const noexcept {
-      // Principal branch: spacelike -> real, timelike -> imaginary. (Storage
-      // becomes complex in a later step; this keeps getLength() exact on-axis.)
-      if (squaredLength >= 0.0) return {std::sqrt(squaredLength), 0.0};
-      return {0.0, std::sqrt(-squaredLength)};
+      return length_;
     }
 
     [[nodiscard]] bool Edge::isNull() const noexcept {

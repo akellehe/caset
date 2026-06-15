@@ -43,7 +43,7 @@ static VertexPtr sliceCenter(const std::vector<VertexPtr> &sliceVerts) {
     std::unordered_map<std::uint64_t, std::vector<std::uint64_t>> adj;
     for (auto *v : sliceVerts) {
         for (const auto &e : v->getEdges()) {
-            if (e->getSquaredLength() <= 0) continue;  // skip timelike/null
+            if (!e->isSpacelike()) continue;  // skip timelike/null
             auto *other = (e->getSource()->getId() == v->getId())
                           ? e->getTarget() : e->getSource();
             if (sliceIds.count(other->getId()))

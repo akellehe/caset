@@ -186,7 +186,7 @@ def _np_L(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength()
+        w = e.getSquaredLength().real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -380,7 +380,7 @@ def verify_correspondence(seed, restarts):
     U = [[1.0 + 0j, 1.0 + 0j], [1.0 + 0j, 1.0 + 0j]]
     bulk = _bipyramid()
     _pin_all(bulk, w=1.0, phase=0.0)
-    pinned = {k: (e.getSquaredLength(), e.getPhase())
+    pinned = {k: (e.getSquaredLength().real, e.getPhase())
               for k, e in _edge_map(bulk).items()}
     target = _bend(U, dA, dB)
     v = cob.RealizabilityOracle(bulk).decide(
@@ -397,7 +397,7 @@ def verify_correspondence(seed, restarts):
     # boundary edges byte-identical and never touches the interior.
     live = _edge_map(W)
     boundary_fixed = all(
-        (live[k].getSquaredLength(), live[k].getPhase()) == pinned[k]
+        (live[k].getSquaredLength().real, live[k].getPhase()) == pinned[k]
         for k in boundary)
     h2 = bool(boundary_fixed and set(boundary).isdisjoint(interior))
 

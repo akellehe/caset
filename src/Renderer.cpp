@@ -440,7 +440,7 @@ LayoutData computeLayout(const Spacetime &st, int maxIters) {
         auto ti = idToIdx.find(e->getTarget()->getId());
         if (si != idToIdx.end() && ti != idToIdx.end())
             layout.edges.push_back(
-                {si->second, ti->second, e->getSquaredLength() < 0});
+                {si->second, ti->second, e->isTimelike()});
     }
 
     // Group vertices by time slice
@@ -664,7 +664,7 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
 
     for (std::size_t i = 0; i < edges.size(); ++i) {
         auto *e = edges[i];
-        double sq = e->getSquaredLength();
+        double sq = e->getSquaredLength().real();
         f << "    <edge id=\"e" << i << "\" source=\""
           << e->getSource()->getId() << "\" target=\""
           << e->getTarget()->getId() << "\">\n"
@@ -698,7 +698,7 @@ bool writeDot(const Spacetime &st, const std::string &path) {
           << ", degree=" << v->degree() << "];\n";
 
     for (auto *e : edges) {
-        double sq = e->getSquaredLength();
+        double sq = e->getSquaredLength().real();
         bool tl = sq < 0;
         f << "  " << e->getSource()->getId()
           << " -- " << e->getTarget()->getId()

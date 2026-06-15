@@ -192,7 +192,7 @@ def layout_from_spacetime(verts, edges, **kwargs):
         ti = vid_to_idx.get(e.getTarget().getId())
         if si is not None and ti is not None:
             edge_idx.append((si, ti))
-            rest_lens.append(math.sqrt(abs(e.getSquaredLength())))
+            rest_lens.append(math.sqrt(abs(e.getSquaredLength().real)))
 
     pos = force_layout_3d(len(verts), edge_idx,
                           rest_lengths=rest_lens, **kwargs)

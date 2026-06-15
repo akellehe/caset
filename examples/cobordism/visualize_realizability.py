@@ -197,7 +197,7 @@ def _graph(st):
         if s == t or s not in vid_to_idx or t not in vid_to_idx:
             continue
         edge_idx.append((vid_to_idx[s], vid_to_idx[t]))
-        edge_timelike.append(e.getSquaredLength() < 0.0)
+        edge_timelike.append(e.getSquaredLength().real < 0.0)
         bnd_edge.append((min(s, t), max(s, t)) in bnd_edge_keys)
     return dict(ids=ids, vid_to_idx=vid_to_idx, verts=verts, edges=edges,
                 edge_idx=edge_idx, edge_timelike=edge_timelike,

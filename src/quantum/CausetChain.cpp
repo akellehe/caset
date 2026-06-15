@@ -77,7 +77,7 @@ CausetChain Causet::chainFrom(tessera::spacetime::Spacetime const& st) {
     if (elist) {
         for (auto const* e : elist->toVector()) {
             if (e == nullptr) continue;
-            if (e->getSquaredLength() >= 0.0) continue;  // spacelike/null
+            if (!e->isTimelike()) continue;  // spacelike/null
             auto const& src = e->getSource();
             auto const& dst = e->getTarget();
             if (!src || !dst) continue;

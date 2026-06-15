@@ -115,7 +115,7 @@ def _boundary_edge_geometry(st):
     out = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = (e.getSquaredLength(), e.getPhase())
+        out[(min(a, b), max(a, b))] = (e.getSquaredLength().real, e.getPhase())
     return out
 
 

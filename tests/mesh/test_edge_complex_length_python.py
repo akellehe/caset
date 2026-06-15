@@ -30,8 +30,10 @@ from tessera import Vertex, Edge
 
 
 def _edge(sq):
+    # the Edge ctor takes l^2 directly (stored exactly); the complex length is
+    # derived as its sqrt (real = spacelike, imaginary = timelike)
     return Edge(Vertex(1, [0.0, 0.0, 0.0, 0.0]),
-                Vertex(2, [0.0, 0.0, 0.0, 1.0]), sq)
+                Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(sq, 0.0))
 
 
 class EdgeComplexLengthTest(unittest.TestCase):
@@ -62,7 +64,8 @@ class EdgeComplexLengthTest(unittest.TestCase):
 
     def test_squaring_length_recovers_squared_length(self):
         for sq in (25.0, -4.0, 1.0, -1.0, 100.0, -0.5):
-            sq2 = _edge(sq).getLength() ** 2
+            length = _edge(sq).getLength()
+            sq2 = length * length
             self.assertAlmostEqual(sq2.real, sq, places=9)
             self.assertAlmostEqual(sq2.imag, 0.0, places=12)
 

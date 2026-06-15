@@ -298,7 +298,7 @@ void HodgeLaplacian::assemble(std::vector<cd> &A, std::vector<double> &D) const 
     const std::size_t j = it->second;
     if (i == j) continue;  // a simplicial complex carries no self-loops
 
-    const double w = e->getSquaredLength();      // signed magnitude
+    const cd w = e->getSquaredLength();  // exact complex squared length l^2
     const double phase = e->getPhase();          // U(1) connection on src->tgt
 
     // Degree uses the magnitude convention D_ii = sum |squaredLength| over

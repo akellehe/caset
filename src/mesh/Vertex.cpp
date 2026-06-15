@@ -155,8 +155,8 @@ Vertex::moveEdgesToImpl(
     // For inEdges: redirect edge to point TO the new vertex (new source = vertex)
     // For outEdges: redirect edge to point FROM the new vertex (new target = vertex)
     const auto &newEdge = (direction == EdgeDirection::In)
-                            ? spacetime->createEdge(sourceVertex, recipient, oldEdge->getSquaredLength())
-                            : spacetime->createEdge(recipient, targetVertex, oldEdge->getSquaredLength());
+                            ? spacetime->createEdge(sourceVertex, recipient, oldEdge->getSquaredLength().real())
+                            : spacetime->createEdge(recipient, targetVertex, oldEdge->getSquaredLength().real());
 
     newEdges.insert(newEdge);
   }

@@ -123,7 +123,7 @@ def _edge_map(st):
 
 def _edge_values(st):
     """{(min_id, max_id): (squaredLength, phase)} snapshot of the live edges."""
-    return {k: (e.getSquaredLength(), e.getPhase())
+    return {k: (e.getSquaredLength().real, e.getPhase())
             for k, e in _edge_map(st).items()}
 
 
@@ -142,7 +142,7 @@ def _np_L(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength()
+        w = e.getSquaredLength().real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -170,7 +170,7 @@ def _set_boundary(st, es, weights=None, phase_scale=0.0, base_w=1.0):
         w = base_w if weights is None else weights[k]
         em[key].setSquaredLength(w)
         em[key].setPhase(phase_scale * (k + 1))
-    return {key: (em[key].getSquaredLength(), em[key].getPhase())
+    return {key: (em[key].getSquaredLength().real, em[key].getPhase())
             for key in bedges}
 
 
@@ -498,7 +498,7 @@ class ConeAndRetryTest(unittest.TestCase):
         es = cob.EigenstateSynthesis(st)
         es.setWeights([1.0] * es.numEdges())   # boundary pinned (phase 0)
         es.setPhases([0.0] * es.numEdges())
-        boundary_vals = {key: (e.getSquaredLength(), e.getPhase())
+        boundary_vals = {key: (e.getSquaredLength().real, e.getPhase())
                          for key, e in _edge_map(st).items()
                          if key in set(es.boundaryEdges())}
 

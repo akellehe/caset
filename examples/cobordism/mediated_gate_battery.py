@@ -120,7 +120,7 @@ def _register_edge_fingerprint(stage):
     emap = {}
     for e in stage["st"].getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        emap[(min(a, b), max(a, b))] = (e.getSquaredLength(), e.getPhase())
+        emap[(min(a, b), max(a, b))] = (e.getSquaredLength().real, e.getPhase())
     reg = {str(k): emap[k] for k in base._REG_EDGES if k in emap}
     return reg, [float(x) for x in base._CP_IN]
 

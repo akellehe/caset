@@ -107,7 +107,7 @@ def _np_L(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength()
+        w = e.getSquaredLength().real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -179,7 +179,7 @@ class EigenstateSynthesisStructureTest(unittest.TestCase):
         self.assertTrue(np.allclose(es.phases(), th))
         # And the writes reach the underlying edges (the Laplacian sees them).
         self.assertTrue(np.allclose(np.array(es.weights()),
-                                    [e.getSquaredLength()
+                                    [e.getSquaredLength().real
                                      for e in st.getEdgeList().toVector()]))
 
     def test_size_mismatch_raises(self):
