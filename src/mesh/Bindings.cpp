@@ -390,6 +390,11 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "dict {(v0,v1): float}. Differentiates the DEC circumradius recursion "
            "(R^2 = h^T G^-1 h); matches finite differences to machine precision. "
            "(n-2)-hinge case only.")
+      .def("dualVolumeHessian", &Simplex::dualVolumeHessian,
+           "Exact analytic d^2(dualVolume)/d(l^2_e)d(l^2_f), as a dict "
+           "{((v0,v1),(v2,v3)): float}. One derivative beyond the gradient "
+           "(d2CircumR2 + signed-sqrt second derivative); symmetric. "
+           "(n-2)-hinge case only.")
       .def("hodgeStar", &Simplex::hodgeStar,
            "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
            "content).")

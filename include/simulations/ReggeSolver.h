@@ -114,6 +114,16 @@ class ReggeSolver {
     /// machine precision but at one pass, not 2·|E| action evaluations.
     [[nodiscard]] std::vector<std::complex<double>> actionGradientExact() const;
 
+    /// Exact analytic Hessian ∂²S/∂ℓ²_e∂ℓ²_f of the dual Lorentzian Regge action,
+    /// as a dense |E|×|E| complex matrix in the ``getEdgeList`` order. The next
+    /// product-rule layer beyond ``actionGradientExact``:
+    /// Σ_h [∂²|★h|·ε_h + ∂|★h|_e·∂ε_h_f + ∂|★h|_f·∂ε_h_e + |★h|·∂²ε_h], assembled
+    /// from the per-hinge ``dualVolumeHessian`` / ``lorentzianDeficitAngleHessian``
+    /// (and their gradients) — no finite differences. Removes the FD-Hessian floor
+    /// in the stationary-action relaxation (exact Newton / Gauss-Newton).
+    [[nodiscard]] std::vector<std::vector<std::complex<double>>>
+    actionHessianExact() const;
+
     // ==================== Solver ====================
 
     /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.

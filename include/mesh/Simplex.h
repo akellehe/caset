@@ -412,6 +412,18 @@ class Simplex {
     [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, double>
     dualVolumeGradient() const;
 
+    /// Exact analytic Hessian of this hinge's ``dualVolume``:
+    /// \f$ \partial^2 |\!\star\!\sigma| / \partial \ell^2_e \partial \ell^2_f \f$.
+    /// One derivative beyond ``dualVolumeGradient``: the DEC facet→top recursion
+    /// carried to second order through the circumradii (``d2CircumR2``, with
+    /// \f$ \partial_f\beta = G^{-1}(\partial_f h - \partial_f G\,\beta) \f$) and the
+    /// signed-sqrt heights (\f$ g''(x) = -\mathrm{sign}(x)/4|x|^{3/2} \f$). Keyed
+    /// by the (sorted) edge pair; symmetric.
+    [[nodiscard]] std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
+                                     std::pair<std::uint64_t, std::uint64_t>>,
+                           double>
+    dualVolumeHessian() const;
+
     /// Diagonal Hodge-star ratio ⋆ = |★σ| / |σ| (dual content over primal
     /// content) for this simplex — the bridge between the primal Laplacian
     /// weights and the dual Regge action.

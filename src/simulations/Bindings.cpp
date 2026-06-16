@@ -292,6 +292,12 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "Assembled from the per-hinge dualVolume/deficit analytic gradients "
            "(no finite differences); matches FD of dualReggeAction to machine "
            "precision in one pass.")
+      .def("actionHessianExact", &ReggeSolver::actionHessianExact,
+           "Exact analytic Hessian ∂²S/∂ℓ²_e∂ℓ²_f of the dual Regge action: a "
+           "dense |E|x|E| complex matrix (getEdgeList order). Four-term product "
+           "rule over the per-hinge dualVolume/deficit Hessians + gradients (no "
+           "finite differences); matches a central difference of "
+           "actionGradientExact to machine precision.")
       .def("step", &ReggeSolver::step,
            py::arg("learningRate") = 0.001,
            "One gradient-descent step on F = ||∇S||². Returns F before the update.")

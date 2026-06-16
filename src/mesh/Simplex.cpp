@@ -1242,6 +1242,71 @@ double dCircumR2(const ::tessera::mesh::Simplex* s,
     return r;
 }
 
+// Exact d^2(R^2)/d(l^2_e)d(l^2_f). Since dR^2 = 2(dh)^T beta - beta^T dG beta and
+// G is linear in l^2 (dG, dh constant indicators), the second derivative is
+// 2(dh_e)^T (d_f beta) - 2 beta^T dG_e (d_f beta), with
+// d_f beta = G^-1 (dh_f - dG_f beta). Symmetric in (e,f).
+double d2CircumR2(const ::tessera::mesh::Simplex* s,
+                  std::uint64_t ea, std::uint64_t eb,
+                  std::uint64_t fa, std::uint64_t fb) {
+    const int d = static_cast<int>(s->size()) - 1;
+    if (d <= 0) return 0.0;
+    const auto& sv = s->getVertices();
+    const std::vector<double> G = s->gramMatrix(/*wickRotate=*/false);
+    const double detG = ::tessera::mesh::Simplex::determinant(G, d);
+    if (std::abs(detG) < 1e-300) return 0.0;
+    const std::vector<double> cofG =
+        ::tessera::mesh::Simplex::cofactorMatrix(G, d);
+    std::vector<double> Ginv(static_cast<std::size_t>(d) * d);
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            Ginv[i * d + j] = cofG[j * d + i] / detG;   // (G^-1)_ij = C_ji/det
+    std::vector<double> h(d), beta(d, 0.0);
+    for (int i = 0; i < d; ++i) h[i] = 0.5 * G[i * d + i];
+    for (int i = 0; i < d; ++i) {
+        double a = 0.0;
+        for (int j = 0; j < d; ++j) a += Ginv[i * d + j] * h[j];
+        beta[i] = a;
+    }
+    auto indMat = [&](std::uint64_t e0, std::uint64_t e1,
+                      std::vector<double>& dG, std::vector<double>& dh) {
+        const std::uint64_t lo = std::min(e0, e1), hi = std::max(e0, e1);
+        auto ind = [&](int p, int q) -> double {
+            if (p == q) return 0.0;
+            const std::uint64_t a = sv[p]->getId(), b = sv[q]->getId();
+            return (std::min(a, b) == lo && std::max(a, b) == hi) ? 1.0 : 0.0;
+        };
+        dG.assign(static_cast<std::size_t>(d) * d, 0.0);
+        dh.assign(d, 0.0);
+        for (int i = 0; i < d; ++i)
+            for (int j = 0; j < d; ++j)
+                dG[i * d + j] =
+                    0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
+        for (int i = 0; i < d; ++i) dh[i] = 0.5 * dG[i * d + i];
+    };
+    std::vector<double> dG_e, dh_e, dG_f, dh_f;
+    indMat(ea, eb, dG_e, dh_e);
+    indMat(fa, fb, dG_f, dh_f);
+    // d_f beta = G^-1 (dh_f - dG_f beta)
+    std::vector<double> tmp(d, 0.0), dbeta_f(d, 0.0);
+    for (int i = 0; i < d; ++i) {
+        double a = dh_f[i];
+        for (int j = 0; j < d; ++j) a -= dG_f[i * d + j] * beta[j];
+        tmp[i] = a;
+    }
+    for (int i = 0; i < d; ++i) {
+        double a = 0.0;
+        for (int j = 0; j < d; ++j) a += Ginv[i * d + j] * tmp[j];
+        dbeta_f[i] = a;
+    }
+    double r = 0.0;
+    for (int i = 0; i < d; ++i) r += 2.0 * dh_e[i] * dbeta_f[i];
+    for (int i = 0; i < d; ++i)
+        for (int j = 0; j < d; ++j)
+            r -= 2.0 * beta[i] * dG_e[i * d + j] * dbeta_f[j];
+    return r;
+}
+
 }  // namespace
 
 std::vector<double> Simplex::circumcenterBarycentric() const {
@@ -1325,6 +1390,90 @@ Simplex::dualVolumeGradient() const {
         grad[e] = dV * inv;
     }
     return grad;
+}
+
+std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
+                   std::pair<std::uint64_t, std::uint64_t>>,
+         double>
+Simplex::dualVolumeHessian() const {
+    using EK = std::pair<std::uint64_t, std::uint64_t>;
+    std::map<std::pair<EK, EK>, double> hess;
+    if (vertices.empty()) return hess;
+    const Simplex* top = this;
+    while (!top->getCofaces().empty()) top = top->getCofaces()[0];
+    const int n = static_cast<int>(top->size()) - 1;
+    const int k = static_cast<int>(size()) - 1;
+    if (k != n - 2) return hess;
+
+    const double Rh2 = circumradiusSquared();
+    struct Facet {
+        const Simplex* cf; double sgn; double R1;
+        std::vector<std::pair<const Simplex*, std::pair<double, double>>> tops;
+    };
+    std::vector<Facet> fs;
+    std::set<EK> edges;
+    for (const auto& cf : getCofaces()) {
+        Facet f; f.cf = cf; f.sgn = oppositeVertexSign(cf, this);
+        f.R1 = cf->circumradiusSquared();
+        for (const auto& tp : cf->getCofaces()) {
+            const double sgn2 = oppositeVertexSign(tp, cf);
+            f.tops.push_back({tp, {sgn2, tp->circumradiusSquared()}});
+            const auto& tv = tp->getVertices();
+            for (std::size_t i = 0; i < tv.size(); ++i)
+                for (std::size_t j = i + 1; j < tv.size(); ++j) {
+                    const std::uint64_t a = tv[i]->getId(), b = tv[j]->getId();
+                    edges.insert({std::min(a, b), std::max(a, b)});
+                }
+        }
+        fs.push_back(std::move(f));
+    }
+    const double inv = 1.0 / (static_cast<double>(n - k) * (n - k - 1));
+    auto gp = [](double x) -> double {
+        return 1.0 / (2.0 * std::sqrt(std::abs(x) + 1e-300));
+    };
+    auto gpp = [](double x) -> double {
+        const double ax = std::abs(x) + 1e-300;
+        return -((x < 0.0) ? -1.0 : 1.0) / (4.0 * ax * std::sqrt(ax));
+    };
+    const std::vector<EK> ev(edges.begin(), edges.end());
+    for (const auto& e : ev) {
+        const double dRh_e = dCircumR2(this, e.first, e.second);
+        for (const auto& f : ev) {
+            const double dRh_f = dCircumR2(this, f.first, f.second);
+            const double d2Rh =
+                d2CircumR2(this, e.first, e.second, f.first, f.second);
+            double dV2 = 0.0;
+            for (const auto& fac : fs) {
+                const double dR1_e = dCircumR2(fac.cf, e.first, e.second);
+                const double dR1_f = dCircumR2(fac.cf, f.first, f.second);
+                const double d2R1 =
+                    d2CircumR2(fac.cf, e.first, e.second, f.first, f.second);
+                const double x1 = fac.R1 - Rh2;
+                const double ss1 = signedSqrt(x1);
+                const double dx1_e = dR1_e - dRh_e, dx1_f = dR1_f - dRh_f;
+                const double dss1_e = gp(x1) * dx1_e, dss1_f = gp(x1) * dx1_f;
+                const double d2ss1 = gpp(x1) * dx1_e * dx1_f + gp(x1) * (d2R1 - d2Rh);
+                double S = 0.0, dS_e = 0.0, dS_f = 0.0, d2S = 0.0;
+                for (const auto& t : fac.tops) {
+                    const double sgn2 = t.second.first, R2 = t.second.second;
+                    const double dR2_e = dCircumR2(t.first, e.first, e.second);
+                    const double dR2_f = dCircumR2(t.first, f.first, f.second);
+                    const double d2R2 =
+                        d2CircumR2(t.first, e.first, e.second, f.first, f.second);
+                    const double x2 = R2 - fac.R1;
+                    const double dx2_e = dR2_e - dR1_e, dx2_f = dR2_f - dR1_f;
+                    S += sgn2 * signedSqrt(x2);
+                    dS_e += sgn2 * gp(x2) * dx2_e;
+                    dS_f += sgn2 * gp(x2) * dx2_f;
+                    d2S += sgn2 * (gpp(x2) * dx2_e * dx2_f + gp(x2) * (d2R2 - d2R1));
+                }
+                dV2 += fac.sgn
+                       * (d2ss1 * S + dss1_e * dS_f + dss1_f * dS_e + ss1 * d2S);
+            }
+            hess[{e, f}] = dV2 * inv;
+        }
+    }
+    return hess;
 }
 
 double Simplex::hodgeStar() const {
