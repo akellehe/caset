@@ -105,6 +105,24 @@ def _staircase(faces, bot_off, top_off):
     return sorted(set(tets))
 
 
+# --------------------------------------------------------------------------- #
+# THE ONLY VALID WAY to build / evolve / compose a cobordism (a HARD rule):
+#   fix a state (or output state) as the BOUNDARY, relax the bulk INTO a
+#   cobordism, and let the input states evolve ONLY while their harmonic /
+#   residual is preserved (the Γ·r_U term in StationaryActionRelaxer). The
+#   result must EMERGE in the bulk and be read off after-the-fact -- never
+#   hand-placed.
+# Surgical / topology-changing moves are NECESSARY and ALLOWED -- they are
+# GATED: the Pachner propose() rejects >2-coface results
+# (pachner_detail::topCofaceCount) and the synthesizer's dualComplexValid is the
+# FULL manifold check (codim-1 cofaces <= 2, ridge links unpinched, vertex links
+# 2-spheres/disks). COMPOSE by feeding one cobordism's RESULT STATE as the next
+# one's incoming BOUNDARY -- NEVER hand-identify two cobordisms' interior
+# simplices ("the weld"): three sheets then meet along one face -> a codim-1
+# facet with >2 cofaces -> NOT a manifold, and it BYPASSES the gate above. That
+# was never allowed. __init__ asserts dualComplexValid so a torn complex can
+# never be relaxed.
+# --------------------------------------------------------------------------- #
 class MergeCobordism:
     """The merge bulk of two inputs into one result. Vertex blocks:
     input A = [0,12), input B = [12,24) -- both on slice t (spatial); result
@@ -132,6 +150,17 @@ class MergeCobordism:
         self._set_causal()
         self.es = cob.EigenstateSynthesis(self.st, 1)
         self.read_spectral()
+        # MANIFOLD GATE -- never relax/compose a torn complex. dualComplexValid
+        # (ChainComplex::dualComplexIsValid) is the full check: every codim-1
+        # facet shared by <=2 top cells, ridge links unpinched, vertex links
+        # 2-spheres/disks. A single merge is manifold by construction; assert it
+        # HARD so any construction that isn't -- e.g. a hand-weld of two
+        # cobordisms' interiors -- is caught here instead of silently relaxed.
+        if not self.dual_valid:
+            raise RuntimeError(
+                f"MergeCobordism is not a valid manifold: {self.dual_reason}. "
+                "Build cobordisms via gated surgical moves or the "
+                "fix-boundary/relax-bulk path; never hand-weld interiors.")
 
     # ---- coordinate-free causal labeling: input->result edges timelike ---- #
     def _is_result(self, vid):

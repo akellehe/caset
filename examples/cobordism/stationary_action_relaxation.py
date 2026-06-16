@@ -94,6 +94,13 @@ class StationaryActionRelaxer:
     The variable edges ``VAR`` are every edge with at least one endpoint in the
     result block (the input→result worldtubes and the result-internal edges) —
     the emergent-dual geometry. The input (slice-t) spatial edges are held fixed.
+
+    This IS the only valid evolution: the boundary states are fixed (their spatial
+    edges held) and the bulk relaxes INTO the cobordism; where an input is allowed
+    to move (its result-touching edges), the Γ·r_U term holds its harmonic /
+    residual fixed, so it evolves ONLY while still carrying its state. The result
+    EMERGES in the bulk and is read after-the-fact, never inserted. Never compose
+    cobordisms by welding interiors — see ``merge_cobordism``'s "ONLY VALID WAY".
     """
 
     def __init__(self, gamma=1e3, merge=None, use_cpp_gradient=True):
