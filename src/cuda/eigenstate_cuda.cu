@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // FP32 cuBLAS (SGEMM) accelerator for the per-edge r_U-gradient loop of
 // EigenstateSynthesis::residualForPeriodsGradient (#348).

@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // Shared CSR construction from a symmetric COO edge list. The two
 // callers — ``SparseGraph::fromCOO`` (binary, uint32 indices, int64

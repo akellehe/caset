@@ -16,7 +16,7 @@ description = "C++/pybind11 extension for lattice spacetime experiments"
 authors = [{ name = "Andrew Kelleher", email = "keats.kelleher@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Proprietary" }
 dependencies = [
     "numpy>=2.0",
 ]

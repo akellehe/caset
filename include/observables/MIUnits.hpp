@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // Shared MI normalisation constant. Promoted from
 // ``src/simulations/InteractionSimulation.cpp`` so the same value is used by

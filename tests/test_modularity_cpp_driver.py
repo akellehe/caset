@@ -1,5 +1,5 @@
-# MIT License
-# Copyright (c) 2025 Andrew Kelleher
+# Copyright (c) 2026 Twin Vector Labs LLC.
+# All rights reserved.
 """Smoke test for ``examples/modularity-cpp.py``: import-only check
 that the driver script's helpers wire up correctly with the C++
 bindings.

@@ -3,7 +3,7 @@
 [![Build & Deploy Docs](https://github.com/akellehe/tessera/actions/workflows/pages.yml/badge.svg)](https://github.com/akellehe/tessera/actions/workflows/pages.yml)
 [![build](https://github.com/akellehe/tessera/actions/workflows/build.yml/badge.svg)](https://github.com/akellehe/tessera/actions/workflows/build.yml)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE.md)
 
 **[Documentation](https://akellehe.github.io/tessera/)**
 
@@ -209,5 +209,5 @@ open _build/html/index.html
 
 ## License
 
-MIT
+Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved. See [LICENSE.md](LICENSE.md).
 

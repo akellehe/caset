@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# MIT License -- Copyright (c) 2025 Andrew Kelleher
+# Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 """
 Real-time evolution of a Schwinger-model q-qbar quench via TDVP.
 

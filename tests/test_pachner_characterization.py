@@ -1,5 +1,5 @@
-# MIT License
-# Copyright (c) 2025 Andrew Kelleher
+# Copyright (c) 2026 Twin Vector Labs LLC.
+# All rights reserved.
 """
 Characterization tests locking in current behavior of CDT::add/remove/
 flip/iflip/shift before the transactional Pachner-move refactor in

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# MIT License -- Copyright (c) 2025 Andrew Kelleher
+# Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 """
 Distribution of N_4^{(3,2)} at fixed N_4^{(4,1)}.
 
