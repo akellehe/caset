@@ -529,6 +529,27 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "approximation (~1e-5 vs FP64); residualForPeriodsGradient stays the "
            "default and the correctness oracle. Requires a TESSERA_CUDA build "
            "(raises otherwise), and raises on a hole/target length mismatch.")
+      // ----- The discovered operator: ker L1(W - dW) (#363) -----
+      .def("bulkMinusBoundaryCells",
+           &EigenstateSynthesis::bulkMinusBoundaryCells,
+           "The interior 1-cells of W - dW (edges both of whose endpoints are "
+           "interior vertices, on no dW face), as sorted (u,v) tuples in "
+           "canonical ChainComplex C_1 order -- the column ordering of "
+           "bulkMinusBoundaryHarmonicMatrix. Empty for a bare (un-grown) "
+           "cobordism (all boundary, no interior bulk).")
+      .def("bulkMinusBoundaryHarmonicMatrix",
+           &EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix,
+           py::arg("tol") = 1e-9,
+           "ker L1(W - dW): the harmonic 1-forms of the combinatorial "
+           "(unit-weight, signature-blind) Hodge Laplacian L1 of the bulk with "
+           "the full dW subcomplex deleted (the subcomplex induced on the "
+           "interior vertices). Restricts the integer boundary maps d1, d2 to "
+           "the interior cells and eigendecomposes L1 = d1^T d1 + d2 d2^T, "
+           "returning the |lambda| < tol eigenvectors stacked as the ROWS of a "
+           "flat row-major (dim ker L1) x len(bulkMinusBoundaryCells()) complex "
+           "array (ascending eigenvalue). The geometry the discovered operator "
+           "is read from -- surgery must first grow the interior so this is "
+           "nonzero. Read fresh from the live complex.")
       // ----- Surgery: the topology-changing interior remove move (#196) -----
       .def("interiorTopCells", &EigenstateSynthesis::interiorTopCells,
            "The interior top cells (all-interior vertices, on no dW face) as "
