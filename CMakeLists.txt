@@ -104,7 +104,7 @@ if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/itensor/itensor/itensor.
     message(STATUS "Fetching the ITensor submodule (one-time network download)...")
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" submodule update --init --recursive
-                -- third_party/itensor third_party/itensor_tdvp
+                -- third_party/itensor
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         RESULT_VARIABLE _itensor_submodule_result)
     if (NOT _itensor_submodule_result EQUAL 0)

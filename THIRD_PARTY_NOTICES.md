@@ -18,8 +18,7 @@ package).
 
 | Component | Version | License | Notes |
 |---|---|---|---|
-| **ITensor** (v3) | submodule pin | Apache-2.0 | ITensor developers / Simons Foundation. Permissive. |
-| **ITensor / TDVP add-on** | submodule pin | **UNSTATED — see below** | Header-only (`tdvp.h`, `basisextension.h`), `#include`d by `src/quantum/TDVPRunner.cpp` and `ChoiState.cpp`. ⚠️ |
+| **ITensor** (v3) | submodule pin | Apache-2.0 | ITensor developers / Simons Foundation. Permissive. Real-time TDVP is provided by tessera's own `TDVPIntegrator` on top of ITensor core — see note below. |
 | **Eigen** | 3.4 | MPL-2.0 | We use only MPL-2.0 modules (Core, Dense, SparseCore, KroneckerProduct). `EIGEN_MPL2_ONLY` is defined to make any non-MPL2 module a compile error. MPL-2.0 is file-level copyleft and does not restrict our proprietary use. |
 | **BLAS / LAPACK** | system | BSD-3-Clause | Resolves to the platform backend (Debian netlib reference BLAS/LAPACK = BSD-3; may be OpenBLAS = BSD-3, Accelerate = Apple system framework, or MKL = proprietary-redistributable depending on the host). None are copyleft. |
 | **zlib** (`libz`) | system | Zlib | Permissive. |
@@ -41,24 +40,19 @@ package).
 
 ---
 
-## ⚠️ Unresolved: ITensor / TDVP license
+## Real-time TDVP is tessera-owned
 
-The TDVP add-on (`third_party/itensor_tdvp`, upstream
-<https://github.com/ITensor/TDVP>) ships **no LICENSE file and no per-file
-license headers**, and the GitHub licensing API reports none. tessera compiles
-these headers into the distributed binary (`itensor::tdvp(...)` is called from
-the Schwinger-quench pipeline), so this is a material obligation, not dead
-weight.
+tessera previously linked the ITensor/TDVP add-on
+(<https://github.com/ITensor/TDVP>), which shipped **no license** upstream (no
+LICENSE file, no per-file headers, none reported by the GitHub licensing API) —
+effectively "all rights reserved". Because the Schwinger-quench pipeline
+compiled it into the distributed binary, that was a material obligation.
 
-Absent an explicit grant, the default is "all rights reserved" by the authors.
-The companion ITensor core repository is Apache-2.0, and TDVP is published by
-the same authors as a public ITensor add-on, so the *intent* is almost
-certainly permissive — but intent is not a license.
-
-**Action required:** obtain a written license grant from the ITensor authors
-(or confirmation that TDVP is covered by ITensor's Apache-2.0), and vendor a
-LICENSE copy here once obtained. If that cannot be secured, replace or remove
-the TDVP dependency before distributing tessera.
+It has been removed. Real-time evolution is now provided by tessera's own
+`TDVPIntegrator` (`include/quantum/TDVPIntegrator.hpp`,
+`src/quantum/TDVPIntegrator.cpp`) — an independent two-site TDVP implementation
+built solely on Apache-2.0 ITensor *core* primitives. No code of unstated
+license is linked.
 
 ## GPL-3.0 code present but NOT linked
 

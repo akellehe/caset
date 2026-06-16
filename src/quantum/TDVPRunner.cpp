@@ -9,7 +9,7 @@
 #include "quantum/Quench.hpp"
 #include "quantum/SchwingerModel.hpp"
 
-#include "tdvp.h"  // ITensor TDVP add-on, vendored under third_party/itensor_tdvp
+#include "quantum/TDVPIntegrator.hpp"  // tessera-owned 2-site TDVP (Apache-2.0 core only)
 
 #include <itensor/all.h>
 
@@ -209,7 +209,7 @@ QuenchResult SchwingerQuench::evolve() const {
 
     const int nSteps = static_cast<int>(std::round(cfg.T / cfg.dt));
     for (int step = 1; step <= nSteps; ++step) {
-        itensor::tdvp(psi, sm.H, tStep, sweepsTdvp, tdvpArgs);
+        TDVPIntegrator::evolve(psi, sm.H, tStep, sweepsTdvp, tdvpArgs);
         if (step % cfg.snapshotEvery == 0 || step == nSteps) {
             const double currentT = step * cfg.dt;
             result.snapshots.push_back(makeSnapshot(

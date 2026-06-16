@@ -6,7 +6,7 @@
 #include "quantum/MutualInformation.hpp"
 #include "quantum/SchwingerModel.hpp"
 
-#include "tdvp.h"  // ITensor TDVP add-on
+#include "quantum/TDVPIntegrator.hpp"  // tessera-owned 2-site TDVP (Apache-2.0 core only)
 
 #include <itensor/all.h>
 #include <itensor/mps/autompo.h>
@@ -223,7 +223,7 @@ ChoiPropagator::evolve(itensor::MPS psi,
 
     const int nSteps = static_cast<int>(std::round(duration / s.dt));
     for (int step = 0; step < nSteps; ++step) {
-        tdvp(psi, H, tStep, sweepsTdvp, args);
+        TDVPIntegrator::evolve(psi, H, tStep, sweepsTdvp, args);
     }
     return psi;
 }
