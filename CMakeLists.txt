@@ -254,6 +254,16 @@ target_include_directories(tessera_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(tessera_core PUBLIC ZLIB::ZLIB Eigen3::Eigen)
 
+# Eigen is MPL-2.0, but a handful of its modules pull in LGPL/GPL code
+# (unsupported/Eigen/FFT via FFTW, MPRealSupport via MPFR, and the
+# SparseCholesky / OrderingMethods AMD routines). tessera only uses MPL-2.0
+# modules (Core, Dense, SparseCore, KroneckerProduct); EIGEN_MPL2_ONLY makes
+# any future `#include` of a non-MPL2 module a hard compile error rather than
+# a silent copyleft contamination of the proprietary _tessera binary. PUBLIC
+# so it reaches every consumer that compiles Eigen headers (tessera_quantum,
+# the binding TUs, and the test executables all link tessera_core).
+target_compile_definitions(tessera_core PUBLIC EIGEN_MPL2_ONLY)
+
 # Optional OpenMP for the spectral-graph heat-kernel parallel loop and
 # similar embarrassingly-parallel hot paths. Bit-identical to the
 # serial code at OMP_NUM_THREADS=1 (the default in our 10-CPU-budget

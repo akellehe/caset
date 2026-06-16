@@ -27,6 +27,20 @@ function(tessera_build_itensor)
             "git submodule update --init --recursive")
     endif()
 
+    # LICENSE GUARD — do not remove. ITensor's optional HDF5 serialization
+    # (itensor/util/h5/, by O. Parcollet) is GPL-3.0-or-later. tessera is
+    # proprietary, so statically linking that code into _tessera would force
+    # the whole binary under the GPL. The h5 .cc files are deliberately
+    # excluded from the source list below and the headers are gated behind
+    # ITENSOR_USE_HDF5, so it is currently dead code. This guard makes the
+    # only switch that could revive it a hard configure-time error.
+    if(ITENSOR_USE_HDF5)
+        message(FATAL_ERROR
+            "ITENSOR_USE_HDF5 is set, but ITensor's HDF5 code (itensor/util/h5) "
+            "is GPL-3.0-or-later and must NOT be linked into the proprietary "
+            "_tessera binary. See THIRD_PARTY_NOTICES.md. Leave HDF5 disabled.")
+    endif()
+
     # Cache variable so users can override with -DITENSOR_PLATFORM=openblas
     # at configure time. The default tracks the OS's native backend:
     # Accelerate on macOS, reference LAPACK elsewhere (libblas + liblapack

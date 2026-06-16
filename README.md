@@ -211,3 +211,5 @@ open _build/html/index.html
 
 Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved. See [LICENSE.md](LICENSE.md).
 
+Third-party components linked or redistributed by tessera are inventoried in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
