@@ -922,6 +922,144 @@ Simplex::lorentzianDeficitAngleGradient() const {
     return grad;
 }
 
+std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
+                   std::pair<std::uint64_t, std::uint64_t>>,
+         std::complex<double>>
+Simplex::lorentzianDeficitAngleHessian() const {
+    using cd = std::complex<double>;
+    using EK = std::pair<std::uint64_t, std::uint64_t>;
+    std::map<std::pair<EK, EK>, cd> hess;
+    if (!spacetime || vertices.empty()) return hess;
+    const int topSize =
+        spacetime->getMetric()->getSignature()->getDimensions() + 1;
+
+    // d^2(eps)/dl^2_e dl^2_f = -sum_tau d^2(theta_tau). Same top-cell set and
+    // cofactor machinery as lorentzianDeficitAngleGradient, carried one more
+    // derivative: d^2 theta = (d2theta/dr^2) dr_e dr_f + (dtheta/dr) d2r.
+    for (const auto &tau : vertices[0]->getSimplices()) {
+        if (static_cast<int>(tau->size()) != topSize) continue;
+        bool containsAll = true;
+        for (std::size_t i = 1; i < vertices.size(); ++i)
+            if (!tau->hasVertex(vertices[i])) { containsAll = false; break; }
+        if (!containsAll) continue;
+
+        const auto &tv = tau->getVertices();
+        const int m = static_cast<int>(tv.size());
+        std::vector<int> opp;
+        for (int k = 0; k < m; ++k) {
+            bool inHinge = false;
+            for (const auto &hv : vertices)
+                if (hv->getId() == tv[k]->getId()) { inHinge = true; break; }
+            if (!inHinge) opp.push_back(k);
+        }
+        if (opp.size() != 2) continue;
+        const int bi = opp[0] + 1, bj = opp[1] + 1;
+
+        const int n = m + 1;
+        const std::vector<double> B = tau->cayleyMengerMatrix(/*wickRotate=*/false);
+        const double detB = determinant(B, n);
+        if (std::abs(detB) < 1e-300) continue;
+        const std::vector<double> C = cofactorMatrix(B, n);
+        std::vector<double> Binv(static_cast<std::size_t>(n) * n);
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+                Binv[i * n + j] = C[j * n + i] / detB;
+
+        const double Cij = C[bi * n + bj];
+        const double Cii = C[bi * n + bi];
+        const double Cjj = C[bj * n + bj];
+        const double sC = (Cii >= 0.0) ? 1.0 : -1.0;
+        const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
+        const double D = std::sqrt(std::abs(Cii * Cjj));
+        if (D < 1e-300) continue;
+        const double denom = sC * D;
+        const double r = -Cij / denom;
+        const cd theta = std::acos(cd(r, 0.0));
+        const cd sinT = std::sin(theta);
+        if (std::abs(sinT) < 1e-300) continue;
+        const cd dthetaDr = cd(-1.0, 0.0) / sinT;
+        const cd d2thetaDr2 = cd(-r, 0.0) / (sinT * sinT * sinT);
+
+        auto bb = [&](int x, int y) -> double { return Binv[x * n + y]; };
+        // dC_pq/dl^2_(a,b): a,b local vertex indices (CM border = +1).
+        auto dCof = [&](int p, int q, int a, int b) -> double {
+            const int A = a + 1, Bn = b + 1;
+            return detB * (2.0 * bb(A, Bn) * bb(p, q)
+                           - bb(p, A) * bb(Bn, q) - bb(p, Bn) * bb(A, q));
+        };
+        // dBinv_xy/dl^2_(c,d) = -(Binv_xC Binv_Dy + Binv_xD Binv_Cy).
+        auto dBi = [&](int x, int y, int c, int d) -> double {
+            const int Cn = c + 1, Dn = d + 1;
+            return -(bb(x, Cn) * bb(Dn, y) + bb(x, Dn) * bb(Cn, y));
+        };
+        // d^2 C_pq/dl^2_(a,b) dl^2_(c,d) = ddetB*T + detB*dT.
+        auto d2Cof = [&](int p, int q, int a, int b, int c, int d) -> double {
+            const int A = a + 1, Bn = b + 1, Cn = c + 1, Dn = d + 1;
+            const double T = 2.0 * bb(A, Bn) * bb(p, q)
+                             - bb(p, A) * bb(Bn, q) - bb(p, Bn) * bb(A, q);
+            const double ddetB = detB * 2.0 * bb(Cn, Dn);
+            const double dT =
+                2.0 * (dBi(A, Bn, c, d) * bb(p, q) + bb(A, Bn) * dBi(p, q, c, d))
+                - (dBi(p, A, c, d) * bb(Bn, q) + bb(p, A) * dBi(Bn, q, c, d))
+                - (dBi(p, Bn, c, d) * bb(A, q) + bb(p, Bn) * dBi(A, q, c, d));
+            return ddetB * T + detB * dT;
+        };
+
+        struct Loc { int a, b; std::uint64_t va, vb; double dr; };
+        std::vector<Loc> es;
+        for (int a = 0; a < m; ++a)
+            for (int b = a + 1; b < m; ++b) {
+                const double dCij = dCof(bi, bj, a, b);
+                const double dCii = dCof(bi, bi, a, b);
+                const double dCjj = dCof(bj, bj, a, b);
+                const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
+                const double ddenom = sC * dD;
+                const double dr =
+                    -(dCij * denom - Cij * ddenom) / (denom * denom);
+                es.push_back({a, b, tv[a]->getId(), tv[b]->getId(), dr});
+            }
+
+        for (const auto &e : es) {
+            const double dCij_e = dCof(bi, bj, e.a, e.b);
+            const double dCii_e = dCof(bi, bi, e.a, e.b);
+            const double dCjj_e = dCof(bj, bj, e.a, e.b);
+            const double dP_e = dCii_e * Cjj + Cii * dCjj_e;
+            const double ddenom_e = sC * sP * dP_e / (2.0 * D);
+            for (const auto &f : es) {
+                const double dCij_f = dCof(bi, bj, f.a, f.b);
+                const double dCii_f = dCof(bi, bi, f.a, f.b);
+                const double dCjj_f = dCof(bj, bj, f.a, f.b);
+                const double dP_f = dCii_f * Cjj + Cii * dCjj_f;
+                const double ddenom_f = sC * sP * dP_f / (2.0 * D);
+
+                const double d2Cij = d2Cof(bi, bj, e.a, e.b, f.a, f.b);
+                const double d2Cii = d2Cof(bi, bi, e.a, e.b, f.a, f.b);
+                const double d2Cjj = d2Cof(bj, bj, e.a, e.b, f.a, f.b);
+                const double d2P = d2Cii * Cjj + dCii_e * dCjj_f
+                                   + dCii_f * dCjj_e + Cii * d2Cjj;
+                const double d2D = sP * d2P / (2.0 * D)
+                                   - dP_e * dP_f / (4.0 * D * D * D);
+                const double d2denom = sC * d2D;
+
+                // r = N/Den, N = -Cij, Den = denom.
+                const double N = -Cij, Ne = -dCij_e, Nf = -dCij_f, Nef = -d2Cij;
+                const double Den = denom, De = ddenom_e, Df = ddenom_f,
+                             Def = d2denom;
+                const double d2r =
+                    ((Nef * Den + Ne * Df - Nf * De - N * Def) * Den
+                     - 2.0 * (Ne * Den - N * De) * Df) / (Den * Den * Den);
+
+                const cd d2theta = d2thetaDr2 * cd(e.dr, 0.0) * cd(f.dr, 0.0)
+                                   + dthetaDr * cd(d2r, 0.0);
+                const EK ke{std::min(e.va, e.vb), std::max(e.va, e.vb)};
+                const EK kf{std::min(f.va, f.vb), std::max(f.va, f.vb)};
+                hess[{ke, kf}] -= d2theta;      // eps = 2pi - sum theta
+            }
+        }
+    }
+    return hess;
+}
+
 double Simplex::area(bool wickRotate) const {
     if (edges.size() < 3) return 0.0;
     auto sq = [&](std::size_t k) -> double {

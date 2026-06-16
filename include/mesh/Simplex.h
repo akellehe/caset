@@ -331,6 +331,20 @@ class Simplex {
                            std::complex<double>>
     lorentzianDeficitAngleGradient() const;
 
+    /// Exact analytic Hessian of this hinge's deficit angle:
+    /// \f$ \partial^2 \varepsilon / \partial \ell^2_e \partial \ell^2_f \f$.
+    /// One derivative beyond ``lorentzianDeficitAngleGradient``: the same
+    /// per-top-cell Cayley-Menger machinery carried to second order, with the
+    /// cofactor second derivative
+    /// \f$ \partial^2 C_{pq} = \partial(\det B\,T) \f$ (T the gradient's
+    /// bracket), \f$ d\theta/dr = -1/\sin\theta \f$ and
+    /// \f$ d^2\theta/dr^2 = -r/\sin^3\theta \f$. Keyed by the (sorted) edge pair;
+    /// symmetric. Complex (the boost part is carried, not truncated).
+    [[nodiscard]] std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
+                                     std::pair<std::uint64_t, std::uint64_t>>,
+                           std::complex<double>>
+    lorentzianDeficitAngleHessian() const;
+
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
     /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``
     /// selects signed (default) vs. |l^2| (see ``gramMatrix``).
