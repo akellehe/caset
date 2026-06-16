@@ -366,6 +366,34 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    // === The discovered operator: ker L₁(W − ∂W) (#363) ===
+
+    /// The interior 1-cells of \f$ W - \partial W \f$ — the edges both of whose
+    /// endpoints are **interior** vertices (on no \f$ \partial W \f$ face) — as
+    /// sorted \f$ (u, v) \f$ tuples in canonical `ChainComplex` \f$ C_1 \f$ order:
+    /// the column ordering of `bulkMinusBoundaryHarmonicMatrix`. Empty when there
+    /// is no interior bulk (a bare, un-grown cobordism is all boundary).
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> bulkMinusBoundaryCells()
+        const;
+
+    /// \f$ \ker L_1(W - \partial W) \f$ — the harmonic 1-forms of the
+    /// **combinatorial** (unit-weight, signature-blind) Hodge Laplacian
+    /// \f$ L_1 \f$ of the bulk with the **full \f$ \partial W \f$ subcomplex
+    /// deleted**: the subcomplex induced on the interior vertices (the bulk
+    /// "with the boundary removed"). Restricts the integer boundary maps
+    /// \f$ \partial_1, \partial_2 \f$ (`ChainComplex`) to the interior cells and
+    /// eigendecomposes \f$ L_1 = \partial_1^{\top}\partial_1 +
+    /// \partial_2\partial_2^{\top} \f$, returning the \f$ |\lambda| < \text{tol} \f$
+    /// eigenvectors stacked as the **rows** of a flat row-major
+    /// \f$ \dim\ker L_1 \times |\text{interior } C_1| \f$ complex array
+    /// (ascending-eigenvalue order), columns in `bulkMinusBoundaryCells()` order.
+    /// This is the geometry the **discovered operator** is read from: surgery
+    /// must first grow the interior so this is nonzero (a bare cobordism with
+    /// only a handful of interior vertices carries 0). Read fresh from the live
+    /// complex — surgery between calls moves it.
+    [[nodiscard]] std::vector<std::complex<double>> bulkMinusBoundaryHarmonicMatrix(
+        double tol = 1e-9) const;
+
     // === Surgery: the topology-changing interior remove move (#196) ===
 
     /// The interior top cells eligible for surgery removal: top cells whose

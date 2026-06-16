@@ -836,6 +836,11 @@ operator U has ``U[i*dB + j] = U_{ij}``. Locked conventions:
             py::arg("U"), py::arg("dA"), py::arg("dB"),
             R"doc(Vectorise a dA×dB operator: vec(U) = Σ_{ij} U_{ij} |i⟩⊗|j⟩,
 the length-(dA·dB) row-major flatten.)doc")
+        .def_static("unvectorize", &ChoiJamiolkowski::unvectorize,
+            py::arg("v"), py::arg("dA"), py::arg("dB"),
+            R"doc(Un-vectorise (the inverse of vectorize): reshape a
+length-(dA·dB) state back into the dA×dB operator U_{ij} = v[i·dB + j].
+The validated row-major reshape, so unvectorize(vectorize(U)) == U.)doc")
         .def_static("singularValues", &ChoiJamiolkowski::singularValues,
             py::arg("U"), py::arg("dA"), py::arg("dB"),
             R"doc(Singular values of the dA×dB operator U (descending); the
@@ -856,6 +861,11 @@ conj(psiA_i)·U_{ij}·psiB_j.)doc")
             py::arg("U"), py::arg("d"),
             R"doc(Choi–Jamiołkowski state (U⊗I)|Φ⁺⟩ = (1/√d)·vec(U) of a square
 d×d operator (length d·d, row-major; a unit vector for unitary U).)doc")
+        .def_static("operatorFromChoiState", &ChoiJamiolkowski::operatorFromChoiState,
+            py::arg("state"), py::arg("d"),
+            R"doc(Recover U from its Choi state (the inverse of choiState):
+U = √d · unvectorize(state), flat row-major (length d·d); the original
+operator up to the global phase the state carries.)doc")
         .def_static("choiMatrix", &ChoiJamiolkowski::choiMatrix,
             py::arg("U"), py::arg("d"),
             R"doc(Choi matrix J(U) = |state⟩⟨state| of a square d×d operator

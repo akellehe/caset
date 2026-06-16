@@ -74,6 +74,15 @@ class ChoiJamiolkowski {
     [[nodiscard]] static std::vector<std::complex<double>> vectorize(
         const std::vector<std::complex<double>> &U, int dA, int dB);
 
+    /// Un-vectorise — the inverse of `vectorize`: reshape a length-(dA·dB) state
+    /// |v⟩ = Σ_{ij} v_{ij} |i⟩_A ⊗ |j⟩_B back into the dA×dB operator U with
+    /// U_{ij} = v_{i·dB + j}. With the row-major convention this is the validated
+    /// reshape — the returned buffer equals the input (length dA·dB), now read as
+    /// a matrix — so `unvectorize(vectorize(U), dA, dB) == U`. Throws
+    /// std::invalid_argument if v.size() != dA·dB or a dimension is non-positive.
+    [[nodiscard]] static std::vector<std::complex<double>> unvectorize(
+        const std::vector<std::complex<double>> &v, int dA, int dB);
+
     /// Singular values of the dA×dB operator U (Eigen JacobiSVD), in descending
     /// order; min(dA, dB) of them. These are the Schmidt coefficients of vec(U).
     [[nodiscard]] static std::vector<double> singularValues(
@@ -108,6 +117,15 @@ class ChoiJamiolkowski {
     /// if U.size() != d·d or d is non-positive.
     [[nodiscard]] static std::vector<std::complex<double>> choiState(
         const std::vector<std::complex<double>> &U, int d);
+
+    /// Recover the operator U from its Choi–Jamiołkowski *state* — the inverse of
+    /// `choiState`. Since |Φ_U⟩ = (1/√d)·vec(U), U = √d · unvectorise(state),
+    /// returned flat row-major (length d·d). For a unit Choi state of a unitary
+    /// this is that unitary up to the global phase the state carries (so compare
+    /// up to phase). Throws std::invalid_argument if state.size() != d·d or d is
+    /// non-positive.
+    [[nodiscard]] static std::vector<std::complex<double>> operatorFromChoiState(
+        const std::vector<std::complex<double>> &state, int d);
 
     /// Choi *matrix* J(U) = |Φ_U⟩⟨Φ_U| of a square d×d operator U: the
     /// (d·d)×(d·d) density matrix of choiState(U, d), returned flat row-major

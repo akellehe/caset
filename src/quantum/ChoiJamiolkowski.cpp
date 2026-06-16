@@ -78,6 +78,17 @@ std::vector<std::complex<double>> ChoiJamiolkowski::vectorize(
     return U;
 }
 
+std::vector<std::complex<double>> ChoiJamiolkowski::unvectorize(
+    const std::vector<std::complex<double>> &v, int dA, int dB) {
+    requirePositiveDims(dA, dB, "ChoiJamiolkowski::unvectorize");
+    // The inverse of vectorize: |v⟩ = Σ_{ij} v_{ij} |i⟩_A ⊗ |j⟩_B reshapes to the
+    // operator U_{ij} = v_{i·dB + j}. With the row-major convention the matrix
+    // buffer is the vector buffer, so validate the length (dA·dB) and return it,
+    // now read as a dA×dB operator.
+    asMatrix(v, dA, dB, "ChoiJamiolkowski::unvectorize");
+    return v;
+}
+
 std::vector<double> ChoiJamiolkowski::singularValues(
     const std::vector<std::complex<double>> &U, int dA, int dB) {
     requirePositiveDims(dA, dB, "ChoiJamiolkowski::singularValues");
@@ -144,6 +155,17 @@ std::vector<std::complex<double>> ChoiJamiolkowski::choiState(
     std::vector<std::complex<double>> state = U;
     for (auto &z : state) z *= inv;
     return state;
+}
+
+std::vector<std::complex<double>> ChoiJamiolkowski::operatorFromChoiState(
+    const std::vector<std::complex<double>> &state, int d) {
+    requirePositiveDims(d, d, "ChoiJamiolkowski::operatorFromChoiState");
+    asMatrix(state, d, d, "ChoiJamiolkowski::operatorFromChoiState");
+    // choiState gives (1/√d)·vec(U); invert by U = √d · unvectorise(state).
+    const double scale = std::sqrt(static_cast<double>(d));
+    std::vector<std::complex<double>> U = state;
+    for (auto &z : U) z *= scale;
+    return U;
 }
 
 std::vector<std::complex<double>> ChoiJamiolkowski::choiMatrix(
