@@ -213,6 +213,51 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
     return g;
 }
 
+std::vector<std::vector<std::complex<double>>>
+ReggeSolver::actionHessianExact() const {
+    using cd = std::complex<double>;
+    const auto edges = spacetime_->getEdgeList()->toVector();
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> eidx;
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        const std::uint64_t a = edges[i]->getSource()->getId();
+        const std::uint64_t b = edges[i]->getTarget()->getId();
+        eidx[{std::min(a, b), std::max(a, b)}] = i;
+    }
+    const std::size_t E = edges.size();
+    std::vector<std::vector<cd>> H(E, std::vector<cd>(E, cd(0.0, 0.0)));
+    // d^2 S/dl^2_e dl^2_f = sum_h [ d2V_ef*eps + dV_e*dEps_f + dV_f*dEps_e
+    //                              + V*d2Eps_ef ].
+    for (const auto &h : collectHinges()) {
+        const cd eps = h->lorentzianDeficitAngle();
+        const double V = h->dualVolume();
+        const auto dEps = h->lorentzianDeficitAngleGradient();
+        const auto dV = h->dualVolumeGradient();
+        const auto d2Eps = h->lorentzianDeficitAngleHessian();
+        const auto d2V = h->dualVolumeHessian();
+        for (const auto &[e, dVe] : dV) {
+            const auto ie = eidx.find(e);
+            if (ie == eidx.end()) continue;
+            const auto dEe_it = dEps.find(e);
+            const cd dEe = (dEe_it != dEps.end()) ? dEe_it->second : cd(0.0, 0.0);
+            for (const auto &[f, dVf] : dV) {
+                const auto if_ = eidx.find(f);
+                if (if_ == eidx.end()) continue;
+                const auto dEf_it = dEps.find(f);
+                const cd dEf =
+                    (dEf_it != dEps.end()) ? dEf_it->second : cd(0.0, 0.0);
+                cd term = dVe * dEf + dVf * dEe;       // cross terms
+                const auto k = std::make_pair(e, f);
+                const auto d2Vit = d2V.find(k);
+                if (d2Vit != d2V.end()) term += d2Vit->second * eps;
+                const auto d2Eit = d2Eps.find(k);
+                if (d2Eit != d2Eps.end()) term += V * d2Eit->second;
+                H[ie->second][if_->second] += term;
+            }
+        }
+    }
+    return H;
+}
+
 double ReggeSolver::actionGradientNorm() const {
     auto g = actionGradient();
     double F = 0.0;

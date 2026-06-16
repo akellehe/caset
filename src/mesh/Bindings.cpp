@@ -390,6 +390,11 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "dict {(v0,v1): float}. Differentiates the DEC circumradius recursion "
            "(R^2 = h^T G^-1 h); matches finite differences to machine precision. "
            "(n-2)-hinge case only.")
+      .def("dualVolumeHessian", &Simplex::dualVolumeHessian,
+           "Exact analytic d^2(dualVolume)/d(l^2_e)d(l^2_f), as a dict "
+           "{((v0,v1),(v2,v3)): float}. One derivative beyond the gradient "
+           "(d2CircumR2 + signed-sqrt second derivative); symmetric. "
+           "(n-2)-hinge case only.")
       .def("hodgeStar", &Simplex::hodgeStar,
            "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
            "content).")
@@ -408,7 +413,12 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "Exact analytic d(deficit)/d(l^2_e) for each surrounding edge, as a "
            "dict {(v0,v1): complex}. Cofactor-derivative of the Cayley-Menger "
            "dihedral with the boost-safe sin(theta) branch; matches finite "
-           "differences to machine precision.");
+           "differences to machine precision.")
+      .def("lorentzianDeficitAngleHessian",
+           &Simplex::lorentzianDeficitAngleHessian,
+           "Exact analytic d^2(deficit)/d(l^2_e)d(l^2_f), as a dict "
+           "{((v0,v1),(v2,v3)): complex}. One derivative beyond the gradient "
+           "(cofactor second derivative + d^2theta/dr^2); symmetric.");
 
   py::class_<SimplexHash, std::shared_ptr<SimplexHash> >(m, "SimplexHash")
       .def(py::init<>());
