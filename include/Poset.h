@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // Hasse-cover representation of a finite partial order over integer-
 // indexed nodes. Storage uses tessera's standard mesh primitives

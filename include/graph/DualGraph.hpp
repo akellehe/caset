@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // Centralised definition of the simplicial-complex dual graph: every
 // top-simplex is a vertex, and two top-simplices are adjacent when they

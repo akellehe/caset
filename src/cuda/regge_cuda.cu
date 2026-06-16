@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // CUDA-accelerated Regge solver: deficit angles and numerical gradients.
 //

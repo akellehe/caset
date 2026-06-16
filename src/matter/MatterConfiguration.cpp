@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 #include "matter/MatterConfiguration.h"
 #include "spacetime/Spacetime.h"
 #include "mesh/Simplex.h"

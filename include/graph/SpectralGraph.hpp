@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // Abstract spectral-graph interface: a vertex count plus a Laplacian
 // matvec is enough to compute the diagonal of the heat kernel, the

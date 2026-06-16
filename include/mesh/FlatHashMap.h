@@ -1,4 +1,4 @@
-// MIT License -- Copyright (c) 2025 Andrew Kelleher
+// Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 //
 // Open-addressing hash map with linear probing for uint64_t keys.
 // Designed for fingerprint-keyed lookups in the CDT hot path where
