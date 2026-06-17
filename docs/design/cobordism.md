@@ -2,7 +2,7 @@
 
 Our goal is to build an emergent operator from starting and ending states in a pair of pants through a cobordism bulk 
 mediated by the Regge action on the _dual_ complex while maintaining a valid simplicial manifold in both spaces. Let $ 
-\psi_A \in \mathscr{H_A} $ and $ \psi_B \in \mathscr{H}_B $ represent qubit states of each of two quantum systems, 
+\psi_A \in \mathscr{H}_A $ and $ \psi_B \in \mathscr{H}_B $ represent qubit states of each of two quantum systems, 
 respectively. Let these be two input states to a cobordism $ W_{AB} $. Let $ \psi_{AB} $ be the expected output/final 
 state of the same cobordism.
 
@@ -34,25 +34,27 @@ $$
 \ker \big(L_1^{U^{Choi}_{AB}}\big)
 $$
 
-where $\operatorname{dim}(U^{Choi}_{AB}) = 4$.
+where the four Choi components are constrained by charge conservation $\sum_k (U^{Choi}_{AB})_k = 0$, so the realizable space has $\operatorname{dim}(U^{Choi}_{AB}) = 3$.
+
+This $\sum = 0$ charge-conserving structure is the same one that carries the color singlet $[1, \omega, \omega^2]$ in the color-singlet (register) construction: there three holes give $b_1 = 2$ on the $\sum = 0$ hyperplane, and here four vertex-disjoint holes give $b_1 = 3 = \operatorname{dim}(U^{Choi}_{AB})$ — the bare icosahedron's capacity ($12$ vertices over $3$).
 
 Fix $ \psi_A \in \ker(L_1^A) $ so that the state, $ \psi_A $ is represented by $ L_1^A$. Similarly fix $ \psi_B \in 
 \ker(L_1^B) $ as well as $ \psi_{AB} \in \ker(L_1^{AB})$ be the expected final state.
 
-Let $ W_{AB} = \operatorname{geo}(U^{Choi}_{AB}) \sqcup \partial W_{AB}$ with $U^{Choi}_{AB} \in \ker(
-\operatorname{L_1^{U^{Choi}_{AB}}}) $ emerge from the optimization process described below.
+Let $ W_{AB} = \operatorname{geo}(U^{Choi}_{AB}) \cup \partial W_{AB}$ with $U^{Choi}_{AB} \in \ker(
+L_1^{U^{Choi}_{AB}}) $ emerge from the optimization process described below.
 
 ## Residuals
 
-Let's construct an objective function, $ F $, that we can minimize to build the bulk of our cobordism, $ W_{AB} - \partial W_{AB}$, 
-from the boundary $ \partial W_{AB} $.
+Let's construct an objective function, $ F $, that we can minimize to build the bulk of our cobordism, $ W_{AB} - 
+\partial W_{AB}$, from the boundary $ \partial W_{AB} $.
 
 The first term will involve the Regge Action, $S_{Regge}$. We want to extremize it such that $ \delta S_{Regge} = 
 0 $ on the space _dual_ to the primal complex $W_{AB}$, namely $ \star W_{AB} $. We use the gradient as the part to 
 minimize: 
 
 $$ 
-r_{S_{Regge}} = \beta|{\nabla S_{Regge}}|^2.
+r_{S_{Regge}} = \beta\|\nabla S_{Regge}\|^2.
 $$
 
 Where $ \beta $ is a weight on the impact of the action.
@@ -60,7 +62,7 @@ Where $ \beta $ is a weight on the impact of the action.
 Next we add residuals that force $ \psi_i \in \ker(L_1^i) $ for each $i \in \{A, B, AB\} $.
 
 $$
-r_\psi = \sum_i \big|\psi_i - P_{\ker L_1^i} \psi_i \big|^2 = \sum_i \big|(I - P_{\ker L_1^i}) \psi_i \big|^2
+r_\psi = \sum_i \big\|\psi_i - P_{\ker L_1^i} \psi_i \big\|^2 = \sum_i \big\|(I - P_{\ker L_1^i}) \psi_i \big\|^2
 $$
 
 where $P_{\ker L_1^i}$ is the orthogonal projector onto the kernel and the element is the projection $ P_{\ker L_1^i} 
@@ -73,18 +75,18 @@ $$
 and then we use the exact analytic Jacobian to do a least squares gradient descent over the residual.
 
 $$
-J = \frac{\partial f}{dx} = \big[ \beta \nabla^2 S_{Regge} \partial_x (I - P_i) \psi_i \big] 
+J = \frac{\partial f}{\partial x} = \begin{bmatrix} \sqrt{\beta}\, \nabla^2 S_{Regge} \\ \partial_x (I - P_i) \psi_i \end{bmatrix} 
 $$
 
 The least-squares solver (Levenberg-Marquardt) consumes the exact analytic Jacobian above. Its stationarity block is the 
-exact action Hessian $\nabla^2 S_{Regge}$; it's state constraint block is the analytic derivative of projected periods.
+exact action Hessian $\nabla^2 S_{Regge}$; its state constraint block is the analytic derivative of projected periods.
 
 ## Optimization
 
 The algorithm converges when $ r < \epsilon$, where $\epsilon$ is a user-defined tolerance, or when MAX_ATTEMPTS is 
 reached, defaulting to 100.
 
-1. Start with an icosahedron connecting the boundary as the minimal manifold/complex representing the bulk of $W_{AB}$ connecting the starting states $\operatorname{geo}(\psi_A) \sqcup \operatorname{geo}(\psi_B) $ to the ending state $ \operatorname{geo}(\psi_{AB}) $ 
+1. Start with an icosahedron connecting the boundary as the minimal manifold/complex representing the bulk of $W_{AB}$ connecting the starting states $\operatorname{geo}(\psi_A) \sqcup \operatorname{geo}(\psi_B) $ to the ending state $ \operatorname{geo}(\psi_{AB}) $. Open the bulk's holes by boundary-fixed surgery: remove $\operatorname{dim}(U^{Choi}_{AB}) + 1$ vertex-disjoint faces (`removeInteriorCell`), since removing $k$ vertex-disjoint faces from a $2$-sphere yields $b_1 = k - 1$; for the $\sum = 0$ constrained operator this is $4$ faces giving $b_1 = 3 = \operatorname{dim}(U^{Choi}_{AB})$. This surgery is the only operation that creates the operator's holes; the RemoveMove/AddMove Pachner moves below are topology-preserving and only relax the metric. 
 2. Now relax edge lengths by minimizing $r$ using the analytic gradient/hessian and a least squares optimizer. 
 3. Does the optimizer converge?
    1. Yes? Execute one RemoveMove (a pachner move, you can find in our code base) and relax again, and go to 3. 
