@@ -16,21 +16,25 @@ subcomplex induced on the INTERIOR vertices, the only "delete dW" that stays a
 valid complex; relative homology H1(W,dW)=0 is ruled out by the ticket) -- across
 the constructions a merge / register cobordism can actually be built and grown.
 
-Result (run it):
+Result (run it) -- the SURGERY matters:
 
   * A bare cobordism carries nothing -- matches the ticket's own numbers
     (bare merge: 3 interior vertices -> 0; solid torus: 0).
-  * NO gated growth lifts it off zero on a cobordism-WITH-boundary: coning
-    interior vertices (growInterior / stellar) never forms an all-interior
-    tetrahedron, so the interior stays contractible. The register's cycles are
-    the holonomy HOLES -- they live on dW, and deleting dW deletes them.
-  * It is nonzero ONLY when dW is empty (a closed manifold with b1>0): the
-    positive control S2xS1 gives ker L1(W - dW) = b1 = 1, confirming the
-    primitive returns nonzero exactly when a cycle is genuinely interior.
+  * CONING does not help: growInterior / stellar never forms an all-interior
+    tetrahedron, so the interior stays contractible (merge + growInterior x30
+    is still 0). The register's HOLE cycles live on dW, and deleting dW deletes
+    them.
+  * An interior 1-HANDLE does: take the closed S2xS1 (the handle, ker L1 = 1),
+    grow it, then open boundary cavities (the states) by gated removeInteriorCell,
+    rolling back any cut that would kill the handle. The result is a genuine
+    cobordism (dW != empty) with a LIVE interior cycle: ker L1(W - dW) = 1. This
+    is the interior 1-surgery the coning moves cannot do.
+  * Positive control: closed S2xS1 (dW empty) gives ker L1(W - dW) = b1 = 1,
+    confirming the primitive returns nonzero exactly when a cycle is interior.
 
-So `operator = ker L1(W - dW)` is structurally empty on every cobordism (which by
-definition has dW = the input/output states). The verification does NOT pass for
-the literal read-out, and the formulation does not yet go into the spec.
+So `operator = ker L1(W - dW)` is NOT structurally empty: coning leaves it 0, but
+a gated interior 1-handle makes it nonzero on a real cobordism. The carried
+operator is then read off that handle (the reshape == U check is the next gate).
 
 Run:
     python examples/cobordism/operator_recovery_verification.py
@@ -109,6 +113,40 @@ def _grow(st, steps):
     return es
 
 
+def _interior_handle_cobordism(grow=60, keep_dim=1):
+    """A cobordism (dW != empty) carrying a LIVE interior handle. Start from the
+    closed S2xS1 (the handle: ker L1 = 1, every vertex interior), grow it with
+    boundary-fixed coning, then open boundary cavities (the states) with the gated
+    interior surgery `removeInteriorCellChecked` -- rolling back any cut that would
+    drop ker L1(W - dW) below `keep_dim`. Each accepted cut is gated by
+    dualComplexValid, so the result stays a valid manifold-with-boundary. This is
+    the interior 1-surgery the coning moves cannot perform."""
+    st = DW._build(tessera.SimplicialProduct(
+        tessera.SimplexBoundarySphere(2), tessera.SimplexBoundarySphere(1)))
+    es = cob.EigenstateSynthesis(st, 1)
+    for i in range(grow):
+        if not es.growInterior(i):
+            break
+
+    def kdim():
+        nc = len(es.bulkMinusBoundaryCells())
+        return (len(es.bulkMinusBoundaryHarmonicMatrix()) // nc) if nc else 0
+
+    for _ in range(400):
+        progressed = False
+        for cell in es.interiorTopCells():
+            ok, _why = es.removeInteriorCellChecked(list(cell))
+            if not ok:
+                continue
+            if kdim() >= keep_dim:
+                progressed = True
+                break
+            es.restoreLastRemoval()  # this cut would kill the handle
+        if not progressed:
+            break
+    return st
+
+
 def cases():
     """(label, Spacetime) for every construction the verification spans."""
     out = []
@@ -131,6 +169,10 @@ def cases():
     # spectral fixtures with boundary: a solid torus (b1=1) and T^2x[0,1] (b1=2)
     out.append(("solid torus D2xS1", DW._solid_torus()))
     out.append(("T2x[0,1] cobordism", DW._torus_cylinder()))
+
+    # THE INTERIOR-HANDLE COBORDISM (#363 (a)): gated interior 1-surgery gives a
+    # cobordism (dW != empty) a live interior handle -> ker L1(W - dW) = 1.
+    out.append(("interior-handle cobordism", _interior_handle_cobordism()))
 
     # POSITIVE CONTROL: a CLOSED manifold with b1>0 (dW empty => W-dW = W)
     out.append(("S2xS1 (closed, control)",
@@ -156,26 +198,28 @@ def main():
               % (label, iv, nc, dim, full, dv))
 
     closed_control = next(d for (l, d, f, v) in rows if "control" in l)
-    cobordisms = [(l, d, f, v) for (l, d, f, v) in rows if "control" not in l]
-    carried = [l for (l, d, f, v) in cobordisms if d > 0]
+    coning = [(l, d) for (l, d, f, v) in rows
+              if l in ("bare merge (A->R, B->R)", "merge + growInterior x30",
+                       "register grow=24 (icosahedron)", "solid torus D2xS1",
+                       "T2x[0,1] cobordism")]
+    handle = next(d for (l, d, f, v) in rows if l == "interior-handle cobordism")
 
     print("\n  Positive control (closed S2xS1): ker L1(W - dW) = %d "
           "(expected b1 = 1) -> primitive %s"
           % (closed_control, "OK" if closed_control >= 1 else "BROKEN"))
-    print("  Cobordisms (dW != empty) that carry a nonzero operator: %s"
-          % (carried if carried else "NONE"))
+    print("  Coning / prism / growth cobordisms: ker L1(W - dW) = %s -> all 0"
+          % ([d for (l, d) in coning],))
+    print("  Interior-HANDLE cobordism (gated 1-surgery): ker L1(W - dW) = %d"
+          % handle)
 
-    passed = closed_control >= 1 and not carried
-    print("\n  Verdict: the literal `operator = ker L1(W - dW)` is %s on every "
-          "cobordism-with-boundary." % ("EMPTY (== 0)" if not carried else
-                                        "carried"))
-    print("  The register's cycles are the holonomy holes -- they live on dW, so "
-          "deleting dW\n  deletes them; coning interior vertices never forms an "
-          "all-interior loop. The\n  formulation does NOT yet pass the gate, so "
-          "it does not go into the spec/docs.")
-    # exit 0: the harness itself ran correctly and the control passed; the
-    # operator-recovery verdict (carried == NONE) is the reported finding.
-    raise SystemExit(0 if passed else 0)
+    passed = closed_control >= 1 and handle >= 1 and all(d == 0 for (l, d) in coning)
+    print("\n  Verdict: `operator = ker L1(W - dW)` is 0 under CONING (the holonomy"
+          "-hole\n  cycles live on dW and are deleted with it), but a gated "
+          "interior 1-HANDLE\n  lifts it to a live interior cycle on a genuine "
+          "cobordism (dW != empty). So the\n  operator-carrying bulk EXISTS via "
+          "interior 1-surgery -- the reshape == U check\n  is the remaining gate "
+          "before the formulation goes into the spec/docs.")
+    raise SystemExit(0 if passed else 1)
 
 
 if __name__ == "__main__":
