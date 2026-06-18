@@ -366,6 +366,59 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    // === Periods over arbitrary signed edge-loops (#363) ===
+    // A removed triangle reads only its own boundary, but a register cycle (e.g.
+    // a torus S^1) is no triangle's boundary. These read the period of the live
+    // harmonics over ANY closed walk of oriented edges, so both cycles of a T^2
+    // qubit register are pinnable.
+
+    /// An oriented edge \f$ (u \to v) \f$; its period contribution is
+    /// \f$ +h(u,v) \f$ when \f$ u < v \f$ (along the stored orientation), else
+    /// \f$ -h(u,v) \f$.
+    using OrientedEdge = std::pair<std::uint64_t, std::uint64_t>;
+    /// A 1-cycle as a closed walk of oriented edges. A removed triangle
+    /// \f$ h_0 < h_1 < h_2 \f$ is the loop \f$ h_0 \to h_1 \to h_2 \to h_0 \f$
+    /// (the identical signed covector and leak edge).
+    using EdgeLoop = std::vector<OrientedEdge>;
+
+    /// `cyclePeriods` over signed edge-loops: a flat row-major
+    /// \f$ \dim\ker L_k \times |\text{loops}| \f$ matrix whose
+    /// \f$ [r\,|\text{loops}|+q] \f$ entry is harmonic \f$ r \f$ summed along
+    /// loop \f$ q \f$. Reads the live harmonics.
+    [[nodiscard]] std::vector<std::complex<double>> cyclePeriodsOverLoops(
+        const std::vector<EdgeLoop> &loops) const;
+
+    /// `residualForPeriods` over signed edge-loops: \f$ \to 0 \f$ iff
+    /// `targetPeriods` lie in the span the live harmonics carry over `loops`.
+    /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
+    [[nodiscard]] double residualForLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// Exact analytic gradient of `residualForLoops` w.r.t. each edge's squared
+    /// length, in `cellSimplices()` order — the shared core of
+    /// `residualForPeriodsGradient`.
+    /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
+    [[nodiscard]] std::vector<double> residualForLoopsGradient(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// The carried representative over signed edge-loops (the loop analogue of
+    /// `carriedRepresentative`): the metric harmonic 1-cochain matching
+    /// `targetPeriods` over `loops` (minimum-norm), a full `order()`-length cell
+    /// vector. The whole-W metric harmonic the L_1(W) read-out rides on.
+    [[nodiscard]] std::vector<std::complex<double>> carriedRepresentativeOverLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// The periods of a GIVEN 1-cochain over signed edge-loops:
+    /// \f$ \sum_{(u,v)\in\text{loop}} \pm\,\text{cochain}[uv] \f$ — the discrete
+    /// \f$ \oint \f$ of a supplied cochain (vs the live harmonics in
+    /// `cyclePeriodsOverLoops`). `cochain` is an `order()`-length cell vector.
+    [[nodiscard]] std::vector<std::complex<double>> periodsOfCochainOverLoops(
+        const std::vector<std::complex<double>> &cochain,
+        const std::vector<EdgeLoop> &loops) const;
+
     // === The discovered operator: ker L₁(W − ∂W) (#363) ===
 
     /// The interior 1-cells of \f$ W - \partial W \f$ — the edges both of whose
@@ -531,6 +584,23 @@ class EigenstateSynthesis {
     };
     [[nodiscard]] RegisterReadout assembleRegisterReadout(
         const std::vector<std::vector<std::uint64_t>> &holes) const;
+
+    // The loop analogue of assembleRegisterReadout: P[r*m+q] = sum over loop q's
+    // oriented edges of (+/-1) * H[r, edge]; leak = the loop's first edge.
+    [[nodiscard]] RegisterReadout assembleReadoutOverLoops(
+        const std::vector<EdgeLoop> &loops) const;
+
+    // The carried representative from a finished read-out — shared by the hole
+    // and loop period paths (the lstsq projection plus each cycle's leak).
+    [[nodiscard]] std::vector<std::complex<double>> carriedFromReadout(
+        const RegisterReadout &ro,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    // The cycle-agnostic core of the period-residual gradient: exact
+    // d r_U / d l^2 with the cycles given as signed edge-loops.
+    [[nodiscard]] std::vector<double> periodGradientOverLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
 
     // Re-create the top cell of a Removal (createSimplexTracked rebuilds its
     // missing edges = the orphaned ones) and restore those edges' weights/phases.

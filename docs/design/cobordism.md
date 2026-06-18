@@ -109,3 +109,19 @@ whole setup.
 As well as any useful statistics about the convergence process. We should especially make note of topological parameters, 
 and call out the observed topologies.
 
+## Realized topology and initialization
+
+The bulk $W_{AB}$ is realized as $(T^2 - 3\,\text{holes}) \times S^1$, i.e. $T^3$ with three $(\text{hole} \times S^1)$ solid tori removed.
+
+- $\partial W = T^2_A \sqcup T^2_B \sqcup T^2_{AB}$: three tori, one per state, each with $b_1 = 2$ — the hole-circle and the $S^1$, the two cycles a qubit register carries.
+- $\ker L_1(W - \partial W) = 3$ interior handles (the two genus cycles and the $S^1$): the operator, $\operatorname{dim}(U^{Choi}) = 3$. A genus-1 base is required — the interior count is $2g + h - 2$, which equals $3$ only for $g = 1, h = 3$; a sphere base ($g = 0$) gives $1$.
+
+Initialization:
+
+1. Build $T^2 = \operatorname{SimplicialProduct}(S^1, S^1)$, subdivide once (the minimal torus admits only two vertex-disjoint holes; one subdivision admits three), remove three vertex-disjoint faces, and staircase the remainder over $S^1$ (three layers, looped).
+2. Seed the edge lengths slightly off uniform $\ell^2 = 1$. At $\ell^2 = 1$ a non-null metric-Hodge eigenvalue sits at zero and the period-residual gradient diverges; a small spread removes it. $\ell^2$ stays free to go negative — the causal type is emergent, not clamped.
+
+The states stay pinned (all three, $\psi_A$, $\psi_B$ and $\psi_{AB}$); the operator is what emerges. The state residual reads periods over the torus cycles via $\operatorname{residualForLoops}$ over signed edge-loops, because the $S^1$ cycle is no triangle boundary. The six boundary cycles span $b_1(W) = 5$, so the joint read-out is over-determined ($6 > 5$) and its gradient is non-singular; a single torus's two cycles ($2 < 5$) would not be.
+
+The search executes a batch of boundary-fixed Pachner moves (flip, inverse flip, shift, add — topology-preserving, so $\ker L_1(W - \partial W)$ is held) before each relaxation, keeping the lowest-residual operator: the moves change the triangulation and hence the operator, and the relaxed residual scores each.
+

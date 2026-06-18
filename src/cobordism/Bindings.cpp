@@ -23,6 +23,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/MergeCobordism.h"
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
 #include "cobordism/Register.h"
@@ -529,6 +530,23 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "approximation (~1e-5 vs FP64); residualForPeriodsGradient stays the "
            "default and the correctness oracle. Requires a TESSERA_CUDA build "
            "(raises otherwise), and raises on a hole/target length mismatch.")
+      .def("cyclePeriodsOverLoops",
+           &EigenstateSynthesis::cyclePeriodsOverLoops, py::arg("loops"),
+           "cyclePeriods over arbitrary signed edge-loops -- each loop a list of "
+           "oriented edges (from, to). Reads the period of the live harmonics "
+           "over ANY closed walk (e.g. a torus S^1 cycle, which is no triangle "
+           "boundary) as a flat dim x |loops| matrix.")
+      .def("residualForLoops", &EigenstateSynthesis::residualForLoops,
+           py::arg("loops"), py::arg("target_periods"),
+           "residualForPeriods over arbitrary signed edge-loops: -> 0 iff the "
+           "target_periods lie in the span the live harmonics carry over the "
+           "loops. Pins cycles a removed triangle cannot (the torus S^1).")
+      .def("residualForLoopsGradient",
+           &EigenstateSynthesis::residualForLoopsGradient,
+           py::arg("loops"), py::arg("target_periods"),
+           "Exact analytic gradient of residualForLoops w.r.t. each edge's "
+           "squared length, in cellSimplices() order -- the shared core that "
+           "residualForPeriodsGradient also routes through.")
       // ----- The discovered operator: ker L1(W - dW) (#363) -----
       .def("bulkMinusBoundaryCells",
            &EigenstateSynthesis::bulkMinusBoundaryCells,
@@ -1272,4 +1290,69 @@ prepared states, reproduces the harmonic overlap.)doc")
            "dimensions differ.")
       .def("norm", &PreparedBoundaryState::norm,
            "The Euclidean norm sqrt(sum |c_a|^2) of the amplitude vector.");
+
+  // ----- The merge cobordism: emergent operator from a pair-of-pants (#363) -----
+  py::class_<MergeCobordism> mc(m, "MergeCobordism",
+      R"doc(The merge cobordism (#363): an emergent operator from starting and
+ending states through a 2-complex pair-of-pants bulk, mediated by the dual Regge
+action. Implements docs/design/cobordism.md.
+
+Builds dW = geo(psi_A) u geo(psi_B) u geo(psi_AB), seeds an icosahedron bulk and
+opens 4 vertex-disjoint holes by boundary-fixed surgery so b_1 = 3 (the Sigma=0
+operator dimension), relaxes the interior edge lengths to a stationary point of
+the dual Regge action (Gauss-Newton/Levenberg-Marquardt on the EXACT analytic
+action Hessian, no finite differences) under converge->RemoveMove /
+fail->AddMove boundary-fixed Pachner moves, and reads the operator off the
+relaxed bulk, U_AB = unvec(ker L_1(W - dW)).)doc");
+
+  py::class_<MergeCobordism::Stats>(mc, "Stats",
+      "Convergence + observed-topology statistics of the merge relaxation.")
+      .def_readonly("converged", &MergeCobordism::Stats::converged)
+      .def_readonly("residual", &MergeCobordism::Stats::residual)
+      .def_readonly("stat_action_residual",
+                    &MergeCobordism::Stats::statActionResidual)
+      .def_readonly("state_residual", &MergeCobordism::Stats::stateResidual)
+      .def_readonly("dual_action", &MergeCobordism::Stats::dualAction)
+      .def_readonly("attempts", &MergeCobordism::Stats::attempts)
+      .def_readonly("add_moves", &MergeCobordism::Stats::addMoves)
+      .def_readonly("remove_moves", &MergeCobordism::Stats::removeMoves)
+      .def_readonly("flip_moves", &MergeCobordism::Stats::flipMoves)
+      .def_readonly("relax_iterations", &MergeCobordism::Stats::relaxIterations)
+      .def_readonly("betti_cobordism", &MergeCobordism::Stats::bettiCobordism)
+      .def_readonly("b1_bulk", &MergeCobordism::Stats::b1Bulk)
+      .def_readonly("ker_l1_bulk", &MergeCobordism::Stats::kerL1Bulk)
+      .def_readonly("interior_vertices",
+                    &MergeCobordism::Stats::interiorVertices)
+      .def_readonly("topology", &MergeCobordism::Stats::topology);
+
+  mc.def(py::init<const std::vector<std::vector<std::complex<double>>> &,
+                  const std::vector<std::vector<std::complex<double>>> &,
+                  const std::vector<std::complex<double>> &, double, double, int,
+                  std::uint64_t, bool>(),
+         py::arg("input_states"), py::arg("output_states"),
+         py::arg("U") = std::vector<std::complex<double>>{},
+         py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6,
+         py::arg("max_attempts") = 100, py::arg("seed") = 0,
+         py::arg("verbose") = false,
+         "Build and run the merge. input_states/output_states are lists of "
+         "complex amplitude vectors; output_states is required unless U (a flat "
+         "row-major d x d operator) is supplied, in which case it is computed "
+         "from U and U is otherwise ignored.")
+      .def_property_readonly("input_states", &MergeCobordism::inputStates)
+      .def_property_readonly("output_states", &MergeCobordism::outputStates)
+      .def_property_readonly("cobordism", &MergeCobordism::cobordism,
+                             "The relaxed cobordism W.")
+      .def_property_readonly("boundary", &MergeCobordism::boundary,
+                             "The boundary dW top cells (sorted vertex tuples).")
+      .def_property_readonly("bulk", &MergeCobordism::bulk,
+                             "The bulk W - dW interior 1-cells (ker L_1 column "
+                             "order).")
+      .def_property_readonly("operator_U", &MergeCobordism::operatorU,
+                             "U_AB = unvec(ker L_1(W - dW)), flat row-major d x d.")
+      .def_property_readonly("choi_state", &MergeCobordism::choiState,
+                             "The carried Choi state (Sigma=0 period vector).")
+      .def_property_readonly("output_state", &MergeCobordism::outputState,
+                             "Emergent psi_AB: the metric L_1(W) harmonic carrying "
+                             "the inputs, read over the output cycles.")
+      .def_property_readonly("stats", &MergeCobordism::stats);
 }
