@@ -280,6 +280,34 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "rule over the per-hinge dualVolume/deficit Hessians + gradients (no "
            "finite differences); matches a central difference of "
            "actionGradientExact to machine precision.")
+      .def("actionHessianExactSparse",
+           [](const ReggeSolver &self) {
+               // Sparse exact Hessian as a COO tuple (rows, cols, values, n).
+               // Hand-rolled rather than returned via pybind11/eigen.h, whose
+               // sparse binding yields an empty CSC under LTO in this build
+               // (cf. quantum EmergentGraph.laplacianCOO).
+               const auto H = self.actionHessianExactSparse();
+               const auto nnz = static_cast<std::size_t>(H.nonZeros());
+               std::vector<int> rows, cols;
+               std::vector<std::complex<double>> values;
+               rows.reserve(nnz);
+               cols.reserve(nnz);
+               values.reserve(nnz);
+               for (int k = 0; k < H.outerSize(); ++k)
+                   for (Eigen::SparseMatrix<std::complex<double>>::InnerIterator
+                            it(H, k); it; ++it) {
+                       rows.push_back(static_cast<int>(it.row()));
+                       cols.push_back(static_cast<int>(it.col()));
+                       values.push_back(it.value());
+                   }
+               return py::make_tuple(rows, cols, values,
+                                     static_cast<int>(H.rows()));
+           },
+           "Sparse exact analytic Hessian as a COO tuple (rows, cols, values, "
+           "n), getEdgeList order — wrap with "
+           "scipy.sparse.coo_matrix((values, (rows, cols)), shape=(n, n)). Same "
+           "values as the dense actionHessianExact on the nonzero pattern (edge "
+           "pairs sharing a hinge), assembled at O(nnz) memory instead of O(|E|²).")
       .def("step", &ReggeSolver::step,
            py::arg("learningRate") = 0.001,
            "One gradient-descent step on F = ||∇S||². Returns F before the update.")
