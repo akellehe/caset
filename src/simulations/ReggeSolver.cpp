@@ -19,7 +19,10 @@
 #include <map>
 #include <numbers>
 #include <set>
+#include <tuple>
 #include <utility>
+
+#include <Eigen/SparseCore>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -295,42 +298,111 @@ ReggeSolver::actionHessianExact() const {
         std::vector<std::vector<cd>> &Hloc =
             partials[static_cast<std::size_t>(tid)];
         #pragma omp for schedule(static)
-        for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
-            const auto &h = hinges[static_cast<std::size_t>(hi)];
-            const cd eps = h->lorentzianDeficitAngle();
-            const double V = h->dualVolume();
-            const auto dEps = h->lorentzianDeficitAngleGradient();
-            const auto dV = h->dualVolumeGradient();
-            const auto d2Eps = h->lorentzianDeficitAngleHessian();
-            const auto d2V = h->dualVolumeHessian();
-            for (const auto &[e, dVe] : dV) {
-                const auto ie = eidx.find(e);
-                if (ie == eidx.end()) continue;
-                const auto dEe_it = dEps.find(e);
-                const cd dEe =
-                    (dEe_it != dEps.end()) ? dEe_it->second : cd(0.0, 0.0);
-                for (const auto &[f, dVf] : dV) {
-                    const auto if_ = eidx.find(f);
-                    if (if_ == eidx.end()) continue;
-                    const auto dEf_it = dEps.find(f);
-                    const cd dEf =
-                        (dEf_it != dEps.end()) ? dEf_it->second : cd(0.0, 0.0);
-                    cd term = dVe * dEf + dVf * dEe;       // cross terms
-                    const auto k = std::make_pair(e, f);
-                    const auto d2Vit = d2V.find(k);
-                    if (d2Vit != d2V.end()) term += d2Vit->second * eps;
-                    const auto d2Eit = d2Eps.find(k);
-                    if (d2Eit != d2Eps.end()) term += V * d2Eit->second;
-                    Hloc[ie->second][if_->second] += term;
-                }
-            }
-        }
+        for (std::ptrdiff_t hi = 0; hi < nH; ++hi)
+            for (const auto &[i, j, term] :
+                 hingeHessianEntries(hinges[static_cast<std::size_t>(hi)], eidx))
+                Hloc[i][j] += term;
     }
 
     std::vector<std::vector<cd>> H(E, std::vector<cd>(E, cd(0.0, 0.0)));
     for (const auto &P : partials)
         for (std::size_t i = 0; i < E; ++i)
             for (std::size_t j = 0; j < E; ++j) H[i][j] += P[i][j];
+    return H;
+}
+
+std::vector<std::tuple<std::size_t, std::size_t, std::complex<double>>>
+ReggeSolver::hingeHessianEntries(
+    const SimplexPtr &hinge,
+    const std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> &eidx)
+    const {
+    using cd = std::complex<double>;
+    // d^2 S/dl^2_e dl^2_f = d2V_ef*eps + dV_e*dEps_f + dV_f*dEps_e + V*d2Eps_ef,
+    // summed over the hinges that couple e and f. This emits one hinge's
+    // contributions; both the dense and sparse assemblies sum them per (e,f).
+    std::vector<std::tuple<std::size_t, std::size_t, cd>> entries;
+    const cd eps = hinge->lorentzianDeficitAngle();
+    const double V = hinge->dualVolume();
+    const auto dEps = hinge->lorentzianDeficitAngleGradient();
+    const auto dV = hinge->dualVolumeGradient();
+    const auto d2Eps = hinge->lorentzianDeficitAngleHessian();
+    const auto d2V = hinge->dualVolumeHessian();
+    entries.reserve(dV.size() * dV.size());
+    for (const auto &[e, dVe] : dV) {
+        const auto ie = eidx.find(e);
+        if (ie == eidx.end()) continue;
+        const auto dEe_it = dEps.find(e);
+        const cd dEe = (dEe_it != dEps.end()) ? dEe_it->second : cd(0.0, 0.0);
+        for (const auto &[f, dVf] : dV) {
+            const auto if_ = eidx.find(f);
+            if (if_ == eidx.end()) continue;
+            const auto dEf_it = dEps.find(f);
+            const cd dEf = (dEf_it != dEps.end()) ? dEf_it->second : cd(0.0, 0.0);
+            cd term = dVe * dEf + dVf * dEe;       // cross terms
+            const auto k = std::make_pair(e, f);
+            const auto d2Vit = d2V.find(k);
+            if (d2Vit != d2V.end()) term += d2Vit->second * eps;
+            const auto d2Eit = d2Eps.find(k);
+            if (d2Eit != d2Eps.end()) term += V * d2Eit->second;
+            entries.emplace_back(ie->second, if_->second, term);
+        }
+    }
+    return entries;
+}
+
+Eigen::SparseMatrix<std::complex<double>>
+ReggeSolver::actionHessianExactSparse() const {
+    using cd = std::complex<double>;
+    using Trip = Eigen::Triplet<cd>;
+    const auto edges = spacetime_->getEdgeList()->toVector();
+    const std::size_t E = edges.size();
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> eidx;
+    for (std::size_t i = 0; i < E; ++i) {
+        const std::uint64_t a = edges[i]->getSource()->getId();
+        const std::uint64_t b = edges[i]->getTarget()->getId();
+        eidx[{std::min(a, b), std::max(a, b)}] = i;
+    }
+    // ∂²S/∂ℓ²_e∂ℓ²_f is nonzero only for edge pairs that share a hinge (local
+    // coupling), so the assembled Hessian is sparse. Emit each hinge's
+    // contributions (hingeHessianEntries) as (e,f) triplets; setFromTriplets
+    // sums the per-hinge terms for each pair, giving identical values to the
+    // dense actionHessianExact on the nonzero pattern at O(nnz) memory instead
+    // of O(E²). Same parallel-over-hinges structure as the dense path; the
+    // per-thread triplet lists are concatenated in thread-index order before
+    // assembly (deterministic), as in actionGradientExact.
+    const auto hinges = collectHinges();
+    const auto nH = static_cast<std::ptrdiff_t>(hinges.size());
+#ifdef _OPENMP
+    const int nThreads = omp_get_max_threads();
+#else
+    const int nThreads = 1;
+#endif
+    std::vector<std::vector<Trip>> partials(static_cast<std::size_t>(nThreads));
+
+    #pragma omp parallel
+    {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        std::vector<Trip> &local = partials[static_cast<std::size_t>(tid)];
+        #pragma omp for schedule(static)
+        for (std::ptrdiff_t hi = 0; hi < nH; ++hi)
+            for (const auto &[i, j, term] :
+                 hingeHessianEntries(hinges[static_cast<std::size_t>(hi)], eidx))
+                local.emplace_back(static_cast<int>(i), static_cast<int>(j), term);
+    }
+
+    std::vector<Trip> triplets;
+    std::size_t total = 0;
+    for (const auto &p : partials) total += p.size();
+    triplets.reserve(total);
+    for (const auto &p : partials)
+        triplets.insert(triplets.end(), p.begin(), p.end());
+
+    Eigen::SparseMatrix<cd> H(static_cast<int>(E), static_cast<int>(E));
+    H.setFromTriplets(triplets.begin(), triplets.end());  // sums duplicate (e,f)
     return H;
 }
 

@@ -4,11 +4,15 @@
 #include "mesh/ForwardDeclarations.h"
 #include "matter/MatterConfiguration.h"
 #include <complex>
+#include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
+
+#include <Eigen/SparseCore>
 
 #ifdef TESSERA_CUDA
 #include "cuda/regge_cuda.h"
@@ -124,6 +128,16 @@ class ReggeSolver {
     [[nodiscard]] std::vector<std::vector<std::complex<double>>>
     actionHessianExact() const;
 
+    /// Sparse assembly of the exact analytic Hessian ``actionHessianExact``.
+    /// ∂²S/∂ℓ²_e∂ℓ²_f is nonzero only when edges e,f share a hinge (local
+    /// coupling), so the Hessian is sparse: assembled directly as an Eigen
+    /// ``SparseMatrix`` (never densified) at O(nnz) memory instead of O(|E|²).
+    /// Same per-hinge product-rule terms as the dense ``actionHessianExact``
+    /// (``hingeHessianEntries``); equal to it to machine precision on the
+    /// nonzero pattern. ``getEdgeList`` order; column-major.
+    [[nodiscard]] Eigen::SparseMatrix<std::complex<double>>
+    actionHessianExactSparse() const;
+
     // ==================== Solver ====================
 
     /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.
@@ -158,6 +172,17 @@ class ReggeSolver {
 
     /// Collect all (d-2)-simplices (hinges) in the complex.
     [[nodiscard]] std::vector<SimplexPtr> collectHinges() const;
+
+    /// All (edgeI, edgeJ, ∂²S term) contributions of a single hinge to the
+    /// action Hessian, with edge indices resolved via @p eidx. The shared
+    /// per-hinge product-rule kernel behind both the dense ``actionHessianExact``
+    /// and the sparse ``actionHessianExactSparse`` assemblies.
+    [[nodiscard]] std::vector<
+        std::tuple<std::size_t, std::size_t, std::complex<double>>>
+    hingeHessianEntries(
+        const SimplexPtr &hinge,
+        const std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t>
+            &eidx) const;
 
     /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
     [[nodiscard]] std::vector<double> actionGradient() const;
