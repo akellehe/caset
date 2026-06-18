@@ -142,8 +142,18 @@ class ReggeSolver {
 
     /// (Re)build the resident gradient and resident dual action from scratch
     /// over all hinges. Must be called once before the first
-    /// ``applyMoveIncremental`` / ``rollbackMoveIncremental`` (it establishes
-    /// the baseline the per-move deltas update). Idempotent.
+    /// ``applyMoveIncremental`` / ``rollbackMoveIncremental`` /
+    /// ``applyLengthChangeIncremental`` (it establishes the baseline the
+    /// per-update deltas maintain). Idempotent.
+    ///
+    /// After any single update the resident equals a from-scratch
+    /// ``actionGradientExact`` on the *current* complex to machine precision.
+    /// The deltas do carry state, though, so a long trajectory that passes
+    /// through a near-degenerate geometry (a dual-volume pole, where the action
+    /// itself is genuinely large) can lose low-order bits to catastrophic
+    /// cancellation — the same numbers a from-scratch pass would also blow up
+    /// on, but reconstructed exactly each time. Call this again to re-baseline
+    /// (``O(H)``) if a search runs long enough for that to matter.
     void resetIncrementalGradient();
 
     /// The resident gradient ``∂S/∂ℓ²_e`` in ``getEdgeList()`` order — the same
@@ -180,6 +190,25 @@ class ReggeSolver {
     /// contributions. Restores the resident gradient/action to their pre-apply
     /// values to machine precision.
     void rollbackMoveIncremental(::tessera::spacetime::PachnerMove &move);
+
+    /// Set edge \a edge's squared length to \a newSquaredLength, updating the
+    /// resident gradient/action over only the edge's **coboundary** — the top
+    /// cells containing it — in ``O(local)``. The geometric counterpart of
+    /// ``applyMoveIncremental``: topology is unchanged (no edge keys added or
+    /// removed), only the hinges sharing a top cell with this edge change.
+    ///
+    /// The dirty region is the union of those top cells' vertices, NOT just the
+    /// two endpoints: a coface's *opposite* hinge (the (d-2)-face on the cell's
+    /// other vertices) depends on the edge's length yet touches neither endpoint.
+    ///
+    /// After this returns the resident gradient/action match a from-scratch
+    /// ``actionGradientExact`` / ``dualReggeAction`` to machine precision.
+    /// Requires a prior ``resetIncrementalGradient`` (throws ``std::logic_error``
+    /// otherwise). Changing an edge length does not touch vertex IDs, so there is
+    /// no relabel caveat. To re-relax a local patch, call this per changed edge;
+    /// each call is bounded by that edge's coface star.
+    void applyLengthChangeIncremental(EdgePtr edge,
+                                      std::complex<double> newSquaredLength);
 
     // ==================== Solver ====================
 
@@ -249,6 +278,13 @@ class ReggeSolver {
     /// complex — used to prune entries for edges a move deletes.
     [[nodiscard]] std::set<EdgeKey>
     regionEdgeKeys(const std::vector<std::uint64_t> &vertexIds) const;
+
+    /// Vertices of every top cell that contains the edge \a (u, v) — the dirty
+    /// set whose incident hinges cover every hinge whose contribution depends on
+    /// that edge's length (the endpoints alone miss each coface's opposite
+    /// hinge).
+    [[nodiscard]] std::vector<std::uint64_t>
+    edgeCoboundaryVertexIds(VertexPtr u, VertexPtr v) const;
 
     /// Shared body of ``applyMoveIncremental`` / ``rollbackMoveIncremental``:
     /// subtract the region's contributions, run \a mutate (apply or rollback),

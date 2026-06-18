@@ -303,6 +303,14 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            py::arg("move"),
            "Replay move.rollback() while restoring the resident gradient/action "
            "over the touched region.")
+      .def("applyLengthChangeIncremental",
+           &ReggeSolver::applyLengthChangeIncremental,
+           py::arg("edge"), py::arg("newSquaredLength"),
+           "Set edge.setSquaredLength(newSquaredLength) while updating the "
+           "resident gradient/action over only the edge's coface star "
+           "(O(local)) -- the geometric counterpart of applyMoveIncremental. "
+           "Requires resetIncrementalGradient() first. No relabel caveat "
+           "(vertex IDs are untouched).")
       .def("step", &ReggeSolver::step,
            py::arg("learningRate") = 0.001,
            "One gradient-descent step on F = ||∇S||². Returns F before the update.")

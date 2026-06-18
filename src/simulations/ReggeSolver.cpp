@@ -369,6 +369,29 @@ ReggeSolver::regionEdgeKeys(const std::vector<std::uint64_t> &vertexIds) const {
     return keys;
 }
 
+std::vector<std::uint64_t>
+ReggeSolver::edgeCoboundaryVertexIds(VertexPtr u, VertexPtr v) const {
+    const int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    const int topSize = d + 1;
+    const std::uint64_t vid = v->getId();
+    std::set<std::uint64_t> seen;
+    std::vector<std::uint64_t> verts;
+    // Top cells incident to u that also contain v == the top cells containing
+    // the edge (u, v). Gather all their vertices: every hinge whose deficit /
+    // dual volume reads this edge's length is a (d-2)-face of one of these tops,
+    // hence has all its vertices in this set.
+    for (const auto &s : u->getSimplices()) {
+        if (static_cast<int>(s->size()) != topSize) continue;
+        bool hasV = false;
+        for (const auto &w : s->getVertices())
+            if (w->getId() == vid) { hasV = true; break; }
+        if (!hasV) continue;
+        for (const auto &w : s->getVertices())
+            if (seen.insert(w->getId()).second) verts.push_back(w->getId());
+    }
+    return verts;
+}
+
 void ReggeSolver::resetIncrementalGradient() {
     residentGradient_.clear();
     residentAction_ = std::complex<double>(0.0, 0.0);
@@ -405,6 +428,21 @@ void ReggeSolver::rollbackMoveIncremental(
             "rollbackMoveIncremental: call resetIncrementalGradient() first to "
             "establish the resident-gradient baseline");
     updateAround(move.touchedVertexIds(), [&move] { move.rollback(); });
+}
+
+void ReggeSolver::applyLengthChangeIncremental(
+    EdgePtr edge, std::complex<double> newSquaredLength) {
+    if (!gradientResident_)
+        throw std::logic_error(
+            "applyLengthChangeIncremental: call resetIncrementalGradient() "
+            "first to establish the resident-gradient baseline");
+    // Topology is unchanged, so the dirty region is the edge's coface star and
+    // updateAround's edge-key pruning is a no-op (pre == post keys).
+    const std::vector<std::uint64_t> dirty =
+        edgeCoboundaryVertexIds(edge->getSource(), edge->getTarget());
+    updateAround(dirty, [edge, newSquaredLength] {
+        edge->setSquaredLength(newSquaredLength);
+    });
 }
 
 std::vector<std::complex<double>> ReggeSolver::incrementalGradient() const {
