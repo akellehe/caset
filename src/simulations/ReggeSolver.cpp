@@ -14,11 +14,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <numbers>
 #include <set>
 #include <utility>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -190,26 +195,64 @@ std::vector<double> ReggeSolver::actionGradient() const {
 std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
     using cd = std::complex<double>;
     const auto edges = spacetime_->getEdgeList()->toVector();
+    const std::size_t E = edges.size();
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> eidx;
-    for (std::size_t i = 0; i < edges.size(); ++i) {
+    for (std::size_t i = 0; i < E; ++i) {
         const std::uint64_t a = edges[i]->getSource()->getId();
         const std::uint64_t b = edges[i]->getTarget()->getId();
         eidx[{std::min(a, b), std::max(a, b)}] = i;
     }
-    std::vector<cd> g(edges.size(), cd(0.0, 0.0));
-    // dS/dl^2_e = sum_h [ d|*h|/dl^2_e * eps_h + |*h| * d eps_h/dl^2_e ]
-    for (const auto &h : collectHinges()) {
-        const cd eps = h->lorentzianDeficitAngle();
-        const double dv = h->dualVolume();
-        for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
-            const auto it = eidx.find(e);
-            if (it != eidx.end()) g[it->second] += dv * dEps;
-        }
-        for (const auto &[e, dDv] : h->dualVolumeGradient()) {
-            const auto it = eidx.find(e);
-            if (it != eidx.end()) g[it->second] += dDv * eps;
+
+    // dS/dl^2_e = sum_h [ d|*h|/dl^2_e * eps_h + |*h| * d eps_h/dl^2_e ].
+    //
+    // The per-hinge work is independent: lorentzianDeficitAngle/dualVolume and
+    // their gradients are pure const reads over already-materialized cofaces
+    // (no mutable members, no lazy caches), so hinges parallelize cleanly. But
+    // many hinges contribute to the same edge, so writing the shared g directly
+    // would contend. Each thread accumulates into its own partial vector; the
+    // partials are then summed into g in thread-index order. With
+    // schedule(static) that order is fixed, so the result is deterministic
+    // run-to-run and bit-identical to the serial code at one thread. (At >1
+    // thread it matches serial to floating-point round-off — the per-thread
+    // split reassociates the per-edge sum.) Respects OMP_NUM_THREADS; serial
+    // no-op when built without OpenMP.
+    const auto hinges = collectHinges();
+    const auto nH = static_cast<std::ptrdiff_t>(hinges.size());
+#ifdef _OPENMP
+    const int nThreads = omp_get_max_threads();
+#else
+    const int nThreads = 1;
+#endif
+    std::vector<std::vector<cd>> partials(
+        static_cast<std::size_t>(nThreads), std::vector<cd>(E, cd(0.0, 0.0)));
+
+    #pragma omp parallel
+    {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        std::vector<cd> &gLocal = partials[static_cast<std::size_t>(tid)];
+        #pragma omp for schedule(static)
+        for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
+            const auto &h = hinges[static_cast<std::size_t>(hi)];
+            const cd eps = h->lorentzianDeficitAngle();
+            const double dv = h->dualVolume();
+            for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
+                const auto it = eidx.find(e);
+                if (it != eidx.end()) gLocal[it->second] += dv * dEps;
+            }
+            for (const auto &[e, dDv] : h->dualVolumeGradient()) {
+                const auto it = eidx.find(e);
+                if (it != eidx.end()) gLocal[it->second] += dDv * eps;
+            }
         }
     }
+
+    std::vector<cd> g(E, cd(0.0, 0.0));
+    for (const auto &p : partials)
+        for (std::size_t i = 0; i < E; ++i) g[i] += p[i];
     return g;
 }
 
@@ -224,37 +267,70 @@ ReggeSolver::actionHessianExact() const {
         eidx[{std::min(a, b), std::max(a, b)}] = i;
     }
     const std::size_t E = edges.size();
-    std::vector<std::vector<cd>> H(E, std::vector<cd>(E, cd(0.0, 0.0)));
     // d^2 S/dl^2_e dl^2_f = sum_h [ d2V_ef*eps + dV_e*dEps_f + dV_f*dEps_e
-    //                              + V*d2Eps_ef ].
-    for (const auto &h : collectHinges()) {
-        const cd eps = h->lorentzianDeficitAngle();
-        const double V = h->dualVolume();
-        const auto dEps = h->lorentzianDeficitAngleGradient();
-        const auto dV = h->dualVolumeGradient();
-        const auto d2Eps = h->lorentzianDeficitAngleHessian();
-        const auto d2V = h->dualVolumeHessian();
-        for (const auto &[e, dVe] : dV) {
-            const auto ie = eidx.find(e);
-            if (ie == eidx.end()) continue;
-            const auto dEe_it = dEps.find(e);
-            const cd dEe = (dEe_it != dEps.end()) ? dEe_it->second : cd(0.0, 0.0);
-            for (const auto &[f, dVf] : dV) {
-                const auto if_ = eidx.find(f);
-                if (if_ == eidx.end()) continue;
-                const auto dEf_it = dEps.find(f);
-                const cd dEf =
-                    (dEf_it != dEps.end()) ? dEf_it->second : cd(0.0, 0.0);
-                cd term = dVe * dEf + dVf * dEe;       // cross terms
-                const auto k = std::make_pair(e, f);
-                const auto d2Vit = d2V.find(k);
-                if (d2Vit != d2V.end()) term += d2Vit->second * eps;
-                const auto d2Eit = d2Eps.find(k);
-                if (d2Eit != d2Eps.end()) term += V * d2Eit->second;
-                H[ie->second][if_->second] += term;
+    //                              + V*d2Eps_ef ]. Independent per hinge, so the
+    // same per-thread-partial reduction as actionGradientExact (see there for
+    // the determinism / bit-identity argument) — here over the dense E x E
+    // matrix. Per-thread partials cost nThreads * E^2 complex; the meshes this
+    // runs on are small (E in the hundreds) and the result is already a dense
+    // E x E matrix, so this is a bounded constant-factor blowup.
+    const auto hinges = collectHinges();
+    const auto nH = static_cast<std::ptrdiff_t>(hinges.size());
+#ifdef _OPENMP
+    const int nThreads = omp_get_max_threads();
+#else
+    const int nThreads = 1;
+#endif
+    std::vector<std::vector<std::vector<cd>>> partials(
+        static_cast<std::size_t>(nThreads),
+        std::vector<std::vector<cd>>(E, std::vector<cd>(E, cd(0.0, 0.0))));
+
+    #pragma omp parallel
+    {
+#ifdef _OPENMP
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        std::vector<std::vector<cd>> &Hloc =
+            partials[static_cast<std::size_t>(tid)];
+        #pragma omp for schedule(static)
+        for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
+            const auto &h = hinges[static_cast<std::size_t>(hi)];
+            const cd eps = h->lorentzianDeficitAngle();
+            const double V = h->dualVolume();
+            const auto dEps = h->lorentzianDeficitAngleGradient();
+            const auto dV = h->dualVolumeGradient();
+            const auto d2Eps = h->lorentzianDeficitAngleHessian();
+            const auto d2V = h->dualVolumeHessian();
+            for (const auto &[e, dVe] : dV) {
+                const auto ie = eidx.find(e);
+                if (ie == eidx.end()) continue;
+                const auto dEe_it = dEps.find(e);
+                const cd dEe =
+                    (dEe_it != dEps.end()) ? dEe_it->second : cd(0.0, 0.0);
+                for (const auto &[f, dVf] : dV) {
+                    const auto if_ = eidx.find(f);
+                    if (if_ == eidx.end()) continue;
+                    const auto dEf_it = dEps.find(f);
+                    const cd dEf =
+                        (dEf_it != dEps.end()) ? dEf_it->second : cd(0.0, 0.0);
+                    cd term = dVe * dEf + dVf * dEe;       // cross terms
+                    const auto k = std::make_pair(e, f);
+                    const auto d2Vit = d2V.find(k);
+                    if (d2Vit != d2V.end()) term += d2Vit->second * eps;
+                    const auto d2Eit = d2Eps.find(k);
+                    if (d2Eit != d2Eps.end()) term += V * d2Eit->second;
+                    Hloc[ie->second][if_->second] += term;
+                }
             }
         }
     }
+
+    std::vector<std::vector<cd>> H(E, std::vector<cd>(E, cd(0.0, 0.0)));
+    for (const auto &P : partials)
+        for (std::size_t i = 0; i < E; ++i)
+            for (std::size_t j = 0; j < E; ++j) H[i][j] += P[i][j];
     return H;
 }
 
