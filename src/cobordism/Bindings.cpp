@@ -23,6 +23,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/MergeCobordism.h"
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
 #include "cobordism/Register.h"
@@ -1272,4 +1273,53 @@ prepared states, reproduces the harmonic overlap.)doc")
            "dimensions differ.")
       .def("norm", &PreparedBoundaryState::norm,
            "The Euclidean norm sqrt(sum |c_a|^2) of the amplitude vector.");
+
+  // === MergeCobordism (#363 / #388) ===
+  py::class_<MergeCobordism> mc(m, "MergeCobordism",
+      "The canonical merge primitive: an emergent operator built from input/"
+      "output qubit states through a cobordism bulk, mediated by the dual "
+      "Lorentzian Regge action (relaxed with the sparse analytic Hessian) on a "
+      "TopologyBuilder topology.");
+  py::class_<MergeCobordism::Stats>(mc, "Stats",
+      "Convergence + topology statistics of the relaxation.")
+      .def_readonly("converged", &MergeCobordism::Stats::converged)
+      .def_readonly("residual", &MergeCobordism::Stats::residual)
+      .def_readonly("stat_action_residual",
+                    &MergeCobordism::Stats::statActionResidual)
+      .def_readonly("state_residual", &MergeCobordism::Stats::stateResidual)
+      .def_readonly("dual_action", &MergeCobordism::Stats::dualAction)
+      .def_readonly("relax_iterations", &MergeCobordism::Stats::relaxIterations)
+      .def_readonly("betti_cobordism", &MergeCobordism::Stats::bettiCobordism)
+      .def_readonly("b1_bulk", &MergeCobordism::Stats::b1Bulk)
+      .def_readonly("ker_l1_bulk", &MergeCobordism::Stats::kerL1Bulk)
+      .def_readonly("interior_vertices",
+                    &MergeCobordism::Stats::interiorVertices)
+      .def_readonly("topology", &MergeCobordism::Stats::topology);
+  mc.def(py::init([](const std::vector<std::vector<std::complex<double>>> &in,
+                     const std::vector<std::vector<std::complex<double>>> &out,
+                     const std::vector<std::complex<double>> &U, double beta,
+                     double epsilon, std::uint64_t seed, bool verbose) {
+           return std::make_unique<MergeCobordism>(in, out, U, beta, epsilon,
+                                                   seed, nullptr, verbose);
+         }),
+         py::arg("input_states"), py::arg("output_states"),
+         py::arg("U") = std::vector<std::complex<double>>{},
+         py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6, py::arg("seed") = 0,
+         py::arg("verbose") = false,
+         "Build and run the merge on the default (T^2-3holes)xS^1 operator "
+         "topology. output_states is required unless U (a flat row-major dxd "
+         "operator) is supplied, in which case it is computed from U.")
+      .def_property_readonly("input_states", &MergeCobordism::inputStates)
+      .def_property_readonly("output_states", &MergeCobordism::outputStates)
+      .def_property_readonly("cobordism", &MergeCobordism::cobordism,
+                             "The cobordism W (relaxed boundary + bulk).")
+      .def_property_readonly("boundary", &MergeCobordism::boundary,
+                             "The boundary dW top-cells.")
+      .def_property_readonly("bulk", &MergeCobordism::bulk,
+                             "The bulk W - dW interior 1-cells.")
+      .def_property_readonly("operator_U", &MergeCobordism::operatorU,
+                             "The merge operator (empty until the #6 read-out).")
+      .def_property_readonly("choi_state", &MergeCobordism::choiState,
+                             "The operator's Choi state (empty until #6).")
+      .def_property_readonly("stats", &MergeCobordism::stats);
 }
