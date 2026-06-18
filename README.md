@@ -41,6 +41,25 @@ slower because ITensor is compiled from source — `ccache` (below) helps a lot.
 
 Builds also use [`ccache`](https://ccache.dev/) automatically when it is installed (`brew install ccache` / `apt-get install ccache`) — recommended: it makes rebuilds and CI dramatically faster.
 
+### OpenMP (optional, speeds up large meshes)
+
+Several CPU hot paths — the Regge action gradient/Hessian hinge loop and the
+spectral-graph heat-kernel — are parallelized with OpenMP. It is **optional**:
+without it the `#pragma omp` directives compile as no-ops and the code runs
+serially, so the build never fails for lack of it.
+
+- **Linux (gcc / clang):** the OpenMP runtime ships with the compiler — nothing
+  to install; CMake detects it automatically.
+- **macOS (Apple Clang):** Apple's compiler has no bundled OpenMP runtime —
+  `brew install libomp` and CMake will pick it up.
+
+CMake prints `OpenMP found (...)` or `OpenMP not found; ... no-ops` at configure
+time, so you can confirm which path you built. Control the thread count at run
+time with `OMP_NUM_THREADS` (e.g. `OMP_NUM_THREADS=16`); the parallel paths scale
+near-linearly up to the core count, and the computed result is deterministic and
+independent of the thread count (to floating-point round-off). The default when
+unset is one thread per core.
+
 ## Quick start
 
 Build a 4D Lorentzian spacetime, thermalize it with CDT, and export a rotating GIF:
