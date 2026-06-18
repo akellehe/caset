@@ -164,6 +164,15 @@ class ReggeSolver {
     /// ``dualReggeAction`` on the mutated complex to machine precision.
     /// ``move`` must have been successfully ``propose()``d. Requires a prior
     /// ``resetIncrementalGradient`` (throws ``std::logic_error`` otherwise).
+    ///
+    /// **Precondition — stable vertex IDs.** The resident gradient is keyed by
+    /// vertex ID, so the move must not cosmetically *relabel* vertices: a
+    /// ``swapVertexLabels`` re-keys edges across an arbitrary partner vertex's
+    /// whole neighborhood (outside the touched region) and is neither local nor
+    /// tracked here. Construct relabeling moves with their relabel toggle off
+    /// (e.g. ``AddMove(..., relabel=false)``) — the same stable-ID regime the
+    /// move tests use. Relabeling is a Markov-chain id randomization orthogonal
+    /// to the geometry the gradient depends on.
     void applyMoveIncremental(::tessera::spacetime::PachnerMove &move);
 
     /// The ``rollback`` counterpart: subtract the touched region's current hinge

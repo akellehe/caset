@@ -294,7 +294,11 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            py::arg("move"),
            "Commit a proposed PachnerMove (move.apply()) while updating the "
            "resident gradient/action over only the move's touched region "
-           "(O(#changed hinges), not O(H)).")
+           "(O(#changed hinges), not O(H)). Requires resetIncrementalGradient() "
+           "first. Precondition: the move must keep vertex IDs stable across "
+           "apply() -- construct relabeling moves with relabel=False (e.g. "
+           "AddMove(st, seed, relabel=False)); a cosmetic vertex relabel "
+           "re-keys edges outside the touched region and is not tracked.")
       .def("rollbackMoveIncremental", &ReggeSolver::rollbackMoveIncremental,
            py::arg("move"),
            "Replay move.rollback() while restoring the resident gradient/action "

@@ -305,9 +305,12 @@ ReggeSolver::regionHinges(const std::vector<std::uint64_t> &vertexIds) {
     const int hingeSize = d - 1;   // (d-2)-hinge: (d-1) vertices
     const auto &vlist = spacetime_->getVertexList();
 
-    // Snapshot the incident top cells FIRST (deduped): getFacets() below
-    // registers freshly-materialized sub-simplices onto these same vertices'
-    // simplex lists, which would invalidate an in-flight iterator.
+    // 1. Snapshot the incident top cells FIRST (deduped): a move can register
+    //    brand-new top cells (and hence new hinges) onto the touched vertices,
+    //    whose (d-2)-faces are not materialized yet. Snapshot before the
+    //    getFacets() pass below, which registers freshly-materialized
+    //    sub-simplices onto these same vertices' simplex lists and would
+    //    invalidate an in-flight iterator.
     std::set<std::uint64_t> seenTops;
     std::vector<SimplexPtr> tops;
     for (std::uint64_t id : vertexIds) {
@@ -319,17 +322,32 @@ ReggeSolver::regionHinges(const std::vector<std::uint64_t> &vertexIds) {
                 tops.push_back(s);
         }
     }
+    // Materialize each top's facet lattice down to its (d-2)-hinges so any
+    // newly-created hinge is registered on its (touched) vertices.
+    for (const auto &top : tops)
+        for (const auto &facet : top->getFacets())  // (d-1)-cells
+            (void)facet->getFacets();                // (d-2)-hinges
 
-    // Walk each top down to its (d-2)-hinges, materializing the facet lattice.
+    // 2. Gather the (d-2)-hinges incident to the touched vertices. Reading the
+    //    vertices' registered simplices (rather than re-deriving faces from the
+    //    current top cells) mirrors exactly what ``collectHinges`` —
+    //    ``getSimplices`` filtered to (d-1)-cells — feeds ``actionGradientExact``
+    //    / ``dualReggeAction``, INCLUDING hinges a move orphaned (a hinge whose
+    //    last top coface was removed still lingers in the simplex list with a
+    //    bare 2π deficit). Missing those would drift the resident action even
+    //    though their gradient contribution is empty.
     std::set<std::uint64_t> seenHinges;
     std::vector<SimplexPtr> hinges;
-    for (const auto &top : tops) {
-        for (const auto &facet : top->getFacets()) {        // (d-1)-cells
-            for (const auto &hinge : facet->getFacets()) {  // (d-2)-hinges
-                if (static_cast<int>(hinge->size()) != hingeSize) continue;
-                if (seenHinges.insert(hinge->fingerprint.fingerprint()).second)
-                    hinges.push_back(hinge);
-            }
+    for (std::uint64_t id : vertexIds) {
+        Vertex *v = vlist->get(id);
+        if (v == nullptr) continue;
+        // Copy: the gather itself does not materialize, but stay defensive.
+        const std::vector<SimplexPtr> incident(v->getSimplices().begin(),
+                                               v->getSimplices().end());
+        for (const auto &s : incident) {
+            if (static_cast<int>(s->size()) != hingeSize) continue;
+            if (seenHinges.insert(s->fingerprint.fingerprint()).second)
+                hinges.push_back(s);
         }
     }
     return hinges;
