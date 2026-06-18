@@ -158,10 +158,22 @@ class StationaryActionRelaxer:
         return np.asarray(cob.HodgeLaplacian(self.st).laplacian(1, True, False),
                           dtype=complex).reshape(self.n1, self.n1).real
 
+    def _solver(self):
+        """A single ReggeSolver reused for the whole relaxation. The topology is
+        fixed in Phase-2 (only ℓ² changes), so its cached edge index + hinge list
+        (built once on the first call) stay valid for every LM iteration; set_var
+        keeps the edge lengths current, which the solver reads live on each
+        actionGradientExact/dualReggeAction call. Reusing it amortizes that
+        topology setup once over the relaxation instead of once per evaluation."""
+        rs = getattr(self, "_rs", None)
+        if rs is None:
+            rs = self._rs = tessera.ReggeSolver(self.st, tessera.MatterConfiguration())
+        return rs
+
     def _dS_VAR(self, x):
         """∂S/∂l² over VAR edges (FULL complex, exact analytic Part A) at x; also S."""
         self.set_var(x)
-        rs = tessera.ReggeSolver(self.st, tessera.MatterConfiguration())
+        rs = self._solver()
         dS = rs.actionGradientExact()
         return (np.array([complex(dS[self.EIDX[k]]) for k in self.VAR]),
                 complex(rs.dualReggeAction()))
@@ -231,7 +243,7 @@ class StationaryActionRelaxer:
 
         # GRAVITY: g = ∂S over VAR (full complex, exact analytic Part A).
         # statres = Σ|dS|² = ‖∂ Re S‖² + ‖∂ Im S‖² — the Im part is kept.
-        rs = tessera.ReggeSolver(self.st, tessera.MatterConfiguration())
+        rs = self._solver()
         S = complex(rs.dualReggeAction())
         dS = rs.actionGradientExact()
         g = np.array([complex(dS[self.EIDX[k]]) for k in self.VAR])
