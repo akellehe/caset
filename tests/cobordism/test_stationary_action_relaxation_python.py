@@ -104,6 +104,19 @@ class StationaryActionRelaxationTest(unittest.TestCase):
         self.assertLess(float(np.max(np.abs(g_cpp - g_py))) / _RX.gamma, 1e-9)
         self.assertLess(_RX.check_gradient(x=x, n=2), 1e-3)   # full grad == FD at x
 
+    def test_solver_is_reused_across_the_relaxation(self):
+        """The relax holds ONE ReggeSolver (so its topology cache amortizes over
+        every LM iteration), and reusing it is value-identical to building a fresh
+        solver each call — the solver reads edge lengths live; only the
+        topology-derived structures are cached."""
+        rs = _RX._solver()
+        self.assertIs(rs, _RX._solver())                  # same object reused
+        _RX.set_var(_RX.x0)
+        g_reused = np.array([complex(z) for z in rs.actionGradientExact()])
+        fresh = SAR.tessera.ReggeSolver(_RX.st, SAR.tessera.MatterConfiguration())
+        g_fresh = np.array([complex(z) for z in fresh.actionGradientExact()])
+        self.assertLess(float(np.max(np.abs(g_reused - g_fresh))), 1e-12)
+
 
 if __name__ == "__main__":
     unittest.main()
