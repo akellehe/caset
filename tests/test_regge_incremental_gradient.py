@@ -32,13 +32,24 @@ def _make_st(n_simplices=200, seed=0):
     return st
 
 
-def _grown_st(n_simplices=200, adds=150, seed=1):
-    """A CDT lattice grown via ``CDTSimulation.add`` so the rarer moves
-    (iflip / remove / shift) have eligible configurations."""
+def _grown_st(n_simplices=200, adds=120, seed=0):
+    """A CDT lattice grown by a fixed sequence of vertex insertions so the rarer
+    moves (iflip / remove / shift) have eligible configurations.
+
+    Growth is via ``AddMove`` (relabel=False) over deterministic seeds rather
+    than ``CDTSimulation.add`` -- the latter is ``random_device``-seeded and
+    yields a different mesh each run, which makes "first move that proposes"
+    (and hence the whole test) flaky. This sequence is reproducible: the same
+    mesh, with the same eligible moves, every run."""
     st = _make_st(n_simplices, seed)
-    cdt = tessera.CDTSimulation(st, 2.2, 0.5, 0.6, 0.02, st.getN41())
-    for _ in range(adds):
-        cdt.add()
+    applied = 0
+    s = 0
+    while applied < adds and s < adds * 60:
+        m = tessera.AddMove(st, s, False)  # relabel=False: stable IDs
+        s += 1
+        if m.propose():
+            m.apply()
+            applied += 1
     st.materializeFacets()
     return st
 
