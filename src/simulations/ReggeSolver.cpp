@@ -88,22 +88,56 @@ double ReggeSolver::hingeArea(SimplexPtr hinge) {
 }
 
 // =====================================================================
-// Collect hinges
+// Topology cache: hinge list + edge index
 // =====================================================================
 
-std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
-    // Hinges are (d-2)-simplices. In 4D, these are triangles (3 vertices).
-    // They are registered in the spacetime's simplex list (sub-simplices
-    // are registered during getFacets()).
-    int d = spacetime_->getMetric()->getSignature()->getDimensions();
-    int hingeSize = d - 1; // (d-2)-simplex has (d-1) vertices
+std::size_t
+ReggeSolver::EdgeKeyHash::operator()(const EdgeKey &key) const noexcept {
+    // Mix both vertex ids.  Keys are already canonical (min, max), so the
+    // symmetric a^b would do, but rotating the second term keeps the
+    // distribution clean independent of that invariant.
+    const std::uint64_t a = Fingerprint::mix64(key.first);
+    const std::uint64_t b = Fingerprint::mix64(key.second);
+    return static_cast<std::size_t>(a ^ ((b << 1) | (b >> 63)));
+}
 
-    std::vector<SimplexPtr> hinges;
-    for (const auto &s : spacetime_->getSimplices()) {
+void ReggeSolver::ensureTopologyCache() const {
+    // O(1) topology signature: a metric-only setSquaredLength leaves the edge
+    // and simplex counts untouched, while any Pachner add/remove perturbs them.
+    const std::size_t nEdges = spacetime_->getEdgeList()->size();
+    const std::size_t nSimplices = spacetime_->getSimplices().size();
+    const std::pair<std::size_t, std::size_t> signature{nEdges, nSimplices};
+    if (topologyCached_ && signature == cachedTopologySignature_) return;
+
+    // Hinges are (d-2)-simplices (triangles in 4D, edges in 3D). They are
+    // registered in the spacetime's simplex list (sub-simplices materialize
+    // during getFacets()).
+    const int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    const int hingeSize = d - 1; // a (d-2)-simplex has (d-1) vertices
+    cachedHinges_.clear();
+    for (const auto &s : spacetime_->getSimplices())
         if (static_cast<int>(s->size()) == hingeSize)
-            hinges.push_back(s);
+            cachedHinges_.push_back(s);
+
+    // Edge key → position in getEdgeList() order (the gradient/Hessian order,
+    // matching actionGradient and the Python EIDX consumers).
+    const auto &edges = spacetime_->getEdgeList()->toVector();
+    cachedEidx_.clear();
+    cachedEidx_.reserve(edges.size());
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        const std::uint64_t a = edges[i]->getSource()->getId();
+        const std::uint64_t b = edges[i]->getTarget()->getId();
+        cachedEidx_[{std::min(a, b), std::max(a, b)}] = i;
     }
-    return hinges;
+    cachedEdgeCount_ = edges.size();
+
+    cachedTopologySignature_ = signature;
+    topologyCached_ = true;
+}
+
+const std::vector<SimplexPtr>& ReggeSolver::collectHinges() const {
+    ensureTopologyCache();
+    return cachedHinges_;
 }
 
 // =====================================================================
@@ -189,25 +223,19 @@ std::vector<double> ReggeSolver::actionGradient() const {
 
 std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
     using cd = std::complex<double>;
-    const auto edges = spacetime_->getEdgeList()->toVector();
-    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> eidx;
-    for (std::size_t i = 0; i < edges.size(); ++i) {
-        const std::uint64_t a = edges[i]->getSource()->getId();
-        const std::uint64_t b = edges[i]->getTarget()->getId();
-        eidx[{std::min(a, b), std::max(a, b)}] = i;
-    }
-    std::vector<cd> g(edges.size(), cd(0.0, 0.0));
+    ensureTopologyCache();
+    std::vector<cd> g(cachedEdgeCount_, cd(0.0, 0.0));
     // dS/dl^2_e = sum_h [ d|*h|/dl^2_e * eps_h + |*h| * d eps_h/dl^2_e ]
-    for (const auto &h : collectHinges()) {
+    for (const auto &h : cachedHinges_) {
         const cd eps = h->lorentzianDeficitAngle();
         const double dv = h->dualVolume();
         for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
-            const auto it = eidx.find(e);
-            if (it != eidx.end()) g[it->second] += dv * dEps;
+            const auto it = cachedEidx_.find(e);
+            if (it != cachedEidx_.end()) g[it->second] += dv * dEps;
         }
         for (const auto &[e, dDv] : h->dualVolumeGradient()) {
-            const auto it = eidx.find(e);
-            if (it != eidx.end()) g[it->second] += dDv * eps;
+            const auto it = cachedEidx_.find(e);
+            if (it != cachedEidx_.end()) g[it->second] += dDv * eps;
         }
     }
     return g;
@@ -216,18 +244,12 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
 std::vector<std::vector<std::complex<double>>>
 ReggeSolver::actionHessianExact() const {
     using cd = std::complex<double>;
-    const auto edges = spacetime_->getEdgeList()->toVector();
-    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> eidx;
-    for (std::size_t i = 0; i < edges.size(); ++i) {
-        const std::uint64_t a = edges[i]->getSource()->getId();
-        const std::uint64_t b = edges[i]->getTarget()->getId();
-        eidx[{std::min(a, b), std::max(a, b)}] = i;
-    }
-    const std::size_t E = edges.size();
+    ensureTopologyCache();
+    const std::size_t E = cachedEdgeCount_;
     std::vector<std::vector<cd>> H(E, std::vector<cd>(E, cd(0.0, 0.0)));
     // d^2 S/dl^2_e dl^2_f = sum_h [ d2V_ef*eps + dV_e*dEps_f + dV_f*dEps_e
     //                              + V*d2Eps_ef ].
-    for (const auto &h : collectHinges()) {
+    for (const auto &h : cachedHinges_) {
         const cd eps = h->lorentzianDeficitAngle();
         const double V = h->dualVolume();
         const auto dEps = h->lorentzianDeficitAngleGradient();
@@ -235,13 +257,13 @@ ReggeSolver::actionHessianExact() const {
         const auto d2Eps = h->lorentzianDeficitAngleHessian();
         const auto d2V = h->dualVolumeHessian();
         for (const auto &[e, dVe] : dV) {
-            const auto ie = eidx.find(e);
-            if (ie == eidx.end()) continue;
+            const auto ie = cachedEidx_.find(e);
+            if (ie == cachedEidx_.end()) continue;
             const auto dEe_it = dEps.find(e);
             const cd dEe = (dEe_it != dEps.end()) ? dEe_it->second : cd(0.0, 0.0);
             for (const auto &[f, dVf] : dV) {
-                const auto if_ = eidx.find(f);
-                if (if_ == eidx.end()) continue;
+                const auto if_ = cachedEidx_.find(f);
+                if (if_ == cachedEidx_.end()) continue;
                 const auto dEf_it = dEps.find(f);
                 const cd dEf =
                     (dEf_it != dEps.end()) ? dEf_it->second : cd(0.0, 0.0);

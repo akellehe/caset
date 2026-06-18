@@ -4,10 +4,12 @@
 #include "mesh/ForwardDeclarations.h"
 #include "matter/MatterConfiguration.h"
 #include <complex>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifdef TESSERA_CUDA
@@ -156,11 +158,47 @@ class ReggeSolver {
     std::shared_ptr<Spacetime> spacetime_;
     MatterConfiguration matter_;
 
-    /// Collect all (d-2)-simplices (hinges) in the complex.
-    [[nodiscard]] std::vector<SimplexPtr> collectHinges() const;
+    /// Collect all (d-2)-simplices (hinges) in the complex. Cached; see
+    /// ``ensureTopologyCache``. The returned reference is valid until the next
+    /// topology change (a rebuild may reallocate the backing vector).
+    [[nodiscard]] const std::vector<SimplexPtr>& collectHinges() const;
 
     /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
     [[nodiscard]] std::vector<double> actionGradient() const;
+
+    // ---- Topology cache (edge index + hinge list) -----------------------
+    // ``eidx`` and the hinge list depend only on the triangulation, not on the
+    // edge lengths, so in a fixed-topology relaxation (Phase-2: only ℓ²
+    // changes) they are constant across every iteration.  Cache them and
+    // rebuild only on a topology change, detected by an O(1) signature
+    // ``(edge count, simplex count)`` that a metric-only ``setSquaredLength``
+    // leaves untouched but any Pachner add/remove perturbs.
+
+    /// Sorted vertex-id edge key, matching the per-hinge gradient/Hessian maps
+    /// (``Simplex::lorentzianDeficitAngleGradient`` etc.).
+    using EdgeKey = std::pair<std::uint64_t, std::uint64_t>;
+
+    /// Hash for ``EdgeKey`` (``std::unordered_map`` needs an explicit one for
+    /// ``std::pair``). Defined out-of-line over ``Fingerprint::mix64``.
+    struct EdgeKeyHash {
+        [[nodiscard]] std::size_t operator()(const EdgeKey &key) const noexcept;
+    };
+
+    /// Edge key → position in ``getEdgeList()->toVector()`` (the gradient/Hessian
+    /// row/column order, matching ``actionGradient``).
+    using EdgeIndex = std::unordered_map<EdgeKey, std::size_t, EdgeKeyHash>;
+
+    mutable std::vector<SimplexPtr> cachedHinges_;
+    mutable EdgeIndex cachedEidx_;
+    mutable std::size_t cachedEdgeCount_ = 0;
+    mutable std::pair<std::size_t, std::size_t> cachedTopologySignature_{0, 0};
+    mutable bool topologyCached_ = false;
+
+    /// (Re)build ``cachedHinges_`` and ``cachedEidx_`` if the triangulation has
+    /// changed since the last build (or it has never been built); a no-op on a
+    /// pure metric change. Called by ``collectHinges``, ``actionGradientExact``
+    /// and ``actionHessianExact``.
+    void ensureTopologyCache() const;
 
 #ifdef TESSERA_CUDA
     /// Flatten mesh topology into GPU-friendly arrays.
