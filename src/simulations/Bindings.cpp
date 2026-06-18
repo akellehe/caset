@@ -280,37 +280,6 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "rule over the per-hinge dualVolume/deficit Hessians + gradients (no "
            "finite differences); matches a central difference of "
            "actionGradientExact to machine precision.")
-      .def("resetIncrementalGradient", &ReggeSolver::resetIncrementalGradient,
-           "(Re)build the resident gradient and resident dual action from "
-           "scratch over all hinges. Call once before the first "
-           "applyMoveIncremental/rollbackMoveIncremental to set the baseline.")
-      .def("incrementalGradient", &ReggeSolver::incrementalGradient,
-           "Resident ∂S/∂ℓ²_e (getEdgeList order, list of complex), maintained "
-           "incrementally under Pachner moves; matches actionGradientExact.")
-      .def("incrementalAction", &ReggeSolver::incrementalAction,
-           "Resident dual Lorentzian Regge action S = Σ_h |*h|·ε_h maintained "
-           "alongside the gradient; matches dualReggeAction.")
-      .def("applyMoveIncremental", &ReggeSolver::applyMoveIncremental,
-           py::arg("move"),
-           "Commit a proposed PachnerMove (move.apply()) while updating the "
-           "resident gradient/action over only the move's touched region "
-           "(O(#changed hinges), not O(H)). Requires resetIncrementalGradient() "
-           "first. Precondition: the move must keep vertex IDs stable across "
-           "apply() -- construct relabeling moves with relabel=False (e.g. "
-           "AddMove(st, seed, relabel=False)); a cosmetic vertex relabel "
-           "re-keys edges outside the touched region and is not tracked.")
-      .def("rollbackMoveIncremental", &ReggeSolver::rollbackMoveIncremental,
-           py::arg("move"),
-           "Replay move.rollback() while restoring the resident gradient/action "
-           "over the touched region.")
-      .def("applyLengthChangeIncremental",
-           &ReggeSolver::applyLengthChangeIncremental,
-           py::arg("edge"), py::arg("newSquaredLength"),
-           "Set edge.setSquaredLength(newSquaredLength) while updating the "
-           "resident gradient/action over only the edge's coface star "
-           "(O(local)) -- the geometric counterpart of applyMoveIncremental. "
-           "Requires resetIncrementalGradient() first. No relabel caveat "
-           "(vertex IDs are untouched).")
       .def("step", &ReggeSolver::step,
            py::arg("learningRate") = 0.001,
            "One gradient-descent step on F = ||∇S||². Returns F before the update.")
