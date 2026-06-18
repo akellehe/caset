@@ -1,10 +1,12 @@
 // Copyright (c) 2026 Twin Vector Labs LLC. All rights reserved.
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
+#include "spacetime/PachnerMove.h"
 #include "graph/IndexByKey.hpp"
 #include "mesh/Simplex.h"
 #include "mesh/Edge.h"
 #include "mesh/Vertex.h"
+#include "mesh/VertexList.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Fingerprint.h"
 
@@ -15,9 +17,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <numbers>
 #include <set>
+#include <stdexcept>
 #include <utility>
 
 // === tessera subsystem ns fwd-decls ===
@@ -263,6 +267,140 @@ double ReggeSolver::actionGradientNorm() const {
     double F = 0.0;
     for (double gi : g) F += gi * gi;
     return F;
+}
+
+// =====================================================================
+// Incremental gradient (Pachner-local)
+//
+// The resident gradient g[] = ∂S/∂ℓ²_e and resident action S = Σ_h |★h|·ε_h
+// are maintained by a subtract-old / add-new delta over the move's touched
+// region.  A hinge's contribution depends only on the geometry of its top
+// cells; a boundary-fixed Pachner move only adds/removes top cells inside the
+// region spanned by ``touchedVertexIds``, so every hinge whose contribution
+// changes is a (d-2)-face of a region top cell.  We re-evaluate the whole
+// region (``regionHinges``) on both sides of the move: unchanged peripheral
+// hinges recompute to the identical value and cancel (subtract then add), so
+// the delta is exact without having to single out the changed hinges, and
+// edges shared with hinges OUTSIDE the region keep their contribution because
+// no edge entry is ever zeroed — only added to.
+// =====================================================================
+
+void ReggeSolver::accumulateHinge(SimplexPtr hinge, int sign) {
+    using cd = std::complex<double>;
+    const cd eps = hinge->lorentzianDeficitAngle();
+    const double dv = hinge->dualVolume();
+    const double s = static_cast<double>(sign);
+    residentAction_ += cd(s, 0.0) * (cd(dv, 0.0) * eps);
+    // dS/dℓ²_e = Σ_h [ |★h|·∂ε_h + ε_h·∂|★h| ], keyed by sorted-id edge.
+    for (const auto &[e, dEps] : hinge->lorentzianDeficitAngleGradient())
+        residentGradient_[e] += cd(s * dv, 0.0) * dEps;
+    for (const auto &[e, dDv] : hinge->dualVolumeGradient())
+        residentGradient_[e] += cd(s * dDv, 0.0) * eps;
+}
+
+std::vector<SimplexPtr>
+ReggeSolver::regionHinges(const std::vector<std::uint64_t> &vertexIds) {
+    const int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    const int topSize = d + 1;     // top cell: (d+1) vertices
+    const int hingeSize = d - 1;   // (d-2)-hinge: (d-1) vertices
+    const auto &vlist = spacetime_->getVertexList();
+
+    // Snapshot the incident top cells FIRST (deduped): getFacets() below
+    // registers freshly-materialized sub-simplices onto these same vertices'
+    // simplex lists, which would invalidate an in-flight iterator.
+    std::set<std::uint64_t> seenTops;
+    std::vector<SimplexPtr> tops;
+    for (std::uint64_t id : vertexIds) {
+        Vertex *v = vlist->get(id);
+        if (v == nullptr) continue;          // e.g. a vertex the move deleted
+        for (const auto &s : v->getSimplices()) {
+            if (static_cast<int>(s->size()) != topSize) continue;
+            if (seenTops.insert(s->fingerprint.fingerprint()).second)
+                tops.push_back(s);
+        }
+    }
+
+    // Walk each top down to its (d-2)-hinges, materializing the facet lattice.
+    std::set<std::uint64_t> seenHinges;
+    std::vector<SimplexPtr> hinges;
+    for (const auto &top : tops) {
+        for (const auto &facet : top->getFacets()) {        // (d-1)-cells
+            for (const auto &hinge : facet->getFacets()) {  // (d-2)-hinges
+                if (static_cast<int>(hinge->size()) != hingeSize) continue;
+                if (seenHinges.insert(hinge->fingerprint.fingerprint()).second)
+                    hinges.push_back(hinge);
+            }
+        }
+    }
+    return hinges;
+}
+
+std::set<ReggeSolver::EdgeKey>
+ReggeSolver::regionEdgeKeys(const std::vector<std::uint64_t> &vertexIds) const {
+    std::set<EdgeKey> keys;
+    const auto &vlist = spacetime_->getVertexList();
+    for (std::uint64_t id : vertexIds) {
+        Vertex *v = vlist->get(id);
+        if (v == nullptr) continue;
+        for (const auto &e : v->getEdges()) {  // returns a copy: safe to walk
+            const std::uint64_t a = e->getSource()->getId();
+            const std::uint64_t b = e->getTarget()->getId();
+            keys.insert({std::min(a, b), std::max(a, b)});
+        }
+    }
+    return keys;
+}
+
+void ReggeSolver::resetIncrementalGradient() {
+    residentGradient_.clear();
+    residentAction_ = std::complex<double>(0.0, 0.0);
+    for (const auto &h : collectHinges()) accumulateHinge(h, +1);
+    gradientResident_ = true;
+}
+
+void ReggeSolver::updateAround(const std::vector<std::uint64_t> &vertexIds,
+                               const std::function<void()> &mutate) {
+    const std::set<EdgeKey> preKeys = regionEdgeKeys(vertexIds);
+    for (const auto &h : regionHinges(vertexIds)) accumulateHinge(h, -1);
+    mutate();
+    for (const auto &h : regionHinges(vertexIds)) accumulateHinge(h, +1);
+    // Drop entries for edges the move deleted (present before, gone after) so a
+    // later id-reusing rollback re-adds onto a clean slate rather than residue.
+    const std::set<EdgeKey> postKeys = regionEdgeKeys(vertexIds);
+    for (const auto &k : preKeys)
+        if (postKeys.find(k) == postKeys.end()) residentGradient_.erase(k);
+}
+
+void ReggeSolver::applyMoveIncremental(
+    ::tessera::spacetime::PachnerMove &move) {
+    if (!gradientResident_)
+        throw std::logic_error(
+            "applyMoveIncremental: call resetIncrementalGradient() first to "
+            "establish the resident-gradient baseline");
+    updateAround(move.touchedVertexIds(), [&move] { (void)move.apply(); });
+}
+
+void ReggeSolver::rollbackMoveIncremental(
+    ::tessera::spacetime::PachnerMove &move) {
+    if (!gradientResident_)
+        throw std::logic_error(
+            "rollbackMoveIncremental: call resetIncrementalGradient() first to "
+            "establish the resident-gradient baseline");
+    updateAround(move.touchedVertexIds(), [&move] { move.rollback(); });
+}
+
+std::vector<std::complex<double>> ReggeSolver::incrementalGradient() const {
+    using cd = std::complex<double>;
+    const auto edges = spacetime_->getEdgeList()->toVector();
+    std::vector<cd> g(edges.size(), cd(0.0, 0.0));
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        const std::uint64_t a = edges[i]->getSource()->getId();
+        const std::uint64_t b = edges[i]->getTarget()->getId();
+        const auto it =
+            residentGradient_.find({std::min(a, b), std::max(a, b)});
+        if (it != residentGradient_.end()) g[i] = it->second;
+    }
+    return g;
 }
 
 // =====================================================================

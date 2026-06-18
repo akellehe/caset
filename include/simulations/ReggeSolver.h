@@ -4,10 +4,14 @@
 #include "mesh/ForwardDeclarations.h"
 #include "matter/MatterConfiguration.h"
 #include <complex>
+#include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
+#include <set>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #ifdef TESSERA_CUDA
@@ -23,6 +27,7 @@ namespace tessera::spacetime {}
 // === cross-subsystem fwd-decls ===
 namespace tessera::spacetime {
   class Spacetime;
+  class PachnerMove;
 }
 namespace tessera::simulations {
 using namespace ::tessera::mesh;
@@ -124,6 +129,49 @@ class ReggeSolver {
     [[nodiscard]] std::vector<std::vector<std::complex<double>>>
     actionHessianExact() const;
 
+    // ============ Incremental gradient (Pachner-local) ============
+    //
+    // ``actionGradientExact`` recomputes the whole gradient over every hinge
+    // (``O(H)``) on each call. The methods below keep a **resident** gradient
+    // ``∂S/∂ℓ²_e`` and the resident dual action ``S`` and update them
+    // **incrementally** under a transactional Pachner move: only the hinges in
+    // the move's touched neighborhood are re-evaluated, so a boundary-fixed move
+    // costs ``O(#changed hinges)`` rather than ``O(H)``. This is the per-move
+    // cost that gates a combinatorial search over triangulations (greedy /
+    // annealing / RL).
+
+    /// (Re)build the resident gradient and resident dual action from scratch
+    /// over all hinges. Must be called once before the first
+    /// ``applyMoveIncremental`` / ``rollbackMoveIncremental`` (it establishes
+    /// the baseline the per-move deltas update). Idempotent.
+    void resetIncrementalGradient();
+
+    /// The resident gradient ``∂S/∂ℓ²_e`` in ``getEdgeList()`` order — the same
+    /// vector ``actionGradientExact`` returns, but maintained incrementally.
+    /// Edges with no resident entry (none of their hinges contribute) read 0.
+    [[nodiscard]] std::vector<std::complex<double>> incrementalGradient() const;
+
+    /// The resident dual Lorentzian Regge action ``S = Σ_h |★h|·ε_h`` maintained
+    /// alongside the gradient — tracks ``dualReggeAction`` after each move.
+    [[nodiscard]] std::complex<double> incrementalAction() const noexcept {
+        return residentAction_;
+    }
+
+    /// Subtract the touched region's old hinge contributions, commit
+    /// ``move.apply()``, then add the region's new hinge contributions (the new
+    /// cells' facets are materialized locally). After this returns, the resident
+    /// gradient/action match a from-scratch ``actionGradientExact`` /
+    /// ``dualReggeAction`` on the mutated complex to machine precision.
+    /// ``move`` must have been successfully ``propose()``d. Requires a prior
+    /// ``resetIncrementalGradient`` (throws ``std::logic_error`` otherwise).
+    void applyMoveIncremental(::tessera::spacetime::PachnerMove &move);
+
+    /// The ``rollback`` counterpart: subtract the touched region's current hinge
+    /// contributions, replay ``move.rollback()``, then add the restored region's
+    /// contributions. Restores the resident gradient/action to their pre-apply
+    /// values to machine precision.
+    void rollbackMoveIncremental(::tessera::spacetime::PachnerMove &move);
+
     // ==================== Solver ====================
 
     /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.
@@ -161,6 +209,43 @@ class ReggeSolver {
 
     /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
     [[nodiscard]] std::vector<double> actionGradient() const;
+
+    // ---- Incremental-gradient state + helpers ----
+
+    using EdgeKey = std::pair<std::uint64_t, std::uint64_t>;
+
+    /// Resident gradient ∂S/∂ℓ²_e keyed by the sorted (minId, maxId) edge — the
+    /// same keying the per-hinge ``dualVolumeGradient`` /
+    /// ``lorentzianDeficitAngleGradient`` maps use.
+    std::map<EdgeKey, std::complex<double>> residentGradient_;
+    /// Resident dual Regge action Σ_h |★h|·ε_h.
+    std::complex<double> residentAction_{0.0, 0.0};
+    /// True once ``resetIncrementalGradient`` has established the baseline.
+    bool gradientResident_ = false;
+
+    /// Add ``sign``·(this hinge's contribution) into the resident gradient and
+    /// action: ε_h = ``lorentzianDeficitAngle``, |★h| = ``dualVolume``, and
+    /// ∂(|★h|·ε_h)/∂ℓ²_e by the product rule — exactly the inner loop of
+    /// ``actionGradientExact``.
+    void accumulateHinge(SimplexPtr hinge, int sign);
+
+    /// The hinges (deduplicated) that are a (d-2)-face of any top cell incident
+    /// to one of \a vertexIds, materializing the facet/coface lattice of those
+    /// tops as it walks. Superset of the hinges a local move can change; the
+    /// subtract/add delta makes the unchanged ones cancel exactly.
+    [[nodiscard]] std::vector<SimplexPtr>
+    regionHinges(const std::vector<std::uint64_t> &vertexIds);
+
+    /// The (sorted) edge keys incident to any of \a vertexIds in the current
+    /// complex — used to prune entries for edges a move deletes.
+    [[nodiscard]] std::set<EdgeKey>
+    regionEdgeKeys(const std::vector<std::uint64_t> &vertexIds) const;
+
+    /// Shared body of ``applyMoveIncremental`` / ``rollbackMoveIncremental``:
+    /// subtract the region's contributions, run \a mutate (apply or rollback),
+    /// add the region's contributions, then drop deleted edges' entries.
+    void updateAround(const std::vector<std::uint64_t> &vertexIds,
+                      const std::function<void()> &mutate);
 
 #ifdef TESSERA_CUDA
     /// Flatten mesh topology into GPU-friendly arrays.
