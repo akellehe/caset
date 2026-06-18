@@ -440,75 +440,70 @@ void MergeCobordism::buildSeed() {
 }
 
 void MergeCobordism::optimize() {
-  // Two-phase optimization (#363).
-  //
-  // PHASE 1 (combinatorial). At the FIXED seed metric, step through triangulation
-  // space with boundary-fixed Pachner moves and greedily keep only those that
-  // lower the interior Regge stationarity ||grad_I S||^2, rolling the rest back
-  // (the moves are transactional). The dual action S = sum_h |*h| eps_h depends on
-  // the triangulation (which hinges exist, their deficits / dual volumes /
-  // rapidities) at fixed edge lengths, so the moves alone extremize it. Stop when
-  // no move lowers the action (extremized) or the move budget is spent.
-  //
-  // PHASE 2 (metric). On that triangulation, relax the edge lengths to minimize
-  // the FULL residual r = beta||grad S||^2 + r_psi, with NO further moves. The
-  // action stays extremized because beta||grad S||^2 is still a term in r.
+  // Joint search (#363). The dual action is stationary over edge lengths AND
+  // combinatorics jointly, so we cannot extremize one then the other (a fixed
+  // metric makes the move-graph look flat — a combinatorial-first pass accepts
+  // zero moves). Each round instead applies a batch of boundary-fixed Pachner
+  // moves (a walk over all five bistellar types), relaxes the metric against the
+  // FULL residual r = beta||grad S||^2 + r_psi, and scores the relaxed result;
+  // we keep the lowest-residual operator found. A move is only as good as the
+  // metric it can be relaxed into.
   std::mt19937 rng(static_cast<std::uint32_t>(seed_));
 
-  // Interior Regge stationarity residual at the current triangulation + metric.
-  auto actionResidual = [&]() -> double {
-    EigenstateSynthesis es(cobordism_, 1);
-    std::set<std::pair<std::uint64_t, std::uint64_t>> interiorSet;
-    for (const auto &uv : es.interiorEdges()) interiorSet.insert(uv);
-    ReggeSolver solver(cobordism_, MatterConfiguration());
-    const auto g = solver.actionGradientExact();
-    const auto edges = cobordism_->getEdgeList()->toVector();
-    double n2 = 0.0;
-    for (std::size_t i = 0; i < edges.size() && i < g.size(); ++i)
-      if (interiorSet.count(edgeKey(edges[i]))) n2 += std::norm(g[i]);
-    return beta_ * n2;
-  };
-
-  // --- Phase 1: greedy combinatorial action extremization (fixed metric) ---
-  double bestAction = actionResidual();
+  relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, /*maxIters=*/150,
+                stats_.relaxIterations, verbose_);
+  extractOperator();
+  double best = stats_.residual;
+  std::vector<std::complex<double>> bestU = operatorU_, bestChoi = choiState_;
+  Stats bestSnap = stats_;
   if (verbose_)
-    std::cerr << "[merge] seed action=" << bestAction << " -- phase 1 (combinatorial, up to "
+    std::cerr << "[merge] seed r=" << best << " -- joint search (up to "
               << maxAttempts_ << " rounds)\n";
-  for (int attempt = 0; attempt < maxAttempts_ && bestAction >= epsilon_; ++attempt) {
-    bool improved = false;
-    auto tryMove = [&](auto &mv, int &counter) {
-      if (mv.propose() && mv.apply()) {
-        const double a = actionResidual();
-        if (a < bestAction) { bestAction = a; ++counter; improved = true; }
-        else { mv.rollback(); }  // reject: undo the move
-      }
+
+  for (int attempt = 0; attempt < maxAttempts_ && best >= epsilon_; ++attempt) {
+    auto applyMove = [&](auto &mv, int &counter) {
+      if (mv.propose() && mv.apply()) ++counter;  // a walk: no per-move rollback
     };
     for (int k = 0; k < kMovesPerRound; ++k) {
       const std::uint64_t s = static_cast<std::uint64_t>(rng());
       switch ((attempt * kMovesPerRound + k) % 5) {
-        case 0: { FlipMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); tryMove(mv, stats_.flipMoves); break; }
-        case 1: { IFlipMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); tryMove(mv, stats_.flipMoves); break; }
-        case 2: { ShiftMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); tryMove(mv, stats_.flipMoves); break; }
-        case 3: { AddMove mv(cobordism_.get(), s, true, PachnerMode::PreGeometric, true); tryMove(mv, stats_.addMoves); break; }
-        default: { RemoveMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); tryMove(mv, stats_.removeMoves); break; }
+        case 0: { FlipMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); applyMove(mv, stats_.flipMoves); break; }
+        case 1: { IFlipMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); applyMove(mv, stats_.flipMoves); break; }
+        case 2: { ShiftMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); applyMove(mv, stats_.flipMoves); break; }
+        case 3: { AddMove mv(cobordism_.get(), s, true, PachnerMode::PreGeometric, true); applyMove(mv, stats_.addMoves); break; }
+        default: { RemoveMove mv(cobordism_.get(), s, PachnerMode::PreGeometric, true); applyMove(mv, stats_.removeMoves); break; }
       }
     }
     stats_.attempts = attempt + 1;
+    relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, /*maxIters=*/150,
+                  stats_.relaxIterations, verbose_);
+    extractOperator();
     if (verbose_)
-      std::cerr << "[merge phase1] round " << (attempt + 1) << "/" << maxAttempts_
-                << "  action=" << bestAction << "  (flip=" << stats_.flipMoves
-                << " add=" << stats_.addMoves << " rm=" << stats_.removeMoves << ")\n";
-    if (!improved) break;  // no move lowered the action this round — extremized
+      std::cerr << "[merge joint] round " << (attempt + 1) << "/" << maxAttempts_
+                << "  r=" << stats_.residual << "  best=" << best
+                << "  (flip=" << stats_.flipMoves << " add=" << stats_.addMoves
+                << " rm=" << stats_.removeMoves << ")\n";
+    if (stats_.residual < best) {
+      best = stats_.residual;
+      bestU = operatorU_;
+      bestChoi = choiState_;
+      bestSnap = stats_;
+    }
   }
 
-  // --- Phase 2: metric residual minimization, no moves ---
-  if (verbose_)
-    std::cerr << "[merge] phase 1 done (action=" << bestAction
-              << ") -- phase 2 (relax, 400 iters)\n";
-  relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, /*maxIters=*/400,
-                stats_.relaxIterations, verbose_);
-  extractOperator();  // operator + topology + full residual breakdown
-  stats_.converged = stats_.residual < epsilon_;
+  // Return the lowest-residual operator found; the move counters stay cumulative.
+  stats_.converged = best < epsilon_;
+  operatorU_ = bestU;
+  choiState_ = bestChoi;
+  stats_.residual = bestSnap.residual;
+  stats_.statActionResidual = bestSnap.statActionResidual;
+  stats_.stateResidual = bestSnap.stateResidual;
+  stats_.dualAction = bestSnap.dualAction;
+  stats_.kerL1Bulk = bestSnap.kerL1Bulk;
+  stats_.bettiCobordism = bestSnap.bettiCobordism;
+  stats_.b1Bulk = bestSnap.b1Bulk;
+  stats_.interiorVertices = bestSnap.interiorVertices;
+  stats_.topology = bestSnap.topology;
 }
 
 void MergeCobordism::extractOperator() {
