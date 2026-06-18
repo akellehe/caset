@@ -175,6 +175,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} TDVPRunner.hpp
 ```
+```{doxygenfile} TDVPIntegrator.hpp
+```
 ```{doxygenfile} Quench.hpp
 ```
 ```{doxygenfile} ChoiJamiolkowski.h
@@ -226,6 +228,8 @@ exclusions to see the entire interface.
 ## GPU / CUDA acceleration
 
 ```{doxygenfile} regge_cuda.h
+```
+```{doxygenfile} eigenstate_cuda.h
 ```
 
 ## Core utilities & infrastructure
