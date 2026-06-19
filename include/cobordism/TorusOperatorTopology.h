@@ -33,6 +33,10 @@ class TorusOperatorTopology : public TopologyBuilder {
       return stateDim * stateDim - 1;  // ker L_1(W - dW), the Sigma=0 Choi dim
     }
 
+    [[nodiscard]] std::size_t loopsPerState() const override {
+      return 2;  // the hole-circle and the S^1 time loop per torus
+    }
+
     [[nodiscard]] std::string name() const override {
       return "(T^2-3holes)xS^1 operator";
     }

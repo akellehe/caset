@@ -48,6 +48,10 @@ class RegisterTopology : public TopologyBuilder {
       return 2;  // the S_3 standard rep (b_1 = 2 on the Sigma=0 hyperplane)
     }
 
+    [[nodiscard]] std::size_t loopsPerState() const override {
+      return 3;  // the three color hole-circles per register block
+    }
+
     /// The color register is \f$ d = 3 \f$ (the color triple on \f$ \sum=0 \f$).
     void validateStateDim(std::size_t d) const override;
 
