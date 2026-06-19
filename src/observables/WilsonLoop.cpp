@@ -377,17 +377,34 @@ WilsonResult WilsonLoop::evaluateU1Connection(
     const int n = static_cast<int>(cycle.size());
     if (n < 2) return {};  // need at least one edge
 
-    double total = 0.0;
+    // Each consecutive pair cycle[i] -> cycle[i+1] (mod n) is one directed
+    // traversal step, walked through the shared Edge::walkLoop primitive. The
+    // step Edges carry a dummy unit length; only their endpoints are read. A
+    // small id -> VertexPtr lookup recovers the mesh edge inside the walk.
+    std::vector<Edge> steps;
+    steps.reserve(static_cast<std::size_t>(n));
+    std::unordered_map<std::uint64_t, VertexPtr> byId;
     for (int i = 0; i < n; ++i) {
-        VertexPtr a = cycle[i];
-        VertexPtr b = cycle[(i + 1) % n];
-        EdgePtr e = edgeBetween(a, b);
-        if (!e) return {};  // open path — not a closed 1-skeleton cycle
-        // +phase along the stored source→target orientation, −phase reversed.
-        const bool forward = (e->getSource()->getId() == a->getId() &&
-                              e->getTarget()->getId() == b->getId());
-        total += forward ? e->getPhase() : -e->getPhase();
+        steps.emplace_back(cycle[i], cycle[(i + 1) % n],
+                           std::complex<double>(1.0, 0.0));
+        byId[cycle[i]->getId()] = cycle[i];
     }
+
+    double total = 0.0;
+    bool open = false;
+    Edge::walkLoop(steps, [&](std::uint64_t u, std::uint64_t v, double sign) {
+        if (open) return;
+        EdgePtr e = edgeBetween(byId[u], byId[v]);
+        if (!e) { open = true; return; }  // open path — not a closed cycle
+        // +phase along the stored source→target orientation, −phase reversed.
+        // The canonical-orientation `sign` folds the edge's stored orientation
+        // back to the cycle's u->v direction: sign * stored == (forward ? +1 :
+        // -1), so this is algebraically identical to the old forward test.
+        const double stored =
+            (e->getSource()->getId() < e->getTarget()->getId()) ? 1.0 : -1.0;
+        total += sign * stored * e->getPhase();
+    });
+    if (open) return {};  // open path — not a closed 1-skeleton cycle
 
     WilsonResult r;
     r.loopSize = n;

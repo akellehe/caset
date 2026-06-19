@@ -1058,8 +1058,7 @@ EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleReadoutOverLoo
           "EigenstateSynthesis::assembleReadoutOverLoops: loop " +
           std::to_string(q) + " is empty");
     bool first = true;
-    for (const Edge &oe : loops[q]) {
-      const std::uint64_t a = oe.getSource()->getId(), b = oe.getTarget()->getId();
+    Edge::walkLoop(loops[q], [&](std::uint64_t a, std::uint64_t b, double s) {
       const std::vector<std::uint64_t> e = {std::min(a, b), std::max(a, b)};
       const auto it = col.find(e);
       if (it == col.end())
@@ -1067,14 +1066,13 @@ EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleReadoutOverLoo
             "EigenstateSynthesis::assembleReadoutOverLoops: loop edge (" +
             std::to_string(a) + "," + std::to_string(b) +
             ") is not a k-cell of the complex");
-      const double s = (a < b) ? 1.0 : -1.0;
       if (first) {
         out.leakColumns.push_back(it->second);
         first = false;
       }
       for (std::size_t r = 0; r < out.dim; ++r)
         out.P[r * m + q] += s * out.H[r * n + it->second];
-    }
+    });
   }
   return out;
 }
@@ -1104,8 +1102,7 @@ std::vector<cd> EigenstateSynthesis::periodsOfCochainOverLoops(
   for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
   std::vector<cd> out(loops.size(), cd(0.0, 0.0));
   for (std::size_t q = 0; q < loops.size(); ++q)
-    for (const Edge &oe : loops[q]) {
-      const std::uint64_t a = oe.getSource()->getId(), b = oe.getTarget()->getId();
+    Edge::walkLoop(loops[q], [&](std::uint64_t a, std::uint64_t b, double s) {
       const std::vector<std::uint64_t> e = {std::min(a, b), std::max(a, b)};
       const auto it = col.find(e);
       if (it == col.end())
@@ -1114,9 +1111,8 @@ std::vector<cd> EigenstateSynthesis::periodsOfCochainOverLoops(
             std::to_string(a) + "," + std::to_string(b) +
             ") is not a k-cell of the complex");
       if (it->second < cochain.size())
-        out[q] += (a < b ? cd(1.0, 0.0) : cd(-1.0, 0.0)) *
-                  cochain[it->second];
-    }
+        out[q] += cd(s, 0.0) * cochain[it->second];
+    });
   return out;
 }
 
@@ -1220,12 +1216,10 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
           std::to_string(q) + " is empty");
     const Edge &fe = loop.front();
     leakCol[q] = cidx1.at(key(fe.getSource()->getId(), fe.getTarget()->getId()));
-    for (const Edge &oe : loop) {
-      const std::uint64_t a = oe.getSource()->getId(), b = oe.getTarget()->getId();
-      const double s = (a < b) ? 1.0 : -1.0;
+    Edge::walkLoop(loop, [&](std::uint64_t a, std::uint64_t b, double s) {
       Q(static_cast<Index>(q),
         static_cast<Index>(cidx1.at(key(a, b)))) += s;
-    }
+    });
   }
 
   // ---- eigendecomposition of M; harmonic (null) / non-null split ----
