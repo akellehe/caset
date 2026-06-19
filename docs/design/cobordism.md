@@ -99,9 +99,10 @@ emergent quantity is the one the caller did NOT supply**:
 
  - **Output supplied** (no $U$): pin `inputStates` *and* `outputStates` together as $\partial W$, relax, and the
    **operator** $U$ is the primary emergent quantity (`operatorU` — see the deferral note below).
- - **$U$ supplied** (no `outputStates`): apply $U$ to the inputs to get the expected output and pin it (so the
-   boundary is well-posed — "$U$ as the bulk constraint"), relax, and the **output state** is the primary emergent
-   quantity, read over the output cycles (`outputState`) — the $\#353$ inputs-$\to$-emergent-output flow.
+ - **$U$ supplied** (no `outputStates`): apply $U$ to the inputs to get the expected output and pin it as the
+   output target, relax, and the **output state** is the primary emergent quantity, read over the output cycles
+   (`outputState`) — the $\#353$ inputs-$\to$-emergent-output flow. (Making the transport itself realise $U$ —
+   "$U$ as the bulk constraint" — is deferred; see the note below.)
 
 `MergeCobordism` should have several members used for later introspection and analysis. 
  - `inputStates`
@@ -118,10 +119,16 @@ and call out the observed topologies.
 ### Emergence modes (which quantity is primary)
 
 `outputState` is populated in **both** modes — the primary emergent quantity when $U$ was supplied, and a
-consistency read (emergent vs. the pinned target) when the output was supplied. It is the $\#353$ flow: the
-minimum-norm metric $L_1(W)$ harmonic matching the **input** periods, read (as periods) over the output cycles —
-read from the relaxed geometry, not echoed from the seed. It is returned unnormalised and up to a global phase
-(the period scale); normalise to recover the qubit amplitudes.
+consistency read when the output was supplied. It is the $\#353$ flow: the minimum-norm metric $L_1(W)$ harmonic
+matching the **input** periods, read (as periods) over the output cycles. Because the read carries *only* the
+inputs, it is input-dominated and independent of the pinned target (read from the relaxed geometry, not echoed
+from the seed — supplying a different output with the same inputs returns the same `outputState`). It is returned
+unnormalised and up to a global phase (the period scale); normalise to recover the qubit amplitudes.
+
+Note that on the current $(T^2 - 3\,\text{holes}) \times S^1$ topology the input-to-output transport is
+$\approx$ identity, so `outputState` tracks the (transported) inputs and does **not** yet reflect $U$'s action.
+Making the transport realise $U$ is the operator-as-bulk-constraint — the same interior-handle operator-topology
+rework deferred for the operator read-out below.
 
 The operator read-out $U = \operatorname{unvec}(\ker L_1(W - \partial W))$ is **deferred**. On the current
 $(T^2 - 3\,\text{holes}) \times S^1$ topology $\ker L_1(W - \partial W)$ is a $(d^2 - 1)$-dimensional subspace of

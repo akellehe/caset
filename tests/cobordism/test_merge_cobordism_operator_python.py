@@ -45,18 +45,31 @@ _ITERS = 30
 _M = tessera.cobordism.MergeCobordism(_IN, _OUT, max_iters=_ITERS, seed=0)
 _S = _M.stats
 
-# U-supplied mode (no output_states): the OUTPUT state is the primary emergent
-# quantity. One input |0> and the identity operator, so the U-computed output
-# (the pinned target) is |0>.
-_U_IDENTITY = [1 + 0j, 0j, 0j, 1 + 0j]
-_MU = tessera.cobordism.MergeCobordism(
-    [[1 + 0j, 0j]], U=_U_IDENTITY, max_iters=_ITERS, seed=0)
+# Output-supplied, SAME inputs as _M but a DIFFERENT pinned output |1>. The
+# emergent output is input-dominated, so this must agree with _M's (it is read
+# from the inputs, not echoed from the pinned target).
+_MB1 = tessera.cobordism.MergeCobordism(
+    _IN, [[0j, 1 + 0j]], max_iters=_ITERS, seed=0)
 
-# 2 inputs + U => 2 U-computed outputs => 4 states > 3 holes, so the input/output
-# cycle split is indeterminate and the emergent output read is skipped (honest).
-# The empty read is iters-independent, so a minimal budget keeps it cheap.
+# U-supplied mode (no output_states): the OUTPUT state is the primary emergent
+# quantity. A DISCRIMINATING case -- one input |1> and U = X (Pauli), so the
+# U-computed/pinned output is X|1> = |0> != the input. On this topology the
+# transport is ~identity, so the emergent output tracks the INPUT |1>, not X|1>.
+_U_X = [0j, 1 + 0j, 1 + 0j, 0j]
+_MUX = tessera.cobordism.MergeCobordism(
+    [[0j, 1 + 0j]], U=_U_X, max_iters=_ITERS, seed=0)
+
+# Over-capacity reads must skip (honest empty), not emit a mis-split value. Both
+# overflow the topology's 3-hole capacity so a state goes unpinned; the empty
+# read is iters-independent, so a minimal budget keeps these cheap.
+#  - 2 inputs + U => 2 outputs => 4 states (caught by stateLoops != 2*total).
+#  - 3 inputs + U => 3 outputs => 6 states (the modulo-zero case a divisibility
+#    heuristic would mis-split into a bogus length-3 output).
 _M_2IN_U = tessera.cobordism.MergeCobordism(
-    _IN, U=[0j, 1 + 0j, 1 + 0j, 0j], max_iters=2, seed=0)
+    _IN, U=_U_X, max_iters=2, seed=0)
+_M_3IN_U = tessera.cobordism.MergeCobordism(
+    [[1 + 0j, 0j], [1 + 0j, 0j], [1 + 0j, 0j]],
+    U=[1 + 0j, 0j, 0j, 1 + 0j], max_iters=2, seed=0)
 
 
 def _normalized_phase_fixed(vec):
@@ -177,30 +190,58 @@ class OutputEmergenceTest(unittest.TestCase):
         for z in _M.output_state:
             self.assertTrue(math.isfinite(z.real) and math.isfinite(z.imag))
 
-    def test_output_supplied_emergent_matches_supplied(self):
-        # output-supplied mode: the emergent output (carry inputs -> read output
-        # cycles), normalized and global-phase-fixed, reproduces the supplied |0>.
-        # Returned unnormalized (the period scale) and up to a global phase.
-        self.assertGreater(_fidelity(_M.output_state, _OUT[0]), 0.9)
+    def test_output_is_emergent_not_an_echo(self):
+        # The discriminator: SAME inputs, DIFFERENT pinned output (|0> for _M,
+        # |1> for _MB1). The read carries only the inputs, so it is input-dominated
+        # -- both must return the SAME output_state (it is read from the geometry,
+        # not echoed from the pinned target). _MB1 therefore does NOT track its own
+        # pinned |1>, which is exactly what makes this read emergent rather than a
+        # tautology.
+        self.assertGreater(
+            _fidelity(_MB1.output_state,
+                      _normalized_phase_fixed(_M.output_state)), 0.99)
+        self.assertLess(_fidelity(_MB1.output_state, [0j, 1 + 0j]), 0.5)
 
     def test_u_supplied_no_output_is_legal(self):
         # U supplied, output_states omitted: construction is legal (output_states
         # defaults to empty and is computed from U) and the output emerges.
-        self.assertEqual(len(_MU.output_state), 2)
+        self.assertEqual(len(_MUX.output_state), 2)
 
     def test_u_supplied_output_states_computed_from_U(self):
-        # the (plural) outputStates echo is U applied to each input: I|0> = |0>.
-        self.assertEqual(_MU.output_states, [[1 + 0j, 0j]])
+        # the (plural) outputStates echo is U applied to each input: X|1> = |0>.
+        self.assertEqual(_MUX.output_states, [[1 + 0j, 0j]])
 
-    def test_u_supplied_output_tracks_input_transport(self):
-        # with the operator-as-bulk-constraint deferred, the transport is ~identity
-        # on this topology, so the emergent output tracks the carried input |0>.
-        self.assertGreater(_fidelity(_MU.output_state, [1 + 0j, 0j]), 0.9)
+    def test_u_supplied_output_tracks_input_not_U(self):
+        # The honest U-supplied verdict (1 input |1>, U = X): with the
+        # operator-as-bulk-constraint deferred, the transport is ~identity, so the
+        # emergent output tracks the INPUT |1> -- it does NOT (yet) reflect U, i.e.
+        # it is not X|1> = |0>. This pins the deferral, not an over-claim.
+        self.assertGreater(_fidelity(_MUX.output_state, [0j, 1 + 0j]), 0.99)  # |1>
+        self.assertLess(_fidelity(_MUX.output_state, [1 + 0j, 0j]), 0.5)      # X|1>=|0>
 
-    def test_indeterminate_split_skips_output(self):
-        # 2 inputs + U => 4 states > 3 holes: the input/output cycle split is
-        # indeterminate, so the output read is skipped (empty) rather than guessed.
+    def test_over_capacity_reads_skip(self):
+        # More states than the topology's 3-hole capacity => a state goes unpinned
+        # => the read is skipped (honest empty), never a mis-split value. Covers
+        # both the 4-state and the modulo-zero 6-state case a naive divisibility
+        # heuristic would wrongly split.
         self.assertEqual(len(_M_2IN_U.output_state), 0)
+        self.assertEqual(len(_M_3IN_U.output_state), 0)
+
+
+class ConstructorValidationTest(unittest.TestCase):
+    """The two modes are mutually exclusive and exactly one must be supplied
+    (#376); now that output_states defaults to empty, both misuses must throw."""
+
+    def test_neither_output_nor_u_raises(self):
+        # output_states defaults to {} and no U => nothing to pin as the output.
+        with self.assertRaises(ValueError):
+            tessera.cobordism.MergeCobordism([[1 + 0j, 0j]], max_iters=2, seed=0)
+
+    def test_both_u_and_output_raises(self):
+        # supplying both must throw rather than silently discard output_states.
+        with self.assertRaises(ValueError):
+            tessera.cobordism.MergeCobordism(
+                _IN, _OUT, U=_U_X, max_iters=2, seed=0)
 
 
 class OperatorDeferredTest(unittest.TestCase):

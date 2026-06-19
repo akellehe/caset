@@ -69,6 +69,14 @@ class TopologyBuilder {
     /// register). Used to size and validate the read-out.
     [[nodiscard]] virtual std::size_t carriedDim(std::size_t stateDim) const = 0;
 
+    /// The number of read-out cycles `readout()` emits per pinned state (e.g. 2
+    /// for the torus: the hole-circle and the \f$ S^1 \f$ time loop). With it the
+    /// caller can split `readout()`'s flat loop list back into per-state blocks
+    /// and detect a state that went unpinned — `readout()` pins at most the
+    /// topology's state capacity, so `loops.size() == loopsPerState() * (#states)`
+    /// holds iff every state was pinned.
+    [[nodiscard]] virtual std::size_t loopsPerState() const = 0;
+
     /// Human-readable topology name, for `MergeCobordism::Stats::topology`.
     [[nodiscard]] virtual std::string name() const = 0;
 };

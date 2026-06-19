@@ -38,15 +38,23 @@ using ::tessera::spacetime::Spacetime;
 ///   inputs as \f$ \partial W \f$, the interior relaxes, and the **operator** is
 ///   the primary emergent quantity (`operatorU()` — see the deferral note below).
 /// * **U-supplied** (`outputStates` omitted): the expected output is computed by
-///   applying `U` to the inputs, pinned as the output target ("apply `U`" / `U` as
-///   the bulk constraint), and the **output state** is the primary emergent
-///   quantity — read back over the output cycles by transporting the inputs
-///   through the relaxed geometry (the #353 `inputs → emergent output` flow), via
-///   `outputState()`.
+///   applying `U` to the inputs and pinned as the output target, and the **output
+///   state** is the primary emergent quantity — read back over the output cycles
+///   by transporting the inputs through the relaxed geometry (the #353
+///   `inputs → emergent output` flow), via `outputState()`. (Making the transport
+///   itself realize `U` — "`U` as the bulk constraint" — is deferred; see below.)
 ///
 /// `outputState()` is populated in **both** modes — primary when `U` was supplied,
-/// a consistency read (emergent vs. the pinned target) when the output was
-/// supplied. `operatorU()` / `choiState()` (the
+/// a consistency read when the output was supplied. It is genuinely emergent: the
+/// read carries only the **inputs** (`carriedRepresentativeOverLoops` on the input
+/// cycles) and reads their periods over the output cycles, so it is input-dominated
+/// and independent of the pinned target, not an echo of the seed. NB on the current
+/// topology the input→output transport is `≈ identity`, so `outputState()` tracks
+/// the (transported) inputs and does **not** yet reflect `U`'s action — reflecting
+/// `U` is the operator-as-bulk-constraint that awaits the same operator-topology
+/// rework as the operator read-out below.
+///
+/// `operatorU()` / `choiState()` (the
 /// \f$ \operatorname{unvec}(\ker L_1(W-\partial W)) \f$ operator read-out) are
 /// **deferred** pending the interior-handle operator-topology rework: on the
 /// current topology \f$ \ker L_1(W-\partial W) \f$ is a \f$ d^2-1 \f$-dim
@@ -74,7 +82,8 @@ class MergeCobordism {
     /// Build and run the merge.
     /// @param inputStates  the input qubit states, each a length-\f$ d \f$ vector.
     /// @param outputStates the expected output state(s). Required when `U` is
-    ///   empty; **may be omitted** when `U` is supplied (then computed from `U`).
+    ///   empty; **must be omitted** when `U` is supplied (then computed from `U` —
+    ///   the two modes are mutually exclusive). Throws if both are supplied.
     /// @param U            optional operator, flat row-major; when set the outputs
     ///   are computed by applying it to the inputs and the output state is the
     ///   primary emergent quantity (`U`-supplied mode).
@@ -87,7 +96,7 @@ class MergeCobordism {
     /// @param verbose      emit per-iteration relax progress to stderr.
     MergeCobordism(
         const std::vector<std::vector<std::complex<double>>> &inputStates,
-        const std::vector<std::vector<std::complex<double>>> &outputStates,
+        const std::vector<std::vector<std::complex<double>>> &outputStates = {},
         const std::vector<std::complex<double>> &U = {}, double beta = 1.0,
         double epsilon = 1e-6, int maxIters = 400, std::uint64_t seed = 0,
         std::shared_ptr<TopologyBuilder> topology = nullptr, bool verbose = false);
@@ -121,8 +130,11 @@ class MergeCobordism {
     /// \f$ L_1(W) \f$ harmonic carrying the **inputs** read over the output
     /// cycles — the output the relaxed geometry produces from the inputs alone.
     /// The primary emergent quantity in `U`-supplied mode; a consistency read
-    /// (emergent vs. the pinned target) in output-supplied mode. Flat, length
-    /// \f$ d \f$. Empty when the input/output cycle split is not determinate.
+    /// (emergent vs. the pinned target) in output-supplied mode. Flat; length is
+    /// `loopsPerState` \f$ \times \f$ (#output states) (\f$ d \f$ for a single
+    /// qubit output). Empty when the read is not determinate — when some state
+    /// went unpinned (more states than the topology's capacity), so the
+    /// input/output cycle split cannot be trusted.
     [[nodiscard]] const std::vector<std::complex<double>> &outputState()
         const noexcept { return outputState_; }
 

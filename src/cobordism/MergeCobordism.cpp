@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <map>
 #include <set>
@@ -192,7 +193,12 @@ MergeCobordism::MergeCobordism(
         "MergeCobordism: state dimension must be a power of two >= 2");
 
   if (!U.empty()) {
-    // U-supplied: compute the output state(s) from U, then ignore U.
+    // U-supplied mode: the output emerges, so outputStates must be OMITTED (the
+    // two modes are mutually exclusive -- supplying both would silently discard
+    // the caller's outputStates when computeOutputsFromOperator overwrites them).
+    if (!outputStates_.empty())
+      throw std::invalid_argument(
+          "MergeCobordism: supply either outputStates or U, not both");
     if (U.size() != stateDim_ * stateDim_)
       throw std::invalid_argument(
           "MergeCobordism: U must be a d x d row-major operator");
@@ -283,10 +289,18 @@ void MergeCobordism::extractOperator() {
   // input/output split is at nIn = loopsPerState * (#input states); skip the
   // read when that split is not determinate (e.g. some states went unpinned).
   outputState_.clear();
+  // The topology emits loopsPerState() cycles per pinned state, inputs first, and
+  // pins at most its state capacity -- so stateLoops_.size() == loopsPerState *
+  // totalStates holds IFF every state was pinned (no truncation). Take
+  // loopsPerState from the topology rather than inferring it by division (which
+  // silently mis-splits when states are dropped, e.g. totalStates beyond
+  // capacity), and require an exact, untruncated, target-matched read; otherwise
+  // skip (an honest empty, not a frame-/split-dependent value).
   const std::size_t totalStates = inputStates_.size() + outputStates_.size();
-  if (totalStates > 0 && !stateLoops_.empty() &&
-      stateLoops_.size() % totalStates == 0) {
-    const std::size_t loopsPerState = stateLoops_.size() / totalStates;
+  const std::size_t loopsPerState = topology_->loopsPerState();
+  if (totalStates > 0 && loopsPerState > 0 &&
+      stateLoops_.size() == loopsPerState * totalStates &&
+      stateTargets_.size() == stateLoops_.size()) {
     const std::size_t nIn = loopsPerState * inputStates_.size();
     if (nIn > 0 && nIn < stateLoops_.size()) {
       const std::vector<TopologyBuilder::EdgeLoop> inLoops(
