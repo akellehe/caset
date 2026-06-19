@@ -131,8 +131,8 @@ class MergeCobordism {
     /// cycles — the output the relaxed geometry produces from the inputs alone.
     /// The primary emergent quantity in `U`-supplied mode; a consistency read
     /// (emergent vs. the pinned target) in output-supplied mode. Flat; length is
-    /// `loopsPerState` \f$ \times \f$ (#output states) (\f$ d \f$ for a single
-    /// qubit output). Empty when the read is not determinate — when some state
+    /// `loopsPerState` \f$ \times \f$ (number of output states) (\f$ d \f$ for a
+    /// single qubit output). Empty when the read is not determinate — when some state
     /// went unpinned (more states than the topology's capacity), so the
     /// input/output cycle split cannot be trusted.
     [[nodiscard]] const std::vector<std::complex<double>> &outputState()
