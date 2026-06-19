@@ -43,7 +43,7 @@ using ::tessera::spacetime::Spacetime;
 /// \f$ r_U \f$ (`EigenstateSynthesis::residualForLoops`): it holds the state's
 /// target periods **exactly** (a minimal leak) and scores the non-harmonicity
 /// \f$ \|L\psi-\lambda\psi\|^2 \f$ — \f$ \to 0 \f$ for a realizable (e.g.
-/// \f$ \sum = 0 \f$) state, floored otherwise (confinement). The legacy **hard
+/// \f$ \sum = 0 \f$) state, floored otherwise (confinement). The **hard
 /// period-pin** \f$ r_\psi \f$ (`EigenstateSynthesis::periodGapForLoops`, the
 /// carried-vs-target period gap \f$ \|P^{\top}c-\text{target}\|^2 \f$ with the
 /// carried object a pure harmonic) is selectable via `StateResidualMode` for

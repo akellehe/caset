@@ -1166,7 +1166,10 @@ double EigenstateSynthesis::periodGapForLoops(
   }
   // P^T (m x dim): the live harmonics' periods over the loops. The carried object
   // stays a PURE harmonic (no leak): least-squares-fit the target onto P^T's
-  // column space and return the squared norm of the unreachable remainder.
+  // column space and return the squared norm of the unreachable remainder. The
+  // min-norm SVD fit is the same projection convention carriedFromReadout uses
+  // for r_U (so the two terms share the realizable zero set) and that
+  // periodGapForLoopsGradient differentiates.
   Eigen::MatrixXcd Pt(static_cast<Eigen::Index>(m),
                       static_cast<Eigen::Index>(ro.dim));
   for (std::size_t q = 0; q < m; ++q)
@@ -1397,7 +1400,13 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   // A = Q Un and c the least-squares fit, NOT the leak'd state's non-harmonicity.
   // Least-squares optimality A^T r = 0 (envelope theorem) drops the dc term, so
   // d r_psi / d l^2 = 2 Re( r^H (Q dUn) c ) -- no leak, no dpsi chain.
+  //
+  // NB the M / eigensplit / per-edge-dM machinery below is DELIBERATELY duplicated
+  // from periodGradientOverLoops: that r_U gradient is frozen (FD- and GPU-mirror
+  // verified), so a shared helper would have to edit do-not-change code. Keep the
+  // two copies in sync; test_period_gap_python.py FD-guards this one.
   using Eigen::Index;
+  using Eigen::MatrixXcd;
   using Eigen::MatrixXd;
   using Eigen::VectorXcd;
   using Eigen::VectorXd;
@@ -1500,12 +1509,20 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
   // ---- the least-squares fit c and the period-gap residual r = A c - target ----
+  // Rank-robust min-norm fit (Jacobi SVD), matching periodGapForLoops's value so
+  // the analytic gradient stays consistent with the function it differentiates,
+  // and so a column-rank-deficient A (carried harmonic count nd > read-out cycle
+  // count m, or dependent/zero-period harmonics) yields the min-norm solution
+  // rather than the NaN a singular (A^T A)^{-1} would give. The optimality
+  // A^T r = 0 holds for ANY least-squares solution, so the envelope theorem
+  // (the dropped dc term) is unaffected by the min-norm choice.
   VectorXcd target(static_cast<Index>(m));
   for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
   const MatrixXd A = Q * Un;                            // m x nd
-  const MatrixXd AtAi = (A.transpose() * A).inverse();  // nd x nd
-  const VectorXcd c = (AtAi * A.transpose()).cast<cd>() * target;  // nd
-  const VectorXcd r = A.cast<cd>() * c - target;        // m; A^T r = 0 (optimality)
+  const MatrixXcd Ac = A.cast<cd>();
+  const VectorXcd c =
+      Ac.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(target);  // nd
+  const VectorXcd r = Ac * c - target;                 // m; A^T r = 0 (optimality)
 
   // ---- per-edge analytic gradient d r_psi / d l^2 (low-rank dM + perturbation) ----
   for (std::size_t je = 0; je < n1; ++je) {
