@@ -94,18 +94,47 @@ reached, defaulting to 100.
 
 ## Implementation
 
-This should all be implemented in a C++ class, `MergeCobordism(inputStates, outputStates, U)`. If the user supplies $U$; 
-the `outputStates` should be calculated. If not then we require `outputStates` and $U$ will be emergent. If the user 
-passes $U$ we should use the algorithm above, ignoring $U$ except in the calculation of the final states used in the 
-whole setup.
+This should all be implemented in a C++ class, `MergeCobordism(inputStates, outputStates, U)`. The **primary
+emergent quantity is the one the caller did NOT supply**:
+
+ - **Output supplied** (no $U$): pin `inputStates` *and* `outputStates` together as $\partial W$, relax, and the
+   **operator** $U$ is the primary emergent quantity (`operatorU` — see the deferral note below).
+ - **$U$ supplied** (no `outputStates`): apply $U$ to the inputs to get the expected output and pin it as the
+   output target, relax, and the **output state** is the primary emergent quantity, read over the output cycles
+   (`outputState`) — the $\#353$ inputs-$\to$-emergent-output flow. (Making the transport itself realise $U$ —
+   "$U$ as the bulk constraint" — is deferred; see the note below.)
 
 `MergeCobordism` should have several members used for later introspection and analysis. 
  - `inputStates`
- - `outputStates`
+ - `outputStates` (as supplied, or computed from $U$)
  - `cobordism` ($W$)
  - `boundary` ($\partial W$)
  - `bulk` ($W - \partial W$)
+ - `operatorU` / `choiState` — the emergent operator $U = \operatorname{unvec}(\ker L_1(W - \partial W))$ (deferred; see below)
+ - `outputState` — the emergent final state $\psi_{AB}$: the inputs carried through the relaxed geometry, read over the output cycles
 
 As well as any useful statistics about the convergence process. We should especially make note of topological parameters, 
 and call out the observed topologies.
+
+### Emergence modes (which quantity is primary)
+
+`outputState` is populated in **both** modes — the primary emergent quantity when $U$ was supplied, and a
+consistency read when the output was supplied. It is the $\#353$ flow: the minimum-norm metric $L_1(W)$ harmonic
+matching the **input** periods, read (as periods) over the output cycles. Because the read carries *only* the
+inputs, it is input-dominated and independent of the pinned target (read from the relaxed geometry, not echoed
+from the seed — supplying a different output with the same inputs returns the same `outputState`). It is returned
+unnormalised and up to a global phase (the period scale); normalise to recover the qubit amplitudes.
+
+Note that on the current $(T^2 - 3\,\text{holes}) \times S^1$ topology the input-to-output transport is
+$\approx$ identity, so `outputState` tracks the (transported) inputs and does **not** yet reflect $U$'s action.
+Making the transport realise $U$ is the operator-as-bulk-constraint — the same interior-handle operator-topology
+rework deferred for the operator read-out below.
+
+The operator read-out $U = \operatorname{unvec}(\ker L_1(W - \partial W))$ is **deferred**. On the current
+$(T^2 - 3\,\text{holes}) \times S^1$ topology $\ker L_1(W - \partial W)$ is a $(d^2 - 1)$-dimensional subspace of
+the interior $1$-cochains, and there is no basis-independent map from it to the $d \times d$ operator: the kernel
+basis is fixed only up to an $O(d^2 - 1)$ rotation, so a reshape is frame-dependent. A principled read needs
+distinguished interior **Choi-cycles** the topology does not yet supply — the interior-handle operator-topology
+rework (building $W$ from the closed $S^2 \times S^1$ handle so the operator is a genuine interior $1$-cycle).
+Until then `operatorU` / `choiState` stay **empty** rather than report a frame-dependent value.
 
