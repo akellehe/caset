@@ -13,7 +13,8 @@ pin the clean base's contract:
   * the boundary / bulk / interior structure (all combinatorial, so exact and
     seed-independent),
   * that the relaxation descends from the bare seed to the intrinsic
-    ``delta-S = 0`` floor, decomposes as ``beta*||grad S||^2 + r_psi``, and is
+    ``delta-S = 0`` floor, decomposes as ``beta*||grad S||^2 + r_state`` (the
+    selected state term: r_U realizability by default, r_psi period-pin), and is
     deterministic for a fixed seed,
   * the bidirectional emergence (#376): the primary emergent quantity is the one
     the caller did not supply -- the emergent ``output_state`` (the inputs carried
@@ -147,12 +148,14 @@ class RelaxationTest(unittest.TestCase):
         self.assertGreater(_S.residual, 0.0)
 
     def test_residual_decomposes(self):
-        # beta = 1: r = beta*||grad S||^2 + r_psi.
+        # beta = 1: r = beta*||grad S||^2 + r_state.
         self.assertAlmostEqual(
             _S.residual, _S.stat_action_residual + _S.state_residual, places=9)
 
-    def test_states_are_pinned_hard(self):
-        # r_psi is the (hard) state-pinning term; it sits near zero.
+    def test_state_residual_near_zero(self):
+        # The default r_state term is r_U (realizability); the basis input/output
+        # states are realizable, so it sits near zero. (That the default term IS
+        # r_U is asserted in StateResidualModeTest.test_default_is_realizability.)
         self.assertLess(_S.state_residual, 1e-2)
 
     def test_runs_the_iteration_budget(self):
@@ -289,6 +292,73 @@ class DeterminismTest(unittest.TestCase):
 
     def test_same_seed_same_output_state(self):
         self.assertEqual(list(self.m2.output_state), list(_M.output_state))
+
+
+class StateResidualModeTest(unittest.TestCase):
+    """The selectable r_state term (#377): r_U realizability (default) vs r_psi
+    hard period-pin. The topology/structure is the term-independent substrate;
+    only the matter term and its descent differ."""
+
+    _MODE = tessera.cobordism.MergeCobordism.StateResidualMode
+
+    @classmethod
+    def setUpClass(cls):
+        # The default merge (_M) is r_U; build the r_psi counterpart once.
+        cls.m_pin = tessera.cobordism.MergeCobordism(
+            _IN, _OUT, max_iters=_ITERS, seed=0,
+            topology=tessera.cobordism.TorusOperatorTopology(),
+            state_mode=cls._MODE.PeriodPin)
+
+    def test_default_is_realizability(self):
+        # No state_mode argument => r_U (the #377 default).
+        self.assertEqual(_S.state_mode, "r_U")
+
+    def test_period_pin_is_selected(self):
+        self.assertEqual(self.m_pin.stats.state_mode, "r_psi")
+
+    def test_period_pin_descends_to_a_finite_floor(self):
+        # r_psi also descends well below the bare seed (~162) and floors > 0.
+        s = self.m_pin.stats
+        self.assertGreater(s.residual, 0.0)
+        self.assertLess(s.residual, 2.0)  # ~300x below the bare seed
+
+    def test_mode_shares_the_combinatorial_topology(self):
+        # ker_l1_bulk and interior_vertices are combinatorial invariants of the
+        # fixed triangulation (no edge lengths enter), so they are mode- AND
+        # metric-independent by construction. This pins that the two modes run on
+        # the *same* substrate; mode-dependence of the relaxed GEOMETRY (the real
+        # discriminator) is checked in test_period_pin_relaxes_differently.
+        self.assertEqual(self.m_pin.stats.ker_l1_bulk, _S.ker_l1_bulk)
+        self.assertEqual(self.m_pin.stats.interior_vertices, _S.interior_vertices)
+
+    def test_period_pin_relaxes_differently(self):
+        # The term IS the matter gradient: r_psi and r_U fold different state
+        # gradients into the LM step, so from the same seed they relax the
+        # interior edges to genuinely different lengths. This is what actually
+        # fails if PeriodPin silently fell back to the r_U descent (every other
+        # assertion in this class survives that regression -- the labels come from
+        # stateMode_ and the floor/topology are mode-independent).
+        def interior_l2(m):
+            bulk = {tuple(c) for c in m.bulk}  # the interior 1-cells (sorted (u,v))
+            out = {}
+            for e in m.cobordism.getEdgeList().toVector():
+                a, b = e.getSource().getId(), e.getTarget().getId()
+                key = (min(a, b), max(a, b))
+                if key in bulk:
+                    out[key] = e.getSquaredLength().real
+            return out
+        ru, pin = interior_l2(_M), interior_l2(self.m_pin)
+        self.assertEqual(set(ru), set(pin))  # same interior edge set (same topology)
+        self.assertGreater(
+            max(abs(ru[k] - pin[k]) for k in ru), 1e-6,
+            "r_psi and r_U relaxed to identical geometry -- mode may not be wired")
+
+    def test_period_pin_is_deterministic(self):
+        m2 = tessera.cobordism.MergeCobordism(
+            _IN, _OUT, max_iters=_ITERS, seed=0,
+            topology=tessera.cobordism.TorusOperatorTopology(),
+            state_mode=self._MODE.PeriodPin)
+        self.assertEqual(m2.stats.residual, self.m_pin.stats.residual)
 
 
 if __name__ == "__main__":

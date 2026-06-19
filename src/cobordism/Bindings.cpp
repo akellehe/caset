@@ -533,6 +533,26 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "approximation (~1e-5 vs FP64); residualForPeriodsGradient stays the "
            "default and the correctness oracle. Requires a TESSERA_CUDA build "
            "(raises otherwise), and raises on a hole/target length mismatch.")
+      // ----- The hard period-pin r_psi (the realizability alternative, #377) -----
+      .def("periodGapForPeriods", &EigenstateSynthesis::periodGapForPeriods,
+           py::arg("holes"), py::arg("target_periods"),
+           "The hard period-pin r_psi over the holes' cycles: r_psi = "
+           "||P^T c - target||^2, where the columns of P^T are the live "
+           "harmonics' periods over the holes and c is their least-squares fit "
+           "-- the squared norm of the part of target_periods no pure harmonic "
+           "can carry. Unlike residualForPeriods (r_U), the carried object stays "
+           "a pure harmonic (NO leak). -> 0 iff the targets lie in the carried "
+           "period span (the same realizable set as r_U), floored otherwise. "
+           "Raises on a hole/target length mismatch or a malformed hole.")
+      .def("periodGapForPeriodsGradient",
+           &EigenstateSynthesis::periodGapForPeriodsGradient,
+           py::arg("holes"), py::arg("target_periods"),
+           "The exact analytic gradient d r_psi / d l^2 of periodGapForPeriods, "
+           "in cellSimplices() (k=1 cell) order. By least-squares optimality "
+           "(A^T r = 0, the envelope theorem) only the harmonic-subspace "
+           "perturbation enters: d r_psi = 2 Re( r^H (Q dUn) c ) -- no leak, no "
+           "dpsi chain. Raises on a hole/target length mismatch or a malformed "
+           "hole.")
       // ----- The discovered operator: ker L1(W - dW) (#363) -----
       .def("bulkMinusBoundaryCells",
            &EigenstateSynthesis::bulkMinusBoundaryCells,
@@ -1309,6 +1329,14 @@ prepared states, reproduces the harmonic overlap.)doc")
       "dual Lorentzian Regge action (relaxed with the sparse analytic Hessian) "
       "on a TopologyBuilder topology. The primary emergent quantity is the one "
       "the caller did not supply (see __init__).");
+  py::enum_<MergeCobordism::StateResidualMode>(mc, "StateResidualMode",
+      "The matter/state term r_state the relaxation pins against.")
+      .value("Realizability", MergeCobordism::StateResidualMode::Realizability,
+             "r_U (default): hold the periods exact, score the state's "
+             "non-harmonicity (residualForLoops).")
+      .value("PeriodPin", MergeCobordism::StateResidualMode::PeriodPin,
+             "r_psi: the pure-harmonic carried-vs-target period gap "
+             "(periodGapForLoops).");
   py::class_<MergeCobordism::Stats>(mc, "Stats",
       "Convergence + topology statistics of the relaxation.")
       .def_readonly("converged", &MergeCobordism::Stats::converged)
@@ -1323,15 +1351,18 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def_readonly("ker_l1_bulk", &MergeCobordism::Stats::kerL1Bulk)
       .def_readonly("interior_vertices",
                     &MergeCobordism::Stats::interiorVertices)
-      .def_readonly("topology", &MergeCobordism::Stats::topology);
+      .def_readonly("topology", &MergeCobordism::Stats::topology)
+      .def_readonly("state_mode", &MergeCobordism::Stats::stateMode,
+                    "The selected r_state term: 'r_U' or 'r_psi'.");
   mc.def(py::init([](const std::vector<std::vector<std::complex<double>>> &in,
                      const std::vector<std::vector<std::complex<double>>> &out,
                      const std::vector<std::complex<double>> &U, double beta,
                      double epsilon, int maxIters, std::uint64_t seed,
-                     std::shared_ptr<TopologyBuilder> topology, bool verbose) {
+                     std::shared_ptr<TopologyBuilder> topology, bool verbose,
+                     MergeCobordism::StateResidualMode stateMode) {
            return std::make_unique<MergeCobordism>(
                in, out, U, beta, epsilon, maxIters, seed, std::move(topology),
-               verbose);
+               verbose, stateMode);
          }),
          py::arg("input_states"),
          py::arg("output_states") =
@@ -1341,6 +1372,7 @@ prepared states, reproduces the harmonic overlap.)doc")
          py::arg("max_iters") = 400, py::arg("seed") = 0,
          py::arg("topology") = std::shared_ptr<TopologyBuilder>{},
          py::arg("verbose") = false,
+         py::arg("state_mode") = MergeCobordism::StateResidualMode::Realizability,
          "Build and run the merge. topology selects the cobordism topology "
          "(default: RegisterTopology, the #353-style color register; pass "
          "TorusOperatorTopology for the (T^2-3holes)xS^1 qubit operator); the "
@@ -1349,7 +1381,8 @@ prepared states, reproduces the harmonic overlap.)doc")
          "supplied: output_states (U empty) => the operator is primary; U (a flat "
          "row-major dxd operator, output_states omitted) => the output_state is "
          "primary, emergent over the output cycles. Supply exactly one of "
-         "output_states or U.")
+         "output_states or U. state_mode selects the r_state term: Realizability "
+         "(r_U, default) or PeriodPin (r_psi, for comparison).")
       .def_property_readonly("input_states", &MergeCobordism::inputStates)
       .def_property_readonly("output_states", &MergeCobordism::outputStates)
       .def_property_readonly("cobordism", &MergeCobordism::cobordism,

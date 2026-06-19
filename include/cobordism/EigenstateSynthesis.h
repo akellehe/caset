@@ -420,6 +420,60 @@ class EigenstateSynthesis {
         const std::vector<std::complex<double>> &cochain,
         const std::vector<EdgeLoop> &loops) const;
 
+    // === The hard period-pin r_ψ (the realizability alternative, #377) ===
+    // `residualForLoops`/`residualForPeriods` (r_U) build the EXACT-period state
+    // (a minimal leak) and score its NON-harmonicity \f$ \|L\psi-\lambda\psi\|^2 \f$.
+    // These instead keep the carried object a PURE harmonic and score the period
+    // GAP it cannot match, \f$ r_\psi = \|P^{\top}c - \text{target}\|^2 \f$ with
+    // \f$ c \f$ the least-squares fit — the §5.0 hard period-pin (#353's `r_ψ`).
+    // Same zero set as r_U (\f$ \to 0 \f$ iff the target lies in the carried
+    // period span), different off-zero shape and gradient. Selectable in
+    // `MergeCobordism` for comparison; r_U is the default.
+
+    /// The hard period-pin residual over signed edge-loops:
+    /// \f$ r_\psi = \|\,P^{\top} c - \text{target}\,\|^2 \f$, where the columns of
+    /// \f$ P^{\top} \f$ are the live harmonics' periods over `loops` and
+    /// \f$ c = (P^{\top})^{+}\,\text{target} \f$ is their least-squares fit — the
+    /// squared norm of the part of `targetPeriods` no pure harmonic can carry.
+    /// \f$ \to 0 \f$ iff the target lies in the carried period span (the same
+    /// realizable set as `residualForLoops`), floored otherwise; **no leak**, so
+    /// the carried object stays a pure harmonic (vs r_U's exact-period state).
+    /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
+    [[nodiscard]] double periodGapForLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// Exact analytic gradient \f$ \partial r_\psi / \partial l^2_e \f$ of
+    /// `periodGapForLoops` w.r.t. each edge's squared length, in `cellSimplices()`
+    /// order. The least-squares optimality \f$ P^{\top\!}\,r = 0 \f$ (envelope
+    /// theorem) kills the \f$ \partial c \f$ term, so
+    /// \f$ \partial r_\psi = 2\,\Re\big(r^{\dagger}\,(Q\,\partial U_n)\,c\big) \f$
+    /// — only the harmonic-subspace perturbation \f$ \partial U_n \f$ enters
+    /// (no leak, no \f$ \partial\psi \f$ chain). Same first-order eigenvector
+    /// perturbation machinery as `residualForLoopsGradient`. \f$ O(n_1^3) \f$.
+    /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
+    [[nodiscard]] std::vector<double> periodGapForLoopsGradient(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// `periodGapForLoops` over removed-triangle holes (the r_ψ analogue of
+    /// `residualForPeriods`): each hole is a 3-vertex tuple whose oriented
+    /// boundary \f$ h_0\to h_1\to h_2\to h_0 \f$ is the loop. Convenience +
+    /// Python entry point.
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()` or a
+    ///   hole has \f$ \ne 3 \f$ vertices.
+    [[nodiscard]] double periodGapForPeriods(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// The analytic gradient of `periodGapForPeriods` (holes routed to
+    /// `periodGapForLoopsGradient`), in `cellSimplices()` order.
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()` or a
+    ///   hole has \f$ \ne 3 \f$ vertices.
+    [[nodiscard]] std::vector<double> periodGapForPeriodsGradient(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     // === The discovered operator: ker L₁(W − ∂W) (#363) ===
 
     /// The interior 1-cells of \f$ W - \partial W \f$ — the edges both of whose
@@ -591,6 +645,14 @@ class EigenstateSynthesis {
     [[nodiscard]] RegisterReadout assembleReadoutOverLoops(
         const std::vector<EdgeLoop> &loops) const;
 
+    // The minimum-norm least-squares fit of targetPeriods onto the carried
+    // period rows P^T (c = (P^T)^+ target via the SVD) — the single projection
+    // both the carried representative (r_U) and the period gap (r_psi) ride on, so
+    // their realizable zero sets coincide. Length ro.dim (empty when ro.dim == 0).
+    [[nodiscard]] std::vector<std::complex<double>> lstsqOverReadout(
+        const RegisterReadout &ro,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     // The carried representative from a finished read-out — shared by the hole
     // and loop period paths (the lstsq projection plus each cycle's leak).
     [[nodiscard]] std::vector<std::complex<double>> carriedFromReadout(
@@ -602,6 +664,12 @@ class EigenstateSynthesis {
     [[nodiscard]] std::vector<double> periodGradientOverLoops(
         const std::vector<EdgeLoop> &loops,
         const std::vector<std::complex<double>> &targetPeriods) const;
+
+    // Each removed-triangle hole (a 3-vertex tuple) as the oriented boundary loop
+    // h0 -> h1 -> h2 -> h0, so the holes period-gap methods reuse the loop core.
+    [[nodiscard]] std::vector<EdgeLoop> holeLoops(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const char *who) const;
 
     // Re-create the top cell of a Removal (createSimplexTracked rebuilds its
     // missing edges = the orphaned ones) and restore those edges' weights/phases.
