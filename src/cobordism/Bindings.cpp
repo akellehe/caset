@@ -27,7 +27,10 @@
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
 #include "cobordism/Register.h"
+#include "cobordism/RegisterTopology.h"
 #include "cobordism/Spectrum.h"
+#include "cobordism/TopologyBuilder.h"
+#include "cobordism/TorusOperatorTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -1274,6 +1277,31 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def("norm", &PreparedBoundaryState::norm,
            "The Euclidean norm sqrt(sum |c_a|^2) of the amplitude vector.");
 
+  // === TopologyBuilder seam (#378): the selectable MergeCobordism topology ===
+  py::class_<TopologyBuilder, std::shared_ptr<TopologyBuilder>>(
+      m, "TopologyBuilder",
+      "Pluggable cobordism topology for MergeCobordism (#378): builds W and "
+      "supplies the per-state read-out cycles, so the read-out (a qubit operator "
+      "vs a color rep) travels with the topology.")
+      .def("name", &TopologyBuilder::name)
+      .def("carried_dim", &TopologyBuilder::carriedDim, py::arg("state_dim"),
+           "dim ker L1(W - dW) this topology realizes.")
+      .def("validate_state_dim", &TopologyBuilder::validateStateDim, py::arg("d"),
+           "Throw unless d is admissible (operator: a power of two >= 2; "
+           "register: 3).");
+  py::class_<TorusOperatorTopology, TopologyBuilder,
+             std::shared_ptr<TorusOperatorTopology>>(
+      m, "TorusOperatorTopology",
+      "The (T^2-3holes)xS^1 qubit-operator topology: dW = 3 tori, 6 boundary "
+      "cycles (2 per state), ker L1(W - dW) = d^2 - 1.")
+      .def(py::init<>());
+  py::class_<RegisterTopology, TopologyBuilder, std::shared_ptr<RegisterTopology>>(
+      m, "RegisterTopology",
+      "The #353-style color register (the default): holed-icosahedron color "
+      "blocks joined by additive tubes (never a welded shared block), color "
+      "hole-circle read-out, no S^1; d = 3.")
+      .def(py::init<>());
+
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
       "The canonical merge primitive: an emergent operator built from input/"
@@ -1299,18 +1327,23 @@ prepared states, reproduces the harmonic overlap.)doc")
                      const std::vector<std::vector<std::complex<double>>> &out,
                      const std::vector<std::complex<double>> &U, double beta,
                      double epsilon, int maxIters, std::uint64_t seed,
-                     bool verbose) {
+                     std::shared_ptr<TopologyBuilder> topology, bool verbose) {
            return std::make_unique<MergeCobordism>(
-               in, out, U, beta, epsilon, maxIters, seed, nullptr, verbose);
+               in, out, U, beta, epsilon, maxIters, seed, std::move(topology),
+               verbose);
          }),
          py::arg("input_states"), py::arg("output_states"),
          py::arg("U") = std::vector<std::complex<double>>{},
          py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6,
          py::arg("max_iters") = 400, py::arg("seed") = 0,
+         py::arg("topology") = std::shared_ptr<TopologyBuilder>{},
          py::arg("verbose") = false,
-         "Build and run the merge on the default (T^2-3holes)xS^1 operator "
-         "topology. output_states is required unless U (a flat row-major dxd "
-         "operator) is supplied, in which case it is computed from U.")
+         "Build and run the merge. topology selects the cobordism topology "
+         "(default: RegisterTopology, the #353-style color register; pass "
+         "TorusOperatorTopology for the (T^2-3holes)xS^1 qubit operator). The "
+         "admissible state dimension is topology-specific (register: d=3; "
+         "operator: a power of two). output_states is required unless U (a flat "
+         "row-major dxd operator) is supplied, in which case it is computed from U.")
       .def_property_readonly("input_states", &MergeCobordism::inputStates)
       .def_property_readonly("output_states", &MergeCobordism::outputStates)
       .def_property_readonly("cobordism", &MergeCobordism::cobordism,

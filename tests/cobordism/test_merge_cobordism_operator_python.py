@@ -35,7 +35,11 @@ _OUT = [[1 + 0j, 0 + 0j]]
 # uses max_iters=400 (the delta-S=0 floor); the full-relax byte-identical
 # descent is pinned by the period smoke, not here.
 _ITERS = 30
-_M = tessera.cobordism.MergeCobordism(_IN, _OUT, max_iters=_ITERS, seed=0)
+# The default topology is now the #353-style RegisterTopology (#378); select the
+# (T^2-3holes)xS^1 operator topology explicitly for this suite.
+_M = tessera.cobordism.MergeCobordism(
+    _IN, _OUT, max_iters=_ITERS, seed=0,
+    topology=tessera.cobordism.TorusOperatorTopology())
 _S = _M.stats
 
 
@@ -139,7 +143,9 @@ class DeterminismTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.m2 = tessera.cobordism.MergeCobordism(_IN, _OUT, max_iters=_ITERS, seed=0)
+        cls.m2 = tessera.cobordism.MergeCobordism(
+            _IN, _OUT, max_iters=_ITERS, seed=0,
+            topology=tessera.cobordism.TorusOperatorTopology())
 
     def test_same_seed_same_residual(self):
         self.assertEqual(self.m2.stats.residual, _S.residual)
