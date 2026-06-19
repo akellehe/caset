@@ -7,10 +7,16 @@
 #include "mesh/Fingerprint.h"
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/EdgeKey.h"
+// walkLoop calls Vertex::getId() non-dependently, so Vertex must be COMPLETE at
+// its definition. Vertex.h only forward-declares Edge, so this include is
+// acyclic.
+#include "mesh/Vertex.h"
 
 #include <complex>
 #include <random>
 #include <memory>
+#include <vector>
+#include <cstdint>
 
 
 // === tessera subsystem ns fwd-decls ===
@@ -181,6 +187,19 @@ class Edge {
     /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
     /// Laplacian and its gauge transform to rephase the edge without rebuilding the mesh.
     void setPhase(double p) noexcept { phase = p; }
+
+    /// Walk a closed loop of ordered directed steps (each Edge's
+    /// getSource()->getTarget() is one traversal step). Invokes f(sourceId,
+    /// targetId, sign) per step; sign = +1 if sourceId < targetId (canonical
+    /// orientation) else -1.
+    template <typename F>
+    static void walkLoop(const std::vector<Edge> &loop, F &&f) {
+      for (const Edge &step : loop) {
+        const std::uint64_t u = step.getSource()->getId();
+        const std::uint64_t v = step.getTarget()->getId();
+        f(u, v, (u < v) ? 1.0 : -1.0);
+      }
+    }
 
     /// The Van Raamsdonk metric law: the spacelike signed squared length for a
     /// given mutual information ``I`` — the value to store as ``squaredLength``

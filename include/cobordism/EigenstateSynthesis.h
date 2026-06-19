@@ -13,12 +13,14 @@
 #include <vector>
 
 #include "cobordism/HodgeLaplacian.h"
+#include "mesh/Edge.h"
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::mesh { class Edge; class Vertex; class Simplex; }
 namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
+using ::tessera::mesh::Edge;
 
 /// # EigenstateSynthesis
 ///
@@ -366,6 +368,86 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    // === Periods over arbitrary signed edge-loops (#363) ===
+    // A removed triangle reads only its own boundary, but a register cycle (e.g.
+    // a torus S^1) is no triangle's boundary. These read the period of the live
+    // harmonics over ANY closed walk of oriented edges, so both cycles of a T^2
+    // qubit register are pinnable.
+
+    /// A 1-cycle as a closed walk of directed `Edge`s: each edge's
+    /// `getSource() -> getTarget()` is the traversal step, contributing
+    /// \f$ +h(u,v) \f$ when \f$ u < v \f$ (source id < target id) else
+    /// \f$ -h(u,v) \f$. A removed triangle \f$ h_0 < h_1 < h_2 \f$ is the loop
+    /// \f$ h_0 \to h_1 \to h_2 \to h_0 \f$ (the identical signed covector and
+    /// leak edge). Only the endpoints are read; the edges' lengths are unused.
+    using EdgeLoop = std::vector<Edge>;
+
+    /// `cyclePeriods` over signed edge-loops: a flat row-major
+    /// \f$ \dim\ker L_k \times |\text{loops}| \f$ matrix whose
+    /// \f$ [r\,|\text{loops}|+q] \f$ entry is harmonic \f$ r \f$ summed along
+    /// loop \f$ q \f$. Reads the live harmonics.
+    [[nodiscard]] std::vector<std::complex<double>> cyclePeriodsOverLoops(
+        const std::vector<EdgeLoop> &loops) const;
+
+    /// `residualForPeriods` over signed edge-loops: \f$ \to 0 \f$ iff
+    /// `targetPeriods` lie in the span the live harmonics carry over `loops`.
+    /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
+    [[nodiscard]] double residualForLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// Exact analytic gradient of `residualForLoops` w.r.t. each edge's squared
+    /// length, in `cellSimplices()` order — the shared core of
+    /// `residualForPeriodsGradient`.
+    /// @throws std::runtime_error if `targetPeriods.size() != loops.size()`.
+    [[nodiscard]] std::vector<double> residualForLoopsGradient(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// The carried representative over signed edge-loops (the loop analogue of
+    /// `carriedRepresentative`): the metric harmonic 1-cochain matching
+    /// `targetPeriods` over `loops` (minimum-norm), a full `order()`-length cell
+    /// vector. The whole-W metric harmonic the L_1(W) read-out rides on.
+    [[nodiscard]] std::vector<std::complex<double>> carriedRepresentativeOverLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    /// The periods of a GIVEN 1-cochain over signed edge-loops:
+    /// \f$ \sum_{(u,v)\in\text{loop}} \pm\,\text{cochain}[uv] \f$ — the discrete
+    /// \f$ \oint \f$ of a supplied cochain (vs the live harmonics in
+    /// `cyclePeriodsOverLoops`). `cochain` is an `order()`-length cell vector.
+    [[nodiscard]] std::vector<std::complex<double>> periodsOfCochainOverLoops(
+        const std::vector<std::complex<double>> &cochain,
+        const std::vector<EdgeLoop> &loops) const;
+
+    // === The discovered operator: ker L₁(W − ∂W) (#363) ===
+
+    /// The interior 1-cells of \f$ W - \partial W \f$ — the edges both of whose
+    /// endpoints are **interior** vertices (on no \f$ \partial W \f$ face) — as
+    /// sorted \f$ (u, v) \f$ tuples in canonical `ChainComplex` \f$ C_1 \f$ order:
+    /// the column ordering of `bulkMinusBoundaryHarmonicMatrix`. Empty when there
+    /// is no interior bulk (a bare, un-grown cobordism is all boundary).
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> bulkMinusBoundaryCells()
+        const;
+
+    /// \f$ \ker L_1(W - \partial W) \f$ — the harmonic 1-forms of the
+    /// **combinatorial** (unit-weight, signature-blind) Hodge Laplacian
+    /// \f$ L_1 \f$ of the bulk with the **full \f$ \partial W \f$ subcomplex
+    /// deleted**: the subcomplex induced on the interior vertices (the bulk
+    /// "with the boundary removed"). Restricts the integer boundary maps
+    /// \f$ \partial_1, \partial_2 \f$ (`ChainComplex`) to the interior cells and
+    /// eigendecomposes \f$ L_1 = \partial_1^{\top}\partial_1 +
+    /// \partial_2\partial_2^{\top} \f$, returning the \f$ |\lambda| < \text{tol} \f$
+    /// eigenvectors stacked as the **rows** of a flat row-major
+    /// \f$ \dim\ker L_1 \times |\text{interior } C_1| \f$ complex array
+    /// (ascending-eigenvalue order), columns in `bulkMinusBoundaryCells()` order.
+    /// This is the geometry the **discovered operator** is read from: surgery
+    /// must first grow the interior so this is nonzero (a bare cobordism with
+    /// only a handful of interior vertices carries 0). Read fresh from the live
+    /// complex — surgery between calls moves it.
+    [[nodiscard]] std::vector<std::complex<double>> bulkMinusBoundaryHarmonicMatrix(
+        double tol = 1e-9) const;
+
     // === Surgery: the topology-changing interior remove move (#196) ===
 
     /// The interior top cells eligible for surgery removal: top cells whose
@@ -503,6 +585,23 @@ class EigenstateSynthesis {
     };
     [[nodiscard]] RegisterReadout assembleRegisterReadout(
         const std::vector<std::vector<std::uint64_t>> &holes) const;
+
+    // The loop analogue of assembleRegisterReadout: P[r*m+q] = sum over loop q's
+    // oriented edges of (+/-1) * H[r, edge]; leak = the loop's first edge.
+    [[nodiscard]] RegisterReadout assembleReadoutOverLoops(
+        const std::vector<EdgeLoop> &loops) const;
+
+    // The carried representative from a finished read-out — shared by the hole
+    // and loop period paths (the lstsq projection plus each cycle's leak).
+    [[nodiscard]] std::vector<std::complex<double>> carriedFromReadout(
+        const RegisterReadout &ro,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    // The cycle-agnostic core of the period-residual gradient: exact
+    // d r_U / d l^2 with the cycles given as signed edge-loops.
+    [[nodiscard]] std::vector<double> periodGradientOverLoops(
+        const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
 
     // Re-create the top cell of a Removal (createSimplexTracked rebuilds its
     // missing edges = the orphaned ones) and restore those edges' weights/phases.

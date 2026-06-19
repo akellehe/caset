@@ -802,6 +802,92 @@ std::pair<bool, std::string> EigenstateSynthesis::dualComplexValid() const {
                   : std::vector<std::vector<std::uint64_t>>{});
 }
 
+// === The discovered operator: ker L₁(W − ∂W) (#363) ===
+
+std::vector<std::vector<std::uint64_t>>
+EigenstateSynthesis::bulkMinusBoundaryCells() const {
+  std::vector<std::vector<std::uint64_t>> out;
+  if (!st_) return out;
+  const std::unordered_set<std::uint64_t> bverts(
+      boundaryVertexIdsSorted_.begin(), boundaryVertexIdsSorted_.end());
+  for (auto &e : ChainComplex::fromSpacetime(*st_).kSimplexVertices(1)) {
+    bool interior = true;
+    for (const std::uint64_t v : e)
+      if (bverts.count(v)) { interior = false; break; }
+    if (interior) out.push_back(e);
+  }
+  return out;
+}
+
+std::vector<cd> EigenstateSynthesis::bulkMinusBoundaryHarmonicMatrix(
+    double tol) const {
+  using Eigen::Index;
+  using Eigen::MatrixXd;
+  if (!st_) return {};
+
+  // W − ∂W is the subcomplex induced on the interior vertices (the ones on no
+  // ∂W face); a cell belongs to it iff all of its vertices are interior. This is
+  // the ticket's "boundary removed" — and ties to its measured "3 interior
+  // vertices carry nothing" (too few interior vertices ⇒ no interior 1-cycle).
+  const std::unordered_set<std::uint64_t> bverts(
+      boundaryVertexIdsSorted_.begin(), boundaryVertexIdsSorted_.end());
+  const auto interiorCell = [&](const std::vector<std::uint64_t> &c) {
+    for (const std::uint64_t v : c)
+      if (bverts.count(v)) return false;
+    return true;
+  };
+
+  const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
+  const auto v0 = cc.kSimplexVertices(0);
+  const auto v1 = cc.kSimplexVertices(1);
+  const auto v2 = cc.kSimplexVertices(2);
+  const std::size_t n0 = v0.size(), n1 = v1.size(), n2 = v2.size();
+  if (n1 == 0) return {};
+
+  // The interior-cell index lists into the full C_k orderings.
+  std::vector<Index> i0, i1, i2;
+  for (std::size_t i = 0; i < n0; ++i)
+    if (interiorCell(v0[i])) i0.push_back(static_cast<Index>(i));
+  for (std::size_t i = 0; i < n1; ++i)
+    if (interiorCell(v1[i])) i1.push_back(static_cast<Index>(i));
+  for (std::size_t i = 0; i < n2; ++i)
+    if (interiorCell(v2[i])) i2.push_back(static_cast<Index>(i));
+  const Index m1 = static_cast<Index>(i1.size());
+  if (m1 == 0) return {};
+
+  // Restrict ∂₁ (n0×n1) and ∂₂ (n1×n2) to the interior rows/columns, then the
+  // combinatorial L₁ = ∂₁ᵀ∂₁ + ∂₂∂₂ᵀ (unit weights — the magnitude,
+  // signature-blind register the merge reads with harmonicMatrix(1,·,False)).
+  const std::vector<long> &d1 = cc.boundaryMatrix(1);
+  const std::vector<long> &d2 = cc.boundaryMatrix(2);
+  MatrixXd D1 = MatrixXd::Zero(static_cast<Index>(i0.size()), m1);
+  for (Index r = 0; r < static_cast<Index>(i0.size()); ++r)
+    for (Index c = 0; c < m1; ++c)
+      D1(r, c) = static_cast<double>(
+          d1[static_cast<std::size_t>(i0[r]) * n1 + static_cast<std::size_t>(i1[c])]);
+  MatrixXd L = D1.transpose() * D1;
+  if (!i2.empty()) {
+    MatrixXd D2 = MatrixXd::Zero(m1, static_cast<Index>(i2.size()));
+    for (Index r = 0; r < m1; ++r)
+      for (Index c = 0; c < static_cast<Index>(i2.size()); ++c)
+        D2(r, c) = static_cast<double>(
+            d2[static_cast<std::size_t>(i1[r]) * n2 + static_cast<std::size_t>(i2[c])]);
+    L += D2 * D2.transpose();
+  }
+
+  // ker L₁ ≅ H₁ of the interior: the |λ| < tol eigenvectors, stacked as rows in
+  // ascending-eigenvalue order (matching HodgeLaplacian::harmonicMatrix).
+  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(L);
+  const Eigen::VectorXd &lam = eig.eigenvalues();
+  const MatrixXd &V = eig.eigenvectors();
+  std::vector<cd> out;
+  for (Index j = 0; j < lam.size(); ++j) {
+    if (std::abs(lam[j]) >= tol) continue;
+    for (Index i = 0; i < m1; ++i) out.push_back(cd(V(i, j), 0.0));
+  }
+  return out;
+}
+
 EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleRegisterReadout(
     const std::vector<std::vector<std::uint64_t>> &holes) const {
   const auto joinIds = [](const std::vector<std::uint64_t> &c) {
@@ -895,10 +981,19 @@ std::vector<cd> EigenstateSynthesis::carriedRepresentative(
         "EigenstateSynthesis::carriedRepresentative: " +
         std::to_string(targetPeriods.size()) + " target periods for " +
         std::to_string(holes.size()) + " holes");
-  const RegisterReadout ro = assembleRegisterReadout(holes);
+  return carriedFromReadout(assembleRegisterReadout(holes), targetPeriods);
+}
+
+std::vector<cd> EigenstateSynthesis::carriedFromReadout(
+    const RegisterReadout &ro, const std::vector<cd> &targetPeriods) const {
   const std::size_t n = order_;
-  const std::size_t m = holes.size();
+  const std::size_t m = ro.leakColumns.size();
   if (n == 0) return {};
+  if (targetPeriods.size() != m)
+    throw std::runtime_error(
+        "EigenstateSynthesis::carriedFromReadout: " +
+        std::to_string(targetPeriods.size()) + " target periods for " +
+        std::to_string(m) + " cycles");
 
   // The minimum-norm least-squares projection onto the carried period rows
   // (what numpy.linalg.lstsq returns): c = (P^T)^+ target via the SVD.
@@ -917,7 +1012,7 @@ std::vector<cd> EigenstateSynthesis::carriedRepresentative(
   }
 
   // The carried representative plus the minimal leak: psi = sum_r c_r h_r,
-  // then each hole's uncarried remainder lands on its leak column, so the
+  // then each cycle's uncarried remainder lands on its leak column, so the
   // cochain's periods are exactly the targets.
   std::vector<cd> psi(n, cd(0.0, 0.0));
   for (std::size_t r = 0; r < ro.dim; ++r) {
@@ -933,6 +1028,94 @@ std::vector<cd> EigenstateSynthesis::carriedRepresentative(
   return psi;
 }
 
+EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleReadoutOverLoops(
+    const std::vector<EdgeLoop> &loops) const {
+  RegisterReadout out;
+  const std::size_t n = order_;
+  out.H = HodgeLaplacian(st_).harmonicMatrix(k_, 1e-9, /*metric=*/true);
+  if (n == 0) {
+    if (!loops.empty())
+      throw std::runtime_error(
+          "EigenstateSynthesis::assembleReadoutOverLoops: the complex has no "
+          "k-cells to carry periods");
+    return out;
+  }
+  if (out.H.size() % n != 0)
+    throw std::runtime_error(
+        "EigenstateSynthesis::assembleReadoutOverLoops: the harmonic matrix "
+        "width " + std::to_string(out.H.size()) +
+        " is not a multiple of the captured operator dimension " +
+        std::to_string(n));
+  out.dim = out.H.size() / n;
+  std::map<std::vector<std::uint64_t>, std::size_t> col;
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
+  const std::size_t m = loops.size();
+  out.P.assign(out.dim * m, cd(0.0, 0.0));
+  out.leakColumns.reserve(m);
+  for (std::size_t q = 0; q < m; ++q) {
+    if (loops[q].empty())
+      throw std::runtime_error(
+          "EigenstateSynthesis::assembleReadoutOverLoops: loop " +
+          std::to_string(q) + " is empty");
+    bool first = true;
+    Edge::walkLoop(loops[q], [&](std::uint64_t a, std::uint64_t b, double s) {
+      const std::vector<std::uint64_t> e = {std::min(a, b), std::max(a, b)};
+      const auto it = col.find(e);
+      if (it == col.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::assembleReadoutOverLoops: loop edge (" +
+            std::to_string(a) + "," + std::to_string(b) +
+            ") is not a k-cell of the complex");
+      if (first) {
+        out.leakColumns.push_back(it->second);
+        first = false;
+      }
+      for (std::size_t r = 0; r < out.dim; ++r)
+        out.P[r * m + q] += s * out.H[r * n + it->second];
+    });
+  }
+  return out;
+}
+
+std::vector<cd> EigenstateSynthesis::cyclePeriodsOverLoops(
+    const std::vector<EdgeLoop> &loops) const {
+  return assembleReadoutOverLoops(loops).P;
+}
+
+double EigenstateSynthesis::residualForLoops(
+    const std::vector<EdgeLoop> &loops,
+    const std::vector<cd> &targetPeriods) const {
+  const std::vector<cd> psi =
+      carriedFromReadout(assembleReadoutOverLoops(loops), targetPeriods);
+  if (psi.empty()) return 0.0;
+  return residual(psi);
+}
+
+std::vector<cd> EigenstateSynthesis::carriedRepresentativeOverLoops(
+    const std::vector<EdgeLoop> &loops, const std::vector<cd> &targetPeriods) const {
+  return carriedFromReadout(assembleReadoutOverLoops(loops), targetPeriods);
+}
+
+std::vector<cd> EigenstateSynthesis::periodsOfCochainOverLoops(
+    const std::vector<cd> &cochain, const std::vector<EdgeLoop> &loops) const {
+  std::map<std::vector<std::uint64_t>, std::size_t> col;
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
+  std::vector<cd> out(loops.size(), cd(0.0, 0.0));
+  for (std::size_t q = 0; q < loops.size(); ++q)
+    Edge::walkLoop(loops[q], [&](std::uint64_t a, std::uint64_t b, double s) {
+      const std::vector<std::uint64_t> e = {std::min(a, b), std::max(a, b)};
+      const auto it = col.find(e);
+      if (it == col.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::periodsOfCochainOverLoops: loop edge (" +
+            std::to_string(a) + "," + std::to_string(b) +
+            ") is not a k-cell of the complex");
+      if (it->second < cochain.size())
+        out[q] += cd(s, 0.0) * cochain[it->second];
+    });
+  return out;
+}
+
 double EigenstateSynthesis::residualForPeriods(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
@@ -941,8 +1124,8 @@ double EigenstateSynthesis::residualForPeriods(
   return residual(psi);
 }
 
-std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
-    const std::vector<std::vector<std::uint64_t>> &holes,
+std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
+    const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
   using Eigen::Index;
   using Eigen::MatrixXd;
@@ -950,13 +1133,13 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
   using Eigen::VectorXd;
   const std::size_t n1 = order_;
   std::vector<double> grad(n1, 0.0);
-  const std::size_t m = holes.size();
+  const std::size_t m = loops.size();
   if (n1 == 0 || m == 0) return grad;
   if (targetPeriods.size() != m)
     throw std::runtime_error(
-        "EigenstateSynthesis::residualForPeriodsGradient: " +
+        "EigenstateSynthesis::periodGradientOverLoops: " +
         std::to_string(targetPeriods.size()) + " target periods for " +
-        std::to_string(m) + " holes");
+        std::to_string(m) + " loops");
   static constexpr double kNullTol = 1e-7;
   const Index N = static_cast<Index>(n1);
 
@@ -1019,19 +1202,24 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
     return it == l2map.end() ? 0.0 : it->second;
   };
 
-  // ---- Q (hole-boundary covector) + each hole's leak column ----
+  // ---- Q (signed edge-loop covector) + each cycle's leak column ----
+  // Generalizes the removed-triangle boundary to any closed walk of oriented
+  // edges: Q(q, edge) += +1 along the stored orientation, -1 against; the leak
+  // is the loop's first edge.
   MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
   std::vector<std::size_t> leakCol(m);
   for (std::size_t q = 0; q < m; ++q) {
-    const auto &h = holes[q];
-    for (int j = 0; j < 3; ++j) {
-      std::vector<std::uint64_t> facet;
-      for (int i = 0; i < 3; ++i)
-        if (i != j) facet.push_back(h[i]);
-      Q(static_cast<Index>(q), static_cast<Index>(cidx1.at(key(facet[0], facet[1])))) +=
-          (j % 2 == 0 ? 1.0 : -1.0);
-    }
-    leakCol[q] = cidx1.at(key(h[0], h[1]));
+    const EdgeLoop &loop = loops[q];
+    if (loop.empty())
+      throw std::runtime_error(
+          "EigenstateSynthesis::periodGradientOverLoops: loop " +
+          std::to_string(q) + " is empty");
+    const Edge &fe = loop.front();
+    leakCol[q] = cidx1.at(key(fe.getSource()->getId(), fe.getTarget()->getId()));
+    Edge::walkLoop(loop, [&](std::uint64_t a, std::uint64_t b, double s) {
+      Q(static_cast<Index>(q),
+        static_cast<Index>(cidx1.at(key(a, b)))) += s;
+    });
   }
 
   // ---- eigendecomposition of M; harmonic (null) / non-null split ----
@@ -1133,6 +1321,39 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
                (2.0 * rU / nrm) * (p.dot(dpsi)).real();
   }
   return grad;
+}
+
+std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+  // A removed triangle's boundary IS the oriented loop h0 -> h1 -> h2 -> h0
+  // (identical signed covector and leak), so route through the loop core.
+  auto &vlist = *st_->getVertexList();
+  auto edge = [&](std::uint64_t u, std::uint64_t v) {
+    auto *vu = vlist.get(u), *vv = vlist.get(v);
+    if (!vu || !vv)
+      throw std::runtime_error(
+          "EigenstateSynthesis::residualForPeriodsGradient: hole vertex absent");
+    return Edge(vu, vv, cd(1.0, 0.0));
+  };
+  std::vector<EdgeLoop> loops;
+  loops.reserve(holes.size());
+  for (const auto &h : holes) {
+    if (h.size() != 3)
+      throw std::runtime_error(
+          "EigenstateSynthesis::residualForPeriodsGradient: hole has " +
+          std::to_string(h.size()) + " vertices, expected 3");
+    std::vector<std::uint64_t> s(h);
+    std::sort(s.begin(), s.end());
+    loops.push_back({edge(s[0], s[1]), edge(s[1], s[2]), edge(s[2], s[0])});
+  }
+  return periodGradientOverLoops(loops, targetPeriods);
+}
+
+std::vector<double> EigenstateSynthesis::residualForLoopsGradient(
+    const std::vector<EdgeLoop> &loops,
+    const std::vector<cd> &targetPeriods) const {
+  return periodGradientOverLoops(loops, targetPeriods);
 }
 
 std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
