@@ -166,6 +166,12 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} Register.h
 ```
+```{doxygenfile} MergeCobordism.h
+```
+```{doxygenfile} TopologyBuilder.h
+```
+```{doxygenfile} TorusOperatorTopology.h
+```
 
 ## Quantum
 
