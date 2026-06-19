@@ -53,7 +53,7 @@ std::vector<int> betti(const Spacetime &st) {
 // interior edges at the best point found.
 double relaxInterior(
     const std::shared_ptr<Spacetime> &st, double beta,
-    const std::vector<std::vector<std::pair<std::uint64_t, std::uint64_t>>> &stateLoops,
+    const std::vector<EigenstateSynthesis::EdgeLoop> &stateLoops,
     const std::vector<std::complex<double>> &stateTargets,
     int maxIters, int &iterCounter, bool verbose = false) {
   EigenstateSynthesis es(st, 1);
@@ -225,7 +225,7 @@ void MergeCobordism::computeStateTargets() {
   states.reserve(inputStates_.size() + outputStates_.size());
   for (const auto &s : inputStates_) states.push_back(s);
   for (const auto &s : outputStates_) states.push_back(s);
-  topology_->readout(states, stateLoops_, stateTargets_);
+  topology_->readout(cobordism_, states, stateLoops_, stateTargets_);
 }
 
 void MergeCobordism::buildSeed() {

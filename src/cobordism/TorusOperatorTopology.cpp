@@ -167,6 +167,7 @@ std::shared_ptr<Spacetime> TorusOperatorTopology::build(
 }
 
 void TorusOperatorTopology::readout(
+    const std::shared_ptr<Spacetime> &cobordism,
     const std::vector<std::vector<std::complex<double>>> &states,
     std::vector<EdgeLoop> &loops,
     std::vector<std::complex<double>> &targets) const {
@@ -175,8 +176,18 @@ void TorusOperatorTopology::readout(
   // loop of a hole vertex). The six cycles jointly over-determine the bulk b_1.
   loops.clear();
   targets.clear();
-  if (holes_.size() < 3 || layerStride_ == 0) return;
+  if (holes_.size() < 3 || layerStride_ == 0 || !cobordism) return;
   const std::uint64_t N = layerStride_;
+  auto &vlist = *cobordism->getVertexList();
+  // A directed step (u -> v) as a fresh Edge over W's vertices; l^2 = 1 is a
+  // placeholder (the period read-out uses only the endpoints, not the length).
+  auto edge = [&](std::uint64_t u, std::uint64_t v) {
+    ::tessera::mesh::Vertex *vu = vlist.get(u), *vv = vlist.get(v);
+    if (!vu || !vv)
+      throw std::runtime_error(
+          "TorusOperatorTopology::readout: loop vertex absent from W");
+    return ::tessera::mesh::Edge(vu, vv, std::complex<double>(1.0, 0.0));
+  };
   const std::size_t nStates = std::min(states.size(), holes_.size());
   for (std::size_t i = 0; i < nStates; ++i) {
     std::vector<std::uint64_t> h(holes_[i]);
@@ -186,11 +197,11 @@ void TorusOperatorTopology::readout(
     const std::complex<double> a1 =
         states[i].size() > 1 ? states[i][1] : std::complex<double>(0);
     // cycle 1: the hole-circle (removed face boundary) -> psi_i[0]
-    loops.push_back({{h[0], h[1]}, {h[1], h[2]}, {h[2], h[0]}});
+    loops.push_back({edge(h[0], h[1]), edge(h[1], h[2]), edge(h[2], h[0])});
     targets.push_back(a0);
     // cycle 2: the S^1 (vertical loop of hole vertex h[0]) -> psi_i[1]
-    loops.push_back(
-        {{h[0], h[0] + N}, {h[0] + N, h[0] + 2 * N}, {h[0] + 2 * N, h[0]}});
+    loops.push_back({edge(h[0], h[0] + N), edge(h[0] + N, h[0] + 2 * N),
+                     edge(h[0] + 2 * N, h[0])});
     targets.push_back(a1);
   }
 }

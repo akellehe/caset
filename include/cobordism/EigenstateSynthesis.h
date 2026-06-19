@@ -13,12 +13,14 @@
 #include <vector>
 
 #include "cobordism/HodgeLaplacian.h"
+#include "mesh/Edge.h"
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::mesh { class Edge; class Vertex; class Simplex; }
 namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using namespace ::tessera::spacetime;
+using ::tessera::mesh::Edge;
 
 /// # EigenstateSynthesis
 ///
@@ -372,14 +374,13 @@ class EigenstateSynthesis {
     // harmonics over ANY closed walk of oriented edges, so both cycles of a T^2
     // qubit register are pinnable.
 
-    /// An oriented edge \f$ (u \to v) \f$; its period contribution is
-    /// \f$ +h(u,v) \f$ when \f$ u < v \f$ (along the stored orientation), else
-    /// \f$ -h(u,v) \f$.
-    using OrientedEdge = std::pair<std::uint64_t, std::uint64_t>;
-    /// A 1-cycle as a closed walk of oriented edges. A removed triangle
-    /// \f$ h_0 < h_1 < h_2 \f$ is the loop \f$ h_0 \to h_1 \to h_2 \to h_0 \f$
-    /// (the identical signed covector and leak edge).
-    using EdgeLoop = std::vector<OrientedEdge>;
+    /// A 1-cycle as a closed walk of directed `Edge`s: each edge's
+    /// `getSource() -> getTarget()` is the traversal step, contributing
+    /// \f$ +h(u,v) \f$ when \f$ u < v \f$ (source id < target id) else
+    /// \f$ -h(u,v) \f$. A removed triangle \f$ h_0 < h_1 < h_2 \f$ is the loop
+    /// \f$ h_0 \to h_1 \to h_2 \to h_0 \f$ (the identical signed covector and
+    /// leak edge). Only the endpoints are read; the edges' lengths are unused.
+    using EdgeLoop = std::vector<Edge>;
 
     /// `cyclePeriods` over signed edge-loops: a flat row-major
     /// \f$ \dim\ker L_k \times |\text{loops}| \f$ matrix whose

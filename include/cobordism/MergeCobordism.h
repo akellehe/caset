@@ -110,7 +110,7 @@ class MergeCobordism {
 
     // r_psi: the states pinned as period targets over the boundary cycles the
     // topology's readout() supplies.
-    std::vector<std::vector<std::pair<std::uint64_t, std::uint64_t>>> stateLoops_{};
+    std::vector<TopologyBuilder::EdgeLoop> stateLoops_{};
     std::vector<std::complex<double>> stateTargets_{};
 
     // === results ===

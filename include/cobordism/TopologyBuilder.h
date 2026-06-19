@@ -11,10 +11,13 @@
 #include <utility>
 #include <vector>
 
+#include "mesh/Edge.h"
+
 namespace tessera::spacetime { class Spacetime; }
 
 namespace tessera::cobordism {
 using ::tessera::spacetime::Spacetime;
+using ::tessera::mesh::Edge;
 
 /// # TopologyBuilder
 ///
@@ -30,9 +33,11 @@ using ::tessera::spacetime::Spacetime;
 /// (holes, strides) that `readout()` then consumes — so call `build()` first.
 class TopologyBuilder {
   public:
-    /// A signed edge-loop: ordered (source, target) vertex-id pairs whose
-    /// orientation gives each edge's sign in the discrete \f$ \oint \f$.
-    using EdgeLoop = std::vector<std::pair<std::uint64_t, std::uint64_t>>;
+    /// A signed edge-loop: an ordered closed walk of directed `Edge`s, each
+    /// edge's `getSource() -> getTarget()` giving its sign in the discrete
+    /// \f$ \oint \f$ (the carried-period direction). Built over the mesh's
+    /// vertices in `readout()`.
+    using EdgeLoop = std::vector<Edge>;
 
     virtual ~TopologyBuilder() = default;
 
@@ -49,8 +54,11 @@ class TopologyBuilder {
     /// The pinned-state read-out: the signed edge-loops over \f$ \partial W \f$
     /// and their target periods, given the states (inputs followed by outputs).
     /// Defines what the relaxation pins and what the operator/rep read-out reads.
-    /// Requires a prior `build()`.
+    /// The loops' `Edge`s are built over `cobordism`'s vertices, so this needs
+    /// the `cobordism` returned by a prior `build()`.
+    /// @param cobordism the \f$ W \f$ from `build()`, for the loop edges' vertices.
     virtual void readout(
+        const std::shared_ptr<Spacetime> &cobordism,
         const std::vector<std::vector<std::complex<double>>> &states,
         std::vector<EdgeLoop> &loops,
         std::vector<std::complex<double>> &targets) const = 0;

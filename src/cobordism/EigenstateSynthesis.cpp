@@ -1058,8 +1058,8 @@ EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleReadoutOverLoo
           "EigenstateSynthesis::assembleReadoutOverLoops: loop " +
           std::to_string(q) + " is empty");
     bool first = true;
-    for (const OrientedEdge &oe : loops[q]) {
-      const std::uint64_t a = oe.first, b = oe.second;
+    for (const Edge &oe : loops[q]) {
+      const std::uint64_t a = oe.getSource()->getId(), b = oe.getTarget()->getId();
       const std::vector<std::uint64_t> e = {std::min(a, b), std::max(a, b)};
       const auto it = col.find(e);
       if (it == col.end())
@@ -1104,17 +1104,17 @@ std::vector<cd> EigenstateSynthesis::periodsOfCochainOverLoops(
   for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
   std::vector<cd> out(loops.size(), cd(0.0, 0.0));
   for (std::size_t q = 0; q < loops.size(); ++q)
-    for (const OrientedEdge &oe : loops[q]) {
-      const std::vector<std::uint64_t> e = {std::min(oe.first, oe.second),
-                                            std::max(oe.first, oe.second)};
+    for (const Edge &oe : loops[q]) {
+      const std::uint64_t a = oe.getSource()->getId(), b = oe.getTarget()->getId();
+      const std::vector<std::uint64_t> e = {std::min(a, b), std::max(a, b)};
       const auto it = col.find(e);
       if (it == col.end())
         throw std::runtime_error(
             "EigenstateSynthesis::periodsOfCochainOverLoops: loop edge (" +
-            std::to_string(oe.first) + "," + std::to_string(oe.second) +
+            std::to_string(a) + "," + std::to_string(b) +
             ") is not a k-cell of the complex");
       if (it->second < cochain.size())
-        out[q] += (oe.first < oe.second ? cd(1.0, 0.0) : cd(-1.0, 0.0)) *
+        out[q] += (a < b ? cd(1.0, 0.0) : cd(-1.0, 0.0)) *
                   cochain[it->second];
     }
   return out;
@@ -1218,11 +1218,13 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
       throw std::runtime_error(
           "EigenstateSynthesis::periodGradientOverLoops: loop " +
           std::to_string(q) + " is empty");
-    leakCol[q] = cidx1.at(key(loop.front().first, loop.front().second));
-    for (const OrientedEdge &oe : loop) {
-      const double s = (oe.first < oe.second) ? 1.0 : -1.0;
+    const Edge &fe = loop.front();
+    leakCol[q] = cidx1.at(key(fe.getSource()->getId(), fe.getTarget()->getId()));
+    for (const Edge &oe : loop) {
+      const std::uint64_t a = oe.getSource()->getId(), b = oe.getTarget()->getId();
+      const double s = (a < b) ? 1.0 : -1.0;
       Q(static_cast<Index>(q),
-        static_cast<Index>(cidx1.at(key(oe.first, oe.second)))) += s;
+        static_cast<Index>(cidx1.at(key(a, b)))) += s;
     }
   }
 
@@ -1332,6 +1334,14 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
     const std::vector<cd> &targetPeriods) const {
   // A removed triangle's boundary IS the oriented loop h0 -> h1 -> h2 -> h0
   // (identical signed covector and leak), so route through the loop core.
+  auto &vlist = *st_->getVertexList();
+  auto edge = [&](std::uint64_t u, std::uint64_t v) {
+    auto *vu = vlist.get(u), *vv = vlist.get(v);
+    if (!vu || !vv)
+      throw std::runtime_error(
+          "EigenstateSynthesis::residualForPeriodsGradient: hole vertex absent");
+    return Edge(vu, vv, cd(1.0, 0.0));
+  };
   std::vector<EdgeLoop> loops;
   loops.reserve(holes.size());
   for (const auto &h : holes) {
@@ -1341,7 +1351,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
           std::to_string(h.size()) + " vertices, expected 3");
     std::vector<std::uint64_t> s(h);
     std::sort(s.begin(), s.end());
-    loops.push_back({{s[0], s[1]}, {s[1], s[2]}, {s[2], s[0]}});
+    loops.push_back({edge(s[0], s[1]), edge(s[1], s[2]), edge(s[2], s[0])});
   }
   return periodGradientOverLoops(loops, targetPeriods);
 }

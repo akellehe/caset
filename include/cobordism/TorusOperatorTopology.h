@@ -24,6 +24,7 @@ class TorusOperatorTopology : public TopologyBuilder {
         std::vector<std::vector<std::uint64_t>> &boundaryCells) override;
 
     void readout(
+        const std::shared_ptr<Spacetime> &cobordism,
         const std::vector<std::vector<std::complex<double>>> &states,
         std::vector<EdgeLoop> &loops,
         std::vector<std::complex<double>> &targets) const override;
