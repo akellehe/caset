@@ -1276,10 +1276,11 @@ prepared states, reproduces the harmonic overlap.)doc")
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
-      "The canonical merge primitive: an emergent operator built from input/"
-      "output qubit states through a cobordism bulk, mediated by the dual "
-      "Lorentzian Regge action (relaxed with the sparse analytic Hessian) on a "
-      "TopologyBuilder topology.");
+      "The canonical merge primitive: an emergent operator / output state built "
+      "from input/output qubit states through a cobordism bulk, mediated by the "
+      "dual Lorentzian Regge action (relaxed with the sparse analytic Hessian) "
+      "on a TopologyBuilder topology. The primary emergent quantity is the one "
+      "the caller did not supply (see __init__).");
   py::class_<MergeCobordism::Stats>(mc, "Stats",
       "Convergence + topology statistics of the relaxation.")
       .def_readonly("converged", &MergeCobordism::Stats::converged)
@@ -1303,14 +1304,19 @@ prepared states, reproduces the harmonic overlap.)doc")
            return std::make_unique<MergeCobordism>(
                in, out, U, beta, epsilon, maxIters, seed, nullptr, verbose);
          }),
-         py::arg("input_states"), py::arg("output_states"),
+         py::arg("input_states"),
+         py::arg("output_states") =
+             std::vector<std::vector<std::complex<double>>>{},
          py::arg("U") = std::vector<std::complex<double>>{},
          py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6,
          py::arg("max_iters") = 400, py::arg("seed") = 0,
          py::arg("verbose") = false,
          "Build and run the merge on the default (T^2-3holes)xS^1 operator "
-         "topology. output_states is required unless U (a flat row-major dxd "
-         "operator) is supplied, in which case it is computed from U.")
+         "topology. The primary emergent quantity is the one not supplied: "
+         "output_states (with U empty) => the operator is primary; U (a flat "
+         "row-major dxd operator, output_states omitted) => the output_state is "
+         "primary, emergent over the output cycles. output_states is required "
+         "unless U is supplied, in which case it is computed from U.")
       .def_property_readonly("input_states", &MergeCobordism::inputStates)
       .def_property_readonly("output_states", &MergeCobordism::outputStates)
       .def_property_readonly("cobordism", &MergeCobordism::cobordism,
@@ -1319,9 +1325,19 @@ prepared states, reproduces the harmonic overlap.)doc")
                              "The boundary dW top-cells.")
       .def_property_readonly("bulk", &MergeCobordism::bulk,
                              "The bulk W - dW interior 1-cells.")
-      .def_property_readonly("operator_U", &MergeCobordism::operatorU,
-                             "The merge operator (empty until the #6 read-out).")
+      .def_property_readonly(
+          "operator_U", &MergeCobordism::operatorU,
+          "The merge operator unvec(ker L1(W-dW)). Deferred (empty) pending the "
+          "interior-handle operator-topology rework; empty also signals no "
+          "operator was carried.")
       .def_property_readonly("choi_state", &MergeCobordism::choiState,
-                             "The operator's Choi state (empty until #6).")
+                             "The operator's Choi state. Deferred (empty) with "
+                             "operator_U.")
+      .def_property_readonly(
+          "output_state", &MergeCobordism::outputState,
+          "The emergent final state psi_AB: the inputs carried through the "
+          "relaxed geometry, read over the output cycles (flat, length d). "
+          "Primary in U-supplied mode; a consistency read in output-supplied "
+          "mode. Empty when the input/output cycle split is not determinate.")
       .def_property_readonly("stats", &MergeCobordism::stats);
 }

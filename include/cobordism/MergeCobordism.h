@@ -19,9 +19,9 @@ using ::tessera::spacetime::Spacetime;
 
 /// # MergeCobordism
 ///
-/// The canonical merge primitive (#363): an **emergent operator** built from
-/// input/output qubit states through a cobordism bulk, mediated by the dual
-/// Lorentzian Regge action while keeping a valid simplicial manifold.
+/// The canonical merge primitive (#363): an **emergent operator / output state**
+/// built from input/output qubit states through a cobordism bulk, mediated by the
+/// dual Lorentzian Regge action while keeping a valid simplicial manifold.
 ///
 /// The topology is supplied by a `TopologyBuilder` (#378) — defaulting to the
 /// \f$ (T^2 - 3\,\text{holes}) \times S^1 \f$ operator topology — which builds
@@ -29,14 +29,31 @@ using ::tessera::spacetime::Spacetime;
 /// lengths are relaxed to a stationary point of the dual Regge action under the
 /// state-pinning residual (`r = \beta\|\nabla S\|^2 + r_\psi`) by a Gauss-Newton
 /// / Levenberg-Marquardt descent on the **exact analytic** Jacobian, using the
-/// **sparse** action Hessian (`actionHessianExactSparse`). The operator is then
-/// read off the relaxed bulk.
+/// **sparse** action Hessian (`actionHessianExactSparse`). The emergent quantities
+/// are then read off the relaxed bulk.
 ///
-/// ## Modes
-/// * **Emergent** (`U` empty): `outputStates` is required; the operator emerges.
-/// * **U-supplied**: `outputStates` is computed from `U` and the inputs; `U` is
-///   then ignored (a consistency check — the emergent operator should reproduce
-///   the supplied `U`).
+/// ## Modes — the primary emergent quantity is the one the caller did NOT supply
+///
+/// * **Output-supplied** (`U` empty): `outputStates` is pinned *together with* the
+///   inputs as \f$ \partial W \f$, the interior relaxes, and the **operator** is
+///   the primary emergent quantity (`operatorU()` — see the deferral note below).
+/// * **U-supplied** (`outputStates` omitted): the expected output is computed by
+///   applying `U` to the inputs, pinned as the output target ("apply `U`" / `U` as
+///   the bulk constraint), and the **output state** is the primary emergent
+///   quantity — read back over the output cycles by transporting the inputs
+///   through the relaxed geometry (the #353 `inputs → emergent output` flow), via
+///   `outputState()`.
+///
+/// `outputState()` is populated in **both** modes — primary when `U` was supplied,
+/// a consistency read (emergent vs. the pinned target) when the output was
+/// supplied. `operatorU()` / `choiState()` (the
+/// \f$ \operatorname{unvec}(\ker L_1(W-\partial W)) \f$ operator read-out) are
+/// **deferred** pending the interior-handle operator-topology rework: on the
+/// current topology \f$ \ker L_1(W-\partial W) \f$ is a \f$ d^2-1 \f$-dim
+/// interior-cochain subspace with no basis-independent map to the
+/// \f$ d\times d \f$ operator (it needs distinguished interior Choi-cycles the
+/// topology does not yet supply), so they stay **empty** rather than report a
+/// frame-dependent value. (#376)
 class MergeCobordism {
   public:
     /// Convergence + topology statistics of the relaxation.
@@ -56,9 +73,11 @@ class MergeCobordism {
 
     /// Build and run the merge.
     /// @param inputStates  the input qubit states, each a length-\f$ d \f$ vector.
-    /// @param outputStates the expected output state(s); required when `U` empty.
+    /// @param outputStates the expected output state(s). Required when `U` is
+    ///   empty; **may be omitted** when `U` is supplied (then computed from `U`).
     /// @param U            optional operator, flat row-major; when set the outputs
-    ///   are computed from it and `U` is otherwise ignored.
+    ///   are computed by applying it to the inputs and the output state is the
+    ///   primary emergent quantity (`U`-supplied mode).
     /// @param beta         weight on the stationary-action residual.
     /// @param epsilon      convergence tolerance on the total residual.
     /// @param maxIters     interior-relaxation iteration budget (LM steps). The
@@ -89,13 +108,23 @@ class MergeCobordism {
     [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &bulk()
         const noexcept { return bulkCells_; }
     /// The merge operator \f$ U_{AB} = \operatorname{unvec}(\ker L_1(W-\partial W)) \f$,
-    /// flat row-major \f$ d\times d \f$.
+    /// flat row-major \f$ d\times d \f$. **Deferred** (always empty for now): the
+    /// principled read-out awaits the interior-handle operator-topology rework —
+    /// see the Modes note. Empty also signals the bulk carried no operator.
     [[nodiscard]] const std::vector<std::complex<double>> &operatorU()
         const noexcept { return operatorU_; }
     /// The Choi state of the merge operator (the carried \f$ \sum=0 \f$ period
-    /// vector), flat length \f$ d^2 \f$.
+    /// vector), flat length \f$ d^2 \f$. **Deferred** with `operatorU()` (empty).
     [[nodiscard]] const std::vector<std::complex<double>> &choiState()
         const noexcept { return choiState_; }
+    /// The emergent final state \f$ \psi_{AB} \f$: the periods of the metric
+    /// \f$ L_1(W) \f$ harmonic carrying the **inputs** read over the output
+    /// cycles — the output the relaxed geometry produces from the inputs alone.
+    /// The primary emergent quantity in `U`-supplied mode; a consistency read
+    /// (emergent vs. the pinned target) in output-supplied mode. Flat, length
+    /// \f$ d \f$. Empty when the input/output cycle split is not determinate.
+    [[nodiscard]] const std::vector<std::complex<double>> &outputState()
+        const noexcept { return outputState_; }
 
     [[nodiscard]] const Stats &stats() const noexcept { return stats_; }
 
@@ -122,6 +151,7 @@ class MergeCobordism {
     std::vector<std::vector<std::uint64_t>> bulkCells_{};
     std::vector<std::complex<double>> operatorU_{};
     std::vector<std::complex<double>> choiState_{};
+    std::vector<std::complex<double>> outputState_{};  // emergent psi_AB (#376)
     Stats stats_{};
 
     // === pipeline ===

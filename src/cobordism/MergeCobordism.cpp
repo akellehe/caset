@@ -261,12 +261,49 @@ void MergeCobordism::extractOperator() {
   stats_.interiorVertices = static_cast<int>(es.interiorVertexCount());
   stats_.topology = topology_->name() + "  ker L1(W-dW)=" + std::to_string(dim);
 
-  // === operator read-out — DEFERRED to #6 (operator-recovery verdict) ===
-  // The principled map ker L_1(W) -> U^Choi (the cycle-Choi correspondence) is
-  // the #6 work; the clean base deliberately does NOT carry the old first-d^2
-  // placeholder. choiState_/operatorU_ stay empty until #6 lands.
+  // === operator read-out — DEFERRED (#376) ===
+  // unvec(ker L_1(W - dW)) is the operator, but ker L_1(W - dW) here is a
+  // (d^2-1)-dim subspace of the interior 1-cochains (C^|interior C_1|) with no
+  // basis-independent map to the d x d operator: the kernel basis is only fixed
+  // up to an O(dim) rotation, so a reshape is frame-dependent. A principled read
+  // needs distinguished interior Choi-cycles the current topology does not
+  // supply (the interior-handle operator-topology rework). Rather than fabricate
+  // a frame-dependent value, the operator stays empty (honest floor signal).
   choiState_.clear();
   operatorU_.clear();
+
+  // === emergent output state read-out (#376) ===
+  // The output the relaxed geometry produces from the INPUTS alone (the #353
+  // inputs -> emergent output flow): carry the pinned input periods as a metric
+  // L_1(W) harmonic and read its periods over the OUTPUT cycles. Populated in
+  // both modes — primary in U-supplied mode, a consistency read (emergent vs the
+  // pinned target) in output-supplied mode. Read from the relaxed (live) metric,
+  // so it is emergent, not the seed. The topology's readout() emits the cycles
+  // state-by-state (inputs then outputs) with a fixed loops-per-state, so the
+  // input/output split is at nIn = loopsPerState * (#input states); skip the
+  // read when that split is not determinate (e.g. some states went unpinned).
+  outputState_.clear();
+  const std::size_t totalStates = inputStates_.size() + outputStates_.size();
+  if (totalStates > 0 && !stateLoops_.empty() &&
+      stateLoops_.size() % totalStates == 0) {
+    const std::size_t loopsPerState = stateLoops_.size() / totalStates;
+    const std::size_t nIn = loopsPerState * inputStates_.size();
+    if (nIn > 0 && nIn < stateLoops_.size()) {
+      const std::vector<TopologyBuilder::EdgeLoop> inLoops(
+          stateLoops_.begin(),
+          stateLoops_.begin() + static_cast<std::ptrdiff_t>(nIn));
+      const std::vector<std::complex<double>> inTargets(
+          stateTargets_.begin(),
+          stateTargets_.begin() + static_cast<std::ptrdiff_t>(nIn));
+      const std::vector<TopologyBuilder::EdgeLoop> outLoops(
+          stateLoops_.begin() + static_cast<std::ptrdiff_t>(nIn),
+          stateLoops_.end());
+      const std::vector<std::complex<double>> psiIn =
+          es.carriedRepresentativeOverLoops(inLoops, inTargets);
+      if (!psiIn.empty())
+        outputState_ = es.periodsOfCochainOverLoops(psiIn, outLoops);
+    }
+  }
 
   // === residual read-out: beta*||grad_I S||^2 + r_psi at the relaxed metric ===
   ReggeSolver residualSolver(cobordism_, MatterConfiguration());
