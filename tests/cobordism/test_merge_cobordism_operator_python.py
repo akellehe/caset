@@ -86,12 +86,14 @@ class RelaxationTest(unittest.TestCase):
         self.assertGreater(_S.residual, 0.0)
 
     def test_residual_decomposes(self):
-        # beta = 1: r = beta*||grad S||^2 + r_psi.
+        # beta = 1: r = beta*||grad S||^2 + r_state.
         self.assertAlmostEqual(
             _S.residual, _S.stat_action_residual + _S.state_residual, places=9)
 
-    def test_states_are_pinned_hard(self):
-        # r_psi is the (hard) state-pinning term; it sits near zero.
+    def test_state_residual_near_zero(self):
+        # The default r_state term is r_U (realizability); the basis input/output
+        # states are realizable, so it sits near zero.
+        self.assertEqual(_S.state_mode, "r_U")
         self.assertLess(_S.state_residual, 1e-2)
 
     def test_runs_the_iteration_budget(self):
@@ -148,6 +150,46 @@ class DeterminismTest(unittest.TestCase):
         self.assertEqual(self.m2.stats.ker_l1_bulk, _S.ker_l1_bulk)
         self.assertEqual(self.m2.stats.interior_vertices, _S.interior_vertices)
         self.assertEqual(len(self.m2.bulk), len(_M.bulk))
+
+
+class StateResidualModeTest(unittest.TestCase):
+    """The selectable r_state term (#377): r_U realizability (default) vs r_psi
+    hard period-pin. The topology/structure is the term-independent substrate;
+    only the matter term and its descent differ."""
+
+    _MODE = tessera.cobordism.MergeCobordism.StateResidualMode
+
+    @classmethod
+    def setUpClass(cls):
+        # The default merge (_M) is r_U; build the r_psi counterpart once.
+        cls.m_pin = tessera.cobordism.MergeCobordism(
+            _IN, _OUT, max_iters=_ITERS, seed=0,
+            state_mode=cls._MODE.PeriodPin)
+
+    def test_default_is_realizability(self):
+        # No state_mode argument => r_U (the #377 default).
+        self.assertEqual(_S.state_mode, "r_U")
+
+    def test_period_pin_is_selected(self):
+        self.assertEqual(self.m_pin.stats.state_mode, "r_psi")
+
+    def test_period_pin_descends_to_a_finite_floor(self):
+        # r_psi also descends well below the bare seed (~162) and floors > 0.
+        s = self.m_pin.stats
+        self.assertGreater(s.residual, 0.0)
+        self.assertLess(s.residual, 2.0)  # ~300x below the bare seed
+        self.assertAlmostEqual(
+            s.residual, s.stat_action_residual + s.state_residual, places=9)
+
+    def test_mode_does_not_change_the_topology(self):
+        # The term is the matter pin, not the geometry: same carried dim / bulk.
+        self.assertEqual(self.m_pin.stats.ker_l1_bulk, _S.ker_l1_bulk)
+        self.assertEqual(self.m_pin.stats.interior_vertices, _S.interior_vertices)
+
+    def test_period_pin_is_deterministic(self):
+        m2 = tessera.cobordism.MergeCobordism(
+            _IN, _OUT, max_iters=_ITERS, seed=0, state_mode=self._MODE.PeriodPin)
+        self.assertEqual(m2.stats.residual, self.m_pin.stats.residual)
 
 
 if __name__ == "__main__":

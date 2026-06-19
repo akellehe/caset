@@ -45,17 +45,20 @@ std::vector<int> betti(const Spacetime &st) {
 }
 
 // One bounded Gauss-Newton / Levenberg-Marquardt descent of the total residual
-// r = beta*||grad_I S||^2 + r_psi over the interior edge squared-lengths, using
+// r = beta*||grad_I S||^2 + r_state over the interior edge squared-lengths, using
 // the EXACT analytic gradient and the SPARSE analytic Hessian of the dual Regge
 // action (actionHessianExactSparse, #381 — assembled at O(nnz), the interior
 // block extracted from it). dW is held fixed (Dirichlet), so the Regge
-// stationarity is over interior edges only. Returns the final r; leaves the
-// interior edges at the best point found.
+// stationarity is over interior edges only. The r_state term is selected by
+// `mode`: r_U realizability (residualForLoops, default) or r_psi hard period-pin
+// (periodGapForLoops). Returns the final r; leaves the interior edges at the best
+// point found.
 double relaxInterior(
     const std::shared_ptr<Spacetime> &st, double beta,
     const std::vector<EigenstateSynthesis::EdgeLoop> &stateLoops,
     const std::vector<std::complex<double>> &stateTargets,
-    int maxIters, int &iterCounter, bool verbose = false) {
+    int maxIters, int &iterCounter, MergeCobordism::StateResidualMode mode,
+    bool verbose = false) {
   EigenstateSynthesis es(st, 1);
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> interiorRank;
   for (const auto &uv : es.interiorEdges()) interiorRank.emplace(uv, 0);
@@ -69,12 +72,15 @@ double relaxInterior(
     }
   }
   const std::size_t nI = interiorIdx.size();
+  const bool periodPin = (mode == MergeCobordism::StateResidualMode::PeriodPin);
 
-  // r_psi: the carried-harmonic residual of the pinned states over the boundary
-  // cycles, read against the live metric so it tracks the relaxation.
+  // r_state: the selected state residual of the pinned states over the boundary
+  // cycles, read against the live metric so it tracks the relaxation -- r_psi
+  // (carried-vs-target period gap) or r_U (exact-period state non-harmonicity).
   auto stateCost = [&]() {
-    return stateLoops.empty() ? 0.0
-                              : es.residualForLoops(stateLoops, stateTargets);
+    if (stateLoops.empty()) return 0.0;
+    return periodPin ? es.periodGapForLoops(stateLoops, stateTargets)
+                     : es.residualForLoops(stateLoops, stateTargets);
   };
   // The action residual is the Regge stationarity over the FREE (interior) edges
   // only: dW is fixed, so its action gradient is an irreducible Dirichlet
@@ -89,7 +95,7 @@ double relaxInterior(
 
   if (nI == 0) return beta * actionNorm2() + stateCost();
 
-  // cellSimplices order (residualForLoopsGradient) -> interior param index, so
+  // cellSimplices order (the state-residual gradient) -> interior param index, so
   // the analytic state-residual gradient folds into the action gradient.
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> paramOf;
   for (std::size_t c = 0; c < nI; ++c) paramOf[edgeKey(interiorEdgePtr[c])] = c;
@@ -126,7 +132,9 @@ double relaxInterior(
     // lengths, plus the analytic state-residual gradient (cellSimplices order).
     Eigen::VectorXd grad = (2.0 * beta * (HII.adjoint() * gI)).real();
     if (!stateLoops.empty()) {
-      const auto rg = es.residualForLoopsGradient(stateLoops, stateTargets);
+      const auto rg = periodPin
+                          ? es.periodGapForLoopsGradient(stateLoops, stateTargets)
+                          : es.residualForLoopsGradient(stateLoops, stateTargets);
       for (std::size_t j = 0; j < rg.size() && j < cellToParam.size(); ++j)
         if (cellToParam[j] >= 0) grad(cellToParam[j]) += rg[j];
     }
@@ -174,7 +182,7 @@ MergeCobordism::MergeCobordism(
     const std::vector<std::vector<std::complex<double>>> &outputStates,
     const std::vector<std::complex<double>> &U, double beta, double epsilon,
     int maxIters, std::uint64_t seed, std::shared_ptr<TopologyBuilder> topology,
-    bool verbose)
+    bool verbose, StateResidualMode stateMode)
     : inputStates_(inputStates),
       outputStates_(outputStates),
       beta_(beta),
@@ -183,7 +191,8 @@ MergeCobordism::MergeCobordism(
       seed_(seed),
       verbose_(verbose),
       topology_(topology ? std::move(topology)
-                         : std::make_shared<TorusOperatorTopology>()) {
+                         : std::make_shared<TorusOperatorTopology>()),
+      stateMode_(stateMode) {
   if (inputStates_.empty())
     throw std::invalid_argument("MergeCobordism: inputStates is empty");
   stateDim_ = inputStates_.front().size();
@@ -236,12 +245,12 @@ void MergeCobordism::buildSeed() {
 
 void MergeCobordism::optimize() {
   // Relax the interior edge lengths to a stationary point of the dual Regge
-  // action under the state-pinning residual r = beta||grad S||^2 + r_psi. No
+  // action under the state-pinning residual r = beta||grad S||^2 + r_state. No
   // combinatorial move-search: the relaxed seed triangulation is a local optimum
   // (every boundary-fixed Pachner move only raised the residual in testing), so
   // the relax alone determines the geometry. [#388]
   relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, maxIters_,
-                stats_.relaxIterations, verbose_);
+                stats_.relaxIterations, stateMode_, verbose_);
   extractOperator();
   stats_.converged = stats_.residual < epsilon_;
 }
@@ -268,7 +277,7 @@ void MergeCobordism::extractOperator() {
   choiState_.clear();
   operatorU_.clear();
 
-  // === residual read-out: beta*||grad_I S||^2 + r_psi at the relaxed metric ===
+  // === residual read-out: beta*||grad_I S||^2 + r_state at the relaxed metric ===
   ReggeSolver residualSolver(cobordism_, MatterConfiguration());
   const auto gRes = residualSolver.actionGradientExact();
   std::set<std::pair<std::uint64_t, std::uint64_t>> interiorSet;
@@ -279,8 +288,13 @@ void MergeCobordism::extractOperator() {
     if (interiorSet.count(edgeKey(resEdges[i]))) actionN2 += std::norm(gRes[i]);
   stats_.statActionResidual = beta_ * actionN2;
   stats_.dualAction = residualSolver.dualReggeAction();
+  const bool periodPin = (stateMode_ == StateResidualMode::PeriodPin);
+  stats_.stateMode = periodPin ? "r_psi" : "r_U";
   stats_.stateResidual =
-      stateLoops_.empty() ? 0.0 : es.residualForLoops(stateLoops_, stateTargets_);
+      stateLoops_.empty()
+          ? 0.0
+          : (periodPin ? es.periodGapForLoops(stateLoops_, stateTargets_)
+                       : es.residualForLoops(stateLoops_, stateTargets_));
   stats_.residual = stats_.statActionResidual + stats_.stateResidual;
 }
 
