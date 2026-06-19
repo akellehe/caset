@@ -93,8 +93,8 @@ class RelaxationTest(unittest.TestCase):
 
     def test_state_residual_near_zero(self):
         # The default r_state term is r_U (realizability); the basis input/output
-        # states are realizable, so it sits near zero.
-        self.assertEqual(_S.state_mode, "r_U")
+        # states are realizable, so it sits near zero. (That the default term IS
+        # r_U is asserted in StateResidualModeTest.test_default_is_realizability.)
         self.assertLess(_S.state_residual, 1e-2)
 
     def test_runs_the_iteration_budget(self):

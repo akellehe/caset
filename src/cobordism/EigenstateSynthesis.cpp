@@ -995,37 +995,45 @@ std::vector<cd> EigenstateSynthesis::carriedFromReadout(
         std::to_string(targetPeriods.size()) + " target periods for " +
         std::to_string(m) + " cycles");
 
-  // The minimum-norm least-squares projection onto the carried period rows
-  // (what numpy.linalg.lstsq returns): c = (P^T)^+ target via the SVD.
-  Eigen::VectorXcd t(static_cast<Eigen::Index>(m));
-  for (std::size_t q = 0; q < m; ++q)
-    t[static_cast<Eigen::Index>(q)] = targetPeriods[q];
-  Eigen::VectorXcd c(static_cast<Eigen::Index>(ro.dim));
-  if (ro.dim > 0) {
-    Eigen::MatrixXcd Pt(static_cast<Eigen::Index>(m),
-                        static_cast<Eigen::Index>(ro.dim));
-    for (std::size_t q = 0; q < m; ++q)
-      for (std::size_t r = 0; r < ro.dim; ++r)
-        Pt(static_cast<Eigen::Index>(q), static_cast<Eigen::Index>(r)) =
-            ro.P[r * m + q];
-    c = Pt.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(t);
-  }
+  // The minimum-norm least-squares projection onto the carried period rows.
+  const std::vector<cd> c = lstsqOverReadout(ro, targetPeriods);
 
   // The carried representative plus the minimal leak: psi = sum_r c_r h_r,
   // then each cycle's uncarried remainder lands on its leak column, so the
   // cochain's periods are exactly the targets.
   std::vector<cd> psi(n, cd(0.0, 0.0));
   for (std::size_t r = 0; r < ro.dim; ++r) {
-    const cd cr = c[static_cast<Eigen::Index>(r)];
+    const cd cr = c[r];
     for (std::size_t i = 0; i < n; ++i) psi[i] += cr * ro.H[r * n + i];
   }
   for (std::size_t q = 0; q < m; ++q) {
     cd carried(0.0, 0.0);
-    for (std::size_t r = 0; r < ro.dim; ++r)
-      carried += c[static_cast<Eigen::Index>(r)] * ro.P[r * m + q];
+    for (std::size_t r = 0; r < ro.dim; ++r) carried += c[r] * ro.P[r * m + q];
     psi[ro.leakColumns[q]] += targetPeriods[q] - carried;
   }
   return psi;
+}
+
+std::vector<cd> EigenstateSynthesis::lstsqOverReadout(
+    const RegisterReadout &ro, const std::vector<cd> &targetPeriods) const {
+  // c = (P^T)^+ target (minimum-norm least squares, what numpy.linalg.lstsq
+  // returns): the SVD projection of the targets onto the carried period rows.
+  // Shared by carriedFromReadout (r_U's leak'd state) and periodGapForLoops
+  // (r_psi's period gap), so the two terms fit onto the same carried space.
+  const std::size_t m = ro.leakColumns.size();
+  if (ro.dim == 0) return {};
+  Eigen::VectorXcd t(static_cast<Eigen::Index>(m));
+  for (std::size_t q = 0; q < m; ++q)
+    t[static_cast<Eigen::Index>(q)] = targetPeriods[q];
+  Eigen::MatrixXcd Pt(static_cast<Eigen::Index>(m),
+                      static_cast<Eigen::Index>(ro.dim));
+  for (std::size_t q = 0; q < m; ++q)
+    for (std::size_t r = 0; r < ro.dim; ++r)
+      Pt(static_cast<Eigen::Index>(q), static_cast<Eigen::Index>(r)) =
+          ro.P[r * m + q];
+  const Eigen::VectorXcd c =
+      Pt.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(t);
+  return std::vector<cd>(c.data(), c.data() + c.size());
 }
 
 EigenstateSynthesis::RegisterReadout EigenstateSynthesis::assembleReadoutOverLoops(
@@ -1158,30 +1166,20 @@ double EigenstateSynthesis::periodGapForLoops(
         std::to_string(m) + " loops");
   if (m == 0) return 0.0;
   const RegisterReadout ro = assembleReadoutOverLoops(loops);
-  // No harmonic carried: none of the target is reachable -> the gap is all of it.
-  if (ro.dim == 0) {
-    double g = 0.0;
-    for (const cd &t : targetPeriods) g += std::norm(t);
-    return g;
+  // The carried object stays a PURE harmonic (no leak): least-squares-fit the
+  // target onto the carried period rows (lstsqOverReadout — the SAME projection
+  // r_U's carriedFromReadout uses, so the two terms share the realizable zero
+  // set) and return the squared norm of the remainder no harmonic can reach,
+  // ||carried - target||^2 = ||P^T c - target||^2. When ro.dim == 0 nothing is
+  // carried and the gap is the whole target (c is empty -> carried = 0).
+  const std::vector<cd> c = lstsqOverReadout(ro, targetPeriods);
+  double gap = 0.0;
+  for (std::size_t q = 0; q < m; ++q) {
+    cd carried(0.0, 0.0);
+    for (std::size_t r = 0; r < ro.dim; ++r) carried += c[r] * ro.P[r * m + q];
+    gap += std::norm(carried - targetPeriods[q]);
   }
-  // P^T (m x dim): the live harmonics' periods over the loops. The carried object
-  // stays a PURE harmonic (no leak): least-squares-fit the target onto P^T's
-  // column space and return the squared norm of the unreachable remainder. The
-  // min-norm SVD fit is the same projection convention carriedFromReadout uses
-  // for r_U (so the two terms share the realizable zero set) and that
-  // periodGapForLoopsGradient differentiates.
-  Eigen::MatrixXcd Pt(static_cast<Eigen::Index>(m),
-                      static_cast<Eigen::Index>(ro.dim));
-  for (std::size_t q = 0; q < m; ++q)
-    for (std::size_t r = 0; r < ro.dim; ++r)
-      Pt(static_cast<Eigen::Index>(q), static_cast<Eigen::Index>(r)) =
-          ro.P[r * m + q];
-  Eigen::VectorXcd t(static_cast<Eigen::Index>(m));
-  for (std::size_t q = 0; q < m; ++q)
-    t[static_cast<Eigen::Index>(q)] = targetPeriods[q];
-  const Eigen::VectorXcd c =
-      Pt.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(t);
-  return (Pt * c - t).squaredNorm();
+  return gap;
 }
 
 double EigenstateSynthesis::periodGapForPeriods(
@@ -1593,26 +1591,9 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
     const std::vector<cd> &targetPeriods) const {
   // A removed triangle's boundary IS the oriented loop h0 -> h1 -> h2 -> h0
   // (identical signed covector and leak), so route through the loop core.
-  auto &vlist = *st_->getVertexList();
-  auto edge = [&](std::uint64_t u, std::uint64_t v) {
-    auto *vu = vlist.get(u), *vv = vlist.get(v);
-    if (!vu || !vv)
-      throw std::runtime_error(
-          "EigenstateSynthesis::residualForPeriodsGradient: hole vertex absent");
-    return Edge(vu, vv, cd(1.0, 0.0));
-  };
-  std::vector<EdgeLoop> loops;
-  loops.reserve(holes.size());
-  for (const auto &h : holes) {
-    if (h.size() != 3)
-      throw std::runtime_error(
-          "EigenstateSynthesis::residualForPeriodsGradient: hole has " +
-          std::to_string(h.size()) + " vertices, expected 3");
-    std::vector<std::uint64_t> s(h);
-    std::sort(s.begin(), s.end());
-    loops.push_back({edge(s[0], s[1]), edge(s[1], s[2]), edge(s[2], s[0])});
-  }
-  return periodGradientOverLoops(loops, targetPeriods);
+  return periodGradientOverLoops(
+      holeLoops(holes, "EigenstateSynthesis::residualForPeriodsGradient"),
+      targetPeriods);
 }
 
 std::vector<double> EigenstateSynthesis::residualForLoopsGradient(

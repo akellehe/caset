@@ -127,7 +127,10 @@ class PeriodGapGradientTest(unittest.TestCase):
         self.assertLess(worst, 1e-4, f"worst |analytic - FD| = {worst:.2e}")
 
     def test_gradient_near_zero_at_realizable_base(self):
-        # At the realizable minimum (r_psi ~ 0) the gradient is ~ 0.
+        # At the realizable minimum (r_psi ~ 0) the gradient is ~ 0. (This alone
+        # can't catch an all-zero stub -- the TRUE gradient is ~0 here too; that
+        # regression is caught by test_gradient_matches_finite_difference, which
+        # asserts norm(g) > 1e-6 at a perturbed point.)
         _st, es, holes, P, cells1 = _substrate()
         target = [complex(z) for z in P[0]]
         g = np.asarray(es.periodGapForPeriodsGradient(holes, target), float)

@@ -645,6 +645,14 @@ class EigenstateSynthesis {
     [[nodiscard]] RegisterReadout assembleReadoutOverLoops(
         const std::vector<EdgeLoop> &loops) const;
 
+    // The minimum-norm least-squares fit of targetPeriods onto the carried
+    // period rows P^T (c = (P^T)^+ target via the SVD) — the single projection
+    // both the carried representative (r_U) and the period gap (r_psi) ride on, so
+    // their realizable zero sets coincide. Length ro.dim (empty when ro.dim == 0).
+    [[nodiscard]] std::vector<std::complex<double>> lstsqOverReadout(
+        const RegisterReadout &ro,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     // The carried representative from a finished read-out — shared by the hole
     // and loop period paths (the lstsq projection plus each cycle's leak).
     [[nodiscard]] std::vector<std::complex<double>> carriedFromReadout(
