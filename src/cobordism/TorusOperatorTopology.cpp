@@ -77,26 +77,6 @@ std::vector<std::vector<std::uint64_t>> disjointHoles(
   return holes;
 }
 
-// The 3 prism tets of (triangle x edge) from layer offset `bot` to `top` — the
-// dimension-generic staircase, looped to make x S^1 rather than x [0,1].
-void appendStaircase(const std::vector<std::vector<std::uint64_t>> &faces,
-                     std::uint64_t bot, std::uint64_t top,
-                     std::set<std::vector<std::uint64_t>> &cells) {
-  for (const auto &f : faces) {
-    const std::uint64_t a = f[0], b = f[1], c = f[2];
-    const std::uint64_t b0[3] = {a + bot, b + bot, c + bot};
-    const std::uint64_t t0[3] = {a + top, b + top, c + top};
-    std::vector<std::vector<std::uint64_t>> tets = {
-        {b0[0], b0[1], b0[2], t0[2]},
-        {b0[0], b0[1], t0[1], t0[2]},
-        {b0[0], t0[0], t0[1], t0[2]}};
-    for (auto &t : tets) {
-      std::sort(t.begin(), t.end());
-      cells.insert(t);
-    }
-  }
-}
-
 }  // namespace
 
 std::shared_ptr<Spacetime> TorusOperatorTopology::build(
@@ -124,19 +104,26 @@ std::shared_ptr<Spacetime> TorusOperatorTopology::build(
         "TorusOperatorTopology: torus base lacks enough vertex-disjoint holes");
   const std::set<std::vector<std::uint64_t>> holeSet(holes.begin(), holes.end());
 
-  std::uint64_t N = 0;
-  for (const auto &f : faces)
-    for (const auto v : f) N = std::max(N, v + 1);
   holes_ = holes;     // cache for readout(): the qubit boundary holes
-  layerStride_ = N;   // cache for readout(): the S^1 layer stride
   std::vector<std::vector<std::uint64_t>> holed;  // torus with the holes removed
   for (const auto &f : faces)
     if (!holeSet.count(f)) holed.push_back(f);
+  std::uint64_t N = 0;  // per-layer vertex stride (matches Spacetime::prismCells)
+  for (const auto &f : holed)
+    for (const auto v : f) N = std::max(N, v + 1);
+  layerStride_ = N;   // cache for readout(): the S^1 layer stride
 
-  // Staircase the holed torus over S^1 (three layers, looped 0 -> N -> 2N -> 0).
+  // (holed torus) x S^1 via the canonical prism (Spacetime::prismCells), then
+  // glue the top layer (ids >= 3N) back to the bottom to close the S^1.
   std::set<std::vector<std::uint64_t>> cellSet;
-  for (std::uint64_t layer = 0; layer < 3; ++layer)
-    appendStaircase(holed, layer * N, ((layer + 1) % 3) * N, cellSet);
+  const std::uint64_t topOff = N * 3;  // three layers, stride N
+  for (const auto &cell : Spacetime::prismCells(holed, /*layers=*/3)) {
+    std::vector<std::uint64_t> c;
+    c.reserve(cell.size());
+    for (const auto v : cell) c.push_back(v >= topOff ? v - topOff : v);
+    std::sort(c.begin(), c.end());
+    cellSet.insert(std::move(c));
+  }
 
   Signature sig3(3, SignatureType::Lorentzian);
   auto metric3 = std::make_shared<Metric>(true, sig3);
