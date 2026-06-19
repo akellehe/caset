@@ -1298,13 +1298,15 @@ prepared states, reproduces the harmonic overlap.)doc")
   mc.def(py::init([](const std::vector<std::vector<std::complex<double>>> &in,
                      const std::vector<std::vector<std::complex<double>>> &out,
                      const std::vector<std::complex<double>> &U, double beta,
-                     double epsilon, std::uint64_t seed, bool verbose) {
-           return std::make_unique<MergeCobordism>(in, out, U, beta, epsilon,
-                                                   seed, nullptr, verbose);
+                     double epsilon, int maxIters, std::uint64_t seed,
+                     bool verbose) {
+           return std::make_unique<MergeCobordism>(
+               in, out, U, beta, epsilon, maxIters, seed, nullptr, verbose);
          }),
          py::arg("input_states"), py::arg("output_states"),
          py::arg("U") = std::vector<std::complex<double>>{},
-         py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6, py::arg("seed") = 0,
+         py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6,
+         py::arg("max_iters") = 400, py::arg("seed") = 0,
          py::arg("verbose") = false,
          "Build and run the merge on the default (T^2-3holes)xS^1 operator "
          "topology. output_states is required unless U (a flat row-major dxd "

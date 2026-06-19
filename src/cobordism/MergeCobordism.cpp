@@ -173,11 +173,13 @@ MergeCobordism::MergeCobordism(
     const std::vector<std::vector<std::complex<double>>> &inputStates,
     const std::vector<std::vector<std::complex<double>>> &outputStates,
     const std::vector<std::complex<double>> &U, double beta, double epsilon,
-    std::uint64_t seed, std::shared_ptr<TopologyBuilder> topology, bool verbose)
+    int maxIters, std::uint64_t seed, std::shared_ptr<TopologyBuilder> topology,
+    bool verbose)
     : inputStates_(inputStates),
       outputStates_(outputStates),
       beta_(beta),
       epsilon_(epsilon),
+      maxIters_(maxIters),
       seed_(seed),
       verbose_(verbose),
       topology_(topology ? std::move(topology)
@@ -238,7 +240,7 @@ void MergeCobordism::optimize() {
   // combinatorial move-search: the relaxed seed triangulation is a local optimum
   // (every boundary-fixed Pachner move only raised the residual in testing), so
   // the relax alone determines the geometry. [#388]
-  relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, /*maxIters=*/400,
+  relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, maxIters_,
                 stats_.relaxIterations, verbose_);
   extractOperator();
   stats_.converged = stats_.residual < epsilon_;

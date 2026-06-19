@@ -61,6 +61,8 @@ class MergeCobordism {
     ///   are computed from it and `U` is otherwise ignored.
     /// @param beta         weight on the stationary-action residual.
     /// @param epsilon      convergence tolerance on the total residual.
+    /// @param maxIters     interior-relaxation iteration budget (LM steps). The
+    ///   production default is 400; tests pass a small value for speed.
     /// @param seed         RNG seed for the metric jitter.
     /// @param topology     the cobordism topology; null => TorusOperatorTopology.
     /// @param verbose      emit per-iteration relax progress to stderr.
@@ -68,7 +70,7 @@ class MergeCobordism {
         const std::vector<std::vector<std::complex<double>>> &inputStates,
         const std::vector<std::vector<std::complex<double>>> &outputStates,
         const std::vector<std::complex<double>> &U = {}, double beta = 1.0,
-        double epsilon = 1e-6, std::uint64_t seed = 0,
+        double epsilon = 1e-6, int maxIters = 400, std::uint64_t seed = 0,
         std::shared_ptr<TopologyBuilder> topology = nullptr, bool verbose = false);
 
     [[nodiscard]] const std::vector<std::vector<std::complex<double>>> &
@@ -103,6 +105,7 @@ class MergeCobordism {
     std::vector<std::vector<std::complex<double>>> outputStates_{};
     double beta_{1.0};
     double epsilon_{1e-6};
+    int maxIters_{400};
     std::uint64_t seed_{0};
     std::size_t stateDim_{0};
     bool verbose_{false};
