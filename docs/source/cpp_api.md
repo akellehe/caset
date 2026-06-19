@@ -172,6 +172,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} TorusOperatorTopology.h
 ```
+```{doxygenfile} RegisterTopology.h
+```
 
 ## Quantum
 

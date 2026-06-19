@@ -7,6 +7,7 @@
 #include <complex>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -70,12 +71,25 @@ class TopologyBuilder {
     [[nodiscard]] virtual std::size_t carriedDim(std::size_t stateDim) const = 0;
 
     /// The number of read-out cycles `readout()` emits per pinned state (e.g. 2
-    /// for the torus: the hole-circle and the \f$ S^1 \f$ time loop). With it the
-    /// caller can split `readout()`'s flat loop list back into per-state blocks
-    /// and detect a state that went unpinned — `readout()` pins at most the
-    /// topology's state capacity, so `loops.size() == loopsPerState() * (#states)`
-    /// holds iff every state was pinned.
+    /// for the torus: the hole-circle and the \f$ S^1 \f$ time loop; 3 for the
+    /// color register: its three hole-circles). With it the caller can split
+    /// `readout()`'s flat loop list back into per-state blocks and detect a state
+    /// that went unpinned — `readout()` pins at most the topology's state
+    /// capacity, so `loops.size() == loopsPerState() * (#states)` holds iff every
+    /// state was pinned.
     [[nodiscard]] virtual std::size_t loopsPerState() const = 0;
+
+    /// Validate the state amplitude dimension \f$ d \f$ for this topology, so the
+    /// admissible dimension travels with the topology rather than being baked
+    /// into `MergeCobordism`. The default requires a power of two \f$ \geq 2 \f$
+    /// (the qubit/Choi operator topology); a register overrides it (\f$ d = 3 \f$,
+    /// the color triple on the \f$ \sum = 0 \f$ hyperplane).
+    /// @throws std::invalid_argument if \f$ d \f$ is not admissible.
+    virtual void validateStateDim(std::size_t d) const {
+      if (d < 2 || (d & (d - 1)) != 0)
+        throw std::invalid_argument(
+            "MergeCobordism: state dimension must be a power of two >= 2");
+    }
 
     /// Human-readable topology name, for `MergeCobordism::Stats::topology`.
     [[nodiscard]] virtual std::string name() const = 0;

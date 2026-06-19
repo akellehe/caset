@@ -42,14 +42,19 @@ _OUT = [[1 + 0j, 0 + 0j]]
 # uses max_iters=400 (the delta-S=0 floor); the full-relax byte-identical
 # descent is pinned by the period smoke, not here.
 _ITERS = 30
-_M = tessera.cobordism.MergeCobordism(_IN, _OUT, max_iters=_ITERS, seed=0)
+# The default topology is now the #353-style RegisterTopology (#378); select the
+# (T^2-3holes)xS^1 operator topology explicitly for this suite.
+_M = tessera.cobordism.MergeCobordism(
+    _IN, _OUT, max_iters=_ITERS, seed=0,
+    topology=tessera.cobordism.TorusOperatorTopology())
 _S = _M.stats
 
 # Output-supplied, SAME inputs as _M but a DIFFERENT pinned output |1>. The
 # emergent output is input-dominated, so this must agree with _M's (it is read
 # from the inputs, not echoed from the pinned target).
 _MB1 = tessera.cobordism.MergeCobordism(
-    _IN, [[0j, 1 + 0j]], max_iters=_ITERS, seed=0)
+    _IN, [[0j, 1 + 0j]], max_iters=_ITERS, seed=0,
+    topology=tessera.cobordism.TorusOperatorTopology())
 
 # U-supplied mode (no output_states): the OUTPUT state is the primary emergent
 # quantity. A DISCRIMINATING case -- one input |1> and U = X (Pauli), so the
@@ -57,7 +62,8 @@ _MB1 = tessera.cobordism.MergeCobordism(
 # transport is ~identity, so the emergent output tracks the INPUT |1>, not X|1>.
 _U_X = [0j, 1 + 0j, 1 + 0j, 0j]
 _MUX = tessera.cobordism.MergeCobordism(
-    [[0j, 1 + 0j]], U=_U_X, max_iters=_ITERS, seed=0)
+    [[0j, 1 + 0j]], U=_U_X, max_iters=_ITERS, seed=0,
+    topology=tessera.cobordism.TorusOperatorTopology())
 
 # Over-capacity reads must skip (honest empty), not emit a mis-split value. Both
 # overflow the topology's 3-hole capacity so a state goes unpinned; the empty
@@ -66,10 +72,12 @@ _MUX = tessera.cobordism.MergeCobordism(
 #  - 3 inputs + U => 3 outputs => 6 states (the modulo-zero case a divisibility
 #    heuristic would mis-split into a bogus length-3 output).
 _M_2IN_U = tessera.cobordism.MergeCobordism(
-    _IN, U=_U_X, max_iters=2, seed=0)
+    _IN, U=_U_X, max_iters=2, seed=0,
+    topology=tessera.cobordism.TorusOperatorTopology())
 _M_3IN_U = tessera.cobordism.MergeCobordism(
     [[1 + 0j, 0j], [1 + 0j, 0j], [1 + 0j, 0j]],
-    U=[1 + 0j, 0j, 0j, 1 + 0j], max_iters=2, seed=0)
+    U=[1 + 0j, 0j, 0j, 1 + 0j], max_iters=2, seed=0,
+    topology=tessera.cobordism.TorusOperatorTopology())
 
 
 def _normalized_phase_fixed(vec):
@@ -235,13 +243,16 @@ class ConstructorValidationTest(unittest.TestCase):
     def test_neither_output_nor_u_raises(self):
         # output_states defaults to {} and no U => nothing to pin as the output.
         with self.assertRaises(ValueError):
-            tessera.cobordism.MergeCobordism([[1 + 0j, 0j]], max_iters=2, seed=0)
+            tessera.cobordism.MergeCobordism(
+                [[1 + 0j, 0j]], max_iters=2, seed=0,
+                topology=tessera.cobordism.TorusOperatorTopology())
 
     def test_both_u_and_output_raises(self):
         # supplying both must throw rather than silently discard output_states.
         with self.assertRaises(ValueError):
             tessera.cobordism.MergeCobordism(
-                _IN, _OUT, U=_U_X, max_iters=2, seed=0)
+                _IN, _OUT, U=_U_X, max_iters=2, seed=0,
+                topology=tessera.cobordism.TorusOperatorTopology())
 
 
 class OperatorDeferredTest(unittest.TestCase):
@@ -264,7 +275,9 @@ class DeterminismTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.m2 = tessera.cobordism.MergeCobordism(_IN, _OUT, max_iters=_ITERS, seed=0)
+        cls.m2 = tessera.cobordism.MergeCobordism(
+            _IN, _OUT, max_iters=_ITERS, seed=0,
+            topology=tessera.cobordism.TorusOperatorTopology())
 
     def test_same_seed_same_residual(self):
         self.assertEqual(self.m2.stats.residual, _S.residual)

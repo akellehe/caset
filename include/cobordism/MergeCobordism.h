@@ -24,7 +24,8 @@ using ::tessera::spacetime::Spacetime;
 /// dual Lorentzian Regge action while keeping a valid simplicial manifold.
 ///
 /// The topology is supplied by a `TopologyBuilder` (#378) — defaulting to the
-/// \f$ (T^2 - 3\,\text{holes}) \times S^1 \f$ operator topology — which builds
+/// \#353-style color `RegisterTopology` (select `TorusOperatorTopology` for the
+/// \f$ (T^2 - 3\,\text{holes}) \times S^1 \f$ qubit operator) — which builds
 /// \f$ W \f$ and supplies the per-state read-out cycles. The interior edge
 /// lengths are relaxed to a stationary point of the dual Regge action under the
 /// state-pinning residual (`r = \beta\|\nabla S\|^2 + r_\psi`) by a Gauss-Newton
@@ -92,7 +93,9 @@ class MergeCobordism {
     /// @param maxIters     interior-relaxation iteration budget (LM steps). The
     ///   production default is 400; tests pass a small value for speed.
     /// @param seed         RNG seed for the metric jitter.
-    /// @param topology     the cobordism topology; null => TorusOperatorTopology.
+    /// @param topology     the cobordism topology; null => RegisterTopology (the
+    ///   \#353-style color register default). The admissible state dimension is
+    ///   topology-specific (register: \f$ d = 3 \f$; operator: a power of two).
     /// @param verbose      emit per-iteration relax progress to stderr.
     MergeCobordism(
         const std::vector<std::vector<std::complex<double>>> &inputStates,

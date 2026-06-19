@@ -17,6 +17,7 @@
 
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
+#include "cobordism/RegisterTopology.h"
 #include "cobordism/TorusOperatorTopology.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
@@ -184,13 +185,13 @@ MergeCobordism::MergeCobordism(
       seed_(seed),
       verbose_(verbose),
       topology_(topology ? std::move(topology)
-                         : std::make_shared<TorusOperatorTopology>()) {
+                         : std::make_shared<RegisterTopology>()) {
   if (inputStates_.empty())
     throw std::invalid_argument("MergeCobordism: inputStates is empty");
   stateDim_ = inputStates_.front().size();
-  if (stateDim_ < 2 || (stateDim_ & (stateDim_ - 1)) != 0)
-    throw std::invalid_argument(
-        "MergeCobordism: state dimension must be a power of two >= 2");
+  // The admissible state dimension travels with the topology (operator: a power
+  // of two; register: the color triple d = 3).
+  topology_->validateStateDim(stateDim_);
 
   if (!U.empty()) {
     // U-supplied mode: the output emerges, so outputStates must be OMITTED (the
