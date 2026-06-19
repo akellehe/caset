@@ -101,8 +101,12 @@ class MergeCobordism {
         double epsilon = 1e-6, int maxIters = 400, std::uint64_t seed = 0,
         std::shared_ptr<TopologyBuilder> topology = nullptr, bool verbose = false);
 
+    /// The input states \f$ \{\psi_i\} \f$ as supplied.
     [[nodiscard]] const std::vector<std::vector<std::complex<double>>> &
     inputStates() const noexcept { return inputStates_; }
+    /// The output state(s) — as supplied (output-supplied mode), or computed by
+    /// applying `U` to each input (`U`-supplied mode). Distinct from the *emergent*
+    /// single `outputState()` read off the relaxed geometry.
     [[nodiscard]] const std::vector<std::vector<std::complex<double>>> &
     outputStates() const noexcept { return outputStates_; }
 
@@ -138,6 +142,7 @@ class MergeCobordism {
     [[nodiscard]] const std::vector<std::complex<double>> &outputState()
         const noexcept { return outputState_; }
 
+    /// Convergence + topology statistics of the relaxation.
     [[nodiscard]] const Stats &stats() const noexcept { return stats_; }
 
   private:
