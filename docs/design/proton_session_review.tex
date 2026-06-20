@@ -39,10 +39,12 @@ onto a \emph{trivalent junction} $W_{ABC}$, where we: built a valid-manifold
 junction that conserves color charge and respects $S_3$; fixed a relaxation stall;
 showed that a van~Raamsdonk metric from \emph{pairwise} mutual information cannot
 select the singlet; realized the photon as a null worldline under a Lorentzian
-relax; and --- the headline result --- proved that the singlet is \emph{reachable}
-on the junction (the $\sim 74\%$ overlap was a suboptimal \emph{input}, not a
-geometry limit), with the one remaining task being a symmetric (gauge-clean)
-window placement so a \emph{natural} quark input transports to the singlet.
+relax; and --- the headline result --- proved that the singlet is reachable by the
+input$\to$result \emph{transport} (it lies in the image of that linear map), even
+though the actual \emph{merge with a natural input does not reach it} ($\sim 74\%$).
+The ceiling is a suboptimal input on gauge-asymmetric windows, not a geometry
+limit; the one remaining task is to produce the singlet from a \emph{principled}
+input, via a symmetric (gauge-clean) window placement.
 \end{abstract}
 
 \section{The goal and the method}
@@ -149,8 +151,21 @@ We find $\operatorname{rank}M=3$ and $[1,\omega,\omega^2]\in\operatorname{im}M$:
   \max_{\text{neutral inputs }t}\frac{|\langle M t,\,[1,\omega,\omega^2]\rangle|}
        {\lVert Mt\rVert\,\lVert[1,\omega,\omega^2]\rVert}=1.0000 .
 \]
-The exact singlet is \emph{reachable} --- the $74\%$ was a suboptimal \emph{input}
+The exact singlet is \emph{reachable by the transport} --- $\exists$ a neutral
+input whose merge produces it --- so the $74\%$ was a suboptimal \emph{input}
 encoding, not a limit of the junction.
+
+\paragraph{Transport-reachable vs.\ merge-produced (the honest distinction).}
+``Reachable'' here means the singlet is in the \emph{image} of $M$: some input maps
+to it. It does \emph{not} mean the merge \emph{produced} the singlet --- run with a
+\emph{natural} (physical, symmetric) quark input the merge still gives $\sim 0.74$.
+The only input that yields the singlet is $M^{-1}[1,\omega,\omega^2]$, which is
+\emph{geometry-specific} (reverse-engineered from the relaxed metric), not an
+independently motivated state. So the result is: the junction \emph{can} carry the
+proton (necessary), but we have not yet \emph{produced} it from a principled input
+through the merge (sufficient). Closing that gap is exactly the symmetric-window
+task below --- with gauge-clean windows the natural input \emph{is} the matched
+input, and the merge produces the singlet.
 
 \subsection{The gauge structure is geometric}
 
@@ -174,7 +189,8 @@ Trivalent junction (valid manifold, charge-conserving, $S_3$) & built (\code{Tri
 Relaxation fix & landed; junction relaxes\\
 VR-from-pairwise-MI is uniform & negative result, documented\\
 Photon (null worldline) & realized under Lorentzian relax\\
-Singlet reachable (overlap $1.0$) & proved; $74\%$ was the input\\
+Singlet reachable by the \emph{transport} & proved ($[1,\omega,\omega^2]\in\operatorname{im}M$, max overlap $1.0$)\\
+\dots but \emph{not} produced by a natural-input merge & merge gives $\sim 0.74$; the matched input is geometry-specific\\
 Window asymmetry is geometric, not gauge & proved $\Rightarrow$ symmetric windows needed\\
 \bottomrule
 \end{tabular}
