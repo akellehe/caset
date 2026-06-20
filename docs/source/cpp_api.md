@@ -174,6 +174,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} RegisterTopology.h
 ```
+```{doxygenfile} TripartiteRegisterTopology.h
+```
 
 ## Quantum
 

@@ -169,6 +169,19 @@ class MergeCobordism {
     [[nodiscard]] const std::vector<std::complex<double>> &outputState()
         const noexcept { return outputState_; }
 
+    /// The EXACT triangle-hole read-out data (register topologies): the pinned
+    /// INPUT holes, their induced-orientation-signed target periods, and the
+    /// EMERGENT result block's holes. Empty for an edge-loop (operator) topology.
+    /// Exposed so a caller can read the emergent result off the relaxed geometry
+    /// via the carried-input transport (carriedRepresentative over the input
+    /// holes, periods over the result holes) with the W's own vertex labels.
+    [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &inputHoles()
+        const noexcept { return stateHoles_; }
+    [[nodiscard]] const std::vector<std::complex<double>> &inputHoleTargets()
+        const noexcept { return holeTargets_; }
+    [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &resultHoles()
+        const noexcept { return resultHoles_; }
+
     /// Convergence + topology statistics of the relaxation.
     [[nodiscard]] const Stats &stats() const noexcept { return stats_; }
 

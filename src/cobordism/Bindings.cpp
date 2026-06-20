@@ -31,6 +31,7 @@
 #include "cobordism/Spectrum.h"
 #include "cobordism/TopologyBuilder.h"
 #include "cobordism/TorusOperatorTopology.h"
+#include "cobordism/TripartiteRegisterTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -1321,6 +1322,15 @@ prepared states, reproduces the harmonic overlap.)doc")
       "blocks joined by additive tubes (never a welded shared block), color "
       "hole-circle read-out, no S^1; d = 3.")
       .def(py::init<>());
+  py::class_<TripartiteRegisterTopology, TopologyBuilder,
+             std::shared_ptr<TripartiteRegisterTopology>>(
+      m, "TripartiteRegisterTopology",
+      "The trivalent W_ABC junction (#396): one geodesic S^2 minus 12 "
+      "vertex-disjoint holes (x I), four distinct windows of 3 color holes "
+      "(A,B,C inputs -> R emergent result). Distinct holes = independent cycles, "
+      "so the three inputs do not average; charge is conserved at the junction "
+      "(Sigma_R = -Sigma_inputs). emergesResult; d = 3.")
+      .def(py::init<>());
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
@@ -1405,5 +1415,18 @@ prepared states, reproduces the harmonic overlap.)doc")
           "relaxed geometry, read over the output cycles (flat, length d). "
           "Primary in U-supplied mode; a consistency read in output-supplied "
           "mode. Empty when the input/output cycle split is not determinate.")
+      .def_property_readonly(
+          "input_holes", &MergeCobordism::inputHoles,
+          "Register topologies only: the pinned INPUT triangle holes (W's own "
+          "vertex labels). Read the emergent result via the carried-input "
+          "transport: carriedRepresentative(input_holes, input_hole_targets) "
+          "then its periods over result_holes.")
+      .def_property_readonly("input_hole_targets",
+                             &MergeCobordism::inputHoleTargets,
+                             "The induced-orientation-signed target periods for "
+                             "input_holes (sign * color amplitude).")
+      .def_property_readonly("result_holes", &MergeCobordism::resultHoles,
+                             "Register topologies only: the EMERGENT result "
+                             "block's triangle holes (read, never pinned).")
       .def_property_readonly("stats", &MergeCobordism::stats);
 }
