@@ -185,22 +185,11 @@ class MergeCobordism {
     std::shared_ptr<TopologyBuilder> topology_{};
     StateResidualMode stateMode_{StateResidualMode::Realizability};
 
-    // r_state: the states pinned as period targets over the boundary cycles the
-    // topology supplies (scored by r_U or r_psi per stateMode_). A topology
-    // supplies EITHER edge-loops (readout(), the operator's S^1, SOFT
-    // residualForLoops) OR triangle holes (readoutHoles(), the #353 register, the
-    // EXACT residualForPeriods) -- never both, so the register cannot fall back
-    // into the soft loop residual. The loop members are empty for a register; the
-    // hole members are empty for the operator.
+    // r_state: the inputs+outputs pinned as period targets over the operator
+    // topology's edge-loop read-out (the S^1 cycles), scored by r_U or r_psi per
+    // stateMode_. (The exact triangle-hole transport read-out is TransportCobordism.)
     std::vector<TopologyBuilder::EdgeLoop> stateLoops_{};
     std::vector<std::complex<double>> stateTargets_{};
-    // The EXACT triangle-hole path (readoutHoles()): the pinned INPUT holes +
-    // their induced-orientation targets (scored over residualForPeriods), and the
-    // EMERGENT result block's holes (read over cyclePeriods after the relax, not
-    // pinned -- the #353 inputs -> emergent result flow).
-    std::vector<std::vector<std::uint64_t>> stateHoles_{};
-    std::vector<std::complex<double>> holeTargets_{};
-    std::vector<std::vector<std::uint64_t>> resultHoles_{};
 
     // === results ===
     std::shared_ptr<Spacetime> cobordism_{};

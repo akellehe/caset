@@ -31,6 +31,9 @@
 #include "cobordism/Spectrum.h"
 #include "cobordism/TopologyBuilder.h"
 #include "cobordism/TorusOperatorTopology.h"
+#include "cobordism/CobordismRelaxer.h"
+#include "cobordism/TransportCobordism.h"
+#include "cobordism/TripartiteRegisterTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -1321,6 +1324,32 @@ prepared states, reproduces the harmonic overlap.)doc")
       "blocks joined by additive tubes (never a welded shared block), color "
       "hole-circle read-out, no S^1; d = 3.")
       .def(py::init<>());
+  py::class_<TripartiteRegisterTopology, TopologyBuilder,
+             std::shared_ptr<TripartiteRegisterTopology>>(
+      m, "TripartiteRegisterTopology",
+      "The trivalent W_ABC junction (#396): one geodesic S^2 minus 12 "
+      "vertex-disjoint holes (x I), four distinct windows of 3 color holes "
+      "(A,B,C inputs -> R emergent result). Distinct holes = independent cycles, "
+      "so the three inputs do not average; charge is conserved at the junction "
+      "(Sigma_R = -Sigma_inputs). emergesResult; d = 3.")
+      .def(py::init<>())
+      .def("set_entangled_metric",
+           &TripartiteRegisterTopology::setEntangledMetric, py::arg("intra_mi"),
+           py::arg("cross_mi"), py::arg("i_max") = TripartiteRegisterTopology::kVanRaamsdonkMaxMI,
+           "Seed the metric from the color-singlet entanglement (van Raamsdonk): "
+           "intra-window edges get mutual information intra_mi, cross-window edges "
+           "cross_mi, bulk 0; l^2 = (-log(I/i_max))^2. The caller computes "
+           "intra_mi/cross_mi from the 3-party state's reduced density matrices, "
+           "so the same state seeds the metric and the complex boundary inputs. "
+           "i_max defaults to 2 log 3 (qutrit). Unset => jitter seed.")
+      .def("set_lorentzian_worldlines",
+           &TripartiteRegisterTopology::setLorentzianWorldlines,
+           py::arg("worldline_lsq") = -1.0,
+           "Make the junction Lorentzian: cross-layer (forward-time) worldline "
+           "edges are set timelike (l^2 = worldline_lsq < 0), so the dual Regge "
+           "action goes complex (Im S != 0) and its harmonics carry the singlet's "
+           "omega-phases. Null edges (photons) may emerge under the relax as a "
+           "worldline's l^2 -> 0. Unset => all-spacelike (Riemannian).");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
@@ -1373,16 +1402,16 @@ prepared states, reproduces the harmonic overlap.)doc")
          py::arg("topology") = std::shared_ptr<TopologyBuilder>{},
          py::arg("verbose") = false,
          py::arg("state_mode") = MergeCobordism::StateResidualMode::Realizability,
-         "Build and run the merge. topology selects the cobordism topology "
-         "(default: RegisterTopology, the #353-style color register; pass "
-         "TorusOperatorTopology for the (T^2-3holes)xS^1 qubit operator); the "
-         "admissible state dimension is topology-specific (register: d=3; "
-         "operator: a power of two). The primary emergent quantity is the one not "
-         "supplied: output_states (U empty) => the operator is primary; U (a flat "
-         "row-major dxd operator, output_states omitted) => the output_state is "
-         "primary, emergent over the output cycles. Supply exactly one of "
-         "output_states or U. state_mode selects the r_state term: Realizability "
-         "(r_U, default) or PeriodPin (r_psi, for comparison).")
+         "Build and run the merge (the operator topology, default "
+         "TorusOperatorTopology: the (T^2-3holes)xS^1 qubit operator). Pins inputs "
+         "AND outputs (or derives outputs from U) and reads the emergent operator "
+         "OR final state -- whichever was not supplied: output_states (U empty) => "
+         "the operator is primary; U (a flat row-major dxd operator, output_states "
+         "omitted) => the output_state is primary, emergent over the output cycles. "
+         "Supply exactly one of output_states or U. (For pinning inputs alone and "
+         "reading the emergent carried result -- the #353 color register / #396 "
+         "proton junction -- use TransportCobordism.) state_mode selects the "
+         "r_state term: Realizability (r_U, default) or PeriodPin (r_psi).")
       .def_property_readonly("input_states", &MergeCobordism::inputStates)
       .def_property_readonly("output_states", &MergeCobordism::outputStates)
       .def_property_readonly("cobordism", &MergeCobordism::cobordism,
@@ -1406,4 +1435,76 @@ prepared states, reproduces the harmonic overlap.)doc")
           "Primary in U-supplied mode; a consistency read in output-supplied "
           "mode. Empty when the input/output cycle split is not determinate.")
       .def_property_readonly("stats", &MergeCobordism::stats);
+
+  // === TransportCobordism (#353 / #396): the carried-rep transport ===
+  py::class_<TransportCobordism> tc(m, "TransportCobordism",
+      "The transport primitive: pin boundary color states (inputs only), relax "
+      "the bulk, and read the EMERGENT result by carrying the inputs through the "
+      "bulk to the result block. This is the #353 color register and the #396 "
+      "tripartite proton junction -- a transport of the boundary states, not a "
+      "merge (no pair-of-pants, no operator). Use a transport topology "
+      "(RegisterTopology default, or TripartiteRegisterTopology).");
+  py::enum_<TransportCobordism::StateResidualMode>(tc, "StateResidualMode")
+      .value("Realizability", TransportCobordism::StateResidualMode::Realizability)
+      .value("PeriodPin", TransportCobordism::StateResidualMode::PeriodPin);
+  py::class_<TransportCobordism::Stats>(tc, "Stats")
+      .def_readonly("converged", &TransportCobordism::Stats::converged)
+      .def_readonly("residual", &TransportCobordism::Stats::residual)
+      .def_readonly("stat_action_residual",
+                    &TransportCobordism::Stats::statActionResidual)
+      .def_readonly("state_residual", &TransportCobordism::Stats::stateResidual)
+      .def_readonly("dual_action", &TransportCobordism::Stats::dualAction)
+      .def_readonly("relax_iterations",
+                    &TransportCobordism::Stats::relaxIterations)
+      .def_readonly("betti_cobordism",
+                    &TransportCobordism::Stats::bettiCobordism)
+      .def_readonly("b1_bulk", &TransportCobordism::Stats::b1Bulk)
+      .def_readonly("interior_vertices",
+                    &TransportCobordism::Stats::interiorVertices)
+      .def_readonly("topology", &TransportCobordism::Stats::topology)
+      .def_readonly("state_mode", &TransportCobordism::Stats::stateMode);
+  tc.def(py::init([](const std::vector<std::vector<std::complex<double>>> &in,
+                     double beta, double epsilon, int maxIters, std::uint64_t seed,
+                     std::shared_ptr<TopologyBuilder> topology, bool verbose,
+                     TransportCobordism::StateResidualMode stateMode) {
+           return std::make_unique<TransportCobordism>(
+               in, beta, epsilon, maxIters, seed, std::move(topology), verbose,
+               stateMode);
+         }),
+         py::arg("input_states"), py::arg("beta") = 1.0,
+         py::arg("epsilon") = 1e-6, py::arg("max_iters") = 400,
+         py::arg("seed") = 0,
+         py::arg("topology") = std::shared_ptr<TopologyBuilder>{},
+         py::arg("verbose") = false,
+         py::arg("state_mode") =
+             TransportCobordism::StateResidualMode::Realizability,
+         "Build + relax the transport. Pins INPUTS only (the result emerges) over "
+         "the topology's exact triangle-hole read-out. Default topology: "
+         "RegisterTopology (the #353 color register); pass TripartiteRegisterTopology "
+         "for the proton junction. d = 3 (color).")
+      .def_property_readonly("input_states", &TransportCobordism::inputStates)
+      .def_property_readonly("cobordism", &TransportCobordism::cobordism,
+                             "The cobordism W (relaxed boundary + bulk).")
+      .def_property_readonly("boundary", &TransportCobordism::boundary,
+                             "The boundary dW top-cells.")
+      .def_property_readonly("bulk", &TransportCobordism::bulk,
+                             "The bulk W - dW interior 1-cells.")
+      .def_property_readonly(
+          "result", &TransportCobordism::result,
+          "The EMERGENT result: the inputs carried through the bulk to the result "
+          "block's color holes (flat, length d). The transport's primary output.")
+      .def_property_readonly(
+          "input_holes", &TransportCobordism::inputHoles,
+          "The pinned INPUT triangle holes (W's own vertex labels). Read the "
+          "emergent result via the carried-input transport: "
+          "carriedRepresentative(input_holes, input_hole_targets) then its periods "
+          "over result_holes.")
+      .def_property_readonly("input_hole_targets",
+                             &TransportCobordism::inputHoleTargets,
+                             "The induced-orientation-signed target periods for "
+                             "input_holes (sign * color amplitude).")
+      .def_property_readonly("result_holes", &TransportCobordism::resultHoles,
+                             "The EMERGENT result block's triangle holes (read, "
+                             "never pinned).")
+      .def_property_readonly("stats", &TransportCobordism::stats);
 }

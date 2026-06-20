@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""Compose bipartite MergeCobordism merges into a sequence (#382).
+"""Compose bipartite TransportCobordism transports into a sequence (#382).
 
 The compose mechanism: the EMERGENT result of one merge is fed as a boundary
 INPUT of the next (result-state = next-merge boundary), never a hand-welded
@@ -34,7 +34,7 @@ _SINGLET = [1, _W, _W * _W]
 
 
 def _merge(inputs, max_iters=60):
-    return cob.MergeCobordism(inputs, [], max_iters=max_iters, seed=0,
+    return cob.TransportCobordism(inputs, max_iters=max_iters, seed=0,
                               topology=cob.RegisterTopology())
 
 
@@ -42,20 +42,19 @@ class ComposeSequenceTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.m1 = _merge([_A, _B])
-        cls.ab = list(cls.m1.output_state)        # emergent result of step 1
+        cls.ab = list(cls.m1.result)        # emergent result of step 1
         cls.m2 = _merge([cls.ab, _C])             # ...fed as a boundary input
-        cls.abc = list(cls.m2.output_state)
+        cls.abc = list(cls.m2.result)
 
     def test_each_step_reads_an_emergent_color_triple(self):
-        # The result is READ out of the relaxed geometry (a 3-vector), not the
-        # operator (which is deferred-empty: the register carries a rep).
+        # The result is READ out of the relaxed geometry (a 3-vector): the transport
+        # carries the inputs to the result block.
         self.assertEqual(len(self.ab), 3)
         self.assertEqual(len(self.abc), 3)
-        self.assertEqual(len(self.m2.operator_U), 0)
 
     def test_compose_is_real_not_welded(self):
-        # Step 2's input boundary IS step 1's emergent output_state -- the merges
-        # are composed (result-state = next boundary), and the chained merge
+        # Step 2's input boundary IS step 1's emergent result -- the transports are
+        # composed (result-state = next boundary), and the chained transport
         # produces a result. Composition, never a hand-welded interior.
         self.assertEqual(list(self.m2.input_states[0]), self.ab)
         self.assertTrue(self.abc)  # the second merge produced an emergent result

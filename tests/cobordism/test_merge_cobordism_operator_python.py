@@ -43,8 +43,8 @@ _OUT = [[1 + 0j, 0 + 0j]]
 # uses max_iters=400 (the delta-S=0 floor); the full-relax byte-identical
 # descent is pinned by the period smoke, not here.
 _ITERS = 30
-# The default topology is now the #353-style RegisterTopology (#378); select the
-# (T^2-3holes)xS^1 operator topology explicitly for this suite.
+# MergeCobordism's default topology is the (T^2-3holes)xS^1 operator topology;
+# we select it explicitly for this suite. (The color register is TransportCobordism.)
 _M = tessera.cobordism.MergeCobordism(
     _IN, _OUT, max_iters=_ITERS, seed=0,
     topology=tessera.cobordism.TorusOperatorTopology())

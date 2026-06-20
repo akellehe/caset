@@ -51,14 +51,15 @@ def _max_facet_coface(top_cells):
     return max(counts.values()) if counts else 0
 
 
-# The register relaxation is light (2-D, signature-blind); a tiny iteration
-# budget keeps the suite fast. The topology invariants are seed/budget-independent.
-_M = cob.MergeCobordism([_A, _B], [_R], max_iters=2, seed=0)
+# The register is a TRANSPORT (pin inputs, read the emergent result), not a merge.
+# The relaxation is light (2-D, signature-blind); a tiny iteration budget keeps the
+# suite fast. The topology invariants are seed/budget-independent.
+_M = cob.TransportCobordism([_A, _B], max_iters=2, seed=0)
 
 
 class RegisterIsDefaultTest(unittest.TestCase):
     def test_default_topology_is_register(self):
-        # No topology= arg -> the #353-style register.
+        # No topology= arg -> TransportCobordism's default is the #353 register.
         self.assertIn("register", _M.stats.topology)
 
 
@@ -113,9 +114,9 @@ class TopologySelectionTest(unittest.TestCase):
             topo.validate_state_dim(2)
 
     def test_register_default_rejects_non_color_dimension(self):
-        # d=2 with the default (register) topology is rejected at construction.
+        # d=2 with the default (register) transport topology is rejected at build.
         with self.assertRaises((ValueError, RuntimeError)):
-            cob.MergeCobordism([_Q, _Q], [_Q], max_iters=1)
+            cob.TransportCobordism([_Q, _Q], max_iters=1)
 
 
 if __name__ == "__main__":
