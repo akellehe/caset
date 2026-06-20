@@ -13,27 +13,35 @@ namespace tessera::cobordism {
 
 /// # RegisterTopology
 ///
-/// The \#353-style color register topology, built **without welding** (the
-/// default `MergeCobordism` topology). The merge \f$ \psi_A, \psi_B \to \psi_R \f$
-/// is three holed-icosahedron register blocks — each \f$ S^2 - 3\,\text{holes} \f$,
-/// \f$ b_1 = 2 \f$ on the \f$ \sum = 0 \f$ hyperplane (the \f$ S_3 \f$ standard
-/// rep, the color singlet \f$ [1, \omega, \omega^2] \f$) — laid with **disjoint**
-/// vertex ids and joined input→result by additive **tubes** (the six lateral
-/// triangles of a triangular prism between two triangular hole-circles).
+/// The \#353-style color register topology (the default `MergeCobordism`
+/// topology). The holed icosahedron (\f$ S^2 - 3 \f$ color holes, \f$ b_1 = 2 \f$
+/// on the \f$ \sum = 0 \f$ hyperplane — the \f$ S_3 \f$ standard rep, the color
+/// singlet \f$ [1, \omega, \omega^2] \f$) is extruded over a **3-layer staircase**
+/// (`Spacetime::prismCells`) into one connected 3-complex with
+/// \f$ b_1(W) = 2 \f$: **one shared color register** across the three blocks
+/// (block A = layer 0, B = layer 1, R = layer 2). That \f$ b_1 = 2 \f$ is the
+/// confinement — a \f$ \sum \neq 0 \f$ (colored) config cannot be carried, so its
+/// realizability residual floors, while a \f$ \sum = 0 \f$ (color-neutral) config
+/// realizes (reproducing #353's realizability map / S₃ gauge invariance).
 ///
-/// Connecting by tubes, never by *identifying* a shared block, is what keeps the
-/// merge a genuine trivalent manifold: the result \f$ R \f$ is a real lobe of one
-/// connected complex, not the buried middle slice the \#353 `merge_cobordism.py`
-/// weld produces (a `P x I` transport whose `dualComplexValid` passes only
-/// because that gate misses the codim-3 pinch). `build()` asserts a manifold gate
-/// — `dualComplexValid` **plus** every edge in \f$ \leq 2 \f$ triangles — and
-/// throws if the seed is non-manifold, so a weld cannot recur.
+/// The continuous staircase is a genuine valid manifold — every triangle in
+/// \f$ \leq 2 \f$ tets, `dualComplexValid` — **not** the welded shared-block
+/// construction (a `P x I` transport that buries the result); `build()` asserts
+/// the manifold gate and throws on a non-manifold seed.
 ///
 /// Read-out: the color hole-circles only (no \f$ S^1 \f$). Each block's three
-/// hole-circle periods carry that state's three color amplitudes. The carried
-/// object is a color rep, so `MergeCobordism` reads a rep, not an operator.
+/// hole-circle periods carry that state's three color amplitudes, with the target
+/// periods pre-multiplied by the induced-orientation covector `kColorSign`
+/// (the #353 `SIGN_BLOCK`) so the carried condition is \f$ \text{sign} \cdot
+/// \psi = 0 \f$. The carried object is a color rep, so `MergeCobordism` reads a
+/// rep, not an operator.
 class RegisterTopology : public TopologyBuilder {
   public:
+    /// The induced-orientation covector on the three color holes
+    /// (`endSignCovector` of the icosahedron color holes; the #353 `SIGN_BLOCK`
+    /// `(+1, +1, -1)`). Target periods are pre-multiplied by it in `readout()`.
+    static const int kColorSign[3];
+
     [[nodiscard]] std::shared_ptr<Spacetime> build(
         std::size_t stateDim, std::uint64_t seed,
         std::vector<std::vector<std::uint64_t>> &boundaryCells) override;
@@ -56,7 +64,7 @@ class RegisterTopology : public TopologyBuilder {
     void validateStateDim(std::size_t d) const override;
 
     [[nodiscard]] std::string name() const override {
-      return "register (S^2-3holes color blocks, tube-joined)";
+      return "register ((S^2-3color-holes) x [0,2] staircase, b1=2)";
     }
 
   private:
