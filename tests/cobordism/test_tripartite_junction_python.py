@@ -50,7 +50,7 @@ def _merge(inputs, max_iters=0, setup=None):
     trt = cob.TripartiteRegisterTopology()
     if setup is not None:
         setup(trt)
-    return cob.MergeCobordism(inputs, [], max_iters=max_iters, seed=0, topology=trt)
+    return cob.TransportCobordism(inputs, max_iters=max_iters, seed=0, topology=trt)
 
 
 def _carried_result(m):

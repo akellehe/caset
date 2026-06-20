@@ -48,7 +48,7 @@ _COLORED = {"[1,0,0]": [1, 0, 0], "[1,1,0]": [1, 1, 0], "[1,1,1]": [1, 1, 1]}
 def _merge(states_in, max_iters=0):
     # The #353 register pins INPUTS only and reads the EMERGENT result block, so
     # no output states are supplied (emergesResult()).
-    return cob.MergeCobordism(states_in, [], max_iters=max_iters, seed=0,
+    return cob.TransportCobordism(states_in, max_iters=max_iters, seed=0,
                               topology=cob.RegisterTopology())
 
 
@@ -111,17 +111,14 @@ class EmergentResultBlockTest(unittest.TestCase):
         # emerges, read EXACTLY over its color holes (cyclePeriods), never pinned.
         cls.m = _merge([[1, -1, 0], [1, 0, -1]], max_iters=40)
 
-    def test_output_state_is_a_color_triple(self):
-        self.assertEqual(len(self.m.output_state), 3)
-
-    def test_operator_is_deferred_empty(self):
-        # Register read-out is a color rep, not an operator (operator deferred).
-        self.assertEqual(len(self.m.operator_U), 0)
+    def test_result_is_a_color_triple(self):
+        # The transport reads a color rep (a 3-vector), carried to the result block.
+        self.assertEqual(len(self.m.result), 3)
 
     def test_two_pair_merge_is_not_a_singlet(self):
         # |σ_R| is O(1), not < 1e-3: the bipartite (2-pair) merge does NOT yield a
         # color singlet — #353's finding that the proton needs the 3-pair merge.
-        sigma_r = abs(sum(self.m.output_state))
+        sigma_r = abs(sum(self.m.result))
         self.assertGreater(sigma_r, 0.1)
 
 
