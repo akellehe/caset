@@ -44,6 +44,8 @@ Fix $ \psi_A \in \ker(L_1^A) $ so that the state, $ \psi_A $ is represented by $
 Let $ W_{AB} = \operatorname{geo}(U^{Choi}_{AB}) \cup \partial W_{AB}$ with $U^{Choi}_{AB} \in \ker(
 L_1^{U^{Choi}_{AB}}) $ emerge from the optimization process described below.
 
+The holes above live on $\partial W$, so forming the bulk $W - \partial W$ deletes them and $\ker L_1(W - \partial W) = 0$. The emergent operator must be a genuinely interior cycle. So $W$ is a 3-manifold whose boundary $\partial W$ is the 2-complex states, and the operator is an interior 1-handle; $\ker L_1(W - \partial W)$ counts the handles. Build it from the closed $S^2 \times S^1$ (the handle, $\ker L_1 = 1$, every vertex interior): enrich the interior with boundary-fixed Pachner adds, then open the $\partial W$ cavities (the states) by gated `removeInteriorCellChecked`, rolling back any cut that drops the handle. Use REGGE, not CDT, so the edge lengths are free and the causal type is emergent, with no preferred foliation.
+
 ## Residuals
 
 Let's construct an objective function, $ F $, that we can minimize to build the bulk of our cobordism, $ W_{AB} - 
@@ -137,4 +139,35 @@ basis is fixed only up to an $O(d^2 - 1)$ rotation, so a reshape is frame-depend
 distinguished interior **Choi-cycles** the topology does not yet supply — the interior-handle operator-topology
 rework (building $W$ from the closed $S^2 \times S^1$ handle so the operator is a genuine interior $1$-cycle).
 Until then `operatorU` / `choiState` stay **empty** rather than report a frame-dependent value.
+
+## Notes
+
+### The Period Matrix
+A period is the integral of a harmonic form around a closed cycle: its circulation (aka holonomy). If the 1-form is $ \omega $ and $ \gamma $ is the loop then it's $ \oint_{\gamma} \omega$.
+
+In the context of simplicial complexes; the harmonic 1-form is a 1-cochain, $\psi$, which assigns a complex number $ \psi(e) $ to each edge and lives in $ \ker L_1 $.
+
+A cycle is a closed loop of oriented edges.
+
+The _period_ of $\psi$ over that cycle is the signed sum along the loop.
+
+$$
+\text{period} = \oint_\gamma \psi = \sum_{e \in \gamma} \pm \psi(e)
+$$
+
+The period only sees topology, not the specific loop you chose. It's the same for any two loops in a homology class. So the (harmonic form + cycle) maps to $b_1$ independent values in $ \mathbb{C} $
+
+In our context the state, $ \psi$ IS its periods. $ \psi \in \ker L_1 $ with $b_1 = \operatorname{dim}(\psi) $ ($b_1$ is the $1^{th}$ betti number: holes). The harmonic space is $b_1$ dimensional and a harmonic form's coordinates in that space are its periods over the $b_1$ independent cycles. So "pinning a qubit state" is "forcing the carried harmonic to have these target periods over these cycles".
+
+Each torus has two independent cycles; the meridian and the longitude. 
+
+$H$ is the "harmonic matrix". i.e. `H = HodgeLaplacian.harmonicMatrix(1, ...)`, which is a `dim x n` table where $dim = b_1$ (number of harmonic 1-forms, n = number of edges). So each row, $r$, is one basis harmonic 1-form $ h_r \in \ker L_1$. Each column, $i$, is an edge. So $H [rn + i ] = h_r(e_i)$ is the complex number harmonic $r$ assigns to edge $e_i$, which is a measure of how much the harmonic "flows" along that edge.
+
+The $\operatorname{sign}$ of an edge is the edge's orientation in its loop $\gamma$. The product $ \operatorname{sign} H[r, e]$ is one edge's signed contribution to harmonic $r$'s circulation. Summing over the loop is the discrete line integral:
+
+$$
+P[r,q] = \sum_{e \in \text{cycle }q} \text{sign}(e)\cdot h_r(e) = \oint_{\text{cycle }q} h_r
+$$
+
+So; rows = harmonics, columns = cycles, entry = the period of that harmonic over that cycle. That's the period matrix.
 
