@@ -13,6 +13,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
+#include "mesh/Vertex.h"
 #include "spacetime/Spacetime.h"
 
 namespace tessera::cobordism {
@@ -66,6 +67,15 @@ std::vector<Face> geodesicTwoSphere() {
 
 }  // namespace
 
+void TripartiteRegisterTopology::setEntangledMetric(double intraMI,
+                                                    double crossMI,
+                                                    double iMax) {
+  vrIntraMI_ = intraMI;
+  vrCrossMI_ = crossMI;
+  vrIMax_ = iMax;
+  vrSeed_ = true;
+}
+
 void TripartiteRegisterTopology::validateStateDim(std::size_t d) const {
   if (d != 3)
     throw std::invalid_argument(
@@ -114,22 +124,52 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
   }
   auto cobordism = Spacetime::fromCells(3, cells, 1.0, 0.0);
 
-  // Seed the metric off the degenerate uniform point (break the l^2 = 1
-  // degeneracy so the relax can descend), as the register/operator seeds do.
-  // REGGE: causal type emergent. [The principled metric is van Raamsdonk, from
-  // the 3-pair state's mutual information; the jitter is the bootstrap seed.]
-  std::mt19937 jrng(static_cast<std::uint32_t>(seed) ^ 0x9e3779b9u);
-  std::uniform_real_distribution<double> jitter(0.7, 1.3);
-  for (auto *e : cobordism->getEdgeList()->toVector())
-    e->setSquaredLength(std::complex<double>(jitter(jrng), 0.0));
-
   // The four windows (A,B,C,R) of three color holes each. Windows live on ONE
   // surface, so holes carry absolute vertex ids (NO per-block stride offset,
-  // unlike RegisterTopology's layered blocks).
+  // unlike RegisterTopology's layered blocks). Computed BEFORE the metric seed:
+  // the van Raamsdonk seed needs the per-vertex party (window) map.
   blockHoles_.assign(4, {});
   for (std::size_t blk = 0; blk < 4; ++blk)
     for (std::size_t k = 0; k < 3; ++k)
       blockHoles_[blk].push_back(holes[blk * 3 + k]);
+
+  // Per-layer vertex stride (matches Spacetime::prismCells): the base surface
+  // vertex count, so a cobordism vertex id's base (window) vertex is id % N.
+  std::uint64_t N = 0;
+  for (const auto &f : holed)
+    for (const auto v : f) N = std::max(N, v + 1);
+
+  // Seed the metric. VAN RAAMSDONK (geometry from the singlet entanglement) when
+  // setEntangledMetric() was called: each edge's squared length is
+  // l^2 = (-log(I/iMax))^2 with I the mutual information of its endpoints' color
+  // parties -- intra-window (bound, short), cross-window (longer), bulk (capped).
+  // The metric is REAL (the omega-phases ride on the complex BOUNDARY inputs, not
+  // the metric). Otherwise fall back to the jitter seed off the degenerate
+  // uniform point. REGGE: causal type emergent.
+  if (vrSeed_) {
+    std::vector<int> partyOf(static_cast<std::size_t>(N), -1);
+    for (std::size_t blk = 0; blk < blockHoles_.size(); ++blk)
+      for (const auto &hole : blockHoles_[blk])
+        for (const auto v : hole)
+          if (v < N) partyOf[static_cast<std::size_t>(v)] = static_cast<int>(blk);
+    for (auto *e : cobordism->getEdgeList()->toVector()) {
+      const int pu =
+          partyOf[static_cast<std::size_t>(e->getSource()->getId() % N)];
+      const int pv =
+          partyOf[static_cast<std::size_t>(e->getTarget()->getId() % N)];
+      const double I = (pu >= 0 && pu == pv)   ? vrIntraMI_
+                       : (pu >= 0 && pv >= 0)  ? vrCrossMI_
+                                               : 0.0;
+      e->setSquaredLength(std::complex<double>(
+          ::tessera::mesh::Edge::vanRaamsdonkSquaredLength(I, vrIMax_, 1e-10),
+          0.0));
+    }
+  } else {
+    std::mt19937 jrng(static_cast<std::uint32_t>(seed) ^ 0x9e3779b9u);
+    std::uniform_real_distribution<double> jitter(0.7, 1.3);
+    for (auto *e : cobordism->getEdgeList()->toVector())
+      e->setSquaredLength(std::complex<double>(jitter(jrng), 0.0));
+  }
 
   // Per-hole induced-orientation signs (the generalization of kColorSign): the
   // endSignCovector of the base surface over the 12 holes, grouped per window.

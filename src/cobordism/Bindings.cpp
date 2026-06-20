@@ -1330,7 +1330,16 @@ prepared states, reproduces the harmonic overlap.)doc")
       "(A,B,C inputs -> R emergent result). Distinct holes = independent cycles, "
       "so the three inputs do not average; charge is conserved at the junction "
       "(Sigma_R = -Sigma_inputs). emergesResult; d = 3.")
-      .def(py::init<>());
+      .def(py::init<>())
+      .def("set_entangled_metric",
+           &TripartiteRegisterTopology::setEntangledMetric, py::arg("intra_mi"),
+           py::arg("cross_mi"), py::arg("i_max") = 2.0 * 1.0986122886681098,
+           "Seed the metric from the color-singlet entanglement (van Raamsdonk): "
+           "intra-window edges get mutual information intra_mi, cross-window edges "
+           "cross_mi, bulk 0; l^2 = (-log(I/i_max))^2. The caller computes "
+           "intra_mi/cross_mi from the 3-party state's reduced density matrices, "
+           "so the same state seeds the metric and the complex boundary inputs. "
+           "i_max defaults to 2 log 3 (qutrit). Unset => jitter seed.");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",

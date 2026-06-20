@@ -78,7 +78,29 @@ class TripartiteRegisterTopology : public TopologyBuilder {
       return "tripartite register ((S^2-12holes) x I, 4 windows A,B,C->R)";
     }
 
+    /// Seed the metric from the color-singlet ENTANGLEMENT (van Raamsdonk) rather
+    /// than random jitter: each same-window edge gets the intra-party mutual
+    /// information `intraMI` (high MI → short, bound), each cross-window edge the
+    /// inter-party `crossMI`, and bulk edges 0 (capped long). The per-edge length
+    /// is \f$ l^2 = (-\log(I/\text{iMax}))^2 \f$ (`Edge::vanRaamsdonkSquaredLength`).
+    /// The caller computes `intraMI`/`crossMI` from the 3-party state's reduced
+    /// density matrices (the geometry from entanglement), so the SAME state seeds
+    /// the metric here and the complex boundary inputs (passed as `MergeCobordism`
+    /// inputStates). If never called, `build()` falls back to the jitter seed.
+    /// @param intraMI the within-party mutual information (party marginal entropy).
+    /// @param crossMI the between-party mutual information.
+    /// @param iMax    the max MI normalization (qutrit: \f$ 2\log 3 \f$).
+    void setEntangledMetric(double intraMI, double crossMI,
+                            double iMax = 2.0 * 1.0986122886681098);
+
   private:
+    // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
+    // build falls back to the jitter seed.
+    bool vrSeed_{false};
+    double vrIntraMI_{0.0};
+    double vrCrossMI_{0.0};
+    double vrIMax_{2.0 * 1.0986122886681098};  // 2 log 3 (max MI of a qutrit pair)
+
     // Cached by build() for readoutHoles(): the four windows (A,B,C,R) of three
     // color holes each (sorted absolute vertex triples), and their per-hole
     // induced-orientation signs (ChainComplex::endSignCovector of the base
