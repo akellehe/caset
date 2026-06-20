@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""#353 color confinement + emergent result through the C++ MergeCobordism (#379).
+"""#353 color confinement + emergent result through the C++ TransportCobordism (#379).
 
 The reworked `RegisterTopology` is the #353 color register built as a
 **b₁=2 holed-icosahedron staircase** (`(S²−3 color holes) × [0,2]`): one shared
@@ -9,7 +9,7 @@ color register across the three blocks. That b₁=2 is the confinement — a col
 (Σ≠0) configuration cannot be carried, so its realizability residual floors,
 while a color-neutral (Σ=0) configuration realizes. (The earlier tube-merge was
 b₁=8 and carried *any* config — no confinement.) These tests pin, through the
-canonical C++ `MergeCobordism`:
+canonical C++ `TransportCobordism`:
 
   * the topology is a valid manifold with **b₁=2** (not 8);
   * **confinement**: neutral/singlet states score orders below colored states;

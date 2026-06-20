@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""The tripartite W_ABC junction through the C++ MergeCobordism (#396).
+"""The tripartite W_ABC junction through the C++ TransportCobordism (#396).
 
 `TripartiteRegisterTopology` is the trivalent proton junction: one geodesic-2
 icosahedron (S^2, 42 vertices) minus 12 vertex-disjoint hole triangles in FOUR
@@ -10,7 +10,7 @@ Distinct holes = independent cycles, so the three inputs do NOT average (the #38
 bipartite obstruction is escaped) and charge is conserved at the junction by the
 surface's global Stokes relation (Sigma_R = -Sigma_inputs).
 
-These tests pin, through the canonical C++ `MergeCobordism`:
+These tests pin, through the canonical C++ `TransportCobordism`:
 
   * the topology is a valid manifold with b1 = 11 (no weld);
   * three color-neutral pairs carry EXACTLY (residualForPeriods ~ 1e-27) -- no
@@ -45,7 +45,7 @@ _NEUTRAL_PAIRS = [[1, -1, 0], [1, 0, -1], [0, 1, -1]]
 
 
 def _merge(inputs, max_iters=0, setup=None):
-    """Build (and optionally relax) the junction via MergeCobordism. `setup`
+    """Build (and optionally relax) the junction via TransportCobordism. `setup`
     configures the topology (VR metric / Lorentzian worldlines) before the build."""
     trt = cob.TripartiteRegisterTopology()
     if setup is not None:

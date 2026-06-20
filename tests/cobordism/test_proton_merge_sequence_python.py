@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""Compose bipartite MergeCobordism merges into a sequence (#382).
+"""Compose bipartite TransportCobordism transports into a sequence (#382).
 
 The compose mechanism: the EMERGENT result of one merge is fed as a boundary
 INPUT of the next (result-state = next-merge boundary), never a hand-welded
