@@ -168,6 +168,10 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} MergeCobordism.h
 ```
+```{doxygenfile} TransportCobordism.h
+```
+```{doxygenfile} CobordismRelaxer.h
+```
 ```{doxygenfile} TopologyBuilder.h
 ```
 ```{doxygenfile} TorusOperatorTopology.h
