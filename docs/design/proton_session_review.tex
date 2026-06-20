@@ -203,10 +203,20 @@ positions, each a $C_3$-symmetric hole triple with a consistent induced-sign
 pattern, so a natural symmetric quark input transports to the exact singlet with
 manifest $S_3$ symmetry, and the photon emerges from the Lorentzian worldlines.
 
-\paragraph{Artifacts.} \code{TripartiteRegisterTopology} (build, exact read-out,
-\code{set\_entangled\_metric}, \code{set\_lorentzian\_worldlines}); the
-\code{MergeCobordism} relaxation fix and emergent-read getters; and three design
-notes --- \code{proton\_bipartite\_obstruction.pdf} (why bipartite fails),
+\paragraph{Naming (merge vs.\ transport).} The register and the junction are a
+\emph{transport} --- pin the boundary, relax, carry the inputs through the bulk to
+the result block --- not a merge (no pair-of-pants, no operator). They live in
+\code{TransportCobordism}; \code{MergeCobordism} is reserved for the operator /
+final-state merge (the operator topology). Both share the relaxation in
+\code{CobordismRelaxer}. (Earlier in the session the transport was prototyped
+through \code{MergeCobordism}; it was split out into \code{TransportCobordism}.)
+
+\paragraph{Artifacts.} \code{TransportCobordism} (the transport: pin inputs, relax,
+read the emergent carried result) on \code{RegisterTopology} /
+\code{TripartiteRegisterTopology} (the latter: build, exact read-out,
+\code{set\_entangled\_metric}, \code{set\_lorentzian\_worldlines}); the shared
+\code{CobordismRelaxer} (the gated relaxation fix); and three design notes ---
+\code{proton\_bipartite\_obstruction.pdf} (why bipartite fails),
 \code{proton\_tripartite\_junction\_choices.pdf} (the four design choices), and
 this review.
 
