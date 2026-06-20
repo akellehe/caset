@@ -45,6 +45,10 @@ namespace tessera::cobordism {
 /// pinned. The carried object is a color rep, so `MergeCobordism` reads a rep.
 class TripartiteRegisterTopology : public TopologyBuilder {
   public:
+    /// The van Raamsdonk MI normalization \f$ I_{\max} = 2\log 3 \f$ --- the
+    /// mutual information of a maximally-entangled qutrit (color-triple) pair.
+    static constexpr double kVanRaamsdonkMaxMI = 2.0 * 1.0986122886681098;
+
     [[nodiscard]] std::shared_ptr<Spacetime> build(
         std::size_t stateDim, std::uint64_t seed,
         std::vector<std::vector<std::uint64_t>> &boundaryCells) override;
@@ -91,7 +95,7 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     /// @param crossMI the between-party mutual information.
     /// @param iMax    the max MI normalization (qutrit: \f$ 2\log 3 \f$).
     void setEntangledMetric(double intraMI, double crossMI,
-                            double iMax = 2.0 * 1.0986122886681098);
+                            double iMax = kVanRaamsdonkMaxMI);
 
     /// Make the junction LORENTZIAN: the cross-layer (forward-time) worldline
     /// edges are set timelike (\f$ l^2 = \text{worldlineLsq} < 0 \f$), so the dual
@@ -113,7 +117,7 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     bool vrSeed_{false};
     double vrIntraMI_{0.0};
     double vrCrossMI_{0.0};
-    double vrIMax_{2.0 * 1.0986122886681098};  // 2 log 3 (max MI of a qutrit pair)
+    double vrIMax_{kVanRaamsdonkMaxMI};  // 2 log 3 (max MI of a qutrit pair)
 
     // Cached by build() for readoutHoles(): the four windows (A,B,C,R) of three
     // color holes each (sorted absolute vertex triples), and their per-hole

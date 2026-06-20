@@ -1333,7 +1333,7 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def(py::init<>())
       .def("set_entangled_metric",
            &TripartiteRegisterTopology::setEntangledMetric, py::arg("intra_mi"),
-           py::arg("cross_mi"), py::arg("i_max") = 2.0 * 1.0986122886681098,
+           py::arg("cross_mi"), py::arg("i_max") = TripartiteRegisterTopology::kVanRaamsdonkMaxMI,
            "Seed the metric from the color-singlet entanglement (van Raamsdonk): "
            "intra-window edges get mutual information intra_mi, cross-window edges "
            "cross_mi, bulk 0; l^2 = (-log(I/i_max))^2. The caller computes "
