@@ -10,6 +10,13 @@ Distinct holes = independent cycles, so the three inputs do NOT average (the #38
 bipartite obstruction is escaped) and charge is conserved at the junction by the
 surface's global Stokes relation (Sigma_R = -Sigma_inputs).
 
+The windows are placed SYMMETRICALLY (#398): one orbit of a tetrahedral subgroup
+A4 of the icosahedral rotation group, seated at the four tetrahedral vertex-orbits
+of the icosahedron. The windows are A4-equivalent, so the per-window
+period-transport blocks are cyclically related: the transport intertwines the color
+Z3, and a color-symmetric (omega-representation) input reaches the EXACT singlet
+with manifest S3 -- a greedy (geometrically inequivalent) placement reached ~0.74.
+
 These tests pin, through the canonical C++ `TransportCobordism`:
 
   * the topology is a valid manifold with b1 = 11 (no weld);
@@ -19,8 +26,10 @@ These tests pin, through the canonical C++ `TransportCobordism`:
   * the #396 relaxation fix: the junction relaxation actually runs (it stalled at
     iteration 0 before the state-gradient gate);
   * the singlet is REACHABLE -- the input->result transport is full-rank and the
-    singlet [1,w,w^2] is in its image (max overlap over neutral inputs = 1.0); a
-    *natural* input is suboptimal (~0.7), the ceiling is the input, not the geometry;
+    singlet [1,w,w^2] is in its image (max overlap over neutral inputs = 1.0);
+  * #398 SYMMETRY: the four windows are the tetrahedral A4 orbit, the transport
+    intertwines the color Z3, and the natural color-symmetric (omega-rep) input
+    transports to the EXACT singlet (overlap ~1.0), with manifest S3;
   * the Lorentzian option makes worldlines timelike and a photon (null edge) can
     emerge under the relax.
 
@@ -79,6 +88,112 @@ def _overlap(v, ref=_SINGLET):
 
 def _edge_l2(m):
     return [e.getSquaredLength().real for e in m.cobordism.getEdgeList().toVector()]
+
+
+def _windows(m):
+    """The four windows (A, B, C inputs and R result), in the cobordism's OWN vertex
+    labels. Each hole's corner is its smallest (< 12) vertex."""
+    ih = [tuple(sorted(h)) for h in m.input_holes]
+    return [ih[0:3], ih[3:6], ih[6:9], [tuple(sorted(h)) for h in m.result_holes]]
+
+
+def _transport_matrix(m):
+    """The input->result transport M (3 result components x 9 input color
+    amplitudes): carry each UNIT input hole through the bare junction and read its
+    raw periods on R. The seed geometry is input-independent (the symmetric uniform
+    metric), so this is one build and nine carries."""
+    es = cob.EigenstateSynthesis(m.cobordism, 1)
+    edge = {}
+    for i, c in enumerate(es.cellSimplices()):
+        if len(c) == 2:
+            edge[(min(c), max(c))] = i
+    holes = [h for w in _windows(m) for h in w]
+    M = np.zeros((3, 9), complex)
+    for col in range(9):
+        psi = es.carriedRepresentative([list(holes[col])], [1.0])
+        for k, h in enumerate(holes[9:12]):
+            a, b, c = h
+            M[k, col] = psi[edge[(a, b)]] + psi[edge[(b, c)]] - psi[edge[(a, c)]]
+    return M
+
+
+def _window_cycle_rep(windows):
+    """The signed-permutation reps (P_in 9x9, P_out 3x3) of the window-cycling
+    symmetry g -- the tetrahedral-group element that FIXES R (= windows[3]) and
+    cycles A->B->C. Reconstructed from the icosahedral A4 generators applied to the
+    windows' OWN labels (never Python-reconstructed holes). The omega-eigenvectors
+    of P_in are the color-symmetric inputs; the singlet is the omega-eigenvector of
+    P_out, and the transport intertwines the two."""
+    ico = [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 5), (0, 5, 1), (1, 5, 10),
+           (1, 10, 6), (1, 6, 2), (2, 6, 7), (2, 7, 3), (3, 7, 8), (3, 8, 4),
+           (4, 8, 9), (4, 9, 5), (5, 9, 10), (6, 10, 11), (7, 6, 11), (8, 7, 11),
+           (9, 8, 11), (10, 9, 11)]
+    mid, nxt = {}, [12]
+
+    def mk(a, b):
+        key = (min(a, b), max(a, b))
+        if key not in mid:
+            mid[key] = nxt[0]
+            nxt[0] += 1
+        return mid[key]
+
+    for f in (tuple(sorted(t)) for t in ico):
+        mk(f[0], f[1]); mk(f[1], f[2]); mk(f[0], f[2])
+    # The four C3 generators (12-vertex perms); they generate the tetrahedral A4.
+    gens = [[4, 3, 8, 9, 5, 0, 7, 11, 10, 1, 2, 6],
+            [3, 4, 0, 2, 7, 8, 5, 1, 6, 11, 9, 10],
+            [6, 10, 11, 7, 2, 1, 9, 8, 3, 0, 5, 4],
+            [10, 6, 1, 5, 9, 11, 2, 0, 4, 8, 7, 3]]
+
+    def comp(p, q):
+        return [p[q[i]] for i in range(len(q))]
+
+    def lift(p):  # lift a 12-vertex perm to the 42 geodesic vertices
+        full = list(range(42))
+        for i in range(12):
+            full[i] = p[i]
+        for (a, b), idx in mid.items():
+            full[idx] = mk(p[a], p[b])
+        return full
+
+    group = {tuple(p): p for p in [list(range(12))] + [list(g) for g in gens]}
+    changed = True
+    while changed:
+        changed = False
+        for p in list(group.values()):
+            for g in gens:
+                r = comp(p, g)
+                if tuple(r) not in group:
+                    group[tuple(r)] = r
+                    changed = True
+    hsets = [set(w) for w in windows]
+
+    def apply_h(full, h):
+        return tuple(sorted(full[v] for v in h))
+
+    def winperm(full):
+        perm = []
+        for w in windows:
+            img = {apply_h(full, h) for h in w}
+            match = [j for j in range(4) if img == hsets[j]]
+            if len(match) != 1:
+                return None
+            perm.append(match[0])
+        return tuple(perm)
+
+    g_full = next(lift(p) for p in group.values()
+                  if winperm(lift(p)) == (1, 2, 0, 3))
+    holes = [h for w in windows for h in w]
+    hidx = {h: i for i, h in enumerate(holes)}
+
+    def sgn3(t):  # parity of the oriented triple relative to its sorted order
+        return 1 if ((t[0] > t[1]) + (t[0] > t[2]) + (t[1] > t[2])) % 2 == 0 else -1
+
+    P = np.zeros((12, 12), complex)
+    for i, h in enumerate(holes):
+        img = (g_full[h[0]], g_full[h[1]], g_full[h[2]])
+        P[hidx[tuple(sorted(img))], i] = sgn3(img)
+    return P[0:9, 0:9], P[9:12, 9:12]
 
 
 # Built once for the metric-independent structural assertions.
@@ -150,9 +265,11 @@ class RelaxationFixTest(unittest.TestCase):
 
 
 class SingletReachabilityTest(unittest.TestCase):
-    """The headline result: the 74% overlap is a suboptimal INPUT, not a geometry
-    limit. The carried-input read is linear, so the input->result transport is a
-    matrix M; it is full-rank and the singlet is in its image."""
+    """A 74% overlap for a NAIVE input is a suboptimal input, not a geometry limit.
+    The carried-input read is linear, so the input->result transport is a matrix M;
+    it is full-rank and the singlet is in its image. (The matched input that
+    actually reaches the singlet is the color-symmetric omega-rep -- see
+    SymmetricWindowsTest, the #398 completion.)"""
 
     @classmethod
     def setUpClass(cls):
@@ -179,12 +296,67 @@ class SingletReachabilityTest(unittest.TestCase):
         max_overlap = np.linalg.norm(image @ (image.conj().T @ s)) / np.linalg.norm(s)
         self.assertGreater(max_overlap, 0.999)
 
-    def test_a_natural_input_is_suboptimal(self):
-        # A natural (gauge-asymmetric-windows) input does NOT reach the singlet --
-        # the matched input is geometry-specific; symmetric windows are the
-        # principled fix (deferred, #20).
+    def test_a_naive_input_is_suboptimal(self):
+        # A NAIVE input (three identical neutral pairs, read raw) does NOT reach the
+        # singlet: the matched input is the color-SYMMETRIC omega-rep, not just any
+        # neutral input. SymmetricWindowsTest exhibits the symmetric input -> singlet.
         ov = _overlap(_carried_result(_merge(_NEUTRAL_PAIRS, max_iters=60)))
         self.assertLess(ov, 0.95)
+
+
+class SymmetricWindowsTest(unittest.TestCase):
+    """#398 -- the principled completion of the junction. The four windows are ONE
+    orbit of a tetrahedral subgroup A4 of the icosahedral group (each a C3 orbit of
+    corner sub-triangles), so the windows are A4-equivalent: the transport
+    intertwines the color Z3, and the natural color-symmetric (omega-representation)
+    input transports to the EXACT singlet with manifest S3."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.windows = _windows(_M)
+        cls.P_in, cls.P_out = _window_cycle_rep(cls.windows)
+        cls.M = _transport_matrix(_M)
+
+    def test_windows_are_the_four_tetrahedral_vertex_orbits(self):
+        # The windows sit at the icosahedron's four tetrahedral vertex-orbits, which
+        # partition all 12 original vertices (each hole's corner is its < 12 vertex).
+        corners = {frozenset(min(h) for h in w) for w in self.windows}
+        self.assertEqual(
+            corners,
+            {frozenset({2, 8, 10}), frozenset({1, 4, 7}),
+             frozenset({0, 6, 9}), frozenset({3, 5, 11})})
+
+    def test_metric_seed_is_uniform_symmetric(self):
+        # The symmetric windows need a symmetry-respecting metric: the default seed
+        # is uniform (l^2 = 1), unlike a jitter that would break the A4 symmetry.
+        self.assertTrue(all(abs(x - 1.0) < 1e-12 for x in _edge_l2(_M)))
+
+    def test_window_cycling_symmetry_is_the_color_z3(self):
+        # g: the A4 3-cycle that fixes R and cycles A->B->C; on the result window it
+        # is the color Z3 (P_out has eigenvalues 1, omega, omega^2).
+        eig = sorted(np.angle(np.linalg.eigvals(self.P_out)))
+        self.assertTrue(np.allclose(
+            eig, [-2 * math.pi / 3, 0.0, 2 * math.pi / 3], atol=1e-9))
+
+    def test_transport_intertwines_the_color_z3(self):
+        # M P_in = P_out M (the windows are A4-equivalent). The small residual is the
+        # junction's intrinsic discretization (a g-invariant non-degenerate metric
+        # gives the same ~4e-2); the singlet overlap below is the conclusive metric.
+        err = (np.linalg.norm(self.M @ self.P_in - self.P_out @ self.M)
+               / np.linalg.norm(self.M))
+        self.assertLess(err, 0.1)
+
+    def test_symmetric_input_transports_to_the_singlet(self):
+        # THE HEADLINE (#398): the natural color-symmetric input is the omega-rep of
+        # g (the omega-eigenvectors of P_in); each transports to the singlet (the
+        # omega-eigenvector of P_out) with overlap ~1.0 -- vs ~0.74 for greedy windows.
+        wv, vin = np.linalg.eig(self.P_in)
+        wo, vout = np.linalg.eig(self.P_out)
+        singlet = vout[:, int(np.argmin(np.abs(wo - _W)))]
+        overlaps = [_overlap(self.M @ vin[:, k], singlet)
+                    for k in range(9) if abs(wv[k] - _W) < 1e-6]
+        self.assertEqual(len(overlaps), 3)  # the omega-eigenspace of P_in is 3-dim
+        self.assertGreater(min(overlaps), 0.99)
 
 
 class LorentzianPhotonTest(unittest.TestCase):
