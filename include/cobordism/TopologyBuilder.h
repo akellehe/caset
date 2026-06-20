@@ -52,17 +52,64 @@ class TopologyBuilder {
         std::size_t stateDim, std::uint64_t seed,
         std::vector<std::vector<std::uint64_t>> &boundaryCells) = 0;
 
-    /// The pinned-state read-out: the signed edge-loops over \f$ \partial W \f$
-    /// and their target periods, given the states (inputs followed by outputs).
-    /// Defines what the relaxation pins and what the operator/rep read-out reads.
-    /// The loops' `Edge`s are built over `cobordism`'s vertices, so this needs
-    /// the `cobordism` returned by a prior `build()`.
+    /// The **edge-loop** pinned-state read-out (the SOFT path): signed edge-loops
+    /// over \f$ \partial W \f$ and their target periods, given the states (inputs
+    /// followed by outputs). Scored by `MergeCobordism` over `residualForLoops`,
+    /// whose per-loop floor is non-zero — use this ONLY for cycles that are not
+    /// triangle boundaries (the operator topology's \f$ S^1 \f$ time loop, which
+    /// has no triangle-hole equivalent). A topology whose read-out cycles ARE
+    /// triangle boundaries (the color register) must instead override
+    /// `readoutHoles()`, the EXACT (`residualForPeriods`) path — never this one,
+    /// so it cannot fall back into the soft loop residual. The default is empty
+    /// (a register supplies only `readoutHoles()`).
     /// @param cobordism the \f$ W \f$ from `build()`, for the loop edges' vertices.
     virtual void readout(
         const std::shared_ptr<Spacetime> &cobordism,
         const std::vector<std::vector<std::complex<double>>> &states,
         std::vector<EdgeLoop> &loops,
-        std::vector<std::complex<double>> &targets) const = 0;
+        std::vector<std::complex<double>> &targets) const {
+      (void)cobordism;
+      (void)states;
+      loops.clear();
+      targets.clear();
+    }
+
+    /// The **triangle-hole** pinned-state read-out (the EXACT \#353 period path).
+    /// When a topology's read-out cycles are triangle boundaries (the color
+    /// register's hole-circles), it overrides this so `MergeCobordism` scores the
+    /// pinned inputs over the EXACT `residualForPeriods` (period of a removed
+    /// triangle, machine-zero on a carried target) and reads the emergent result
+    /// block over `cyclePeriods` — never the soft edge-loop `residualForLoops`.
+    /// Only the **inputs** are pinned (the supplied `states`); the result block's
+    /// holes are returned separately in `resultHoles` to be READ after the relax,
+    /// not pinned (the \#353 inputs -> emergent result flow). The default is empty
+    /// (a topology whose cycles are not triangle boundaries — the operator's
+    /// \f$ S^1 \f$ — supplies only `readout()` and is scored over loops).
+    /// @param cobordism    the \f$ W \f$ from `build()`.
+    /// @param states       the pinned states (inputs followed by outputs).
+    /// @param inputHoles   out: the pinned states' triangle holes (sorted triples).
+    /// @param inputTargets out: their target periods (induced-orientation signed).
+    /// @param resultHoles  out: the emergent result block's triangle holes (read).
+    virtual void readoutHoles(
+        const std::shared_ptr<Spacetime> &cobordism,
+        const std::vector<std::vector<std::complex<double>>> &states,
+        std::vector<std::vector<std::uint64_t>> &inputHoles,
+        std::vector<std::complex<double>> &inputTargets,
+        std::vector<std::vector<std::uint64_t>> &resultHoles) const {
+      (void)cobordism;
+      (void)states;
+      inputHoles.clear();
+      inputTargets.clear();
+      resultHoles.clear();
+    }
+
+    /// Whether the result block EMERGES from the pinned inputs alone (the \#353
+    /// register: pin the neutral-pair inputs, read the emergent result block),
+    /// rather than being pinned/supplied. When true, `MergeCobordism` does not
+    /// require `outputStates`/`U` (the result is not a caller input but an
+    /// emergent read-out via `readoutHoles`'s result block). The default is false
+    /// (the operator topology pins inputs AND outputs, or derives outputs from U).
+    [[nodiscard]] virtual bool emergesResult() const { return false; }
 
     /// The carried-object dimension this topology realizes:
     /// \f$ \dim \ker L_1(W - \partial W) \f$ (e.g. \f$ d^2 - 1 \f$ for the

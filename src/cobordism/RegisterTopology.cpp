@@ -148,39 +148,45 @@ std::shared_ptr<Spacetime> RegisterTopology::build(
   return cobordism;
 }
 
-void RegisterTopology::readout(
+void RegisterTopology::readoutHoles(
     const std::shared_ptr<Spacetime> &cobordism,
     const std::vector<std::vector<std::complex<double>>> &states,
-    std::vector<EdgeLoop> &loops,
-    std::vector<std::complex<double>> &targets) const {
-  // Each block's three color hole-circles carry that state's three color
-  // amplitudes (no S^1). The hole-circle of a sorted triangle (a<b<c) is the
-  // signed walk a -> b -> c -> a; the target periods are PRE-MULTIPLIED by the
-  // induced-orientation covector kColorSign (the #353 SIGN_BLOCK), so the carried
-  // condition is sign . psi = 0 (the color singlet [1, omega, omega^2] realizes;
-  // raw components would mis-floor it).
-  loops.clear();
-  targets.clear();
+    std::vector<std::vector<std::uint64_t>> &inputHoles,
+    std::vector<std::complex<double>> &inputTargets,
+    std::vector<std::vector<std::uint64_t>> &resultHoles) const {
+  // The EXACT (#353 period) read-out: each block's three color holes are removed
+  // triangles whose dual periods carry that state's three color amplitudes (no
+  // S^1). The merge scores the PINNED INPUT blocks over residualForPeriods (the
+  // period of a removed triangle (a<b<c), machine-zero on a carried target) and
+  // reads the EMERGENT result block over cyclePeriods. The target periods are
+  // PRE-MULTIPLIED by the induced-orientation covector kColorSign (the #353
+  // SIGN_BLOCK), so the carried condition is sign . psi = 0 (the color singlet
+  // [1, omega, omega^2] realizes; raw components would mis-floor it).
+  inputHoles.clear();
+  inputTargets.clear();
+  resultHoles.clear();
   if (blockHoles_.empty() || !cobordism) return;
-  auto &vlist = *cobordism->getVertexList();
-  auto edge = [&](std::uint64_t u, std::uint64_t v) {
-    ::tessera::mesh::Vertex *vu = vlist.get(u), *vv = vlist.get(v);
-    if (!vu || !vv)
-      throw std::runtime_error(
-          "RegisterTopology::readout: loop vertex absent from W");
-    return ::tessera::mesh::Edge(vu, vv, std::complex<double>(1.0, 0.0));
-  };
+
+  // Pin the supplied states (inputs first); for the #353 inputs -> emergent
+  // result flow the caller supplies inputs only, so the first UNPINNED block is
+  // the result block R (read after the relax, not pinned).
   const std::size_t nStates = std::min(states.size(), blockHoles_.size());
   for (std::size_t s = 0; s < nStates; ++s) {
     for (std::size_t k = 0; k < blockHoles_[s].size(); ++k) {
       Face h(blockHoles_[s][k]);
       std::sort(h.begin(), h.end());
-      loops.push_back({edge(h[0], h[1]), edge(h[1], h[2]), edge(h[2], h[0])});
+      inputHoles.push_back(std::move(h));
       const std::complex<double> a =
           k < states[s].size() ? states[s][k] : std::complex<double>(0);
-      targets.push_back(static_cast<double>(kColorSign[k % 3]) * a);
+      inputTargets.push_back(static_cast<double>(kColorSign[k % 3]) * a);
     }
   }
+  if (nStates < blockHoles_.size())
+    for (const auto &h : blockHoles_[nStates]) {
+      Face sorted(h);
+      std::sort(sorted.begin(), sorted.end());
+      resultHoles.push_back(std::move(sorted));
+    }
 }
 
 }  // namespace tessera::cobordism

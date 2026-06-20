@@ -46,11 +46,21 @@ class RegisterTopology : public TopologyBuilder {
         std::size_t stateDim, std::uint64_t seed,
         std::vector<std::vector<std::uint64_t>> &boundaryCells) override;
 
-    void readout(
+    /// The EXACT triangle-hole read-out (the \#353 period path). The register's
+    /// read-out cycles ARE triangle boundaries (the color hole-circles), so it
+    /// overrides `readoutHoles()` — never the soft `readout()` (loops) — so the
+    /// merge scores inputs over `residualForPeriods` and reads the result block
+    /// over `cyclePeriods`, machine-zero on a carried (color-neutral) target.
+    void readoutHoles(
         const std::shared_ptr<Spacetime> &cobordism,
         const std::vector<std::vector<std::complex<double>>> &states,
-        std::vector<EdgeLoop> &loops,
-        std::vector<std::complex<double>> &targets) const override;
+        std::vector<std::vector<std::uint64_t>> &inputHoles,
+        std::vector<std::complex<double>> &inputTargets,
+        std::vector<std::vector<std::uint64_t>> &resultHoles) const override;
+
+    /// The #353 result block EMERGES from the pinned neutral-pair inputs (read
+    /// after the relax, not supplied), so MergeCobordism may omit outputStates/U.
+    [[nodiscard]] bool emergesResult() const override { return true; }
 
     [[nodiscard]] std::size_t carriedDim(std::size_t /*stateDim*/) const override {
       return 2;  // the S_3 standard rep (b_1 = 2 on the Sigma=0 hyperplane)
@@ -68,8 +78,8 @@ class RegisterTopology : public TopologyBuilder {
     }
 
   private:
-    // Cached by build() for readout(): the per-block color holes (sorted vertex
-    // triples), blocks in [A, B, R] order.
+    // Cached by build() for readoutHoles(): the per-block color holes (sorted
+    // vertex triples), blocks in [A, B, R] order.
     std::vector<std::vector<std::vector<std::uint64_t>>> blockHoles_{};
 };
 
