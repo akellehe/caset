@@ -93,7 +93,21 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     void setEntangledMetric(double intraMI, double crossMI,
                             double iMax = 2.0 * 1.0986122886681098);
 
+    /// Make the junction LORENTZIAN: the cross-layer (forward-time) worldline
+    /// edges are set timelike (\f$ l^2 = \text{worldlineLsq} < 0 \f$), so the dual
+    /// Regge action goes complex (\f$ \mathrm{Im}\,S \neq 0 \f$) and its harmonics
+    /// can carry the singlet's \f$ \omega \f$-phases (a real metric cannot). Null
+    /// edges (photons) may EMERGE under the relax as a worldline's \f$ l^2 \to 0 \f$
+    /// (lightlike). Unset (default): the junction is all-spacelike (Riemannian).
+    /// @param worldlineLsq the timelike squared length for cross-layer edges (<0).
+    void setLorentzianWorldlines(double worldlineLsq = -1.0);
+
   private:
+    // Lorentzian worldlines (set by setLorentzianWorldlines): when on, build()
+    // sets cross-layer edges timelike.
+    bool lorentzian_{false};
+    double lorentzWorldlineLsq_{-1.0};
+
     // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
     // build falls back to the jitter seed.
     bool vrSeed_{false};

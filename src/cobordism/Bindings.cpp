@@ -1339,7 +1339,15 @@ prepared states, reproduces the harmonic overlap.)doc")
            "cross_mi, bulk 0; l^2 = (-log(I/i_max))^2. The caller computes "
            "intra_mi/cross_mi from the 3-party state's reduced density matrices, "
            "so the same state seeds the metric and the complex boundary inputs. "
-           "i_max defaults to 2 log 3 (qutrit). Unset => jitter seed.");
+           "i_max defaults to 2 log 3 (qutrit). Unset => jitter seed.")
+      .def("set_lorentzian_worldlines",
+           &TripartiteRegisterTopology::setLorentzianWorldlines,
+           py::arg("worldline_lsq") = -1.0,
+           "Make the junction Lorentzian: cross-layer (forward-time) worldline "
+           "edges are set timelike (l^2 = worldline_lsq < 0), so the dual Regge "
+           "action goes complex (Im S != 0) and its harmonics carry the singlet's "
+           "omega-phases. Null edges (photons) may emerge under the relax as a "
+           "worldline's l^2 -> 0. Unset => all-spacelike (Riemannian).");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",

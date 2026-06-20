@@ -76,6 +76,11 @@ void TripartiteRegisterTopology::setEntangledMetric(double intraMI,
   vrSeed_ = true;
 }
 
+void TripartiteRegisterTopology::setLorentzianWorldlines(double worldlineLsq) {
+  lorentzian_ = true;
+  lorentzWorldlineLsq_ = worldlineLsq;
+}
+
 void TripartiteRegisterTopology::validateStateDim(std::size_t d) const {
   if (d != 3)
     throw std::invalid_argument(
@@ -170,6 +175,16 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
     for (auto *e : cobordism->getEdgeList()->toVector())
       e->setSquaredLength(std::complex<double>(jitter(jrng), 0.0));
   }
+
+  // LORENTZIAN worldlines: overwrite the cross-layer (forward-time) edges as
+  // timelike (l^2 < 0), so the dual Regge action goes complex (Im S != 0) and its
+  // harmonics carry the singlet's omega-phases (a real/spacelike metric cannot).
+  // A worldline whose l^2 relaxes through 0 is null = a photon. The base-vertex
+  // layer of a cobordism vertex is id / N (the per-layer stride).
+  if (lorentzian_)
+    for (auto *e : cobordism->getEdgeList()->toVector())
+      if ((e->getSource()->getId() / N) != (e->getTarget()->getId() / N))
+        e->setSquaredLength(std::complex<double>(lorentzWorldlineLsq_, 0.0));
 
   // Per-hole induced-orientation signs (the generalization of kColorSign): the
   // endSignCovector of the base surface over the 12 holes, grouped per window.
