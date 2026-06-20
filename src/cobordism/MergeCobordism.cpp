@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -65,7 +66,7 @@ double relaxInterior(
     const std::vector<std::vector<std::uint64_t>> &stateHoles,
     const std::vector<std::complex<double>> &holeTargets,
     int maxIters, int &iterCounter, MergeCobordism::StateResidualMode mode,
-    bool verbose = false) {
+    double stateEpsilon, bool verbose = false) {
   EigenstateSynthesis es(st, 1);
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> interiorRank;
   for (const auto &uv : es.interiorEdges()) interiorRank.emplace(uv, 0);
@@ -142,8 +143,16 @@ double relaxInterior(
 
     // Analytic gradient and GN Hessian of beta*||grad_I S||^2 over the interior
     // lengths, plus the analytic state-residual gradient (cellSimplices order).
+    // The state-residual gradient is folded in ONLY while r_state is ABOVE its
+    // convergence floor. When the pinned inputs already carry exactly (r_state ->
+    // 0 -- e.g. the distinct-window junction, where every neutral input is
+    // carried on its own independent cycle), its analytic gradient is numerical
+    // noise that, divided by the ill-conditioned action GN Hessian, explodes the
+    // step (the relaxation then stalls at iteration 0). Once the state term is
+    // converged we minimize the action alone. [#396]
+    const double rStateNow = stateCost();
     Eigen::VectorXd grad = (2.0 * beta * (HII.adjoint() * gI)).real();
-    if (useHoles || !stateLoops.empty()) {
+    if (rStateNow > stateEpsilon && (useHoles || !stateLoops.empty())) {
       const auto rg =
           useHoles
               ? (periodPin
@@ -171,7 +180,15 @@ double relaxInterior(
       // degenerate step blows the action up and the line search rejects it.
       for (std::size_t c = 0; c < nI; ++c)
         interiorEdgePtr[c]->setSquaredLength(std::complex<double>(x(c), 0.0));
-      const double trial = cost();
+      // A degenerate step (a null/zero-area edge) makes the action / period
+      // read-out fail loudly; treat the throw as no improvement so the line
+      // search damps mu and retries, rather than aborting the whole relaxation.
+      double trial;
+      try {
+        trial = cost();
+      } catch (...) {
+        trial = std::numeric_limits<double>::infinity();
+      }
       if (trial < best) {
         best = trial;
         mu = std::max(mu * 0.5, 1e-9);
@@ -283,8 +300,8 @@ void MergeCobordism::optimize() {
   // (every boundary-fixed Pachner move only raised the residual in testing), so
   // the relax alone determines the geometry. [#388]
   relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, stateHoles_,
-                holeTargets_, maxIters_,
-                stats_.relaxIterations, stateMode_, verbose_);
+                holeTargets_, maxIters_, stats_.relaxIterations, stateMode_,
+                epsilon_, verbose_);
   extractOperator();
   stats_.converged = stats_.residual < epsilon_;
 }
