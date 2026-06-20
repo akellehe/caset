@@ -7,13 +7,15 @@
 default is now the color `RegisterTopology` (the #353 register), selectable
 against the `(T^2-3holes)xS^1` `TorusOperatorTopology`.
 
-`RegisterTopology` lays three holed-icosahedron color blocks (A, B, R) with
-disjoint vertex ids, joined input->result by additive *tubes*. Connecting by
-tubes — never by *identifying* a shared block — keeps the merge a genuine
-trivalent manifold, NOT the #353 `merge_cobordism.py` weld (a `P x I` transport
-with a buried result). These tests pin that the register seed is a valid,
-non-welded manifold and that the topology is selectable with a topology-specific
-state dimension (register: d=3; operator: a power of two).
+`RegisterTopology` extrudes the holed icosahedron (S²−3 color holes, b₁=2 on the
+Σ=0 hyperplane) over a 3-layer staircase into one connected 3-complex with
+**b₁(W)=2** — one shared color register across the three blocks (#379). That b₁=2
+is the #353 confinement (a Σ≠0 config cannot be carried). It is a valid manifold
+(every triangle in ≤2 tets, dualComplexValid) — not the welded shared-block
+construction. These tests pin the topology + the selectable seam with a
+topology-specific state dimension (register: d=3; operator: a power of two); the
+color realizability map / S₃ invariance / emergent result are in
+`test_register_merge_353_python.py` and `test_proton_realizability_python.py`.
 """
 
 import cmath
@@ -60,26 +62,26 @@ class RegisterIsDefaultTest(unittest.TestCase):
         self.assertIn("register", _M.stats.topology)
 
 
-class RegisterIsAValidNonWeldedManifoldTest(unittest.TestCase):
-    def test_no_edge_in_more_than_two_triangles(self):
-        # The weld signature is an edge in > 2 triangles. Tubes only ADD
-        # triangles, so the register stays a 2-manifold (each edge in 1 or 2).
-        faces = _top_cells(_M.cobordism, 2)
-        self.assertGreater(len(faces), 0)
-        self.assertLessEqual(_max_facet_coface(faces), 2)
+class RegisterIsAValidManifoldTest(unittest.TestCase):
+    def test_no_triangle_in_more_than_two_tets(self):
+        # The weld signature is a (codim-1) triangle in > 2 tets. The continuous
+        # staircase is a clean 3-manifold (each triangle in 1 or 2 tets).
+        tets = _top_cells(_M.cobordism, 3)
+        self.assertGreater(len(tets), 0)
+        self.assertLessEqual(_max_facet_coface(tets), 2)
 
     def test_dual_complex_gate_passes(self):
         ok, why = cob.EigenstateSynthesis(_M.cobordism, 1).dualComplexValid()
         self.assertTrue(ok, why)
 
-    def test_connected_with_nine_holes(self):
-        # Three icosa blocks tube-joined into one connected complex; opening the
-        # nine color holes (3 per block) gives S^2 minus 9 disks: b0=1, b1=8.
+    def test_connected_b1_is_two(self):
+        # One connected complex (b0=1) with b1=2: the single shared color register
+        # (the #353 confinement), NOT the b1=8 of independent per-block holes.
         betti = list(_M.stats.betti_cobordism)
         self.assertEqual(betti[0], 1)
-        self.assertEqual(betti[1], 8)
+        self.assertEqual(betti[1], 2)
 
-    def test_boundary_is_the_color_hole_circles(self):
+    def test_boundary_is_nonempty(self):
         self.assertGreater(len(_M.boundary), 0)
 
 
