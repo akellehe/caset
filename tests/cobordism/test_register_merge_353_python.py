@@ -21,9 +21,14 @@ canonical C++ `MergeCobordism`:
     documented result that the proton needs three pairs (the #382 tripartite/
     sequence merge), not a single bipartite merge.
 
-The exact (~1e-29) realizability map lives on `cob.Register` /
-`residualForPeriods`; through the merge the loop encoding (`residualForLoops`)
-gives a softer neutral floor (~1e-2), but the confinement *split* is the same.
+Through the merge the register is scored over the EXACT `residualForPeriods` (the
+#353 period path; the merge no longer uses the soft `residualForLoops` edge-loop
+encoding for the register, and pins INPUTS only — the result block EMERGES). The
+~1e-2 neutral floor here is intrinsic to the *shared-register* staircase: a single
+block's three holes span the b₁=2 register only approximately, so neutral floors at
+~1e-2 — both encodings agree on this, so it was never the encoding (the machine-zero
+~1e-29 realizability map lives on the single-register `cob.Register`). Colored
+configs floor at ~10, so the confinement *split* (ratio ~10³) is intact.
 """
 
 import cmath
@@ -40,20 +45,23 @@ _NEUTRAL = {"[1,-1,0]": [1, -1, 0], "[1,0,-1]": [1, 0, -1],
 _COLORED = {"[1,0,0]": [1, 0, 0], "[1,1,0]": [1, 1, 0], "[1,1,1]": [1, 1, 1]}
 
 
-def _merge(states_in, states_out, max_iters=0):
-    return cob.MergeCobordism(states_in, states_out, max_iters=max_iters, seed=0,
+def _merge(states_in, max_iters=0):
+    # The #353 register pins INPUTS only and reads the EMERGENT result block, so
+    # no output states are supplied (emergesResult()).
+    return cob.MergeCobordism(states_in, [], max_iters=max_iters, seed=0,
                               topology=cob.RegisterTopology())
 
 
 def _score(cfg):
-    # Pin the config on the register blocks; the post-build r_U (state_residual)
-    # is the realizability score. max_iters=0 => bare metric (the confinement is
-    # a topology property, max_iters-independent), so this is fast and exact.
-    return _merge([cfg], [cfg]).stats.state_residual
+    # Pin the config on one input register block; the post-build r_U
+    # (state_residual, the EXACT residualForPeriods) is the realizability score.
+    # max_iters=0 => bare metric (the confinement is a topology property,
+    # max_iters-independent — the staircase floor does not relax away).
+    return _merge([cfg]).stats.state_residual
 
 
 # Built once for the structural assertions (topology is max_iters-independent).
-_M = _merge([[1, -1, 0]], [[1, -1, 0]])
+_M = _merge([[1, -1, 0]])
 
 
 class TopologyIsB1EqualsTwoTest(unittest.TestCase):
@@ -99,9 +107,9 @@ class EmergentResultBlockTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Merge two neutral q-qbar pairs; read the emergent result over the R
-        # block's color cycles (a short relaxation suffices for the structure).
-        cls.m = _merge([[1, -1, 0], [1, 0, -1]], [[1, _W, _W * _W]], max_iters=40)
+        # Pin two neutral q-qbar pairs as INPUTS (blocks A, B); the result block R
+        # emerges, read EXACTLY over its color holes (cyclePeriods), never pinned.
+        cls.m = _merge([[1, -1, 0], [1, 0, -1]], max_iters=40)
 
     def test_output_state_is_a_color_triple(self):
         self.assertEqual(len(self.m.output_state), 3)

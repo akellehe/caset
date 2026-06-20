@@ -52,13 +52,18 @@ std::vector<int> betti(const Spacetime &st) {
 // action (actionHessianExactSparse, #381 — assembled at O(nnz), the interior
 // block extracted from it). dW is held fixed (Dirichlet), so the Regge
 // stationarity is over interior edges only. The r_state term is selected by
-// `mode`: r_U realizability (residualForLoops, default) or r_psi hard period-pin
-// (periodGapForLoops). Returns the final r; leaves the interior edges at the best
-// point found.
+// `mode`: r_U realizability or r_psi hard period-pin. The pinned states are
+// scored over EITHER the topology's EXACT triangle holes (stateHoles, the #353
+// register's residualForPeriods/periodGapForPeriods) OR its SOFT edge-loops
+// (stateLoops, the operator's S^1 residualForLoops/periodGapForLoops) -- whichever
+// the topology supplied (mutually exclusive; holes take precedence). Returns the
+// final r; leaves the interior edges at the best point found.
 double relaxInterior(
     const std::shared_ptr<Spacetime> &st, double beta,
     const std::vector<EigenstateSynthesis::EdgeLoop> &stateLoops,
     const std::vector<std::complex<double>> &stateTargets,
+    const std::vector<std::vector<std::uint64_t>> &stateHoles,
+    const std::vector<std::complex<double>> &holeTargets,
     int maxIters, int &iterCounter, MergeCobordism::StateResidualMode mode,
     bool verbose = false) {
   EigenstateSynthesis es(st, 1);
@@ -75,11 +80,16 @@ double relaxInterior(
   }
   const std::size_t nI = interiorIdx.size();
   const bool periodPin = (mode == MergeCobordism::StateResidualMode::PeriodPin);
+  // EXACT triangle-hole path (#353 register) vs SOFT edge-loop path (operator).
+  const bool useHoles = !stateHoles.empty();
 
   // r_state: the selected state residual of the pinned states over the boundary
   // cycles, read against the live metric so it tracks the relaxation -- r_psi
   // (carried-vs-target period gap) or r_U (exact-period state non-harmonicity).
-  auto stateCost = [&]() {
+  auto stateCost = [&]() -> double {
+    if (useHoles)
+      return periodPin ? es.periodGapForPeriods(stateHoles, holeTargets)
+                       : es.residualForPeriods(stateHoles, holeTargets);
     if (stateLoops.empty()) return 0.0;
     return periodPin ? es.periodGapForLoops(stateLoops, stateTargets)
                      : es.residualForLoops(stateLoops, stateTargets);
@@ -133,10 +143,15 @@ double relaxInterior(
     // Analytic gradient and GN Hessian of beta*||grad_I S||^2 over the interior
     // lengths, plus the analytic state-residual gradient (cellSimplices order).
     Eigen::VectorXd grad = (2.0 * beta * (HII.adjoint() * gI)).real();
-    if (!stateLoops.empty()) {
-      const auto rg = periodPin
-                          ? es.periodGapForLoopsGradient(stateLoops, stateTargets)
-                          : es.residualForLoopsGradient(stateLoops, stateTargets);
+    if (useHoles || !stateLoops.empty()) {
+      const auto rg =
+          useHoles
+              ? (periodPin
+                     ? es.periodGapForPeriodsGradient(stateHoles, holeTargets)
+                     : es.residualForPeriodsGradient(stateHoles, holeTargets))
+              : (periodPin
+                     ? es.periodGapForLoopsGradient(stateLoops, stateTargets)
+                     : es.residualForLoopsGradient(stateLoops, stateTargets));
       for (std::size_t j = 0; j < rg.size() && j < cellToParam.size(); ++j)
         if (cellToParam[j] >= 0) grad(cellToParam[j]) += rg[j];
     }
@@ -214,9 +229,11 @@ MergeCobordism::MergeCobordism(
           "MergeCobordism: U must be a d x d row-major operator");
     computeOutputsFromOperator(U);
   }
-  if (outputStates_.empty())
+  if (outputStates_.empty() && !topology_->emergesResult())
     throw std::invalid_argument(
-        "MergeCobordism: outputStates is required when U is not supplied");
+        "MergeCobordism: outputStates is required when U is not supplied (this "
+        "topology pins the result; only an emergent-result topology -- the #353 "
+        "register -- may pin inputs alone and read the emergent result block)");
 
   buildSeed();
   computeStateTargets();
@@ -239,11 +256,20 @@ void MergeCobordism::computeOutputsFromOperator(
 
 void MergeCobordism::computeStateTargets() {
   // The states (inputs then outputs) pinned over the topology's read-out cycles.
+  // A topology supplies EXACTLY ONE of the two read-outs: edge-loops (operator's
+  // S^1, scored over the SOFT residualForLoops) or triangle holes (#353 register,
+  // scored over the EXACT residualForPeriods + the result block read over
+  // cyclePeriods). The unused one stays empty, so the merge dispatches on which.
   std::vector<std::vector<std::complex<double>>> states;
   states.reserve(inputStates_.size() + outputStates_.size());
   for (const auto &s : inputStates_) states.push_back(s);
   for (const auto &s : outputStates_) states.push_back(s);
   topology_->readout(cobordism_, states, stateLoops_, stateTargets_);
+  // The operator pins inputs AND outputs (readout() above gets both); the #353
+  // register pins INPUTS only and reads the EMERGENT result block (the first
+  // unpinned block), so readoutHoles gets the inputs alone.
+  topology_->readoutHoles(cobordism_, inputStates_, stateHoles_, holeTargets_,
+                          resultHoles_);
 }
 
 void MergeCobordism::buildSeed() {
@@ -256,7 +282,8 @@ void MergeCobordism::optimize() {
   // combinatorial move-search: the relaxed seed triangulation is a local optimum
   // (every boundary-fixed Pachner move only raised the residual in testing), so
   // the relax alone determines the geometry. [#388]
-  relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, maxIters_,
+  relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_, stateHoles_,
+                holeTargets_, maxIters_,
                 stats_.relaxIterations, stateMode_, verbose_);
   extractOperator();
   stats_.converged = stats_.residual < epsilon_;
@@ -299,33 +326,50 @@ void MergeCobordism::extractOperator() {
   // input/output split is at nIn = loopsPerState * (#input states); skip the
   // read when that split is not determinate (e.g. some states went unpinned).
   outputState_.clear();
-  // The topology emits loopsPerState() cycles per pinned state, inputs first, and
-  // pins at most its state capacity -- so stateLoops_.size() == loopsPerState *
-  // totalStates holds IFF every state was pinned (no truncation). Take
-  // loopsPerState from the topology rather than inferring it by division (which
-  // silently mis-splits when states are dropped, e.g. totalStates beyond
-  // capacity), and require an exact, untruncated, target-matched read; otherwise
-  // skip (an honest empty, not a frame-/split-dependent value).
-  const std::size_t totalStates = inputStates_.size() + outputStates_.size();
-  const std::size_t loopsPerState = topology_->loopsPerState();
-  if (totalStates > 0 && loopsPerState > 0 &&
-      stateLoops_.size() == loopsPerState * totalStates &&
-      stateTargets_.size() == stateLoops_.size()) {
-    const std::size_t nIn = loopsPerState * inputStates_.size();
-    if (nIn > 0 && nIn < stateLoops_.size()) {
-      const std::vector<TopologyBuilder::EdgeLoop> inLoops(
-          stateLoops_.begin(),
-          stateLoops_.begin() + static_cast<std::ptrdiff_t>(nIn));
-      const std::vector<std::complex<double>> inTargets(
-          stateTargets_.begin(),
-          stateTargets_.begin() + static_cast<std::ptrdiff_t>(nIn));
-      const std::vector<TopologyBuilder::EdgeLoop> outLoops(
-          stateLoops_.begin() + static_cast<std::ptrdiff_t>(nIn),
-          stateLoops_.end());
-      const std::vector<std::complex<double>> psiIn =
-          es.carriedRepresentativeOverLoops(inLoops, inTargets);
-      if (!psiIn.empty())
-        outputState_ = es.periodsOfCochainOverLoops(psiIn, outLoops);
+  if (!resultHoles_.empty()) {
+    // === EXACT (#353 register) read ===
+    // The relaxed geometry's harmonic periods over the EMERGENT result block's
+    // color holes (cyclePeriods): carriedDim rows x (#result holes), row-major.
+    // Row 0 is the result block's emergent color amplitudes (the #353
+    // cyclePeriods(holes)[0, result-block] read); their sum is the color charge
+    // sigma_R (-> 0 iff the emergent result is color-neutral). EXACT, not the soft
+    // edge-loop carry -- so this never re-introduces the loop residual floor.
+    const auto P = es.cyclePeriods(resultHoles_);
+    const std::size_t m = resultHoles_.size();
+    if (m > 0 && P.size() >= m && P.size() % m == 0)
+      outputState_.assign(P.begin(), P.begin() + static_cast<std::ptrdiff_t>(m));
+  } else {
+    // === SOFT (operator S^1) read ===
+    // The output the relaxed geometry produces from the INPUTS alone: carry the
+    // pinned input periods as a metric L_1(W) harmonic and read its periods over
+    // the OUTPUT cycles. The topology emits loopsPerState() cycles per pinned
+    // state, inputs first, and pins at most its state capacity -- so
+    // stateLoops_.size() == loopsPerState * totalStates holds IFF every state was
+    // pinned (no truncation). Take loopsPerState from the topology rather than
+    // inferring it by division (which silently mis-splits when states are
+    // dropped), and require an exact, untruncated, target-matched read; otherwise
+    // skip (an honest empty, not a frame-/split-dependent value).
+    const std::size_t totalStates = inputStates_.size() + outputStates_.size();
+    const std::size_t loopsPerState = topology_->loopsPerState();
+    if (totalStates > 0 && loopsPerState > 0 &&
+        stateLoops_.size() == loopsPerState * totalStates &&
+        stateTargets_.size() == stateLoops_.size()) {
+      const std::size_t nIn = loopsPerState * inputStates_.size();
+      if (nIn > 0 && nIn < stateLoops_.size()) {
+        const std::vector<TopologyBuilder::EdgeLoop> inLoops(
+            stateLoops_.begin(),
+            stateLoops_.begin() + static_cast<std::ptrdiff_t>(nIn));
+        const std::vector<std::complex<double>> inTargets(
+            stateTargets_.begin(),
+            stateTargets_.begin() + static_cast<std::ptrdiff_t>(nIn));
+        const std::vector<TopologyBuilder::EdgeLoop> outLoops(
+            stateLoops_.begin() + static_cast<std::ptrdiff_t>(nIn),
+            stateLoops_.end());
+        const std::vector<std::complex<double>> psiIn =
+            es.carriedRepresentativeOverLoops(inLoops, inTargets);
+        if (!psiIn.empty())
+          outputState_ = es.periodsOfCochainOverLoops(psiIn, outLoops);
+      }
     }
   }
 
@@ -342,11 +386,18 @@ void MergeCobordism::extractOperator() {
   stats_.dualAction = residualSolver.dualReggeAction();
   const bool periodPin = (stateMode_ == StateResidualMode::PeriodPin);
   stats_.stateMode = periodPin ? "r_psi" : "r_U";
-  stats_.stateResidual =
-      stateLoops_.empty()
-          ? 0.0
-          : (periodPin ? es.periodGapForLoops(stateLoops_, stateTargets_)
-                       : es.residualForLoops(stateLoops_, stateTargets_));
+  // The pinned-input state residual, scored over the EXACT triangle holes (#353
+  // register) or the SOFT edge-loops (operator) -- whichever the topology used.
+  if (!stateHoles_.empty())
+    stats_.stateResidual =
+        periodPin ? es.periodGapForPeriods(stateHoles_, holeTargets_)
+                  : es.residualForPeriods(stateHoles_, holeTargets_);
+  else
+    stats_.stateResidual =
+        stateLoops_.empty()
+            ? 0.0
+            : (periodPin ? es.periodGapForLoops(stateLoops_, stateTargets_)
+                         : es.residualForLoops(stateLoops_, stateTargets_));
   stats_.residual = stats_.statActionResidual + stats_.stateResidual;
 }
 
