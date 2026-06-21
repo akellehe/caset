@@ -19,3 +19,6 @@ cmake-build
 benchmarks/runs/
 Testing/
 examples/quantum/_out/
+papers/
+refs/
+third_party/itensor_tdvp/
