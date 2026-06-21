@@ -128,6 +128,15 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     /// @param frequency the subdivision frequency \f$ N \ge 2 \f$.
     void setFrequency(int frequency);
 
+    /// Use the **symmetric apex interior** (`Spacetime::symmetricStackCells`) for the
+    /// bulk instead of the prism extrusion: a label-independent stacking with no
+    /// vertex-sort diagonal, so the transport is exactly equivariant and the
+    /// intertwining residual \f$ \to 0 \f$ / singlet overlap \f$ \to 1 \f$ (\#413).
+    /// Default off (the prism). It uses the uniform symmetric metric (\f$ l^2 = 1 \f$);
+    /// the van Raamsdonk and Lorentzian seeds are skipped under it (their `id % N`
+    /// layering assumes the prism's stride).
+    void setSymmetricInterior(bool on = true);
+
   private:
     // Lorentzian worldlines (set by setLorentzianWorldlines): when on, build()
     // sets cross-layer edges timelike.
@@ -137,6 +146,11 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     // The geodesic subdivision frequency N (set by setFrequency); default 2 (the
     // #398 base). Larger N refines the lattice (tunable granularity, #404).
     int frequency_{2};
+
+    // Use the symmetric apex interior (set by setSymmetricInterior); default off
+    // (the prism extrusion). When on, build() uses Spacetime::symmetricStackCells
+    // and the uniform metric (#413).
+    bool symmetricInterior_{false};
 
     // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
     // build uses the uniform symmetric seed (l^2 = 1).

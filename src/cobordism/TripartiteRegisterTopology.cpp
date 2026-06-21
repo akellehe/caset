@@ -217,6 +217,10 @@ void TripartiteRegisterTopology::setFrequency(int frequency) {
   frequency_ = frequency;
 }
 
+void TripartiteRegisterTopology::setSymmetricInterior(bool on) {
+  symmetricInterior_ = on;
+}
+
 void TripartiteRegisterTopology::validateStateDim(std::size_t d) const {
   if (d != 3)
     throw std::invalid_argument(
@@ -259,12 +263,15 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
   for (std::size_t blk = 0; blk < 4; ++blk)
     for (const auto &h : windows[blk]) blockHoles_[blk].push_back(h);
 
-  // Holed surface -> prism (x I) -> 3-complex.
+  // Holed surface -> 3-complex: the symmetric apex stacking (#413, label-independent,
+  // no std::sort diagonal -> exactly equivariant transport) or the prism extrusion.
   const std::set<Face> holeSet(holes.begin(), holes.end());
   std::vector<Face> holed;
   for (const auto &f : faces)
     if (!holeSet.count(f)) holed.push_back(f);
-  const auto prism = Spacetime::prismCells(holed, /*layers=*/2);
+  const auto prism = symmetricInterior_
+                         ? Spacetime::symmetricStackCells(holed)
+                         : Spacetime::prismCells(holed, /*layers=*/2);
   std::vector<std::vector<std::uint64_t>> cells;
   cells.reserve(prism.size());
   for (auto c : prism) {
@@ -289,7 +296,7 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
   // color Z3 -- a random jitter would break the A4 symmetry and scatter the
   // singlet -- and on the (g-invariant) uniform point junction charge
   // conservation is EXACT (Sigma_R -> 0). REGGE: causal type emergent.
-  if (vrSeed_) {
+  if (vrSeed_ && !symmetricInterior_) {
     std::vector<int> partyOf(static_cast<std::size_t>(N), -1);
     for (std::size_t blk = 0; blk < blockHoles_.size(); ++blk)
       for (const auto &hole : blockHoles_[blk])
@@ -317,7 +324,7 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
   // harmonics carry the singlet's omega-phases (a real/spacelike metric cannot).
   // A worldline whose l^2 relaxes through 0 is null = a photon. The base-vertex
   // layer of a cobordism vertex is id / N (the per-layer stride).
-  if (lorentzian_)
+  if (lorentzian_ && !symmetricInterior_)
     for (auto *e : cobordism->getEdgeList()->toVector())
       if ((e->getSource()->getId() / N) != (e->getTarget()->getId() / N))
         e->setSquaredLength(std::complex<double>(lorentzWorldlineLsq_, 0.0));

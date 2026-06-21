@@ -1357,7 +1357,14 @@ prepared states, reproduces the harmonic overlap.)doc")
            "20*(N-1)(N-2)/2 vertices, 20 N^2 faces). The four A4-orbit windows are "
            "generated from the symmetry at any N>=2; N=2 (default) is the #398 base "
            "of 42 vertices. Larger N refines the lattice, shrinking the intertwining "
-           "residual and driving the singlet overlap -> 1.");
+           "residual and driving the singlet overlap -> 1.")
+      .def("set_symmetric_interior",
+           &TripartiteRegisterTopology::setSymmetricInterior, py::arg("on") = true,
+           "Use the SYMMETRIC APEX interior (Spacetime::symmetricStackCells) instead "
+           "of the prism extrusion (#413): a label-independent stacking with no "
+           "vertex-sort diagonal, so the transport is exactly equivariant and the "
+           "intertwining residual -> 0 / singlet overlap -> 1. Default off (prism). "
+           "Uses the uniform metric; the VR and Lorentzian seeds are skipped under it.");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
