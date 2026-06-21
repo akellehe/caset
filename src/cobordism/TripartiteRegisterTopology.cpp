@@ -34,44 +34,85 @@ std::vector<Face> icosahedron() {
   return faces;
 }
 
-using MidMap = std::map<std::pair<std::uint64_t, std::uint64_t>, std::uint64_t>;
+using EdgeMap =
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::uint64_t>>;
 
-// The 2-frequency geodesic icosahedron and its edge-midpoint map.
+// A frequency-N geodesic icosahedron and its per-edge sub-vertex map.
 struct GeodesicSphere {
-  std::vector<Face> faces;  // 80 sub-triangles (sorted)
-  MidMap mid;               // undirected icosa edge (min,max) -> midpoint vertex id
+  std::vector<Face> faces;  // 20*N^2 sub-triangles (sorted)
+  int frequency;            // N
+  EdgeMap edgePts;          // undirected icosa edge (min,max) -> N-1 ids from min
 };
 
-// 2-frequency geodesic subdivision of the icosahedron: an edge-midpoint vertex
-// per edge (30 new, ids 12..41), each face split into 4. A connected S^2 with 42
-// vertices and 80 faces — enough to host 12 vertex-disjoint hole triangles (the
-// bare icosahedron's 12 vertices admit only 4 disjoint holes; we need 12 = 4
-// windows of 3). Deterministic (no metric/seed dependence). The midpoint map is
-// returned so the symmetric-window generator can lift the C3 rotations.
-GeodesicSphere geodesicTwoSphere() {
+// The step-th sub-vertex (step = 1..N-1) along the icosa edge from u toward v.
+std::uint64_t edgePoint(const EdgeMap &edgePts, int N, std::uint64_t u,
+                        std::uint64_t v, int step) {
+  const std::pair<std::uint64_t, std::uint64_t> e{std::min(u, v), std::max(u, v)};
+  const int idx = (u == e.first) ? step - 1 : N - step - 1;
+  return edgePts.at(e)[static_cast<std::size_t>(idx)];
+}
+
+// Frequency-N geodesic subdivision of the icosahedron: each icosa edge gets N-1
+// sub-vertices and each face is split into N^2 sub-triangles, giving a connected
+// S^2 with 12 + 30(N-1) + 20*(N-1)(N-2)/2 vertices and 20*N^2 faces. N=2 is the
+// 42-vertex/80-face base of #398 (enough to host the 12 vertex-disjoint hole
+// triangles); larger N refines the lattice (the tunable granularity, #404), which
+// shrinks the discretization residual and drives the singlet overlap -> 1. Uses a
+// face-order numbering (edge blocks on first encounter, then the face's interior),
+// so N=2 reproduces geodesicTwoSphere exactly (backward-compatible). Deterministic.
+// The edge map is returned so the window generator lifts the C3 rotations across the
+// subdivision.
+GeodesicSphere geodesicSphere(int N) {
   const auto ico = icosahedron();
-  MidMap mid;
+  EdgeMap edgePts;
   std::uint64_t next = 12;
-  auto midpoint = [&](std::uint64_t a, std::uint64_t b) {
-    const std::pair<std::uint64_t, std::uint64_t> key{std::min(a, b),
-                                                      std::max(a, b)};
-    const auto it = mid.find(key);
-    if (it != mid.end()) return it->second;
-    return mid[key] = next++;
+  auto ensureEdge = [&](std::uint64_t u, std::uint64_t v) {
+    const std::pair<std::uint64_t, std::uint64_t> e{std::min(u, v), std::max(u, v)};
+    if (edgePts.count(e)) return;
+    std::vector<std::uint64_t> ids(static_cast<std::size_t>(N - 1));
+    for (auto &id : ids) id = next++;
+    edgePts.emplace(e, std::move(ids));
+  };
+  // Per-face interior points (barycentric i,j,k all > 0), keyed by (j,k); assigned
+  // in face order AFTER that face's edges (the first-encounter scheme above).
+  std::map<Face, std::map<std::pair<int, int>, std::uint64_t>> interior;
+  for (const auto &f : ico) {
+    ensureEdge(f[0], f[1]);
+    ensureEdge(f[1], f[2]);
+    ensureEdge(f[2], f[0]);
+    std::map<std::pair<int, int>, std::uint64_t> in;
+    for (int j = 1; j < N; ++j)
+      for (int k = 1; k < N - j; ++k) in[{j, k}] = next++;
+    interior[f] = std::move(in);
+  }
+  // P(j,k) in face (a,b,c): barycentric i=N-j-k toward a, j toward b, k toward c.
+  auto gridId = [&](const Face &f, int j, int k) -> std::uint64_t {
+    const std::uint64_t a = f[0], b = f[1], c = f[2];
+    const int i = N - j - k;
+    if (i == N) return a;
+    if (j == N) return b;
+    if (k == N) return c;
+    if (k == 0) return edgePoint(edgePts, N, a, b, j);  // edge a-b
+    if (j == 0) return edgePoint(edgePts, N, a, c, k);  // edge a-c
+    if (i == 0) return edgePoint(edgePts, N, b, c, k);  // edge b-c
+    return interior.at(f).at({j, k});
   };
   std::vector<Face> faces;
-  faces.reserve(ico.size() * 4);
-  for (const auto &f : ico) {
-    const std::uint64_t a = f[0], b = f[1], c = f[2];
-    const std::uint64_t ab = midpoint(a, b), bc = midpoint(b, c),
-                        ca = midpoint(c, a);
-    for (Face sub : {Face{a, ab, ca}, Face{b, bc, ab}, Face{c, ca, bc},
-                     Face{ab, bc, ca}}) {
-      std::sort(sub.begin(), sub.end());
-      faces.push_back(std::move(sub));
-    }
-  }
-  return {std::move(faces), std::move(mid)};
+  faces.reserve(ico.size() * static_cast<std::size_t>(N) * N);
+  for (const auto &f : ico)
+    for (int j = 0; j < N; ++j)
+      for (int k = 0; k < N - j; ++k) {
+        Face up = {gridId(f, j, k), gridId(f, j + 1, k), gridId(f, j, k + 1)};
+        std::sort(up.begin(), up.end());
+        faces.push_back(std::move(up));
+        if (j + k < N - 1) {
+          Face dn = {gridId(f, j + 1, k), gridId(f, j, k + 1),
+                     gridId(f, j + 1, k + 1)};
+          std::sort(dn.begin(), dn.end());
+          faces.push_back(std::move(dn));
+        }
+      }
+  return {std::move(faces), N, std::move(edgePts)};
 }
 
 // The four A4-tetrahedral, C3-symmetric register windows (#398) — one orbit of a
@@ -83,12 +124,15 @@ GeodesicSphere geodesicTwoSphere() {
 // (omega-representation) input transports to the EXACT singlet with manifest S3 —
 // unlike a greedy pick whose windows are geometrically inequivalent.
 //
-// Generated FROM the symmetry (four C3 generators + a seed corner per window +
-// the midpoint lift), so it is correct in whatever vertex numbering
-// geodesicTwoSphere() produces (hardcoding the 12 triples is fragile against the
-// midpoint numbering). Asserts the construction: each window a genuine C3 orbit,
-// all 12 holes real faces, all 36 vertices distinct.
-std::vector<std::vector<Face>> symmetricWindows(const MidMap &mid,
+// Generated FROM the symmetry (four C3 generators + a seed corner per window + the
+// sub-vertex lift), so it is correct at any frequency N and in whatever numbering
+// geodesicSphere() produces (hardcoding the triples is fragile against it). The seed
+// corner sub-triangle at vertex v is {v, the nearest sub-vertex toward each of two
+// neighbours}; the C3 rotation lifts it across the subdivision (a base vertex maps by
+// the permutation; a sub-vertex on edge (p,q) at step s maps to step s on edge
+// (perm[p],perm[q])). Asserts: each window a genuine C3 orbit, all 12 holes real
+// faces, all 36 vertices distinct.
+std::vector<std::vector<Face>> symmetricWindows(const EdgeMap &edgePts, int N,
                                                 const std::set<Face> &faceSet) {
   // The four C3 rotations as 12-vertex permutations: a[w] cycles window w's
   // tetrahedral vertex-orbit (all order 3, orientation-preserving rotations).
@@ -102,22 +146,21 @@ std::vector<std::vector<Face>> symmetricWindows(const MidMap &mid,
   static const std::array<std::array<std::uint64_t, 3>, 4> seed = {{
       {{2, 0, 1}}, {{1, 6, 10}}, {{0, 3, 4}}, {{3, 2, 7}},
   }};
-  auto m = [&](std::uint64_t x, std::uint64_t y) {
-    return mid.at({std::min(x, y), std::max(x, y)});
-  };
-  // Reverse midpoint lookup (id -> the icosa edge it bisects), to lift a vertex
-  // permutation onto the geodesic vertices: a base vertex maps by the
-  // permutation, a midpoint m(p,q) maps to m(perm[p], perm[q]).
-  std::map<std::uint64_t, std::pair<std::uint64_t, std::uint64_t>> rev;
-  for (const auto &kv : mid) rev[kv.second] = kv.first;
+  // Reverse sub-vertex lookup: id -> (its icosa edge, its step index from the edge's
+  // min endpoint), so a vertex permutation lifts onto the subdivision.
+  std::map<std::uint64_t, std::pair<std::pair<std::uint64_t, std::uint64_t>, int>> rev;
+  for (const auto &kv : edgePts)
+    for (std::size_t idx = 0; idx < kv.second.size(); ++idx)
+      rev[kv.second[idx]] = {kv.first, static_cast<int>(idx)};
   auto apply = [&](const std::array<int, 12> &p, Face h) {
     for (auto &v : h) {
       if (v < 12) {
         v = static_cast<std::uint64_t>(p[v]);
       } else {
-        const auto pq = rev.at(v);
-        v = m(static_cast<std::uint64_t>(p[pq.first]),
-              static_cast<std::uint64_t>(p[pq.second]));
+        const auto &er = rev.at(v);  // ((edge min, edge max), step-1)
+        v = edgePoint(edgePts, N, static_cast<std::uint64_t>(p[er.first.first]),
+                      static_cast<std::uint64_t>(p[er.first.second]),
+                      er.second + 1);
       }
     }
     std::sort(h.begin(), h.end());
@@ -127,7 +170,8 @@ std::vector<std::vector<Face>> symmetricWindows(const MidMap &mid,
   std::vector<std::vector<Face>> windows(4);
   std::set<std::uint64_t> used;
   for (int w = 0; w < 4; ++w) {
-    Face s = {seed[w][0], m(seed[w][0], seed[w][1]), m(seed[w][0], seed[w][2])};
+    Face s = {seed[w][0], edgePoint(edgePts, N, seed[w][0], seed[w][1], 1),
+              edgePoint(edgePts, N, seed[w][0], seed[w][2], 1)};
     std::sort(s.begin(), s.end());
     const Face h1 = apply(a[w], s);
     const Face h2 = apply(a[w], h1);
@@ -165,6 +209,14 @@ void TripartiteRegisterTopology::setLorentzianWorldlines(double worldlineLsq) {
   lorentzWorldlineLsq_ = worldlineLsq;
 }
 
+void TripartiteRegisterTopology::setFrequency(int frequency) {
+  if (frequency < 2)
+    throw std::invalid_argument(
+        "TripartiteRegisterTopology: frequency must be >= 2 (N=2 is the base "
+        "that hosts the 12 disjoint holes; larger N refines the lattice)");
+  frequency_ = frequency;
+}
+
 void TripartiteRegisterTopology::validateStateDim(std::size_t d) const {
   if (d != 3)
     throw std::invalid_argument(
@@ -176,13 +228,15 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
     std::size_t /*stateDim*/, std::uint64_t /*seed*/,
     std::vector<std::vector<std::uint64_t>> &boundaryCells) {
   // The trivalent W_ABC junction, built NON-WELDED: ONE connected base surface (a
-  // 2-frequency geodesic icosahedron, S^2, 42 vertices) minus 12 vertex-disjoint
-  // hole triangles grouped into FOUR windows of three — A, B, C (inputs) and R
-  // (the emergent result) — extruded x I (prismCells). The four windows are
-  // distinct holes = INDEPENDENT cycles (not stacked layers of one shared
-  // register), so the three inputs do not average; the result is confined to
-  // Sigma=0 by the surface's global Stokes relation (Sigma_R = -Sigma_inputs).
-  const auto sphere = geodesicTwoSphere();
+  // frequency-N geodesic icosahedron, S^2; N=2 -> 42 vertices) minus 12
+  // vertex-disjoint hole triangles grouped into FOUR windows of three — A, B, C
+  // (inputs) and R (the emergent result) — extruded x I (prismCells). The four
+  // windows are distinct holes = INDEPENDENT cycles (not stacked layers of one
+  // shared register), so the three inputs do not average; the result is confined to
+  // Sigma=0 by the surface's global Stokes relation (Sigma_R = -Sigma_inputs). The
+  // frequency is tunable (#404): larger N refines the lattice, shrinking the
+  // discretization residual and driving the singlet overlap -> 1.
+  const auto sphere = geodesicSphere(frequency_);
   const auto &faces = sphere.faces;
   const std::set<Face> faceSet(faces.begin(), faces.end());
 
@@ -191,7 +245,7 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
   // and the windows A4-equivalent, so the per-window transport blocks are
   // cyclically related and a color-symmetric input -> the EXACT singlet (manifest
   // S3). Flattened to 12 holes in window order A,B,C,R.
-  const auto windows = symmetricWindows(sphere.mid, faceSet);
+  const auto windows = symmetricWindows(sphere.edgePts, frequency_, faceSet);
   std::vector<Face> holes;
   holes.reserve(12);
   for (const auto &w : windows)
