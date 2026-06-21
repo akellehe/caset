@@ -1463,7 +1463,20 @@ prepared states, reproduces the harmonic overlap.)doc")
       "The #353-style color register (the default): holed-icosahedron color "
       "blocks joined by additive tubes (never a welded shared block), color "
       "hole-circle read-out, no S^1; d = 3.")
-      .def(py::init<>());
+      .def(py::init<>())
+      .def("set_twist", &RegisterTopology::setTwist, py::arg("twist"),
+           "Twist the staircase tube (#416): a base vertex permutation phi "
+           "(dict {id: id}) applied cumulatively up the layers by prismCells (the "
+           "mapping-torus twist); block A = layer 0 (identity), B = phi, R = phi^2. "
+           "An orientation-reversing twist (e.g. orientation_reversing_twist) is the "
+           "geometric antisymmetrizer onto the diquark 3bar. Empty => identity.")
+      .def_static("orientation_reversing_twist",
+                  &RegisterTopology::orientationReversingTwist,
+                  "The canonical orientation-reversing twist (#416): the exact "
+                  "geometric antisymmetrizer onto the diquark 3bar -- reverse each "
+                  "color hole's induced orientation (a within-hole transposition) so "
+                  "each carried period flips sign. An involution (phi^2 = id); on the "
+                  "uniform metric M_B = -M_A exactly (pure antisymmetric channel).");
   py::class_<TripartiteRegisterTopology, TopologyBuilder,
              std::shared_ptr<TripartiteRegisterTopology>>(
       m, "TripartiteRegisterTopology",

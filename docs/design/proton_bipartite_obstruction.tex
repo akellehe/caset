@@ -279,4 +279,59 @@ reproduces it quantitatively: the emergent bipartite result stays color-charged
 ($|\sigmacol|\approx0.67$) at every step. The proton is irreducibly tripartite,
 and its carrier is the trivalent junction $W_{ABC}$.
 
+\section{Addendum (\#416): the twisted antisymmetrizer and the connected path}
+
+Sec.~3 conceded the singlet \emph{is} reachable pairwise \emph{if} the first merge
+projects onto the antisymmetric diquark $\bar{\rep 3}=\varepsilon_{ijk}q^jq^k$. The
+claim there was that the \emph{generic emergent} merge does no such projection. We
+now test both the projection and the deeper confinement-of-intermediate claim
+directly, measuring \emph{through} the existing prism triangulation on the uniform
+$\ell^2=1$ metric (the seed-independent geometric transport; the jittered relax is a
+noisy proxy whose $|\sigmacol|$ ranges $0.24$--$1.02$ across seeds).
+
+\paragraph{(a) An orientation-reversing twist is an \emph{exact} antisymmetrizer.}
+Extruding the holed-icosahedron register tube with a twist that reverses each color
+hole's induced orientation (a within-hole vertex transposition, supplied to
+\texttt{Spacetime::prismCells}'s cumulative twist via
+\texttt{RegisterTopology::setTwist}) flips the sign of each carried color period.
+On the uniform metric the two input-transport blocks then satisfy $M_B=-M_A$
+\emph{exactly} ($\lVert M_A+M_B\rVert\approx 6\times10^{-15}$), so the symmetric
+sextet cancels: the $A\leftrightarrow B$ antisymmetric fraction of the emergent
+diquark jumps from $0.00$ (untwisted control --- the \emph{pure} symmetric $\rep 6$)
+to $1.00$ (twisted --- the \emph{pure} antisymmetric $\bar{\rep 3}$). The
+``generic'' merge does not project, exactly as Sec.~3 says; but the projection is
+not unreachable --- it is a single orientation-reversing twist, the simplicial
+$\varepsilon_{ijk}$ acting on the two-body factor. (The untwisted control's
+$|\sigmacol|\approx0.70$ of line~161 is a jittered-relax artifact; the faithful
+uniform measurement shows the control is the \emph{pure} sextet, antisymmetric
+fraction $0$.)
+
+\paragraph{(b) Confinement of the intermediate is of the \emph{free} diquark only.}
+The colored diquark $\bar{\rep 3}$ is over-determined on the \emph{shared} bipartite
+register (its realizability residual $r_U\approx 15$, the same averaging that floors
+every state there), so the welded/free-boundary sequence --- read the diquark out as
+a free boundary and re-pin it --- floors at singlet overlap $\approx 0.55$. But on
+\emph{distinct} windows (independent cycles) the \emph{same} colored state carries
+\emph{exactly}, $r_U\approx 4\times10^{-27}$. A \emph{connected} path that keeps the
+diquark an interior carried state on its own cycle ($\partial W$ = the input/result
+windows only, no free diquark boundary) therefore has a full-rank input$\to$result
+transport: the singlet $[1,\omega,\omega^2]$ lies in its image (reachability
+$1.00$), and charge is conserved at the junction ($|\sigmacol_R|\approx 9\times
+10^{-15}$ for neutral inputs).
+
+\paragraph{Verdict.} Bipartite-\emph{with}-projection \emph{does} produce the
+antisymmetric diquark $\bar{\rep 3}$ (antisymmetric fraction $0\!\to\!1$ under the
+orientation-reversing twist), and the color singlet \emph{is} reachable through a
+connected path that keeps the diquark interior on an independent cycle (reachability
+$1.00$, against the welded free-boundary sequence's $0.55$). The
+confinement-of-the-intermediate is the obstruction to the \emph{welded} sequence ---
+the free colored diquark is non-carriable on a shared register --- and it is
+\emph{not} fundamental: keeping the intermediate interior ($r_U\!\to\!0$ on a
+distinct cycle) escapes it. This refines rather than overturns the tripartite
+conclusion: a single two-body fusion still has no singlet (Prop.~\ref{prop:nosinglet}
+is untouched), but a \emph{two-step} bipartite construction with an explicit
+antisymmetrizing projection and an interior intermediate reaches it --- which is the
+sequential image of the same $\varepsilon_{ijk}$ the star junction $W_{ABC}$ carries
+at one vertex.
+
 \end{document}
