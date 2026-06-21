@@ -195,10 +195,13 @@ into simplices along a diagonal selected by sorting vertex ids. That cut is
 label-dependent and not $g$-invariant, and it --- not the metric --- is the cause of the
 $4.3\times10^{-2}$ residual: replacing the uniform seed by a $g$-invariant
 non-degenerate metric leaves the residual essentially unchanged. The fix is a
-\emph{symmetric continuation of the primal $1$-skeleton}: a triangle whose base sits at
-$t=0$ has its apex (tip) at $t=1$, and that tip is shared with an inverted triangle based
-at $t=2$ --- the alternating up/down tetrahedral (tetrahedral--octahedral) stacking. It
-is label-independent and yields genuine vertical worldline (temporal) edges.
+\emph{symmetric apex stacking} --- a continuation of the primal $1$-skeleton, \emph{not a
+prism}: each base triangle at $t=0$ cones up to a single \emph{face-apex} vertex $f$ at
+$t=1$ (a $(3,1)$ tetrahedron), and that apex is shared with the inverted triangle at $t=2$
+(a $(1,3)$ tetrahedron). The gap between two adjacent apex-columns over a shared base edge
+is an octahedron split along the \emph{canonical dual edge} $f_1 f_2$ (the two
+face-centres) into four tetrahedra --- so \emph{no vertex-label sort chooses any diagonal
+anywhere}. It is label-independent and yields genuine vertical worldline (temporal) edges.
 
 \begin{remark}[Connectivity is CDT, the metric stays Regge]
 \label{rem:cdt}
@@ -211,16 +214,16 @@ choices; we take the symmetric connectivity and keep the Regge metric.
 
 This foundation does double duty. It removes the residual (driving the singlet overlap to
 $1$), and its worldline edges are the clean temporal edges the charge sector needs. The
-one care point is the octahedral cells of the stacking: they must be tetrahedralized
-without reintroducing a label-dependent diagonal (use the orientation anchor of
-\S\ref{sec:orientation}, or symmetrize over the octahedral diagonals, or document the
-residual symmetry honestly).
+octahedral cells are split along the canonical dual edge $f_1 f_2$, determined by the two
+incident faces rather than by vertex ids, so the split is itself $g$-equivariant --- there
+is no residual diagonal choice left to document.
 
-\paragraph{Faithfulness.} The residual
-$\norm{M\Pin-\Pout M}/\norm{M}$ must drop well below the $4.3\times10^{-2}$ prism value
-and the singlet overlap rise above the $0.999$ floor, while $b_1=11$, the dual complex
-stays a valid manifold, and charge conservation stays exact. \#413 owns ``singlet
-$\to1$''.
+\paragraph{Faithfulness (measured).} A prototype of the apex stacking on the real
+$42$-vertex base drives the residual $\norm{M\Pin-\Pout M}/\norm{M}$ from the prism's
+$4.3\times10^{-2}$ to $4.5\times10^{-14}$ (machine zero) and the singlet overlap from
+$0.999$ to $1.000000$, with $b_1=11$, a valid manifold (\texttt{dualComplexValid}), and
+charge conservation exact --- the transport is \emph{exactly} equivariant. \#413 owns
+``singlet $\to1$''.
 
 \section{The charge sector}
 \label{sec:charge}
@@ -371,9 +374,12 @@ contaminates. It does \emph{not} rule out two bipartite steps with a projection:
 first merge projects onto the antisymmetric diquark $\bar{\rep3}=\varepsilon q q$, the
 second ($\bar{\rep3}\otimes\rep3=\triv\oplus\rep8$) contains the singlet.
 
-Two questions follow, both testable with machinery that already exists --- the prism
-extrusion accepts a cumulative \emph{twist} permutation, i.e.\ an orientation-reversing
-tube that is a geometric antisymmetrizer.
+Two questions follow, both testable with machinery that already exists --- the
+\emph{bipartite} merge's prism extrusion accepts a cumulative \emph{twist} permutation,
+i.e.\ an orientation-reversing tube that is a geometric antisymmetrizer. (The
+\emph{tripartite} $W_{ABC}$ interior is now the symmetric apex stacking of
+\S\ref{sec:interior}, with no label-sort diagonal; the bipartite path here still uses the
+prism, and a symmetric analog of the twist would be its eventual replacement.)
 \begin{itemize}[nosep]
   \item Does a twisted bipartite tube project the emergent diquark onto $\bar{\rep3}$
   ($\abs{\sigmacol}\approx1$, the antisymmetric channel) rather than the generic average
@@ -424,7 +430,7 @@ them.
 \toprule
  & invariant & assertion (the ``do not drift'' guard)\\
 \midrule
-$G_1$ & proton present & singlet overlap $\ge 0.999$ (prism), $\to1$ after \#413\\
+$G_1$ & proton present & singlet overlap $0.999$ (prism) $\to 1.000000$ (symmetric apex interior, \#413)\\
 $G_2$ & confinement & color charge $\sigmacol\to0$ ($\abs{\sigmacol}\lesssim0.06$) for the symmetric input\\
 $G_3$ & charge conservation & $\sigmacol_R=-(\sigmacol_A+\sigmacol_B+\sigmacol_C)$ exact ($\sim10^{-14}$, uniform metric)\\
 $G_4$ & topology & $b_1=11$ and the dual complex is a valid manifold (no weld)\\
