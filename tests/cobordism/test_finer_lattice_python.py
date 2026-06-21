@@ -10,7 +10,8 @@ production C++ path and the convergence example:
   * N=2 (the default) is backward-compatible with #398 (the four A4-orbit windows are
     exactly the #398 oracle), and every N gives a valid b1=11 manifold;
   * the lattice actually refines (more vertices) with N;
-  * refining shrinks the intertwining residual and drives the singlet overlap -> 1;
+  * the symmetric apex interior (#413, the default) holds the intertwining residual at the
+    machine-zero floor and the singlet overlap at 1.0 across frequencies;
   * frequency < 2 is rejected.
 """
 
@@ -55,9 +56,15 @@ class FinerLatticeTest(unittest.TestCase):
     def test_finer_lattice_has_more_vertices(self):
         self.assertGreater(self.o3["verts"], self.o2["verts"])
 
-    def test_refining_shrinks_the_intertwining_residual(self):
-        # The residual is a fixed-resolution artifact; it decreases with N.
-        self.assertLess(self.o3["intertwine"], self.o2["intertwine"])
+    def test_refining_keeps_the_residual_at_the_machine_zero_floor(self):
+        # With the symmetric apex interior (#413, now the default) the transport is
+        # exactly equivariant at every frequency, so the intertwining residual
+        # ||M Pin - Pout M||/||M|| sits at the machine-zero floor (~1e-13) -- not the
+        # prism's ~4e-2 fixed-resolution artifact. Refining the lattice keeps it there
+        # (the singlet overlap stays 1.0); there is no finite residual left to shrink.
+        floor = 1e-9
+        self.assertLess(self.o2["intertwine"], floor)
+        self.assertLess(self.o3["intertwine"], floor)
 
     def test_singlet_overlap_is_near_one_and_improves(self):
         self.assertGreater(self.o2["overlap_min"], 0.999)

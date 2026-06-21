@@ -38,9 +38,10 @@ _COLORED = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
 _SEED = 412
 
 
-def _build(inputs):
-    return cob.TransportCobordism(inputs, max_iters=0, seed=0,
-                                  topology=cob.TripartiteRegisterTopology())
+def _build(inputs, symmetric=True):
+    topology = cob.TripartiteRegisterTopology()
+    topology.set_symmetric_interior(symmetric)
+    return cob.TransportCobordism(inputs, max_iters=0, seed=0, topology=topology)
 
 
 def _geometry(m):
@@ -149,7 +150,13 @@ class RelabelingInvarianceTest(unittest.TestCase):
     while the unsigned charge is scrambled."""
 
     def test_signed_charge_is_relabeling_invariant_raw_is_not(self):
-        m = _build(_COLORED)
+        # The relabeling rebuild reconstructs the cobordism from its prism stride
+        # (N = nverts // 3, three layers base x I) and rebuilds it under a per-layer
+        # permutation, so pin the prism interior: the symmetric apex interior (#413,
+        # the default) adds apex vertices and is not a clean three-layer stride. The
+        # signed-charge invariant is a property of the orientation read-out, independent
+        # of which interior fills the bulk.
+        m = _build(_COLORED, symmetric=False)
         faces, holes, tets, N = _geometry(m)
 
         def sigma(cobordism, perm, signed):

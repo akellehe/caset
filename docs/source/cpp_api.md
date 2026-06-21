@@ -39,7 +39,7 @@ exclusions to see the entire interface.
 
 ```{doxygenfile} Simplex.h
 ```
-```{doxygenfile} SimplexOrientation.h
+```{doxygenfile} TemporalOrientation.h
 ```
 ```{doxygenfile} Vertex.h
 ```
