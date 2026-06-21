@@ -399,21 +399,75 @@ from the generic value; the path geometry's singlet overlap is pinned to a recor
 verdict; the intermediate's carriability residual is reported so a ``separated two-step''
 claim cannot quietly rely on a non-carriable free diquark.
 
-\section{The dimensional question (\#418)}
+\section{The dimensional question (\#418, \#429)}
 \label{sec:dim}
 
-The full structure of this program wants more than the current geometry supplies. The
-electromagnetic field strength has its full $\vec E,\vec B$ content, and the Dirac algebra
-its full $4\times4$ gammas, only in $3+1$ dimensions --- a genuine $S^3$ spatial slice
-extruded in time. The present construction is $2+1$ dimensional ($S^2\times I$), a reduced
-sector: in $2+1$ D the field strength has three components ($B$ is a scalar) and the
-Clifford algebra is $\C l(2,1)$ ($2\times2$ gammas). This is a spike, not a build: it
-scopes what the Hodge/Regge/relaxation machinery needs to generalize to a triangulated
-$S^3$, the cost, and --- crucially --- which observables genuinely \emph{require} $3+1$ D
-versus which are faithful already in $2+1$ D (the Gauss-law charge and the binary flavor
-label can be explored first in $2+1$ D; full $\vec E,\vec B$ and $4\times4$
-Dirac--K\"ahler cannot). The deliverable is a go/no-go recommendation and a minimal $S^3$
-prototype with a smoke test.
+The full structure of this program wants the full dimension. The electromagnetic field
+strength has its full $\vec E,\vec B$ content, and the Dirac algebra its full $4\times4$
+gammas, in $3+1$ dimensions --- a genuine $S^3$ spatial slice extruded in time. The
+discipline here is the program's discipline everywhere: we do \emph{not} reduce dimension
+as a shortcut. Tessera is fully emergent, and dropping to $2+1$ D (an $S^2$ slice)
+\emph{changes the physics} --- the field strength loses a component ($B$ becomes a scalar)
+and the Clifford algebra collapses to $\C l(2,1)$ ($2\times2$ gammas). A result measured
+in a reduced sector is a result about a different theory, not a faithful first cut of this
+one. There is therefore no ``explore it in $2+1$ D first'': the Gauss-law charge, the
+binary flavor label, the full $\vec E,\vec B$, and the $4\times4$ Dirac--K\"ahler are all
+to be measured in the full dimension.
+
+The apparent obstacle --- that the symmetric apex interior of \S\ref{sec:interior} is
+currently triangle-only --- is an implementation gap, not a dimensional wall. The interior
+connectivity is \emph{dimension-generic}, defined entirely from the base layer's
+coface/dual structure: cone each top $d$-simplex to an apex vertex, and let the
+apex-connectivity be \emph{mirrored} across shared faces. A facet (a $(d-1)$-simplex)
+shared by two cofaces has those cofaces' apex-edges reflected across it; a lower face
+shared by $k$ cofaces mirrors analogously. In $2$D this mirroring \emph{is} the dual-edge
+octahedron split of \S\ref{sec:interior} (a shared edge's two triangle-apexes reflected
+through it); in $3$D it cones tetrahedra to cell-apexes across shared triangles; and so on
+in every dimension --- no vertex-label sort chooses any diagonal at any dimension. The
+current \texttt{Spacetime::symmetricStackCells} triangle-only special case (the
+\texttt{t.size()\,!=\,3 -> continue} guard) is the temporary gap, not a barrier. The full
+dimension is reached by \emph{generalizing} this construction, which is the content of
+\#429, not by reducing to a sector.
+
+\#429 (\emph{iterated apex-reflection cobordism, dimension-generic, and emergent twists})
+carries the generalization: lift \texttt{symmetricStackCells} to the coface-mirroring rule
+above, add an \texttt{nApexSlices} parameter (default $1$, today's single stack), build an
+$S^3$ over a tetrahedral base, and measure the emergent twist of \S\ref{sec:twist}. \#418
+remains the go/no-go scoping --- what the Hodge/Regge/relaxation machinery costs over a
+triangulated $S^3$, and a minimal $S^3$ smoke test --- but the recommendation it returns
+is which observables to \emph{build} in the full dimension, never which to retreat from it.
+
+\subsection{Iterated apex-reflection and the emergent twist (\#429)}
+\label{sec:twist}
+
+The symmetric apex interior has a reading that the prism never had. Each apex is a centre
+of \emph{point-reflection}: the next slice is made by inverting an apex's neighbour edges
+through it (and adding a ``cap'' to close the cell). A single slice (\texttt{nApexSlices}
+$=1$) is today's construction; iterating reflect-and-cap over many slices stacks the
+cobordism in time. Because a point-reflection is an orientation-reversing involution and
+the \emph{composition of two reflections is a rotation}, an iterated stack of apex
+reflections can accumulate a net rotation --- a \emph{screw}/monodromy --- along the time
+direction. That accumulated rotation is a \textbf{twist}.
+
+The twist is \emph{emergent}: it is read off the relaxed geometry of the iterated stack,
+not supplied by hand. This is the crucial contrast with the bipartite tube's
+\texttt{prismCells} twist of \S\ref{sec:bipartite}, which is a hand-chosen permutation
+inserted into the extrusion. A nontrivial emergent twist makes $W$ a \emph{mapping torus}
+--- a twisted product, not a plain $\Sigma\times I$ --- with the twist as its gluing
+monodromy. The hypothesis to test in \#429 is whether such a twist appears and what it
+means:
+\begin{itemize}[nosep]
+  \item a $\Z_3$ twist would be the color singlet's $\omega$-phases (triality realized
+  geometrically along time);
+  \item a $2\pi\!\mapsto\!-1$ twist would be the spinor sign --- genuine spin, the central
+  $\Z_2$ of $\mathrm{Spin}\to SO$ flagged as a risk in \S\ref{sec:risks};
+  \item a $U(1)$ twist would be a gauge holonomy --- the charge of \S\ref{sec:charge} as a
+  monodromy.
+\end{itemize}
+Each reading is a falsifiable target: the screw angle of the relaxed stack is measured and
+matched (or not) to one of these. As with every observable in this program, the twist is
+something we \emph{read}, not impose; \#429 prototypes it over the iterated apex stack and
+its $S^3$ generalization.
 
 \section{Faithfulness and anti-drift}
 \label{sec:faithful}
