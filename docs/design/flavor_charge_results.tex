@@ -237,9 +237,18 @@ Three further pieces are under construction and are reported here only as scope:
   \emph{bipartite/prism} path, which the symmetric apex interior (a tripartite-junction
   construction) does not replace.
   \item \textbf{The $S^3$ dimensional spike (\#418, in flight).} Scopes whether the
-  apex/dual-edge octahedron split generalizes to a triangulated $S^3$ base, which
-  observables genuinely need $3+1$ D (full $\vec E,\vec B$; the $4\times4$ Dirac matrices)
-  versus which are faithful already in $2+1$ D.
+  apex/dual-edge octahedron split generalizes to a triangulated $S^3$ base. The
+  dimensional question is \emph{not} settled by reducing to a lower-dimensional sector:
+  the program is fully emergent, and dropping to $2+1$ D (an $S^2$ slice) would change the
+  physics rather than answer it. The honest route is to \emph{generalize} the apex
+  interior dimension-generically. The interior connectivity follows from the base layer's
+  coface/dual structure: cone each top $d$-simplex to an apex, and reflect apex-connectivity
+  across a $(d-1)$-facet shared by two cofaces (with lower faces shared by $k$ cofaces
+  mirrored analogously). In $2$D this is exactly the dual-edge octahedron split; in $3$D it
+  cones tetrahedra to cell-apexes across shared triangles. The current
+  \texttt{Spacetime::symmetricStackCells} triangle-only special case is an implementation
+  gap, not a wall. This coface-mirroring generalization, $S^3$ over a tetrahedral base, and
+  the measurement it enables are carried by \#429 (see also the assessment below).
 \end{itemize}
 
 \section{Faithfulness and no-regression}
@@ -266,8 +275,17 @@ machine precision and merged.
 \paragraph{What is open.} The electric charge as a protected Gauss-law holonomy and its
 agreement with $j^0$ (\#411); whether flavor is the taste multiplicity or the
 spatio-temporal split (\#414); whether two bipartite steps reach the singlet (\#416);
-and whether $3+1$ D over $S^3$ is needed for the full electroweak content (\#418). Two
-deeper questions persist from the plan: the cross-sector
+and the higher-dimensional electroweak content over $S^3$ (\#418). The dimension is
+answered not by a reduced sector but by generalizing the apex interior via
+coface-mirroring (\#429): build $S^3$ over a tetrahedral base and read off what emerges.
+A forward direction prototyped there is an \emph{emergent twist}: each apex is a centre of
+point-reflection (its neighbour edges inverted through it to form the next slice, plus a
+cap), and since composing reflections is a rotation, iterating reflect-and-cap over many
+slices may accumulate a net screw/monodromy along time. Such a twist is read off the
+relaxed geometry (unlike the hand-supplied prism twist) and makes $W$ a mapping torus
+(a twisted product); a $\Z_3$ twist would be the colour singlet's $\omega$-phases, a
+$2\pi\to-1$ twist the spinor sign (spin), and a $U(1)$ twist a gauge holonomy (charge).
+Two deeper questions persist from the plan: the cross-sector
 \emph{total antisymmetrization} (the $SU(6)$ $\mathbf{56}$ that makes three labels a
 proton, not just color $\times$ flavor $\times$ spin), and whether isospin is realized as
 a genuine $SU(2)$ with a ladder rather than a static u/d label. Finally,
