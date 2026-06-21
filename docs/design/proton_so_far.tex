@@ -189,20 +189,36 @@ structure, arrived at emergently with the correct symmetry, and a scale-free
 observable in the right ballpark --- the QCD skeleton of a proton on a coarse lattice,
 not the full particle.
 
-\section{Outlook}
-Three follow-ons (the \#380 epic) would push it toward ``actual'':
+\section{Scope, boundary, and outlook}
+The program has reached its natural scope: the \emph{color sector}. Two follow-ons were
+investigated and hit a clear architectural boundary --- they need structure the
+color-only geometry does not carry, not a seed or read-out change:
 \begin{itemize}[nosep]
-  \item \textbf{\#403 --- let the size emerge.} Relax from a localizing, $g$-invariant
-  seed (the van Raamsdonk / entanglement seed, available via
-  \texttt{set\_entangled\_metric}) so a genuine bound-state length scale emerges and
-  the radius is no longer lattice-pinned; then $r\!\cdot\!m$ becomes a clean probe.
-  This composes with the finer lattice (\#404). (A reconnaissance confirms the
-  entanglement seed develops a strong interior/exterior contrast where the uniform
-  seed stays flat.)
-  \item \textbf{\#405 --- electroweak quantum numbers.} Read the emergent electric
-  charge $+1$ (the $uud$ charges $+\tfrac23,+\tfrac23,-\tfrac13$), then spin and flavor.
-  \item \textbf{\#361 --- animation.} Visualize the relaxation: primal/dual geometry,
-  curvature gradient, null (photon) edges, live residuals.
+  \item \textbf{\#403 --- the size is not dynamically emergent (deferred).} The singlet's
+  mutual information is \emph{uniform} (intra $=$ cross $= \log 3$, computed from its
+  reduced density matrices), so the entanglement seed only rescales the metric rather
+  than localizing it ($r\!\cdot\!m$ worsens to $77$); and on the relaxed geometry every
+  radius observable is $\sim 1$ lattice unit (the curvature is spread, $\sim 2.2$/edge,
+  so a minimal-MI cut finds the sphere's bottleneck, not a particle boundary). The
+  proton's size here is the \emph{fixed} angular separation of the quark windows, not
+  dynamical; un-pinning it needs a confinement scale.
+  (Details: \texttt{proton\_radius\_finding}.)
+  \item \textbf{\#405 --- the electroweak numbers need flavor (deferred).} Electric
+  charge is flavor-dependent (u:$+\tfrac23$, d:$-\tfrac13$), but the three windows are
+  identical color registers, so nothing distinguishes the proton (uud, $+1$) from the
+  neutron (udd, $0$); spin needs spinors; baryon number is structural (the $3\to1$
+  topology). A net-orientation charge reduces to the (zero) color flux or a
+  particle/antiparticle sign, not the flavor magnitude.
+  (Details: \texttt{proton\_electroweak\_finding}.)
 \end{itemize}
+The minimal path forward is a \emph{richer construction} --- a flavor register parallel
+to color (for charge / isospin / flavor) and spinor content (for spin). That is future
+work. \textbf{\#361 --- animation} (the relaxation: primal/dual geometry, curvature
+gradient, null photon edges, live residuals) remains tractable now.
+
+What stands is a clean result: an emergent color-confinement \emph{skeleton} of the
+proton --- the singlet forced by symmetry, confinement, and a scale-free observable in
+the right ballpark --- on a coarse lattice, with a sharp boundary marking what the
+pure-geometry construction can and cannot produce.
 
 \end{document}
