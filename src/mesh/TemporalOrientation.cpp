@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "mesh/ForwardDeclarations.h"
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "mesh/Vertex.h"
 
 
@@ -30,61 +30,61 @@ using namespace ::tessera::spacetime;
 using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
-SimplexOrientation::SimplexOrientation(uint8_t ti_, uint8_t tf_)
+TemporalOrientation::TemporalOrientation(uint8_t ti_, uint8_t tf_)
     : ti(ti_), tf(tf_), k(ti_ + tf_ - 1), fingerprint({ti_, tf_}) {
 }
 
-SimplexOrientation::SimplexOrientation()
+TemporalOrientation::TemporalOrientation()
     : ti(0), tf(0), k(0), fingerprint({0, 0}) {
 }
 
-[[nodiscard]] std::pair<uint8_t, uint8_t> SimplexOrientation::numeric() const {
+[[nodiscard]] std::pair<uint8_t, uint8_t> TemporalOrientation::numeric() const {
   return {ti, tf};
 }
 
-[[nodiscard]] size_t SimplexOrientation::hash() const {
+[[nodiscard]] size_t TemporalOrientation::hash() const {
   return fingerprint.fingerprint();
 }
 
 
-[[nodiscard]] SimplexOrientation SimplexOrientation::flip() const {
-  SimplexOrientation o{tf, ti};
+[[nodiscard]] TemporalOrientation TemporalOrientation::flip() const {
+  TemporalOrientation o{tf, ti};
   return o;
 }
 
 [[nodiscard]]
-SimplexOrientation SimplexOrientation::decTi() const {
+TemporalOrientation TemporalOrientation::decTi() const {
   if (ti == 0) return {0, tf};
-  SimplexOrientation o{static_cast<uint8_t>(ti - 1), tf};
+  TemporalOrientation o{static_cast<uint8_t>(ti - 1), tf};
   return o;
 }
 
 [[nodiscard]]
-SimplexOrientation SimplexOrientation::decTf() const {
+TemporalOrientation TemporalOrientation::decTf() const {
   if (tf == 0) return {ti, 0};
-  SimplexOrientation o{ti, static_cast<uint8_t>(tf - 1)};
+  TemporalOrientation o{ti, static_cast<uint8_t>(tf - 1)};
   return o;
 }
 
-[[nodiscard]] std::string SimplexOrientation::toString() const noexcept {
-  return "<SimplexOrientation: (" + std::to_string(ti) + ", " + std::to_string(tf) + ")>";
+[[nodiscard]] std::string TemporalOrientation::toString() const noexcept {
+  return "<TemporalOrientation: (" + std::to_string(ti) + ", " + std::to_string(tf) + ")>";
 }
 
-bool SimplexOrientation::operator==(const SimplexOrientation &other) const noexcept {
+bool TemporalOrientation::operator==(const TemporalOrientation &other) const noexcept {
   return ti == other.ti && tf == other.tf;
 }
 
-[[nodiscard]] TimeOrientation SimplexOrientation::getOrientation() const {
+[[nodiscard]] TimeOrientation TemporalOrientation::getOrientation() const {
   if (ti == tf) return TimeOrientation::UNKNOWN;
   if (ti > tf) return TimeOrientation::PRESENT;
   return TimeOrientation::FUTURE;
 }
 
-[[nodiscard]] std::vector<SimplexOrientation> SimplexOrientation::getFacialOrientations() const {
+[[nodiscard]] std::vector<TemporalOrientation> TemporalOrientation::getFacialOrientations() const {
   if (ti + tf == 0) return {};
   if (ti == 0) return {decTf()};
   if (tf == 0) return {decTi()};
-  std::vector<SimplexOrientation> orientations;
+  std::vector<TemporalOrientation> orientations;
   orientations.reserve(2);
   orientations.push_back(decTi());
   orientations.push_back(decTf());
@@ -92,11 +92,11 @@ bool SimplexOrientation::operator==(const SimplexOrientation &other) const noexc
 }
 
 /// A k-simplex has \f$ k+1 \f$ vertices.
-[[nodiscard]] uint8_t SimplexOrientation::getK() const {
+[[nodiscard]] uint8_t TemporalOrientation::getK() const {
   return k;
 }
 
-SimplexOrientation SimplexOrientation::orientationOf(const VertexPtrs &vertices) {
+TemporalOrientation TemporalOrientation::orientationOf(const VertexPtrs &vertices) {
   // Two-pass: first find min/max times, then count.
   // Single-pass was buggy when the first vertex was at tf, not ti.
   double tMin = std::numeric_limits<double>::max();

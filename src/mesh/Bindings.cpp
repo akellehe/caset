@@ -235,9 +235,9 @@ which to remove).)doc")
       .def("toVector", &EdgeList::toVector, py::return_value_policy::reference,
            "Return all edges as a list.");
   // ========================================
-  // SimplexOrientation
+  // TemporalOrientation
   // ========================================
-  py::class_<SimplexOrientation, std::shared_ptr<SimplexOrientation> >(m, "SimplexOrientation",
+  py::class_<TemporalOrientation, std::shared_ptr<TemporalOrientation> >(m, "TemporalOrientation",
       R"doc(CDT simplex orientation (ti, tf) counting vertices at each time slice.
 
 For a d-simplex spanning times t and t+1:
@@ -248,18 +248,18 @@ For a d-simplex spanning times t and t+1:
 Valid CDT orientations: (d,1), (1,d), (d-1,2), (2,d-1).
 For d=4: (4,1), (1,4), (3,2), (2,3).)doc")
       .def(py::init<uint8_t, uint8_t>(), py::arg("ti"), py::arg("tf"))
-      .def("getOrientation", &SimplexOrientation::getOrientation,
+      .def("getOrientation", &TemporalOrientation::getOrientation,
            "Return the (ti, tf) orientation as a pair.")
-      .def("__hash__", &SimplexOrientation::hash)
-      .def("__eq__", &SimplexOrientation::operator==, py::arg("other"))
-      .def("__str__", &SimplexOrientation::toString)
-      .def("__repr__", &SimplexOrientation::toString)
-      .def("numeric", &SimplexOrientation::numeric,
+      .def("__hash__", &TemporalOrientation::hash)
+      .def("__eq__", &TemporalOrientation::operator==, py::arg("other"))
+      .def("__str__", &TemporalOrientation::toString)
+      .def("__repr__", &TemporalOrientation::toString)
+      .def("numeric", &TemporalOrientation::numeric,
            "Return the orientation as a Python tuple (ti, tf).");
 
-  py::class_<SimplexOrientationHash, std::shared_ptr<SimplexOrientationHash> >(m, "SimplexOrientationHash")
+  py::class_<TemporalOrientationHash, std::shared_ptr<TemporalOrientationHash> >(m, "TemporalOrientationHash")
       .def(py::init<>());
-  py::class_<SimplexOrientationEq, std::shared_ptr<SimplexOrientationEq> >(m, "SimplexOrientationEq")
+  py::class_<TemporalOrientationEq, std::shared_ptr<TemporalOrientationEq> >(m, "TemporalOrientationEq")
       .def(py::init<>());
   // ========================================
   // Simplex

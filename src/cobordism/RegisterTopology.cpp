@@ -153,7 +153,8 @@ void RegisterTopology::readoutHoles(
     const std::vector<std::vector<std::complex<double>>> &states,
     std::vector<std::vector<std::uint64_t>> &inputHoles,
     std::vector<std::complex<double>> &inputTargets,
-    std::vector<std::vector<std::uint64_t>> &resultHoles) const {
+    std::vector<std::vector<std::uint64_t>> &resultHoles,
+    std::vector<int> &resultSigns) const {
   // The EXACT (#353 period) read-out: each block's three color holes are removed
   // triangles whose dual periods carry that state's three color amplitudes (no
   // S^1). The merge scores the PINNED INPUT blocks over residualForPeriods (the
@@ -165,6 +166,8 @@ void RegisterTopology::readoutHoles(
   inputHoles.clear();
   inputTargets.clear();
   resultHoles.clear();
+  resultSigns.clear();  // bipartite register: result left unsigned (behavior
+                        // unchanged; result-sign symmetry is a #410 follow-up).
   if (blockHoles_.empty() || !cobordism) return;
 
   // Pin the supplied states (inputs first); for the #353 inputs -> emergent

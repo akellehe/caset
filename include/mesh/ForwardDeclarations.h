@@ -90,14 +90,14 @@ using VertexIdMap = std::unordered_map<IdType, VertexPtr>;
 using VertexIdToIndex = std::unordered_map<IdType, std::size_t>;
 using VertexIndexToId = std::unordered_map<std::size_t, IdType>;
 
-// SimplexOrientation Structures
-class SimplexOrientation;
-using SimplexOrientationPtr = std::shared_ptr<SimplexOrientation>;
-using SimplexOrientationPtrHash = FingerprintPtrHash<SimplexOrientationPtr>;
-using SimplexOrientationPtrEq = FingerprintPtrEq<SimplexOrientationPtr>;
-using SimplexOrientationHash = FingerprintHash<SimplexOrientation>;
-using SimplexOrientationEq = FingerprintEq<SimplexOrientation>;
-using SimplexOrientationSet = std::unordered_set<SimplexOrientation, SimplexOrientationHash, SimplexOrientationEq>;
+// TemporalOrientation Structures
+class TemporalOrientation;
+using TemporalOrientationPtr = std::shared_ptr<TemporalOrientation>;
+using TemporalOrientationPtrHash = FingerprintPtrHash<TemporalOrientationPtr>;
+using TemporalOrientationPtrEq = FingerprintPtrEq<TemporalOrientationPtr>;
+using TemporalOrientationHash = FingerprintHash<TemporalOrientation>;
+using TemporalOrientationEq = FingerprintEq<TemporalOrientation>;
+using TemporalOrientationSet = std::unordered_set<TemporalOrientation, TemporalOrientationHash, TemporalOrientationEq>;
 
 
 } // namespace tessera::mesh

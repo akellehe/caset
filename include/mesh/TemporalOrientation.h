@@ -5,8 +5,8 @@
 // Created by andrew on 12/14/25.
 //
 
-#ifndef TESSERA_SIMPLEXORIENTATION_H
-#define TESSERA_SIMPLEXORIENTATION_H
+#ifndef TESSERA_TEMPORALORIENTATION_H
+#define TESSERA_TEMPORALORIENTATION_H
 
 // Note: an old `#include <pybind11/pybind11.h>` was removed here. It was
 // unreferenced inside the file and was dragging Python.h into every TU
@@ -43,7 +43,7 @@ enum class TimeOrientation : uint8_t {
   UNKNOWN = 2
 };
 
-class SimplexOrientation {
+class TemporalOrientation {
   public:
     ///
     /// The orientation of a simplex is determined by how many vertices lie on the initial and final time slice for the
@@ -60,20 +60,20 @@ class SimplexOrientation {
     /// @param ti_ The number of vertices on the initial time slice.
     /// @param tf_ The number of vertices on the final time slice.
     ///
-    SimplexOrientation(uint8_t ti_, uint8_t tf_);
-    SimplexOrientation();
+    TemporalOrientation(uint8_t ti_, uint8_t tf_);
+    TemporalOrientation();
 
-    [[nodiscard]] SimplexOrientation decTf() const;
-    [[nodiscard]] SimplexOrientation decTi() const;
-    [[nodiscard]] SimplexOrientation flip() const;
+    [[nodiscard]] TemporalOrientation decTf() const;
+    [[nodiscard]] TemporalOrientation decTi() const;
+    [[nodiscard]] TemporalOrientation flip() const;
     [[nodiscard]] TimeOrientation getOrientation() const;
     [[nodiscard]] std::pair<uint8_t, uint8_t> numeric() const;
     [[nodiscard]] std::string toString() const noexcept;
-    [[nodiscard]] std::vector<SimplexOrientation> getFacialOrientations() const;
+    [[nodiscard]] std::vector<TemporalOrientation> getFacialOrientations() const;
     [[nodiscard]] uint8_t getK() const; /// A k-simplex has \f$ k+1 \f$ vertices.
     [[nodiscard]] size_t hash() const;
-    bool operator==(const SimplexOrientation &other) const noexcept;
-    static SimplexOrientation orientationOf(const VertexPtrs &vertices);
+    bool operator==(const TemporalOrientation &other) const noexcept;
+    static TemporalOrientation orientationOf(const VertexPtrs &vertices);
     Fingerprint fingerprint;
   private:
     uint8_t ti{0};
@@ -83,4 +83,4 @@ class SimplexOrientation {
 
 }
 
-#endif //TESSERA_SIMPLEXORIENTATION_H
+#endif //TESSERA_TEMPORALORIENTATION_H

@@ -16,7 +16,7 @@
 #include "Logger.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Fingerprint.h"
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "utils.h"
 
 // === tessera subsystem ns fwd-decls ===
@@ -52,13 +52,13 @@ class Simplex {
   public:
     // ==================== Static Factory Methods ====================
     static Simplex* create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_);
-    static Simplex* create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_, const SimplexOrientation &orientation_);
+    static Simplex* create(Spacetime *spacetime_, const VertexPtrs &vertices_, const Edges &edges_, const TemporalOrientation &orientation_);
     [[nodiscard]] static std::size_t computeNumberOfEdges(std::size_t k);
 
     // ==================== Constructors & Initialization ====================
     /// @param vertices_
     explicit Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_);
-    Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_ ,const SimplexOrientation &orientation_);
+    Simplex(Spacetime *spacetime_, const VertexPtrs &vertices_, Edges edges_ ,const TemporalOrientation &orientation_);
 
     std::uint64_t size() const noexcept { return vertices.size(); }
 
@@ -81,9 +81,9 @@ class Simplex {
 
     // ==================== Basic Getters ====================
     /// Each simplex has an associated _orientation_ in the case you're preserving causality with your work. You can
-    /// find specifics of the SimplexOrientation abstractly and concretely/computationally in the documentation for the
-    /// SimplexOrientation
-    [[nodiscard]] const SimplexOrientation &getOrientation() const noexcept { return orientation; }
+    /// find specifics of the TemporalOrientation abstractly and concretely/computationally in the documentation for the
+    /// TemporalOrientation
+    [[nodiscard]] const TemporalOrientation &getOrientation() const noexcept { return orientation; }
 
     /// The earliest time assigned to a vertex in this Simplex.
     /// @returns ti for the Simplex.
@@ -548,7 +548,7 @@ class Simplex {
     void releaseChildren() noexcept;
   private:
     Spacetime *spacetime{nullptr};
-    SimplexOrientation orientation{};
+    TemporalOrientation orientation{};
 
     VertexPtrs vertices{};
 

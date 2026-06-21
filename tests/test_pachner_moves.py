@@ -404,7 +404,7 @@ class TestActionConsistency(unittest.TestCase):
 # Simplex orientation correctness
 # =====================================================================
 
-class TestSimplexOrientation(unittest.TestCase):
+class TestTemporalOrientation(unittest.TestCase):
     """[RU] Sec. 3: Verify orientation computation from vertex times."""
 
     def _make_simplex(self, times):

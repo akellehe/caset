@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Twin Vector Labs LLC.
 // All rights reserved.
 
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "spacetime/topologies/Toroid.h"
 #include "spacetime/Spacetime.h"
 #include "utils.h"

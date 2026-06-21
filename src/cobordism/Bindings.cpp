@@ -1514,5 +1514,10 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def_property_readonly("result_holes", &TransportCobordism::resultHoles,
                              "The EMERGENT result block's triangle holes (read, "
                              "never pinned).")
+      .def_property_readonly("result_signs", &TransportCobordism::resultSigns,
+                             "The result block's induced-orientation signs (+-1 per "
+                             "result hole), applied to the emergent result periods so "
+                             "the read-out is symmetric with the signed inputs "
+                             "(relabeling-invariant sigma_R). Empty if unsigned.")
       .def_property_readonly("stats", &TransportCobordism::stats);
 }

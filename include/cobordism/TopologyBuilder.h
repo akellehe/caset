@@ -90,17 +90,23 @@ class TopologyBuilder {
     /// @param inputHoles   out: the pinned states' triangle holes (sorted triples).
     /// @param inputTargets out: their target periods (induced-orientation signed).
     /// @param resultHoles  out: the emergent result block's triangle holes (read).
+    /// @param resultSigns  out: the result block's induced-orientation signs
+    ///   (\f$ \pm 1 \f$), applied to the emergent result periods so the read-out is
+    ///   symmetric with the signed input targets and hence relabeling-invariant.
+    ///   Empty means no signing (the read-out keeps the raw per-hole periods).
     virtual void readoutHoles(
         const std::shared_ptr<Spacetime> &cobordism,
         const std::vector<std::vector<std::complex<double>>> &states,
         std::vector<std::vector<std::uint64_t>> &inputHoles,
         std::vector<std::complex<double>> &inputTargets,
-        std::vector<std::vector<std::uint64_t>> &resultHoles) const {
+        std::vector<std::vector<std::uint64_t>> &resultHoles,
+        std::vector<int> &resultSigns) const {
       (void)cobordism;
       (void)states;
       inputHoles.clear();
       inputTargets.clear();
       resultHoles.clear();
+      resultSigns.clear();
     }
 
     /// Whether the result block EMERGES from the pinned inputs alone (the \#353

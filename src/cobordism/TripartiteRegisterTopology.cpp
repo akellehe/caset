@@ -371,7 +371,8 @@ void TripartiteRegisterTopology::readoutHoles(
     const std::vector<std::vector<std::complex<double>>> &states,
     std::vector<std::vector<std::uint64_t>> &inputHoles,
     std::vector<std::complex<double>> &inputTargets,
-    std::vector<std::vector<std::uint64_t>> &resultHoles) const {
+    std::vector<std::vector<std::uint64_t>> &resultHoles,
+    std::vector<int> &resultSigns) const {
   // The EXACT (#353 period) read-out on distinct windows. Pin the supplied input
   // states on windows A,B,C (one window per state) over residualForPeriods, with
   // each window's own induced-orientation covector signTable_; the first unpinned
@@ -379,6 +380,7 @@ void TripartiteRegisterTopology::readoutHoles(
   inputHoles.clear();
   inputTargets.clear();
   resultHoles.clear();
+  resultSigns.clear();
   if (blockHoles_.empty() || !cobordism) return;
 
   const std::size_t nStates = std::min(states.size(), blockHoles_.size());
@@ -389,8 +391,15 @@ void TripartiteRegisterTopology::readoutHoles(
           k < states[s].size() ? states[s][k] : std::complex<double>(0);
       inputTargets.push_back(static_cast<double>(signTable_[s][k]) * a);
     }
-  if (nStates < blockHoles_.size())
+  if (nStates < blockHoles_.size()) {
     for (const auto &h : blockHoles_[nStates]) resultHoles.push_back(h);
+    // The result block's induced-orientation signs (signTable_[nStates], the same
+    // endSignCovector that signs the inputs), so the emergent result is read in the
+    // SAME global surface orientation as the inputs -- making sigma_R the
+    // relabeling-invariant Stokes charge rather than a bare per-hole-sorted sum.
+    for (std::size_t k = 0; k < blockHoles_[nStates].size(); ++k)
+      resultSigns.push_back(signTable_[nStates][k]);
+  }
 }
 
 }  // namespace tessera::cobordism
