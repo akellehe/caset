@@ -411,58 +411,130 @@ std::vector<std::vector<std::uint64_t>> Spacetime::prismCells(
   return {out.begin(), out.end()};
 }
 
-std::vector<std::vector<std::uint64_t>> Spacetime::symmetricStackCells(
-    const std::vector<std::vector<std::uint64_t>> &baseCells) {
-  // The symmetric APEX stacking (NOT a prism): each base triangle cones up to a
-  // face-apex at the mid layer and down to the top copy, and the gap between two
-  // adjacent apex-columns over a shared base edge is an octahedron split along the
-  // canonical dual edge f1-f2 (the two face-centres) -- so no vertex-label sort
-  // chooses any diagonal. The split is equivariant under the surface's symmetries,
-  // hence the carried transport is exactly equivariant (the #413 fix). Bottom ids
-  // are the base ids v; top ids are v + stride; apex ids are 2*stride onward (one
-  // per triangle, lexicographic).
-  std::uint64_t stride = 0;
-  for (const auto &c : baseCells)
-    for (auto v : c) stride = std::max(stride, v + 1);
-  const std::uint64_t top = stride;
-  std::uint64_t nextApex = stride * 2;
+std::vector<std::vector<std::uint64_t>> Spacetime::worldprismBoundaryFaces(
+    const std::vector<std::uint64_t> &facet, std::uint64_t loOffset,
+    std::uint64_t hiOffset) {
+  // The staircase triangulation of the prism g x I over the (d-1)-simplex g
+  // (facet, sorted, m vertices): the m d-simplices S_k = {lo[g_0..g_k]} u
+  // {hi[g_k..g_{m-1}]}, k = 0..m-1. Its (d-1)-faces that appear in exactly ONE
+  // staircase cell are the boundary of partial(g x I) (the caps g and g_top and
+  // the side worldsheets); the shared (interior) face is the staircase diagonal.
+  const std::size_t m = facet.size();
+  std::vector<std::vector<std::uint64_t>> staircase;
+  staircase.reserve(m);
+  for (std::size_t k = 0; k < m; ++k) {
+    std::vector<std::uint64_t> s;
+    s.reserve(m + 1);
+    for (std::size_t i = 0; i <= k; ++i) s.push_back(facet[i] + loOffset);
+    for (std::size_t i = k; i < m; ++i) s.push_back(facet[i] + hiOffset);
+    std::sort(s.begin(), s.end());
+    staircase.push_back(std::move(s));
+  }
+  std::map<std::vector<std::uint64_t>, int> faceCount;
+  for (const auto &s : staircase)
+    for (std::size_t drop = 0; drop < s.size(); ++drop) {
+      std::vector<std::uint64_t> f;
+      f.reserve(s.size() - 1);
+      for (std::size_t i = 0; i < s.size(); ++i)
+        if (i != drop) f.push_back(s[i]);
+      ++faceCount[f];  // f is already sorted (s is)
+    }
+  std::vector<std::vector<std::uint64_t>> boundary;
+  for (auto &[f, n] : faceCount)
+    if (n == 1) boundary.push_back(f);
+  return boundary;
+}
 
-  std::map<std::vector<std::uint64_t>, std::uint64_t> apex;
-  std::map<std::pair<std::uint64_t, std::uint64_t>,
-           std::vector<std::vector<std::uint64_t>>> edgeTriangles;
-  std::vector<std::vector<std::uint64_t>> triangles;
+std::vector<std::vector<std::uint64_t>> Spacetime::symmetricStackCells(
+    const std::vector<std::vector<std::uint64_t>> &baseCells, int nApexSlices) {
+  // The symmetric APEX stacking (NOT a prism), dimension-generic via coface
+  // mirroring: each top d-simplex t cones UP to a cell-apex f_t (up-cone t u {f_t})
+  // and DOWN to the top copy (down-cone = the point reflection of the up-cone
+  // through f_t). The gap over a (d-1)-facet g shared by two cofaces (apexes
+  // f1, f2) is [f1,f2] * partial(g x I): the join of the canonical dual edge with
+  // the boundary of the worldprism over g (worldprismBoundaryFaces). Its caps
+  // reproduce the up/down reflection; its sides mirror across g's lower faces. In
+  // d=2 the sides are worldlines, so this is EXACTLY the #413 octahedron split on
+  // the dual edge (no diagonal); in d>=3 the side worldsheets take a globally
+  // consistent staircase diagonal. nApexSlices reflect-and-cap layers stack into a
+  // tall cobordism: primal layer ell holds v + ell*stride, apexes start at
+  // (nApexSlices+1)*stride. nApexSlices = 1 is the single #413 reflection.
+  if (nApexSlices < 1)
+    throw std::runtime_error("symmetricStackCells: nApexSlices must be >= 1");
+
+  std::uint64_t stride = 0;
+  std::size_t cellSize = 0;
+  for (const auto &c : baseCells) {
+    cellSize = std::max(cellSize, c.size());
+    for (auto v : c) stride = std::max(stride, v + 1);
+  }
+  if (cellSize < 3)
+    throw std::runtime_error(
+        "symmetricStackCells: base needs (d+1)-vertex cells with d >= 2");
+  const int dim = static_cast<int>(cellSize) - 1;  // base manifold dimension
+  (void)dim;  // documented; the per-facet loop derives the codimension structure
+
+  // Dedup top d-simplices in first-appearance order (the apex indexing matches
+  // the original #413 lexicographic-per-input order in d=2).
+  std::vector<std::vector<std::uint64_t>> tops;
+  std::map<std::vector<std::uint64_t>, std::size_t> topIndex;
   for (const auto &raw : baseCells) {
+    if (raw.size() != cellSize) continue;  // skip lower-dimensional / malformed
     std::vector<std::uint64_t> t(raw.begin(), raw.end());
     std::sort(t.begin(), t.end());
-    if (t.size() != 3) continue;                      // base = a triangulated surface
-    if (!apex.emplace(t, nextApex).second) continue;  // dedup repeated cells
-    ++nextApex;
-    triangles.push_back(t);
-    for (std::size_t i = 0; i < 3; ++i)
-      for (std::size_t j = i + 1; j < 3; ++j)
-        edgeTriangles[{t[i], t[j]}].push_back(t);
+    if (topIndex.emplace(t, tops.size()).second) tops.push_back(std::move(t));
+  }
+  const std::size_t nTops = tops.size();
+
+  // Each (d-1)-facet -> the indices of the top simplices that share it.
+  std::map<std::vector<std::uint64_t>, std::vector<std::size_t>> facetCofaces;
+  for (std::size_t ti = 0; ti < nTops; ++ti) {
+    const auto &t = tops[ti];
+    for (std::size_t drop = 0; drop < t.size(); ++drop) {
+      std::vector<std::uint64_t> g;
+      g.reserve(t.size() - 1);
+      for (std::size_t i = 0; i < t.size(); ++i)
+        if (i != drop) g.push_back(t[i]);
+      facetCofaces[g].push_back(ti);  // g already sorted
+    }
   }
 
+  const std::uint64_t apexBase =
+      static_cast<std::uint64_t>(nApexSlices + 1) * stride;
   std::set<std::vector<std::uint64_t>> out;
   const auto add = [&out](std::vector<std::uint64_t> c) {
     std::sort(c.begin(), c.end());  // canonical storage key (carries no orientation)
     out.insert(std::move(c));
   };
-  for (const auto &t : triangles) {
-    const std::uint64_t f = apex.at(t);
-    add({t[0], t[1], t[2], f});                    // up-cone (3,1)
-    add({t[0] + top, t[1] + top, t[2] + top, f});  // down-cone (1,3)
-  }
-  for (const auto &[edge, tris] : edgeTriangles) {
-    if (tris.size() != 2) continue;  // hole-boundary edge: a tube wall, not gap-filled
-    const std::uint64_t u = edge.first, v = edge.second;
-    const std::uint64_t f1 = apex.at(tris[0]), f2 = apex.at(tris[1]);
-    // The octahedron (u, v, u+top, v+top ; poles f1, f2) split along the dual edge
-    // f1-f2 into four tetrahedra (each holds both apexes, so the order is irrelevant).
-    add({f1, f2, u, v});
-    add({f1, f2, v, v + top});
-    add({f1, f2, v + top, u + top});
-    add({f1, f2, u + top, u});
+
+  for (int j = 0; j < nApexSlices; ++j) {
+    const std::uint64_t lo = static_cast<std::uint64_t>(j) * stride;
+    const std::uint64_t hi = static_cast<std::uint64_t>(j + 1) * stride;
+    const std::uint64_t apexSlice =
+        apexBase + static_cast<std::uint64_t>(j) * nTops;
+
+    for (std::size_t ti = 0; ti < nTops; ++ti) {
+      const auto &t = tops[ti];
+      const std::uint64_t f = apexSlice + ti;
+      std::vector<std::uint64_t> up, dn;
+      up.reserve(t.size() + 1);
+      dn.reserve(t.size() + 1);
+      for (auto v : t) { up.push_back(v + lo); dn.push_back(v + hi); }
+      up.push_back(f);
+      dn.push_back(f);
+      add(std::move(up));   // up-cone (d,1)
+      add(std::move(dn));   // down-cone (1,d) -- the point reflection through f
+    }
+
+    for (const auto &[g, cof] : facetCofaces) {
+      if (cof.size() != 2) continue;  // hole-boundary facet: a tube wall
+      const std::uint64_t f1 = apexSlice + cof[0], f2 = apexSlice + cof[1];
+      for (auto s : worldprismBoundaryFaces(g, lo, hi)) {
+        s.push_back(f1);
+        s.push_back(f2);
+        add(std::move(s));  // [f1,f2] * (a boundary face of the worldprism g x I)
+      }
+    }
   }
   return {out.begin(), out.end()};
 }
