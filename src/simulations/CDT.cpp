@@ -60,7 +60,7 @@ static bool isValidCDTOrientation(const VertexPtrs &verts, int d) {
   }
   if (times.size() != 2) return false;
 
-  auto orient = SimplexOrientation::orientationOf(verts);
+  auto orient = TemporalOrientation::orientationOf(verts);
   auto [ti, tf] = orient.numeric();
   if ((ti == d && tf == 1) || (ti == 1 && tf == d)) return true;
   if ((ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1)) return true;

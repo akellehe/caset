@@ -51,7 +51,7 @@ def _is_valid_cdt_simplex(verts):
     times = {v.getTime() for v in verts}
     if len(times) != 2:
         return False
-    o = tessera.SimplexOrientation(0, 0)  # dummy
+    o = tessera.TemporalOrientation(0, 0)  # dummy
     # Count vertices at each time
     time_list = sorted(times)
     ti_count = sum(1 for v in verts if v.getTime() == time_list[0])

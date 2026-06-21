@@ -56,7 +56,8 @@ class RegisterTopology : public TopologyBuilder {
         const std::vector<std::vector<std::complex<double>>> &states,
         std::vector<std::vector<std::uint64_t>> &inputHoles,
         std::vector<std::complex<double>> &inputTargets,
-        std::vector<std::vector<std::uint64_t>> &resultHoles) const override;
+        std::vector<std::vector<std::uint64_t>> &resultHoles,
+        std::vector<int> &resultSigns) const override;
 
     /// The #353 result block EMERGES from the pinned neutral-pair inputs (read
     /// after the relax, not supplied), so MergeCobordism may omit outputStates/U.

@@ -23,7 +23,7 @@
 #include "mesh/SimplexFilter.h"
 #include "observables/MIUnits.hpp"
 #include "observables/SparseGraph.h"
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Edge.h"
@@ -166,7 +166,7 @@ std::pair<SimplexPtr, bool> Spacetime::createSimplex(const std::tuple<uint8_t, u
   if (getMetric()->getSignature()->getSignatureType() != SignatureType::Lorentzian) {
     timelikeSquaredLength = a;  // Euclidean: all edges positive
   }
-  SimplexOrientation orientation = {
+  TemporalOrientation orientation = {
     std::get<0>(numericOrientation),
     std::get<1>(numericOrientation)
   };
@@ -602,7 +602,7 @@ SimplexSet Spacetime::getExternalSimplices() noexcept {
 }
 
 std::vector<SimplexPtr> Spacetime::getSimplicesWithOrientation(std::tuple<uint8_t, uint8_t> orientation) const {
-  SimplexOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
+  TemporalOrientation o{std::get<0>(orientation), std::get<1>(orientation)};
   std::vector<SimplexPtr> result{};
   for (const auto &simplex : simplicesVec) {
     if (simplex->getOrientation() == o) result.push_back(simplex);
@@ -956,7 +956,7 @@ SimplexPtr Spacetime::findSimplexByVerts(
 }
 
 SimplexPtr Spacetime::getRandomSimplexWithOrientation(uint8_t ti, uint8_t tf) {
-  SimplexOrientation target{ti, tf};
+  TemporalOrientation target{ti, tf};
   // Try random sampling first (fast if many match)
   for (int attempt = 0; attempt < 100; ++attempt) {
     auto s = getRandomSimplex();

@@ -96,6 +96,14 @@ class TransportCobordism {
     [[nodiscard]] const std::vector<std::vector<std::uint64_t>> &resultHoles()
         const noexcept { return resultHoles_; }
 
+    /// The result block's induced-orientation signs (\f$ \pm 1 \f$ per result hole),
+    /// applied to the emergent result periods so the read-out is symmetric with the
+    /// signed input targets (the relabeling-invariant Stokes charge). Empty for a
+    /// topology that supplies no result signing (the raw periods are kept).
+    [[nodiscard]] const std::vector<int> &resultSigns() const noexcept {
+      return resultSigns_;
+    }
+
     [[nodiscard]] const Stats &stats() const noexcept { return stats_; }
 
   private:
@@ -114,6 +122,7 @@ class TransportCobordism {
     std::vector<std::vector<std::uint64_t>> stateHoles_{};
     std::vector<std::complex<double>> holeTargets_{};
     std::vector<std::vector<std::uint64_t>> resultHoles_{};
+    std::vector<int> resultSigns_{};  // result block's induced-orientation signs
 
     // === results ===
     std::shared_ptr<Spacetime> cobordism_{};

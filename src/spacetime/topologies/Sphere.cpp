@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Twin Vector Labs LLC.
 // All rights reserved.
 
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "spacetime/topologies/Sphere.h"
 #include "spacetime/Spacetime.h"
 #include "utils.h"
@@ -22,7 +22,7 @@ using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 void Sphere::build(Spacetime *spacetime, int nSimplices) {
   auto dimensions = spacetime->getMetric()->getSignature()->getDimensions();
-  SimplexOrientation orientation{1, static_cast<std::uint8_t>(dimensions)};
+  TemporalOrientation orientation{1, static_cast<std::uint8_t>(dimensions)};
   spacetime->reserve(nSimplices);
 
   int numLayers = std::max(2, static_cast<int>(std::cbrt(nSimplices)));

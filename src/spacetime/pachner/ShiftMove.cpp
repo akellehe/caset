@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #include "mesh/Simplex.h"
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "mesh/Vertex.h"
 
 // === tessera subsystem ns fwd-decls ===

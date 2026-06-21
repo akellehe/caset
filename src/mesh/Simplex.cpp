@@ -4,7 +4,7 @@
 #include "mesh/Vertex.h"
 #include "mesh/Simplex.h"
 #include "mesh/ForwardDeclarations.h"
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "spacetime/Spacetime.h"
 #include "Logger.h"
 #include "utils.h"
@@ -128,7 +128,7 @@ Simplex::Simplex(
   Spacetime *spacetime_,
   const VertexPtrs &vertices_,
   Edges edges_
-) : spacetime(spacetime_), orientation(SimplexOrientation::orientationOf(vertices_)), vertices(vertices_),
+) : spacetime(spacetime_), orientation(TemporalOrientation::orientationOf(vertices_)), vertices(vertices_),
     edges(std::move(edges_)),
     fingerprint({0}) {
 #if TESSERA_ASSERTIONS
@@ -140,7 +140,7 @@ Simplex::Simplex(
   Spacetime *spacetime_,
   const VertexPtrs &vertices_,
   Edges edges_,
-  const SimplexOrientation &orientation_
+  const TemporalOrientation &orientation_
 ) : spacetime(spacetime_), orientation(orientation_), vertices(vertices_), edges(std::move(edges_)),
     fingerprint() {
   for (const auto &v : vertices_) {
@@ -186,7 +186,7 @@ void Simplex::releaseChildren() noexcept {
 Simplex* Simplex::create(Spacetime *spacetime_,
                            const VertexPtrs &vertices_,
                            const Edges &edges_,
-                           const SimplexOrientation &orientation_) {
+                           const TemporalOrientation &orientation_) {
 #if TESSERA_ASSERTIONS
   if (vertices_.empty()) throw std::runtime_error("Simplex is empty");
 #endif

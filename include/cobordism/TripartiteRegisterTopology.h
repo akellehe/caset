@@ -70,7 +70,8 @@ class TripartiteRegisterTopology : public TopologyBuilder {
         const std::vector<std::vector<std::complex<double>>> &states,
         std::vector<std::vector<std::uint64_t>> &inputHoles,
         std::vector<std::complex<double>> &inputTargets,
-        std::vector<std::vector<std::uint64_t>> &resultHoles) const override;
+        std::vector<std::vector<std::uint64_t>> &resultHoles,
+        std::vector<int> &resultSigns) const override;
 
     /// The result block (window R) EMERGES from the three pinned inputs; the merge
     /// pins inputs alone and reads the emergent result, so no outputStates/U.

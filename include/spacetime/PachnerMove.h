@@ -13,7 +13,7 @@
 
 #include "mesh/ForwardDeclarations.h"
 #include "mesh/Simplex.h"
-#include "mesh/SimplexOrientation.h"
+#include "mesh/TemporalOrientation.h"
 #include "mesh/Vertex.h"
 #include "spacetime/Spacetime.h"
 
@@ -42,7 +42,7 @@ inline bool isValidCDTOrientation(const VertexPtrs &verts, int d) {
     times.insert(static_cast<std::uint64_t>(v->getTime()));
   }
   if (times.size() != 2) return false;
-  auto orient = SimplexOrientation::orientationOf(verts);
+  auto orient = TemporalOrientation::orientationOf(verts);
   auto [ti, tf] = orient.numeric();
   if ((ti == d && tf == 1) || (ti == 1 && tf == d)) return true;
   if ((ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1)) return true;
@@ -60,12 +60,12 @@ inline bool isN32Type(const SimplexPtr &s, int d) {
 }
 
 inline bool isN41TypeVerts(const VertexPtrs &verts, int d) {
-  auto [ti, tf] = SimplexOrientation::orientationOf(verts).numeric();
+  auto [ti, tf] = TemporalOrientation::orientationOf(verts).numeric();
   return (ti == d && tf == 1) || (ti == 1 && tf == d);
 }
 
 inline bool isN32TypeVerts(const VertexPtrs &verts, int d) {
-  auto [ti, tf] = SimplexOrientation::orientationOf(verts).numeric();
+  auto [ti, tf] = TemporalOrientation::orientationOf(verts).numeric();
   return (ti == d - 1 && tf == 2) || (ti == 2 && tf == d - 1);
 }
 

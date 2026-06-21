@@ -61,7 +61,7 @@ void TransportCobordism::computeStateTargets() {
   // topology's exact triangle-hole read-out gives the pinned input holes + their
   // induced-orientation targets, and the first unpinned window (the result block).
   topology_->readoutHoles(cobordism_, inputStates_, stateHoles_, holeTargets_,
-                          resultHoles_);
+                          resultHoles_, resultSigns_);
 }
 
 void TransportCobordism::optimize() {
@@ -99,6 +99,13 @@ void TransportCobordism::readResult() {
     if (m > 0 && P.size() >= m && P.size() % m == 0)
       result_.assign(P.begin(), P.begin() + static_cast<std::ptrdiff_t>(m));
   }
+  // Apply the result block's induced-orientation signs (symmetric with the signed
+  // input targets) so sigma_R = sum(result_) is the relabeling-invariant Stokes
+  // charge, not a bare sum of per-hole sorted-reference periods (#412). Empty signs
+  // (e.g. the bipartite register) leave the raw periods unchanged.
+  if (!resultSigns_.empty() && resultSigns_.size() == result_.size())
+    for (std::size_t k = 0; k < result_.size(); ++k)
+      result_[k] *= static_cast<double>(resultSigns_[k]);
 
   // === residual read-out: beta*||grad_I S||^2 + r_state at the relaxed metric ===
   ReggeSolver residualSolver(cobordism_, MatterConfiguration());
