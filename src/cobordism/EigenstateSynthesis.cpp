@@ -984,6 +984,110 @@ std::vector<cd> EigenstateSynthesis::carriedRepresentative(
   return carriedFromReadout(assembleRegisterReadout(holes), targetPeriods);
 }
 
+// === Charge sector: the E/B split of the field strength F ∈ Ω² (#417) ===
+
+std::vector<cd> EigenstateSynthesis::curvatureFromConnection(
+    const std::vector<cd> &A) const {
+  if (k_ != 2)
+    throw std::runtime_error(
+        "EigenstateSynthesis::curvatureFromConnection: requires a degree-2 "
+        "instance (the field strength F is a 2-cochain); this instance is "
+        "degree " +
+        std::to_string(k_));
+  // The connection A is a degree-1 cochain in the canonical ChainComplex 1-cell
+  // order — map each sorted edge (u,v) to its index so the per-plaquette signed
+  // edge sum can read A by edge.
+  const auto edges1 = ChainComplex::fromSpacetime(*st_).kSimplexVertices(1);
+  if (A.size() != edges1.size())
+    throw std::runtime_error(
+        "EigenstateSynthesis::curvatureFromConnection: the connection has " +
+        std::to_string(A.size()) + " components; the complex has " +
+        std::to_string(edges1.size()) + " 1-cells (edges)");
+  std::map<std::vector<std::uint64_t>, std::size_t> edgeIdx;
+  for (std::size_t i = 0; i < edges1.size(); ++i) edgeIdx[edges1[i]] = i;
+
+  // F = dA on each sorted 2-cell (a,b,c): the induced-orientation signed edge sum
+  // +A(a,b) + A(b,c) - A(a,c) — facet (drop v_j) carries (-1)^j, the same boundary
+  // convention cyclePeriods uses (drop a -> +(b,c), drop b -> -(a,c), drop c ->
+  // +(a,b)).
+  std::vector<cd> F(order_, cd(0.0, 0.0));
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) {
+    const auto &cell = cellOrdering_[i];  // sorted (a,b,c)
+    if (cell.size() != 3)
+      throw std::runtime_error(
+          "EigenstateSynthesis::curvatureFromConnection: a degree-2 cell has " +
+          std::to_string(cell.size()) + " vertices (expected 3)");
+    const std::vector<std::vector<std::uint64_t>> facets = {
+        {cell[0], cell[1]}, {cell[1], cell[2]}, {cell[0], cell[2]}};
+    const double sign[3] = {1.0, 1.0, -1.0};  // +(a,b) +(b,c) -(a,c)
+    for (std::size_t j = 0; j < 3; ++j) {
+      const auto it = edgeIdx.find(facets[j]);
+      if (it == edgeIdx.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::curvatureFromConnection: edge (" +
+            std::to_string(facets[j][0]) + "," + std::to_string(facets[j][1]) +
+            ") of a 2-cell is not a 1-cell of the complex");
+      F[i] += sign[j] * A[it->second];
+    }
+  }
+  return F;
+}
+
+EigenstateSynthesis::FieldStrengthSplit EigenstateSynthesis::fieldStrengthSplit(
+    const std::vector<cd> &F) const {
+  if (k_ != 2)
+    throw std::runtime_error(
+        "EigenstateSynthesis::fieldStrengthSplit: requires a degree-2 instance "
+        "(the field strength F is a 2-cochain); this instance is degree " +
+        std::to_string(k_));
+  if (F.size() != order_)
+    throw std::runtime_error(
+        "EigenstateSynthesis::fieldStrengthSplit: F has " +
+        std::to_string(F.size()) + " components; the degree-2 operator has " +
+        std::to_string(order_) + " cells");
+
+  // Map each sorted edge (u,v) to its live Edge* so each plaquette's causal type
+  // is read off Edge::isTimelike() — the sanctioned causal test (Im(length) != 0).
+  std::map<std::pair<std::uint64_t, std::uint64_t>, ::tessera::mesh::Edge *> em;
+  for (auto *e : edges_) {
+    const std::uint64_t a = e->getSource()->getId();
+    const std::uint64_t b = e->getTarget()->getId();
+    em[{std::min(a, b), std::max(a, b)}] = e;
+  }
+
+  FieldStrengthSplit split;
+  split.electric.assign(order_, cd(0.0, 0.0));
+  split.magnetic.assign(order_, cd(0.0, 0.0));
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) {
+    const auto &cell = cellOrdering_[i];  // sorted (a,b,c)
+    const std::pair<std::uint64_t, std::uint64_t> facets[3] = {
+        {cell[0], cell[1]}, {cell[1], cell[2]}, {cell[0], cell[2]}};
+    // Electric iff any leg is timelike (one temporal index, the discrete F_{0i});
+    // else purely-spacelike = magnetic (F_{ij}).
+    bool electric = false;
+    for (const auto &f : facets) {
+      const auto it = em.find(f);
+      if (it == em.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::fieldStrengthSplit: edge (" +
+            std::to_string(f.first) + "," + std::to_string(f.second) +
+            ") of a 2-cell is not an edge of the complex");
+      if (it->second->isTimelike()) {
+        electric = true;
+        break;
+      }
+    }
+    if (electric) {
+      split.electric[i] = F[i];
+      split.electricCells.push_back(i);
+    } else {
+      split.magnetic[i] = F[i];
+      split.magneticCells.push_back(i);
+    }
+  }
+  return split;
+}
+
 std::vector<cd> EigenstateSynthesis::carriedFromReadout(
     const RegisterReadout &ro, const std::vector<cd> &targetPeriods) const {
   const std::size_t n = order_;

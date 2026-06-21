@@ -337,7 +337,7 @@ Euclidean spectrum/kernel.)doc")
            "all-spacelike complex.");
 
   // ----- §4b eigenstate synthesis: residual + parameter access (#133) -----
-  py::class_<EigenstateSynthesis>(m, "EigenstateSynthesis",
+  auto eigenstateSynthesis = py::class_<EigenstateSynthesis>(m, "EigenstateSynthesis",
       R"doc(§4b inverse eigenvector problem on a fixed complex, degree-k.
 
 Scores how close the complex's current Hermitian edge weights make a target
@@ -623,7 +623,57 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "acceptance the bulk's edges are re-pinned uniform (squaredLength 1, "
            "phase 0) — the unit cochain metric the register/fill seeds are built "
            "with, held by construction rather than by the createSimplexTracked "
-           "time-rule coincidence on all-same-time seeds.");
+           "time-rule coincidence on all-same-time seeds.")
+      // ----- Charge sector: the E/B split of F in Omega^2 (#417) -----
+      .def("curvatureFromConnection",
+           &EigenstateSynthesis::curvatureFromConnection, py::arg("A"),
+           "The curvature 2-cochain F = dA from a U(1) connection 1-cochain A by "
+           "discrete coboundary: on each sorted degree-2 cell (a,b,c), F = "
+           "A(a,b) + A(b,c) - A(a,c), the induced-orientation signed edge sum the "
+           "period read-out uses (cyclePeriods). A is a degree-1 cochain in the "
+           "canonical ChainComplex 1-cell order (length = the number of edges, "
+           "i.e. EigenstateSynthesis(st, 1).order()); this instance is degree 2 "
+           "and returns an order()-length 2-cochain. Gauge-invariant (d.d = 0): a "
+           "pure gauge A -> A + d chi leaves F unchanged. Raises if degree() != 2, "
+           "if len(A) is not the number of 1-cells, or if a 2-cell edge is "
+           "missing.")
+      .def("fieldStrengthSplit", &EigenstateSynthesis::fieldStrengthSplit,
+           py::arg("F"),
+           "The electric/magnetic split of a field-strength 2-cochain F by the "
+           "causal type of each plaquette: electric = F on plaquettes carrying a "
+           "timelike edge (one temporal leg, the discrete F_{0i}); magnetic = F "
+           "on purely-spacelike plaquettes (F_{ij}). Returns a FieldStrengthSplit "
+           "whose electric/magnetic are order()-length cochains (agreeing with F "
+           "on their own support, zero elsewhere, so electric + magnetic == F) "
+           "and whose electricCells/magneticCells are the disjoint, complete "
+           "index lists into cellSimplices(). A plaquette is electric iff any of "
+           "its three edges is Edge.isTimelike() on the live complex. Raises if "
+           "degree() != 2, if len(F) != order(), or if a plaquette edge is "
+           "missing.");
+
+  // The result of fieldStrengthSplit (#417): the E/B partition of F in Omega^2.
+  py::class_<EigenstateSynthesis::FieldStrengthSplit>(
+      eigenstateSynthesis, "FieldStrengthSplit",
+      "The E/B split of a field-strength 2-cochain F by plaquette causal type "
+      "(EigenstateSynthesis.fieldStrengthSplit): electric (timelike-leg "
+      "plaquettes), magnetic (purely-spacelike plaquettes), and their disjoint "
+      "index lists into cellSimplices(). electric + magnetic == F.")
+      .def_readonly("electric",
+                    &EigenstateSynthesis::FieldStrengthSplit::electric,
+                    "F on plaquettes with a timelike leg (zero elsewhere); an "
+                    "order()-length 2-cochain.")
+      .def_readonly("magnetic",
+                    &EigenstateSynthesis::FieldStrengthSplit::magnetic,
+                    "F on purely-spacelike plaquettes (zero elsewhere); an "
+                    "order()-length 2-cochain.")
+      .def_readonly("electricCells",
+                    &EigenstateSynthesis::FieldStrengthSplit::electricCells,
+                    "Indices into cellSimplices() of the electric (timelike-leg) "
+                    "plaquettes.")
+      .def_readonly("magneticCells",
+                    &EigenstateSynthesis::FieldStrengthSplit::magneticCells,
+                    "Indices into cellSimplices() of the magnetic "
+                    "(purely-spacelike) plaquettes.");
 
   // ----- The carried spectral register V = ker L_1 (#303) -----
   py::class_<Register>(m, "Register",
