@@ -171,6 +171,78 @@ def shell_deficit(st, seed_vertices):
     return float(sum(shells.values())), shells
 
 
+# --- electric charge: the temporal-sector Gauss-law holonomy (#411) ---
+# Q = oint_S E reads electric charge as a discrete Gauss law on the electric part of
+# the field strength F = d psi (E = plaquettes with a timelike leg, #417), summed over
+# a closed surface S enclosing the quark windows. A closed-surface flux of an exact F
+# is topologically protected (oint d psi = <psi, d^2 V> = 0), so Q is a genuine gauged-
+# U(1) holonomy -- metric-robust like the color charge sigma -- unlike the hand-weighted
+# (2/3, 2/3, -1/3) flavor covector, which is not A4/color-Z3 equivariant and drifts.
+_FLAVOR_COVECTOR = (2.0 / 3.0, 2.0 / 3.0, -1.0 / 3.0)  # (u, u, d): the NON-equivariant baseline
+
+
+def _carried_singlet(m):
+    """The carried representative psi -- the kernel (closed) 1-cochain U(1) connection
+    of the color singlet [1, w, w^2] pinned on the result windows. The field strength
+    F = d psi (its E/B split, and the Gauss-law Q) is read off this."""
+    es1 = cob.EigenstateSynthesis(m.cobordism, 1)
+    result = [list(h) for h in _windows(m)[3]]
+    return es1, np.array(es1.carriedRepresentative(result, [1.0, _W, _W * _W]))
+
+
+def gauss_law_charge(m):
+    """Electric charge Q = oint_S E, the temporal-sector Gauss-law holonomy (#411): the
+    orientation-signed sum of the ELECTRIC part of F = d psi over the closed surface S
+    bounding the worldtube of the three quark windows. Returns (Q_electric, Q_full):
+    Q_full = oint_S F is the full closed-surface flux (0 to round-off, the topological
+    protection); Q_electric restricts to the timelike-leg plaquettes (exactly 0 on the
+    all-spacelike reduced geometry -- the neutral total of the color-only sector)."""
+    es1, psi = _carried_singlet(m)
+    es2 = cob.EigenstateSynthesis(m.cobordism, 2)
+    F = list(es2.curvatureFromConnection(list(psi)))
+    enclosed = sorted(set(v for w in _windows(m)[:3] for h in w for v in h))
+    return es2.gaussLawCharge(F, enclosed, True), es2.gaussLawCharge(F, enclosed, False)
+
+
+def covector_charge(m):
+    """The NON-HOLONOMY baseline (CONTRAST ONLY): a fixed (2/3, 2/3, -1/3) flavor
+    covector dotted into the three quark windows' field-strength periods. Not
+    A4/color-Z3 equivariant, hence not a closed-surface flux -- it drifts under metric
+    jitter where the Gauss-law Q stays protected. It is NOT a charge the geometry
+    carries; it exists to make the robustness contrast measurable."""
+    es1, psi = _carried_singlet(m)
+    edge = {(min(c), max(c)): i
+            for i, c in enumerate(es1.cellSimplices()) if len(c) == 2}
+
+    def period(h):
+        a, b, c = h
+        return psi[edge[(a, b)]] + psi[edge[(b, c)]] - psi[edge[(a, c)]]
+
+    windows = _windows(m)[:3]  # the three quark windows (each three holes)
+    return sum(_FLAVOR_COVECTOR[i] * sum(period(h) for h in win)
+               for i, win in enumerate(windows))
+
+
+def dirac_kahler_net_charge(m):
+    """The conserved Dirac-Kahler (Noether) charge cross-check (#415): the per-window
+    j^0 charges weighted by the singlet phases [1, w, w^2]. The three quark charges are
+    equal (the A4-symmetric apex interior, #413), so the net Sum_k phase_k * q_k -> 0 --
+    agreeing with the Gauss-law flux Q. The (positive) total carriedCharge Sum_k q_k is
+    the constituent norm (three colored quarks), NOT the net. Returns (net, total)."""
+    es1 = cob.EigenstateSynthesis(m.cobordism, 1)
+    dk = cob.DiracKahler(m.cobordism)
+    result = [list(h) for h in _windows(m)[3]]
+    phases = [1.0, _W, _W * _W]
+    qk = []
+    for k in range(3):
+        target = [0.0, 0.0, 0.0]
+        target[k] = 1.0
+        psik = es1.carriedRepresentative(result, target)
+        qk.append(dk.charge(dk.lift(1, list(psik))))
+    net = sum(phases[k] * qk[k] for k in range(3))
+    return net, float(sum(qk))
+
+
 def measure(max_iters=80):
     """Build the symmetric junction, pin the omega-rep proton input, relax, and read
     the emergent observables off the relaxed geometry. Returns a dict."""
@@ -195,9 +267,18 @@ def measure(max_iters=80):
     mass_a = abs(m.stats.dual_action)
     quark_holes = set(v for w in _windows(m)[:3] for h in w for v in h)
     mass_b, shells = shell_deficit(m.cobordism, quark_holes)
+
+    # electric charge: the temporal-sector Gauss-law holonomy (#411).
+    q_e, q_f = gauss_law_charge(m)
+    dk_net, dk_total = dirac_kahler_net_charge(m)
     return {
         "sigma": _proj(v_charge, result),          # color charge (singlet => 0)
         "singlet": _proj(v_singlet, result),       # the proton (=> 1)
+        "charge_Q": abs(q_e),                      # electric Gauss-law charge oint_S E
+        "charge_flux": abs(q_f),                   # full closed-surface flux (the protection)
+        "charge_covector": abs(covector_charge(m)),  # NON-holonomy baseline (drifts)
+        "charge_dk_net": abs(dk_net),              # net Dirac-Kahler charge (=> 0, neutral)
+        "charge_dk_total": dk_total,               # constituent norm (three quarks)
         "radius": r, "n_spacelike": n_sp, "n_timelike": n_tl,
         "mass_a": mass_a, "mass_b": mass_b, "shells": shells,
         "rm_a": r * mass_a, "rm_b": r * mass_b,    # anchor on B
@@ -212,6 +293,12 @@ def main():
     print("color (the result emerges from the symmetric quark input, never pinned):")
     print(f"  color charge sigma = {o['sigma']:.3e}   (confinement: singlet => 0)")
     print(f"  singlet component  = {o['singlet']:.4f}   (the proton)")
+    print(f"\nelectric charge (the temporal-sector Gauss-law holonomy, #411):")
+    print(f"  Q = oint_S E       = {o['charge_Q']:.3e}   (electric Gauss-law charge; neutral total)")
+    print(f"  oint_S F (full)    = {o['charge_flux']:.3e}   (closed-surface flux: the protection => 0)")
+    print(f"  covector baseline  = {o['charge_covector']:.4f}   (NON-holonomy (2/3,2/3,-1/3); drifts)")
+    print(f"  Dirac-Kahler j^0   net={o['charge_dk_net']:.3e}  total={o['charge_dk_total']:.4f}"
+          f"   (Noether: net=>0 neutral, total=constituents)")
     print(f"\nradius:")
     print(f"  r = sqrt(mean(l^2>0)) = {o['radius']:.4f}   "
           f"({o['n_spacelike']} spacelike, {o['n_timelike']} timelike/null edges)")

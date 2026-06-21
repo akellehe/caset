@@ -739,7 +739,21 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "index lists into cellSimplices(). A plaquette is electric iff any of "
            "its three edges is Edge.isTimelike() on the live complex. Raises if "
            "degree() != 2, if len(F) != order(), or if a plaquette edge is "
-           "missing.");
+           "missing.")
+      .def("gaussLawCharge", &EigenstateSynthesis::gaussLawCharge, py::arg("F"),
+           py::arg("enclosedVertices"), py::arg("electricOnly") = true,
+           "The discrete Gauss-law charge Q = oint_S E (#411): the temporal-sector "
+           "flux of a field-strength 2-cochain F through the closed surface S = dV "
+           "bounding the worldtube V (the closed star of enclosedVertices, the quark "
+           "windows). Sums F over S's plaquettes with their induced (-1)^j "
+           "orientation (interior faces of V cancel), restricted to the ELECTRIC "
+           "(timelike-leg, F_{0i}) plaquettes when electricOnly, else the full flux. "
+           "For an exact F = d psi the full flux is <psi, d^2 V> = 0 to round-off -- "
+           "the topological protection that makes Q a metric-robust gauged-U(1) "
+           "holonomy (unlike a hand-weighted flavor covector). On an all-spacelike "
+           "(Riemannian) complex no plaquette is electric, so the electric Q is "
+           "exactly 0 (the neutral total of the reduced color-only sector). Raises "
+           "if degree() != 2 or len(F) != order().");
 
   // The result of fieldStrengthSplit (#417): the E/B partition of F in Omega^2.
   py::class_<EigenstateSynthesis::FieldStrengthSplit>(
