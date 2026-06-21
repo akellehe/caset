@@ -1360,11 +1360,13 @@ prepared states, reproduces the harmonic overlap.)doc")
            "residual and driving the singlet overlap -> 1.")
       .def("set_symmetric_interior",
            &TripartiteRegisterTopology::setSymmetricInterior, py::arg("on") = true,
-           "Use the SYMMETRIC APEX interior (Spacetime::symmetricStackCells) instead "
-           "of the prism extrusion (#413): a label-independent stacking with no "
-           "vertex-sort diagonal, so the transport is exactly equivariant and the "
-           "intertwining residual -> 0 / singlet overlap -> 1. Default off (prism). "
-           "Uses the uniform metric; the VR and Lorentzian seeds are skipped under it.");
+           "Select the cobordism interior. The SYMMETRIC APEX interior "
+           "(Spacetime::symmetricStackCells, #413) is the DEFAULT: a label-independent "
+           "stacking with no vertex-sort diagonal, so the transport is exactly "
+           "equivariant (residual ~0, singlet overlap 1). Pass on=False for the legacy "
+           "prism extrusion (residual ~4e-2). The symmetric interior uses the uniform "
+           "metric; the VR seed requires on=False (prism), the Lorentzian seed works "
+           "on both.");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",

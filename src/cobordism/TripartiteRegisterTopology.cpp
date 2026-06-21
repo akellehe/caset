@@ -319,15 +319,24 @@ std::shared_ptr<Spacetime> TripartiteRegisterTopology::build(
       e->setSquaredLength(std::complex<double>(1.0, 0.0));
   }
 
-  // LORENTZIAN worldlines: overwrite the cross-layer (forward-time) edges as
-  // timelike (l^2 < 0), so the dual Regge action goes complex (Im S != 0) and its
-  // harmonics carry the singlet's omega-phases (a real/spacelike metric cannot).
-  // A worldline whose l^2 relaxes through 0 is null = a photon. The base-vertex
-  // layer of a cobordism vertex is id / N (the per-layer stride).
-  if (lorentzian_ && !symmetricInterior_)
+  // LORENTZIAN worldlines: overwrite the cross-time (forward-time) edges as timelike
+  // (l^2 < 0), so the dual Regge action goes complex (Im S != 0) and its harmonics
+  // carry the singlet's omega-phases (a real/spacelike metric cannot). A worldline
+  // whose l^2 relaxes through 0 is null = a photon. The time of a cobordism vertex is
+  // id / N (the per-layer stride) on the prism; on the symmetric apex interior the
+  // bottom (id < N) is t=0, the top (N <= id < 2N) is t=2, and the face-apexes
+  // (id >= 2N) are t=1. Both labelings are g-symmetric, so timelike-izing the
+  // worldlines preserves the exact equivariance.
+  if (lorentzian_) {
+    const bool sym = symmetricInterior_;
+    const auto timeOf = [N, sym](std::uint64_t id) -> std::uint64_t {
+      if (sym) return id < N ? 0u : (id < 2 * N ? 2u : 1u);
+      return id / N;
+    };
     for (auto *e : cobordism->getEdgeList()->toVector())
-      if ((e->getSource()->getId() / N) != (e->getTarget()->getId() / N))
+      if (timeOf(e->getSource()->getId()) != timeOf(e->getTarget()->getId()))
         e->setSquaredLength(std::complex<double>(lorentzWorldlineLsq_, 0.0));
+  }
 
   // Per-hole induced-orientation signs (the generalization of kColorSign): the
   // endSignCovector of the base surface over the 12 holes, grouped per window.

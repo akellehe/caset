@@ -128,13 +128,17 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     /// @param frequency the subdivision frequency \f$ N \ge 2 \f$.
     void setFrequency(int frequency);
 
-    /// Use the **symmetric apex interior** (`Spacetime::symmetricStackCells`) for the
-    /// bulk instead of the prism extrusion: a label-independent stacking with no
-    /// vertex-sort diagonal, so the transport is exactly equivariant and the
-    /// intertwining residual \f$ \to 0 \f$ / singlet overlap \f$ \to 1 \f$ (\#413).
-    /// Default off (the prism). It uses the uniform symmetric metric (\f$ l^2 = 1 \f$);
-    /// the van Raamsdonk and Lorentzian seeds are skipped under it (their `id % N`
-    /// layering assumes the prism's stride).
+    /// Select the cobordism interior. The **symmetric apex interior**
+    /// (`Spacetime::symmetricStackCells`) is the **default** (\#413): a
+    /// label-independent stacking with no vertex-sort diagonal, so the transport is
+    /// exactly equivariant --- the intertwining residual is machine zero and the
+    /// singlet overlap is \f$ 1 \f$. Pass `false` for the legacy prism extrusion (the
+    /// \f$ \times I \f$ Freudenthal staircase, residual \f$ \sim 4\times10^{-2} \f$).
+    /// The symmetric interior uses the uniform metric (\f$ l^2 = 1 \f$); the van
+    /// Raamsdonk seed is skipped under it (its `id % N` party map assumes the prism
+    /// stride), so it requires `setSymmetricInterior(false)`. The Lorentzian worldline
+    /// seed works on both interiors (on the apex interior the surface\f$ \leftrightarrow \f$apex
+    /// and bottom\f$ \leftrightarrow \f$top edges are the timelike worldlines).
     void setSymmetricInterior(bool on = true);
 
   private:
@@ -147,10 +151,12 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     // #398 base). Larger N refines the lattice (tunable granularity, #404).
     int frequency_{2};
 
-    // Use the symmetric apex interior (set by setSymmetricInterior); default off
-    // (the prism extrusion). When on, build() uses Spacetime::symmetricStackCells
-    // and the uniform metric (#413).
-    bool symmetricInterior_{false};
+    // Use the symmetric apex interior (#413); DEFAULT ON. build() uses
+    // Spacetime::symmetricStackCells (label-independent, exactly equivariant) with the
+    // uniform metric; set_symmetric_interior(false) selects the legacy prism extrusion
+    // (required for the van Raamsdonk seed, whose id%N party map assumes the prism
+    // stride; the Lorentzian worldline seed works on both interiors).
+    bool symmetricInterior_{true};
 
     // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
     // build uses the uniform symmetric seed (l^2 = 1).

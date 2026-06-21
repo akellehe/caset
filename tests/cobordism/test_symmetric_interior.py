@@ -36,8 +36,7 @@ _NEUTRAL = [[1, -1, 0], [1, 0, -1], [0, 1, -1]]
 
 def _build(symmetric):
     trt = cob.TripartiteRegisterTopology()
-    if symmetric:
-        trt.set_symmetric_interior(True)
+    trt.set_symmetric_interior(symmetric)  # symmetric apex is now the DEFAULT (#413)
     return cob.TransportCobordism(_NEUTRAL, max_iters=0, seed=0, topology=trt)
 
 
@@ -192,6 +191,55 @@ class SymmetricInteriorTest(unittest.TestCase):
         # ~0.999 overlap (no regression to the existing path).
         self.assertAlmostEqual(self.r_prism, 4.26e-2, delta=5e-3)
         self.assertGreaterEqual(self.ov_prism, 0.999)
+
+
+class SymmetricLorentzianTest(unittest.TestCase):
+    """Parity for the prism's LorentzianPhotonTest on the (default) symmetric interior:
+    the Lorentzian worldline seed works there too -- the surface<->apex and bottom<->top
+    edges are the timelike worldlines (#413)."""
+
+    @staticmethod
+    def _l2(m):
+        return [e.getSquaredLength().real
+                for e in m.cobordism.getEdgeList().toVector()]
+
+    def test_worldlines_become_timelike(self):
+        trt = cob.TripartiteRegisterTopology()  # symmetric apex is the default
+        trt.set_lorentzian_worldlines(-1.0)
+        m = cob.TransportCobordism(_NEUTRAL, max_iters=0, seed=0, topology=trt)
+        self.assertGreater(sum(1 for x in self._l2(m) if x < -1e-9), 0)
+
+    def test_worldlines_stay_timelike_no_spurious_photon(self):
+        # The symmetric counterpart of the prism's photon test, and a finding: on the
+        # symmetric interior the relax keeps ALL worldlines uniformly timelike (-0.3) --
+        # NO worldline spontaneously relaxes through null. The prism's "photon" (a null
+        # edge emerging under relax) was triggered by the triangulation asymmetry
+        # singling out one worldline; the symmetric interior removes that artifact, so a
+        # photon needs a genuine symmetry-breaking SOURCE, not the bare uniform seed.
+        trt = cob.TripartiteRegisterTopology()
+        trt.set_lorentzian_worldlines(-0.3)
+        m = cob.TransportCobordism(_NEUTRAL, max_iters=60, seed=0, topology=trt)
+        l2 = self._l2(m)
+        self.assertGreater(sum(1 for x in l2 if x < -1e-9), 0)    # worldlines timelike
+        self.assertEqual(sum(1 for x in l2 if abs(x) < 1e-3), 0)  # no spurious photon
+
+
+class SymmetricMetricSeedParityTest(unittest.TestCase):
+    """Parity for the prism's EntangledMetricTest: the van Raamsdonk seed is prism-only
+    (its id%N party map assumes the prism stride), so on the (default) symmetric
+    interior set_entangled_metric is a no-op and the topology stays intact -- the same
+    'a metric seed leaves the topology intact' property, on the symmetric default."""
+
+    def test_topology_intact_under_metric_seed(self):
+        trt = cob.TripartiteRegisterTopology()  # symmetric default
+        trt.set_entangled_metric(math.log(3), math.log(3))  # skipped on symmetric
+        m = cob.TransportCobordism(_NEUTRAL, max_iters=0, seed=0, topology=trt)
+        self.assertEqual(list(m.stats.betti_cobordism)[1], 11)
+        valid, _ = cob.EigenstateSynthesis(m.cobordism, 1).dualComplexValid()
+        self.assertTrue(valid)
+        # the seed is skipped, so the metric stays uniform (the symmetric requirement)
+        l2 = [e.getSquaredLength().real for e in m.cobordism.getEdgeList().toVector()]
+        self.assertTrue(all(abs(x - 1.0) < 1e-12 for x in l2))
 
 
 if __name__ == "__main__":
