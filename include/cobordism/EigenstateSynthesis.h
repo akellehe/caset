@@ -624,6 +624,30 @@ class EigenstateSynthesis {
     [[nodiscard]] std::vector<std::complex<double>> curvatureFromConnection(
         const std::vector<std::complex<double>> &A) const;
 
+    /// The discrete Gauss-law charge \f$ Q = \oint_S E \f$: the temporal-sector
+    /// flux of the field-strength 2-cochain `F` through the closed surface
+    /// \f$ S = \partial V \f$ bounding the worldtube region `V` of the
+    /// `enclosedVertices` (the quark windows). `V` is the closed star — every
+    /// degree-3 cell (tetrahedron) touching an enclosed vertex — and `S` its
+    /// boundary 2-chain (interior faces shared by two `V`-cells cancel under the
+    /// induced \f$ (-1)^j \f$ orientation, leaving the enclosing surface). `Q` is
+    /// the orientation-signed sum of `F` over `S`, restricted to the ELECTRIC
+    /// plaquettes (a timelike leg, the discrete \f$ F_{0i} \f$; `fieldStrengthSplit`'s
+    /// `electricCells`) when `electricOnly`, else the full flux. Because
+    /// \f$ F = d\psi \f$ is exact, the full flux is \f$ \langle d\psi, \partial V\rangle
+    /// = \langle \psi, \partial^2 V\rangle = 0 \f$ to round-off — the topological
+    /// protection (metric-free \f$ d \f$): a genuine gauged-U(1) holonomy that does
+    /// not drift under metric jitter, unlike a hand-weighted flavor covector. On an
+    /// all-spacelike (Riemannian) complex no plaquette is electric, so the electric
+    /// `Q` is exactly `0` (the neutral total of the reduced color-only sector). A
+    /// degree-2 read-out: it classifies cells by `Edge::isTimelike()` and sums a
+    /// supplied `F`, never mutating geometry.
+    /// @throws std::runtime_error if `degree() != 2` or `F.size() != order()`.
+    [[nodiscard]] std::complex<double> gaussLawCharge(
+        const std::vector<std::complex<double>> &F,
+        const std::vector<std::uint64_t> &enclosedVertices,
+        bool electricOnly = true) const;
+
   private:
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against

@@ -1088,6 +1088,73 @@ EigenstateSynthesis::FieldStrengthSplit EigenstateSynthesis::fieldStrengthSplit(
   return split;
 }
 
+cd EigenstateSynthesis::gaussLawCharge(
+    const std::vector<cd> &F, const std::vector<std::uint64_t> &enclosedVertices,
+    bool electricOnly) const {
+  if (k_ != 2)
+    throw std::runtime_error(
+        "EigenstateSynthesis::gaussLawCharge: requires a degree-2 instance (the "
+        "field strength F is a 2-cochain); this instance is degree " +
+        std::to_string(k_));
+  if (F.size() != order_)
+    throw std::runtime_error(
+        "EigenstateSynthesis::gaussLawCharge: F has " +
+        std::to_string(F.size()) + " components; the degree-2 operator has " +
+        std::to_string(order_) + " cells");
+
+  // The electric (timelike-leg) plaquettes — the same E/B causal split #417
+  // delivers, so Q lives on the same temporal sector. magnetic-only Q (the full
+  // flux on an all-spacelike complex) is recovered with electricOnly = false.
+  const FieldStrengthSplit split = fieldStrengthSplit(F);
+  const std::set<std::size_t> electric(split.electricCells.begin(),
+                                       split.electricCells.end());
+
+  // Sorted 2-cell tuple -> its component index, so a boundary face of an
+  // enclosed tetrahedron maps back to its F entry.
+  std::map<std::vector<std::uint64_t>, std::size_t> faceIdx;
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i)
+    faceIdx[cellOrdering_[i]] = i;
+
+  const std::set<std::uint64_t> enclosed(enclosedVertices.begin(),
+                                         enclosedVertices.end());
+
+  // V = the closed star of the enclosed vertices (every tetrahedron touching
+  // one). S = boundary 2-chain dV: accumulate each enclosed tetrahedron's four
+  // (-1)^j-signed faces; faces interior to V (shared by two V-cells with
+  // opposite induced orientation) cancel, leaving the enclosing surface.
+  const auto tets = ChainComplex::fromSpacetime(*st_).kSimplexVertices(3);
+  std::map<std::vector<std::uint64_t>, double> boundary;
+  for (const auto &tet : tets) {
+    if (tet.size() != 4) continue;
+    bool touches = false;
+    for (const std::uint64_t v : tet)
+      if (enclosed.count(v)) {
+        touches = true;
+        break;
+      }
+    if (!touches) continue;
+    for (int j = 0; j < 4; ++j) {  // drop vertex j carries (-1)^j; tet sorted
+      std::vector<std::uint64_t> face;
+      face.reserve(3);
+      for (int q = 0; q < 4; ++q)
+        if (q != j) face.push_back(tet[static_cast<std::size_t>(q)]);
+      boundary[face] += (j % 2 == 0) ? 1.0 : -1.0;
+    }
+  }
+
+  // Q = sum over the surviving surface plaquettes of the orientation-signed F,
+  // restricted to the electric (temporal-sector) plaquettes when asked.
+  cd Q(0.0, 0.0);
+  for (const auto &[face, coeff] : boundary) {
+    if (std::abs(coeff) < 1e-12) continue;  // interior face, cancelled
+    const auto it = faceIdx.find(face);
+    if (it == faceIdx.end()) continue;
+    if (electricOnly && electric.find(it->second) == electric.end()) continue;
+    Q += coeff * F[it->second];
+  }
+  return Q;
+}
+
 std::vector<cd> EigenstateSynthesis::carriedFromReadout(
     const RegisterReadout &ro, const std::vector<cd> &targetPeriods) const {
   const std::size_t n = order_;
