@@ -5,10 +5,15 @@
 > production C++ and changes **no** 2+1 D proton path. It scopes — it does not
 > build — the 3+1 D sector. Tracks epic #410; ticket #418.
 
-## TL;DR — recommendation: **STAGE**
+## TL;DR — recommendation: **BUILD THE FULL DIMENSION (generalize; do not reduce)**
 
-Build the `S³` sector **later**, gated on a reduced-sector observable demonstrably
-hitting the 2+1 D ceiling — not now, and not never.
+Build the `S³` sector at full dimension. **Do not** reduce to a 2+1 D / reduced
+sector as a shortcut: the program is fully emergent, so dropping a dimension
+fundamentally changes the physics — it is not a faithful "first cut." The
+dimensional question is answered by the **generalization**, not by a reduced
+slice: ticket **#429** ("Iterated apex-reflection cobordism (dimension-generic)
+and emergent twists") generalizes `symmetricStackCells` via coface-mirroring,
+builds `S³` over a tetrahedral base, and measures an emergent twist.
 
 - **Almost all the machinery is already dimension-generic** and runs on a
   triangulated `S³` / `S³ × I` as-is: `Spacetime::fromCells`, `getBoundary`,
@@ -17,24 +22,58 @@ hitting the 2+1 D ceiling — not now, and not never.
   The isolated smoke prototype confirms this end-to-end: it stands up the closed
   `S³` (`∂Δ⁴`) and the 4D `S³ × I` and reads the `S³` Betti vector `[1,0,0,1]`
   straight off the Hodge spectrum.
-- **Exactly one construction does *not* generalize:** `Spacetime::symmetricStackCells`
-  is 2D-only (it cones triangles; `src/spacetime/Spacetime.cpp:437`). The 3D
-  analogue — cone tetrahedra to a cell-apex, split the codim-1 gap cells over
-  shared *triangles* on the canonical dual edge — is the single core build the
-  staged ticket owns. Two supporting changes ride along: the
-  `dualComplexValid` vertex-link check is hardcoded to `n=3`
-  (`src/cobordism/ChainComplex.cpp:845`), and the register/window read-out
-  assembles connections on *triangles* (`src/cobordism/EigenstateSynthesis.cpp:1016,1251`).
-- **The cost cliff is resolution, not dimension.** A *minimal* `S³ × I` is
-  actually *cheaper* than the current `S² × I`, but is far too coarse to host the
-  color windows or a meaningful E/B plaquette set. A *like-resolution* `S³ × I`
+- **Exactly one construction has a current implementation gap:**
+  `Spacetime::symmetricStackCells` is triangle-only *today* (the `t.size() != 3
+  -> continue` guard; `src/spacetime/Spacetime.cpp:437`). This is a temporary
+  gap, **not** a dimensional wall. The interior connectivity is defined
+  dimension-generically from the base layer's coface/dual structure (cone each
+  top `d`-simplex to an apex vertex; a facet shared by two cofaces has those
+  cofaces' apex-connectivity reflected across it — see §0). #429 lifts the
+  triangle special-case to this coface-mirroring rule: cone tetrahedra to a
+  cell-apex, split the codim-1 gap cells over shared *triangles* on the canonical
+  dual edge. Two supporting changes ride along: the `dualComplexValid` vertex-link
+  check is hardcoded to `n=3` (`src/cobordism/ChainComplex.cpp:845`), and the
+  register/window read-out assembles connections on *triangles*
+  (`src/cobordism/EigenstateSynthesis.cpp:1016,1251`).
+- **The cost is resolution-driven, and accepted.** A *minimal* `S³ × I` is
+  actually *cheaper* than the current `S² × I`; a *like-resolution* `S³ × I`
   (icosahedral-symmetry class → the 600-cell) costs ≈ **10³–10⁴× the current
-  `S² × I`** per iteration in dense Hodge linear algebra alone — squarely a
-  "stage it" number.
+  `S² × I`** per iteration in dense Hodge linear algebra alone. This is a real
+  number to budget for — not a reason to reduce dimension. The cliff is the
+  *resolution* needed to host 3D windows / plaquettes, not the extra dimension
+  per se.
 - **The full 3-component E and B vectors and the 4×4 Dirac–Kähler structure
-  genuinely require `S³`.** Their *reduced* sectors (a 2-component E, a single-B
-  pseudoscalar, the Gauss-law charge density, the binary flavor label) are
-  faithful to explore first in 2+1 D — so the track should not over-build.
+  require `S³`** — and so does every other observable, faithfully, because the
+  physics is emergent at the full dimension. There is no faithful reduced 2+1 D
+  surrogate; the reduced sectors are diagnostics, not the target.
+
+---
+
+## 0. The dimension-generic apex rule and the emergent-twist hypothesis (#429)
+
+The symmetric apex interior is **not** fundamentally 2D. Its connectivity is
+defined from the base layer's **coface / dual** structure, dimension-generically:
+cone each top `d`-simplex to an apex vertex; a facet (a `(d−1)`-simplex) shared
+by **two** cofaces has those cofaces' apex-connectivity **reflected** across it,
+and lower faces shared by `k` cofaces mirror analogously. In 2D this is the
+dual-edge octahedron split; in 3D it cones tetrahedra to cell-apexes across
+shared *triangles*. The current `symmetricStackCells` triangle-only special case
+(`t.size() != 3 -> continue`) is a temporary **implementation gap**, not a wall —
+#429 ("Iterated apex-reflection cobordism, dimension-generic") replaces it with
+the coface-mirroring rule above, gains an `nApexSlices` parameter (default `1` =
+today's single layer), and builds `S³` over a tetrahedral base.
+
+**The emergent-twist hypothesis.** Each apex is a centre of point-reflection: its
+neighbour edges are inverted through it to make the next slice, plus a "cap."
+Iterating reflect-and-cap over many slices, and since composing reflections is a
+**rotation**, the stack may accumulate a net screw / monodromy along time — a
+**twist**. This twist is *emergent* (read off the relaxed geometry), unlike the
+hand-supplied `prismCells` twist. A nontrivial twist makes `W` a **mapping torus**
+(a twisted product). Candidate physical meanings to test in #429: a `Z₃` twist =
+the colour singlet's `ω`-phases; a `2π → −1` twist = the spinor sign (spin); a
+`U(1)` twist = a gauge holonomy (charge). #429 measures this emergent twist
+directly; it is the proper way to answer the dimensional question — by
+generalizing, not by reducing to a smaller sector.
 
 ---
 
@@ -54,18 +93,19 @@ citation. "Generic" = keys off the combinatorial dimension / vertex sets with no
 | Dual Regge action | **Generalizes as-is** | Sums `dualVolume()·lorentzianDeficitAngle()` over hinges = `(n−2)`-simplices, no dimension-specific branch — `src/simulations/ReggeSolver.cpp:129-137`. In 4D the hinges are triangles; the Lorentzian/null handling is hinge-local. (`Characteristic.cpp:27` gates the Pontryagin number to `n=4`, but that is an Euler/signature characteristic-number path, not the action.) |
 | `CobordismRelaxer::relaxInterior` | **Generalizes as-is (cost driver)** | Bounded GN/LM descent of `β‖∇_I S‖² + r_state` over interior edge squared-lengths via the analytic gradient + sparse Hessian of the dual Regge action — `include/cobordism/CobordismRelaxer.h:54-61`. No 2-base assumption; cost scales with interior-edge count × per-iteration Hodge/Regge solve (see §2). |
 | `TemporalOrientation::orientationOf` | **Generalizes as-is** | Counts vertices on the min/max time slices (the Ambjørn–Loll initial/final split) — works for any vertex count, `src/mesh/TemporalOrientation.cpp:99-118`. Causal type via `Edge::isTimelike()/isSpacelike()` — `include/mesh/Edge.h:118-119`. |
-| **`Spacetime::symmetricStackCells`** | **NEEDS CHANGE — the core build** | 2D-only: `if (t.size() != 3) continue;` skips any base cell that is not a triangle — `src/spacetime/Spacetime.cpp:437`. It cones *triangles* to face-apexes and splits the octahedron over a shared *edge* along the dual edge `f1–f2` (`:451-466`). Fed a tetrahedral `S³` base it returns an **empty** interior. The `S³` analogue: cone *tetrahedra* to a cell-apex (the `(4,1)`/`(1,4)` cells), and split the codim-1 gap cells over each shared *triangle* along the canonical dual edge (the two cell-centres). The canonical-dual split is what keeps it `g`-equivariant; the open question the spike answers structurally — *does the dual split survive the extra codimension?* — is **yes in principle** (the dual edge `f1–f2` of two cells sharing a codim-1 face is canonical in any dimension), but it must be built and its equivariance re-measured. (Not Python-bound today, so even the smoke prototype cannot call it — it uses the generic `prismCells` for the stack.) |
-| `dualComplexValid` (manifold validity) | **NEEDS CHANGE for `n=4`** | The ridge-link "pinch" check is generic over `(n−2)`-faces (`src/cobordism/ChainComplex.cpp:826-843`), but the vertex-link sphere test is hardcoded to `n=3`: `if (dim == 2) return ok;` then "n == 3: vertex links must be 2-spheres" with a `χ=2` test on *triangular* link faces — `src/cobordism/ChainComplex.cpp:845-889`. At `n=4` a vertex link is a 3-complex (tetrahedral faces) whose validity is "is it an `S³`?", not a surface `χ`; the existing test misapplies. **Caveat:** this is a *validation* helper — it does not block building or running the Hodge solve (the smoke prototype never calls it), so it is a correctness add for the staged build, not a blocker. |
-| Register / window read-out (`EigenstateSynthesis`) | **Assumes-2D (for the *period* read-out only)** | The kernel-only harmonic read is generic (`harmonicMatrix(k,…)`, `src/cobordism/EigenstateSynthesis.cpp:906,1043`), but the *connection/window* assembly hardcodes triangles: `curvatureFromConnection` requires degree-2 cells of 3 vertices (`:1016`) and the loop read-out requires triangular holes (`:1251`). The color-singlet/confinement read-out is therefore 2D-specific. **Mitigation:** the E/B and Dirac–Kähler sectors do *not* use the window/period read-out (they read the field-strength cochain and the operator), so an `S³` build need not port the color windows up first — it can keep color on a 2D sub-slice. |
+| **`Spacetime::symmetricStackCells`** | **CURRENT GAP — the core build (#429)** | Triangle-only *today* via the temporary `if (t.size() != 3) continue;` guard (`src/spacetime/Spacetime.cpp:437`) — an implementation gap, **not** a dimensional wall. It cones *triangles* to face-apexes and splits the octahedron over a shared *edge* along the dual edge `f1–f2` (`:451-466`). The connectivity is defined dimension-generically from the coface/dual structure (§0): #429 lifts the special-case to the coface-mirroring rule — cone each top `d`-simplex to a cell-apex (the `(4,1)`/`(1,4)` cells in 3D), and split the codim-1 gap cells over each shared `(d−1)`-face (a *triangle* in 3D) along the canonical dual edge (the two cell-centres). The canonical-dual split is what keeps it `g`-equivariant; the dual edge `f1–f2` of two cells sharing a codim-1 face is canonical in any dimension, so the split survives the extra codimension — to be built and its equivariance re-measured. (Not Python-bound today, so even the smoke prototype cannot call it — it uses the generic `prismCells` for the stack.) |
+| `dualComplexValid` (manifold validity) | **NEEDS CHANGE for `n=4`** | The ridge-link "pinch" check is generic over `(n−2)`-faces (`src/cobordism/ChainComplex.cpp:826-843`), but the vertex-link sphere test is hardcoded to `n=3`: `if (dim == 2) return ok;` then "n == 3: vertex links must be 2-spheres" with a `χ=2` test on *triangular* link faces — `src/cobordism/ChainComplex.cpp:845-889`. At `n=4` a vertex link is a 3-complex (tetrahedral faces) whose validity is "is it an `S³`?", not a surface `χ`; the existing test misapplies. **Caveat:** this is a *validation* helper — it does not block building or running the Hodge solve (the smoke prototype never calls it), so it is a correctness add for the full-dimension build (#429), not a blocker. |
+| Register / window read-out (`EigenstateSynthesis`) | **Assumes-2D (for the *period* read-out only)** | The kernel-only harmonic read is generic (`harmonicMatrix(k,…)`, `src/cobordism/EigenstateSynthesis.cpp:906,1043`), but the *connection/window* assembly hardcodes triangles: `curvatureFromConnection` requires degree-2 cells of 3 vertices (`:1016`) and the loop read-out requires triangular holes (`:1251`). The color-singlet/confinement read-out is therefore triangle-hardcoded *today*. **Path:** generalize the connection/window assembly to 3-cell windows via the coface-mirroring read-out (§0, #429) so colour reads at the full emergent dimension. (The E/B and Dirac–Kähler sectors do *not* use the window/period read-out — they read the field-strength cochain and the operator — so they need only the mesh, independent of the window port.) |
 | `EigenstateSynthesis::fieldStrengthSplit` (E/B, #417) | **Generic code, 2D-limited physics** | The split runs at `k=2` in any dimension — it reads each plaquette's causal type from its edges — but it *requires* a 2-cochain: `if (k_ != 2) throw` (`src/cobordism/EigenstateSynthesis.cpp:1038`). `F` is a 2-form in every dimension, so the *code* is generic; the *physics* deficit (a 2-component E and a single-B pseudoscalar on an `S²` slice vs. the full 3-vectors) is the slice, not the code. See §3. |
 | `DiracKähler` operator (`(d+δ)`, #415/#424) | **NEEDS `S³×I` to realize; assembles generically** | The operator `D=d+δ` and the `D²=L` check iterate `0..n` and run on any mesh, but the Clifford framework is fixed at 4D: `constexpr int kFrameworkDim = 4` (`src/cobordism/DiracKahler.cpp:29`), `gammaDimension()=2⁴=16` (`:181`), `multiplicity()=2²=4` (`:184`). The full `16 = 4×4` module needs `Ω⁰…Ω⁴`, i.e. a genuine 4-complex. The current `S²×I` cobordism is only a **3-complex** (`Ω⁰…Ω³`), so the 4×4 spinor image and the 4-fold taste do not materialize there. The header says exactly this (`include/cobordism/DiracKahler.h:97-102`). No code change is needed in `DiracKähler` itself — it needs the `S³×I` *mesh* to feed it `Ω⁴`. |
 | `MergeCobordism::operatorU()` / `choiState()` | **Deferred — `S³` *may* help, not assessed to resolve here** | Empty pending the interior-handle operator-topology rework: on the current topology `ker L₁(W−∂W)` is `d²−1`-dim with no basis-independent map to the `d×d` operator (needs "distinguished interior Choi-cycles") — `include/cobordism/MergeCobordism.h:58-65,150-159`. An `S³` interior has genuine 3-handles (`S²×S¹`-type cycles) that *could* supply distinguished `L₁` cycles, which a 2D interior cannot. **Verdict for this spike:** an `S³` interior is the *natural* place to resolve the frame ambiguity, but confirming it does is its own ticket — out of scope here (the ticket only asks to assess `S³` impact, and the impact is "plausibly enabling, unverified"). |
 
 **One-line summary.** Generic and ready: `fromCells`, `getBoundary`,
 `getTopVertexCount`, `CombinatorialDimension`, `HodgeLaplacian`, dual Regge action,
-`CobordismRelaxer`, `TemporalOrientation`. Needs a build: `symmetricStackCells`
-(the core 3D apex stacking), the `dualComplexValid` `n=4` link check, and an `S³`
-window read-out (only if color is ported up). Needs only the mesh: `DiracKähler`.
+`CobordismRelaxer`, `TemporalOrientation`. Needs a build (#429):
+`symmetricStackCells` (the dimension-generic coface-mirroring apex stacking, §0),
+the `dualComplexValid` `n=4` link check, and the `S³` window read-out generalized
+via coface-mirroring. Needs only the mesh: `DiracKähler`.
 
 ---
 
@@ -125,44 +165,50 @@ actually cheaper than `S²×I` but carries nothing.
 | **Full E-vector** (3 components) | **Requires `S³`** | `E` = plaquettes with a timelike leg; 3 independent spacelike directions need a 3D spatial slice. An `S²` slice has 2 → only a 2-component reduced E. The split *code* runs generically (`EigenstateSynthesis.cpp:1038`); the deficit is the slice. |
 | **Full B-vector** (3 components) | **Requires `S³`** | `B` = purely spacelike plaquettes; an `S²` slice has a single spacelike 2-plane orientation → `B` is one pseudoscalar, not a 3-vector. 3 independent spacelike 2-planes need `S³`. |
 | **4×4 Dirac–Kähler** (16-component `Ω⁰…Ω⁴`) | **Requires `S³×I`** | The full `16 = 4×4` Clifford module needs `Ω⁴ ≠ 0`, i.e. a 4-complex. The `S²×I` cobordism is a 3-complex (`Ω⁰…Ω³`); `DiracKähler` reports the 4D framework (`DiracKahler.cpp:29,181,184`) but the 4×4 image / 4-fold taste only materialize on `S³×I`. |
-| **Gauss-law charge density `j⁰`** (`∇·E = ρ`) | **Explorable first in 2+1 D** | The divergence of the *reduced* E on the `S²` slice is a genuine 0-cochain charge density — a faithful 2+1 D Gauss law. Only the E it diverges is reduced. Explore the holonomy / triality (`Q = I₃ + Y/2`) link in 2+1 D before paying for `S³`. |
-| **Binary flavor** (proton-vs-neutron) label | **Explorable first in 2+1 D** | A `Z₂` label needs only 2-fold multiplicity. Candidate carriers — the temporal/spatial split, or a reduced DK multiplicity — are testable on `S²×I`. Commit to `S³` only if the binary label provably needs the genuine 4-fold taste (which *is* 4D). |
-| Color singlet / confinement `σ` | **2+1 D (already in hand)** | Period/window read-out on the `S²` base (kernel-only, `EigenstateSynthesis.cpp:906`); `S³` would only refine resolution, not enable anything new. |
+| **Gauss-law charge density `j⁰`** (`∇·E = ρ`) | **Full emergent dimension** | `∇·E = ρ` is read off the full E field on the `S³` slice; the divergence of a *reduced* E on an `S²` slice is a different (lower-dimensional) physics, not a faithful surrogate. Read the holonomy / triality (`Q = I₃ + Y/2`) link at full dimension — see the emergent twist of #429. |
+| **Binary flavor** (proton-vs-neutron) label | **Full emergent dimension** | A `Z₂` label is emergent from the full geometry (the genuine 4-fold DK taste, the temporal/spatial split). A reduced `S²×I` multiplicity changes the physics rather than approximating it; read the label off the full-dimension relaxation. |
+| Color singlet / confinement `σ` | **Full emergent dimension** | Period/window read-out (kernel-only, `EigenstateSynthesis.cpp:906`); on `S³` the window assembly is generalized via the coface-mirroring read-out (§0, #429), not kept on a 2D sub-slice as a shortcut. |
 
-**The contract this table encodes:** only the **3-vector E/B** and the **4×4
-Dirac–Kähler** force `S³`. Everything the track explores *next* — the Gauss-law
-charge (#411), the flavor label (#414) — has a faithful 2+1 D first cut. Later
-tickets must not stand up a 4D relaxation where a reduced slice suffices.
+**The contract this table encodes:** every observable targets the **full
+emergent dimension** — the physics is emergent, so a reduced slice is a different
+theory, not a faithful first cut. The **3-vector E/B** and the **4×4
+Dirac–Kähler** make this most visible (they cannot even be expressed below `S³`),
+but the Gauss-law charge (#411) and the flavor label (#414) are equally
+full-dimension observables. The dimensional question is settled by the
+generalization (#429), not by standing up a reduced slice.
 
 ---
 
 ## 4. Go / no-go + minimal prototype path + sequencing
 
-### Decision: **STAGE**
+### Decision: **BUILD THE FULL DIMENSION — generalize via #429, do not reduce**
 
-Neither "build `S³` now" (the cost is 10³–10⁴× and the next two charge/flavor
-tickets have faithful 2+1 D first cuts) nor "defer indefinitely" (the full E/B
-3-vectors and 4×4 Dirac–Kähler genuinely need it, and the machinery is almost
-entirely ready). Stage it: explore the reduced sectors in 2+1 D, and trigger the
-`S³` build when a reduced-sector observable demonstrably hits the 2D ceiling.
+The machinery is almost entirely ready, and the physics is emergent — so a
+reduced 2+1 D sector is a *different* theory, not a faithful first cut. Answer the
+dimensional question by **generalizing**: #429 ("Iterated apex-reflection
+cobordism, dimension-generic") lifts `symmetricStackCells` to the coface-mirroring
+rule (§0), builds `S³` over a tetrahedral base, and measures the emergent twist.
+The 10³–10⁴× like-resolution cost is accepted and budgeted, not a reason to drop a
+dimension.
 
 ### Where it sequences in epic #410
 
 ```
-#412 ─▶ #413 ─┬─▶ #417 E/B (reduced, 2+1 D) ─▶ #411 charge (2+1 D) ─┐
-              └─▶ #415 Dirac–Kähler (reduced, 2+1 D) ────────────────┼─▶ #414 flavor (2+1 D first)
-                                                                     │
-#418 (this spike) ─ recommends: do the above in 2+1 D first ────────┘
-                    then STAGE the S³ build below, gated on a 2D-ceiling hit:
-
-   [staged] S³ sector ─▶ full 3-vector E/B + 4×4 Dirac–Kähler
+#412 ─▶ #413 ─┬─▶ #417 E/B (full E, B) ─▶ #411 charge (full j⁰) ─┐
+              └─▶ #415 Dirac–Kähler (full Ω⁰…Ω⁴) ────────────────┼─▶ #414 flavor (full)
+                                                                  │
+#418 (this spike) ─ recommends: build at full dimension ─────────┤
+                    via the dimension-generic generalization:     │
+                                                                  ▼
+   #429 apex-reflection cobordism (coface-mirroring + emergent twist)
+        ─▶ S³ sector ─▶ full 3-vector E/B + 4×4 Dirac–Kähler
 ```
 
-The spike's standing recommendation for #417 / #415 / #411 / #414: **build the
-reduced 2+1 D version first** (the table's right column). The `S³` build is a
-*new, later* ticket, not a dependency of those four.
+The spike's standing recommendation for #417 / #415 / #411 / #414: **build at the
+full emergent dimension**; the apex generalization and the emergent-twist
+measurement are owned by #429.
 
-### Minimal prototype path for the staged `S³` build (when triggered)
+### Minimal prototype path for the full-dimension `S³` build (#429)
 
 In order; all C++ on existing classes / static utils, **no free functions**:
 
@@ -171,21 +217,23 @@ In order; all C++ on existing classes / static utils, **no free functions**:
    (the 16-cell) and a geodesic 3-sphere subdivision for the 600-cell-class
    resolution. (The smoke prototype needs none — `∂Δ⁴` is 5 combinatorial
    tetrahedra fed straight to the existing `fromCells`.)
-2. **The core build — tetrahedral symmetric apex stacking.** Generalize
-   `Spacetime::symmetricStackCells` (`src/spacetime/Spacetime.cpp:414-468`) to a
-   tetrahedral base: cone each base tetrahedron up/down to a cell-apex, split the
-   codim-1 gap cells over each shared *triangle* along the canonical dual edge
-   (the two cell-centres `f1–f2`). Re-measure the `g`-equivariance residual
+2. **The core build — dimension-generic apex stacking (#429).** Generalize
+   `Spacetime::symmetricStackCells` (`src/spacetime/Spacetime.cpp:414-468`) via the
+   coface-mirroring rule (§0): cone each top `d`-simplex up/down to a cell-apex,
+   split the codim-1 gap cells over each shared `(d−1)`-face (a *triangle* in 3D)
+   along the canonical dual edge (the two cell-centres `f1–f2`); add the
+   `nApexSlices` parameter (default `1`). Re-measure the `g`-equivariance residual
    (`‖M P_in − P_out M‖/‖M‖`) — the #413 result was `4.5e-14` in 2D; confirm the
-   dual split holds in the extra codimension. Bind it to Python.
+   dual split holds in the extra codimension. Iterate reflect-and-cap over many
+   slices and read off the emergent twist (§0). Bind it to Python.
 3. **`dualComplexValid` `n=4` link check** — replace the `n=3` surface `χ=2`
    vertex-link test (`src/cobordism/ChainComplex.cpp:845-889`) with an `S³`
    (3-sphere) link test, so the 4-complex passes the manifold gate.
-4. **`S³` window read-out (only if color is ported up)** — generalize the
-   triangle-hardcoded connection/window assembly
-   (`EigenstateSynthesis.cpp:1016,1251`) to 3-cell windows, *or* keep color on a
-   2D sub-slice and use `S³` only for E/B + Dirac–Kähler (which bypass the window
-   read-out).
+4. **`S³` window read-out** — generalize the triangle-hardcoded connection/window
+   assembly (`EigenstateSynthesis.cpp:1016,1251`) to 3-cell windows via the
+   coface-mirroring read-out (§0), so colour is read at the full emergent
+   dimension rather than on a reduced 2D sub-slice. (The E/B + Dirac–Kähler
+   sectors bypass the window read-out and need only the mesh.)
 5. **First `S³×I` relaxation smoke** — one `CobordismRelaxer::relaxInterior` pass
    on a 16-cell `× I`, asserting convergence and a finite `dualReggeAction`; then
    the full 3-vector E/B (`fieldStrengthSplit` already runs at `k=2`) and the
@@ -208,17 +256,23 @@ golden 2+1 D results (`tests/cobordism/test_epic410_invariants.py` is the guard)
 
 ## Paste-ready recommendation for the #410 checklist
 
-> **#418 (S³ spike) — STAGE.** Almost all the cobordism machinery (`fromCells`,
-> `getBoundary`, `getTopVertexCount`, `CombinatorialDimension`, `HodgeLaplacian`,
-> dual Regge action, `CobordismRelaxer`, `TemporalOrientation`) is already
-> dimension-generic and runs on a triangulated `S³`/`S³×I` as-is — confirmed by an
-> isolated smoke prototype that reads `S³` Betti `[1,0,0,1]` off the Hodge
-> spectrum. The single core build is the tetrahedral generalization of
-> `symmetricStackCells` (2D-only today, `Spacetime.cpp:437`), with a
-> `dualComplexValid` `n=4` link check and (only if color is ported up) an `S³`
-> window read-out riding along; `DiracKähler` needs only the 4-complex mesh, no
-> code change. A like-resolution `S³×I` (600-cell class) costs ≈ 10³–10⁴× the
-> current `S²×I` per iteration. **Only the full 3-vector E/B and the 4×4
-> Dirac–Kähler require `S³`**; the Gauss-law charge (#411) and the binary flavor
-> label (#414) have faithful 2+1 D first cuts — do those reduced sectors first,
-> then trigger the staged `S³` build when one provably hits the 2D ceiling.
+> **#418 (S³ spike) — BUILD THE FULL DIMENSION; do not reduce.** Almost all the
+> cobordism machinery (`fromCells`, `getBoundary`, `getTopVertexCount`,
+> `CombinatorialDimension`, `HodgeLaplacian`, dual Regge action, `CobordismRelaxer`,
+> `TemporalOrientation`) is already dimension-generic and runs on a triangulated
+> `S³`/`S³×I` as-is — confirmed by an isolated smoke prototype that reads `S³`
+> Betti `[1,0,0,1]` off the Hodge spectrum. The single core build is the
+> dimension-generic generalization of `symmetricStackCells` via coface-mirroring
+> (triangle-only *today*, `Spacetime.cpp:437` — a gap, not a wall), with a
+> `dualComplexValid` `n=4` link check and an `S³` window read-out riding along;
+> `DiracKähler` needs only the 4-complex mesh, no code change. The program is
+> **emergent**, so reducing to a 2+1 D sector changes the physics and is *not* a
+> faithful first cut — the dimensional question is answered by **#429** ("Iterated
+> apex-reflection cobordism, dimension-generic and emergent twists"), which
+> generalizes the apex rule, builds `S³` over a tetrahedral base, and measures an
+> emergent twist (candidate carriers: `Z₃` colour `ω`-phases, a `2π→−1` spinor
+> sign, a `U(1)` charge holonomy). A like-resolution `S³×I` (600-cell class) costs
+> ≈ 10³–10⁴× the current `S²×I` per iteration — accepted and budgeted, not a
+> reason to reduce. Every observable — the 3-vector E/B and 4×4 Dirac–Kähler, the
+> Gauss-law charge (#411), the flavor label (#414) — targets the full emergent
+> dimension.
