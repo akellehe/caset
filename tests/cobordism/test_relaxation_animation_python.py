@@ -32,7 +32,8 @@ class RelaxationAnimationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.iters = [0, 2]
-        cls.geoms, cls.trace, cls.layout = _anim.capture(cls.iters)
+        (cls.geoms, cls.trace, cls.layout,
+         cls.windows, cls.stride) = _anim.capture(cls.iters)
 
     def test_capture_yields_a_frame_per_iteration(self):
         self.assertEqual(len(self.geoms), len(self.iters))
@@ -51,16 +52,25 @@ class RelaxationAnimationTest(unittest.TestCase):
         self.assertEqual(null_by_iter[0], 0)
         self.assertGreater(max(t[2] for t in self.trace), 0)
 
-    def test_frames_render_to_valid_rgba_images(self):
-        with tempfile.TemporaryDirectory() as d:
-            out = os.path.join(d, "anim.gif")
-            frames = _anim.render(self.geoms, self.trace, self.layout, out)
-            self.assertEqual(len(frames), len(self.iters))
-            for f in frames:
-                self.assertEqual(f.ndim, 3)
-                self.assertEqual(f.shape[2], 4)     # RGBA
-                self.assertGreater(f.shape[0] * f.shape[1], 0)
-            self.assertTrue(os.path.exists(out) and os.path.getsize(out) > 0)
+    def test_both_views_render_to_valid_rgba_images(self):
+        for view in ("full", "pants"):
+            with tempfile.TemporaryDirectory() as d:
+                out = os.path.join(d, f"anim_{view}.gif")
+                frames = _anim.render(self.geoms, self.trace, self.layout,
+                                      self.windows, self.stride, out, view=view)
+                self.assertEqual(len(frames), len(self.iters), view)
+                for f in frames:
+                    self.assertEqual(f.ndim, 3, view)
+                    self.assertEqual(f.shape[2], 4, view)   # RGBA
+                    self.assertGreater(f.shape[0] * f.shape[1], 0, view)
+                self.assertTrue(os.path.exists(out) and os.path.getsize(out) > 0, view)
+
+    def test_pants_view_uses_a_clean_sphere_embedding(self):
+        # the base surface embeds onto ~the unit sphere (clearer than the prism blob)
+        scoords, sidx = _anim._sphere_coords(self.geoms[-1][0], self.stride)
+        radii = np.linalg.norm(scoords, axis=1)
+        self.assertTrue(np.allclose(radii, 1.0, atol=1e-6))
+        self.assertEqual(len(sidx), self.stride)        # all base vertices embedded
 
 
 if __name__ == "__main__":
