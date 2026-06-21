@@ -27,6 +27,15 @@ namespace tessera::cobordism {
 /// 12 vertex-disjoint hole triangles, extruded \f$ \times I \f$ (`prismCells`).
 /// The four windows are A, B, C (inputs) and R (the emergent result).
 ///
+/// The windows are placed **symmetrically** (#398): one orbit of a tetrahedral
+/// subgroup \f$ A_4 \f$ of the icosahedral rotation group, each window a \f$ C_3 \f$
+/// orbit of three corner sub-triangles at one of the icosahedron's four tetrahedral
+/// vertex-orbits. The windows are \f$ A_4 \f$-equivalent, so the per-window
+/// period-transport blocks are cyclically related: the transport intertwines the
+/// color \f$ \mathbb{Z}_3 \f$, and a color-symmetric (\f$ \omega \f$-representation)
+/// input transports to the EXACT singlet with manifest \f$ S_3 \f$ — a greedy pick,
+/// whose windows are geometrically inequivalent, reaches only \f$ \sim 0.74 \f$.
+///
 /// Confinement is then **conservation at the junction**: on a connected
 /// surface-minus-holes the global Stokes relation forces
 /// \f$ \sum_{\text{all holes}} (\text{induced period}) = 0 \f$, so
@@ -90,7 +99,9 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     /// The caller computes `intraMI`/`crossMI` from the 3-party state's reduced
     /// density matrices (the geometry from entanglement), so the SAME state seeds
     /// the metric here and the complex boundary inputs (passed as `MergeCobordism`
-    /// inputStates). If never called, `build()` falls back to the jitter seed.
+    /// inputStates). If never called, `build()` uses the uniform symmetric seed
+    /// (\f$ l^2 = 1 \f$), which (like the party-based VR seed) respects the \f$ A_4 \f$
+    /// window symmetry the singlet transport relies on.
     /// @param intraMI the within-party mutual information (party marginal entropy).
     /// @param crossMI the between-party mutual information.
     /// @param iMax    the max MI normalization (qutrit: \f$ 2\log 3 \f$).
@@ -113,7 +124,7 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     double lorentzWorldlineLsq_{-1.0};
 
     // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
-    // build falls back to the jitter seed.
+    // build uses the uniform symmetric seed (l^2 = 1).
     bool vrSeed_{false};
     double vrIntraMI_{0.0};
     double vrCrossMI_{0.0};
