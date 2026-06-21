@@ -55,7 +55,7 @@ identity `σ_R = -(σ_A + σ_B + σ_C)` the color read-out already relies on.
 | quantity | value | reading |
 |---|---|---|
 | `‖F = dψ‖` | `0.189` | a genuine, nonzero field strength (sourced at the holes) |
-| timelike edges | `0` | the relaxed seed is Riemannian (2+1 D reduced) |
+| timelike edges | `0` | the relaxed seed is Riemannian (all spacelike) — set Lorentzian worldlines to populate `E` |
 | electric plaquettes | `0` | no timelike leg ⇒ the electric sector is **unpopulated** |
 | `Q = ∮_S E` | `0` (exact) | the **electric Gauss-law charge** |
 | `∮_S F` (full flux) | `4.4×10⁻¹⁷` | machine-precision **0** by genuine cancellation of nonzero `F` |
@@ -122,9 +122,11 @@ facts pin this:
    spacelike plaquettes). The electric Gauss-law charge is therefore identically `0`
    — there is no temporal sector for an electric field to live in. Populating `E`
    requires genuine **Lorentzian worldlines** (timelike legs), i.e. relaxing the
-   junction on a Lorentzian metric over the symmetric apex interior (#413), and —
-   for the full `E⃗`-vector — a **3+1 D** cobordism over a triangulated `S³` (#418);
-   the present `S²×I` is a 2+1 D reduced sector (out of scope here, per #410).
+   junction on a Lorentzian metric over the symmetric apex interior (#413) — a metric
+   choice, not a dimensional one. The full `E⃗`-vector lives in the **full emergent
+   dimension**, reached by generalizing the apex interior via coface-mirroring (#429,
+   the dimension-generic / `S³` build), **not** by a reduced 2+1 D sector: the program
+   is emergent and reducing dimension changes the physics.
 
 2. **The geometry is flavor-blind.** The construction carries **color** (the
    `Z₃ ⊂ S₃` window-cycling `g`, `P_out` eigenvalues `{1, ω, ω²}`) and nothing else.
@@ -142,7 +144,9 @@ facts pin this:
    carries, and the singlet is the definite-triality state `[1, ω, ω²]`. The
    ⅓-quanta of quark charge are exactly the values tied to a `Z₃`/`N`-ality center.
    But the geometry supplies **only** the `Y/2`-like (triality/baryon) factor; it has
-   **no `I₃` (weak-isospin) factor**, because there is no flavor register. With both
+   **no `I₃` (weak-isospin) factor** yet — the geometry carries only color/triality.
+   That `I₃` index is the flavor work of #414 (the spatio-temporal split or the
+   Dirac–Kähler taste multiplicity), **not** a parallel flavor register. With both
    per-window charges equal and the triality phases summing to zero, the net is the
    neutral total — the proton's `+1` (and the neutron's `0`) require the **isospin
    splitting** `I₃ = +½` (`u`) vs `−½` (`d`) that a flavor index would provide.
