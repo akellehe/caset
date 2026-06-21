@@ -20,6 +20,7 @@
 #include "cobordism/Cobordism.h"
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/DijkgraafWitten.h"
+#include "cobordism/DiracKahler.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
@@ -335,6 +336,95 @@ Euclidean spectrum/kernel.)doc")
            "representatives, one per column of lorentzianHarmonics (same order). "
            "A value ~0 flags a NULL (lightlike) harmonic; all positive on an "
            "all-spacelike complex.");
+
+  // ----- Dirac-Kahler operator d+delta and the conserved current j^0 (#415) -----
+  py::class_<DiracKahler>(m, "DiracKahler",
+      R"doc(The discrete Dirac-Kahler operator D = d + delta on the inhomogeneous
+cochain complex of a Spacetime — the label-independent square root of the
+HodgeLaplacian, and the distinguished frame the deferred operator read-out lacks.
+
+On the total cochain space Phi in (+)_k Omega^k (flat dim sum_k |C_k|), D is
+assembled block-by-block from the integer boundary maps d_k (ChainComplex) and
+diagonal weights W_k (HodgeLaplacian.weights): the boundary part (degree-lowering)
+block Omega^k -> Omega^{k-1} is d_k; the codifferential part d_k* = W_k^-1 d_k^T
+W_{k-1} (degree-raising) block Omega^{k-1} -> Omega^k. Since d^2 = (d*)^2 = 0 the
+square is block-diagonal per degree and reproduces the HodgeLaplacian:
+(d+delta)^2 = L_k. On uniform per-degree weights (e.g. l^2 = 1, W_k = c_k I) this
+matches the symmetric metric laplacian(k); the lorentzian path reproduces the
+signed d'Alembertian blocks (k>=1). Rebuilt from current edge weights each call.
+
+Clifford/gamma structure: the gammas are the Clifford action of unit 1-cochains on
+the Kahler-Atiyah form fiber Lambda(R^d), gamma^a = eps(e^a) + eta^aa iota(e^a),
+satisfying {gamma^a, gamma^b} = 2 eta^ab I exactly. The framework dimension is d=4:
+the fiber is 2^4 = 16 = 4 (Dirac spinor) x 4 (taste) and multiplicity() = 4 is the
+candidate flavor/taste index. The conserved U(1) current j^a = bar(Phi) gamma^a Phi
+has time component j^0 = W_c |Phi_c|^2 (charge density); summed over a closed slice
+it integrates to the carried charge <Phi,Phi>_W.
+
+Reduced-dimension caveat: the current S^2 x I cobordism is 2+1 D; D and the D^2 = L
+check are generic in n D, while the gamma/Clifford framework and multiplicity report
+the fixed 4D values.)doc")
+      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
+           "Build the Dirac-Kahler operator over a triangulation.")
+      .def("meshDimension", &DiracKahler::meshDimension,
+           "The mesh top dimension n (largest k with a k-cell), or -1 if empty.")
+      .def("totalDimension", &DiracKahler::totalDimension,
+           "The total cochain dimension sum_k |C_k| (side length of D).")
+      .def("blockOffsets", &DiracKahler::blockOffsets,
+           "Block offsets (o_0..o_{n+1}), o_k = sum_{j<k} |C_j|: degree-k "
+           "components occupy [o_k, o_{k+1}) in canonical ChainComplex cell order.")
+      .def("matrix", &DiracKahler::matrix, py::arg("metric") = true,
+           py::arg("lorentzian") = false,
+           "The operator D = d+delta as a flat row-major totalDimension^2 complex "
+           "array (real; imag 0). metric=False uses unit weights (combinatorial); "
+           "lorentzian=True uses signed weights (the square is the d'Alembertian).")
+      .def("square", &DiracKahler::square, py::arg("metric") = true,
+           py::arg("lorentzian") = false,
+           "The square D^2 as a flat row-major totalDimension^2 complex array: "
+           "block-diagonal per degree, each block the degree-k HodgeLaplacian; "
+           "cross-degree blocks vanish (d^2 = delta^2 = 0).")
+      .def("laplacianResidual", &DiracKahler::laplacianResidual,
+           py::arg("metric") = true, py::arg("lorentzian") = false,
+           "max_k ||(D^2)_k - laplacian(k, metric, lorentzian)||_F over k=0..n "
+           "(Euclidean) or k=1..n (lorentzian; the k=0 HodgeLaplacian is the "
+           "Hermitian graph Laplacian, not the signed 0-form d'Alembertian). ~0 "
+           "confirms (d+delta)^2 = L.")
+      .def("frameworkDimension", &DiracKahler::frameworkDimension,
+           "The framework spacetime dimension d=4 (fixed; independent of the "
+           "reduced mesh dimension).")
+      .def("gammaDimension", &DiracKahler::gammaDimension,
+           "The Kahler-Atiyah form-fiber dimension 2^d = 16 (side length of each "
+           "gamma matrix).")
+      .def("multiplicity", &DiracKahler::multiplicity,
+           "The 4-fold Dirac-Kahler multiplicity 2^{d/2} = 4: the degenerate Dirac "
+           "copies in Lambda(C^4) = 16 = 4_spinor x 4_taste (candidate flavor "
+           "index). Pinned to 4 in the 4D framework.")
+      .def("signature", &DiracKahler::signature, py::arg("lorentzian") = false,
+           "The metric signature eta as a flat row-major d*d array: Euclidean "
+           "delta_ab, or Lorentzian diag(-1,+1,+1,+1) under lorentzian=True.")
+      .def("gammas", &DiracKahler::gammas, py::arg("lorentzian") = false,
+           "The d=4 gamma generators (Clifford action of unit 1-cochains on "
+           "Lambda(R^4)) as a list of gammaDimension*gammaDimension flat row-major "
+           "complex matrices gamma^a = eps(e^a) + eta^aa iota(e^a). Satisfy "
+           "{gamma^a, gamma^b} = 2 eta^ab I against signature(lorentzian).")
+      .def("cliffordResidual", &DiracKahler::cliffordResidual,
+           py::arg("lorentzian") = false,
+           "max_{a,b} ||{gamma^a, gamma^b} - 2 eta^ab I||_F for gammas(lorentzian) "
+           "against signature(lorentzian). ~0.")
+      .def("lift", &DiracKahler::lift, py::arg("k"), py::arg("component"),
+           "Lift a degree-k cochain (length |C_k|) into a total-space field "
+           "(length totalDimension), zero in every other degree. Raises if the "
+           "component length is wrong.")
+      .def("chargeDensity", &DiracKahler::chargeDensity, py::arg("field"),
+           py::arg("metric") = true,
+           "Per-cell charge density j^0_c = W_c |Phi_c|^2 of a total-space field "
+           "(length totalDimension) in the blockOffsets layout. metric=False uses "
+           "unit weights. Raises if the field length is wrong.")
+      .def("charge", &DiracKahler::charge, py::arg("field"),
+           py::arg("metric") = true,
+           "The carried U(1) charge sum_c j^0_c = <Phi,Phi>_W (j^0 summed over the "
+           "slice). On a closed harmonic this is the carried charge. Raises if the "
+           "field length is wrong.");
 
   // ----- §4b eigenstate synthesis: residual + parameter access (#133) -----
   py::class_<EigenstateSynthesis>(m, "EigenstateSynthesis",

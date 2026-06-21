@@ -140,6 +140,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} HodgeLaplacian.h
 ```
+```{doxygenfile} DiracKahler.h
+```
 ```{doxygenfile} IntegerLinalg.h
 ```
 ```{doxygenfile} DijkgraafWitten.h
