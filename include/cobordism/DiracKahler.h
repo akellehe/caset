@@ -176,6 +176,23 @@ class DiracKahler {
     [[nodiscard]] std::vector<std::vector<std::complex<double>>> gammas(
         bool lorentzian = false) const;
 
+    /// \note **Where the 4x4 irreducible Dirac matrices would slot in.** `gammas()`
+    /// exposes the \f$ 16\times 16 \f$ *Clifford action* on the form fiber (the literal
+    /// "Clifford action of 1-cochains"). That fiber is
+    /// \f$ \Lambda(\mathbb{C}^4)\cong M_4(\mathbb{C}) \f$ — four commuting copies of the
+    /// irreducible \f$ 4\times 4 \f$ Dirac representation, one per `multiplicity()`
+    /// *taste*. To switch approach from the Clifford action to the relativistic Dirac
+    /// matrices, add a sibling accessor here, e.g.
+    /// `diracMatrices(lorentzian)` returning the \f$ 4\times 4 \f$
+    /// \f$ \gamma^\mu \f$ — the image of these same generators under the Chevalley /
+    /// Kahler-Atiyah isomorphism \f$ \Lambda(\mathbb{C}^4)\to M_4(\mathbb{C}) \f$
+    /// (equivalently the restriction of the \f$ 16\times 16 \f$ action to one minimal
+    /// left ideal / taste block) — with a `tasteProjector()` for the four commuting
+    /// copies. The operator \f$ D \f$ and the current \f$ j^0 \f$ are
+    /// representation-independent; only `gammas()` / `gammaDimension()` would change
+    /// (\f$ 16\to 4 \f$) and `multiplicity()` would become the explicit taste
+    /// degeneracy. The Clifford and multiplicity tests pass for either form.
+
     /// The Clifford anticommutator residual
     /// \f$ \max_{a,b}\|\{\gamma^a,\gamma^b\} - 2\eta^{ab}I\|_F \f$ for the
     /// generators of `gammas(lorentzian)` against `signature(lorentzian)`. ~0.
