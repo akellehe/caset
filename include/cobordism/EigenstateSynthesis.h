@@ -575,6 +575,55 @@ class EigenstateSynthesis {
     [[nodiscard]] std::pair<bool, std::string> stellarSubdivideInterior(
         const std::vector<std::uint64_t> &cell);
 
+    // === Charge sector: the E/B split of the field strength F ∈ Ω² (#417) ===
+    // The field-strength is a 2-cochain F ∈ Ω². On a Lorentzian complex each
+    // plaquette has a causal type, so F splits by it: the ELECTRIC part lives on
+    // plaquettes carrying a timelike edge (one temporal leg, the discrete F_{0i});
+    // the MAGNETIC part on purely-spacelike plaquettes (all-spatial, F_{ij}). This
+    // is a read-out on the live degree-2 complex — it only classifies cells by
+    // `Edge::isTimelike()` and partitions a supplied F, never mutating geometry.
+
+    /// The electric/magnetic split of a field-strength 2-cochain `F` by the causal
+    /// type of each plaquette. `electric` is `F` on plaquettes with a timelike edge
+    /// (zero elsewhere); `magnetic` is `F` on purely-spacelike plaquettes (zero
+    /// elsewhere); so `electric + magnetic == F` componentwise. `electricCells` /
+    /// `magneticCells` are the disjoint, complete index lists into
+    /// `cellSimplices()` (degree-2). A plaquette is electric iff any of its three
+    /// edges in the live complex is `Edge::isTimelike()`, else magnetic.
+    struct FieldStrengthSplit {
+      std::vector<std::complex<double>> electric;  // F on timelike-leg plaquettes
+      std::vector<std::complex<double>> magnetic;  // F on purely-spacelike ones
+      std::vector<std::size_t> electricCells;      // E indices into cellSimplices()
+      std::vector<std::size_t> magneticCells;      // B indices into cellSimplices()
+    };
+
+    /// Split a field-strength 2-cochain `F` (an `order()`-length cochain in the
+    /// degree-2 `cellSimplices()` order) into its electric (timelike-leg) and
+    /// magnetic (purely-spacelike) parts by the causal type of each plaquette's
+    /// edges (`Edge::isTimelike()` on the live complex). The returned `electric`
+    /// and `magnetic` are `order()`-length cochains agreeing with `F` on their own
+    /// support and zero elsewhere (`electric + magnetic == F`), plus the disjoint
+    /// index lists `electricCells` / `magneticCells` (their union is all cells).
+    /// @throws std::runtime_error if `degree() != 2`, if `F.size() != order()`, or
+    ///   if a plaquette's edge is missing from the complex.
+    [[nodiscard]] FieldStrengthSplit fieldStrengthSplit(
+        const std::vector<std::complex<double>> &F) const;
+
+    /// The curvature 2-cochain \f$ F = dA \f$ built from a carried U(1) connection
+    /// 1-cochain `A` by discrete coboundary: on each degree-2 cell \f$ (a,b,c) \f$
+    /// (sorted) \f$ F = A(a,b) + A(b,c) - A(a,c) \f$, the induced-orientation signed
+    /// edge sum the period read-out uses (`cyclePeriods`,
+    /// `examples/cobordism/proton_observables.py:55-56`). `A` is a degree-1 cochain
+    /// indexed in the canonical `ChainComplex` 1-cell order (length = the number of
+    /// 1-cells/edges, i.e. `EigenstateSynthesis(st, 1).order()`); this instance is
+    /// degree 2 and returns an `order()`-length 2-cochain. Because \f$ d\circ d = 0 \f$
+    /// the result is gauge-invariant: a pure gauge \f$ A \to A + d\chi \f$ leaves
+    /// `F` (hence its E/B split) unchanged.
+    /// @throws std::runtime_error if `degree() != 2`, if `A.size()` is not the
+    ///   number of 1-cells, or if a 2-cell's edge is not a 1-cell of the complex.
+    [[nodiscard]] std::vector<std::complex<double>> curvatureFromConnection(
+        const std::vector<std::complex<double>> &A) const;
+
   private:
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
