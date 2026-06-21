@@ -39,6 +39,12 @@ _WORLDLINE_LSQ = -0.3      # cross-layer worldlines start timelike (so null can 
 def _build(k):
     """The Lorentzian W_ABC junction relaxed to exactly k iterations (deterministic)."""
     t = cob.TripartiteRegisterTopology()
+    # The emergent photon is a worldline relaxing through l^2 ~ 0. On the symmetric apex
+    # interior (#413, now the default) the worldlines stay timelike and no null edge
+    # emerges; the prism (x I) triangulation is the one whose worldlines relax through
+    # null, so this animation -- whose subject IS the emergent photon -- exercises the
+    # prism path explicitly.
+    t.set_symmetric_interior(False)
     t.set_lorentzian_worldlines(_WORLDLINE_LSQ)
     return cob.TransportCobordism(_NEUTRAL, max_iters=k, seed=0, topology=t)
 
