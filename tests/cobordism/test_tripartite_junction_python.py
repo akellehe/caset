@@ -360,9 +360,13 @@ class SymmetricWindowsTest(unittest.TestCase):
 
 
 class LorentzianPhotonTest(unittest.TestCase):
+    # The Lorentzian worldline seed requires the PRISM interior: its cross-layer
+    # detection (id / N) assumes the prism stride, so it is skipped under the
+    # (default) symmetric apex interior -- select the prism explicitly here (#413).
     def test_worldlines_become_timelike(self):
         m = _merge(_NEUTRAL_PAIRS, max_iters=0,
-                   setup=lambda t: t.set_lorentzian_worldlines(-1.0))
+                   setup=lambda t: (t.set_symmetric_interior(False),
+                                    t.set_lorentzian_worldlines(-1.0)))
         timelike = sum(1 for x in _edge_l2(m) if x < -1e-9)
         self.assertGreater(timelike, 0)
 
@@ -370,7 +374,8 @@ class LorentzianPhotonTest(unittest.TestCase):
         # With near-null worldlines, the relax drives a worldline edge through null
         # (l^2 -> 0, lightlike) -- the predicted photon.
         m = _merge(_NEUTRAL_PAIRS, max_iters=60,
-                   setup=lambda t: t.set_lorentzian_worldlines(-0.3))
+                   setup=lambda t: (t.set_symmetric_interior(False),
+                                    t.set_lorentzian_worldlines(-0.3)))
         nulls = sum(1 for x in _edge_l2(m) if abs(x) < 1e-3)
         self.assertGreater(nulls, 0)
 
@@ -378,8 +383,11 @@ class LorentzianPhotonTest(unittest.TestCase):
 class EntangledMetricTest(unittest.TestCase):
     def test_set_entangled_metric_builds_a_valid_junction(self):
         # The VR-from-entanglement seed (a metric only) leaves the topology intact.
+        # It requires the PRISM interior (its id % N party map assumes the prism
+        # stride, skipped under the default symmetric apex interior) -- #413.
         m = _merge(_NEUTRAL_PAIRS, max_iters=0,
-                   setup=lambda t: t.set_entangled_metric(math.log(3), math.log(3)))
+                   setup=lambda t: (t.set_symmetric_interior(False),
+                                    t.set_entangled_metric(math.log(3), math.log(3))))
         self.assertEqual(list(m.stats.betti_cobordism)[1], 11)
 
 

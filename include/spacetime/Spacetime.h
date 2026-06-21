@@ -333,6 +333,26 @@ class Spacetime {
         const std::optional<std::unordered_map<std::uint64_t, std::uint64_t>>
             &twist = std::nullopt);
 
+    /// The **symmetric apex stacking** of a triangulated surface into a cobordism
+    /// 3-complex --- a label-independent alternative to ::prismCells with **no
+    /// vertex-sort diagonal**. Each base triangle cones up to a single *face-apex*
+    /// vertex \f$ f \f$ (a \f$ (3,1) \f$ tetrahedron) and down from \f$ f \f$ to the
+    /// top copy (a \f$ (1,3) \f$ tetrahedron); the gap between two adjacent
+    /// apex-columns over a shared base edge is an octahedron split along the
+    /// **canonical dual edge** \f$ f_1 f_2 \f$ (the two face-centres) into four
+    /// tetrahedra. Because the split is fixed by the two incident faces (not by
+    /// vertex ids) it is equivariant under the surface's symmetries, so the carried
+    /// transport through the \f$ 3 \f$-complex is **exactly** equivariant --- the
+    /// \#413 cure for the prism's \texttt{std::sort}-diagonal intertwining residual.
+    /// Bottom ids are the base ids \f$ v \f$, top ids are \f$ v + \text{stride} \f$,
+    /// apex ids are \f$ 2\,\text{stride} \f$ onward (one per triangle, lexicographic).
+    /// The base must be a triangulated surface (\f$ 3 \f$-vertex cells); a base edge
+    /// with a single incident triangle (a hole boundary) is a tube wall, not gap-filled.
+    /// @param baseCells the base surface's triangles as vertex-id tuples.
+    /// @return the cobordism's tetrahedra as sorted vertex-id tuples, uniqued.
+    [[nodiscard]] static std::vector<std::vector<std::uint64_t>> symmetricStackCells(
+        const std::vector<std::vector<std::uint64_t>> &baseCells);
+
     // ========================================
     // Query Methods
     // ========================================

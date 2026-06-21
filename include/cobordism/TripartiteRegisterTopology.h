@@ -128,6 +128,19 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     /// @param frequency the subdivision frequency \f$ N \ge 2 \f$.
     void setFrequency(int frequency);
 
+    /// Select the cobordism interior. The **symmetric apex interior**
+    /// (`Spacetime::symmetricStackCells`) is the **default** (\#413): a
+    /// label-independent stacking with no vertex-sort diagonal, so the transport is
+    /// exactly equivariant --- the intertwining residual is machine zero and the
+    /// singlet overlap is \f$ 1 \f$. Pass `false` for the legacy prism extrusion (the
+    /// \f$ \times I \f$ Freudenthal staircase, residual \f$ \sim 4\times10^{-2} \f$).
+    /// The symmetric interior uses the uniform metric (\f$ l^2 = 1 \f$); the van
+    /// Raamsdonk seed is skipped under it (its `id % N` party map assumes the prism
+    /// stride), so it requires `setSymmetricInterior(false)`. The Lorentzian worldline
+    /// seed works on both interiors (on the apex interior the surface\f$ \leftrightarrow \f$apex
+    /// and bottom\f$ \leftrightarrow \f$top edges are the timelike worldlines).
+    void setSymmetricInterior(bool on = true);
+
   private:
     // Lorentzian worldlines (set by setLorentzianWorldlines): when on, build()
     // sets cross-layer edges timelike.
@@ -137,6 +150,13 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     // The geodesic subdivision frequency N (set by setFrequency); default 2 (the
     // #398 base). Larger N refines the lattice (tunable granularity, #404).
     int frequency_{2};
+
+    // Use the symmetric apex interior (#413); DEFAULT ON. build() uses
+    // Spacetime::symmetricStackCells (label-independent, exactly equivariant) with the
+    // uniform metric; set_symmetric_interior(false) selects the legacy prism extrusion
+    // (required for the van Raamsdonk seed, whose id%N party map assumes the prism
+    // stride; the Lorentzian worldline seed works on both interiors).
+    bool symmetricInterior_{true};
 
     // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
     // build uses the uniform symmetric seed (l^2 = 1).

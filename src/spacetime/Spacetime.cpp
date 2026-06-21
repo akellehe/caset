@@ -411,6 +411,62 @@ std::vector<std::vector<std::uint64_t>> Spacetime::prismCells(
   return {out.begin(), out.end()};
 }
 
+std::vector<std::vector<std::uint64_t>> Spacetime::symmetricStackCells(
+    const std::vector<std::vector<std::uint64_t>> &baseCells) {
+  // The symmetric APEX stacking (NOT a prism): each base triangle cones up to a
+  // face-apex at the mid layer and down to the top copy, and the gap between two
+  // adjacent apex-columns over a shared base edge is an octahedron split along the
+  // canonical dual edge f1-f2 (the two face-centres) -- so no vertex-label sort
+  // chooses any diagonal. The split is equivariant under the surface's symmetries,
+  // hence the carried transport is exactly equivariant (the #413 fix). Bottom ids
+  // are the base ids v; top ids are v + stride; apex ids are 2*stride onward (one
+  // per triangle, lexicographic).
+  std::uint64_t stride = 0;
+  for (const auto &c : baseCells)
+    for (auto v : c) stride = std::max(stride, v + 1);
+  const std::uint64_t top = stride;
+  std::uint64_t nextApex = stride * 2;
+
+  std::map<std::vector<std::uint64_t>, std::uint64_t> apex;
+  std::map<std::pair<std::uint64_t, std::uint64_t>,
+           std::vector<std::vector<std::uint64_t>>> edgeTriangles;
+  std::vector<std::vector<std::uint64_t>> triangles;
+  for (const auto &raw : baseCells) {
+    std::vector<std::uint64_t> t(raw.begin(), raw.end());
+    std::sort(t.begin(), t.end());
+    if (t.size() != 3) continue;                      // base = a triangulated surface
+    if (!apex.emplace(t, nextApex).second) continue;  // dedup repeated cells
+    ++nextApex;
+    triangles.push_back(t);
+    for (std::size_t i = 0; i < 3; ++i)
+      for (std::size_t j = i + 1; j < 3; ++j)
+        edgeTriangles[{t[i], t[j]}].push_back(t);
+  }
+
+  std::set<std::vector<std::uint64_t>> out;
+  const auto add = [&out](std::vector<std::uint64_t> c) {
+    std::sort(c.begin(), c.end());  // canonical storage key (carries no orientation)
+    out.insert(std::move(c));
+  };
+  for (const auto &t : triangles) {
+    const std::uint64_t f = apex.at(t);
+    add({t[0], t[1], t[2], f});                    // up-cone (3,1)
+    add({t[0] + top, t[1] + top, t[2] + top, f});  // down-cone (1,3)
+  }
+  for (const auto &[edge, tris] : edgeTriangles) {
+    if (tris.size() != 2) continue;  // hole-boundary edge: a tube wall, not gap-filled
+    const std::uint64_t u = edge.first, v = edge.second;
+    const std::uint64_t f1 = apex.at(tris[0]), f2 = apex.at(tris[1]);
+    // The octahedron (u, v, u+top, v+top ; poles f1, f2) split along the dual edge
+    // f1-f2 into four tetrahedra (each holds both apexes, so the order is irrelevant).
+    add({f1, f2, u, v});
+    add({f1, f2, v, v + top});
+    add({f1, f2, v + top, u + top});
+    add({f1, f2, u + top, u});
+  }
+  return {out.begin(), out.end()};
+}
+
 // ========================================
 // Query Methods
 // ========================================
