@@ -5,6 +5,7 @@
 #define TESSERA_COBORDISM_REGISTERTOPOLOGY_H
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 #include "cobordism/TopologyBuilder.h"
@@ -63,6 +64,38 @@ class RegisterTopology : public TopologyBuilder {
     /// after the relax, not supplied), so MergeCobordism may omit outputStates/U.
     [[nodiscard]] bool emergesResult() const override { return true; }
 
+    /// Twist the staircase tube (#416): supply a vertex permutation \f$ \phi \f$ of
+    /// the base holed icosahedron, applied **cumulatively** up the layers by
+    /// `Spacetime::prismCells` (the mapping-torus twist) — block A at layer 0 is the
+    /// untwisted base, B at layer 1 is \f$ \phi \f$, R at layer 2 is \f$ \phi^2 \f$.
+    /// The per-block color holes are tracked through the SAME \f$ \phi^\ell \f$ so
+    /// `readoutHoles()` follows the twisted tube. An **orientation-reversing** twist
+    /// (one whose induced action on the carried color period is sign-reversing) is a
+    /// candidate geometric antisymmetrizer onto the diquark \f$ \bar{\mathbf 3} \f$:
+    /// inputs A and B enter the shared register through opposite orientations, the
+    /// generic symmetric \f$ \mathbf 6 \f$ part cancels. Default: identity (the
+    /// generic bipartite merge of `proton_bipartite_obstruction.tex`). Pass an empty
+    /// map to clear.
+    /// @param twist a partial vertex permutation \f$ \{v : \phi(v)\} \f$ (a missing
+    ///   key maps to itself); must be a bijection on the base vertices it touches.
+    void setTwist(const std::unordered_map<std::uint64_t, std::uint64_t> &twist);
+
+    /// The canonical orientation-reversing twist of the holed-icosahedron register
+    /// (#416), the **exact geometric antisymmetrizer** onto the diquark
+    /// \f$ \bar{\mathbf 3} \f$: it reverses the induced orientation of each of the
+    /// three color holes (a within-hole vertex transposition, swapping the two
+    /// smallest vertices of each), so each carried color period flips sign. It is an
+    /// involution (\f$ \phi^2 = \mathrm{id} \f$): the result block R (\f$ \phi^2 \f$)
+    /// returns to the base orientation while input B (\f$ \phi \f$) enters through the
+    /// reversed one, so on the uniform metric the two input-transport blocks satisfy
+    /// \f$ M_B = -M_A \f$ exactly — the symmetric sextet \f$ \mathbf 6 \f$ cancels and
+    /// the merge is purely antisymmetric (A\f$ \leftrightarrow \f$B antisymmetric
+    /// fraction \f$ = 1 \f$). It preserves the three hole triangles setwise, so the
+    /// read-out blocks are the same removed triangles, only relabeled within. A static
+    /// helper so the twist travels with the class — no free function.
+    [[nodiscard]] static std::unordered_map<std::uint64_t, std::uint64_t>
+    orientationReversingTwist();
+
     [[nodiscard]] std::size_t carriedDim(std::size_t /*stateDim*/) const override {
       return 2;  // the S_3 standard rep (b_1 = 2 on the Sigma=0 hyperplane)
     }
@@ -79,8 +112,14 @@ class RegisterTopology : public TopologyBuilder {
     }
 
   private:
+    // The optional staircase twist (#416): a partial vertex permutation phi of the
+    // base holed icosahedron, applied cumulatively up the layers by prismCells.
+    // Empty => identity (the generic, untwisted bipartite merge).
+    std::unordered_map<std::uint64_t, std::uint64_t> twist_{};
+
     // Cached by build() for readoutHoles(): the per-block color holes (sorted
-    // vertex triples), blocks in [A, B, R] order.
+    // vertex triples), blocks in [A, B, R] order. Tracked through phi^ell when a
+    // twist is set, so the read-out follows the twisted tube.
     std::vector<std::vector<std::vector<std::uint64_t>>> blockHoles_{};
 };
 

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <random>
 #include <set>
 #include <stdexcept>
@@ -61,6 +62,29 @@ void RegisterTopology::validateStateDim(std::size_t d) const {
         "color triple on the Sigma=0 hyperplane)");
 }
 
+void RegisterTopology::setTwist(
+    const std::unordered_map<std::uint64_t, std::uint64_t> &twist) {
+  twist_ = twist;
+}
+
+std::unordered_map<std::uint64_t, std::uint64_t>
+RegisterTopology::orientationReversingTwist() {
+  // Reverse the induced orientation of each of the three color holes by swapping
+  // the two smallest vertices of each ((0,1,2)->swap(0,1); (3,7,8)->swap(3,7);
+  // (4,5,9)->swap(4,5)), fixing the rest. A within-hole transposition is an odd
+  // permutation, so each hole's carried color period flips sign — the exact
+  // antisymmetrizer. It is an involution that preserves each hole triangle setwise,
+  // so the read-out blocks are the same removed triangles, only relabeled within.
+  // Applied cumulatively by prismCells: B (= phi) enters reversed, R (= phi^2 = id)
+  // returns to base, so on the uniform metric M_B = -M_A exactly (pure 3bar).
+  std::unordered_map<std::uint64_t, std::uint64_t> twist;
+  for (const auto &h : classHoles()) {  // h is sorted (a < b < c)
+    twist[h[0]] = h[1];
+    twist[h[1]] = h[0];
+  }
+  return twist;
+}
+
 std::shared_ptr<Spacetime> RegisterTopology::build(
     std::size_t /*stateDim*/, std::uint64_t seed,
     std::vector<std::vector<std::uint64_t>> &boundaryCells) {
@@ -87,8 +111,12 @@ std::shared_ptr<Spacetime> RegisterTopology::build(
     for (const auto v : f) N = std::max(N, v + 1);
 
   // (holed icosahedron) x [0,2]: a 3-layer staircase of tets (NOT looped — an
-  // interval, so the two end caps + the hole-tubes are the boundary).
-  const auto prism = Spacetime::prismCells(holed, /*layers=*/2);
+  // interval, so the two end caps + the hole-tubes are the boundary). An optional
+  // twist (#416) is applied cumulatively up the layers (the mapping-torus twist);
+  // empty => identity (the generic, untwisted bipartite merge).
+  const std::optional<std::unordered_map<std::uint64_t, std::uint64_t>> twistOpt =
+      twist_.empty() ? std::nullopt : std::optional(twist_);
+  const auto prism = Spacetime::prismCells(holed, /*layers=*/2, twistOpt);
   std::vector<std::vector<std::uint64_t>> cells;
   cells.reserve(prism.size());
   for (auto c : prism) {
@@ -107,15 +135,29 @@ std::shared_ptr<Spacetime> RegisterTopology::build(
     e->setSquaredLength(std::complex<double>(jitter(jrng), 0.0));
 
   // The per-block (per-layer) color holes, in fixed class-hole order so they pair
-  // with kColorSign: block A = layer 0, B = layer 1, R = layer 2.
+  // with kColorSign: block A = layer 0, B = layer 1, R = layer 2. Each block sits
+  // at phi^blk of the base (phi the twist, cumulative as in prismCells), so a
+  // twisted tube's read-out follows the relabeled holes. phi^0 = identity.
+  std::vector<std::uint64_t> phi(N);
+  for (std::uint64_t v = 0; v < N; ++v) phi[v] = v;  // phi^0
   blockHoles_.assign(3, {});
   for (std::size_t blk = 0; blk < 3; ++blk) {
     const std::uint64_t off = static_cast<std::uint64_t>(blk) * N;
     for (const auto &h : holes) {
       Face shifted;
       shifted.reserve(h.size());
-      for (const auto v : h) shifted.push_back(v + off);
+      for (const auto v : h) shifted.push_back(phi[v] + off);
+      std::sort(shifted.begin(), shifted.end());
       blockHoles_[blk].push_back(std::move(shifted));
+    }
+    // Advance phi -> phi^(blk+1) by composing the base twist once more.
+    if (!twist_.empty()) {
+      std::vector<std::uint64_t> next(N);
+      for (std::uint64_t v = 0; v < N; ++v) {
+        const auto it = twist_.find(phi[v]);
+        next[v] = (it != twist_.end()) ? it->second : phi[v];
+      }
+      phi = std::move(next);
     }
   }
 
