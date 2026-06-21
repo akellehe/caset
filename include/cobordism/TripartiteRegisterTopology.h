@@ -117,11 +117,25 @@ class TripartiteRegisterTopology : public TopologyBuilder {
     /// @param worldlineLsq the timelike squared length for cross-layer edges (<0).
     void setLorentzianWorldlines(double worldlineLsq = -1.0);
 
+    /// Set the geodesic subdivision **frequency** N (the tunable lattice
+    /// granularity, \#404). The base surface is a frequency-N geodesic icosahedron:
+    /// \f$ 12 + 30(N-1) + 20\binom{N-1}{2} \f$ vertices, \f$ 20N^2 \f$ faces. The
+    /// four \f$ A_4 \f$-orbit windows are generated from the symmetry at any N, so
+    /// the construction is unchanged in structure (\f$ N=2 \f$, the default, is the
+    /// \#398 base of 42 vertices); larger N refines the lattice, shrinking the
+    /// intertwining residual and driving the singlet overlap \f$ \to 1 \f$.
+    /// @param frequency the subdivision frequency \f$ N \ge 2 \f$.
+    void setFrequency(int frequency);
+
   private:
     // Lorentzian worldlines (set by setLorentzianWorldlines): when on, build()
     // sets cross-layer edges timelike.
     bool lorentzian_{false};
     double lorentzWorldlineLsq_{-1.0};
+
+    // The geodesic subdivision frequency N (set by setFrequency); default 2 (the
+    // #398 base). Larger N refines the lattice (tunable granularity, #404).
+    int frequency_{2};
 
     // The van Raamsdonk metric seed (set by setEntangledMetric); when unset the
     // build uses the uniform symmetric seed (l^2 = 1).

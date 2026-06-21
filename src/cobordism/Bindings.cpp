@@ -1349,7 +1349,15 @@ prepared states, reproduces the harmonic overlap.)doc")
            "edges are set timelike (l^2 = worldline_lsq < 0), so the dual Regge "
            "action goes complex (Im S != 0) and its harmonics carry the singlet's "
            "omega-phases. Null edges (photons) may emerge under the relax as a "
-           "worldline's l^2 -> 0. Unset => all-spacelike (Riemannian).");
+           "worldline's l^2 -> 0. Unset => all-spacelike (Riemannian).")
+      .def("set_frequency", &TripartiteRegisterTopology::setFrequency,
+           py::arg("frequency"),
+           "Set the geodesic subdivision frequency N (tunable lattice granularity, "
+           "#404): the base is a frequency-N geodesic icosahedron (12 + 30(N-1) + "
+           "20*(N-1)(N-2)/2 vertices, 20 N^2 faces). The four A4-orbit windows are "
+           "generated from the symmetry at any N>=2; N=2 (default) is the #398 base "
+           "of 42 vertices. Larger N refines the lattice, shrinking the intertwining "
+           "residual and driving the singlet overlap -> 1.");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
