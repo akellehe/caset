@@ -372,7 +372,13 @@ prism tetrahedralization (the $\times I$ extrusion's diagonal choices), so the d
 carried map is only approximately equivariant at this fixed resolution
 (Remark~\ref{rem:residual}). The $0.999$ overlap, not the exact $1$, is the signature
 of that artifact; a $g$-symmetric subdivision would remove it. This is the conclusive
-figure that the symmetry is respected.
+figure that the symmetry is respected. \emph{That subdivision has since been built}
+(the symmetric apex interior, \#413): replacing the prism extrusion with a
+label-independent stacking --- each base triangle coning to a face-apex, the gap
+octahedra split along the canonical dual edge $f_1 f_2$, so no vertex-label sort chooses
+a diagonal --- drives the residual from $4.26\times10^{-2}$ to $4.5\times10^{-14}$
+(machine zero) and the singlet overlap to $1.000000$, confirming the artifact diagnosis
+exactly.
 
 \section{Implementation}
 \label{sec:impl}
