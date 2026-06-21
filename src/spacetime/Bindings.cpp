@@ -401,6 +401,33 @@ Args:
 
 Returns:
     The prism's top cells as sorted vertex-id tuples, uniqued and sorted.)doc")
+      .def_static("symmetricStackCells", &Spacetime::symmetricStackCells,
+           py::arg("baseCells"), py::arg("nApexSlices") = 1,
+           R"doc(The symmetric apex stacking of a triangulated d-manifold (#413, #429).
+
+A label-independent alternative to prismCells via coface mirroring (no
+vertex-sort diagonal in d=2). Each top d-simplex t cones up to a cell-apex f_t
+(up-cone t u {f_t}) and down to the top copy (down-cone = the point reflection
+of the up-cone through f_t); the gap over a (d-1)-facet g shared by two cofaces
+(apexes f1, f2) is [f1,f2] * boundary(g x I) -- the join of the canonical dual
+edge with the worldprism boundary. In d=2 this is exactly the #413 octahedron
+split on the dual edge; in d>=3 the side worldsheets take a globally consistent
+staircase diagonal, giving a valid manifold on a tetrahedral S^3 base.
+
+The apex is a point reflection (a parity+time inversion), so stacking
+nApexSlices reflect-and-cap layers gives an alternating (-1)^j per-slice
+chirality (bidirectional / Dirac, not a single chiral screw). IDs: primal layer
+ell holds v + ell*stride; apexes start at (nApexSlices+1)*stride. nApexSlices=1
+reproduces the single #413 reflection bit-for-bit.
+
+Args:
+    baseCells: Base top d-simplices as vertex-id tuples (uniform (d+1)-vertex
+        cells; d is inferred and must be >= 2). A facet with one incident top
+        simplex (a hole boundary) is a tube wall, not gap-filled.
+    nApexSlices: Number of stacked apex (reflect-and-cap) layers (>= 1).
+
+Returns:
+    The cobordism's (d+1)-simplices as sorted vertex-id tuples, uniqued.)doc")
       // The returned Simplex handles point into this Spacetime's storage, so
       // each one must keep the Spacetime alive — otherwise
       // `Spacetime(...).getSimplices()` on a temporary frees the storage before

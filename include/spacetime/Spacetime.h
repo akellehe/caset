@@ -333,25 +333,42 @@ class Spacetime {
         const std::optional<std::unordered_map<std::uint64_t, std::uint64_t>>
             &twist = std::nullopt);
 
-    /// The **symmetric apex stacking** of a triangulated surface into a cobordism
-    /// 3-complex --- a label-independent alternative to ::prismCells with **no
-    /// vertex-sort diagonal**. Each base triangle cones up to a single *face-apex*
-    /// vertex \f$ f \f$ (a \f$ (3,1) \f$ tetrahedron) and down from \f$ f \f$ to the
-    /// top copy (a \f$ (1,3) \f$ tetrahedron); the gap between two adjacent
-    /// apex-columns over a shared base edge is an octahedron split along the
-    /// **canonical dual edge** \f$ f_1 f_2 \f$ (the two face-centres) into four
-    /// tetrahedra. Because the split is fixed by the two incident faces (not by
-    /// vertex ids) it is equivariant under the surface's symmetries, so the carried
-    /// transport through the \f$ 3 \f$-complex is **exactly** equivariant --- the
-    /// \#413 cure for the prism's \texttt{std::sort}-diagonal intertwining residual.
-    /// Bottom ids are the base ids \f$ v \f$, top ids are \f$ v + \text{stride} \f$,
-    /// apex ids are \f$ 2\,\text{stride} \f$ onward (one per triangle, lexicographic).
-    /// The base must be a triangulated surface (\f$ 3 \f$-vertex cells); a base edge
-    /// with a single incident triangle (a hole boundary) is a tube wall, not gap-filled.
-    /// @param baseCells the base surface's triangles as vertex-id tuples.
-    /// @return the cobordism's tetrahedra as sorted vertex-id tuples, uniqued.
+    /// The **symmetric apex stacking** of a triangulated \f$ d \f$-manifold into a
+    /// cobordism \f$ (d{+}1) \f$-complex (any base dimension \f$ d \ge 2 \f$) --- a
+    /// label-independent alternative to ::prismCells via **coface mirroring**. Each
+    /// top \f$ d \f$-simplex \f$ t \f$ cones up to a single *cell-apex* \f$ f_t \f$
+    /// (an up-cone \f$ t \cup \{f_t\} \f$) and down from \f$ f_t \f$ to the top copy
+    /// (a down-cone --- the **point reflection** of the up-cone through \f$ f_t \f$).
+    /// The gap over a \f$ (d{-}1) \f$-facet \f$ g \f$ shared by two cofaces (apexes
+    /// \f$ f_1, f_2 \f$) is the join of the **canonical dual edge** \f$ f_1 f_2 \f$
+    /// with the boundary of the worldprism \f$ g \times I \f$:
+    /// \f$ [f_1,f_2] * \partial(g\times I) \f$. Its caps reproduce the up/down
+    /// reflection; its sides mirror the connectivity across \f$ g \f$'s lower faces.
+    /// In \f$ d=2 \f$ this is **exactly** the \#413 octahedron split on the dual edge
+    /// (the worldprism sides are worldlines --- no diagonal); in \f$ d\ge 3 \f$ the
+    /// side worldsheets take a globally-consistent (vertex-id-ordered) staircase
+    /// diagonal, yielding a valid manifold on a tetrahedral \f$ S^3 \f$ base.
+    ///
+    /// The apex is a point reflection (a parity+time inversion), so the down-cone is
+    /// the orientation-reverse of the up-cone: stacking \p nApexSlices reflect-and-cap
+    /// layers gives an **alternating** \f$ (-1)^j \f$ per-slice chirality (a Dirac,
+    /// non-chiral, twist --- both senses at once), never a single chiral screw.
+    ///
+    /// IDs: primal layer \f$ \ell \f$ (\f$ 0 \le \ell \le \texttt{nApexSlices} \f$)
+    /// holds \f$ v + \ell\,\text{stride} \f$; apexes start at
+    /// \f$ (\texttt{nApexSlices}{+}1)\,\text{stride} \f$ (one per top simplex per
+    /// slice). \p nApexSlices \f$ = 1 \f$ reproduces the single-reflection \#413
+    /// result bit-for-bit. A facet with a single incident top simplex (a hole
+    /// boundary) is a tube wall, not gap-filled.
+    /// @param baseCells the base manifold's top \f$ d \f$-simplices as vertex-id
+    ///   tuples (uniform \f$ (d{+}1) \f$-vertex cells; \f$ d \f$ is inferred).
+    /// @param nApexSlices the number of stacked apex (reflect-and-cap) layers
+    ///   (\f$ \ge 1 \f$); 1 is the single \#413 reflection.
+    /// @return the cobordism's \f$ (d{+}1) \f$-simplices as sorted vertex-id tuples,
+    ///   uniqued.
     [[nodiscard]] static std::vector<std::vector<std::uint64_t>> symmetricStackCells(
-        const std::vector<std::vector<std::uint64_t>> &baseCells);
+        const std::vector<std::vector<std::uint64_t>> &baseCells,
+        int nApexSlices = 1);
 
     // ========================================
     // Query Methods
@@ -735,6 +752,20 @@ class Spacetime {
     void unregisterSimplex(const SimplexPtr &simplex);
 
   private:
+    // The boundary \f$ (d{-}1) \f$-faces of the worldprism \f$ g\times I \f$ used by
+    // ::symmetricStackCells: the staircase triangulation of the prism over the
+    // \f$ (d{-}1) \f$-facet \p facet (sorted, \f$ d \f$ vertices) between the
+    // \p loOffset (bottom) and \p hiOffset (top) primal layers, keeping the faces
+    // that lie on \f$ \partial(g\times I) \f$ (the caps \f$ g, g_\text{top} \f$ plus
+    // the side worldsheets). Each returned face has \f$ d \f$ vertices; joined with
+    // the dual edge it forms a \f$ (d{+}1) \f$-cell. The diagonal is the global
+    // vertex-id staircase, so a worldsheet shared by several facets is split
+    // consistently (a valid complex). In \f$ d=2 \f$ the sides are worldlines, so
+    // the result is exactly the \#413 octahedron's boundary edges.
+    [[nodiscard]] static std::vector<std::vector<std::uint64_t>> worldprismBoundaryFaces(
+        const std::vector<std::uint64_t> &facet, std::uint64_t loOffset,
+        std::uint64_t hiOffset);
+
     // The next vertex id not already in use: advances vertexIdCounter past any
     // explicitly-assigned ids so a no-arg/reserved id never aliases an existing
     // vertex (VertexList::add returns the existing vertex on a duplicate id;

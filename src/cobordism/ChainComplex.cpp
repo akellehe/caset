@@ -844,6 +844,33 @@ std::pair<bool, std::string> ChainComplex::dualComplexIsValid(
   }
   if (dim == 2) return {true, "ok"};
 
+  // n >= 4: a complex is a PL manifold iff every facet is in <= 2 cofaces (checked
+  // above) AND every vertex link is itself a valid (n-1)-manifold. Recurse on the
+  // links (link top cells = each cell minus the vertex); the recursion bottoms out
+  // at the n==3 S^2-vertex-link rigor below, so a 4-manifold's links are certified
+  // as genuine closed 3-manifolds (interior) or balls (boundary). The n==3 inline
+  // check (chi-based, slightly stronger: it pins links to S^2 rather than any
+  // closed surface) is kept; sphere-vs-other-manifold at the top is the caller's
+  // separate Betti check.
+  if (dim >= 4) {
+    std::map<std::uint64_t, std::vector<Cell>> linkTops;
+    for (const auto &c : cells)
+      for (const std::uint64_t v : c) {
+        Cell lf;
+        lf.reserve(nv - 1);
+        for (const std::uint64_t u : c)
+          if (u != v) lf.push_back(u);
+        linkTops[v].push_back(std::move(lf));
+      }
+    for (const auto &[v, lt] : linkTops) {
+      const auto verdict = dualComplexIsValid(lt, dim - 1, {});
+      if (!verdict.first)
+        return {false,
+                "vertex " + std::to_string(v) + " link: " + verdict.second};
+    }
+    return {true, "ok"};
+  }
+
   // n == 3: vertex links must be 2-spheres (interior) or disks (boundary).
   std::map<std::uint64_t, std::vector<Cell>> atVertex;
   for (const auto &c : cells)
