@@ -184,6 +184,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SymmetricWindowSurface.h
 ```
+```{doxygenfile} S3WindowSurface.h
+```
 ```{doxygenfile} BipartiteCreationTopology.h
 ```
 ```{doxygenfile} EmergentEventTopology.h
