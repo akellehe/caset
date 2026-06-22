@@ -29,6 +29,8 @@ pair-of-pants example ``examples/cobordism/merge_cobordism.py`` (ker L1 = 2).
 import math
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -273,6 +275,7 @@ class OperatorDeferredTest(unittest.TestCase):
         self.assertEqual(len(_M.choi_state), 0)
 
 
+@pytest.mark.slow
 class DeterminismTest(unittest.TestCase):
     """A fixed seed gives a bit-identical relaxation (reproducible)."""
 
@@ -294,6 +297,7 @@ class DeterminismTest(unittest.TestCase):
         self.assertEqual(list(self.m2.output_state), list(_M.output_state))
 
 
+@pytest.mark.slow
 class StateResidualModeTest(unittest.TestCase):
     """The selectable r_state term (#377): r_U realizability (default) vs r_psi
     hard period-pin. The topology/structure is the term-independent substrate;

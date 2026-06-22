@@ -17,6 +17,8 @@ import os
 import sys
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -88,6 +90,7 @@ def _jitter_sweep(m, n=_N_JIT, mag=_MAG):
     return np.array(qe), np.array(qf), np.array(cov)
 
 
+@pytest.mark.slow
 class ProtonChargeGaussLawTest(unittest.TestCase):
 
     @classmethod

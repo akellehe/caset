@@ -42,6 +42,8 @@ import cmath
 import math
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -249,6 +251,7 @@ class CarryAndConservationTest(unittest.TestCase):
         self.assertGreater(sigma, 2.0 * neutral)
 
 
+@pytest.mark.slow
 class RelaxationFixTest(unittest.TestCase):
     """#396: the junction relaxation stalled at iteration 0 (a converged state
     residual's spurious gradient exploded the ill-conditioned step); the
@@ -264,6 +267,7 @@ class RelaxationFixTest(unittest.TestCase):
         self.assertLess(relaxed, seed)
 
 
+@pytest.mark.slow
 class SingletReachabilityTest(unittest.TestCase):
     """A 74% overlap for a NAIVE input is a suboptimal input, not a geometry limit.
     The carried-input read is linear, so the input->result transport is a matrix M;
@@ -370,6 +374,7 @@ class LorentzianPhotonTest(unittest.TestCase):
         timelike = sum(1 for x in _edge_l2(m) if x < -1e-9)
         self.assertGreater(timelike, 0)
 
+    @pytest.mark.slow
     def test_a_photon_null_edge_emerges_under_relax(self):
         # With near-null worldlines, the relax drives a worldline edge through null
         # (l^2 -> 0, lightlike) -- the predicted photon.

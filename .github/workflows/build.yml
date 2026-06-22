@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Nightly full-suite run (07:00 UTC) so the slow tests deselected on PR
+    # pushes still gate the tree at least once a day, independent of merges.
+    - cron: "0 7 * * *"
   workflow_dispatch:
 
 permissions:
@@ -68,7 +72,40 @@ jobs:
           print("quantum subsystem present")
           PY
 
-      # Self-hosted gives us the headroom to run the entire suite (it times out
-      # on GitHub-hosted). Runs from the repo root so pytest discovers tests/.
-      - name: Run full test suite
-        run: python -m pytest tests/ -q
+      # The editable install above keeps conftest.py's xdist-unsafe build
+      # fallback dormant (its fast path returns as soon as ``tessera._tessera``
+      # imports), so the suite below can shard across workers safely.
+      #
+      # Thread budget: this suite is BLAS / OpenMP bound — its long-pole tests
+      # (cobordism relaxations, the example subprocess) thread-scale, so the
+      # naive OMP=1 + -n auto actually REGRESSES (a single-threaded long pole
+      # floors the wall clock, and each worker re-pays the heavy module imports).
+      # Profiling across thread budgets (workers x OMP held ~= cores) put the
+      # optimum at OMP=4 per worker: the heavy tests keep 4 threads while 4x as
+      # many run at once. So pin every math library to 4 and run cores/4 workers.
+      #
+      # PR pushes run only the fast lane (the >30s ``slow`` tests deselected);
+      # merge-to-main, the nightly schedule, and manual dispatch run the FULL
+      # suite. Coverage is split, never cut — every ``slow`` test still runs on
+      # main/nightly. Both lanes run from the repo root so pytest finds tests/.
+      - name: Run fast test suite (PR pushes)
+        if: github.event_name == 'pull_request'
+        env:
+          OMP_NUM_THREADS: "4"
+          OPENBLAS_NUM_THREADS: "4"
+          MKL_NUM_THREADS: "4"
+          BLIS_NUM_THREADS: "4"
+        run: |
+          workers=$(( $(nproc) / 4 )); [ "$workers" -lt 1 ] && workers=1
+          python -m pytest tests/ -q -m "not slow" -n "$workers" --dist worksteal
+
+      - name: Run full test suite (main / nightly / manual)
+        if: github.event_name != 'pull_request'
+        env:
+          OMP_NUM_THREADS: "4"
+          OPENBLAS_NUM_THREADS: "4"
+          MKL_NUM_THREADS: "4"
+          BLIS_NUM_THREADS: "4"
+        run: |
+          workers=$(( $(nproc) / 4 )); [ "$workers" -lt 1 ] && workers=1
+          python -m pytest tests/ -q -n "$workers" --dist worksteal

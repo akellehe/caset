@@ -134,6 +134,7 @@ def _decide_disk(beta=0.0, max_cones=3, max_vertices=16, explicit_beta=True,
 
 
 # --------------------------------------------------------------------------- #
+@pytest.mark.slow
 class Beta0ReproducesBaseLayer(unittest.TestCase):
     def test_explicit_beta0_equals_default(self):
         # The β=0 mediated path is the base-layer search bit-for-bit: residual,
@@ -156,6 +157,7 @@ class Beta0ReproducesBaseLayer(unittest.TestCase):
         self.assertEqual(v0.regge_action, v5.regge_action)
 
 
+@pytest.mark.slow
 class ReggeActionReported(unittest.TestCase):
     def test_regge_action_finite_nonnegative(self):
         _, v = _decide_disk(beta=0.0)
