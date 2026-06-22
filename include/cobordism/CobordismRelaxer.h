@@ -51,6 +51,21 @@ class CobordismRelaxer {
     /// numerical noise that, through the ill-conditioned action Hessian, explodes
     /// the step). Returns the final residual; leaves the interior edges at the
     /// best point found.
+    ///
+    /// `registerDegree` is the Hodge degree \f$ k \f$ the state residual is read
+    /// at (`TopologyBuilder::registerDegree()`): \f$ 1 \f$ (\f$ b_1 \f$, triangle
+    /// holes) on an \f$ S^2 \f$ (2+1 D) slice, \f$ 2 \f$ (\f$ b_2 \f$, tetrahedral
+    /// holes) on an \f$ S^3 \f$ (3+1 D) slice. The `residualForPeriods` cost is
+    /// degree-general (a hole is a \f$ (k+2) \f$-vertex tuple whose facets are
+    /// \f$ k \f$-cells), so the line search tracks the carried register at any
+    /// degree. The analytic state-residual GRADIENT, however, is the degree-1
+    /// \f$ L_1 \f$ port (`periodGradientOverLoops`), so it is folded in ONLY at
+    /// \f$ k=1 \f$; at \f$ k \ge 2 \f$ the descent is the action gradient alone
+    /// (\f$ \beta\lVert\nabla_I S\rVert^2 \f$) with the degree-\f$ k \f$ state cost
+    /// still gating the line search -- on the symmetric uniform seed the carried
+    /// register already sits at its `residualForPeriods` floor, so its gradient is
+    /// the dropped numerical-noise term either way (#396). The default \f$ 1 \f$
+    /// keeps every \f$ S^2 \f$ caller byte-identical.
     [[nodiscard]] static double relaxInterior(
         const std::shared_ptr<Spacetime> &st, double beta,
         const std::vector<EigenstateSynthesis::EdgeLoop> &stateLoops,
@@ -58,7 +73,7 @@ class CobordismRelaxer {
         const std::vector<std::vector<std::uint64_t>> &stateHoles,
         const std::vector<std::complex<double>> &holeTargets, int maxIters,
         int &iterCounter, bool periodPin, double stateEpsilon,
-        bool verbose = false);
+        bool verbose = false, int registerDegree = 1);
 };
 
 }  // namespace tessera::cobordism

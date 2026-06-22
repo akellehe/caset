@@ -144,6 +144,19 @@ class TopologyBuilder {
             "MergeCobordism: state dimension must be a power of two >= 2");
     }
 
+    /// The Hodge degree \f$ k \f$ at which this topology's color register is read:
+    /// the holes' facets are \f$ k \f$-cells and \f$ \ker L_k \f$ carries the
+    /// state (the register is \f$ \ker L_{d-1} \f$ for a \f$ d \f$-dimensional
+    /// spatial slice). The relaxation harness (`CobordismRelaxer`,
+    /// `TransportCobordism`, `MergeCobordism`) reads the register at this degree
+    /// instead of a hardcoded \f$ 1 \f$, so the read-out cycles and the
+    /// `residualForPeriods` cost track the spatial dimension. The default is
+    /// \f$ 1 \f$ (the \f$ b_1 \f$ / triangle-hole register of every \f$ S^2 \f$
+    /// (2+1 D) topology), so threading it leaves the \f$ S^2 \f$ path
+    /// byte-identical; `EmergentEventTopology`'s \f$ S^3 \f$ (3+1 D) slice
+    /// overrides it to \f$ 2 \f$ (the \f$ b_2 \f$ / tetrahedral-hole register).
+    [[nodiscard]] virtual std::size_t registerDegree() const { return 1; }
+
     /// Human-readable topology name, for `MergeCobordism::Stats::topology`.
     [[nodiscard]] virtual std::string name() const = 0;
 };

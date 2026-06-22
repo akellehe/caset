@@ -72,13 +72,17 @@ void TransportCobordism::optimize() {
   CobordismRelaxer::relaxInterior(cobordism_, beta_, /*stateLoops=*/{},
                                   /*stateTargets=*/{}, stateHoles_, holeTargets_,
                                   maxIters_, stats_.relaxIterations, periodPin,
-                                  epsilon_, verbose_);
+                                  epsilon_, verbose_,
+                                  static_cast<int>(topology_->registerDegree()));
   readResult();
   stats_.converged = stats_.residual < epsilon_;
 }
 
 void TransportCobordism::readResult() {
-  EigenstateSynthesis es(cobordism_, 1);
+  // The register read-out degree travels with the topology: k=1 (b_1, triangle
+  // holes) on S^2, k=2 (b_2, tetrahedral holes) on S^3. cyclePeriods /
+  // residualForPeriods are degree-general (a hole is a (k+2)-vertex tuple).
+  EigenstateSynthesis es(cobordism_, static_cast<int>(topology_->registerDegree()));
   bulkCells_ = es.bulkMinusBoundaryCells();
 
   // === topology stats ===
