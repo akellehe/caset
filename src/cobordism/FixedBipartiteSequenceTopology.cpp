@@ -21,33 +21,23 @@ FixedBipartiteSequenceTopology::diquarkColorFor(
   }
   if (states.size() >= 5 && states[4].size() == 3) return states[4];
 
-  // The default colored 3bar: the antisymmetric (wedge / cross-product)
-  // combination d = q_A ^ q_B of the two quark inputs -- the textbook
-  // 3 (x) 3 -> 3bar antisymmetric diquark. Two color-indefinite (omega-rep)
-  // inputs wedge to a definite anti-triplet, generically colored (sigma != 0).
-  if (states.size() < 2 || states[0].size() != 3 || states[1].size() != 3)
-    throw std::invalid_argument(
-        "FixedBipartiteSequenceTopology: pinning the intermediate diquark needs "
-        "at least the two quark inputs A,B (each a color triple) to form the "
-        "antisymmetric 3bar, or an explicit setDiquarkColor / fifth state");
-  const auto &a = states[0];
-  const auto &b = states[1];
-  std::vector<std::complex<double>> d = {a[1] * b[2] - a[2] * b[1],
-                                         a[2] * b[0] - a[0] * b[2],
-                                         a[0] * b[1] - a[1] * b[0]};
-  // Normalize to the singlet norm sqrt(3) so r_U is on the same scale as A's
-  // (residualForPeriods is covariant in the target norm).
-  double n2 = 0.0;
-  for (const auto &z : d) n2 += std::norm(z);
-  const double norm = std::sqrt(n2);
-  if (norm < 1e-12)
-    throw std::invalid_argument(
-        "FixedBipartiteSequenceTopology: the two quark inputs are color-"
-        "parallel (q_A ^ q_B = 0); the antisymmetric 3bar is undefined -- supply "
-        "a non-degenerate pair or an explicit setDiquarkColor");
-  const double scale = std::sqrt(3.0) / norm;
-  for (auto &z : d) z *= scale;
-  return d;
+  // The default colored 3bar diquark: a DEFINITE anti-color anti-triplet -- the
+  // textbook antisymmetric 3 (x) 3 -> 3bar combination of two definite-color
+  // quarks (q_r ^ q_g = the complementary "anti-blue", epsilon_{rg.}), which is
+  // exactly a color basis state. We cannot derive it by wedging the two pinned
+  // inputs: the color-symmetric (omega-rep, #414 no-go) inputs are color-Z3
+  // phase-copies of one common direction, so q_A ^ q_B = 0 -- two color-
+  // INDEFINITE quarks carry no definite relative color to antisymmetrize. The
+  // diquark color is therefore the ONE thing this experiment pins (per #438): a
+  // strongly-colored anti-triplet (sigma = 1/sqrt(3), vs A's weak emergent ~0.10).
+  // The canonical (first) anti-color axis is chosen; by the A4 / color-Z3 window
+  // symmetry the three axes are equivalent, so the hosted-vs-floored verdict does
+  // not depend on it. Normalized to the singlet norm sqrt(3) so r_U is on the same
+  // scale as A's (residualForPeriods is covariant in the target norm). The
+  // conjugate (3bar / antisymmetric) character is carried by the orientation-
+  // reversing #416 twist applied to the diquark window's covector in readoutHoles.
+  return {std::complex<double>(std::sqrt(3.0), 0.0), std::complex<double>(0.0),
+          std::complex<double>(0.0)};
 }
 
 std::vector<std::vector<std::uint64_t>>
