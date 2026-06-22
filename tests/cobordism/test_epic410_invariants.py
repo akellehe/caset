@@ -18,6 +18,8 @@ import os
 import sys
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -41,6 +43,7 @@ def _build(max_iters=_RELAX):
                                   topology=cob.TripartiteRegisterTopology())
 
 
+@pytest.mark.slow
 class Epic410InvariantsTest(unittest.TestCase):
 
     @classmethod

@@ -28,6 +28,8 @@ import os
 import sys
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -48,6 +50,7 @@ _SEED = 410414
 _F3_MARGIN = 0.1
 
 
+@pytest.mark.slow
 class ProtonFlavorNegativeResultTest(unittest.TestCase):
 
     @classmethod

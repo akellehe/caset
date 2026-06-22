@@ -19,6 +19,8 @@ import importlib.util
 import pathlib
 import unittest
 
+import pytest
+
 import tessera
 
 cob = tessera.cobordism
@@ -36,6 +38,7 @@ _ORACLE = [[(2, 13, 14), (8, 31, 32), (10, 22, 36)],
 _ORACLE = [[tuple(sorted(h)) for h in w] for w in _ORACLE]
 
 
+@pytest.mark.slow
 class FinerLatticeTest(unittest.TestCase):
 
     @classmethod

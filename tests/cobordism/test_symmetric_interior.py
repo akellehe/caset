@@ -25,6 +25,8 @@ import cmath
 import math
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -209,6 +211,7 @@ class SymmetricLorentzianTest(unittest.TestCase):
         m = cob.TransportCobordism(_NEUTRAL, max_iters=0, seed=0, topology=trt)
         self.assertGreater(sum(1 for x in self._l2(m) if x < -1e-9), 0)
 
+    @pytest.mark.slow
     def test_worldlines_stay_timelike_no_spurious_photon(self):
         # The symmetric counterpart of the prism's photon test, and a finding: on the
         # symmetric interior the relax keeps ALL worldlines uniformly timelike (-0.3) --

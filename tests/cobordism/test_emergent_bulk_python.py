@@ -31,6 +31,8 @@ import subprocess
 import sys
 import unittest
 
+import pytest
+
 import numpy as np
 
 import tessera
@@ -176,6 +178,7 @@ class MeridianTwoBoundaryTest(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+@pytest.mark.slow
 class SurgeryMovesB1Test(unittest.TestCase):
     """3: the SURGERY search moves b_1 0 -> 1 on its own; the matched meridian then
     realizes, the flipped one still floors on the opened handle."""
@@ -255,6 +258,7 @@ class HarmonicCriterionTest(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+@pytest.mark.slow
 class ExampleSelfVerifiesTest(unittest.TestCase):
     """The committed example runs end-to-end and exits 0 (its own assertions)."""
 

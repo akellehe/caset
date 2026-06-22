@@ -18,6 +18,8 @@ import importlib.util
 import pathlib
 import unittest
 
+import pytest
+
 _EXAMPLE = (pathlib.Path(__file__).resolve().parents[2]
             / "examples" / "cobordism" / "proton_observables.py")
 _spec = importlib.util.spec_from_file_location("proton_observables", _EXAMPLE)
@@ -25,6 +27,7 @@ _obs = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_obs)
 
 
+@pytest.mark.slow
 class ProtonObservablesTest(unittest.TestCase):
     """All observables are read off ONE relaxed geometry; a short relax keeps the
     test quick (the reading interface is what is under test, not the relax depth)."""
