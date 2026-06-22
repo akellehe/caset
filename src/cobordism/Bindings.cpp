@@ -37,6 +37,7 @@
 #include "cobordism/TripartiteRegisterTopology.h"
 #include "cobordism/BipartiteCreationTopology.h"
 #include "cobordism/EmergentEventTopology.h"
+#include "cobordism/FixedBipartiteSequenceTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -1651,6 +1652,48 @@ prepared states, reproduces the harmonic overlap.)doc")
            "the U-turn twist); layer-independent.")
       .def("u_turn_twisted", &EmergentEventTopology::uTurnTwisted,
            "Whether the U-turn (anti-baryon) twist is applied (default false).");
+
+  // === FixedBipartiteSequenceTopology (#438, Experiment B) ===
+  py::class_<FixedBipartiteSequenceTopology, EmergentEventTopology,
+             std::shared_ptr<FixedBipartiteSequenceTopology>>(
+      m, "FixedBipartiteSequenceTopology",
+      "The fixed-bipartite-sequence event cobordism (#438, Experiment B): the "
+      "SAME EmergentEventTopology (#434) structure -- shared SymmetricWindowSurface "
+      "stacked over n_layers, tube-connected (#378), never welded -- reused "
+      "VERBATIM (this is a subclass; build is inherited), but with the intermediate "
+      "result window R at every interior temporal layer ADDITIONALLY pinned to the "
+      "colored 3bar diquark (the #416-twisted antisymmetric combination q_A ^ q_B "
+      "of the quark inputs). The endpoints A,B,C @ bottom and R @ top stay "
+      "color-emergent (as #434). Probes whether the connected bulk HOSTS the strong "
+      "3bar (read its own r_U via residualForPeriods over the diquark holes) that A "
+      "only weakly produced. Inherits set_layers/set_lorentzian_worldlines/"
+      "set_u_turn_twist/window_holes_at_layer/... from EmergentEventTopology.")
+      .def(py::init<>())
+      .def("set_pin_intermediate",
+           &FixedBipartiteSequenceTopology::setPinIntermediate, py::arg("on"),
+           "Turn the intermediate-diquark pin on/off (default ON). Off reproduces "
+           "the pure #434 emergent-intermediate experiment on the same subclass "
+           "(a control: the diquark is NOT pinned, the endpoints relax as in A).")
+      .def("pins_intermediate",
+           &FixedBipartiteSequenceTopology::pinsIntermediate,
+           "Whether the intermediate diquark is pinned (default true).")
+      .def("set_diquark_color",
+           &FixedBipartiteSequenceTopology::setDiquarkColor, py::arg("color"),
+           "Override the colored 3bar diquark color (a 3-vector over R's three "
+           "color holes). Unset (empty) => derived as the normalized antisymmetric "
+           "q_A ^ q_B of the two pinned quark inputs.")
+      .def("diquark_color_for",
+           &FixedBipartiteSequenceTopology::diquarkColorFor, py::arg("states"),
+           "The colored 3bar diquark color that will be pinned for the given "
+           "pinned states (A,B,C,R[,diquark]): the override / fifth state if "
+           "supplied, else the normalized antisymmetric q_A ^ q_B. Exposed so the "
+           "read-out can report exactly what was imposed.")
+      .def("diquark_holes", &FixedBipartiteSequenceTopology::diquarkHoles,
+           "Window R's three color holes at the middle slice -- the canonical "
+           "diquark holes for the per-window r_U (hosted-vs-floored) read-out.")
+      .def("diquark_signs", &FixedBipartiteSequenceTopology::diquarkSigns,
+           "The orientation-reversed (3bar, #416-twisted) per-hole signs of the "
+           "diquark window at the middle slice.");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
