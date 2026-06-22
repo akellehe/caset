@@ -35,6 +35,7 @@
 #include "cobordism/CobordismRelaxer.h"
 #include "cobordism/TransportCobordism.h"
 #include "cobordism/TripartiteRegisterTopology.h"
+#include "cobordism/BipartiteCreationTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -1534,6 +1535,60 @@ prepared states, reproduces the harmonic overlap.)doc")
            "prism extrusion (residual ~4e-2). The symmetric interior uses the uniform "
            "metric; the VR seed requires on=False (prism), the Lorentzian seed works "
            "on both.");
+
+  py::class_<BipartiteCreationTopology, TopologyBuilder,
+             std::shared_ptr<BipartiteCreationTopology>>(
+      m, "BipartiteCreationTopology",
+      "The bipartite q/qbar creation node (#435): the time U-turn of one fermion "
+      "line, realized as a SPLIT of the color register -- one seed window into TWO "
+      "emergent windows (q, qbar) on one connected surface (the mirror of "
+      "TripartiteRegisterTopology's 3->1 merge). Punches the first three A4 windows "
+      "(seed=0, q=1, qbar=2) of the shared SymmetricWindowSurface; pair neutrality "
+      "(sigma_q + sigma_qbar = -sigma_seed) is the surface's Stokes relation. With "
+      "set_lorentzian_worldlines the creation-vertex/U-turn edges go timelike so the "
+      "electric sector is non-empty and Q = oint_S E is non-degenerate (an "
+      "all-spacelike relax gives E = 0 -- the degenerate case). emergesResult; d = 3.")
+      .def(py::init<>())
+      .def("set_lorentzian_worldlines",
+           &BipartiteCreationTopology::setLorentzianWorldlines,
+           py::arg("worldline_lsq") = -1.0,
+           "Make the creation node Lorentzian: the cross-time (creation-vertex / "
+           "U-turn) edges go timelike (l^2 = worldline_lsq < 0), so the dual Regge "
+           "action is complex and the electric (timelike-leg) sector is non-empty -- "
+           "the precondition for a non-degenerate emergent Gauss-law charge. Unset => "
+           "all-spacelike (Riemannian), E = 0 (the degenerate case).")
+      .def("set_u_turn_twist", &BipartiteCreationTopology::setUTurnTwist,
+           py::arg("on") = true,
+           "Apply the orientation-reversing U-turn twist (#416) to the antiquark "
+           "window: reverse its induced orientation so qbar carries the opposite "
+           "(time-reversed) charge of q -- the geometric realization of qbar = q "
+           "backward in time. On by default; False for the untwisted symmetric pair.")
+      .def("set_frequency", &BipartiteCreationTopology::setFrequency,
+           py::arg("frequency"),
+           "Set the geodesic subdivision frequency N >= 2 (tunable lattice "
+           "granularity, #404); N=2 (default) is the 42-vertex base.")
+      .def("temporal_flip_count", &BipartiteCreationTopology::temporalFlipCount,
+           "The number of TemporalOrientation flips (apex PT-reflection layers) = the "
+           "count of time U-turns. The creation node is a SINGLE reflection, so this "
+           "is 1: the flip is localized to the one creation vertex and the propagation "
+           "slabs are orientation-coherent (no per-slice PT alternation, #429).")
+      .def("u_turn_twisted", &BipartiteCreationTopology::uTurnTwisted,
+           "Whether the antiquark U-turn twist is applied (the bridge then reads "
+           "Q_qbar = -oint E so the pair charge cancels).")
+      .def("seed_window", &BipartiteCreationTopology::seedWindow,
+           "The seed window's three color holes (window 0, the pinned input).")
+      .def("quark_window", &BipartiteCreationTopology::quarkWindow,
+           "The quark window's three color holes (window 1, the result block).")
+      .def("antiquark_window", &BipartiteCreationTopology::antiquarkWindow,
+           "The antiquark window's three color holes (window 2, the second emergent "
+           "result, read separately by the bridge).")
+      .def("seed_signs", &BipartiteCreationTopology::seedSigns,
+           "The seed window's per-hole induced-orientation signs.")
+      .def("quark_signs", &BipartiteCreationTopology::quarkSigns,
+           "The quark window's per-hole induced-orientation signs.")
+      .def("antiquark_signs", &BipartiteCreationTopology::antiquarkSigns,
+           "The antiquark window's per-hole induced-orientation signs (sign-reversed "
+           "by the U-turn twist relative to the quark window).");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",

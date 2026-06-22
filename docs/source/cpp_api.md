@@ -182,6 +182,10 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} TripartiteRegisterTopology.h
 ```
+```{doxygenfile} SymmetricWindowSurface.h
+```
+```{doxygenfile} BipartiteCreationTopology.h
+```
 
 ## Quantum
 
