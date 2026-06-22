@@ -196,6 +196,17 @@ bool RemoveMove::proposePreGeometric() {
   return true;
 }
 
+void RemoveMove::removeIncidentSubSimplices() {
+  // After the incident top cells are gone, every remaining simplex on v_ is a
+  // sub-top facet/hinge orphaned by the removal. Snapshot first: removeSimplex
+  // mutates v_'s simplex list.
+  std::vector<SimplexPtr> sub(v_->getSimplices().begin(),
+                              v_->getSimplices().end());
+  for (const auto &s : sub) {
+    if (!s->isStale()) st_->removeSimplex(s);
+  }
+}
+
 bool RemoveMove::applyPreGeometric() {
   // Capture the vertex and its incident edges for rollback.  Pre-geometric
   // vertices are coordinate-free, so getCoordinates() would throw; an empty
@@ -212,6 +223,14 @@ bool RemoveMove::applyPreGeometric() {
 
   // Remove the d+1 incident cells.
   for (const auto &s : incident_) st_->removeSimplex(s);
+
+  // Drop the sub-simplices (facets/hinges) those cells materialised on v: with
+  // v's top cells gone they are orphans, and leaving them registered lets a
+  // later materialisation reuse them by fingerprint carrying a now-stale pointer
+  // to v once removeIfIsolated frees v and rollback recreates it as a fresh
+  // object — which would corrupt the dual-volume / deficit coface walk over the
+  // restored star. rollback re-materialises clean ones referencing the new v.
+  removeIncidentSubSimplices();
 
   // Remove edges incident to v from both endpoints + the global list.
   Edges inCopy(v_->getInEdges().begin(), v_->getInEdges().end());
@@ -260,6 +279,12 @@ bool RemoveMove::apply() {
 
   // 2. Remove the 2d incident simplices.
   for (const auto &s : incident_) st_->removeSimplex(s);
+
+  // 2b. Drop the now-orphaned sub-simplices the removed cells materialised on v
+  // (see applyPreGeometric for the stale-pointer rationale): rollback recreates
+  // v as a fresh object, so any lingering facet/hinge that still points at the
+  // old v would corrupt the restored star's dual/coface walk.
+  removeIncidentSubSimplices();
 
   // 3. Remove edges incident to v from both endpoints + the global list.
   // Mirrors CDT::remove's cleanup.

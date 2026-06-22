@@ -103,12 +103,24 @@ std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
     // Hinges are (d-2)-simplices. In 4D, these are triangles (3 vertices).
     // They are registered in the spacetime's simplex list (sub-simplices
     // are registered during getFacets()).
+    //
+    // Only *genuine* hinges count toward the Regge action: a (d-2)-face of at
+    // least one current top (d)-cell. A Pachner move that removes a cell can
+    // leave a lazily-materialised hinge registered with no surviving top coface
+    // (an orphan); ``lorentzianDeficitAngle`` then returns a bare 2π for it
+    // while its gradient maps are empty, so an unfiltered sum would let the
+    // resident action and ``actionGradientExact`` disagree (#365/#371). Skipping
+    // orphans (``hasTopCoface``) makes ``dualReggeAction`` a pure function of the
+    // current top-cell set — exactly equal to a from-scratch rebuild — so the
+    // action is invariant under any move∘move⁻¹ that restores those cells. This
+    // is bookkeeping (which hinges are real), not a change to the action S =
+    // Σ_h |★h|·ε_h itself.
     int d = spacetime_->getMetric()->getSignature()->getDimensions();
     int hingeSize = d - 1; // (d-2)-simplex has (d-1) vertices
 
     std::vector<SimplexPtr> hinges;
     for (const auto &s : spacetime_->getSimplices()) {
-        if (static_cast<int>(s->size()) == hingeSize)
+        if (static_cast<int>(s->size()) == hingeSize && s->hasTopCoface())
             hinges.push_back(s);
     }
     return hinges;

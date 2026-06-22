@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -717,6 +718,45 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
     return B;
 }
 
+std::vector<double> Simplex::cayleyMengerCanonical(
+    bool wickRotate, std::unordered_map<std::uint64_t, int> &pos1) const {
+    const int dPlus1 = static_cast<int>(vertices.size());
+    pos1.clear();
+    if (dPlus1 < 1) return {};
+
+    // Canonical order: vertices sorted by ascending id (the reference orientation).
+    std::vector<VertexPtr> sorted(vertices.begin(), vertices.end());
+    std::sort(sorted.begin(), sorted.end(),
+              [](const VertexPtr a, const VertexPtr b) {
+                  return a->getId() < b->getId();
+              });
+    for (int i = 0; i < dPlus1; ++i)
+        pos1[sorted[static_cast<std::size_t>(i)]->getId()] = i + 1;  // border-offset
+
+    std::unordered_map<std::uint64_t, double> sqMap;
+    for (const auto &e : edges) {
+        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
+                  Fingerprint::mix64(e->getTarget()->getId());
+        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
+                               : e->getSquaredLength().real();
+    }
+    auto getSq = [&](int i, int j) -> double {
+        if (i == j) return 0.0;
+        auto fp = Fingerprint::mix64(sorted[static_cast<std::size_t>(i)]->getId()) ^
+                  Fingerprint::mix64(sorted[static_cast<std::size_t>(j)]->getId());
+        auto it = sqMap.find(fp);
+        return it != sqMap.end() ? it->second : 0.0;
+    };
+
+    const int n = dPlus1 + 1;
+    std::vector<double> B(static_cast<std::size_t>(n) * n, 0.0);
+    for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
+    for (int i = 0; i < dPlus1; ++i)
+        for (int j = 0; j < dPlus1; ++j)
+            B[(i + 1) * n + (j + 1)] = getSq(i, j);
+    return B;
+}
+
 double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
     int dPlus1 = static_cast<int>(vertices.size());
 
@@ -792,10 +832,22 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     // Signed (non-Wick) Cayley-Menger cofactors → the dihedral cosine ratio r,
     // UN-clamped. std::acos on its complex extension returns the ordinary angle
     // for |r| <= 1 and a boost (complex) for |r| > 1 — see the header.
+    //
+    // Evaluate in the canonical (sorted-by-id) frame: the signed cofactor sign fix
+    // below (Cii<0) is sensitive to the order the cell's vertices are stored in, so
+    // a cell a Pachner move stored in causal order would otherwise yield a
+    // different deficit than the same geometry built sorted — making the action
+    // depend on build history. The canonical frame makes it a true invariant.
     const int n = dPlus1 + 1;
-    const auto B = cayleyMengerMatrix(/*wickRotate=*/false);
+    std::unordered_map<std::uint64_t, int> pos1;
+    const auto B = cayleyMengerCanonical(/*wickRotate=*/false, pos1);
     const auto cof = cofactorMatrix(B, n);
-    const int bi = vi + 1, bj = vj + 1;
+    int bi = pos1[vertices[vi]->getId()];
+    int bj = pos1[vertices[vj]->getId()];
+    // The Cii<0 sign fix below is asymmetric in (i,j); anchor it on the lower
+    // canonical position so the result does not depend on which opposite vertex
+    // the (stored) ordering happened to present first.
+    if (bi > bj) std::swap(bi, bj);
     const double Cij = cof[static_cast<std::size_t>(bi) * n + bj];
     const double Cii = cof[static_cast<std::size_t>(bi) * n + bi];
     const double Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
@@ -812,15 +864,10 @@ std::complex<double> Simplex::lorentzianDeficitAngle() const {
     if (!spacetime || vertices.empty()) return twoPi;
     const int topSize =
         spacetime->getMetric()->getSignature()->getDimensions() + 1;
+    (void)topSize;
     cd sum(0.0, 0.0);
-    for (const auto &sigma : vertices[0]->getSimplices()) {
-        if (static_cast<int>(sigma->size()) != topSize) continue;
-        bool containsAll = true;
-        for (std::size_t i = 1; i < vertices.size(); ++i)
-            if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
-        if (containsAll)
-            sum += sigma->lorentzianDihedralAngle(const_cast<Simplex *>(this));
-    }
+    for (auto *sigma : incidentTopCells())
+        sum += sigma->lorentzianDihedralAngle(const_cast<Simplex *>(this));
     return twoPi - sum;
 }
 
@@ -834,13 +881,8 @@ Simplex::lorentzianDeficitAngleGradient() const {
 
     // The top cells containing this hinge -- the same set lorentzianDeficitAngle
     // sums over. d(eps)/dl^2 = -sum_tau d(theta_tau)/dl^2.
-    for (const auto &tau : vertices[0]->getSimplices()) {
-        if (static_cast<int>(tau->size()) != topSize) continue;
-        bool containsAll = true;
-        for (std::size_t i = 1; i < vertices.size(); ++i)
-            if (!tau->hasVertex(vertices[i])) { containsAll = false; break; }
-        if (!containsAll) continue;
-
+    (void)topSize;
+    for (auto *tau : incidentTopCells()) {
         const auto &tv = tau->getVertices();
         const int m = static_cast<int>(tv.size());          // d + 1
         // local indices of the two vertices NOT in the hinge
@@ -1307,21 +1349,53 @@ double Simplex::circumradiusSquared() const {
     return r2;
 }
 
-double Simplex::dualVolume() const {
-    // Ambient top dimension: walk up cofaces to a top simplex (empty cofaces).
+std::vector<Simplex *> Simplex::incidentTopCells() const {
+    std::vector<Simplex *> out;
+    if (!spacetime || vertices.empty()) return out;
+    const int topSize =
+        spacetime->getMetric()->getSignature()->getDimensions() + 1;
+    std::unordered_set<std::uint64_t> seen;
+    for (const auto &anchor : vertices) {
+        for (const auto &sigma : anchor->getSimplices()) {
+            if (static_cast<int>(sigma->size()) != topSize) continue;
+            bool containsAll = true;
+            for (const auto &hv : vertices)
+                if (!sigma->hasVertex(hv)) { containsAll = false; break; }
+            if (!containsAll) continue;
+            if (seen.insert(sigma->fingerprint.fingerprint()).second)
+                out.push_back(sigma);
+        }
+    }
+    return out;
+}
+
+bool Simplex::hasTopCoface() const {
+    if (!spacetime || vertices.empty()) return false;
+    const int topSize =
+        spacetime->getMetric()->getSignature()->getDimensions() + 1;
+    if (static_cast<int>(size()) >= topSize) return true;  // already top
+    return !incidentTopCells().empty();
+}
+
+int Simplex::ambientTopDimension() const {
+    // Prefer the metric dimension: it is the genuine ambient n and is immune to
+    // orphan cofaces a move may have left dangling in this simplex's coface list.
+    if (spacetime) return spacetime->getMetric()->getSignature()->getDimensions();
+    // Coordinate-free fixture (no spacetime): fall back to the coface walk.
     const Simplex* top = this;
     while (!top->getCofaces().empty()) top = top->getCofaces()[0];
-    const int n = static_cast<int>(top->size()) - 1;
-    return dualVolRec(this, n);
+    return static_cast<int>(top->size()) - 1;
+}
+
+double Simplex::dualVolume() const {
+    return dualVolRec(this, ambientTopDimension());
 }
 
 std::map<std::pair<std::uint64_t, std::uint64_t>, double>
 Simplex::dualVolumeGradient() const {
     std::map<std::pair<std::uint64_t, std::uint64_t>, double> grad;
     if (vertices.empty()) return grad;
-    const Simplex* top = this;
-    while (!top->getCofaces().empty()) top = top->getCofaces()[0];
-    const int n = static_cast<int>(top->size()) - 1;
+    const int n = ambientTopDimension();
     const int k = static_cast<int>(size()) - 1;
     if (k != n - 2) return grad;          // the (n-2) hinge the Regge action needs
 
@@ -1381,9 +1455,7 @@ Simplex::dualVolumeHessian() const {
     using EK = std::pair<std::uint64_t, std::uint64_t>;
     std::map<std::pair<EK, EK>, double> hess;
     if (vertices.empty()) return hess;
-    const Simplex* top = this;
-    while (!top->getCofaces().empty()) top = top->getCofaces()[0];
-    const int n = static_cast<int>(top->size()) - 1;
+    const int n = ambientTopDimension();
     const int k = static_cast<int>(size()) - 1;
     if (k != n - 2) return hess;
 

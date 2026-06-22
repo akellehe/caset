@@ -585,6 +585,11 @@ its top cells match.)doc")
            "Return a uniformly random vertex.")
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"),
            "Remove a top-dimensional simplex from the complex.")
+      .def("pruneOrphanedSimplices", &Spacetime::pruneOrphanedSimplices,
+           "Unregister sub-simplices (facets/hinges) orphaned by a move — "
+           "registered but no longer a face of any current top cell. Returns "
+           "the count pruned. Restores the simplex set to the exact closure of "
+           "the top cells (bit-identical across an apply/rollback round trip).")
       .def("swapVertexLabels", &Spacetime::swapVertexLabels, py::arg("v1"), py::arg("v2"),
            R"doc(Swap the integer IDs of two vertices ([BGL] Sec. 2.2.1).
 

@@ -66,6 +66,14 @@ private:
   bool proposePreGeometric();
   bool applyPreGeometric();
 
+  // Unregister every sub-top-dimensional simplex (facet/hinge) still incident to
+  // ``v_`` after its top cells have been removed. Those are orphans now, and
+  // leaving them registered would let a later facet materialisation reuse them
+  // by fingerprint while they hold a stale pointer to ``v_`` (which rollback
+  // recreates as a fresh object), corrupting the restored star's dual/coface
+  // walk. Call after removing the incident top cells, before removing ``v_``.
+  void removeIncidentSubSimplices();
+
   Spacetime *st_;
   std::unique_ptr<std::mt19937> ownedRng_;
   std::mt19937 *rng_;

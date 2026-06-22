@@ -8,6 +8,7 @@
 #include <complex>
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -369,6 +370,18 @@ class Simplex {
     /// negative when the circumcenter–vertex displacement is timelike.
     [[nodiscard]] double circumradiusSquared() const;
 
+    /// True iff this simplex is a genuine face of the current triangulation:
+    /// some registered **top** cell (a (d+1)-vertex simplex, d the ambient
+    /// spacetime dimension) contains all of this simplex's vertices. A Pachner
+    /// move that removes a cell can leave a lazily-materialised sub-face (facet
+    /// or (d-2)-hinge) registered with no surviving top coface — an *orphan*.
+    /// Such an orphan is no longer part of the simplicial complex and must not
+    /// contribute to the Regge action (it would carry a spurious bare-2π
+    /// deficit). The hinge set the action sums over is exactly the (d-2)-faces
+    /// for which this returns ``true``. Mirrors the top-cell scan in
+    /// ``lorentzianDeficitAngle``; requires a non-null owning spacetime.
+    [[nodiscard]] bool hasTopCoface() const;
+
     /// Signed **circumcentric dual cell volume** |★σ| of this k-simplex in the
     /// surrounding complex (the dual is (n−k)-dimensional, n = top dimension
     /// reached via cofaces). Built from circumcenters by the standard DEC
@@ -547,6 +560,39 @@ class Simplex {
     /// MUST NOT invoke this while the simplex is still registered.
     void releaseChildren() noexcept;
   private:
+    /// The current top (d+1)-cells that contain every vertex of this simplex,
+    /// deduplicated by fingerprint. Scans the simplex lists of *all* this
+    /// simplex's vertices (not just ``vertices[0]``): a Pachner remove∘rollback
+    /// recreates a deleted vertex as a fresh object, so a sub-simplex created
+    /// before the removal can keep a (now stale, empty-list) pointer to the old
+    /// vertex while the genuine cofaces register on the new one. Anchoring the
+    /// scan on a single stored vertex would then miss them — yielding a spurious
+    /// bare-2π deficit. Membership is tested by vertex id, so the mixed-pointer
+    /// case resolves correctly. The set is identical to a single-vertex scan
+    /// whenever no vertex is stale.
+    [[nodiscard]] std::vector<Simplex *> incidentTopCells() const;
+
+    /// Bordered Cayley-Menger matrix built over this simplex's vertices sorted by
+    /// ascending id -- the ChainComplex reference orientation. ``pos1`` is filled
+    /// with each vertex id's 1-based bordered position in that canonical order.
+    /// The signed (Lorentzian) dihedral-angle cofactor formula is sensitive to the
+    /// order a cell's vertices happen to be stored in (a Pachner move stores them
+    /// in causal, not sorted, order), which would make ``lorentzianDeficitAngle``
+    /// -- and hence ``dualReggeAction`` -- depend on build history rather than on
+    /// the geometry. Evaluating the standard formula in this fixed reference frame
+    /// makes the deficit a true relabelling/order invariant. Identical to
+    /// ``cayleyMengerMatrix`` when the cell is already stored sorted.
+    [[nodiscard]] std::vector<double> cayleyMengerCanonical(
+        bool wickRotate, std::unordered_map<std::uint64_t, int> &pos1) const;
+
+    /// Ambient top dimension n for the circumcentric-dual recursion. When this
+    /// simplex carries an owning spacetime, n is read straight off the metric
+    /// signature — robust to stale/orphan cofaces a Pachner move may leave in
+    /// this simplex's coface list (which would otherwise misdirect a
+    /// ``getCofaces()[0]`` walk and corrupt ``dualVolume``). Falls back to the
+    /// historical coface walk for coordinate-free fixtures with no spacetime.
+    [[nodiscard]] int ambientTopDimension() const;
+
     Spacetime *spacetime{nullptr};
     TemporalOrientation orientation{};
 

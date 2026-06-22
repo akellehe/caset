@@ -367,6 +367,10 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "Signed circumcentric dual cell content |*sigma| in the surrounding "
            "complex (DEC recursion over cofaces, n = top dimension). "
            "Signature-aware; negative content is meaningful.")
+      .def("hasTopCoface", &Simplex::hasTopCoface,
+           "True iff this simplex is a genuine face of a current top cell (not "
+           "an orphan stranded by a Pachner move). The hinges the Regge action "
+           "sums over are exactly the (d-2)-faces for which this is true.")
       .def("dualVolumeGradient", &Simplex::dualVolumeGradient,
            "Exact analytic d(dualVolume)/d(l^2_e) for each surrounding edge, as a "
            "dict {(v0,v1): float}. Differentiates the DEC circumradius recursion "
