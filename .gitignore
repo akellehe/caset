@@ -22,3 +22,4 @@ examples/quantum/_out/
 papers/
 refs/
 third_party/itensor_tdvp/
+.venv-build/

@@ -186,6 +186,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} BipartiteCreationTopology.h
 ```
+```{doxygenfile} EmergentEventTopology.h
+```
 
 ## Quantum
 

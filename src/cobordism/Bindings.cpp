@@ -36,6 +36,7 @@
 #include "cobordism/TransportCobordism.h"
 #include "cobordism/TripartiteRegisterTopology.h"
 #include "cobordism/BipartiteCreationTopology.h"
+#include "cobordism/EmergentEventTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
 namespace py = pybind11;
@@ -1589,6 +1590,67 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def("antiquark_signs", &BipartiteCreationTopology::antiquarkSigns,
            "The antiquark window's per-hole induced-orientation signs (sign-reversed "
            "by the U-turn twist relative to the quark window).");
+
+  // === EmergentEventTopology (#434, Experiment A) ===
+  py::class_<EmergentEventTopology, TopologyBuilder,
+             std::shared_ptr<EmergentEventTopology>>(
+      m, "EmergentEventTopology",
+      "The bilaterally-pinned event cobordism (#434): the reusable builder that "
+      "lays out a multi-body color event as ONE connected, tube-connected (#378, "
+      "never welded) cobordism over several temporal slices (the shared "
+      "SymmetricWindowSurface stacked over nLayers by prismCells). readoutHoles "
+      "pins the three input windows A,B,C at the BOTTOM slice and the result "
+      "window R at the TOP slice (bilateral) -- the middle slices are pinned "
+      "nowhere, so the intermediates EMERGE off the relax. This is the direct test "
+      "of the #435 finding: bilateral pinning supplies the constraint the singly-"
+      "pinned creation node lacked, regulating the conformal runaway. "
+      "set_lorentzian_worldlines makes the cross-layer worldlines timelike so "
+      "Q = oint_S E is non-empty. emergesResult; d = 3. Reused by #438.")
+      .def(py::init<>())
+      .def("set_layers", &EmergentEventTopology::setLayers, py::arg("n_layers"),
+           "Set the number of temporal layers (>= 2): the staircase stacks the "
+           "holed surface over n_layers product layers (slices 0..n_layers). At "
+           "least 2 so a middle (unpinned, emergent) slice exists between the "
+           "pinned bottom (ell=0) and top (ell=n_layers) layers.")
+      .def("set_lorentzian_worldlines",
+           &EmergentEventTopology::setLorentzianWorldlines,
+           py::arg("worldline_lsq") = -1.0,
+           "Make the event Lorentzian: the cross-temporal-layer (worldline) edges "
+           "go timelike (l^2 = worldline_lsq < 0), so the dual Regge action is "
+           "complex (Im S != 0) and the electric sector is non-empty -- the "
+           "precondition for a non-degenerate emergent Gauss-law charge. Unset => "
+           "all-spacelike (Riemannian), E = 0 (the degenerate control).")
+      .def("set_u_turn_twist", &EmergentEventTopology::setUTurnTwist,
+           py::arg("on") = true,
+           "Apply the orientation-reversing U-turn twist (#416): reverse every "
+           "window's induced-orientation covector, so each carried period and "
+           "emergent charge is the sign-flipped image of the untwisted (proton) "
+           "sector -- the anti-baryon (anti-proton) sector, qbar = q backward in "
+           "time, so the two sectors' charges cancel (total charge 0, CPT). Off by "
+           "default (the proton sector).")
+      .def("set_frequency", &EmergentEventTopology::setFrequency,
+           py::arg("frequency"),
+           "Set the geodesic subdivision frequency N >= 2 (#404); N=2 (default) is "
+           "the 42-vertex base that hosts the 12 disjoint holes.")
+      .def("n_layers", &EmergentEventTopology::nLayers,
+           "The number of temporal layers (>= 2); slices are 0..n_layers.")
+      .def("stride", &EmergentEventTopology::stride,
+           "The per-layer vertex stride (base holed-surface vertex count): a base "
+           "vertex v at layer ell has cobordism id v + ell*stride.")
+      .def("window_count", &EmergentEventTopology::windowCount,
+           "The number of windows (4: A,B,C,R).")
+      .def("window_holes_at_layer", &EmergentEventTopology::windowHolesAtLayer,
+           py::arg("window"), py::arg("layer"),
+           "The three color holes (sorted absolute cobordism-vertex triples) of "
+           "window w (0=A,1=B,2=C,3=R) at temporal layer (0..n_layers): the base "
+           "holes shifted by layer*stride. The handle for reading any window's "
+           "period at any temporal slice off the relaxed geometry.")
+      .def("window_signs_at_layer", &EmergentEventTopology::windowSignsAtLayer,
+           py::arg("window"), py::arg("layer"),
+           "The per-hole induced-orientation signs of window w (sign-reversed by "
+           "the U-turn twist); layer-independent.")
+      .def("u_turn_twisted", &EmergentEventTopology::uTurnTwisted,
+           "Whether the U-turn (anti-baryon) twist is applied (default false).");
 
   // === MergeCobordism (#363 / #388) ===
   py::class_<MergeCobordism> mc(m, "MergeCobordism",
