@@ -1336,6 +1336,22 @@ void Spacetime::removeSimplex(const SimplexPtr &simplex) {
   unregisterSimplex(simplex);
 }
 
+std::size_t Spacetime::pruneOrphanedSimplices() {
+  const int topSize = getMetric()->getSignature()->getDimensions() + 1;
+  // Snapshot first: removeSimplex mutates the simplex list (and the vertices'
+  // incidence lists that hasTopCoface reads), so we must not iterate it live.
+  std::vector<SimplexPtr> snapshot(getSimplices().begin(), getSimplices().end());
+  std::size_t pruned = 0;
+  for (const auto &s : snapshot) {
+    if (s->isStale()) continue;
+    if (static_cast<int>(s->size()) >= topSize) continue;  // keep top cells
+    if (s->hasTopCoface()) continue;                       // genuine face
+    removeSimplex(s);
+    ++pruned;
+  }
+  return pruned;
+}
+
 void Spacetime::removeEdge(const EdgePtr &edge) {
   if (edge == nullptr) return;
   if (auto src = edge->getSource()) src->removeOutEdge(edge);

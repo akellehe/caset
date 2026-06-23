@@ -470,6 +470,21 @@ class Spacetime {
     /// @param simplex The simplex \f$ \sigma \f$ to remove
     void removeSimplex(const SimplexPtr &simplex);
 
+    /// Unregister every *orphaned* sub-simplex: a non-top simplex (size < d+1)
+    /// that is no longer a face of any current top cell. Lazy facet/hinge
+    /// materialisation (``Simplex::getFacets``) registers sub-simplices that a
+    /// later Pachner move can strand once it removes the top cells above them.
+    /// Such orphans are not part of the simplicial complex — they only persist
+    /// as stale cache entries — yet they linger in ``getSimplices()``. The Regge
+    /// action already excludes them (``Simplex::hasTopCoface`` filtering in
+    /// ``ReggeSolver``), so this is not needed for action correctness; it is for
+    /// callers (e.g. a move-driven optimiser, or a round-trip invariance check)
+    /// that want the registered simplex set to stay exactly the closure of the
+    /// top cells — bit-identical before and after an apply∘rollback. Edges and
+    /// vertices are left untouched (the move classes own those). Returns the
+    /// number of simplices pruned.
+    std::size_t pruneOrphanedSimplices();
+
     /// Fully remove an edge from the complex: drop it from its endpoints'
     /// in/out edge lists and from the EdgeList. The caller is responsible
     /// for first removing any simplices that contain the edge.
