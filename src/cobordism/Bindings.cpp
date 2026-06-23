@@ -25,6 +25,7 @@
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/MergeCobordism.h"
+#include "cobordism/OrientedCone.h"
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
 #include "cobordism/Register.h"
@@ -135,6 +136,20 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
           "under order-preserving relabelings (e.g. a layer shift). Raises "
           "on mixed-dimension cells, a facet with > 2 cofaces, or a "
           "non-orientable surface.")
+      .def_static(
+          "orientationCovector", &ChainComplex::orientationCovector,
+          py::arg("top_cells"),
+          "The induced-orientation covector eps in {+/-1}^len(top_cells): the "
+          "per-cell sign from orienting a whole top-cell complex by facet-"
+          "sharing propagation (component roots = lex-smallest cells, +1; "
+          "across an interior facet the two induced signs cancel). The result "
+          "aligns to the sorted-unique (canonical C_d) order of the cells. "
+          "Unlike fundamentalClass() it does NOT require closedness (boundary "
+          "facets impose nothing), so it reads the orientation of an open "
+          "refinement region (a stellar cone star, a CDT slab). Determined "
+          "combinatorially, independent of geometry, vertex labels, and input "
+          "order. Raises on mixed-dimension cells, a facet with > 2 cofaces, "
+          "or a non-orientable propagation contradiction.")
       .def("intersectionForm", &ChainComplex::intersectionForm,
            "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")
@@ -1856,4 +1871,40 @@ prepared states, reproduces the harmonic overlap.)doc")
                              "the read-out is symmetric with the signed inputs "
                              "(relabeling-invariant sigma_R). Empty if unsigned.")
       .def_property_readonly("stats", &TransportCobordism::stats);
+
+  // ----- Orientation-safe, dualComplexValid-gated stellar cone (#459) -----
+  py::class_<OrientedCone>(m, "OrientedCone",
+      R"doc(Orientation-safe, dualComplexValid-gated stellar cone move (#459).
+
+A thin wrapper that REUSES the T1 cone primitives (AddMove / RemoveMove in
+PachnerMode.PreGeometric, the 1<->(d+1) stellar subdivision) and accepts a cone
+only if the resulting complex is a valid, ORIENTABLE manifold -- so a cone can
+never flip a local induced orientation and inject a spurious sign into the
+complex (Lorentzian/Sorkin) deficit, i.e. into Im(dualReggeAction). On rejection
+the move is rolled back and the complex is left bit-identical. For a topology-
+PRESERVING refinement the gate always passes; it is the safety net the topology-
+CHANGING surgical variant (T3) relies on.)doc")
+      .def(py::init<Spacetime *>(), py::arg("spacetime"), py::keep_alive<1, 2>(),
+           "Bind the cone to a spacetime (does not mutate it).")
+      .def("coneIn", &OrientedCone::coneIn, py::arg("seed"),
+           "(ok, reason): gated stellar 1->(d+1) refinement (cone-in) via the "
+           "T1 AddMove(PreGeometric). Accepts only a valid orientable manifold; "
+           "otherwise rolls back and names the reason. No-op if a cone is "
+           "already applied.")
+      .def("coneOut", &OrientedCone::coneOut, py::arg("seed"),
+           "(ok, reason): gated stellar (d+1)->1 weld (cone-out) via the T1 "
+           "RemoveMove(PreGeometric), under the same gate.")
+      .def("rollback", &OrientedCone::rollback,
+           "Undo the last accepted cone (the T1 move's exact inverse), "
+           "restoring the complex bit-for-bit. False if nothing is applied.")
+      .def_property_readonly("isApplied", &OrientedCone::isApplied,
+           "True iff a cone is accepted and not yet rolled back.")
+      .def("orientationCovector", &OrientedCone::orientationCovector,
+           "The induced-orientation covector of the CURRENT top complex "
+           "(ChainComplex.orientationCovector over its top cells), aligned to "
+           "the canonical sorted-unique top-cell order. Restored exactly across "
+           "a cone round trip. Raises if the current complex is non-orientable.")
+      .def("validate", &OrientedCone::validate,
+           "(ok, reason): the manifold + orientability verdict on the CURRENT "
+           "complex -- the same gate coneIn / coneOut apply.");
 }

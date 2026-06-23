@@ -1042,4 +1042,87 @@ std::vector<int> ChainComplex::endSignCovector(
   return sigma;
 }
 
+std::vector<int> ChainComplex::orientationCovector(
+    const std::vector<std::vector<std::uint64_t>> &topCells) {
+  using Cell = std::vector<std::uint64_t>;
+  const auto joinIds = [](const Cell &c) {
+    std::string out = "(";
+    for (std::size_t i = 0; i < c.size(); ++i) {
+      if (i) out += ",";
+      out += std::to_string(c[i]);
+    }
+    return out + ")";
+  };
+  if (topCells.empty()) return {};
+
+  // Sorted-unique cells: the canonical C_d column order, so the returned
+  // covector aligns with orientedTopSimplices() / kSimplexVertices(dim) and is
+  // independent of the order topCells is supplied in.
+  std::set<Cell> uniq;
+  const std::size_t nv = topCells.front().size();
+  for (const auto &raw : topCells) {
+    if (raw.size() != nv)
+      throw std::runtime_error(
+          "ChainComplex::orientationCovector: cell " + joinIds(raw) + " has " +
+          std::to_string(raw.size()) + " vertices, expected " +
+          std::to_string(nv) + " (one dimension throughout)");
+    Cell c = raw;
+    std::sort(c.begin(), c.end());
+    uniq.insert(std::move(c));
+  }
+  const std::vector<Cell> cells(uniq.begin(), uniq.end());
+
+  // facet -> its cofaces as (cell index, boundary sign): facet j of a sorted
+  // cell drops vertex j and carries (-1)^j.
+  std::map<Cell, std::vector<std::pair<std::size_t, int>>> cofaces;
+  for (std::size_t ci = 0; ci < cells.size(); ++ci)
+    for (std::size_t j = 0; j < nv; ++j) {
+      Cell f;
+      f.reserve(nv - 1);
+      for (std::size_t i = 0; i < nv; ++i)
+        if (i != j) f.push_back(cells[ci][i]);
+      cofaces[f].emplace_back(ci, (j % 2 == 0) ? 1 : -1);
+    }
+  for (const auto &[f, at] : cofaces)
+    if (at.size() > 2)
+      throw std::runtime_error(
+          "ChainComplex::orientationCovector: facet " + joinIds(f) + " has " +
+          std::to_string(at.size()) + " cofaces (not a pseudomanifold)");
+
+  // Orient by propagation: across an interior facet the two induced signs must
+  // cancel (eps_b = -eps_a * s_a * s_b); boundary facets (one coface) impose
+  // nothing. Component roots are the lex-smallest unvisited cells, eps = +1.
+  std::vector<int> eps(cells.size(), 0);
+  for (std::size_t root = 0; root < cells.size(); ++root) {
+    if (eps[root] != 0) continue;
+    eps[root] = 1;
+    std::vector<std::size_t> stack{root};
+    while (!stack.empty()) {
+      const std::size_t a = stack.back();
+      stack.pop_back();
+      for (std::size_t j = 0; j < nv; ++j) {
+        Cell f;
+        f.reserve(nv - 1);
+        for (std::size_t i = 0; i < nv; ++i)
+          if (i != j) f.push_back(cells[a][i]);
+        const int sa = (j % 2 == 0) ? 1 : -1;
+        for (const auto &[b, sb] : cofaces.at(f)) {
+          if (b == a) continue;
+          const int want = -eps[a] * sa * sb;
+          if (eps[b] == 0) {
+            eps[b] = want;
+            stack.push_back(b);
+          } else if (eps[b] != want) {
+            throw std::runtime_error(
+                "ChainComplex::orientationCovector: orientation propagation "
+                "contradicts itself at facet " + joinIds(f) +
+                " (the complex is non-orientable)");
+          }
+        }
+      }
+    }
+  }
+  return eps;
+}
+
 }  // namespace tessera::cobordism
