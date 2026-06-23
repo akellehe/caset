@@ -170,6 +170,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} MergeCobordism.h
 ```
+```{doxygenfile} SurgicalCone.h
+```
 ```{doxygenfile} TransportCobordism.h
 ```
 ```{doxygenfile} CobordismRelaxer.h
