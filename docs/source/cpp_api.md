@@ -172,6 +172,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} OrientedCone.h
 ```
+```{doxygenfile} SurgicalCone.h
+```
 ```{doxygenfile} TransportCobordism.h
 ```
 ```{doxygenfile} CobordismRelaxer.h

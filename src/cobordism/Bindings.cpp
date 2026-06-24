@@ -26,6 +26,7 @@
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/MergeCobordism.h"
 #include "cobordism/OrientedCone.h"
+#include "cobordism/SurgicalCone.h"
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
 #include "cobordism/Register.h"
@@ -1967,4 +1968,49 @@ CHANGING surgical variant (T3) relies on.)doc")
       .def("validate", &OrientedCone::validate,
            "(ok, reason): the manifold + orientability verdict on the CURRENT "
            "complex -- the same gate coneIn / coneOut apply.");
+
+  // ----- Gated surgical cone-out/cone-in (topology change, #460) -----
+  py::class_<SurgicalCone>(m, "SurgicalCone",
+      R"doc(Gated surgical cone-out/cone-in: the topology-CHANGING move (#460, T3).
+
+The genuine b_k-hole creator of the Emergent Color Topology epic (#457). Pachner
+moves and the stellar refinement cone (OrientedCone, T1/T2) are topology-
+PRESERVING; this is not. coneOut removes one top cell (its orphaned edges, then
+any isolated vertex) -- on a closed manifold this opens a manifold-with-boundary
+and, for a cell disjoint from an existing hole, raises b_{d-1} by 1 (on S^3, the
+color register's b_2). coneIn adds one top cell on a fresh vertex joined to d
+existing vertices, lowering b_{d-1} by 1 when it caps a hole. EVERY move is gated
+on ChainComplex.dualComplexIsValid (a valid manifold-with-boundary; the #429
+n>=4 recursive check) -- surgery is allowed BECAUSE it is gated; bypassing the
+gate is what broke the #353 weld. Rejected moves roll back bit-identically.
+Accepted moves stack; rollback() undoes the last LIFO, restoring every edge
+length and phase so a round trip leaves the dual Regge action (Re AND Im)
+invariant.)doc")
+      .def(py::init<Spacetime *>(), py::arg("spacetime"), py::keep_alive<1, 2>(),
+           "Bind the cone to a spacetime (does not mutate it).")
+      .def("coneOut", &SurgicalCone::coneOut, py::arg("cell"),
+           "(ok, reason): gated surgical cone-out -- remove the top cell whose "
+           "sorted vertex ids equal `cell` (plus orphaned edges and any vertex "
+           "thereby isolated). Accepts only a valid manifold-with-boundary; "
+           "otherwise restores the cell and names the reason. Rejects removing "
+           "the last top cell.")
+      .def("coneIn", &SurgicalCone::coneIn, py::arg("target_verts"),
+           "(ok, reason): gated surgical cone-in -- create a fresh vertex, join "
+           "it to the d `target_verts` to form a new top cell. Accepts only a "
+           "valid manifold-with-boundary; otherwise undoes the additions.")
+      .def("rollback", &SurgicalCone::rollback,
+           "Undo the last accepted move (LIFO), restoring the complex bit-for-"
+           "bit (edge lengths and phases). False if nothing is applied.")
+      .def("rollbackAll", &SurgicalCone::rollbackAll,
+           "Roll every accepted move back; returns the number undone.")
+      .def_property_readonly("depth", &SurgicalCone::depth,
+           "Number of accepted, not-yet-rolled-back moves on the stack.")
+      .def_property_readonly("isApplied", &SurgicalCone::isApplied,
+           "True iff at least one move is accepted and not yet rolled back.")
+      .def("bettiNumbers", &SurgicalCone::bettiNumbers,
+           "Betti numbers b_0..b_n (over Q) of the CURRENT complex -- the read-"
+           "out the b_k-delta tests assert a surgical move shifts by one.")
+      .def("validate", &SurgicalCone::validate,
+           "(ok, reason): the manifold-with-boundary verdict on the CURRENT "
+           "complex -- the same gate coneOut / coneIn apply.");
 }
