@@ -10,9 +10,21 @@ Gram determinant, `∂V/∂ℓ²_e = (V/2)·tr(G⁻¹ ∂_e G)`, reusing the sam
 (#354). Here it must match a central finite difference of `volume()` to ~machine
 precision across every degree (triangle, tetrahedron, pentatope).
 """
+import math
 import unittest
 
 import tessera as T
+
+
+def _top_of_dim(st, nverts):
+    return next(s for s in st.getSimplices()
+               if len([v for v in s.getVertices()]) == nverts)
+
+
+def _l2(st):
+    return {(min(e.getSource().getId(), e.getTarget().getId()),
+             max(e.getSource().getId(), e.getTarget().getId())):
+            e.getSquaredLength().real for e in st.getEdgeList().toVector()}
 
 
 def _jittered_s4():
@@ -32,6 +44,42 @@ def _jittered_s4():
 
 def _key(a, b):
     return (min(a, b), max(a, b))
+
+
+class VolumeGradientHandCalcTest(unittest.TestCase):
+    """Closed-form values and the exact Euler homogeneity identity — the rigorous
+    checks (finite difference is only a roundoff-limited cross-check; the optimizer
+    uses the analytic gradient, never FD)."""
+
+    def test_equilateral_triangle_closed_form(self):
+        # All ℓ²=1: A = √3/4, and ∂A/∂ℓ²_e = 1/(4√3) for every edge (by symmetry).
+        st = T.Spacetime.fromCells(2, [[0, 1, 2]], 1.0, 0.0)
+        tri = _top_of_dim(st, 3)
+        self.assertAlmostEqual(tri.volume(), math.sqrt(3) / 4, places=12)
+        for _e, dA in tri.volumeGradient().items():
+            self.assertAlmostEqual(dA, 1.0 / (4 * math.sqrt(3)), places=12)
+
+    def test_regular_tetrahedron_closed_form(self):
+        # All ℓ²=1: V = 1/(6√2), and ∂V/∂ℓ²_e = 1/(24√2) for every edge.
+        st = T.Spacetime.fromCells(3, [[0, 1, 2, 3]], 1.0, 0.0)
+        tet = _top_of_dim(st, 4)
+        self.assertAlmostEqual(tet.volume(), 1.0 / (6 * math.sqrt(2)), places=12)
+        for _e, dV in tet.volumeGradient().items():
+            self.assertAlmostEqual(dV, 1.0 / (24 * math.sqrt(2)), places=12)
+
+    def test_euler_homogeneity_identity(self):
+        # A j-simplex volume is homogeneous of degree j/2 in ℓ² ⇒
+        # Σ_e ℓ²_e ∂V/∂ℓ²_e = (j/2)·V exactly (independent of finite difference).
+        for nverts, cell in [(3, [0, 1, 2]), (4, [0, 1, 2, 3])]:
+            st = T.Spacetime.fromCells(nverts - 1, [cell], 1.0, 0.0)
+            # jitter so the identity is non-trivial (not just the symmetric point)
+            for i, e in enumerate(st.getEdgeList().toVector()):
+                e.setSquaredLength(1.0 + 0.07 * (i % 4))
+            s = _top_of_dim(st, nverts)
+            l2 = _l2(st)
+            j = nverts - 1
+            euler = sum(l2[e] * dV for e, dV in s.volumeGradient().items())
+            self.assertAlmostEqual(euler, (j / 2.0) * s.volume(), places=12)
 
 
 class VolumeGradientTest(unittest.TestCase):

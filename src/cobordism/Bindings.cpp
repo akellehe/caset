@@ -285,6 +285,13 @@ Euclidean spectrum/kernel.)doc")
            "column order: per-k-simplex |volume| (W_0 = I). lorentzian=True returns "
            "the signed volume (timelike cells negative). Empty for k<0 or k above "
            "the top dimension.")
+      .def("laplacianGradient", &HodgeLaplacian::laplacianGradient, py::arg("k"),
+           py::arg("edgeA"), py::arg("edgeB"),
+           "Exact analytic dL_k^sym/dl^2_e of the symmetric metric Hodge Laplacian "
+           "(k>=1) w.r.t. one edge's squared length, flat |C_k|x|C_k| row-major. Only "
+           "the weights W_j=|vol| depend on l^2; built via dB_k = diag(a_{k-1})B_k + "
+           "B_k diag(b_k), a_j=dW_j/(2W_j), dW_j = Simplex.volumeGradient. Empty for "
+           "k<1 or an absent edge.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
            "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
       .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,

@@ -128,6 +128,20 @@ class HodgeLaplacian {
     /// cells still fall back to \f$ +1 \f$ so \f$ W_k \f$ stays invertible).
     [[nodiscard]] std::vector<double> weights(int k, bool lorentzian = false) const;
 
+    /// Exact analytic gradient \f$ \partial L_k^{\text{sym}} / \partial \ell^2_e \f$
+    /// of the symmetric metric Hodge Laplacian (\f$ k \ge 1 \f$) with respect to one
+    /// edge's squared length, as a flat \f$ |C_k|\times|C_k| \f$ row-major matrix in
+    /// the canonical column order. With \f$ L_k = B_k^\top B_k + B_{k+1}B_{k+1}^\top \f$,
+    /// \f$ B_k=\mathrm{diag}(\sqrt{W_{k-1}})\,\partial_k\,\mathrm{diag}(1/\sqrt{W_k}) \f$,
+    /// only the inner-product weights \f$ W_j=|\!\operatorname{vol}| \f$ depend on
+    /// \f$ \ell^2 \f$, so \f$ \partial B_k=\mathrm{diag}(a_{k-1})B_k+B_k\,\mathrm{diag}(b_k) \f$
+    /// with \f$ a_j=\tfrac{\partial W_j}{2W_j} \f$ — and \f$ \partial W_j \f$ is the
+    /// per-simplex `Simplex::volumeGradient` (signed for the `|vol|` weight). The
+    /// degree-generic keystone for the arbitrary-\f$ k \f$ \f$ r_U \f$ gradient.
+    /// Empty for \f$ k < 1 \f$ or an absent edge.
+    [[nodiscard]] std::vector<double> laplacianGradient(
+        int k, std::uint64_t edgeA, std::uint64_t edgeB) const;
+
     /// Whether \f$ \| L - L^\dagger \| \le \text{tol} \f$ (Frobenius norm) for
     /// the \f$ k = 0 \f$ Laplacian. True by construction.
     [[nodiscard]] bool isHermitian(double tol = 1e-12) const;
