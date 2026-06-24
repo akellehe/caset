@@ -25,6 +25,7 @@
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/MergeCobordism.h"
+#include "cobordism/OrientedCone.h"
 #include "cobordism/SurgicalCone.h"
 #include "cobordism/PreparedBoundaryState.h"
 #include "cobordism/RealizabilityOracle.h"
@@ -38,6 +39,7 @@
 #include "cobordism/TripartiteRegisterTopology.h"
 #include "cobordism/BipartiteCreationTopology.h"
 #include "cobordism/EmergentEventTopology.h"
+#include "cobordism/S3WindowSurface.h"
 #include "cobordism/FixedBipartiteSequenceTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
@@ -136,6 +138,20 @@ numbers (over ℚ and GF(2)), torsion coefficients, Euler characteristic, and th
           "under order-preserving relabelings (e.g. a layer shift). Raises "
           "on mixed-dimension cells, a facet with > 2 cofaces, or a "
           "non-orientable surface.")
+      .def_static(
+          "orientationCovector", &ChainComplex::orientationCovector,
+          py::arg("top_cells"),
+          "The induced-orientation covector eps in {+/-1}^len(top_cells): the "
+          "per-cell sign from orienting a whole top-cell complex by facet-"
+          "sharing propagation (component roots = lex-smallest cells, +1; "
+          "across an interior facet the two induced signs cancel). The result "
+          "aligns to the sorted-unique (canonical C_d) order of the cells. "
+          "Unlike fundamentalClass() it does NOT require closedness (boundary "
+          "facets impose nothing), so it reads the orientation of an open "
+          "refinement region (a stellar cone star, a CDT slab). Determined "
+          "combinatorially, independent of geometry, vertex labels, and input "
+          "order. Raises on mixed-dimension cells, a facet with > 2 cofaces, "
+          "or a non-orientable propagation contradiction.")
       .def("intersectionForm", &ChainComplex::intersectionForm,
            "Symmetric intersection form on free H^2 (flat b2 x b2), for a closed "
            "oriented 4-manifold; empty if n != 4 or b2 == 0.")
@@ -1593,6 +1609,31 @@ prepared states, reproduces the harmonic overlap.)doc")
            "The antiquark window's per-hole induced-orientation signs (sign-reversed "
            "by the U-turn twist relative to the quark window).");
 
+  // === S3WindowSurface (#453): the genuinely 3+1 D color-register slice ===
+  py::class_<S3WindowSurface::Surface>(
+      m, "S3Surface",
+      "The triangulated S^3 spatial slice (.faces: the K^2 top tetrahedra) and its "
+      "Z_3-symmetric color windows (.windows: windowCount x 3 hole tetrahedra).")
+      .def_readonly("faces", &S3WindowSurface::Surface::faces)
+      .def_readonly("windows", &S3WindowSurface::Surface::windows);
+  py::class_<S3WindowSurface>(
+      m, "S3WindowSurface",
+      "The genuinely 3+1 D color-register base slice (#453): a triangulated S^3 "
+      "(the join of two K-cycles) carrying symmetric, color-Z_3-equivariant windows "
+      "-- the faithful 4D analog of the S^2 SymmetricWindowSurface. The register "
+      "degree tracks the spatial dimension (ker L_{d-1}, holes = removed top "
+      "d-cells): on S^3 a window hole is a removed TETRAHEDRON (the b_2/k=2 "
+      "register), and each window is a Z_3 orbit (sigma = tau^{K/3}) of three "
+      "vertex-disjoint hole tetrahedra; removing 3*windowCount disjoint tetrahedra "
+      "gives b_2 = 3*windowCount - 1 (windowCount=4 => b_2=11, the S^2 proton's hole "
+      "budget lifted to S^3). Pure and deterministic.")
+      .def_static("build", &S3WindowSurface::build, py::arg("window_count") = 4,
+                  py::arg("granularity") = 1,
+                  "Build the S^3 slice + windows. window_count >= 1 (four matches "
+                  "the W_ABC A,B,C,R structure; one is the minimal color register); "
+                  "granularity >= 1 refines the lattice between the disjoint holes "
+                  "(K = 6*window_count*granularity).");
+
   // === EmergentEventTopology (#434, Experiment A) ===
   py::class_<EmergentEventTopology, TopologyBuilder,
              std::shared_ptr<EmergentEventTopology>>(
@@ -1634,6 +1675,26 @@ prepared states, reproduces the harmonic overlap.)doc")
            py::arg("frequency"),
            "Set the geodesic subdivision frequency N >= 2 (#404); N=2 (default) is "
            "the 42-vertex base that hosts the 12 disjoint holes.")
+      .def("set_s3_slice", &EmergentEventTopology::setS3Slice,
+           py::arg("on") = true,
+           "Build the genuinely 3+1 D event over a triangulated S^3 slice (#453) "
+           "instead of the 2+1 D S^2 slice: S3WindowSurface (join-of-cycles S^3 + "
+           "Z_3 windows of three hole TETRAHEDRA each, the b_2/k=2 register), holed "
+           "and stacked by the dimension-generic symmetric apex reflection "
+           "(symmetricStackCells, #429) into a genuine 4-manifold (pentatopes), "
+           "gated by the rigorous n=4 recursive dualComplexValid. Off => S^2.")
+      .def("s3_slice", &EmergentEventTopology::s3Slice,
+           "Whether the S^3 (3+1 D) spatial slice is selected (default false).")
+      .def("set_s3_windows", &EmergentEventTopology::setS3Windows,
+           py::arg("windows"),
+           "Set the number of S^3 color windows (>= 1; default 4 = A,B,C,R). The "
+           "holed slice carries b_2 = 3*windows - 1; fewer windows make a much "
+           "smaller 4-complex (one window is the minimal genuinely-4D event).")
+      .def("s3_windows", &EmergentEventTopology::s3Windows,
+           "The number of S^3 color windows (default 4).")
+      .def("register_degree", &EmergentEventTopology::registerDegree,
+           "The Hodge degree k the color register is read at: 1 (b_1, triangle "
+           "holes) on S^2; 2 (b_2, tetrahedral holes) on S^3. Always ker L_{d-1}.")
       .def("n_layers", &EmergentEventTopology::nLayers,
            "The number of temporal layers (>= 2); slices are 0..n_layers.")
       .def("stride", &EmergentEventTopology::stride,
@@ -1652,7 +1713,21 @@ prepared states, reproduces the harmonic overlap.)doc")
            "The per-hole induced-orientation signs of window w (sign-reversed by "
            "the U-turn twist); layer-independent.")
       .def("u_turn_twisted", &EmergentEventTopology::uTurnTwisted,
-           "Whether the U-turn (anti-baryon) twist is applied (default false).");
+           "Whether the U-turn (anti-baryon) twist is applied (default false).")
+      .def(
+          "build_cobordism",
+          [](EmergentEventTopology &self, std::size_t stateDim,
+             std::uint64_t seed) {
+            std::vector<std::vector<std::uint64_t>> boundaryCells;
+            auto st = self.build(stateDim, seed, boundaryCells);
+            return py::make_tuple(st, boundaryCells);
+          },
+          py::arg("state_dim") = 3, py::arg("seed") = 0,
+          "Build the event cobordism W directly (bypassing the k=1 TransportCobordism "
+          "harness): returns (cobordism, boundary_cells). For the S^3 (#453) mode the "
+          "cobordism is a genuine 4-manifold (read its register at register_degree()=2 "
+          "via EigenstateSynthesis(W, 2)); build() already gates it on the rigorous "
+          "n=4 recursive dualComplexValid.");
 
   // === FixedBipartiteSequenceTopology (#438, Experiment B) ===
   py::class_<FixedBipartiteSequenceTopology, EmergentEventTopology,
@@ -1857,6 +1932,42 @@ prepared states, reproduces the harmonic overlap.)doc")
                              "the read-out is symmetric with the signed inputs "
                              "(relabeling-invariant sigma_R). Empty if unsigned.")
       .def_property_readonly("stats", &TransportCobordism::stats);
+
+  // ----- Orientation-safe, dualComplexValid-gated stellar cone (#459) -----
+  py::class_<OrientedCone>(m, "OrientedCone",
+      R"doc(Orientation-safe, dualComplexValid-gated stellar cone move (#459).
+
+A thin wrapper that REUSES the T1 cone primitives (AddMove / RemoveMove in
+PachnerMode.PreGeometric, the 1<->(d+1) stellar subdivision) and accepts a cone
+only if the resulting complex is a valid, ORIENTABLE manifold -- so a cone can
+never flip a local induced orientation and inject a spurious sign into the
+complex (Lorentzian/Sorkin) deficit, i.e. into Im(dualReggeAction). On rejection
+the move is rolled back and the complex is left bit-identical. For a topology-
+PRESERVING refinement the gate always passes; it is the safety net the topology-
+CHANGING surgical variant (T3) relies on.)doc")
+      .def(py::init<Spacetime *>(), py::arg("spacetime"), py::keep_alive<1, 2>(),
+           "Bind the cone to a spacetime (does not mutate it).")
+      .def("coneIn", &OrientedCone::coneIn, py::arg("seed"),
+           "(ok, reason): gated stellar 1->(d+1) refinement (cone-in) via the "
+           "T1 AddMove(PreGeometric). Accepts only a valid orientable manifold; "
+           "otherwise rolls back and names the reason. No-op if a cone is "
+           "already applied.")
+      .def("coneOut", &OrientedCone::coneOut, py::arg("seed"),
+           "(ok, reason): gated stellar (d+1)->1 weld (cone-out) via the T1 "
+           "RemoveMove(PreGeometric), under the same gate.")
+      .def("rollback", &OrientedCone::rollback,
+           "Undo the last accepted cone (the T1 move's exact inverse), "
+           "restoring the complex bit-for-bit. False if nothing is applied.")
+      .def_property_readonly("isApplied", &OrientedCone::isApplied,
+           "True iff a cone is accepted and not yet rolled back.")
+      .def("orientationCovector", &OrientedCone::orientationCovector,
+           "The induced-orientation covector of the CURRENT top complex "
+           "(ChainComplex.orientationCovector over its top cells), aligned to "
+           "the canonical sorted-unique top-cell order. Restored exactly across "
+           "a cone round trip. Raises if the current complex is non-orientable.")
+      .def("validate", &OrientedCone::validate,
+           "(ok, reason): the manifold + orientability verdict on the CURRENT "
+           "complex -- the same gate coneIn / coneOut apply.");
 
   // ----- Gated surgical cone-out/cone-in (topology change, #460) -----
   py::class_<SurgicalCone>(m, "SurgicalCone",

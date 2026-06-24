@@ -170,6 +170,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} MergeCobordism.h
 ```
+```{doxygenfile} OrientedCone.h
+```
 ```{doxygenfile} SurgicalCone.h
 ```
 ```{doxygenfile} TransportCobordism.h
@@ -185,6 +187,8 @@ exclusions to see the entire interface.
 ```{doxygenfile} TripartiteRegisterTopology.h
 ```
 ```{doxygenfile} SymmetricWindowSurface.h
+```
+```{doxygenfile} S3WindowSurface.h
 ```
 ```{doxygenfile} BipartiteCreationTopology.h
 ```

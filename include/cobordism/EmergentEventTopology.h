@@ -138,6 +138,44 @@ class EmergentEventTopology : public TopologyBuilder {
     /// @param frequency the subdivision frequency \f$ N \ge 2 \f$.
     void setFrequency(int frequency);
 
+    /// Build the genuinely **3+1 D** event over a triangulated \f$ S^3 \f$ spatial
+    /// slice (#453) instead of the 2+1 D \f$ S^2 \f$ slice. When set, `build()`
+    /// uses `S3WindowSurface` (the join-of-cycles \f$ S^3 \f$ with color windows of
+    /// three vertex-disjoint hole **tetrahedra** each), removes the window tetrahedra
+    /// (opening the \f$ b_2 \f$ color register --- the \f$ \ker L_2 \f$ degree
+    /// \f$ k=2 \f$, the \f$ S^3 \f$ analog of \f$ S^2 \f$'s \f$ b_1 \f$/\f$ k=1 \f$),
+    /// and stacks the holed slice over the temporal layers with the **dimension-generic
+    /// symmetric apex reflection** (`Spacetime::symmetricStackCells`, #429) into a
+    /// genuine **4-manifold** (pentatope top cells), gated by the rigorous \f$ n\ge4 \f$
+    /// recursive `dualComplexValid`. The window holes, signs, and bilateral pinning
+    /// flow exactly as in the \f$ S^2 \f$ path but with 4-vertex tetrahedral holes
+    /// read at `registerDegree()` \f$ =2 \f$. Off by default (the \f$ S^2 \f$ slice).
+    /// @param on whether to build the \f$ S^3 \f$ (3+1 D) slice.
+    void setS3Slice(bool on = true);
+
+    /// Whether the \f$ S^3 \f$ (3+1 D) spatial slice is selected (default false).
+    [[nodiscard]] bool s3Slice() const { return s3Slice_; }
+
+    /// Set the number of color windows on the \f$ S^3 \f$ slice (\f$ \ge 1 \f$;
+    /// default 4 = the A,B,C,R structure). The holed slice then carries
+    /// \f$ b_2 = 3\cdot\text{windows} - 1 \f$. Fewer windows make a much smaller
+    /// 4-complex (the like-resolution four-window event is the 10^3-10^4x cost the
+    /// #418 spike budgeted for); one window is the minimal genuinely-4D event. Only
+    /// the first four windows are bilaterally pinned by `readoutHoles` (A,B,C,R).
+    /// @param windows the number of \f$ \mathbb{Z}_3 \f$ color windows.
+    void setS3Windows(int windows);
+
+    /// The number of \f$ S^3 \f$ color windows (default 4).
+    [[nodiscard]] int s3Windows() const { return s3Windows_; }
+
+    /// The Hodge degree \f$ k \f$ at which the color register is read: \f$ k=1 \f$
+    /// (\f$ b_1 \f$, triangle holes) on the \f$ S^2 \f$ slice; \f$ k=2 \f$
+    /// (\f$ b_2 \f$, tetrahedral holes) on the \f$ S^3 \f$ slice. The register is
+    /// always \f$ \ker L_{d-1} \f$ for a \f$ d \f$-dimensional spatial slice.
+    [[nodiscard]] std::size_t registerDegree() const override {
+      return s3Slice_ ? 2u : 1u;
+    }
+
     /// The number of temporal layers (\f$ \ge 2 \f$); slices are \f$ 0..nLayers \f$.
     [[nodiscard]] int nLayers() const { return nLayers_; }
 
@@ -171,6 +209,8 @@ class EmergentEventTopology : public TopologyBuilder {
     bool lorentzian_{false};    // timelike cross-layer worldlines
     double lorentzWorldlineLsq_{-1.0};
     bool uTurnTwist_{false};    // anti-baryon (orientation-reversing) sector
+    bool s3Slice_{false};       // genuinely 3+1 D: S^3 slice (#453) vs the S^2 slice
+    int s3Windows_{4};          // number of S^3 color windows (b_2 = 3*windows - 1)
 
     std::uint64_t stride_{0};   // per-layer vertex stride (base vertex count)
 
