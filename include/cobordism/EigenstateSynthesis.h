@@ -336,6 +336,20 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
+    /// **Arbitrary-degree** analytic gradient \f$ \partial r_U / \partial l^2_e \f$
+    /// of `residualForPeriods` — the degree-generic generalization of
+    /// `residualForPeriodsGradient` (which is \f$ k = 1 \f$ only). Eigendecomposes
+    /// \f$ M = L_k \f$ (`HodgeLaplacian`), uses the per-edge analytic
+    /// \f$ \partial L_k/\partial l^2 \f$ (`HodgeLaplacian::laplacianGradient`, built on
+    /// `Simplex::volumeGradient`) through the same first-order eigenvector-perturbation
+    /// derivation, with the period covector + leak read from each removed-\f$(k\!+\!1)\f$-cell
+    /// hole's facet boundary. Returned in `ChainComplex` 1-cell (edge) order. Equals
+    /// the \f$ k = 1 \f$ loop core on triangle holes; validated by the exact Euler
+    /// identity \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = -r_U \f$ at every degree.
+    [[nodiscard]] std::vector<double> periodGradientGeneral(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
     /// FP32 cuBLAS (SGEMM) GPU port of `residualForPeriodsGradient` (#348): the
     /// identical analytic gradient, but the dominant per-edge GEMMs
     /// (\f$ U_{nn}^\top f_a \f$, the core product, \f$ dU_n = U_{nn}(\dots) \f$,

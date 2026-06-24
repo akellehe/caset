@@ -115,13 +115,27 @@ the localized **gradient norm** over the affected edges.
    Richardson-extrapolated FD to 4e-9). The period-gap family is the separate #377
    hard period-pin `r_ψ`, kept as-is.
 
-   *Arbitrary-k analytic gradient (Stage-2 affordability):* the existing
-   `residualForPeriodsGradient` is k=1-only (hardcoded `laplacian(1)` / edge-loop
-   covector). Generalizing it needs (a) **`Simplex::volumeGradient`** — the per-degree
-   Hodge-weight gradient `∂W_j/∂ℓ²` (DONE: Jacobi on the Gram determinant, reusing the
-   #354 machinery; exact to ~1e-11 across triangle/tet/pentatope), (b) a general-k
-   `∂L_k/∂ℓ²` assembled from it, (c) a faithful general-k port of the eigenvector-
-   perturbation gradient over the `assembleRegisterReadout` period map. (b)/(c) remain.
+   *Arbitrary-k analytic gradient (Stage-2 affordability) — DONE.* The existing
+   `residualForPeriodsGradient` was k=1-only (hardcoded `laplacian(1)` / edge-loop
+   covector). It now generalizes through three exact, hand-verified pieces:
+   - (a) **`Simplex::volumeGradient`** — the per-degree Hodge-weight gradient `∂W_j/∂ℓ²`
+     (Jacobi on the Gram determinant, reusing the #354 machinery). Verified by
+     closed forms (equilateral triangle `1/(4√3)`, regular tet `1/(24√2)`) and the
+     Euler identity `Σ_e ℓ²_e ∂V/∂ℓ²_e = (j/2)V`.
+   - (b) **`HodgeLaplacian::laplacianGradient`** — general-k `∂L_k/∂ℓ²` (`L_k =
+     BₖᵀBₖ + Bₖ₊₁Bₖ₊₁ᵀ`, `dBₖ = diag(a_{k-1})Bₖ + Bₖdiag(b_k)`). Verified by the Euler
+     identity `Σ_e ℓ²_e ∂L_k/∂ℓ²_e = −½L_k` (3.4e-15 at k=1, k=2).
+   - (c) **`EigenstateSynthesis::periodGradientGeneral`** — the general-k `∂r_U/∂ℓ²`:
+     `M = L_k`, the per-edge `∂L_k/∂ℓ²` through the same eigenvector-perturbation
+     derivation, period covector from each removed-(k+1)-cell hole's facets. Matches
+     the k=1 `residualForPeriodsGradient` to 1.7e-15, and satisfies the exact Euler
+     identity `Σ_e ℓ²_e ∂r_U/∂ℓ²_e = −r_U` (4e-16 at k=1, 3.4e-14 at k=2).
+
+   Finite difference is roundoff-limited and does **not** converge; the optimizer
+   uses these analytic gradients, and the tests certify them against hand-derived
+   identities, not FD. (Consolidation — routing `residualForPeriodsGradient` through
+   the general path and retiring the k=1-only `periodGradientOverLoops` — is a clean
+   follow-up once the general path has soaked.)
 4. **ΔF = Δ‖∇S_Regge‖² + Γ·Δr_U**, and correctness tests: `ΔF` matches a full `F`
    recompute to ~machine precision across **every** move class — Pachner, surgical
    cone-out/in, and edge-length perturbation — including across a topology change.

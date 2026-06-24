@@ -643,6 +643,16 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "the per-edge low-rank dM/dl^2 through eigenvector perturbation theory "
            "and the pseudo-inverse derivative (the C++ port of the relaxation's "
            "Python drU). Raises on a hole/target length mismatch.")
+      .def("periodGradientGeneral",
+           &EigenstateSynthesis::periodGradientGeneral,
+           py::arg("holes"), py::arg("target_periods"),
+           "Arbitrary-degree analytic gradient d r_U / d l^2 of residualForPeriods "
+           "(the general-k generalization of residualForPeriodsGradient, which is "
+           "k=1 only). M = L_k, the per-edge dL_k/dl^2 = HodgeLaplacian."
+           "laplacianGradient (built on Simplex.volumeGradient), same eigenvector-"
+           "perturbation derivation, period covector from each removed-(k+1)-cell "
+           "hole's facets. ChainComplex 1-cell (edge) order. Equals the k=1 path on "
+           "triangle holes; exact (Σ l² ∂r_U = −r_U).")
       .def("residualForPeriodsGradientGpu",
            &EigenstateSynthesis::residualForPeriodsGradientGpu,
            py::arg("holes"), py::arg("target_periods"),
