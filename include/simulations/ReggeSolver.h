@@ -122,6 +122,31 @@ class ReggeSolver {
     [[nodiscard]] std::complex<double> dualReggeActionOverHinges(
         const std::vector<std::vector<std::uint64_t>> &hinges) const;
 
+    /// The edges whose per-edge action gradient `∂S/∂ℓ²_e` a move over the given top
+    /// cells can change — the **affected-edge index** for the incremental
+    /// `Δ‖∇S_Regge‖²`. A move changes `∂S/∂ℓ²_e` only when an affected hinge
+    /// (`hingeFacesOfCells(cells)`) contributes to `e`, i.e. only for edges that share
+    /// a top cell with an affected hinge. Returns those edges as sorted `(a,b)` id
+    /// pairs (deduped). Build it from a move's touched cells; because cells are
+    /// added/removed, take the **union** of this set evaluated before and after the
+    /// move, then use that fixed set for both legs of `gradientNorm2OverEdges`.
+    [[nodiscard]] std::vector<std::pair<std::uint64_t, std::uint64_t>>
+    affectedEdgesOfCells(
+        const std::vector<std::vector<std::uint64_t>> &cells) const;
+
+    /// The **localized** squared gradient norm `Σ_{e∈edges} |∂S/∂ℓ²_e|²` of the dual
+    /// (Sorkin) Regge action — the geometry term of the optimizer objective
+    /// `F = ‖∇S_Regge‖² + Γ·r_U` (extremize the action, δS=0). Each `∂S/∂ℓ²_e` is the
+    /// **full** per-edge gradient `Σ_{h∋e}[∂|★h|·ε_h + |★h|·∂ε_h]` summed over *all*
+    /// hinges incident to `e` (`e`'s star — local), built from the same per-hinge
+    /// analytic gradients as `actionGradientExact`; **complex** modulus (Re and Im
+    /// together). Over a FIXED affected-edge set across a move,
+    /// `Δ‖∇S_Regge‖² = after − before` is exact (every edge outside the set keeps its
+    /// gradient and cancels). `gradientNorm2OverEdges` over *all* edges equals
+    /// `Σ_e |actionGradientExact()_e|²`.
+    [[nodiscard]] double gradientNorm2OverEdges(
+        const std::vector<std::pair<std::uint64_t, std::uint64_t>> &edges) const;
+
     /// Point-particle matter action: \f$S_{\text{matter}} = -M \sum_{e \in W} \sqrt{-\ell^2_e}\f$.
     [[nodiscard]] double matterAction() const;
 

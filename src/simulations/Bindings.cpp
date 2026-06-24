@@ -274,6 +274,18 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "tuples that are genuine (registered, with a top coface; orphans → 0). "
            "Same per-term measure as dualReggeAction. Evaluated over a FIXED hinge "
            "set across a move, ΔS = after − before is exact.")
+      .def("affectedEdgesOfCells", &ReggeSolver::affectedEdgesOfCells,
+           py::arg("cells"),
+           "The edges (sorted (a,b) id pairs) whose ∂S/∂ℓ²_e a move over the given "
+           "top cells can change — the affected-edge index for Δ‖∇S_Regge‖². Union "
+           "the before/after evaluations for a fixed set across the move.")
+      .def("gradientNorm2OverEdges", &ReggeSolver::gradientNorm2OverEdges,
+           py::arg("edges"),
+           "Localized squared gradient norm Σ_e |∂S/∂ℓ²_e|² (the geometry term of "
+           "F = ‖∇S_Regge‖² + Γ·r_U, extremize δS=0). Each ∂S/∂ℓ²_e is the full "
+           "per-edge complex gradient (e's star). Over a FIXED affected-edge set "
+           "across a move, Δ‖∇S‖² = after − before is exact; over all edges it "
+           "equals Σ_e |actionGradientExact()_e|².")
       .def("matterAction", &ReggeSolver::matterAction,
            "Point-particle matter action: S_matter = -M Σ √(-ℓ²) along worldlines.")
       .def("totalAction", &ReggeSolver::totalAction,

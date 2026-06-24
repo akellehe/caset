@@ -99,5 +99,98 @@ class IncrementalDeltaSReggeTest(unittest.TestCase):
         self.assertLess(abs(d_full - d_loc), _TOL)
 
 
+def _cdt_toroid(n_simplices=200):
+    """A built 4D Lorentzian CDT toroid — a genuinely large complex (Im S ≠ 0),
+    where the hinge-local update touches far fewer than all edges."""
+    sig = T.Signature(4, T.Lorentzian)
+    st = T.Spacetime(T.Metric(True, sig), T.CDT, 1.0, 1.0, T.PREFERRED, T.Toroid())
+    st.build(n_simplices)
+    return st
+
+
+def _grad_norm2(rs):
+    """‖∇S_Regge‖² = Σ_e |∂S/∂ℓ²_e|² from the exact analytic gradient."""
+    return sum(abs(z) ** 2 for z in rs.actionGradientExact())
+
+
+class GradientNormObjectiveTest(unittest.TestCase):
+    """The geometry term of `F = ‖∇S_Regge‖² + Γ·r_U` (extremize, δS=0), localized."""
+
+    def test_over_all_edges_equals_action_gradient_exact(self):
+        # The localized gradient norm over the full edge set IS ‖∇S_Regge‖².
+        st = _sphere4()
+        rs = T.ReggeSolver(st, T.MatterConfiguration())
+        all_edges = [(e.getSource().getId(), e.getTarget().getId())
+                     for e in st.getEdgeList().toVector()]
+        self.assertLess(abs(rs.gradientNorm2OverEdges(all_edges) - _grad_norm2(rs)),
+                        _TOL)
+
+    def test_delta_under_edge_perturbation_is_exact(self):
+        # Δ‖∇S_Regge‖² over the FIXED affected-edge set == full Δ, machine precision.
+        st = _sphere4()
+        rs = T.ReggeSolver(st, T.MatterConfiguration())
+        e = st.getEdgeList().toVector()[3]
+        ev = {e.getSource().getId(), e.getTarget().getId()}
+        aff = [list(c) for c in _tops(st) if ev.issubset(set(c))]
+        E = rs.affectedEdgesOfCells(aff)
+        self.assertTrue(E)
+
+        before_full, before_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
+        orig = e.getSquaredLength()
+        e.setSquaredLength(orig * 1.07)
+        after_full, after_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
+        e.setSquaredLength(orig)
+
+        self.assertLess(abs((after_full - before_full) - (after_loc - before_loc)),
+                        _TOL)
+
+    def test_delta_under_pachner_move_is_exact(self):
+        # Across a PreGeometric stellar cone-in, Δ‖∇S_Regge‖² over the affected-edge
+        # set (union of the before/after evaluations, fixed across the move) == full Δ.
+        st_before = _sphere4()
+        rs_before = T.ReggeSolver(st_before, T.MatterConfiguration())
+        st_after = _sphere4()
+        rs_after = T.ReggeSolver(st_after, T.MatterConfiguration())
+        mv = T.AddMove(st_after, 5, False, T.PachnerMode.PreGeometric, False)
+        self.assertTrue(mv.propose() and mv.apply())
+
+        affected = [list(c) for c in (_tops(st_before) ^ _tops(st_after))]
+        # cells are added/removed ⇒ union the affected-edge set on both complexes
+        E = sorted(set(map(tuple, rs_before.affectedEdgesOfCells(affected)))
+                   | set(map(tuple, rs_after.affectedEdgesOfCells(affected))))
+        self.assertTrue(E)
+
+        d_full = _grad_norm2(rs_after) - _grad_norm2(rs_before)
+        d_loc = (rs_after.gradientNorm2OverEdges(E)
+                 - rs_before.gradientNorm2OverEdges(E))
+        self.assertLess(abs(d_full - d_loc), _TOL)
+
+
+class LocalityTest(unittest.TestCase):
+    """On a large complex the update is genuinely local — it touches far fewer than
+    all edges — while staying exact. This is the whole point of T4 (the #418 cost)."""
+
+    def test_edge_perturbation_is_local_and_exact(self):
+        st = _cdt_toroid()
+        rs = T.ReggeSolver(st, T.MatterConfiguration())
+        edges = st.getEdgeList().toVector()
+        n_total = len(edges)
+        e = edges[n_total // 2]
+        ev = {e.getSource().getId(), e.getTarget().getId()}
+        aff = [list(c) for c in _tops(st) if ev.issubset(set(c))]
+        E = rs.affectedEdgesOfCells(aff)
+
+        # genuinely local: the perturbed edge touches a small neighborhood
+        self.assertLess(len(E), n_total // 2, "update is not local on a large mesh")
+
+        before_full, before_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
+        orig = e.getSquaredLength()
+        e.setSquaredLength(orig * 1.05)
+        after_full, after_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
+        e.setSquaredLength(orig)
+        self.assertLess(abs((after_full - before_full) - (after_loc - before_loc)),
+                        1e-9)  # larger complex ⇒ looser abs tol, still ~machine
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -213,6 +213,122 @@ std::complex<double> ReggeSolver::dualReggeActionOverHinges(
     return S;
 }
 
+std::vector<std::pair<std::uint64_t, std::uint64_t>>
+ReggeSolver::affectedEdgesOfCells(
+    const std::vector<std::vector<std::uint64_t>> &cells) const {
+    // A move changes ∂S/∂ℓ²_e only where an affected hinge contributes to e, i.e.
+    // for edges sharing a top cell with an affected hinge. So: affected hinges →
+    // their incident top cells → those tops' edges. Top cells are reached through a
+    // hinge vertex's incidences (getSimplices), so this never depends on edges /
+    // hinges being materialized as registered simplices.
+    std::unordered_map<std::uint64_t, VertexPtr> vidx;
+    for (const auto &v : spacetime_->getVertexList()->toVector())
+        if (v != nullptr) vidx.emplace(v->getId(), v);
+    const int topSize =
+        spacetime_->getMetric()->getSignature()->getDimensions() + 1;
+
+    std::set<std::pair<std::uint64_t, std::uint64_t>> E;
+    for (const auto &ht : hingeFacesOfCells(cells)) {
+        const auto v0 = vidx.find(ht[0]);
+        if (v0 == vidx.end()) continue;
+        const std::set<std::uint64_t> need(ht.begin(), ht.end());
+        for (auto *sigma : v0->second->getSimplices()) {
+            if (static_cast<int>(sigma->size()) != topSize) continue;
+            std::set<std::uint64_t> sv;
+            for (const auto &v : sigma->getVertices()) sv.insert(v->getId());
+            if (!std::includes(sv.begin(), sv.end(), need.begin(), need.end()))
+                continue;
+            const auto &tv = sigma->getVertices();
+            for (std::size_t i = 0; i < tv.size(); ++i)
+                for (std::size_t j = i + 1; j < tv.size(); ++j) {
+                    const std::uint64_t a = tv[i]->getId(), b = tv[j]->getId();
+                    E.insert({std::min(a, b), std::max(a, b)});
+                }
+        }
+    }
+    return {E.begin(), E.end()};
+}
+
+double ReggeSolver::gradientNorm2OverEdges(
+    const std::vector<std::pair<std::uint64_t, std::uint64_t>> &edges) const {
+    std::unordered_map<std::uint64_t, VertexPtr> vidx;
+    for (const auto &v : spacetime_->getVertexList()->toVector())
+        if (v != nullptr) vidx.emplace(v->getId(), v);
+
+    std::set<std::pair<std::uint64_t, std::uint64_t>> E;
+    for (const auto &e : edges)
+        E.insert({std::min(e.first, e.second), std::max(e.first, e.second)});
+
+    // Every hinge that contributes to a query edge: the (d-2)-faces of the top cells
+    // containing that edge. The top cells are reached through an edge endpoint's
+    // incidences (getSimplices) — edges are not registered as 1-simplices, so resolve
+    // via the vertex. Summing each query edge's full per-edge gradient over these
+    // hinges is exact: they are precisely e's star for every e in E.
+    const int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    const int topSize = d + 1;
+    const auto hingeSize = static_cast<std::size_t>(d - 1);
+    std::set<std::vector<std::uint64_t>> hinges;
+    for (const auto &e : E) {
+        const auto va = vidx.find(e.first);
+        if (va == vidx.end()) continue;
+        for (auto *sigma : va->second->getSimplices()) {
+            if (static_cast<int>(sigma->size()) != topSize) continue;
+            bool hasB = false;
+            for (const auto &v : sigma->getVertices())
+                if (v->getId() == e.second) { hasB = true; break; }
+            if (!hasB) continue;
+            std::vector<std::uint64_t> cs;
+            for (const auto &v : sigma->getVertices()) cs.push_back(v->getId());
+            std::sort(cs.begin(), cs.end());
+            cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
+            if (cs.size() < hingeSize) continue;
+            std::vector<bool> mask(cs.size(), false);
+            std::fill(mask.begin(),
+                      mask.begin() + static_cast<std::ptrdiff_t>(hingeSize), true);
+            do {
+                std::vector<std::uint64_t> h;
+                h.reserve(hingeSize);
+                for (std::size_t i = 0; i < cs.size(); ++i)
+                    if (mask[i]) h.push_back(cs[i]);
+                hinges.insert(std::move(h));
+            } while (std::prev_permutation(mask.begin(), mask.end()));
+        }
+    }
+
+    // ∂S/∂ℓ²_e = Σ_h [∂|★h|·ε_h + |★h|·∂ε_h], restricted to the query edges (the
+    // full per-edge gradient for every e in E, since E's hinges are all in `hinges`).
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> g;
+    for (const auto &ht : hinges) {
+        VertexPtrs vp;
+        vp.reserve(ht.size());
+        bool ok = true;
+        for (const std::uint64_t id : ht) {
+            const auto it = vidx.find(id);
+            if (it == vidx.end()) { ok = false; break; }
+            vp.push_back(it->second);
+        }
+        if (!ok) continue;
+        const auto h = spacetime_->findSimplexByVerts(vp);
+        if (h == nullptr || !h->hasTopCoface()) continue;
+        const std::complex<double> eps = h->lorentzianDeficitAngle();
+        const double dv = h->dualVolume();
+        for (const auto &[ed, dEps] : h->lorentzianDeficitAngleGradient()) {
+            const std::pair<std::uint64_t, std::uint64_t> k{
+                std::min(ed.first, ed.second), std::max(ed.first, ed.second)};
+            if (E.count(k)) g[k] += dv * dEps;
+        }
+        for (const auto &[ed, dDv] : h->dualVolumeGradient()) {
+            const std::pair<std::uint64_t, std::uint64_t> k{
+                std::min(ed.first, ed.second), std::max(ed.first, ed.second)};
+            if (E.count(k)) g[k] += dDv * eps;
+        }
+    }
+
+    double s = 0.0;
+    for (const auto &[k, v] : g) s += std::norm(v);  // |∂S/∂ℓ²_e|²
+    return s;
+}
+
 double ReggeSolver::matterAction() const {
     // Point-particle action: S_matter = -M ∫ dτ
     // Timelike edges (between slices) have ℓ² < 0; spacelike edges (within a

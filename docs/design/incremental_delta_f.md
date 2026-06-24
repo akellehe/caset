@@ -90,13 +90,14 @@ the localized **gradient norm** over the affected edges.
    → the localized dual action over a FIXED hinge set (genuine-only), so
    `ΔS_Regge = after − before` is exact. The action value is a diagnostic; the
    objective (below) uses the gradient norm built from the same per-hinge terms.
-2. **Δ‖∇S_Regge‖² (hinge-local, the geometry objective).** `‖∇S_Regge‖² = Σ_e|∂S/∂ℓ²_e|²`.
-   A move changes the gradient component only for edges sharing a hinge with the
-   touched region, so the affected-edge set = edges appearing in the affected hinges'
-   gradient maps. For each affected edge compute the full per-edge gradient
-   `∂S/∂ℓ²_e = Σ_{h∋e}[∂|*h|·ε_h + |*h|·∂ε_h]` (local — `e`'s incident hinges) before
-   and after; `Δ‖∇S‖² = Σ_e(|g_e^after|² − |g_e^before|²)`. Re **and** Im (complex
-   modulus). Covers combinatorial moves and edge-length perturbations.
+2. **Δ‖∇S_Regge‖² (hinge-local, the geometry objective — DONE).**
+   `ReggeSolver::affectedEdgesOfCells` (the edges a move on the touched cells can
+   change) + `gradientNorm2OverEdges` (`Σ_e|∂S/∂ℓ²_e|²` with each `∂S/∂ℓ²_e` the full
+   per-edge gradient over `e`'s star, complex modulus). Over a fixed affected-edge
+   set across a move, `Δ‖∇S‖² = after − before` is exact. Verified to machine
+   precision for an edge perturbation and a Pachner move; `gradientNorm2OverEdges`
+   over all edges equals `Σ_e|actionGradientExact()_e|²`. Genuinely local: one edge
+   perturbation touches ~23% of a 260-edge toroid (shrinking as the mesh grows).
 3. **Δr_U.** The change in the state residual at `k = 2` induced by the move,
    including across a topology change where `b_k` (and thus the register dimension)
    shifts. Validate the incremental update against `residualForPeriods` recompute.
