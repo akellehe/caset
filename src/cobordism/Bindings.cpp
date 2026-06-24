@@ -37,6 +37,7 @@
 #include "cobordism/TripartiteRegisterTopology.h"
 #include "cobordism/BipartiteCreationTopology.h"
 #include "cobordism/EmergentEventTopology.h"
+#include "cobordism/S3WindowSurface.h"
 #include "cobordism/FixedBipartiteSequenceTopology.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
 
@@ -1592,6 +1593,31 @@ prepared states, reproduces the harmonic overlap.)doc")
            "The antiquark window's per-hole induced-orientation signs (sign-reversed "
            "by the U-turn twist relative to the quark window).");
 
+  // === S3WindowSurface (#453): the genuinely 3+1 D color-register slice ===
+  py::class_<S3WindowSurface::Surface>(
+      m, "S3Surface",
+      "The triangulated S^3 spatial slice (.faces: the K^2 top tetrahedra) and its "
+      "Z_3-symmetric color windows (.windows: windowCount x 3 hole tetrahedra).")
+      .def_readonly("faces", &S3WindowSurface::Surface::faces)
+      .def_readonly("windows", &S3WindowSurface::Surface::windows);
+  py::class_<S3WindowSurface>(
+      m, "S3WindowSurface",
+      "The genuinely 3+1 D color-register base slice (#453): a triangulated S^3 "
+      "(the join of two K-cycles) carrying symmetric, color-Z_3-equivariant windows "
+      "-- the faithful 4D analog of the S^2 SymmetricWindowSurface. The register "
+      "degree tracks the spatial dimension (ker L_{d-1}, holes = removed top "
+      "d-cells): on S^3 a window hole is a removed TETRAHEDRON (the b_2/k=2 "
+      "register), and each window is a Z_3 orbit (sigma = tau^{K/3}) of three "
+      "vertex-disjoint hole tetrahedra; removing 3*windowCount disjoint tetrahedra "
+      "gives b_2 = 3*windowCount - 1 (windowCount=4 => b_2=11, the S^2 proton's hole "
+      "budget lifted to S^3). Pure and deterministic.")
+      .def_static("build", &S3WindowSurface::build, py::arg("window_count") = 4,
+                  py::arg("granularity") = 1,
+                  "Build the S^3 slice + windows. window_count >= 1 (four matches "
+                  "the W_ABC A,B,C,R structure; one is the minimal color register); "
+                  "granularity >= 1 refines the lattice between the disjoint holes "
+                  "(K = 6*window_count*granularity).");
+
   // === EmergentEventTopology (#434, Experiment A) ===
   py::class_<EmergentEventTopology, TopologyBuilder,
              std::shared_ptr<EmergentEventTopology>>(
@@ -1633,6 +1659,26 @@ prepared states, reproduces the harmonic overlap.)doc")
            py::arg("frequency"),
            "Set the geodesic subdivision frequency N >= 2 (#404); N=2 (default) is "
            "the 42-vertex base that hosts the 12 disjoint holes.")
+      .def("set_s3_slice", &EmergentEventTopology::setS3Slice,
+           py::arg("on") = true,
+           "Build the genuinely 3+1 D event over a triangulated S^3 slice (#453) "
+           "instead of the 2+1 D S^2 slice: S3WindowSurface (join-of-cycles S^3 + "
+           "Z_3 windows of three hole TETRAHEDRA each, the b_2/k=2 register), holed "
+           "and stacked by the dimension-generic symmetric apex reflection "
+           "(symmetricStackCells, #429) into a genuine 4-manifold (pentatopes), "
+           "gated by the rigorous n=4 recursive dualComplexValid. Off => S^2.")
+      .def("s3_slice", &EmergentEventTopology::s3Slice,
+           "Whether the S^3 (3+1 D) spatial slice is selected (default false).")
+      .def("set_s3_windows", &EmergentEventTopology::setS3Windows,
+           py::arg("windows"),
+           "Set the number of S^3 color windows (>= 1; default 4 = A,B,C,R). The "
+           "holed slice carries b_2 = 3*windows - 1; fewer windows make a much "
+           "smaller 4-complex (one window is the minimal genuinely-4D event).")
+      .def("s3_windows", &EmergentEventTopology::s3Windows,
+           "The number of S^3 color windows (default 4).")
+      .def("register_degree", &EmergentEventTopology::registerDegree,
+           "The Hodge degree k the color register is read at: 1 (b_1, triangle "
+           "holes) on S^2; 2 (b_2, tetrahedral holes) on S^3. Always ker L_{d-1}.")
       .def("n_layers", &EmergentEventTopology::nLayers,
            "The number of temporal layers (>= 2); slices are 0..n_layers.")
       .def("stride", &EmergentEventTopology::stride,
@@ -1651,7 +1697,21 @@ prepared states, reproduces the harmonic overlap.)doc")
            "The per-hole induced-orientation signs of window w (sign-reversed by "
            "the U-turn twist); layer-independent.")
       .def("u_turn_twisted", &EmergentEventTopology::uTurnTwisted,
-           "Whether the U-turn (anti-baryon) twist is applied (default false).");
+           "Whether the U-turn (anti-baryon) twist is applied (default false).")
+      .def(
+          "build_cobordism",
+          [](EmergentEventTopology &self, std::size_t stateDim,
+             std::uint64_t seed) {
+            std::vector<std::vector<std::uint64_t>> boundaryCells;
+            auto st = self.build(stateDim, seed, boundaryCells);
+            return py::make_tuple(st, boundaryCells);
+          },
+          py::arg("state_dim") = 3, py::arg("seed") = 0,
+          "Build the event cobordism W directly (bypassing the k=1 TransportCobordism "
+          "harness): returns (cobordism, boundary_cells). For the S^3 (#453) mode the "
+          "cobordism is a genuine 4-manifold (read its register at register_degree()=2 "
+          "via EigenstateSynthesis(W, 2)); build() already gates it on the rigorous "
+          "n=4 recursive dualComplexValid.");
 
   // === FixedBipartiteSequenceTopology (#438, Experiment B) ===
   py::class_<FixedBipartiteSequenceTopology, EmergentEventTopology,

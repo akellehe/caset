@@ -10,6 +10,7 @@
 
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
+#include "cobordism/S3WindowSurface.h"
 #include "cobordism/SymmetricWindowSurface.h"
 #include "mesh/Edge.h"
 #include "mesh/EdgeList.h"
@@ -33,6 +34,16 @@ void EmergentEventTopology::setLorentzianWorldlines(double worldlineLsq) {
 }
 
 void EmergentEventTopology::setUTurnTwist(bool on) { uTurnTwist_ = on; }
+
+void EmergentEventTopology::setS3Slice(bool on) { s3Slice_ = on; }
+
+void EmergentEventTopology::setS3Windows(int windows) {
+  if (windows < 1)
+    throw std::invalid_argument(
+        "EmergentEventTopology: S^3 windows must be >= 1 (four is the A,B,C,R "
+        "structure; one is the minimal genuinely-4D color event)");
+  s3Windows_ = windows;
+}
 
 void EmergentEventTopology::setFrequency(int frequency) {
   if (frequency < 2)
@@ -61,19 +72,33 @@ std::shared_ptr<Spacetime> EmergentEventTopology::build(
   // three color holes are readable at EVERY temporal slice (the base holes shifted
   // by layer*stride). The bottom (ell=0) and top (ell=nLayers_) slices are pinned;
   // the middle slices relax (the emergent intermediates).
-  const auto surface = SymmetricWindowSurface::build(frequency_);
-  const auto &faces = surface.faces;
+  // The spatial slice + its color windows. S^2 (2+1 D, default): the geodesic
+  // icosahedron with four A4 windows of three vertex-disjoint hole TRIANGLES each
+  // (the b_1 / k=1 register). S^3 (3+1 D, #453): the join-of-cycles 3-sphere with
+  // four Z_3 windows of three vertex-disjoint hole TETRAHEDRA each (the b_2 / k=2
+  // register — the faithful dimensional lift, ker L_{d-1} with holes the removed
+  // top d-cells). Both expose .faces (top d-cells) and .windows (windowCount x 3).
+  std::vector<Face> faces;
+  std::vector<std::vector<Face>> windows;
+  if (s3Slice_) {
+    auto surface = S3WindowSurface::build(s3Windows_, /*granularity=*/1);
+    faces = std::move(surface.faces);
+    windows = std::move(surface.windows);
+  } else {
+    auto surface = SymmetricWindowSurface::build(frequency_);
+    faces = std::move(surface.faces);
+    windows = std::move(surface.windows);
+  }
 
-  // Flatten all four windows' (A,B,C,R) twelve holes in window order, for the
-  // base-layer endSignCovector and for the per-layer accessors.
+  // Flatten all four windows' (A,B,C,R) holes in window order, for the base-layer
+  // endSignCovector and for the per-layer accessors.
   std::vector<Face> holes;
-  holes.reserve(12);
-  for (std::size_t w = 0; w < surface.windows.size(); ++w)
-    for (const auto &h : surface.windows[w]) holes.push_back(h);
+  for (std::size_t w = 0; w < windows.size(); ++w)
+    for (const auto &h : windows[w]) holes.push_back(h);
 
-  blockHoles_.assign(surface.windows.size(), {});
-  for (std::size_t w = 0; w < surface.windows.size(); ++w)
-    for (const auto &h : surface.windows[w]) blockHoles_[w].push_back(h);
+  blockHoles_.assign(windows.size(), {});
+  for (std::size_t w = 0; w < windows.size(); ++w)
+    for (const auto &h : windows[w]) blockHoles_[w].push_back(h);
 
   // Holed surface -> 3-complex: the staircase prism over [0, nLayers_]. An
   // interval (NOT looped), so the two end caps + the hole-tube walls are the
@@ -87,14 +112,23 @@ std::shared_ptr<Spacetime> EmergentEventTopology::build(
   for (const auto &f : holed)
     for (const auto v : f) stride_ = std::max(stride_, v + 1);
 
-  const auto prism = Spacetime::prismCells(holed, /*layers=*/nLayers_);
+  // Holed slice -> cobordism. S^2: the dimension-generic staircase prism over the
+  // nLayers_ temporal layers, giving a 3-complex (tetrahedra). S^3 (#453): the
+  // dimension-generic SYMMETRIC apex reflection (symmetricStackCells, #429) over
+  // nLayers_ apex slices, giving a genuine 4-complex (pentatope top cells) — a real
+  // 3+1 D worldvolume, never a 2+1 D shortcut. The primal vertices layer the same
+  // way in both (v + ell*stride), so windowHolesAtLayer is unchanged.
+  const int dim = s3Slice_ ? 4 : 3;
+  const auto stacked = s3Slice_
+                           ? Spacetime::symmetricStackCells(holed, nLayers_)
+                           : Spacetime::prismCells(holed, /*layers=*/nLayers_);
   std::vector<std::vector<std::uint64_t>> cells;
-  cells.reserve(prism.size());
-  for (auto c : prism) {
+  cells.reserve(stacked.size());
+  for (auto c : stacked) {
     std::sort(c.begin(), c.end());
     cells.push_back(std::move(c));
   }
-  auto cobordism = Spacetime::fromCells(3, cells, 1.0, 0.0);
+  auto cobordism = Spacetime::fromCells(dim, cells, 1.0, 0.0);
 
   // The symmetric UNIFORM seed (l^2 = 1): the symmetric windows need a
   // symmetry-respecting metric for the transport to intertwine the color Z3, and
@@ -121,16 +155,24 @@ std::shared_ptr<Spacetime> EmergentEventTopology::build(
   // grouped per window A,B,C,R). The carried condition is sign . psi = 0, so
   // targets are pre-multiplied by it; the emergent windows are read in the SAME
   // global orientation, making sigma the relabeling-invariant Stokes charge (#412).
-  const std::vector<int> covec = ChainComplex::endSignCovector(faces, holes);
-  if (covec.size() != holes.size())
-    throw std::runtime_error(
-        "EmergentEventTopology: endSignCovector returned " +
-        std::to_string(covec.size()) + " signs, expected " +
-        std::to_string(holes.size()));
   signTable_.assign(blockHoles_.size(), std::vector<int>(3, 1));
-  for (std::size_t w = 0; w < blockHoles_.size(); ++w)
-    for (std::size_t k = 0; k < 3; ++k)
-      signTable_[w][k] = covec[w * 3 + k];
+  if (!s3Slice_) {
+    // S^2: induced-orientation covector over the 12 triangle holes, so sigma is the
+    // relabeling-invariant Stokes charge (#412).
+    const std::vector<int> covec = ChainComplex::endSignCovector(faces, holes);
+    if (covec.size() != holes.size())
+      throw std::runtime_error(
+          "EmergentEventTopology: endSignCovector returned " +
+          std::to_string(covec.size()) + " signs, expected " +
+          std::to_string(holes.size()));
+    for (std::size_t w = 0; w < blockHoles_.size(); ++w)
+      for (std::size_t k = 0; k < 3; ++k)
+        signTable_[w][k] = covec[w * 3 + k];
+  }
+  // S^3 (#453): the b_2 register carries the omega color states with the raw
+  // tetrahedral-hole periods (residualForPeriods machine-zero on a carried target),
+  // so the foundation pins with +1 signs; the induced-orientation signing of a
+  // 2-cycle for a relabeling-invariant sigma_R is the stage-2 physics build-out.
 
   // The orientation-reversing U-TURN TWIST (#416): reverse every window's
   // induced-orientation covector, so each carried period (and emergent charge) is
@@ -161,8 +203,11 @@ std::shared_ptr<Spacetime> EmergentEventTopology::build(
     if (kv.second == 1) boundaryCells.push_back(kv.first);
   }
 
-  // === manifold gate: dualComplexValid (rigorous for n <= 3) ===
-  const auto valid = EigenstateSynthesis(cobordism, 1).dualComplexValid();
+  // === manifold gate: dualComplexValid (rigorous recursive link check; for the
+  // S^3 path this is the n=4 4-manifold gate, vertex links validated as 3-manifolds)
+  const auto valid =
+      EigenstateSynthesis(cobordism, static_cast<int>(registerDegree()))
+          .dualComplexValid();
   if (!valid.first)
     throw std::runtime_error(
         "EmergentEventTopology: seed failed the dual-complex manifold gate: " +
