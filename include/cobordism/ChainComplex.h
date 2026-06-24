@@ -142,6 +142,32 @@ class ChainComplex {
         const std::vector<std::vector<std::uint64_t>> &surfaceCells,
         const std::vector<std::vector<std::uint64_t>> &holes);
 
+    /// The **induced-orientation covector** of a whole top-cell complex: the
+    /// per-cell sign \f$ \varepsilon_t \in \{\pm 1\} \f$ assigned by orienting
+    /// the complex through facet-sharing propagation. Each `topCells` entry is
+    /// a sorted vertex-id tuple, all of one dimension; the returned vector is
+    /// aligned to the **sorted-unique** (lexicographic) order of those cells —
+    /// the canonical \f$ C_d \f$ column order, i.e. the order of
+    /// orientedTopSimplices() / kSimplexVertices(dimension()). Roots of each
+    /// connected component (its lexicographically smallest cell) carry
+    /// \f$ +1 \f$ and the sign propagates across every shared facet by the same
+    /// rule endSignCovector() uses (facet \f$ j \f$ of a sorted cell carries
+    /// boundary sign \f$ (-1)^j \f$, and across an interior facet the two
+    /// induced signs cancel: \f$ \varepsilon_b = -\varepsilon_a s_a s_b \f$).
+    /// Unlike fundamentalClass() this does **not** require the complex to be
+    /// closed — boundary facets (one coface) simply impose no constraint — so it
+    /// is the orientation read-out for an open refinement region (e.g. a single
+    /// stellar cone star, or a Lorentzian CDT slab with boundary). Determined
+    /// purely combinatorially, independent of geometry, vertex labels (any
+    /// order-preserving relabel leaves it unchanged), and the order `topCells`
+    /// is supplied in. Empty for the empty complex.
+    /// @throws std::runtime_error if the cells are not all of one dimension, a
+    ///   facet has more than two cofaces (not a pseudomanifold), or the
+    ///   orientation propagation contradicts itself (non-orientable) — exactly
+    ///   the conditions a surgical cone must never silently introduce.
+    [[nodiscard]] static std::vector<int> orientationCovector(
+        const std::vector<std::vector<std::uint64_t>> &topCells);
+
     /// The symmetric intersection form \f$ Q_{ij} = \langle \alpha_i \cup
     /// \alpha_j, [K] \rangle \f$ on a basis \f$ \{\alpha_i\} \f$ of the free
     /// part of \f$ H^2 \f$, as a flat row-major \f$ b_2 \times b_2 \f$ matrix.
