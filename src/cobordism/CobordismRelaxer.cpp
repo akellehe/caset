@@ -43,8 +43,14 @@ double CobordismRelaxer::relaxInterior(
     const std::vector<std::complex<double>> &stateTargets,
     const std::vector<std::vector<std::uint64_t>> &stateHoles,
     const std::vector<std::complex<double>> &holeTargets, int maxIters,
-    int &iterCounter, bool periodPin, double stateEpsilon, bool verbose) {
-  EigenstateSynthesis es(st, 1);
+    int &iterCounter, bool periodPin, double stateEpsilon, bool verbose,
+    int registerDegree) {
+  EigenstateSynthesis es(st, registerDegree);
+  // The analytic state-residual gradient (periodGradientOverLoops) is the
+  // degree-1 L_1 port; at k >= 2 it is unavailable (tetrahedral holes are not
+  // 3-vertex edge-loops), so only the degree-k residualForPeriods COST gates the
+  // line search there (the action gradient drives the descent). See the header.
+  const bool foldStateGradient = (registerDegree == 1);
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> interiorRank;
   for (const auto &uv : es.interiorEdges()) interiorRank.emplace(uv, 0);
   const auto edges = st->getEdgeList()->toVector();
@@ -85,17 +91,23 @@ double CobordismRelaxer::relaxInterior(
   if (nI == 0) return beta * actionNorm2() + stateCost();
 
   // cellSimplices order (the state-residual gradient) -> interior param index, so
-  // the analytic state-residual gradient folds into the action gradient.
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> paramOf;
-  for (std::size_t c = 0; c < nI; ++c) paramOf[edgeKey(interiorEdgePtr[c])] = c;
-  const auto &cells = es.cellSimplices();
-  std::vector<int> cellToParam(cells.size(), -1);
-  for (std::size_t j = 0; j < cells.size(); ++j) {
-    if (cells[j].size() < 2) continue;
-    const std::pair<std::uint64_t, std::uint64_t> key{
-        std::min(cells[j][0], cells[j][1]), std::max(cells[j][0], cells[j][1])};
-    const auto it = paramOf.find(key);
-    if (it != paramOf.end()) cellToParam[j] = static_cast<int>(it->second);
+  // the analytic state-residual gradient folds into the action gradient. Only the
+  // degree-1 gradient is folded (see foldStateGradient), and only there are the
+  // cells edges whose first two ids ARE the edge key, so build this map there
+  // alone (at k >= 2 cellSimplices are k-cells, not edges).
+  std::vector<int> cellToParam;
+  if (foldStateGradient) {
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> paramOf;
+    for (std::size_t c = 0; c < nI; ++c) paramOf[edgeKey(interiorEdgePtr[c])] = c;
+    const auto &cells = es.cellSimplices();
+    cellToParam.assign(cells.size(), -1);
+    for (std::size_t j = 0; j < cells.size(); ++j) {
+      if (cells[j].size() < 2) continue;
+      const std::pair<std::uint64_t, std::uint64_t> key{
+          std::min(cells[j][0], cells[j][1]), std::max(cells[j][0], cells[j][1])};
+      const auto it = paramOf.find(key);
+      if (it != paramOf.end()) cellToParam[j] = static_cast<int>(it->second);
+    }
   }
 
   auto cost = [&]() { return beta * actionNorm2() + stateCost(); };
@@ -128,7 +140,8 @@ double CobordismRelaxer::relaxInterior(
     // converged we minimize the action alone. [#396]
     const double rStateNow = stateCost();
     Eigen::VectorXd grad = (2.0 * beta * (HII.adjoint() * gI)).real();
-    if (rStateNow > stateEpsilon && (useHoles || !stateLoops.empty())) {
+    if (foldStateGradient && rStateNow > stateEpsilon &&
+        (useHoles || !stateLoops.empty())) {
       const auto rg =
           useHoles
               ? (periodPin

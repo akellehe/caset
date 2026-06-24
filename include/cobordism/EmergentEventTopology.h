@@ -172,7 +172,9 @@ class EmergentEventTopology : public TopologyBuilder {
     /// (\f$ b_1 \f$, triangle holes) on the \f$ S^2 \f$ slice; \f$ k=2 \f$
     /// (\f$ b_2 \f$, tetrahedral holes) on the \f$ S^3 \f$ slice. The register is
     /// always \f$ \ker L_{d-1} \f$ for a \f$ d \f$-dimensional spatial slice.
-    [[nodiscard]] std::size_t registerDegree() const { return s3Slice_ ? 2u : 1u; }
+    [[nodiscard]] std::size_t registerDegree() const override {
+      return s3Slice_ ? 2u : 1u;
+    }
 
     /// The number of temporal layers (\f$ \ge 2 \f$); slices are \f$ 0..nLayers \f$.
     [[nodiscard]] int nLayers() const { return nLayers_; }

@@ -117,7 +117,8 @@ void MergeCobordism::optimize() {
   CobordismRelaxer::relaxInterior(cobordism_, beta_, stateLoops_, stateTargets_,
                                   /*stateHoles=*/{}, /*holeTargets=*/{}, maxIters_,
                                   stats_.relaxIterations, periodPin, epsilon_,
-                                  verbose_);
+                                  verbose_,
+                                  static_cast<int>(topology_->registerDegree()));
   extractOperator();
   stats_.converged = stats_.residual < epsilon_;
 }
