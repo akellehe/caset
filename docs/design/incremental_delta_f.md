@@ -125,17 +125,29 @@ the localized **gradient norm** over the affected edges.
    - (b) **`HodgeLaplacian::laplacianGradient`** — general-k `∂L_k/∂ℓ²` (`L_k =
      BₖᵀBₖ + Bₖ₊₁Bₖ₊₁ᵀ`, `dBₖ = diag(a_{k-1})Bₖ + Bₖdiag(b_k)`). Verified by the Euler
      identity `Σ_e ℓ²_e ∂L_k/∂ℓ²_e = −½L_k` (3.4e-15 at k=1, k=2).
-   - (c) **`EigenstateSynthesis::periodGradientGeneral`** — the general-k `∂r_U/∂ℓ²`:
-     `M = L_k`, the per-edge `∂L_k/∂ℓ²` through the same eigenvector-perturbation
-     derivation, period covector from each removed-(k+1)-cell hole's facets. Matches
-     the k=1 `residualForPeriodsGradient` to 1.7e-15, and satisfies the exact Euler
-     identity `Σ_e ℓ²_e ∂r_U/∂ℓ²_e = −r_U` (4e-16 at k=1, 3.4e-14 at k=2).
+   - (c) **`EigenstateSynthesis::residualForPeriodsGradient`** (consolidated) — the
+     general-k `∂r_U/∂ℓ²`: `M = L_k`, the per-edge `∂L_k/∂ℓ²` through the same
+     eigenvector-perturbation derivation, period covector from each removed-(k+1)-cell
+     hole's facets. The arbitrary-k implementation now **is** `residualForPeriodsGradient`
+     (it no longer routes through the k=1-only `holeLoops`/`periodGradientOverLoops`
+     path); reproduces the prior k=1 result to 1.7e-15 (the GPU oracle test still
+     passes) and satisfies the exact Euler identity `Σ_e ℓ²_e ∂r_U/∂ℓ²_e = −r_U`
+     (4e-16 at k=1, 3.4e-14 at k=2). `periodGradientOverLoops` is retained only for
+     the genuinely loop-input path (`residualForLoopsGradient`, used by Merge/Relaxer).
 
    Finite difference is roundoff-limited and does **not** converge; the optimizer
    uses these analytic gradients, and the tests certify them against hand-derived
-   identities, not FD. (Consolidation — routing `residualForPeriodsGradient` through
-   the general path and retiring the k=1-only `periodGradientOverLoops` — is a clean
-   follow-up once the general path has soaked.)
+   identities, not FD.
+
+5. **End-to-end `ΔF` + surgical-move tests — DONE** (`test_delta_f_end_to_end_python.py`).
+   - Stage-2 edge perturbation on the k=2 register: `ΔF = Δ‖∇S‖²(local) + Γ·Δr_U(recompute)`
+     == full `F` recompute.
+   - Stage-1 surgical cone-out on a CDT with edge multiplicities: cone-out **decrements**
+     shared-edge multiplicity (covered base edges survive); local `Δ‖∇S‖²` == full Δ.
+   - A disjoint-pair cone-out **shifts the b₂ register**; `r_U` recomputes post-surgery
+     and its analytic gradient stays exact (the Euler identity).
+   - Cone-out is the **exact inverse** of cone-in (removes only the k apex edges);
+     cone-in∘cone-out restores the structure bit-for-bit.
 4. **ΔF = Δ‖∇S_Regge‖² + Γ·Δr_U**, and correctness tests: `ΔF` matches a full `F`
    recompute to ~machine precision across **every** move class — Pachner, surgical
    cone-out/in, and edge-length perturbation — including across a topology change.
