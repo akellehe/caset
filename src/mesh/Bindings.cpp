@@ -357,6 +357,11 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
       .def("volume", &Simplex::volume,
            "Signed d-content sqrt(det G)/d! on the honest (non-Wick-rotated) "
            "geometry; negative for a Lorentzian cell with timelike content.")
+      .def("volumeGradient", &Simplex::volumeGradient,
+           "Exact analytic gradient dV/dl^2_e of the signed volume() w.r.t. each "
+           "edge's squared length (edge-keyed map), via Jacobi's formula on the "
+           "Gram determinant: dV = (V/2) tr(G^-1 dG). The per-degree Hodge weight "
+           "gradient (W_k are signed simplex volumes) — keystone for arbitrary-k.")
       .def("circumcenterBarycentric", &Simplex::circumcenterBarycentric,
            "Circumcenter in barycentric coordinates (sum 1), intrinsic from the "
            "signature-aware edge lengths; entry i weights getVertices()[i].")

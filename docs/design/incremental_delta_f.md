@@ -100,7 +100,28 @@ the localized **gradient norm** over the affected edges.
    perturbation touches ~23% of a 260-edge toroid (shrinking as the mesh grows).
 3. **Δr_U.** The change in the state residual at `k = 2` induced by the move,
    including across a topology change where `b_k` (and thus the register dimension)
-   shifts. Validate the incremental update against `residualForPeriods` recompute.
+   shifts. `r_U` is a **global** spectral quantity — `residualForPeriods` =
+   `‖L_k ψ − λ ψ‖²` with `ψ` built from the harmonic subspace `harmonicMatrix(k)`
+   (the eigendecomposition is the cost), so it has no exact hinge-local delta like
+   the action. The **exact** `Δr_U` is therefore a before/after `residualForPeriods`
+   recompute — confirmed end-to-end: `ΔF = Δ‖∇S_Regge‖²(local) + Γ·Δr_U(recompute)`
+   matches a full `F` recompute to 2.4e-15 on the holed-S³ **k=2** register (ω carried
+   ~3e-3, singlet ~47).
+
+   *Residual choice (investigated):* `residualForPeriods` (eigenvector residual) is
+   the `r_U` — it is the only residual that supports general `k` (`periodGapForPeriods`
+   is k=1-only, throwing on tetrahedral holes), and its analytic gradient
+   `residualForPeriodsGradient` is exact to the 1e-9 spectral floor (matches a
+   Richardson-extrapolated FD to 4e-9). The period-gap family is the separate #377
+   hard period-pin `r_ψ`, kept as-is.
+
+   *Arbitrary-k analytic gradient (Stage-2 affordability):* the existing
+   `residualForPeriodsGradient` is k=1-only (hardcoded `laplacian(1)` / edge-loop
+   covector). Generalizing it needs (a) **`Simplex::volumeGradient`** — the per-degree
+   Hodge-weight gradient `∂W_j/∂ℓ²` (DONE: Jacobi on the Gram determinant, reusing the
+   #354 machinery; exact to ~1e-11 across triangle/tet/pentatope), (b) a general-k
+   `∂L_k/∂ℓ²` assembled from it, (c) a faithful general-k port of the eigenvector-
+   perturbation gradient over the `assembleRegisterReadout` period map. (b)/(c) remain.
 4. **ΔF = Δ‖∇S_Regge‖² + Γ·Δr_U**, and correctness tests: `ΔF` matches a full `F`
    recompute to ~machine precision across **every** move class — Pachner, surgical
    cone-out/in, and edge-length perturbation — including across a topology change.

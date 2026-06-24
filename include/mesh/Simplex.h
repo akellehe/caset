@@ -342,6 +342,20 @@ class Simplex {
     /// discarding it the way |l^2| would.
     [[nodiscard]] double volume() const;
 
+    /// Exact analytic gradient of this simplex's **signed `volume()`** with respect
+    /// to the squared length of each of its edges:
+    /// \f$ \partial V / \partial \ell^2_e \f$, returned as an edge-keyed map (sorted
+    /// `(a,b)` ids). By Jacobi's formula on the Gram determinant
+    /// (\f$ V = \mathrm{sgn}\,\sqrt{|\det G|}/d! \f$, \f$ G \f$ linear in \f$ \ell^2 \f$):
+    /// \f$ \partial V/\partial\ell^2_e = \tfrac{V}{2}\,\mathrm{tr}(G^{-1}\,\partial_e G) \f$,
+    /// the same machinery (`gramMatrix`/`determinant`/`cofactorMatrix`) the
+    /// circumcentric `dualVolumeGradient` (#354) uses. This is the per-degree
+    /// **Hodge inner-product weight** gradient (the weights \f$ W_k \f$ are signed
+    /// simplex volumes), the keystone for an arbitrary-degree analytic
+    /// \f$ \partial L_k/\partial\ell^2 \f$ and hence the general-k \f$ r_U \f$ gradient.
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+    volumeGradient() const;
+
     /// Fail-loudly admissibility check for a purely-spacelike simplex.
     ///
     /// "Spacelike" means every edge has squared length > tol (the Edge
