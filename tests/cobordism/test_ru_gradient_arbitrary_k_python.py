@@ -2,20 +2,21 @@
 # All rights reserved.
 """Arbitrary-degree analytic r_U gradient (#461, c).
 
-`EigenstateSynthesis.periodGradientGeneral` is the degree-generic `∂r_U/∂ℓ²` of
-`residualForPeriods` — the generalization of the k=1-only `residualForPeriodsGradient`
-to the b₂ register (k=2) and beyond. It uses `M = L_k` and the exact per-edge
-`∂L_k/∂ℓ²` (`HodgeLaplacian.laplacianGradient`, built on `Simplex.volumeGradient`)
-through the same eigenvector-perturbation derivation, with the period covector read
-from each removed-(k+1)-cell hole's facet boundary.
+`EigenstateSynthesis.residualForPeriodsGradient` is the degree-generic `∂r_U/∂ℓ²` of
+`residualForPeriods` — it now works at the b₂ register (k=2) and beyond (it used to be
+k=1 only). It uses `M = L_k` and the exact per-edge `∂L_k/∂ℓ²`
+(`HodgeLaplacian.laplacianGradient`, built on `Simplex.volumeGradient`) through
+eigenvector-perturbation theory, with the period covector read from each
+removed-(k+1)-cell hole's facet boundary.
 
 The rigorous checks (finite difference does not converge — the optimizer uses the
 analytic gradient):
-  * **k=1 equivalence** — it reproduces the established `residualForPeriodsGradient`
-    on triangle holes to machine precision.
   * **exact Euler identity** — `r_U` is homogeneous of degree −1 in ℓ² (the carried
     representative is scale-invariant, `M` is degree −½), so
-    `Σ_e ℓ²_e · ∂r_U/∂ℓ²_e = −r_U` at every register degree.
+    `Σ_e ℓ²_e · ∂r_U/∂ℓ²_e = −r_U` at every register degree, k=1 and k=2.
+
+(The k=1 numerical equivalence with the established path is additionally guarded by
+`test_ru_gradient_gpu_python.py`, whose FP32 GPU oracle mirrors the prior CPU result.)
 """
 import cmath
 import importlib.util
@@ -50,9 +51,9 @@ def _euler_lhs(st, grad):
 
 
 class ArbitraryKRuGradientTest(unittest.TestCase):
-    def test_k1_equivalence_and_euler(self):
-        # k=1 (triangle holes): the general path reproduces residualForPeriodsGradient,
-        # and satisfies the exact Euler identity. Uses the MergeCobordism substrate.
+    def test_k1_euler_on_triangle_holes(self):
+        # k=1 (triangle holes): the arbitrary-k path satisfies the exact Euler
+        # identity. Uses the MergeCobordism substrate.
         sys.path.insert(0, os.path.join(_EX, "deep_merge_baseline"))
         sys.path.insert(0, _EX)
         try:
@@ -70,13 +71,9 @@ class ArbitraryKRuGradientTest(unittest.TestCase):
         periods = np.asarray(es.cyclePeriods(holes), complex).reshape(m.dim, len(holes))
         target = [complex(z) + 0.137 for z in periods[0]]  # perturbed ⇒ r_U > 0
 
-        g_old = np.asarray(es.residualForPeriodsGradient(holes, target), float)
-        g_new = np.asarray(es.periodGradientGeneral(holes, target), float)
-        self.assertLess(np.linalg.norm(g_new - g_old) / np.linalg.norm(g_old), 1e-10,
-                        "general path disagrees with residualForPeriodsGradient at k=1")
-
         r_u = es.residualForPeriods(holes, target)
-        self.assertLess(abs(_euler_lhs(st, g_new) + r_u), 1e-9,
+        g = np.asarray(es.residualForPeriodsGradient(holes, target), float)
+        self.assertLess(abs(_euler_lhs(st, g) + r_u), 1e-9,
                         "Euler identity Σℓ²∂r_U = −r_U failed at k=1")
 
     def test_k2_euler_on_b2_register(self):
@@ -97,7 +94,7 @@ class ArbitraryKRuGradientTest(unittest.TestCase):
 
         r_u = es.residualForPeriods(holes, target)
         self.assertGreater(r_u, 1.0)
-        g = np.asarray(es.periodGradientGeneral(holes, target), float)
+        g = np.asarray(es.residualForPeriodsGradient(holes, target), float)
         self.assertLess(abs(_euler_lhs(st, g) + r_u) / r_u, 1e-11,
                         "Euler identity Σℓ²∂r_U = −r_U failed at k=2")
 

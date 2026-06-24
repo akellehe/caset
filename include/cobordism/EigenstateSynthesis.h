@@ -323,30 +323,20 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
-    /// The analytic gradient \f$ \partial r_U / \partial l^2_e \f$ of
-    /// `residualForPeriods` w.r.t. each edge's squared length, returned in
-    /// `cellSimplices()` (\f$ k = 1 \f$ cell) order. Eigendecomposes the metric
-    /// Laplacian \f$ M = L_1 \f$, builds the same carried representative \f$ \psi \f$,
-    /// then propagates the per-edge low-rank \f$ dM/dl^2 \f$ through first-order
-    /// eigenvector perturbation theory and the pseudo-inverse derivative — the C++
-    /// port of the Python relaxation's `drU` (verified against it and a finite
-    /// difference). \f$ O(n_1^3) \f$ (one dense eigensolve plus a per-edge sweep).
+    /// **Arbitrary-degree** exact analytic gradient \f$ \partial r_U / \partial l^2_e \f$
+    /// of `residualForPeriods` w.r.t. each edge's squared length, in `ChainComplex`
+    /// 1-cell (edge) order. Eigendecomposes the metric Laplacian \f$ M = L_k \f$
+    /// (`HodgeLaplacian`), builds the same carried representative \f$ \psi \f$ (period
+    /// covector + leak from each removed-\f$(k\!+\!1)\f$-cell hole's facet boundary),
+    /// then propagates the per-edge analytic \f$ \partial L_k/\partial l^2 \f$
+    /// (`HodgeLaplacian::laplacianGradient`, built on `Simplex::volumeGradient`) through
+    /// first-order eigenvector-perturbation theory and the pseudo-inverse derivative.
+    /// Reproduces the \f$ k = 1 \f$ edge-loop core (`periodGradientOverLoops`) on
+    /// triangle holes to machine precision; certified by the exact Euler identity
+    /// \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = -r_U \f$ at every register degree
+    /// (finite difference is roundoff-limited and does not converge). \f$ O(n_k^3) \f$.
     /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`.
     [[nodiscard]] std::vector<double> residualForPeriodsGradient(
-        const std::vector<std::vector<std::uint64_t>> &holes,
-        const std::vector<std::complex<double>> &targetPeriods) const;
-
-    /// **Arbitrary-degree** analytic gradient \f$ \partial r_U / \partial l^2_e \f$
-    /// of `residualForPeriods` — the degree-generic generalization of
-    /// `residualForPeriodsGradient` (which is \f$ k = 1 \f$ only). Eigendecomposes
-    /// \f$ M = L_k \f$ (`HodgeLaplacian`), uses the per-edge analytic
-    /// \f$ \partial L_k/\partial l^2 \f$ (`HodgeLaplacian::laplacianGradient`, built on
-    /// `Simplex::volumeGradient`) through the same first-order eigenvector-perturbation
-    /// derivation, with the period covector + leak read from each removed-\f$(k\!+\!1)\f$-cell
-    /// hole's facet boundary. Returned in `ChainComplex` 1-cell (edge) order. Equals
-    /// the \f$ k = 1 \f$ loop core on triangle holes; validated by the exact Euler
-    /// identity \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = -r_U \f$ at every degree.
-    [[nodiscard]] std::vector<double> periodGradientGeneral(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 

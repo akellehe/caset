@@ -637,22 +637,14 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("residualForPeriodsGradient",
            &EigenstateSynthesis::residualForPeriodsGradient,
            py::arg("holes"), py::arg("target_periods"),
-           "The analytic gradient d r_U / d l^2 of residualForPeriods w.r.t. each "
-           "edge's squared length, in cellSimplices() (k=1 cell) order. "
-           "Eigendecomposes M = L1, builds the same carried psi, then propagates "
-           "the per-edge low-rank dM/dl^2 through eigenvector perturbation theory "
-           "and the pseudo-inverse derivative (the C++ port of the relaxation's "
-           "Python drU). Raises on a hole/target length mismatch.")
-      .def("periodGradientGeneral",
-           &EigenstateSynthesis::periodGradientGeneral,
-           py::arg("holes"), py::arg("target_periods"),
-           "Arbitrary-degree analytic gradient d r_U / d l^2 of residualForPeriods "
-           "(the general-k generalization of residualForPeriodsGradient, which is "
-           "k=1 only). M = L_k, the per-edge dL_k/dl^2 = HodgeLaplacian."
-           "laplacianGradient (built on Simplex.volumeGradient), same eigenvector-"
-           "perturbation derivation, period covector from each removed-(k+1)-cell "
-           "hole's facets. ChainComplex 1-cell (edge) order. Equals the k=1 path on "
-           "triangle holes; exact (Σ l² ∂r_U = −r_U).")
+           "Arbitrary-degree exact analytic gradient d r_U / d l^2 of "
+           "residualForPeriods w.r.t. each edge's squared length, in ChainComplex "
+           "1-cell (edge) order. M = L_k, the per-edge dL_k/dl^2 = HodgeLaplacian."
+           "laplacianGradient (built on Simplex.volumeGradient), through eigenvector-"
+           "perturbation theory; period covector + leak from each removed-(k+1)-cell "
+           "hole's facets. Reproduces the k=1 edge-loop core on triangle holes; "
+           "certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
+           "converge). Raises on a hole/target length mismatch.")
       .def("residualForPeriodsGradientGpu",
            &EigenstateSynthesis::residualForPeriodsGradientGpu,
            py::arg("holes"), py::arg("target_periods"),

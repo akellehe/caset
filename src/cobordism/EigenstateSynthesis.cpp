@@ -1560,9 +1560,15 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   return grad;
 }
 
-std::vector<double> EigenstateSynthesis::periodGradientGeneral(
+std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
+  // Arbitrary-degree exact d r_U / d l^2 over the removed-(k+1)-cell holes. M = L_k,
+  // the per-edge dL_k/dl^2 (HodgeLaplacian::laplacianGradient, on Simplex::volumeGradient)
+  // through first-order eigenvector perturbation, period covector + leak from each
+  // hole's facet boundary (the assembleRegisterReadout convention). Equals the k=1
+  // loop core (periodGradientOverLoops) on triangle holes; certified by the Euler
+  // identity Sum_e l^2_e d r_U/d l^2_e = -r_U.
   using Eigen::Index;
   using Eigen::MatrixXcd;
   using Eigen::MatrixXd;
@@ -1576,7 +1582,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   if (nk == 0 || m == 0) return grad;
   if (targetPeriods.size() != m)
     throw std::runtime_error(
-        "EigenstateSynthesis::periodGradientGeneral: " +
+        "EigenstateSynthesis::residualForPeriodsGradient: " +
         std::to_string(targetPeriods.size()) + " target periods for " +
         std::to_string(m) + " holes");
   static constexpr double kNullTol = 1e-7;
@@ -1602,7 +1608,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
     std::sort(h.begin(), h.end());
     if (h.size() != hv)
       throw std::runtime_error(
-          "EigenstateSynthesis::periodGradientGeneral: hole has " +
+          "EigenstateSynthesis::residualForPeriodsGradient: hole has " +
           std::to_string(h.size()) + " vertices, expected " + std::to_string(hv));
     std::vector<std::size_t> walk(hv);
     for (std::size_t i = 0; i < hv; ++i) walk[i] = i;
@@ -1616,7 +1622,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
       const auto it = col.find(f);
       if (it == col.end())
         throw std::runtime_error(
-            "EigenstateSynthesis::periodGradientGeneral: a hole facet is not a "
+            "EigenstateSynthesis::residualForPeriodsGradient: a hole facet is not a "
             "k-cell of the complex");
       if (w == 0) leakCol[q] = it->second;
       Q(static_cast<Index>(q), static_cast<Index>(it->second)) +=
@@ -1887,15 +1893,6 @@ std::vector<double> EigenstateSynthesis::periodGapForPeriodsGradient(
       targetPeriods);
 }
 
-std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
-    const std::vector<std::vector<std::uint64_t>> &holes,
-    const std::vector<cd> &targetPeriods) const {
-  // A removed triangle's boundary IS the oriented loop h0 -> h1 -> h2 -> h0
-  // (identical signed covector and leak), so route through the loop core.
-  return periodGradientOverLoops(
-      holeLoops(holes, "EigenstateSynthesis::residualForPeriodsGradient"),
-      targetPeriods);
-}
 
 std::vector<double> EigenstateSynthesis::residualForLoopsGradient(
     const std::vector<EdgeLoop> &loops,
