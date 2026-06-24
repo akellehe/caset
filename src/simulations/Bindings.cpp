@@ -262,6 +262,18 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "(d-2)-hinge's circumcentric dual content (Simplex.dualVolume) times "
            "its complex Lorentzian deficit. Returns a Python complex (real = "
            "angle-defect curvature, imag = boost/light-cone content).")
+      .def("hingeFacesOfCells", &ReggeSolver::hingeFacesOfCells, py::arg("cells"),
+           "The (d-2) hinge vertex-tuples that are faces of the given top d-cells "
+           "— the affected-hinge index for the incremental ΔS_Regge. `cells` is a "
+           "list of vertex-id tuples; returns the dedup'd sorted (d-1)-vertex "
+           "sub-tuples. Build from a move's touched cells (created ∪ removed ∪ the "
+           "perturbed edge's top cofaces) and reuse the SAME set before/after.")
+      .def("dualReggeActionOverHinges", &ReggeSolver::dualReggeActionOverHinges,
+           py::arg("hinges"),
+           "Localized dual Regge action Σ |*h|·ε_h over only the given (d-2) hinge "
+           "tuples that are genuine (registered, with a top coface; orphans → 0). "
+           "Same per-term measure as dualReggeAction. Evaluated over a FIXED hinge "
+           "set across a move, ΔS = after − before is exact.")
       .def("matterAction", &ReggeSolver::matterAction,
            "Point-particle matter action: S_matter = -M Σ √(-ℓ²) along worldlines.")
       .def("totalAction", &ReggeSolver::totalAction,

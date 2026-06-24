@@ -97,6 +97,31 @@ class ReggeSolver {
     /// Asante-Dittrich arXiv:2104.00485.
     [[nodiscard]] std::complex<double> dualReggeAction() const;
 
+    /// The \f$(d\!-\!2)\f$ **hinge** vertex-tuples that are faces of the given top
+    /// \f$d\f$-cells — the set of hinges whose dual-action contribution a move over
+    /// those cells can change. Each input cell is a vertex-id tuple; the result is
+    /// the dedup'd set of \f$(d\!-\!1)\f$-vertex sub-tuples (sorted ids). Pure
+    /// topology (no geometry): the **affected-hinge index** for the incremental
+    /// \f$\Delta S_{\text{Regge}}\f$. Build it from a move's touched cells
+    /// (created ∪ removed ∪ the top cofaces of a perturbed edge) once, then use the
+    /// SAME set for the before/after legs of ``dualReggeActionOverHinges``.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> hingeFacesOfCells(
+        const std::vector<std::vector<std::uint64_t>> &cells) const;
+
+    /// The **localized** dual (Sorkin) Regge action
+    /// \f$\sum_{h} |\!\star\! h|\,\varepsilon_h\f$ over only the given
+    /// \f$(d\!-\!2)\f$ hinge tuples that are *genuine* in the live complex (a
+    /// registered simplex with a top coface — orphans contribute 0, exactly as in
+    /// ``dualReggeAction``). Each tuple is resolved by vertex id (order-independent,
+    /// ``findSimplexByVerts``) and the per-term measure is the **same** circumcentric
+    /// ``dualVolume`` as ``dualReggeAction``, so it inherits the dual action by
+    /// construction. This is the before/after leg of the incremental
+    /// \f$\Delta S_{\text{Regge}}\f$: evaluated over a FIXED affected-hinge set
+    /// across a move, \f$\Delta S = S_{\text{after}} - S_{\text{before}}\f$ is exact
+    /// (every hinge outside the set is unchanged and cancels).
+    [[nodiscard]] std::complex<double> dualReggeActionOverHinges(
+        const std::vector<std::vector<std::uint64_t>> &hinges) const;
+
     /// Point-particle matter action: \f$S_{\text{matter}} = -M \sum_{e \in W} \sqrt{-\ell^2_e}\f$.
     [[nodiscard]] double matterAction() const;
 

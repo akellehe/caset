@@ -6,6 +6,7 @@
 #include "mesh/Edge.h"
 #include "mesh/Vertex.h"
 #include "mesh/EdgeList.h"
+#include "mesh/VertexList.h"
 #include "mesh/Fingerprint.h"
 
 #ifdef TESSERA_CUDA
@@ -20,6 +21,7 @@
 #include <numbers>
 #include <set>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 
 #include <Eigen/SparseCore>
@@ -145,6 +147,68 @@ std::complex<double> ReggeSolver::dualReggeAction() const {
     std::complex<double> S(0.0, 0.0);
     for (const auto &h : collectHinges()) {
         S += h->dualVolume() * h->lorentzianDeficitAngle();
+    }
+    return S;
+}
+
+std::vector<std::vector<std::uint64_t>> ReggeSolver::hingeFacesOfCells(
+    const std::vector<std::vector<std::uint64_t>> &cells) const {
+    // A hinge is a (d-2)-simplex = (d-1) vertices. Its dual-action contribution
+    // can change only when a move adds/removes a top coface around it, i.e. only
+    // for hinges that are faces of a touched top cell — so the affected set is the
+    // dedup'd (d-1)-element sub-tuples of the touched cells. Pure topology.
+    const int d = spacetime_->getMetric()->getSignature()->getDimensions();
+    const auto hingeSize = static_cast<std::size_t>(d - 1);
+    std::set<std::vector<std::uint64_t>> seen;
+    for (const auto &cell : cells) {
+        std::vector<std::uint64_t> cs(cell.begin(), cell.end());
+        std::sort(cs.begin(), cs.end());
+        cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
+        if (cs.size() < hingeSize) continue;
+        // Every hingeSize-element combination of cs (sorted ⇒ combinations stay
+        // sorted), via a descending-prefix selection mask.
+        std::vector<bool> mask(cs.size(), false);
+        std::fill(mask.begin(), mask.begin() + static_cast<std::ptrdiff_t>(hingeSize),
+                  true);
+        do {
+            std::vector<std::uint64_t> hinge;
+            hinge.reserve(hingeSize);
+            for (std::size_t i = 0; i < cs.size(); ++i)
+                if (mask[i]) hinge.push_back(cs[i]);
+            seen.insert(std::move(hinge));
+        } while (std::prev_permutation(mask.begin(), mask.end()));
+    }
+    return {seen.begin(), seen.end()};
+}
+
+std::complex<double> ReggeSolver::dualReggeActionOverHinges(
+    const std::vector<std::vector<std::uint64_t>> &hinges) const {
+    // The localized dual Regge action over a FIXED hinge set, term-for-term equal
+    // to dualReggeAction's summand: |★h|·ε_h for each genuine hinge (registered,
+    // with a top coface), 0 for orphans. Resolve tuples by vertex id.
+    std::unordered_map<std::uint64_t, VertexPtr> vidx;
+    for (const auto &v : spacetime_->getVertexList()->toVector())
+        if (v != nullptr) vidx.emplace(v->getId(), v);
+
+    std::complex<double> S(0.0, 0.0);
+    std::set<std::vector<std::uint64_t>> done;  // dedup (caller sets may overlap)
+    for (const auto &h : hinges) {
+        std::vector<std::uint64_t> key(h.begin(), h.end());
+        std::sort(key.begin(), key.end());
+        key.erase(std::unique(key.begin(), key.end()), key.end());
+        if (!done.insert(key).second) continue;
+        VertexPtrs vp;
+        vp.reserve(key.size());
+        bool ok = true;
+        for (const std::uint64_t id : key) {
+            const auto it = vidx.find(id);
+            if (it == vidx.end()) { ok = false; break; }
+            vp.push_back(it->second);
+        }
+        if (!ok) continue;
+        const auto s = spacetime_->findSimplexByVerts(vp);
+        if (s == nullptr || !s->hasTopCoface()) continue;
+        S += s->dualVolume() * s->lorentzianDeficitAngle();
     }
     return S;
 }
