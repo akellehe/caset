@@ -131,49 +131,45 @@ sequence of individually objective-justified moves — reached by the greedy ste
 emerges, and that is the honest verdict (the central hypothesis #463 tests). We never
 force the pair.
 
-## 4. Open item (c): the Z₃-frame — score the nearest ω-rep over embeddings
+## 4. The Z₃-frame is NOT a loop condition — the color rep is a post-hoc observable
 
-On the **hand-placed** symmetric windows the color `Z₃` is the window-cycling symmetry
-`σ = τ^(K/3)` (`proton_observables.py`: `P_out` eigenvalues `{1, ω, ω²}`, the ω-rep
-input as the eigenvector of `P_in`). An **emergent** complex carries **no a priori
-`Z₃`**: the holes the optimizer grows are not a symmetry orbit, so there is no canonical
-frame in which the target reads `[1, ω, ω²]`.
+The objective imposes nothing about a `Z₃` frame. `r_U` scores the combined complex
+against the **concrete constructed state harmonics** (§2) — the input/output states are
+built as actual sub-structures, so `r_U = residualForPeriods(states' holes, states'
+harmonics)` is fully defined with no frame to pick and no embedding search. There is
+no `min over frame assignments` in the loop and no imposed `Z₃` symmetry.
 
-**Decision: do not impose a frame — score the nearest ω-rep over embeddings.** `r_U`
-for a color-charged state is
+The `Z₃` color structure — `σ` / the ω-rep / the singlet (`proton_observables.py`:
+`P_out` eigenvalues `{1, ω, ω²}`) — is read **after convergence** as an **observable
+on the relaxed structure**, for interpreting the result and for T6's verdict; it never
+constrains the optimization. On an emergent complex there is no a priori `Z₃`, so that
+reading uses the **relabeling-invariant** charge `σ_R` (#412) — but, again, only to
+*interpret* the converged geometry, never to steer it. (Earlier drafts proposed
+folding a frame search into `r_U`; that is an extra imposed rule and is dropped.)
 
-```
-r_U = min over frame assignments φ of  residualForPeriods(holes, ω-target ∘ φ)
-```
+## 5. No r_U "hardening" rule — exact b_k is a post-hoc diagnostic only
 
-i.e. the residual of carrying the standard color rep, **minimized over the ways to
-attach the ω-rep to the emergent holes** (the `Z₃` cosets / hole orderings). This is
-frame-free and emergent-faithful: it asks "can this register carry a color charge **at
-all**," never "does it carry it in a frame we picked." For a 3-hole window the
-minimization is over the finite set of cyclic/labelling assignments (cheap); the
-relabeling-invariant `σ_R` (#412) is read in the winning frame after convergence. The
-alternative — *emerging* an exact `Z₃` symmetry of the metric — is rejected here as
-over-constraining (symmetry is not naturally a relaxation fixed point), consistent with
-"emergent-first, never insert the answer by fiat."
+`r_U` is the spectral `residualForPeriods` — full stop, the single objective term.
+We **impose no auxiliary rule**: no asserting the harmonic-subspace dimension equals
+the exact Betti number, and **no rejecting moves on a dimension mismatch**. That would
+be hand-imposing behavior the optimization should produce on its own — exactly the kind
+of extra condition this epic forbids. Whatever relation holds between the spectral
+register dimension and the topology is **emergent**; we do not police it. (And it need
+not be equality: the `1e-9`-thresholded harmonic count can be **≤** the exact `b_k`
+under a small spectral gap — a readout property, not an error to gate on. The original
+#457 "harden r_U" note is satisfied by *observing*, not *enforcing*.)
 
-## 5. Open item (d): r_U hardening — exact b_k cross-check
+The exact topological `b_k` — `ChainComplex::bettiNumbers()` (`ChainComplex.h:77`) and
+the Smith-normal-form path (`IntegerLinalg::smithNormalForm`/`integerRank`,
+`IntegerLinalg.h:28,31`) — is available purely as a **post-hoc diagnostic** for
+interpreting a converged run (e.g. T6 reading what topology emerged), never as a gate
+or a term in `F`.
 
-`r_U = residualForPeriods` reads the carried register through
-`HodgeLaplacian::harmonicMatrix(k, 1e-9, metric)` — a spectral kernel thresholded at
-`1e-9`, so the carried **dimension** is only as exact as the spectral gap. Near a
-topology change (a hole opening/closing) the gap can be small and the count wrong.
-
-**Decision: gate the register dimension with the exact topological Betti number.**
-`ChainComplex::bettiNumbers()` (`ChainComplex.h:77`, free rank over ℚ) and the
-integer Smith-normal-form path (`IntegerLinalg::smithNormalForm`/`integerRank`,
-`IntegerLinalg.h:28,31`) compute `b₂` exactly and metric-free. The loop:
-
-- after every accepted **surgical** move, recompute `b₂` exactly and assert the
-  harmonic-subspace dimension (`harmonicMatrix` rank at `1e-9`) **equals** it; a
-  mismatch flags an ill-conditioned readout (tighten the threshold / reject the move).
-- the residual *value* stays the spectral `residualForPeriods` (it must be
-  differentiable for Stage 2); only the **dimension** is exact-checked. This keeps the
-  single `r_U` while removing the silent miscount risk #457 flagged.
+**The only conditions imposed on the loop are:** (1) the **manifold gate** on the dual
+lattice (`dualComplexValid`), (2) **extremization of the objective** `F` (greedy `ΔF`),
+(3) the **fixed start/end states** held representative through `r_U` (§2), and (4)
+**starting from an S⁴ with plenty of edges/vertices** to optimize over. Nothing else is
+imposed or drawn by hand — everything else is emergent or read after the fact.
 
 ## 6. Scale regulation (no boundary pin)
 
@@ -252,9 +248,11 @@ scope here).
    then k=1, k=0); Stage-1 greedy loop over **random single**
    Pachner + gated surgical cone-out/in moves, kept only by ΔF from T4. (`@slow`
    end-to-end test on a tiny host.)
-2. The frame-free color scorer (§4) + the exact-b₂ hardening guard (§5).
-3. Stage-2 `relaxInterior` integration + the general-k `r_U`-gradient precompute optimization.
-4. Random restarts + GraphML per-hinge export (§8) + the converged-run verdict readout.
+2. Stage-2 `relaxInterior` integration + the general-k `r_U`-gradient precompute optimization.
+3. Random restarts + GraphML per-hinge export (§8).
+4. **Post-hoc observables** (read after convergence, never loop conditions): the color
+   rep / relabeling-invariant `σ_R` (§4) and the exact `b_k` diagnostic (§5) for the
+   converged-run verdict.
 5. Findings report (`docs/design/`, slug + commit hash).
 
 Each keeps `tests/cobordism/test_epic410_invariants.py` green and the heavy event `@slow`.
