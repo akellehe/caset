@@ -141,6 +141,82 @@ Eigen::MatrixXd metricLaplacian(const Spacetime &K, int k, bool metric) {
   return L;
 }
 
+// Exact analytic dL_k^sym / dl^2_e for the symmetric metric Hodge Laplacian. Only
+// the weights W_j = |vol| (j = k-1, k, k+1) depend on l^2; W_0 = I is constant. With
+// B_k = diag(sqrt W_{k-1}) d_k diag(1/sqrt W_k), dB_k = diag(a_{k-1}) B_k + B_k diag(b_k),
+// a_j = dW_j/(2 W_j), and dL = dB_k^T B_k + B_k^T dB_k + dB_{k+1} B_{k+1}^T + B_{k+1} dB_{k+1}^T.
+// dW_j[i] = sgn(vol_i) * Simplex::volumeGradient(face_i)[e] (signed for the |vol| weight).
+Eigen::MatrixXd metricLaplacianGradient(const Spacetime &K, int k,
+                                        std::uint64_t ea, std::uint64_t eb) {
+  const ChainComplex cc = ChainComplex::fromSpacetime(K);
+  const int n = cc.dimension();
+  const int nk = static_cast<int>(cc.numSimplices(k));
+  Eigen::MatrixXd dL = Eigen::MatrixXd::Zero(nk, nk);
+  if (k < 1 || nk == 0) return dL;
+  const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
+  const std::uint64_t lo = std::min(ea, eb), hi = std::max(ea, eb);
+
+  const auto weightArr = [&](int kk) {
+    const std::vector<double> wv =
+        simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), /*metric=*/true);
+    Eigen::ArrayXd a(static_cast<Eigen::Index>(wv.size()));
+    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
+    return a;
+  };
+  // dW_j (per-cell weight derivative w.r.t. l^2_(lo,hi)); 0 for k=0 (W_0 const).
+  const auto dWeightArr = [&](int kk) {
+    const int cnt = static_cast<int>(cc.numSimplices(kk));
+    Eigen::ArrayXd dw = Eigen::ArrayXd::Zero(std::max(cnt, 0));
+    if (kk < 1 || kk >= static_cast<int>(faces.size())) return dw;  // W_0 = I
+    const auto &fk = faces[static_cast<std::size_t>(kk)];
+    for (int i = 0; i < cnt && i < static_cast<int>(fk.size()); ++i) {
+      const double vol = fk[static_cast<std::size_t>(i)]->volume();
+      if (std::abs(vol) <= 0.0) continue;  // degenerate weight pinned to 1 (const)
+      const auto g = fk[static_cast<std::size_t>(i)]->volumeGradient();
+      const auto it = g.find({lo, hi});
+      if (it != g.end())
+        dw[i] = (vol < 0.0 ? -1.0 : 1.0) * it->second;  // d|vol| = sgn(vol) dvol
+    }
+    return dw;
+  };
+  const auto boundary = [&](int kk, int rows, int cols) {
+    const std::vector<long> &flat = cc.boundaryMatrix(kk);
+    Eigen::MatrixXd d(rows, cols);
+    for (int r = 0; r < rows; ++r)
+      for (int c = 0; c < cols; ++c)
+        d(r, c) = static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
+    return d;
+  };
+
+  const Eigen::ArrayXd Wk = weightArr(k), dWk = dWeightArr(k);
+  // Term 1 (down): B_k = diag(sqrt W_{k-1}) d_k diag(1/sqrt W_k).
+  const int rows = static_cast<int>(cc.numSimplices(k - 1));
+  if (rows > 0) {
+    const Eigen::ArrayXd Wm = weightArr(k - 1), dWm = dWeightArr(k - 1);
+    const Eigen::MatrixXd Bk = Wm.sqrt().matrix().asDiagonal() * boundary(k, rows, nk) *
+                               Wk.sqrt().inverse().matrix().asDiagonal();
+    const Eigen::VectorXd aL = (dWm / (2.0 * Wm)).matrix();   // rows (k-1)
+    const Eigen::VectorXd bR = (-dWk / (2.0 * Wk)).matrix();  // nk
+    const Eigen::MatrixXd dBk =
+        aL.asDiagonal() * Bk + Bk * bR.asDiagonal();
+    dL.noalias() += dBk.transpose() * Bk + Bk.transpose() * dBk;
+  }
+  // Term 2 (up): B_{k+1} = diag(sqrt W_k) d_{k+1} diag(1/sqrt W_{k+1}).
+  const int cols = (k + 1 <= n) ? static_cast<int>(cc.numSimplices(k + 1)) : 0;
+  if (cols > 0) {
+    const Eigen::ArrayXd Wp = weightArr(k + 1), dWp = dWeightArr(k + 1);
+    const Eigen::MatrixXd Bkp1 = Wk.sqrt().matrix().asDiagonal() *
+                                 boundary(k + 1, nk, cols) *
+                                 Wp.sqrt().inverse().matrix().asDiagonal();
+    const Eigen::VectorXd aL = (dWk / (2.0 * Wk)).matrix();   // nk
+    const Eigen::VectorXd bR = (-dWp / (2.0 * Wp)).matrix();  // cols (k+1)
+    const Eigen::MatrixXd dBkp1 =
+        aL.asDiagonal() * Bkp1 + Bkp1 * bR.asDiagonal();
+    dL.noalias() += dBkp1 * Bkp1.transpose() + Bkp1 * dBkp1.transpose();
+  }
+  return dL;
+}
+
 // Signed-weight (Lorentzian) metric Hodge Laplacian for k >= 0 — the discrete
 // d'Alembertian. With W indefinite the symmetric W^{1/2} similarity breaks, so the
 // operator is assembled directly from the signed metric adjoint
@@ -356,6 +432,18 @@ std::vector<double> HodgeLaplacian::weights(int k, bool lorentzian) const {
   const int m = static_cast<int>(cc.numSimplices(k));
   if (k == 0) return std::vector<double>(static_cast<std::size_t>(m), 1.0);
   return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true, lorentzian);
+}
+
+std::vector<double> HodgeLaplacian::laplacianGradient(int k, std::uint64_t ea,
+                                                      std::uint64_t eb) const {
+  if (k < 1 || !st_) return {};
+  const Eigen::MatrixXd dL = metricLaplacianGradient(*st_, k, ea, eb);
+  const int nk = static_cast<int>(dL.rows());
+  std::vector<double> out(static_cast<std::size_t>(nk) * nk, 0.0);
+  for (int i = 0; i < nk; ++i)
+    for (int j = 0; j < nk; ++j)
+      out[static_cast<std::size_t>(i) * nk + j] = dL(i, j);
+  return out;
 }
 
 const HodgeLaplacian::MetricSpectrum &HodgeLaplacian::ensureMetricSpectrum(

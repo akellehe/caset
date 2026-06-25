@@ -1392,6 +1392,49 @@ double Simplex::dualVolume() const {
 }
 
 std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+Simplex::volumeGradient() const {
+    // dV/dl^2_e = (V/2) tr(G^-1 dG_e), Jacobi's formula on the Gram determinant
+    // (V = sgn sqrt(|det G|)/d!, G linear in l^2 so dG_e is an indicator matrix —
+    // the same dG the #354 dCircumR2 uses). G^-1 via the adjugate (cofactor^T/det),
+    // Eigen-free, matching circumFromGram / volume().
+    std::map<std::pair<std::uint64_t, std::uint64_t>, double> grad;
+    const int d = static_cast<int>(size()) - 1;
+    if (d < 1) return grad;
+    const std::vector<double> G = gramMatrix(/*wickRotate=*/false);
+    if (static_cast<int>(G.size()) != d * d) return grad;
+    const double detG = determinant(G, d);
+    if (std::abs(detG) < 1e-300) return grad;
+    const std::vector<double> cofG = cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
+    const double V = volume();
+    const auto &sv = vertices;
+    for (std::size_t p = 0; p < sv.size(); ++p)
+        for (std::size_t q = p + 1; q < sv.size(); ++q) {
+            const std::uint64_t a = sv[p]->getId(), b = sv[q]->getId();
+            const std::pair<std::uint64_t, std::uint64_t> ek{std::min(a, b),
+                                                             std::max(a, b)};
+            auto ind = [&](int i, int j) -> double {
+                if (i == j) return 0.0;
+                const std::uint64_t x = sv[static_cast<std::size_t>(i)]->getId();
+                const std::uint64_t y = sv[static_cast<std::size_t>(j)]->getId();
+                return (std::min(x, y) == ek.first && std::max(x, y) == ek.second)
+                           ? 1.0 : 0.0;
+            };
+            // tr(G^-1 dG) = sum_ij (G^-1)_ij dG_ji; dG symmetric, (G^-1)_ij=cof_ji/det.
+            double tr = 0.0;
+            for (int i = 0; i < d; ++i)
+                for (int j = 0; j < d; ++j) {
+                    const double dGij =
+                        0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
+                    const double GinvIJ =
+                        cofG[static_cast<std::size_t>(j) * d + i] / detG;
+                    tr += GinvIJ * dGij;
+                }
+            grad[ek] += 0.5 * V * tr;
+        }
+    return grad;
+}
+
+std::map<std::pair<std::uint64_t, std::uint64_t>, double>
 Simplex::dualVolumeGradient() const {
     std::map<std::pair<std::uint64_t, std::uint64_t>, double> grad;
     if (vertices.empty()) return grad;

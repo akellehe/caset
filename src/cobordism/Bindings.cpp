@@ -285,6 +285,13 @@ Euclidean spectrum/kernel.)doc")
            "column order: per-k-simplex |volume| (W_0 = I). lorentzian=True returns "
            "the signed volume (timelike cells negative). Empty for k<0 or k above "
            "the top dimension.")
+      .def("laplacianGradient", &HodgeLaplacian::laplacianGradient, py::arg("k"),
+           py::arg("edgeA"), py::arg("edgeB"),
+           "Exact analytic dL_k^sym/dl^2_e of the symmetric metric Hodge Laplacian "
+           "(k>=1) w.r.t. one edge's squared length, flat |C_k|x|C_k| row-major. Only "
+           "the weights W_j=|vol| depend on l^2; built via dB_k = diag(a_{k-1})B_k + "
+           "B_k diag(b_k), a_j=dW_j/(2W_j), dW_j = Simplex.volumeGradient. Empty for "
+           "k<1 or an absent edge.")
       .def("isHermitian", &HodgeLaplacian::isHermitian, py::arg("tol") = 1e-12,
            "True iff ||L - L^dagger|| <= tol (Frobenius) for the k=0 Laplacian.")
       .def("unitarityResidual", &HodgeLaplacian::unitarityResidual,
@@ -630,12 +637,14 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("residualForPeriodsGradient",
            &EigenstateSynthesis::residualForPeriodsGradient,
            py::arg("holes"), py::arg("target_periods"),
-           "The analytic gradient d r_U / d l^2 of residualForPeriods w.r.t. each "
-           "edge's squared length, in cellSimplices() (k=1 cell) order. "
-           "Eigendecomposes M = L1, builds the same carried psi, then propagates "
-           "the per-edge low-rank dM/dl^2 through eigenvector perturbation theory "
-           "and the pseudo-inverse derivative (the C++ port of the relaxation's "
-           "Python drU). Raises on a hole/target length mismatch.")
+           "Arbitrary-degree exact analytic gradient d r_U / d l^2 of "
+           "residualForPeriods w.r.t. each edge's squared length, in ChainComplex "
+           "1-cell (edge) order. M = L_k, the per-edge dL_k/dl^2 = HodgeLaplacian."
+           "laplacianGradient (built on Simplex.volumeGradient), through eigenvector-"
+           "perturbation theory; period covector + leak from each removed-(k+1)-cell "
+           "hole's facets. Reproduces the k=1 edge-loop core on triangle holes; "
+           "certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
+           "converge). Raises on a hole/target length mismatch.")
       .def("residualForPeriodsGradientGpu",
            &EigenstateSynthesis::residualForPeriodsGradientGpu,
            py::arg("holes"), py::arg("target_periods"),

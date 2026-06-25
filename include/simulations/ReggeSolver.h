@@ -97,6 +97,56 @@ class ReggeSolver {
     /// Asante-Dittrich arXiv:2104.00485.
     [[nodiscard]] std::complex<double> dualReggeAction() const;
 
+    /// The \f$(d\!-\!2)\f$ **hinge** vertex-tuples that are faces of the given top
+    /// \f$d\f$-cells — the set of hinges whose dual-action contribution a move over
+    /// those cells can change. Each input cell is a vertex-id tuple; the result is
+    /// the dedup'd set of \f$(d\!-\!1)\f$-vertex sub-tuples (sorted ids). Pure
+    /// topology (no geometry): the **affected-hinge index** for the incremental
+    /// \f$\Delta S_{\text{Regge}}\f$. Build it from a move's touched cells
+    /// (created ∪ removed ∪ the top cofaces of a perturbed edge) once, then use the
+    /// SAME set for the before/after legs of ``dualReggeActionOverHinges``.
+    [[nodiscard]] std::vector<std::vector<std::uint64_t>> hingeFacesOfCells(
+        const std::vector<std::vector<std::uint64_t>> &cells) const;
+
+    /// The **localized** dual (Sorkin) Regge action
+    /// \f$\sum_{h} |\!\star\! h|\,\varepsilon_h\f$ over only the given
+    /// \f$(d\!-\!2)\f$ hinge tuples that are *genuine* in the live complex (a
+    /// registered simplex with a top coface — orphans contribute 0, exactly as in
+    /// ``dualReggeAction``). Each tuple is resolved by vertex id (order-independent,
+    /// ``findSimplexByVerts``) and the per-term measure is the **same** circumcentric
+    /// ``dualVolume`` as ``dualReggeAction``, so it inherits the dual action by
+    /// construction. This is the before/after leg of the incremental
+    /// \f$\Delta S_{\text{Regge}}\f$: evaluated over a FIXED affected-hinge set
+    /// across a move, \f$\Delta S = S_{\text{after}} - S_{\text{before}}\f$ is exact
+    /// (every hinge outside the set is unchanged and cancels).
+    [[nodiscard]] std::complex<double> dualReggeActionOverHinges(
+        const std::vector<std::vector<std::uint64_t>> &hinges) const;
+
+    /// The edges whose per-edge action gradient `∂S/∂ℓ²_e` a move over the given top
+    /// cells can change — the **affected-edge index** for the incremental
+    /// `Δ‖∇S_Regge‖²`. A move changes `∂S/∂ℓ²_e` only when an affected hinge
+    /// (`hingeFacesOfCells(cells)`) contributes to `e`, i.e. only for edges that share
+    /// a top cell with an affected hinge. Returns those edges as sorted `(a,b)` id
+    /// pairs (deduped). Build it from a move's touched cells; because cells are
+    /// added/removed, take the **union** of this set evaluated before and after the
+    /// move, then use that fixed set for both legs of `gradientNorm2OverEdges`.
+    [[nodiscard]] std::vector<std::pair<std::uint64_t, std::uint64_t>>
+    affectedEdgesOfCells(
+        const std::vector<std::vector<std::uint64_t>> &cells) const;
+
+    /// The **localized** squared gradient norm `Σ_{e∈edges} |∂S/∂ℓ²_e|²` of the dual
+    /// (Sorkin) Regge action — the geometry term of the optimizer objective
+    /// `F = ‖∇S_Regge‖² + Γ·r_U` (extremize the action, δS=0). Each `∂S/∂ℓ²_e` is the
+    /// **full** per-edge gradient `Σ_{h∋e}[∂|★h|·ε_h + |★h|·∂ε_h]` summed over *all*
+    /// hinges incident to `e` (`e`'s star — local), built from the same per-hinge
+    /// analytic gradients as `actionGradientExact`; **complex** modulus (Re and Im
+    /// together). Over a FIXED affected-edge set across a move,
+    /// `Δ‖∇S_Regge‖² = after − before` is exact (every edge outside the set keeps its
+    /// gradient and cancels). `gradientNorm2OverEdges` over *all* edges equals
+    /// `Σ_e |actionGradientExact()_e|²`.
+    [[nodiscard]] double gradientNorm2OverEdges(
+        const std::vector<std::pair<std::uint64_t, std::uint64_t>> &edges) const;
+
     /// Point-particle matter action: \f$S_{\text{matter}} = -M \sum_{e \in W} \sqrt{-\ell^2_e}\f$.
     [[nodiscard]] double matterAction() const;
 
