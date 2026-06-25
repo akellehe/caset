@@ -251,36 +251,32 @@ class EmergentOptimizer:
     def _restore(self, st):
         self.st = st
 
-    # ----- Stage 1: combinatorial moves on the free part (whole minus the inputs) -----
+    # ----- Stage 1: combinatorial moves; inputs kept REPRESENTABLE, not walled off -----
     def _random_spec(self, st):
-        """A single RANDOM move on `st`. Stage 1 holds the inputs fixed, so cone moves
-        are confined to cells/facets disjoint from the input vertices (the free part)."""
-        protect = self._input_verts
+        """A single RANDOM move on `st`. Moves may freely ADD to (or near) the input
+        regions; the only thing held fixed is that no input vertex is removed (enforced
+        in `_apply_spec`), so cone moves are proposed on any cell/facet."""
         kind = self.rng.choice(
             ["add", "remove", "flip", "iflip", "cone_out", "cone_in"])
         if kind in ("add", "remove", "flip", "iflip"):
             return (kind, self.rng.randrange(2 ** 31))
-        free = [c for c in (_top_tuple(s) for s in st.getTopSimplices())
-                if not (set(c) & protect)]
-        if not free:
+        tops = [_top_tuple(s) for s in st.getTopSimplices()]
+        if not tops:
             return ("noop", None)
         if kind == "cone_out":
-            return ("cone_out", list(self.rng.choice(free)))
-        verts = list(self.rng.choice(free))
+            return ("cone_out", list(self.rng.choice(tops)))
+        verts = list(self.rng.choice(tops))
         drop = self.rng.randrange(len(verts))
         return ("cone_in", [v for i, v in enumerate(verts) if i != drop])
 
-    def _touches_input(self, before_cells, after_cells):
-        protect = self._input_verts
-        return any(set(c) & protect for c in before_cells ^ after_cells)
-
     def _apply_spec(self, st, spec):
         """Apply a move to `st`; True iff applied, gated by `dualComplexValid` (§3), and
-        — in the combinatorial stage — disjoint from the held-fixed input vertices."""
+        it does NOT remove an input vertex. Moves may add to the input regions — only the
+        set of vertices representing each input state must persist (the residual keeps it
+        representative), so the rejection is the narrow `input vertex disappeared`."""
         kind, p = spec
         if kind == "noop":
             return False
-        before = {_top_tuple(s) for s in st.getTopSimplices()}
         if kind in ("add", "remove", "flip", "iflip"):
             cls = {"add": T.AddMove, "remove": T.RemoveMove,
                    "flip": T.FlipMove, "iflip": T.IFlipMove}[kind]
@@ -293,8 +289,8 @@ class EmergentOptimizer:
             applied = cob.SurgicalCone(st).coneIn(p)[0]
         if not applied:
             return False
-        after = {_top_tuple(s) for s in st.getTopSimplices()}
-        if self._touches_input(before, after):           # inputs held fixed in Stage 1
+        live = {v for c in (_top_tuple(s) for s in st.getTopSimplices()) for v in c}
+        if not (self._input_verts <= live):              # an input vertex was removed
             return False
         ok, _why = cob.EigenstateSynthesis(st, self.k).dualComplexValid()
         return ok
