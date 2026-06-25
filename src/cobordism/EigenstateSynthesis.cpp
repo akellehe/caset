@@ -1560,7 +1560,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   return grad;
 }
 
-std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
+std::vector<double> EigenstateSynthesis::periodGradientGeneral(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
   // Arbitrary-degree exact d r_U / d l^2 over the removed-(k+1)-cell holes. M = L_k,
@@ -1582,7 +1582,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
   if (nk == 0 || m == 0) return grad;
   if (targetPeriods.size() != m)
     throw std::runtime_error(
-        "EigenstateSynthesis::residualForPeriodsGradient: " +
+        "EigenstateSynthesis::periodGradientGeneral: " +
         std::to_string(targetPeriods.size()) + " target periods for " +
         std::to_string(m) + " holes");
   static constexpr double kNullTol = 1e-7;
@@ -1608,7 +1608,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
     std::sort(h.begin(), h.end());
     if (h.size() != hv)
       throw std::runtime_error(
-          "EigenstateSynthesis::residualForPeriodsGradient: hole has " +
+          "EigenstateSynthesis::periodGradientGeneral: hole has " +
           std::to_string(h.size()) + " vertices, expected " + std::to_string(hv));
     std::vector<std::size_t> walk(hv);
     for (std::size_t i = 0; i < hv; ++i) walk[i] = i;
@@ -1622,7 +1622,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
       const auto it = col.find(f);
       if (it == col.end())
         throw std::runtime_error(
-            "EigenstateSynthesis::residualForPeriodsGradient: a hole facet is not a "
+            "EigenstateSynthesis::periodGradientGeneral: a hole facet is not a "
             "k-cell of the complex");
       if (w == 0) leakCol[q] = it->second;
       Q(static_cast<Index>(q), static_cast<Index>(it->second)) +=
@@ -1694,6 +1694,23 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
                (2.0 * rU / nrm) * (p.dot(dpsi)).real();
   }
   return grad;
+}
+
+std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+  // Arbitrary-degree exact d r_U / d l^2, in ChainComplex 1-cell (edge) order.
+  // At k = 1 (triangle holes) route through the fast low-rank edge-loop core
+  // (periodGradientOverLoops): it builds the chain complex once and uses a per-edge
+  // low-rank dM, so a relaxation loop stays affordable. It is value-identical to the
+  // general path (verified to 1.7e-15). For k >= 2 use the degree-generic
+  // periodGradientGeneral (M = L_k, the per-edge analytic dL_k/dl^2). Both satisfy
+  // the exact Euler identity Sum_e l^2_e d r_U/d l^2_e = -r_U.
+  if (k_ == 1)
+    return periodGradientOverLoops(
+        holeLoops(holes, "EigenstateSynthesis::residualForPeriodsGradient"),
+        targetPeriods);
+  return periodGradientGeneral(holes, targetPeriods);
 }
 
 std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(

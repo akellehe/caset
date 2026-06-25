@@ -325,16 +325,13 @@ class EigenstateSynthesis {
 
     /// **Arbitrary-degree** exact analytic gradient \f$ \partial r_U / \partial l^2_e \f$
     /// of `residualForPeriods` w.r.t. each edge's squared length, in `ChainComplex`
-    /// 1-cell (edge) order. Eigendecomposes the metric Laplacian \f$ M = L_k \f$
-    /// (`HodgeLaplacian`), builds the same carried representative \f$ \psi \f$ (period
-    /// covector + leak from each removed-\f$(k\!+\!1)\f$-cell hole's facet boundary),
-    /// then propagates the per-edge analytic \f$ \partial L_k/\partial l^2 \f$
-    /// (`HodgeLaplacian::laplacianGradient`, built on `Simplex::volumeGradient`) through
-    /// first-order eigenvector-perturbation theory and the pseudo-inverse derivative.
-    /// Reproduces the \f$ k = 1 \f$ edge-loop core (`periodGradientOverLoops`) on
-    /// triangle holes to machine precision; certified by the exact Euler identity
+    /// 1-cell (edge) order, certified by the exact Euler identity
     /// \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = -r_U \f$ at every register degree
-    /// (finite difference is roundoff-limited and does not converge). \f$ O(n_k^3) \f$.
+    /// (finite difference is roundoff-limited and does not converge). At \f$ k = 1 \f$
+    /// it routes through the **fast** low-rank edge-loop core (`periodGradientOverLoops`,
+    /// which builds the chain complex once) so a relaxation loop stays affordable; at
+    /// \f$ k \ge 2 \f$ it uses the degree-generic `periodGradientGeneral`. The two are
+    /// value-identical at \f$ k = 1 \f$ (verified to 1.7e-15).
     /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`.
     [[nodiscard]] std::vector<double> residualForPeriodsGradient(
         const std::vector<std::vector<std::uint64_t>> &holes,
@@ -740,6 +737,13 @@ class EigenstateSynthesis {
     // d r_U / d l^2 with the cycles given as signed edge-loops.
     [[nodiscard]] std::vector<double> periodGradientOverLoops(
         const std::vector<EdgeLoop> &loops,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    // Degree-generic d r_U / d l^2 over removed-(k+1)-cell holes (M = L_k, the
+    // per-edge analytic dL_k/dl^2). The k >= 2 path of residualForPeriodsGradient;
+    // value-identical to periodGradientOverLoops at k = 1.
+    [[nodiscard]] std::vector<double> periodGradientGeneral(
+        const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
     // Each removed-triangle hole (a 3-vertex tuple) as the oriented boundary loop
