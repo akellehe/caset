@@ -351,3 +351,51 @@ class EmergentOptimizer:
             else:
                 stalls = 0
         return trace
+
+    # ----- Stage 2: continuous geometric relaxation (every edge free) -----
+    def relax_stage2(self, beta=1.0, max_iters=40, alpha0=0.05):
+        """Stage 2 (§6/§7): relax **every** edge squared-length toward a stationary point
+        of `β‖∇S‖² + Γ·r_U`, re-opening the scale DOF Stage 1 froze. The inputs are held
+        *representable*, not frozen — their residual terms are in the objective, so input
+        edges relax like any other while staying representative.
+
+        The squared lengths are **complex** (Lorentzian): each `ℓ²_e` carries a real and
+        an imaginary part and both must be relaxed. `‖∇S‖²` is real, so its steepest
+        descent over a complex `ℓ²` is the Wirtinger direction
+        `∂‖∇S‖²/∂ℓ̄²_f = 2·conj(H)·g` (`actionGradientExact` `g` + `actionHessianExact`
+        `H` — exact analytic, no finite differences), which reduces to the real gradient
+        when the metric is Euclidean. A backtracking line search accepts only a decrease
+        of the **full three-term** objective; `r_U` gates the step (its general-k gradient
+        is not folded — the §9.2 precompute, matching `CobordismRelaxer::relaxInterior`'s
+        k≥2 semantics). The conformal/scale runaway is diagnosed by this restoring force,
+        never pinned to a boundary. Returns the F trace."""
+        edges = self.st.getEdgeList().toVector()
+
+        def full_f():
+            return beta * _grad_norm2(self.st) + self.gamma * self.r_u(self.st)
+
+        trace = [full_f()]
+        alpha = alpha0
+        for _ in range(max_iters):
+            rs = T.ReggeSolver(self.st, T.MatterConfiguration())
+            g = np.asarray(rs.actionGradientExact(), dtype=complex)
+            hmat = np.asarray(rs.actionHessianExact(), dtype=complex).reshape(len(g), len(g))
+            grad = beta * 2.0 * (np.conj(hmat) @ g)          # complex ∂‖∇S‖²/∂ℓ̄²
+            l2 = np.asarray([e.getSquaredLength() for e in edges], dtype=complex)
+            f0, step, improved = trace[-1], alpha, False
+            for _ls in range(24):
+                l2n = l2 - step * grad
+                re = np.clip(l2n.real, 0.05, 20.0)           # keep the real part bounded;
+                for e, v in zip(edges, re + 1j * l2n.imag):  # carry the imaginary part
+                    e.setSquaredLength(complex(v))
+                f1 = full_f()
+                if f1 < f0 - self._tol:
+                    trace.append(f1)
+                    alpha, improved = min(alpha * 1.3, 1.0), True
+                    break
+                step *= 0.5
+            if not improved:
+                for e, v in zip(edges, l2):                  # restore the best point
+                    e.setSquaredLength(complex(v))
+                break
+        return trace

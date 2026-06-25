@@ -126,6 +126,20 @@ class EmergentLoopTest(unittest.TestCase):
         # starts connected and stays connected, topology whatever ΔF produced
         self.assertEqual(eo.betti(opt.st)[0], 1)
 
+        # Stage 2 (continuous): relax every edge toward a stationary point of
+        # β‖∇S‖² + Γ·r_U — F decreases monotonically, the geometry term falls, the
+        # inputs stay representable (every input vertex present), and it stays gated.
+        g0 = eo._grad_norm2(opt.st)
+        s2 = opt.relax_stage2(beta=1.0, max_iters=4)
+        self.assertTrue(all(s2[i + 1] <= s2[i] + 1e-9 for i in range(len(s2) - 1)))
+        self.assertLessEqual(s2[-1], s2[0])
+        self.assertLessEqual(eo._grad_norm2(opt.st), g0 + 1e-6)
+        live2 = {v for c in (eo._top_tuple(s) for s in opt.st.getTopSimplices())
+                 for v in c}
+        self.assertTrue(input_verts0 <= live2)
+        ok2, _why2 = eo.cob.EigenstateSynthesis(opt.st, 3).dualComplexValid()
+        self.assertTrue(ok2)
+
 
 if __name__ == "__main__":
     unittest.main()
