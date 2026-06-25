@@ -44,27 +44,50 @@ S³), refined by a few `PreGeometric` Pachner moves so it is large enough for su
 have somewhere to act (the minimal triangulation is too small), stacked
 to a small closed S⁴, is the starting host. `Spacetime::fromCells(4, …)` materializes it.
 
-**Pinned interior states — the crux.** A closed S⁴ starts at `b₂ = 0`: there is no
-color register yet, so `r_U` has nothing to score. The states must therefore be
-**seeded as fixed interior register holes**, not as abstract "regions":
+**Pinned interior states — the crux. This is the cobordism construction, in three
+steps; the states are genuine fixed sub-structures, not abstract "seeded holes".**
 
-- An input (resp. output) state is a small **fixed sub-complex** carrying a removed
-  top-cell hole at the register degree (`k = 2` → a removed tetrahedron, the `b₂`
-  hole) with a pinned color **target period** (the ω color charge `[1, ω, ω²]`, frame
-  up to §4). Its edge lengths are **Dirichlet-fixed** (the "fixed interior region").
-- The optimizer relaxes the **bulk** between/around the pinned states and, via gated
-  surgery, may grow **additional** `b₂` holes when a pinned color charge cannot be
-  carried without them. `r_U = residualForPeriods(allPinnedHoles, allTargets)` on the
-  current emergent register is then well-defined from step 0 (high while the register
-  can't carry the pinned charge, → 0 once it can).
+1. **Construct each state as a sub-structure whose own harmonic IS the state.** For
+   each input (and for the output) we first **solve for an interior sub-complex whose
+   harmonic of its OWN Laplacian `L_k` represents that state** — i.e. a small structure
+   whose `ker L_k` carries the desired register periods (the color charge as a harmonic
+   of *that* sub-complex). This is a construction step, done before the loop: the
+   state is realized as an actual triangulated piece of geometry, not a target attached
+   to a bare hole. (`EigenstateSynthesis::residualForPeriods` / `carriedRepresentative`
+   build the harmonic representative; the sub-structure is the geometry whose `ker L_k`
+   *is* that harmonic.)
+2. **Fix every state sub-structure in the interior.** The input sub-structures and the
+   output sub-structure are placed in the interior of the closed S⁴ and **Dirichlet-
+   pinned** (their edge lengths held fixed) — these are the "fixed interior regions."
+   Both inputs **and** the output are held fixed.
+3. **Solve for the full structure (the emergent bulk).** The optimizer solves for the
+   connecting bulk such that the combined complex (a) keeps each fixed input
+   sub-structure representative of its state-harmonic, **and** (b) realizes the final
+   state as a harmonic of the **combined** Laplacian of the whole complex.
 
-This reuses the established pinning machinery: `CobordismRelaxer::relaxInterior`
-(`CobordismRelaxer.h:54`) already partitions **Dirichlet-fixed boundary/pinned edges**
-from the **free interior edges** and relaxes `β‖∇ᵢS‖² + r_state` to a stationary point;
-the pinned holes flow through its `stateHoles`/`holeTargets`. The novelty of T5 is that
-the *topology* between the pinned states is no longer hand-built — it **emerges** under
-the move set. (The minimal-event question — one seeded input + one seeded output, grow
-the connecting register — is exactly what T6/#463 then validates.)
+So `r_U` scores the residual of **all** the pinned state-harmonics against the harmonic
+subspace of the **combined** complex (`residualForPeriods` over the states' register
+holes, read on the whole `L_k`) → `0` exactly when the emergent bulk realizes the
+cobordism (inputs preserved, output realized as a combined-complex harmonic). The
+`b₂ = 0` worry was a non-issue framed wrongly: the **input/output sub-structures bring
+their own register** (their harmonics); what is emergent is the **bulk topology**
+connecting them — and whether the combined complex can carry all the fixed states at
+once is precisely the question `r_U` measures and the optimizer minimizes.
+
+This reuses the established cobordism evolution rule and its machinery:
+`CobordismRelaxer::relaxInterior` (`CobordismRelaxer.h:54`) partitions the
+**Dirichlet-fixed** state sub-structures from the **free** bulk edges and relaxes
+`β‖∇S‖² + Γ·r_state` to a stationary point; the fixed states' holes/targets flow
+through its `stateHoles`/`holeTargets`. The novelty of T5 is only that the **bulk
+topology is no longer hand-built — it emerges** under the random move set (§3, §7).
+(The minimal case — construct/fix one input and one output, solve for the connecting
+bulk — is what T6/#463 validates.)
+
+> **Open for sign-off (degree):** you wrote `L_1` for the input sub-structures' harmonic;
+> the S⁴ host's register is `k = 2` (`b₂`, tetrahedral holes). These must agree — either
+> the state sub-structures are themselves `k = 2`, or there is a degree lift between the
+> input sub-structure (`L_1`/`b₁`, surface-like) and the combined 4-complex (`L_2`/`b₂`,
+> the #453 dimensional lift). Confirm which; I'll pin the degree throughout.
 
 ## 3. The move set + the gate
 
@@ -166,7 +189,9 @@ A new cobordism class — `EmergentOptimizer` (working name) — composing the m
 primitives, with **no new objective and no reimplemented moves**:
 
 ```
-EmergentOptimizer(host: closed S⁴, pinnedStates: [(charge cycle, target)], Γ, β):
+EmergentOptimizer(host: closed S⁴,
+                  fixedStates: [interior sub-structures whose ker L_k = each state,
+                                Dirichlet-pinned — inputs AND output (§2)], Γ, β):
   Stage 1 (combinatorial, fixed edge length):
     repeat (greedy steps), with random restarts:
       draw a RANDOM batch of candidate moves, each a SINGLE move:
@@ -215,9 +240,10 @@ scope here).
 
 ## 9. Build plan (follow-up PRs after this note signs off)
 
-1. `EmergentOptimizer` scaffold + the closed-S⁴ host builder + pinned-state seeding;
-   Stage-1 greedy loop over **random single** Pachner + gated surgical cone-out/in
-   moves, kept only by ΔF from T4. (`@slow`
+1. `EmergentOptimizer` scaffold + the closed-S⁴ host builder + the state-construction
+   step (build each input/output as a sub-structure whose `ker L_k` is the state, then
+   Dirichlet-fix it in the interior — §2); Stage-1 greedy loop over **random single**
+   Pachner + gated surgical cone-out/in moves, kept only by ΔF from T4. (`@slow`
    end-to-end test on a tiny host.)
 2. The frame-free color scorer (§4) + the exact-b₂ hardening guard (§5).
 3. Stage-2 `relaxInterior` integration + the k = 2 `r_U`-gradient precompute optimization.
