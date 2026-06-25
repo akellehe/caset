@@ -2,24 +2,41 @@
 # All rights reserved.
 """The emergent optimizer loop on a closed S⁴ (T5, #462).
 
-Builds the topology of a cobordism EMERGENTLY: start from a closed S⁴ with plenty
-of edges/vertices, hold the start/end states representative through the single
-combined residual ``r_U``, and minimize the objective
+Builds the topology of a cobordism EMERGENTLY. Per the design note (§2):
 
-    F = ‖∇S_Regge‖²  +  Γ · r_U          (extremize the action, δS = 0)
+* **Host** — a bare closed S⁴ (`SimplexBoundarySphere(4)` refined for surgery room),
+  with two **constructed interior input states** inserted.
+* **Two inputs** — each solved *separately* into its own interior sub-complex whose
+  **own `L_k` harmonic** represents that input. Topology emergent (no opened holes, no
+  designated register). Tracked, held *effectively* fixed by its residual.
+* **Output** — never constructed: the harmonic of the **entire** structure. The loop
+  drives the free part until the whole complex's `L_k` harmonic matches the expected
+  output.
+* **Objective** — `F = ‖∇S_Regge‖² + Γ·r_U`, `r_U` a **three-term** residual:
 
-by **random, single** moves — Pachner (refine/flip) and gated surgical cone-out/in —
-each kept **only** by ΔF (gated by the dual-lattice manifold check). The topology is
-FULLY EMERGENT, NEVER PRESCRIBED: the optimizer carries no target topology, no `b_k`
-goal, and no move recipes; the objective is the only thing that ever guides the
-lattice, move-by-move (greedy + random restarts to escape local minima).
+      r_U = r(sub₁, input₁ | sub₁'s own L_k)
+          + r(sub₂, input₂ | sub₂'s own L_k)
+          + r(whole, output | whole L_k)
 
-Composes the merged primitives: `ReggeSolver` (‖∇S‖² via `actionGradientExact`),
-`EigenstateSynthesis` (`r_U = residualForPeriods` at register degree `k`, and the
-`dualComplexValid` gate), the Pachner moves, and `SurgicalCone` (#469). See
-`docs/design/t5_emergent_optimizer_design.md`.
+  Each term is a `residualForPeriods` of the expected state against the `L_k` harmonic
+  read over the structure's *emergent* register, with the register **zero-filled** to
+  the expected state's dimension (un-emerged slots = 0) and matched **relabeling-
+  invariantly**. The register is *read off* the structure (`getBoundary`), never placed.
+* **Two stages, one functional, in sequence (never together):**
+  - **Stage 1** (combinatorial, fixed edge length) — greedy best-ΔF over random single
+    Pachner + gated surgical cone-out/in, kept only by ΔF; the two inputs are *really
+    held fixed* (moves can't touch their edges), so the free part is *whole minus the
+    inputs*. `Δ‖∇S‖²` is the incremental T4 local delta.
+  - **Stage 2** (continuous, geometric) — `relaxInterior` on every free edge (the inputs
+    held representative, not frozen). Build-plan §9.2; not wired here.
+
+The topology is FULLY EMERGENT, NEVER PRESCRIBED: random moves kept only by ΔF, no
+target topology, no `b_k` goal, no recipes. See `docs/design/t5_emergent_optimizer_design.md`.
 """
+import itertools
 import random
+
+import numpy as np
 
 import tessera as T
 
@@ -32,7 +49,8 @@ _DIM = 4
 
 def build_closed_s4(n_refine=20, seed=0):
     """A closed S⁴ (Betti [1,0,0,0,1]) with plenty of edges/vertices to optimize over:
-    the minimal `∂Δ⁵` sphere refined by `n_refine` PreGeometric stellar Pachner moves."""
+    the bare `∂Δ⁵` sphere refined by `n_refine` PreGeometric stellar Pachner moves so
+    surgery has somewhere to act (the minimal triangulation is too small)."""
     sig = T.Signature(_DIM, T.Lorentzian)
     st = T.Spacetime(T.Metric(True, sig), T.CDT, 1.0, 1.0, T.PREFERRED,
                      T.SimplexBoundarySphere(_DIM))
@@ -59,41 +77,156 @@ def betti(st):
     return list(cob.ChainComplex.fromSpacetime(st).bettiNumbers())
 
 
-class EmergentOptimizer:
-    """Greedy + random-restart optimizer of `F = ‖∇S_Regge‖² + Γ·r_U` over the move
-    set, with fully emergent topology. The fixed states are held representative by the
-    single combined `r_U` term (`stateHoles`/`stateTargets`) — not frozen, not seeded
-    as registers: as the bulk emerges, `r_U` → 0 only if the structure can carry every
-    state at once. Nothing else is imposed."""
+# ===== the emergent register read + the residual (a function of the L_k harmonic and
+# ===== the expected state — nothing imposed) =====
+def emergent_holes(st, k):
+    """The emergent k-register, **read off** the structure: the `(k+2)`-vertex tuples
+    (removed `(k+1)`-simplices) all of whose drop-one facets are boundary facets — the
+    cells whose boundary `k`-cycle the surgery exposed. A pure read of `getBoundary`;
+    nothing is placed and no register is tracked."""
+    bnd = {tuple(sorted(f)) for f in st.getBoundary()}
+    if len(next(iter(bnd), ())) != k + 1:               # boundary facets must be k-cells
+        return []
+    verts = sorted({v for f in bnd for v in f})
+    holes = set()
+    for f in bnd:
+        for v in verts:
+            if v in f:
+                continue
+            tup = tuple(sorted(f + (v,)))
+            facets = [tuple(x for j, x in enumerate(tup) if j != i)
+                      for i in range(len(tup))]
+            if all(ff in bnd for ff in facets):
+                holes.add(tup)
+    return sorted(holes)
 
-    def __init__(self, host, state_holes, state_targets, k=2, gamma=1.0, seed=0):
+
+def r_state(st, k, target):
+    """The residual of the expected `target` state against the `L_k` harmonic of `st`,
+    with the emergent register **zero-filled** to the target dimension and matched
+    **relabeling-invariantly**:
+
+    * `b_k = 0` (nothing emerged) → every slot zero → residual = ‖target‖² (full leak),
+      so the loop has a gradient toward growing a register rather than `r_U` being
+      undefined;
+    * as cycles emerge and their periods align with the target, the leak falls → 0 iff
+      the structure carries the state.
+
+    Purely a function of `harmonicMatrix(k)` (via `cyclePeriods`) and the expected
+    state; the register is read, never placed."""
+    d = len(target)
+    t = np.asarray(target, dtype=complex)
+    bk = betti(st)[k]
+    if bk == 0:
+        return float(np.vdot(t, t).real)                 # zero-filled: full leak
+    holes = emergent_holes(st, k)[:d]                    # up to d emergent slots
+    if not holes:
+        return float(np.vdot(t, t).real)
+    periods = cob.EigenstateSynthesis(st, k).cyclePeriods([list(h) for h in holes])
+    pmat = np.asarray(periods, dtype=complex).reshape(bk, len(holes))
+    pd = np.zeros((bk, d), dtype=complex)                # zero-fill un-emerged slots
+    pd[:, :pmat.shape[1]] = pmat
+    best = float("inf")
+    for perm in itertools.permutations(range(d)):        # relabeling-invariant match
+        ts = t[list(perm)]
+        c, *_ = np.linalg.lstsq(pd.T, ts, rcond=None)
+        leak = pd.T @ c - ts
+        best = min(best, float(np.vdot(leak, leak).real))
+    return best
+
+
+def _grad_norm2(st):
+    return sum(abs(z) ** 2
+               for z in T.ReggeSolver(st, T.MatterConfiguration()).actionGradientExact())
+
+
+class EmergentOptimizer:
+    """Greedy + random-restart optimizer of `F = ‖∇S_Regge‖² + Γ·r_U` with fully
+    emergent topology and the three-term, asymmetric `r_U` of §2. The two inputs are
+    constructed in place as interior sub-complexes (their own `L_k` harmonic represents
+    each input) and tracked by vertex set; the output is the whole structure's harmonic.
+
+    `input_targets` is a list of two expected-state period vectors; `output_target` the
+    expected output. Nothing is frozen and no register is imposed."""
+
+    def __init__(self, host, input_targets, output_target, k=2, gamma=1.0, seed=0):
         self.st = host
-        self.holes = [list(h) for h in state_holes]
-        self.targets = [complex(t) for t in state_targets]
+        self.input_targets = [list(t) for t in input_targets]
+        self.output_target = list(output_target)
         self.k = k
         self.gamma = gamma
         self.rng = random.Random(seed)
-        self._tol = 1e-9          # only accept a meaningfully-improving move
+        self._tol = 1e-9
+        self.inputs = []        # [{'verts': frozenset, 'target': [...]}, ...]
 
-    # ----- objective (full — for reporting / the exact-accounting test) -----
-    def _grad_norm2(self, st):
-        return sum(abs(z) ** 2
-                   for z in T.ReggeSolver(st, T.MatterConfiguration()).actionGradientExact())
+    # ----- the constructed interior inputs -----
+    def _region_subcomplex(self, verts):
+        """The input sub-complex: the host cells entirely within `verts`, as its own
+        complex so we can take its *own* `L_k`."""
+        cells = [list(c) for c in (_top_tuple(s) for s in self.st.getTopSimplices())
+                 if set(c) <= verts]
+        return T.Spacetime.fromCells(_DIM, cells, 1.0, 0.0) if cells else None
 
-    def _r_u(self, st):
-        if not self.holes:
-            return 0.0
-        return cob.EigenstateSynthesis(st, self.k).residualForPeriods(
-            self.holes, self.targets)
+    def _r_input(self, inp):
+        sub = self._region_subcomplex(inp['verts'])
+        return r_state(sub, self.k, inp['target']) if sub is not None else \
+            float(np.vdot(np.asarray(inp['target']), np.asarray(inp['target'])).real)
+
+    def construct_inputs(self, seeds, rounds=24):
+        """Solve each input *separately* into an interior sub-complex whose own `L_k`
+        harmonic represents it: a region-restricted move-solve (surgical cone-out/in on
+        cells inside the region, kept only by Δ of that input's term) growing whatever
+        emergent topology carries the target. `seeds` is the list of seed vertices; the
+        region is the seed's neighbourhood. Nothing opened by hand."""
+        for seed_v, target in zip(seeds, self.input_targets):
+            verts = frozenset(
+                v for c in (_top_tuple(s) for s in self.st.getTopSimplices())
+                if seed_v in c for v in c)
+            inp = {'verts': verts, 'target': target}
+            r = self._r_input(inp)
+            for _ in range(rounds):
+                cells = [c for c in (_top_tuple(s) for s in self.st.getTopSimplices())
+                         if set(c) <= verts]
+                if not cells:
+                    break
+                cell = list(self.rng.choice(cells))
+                snap = self._snapshot_of(self.st)
+                if not cob.SurgicalCone(self.st).coneOut(cell)[0]:
+                    continue
+                ok, _why = cob.EigenstateSynthesis(self.st, self.k).dualComplexValid()
+                r_new = self._r_input(inp) if ok else float("inf")
+                if ok and r_new < r - self._tol:
+                    r = r_new
+                else:
+                    self._restore(self._build(snap))     # reject: restore exactly
+            self.inputs.append(inp)
+        return [self._r_input(i) for i in self.inputs]
+
+    @property
+    def _input_verts(self):
+        out = set()
+        for inp in self.inputs:
+            out |= inp['verts']
+        return out
+
+    # ----- objective (three-term, asymmetric) -----
+    def r_u(self, st=None):
+        st = st if st is not None else self.st
+        rt = r_state(st, self.k, self.output_target)     # output: on the whole
+        for inp in self.inputs:                          # inputs: on their own L_k
+            rt += self._r_input(inp) if st is self.st else r_state(
+                self._sub_of(st, inp['verts']), self.k, inp['target'])
+        return rt
+
+    def _sub_of(self, st, verts):
+        cells = [list(c) for c in (_top_tuple(s) for s in st.getTopSimplices())
+                 if set(c) <= verts]
+        return T.Spacetime.fromCells(_DIM, cells, 1.0, 0.0) if cells else None
 
     def objective(self):
-        return self._grad_norm2(self.st) + self.gamma * self._r_u(self.st)
+        return _grad_norm2(self.st) + self.gamma * self.r_u(self.st)
 
-    # ----- snapshot / restore (drift-free base for candidate evaluation) -----
-    # Move rollback is not bit-exact for every move (RemoveMove drifts O(1), #365/#371),
-    # so we never rely on it: each candidate is evaluated on a freshly REBUILT copy of
-    # the base complex (fromCells is deterministic ⇒ bit-identical), and only the winner
-    # is committed. No drift can accumulate.
+    # ----- snapshot / restore (drift-free; never trust move rollback, #365/#371) -----
     def _snapshot_of(self, st):
         cells = [list(_top_tuple(s)) for s in st.getTopSimplices()]
         l2 = {}
@@ -106,8 +239,6 @@ class EmergentOptimizer:
         return self._snapshot_of(self.st)
 
     def _build(self, snap):
-        """Materialize a snapshot into a fresh complex WITHOUT touching `self.st` (so the
-        live base stays available as the before-leg of the incremental ΔF)."""
         cells, l2 = snap
         st = T.Spacetime.fromCells(_DIM, cells, 1.0, 0.0)
         for e in st.getEdgeList().toVector():
@@ -117,34 +248,39 @@ class EmergentOptimizer:
                 e.setSquaredLength(v)
         return st
 
-    def _restore(self, snap):
-        self.st = self._build(snap)
+    def _restore(self, st):
+        self.st = st
 
-    # ----- random single-move spec (the ONLY guidance is ΔF, applied below) -----
+    # ----- Stage 1: combinatorial moves on the free part (whole minus the inputs) -----
     def _random_spec(self, st):
-        """A single RANDOM move on `st`, as a deterministic spec — `(kind, param)`. The
-        move is chosen at random; nothing about target topology enters here."""
+        """A single RANDOM move on `st`. Stage 1 holds the inputs fixed, so cone moves
+        are confined to cells/facets disjoint from the input vertices (the free part)."""
+        protect = self._input_verts
         kind = self.rng.choice(
             ["add", "remove", "flip", "iflip", "cone_out", "cone_in"])
         if kind in ("add", "remove", "flip", "iflip"):
             return (kind, self.rng.randrange(2 ** 31))
-        tops = [_top_tuple(s) for s in st.getTopSimplices()]
-        if not tops:
+        free = [c for c in (_top_tuple(s) for s in st.getTopSimplices())
+                if not (set(c) & protect)]
+        if not free:
             return ("noop", None)
         if kind == "cone_out":
-            return ("cone_out", list(self.rng.choice(tops)))   # a random top pentatope
-        verts = list(self.rng.choice(tops))                     # random d-facet (cone-in)
+            return ("cone_out", list(self.rng.choice(free)))
+        verts = list(self.rng.choice(free))
         drop = self.rng.randrange(len(verts))
         return ("cone_in", [v for i, v in enumerate(verts) if i != drop])
 
+    def _touches_input(self, before_cells, after_cells):
+        protect = self._input_verts
+        return any(set(c) & protect for c in before_cells ^ after_cells)
+
     def _apply_spec(self, st, spec):
-        """Apply a move spec to `st` and return True iff it applied AND passes the
-        authoritative manifold gate `dualComplexValid` (spec §3) — the only structural
-        condition imposed on the loop. Surgery is also gated internally (#469); this is
-        the single uniform check over every move type."""
+        """Apply a move to `st`; True iff applied, gated by `dualComplexValid` (§3), and
+        — in the combinatorial stage — disjoint from the held-fixed input vertices."""
         kind, p = spec
         if kind == "noop":
             return False
+        before = {_top_tuple(s) for s in st.getTopSimplices()}
         if kind in ("add", "remove", "flip", "iflip"):
             cls = {"add": T.AddMove, "remove": T.RemoveMove,
                    "flip": T.FlipMove, "iflip": T.IFlipMove}[kind]
@@ -157,19 +293,17 @@ class EmergentOptimizer:
             applied = cob.SurgicalCone(st).coneIn(p)[0]
         if not applied:
             return False
-        ok, _reason = cob.EigenstateSynthesis(st, self.k).dualComplexValid()
+        after = {_top_tuple(s) for s in st.getTopSimplices()}
+        if self._touches_input(before, after):           # inputs held fixed in Stage 1
+            return False
+        ok, _why = cob.EigenstateSynthesis(st, self.k).dualComplexValid()
         return ok
 
-    def _delta_f(self, base, base_solver, base_g2_edges, base_ru, base_cells, cand):
-        """The **incremental** ΔF of `cand` relative to `base` (T4, #461):
-
-            ΔF = Δ‖∇S_Regge‖²(touched edges) + Γ·Δr_U
-
-        `Δ‖∇S‖²` is read over the *affected-edge index* of the move — the union of
-        `affectedEdgesOfCells(touched)` evaluated on both legs (`base` and `cand`), where
-        `touched` is the symmetric difference of the two cell sets. Over that fixed edge
-        set, `after − before` is exact (every edge outside it keeps its gradient and
-        cancels) — verified value-identical to the full ‖∇S‖² recompute to ~1e-13."""
+    def _delta_f(self, base_solver, base_g2_edges, base_ru, base_cells, cand):
+        """Incremental ΔF = Δ‖∇S‖²(touched edges) + Γ·Δr_U (T4, #461). The geometry term
+        reads over the affected-edge index of the move (union of `affectedEdgesOfCells`
+        on both legs); `r_U` (the three-term residual) is an exact before/after recompute
+        — a global spectral quantity with no hinge-local delta."""
         cand_cells = {_top_tuple(s) for s in cand.getTopSimplices()}
         touched = [list(c) for c in base_cells ^ cand_cells]
         cand_solver = T.ReggeSolver(cand, T.MatterConfiguration())
@@ -177,44 +311,37 @@ class EmergentOptimizer:
                        | {tuple(p) for p in cand_solver.affectedEdgesOfCells(touched)})
         edges = [list(p) for p in edges]
         d_grad = cand_solver.gradientNorm2OverEdges(edges) - base_g2_edges(edges)
-        d_ru = self._r_u(cand) - base_ru
+        d_ru = self.r_u(cand) - base_ru
         return d_grad + self.gamma * d_ru
 
-    # ----- one greedy step over a random batch -----
     def step(self, n_candidates=12):
-        """Draw `n_candidates` RANDOM single moves, score each by the **incremental ΔF**
-        (T4) against the live base, and commit the single move with the most-negative ΔF
-        (if any < 0). Returns the committed ΔF (0.0 = no improving candidate → no-op).
-
-        Each candidate is built on a fresh `fromCells` copy of the base (the base stays
-        live as the before-leg); the winning candidate's complex is committed as-is — we
-        never re-apply a move spec (Pachner `propose` is not deterministic across
-        rebuilds), so the committed state IS exactly the evaluated state."""
+        """One greedy step: draw `n_candidates` random single moves on the free part,
+        score each by the incremental ΔF against the live base, commit the most-negative
+        (if < 0). The winner's resulting complex is committed as-is; we never re-apply a
+        spec (Pachner `propose` is non-deterministic across rebuilds). Returns ΔF."""
         snap = self._snapshot()
-        base = self.st
-        base_solver = T.ReggeSolver(base, T.MatterConfiguration())
+        base_solver = T.ReggeSolver(self.st, T.MatterConfiguration())
         base_g2_edges = base_solver.gradientNorm2OverEdges
-        base_ru = self._r_u(base)
-        base_cells = {_top_tuple(s) for s in base.getTopSimplices()}
-        specs = [self._random_spec(base) for _ in range(n_candidates)]
+        base_ru = self.r_u(self.st)
+        base_cells = {_top_tuple(s) for s in self.st.getTopSimplices()}
+        specs = [self._random_spec(self.st) for _ in range(n_candidates)]
         best_dF, best_snap = -self._tol, None
         for spec in specs:
-            cand = self._build(snap)                     # fresh, bit-identical base
+            cand = self._build(snap)
             if not self._apply_spec(cand, spec):
                 continue
-            dF = self._delta_f(base, base_solver, base_g2_edges, base_ru, base_cells, cand)
+            dF = self._delta_f(base_solver, base_g2_edges, base_ru, base_cells, cand)
             if dF < best_dF:
                 best_dF = dF
-                best_snap = self._snapshot_of(cand)      # the WINNING result, committed as-is
+                best_snap = self._snapshot_of(cand)
         if best_snap is not None:
-            self._restore(best_snap)
+            self._restore(self._build(best_snap))
             return best_dF
         return 0.0
 
-    # ----- Stage 1: greedy combinatorial moves at fixed edge length + restarts -----
     def run_stage1(self, max_steps=200, n_candidates=12, patience=8):
-        """Greedy best-ΔF steps until `patience` consecutive no-ops, restarting the
-        random stream on each stall. Returns the F trace."""
+        """Greedy best-ΔF steps until `patience` consecutive no-ops, re-seeding the
+        random stream on each stall (restart). Returns the F trace."""
         trace = [self.objective()]
         stalls = 0
         for _ in range(max_steps):
@@ -222,7 +349,6 @@ class EmergentOptimizer:
             trace.append(trace[-1] + dF)
             if dF >= -self._tol:
                 stalls += 1
-                # random restart: re-seed the proposal stream (NOT the topology)
                 self.rng = random.Random(self.rng.randrange(2 ** 31))
                 if stalls >= patience:
                     break
