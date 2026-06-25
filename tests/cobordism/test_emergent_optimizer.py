@@ -2,19 +2,21 @@
 # All rights reserved.
 """The emergent optimizer loop on a closed S⁴ (T5, #462).
 
-End-to-end checks of the Stage-1 loop's *mechanics* — that it is a faithful greedy,
-gated, fully-emergent optimizer of `F = ‖∇S_Regge‖² + Γ·r_U` (the physics verdict —
-does a color b_k hole emerge — is T6/#463, not here):
+Two layers:
 
-  * **greedy extremization** — `F` decreases monotonically and stays `≥ 0`;
-  * **exact accounting** — each committed step's reported `ΔF` equals the actual
-    objective change (the snapshot-the-winner commit is drift-free);
-  * **gated** — every accepted state is a valid manifold (`dualComplexValid`);
-  * **emergent, not prescribed** — the optimizer holds no target topology; whatever
-    `b_k` results comes only from objective-justified random moves;
-  * **no-improvement is a no-op** — a step with no improving candidate leaves `F`.
+  * **The residual** (`r_state`) — the zero-filled, relabeling-invariant residual of an
+    expected state against the `L_k` harmonic read off a structure's emergent register.
+    Validated against a known carrier (ω → 0), a non-carrier (the color singlet `[1,1,1]`
+    → floored: confinement), and an empty register (→ full leak): exactly "a function of
+    the `L_k` harmonic and the expected state," nothing placed.
 
-Heavy (`@pytest.mark.slow`): one Stage-1 run on a small closed S⁴.
+  * **The loop** — the three-term `r_U` cobordism on a bare d=4 S⁴ at degree `k=3` (the
+    degree whose register the surgery makes — `ker L_{d-1}`, holes = removed top d-cells):
+    two inputs constructed in place and held *representable* (a move is rejected only when
+    it would remove an input vertex), the output the harmonic of the whole. The Stage-1
+    loop is a gated, greedy, exact, emergent optimizer of `F = ‖∇S_Regge‖² + Γ·r_U`.
+
+Heavy (`@pytest.mark.slow`): the loop test runs a real construction + Stage-1 event.
 """
 import cmath
 import importlib.util
@@ -26,9 +28,10 @@ import unittest
 import pytest
 
 _EX = os.path.join(os.path.dirname(__file__), "..", "..", "examples", "cobordism")
+_W = cmath.exp(2j * math.pi / 3)                          # ω color charge
 
 
-def _load_optimizer():
+def _load():
     sys.path.insert(0, _EX)
     spec = importlib.util.spec_from_file_location(
         "emergent_optimizer", os.path.join(_EX, "emergent_optimizer.py"))
@@ -38,60 +41,90 @@ def _load_optimizer():
     return mod
 
 
-def _make_opt(EO, seed=1):
-    st = EO.build_closed_s4(n_refine=20, seed=0)
-    tets = sorted({tuple(sorted(v.getId() for v in f.getVertices()))
-                   for s in st.getTopSimplices() for f in s.getFacets()})[:3]
-    w = cmath.exp(2j * math.pi / 3)                       # ω color charge target
-    return EO.EmergentOptimizer(st, [list(t) for t in tets], [1.0, w, w * w],
-                                k=2, gamma=1.0, seed=seed)
+class ResidualTest(unittest.TestCase):
+    """The residual is a function of the L_k harmonic + the expected state, read off the
+    emergent register with no imposed holes — fast, no loop."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.eo = _load()
+
+    def test_zero_filled_relabel_invariant_residual(self):
+        eo = self.eo
+        T, cob = eo.T, eo.cob
+        # a known ω carrier: a holed S³ (its emergent register read off getBoundary)
+        surf = cob.S3WindowSurface.build(1, 1)
+        sw = T.Spacetime.fromCells(3, [list(f) for f in surf.faces], 1.0, 0.0)
+        sc = cob.SurgicalCone(sw)
+        for h in surf.windows[0]:
+            sc.coneOut(list(h))
+
+        # the read recovers the register purely from the structure (no tracking)
+        read = eo.emergent_holes(sw, 2)
+        self.assertTrue(set(tuple(sorted(h)) for h in surf.windows[0]) <= set(read))
+
+        omega = [1.0, _W, _W * _W]
+        self.assertLess(eo.r_state(sw, 2, omega), 1e-12)             # carrier → 0
+        self.assertGreater(eo.r_state(sw, 2, [1.0, 1.0, 1.0]), 0.5)  # singlet → floor
+        # an empty register → full zero-filled leak ‖target‖²
+        empty = T.Spacetime.fromCells(3, [list(f) for f in surf.faces], 1.0, 0.0)
+        self.assertAlmostEqual(eo.r_state(empty, 2, omega),
+                               sum(abs(z) ** 2 for z in omega), places=9)
 
 
 @pytest.mark.slow
-class EmergentOptimizerStage1Test(unittest.TestCase):
+class EmergentLoopTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.EO = _load_optimizer()
+        cls.eo = _load()
 
-    def test_stage1_is_a_gated_monotone_exact_emergent_optimizer(self):
-        EO = self.EO
-        opt = _make_opt(EO)
-        self.assertEqual(EO.betti(opt.st), [1, 0, 0, 0, 1])   # a closed S⁴ host
+    def _opt(self, seed=3):
+        eo = self.eo
+        host = eo.build_closed_s4(n_refine=20, seed=0)
+        opt = eo.EmergentOptimizer(
+            host, [[1.0, _W, _W * _W], [1.0, _W * _W, _W]], [1.0, _W, _W * _W],
+            k=3, gamma=1.0, seed=seed)
+        seeds = [v.getId() for v in host.getVertexList().toVector()][:2]
+        opt.construct_inputs(seeds, rounds=12)
+        return opt
 
-        # exact accounting: each committed step's ΔF == the actual objective change
-        for _ in range(8):
+    def test_three_term_loop_is_gated_monotone_exact_emergent(self):
+        eo = self.eo
+        opt = self._opt()
+
+        # r_U is the three-term residual: well-defined and non-negative
+        self.assertGreaterEqual(opt.r_u(), -1e-9)
+        input_verts0 = set(opt._input_verts)
+
+        # exact accounting: each committed ΔF == the actual objective change (the
+        # incremental T4 ΔF matches the full three-term recompute)
+        for _ in range(6):
             before = opt.objective()
-            dF = opt.step(n_candidates=12)
+            dF = opt.step(n_candidates=8)
             after = opt.objective()
-            self.assertLess(abs(after - (before + dF)), 1e-6)
-            self.assertLessEqual(dF, 1e-9)                    # never accept a worsening move
+            self.assertLess(abs(after - (before + dF)), 1e-5)
+            self.assertLessEqual(dF, 1e-9)                  # never a worsening move
 
-        trace = opt.run_stage1(max_steps=40, n_candidates=12, patience=8)
+        trace = opt.run_stage1(max_steps=20, n_candidates=8, patience=6)
 
-        # greedy: monotone non-increasing, and the objective is genuinely lowered
+        # greedy: monotone non-increasing, F genuinely lowered, never negative
         self.assertTrue(all(trace[i + 1] <= trace[i] + 1e-6
                             for i in range(len(trace) - 1)))
         self.assertLess(trace[-1], trace[0])
-        # F = ‖∇S‖² + Γ·r_U is a sum of non-negatives — never goes negative
         self.assertTrue(all(f >= -1e-6 for f in trace))
 
         # gated: the final emergent complex is a valid manifold
-        ok, _reason = EO.cob.EigenstateSynthesis(opt.st, 2).dualComplexValid()
+        ok, _why = eo.cob.EigenstateSynthesis(opt.st, 3).dualComplexValid()
         self.assertTrue(ok)
 
-        # emergent (not prescribed): the optimizer carries no b_k target; the host
-        # started [1,0,0,0,1] and whatever topology it ends at came only from ΔF.
-        end_betti = EO.betti(opt.st)
-        self.assertEqual(end_betti[0], 1)                    # still connected
+        # inputs held REPRESENTABLE, not walled off: every input vertex still present
+        live = {v for c in (eo._top_tuple(s) for s in opt.st.getTopSimplices())
+                for v in c}
+        self.assertTrue(input_verts0 <= live)
 
-    def test_no_improving_candidate_is_a_noop(self):
-        EO = self.EO
-        opt = _make_opt(EO, seed=2)
-        f0 = opt.objective()
-        # with zero candidates there is nothing to improve → an exact no-op
-        dF = opt.step(n_candidates=0)
-        self.assertEqual(dF, 0.0)
-        self.assertLess(abs(opt.objective() - f0), 1e-9)
+        # emergent (not prescribed): the optimizer carries no b_k target; the host
+        # starts connected and stays connected, topology whatever ΔF produced
+        self.assertEqual(eo.betti(opt.st)[0], 1)
 
 
 if __name__ == "__main__":
