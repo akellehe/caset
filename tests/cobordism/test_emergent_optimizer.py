@@ -83,7 +83,7 @@ class EmergentLoopTest(unittest.TestCase):
         host = eo.build_closed_s4(n_refine=20, seed=0)
         opt = eo.EmergentOptimizer(
             host, [[1.0, _W, _W * _W], [1.0, _W * _W, _W]], [1.0, _W, _W * _W],
-            k=3, gamma=1.0, seed=seed)
+            degrees=(3,), gamma=1.0, seed=seed)
         seeds = [v.getId() for v in host.getVertexList().toVector()][:2]
         opt.construct_inputs(seeds, rounds=12)
         return opt
