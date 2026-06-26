@@ -41,12 +41,16 @@ live in the test module and in `__main__`. **Post-hoc only, never a loop conditi
 
 Outcome (see `docs/design/composite_proton_spin_findings.md`): the readout robustly identifies
 a **three–spin-½ (baryon)** bound state — `|⟨S⟩|=½` per hole and the product `J²` floors at the
-n=3 value `3/2`. The **composite** total spin (proton ½ vs Δ 3/2) is NOT a clean observable of
-this construction: (i) it needs a per-cell rest frame that a frameless complex supplies
-canonically only on geometrically *generic* cells (near-symmetric cells have degenerate inertia
-→ no canonical frame; the gates pass on generic cells but fail there — independent of b₃); and
-(ii) a product of per-hole spinors cannot carry the entanglement that defines the channel. The
-`joint_*` functions are the exploratory step toward the entangled joint-state read.
+n=3 value `3/2`. The per-cell frame is the **dual-edge** frame (`cell_frame`): its axes come
+from the cell's circumcenter-to-neighbor-circumcenter vectors, whose *lengths* carry the
+neighbors' sizes, so the frame is non-degenerate even when the cell's own vertices are
+near-symmetric — this makes GAUGE and RELABEL pass on every non-uniform structure (b₃=3..7 and
+real converged geometry), where a primal-vertex frame failed sporadically. (Only a perfectly
+uniform metric leaves the dual edges equal too — a genuine, unphysical symmetry.) The one
+remaining limitation is physical, not numerical: the **composite** total spin (proton ½ vs
+Δ 3/2) is an *entanglement* property, and a product of per-hole spinors floors at `3/2` and
+cannot reach the proton ¾. The `joint_*` functions are the exploratory step toward the
+entangled joint-state read.
 """
 import cmath
 import collections
@@ -122,26 +126,83 @@ def embed_cell(cell):
     return coords
 
 
-def cell_frame(cell):
-    """The unified per-cell frame `F(c)` and its (raw) coords, used by BOTH the spinor
-    extraction and the Wilson-line transport. `F(c)` is built from the cell's VERTEX SET —
-    its centered principal axes (eigenvectors of the inertia tensor `Σ(p−p̄)(p−p̄)ᵀ`) — so it
-    depends only on the point set, never the vertex order. Hence the frame-local coords
-    `F·(p−p̄)` are **relabel-invariant** (the same physical frame whatever the labeling) and
-    **gauge-covariant** (`F → R F` under a global rotation `R`, so frame-local coords are
-    gauge-invariant) — unlike an origin-vertex polar/QR frame, which rotates by a generic
-    SO(4) when relabeling moves the origin and breaks covariance.
+def _facet_neighbors(cells, top_tuple):
+    """`{facet frozenset: [top cells sharing it]}` — the dual adjacency, by vertex SET."""
+    fmap = collections.defaultdict(list)
+    for c in cells:
+        vs = top_tuple(c)
+        for j in range(len(vs)):
+            fmap[frozenset(vs[:j] + vs[j + 1:])].append(c)
+    return fmap
 
-    Degenerate principal moments (near-symmetric cells) leave the eigenvectors ambiguous and
-    would break the gates, so a coincident-eigenvalue block is canonically resolved by
-    diagonalizing the (order-independent) third-moment tensor restricted to it; each axis'
-    sign is then fixed by its third moment. A perfectly regular cell (all moments equal) has
-    no canonical frame — a genuine symmetry, unreachable by a non-degenerate metric.
-    Returns `(coords, F, vs)`."""
+
+def _circumcenter(cell, coords, vs):
+    bary = np.asarray(cell.circumcenterBarycentric(), dtype=float)
+    return sum(bary[i] * coords[vs[i]] for i in range(len(vs)))
+
+
+def _facet_outward_normal(coords, facet, apex):
+    """Unit normal to the facet's 3-plane (in these coords), pointing away from `apex`."""
+    pts = np.array([coords[v] for v in facet])
+    cen = pts.mean(0)
+    _u, _s, vt = np.linalg.svd(pts - cen)
+    n = vt[-1] / np.linalg.norm(vt[-1])
+    return cen, (-n if np.dot(coords[apex] - cen, n) > 0 else n)
+
+
+def _dual_height(cell):
+    """`{facet frozenset: |distance from this cell's circumcenter to that facet|}` — the
+    intrinsic dual half-edge each facet contributes, in the cell's own embedding."""
     coords = embed_cell(cell)
     vs = [v.getId() for v in cell.getVertices()]
-    pts = np.array([coords[v] for v in vs])
-    pc = pts - pts.mean(0)
+    cc = _circumcenter(cell, coords, vs)
+    out = {}
+    for j in range(5):
+        facet = frozenset(vs[:j] + vs[j + 1:])
+        cen, n = _facet_outward_normal(coords, sorted(facet), vs[j])
+        out[facet] = abs(float((cc - cen) @ n))
+    return out
+
+
+def cell_frame(cell, neighbors=None):
+    """The unified per-cell frame `F(c)` and its (raw) coords, used by BOTH the spinor
+    extraction and the Wilson-line transport, built from a VERTEX-SET-derived point cloud so
+    the frame-local coords are **relabel-invariant** (the same physical frame whatever the
+    labeling) and **gauge-covariant** (`F → R F` under a global rotation `R`) — unlike an
+    origin-vertex polar/QR frame, which rotates by a generic SO(4) when relabeling moves the
+    origin and breaks covariance.
+
+    `neighbors` is the `_facet_neighbors` map. When given (the default in the readout), the
+    point cloud is the cell's five **dual-edge vectors** — circumcenter → facet-neighbor
+    circumcenter, `(h_a + h_b)·n_facet`. The edge LENGTH carries the neighbor's size, so these
+    are generically anisotropic even when the cell itself is regular: this is what rescues the
+    readout on near-symmetric cells, where the cell's own vertices (the `neighbors=None`
+    fallback) are isotropic and have no canonical frame. (A perfectly uniform metric leaves
+    even the dual edges equal — a genuine symmetry, unreachable by a non-degenerate metric.)
+
+    The frame is the inertia (principal-axis) eigenbasis of the centered point cloud; a
+    coincident-eigenvalue block is canonically resolved by the order-independent third-moment
+    tensor, and each axis' sign by its third moment. Returns `(coords, F, vs)`."""
+    coords = embed_cell(cell)
+    vs = [v.getId() for v in cell.getVertices()]
+    if neighbors is None:                              # fallback: the cell's own vertices
+        cloud = np.array([coords[v] for v in vs])
+    else:                                              # default: dual-edge vectors
+        cc = _circumcenter(cell, coords, vs)
+        vset = tuple(sorted(vs))
+        h_self = _dual_height(cell)
+        rows = []
+        for j in range(5):
+            facet = frozenset(vs[:j] + vs[j + 1:])
+            cen, n = _facet_outward_normal(coords, sorted(facet), vs[j])
+            h_b = 0.0
+            for nb in neighbors.get(facet, ()):
+                if tuple(sorted(x.getId() for x in nb.getVertices())) != vset:
+                    h_b = _dual_height(nb)[facet]
+                    break
+            rows.append((h_self[facet] + h_b) * n)
+        cloud = np.array(rows)
+    pc = cloud - cloud.mean(0)
     w, V = np.linalg.eigh(pc.T @ pc)                   # principal axes as columns, ascending
     proj = pc @ V
     wsq = (proj ** 2).sum(1)
@@ -162,13 +223,19 @@ def cell_frame(cell):
     return coords, V, vs
 
 
-def facet_transport(cell_a, cell_b):
+def _frames(cells, top_tuple):
+    """Precompute the dual-edge `cell_frame` of every top cell, keyed by `id(cell)`."""
+    fmap = _facet_neighbors(cells, top_tuple)
+    return {id(c): cell_frame(c, fmap) for c in cells}
+
+
+def facet_transport(cell_a, cell_b, frames=None):
     """The `Spin(4)` transport mapping `cell_b`'s spinor frame to `cell_a`'s, from the SAME
-    `cell_frame` both the extraction and the transport use: align `b`'s shared-facet coords
-    (in `F(b)`) to `a`'s (in `F(a)`) by orthogonal Procrustes, det-corrected to a proper
-    rotation, then `rotation_to_spin`. `None` if they don't share a facet."""
-    ca, Fa, _ = cell_frame(cell_a)
-    cb, Fb, _ = cell_frame(cell_b)
+    `cell_frame`s the extraction uses: align `b`'s shared-facet coords (in `F(b)`) to `a`'s
+    (in `F(a)`) by orthogonal Procrustes, det-corrected to a proper rotation, then
+    `rotation_to_spin`. `frames` is the precomputed `_frames` map. `None` if no shared facet."""
+    ca, Fa, _ = frames[id(cell_a)] if frames else cell_frame(cell_a)
+    cb, Fb, _ = frames[id(cell_b)] if frames else cell_frame(cell_b)
     shared = sorted(set(ca) & set(cb))
     if len(shared) < 4:
         return None
@@ -192,7 +259,7 @@ def _dual_adjacency(cells, top_tuple):
     return adj
 
 
-def wilson_line(cells, adj, cell_i, cell_j):
+def wilson_line(cells, adj, cell_i, cell_j, frames=None):
     """The `Spin(4)` holonomy mapping `cell_j`'s frame to `cell_i`'s: the product of
     `facet_transport` along a BFS dual path `j → … → i`. `None` if disconnected."""
     prev = {id(cell_i): None}
@@ -209,7 +276,7 @@ def wilson_line(cells, adj, cell_i, cell_j):
     c = cell_j
     while prev[id(c)] is not None:
         p = prev[id(c)]
-        ft = facet_transport(p, c)                     # maps c-frame → p-frame
+        ft = facet_transport(p, c, frames)             # maps c-frame → p-frame
         if ft is None:
             return None
         holo = ft @ holo
@@ -224,16 +291,17 @@ def _cells3_by_set(st):
     return {frozenset(t): (i, list(t)) for i, t in enumerate(cells3)}, len(cells3)
 
 
-def emergent_spinor(by_set, psi, cell):
+def emergent_spinor(by_set, psi, frame):
     """The per-hole spinor extracted from the carried representative `psi` (a 3-cochain) over
-    `cell`'s five tetrahedral faces, in the cell's own frame `F(c)`. Order-agnostic: faces
-    are matched by vertex SET, oriented from the cochain's stored order (never sorted by id).
+    the hole cell's five tetrahedral faces, in the cell's own frame. `frame` is the cell's
+    `cell_frame` triple `(coords, F, vs)`. Order-agnostic: faces are matched by vertex SET,
+    oriented from the cochain's stored order (never sorted by id).
 
-    For each face: build its trivector (the 4 det-minors of the 3 edge vectors in `F(c)` over
+    For each face: build its trivector (the 4 det-minors of the 3 edge vectors in `F` over
     `_TRIPLES`) as an `M`-row and take `psi` on that 3-cell as the RHS. `omega = lstsq(M, b)`
     is the carried 3-form's components; `Phi = Σ omega_t γ_iγ_jγ_k` maps it into the Clifford
     algebra, and `s = Phi · [1,0,0,0]` (normalized) is the spinor."""
-    coords, F, vs = cell_frame(cell)
+    coords, F, vs = frame
     x = {v: F.T @ coords[v] for v in coords}
     rows, rhs = [], []
     for drop in range(5):
@@ -254,8 +322,9 @@ def emergent_spinor(by_set, psi, cell):
 
 
 def emergent_spinors(st, holes, top_tuple):
-    """The three emergent per-hole spinors, each in its own hole cell's frame `F(c)`."""
+    """The three emergent per-hole spinors, each in its own hole cell's (dual-edge) frame."""
     cells = list(st.getTopSimplices())
+    frames = _frames(cells, top_tuple)
 
     def cell_of(h):
         hv = set(h)
@@ -266,7 +335,7 @@ def emergent_spinors(st, holes, top_tuple):
     out = []
     for h in holes[:3]:
         psi = np.asarray(es.carriedRepresentative([list(h)], [1.0]), dtype=complex)
-        out.append(emergent_spinor(by_set, psi, cell_of(h)))
+        out.append(emergent_spinor(by_set, psi, frames[id(cell_of(h))]))
     return out
 
 
@@ -286,13 +355,14 @@ def composite_j2(st, holes, top_tuple, per_hole_spinors):
     in its own hole cell's frame."""
     cells = list(st.getTopSimplices())
     adj = _dual_adjacency(cells, top_tuple)
+    frames = _frames(cells, top_tuple)
 
     def cell_of(h):
         hv = set(h)
         return max(cells, key=lambda c: len(hv & set(top_tuple(c))))
 
     hc = [cell_of(h) for h in holes[:3]]
-    lines = [wilson_line(cells, adj, hc[0], hc[j]) for j in range(3)]
+    lines = [wilson_line(cells, adj, hc[0], hc[j], frames) for j in range(3)]
     if any(u is None for u in lines):
         return None
     psi = [lines[j] @ per_hole_spinors[j] for j in range(3)]
@@ -335,6 +405,7 @@ def joint_spinors(st, holes, top_tuple, target=(1.0, _W3, _W3 * _W3)):
     """The three per-hole spinors read from the SINGLE joint carried representative of the color
     singlet `[1,ω,ω²]` over the three holes (vs `emergent_spinors`' independent per-hole reads)."""
     cells = list(st.getTopSimplices())
+    frames = _frames(cells, top_tuple)
 
     def cell_of(h):
         hv = set(h)
@@ -343,7 +414,7 @@ def joint_spinors(st, holes, top_tuple, target=(1.0, _W3, _W3 * _W3)):
     by_set, _n3 = _cells3_by_set(st)
     psi = np.asarray(cob.EigenstateSynthesis(st, 3).carriedRepresentative(
         [list(h) for h in holes[:3]], list(target)), dtype=complex)
-    return [emergent_spinor(by_set, psi, cell_of(h)) for h in holes[:3]]
+    return [emergent_spinor(by_set, psi, frames[id(cell_of(h))]) for h in holes[:3]]
 
 
 def joint_j2(st, holes, top_tuple):
@@ -360,13 +431,14 @@ def spin_channel_weights(st, holes, top_tuple, per_hole_spinors):
     composite ¾ proton is unreachable without genuine entanglement (#485 §5)."""
     cells = list(st.getTopSimplices())
     adj = _dual_adjacency(cells, top_tuple)
+    frames = _frames(cells, top_tuple)
 
     def cell_of(h):
         hv = set(h)
         return max(cells, key=lambda c: len(hv & set(top_tuple(c))))
 
     hc = [cell_of(h) for h in holes[:3]]
-    lines = [wilson_line(cells, adj, hc[0], hc[j]) for j in range(3)]
+    lines = [wilson_line(cells, adj, hc[0], hc[j], frames) for j in range(3)]
     if any(u is None for u in lines):
         return None
     qubits = []

@@ -8,11 +8,12 @@ eigenphases are `±ε/2` (the spin-½ double cover, not the vector `±ε`).
 Readout (on controlled-b₃ fixtures, `tests/fixtures/composite_spin/`):
 * **Robust, every b₃:** each constituent is spin-½ (`|⟨S⟩|=½`) and the composite `J²` lies in
   the three-spin-½ baryon range `[3/2, 15/4]` — the n=3 fingerprint.
-* **Generic geometry:** the readout is frame-invariant — GAUGE (per-cell SO(4) of the
-  embedding) and RELABEL (vertex-id permutation) both leave `J²` unchanged.
-* The composite ½-vs-3/2 channel is only an honest negative (near-symmetric cells have no
-  canonical rest frame; a product of per-hole spinors can't carry the entanglement) — the
-  findings doc, not asserted here.
+* **Frame-invariant everywhere:** with the dual-edge frame, GAUGE (per-cell SO(4) of the
+  embedding) and RELABEL (vertex-id permutation) both leave `J²` unchanged on every fixture —
+  including the near-symmetric ones (real converged b₃=3, synthetic b₃=4) where a primal-vertex
+  frame failed.
+* The composite ½-vs-3/2 channel itself is bounded by a physics limit (a product of per-hole
+  spinors can't carry the entanglement), documented in the findings doc, not asserted here.
 """
 import importlib.util
 import json
@@ -141,13 +142,14 @@ class CompositeSpinReadoutTest(unittest.TestCase):
         relabeled = cs.emergent_j2(st2, holes2, eo._top_tuple)
         return base, abs(gauged - base), abs(relabeled - base)
 
-    def test_gauge_and_relabel_invariance_on_generic_geometry(self):
-        # Generic (non-degenerate) structures across a range of b₃; the readout is a genuine
-        # frame-free observable here (near-symmetric cells are the documented obstruction).
-        for name in ("synthetic_b3_3.json", "synthetic_b3_5.json",
-                     "synthetic_b3_6.json", "synthetic_b3_7.json"):
+    def test_gauge_and_relabel_invariance(self):
+        # The dual-edge frame is non-degenerate on every (non-uniform) fixture — including the
+        # two (synthetic b₃=4, the real converged b₃=3) where the cell's own vertices are
+        # near-symmetric and a primal-vertex frame failed. So J² is a genuine frame-free
+        # observable across b₃ = 3..7 and on real converged geometry.
+        for name in self._all_fixtures():
             d, cells, edges, st, holes = self._load_fixture(name)
-            with self.subTest(fixture=name, b3=d["b3"]):
+            with self.subTest(fixture=name, b3=d["b3"], kind=d.get("kind")):
                 base, dg, dr = self._gates(cells, edges, st, holes)
                 self.assertLess(dg, 1e-5)
                 self.assertLess(dr, 1e-5)
