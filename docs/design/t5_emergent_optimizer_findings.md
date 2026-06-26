@@ -86,8 +86,8 @@ deferred (it would need either a `b₂` register, or a degree-3 field-strength a
 The per-hole charge *magnitudes* depend on geometry, so the distinguishability could in
 principle be metric asymmetry rather than a structured label. Stage-2 geometric relaxation
 (driving the metric toward the Regge equations) settles it: an artifact would *equalize* the
-charges as the geometry smooths. Instead, on most structures the distinction **persists or
-sharpens** even as `‖∇S‖²` drops 4–8×:
+charges as the geometry smooths. Instead, across **21 structures the distinction persists in
+20** even as `‖∇S‖²` drops 4–8× — and often *sharpens*:
 
 | seed | grad_norm2 | spread before → after | outcome |
 |---|---|---|---|
@@ -96,12 +96,18 @@ sharpens** even as `‖∇S‖²` drops 4–8×:
 | 24 | 238 → 38 | 0.499 → **0.493** | stable |
 | 31 | 364 → 41 | 0.493 → **0.770** | sharpens |
 | 25 | 201 → 60 | 0.191 → **0.034** | collapsed |
+| *+16-structure sweep* | (all relaxed 4–8×) | initial 0.07–0.68 | **16/16 persist** |
 
-The exception (seed 25) is the structure that *started* with the weakest distinction
-(0.19 vs 0.32–0.58). So the pattern is: **strong distinctions (the common case) are real and
-relaxation-stable — often sharpening — while weak/marginal ones can be geometric and wash
-out.** (A larger Stage-2 sweep, `scratchpad/stage2_stability_runs.py`, confirms this; final
-tally to be appended.)
+A 16-structure sweep (`stage2_stability_runs.py`) added **16/16 persisting**, including
+distinctions as weak as 0.07 — so the lone collapse (seed 25) is **atypical (~5%)**, and
+strength does *not* predict it (very weak distinctions persisted). The conclusion is
+therefore stronger than the first five seeds suggested: **the per-hole charge distinction is
+robustly relaxation-stable — ~20/21 persist, many sharpen, none of the geometry-symmetrizing
+washout an artifact would show.** A separate test (re-relaxing a collapsed structure from
+randomly perturbed starts, to check whether a collapse is a Stage-2 *local extremum* that a
+restart recovers) found **no collapse to probe within budget** — itself consistent with
+collapses being rare; the local-extremum question is left open but largely moot given the
+robustness.
 
 ## 6. Bottom line
 
