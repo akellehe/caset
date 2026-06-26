@@ -149,28 +149,34 @@ class EmergentOptimizer:
     `input_targets` is a list of two expected-state period vectors; `output_target` the
     expected output. Nothing is frozen and no register is imposed."""
 
-    def __init__(self, host, input_targets, output_target, k=2, gamma=1.0, seed=0):
+    def __init__(self, host, input_targets, output_target, degrees=(3,), gamma=1.0,
+                 seed=0):
         self.st = host
         self.input_targets = [list(t) for t in input_targets]
         self.output_target = list(output_target)
-        self.k = k
+        self.degrees = tuple(degrees)        # the register degrees r_U requires at once
+        self._gate_k = max(self.degrees)     # dualComplexValid is the (degree-free) gate
         self.gamma = gamma
         self.rng = random.Random(seed)
         self._tol = 1e-9
         self.inputs = []        # [{'verts': frozenset, 'target': [...]}, ...]
 
     # ----- the constructed interior inputs -----
-    def _region_subcomplex(self, verts):
-        """The input sub-complex: the host cells entirely within `verts`, as its own
-        complex so we can take its *own* `L_k`."""
-        cells = [list(c) for c in (_top_tuple(s) for s in self.st.getTopSimplices())
+    def _sub_of(self, st, verts):
+        """An input sub-complex: the cells of `st` entirely within `verts`, as its own
+        complex so we can take its *own* `L_k` at each register degree."""
+        cells = [list(c) for c in (_top_tuple(s) for s in st.getTopSimplices())
                  if set(c) <= verts]
         return T.Spacetime.fromCells(_DIM, cells, 1.0, 0.0) if cells else None
 
-    def _r_input(self, inp):
-        sub = self._region_subcomplex(inp['verts'])
-        return r_state(sub, self.k, inp['target']) if sub is not None else \
-            float(np.vdot(np.asarray(inp['target']), np.asarray(inp['target'])).real)
+    def _r_input(self, inp, st):
+        """The input's residual: its own-`L_k` representativeness summed over ALL register
+        degrees (each degree's harmonic must carry the input)."""
+        sub = self._sub_of(st, inp['verts'])
+        if sub is None:
+            tg = np.asarray(inp['target'])
+            return len(self.degrees) * float(np.vdot(tg, tg).real)
+        return sum(r_state(sub, k, inp['target']) for k in self.degrees)
 
     def construct_inputs(self, seeds, rounds=24):
         """Solve each input *separately* into an interior sub-complex whose own `L_k`
@@ -183,7 +189,7 @@ class EmergentOptimizer:
                 v for c in (_top_tuple(s) for s in self.st.getTopSimplices())
                 if seed_v in c for v in c)
             inp = {'verts': verts, 'target': target}
-            r = self._r_input(inp)
+            r = self._r_input(inp, self.st)
             for _ in range(rounds):
                 cells = [c for c in (_top_tuple(s) for s in self.st.getTopSimplices())
                          if set(c) <= verts]
@@ -193,14 +199,14 @@ class EmergentOptimizer:
                 snap = self._snapshot_of(self.st)
                 if not cob.SurgicalCone(self.st).coneOut(cell)[0]:
                     continue
-                ok, _why = cob.EigenstateSynthesis(self.st, self.k).dualComplexValid()
-                r_new = self._r_input(inp) if ok else float("inf")
+                ok, _why = cob.EigenstateSynthesis(self.st, self._gate_k).dualComplexValid()
+                r_new = self._r_input(inp, self.st) if ok else float("inf")
                 if ok and r_new < r - self._tol:
                     r = r_new
                 else:
                     self._restore(self._build(snap))     # reject: restore exactly
             self.inputs.append(inp)
-        return [self._r_input(i) for i in self.inputs]
+        return [self._r_input(i, self.st) for i in self.inputs]
 
     @property
     def _input_verts(self):
@@ -209,19 +215,17 @@ class EmergentOptimizer:
             out |= inp['verts']
         return out
 
-    # ----- objective (three-term, asymmetric) -----
+    # ----- objective (asymmetric, summed over the register degrees) -----
     def r_u(self, st=None):
+        """The three-term residual, summed over ALL register degrees: the whole's `L_k`
+        harmonic must carry the output, and each input sub-complex's own `L_k` must carry
+        its input, at **every** degree in `self.degrees`. Requiring (say) both `L₂` and
+        `L₃` forces both a `b₂` and a `b₃` register to emerge."""
         st = st if st is not None else self.st
-        rt = r_state(st, self.k, self.output_target)     # output: on the whole
-        for inp in self.inputs:                          # inputs: on their own L_k
-            rt += self._r_input(inp) if st is self.st else r_state(
-                self._sub_of(st, inp['verts']), self.k, inp['target'])
-        return rt
-
-    def _sub_of(self, st, verts):
-        cells = [list(c) for c in (_top_tuple(s) for s in st.getTopSimplices())
-                 if set(c) <= verts]
-        return T.Spacetime.fromCells(_DIM, cells, 1.0, 0.0) if cells else None
+        total = sum(r_state(st, k, self.output_target) for k in self.degrees)  # output
+        for inp in self.inputs:                                               # inputs
+            total += self._r_input(inp, st)
+        return total
 
     def objective(self):
         return _grad_norm2(self.st) + self.gamma * self.r_u(self.st)
@@ -292,7 +296,7 @@ class EmergentOptimizer:
         live = {v for c in (_top_tuple(s) for s in st.getTopSimplices()) for v in c}
         if not (self._input_verts <= live):              # an input vertex was removed
             return False
-        ok, _why = cob.EigenstateSynthesis(st, self.k).dualComplexValid()
+        ok, _why = cob.EigenstateSynthesis(st, self._gate_k).dualComplexValid()
         return ok
 
     def _delta_f(self, base_solver, base_g2_edges, base_ru, base_cells, cand):
