@@ -22,6 +22,7 @@
 #include "cobordism/DijkgraafWitten.h"
 #include "cobordism/DiracKahler.h"
 #include "cobordism/EigenstateSynthesis.h"
+#include "cobordism/EmergentOptimizer.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/MergeCobordism.h"
@@ -1864,6 +1865,38 @@ prepared states, reproduces the harmonic overlap.)doc")
           "Primary in U-supplied mode; a consistency read in output-supplied "
           "mode. Empty when the input/output cycle split is not determinate.")
       .def_property_readonly("stats", &MergeCobordism::stats);
+
+  // === EmergentOptimizer (#491): the C++ source-of-truth port of
+  // examples/cobordism/emergent_optimizer.py — fully emergent topology, user k. ===
+  py::class_<EmergentOptimizer>(m, "EmergentOptimizer",
+      "The C++ port of emergent_optimizer.EmergentOptimizer (#491): merge as a "
+      "fully emergent optimization. From a bare host it grows the register by "
+      "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
+      "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
+      "dynamically off getBoundary. Two stages: run_stage1 (combinatorial), "
+      "relax_stage2 (geometric).")
+      .def(py::init<std::shared_ptr<Spacetime>,
+                    std::vector<std::vector<std::complex<double>>>,
+                    std::vector<std::complex<double>>, std::vector<int>, double,
+                    std::uint64_t>(),
+           py::arg("host"), py::arg("input_targets"), py::arg("output_target"),
+           py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
+           py::arg("seed") = 0)
+      .def_static("betti", &EmergentOptimizer::betti, py::arg("st"))
+      .def_static("emergent_holes", &EmergentOptimizer::emergentHoles,
+                  py::arg("st"), py::arg("k"))
+      .def_static("grad_norm2", &EmergentOptimizer::gradNorm2, py::arg("st"))
+      .def_static("r_state", &EmergentOptimizer::rState, py::arg("st"),
+                  py::arg("k"), py::arg("target"))
+      .def("r_u", &EmergentOptimizer::rU, py::arg("st"))
+      .def("objective", &EmergentOptimizer::objective)
+      .def("construct_inputs", &EmergentOptimizer::constructInputs,
+           py::arg("seeds"), py::arg("rounds") = 24)
+      .def("run_stage1", &EmergentOptimizer::runStage1, py::arg("max_steps") = 200,
+           py::arg("n_candidates") = 12, py::arg("patience") = 8)
+      .def("relax_stage2", &EmergentOptimizer::relaxStage2, py::arg("beta") = 1.0,
+           py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
+      .def_property_readonly("st", &EmergentOptimizer::spacetime);
 
   // === TransportCobordism (#353 / #396): the carried-rep transport ===
   py::class_<TransportCobordism> tc(m, "TransportCobordism",
