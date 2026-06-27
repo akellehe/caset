@@ -48,6 +48,15 @@ class MultiCobordismAnimationTest(unittest.TestCase):
         self.assertEqual(anim.hist["stage"], [1, 1, 1, 2])
         self.assertTrue(all(isinstance(v, float) for v in anim.hist["F"]))
 
+    def test_default_is_no_visualization(self):
+        # visualize defaults to OFF: run_optimization takes the fast batched path
+        # (one run_stage1 + one relax_stage2, no per-step plotting) and returns the
+        # final metrics dict rather than an animation.
+        res = self.mca.run_optimization(self.opt, stage1_steps=2, stage2_iters=2)
+        self.assertIsInstance(res, dict)
+        for key in ("F", "gradN2", "rU", "b3", "holes"):
+            self.assertIn(key, res)
+
     def test_mds_layout_is_2d(self):
         coords = self.mca._mds_layout(self.opt.st)
         self.assertGreater(len(coords), 0)

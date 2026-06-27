@@ -19,8 +19,14 @@ with single-step counts — which continue the optimizer state across calls —
 plus `betti`, `emergent_holes`, `grad_norm2`, `r_u`, `objective`, `st`). The C++
 engine is untouched.
 
-    # live (interactive backend):
+**Visualization is off by default** — `run_optimization(opt)` takes the fast
+batched path with no per-step plotting overhead. Opt in with `visualize=True`
+(or `--live`/`--save`) to animate, which is slower.
+
+    # default: run the optimization fast, no visualization
     python multicobordism_animation.py
+    # live (interactive backend):
+    python multicobordism_animation.py --live
     # headless: write a GIF (no display needed):
     python multicobordism_animation.py --save merge.gif
 """
@@ -197,16 +203,49 @@ def animate(opt, save=None, interval=200, **kw):
     return anim_state
 
 
+def run_optimization(opt, visualize=False, save=None, degree=3, stage1_steps=40,
+                     stage1_candidates=8, stage2_iters=30, stage2_beta=1.0,
+                     interval=200):
+    """Run the two-stage optimization.
+
+    Visualization is **off by default**: with ``visualize=False`` (and no
+    ``save``) this takes the fast **batched** path — `run_stage1`/`relax_stage2`
+    run to completion in one call each, with no per-step layout/redraw overhead —
+    and returns the final metrics. Opt in with ``visualize=True`` (live window) or
+    ``save=...`` (GIF/MP4) to animate it step-by-step (slower); that returns the
+    per-step history."""
+    if not visualize and not save:
+        opt.run_stage1(max_steps=stage1_steps, n_candidates=stage1_candidates)
+        opt.relax_stage2(beta=stage2_beta, max_iters=stage2_iters)
+        st = opt.st
+        return {"F": float(opt.objective()),
+                "gradN2": float(cob.MultiCobordism.grad_norm2(st)),
+                "rU": float(opt.r_u(st)),
+                "b3": int(cob.MultiCobordism.betti(st)[degree]),
+                "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}
+    return animate(opt, save=save, degree=degree, stage1_steps=stage1_steps,
+                   stage1_candidates=stage1_candidates, stage2_iters=stage2_iters,
+                   stage2_beta=stage2_beta, interval=interval).hist
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--save", help="write a GIF/MP4 instead of showing live")
+    # Visualization is OFF by default (fast). Opt in with --live or --save.
+    ap.add_argument("--live", action="store_true",
+                    help="show the live animation window (slower than the default)")
+    ap.add_argument("--save", help="write a GIF/MP4 of the animation (slower)")
     ap.add_argument("--seed", type=int, default=3)
     ap.add_argument("--refine", type=int, default=16)
     ap.add_argument("--stage1", type=int, default=40)
     ap.add_argument("--stage2", type=int, default=30)
     args = ap.parse_args()
     opt = build_demo_merge(seed=args.seed, n_refine=args.refine)
-    animate(opt, save=args.save, stage1_steps=args.stage1, stage2_iters=args.stage2)
+    result = run_optimization(opt, visualize=args.live, save=args.save,
+                              stage1_steps=args.stage1, stage2_iters=args.stage2)
+    if not args.live and not args.save:
+        print("optimization finished (visualization off by default — pass --live "
+              "or --save to watch it):")
+        print("  " + "  ".join(f"{k}={v}" for k, v in result.items()))
 
 
 if __name__ == "__main__":
