@@ -170,6 +170,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} MultiCobordism.h
 ```
+```{doxygenfile} Proton.h
+```
 ```{doxygenfile} CobordismDAG.h
 ```
 ```{doxygenfile} OrientedCone.h

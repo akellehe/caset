@@ -24,6 +24,7 @@
 #include "cobordism/CobordismDAG.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/MultiCobordism.h"
+#include "cobordism/Proton.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/OrientedCone.h"
@@ -1831,6 +1832,39 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def_property_readonly("outputs", &MultiCobordism::outputs,
                              py::return_value_policy::reference_internal,
                              "The emergent output blocks (each a MultiCobordismBlock).");
+
+  // === Proton (#503): fully-emergent, two-step proton builder over MultiCobordism ===
+  py::class_<Proton>(m, "Proton",
+      "A fully-emergent proton builder composing MultiCobordism (#503). It grows "
+      "the colour register by gated surgical coning on a bare S^4 host -- NO "
+      "topology is seeded -- in two steps (q+q -> diquark [1,w]; diquark+q -> "
+      "proton [1,w,w*w]), restarting across seeds until the proton block carries "
+      "the colour singlet on >= 3 emergent quark holes. Attempts and per-stage "
+      "step budgets are user-controlled.")
+      .def(py::init<int, int, int, int, double, std::uint64_t>(),
+           py::arg("n_attempts") = 40, py::arg("stage1_steps") = 80,
+           py::arg("stage2_steps") = 20, py::arg("n_refine") = 18,
+           py::arg("gamma") = 1.0, py::arg("seed0") = 1,
+           "Build a converged emergent proton. n_attempts is the restart budget; "
+           "stage1_steps/stage2_steps cap the combinatorial (surgery) and geometric "
+           "(relaxation) work per MultiCobordism run; n_refine is bare-host volume "
+           "(no register); gamma is the r_U objective weight; seed0 the first seed.")
+      .def_property_readonly("converged", &Proton::converged,
+           "Whether a >= 3-hole proton block carrying the singlet was found.")
+      .def_property_readonly("seed", &Proton::seed,
+           "The converged seed (or the last seed tried).")
+      .def_property_readonly("attempts", &Proton::attempts,
+           "How many attempts were consumed.")
+      .def_property_readonly("st", &Proton::spacetime,
+           "The step-B cobordism (proton formation).")
+      .def_property_readonly("block", &Proton::block,
+           "The proton block sub-complex (relaxed metric copied in).")
+      .def_property_readonly("quark_holes", &Proton::quarkHoles,
+           "The emergent quark holes (sorted vertex-id tuples) at k=3.")
+      .def_property_readonly("color_residual", &Proton::colorResidual,
+           "Singlet r_U on the proton block (~0 => carried, confinement).")
+      .def_property_readonly("diquark_residual", &Proton::diquarkResidual,
+           "Step-A diquark r_U (~0 => the diquark formed).");
 
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",
