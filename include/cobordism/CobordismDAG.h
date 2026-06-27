@@ -1,0 +1,75 @@
+// Copyright (c) 2026 Twin Vector Labs LLC.
+// All rights reserved.
+
+#ifndef TESSERA_COBORDISM_COBORDISMDAG_H
+#define TESSERA_COBORDISM_COBORDISMDAG_H
+
+#include <complex>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+namespace tessera::spacetime { class Spacetime; }
+
+namespace tessera::cobordism {
+using ::tessera::spacetime::Spacetime;
+
+/// # CobordismDAG
+///
+/// Chain emergent merges (`EmergentOptimizer`) into a DAG: the **output of one
+/// cobordism is an input to the next** (#491). Generalizes the
+/// `proton_merge_sequence` compose — `merge(q,q)→diquark`, then
+/// `merge(diquark,q)→proton` — to an arbitrary acyclic graph, on the C++
+/// source-of-truth engine.
+///
+/// Each node is one merge: a bare host, literal input targets, edges that pipe
+/// upstream nodes' outputs into further input slots, and a prescribed
+/// `outputTarget` (the EmergentOptimizer semantics — the output is scored by its
+/// own `r_U`). `run()` executes the nodes in topological order, assembling each
+/// node's input targets from its literals plus the resolved upstream outputs,
+/// running both stages, and recording the node's output (its verified
+/// `outputTarget`) and its final realizability residual `r_U`.
+class CobordismDAG {
+ public:
+  /// Add a merge node. `host` is a bare emergent host (e.g. a closed S⁴). The
+  /// node's input targets are `literalInputs` followed by, for each id in
+  /// `upstream`, that upstream node's output. `degrees` is the user-defined
+  /// register degree(s) k. Returns the node id (its insertion index).
+  int addNode(std::shared_ptr<Spacetime> host,
+              std::vector<std::vector<std::complex<double>>> literalInputs,
+              std::vector<int> upstream,
+              std::vector<std::complex<double>> outputTarget,
+              std::vector<int> degrees = {3}, double gamma = 1.0,
+              std::uint64_t seed = 0);
+
+  /// Run every node in topological order. Stage-1 (combinatorial) and stage-2
+  /// (geometric) parameters are shared across nodes. Raises on a cycle.
+  void run(int stage1MaxSteps = 30, int stage1Candidates = 8,
+           int stage1Patience = 8, double stage2Beta = 1.0,
+           int stage2MaxIters = 40);
+
+  /// The node's output (its verified `outputTarget`), valid after `run()`.
+  [[nodiscard]] std::vector<std::complex<double>> output(int node) const;
+  /// The node's final realizability residual `r_U` (≈0 ⇒ realizable), after run.
+  [[nodiscard]] double residual(int node) const;
+  [[nodiscard]] std::size_t size() const { return nodes_.size(); }
+
+ private:
+  struct Node {
+    std::shared_ptr<Spacetime> host;
+    std::vector<std::vector<std::complex<double>>> literalInputs;
+    std::vector<int> upstream;
+    std::vector<std::complex<double>> outputTarget;
+    std::vector<int> degrees;
+    double gamma;
+    std::uint64_t seed;
+  };
+  std::vector<Node> nodes_;
+  std::vector<std::vector<std::complex<double>>> outputs_;
+  std::vector<double> residuals_;
+  std::vector<bool> done_;
+};
+
+}  // namespace tessera::cobordism
+
+#endif  // TESSERA_COBORDISM_COBORDISMDAG_H

@@ -21,6 +21,7 @@
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/DijkgraafWitten.h"
 #include "cobordism/DiracKahler.h"
+#include "cobordism/CobordismDAG.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/EmergentOptimizer.h"
 #include "cobordism/HodgeLaplacian.h"
@@ -1897,6 +1898,29 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def("relax_stage2", &EmergentOptimizer::relaxStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
       .def_property_readonly("st", &EmergentOptimizer::spacetime);
+
+  // === CobordismDAG (#491): chain emergent merges, output -> input ===
+  py::class_<CobordismDAG>(m, "CobordismDAG",
+      "Chain emergent merges (EmergentOptimizer) into a DAG: the output of one "
+      "cobordism is an input to the next (the proton_merge_sequence compose, "
+      "generalized). add_node returns a node id; edges pipe upstream outputs into "
+      "downstream input slots; run() executes in topological order, recording each "
+      "node's output (its verified output_target) and realizability residual r_U.")
+      .def(py::init<>())
+      .def("add_node", &CobordismDAG::addNode, py::arg("host"),
+           py::arg("literal_inputs"), py::arg("upstream"), py::arg("output_target"),
+           py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
+           py::arg("seed") = 0,
+           "Add a merge node: a bare host, literal input targets, upstream node "
+           "ids whose outputs feed further inputs, and a prescribed output_target. "
+           "Returns the node id.")
+      .def("run", &CobordismDAG::run, py::arg("stage1_max_steps") = 30,
+           py::arg("stage1_candidates") = 8, py::arg("stage1_patience") = 8,
+           py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 40,
+           "Run all nodes in topological order (raises on a cycle).")
+      .def("output", &CobordismDAG::output, py::arg("node"))
+      .def("residual", &CobordismDAG::residual, py::arg("node"))
+      .def("__len__", &CobordismDAG::size);
 
   // === TransportCobordism (#353 / #396): the carried-rep transport ===
   py::class_<TransportCobordism> tc(m, "TransportCobordism",
