@@ -1783,6 +1783,17 @@ prepared states, reproduces the harmonic overlap.)doc")
 
   // === MultiCobordism (#491): the C++ source-of-truth port of
   // examples/cobordism/emergent_optimizer.py — fully emergent topology, user k. ===
+  py::class_<MultiCobordism::Input>(m, "MultiCobordismBlock",
+      "An emergent boundary block of a MultiCobordism (an input or output): the "
+      "vertex set whose own sub-complex carries the block, and its target period "
+      "vector. Read the block's sub-complex with Spacetime.fromCells over the "
+      "cells inside `verts`, then its holes with MultiCobordism.emergent_holes.")
+      .def_property_readonly("verts", [](const MultiCobordism::Input &b) {
+        return std::vector<std::uint64_t>(b.verts.begin(), b.verts.end());
+      })
+      .def_property_readonly("target", [](const MultiCobordism::Input &b) {
+        return b.target;
+      });
   py::class_<MultiCobordism>(m, "MultiCobordism",
       "The C++ port of emergent_optimizer.MultiCobordism (#491): merge as a "
       "fully emergent optimization. From a bare host it grows the register by "
@@ -1813,7 +1824,13 @@ prepared states, reproduces the harmonic overlap.)doc")
            py::arg("n_candidates") = 12, py::arg("patience") = 8)
       .def("relax_stage2", &MultiCobordism::relaxStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
-      .def_property_readonly("st", &MultiCobordism::spacetime);
+      .def_property_readonly("st", &MultiCobordism::spacetime)
+      .def_property_readonly("inputs", &MultiCobordism::inputs,
+                             py::return_value_policy::reference_internal,
+                             "The emergent input blocks (each a MultiCobordismBlock).")
+      .def_property_readonly("outputs", &MultiCobordism::outputs,
+                             py::return_value_policy::reference_internal,
+                             "The emergent output blocks (each a MultiCobordismBlock).");
 
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",
