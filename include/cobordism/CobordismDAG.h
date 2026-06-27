@@ -7,6 +7,7 @@
 #include <complex>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace tessera::spacetime { class Spacetime; }
@@ -31,16 +32,21 @@ using ::tessera::spacetime::Spacetime;
 /// `outputTarget`) and its final realizability residual `r_U`.
 class CobordismDAG {
  public:
-  /// Add a merge node. `host` is a bare emergent host (e.g. a closed S⁴). The
-  /// node's input targets are `literalInputs` followed by, for each id in
-  /// `upstream`, that upstream node's output. `degrees` is the user-defined
-  /// register degree(s) k. Returns the node id (its insertion index).
-  int addNode(std::shared_ptr<Spacetime> host,
-              std::vector<std::vector<std::complex<double>>> literalInputs,
-              std::vector<int> upstream,
-              std::vector<std::complex<double>> outputTarget,
-              std::vector<int> degrees = {3}, double gamma = 1.0,
-              std::uint64_t seed = 0);
+  /// Add a node — one co-optimized `EmergentOptimizer` system. `host` is a bare
+  /// emergent host. The node's input targets are `literalInputs` followed by, for
+  /// each `(nodeId, outputIndex)` in `upstream`, that upstream node's
+  /// `outputIndex`-th output. `outputTargets` is the list of output boundary
+  /// blocks (one for a merge, two for a 2→2 recombination). `degrees` is the
+  /// user-defined register degree(s) k. Returns the node id. Coupled interactions
+  /// (e.g. the recombination's two pairs) MUST be one node; uncoupled ones (the
+  /// proton/antiproton legs) are separate nodes.
+  int addNode(
+      std::shared_ptr<Spacetime> host,
+      const std::vector<std::vector<std::complex<double>>> &literalInputs,
+      const std::vector<std::pair<int, int>> &upstream,
+      const std::vector<std::vector<std::complex<double>>> &outputTargets,
+      const std::vector<int> &degrees = {3}, double gamma = 1.0,
+      std::uint64_t seed = 0);
 
   /// Run every node in topological order. Stage-1 (combinatorial) and stage-2
   /// (geometric) parameters are shared across nodes. Raises on a cycle.
@@ -48,8 +54,11 @@ class CobordismDAG {
            int stage1Patience = 8, double stage2Beta = 1.0,
            int stage2MaxIters = 40);
 
-  /// The node's output (its verified `outputTarget`), valid after `run()`.
-  [[nodiscard]] std::vector<std::complex<double>> output(int node) const;
+  /// The node's `outputIndex`-th output (its verified target), valid after run.
+  [[nodiscard]] std::vector<std::complex<double>> output(int node,
+                                                         int outputIndex) const;
+  /// Number of outputs of a node.
+  [[nodiscard]] int numOutputs(int node) const;
   /// The node's final realizability residual `r_U` (≈0 ⇒ realizable), after run.
   [[nodiscard]] double residual(int node) const;
   [[nodiscard]] std::size_t size() const { return nodes_.size(); }
@@ -58,14 +67,14 @@ class CobordismDAG {
   struct Node {
     std::shared_ptr<Spacetime> host;
     std::vector<std::vector<std::complex<double>>> literalInputs;
-    std::vector<int> upstream;
-    std::vector<std::complex<double>> outputTarget;
+    std::vector<std::pair<int, int>> upstream;  // (nodeId, outputIndex)
+    std::vector<std::vector<std::complex<double>>> outputTargets;
     std::vector<int> degrees;
     double gamma;
     std::uint64_t seed;
   };
   std::vector<Node> nodes_;
-  std::vector<std::vector<std::complex<double>>> outputs_;
+  std::vector<std::vector<std::vector<std::complex<double>>>> outputs_;  // per node
   std::vector<double> residuals_;
   std::vector<bool> done_;
 };

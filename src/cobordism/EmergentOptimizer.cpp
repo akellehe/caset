@@ -51,12 +51,13 @@ std::pair<std::uint64_t, std::uint64_t> edgeKey(const ::tessera::mesh::Edge *e) 
 
 EmergentOptimizer::EmergentOptimizer(
     std::shared_ptr<Spacetime> host,
-    std::vector<std::vector<cd>> inputTargets, std::vector<cd> outputTarget,
-    std::vector<int> degrees, double gamma, std::uint64_t seed)
+    const std::vector<std::vector<cd>> &inputTargets,
+    const std::vector<std::vector<cd>> &outputTargets,
+    const std::vector<int> &degrees, double gamma, std::uint64_t seed)
     : st_(std::move(host)),
-      inputTargets_(std::move(inputTargets)),
-      outputTarget_(std::move(outputTarget)),
-      degrees_(std::move(degrees)),
+      inputTargets_(inputTargets),
+      outputTargets_(outputTargets),
+      degrees_(degrees),
       gateK_(degrees_.empty() ? 0
                               : *std::max_element(degrees_.begin(),
                                                   degrees_.end())),
@@ -183,9 +184,17 @@ double EmergentOptimizer::rInput(const Input &inp,
 }
 
 double EmergentOptimizer::rU(const std::shared_ptr<Spacetime> &st) const {
+  // The symmetric cobordism residual: one r_U term per boundary block — every
+  // input AND every output sub-complex (the bulk routes the connectivity between
+  // them). The Regge extremization term lives in objective()/stages, not here.
   double total = 0.0;
-  for (int k : degrees_) total += rState(st, k, outputTarget_);  // output
-  for (const auto &inp : inputs_) total += rInput(inp, st);      // inputs
+  for (const auto &inp : inputs_) total += rInput(inp, st);
+  for (const auto &out : outputs_) total += rInput(out, st);
+  // No blocks yet (pre-construction): score the raw output targets as full leak so
+  // the bare objective is well-defined and matches the single-merge convention.
+  if (inputs_.empty() && outputs_.empty())
+    for (int k : degrees_)
+      for (const auto &t : outputTargets_) total += rState(st, k, t);
   return total;
 }
 
@@ -193,10 +202,11 @@ double EmergentOptimizer::objective() const {
   return gradNorm2(st_) + gamma_ * rU(st_);
 }
 
-std::set<std::uint64_t> EmergentOptimizer::inputVerts() const {
+std::set<std::uint64_t> EmergentOptimizer::boundaryVerts() const {
   std::set<std::uint64_t> out;
   for (const auto &inp : inputs_)
     out.insert(inp.verts.begin(), inp.verts.end());
+  for (const auto &o : outputs_) out.insert(o.verts.begin(), o.verts.end());
   return out;
 }
 
@@ -275,8 +285,8 @@ bool EmergentOptimizer::applySpec(const std::shared_ptr<Spacetime> &st,
   std::set<std::uint64_t> live;
   for (const auto &s : st->getTopSimplices())
     for (auto v : topTuple(*s)) live.insert(v);
-  for (auto v : inputVerts())
-    if (!live.count(v)) return false;  // an input vertex was removed
+  for (auto v : boundaryVerts())
+    if (!live.count(v)) return false;  // a pinned boundary vertex was removed
   return EigenstateSynthesis(st, gateK_).dualComplexValid().first;
 }
 
@@ -349,10 +359,21 @@ std::vector<double> EmergentOptimizer::runStage1(int maxSteps, int nCandidates,
 
 void EmergentOptimizer::constructInputs(const std::vector<std::uint64_t> &seeds,
                                         int rounds) {
-  // Region-restricted surgical solve per input: grow whatever emergent topology
-  // in the seed's neighbourhood carries the input target (kept by Δr_input).
-  for (std::size_t idx = 0;
-       idx < inputTargets_.size() && idx < seeds.size(); ++idx) {
+  constructBlocks(seeds, inputTargets_, inputs_, rounds);
+}
+
+void EmergentOptimizer::constructOutputs(const std::vector<std::uint64_t> &seeds,
+                                         int rounds) {
+  constructBlocks(seeds, outputTargets_, outputs_, rounds);
+}
+
+void EmergentOptimizer::constructBlocks(
+    const std::vector<std::uint64_t> &seeds,
+    const std::vector<std::vector<cd>> &targets, std::vector<Input> &dest,
+    int rounds) {
+  // Region-restricted surgical solve per boundary block: grow whatever emergent
+  // topology in the seed's neighbourhood carries the block's target (kept by Δr).
+  for (std::size_t idx = 0; idx < targets.size() && idx < seeds.size(); ++idx) {
     const std::uint64_t seedV = seeds[idx];
     std::set<std::uint64_t> region;
     for (const auto &s : st_->getTopSimplices()) {
@@ -360,7 +381,7 @@ void EmergentOptimizer::constructInputs(const std::vector<std::uint64_t> &seeds,
       if (std::find(c.begin(), c.end(), seedV) != c.end())
         region.insert(c.begin(), c.end());
     }
-    Input inp{region, inputTargets_[idx]};
+    Input inp{region, targets[idx]};
     double r = rInput(inp, st_);
     for (int round = 0; round < rounds; ++round) {
       const auto snap = snapshot();
@@ -398,7 +419,7 @@ void EmergentOptimizer::constructInputs(const std::vector<std::uint64_t> &seeds,
         inp.verts = region;
       }
     }
-    inputs_.push_back(inp);
+    dest.push_back(inp);
   }
 }
 

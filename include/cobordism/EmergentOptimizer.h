@@ -50,11 +50,17 @@ class EmergentOptimizer {
     std::vector<std::complex<double>> target;
   };
 
-  EmergentOptimizer(std::shared_ptr<Spacetime> host,
-                    std::vector<std::vector<std::complex<double>>> inputTargets,
-                    std::vector<std::complex<double>> outputTarget,
-                    std::vector<int> degrees = {3}, double gamma = 1.0,
-                    std::uint64_t seed = 0);
+  /// `outputTargets` is a LIST of output boundary blocks (the full cobordism
+  /// `∂W = inputs ⊔ outputs`, #491): a merge has one, a 2→2 recombination has two
+  /// (diquark ⊔ antidiquark). Each output — like each input — is an emergent
+  /// boundary sub-complex carrying its target, scored by its own `r_U`; the bulk
+  /// routes the connectivity (which input constituent reaches which output).
+  EmergentOptimizer(
+      std::shared_ptr<Spacetime> host,
+      const std::vector<std::vector<std::complex<double>>> &inputTargets,
+      const std::vector<std::vector<std::complex<double>>> &outputTargets,
+      const std::vector<int> &degrees = {3}, double gamma = 1.0,
+      std::uint64_t seed = 0);
 
   // ---- module-level helpers (static; the reference's free functions) ----
   /// Betti numbers (combinatorial, geometry-free).
@@ -72,14 +78,17 @@ class EmergentOptimizer {
       const std::vector<std::complex<double>> &target);
 
   // ---- objective ----
-  /// The three-term register residual summed over `degrees_`: `r_state(output) +
-  /// Σ_i r_input(input_i)`.
+  /// The per-block register residual summed over `degrees_`: `Σ r_U(boundary
+  /// block)` over EVERY input and output block (the symmetric cobordism objective).
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
-  /// `F = gradNorm2 + gamma * rU`.
+  /// `F = gradNorm2 (Regge extremization) + gamma * rU`.
   [[nodiscard]] double objective() const;
 
-  // ---- the two stages + input construction ----
+  // ---- the two stages + boundary-block construction ----
+  /// Grow each INPUT block's emergent sub-complex near its seed vertex.
   void constructInputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
+  /// Grow each OUTPUT block's emergent sub-complex near its seed vertex.
+  void constructOutputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
   std::vector<double> runStage1(int maxSteps = 200, int nCandidates = 12,
                                 int patience = 8);
   std::vector<double> relaxStage2(double beta = 1.0, int maxIters = 40,
@@ -87,6 +96,7 @@ class EmergentOptimizer {
 
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return st_; }
   [[nodiscard]] const std::vector<Input> &inputs() const { return inputs_; }
+  [[nodiscard]] const std::vector<Input> &outputs() const { return outputs_; }
 
  private:
   using Snapshot =
@@ -100,7 +110,13 @@ class EmergentOptimizer {
       const;
   [[nodiscard]] double rInput(const Input &inp,
                               const std::shared_ptr<Spacetime> &st) const;
-  [[nodiscard]] std::set<std::uint64_t> inputVerts() const;
+  // Build the emergent boundary sub-complexes for `targets` near `seeds`, append
+  // to `dest` (shared by constructInputs/constructOutputs).
+  void constructBlocks(const std::vector<std::uint64_t> &seeds,
+                       const std::vector<std::vector<std::complex<double>>> &targets,
+                       std::vector<Input> &dest, int rounds);
+  // All pinned boundary (input + output) vertices — none may be removed by a move.
+  [[nodiscard]] std::set<std::uint64_t> boundaryVerts() const;
 
   [[nodiscard]] Snapshot snapshotOf(const Spacetime &st) const;
   [[nodiscard]] Snapshot snapshot() const;
@@ -117,13 +133,14 @@ class EmergentOptimizer {
 
   std::shared_ptr<Spacetime> st_;
   std::vector<std::vector<std::complex<double>>> inputTargets_;
-  std::vector<std::complex<double>> outputTarget_;
+  std::vector<std::vector<std::complex<double>>> outputTargets_;
   std::vector<int> degrees_;
   int gateK_;
   double gamma_;
   std::mt19937_64 rng_;
   double tol_ = 1e-9;
   std::vector<Input> inputs_;
+  std::vector<Input> outputs_;
 };
 
 }  // namespace tessera::cobordism

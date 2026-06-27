@@ -48,14 +48,16 @@ class EmergentOptimizerCxxTest(unittest.TestCase):
                                CXX.r_state(self.host, 3, tgt), places=10)
         po = eo.EmergentOptimizer(self.host, [[1, w, w * w], [1, w * w, w]], tgt,
                                   degrees=(3,), gamma=1.0, seed=0).objective()
-        co = CXX(self.host, [[1, w, w * w], [1, w * w, w]], tgt, degrees=[3],
+        # output_targets is a list (the full cobordism); pre-construction the
+        # single-output fallback reproduces the reference's r_state(output).
+        co = CXX(self.host, [[1, w, w * w], [1, w * w, w]], [tgt], degrees=[3],
                  gamma=1.0, seed=0).objective()
         self.assertAlmostEqual(po, co, places=6)
 
     def test_two_stage_grows_emergent_register(self):
         CXX, w = self.CXX, self.w
         host = self.eo.build_closed_s4(n_refine=20, seed=3)
-        opt = CXX(host, [[1, w, w * w], [1, w * w, w]], [1, w, w * w], degrees=[3],
+        opt = CXX(host, [[1, w, w * w], [1, w * w, w]], [[1, w, w * w]], degrees=[3],
                   gamma=1.0, seed=3)
         self.assertEqual(list(CXX.betti(opt.st))[4], 1)        # bare closed S⁴: b₄=1
         sv = [v.getId() for v in host.getVertexList().toVector()][:2]
@@ -68,15 +70,48 @@ class EmergentOptimizerCxxTest(unittest.TestCase):
         dag = cob.CobordismDAG()
         h0 = eo.build_closed_s4(n_refine=14, seed=3)
         h1 = eo.build_closed_s4(n_refine=14, seed=4)
-        n0 = dag.add_node(h0, [[1, -1, 0], [1, 0, -1]], [], [1, w, w * w],
+        n0 = dag.add_node(h0, [[1, -1, 0], [1, 0, -1]], [], [[1, w, w * w]],
                           degrees=[3], seed=3)
-        n1 = dag.add_node(h1, [[0, 1, -1]], [n0], [1, w, w * w], degrees=[3], seed=4)
+        n1 = dag.add_node(h1, [[0, 1, -1]], [(n0, 0)], [[1, w, w * w]],
+                          degrees=[3], seed=4)
         self.assertEqual(len(dag), 2)
         dag.run(stage1_max_steps=8, stage1_candidates=4, stage1_patience=4,
                 stage2_max_iters=10)
-        self.assertEqual(len(dag.output(n1)), 3)               # threaded + ran
+        self.assertEqual(len(dag.output(n1, 0)), 3)            # threaded + ran
         self.assertTrue(math.isfinite(dag.residual(n0)))
         self.assertTrue(math.isfinite(dag.residual(n1)))
+
+    def test_recombination_two_in_two_out(self):
+        # 2->2 recombination in ONE co-optimized node: 2 input pairs, 2 outputs.
+        CXX, w = self.CXX, self.w
+        host = self.eo.build_closed_s4(n_refine=14, seed=3)
+        opt = CXX(host, [[1, -1, 0], [1, 0, -1]], [[1, w, w * w], [1, w * w, w]],
+                  degrees=[3], gamma=1.0, seed=3)
+        sv = [v.getId() for v in host.getVertexList().toVector()]
+        opt.construct_inputs(sv[:2], rounds=8)
+        opt.construct_outputs(sv[2:4], rounds=8)
+        self.assertEqual(len(opt.outputs()), 2)                # two output blocks
+        opt.run_stage1(max_steps=6, n_candidates=4, patience=4)
+        self.assertTrue(math.isfinite(opt.r_u(opt.st)))
+
+    def test_dag_recombination_routes_two_outputs(self):
+        # recombination node (2 outputs) -> two independent legs via output index.
+        cob, eo, w = tessera.cobordism, self.eo, self.w
+        dag = cob.CobordismDAG()
+        hr = eo.build_closed_s4(n_refine=12, seed=3)
+        hp = eo.build_closed_s4(n_refine=12, seed=5)
+        ha = eo.build_closed_s4(n_refine=12, seed=6)
+        rec = dag.add_node(hr, [[1, -1, 0], [1, 0, -1]],
+                           [], [[1, w, w * w], [1, w * w, w]], degrees=[3], seed=3)
+        pro = dag.add_node(hp, [[0, 1, -1]], [(rec, 0)], [[1, w, w * w]],
+                           degrees=[3], seed=5)
+        apr = dag.add_node(ha, [[0, -1, 1]], [(rec, 1)], [[1, w, w * w]],
+                           degrees=[3], seed=6)
+        dag.run(stage1_max_steps=6, stage1_candidates=3, stage1_patience=3,
+                stage2_max_iters=6)
+        self.assertEqual(dag.num_outputs(rec), 2)
+        for nd in (rec, pro, apr):
+            self.assertTrue(math.isfinite(dag.residual(nd)))
 
 
 if __name__ == "__main__":

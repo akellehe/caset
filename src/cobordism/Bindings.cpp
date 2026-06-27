@@ -1878,9 +1878,9 @@ prepared states, reproduces the harmonic overlap.)doc")
       "relax_stage2 (geometric).")
       .def(py::init<std::shared_ptr<Spacetime>,
                     std::vector<std::vector<std::complex<double>>>,
-                    std::vector<std::complex<double>>, std::vector<int>, double,
-                    std::uint64_t>(),
-           py::arg("host"), py::arg("input_targets"), py::arg("output_target"),
+                    std::vector<std::vector<std::complex<double>>>,
+                    std::vector<int>, double, std::uint64_t>(),
+           py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
            py::arg("seed") = 0)
       .def_static("betti", &EmergentOptimizer::betti, py::arg("st"))
@@ -1892,6 +1892,8 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def("r_u", &EmergentOptimizer::rU, py::arg("st"))
       .def("objective", &EmergentOptimizer::objective)
       .def("construct_inputs", &EmergentOptimizer::constructInputs,
+           py::arg("seeds"), py::arg("rounds") = 24)
+      .def("construct_outputs", &EmergentOptimizer::constructOutputs,
            py::arg("seeds"), py::arg("rounds") = 24)
       .def("run_stage1", &EmergentOptimizer::runStage1, py::arg("max_steps") = 200,
            py::arg("n_candidates") = 12, py::arg("patience") = 8)
@@ -1908,17 +1910,20 @@ prepared states, reproduces the harmonic overlap.)doc")
       "node's output (its verified output_target) and realizability residual r_U.")
       .def(py::init<>())
       .def("add_node", &CobordismDAG::addNode, py::arg("host"),
-           py::arg("literal_inputs"), py::arg("upstream"), py::arg("output_target"),
-           py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
-           py::arg("seed") = 0,
-           "Add a merge node: a bare host, literal input targets, upstream node "
-           "ids whose outputs feed further inputs, and a prescribed output_target. "
-           "Returns the node id.")
+           py::arg("literal_inputs"), py::arg("upstream"),
+           py::arg("output_targets"), py::arg("degrees") = std::vector<int>{3},
+           py::arg("gamma") = 1.0, py::arg("seed") = 0,
+           "Add a node (one co-optimized EmergentOptimizer system): a bare host, "
+           "literal input targets, `upstream` as (node_id, output_index) tuples "
+           "whose outputs feed further inputs, and `output_targets` (one for a "
+           "merge, two for a 2->2 recombination). Returns the node id.")
       .def("run", &CobordismDAG::run, py::arg("stage1_max_steps") = 30,
            py::arg("stage1_candidates") = 8, py::arg("stage1_patience") = 8,
            py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 40,
            "Run all nodes in topological order (raises on a cycle).")
-      .def("output", &CobordismDAG::output, py::arg("node"))
+      .def("output", &CobordismDAG::output, py::arg("node"),
+           py::arg("output_index") = 0)
+      .def("num_outputs", &CobordismDAG::numOutputs, py::arg("node"))
       .def("residual", &CobordismDAG::residual, py::arg("node"))
       .def("__len__", &CobordismDAG::size);
 

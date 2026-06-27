@@ -15,13 +15,13 @@ namespace tessera::cobordism {
 using cd = std::complex<double>;
 
 int CobordismDAG::addNode(std::shared_ptr<Spacetime> host,
-                          std::vector<std::vector<cd>> literalInputs,
-                          std::vector<int> upstream,
-                          std::vector<cd> outputTarget, std::vector<int> degrees,
-                          double gamma, std::uint64_t seed) {
-  nodes_.push_back(Node{std::move(host), std::move(literalInputs),
-                        std::move(upstream), std::move(outputTarget),
-                        std::move(degrees), gamma, seed});
+                          const std::vector<std::vector<cd>> &literalInputs,
+                          const std::vector<std::pair<int, int>> &upstream,
+                          const std::vector<std::vector<cd>> &outputTargets,
+                          const std::vector<int> &degrees, double gamma,
+                          std::uint64_t seed) {
+  nodes_.push_back(Node{std::move(host), literalInputs, upstream, outputTargets,
+                        degrees, gamma, seed});
   return static_cast<int>(nodes_.size()) - 1;
 }
 
@@ -39,32 +39,40 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1Candidates,
     for (std::size_t i = 0; i < n; ++i) {
       if (done_[i]) continue;
       bool ready = true;
-      for (int u : nodes_[i].upstream)
-        if (u < 0 || u >= static_cast<int>(n) || !done_[u]) {
+      for (const auto &e : nodes_[i].upstream)
+        if (e.first < 0 || e.first >= static_cast<int>(n) || !done_[e.first]) {
           ready = false;
           break;
         }
       if (!ready) continue;
 
       const Node &nd = nodes_[i];
-      // Assemble input targets: literals, then each upstream node's output.
+      // Assemble input targets: literals, then each upstream node's chosen output.
       std::vector<std::vector<cd>> inputs = nd.literalInputs;
-      for (int u : nd.upstream) inputs.push_back(outputs_[u]);
-
-      EmergentOptimizer opt(nd.host, inputs, nd.outputTarget, nd.degrees,
-                            nd.gamma, nd.seed);
-      // One construct_inputs seed vertex per input (the first |inputs| ids).
-      std::vector<std::uint64_t> seeds;
-      for (const auto *v : nd.host->getVertexList()->toVector()) {
-        if (seeds.size() >= inputs.size()) break;
-        seeds.push_back(v->getId());
+      for (const auto &e : nd.upstream) {
+        const auto &up = outputs_[e.first];
+        if (e.second < 0 || e.second >= static_cast<int>(up.size()))
+          throw std::out_of_range("CobordismDAG::run: bad upstream output index");
+        inputs.push_back(up[e.second]);
       }
-      opt.constructInputs(seeds, /*rounds=*/12);
+
+      EmergentOptimizer opt(nd.host, inputs, nd.outputTargets, nd.degrees,
+                            nd.gamma, nd.seed);
+      // One construct seed vertex per block (the first |inputs|+|outputs| ids).
+      const auto verts = nd.host->getVertexList()->toVector();
+      std::vector<std::uint64_t> inSeeds, outSeeds;
+      std::size_t v = 0;
+      for (; v < verts.size() && inSeeds.size() < inputs.size(); ++v)
+        inSeeds.push_back(verts[v]->getId());
+      for (; v < verts.size() && outSeeds.size() < nd.outputTargets.size(); ++v)
+        outSeeds.push_back(verts[v]->getId());
+      opt.constructInputs(inSeeds, /*rounds=*/12);
+      opt.constructOutputs(outSeeds, /*rounds=*/12);
       opt.runStage1(stage1MaxSteps, stage1Candidates, stage1Patience);
       opt.relaxStage2(stage2Beta, stage2MaxIters);
 
       residuals_[i] = opt.rU(opt.spacetime());
-      outputs_[i] = nd.outputTarget;  // the verified output, threaded downstream
+      outputs_[i] = nd.outputTargets;  // verified outputs, threaded downstream
       done_[i] = true;
       ++completed;
       progressed = true;
@@ -74,10 +82,19 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1Candidates,
   }
 }
 
-std::vector<cd> CobordismDAG::output(int node) const {
+std::vector<cd> CobordismDAG::output(int node, int outputIndex) const {
   if (node < 0 || node >= static_cast<int>(outputs_.size()))
     throw std::out_of_range("CobordismDAG::output: node id out of range");
-  return outputs_[node];
+  const auto &outs = outputs_[node];
+  if (outputIndex < 0 || outputIndex >= static_cast<int>(outs.size()))
+    throw std::out_of_range("CobordismDAG::output: output index out of range");
+  return outs[outputIndex];
+}
+
+int CobordismDAG::numOutputs(int node) const {
+  if (node < 0 || node >= static_cast<int>(outputs_.size()))
+    throw std::out_of_range("CobordismDAG::numOutputs: node id out of range");
+  return static_cast<int>(outputs_[node].size());
 }
 
 double CobordismDAG::residual(int node) const {
