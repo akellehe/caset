@@ -17,7 +17,7 @@ using ::tessera::spacetime::Spacetime;
 
 /// # CobordismDAG
 ///
-/// Chain emergent merges (`EmergentOptimizer`) into a DAG: the **output of one
+/// Chain emergent merges (`MultiCobordism`) into a DAG: the **output of one
 /// cobordism is an input to the next** (#491). Generalizes the
 /// `proton_merge_sequence` compose — `merge(q,q)→diquark`, then
 /// `merge(diquark,q)→proton` — to an arbitrary acyclic graph, on the C++
@@ -25,14 +25,14 @@ using ::tessera::spacetime::Spacetime;
 ///
 /// Each node is one merge: a bare host, literal input targets, edges that pipe
 /// upstream nodes' outputs into further input slots, and a prescribed
-/// `outputTarget` (the EmergentOptimizer semantics — the output is scored by its
+/// `outputTarget` (the MultiCobordism semantics — the output is scored by its
 /// own `r_U`). `run()` executes the nodes in topological order, assembling each
 /// node's input targets from its literals plus the resolved upstream outputs,
 /// running both stages, and recording the node's output (its verified
 /// `outputTarget`) and its final realizability residual `r_U`.
 class CobordismDAG {
  public:
-  /// Add a node — one co-optimized `EmergentOptimizer` system. `host` is a bare
+  /// Add a node — one co-optimized `MultiCobordism` system. `host` is a bare
   /// emergent host. The node's input targets are `literalInputs` followed by, for
   /// each `(nodeId, outputIndex)` in `upstream`, that upstream node's
   /// `outputIndex`-th output. `outputTargets` is the list of output boundary

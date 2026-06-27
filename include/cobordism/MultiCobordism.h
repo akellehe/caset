@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Twin Vector Labs LLC.
 // All rights reserved.
 
-#ifndef TESSERA_COBORDISM_EMERGENTOPTIMIZER_H
-#define TESSERA_COBORDISM_EMERGENTOPTIMIZER_H
+#ifndef TESSERA_COBORDISM_MULTICOBORDISM_H
+#define TESSERA_COBORDISM_MULTICOBORDISM_H
 
 #include <complex>
 #include <cstdint>
@@ -18,7 +18,7 @@ namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using ::tessera::spacetime::Spacetime;
 
-/// # EmergentOptimizer
+/// # MultiCobordism
 ///
 /// The C++ source-of-truth port of `examples/cobordism/emergent_optimizer.py`
 /// (epic #457 / T5, #491): the merge as a **fully emergent** optimization — no
@@ -41,7 +41,7 @@ using ::tessera::spacetime::Spacetime;
 ///   * **Stage 2 (geometric):** relax every (complex) edge `ℓ²` toward a stationary
 ///     point of `β‖∇S‖² + Γ·r_U` (Wirtinger steepest descent, backtracking line
 ///     search), re-opening the scale DOF.
-class EmergentOptimizer {
+class MultiCobordism {
  public:
   /// An emergent input: the vertex SET whose own sub-complex `L_k` must carry
   /// `target`, and the target period vector.
@@ -55,7 +55,7 @@ class EmergentOptimizer {
   /// (diquark ⊔ antidiquark). Each output — like each input — is an emergent
   /// boundary sub-complex carrying its target, scored by its own `r_U`; the bulk
   /// routes the connectivity (which input constituent reaches which output).
-  EmergentOptimizer(
+  MultiCobordism(
       std::shared_ptr<Spacetime> host,
       const std::vector<std::vector<std::complex<double>>> &inputTargets,
       const std::vector<std::vector<std::complex<double>>> &outputTargets,
@@ -145,4 +145,4 @@ class EmergentOptimizer {
 
 }  // namespace tessera::cobordism
 
-#endif  // TESSERA_COBORDISM_EMERGENTOPTIMIZER_H
+#endif  // TESSERA_COBORDISM_MULTICOBORDISM_H

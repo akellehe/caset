@@ -19,7 +19,6 @@ analytic gradient):
 `test_ru_gradient_gpu_python.py`, whose FP32 GPU oracle mirrors the prior CPU result.)
 """
 import cmath
-import importlib.util
 import math
 import os
 import sys
@@ -31,7 +30,8 @@ import tessera as T
 
 cob = T.cobordism
 
-_EX = os.path.join(os.path.dirname(__file__), "..", "..", "examples", "cobordism")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _holed_surface import holed_surface  # noqa: E402
 
 
 def _edge_l2(st):
@@ -53,27 +53,18 @@ def _euler_lhs(st, grad):
 class ArbitraryKRuGradientTest(unittest.TestCase):
     def test_k1_euler_on_triangle_holes(self):
         # k=1 (triangle holes): the arbitrary-k path satisfies the exact Euler
-        # identity. Uses the MergeCobordism substrate.
-        sys.path.insert(0, os.path.join(_EX, "deep_merge_baseline"))
-        sys.path.insert(0, _EX)
-        try:
-            spec = importlib.util.spec_from_file_location(
-                "merge_cobordism", os.path.join(_EX, "merge_cobordism.py"))
-            mc = importlib.util.module_from_spec(spec)
-            sys.modules["merge_cobordism"] = mc
-            spec.loader.exec_module(mc)
-        except Exception as exc:  # pragma: no cover
-            self.skipTest(f"merge_cobordism substrate unavailable: {exc}")
-
-        m = mc.MergeCobordism()
-        st, es = m.st, m.es
-        holes = [list(t) for t in m.hole_circles]
-        periods = np.asarray(es.cyclePeriods(holes), complex).reshape(m.dim, len(holes))
-        target = [complex(z) + 0.137 for z in periods[0]]  # perturbed ⇒ r_U > 0
+        # identity on a holed icosahedron (a b1 register).
+        st, es, holes, periods = holed_surface(degree=1)
+        # A non-proportional target leaves the carried span (r_U > 0); shifting a
+        # single component is enough (a uniform shift of near-equal periods stays
+        # in-span).
+        target = [complex(z) for z in periods[0]]
+        target[0] += 0.5
 
         r_u = es.residualForPeriods(holes, target)
+        self.assertGreater(r_u, 1e-3, "target should be non-realizable (r_U > 0)")
         g = np.asarray(es.residualForPeriodsGradient(holes, target), float)
-        self.assertLess(abs(_euler_lhs(st, g) + r_u), 1e-9,
+        self.assertLess(abs(_euler_lhs(st, g) + r_u) / r_u, 1e-9,
                         "Euler identity Σℓ²∂r_U = −r_U failed at k=1")
 
     def test_k2_euler_on_b2_register(self):

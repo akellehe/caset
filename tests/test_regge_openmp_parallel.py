@@ -19,8 +19,8 @@ determinism criterion (the per-thread split must not leak thread-timing into the
 answer).
 
 Coverage:
-  * gradient and Hessian match an independent serial Python reduction (Merge
-    cobordism — complex/boost hinges — and a 4D CDT mesh — real triangle hinges);
+  * gradient and Hessian match an independent serial Python reduction (Lorentzian
+    CDT meshes — both complex/boost and real triangle hinges);
   * the parallel Hessian stays symmetric;
   * repeated calls in one process are bit-identical (determinism);
   * results are invariant across OMP_NUM_THREADS and bit-identical across
@@ -40,7 +40,6 @@ import numpy as np
 import tessera
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_MERGE = os.path.join(_HERE, "..", "examples", "cobordism", "merge_cobordism.py")
 
 # Tight enough to catch a real reduction bug (those are O(1), like a dropped or
 # double-counted hinge), loose enough to absorb the round-off from reassociating
@@ -66,15 +65,10 @@ def _make_cdt(n_simplices):
     return st
 
 
-def _load_merge():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("merge_cobordism", _MERGE)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["merge_cobordism"] = module
-    spec.loader.exec_module(module)
-    st = module.MergeCobordism().st
-    st.materializeFacets()
-    return st
+def _complex_mesh():
+    """A Lorentzian CDT mesh sized so its triangle hinges carry genuinely complex
+    (boost) deficits -- exercises the complex branch of the parallel reduction."""
+    return _make_cdt(200)
 
 
 # --------------------------------------------------------------------------- #
@@ -174,16 +168,16 @@ class GradientCorrectnessTest(unittest.TestCase):
             f"parallel gradient disagrees with serial reference: max|d|={worst:.3e}")
         return par
 
-    def test_matches_serial_reference_merge(self):
-        # 3D merge cobordism: edge hinges, genuinely complex (boost) deficits.
-        par = self._assert_matches_serial(_load_merge())
+    def test_matches_serial_reference_complex(self):
+        # Lorentzian CDT: triangle hinges with genuinely complex (boost) deficits.
+        par = self._assert_matches_serial(_complex_mesh())
         self.assertGreater(
             float(np.max(np.abs(par.imag))), 0.1,
-            "merge gradient should be materially complex (boost hinges)")
+            "gradient should be materially complex (boost hinges)")
 
     def test_matches_serial_reference_cdt(self):
-        # 4D CDT mesh: triangle hinges — a different ambient dimension/hinge type.
-        self._assert_matches_serial(_make_cdt(200))
+        # A second, larger CDT mesh — more hinges across the parallel reduction.
+        self._assert_matches_serial(_make_cdt(600))
 
     def test_length_matches_edge_count(self):
         st = _make_cdt(60)
@@ -194,10 +188,10 @@ class GradientCorrectnessTest(unittest.TestCase):
 class HessianCorrectnessTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.st = _load_merge()
+        cls.st = _complex_mesh()
         cls.par = _parallel_hessian(cls.st)
 
-    def test_matches_serial_reference_merge(self):
+    def test_matches_serial_reference_complex(self):
         ser = _serial_hessian(self.st)
         self.assertEqual(self.par.shape, ser.shape)
         worst = float(np.max(np.abs(self.par - ser)))
@@ -220,7 +214,7 @@ class HessianCorrectnessTest(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 class DeterminismWithinProcessTest(unittest.TestCase):
     def test_gradient_bit_identical_across_calls(self):
-        st = _load_merge()
+        st = _complex_mesh()
         rs = tessera.ReggeSolver(st, tessera.MatterConfiguration())
         a = np.array([complex(z) for z in rs.actionGradientExact()])
         b = np.array([complex(z) for z in rs.actionGradientExact()])
@@ -228,7 +222,7 @@ class DeterminismWithinProcessTest(unittest.TestCase):
                         "gradient not bit-identical across repeated calls")
 
     def test_hessian_bit_identical_across_calls(self):
-        st = _load_merge()
+        st = _complex_mesh()
         rs = tessera.ReggeSolver(st, tessera.MatterConfiguration())
         a = np.array([[complex(z) for z in r] for r in rs.actionHessianExact()])
         b = np.array([[complex(z) for z in r] for r in rs.actionHessianExact()])
@@ -278,15 +272,15 @@ def _run_driver(mesh, n, threads, want_hess, tag=0):
 
 class ThreadCountInvarianceTest(unittest.TestCase):
     def test_gradient_invariant_serial_vs_parallel(self):
-        g1, _, _ = _run_driver("merge", 0, threads=1, want_hess=False)
-        g8, _, _ = _run_driver("merge", 0, threads=8, want_hess=False)
+        g1, _, _ = _run_driver("complex", 200, threads=1, want_hess=False)
+        g8, _, _ = _run_driver("complex", 200, threads=8, want_hess=False)
         worst = float(np.max(np.abs(g1 - g8)))
         self.assertTrue(np.allclose(g1, g8, rtol=_RTOL, atol=_ATOL),
                         f"gradient changed with thread count: max|d|={worst:.3e}")
 
     def test_hessian_invariant_serial_vs_parallel(self):
-        _, h1, _ = _run_driver("merge", 0, threads=1, want_hess=True)
-        _, h8, _ = _run_driver("merge", 0, threads=8, want_hess=True)
+        _, h1, _ = _run_driver("complex", 200, threads=1, want_hess=True)
+        _, h8, _ = _run_driver("complex", 200, threads=8, want_hess=True)
         worst = float(np.max(np.abs(h1 - h8)))
         self.assertTrue(np.allclose(h1, h8, rtol=_RTOL, atol=_ATOL),
                         f"Hessian changed with thread count: max|d|={worst:.3e}")
@@ -294,8 +288,8 @@ class ThreadCountInvarianceTest(unittest.TestCase):
     def test_gradient_deterministic_across_processes(self):
         # Two independent 8-thread processes must agree bit-for-bit. A
         # nondeterministic (e.g. critical-section) reduction would fail this.
-        a, _, _ = _run_driver("merge", 0, threads=8, want_hess=False, tag=0)
-        b, _, _ = _run_driver("merge", 0, threads=8, want_hess=False, tag=1)
+        a, _, _ = _run_driver("complex", 200, threads=8, want_hess=False, tag=0)
+        b, _, _ = _run_driver("complex", 200, threads=8, want_hess=False, tag=1)
         self.assertTrue(np.array_equal(a, b),
                         "8-thread gradient not bit-identical across processes")
 
@@ -357,7 +351,7 @@ class ScalingBenchmarkTest(unittest.TestCase):
 def _dump_main(argv):
     import time
     mesh, n, want_hess, out = argv[2], int(argv[3]), argv[4] == "1", argv[5]
-    st = _load_merge() if mesh == "merge" else _make_cdt(n)
+    st = _complex_mesh() if mesh == "complex" else _make_cdt(n)
     rs = tessera.ReggeSolver(st, tessera.MatterConfiguration())
     t0 = time.perf_counter()
     grad = np.array([complex(z) for z in rs.actionGradientExact()], dtype=complex)

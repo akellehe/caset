@@ -54,7 +54,7 @@ class RegisterSpinTest(unittest.TestCase):
             host = eo.build_closed_s4(n_refine=20, seed=s % 997)
             opt = eo.EmergentOptimizer(
                 host, [[1.0, _W, _W * _W], [1.0, _W * _W, _W]], [1.0, _W, _W * _W],
-                k=3, gamma=1.0, seed=s)
+                degrees=[3], gamma=1.0, seed=s)
             seeds = [v.getId() for v in host.getVertexList().toVector()][:2]
             opt.construct_inputs(seeds, rounds=12)
             opt.run_stage1(max_steps=30, n_candidates=8, patience=8)

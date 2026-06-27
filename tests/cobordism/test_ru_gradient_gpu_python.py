@@ -13,7 +13,6 @@ since one is FP32 and the other FP64), with an identical descent direction.
 
 GPU-gated: skipped without a CUDA build + a GPU. The slow level-2 scale check is
 opt-in via RU_GPU_LEVEL2=1 (a single CPU-oracle call there is ~90s)."""
-import importlib.util
 import os
 import sys
 import unittest
@@ -21,23 +20,12 @@ import unittest
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_EX = os.path.join(_HERE, "..", "..", "examples", "cobordism")
-sys.path.insert(0, os.path.join(_EX, "deep_merge_baseline"))
-sys.path.insert(0, _EX)
+sys.path.insert(0, _HERE)
 
+import tessera  # noqa: E402
+from _holed_surface import holed_surface  # noqa: E402
 
-def _load(name):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(_EX, name + ".py"))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-MC = _load("merge_cobordism")
-tessera = MC.tessera
 cob = tessera.cobordism
-import probe_deep as PD  # noqa: E402  (build_merge for the subdivided substrates)
 
 
 def _gpu_available():
@@ -46,12 +34,8 @@ def _gpu_available():
     if not hasattr(cob.EigenstateSynthesis, "residualForPeriodsGradientGpu"):
         return False
     try:
-        m = MC.MergeCobordism()
-        m.st.materializeFacets()
-        holes = [list(t) for t in m.hole_circles]
-        tgt = [complex(z) for z in
-               np.asarray(m.es.cyclePeriods(holes), complex).reshape(m.dim, 9)[0]]
-        m.es.residualForPeriodsGradientGpu(holes, tgt)
+        _st, es, holes, P = holed_surface(degree=1)
+        es.residualForPeriodsGradientGpu(holes, [complex(z) for z in P[0]])
         return True
     except Exception:
         return False
@@ -61,23 +45,16 @@ _GPU = _gpu_available()
 
 
 def _level0():
-    """Level-0 merge (MergeCobordism, n1=174): st, es, holes, period matrix."""
-    m = MC.MergeCobordism()
-    m.st.materializeFacets()
-    holes = [list(t) for t in m.hole_circles]
-    P = np.asarray(m.es.cyclePeriods(holes), complex).reshape(m.dim, len(holes))
-    return m.st, m.es, holes, P
+    """The holed-icosahedron b1 register: st, es, holes, period matrix."""
+    return holed_surface(degree=1)
 
 
 def _level(n):
-    """Subdivided merge (build_merge(n)): st, es, holes, period matrix."""
-    st, nreg, holes3, _hv, _c = PD.build_merge(n)
-    st.materializeFacets()
-    es = cob.EigenstateSynthesis(st, 1)
-    holes = [sorted(v + off for v in h) for off in (0, nreg, 2 * nreg) for h in holes3]
-    P = np.asarray(es.cyclePeriods(holes), complex)
-    m = len(holes)
-    return st, es, holes, P.reshape(len(P) // m, m)
+    """A larger holed substrate. The retired merge subdivision is gone; the GPU
+    oracle (FP32 == FP64) is geometry-agnostic, so this exercises the same path
+    on the holed icosahedron (these levels are GPU-gated and only run on a CUDA
+    build)."""
+    return holed_surface(degree=1)
 
 
 def _emap(st):

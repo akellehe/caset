@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Twin Vector Labs LLC.
 // All rights reserved.
 
-#include "cobordism/EmergentOptimizer.h"
+#include "cobordism/MultiCobordism.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,7 +49,7 @@ std::pair<std::uint64_t, std::uint64_t> edgeKey(const ::tessera::mesh::Edge *e) 
 }
 }  // namespace
 
-EmergentOptimizer::EmergentOptimizer(
+MultiCobordism::MultiCobordism(
     std::shared_ptr<Spacetime> host,
     const std::vector<std::vector<cd>> &inputTargets,
     const std::vector<std::vector<cd>> &outputTargets,
@@ -64,11 +64,11 @@ EmergentOptimizer::EmergentOptimizer(
       gamma_(gamma),
       rng_(seed) {}
 
-std::vector<int> EmergentOptimizer::betti(const Spacetime &st) {
+std::vector<int> MultiCobordism::betti(const Spacetime &st) {
   return ChainComplex::fromSpacetime(st).bettiNumbers();
 }
 
-std::vector<std::vector<std::uint64_t>> EmergentOptimizer::emergentHoles(
+std::vector<std::vector<std::uint64_t>> MultiCobordism::emergentHoles(
     const Spacetime &st, int k) {
   // The (k+2)-vertex tuples all of whose drop-one facets are boundary facets.
   std::set<std::vector<std::uint64_t>> bnd;
@@ -107,14 +107,14 @@ std::vector<std::vector<std::uint64_t>> EmergentOptimizer::emergentHoles(
   return out;
 }
 
-double EmergentOptimizer::gradNorm2(const std::shared_ptr<Spacetime> &st) {
+double MultiCobordism::gradNorm2(const std::shared_ptr<Spacetime> &st) {
   ReggeSolver solver(st, MatterConfiguration());
   double n2 = 0.0;
   for (const auto &z : solver.actionGradientExact()) n2 += std::norm(z);
   return n2;
 }
 
-double EmergentOptimizer::rState(const std::shared_ptr<Spacetime> &st, int k,
+double MultiCobordism::rState(const std::shared_ptr<Spacetime> &st, int k,
                                  const std::vector<cd> &target) {
   const std::size_t d = target.size();
   Eigen::VectorXcd t(d);
@@ -152,7 +152,7 @@ double EmergentOptimizer::rState(const std::shared_ptr<Spacetime> &st, int k,
   return best;
 }
 
-std::shared_ptr<Spacetime> EmergentOptimizer::subOf(
+std::shared_ptr<Spacetime> MultiCobordism::subOf(
     const std::shared_ptr<Spacetime> &st,
     const std::set<std::uint64_t> &verts) const {
   std::vector<std::vector<std::uint64_t>> cells;
@@ -170,7 +170,7 @@ std::shared_ptr<Spacetime> EmergentOptimizer::subOf(
   return Spacetime::fromCells(kDim, cells, 1.0, 0.0);
 }
 
-double EmergentOptimizer::rInput(const Input &inp,
+double MultiCobordism::rInput(const Input &inp,
                                  const std::shared_ptr<Spacetime> &st) const {
   auto sub = subOf(st, inp.verts);
   double r = 0.0;
@@ -183,7 +183,7 @@ double EmergentOptimizer::rInput(const Input &inp,
   return r;
 }
 
-double EmergentOptimizer::rU(const std::shared_ptr<Spacetime> &st) const {
+double MultiCobordism::rU(const std::shared_ptr<Spacetime> &st) const {
   // The symmetric cobordism residual: one r_U term per boundary block — every
   // input AND every output sub-complex (the bulk routes the connectivity between
   // them). The Regge extremization term lives in objective()/stages, not here.
@@ -198,11 +198,11 @@ double EmergentOptimizer::rU(const std::shared_ptr<Spacetime> &st) const {
   return total;
 }
 
-double EmergentOptimizer::objective() const {
+double MultiCobordism::objective() const {
   return gradNorm2(st_) + gamma_ * rU(st_);
 }
 
-std::set<std::uint64_t> EmergentOptimizer::boundaryVerts() const {
+std::set<std::uint64_t> MultiCobordism::boundaryVerts() const {
   std::set<std::uint64_t> out;
   for (const auto &inp : inputs_)
     out.insert(inp.verts.begin(), inp.verts.end());
@@ -210,7 +210,7 @@ std::set<std::uint64_t> EmergentOptimizer::boundaryVerts() const {
   return out;
 }
 
-EmergentOptimizer::Snapshot EmergentOptimizer::snapshotOf(
+MultiCobordism::Snapshot MultiCobordism::snapshotOf(
     const Spacetime &st) const {
   std::vector<std::vector<std::uint64_t>> cells;
   for (const auto &s : st.getTopSimplices()) cells.push_back(topTuple(*s));
@@ -220,11 +220,11 @@ EmergentOptimizer::Snapshot EmergentOptimizer::snapshotOf(
   return {std::move(cells), std::move(l2)};
 }
 
-EmergentOptimizer::Snapshot EmergentOptimizer::snapshot() const {
+MultiCobordism::Snapshot MultiCobordism::snapshot() const {
   return snapshotOf(*st_);
 }
 
-std::shared_ptr<Spacetime> EmergentOptimizer::build(const Snapshot &snap) const {
+std::shared_ptr<Spacetime> MultiCobordism::build(const Snapshot &snap) const {
   auto st = Spacetime::fromCells(kDim, snap.first, 1.0, 0.0);
   for (auto *e : st->getEdgeList()->toVector()) {
     const auto it = snap.second.find(edgeKey(e));
@@ -233,7 +233,7 @@ std::shared_ptr<Spacetime> EmergentOptimizer::build(const Snapshot &snap) const 
   return st;
 }
 
-EmergentOptimizer::MoveSpec EmergentOptimizer::randomSpec(const Spacetime &st) {
+MultiCobordism::MoveSpec MultiCobordism::randomSpec(const Spacetime &st) {
   static const char *kinds[] = {"add",      "remove",  "flip",
                                 "iflip",    "cone_out", "cone_in"};
   const std::string kind = kinds[rng_() % 6];
@@ -251,7 +251,7 @@ EmergentOptimizer::MoveSpec EmergentOptimizer::randomSpec(const Spacetime &st) {
   return {"cone_in", face};
 }
 
-bool EmergentOptimizer::applySpec(const std::shared_ptr<Spacetime> &st,
+bool MultiCobordism::applySpec(const std::shared_ptr<Spacetime> &st,
                                   const MoveSpec &spec) {
   const auto &kind = spec.first;
   if (kind == "noop") return false;
@@ -290,7 +290,7 @@ bool EmergentOptimizer::applySpec(const std::shared_ptr<Spacetime> &st,
   return EigenstateSynthesis(st, gateK_).dualComplexValid().first;
 }
 
-double EmergentOptimizer::deltaF(
+double MultiCobordism::deltaF(
     const std::shared_ptr<Spacetime> &cand, double baseRu,
     const std::set<std::vector<std::uint64_t>> &baseCells) const {
   std::set<std::vector<std::uint64_t>> candCells;
@@ -313,7 +313,7 @@ double EmergentOptimizer::deltaF(
   return dGrad + gamma_ * dRu;
 }
 
-double EmergentOptimizer::step(int nCandidates) {
+double MultiCobordism::step(int nCandidates) {
   const auto snap = snapshot();
   const double baseRu = rU(st_);
   std::set<std::vector<std::uint64_t>> baseCells;
@@ -339,7 +339,7 @@ double EmergentOptimizer::step(int nCandidates) {
   return 0.0;
 }
 
-std::vector<double> EmergentOptimizer::runStage1(int maxSteps, int nCandidates,
+std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidates,
                                                  int patience) {
   std::vector<double> trace = {objective()};
   int stalls = 0;
@@ -357,17 +357,17 @@ std::vector<double> EmergentOptimizer::runStage1(int maxSteps, int nCandidates,
   return trace;
 }
 
-void EmergentOptimizer::constructInputs(const std::vector<std::uint64_t> &seeds,
+void MultiCobordism::constructInputs(const std::vector<std::uint64_t> &seeds,
                                         int rounds) {
   constructBlocks(seeds, inputTargets_, inputs_, rounds);
 }
 
-void EmergentOptimizer::constructOutputs(const std::vector<std::uint64_t> &seeds,
+void MultiCobordism::constructOutputs(const std::vector<std::uint64_t> &seeds,
                                          int rounds) {
   constructBlocks(seeds, outputTargets_, outputs_, rounds);
 }
 
-void EmergentOptimizer::constructBlocks(
+void MultiCobordism::constructBlocks(
     const std::vector<std::uint64_t> &seeds,
     const std::vector<std::vector<cd>> &targets, std::vector<Input> &dest,
     int rounds) {
@@ -423,7 +423,7 @@ void EmergentOptimizer::constructBlocks(
   }
 }
 
-std::vector<double> EmergentOptimizer::relaxStage2(double beta, int maxIters,
+std::vector<double> MultiCobordism::relaxStage2(double beta, int maxIters,
                                                    double alpha0) {
   auto edges = st_->getEdgeList()->toVector();
   const std::size_t n = edges.size();

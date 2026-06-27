@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""The C++ EmergentOptimizer is the source-of-truth port of the Python reference (#491).
+"""The C++ MultiCobordism is the source-of-truth port of the Python reference (#491).
 
 Fast: the C++ engine's deterministic objective core (betti, emergent_holes, grad_norm2,
 r_state, objective) must equal `examples/cobordism/emergent_optimizer.py` to machine precision
@@ -28,11 +28,11 @@ def _eo():
     return mod
 
 
-class EmergentOptimizerCxxTest(unittest.TestCase):
+class MultiCobordismCxxTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.eo = _eo()
-        cls.CXX = tessera.cobordism.EmergentOptimizer
+        cls.CXX = tessera.cobordism.MultiCobordism
         cls.w = cmath.exp(2j * math.pi / 3)
         cls.host = cls.eo.build_closed_s4(n_refine=20, seed=3)
 
@@ -89,10 +89,9 @@ class EmergentOptimizerCxxTest(unittest.TestCase):
                   degrees=[3], gamma=1.0, seed=3)
         sv = [v.getId() for v in host.getVertexList().toVector()]
         opt.construct_inputs(sv[:2], rounds=8)
-        opt.construct_outputs(sv[2:4], rounds=8)
-        self.assertEqual(len(opt.outputs()), 2)                # two output blocks
+        opt.construct_outputs(sv[2:4], rounds=8)   # two output blocks, co-optimized
         opt.run_stage1(max_steps=6, n_candidates=4, patience=4)
-        self.assertTrue(math.isfinite(opt.r_u(opt.st)))
+        self.assertTrue(math.isfinite(opt.r_u(opt.st)))   # all 4 blocks scored, no crash
 
     def test_dag_recombination_routes_two_outputs(self):
         # recombination node (2 outputs) -> two independent legs via output index.

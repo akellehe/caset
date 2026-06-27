@@ -168,13 +168,13 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} Register.h
 ```
-```{doxygenfile} MergeCobordism.h
+```{doxygenfile} MultiCobordism.h
+```
+```{doxygenfile} CobordismDAG.h
 ```
 ```{doxygenfile} OrientedCone.h
 ```
 ```{doxygenfile} SurgicalCone.h
-```
-```{doxygenfile} TransportCobordism.h
 ```
 ```{doxygenfile} CobordismRelaxer.h
 ```

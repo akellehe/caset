@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-#include "cobordism/EmergentOptimizer.h"
+#include "cobordism/MultiCobordism.h"
 #include "mesh/Vertex.h"
 #include "mesh/VertexList.h"
 #include "spacetime/Spacetime.h"
@@ -56,7 +56,7 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1Candidates,
         inputs.push_back(up[e.second]);
       }
 
-      EmergentOptimizer opt(nd.host, inputs, nd.outputTargets, nd.degrees,
+      MultiCobordism opt(nd.host, inputs, nd.outputTargets, nd.degrees,
                             nd.gamma, nd.seed);
       // One construct seed vertex per block (the first |inputs|+|outputs| ids).
       const auto verts = nd.host->getVertexList()->toVector();
