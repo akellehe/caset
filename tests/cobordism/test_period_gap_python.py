@@ -28,31 +28,20 @@ import unittest
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_EX = os.path.join(_HERE, "..", "..", "examples", "cobordism")
-sys.path.insert(0, _EX)
+sys.path.insert(0, _HERE)
 
+import tessera  # noqa: E402
+from _holed_surface import holed_surface  # noqa: E402
 
-def _load(name):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(_EX, name + ".py"))
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-MC = _load("merge_cobordism")
-tessera = MC.tessera
 cob = tessera.cobordism
 
 
 def _substrate():
-    """Level-0 merge: st, es, holes (9 triangle circles), period matrix P."""
-    m = MC.MergeCobordism()
-    m.st.materializeFacets()
-    holes = [list(t) for t in m.hole_circles]
-    P = np.asarray(m.es.cyclePeriods(holes), complex).reshape(m.dim, len(holes))
-    cells1 = [tuple(int(v) for v in c) for c in m.es.cellSimplices()]
-    return m.st, m.es, holes, P, cells1
+    """A holed icosahedron (b1 register): st, es, hole-circles, period matrix P,
+    and the edge-cell list."""
+    st, es, holes, P = holed_surface(degree=1)
+    cells1 = [tuple(int(v) for v in c) for c in es.cellSimplices()]
+    return st, es, holes, P, cells1
 
 
 def _emap(st):

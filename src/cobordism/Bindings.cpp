@@ -21,10 +21,11 @@
 #include "cobordism/CombinatorialDimension.h"
 #include "cobordism/DijkgraafWitten.h"
 #include "cobordism/DiracKahler.h"
+#include "cobordism/CobordismDAG.h"
 #include "cobordism/EigenstateSynthesis.h"
+#include "cobordism/MultiCobordism.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
-#include "cobordism/MergeCobordism.h"
 #include "cobordism/OrientedCone.h"
 #include "cobordism/SurgicalCone.h"
 #include "cobordism/PreparedBoundaryState.h"
@@ -35,7 +36,6 @@
 #include "cobordism/TopologyBuilder.h"
 #include "cobordism/TorusOperatorTopology.h"
 #include "cobordism/CobordismRelaxer.h"
-#include "cobordism/TransportCobordism.h"
 #include "cobordism/TripartiteRegisterTopology.h"
 #include "cobordism/BipartiteCreationTopology.h"
 #include "cobordism/EmergentEventTopology.h"
@@ -1780,167 +1780,67 @@ prepared states, reproduces the harmonic overlap.)doc")
            "The orientation-reversed (3bar, #416-twisted) per-hole signs of the "
            "diquark window at the middle slice.");
 
-  // === MergeCobordism (#363 / #388) ===
-  py::class_<MergeCobordism> mc(m, "MergeCobordism",
-      "The canonical merge primitive: an emergent operator / output state built "
-      "from input/output qubit states through a cobordism bulk, mediated by the "
-      "dual Lorentzian Regge action (relaxed with the sparse analytic Hessian) "
-      "on a TopologyBuilder topology. The primary emergent quantity is the one "
-      "the caller did not supply (see __init__).");
-  py::enum_<MergeCobordism::StateResidualMode>(mc, "StateResidualMode",
-      "The matter/state term r_state the relaxation pins against.")
-      .value("Realizability", MergeCobordism::StateResidualMode::Realizability,
-             "r_U (default): hold the periods exact, score the state's "
-             "non-harmonicity (residualForLoops).")
-      .value("PeriodPin", MergeCobordism::StateResidualMode::PeriodPin,
-             "r_psi: the pure-harmonic carried-vs-target period gap "
-             "(periodGapForLoops).");
-  py::class_<MergeCobordism::Stats>(mc, "Stats",
-      "Convergence + topology statistics of the relaxation.")
-      .def_readonly("converged", &MergeCobordism::Stats::converged)
-      .def_readonly("residual", &MergeCobordism::Stats::residual)
-      .def_readonly("stat_action_residual",
-                    &MergeCobordism::Stats::statActionResidual)
-      .def_readonly("state_residual", &MergeCobordism::Stats::stateResidual)
-      .def_readonly("dual_action", &MergeCobordism::Stats::dualAction)
-      .def_readonly("relax_iterations", &MergeCobordism::Stats::relaxIterations)
-      .def_readonly("betti_cobordism", &MergeCobordism::Stats::bettiCobordism)
-      .def_readonly("b1_bulk", &MergeCobordism::Stats::b1Bulk)
-      .def_readonly("ker_l1_bulk", &MergeCobordism::Stats::kerL1Bulk)
-      .def_readonly("interior_vertices",
-                    &MergeCobordism::Stats::interiorVertices)
-      .def_readonly("topology", &MergeCobordism::Stats::topology)
-      .def_readonly("state_mode", &MergeCobordism::Stats::stateMode,
-                    "The selected r_state term: 'r_U' or 'r_psi'.");
-  mc.def(py::init([](const std::vector<std::vector<std::complex<double>>> &in,
-                     const std::vector<std::vector<std::complex<double>>> &out,
-                     const std::vector<std::complex<double>> &U, double beta,
-                     double epsilon, int maxIters, std::uint64_t seed,
-                     std::shared_ptr<TopologyBuilder> topology, bool verbose,
-                     MergeCobordism::StateResidualMode stateMode) {
-           return std::make_unique<MergeCobordism>(
-               in, out, U, beta, epsilon, maxIters, seed, std::move(topology),
-               verbose, stateMode);
-         }),
-         py::arg("input_states"),
-         py::arg("output_states") =
-             std::vector<std::vector<std::complex<double>>>{},
-         py::arg("U") = std::vector<std::complex<double>>{},
-         py::arg("beta") = 1.0, py::arg("epsilon") = 1e-6,
-         py::arg("max_iters") = 400, py::arg("seed") = 0,
-         py::arg("topology") = std::shared_ptr<TopologyBuilder>{},
-         py::arg("verbose") = false,
-         py::arg("state_mode") = MergeCobordism::StateResidualMode::Realizability,
-         "Build and run the merge (the operator topology, default "
-         "TorusOperatorTopology: the (T^2-3holes)xS^1 qubit operator). Pins inputs "
-         "AND outputs (or derives outputs from U) and reads the emergent operator "
-         "OR final state -- whichever was not supplied: output_states (U empty) => "
-         "the operator is primary; U (a flat row-major dxd operator, output_states "
-         "omitted) => the output_state is primary, emergent over the output cycles. "
-         "Supply exactly one of output_states or U. (For pinning inputs alone and "
-         "reading the emergent carried result -- the #353 color register / #396 "
-         "proton junction -- use TransportCobordism.) state_mode selects the "
-         "r_state term: Realizability (r_U, default) or PeriodPin (r_psi).")
-      .def_property_readonly("input_states", &MergeCobordism::inputStates)
-      .def_property_readonly("output_states", &MergeCobordism::outputStates)
-      .def_property_readonly("cobordism", &MergeCobordism::cobordism,
-                             "The cobordism W (relaxed boundary + bulk).")
-      .def_property_readonly("boundary", &MergeCobordism::boundary,
-                             "The boundary dW top-cells.")
-      .def_property_readonly("bulk", &MergeCobordism::bulk,
-                             "The bulk W - dW interior 1-cells.")
-      .def_property_readonly(
-          "operator_U", &MergeCobordism::operatorU,
-          "The merge operator unvec(ker L1(W-dW)). Deferred (empty) pending the "
-          "interior-handle operator-topology rework; empty also signals no "
-          "operator was carried.")
-      .def_property_readonly("choi_state", &MergeCobordism::choiState,
-                             "The operator's Choi state. Deferred (empty) with "
-                             "operator_U.")
-      .def_property_readonly(
-          "output_state", &MergeCobordism::outputState,
-          "The emergent final state psi_AB: the inputs carried through the "
-          "relaxed geometry, read over the output cycles (flat, length d). "
-          "Primary in U-supplied mode; a consistency read in output-supplied "
-          "mode. Empty when the input/output cycle split is not determinate.")
-      .def_property_readonly("stats", &MergeCobordism::stats);
 
-  // === TransportCobordism (#353 / #396): the carried-rep transport ===
-  py::class_<TransportCobordism> tc(m, "TransportCobordism",
-      "The transport primitive: pin boundary color states (inputs only), relax "
-      "the bulk, and read the EMERGENT result by carrying the inputs through the "
-      "bulk to the result block. This is the #353 color register and the #396 "
-      "tripartite proton junction -- a transport of the boundary states, not a "
-      "merge (no pair-of-pants, no operator). Use a transport topology "
-      "(RegisterTopology default, or TripartiteRegisterTopology).");
-  py::enum_<TransportCobordism::StateResidualMode>(tc, "StateResidualMode")
-      .value("Realizability", TransportCobordism::StateResidualMode::Realizability)
-      .value("PeriodPin", TransportCobordism::StateResidualMode::PeriodPin);
-  py::class_<TransportCobordism::Stats>(tc, "Stats")
-      .def_readonly("converged", &TransportCobordism::Stats::converged)
-      .def_readonly("residual", &TransportCobordism::Stats::residual)
-      .def_readonly("stat_action_residual",
-                    &TransportCobordism::Stats::statActionResidual)
-      .def_readonly("state_residual", &TransportCobordism::Stats::stateResidual)
-      .def_readonly("dual_action", &TransportCobordism::Stats::dualAction)
-      .def_readonly("relax_iterations",
-                    &TransportCobordism::Stats::relaxIterations)
-      .def_readonly("betti_cobordism",
-                    &TransportCobordism::Stats::bettiCobordism)
-      .def_readonly("b1_bulk", &TransportCobordism::Stats::b1Bulk)
-      .def_readonly("interior_vertices",
-                    &TransportCobordism::Stats::interiorVertices)
-      .def_readonly("topology", &TransportCobordism::Stats::topology)
-      .def_readonly("state_mode", &TransportCobordism::Stats::stateMode);
-  tc.def(py::init([](const std::vector<std::vector<std::complex<double>>> &in,
-                     double beta, double epsilon, int maxIters, std::uint64_t seed,
-                     std::shared_ptr<TopologyBuilder> topology, bool verbose,
-                     TransportCobordism::StateResidualMode stateMode) {
-           return std::make_unique<TransportCobordism>(
-               in, beta, epsilon, maxIters, seed, std::move(topology), verbose,
-               stateMode);
-         }),
-         py::arg("input_states"), py::arg("beta") = 1.0,
-         py::arg("epsilon") = 1e-6, py::arg("max_iters") = 400,
-         py::arg("seed") = 0,
-         py::arg("topology") = std::shared_ptr<TopologyBuilder>{},
-         py::arg("verbose") = false,
-         py::arg("state_mode") =
-             TransportCobordism::StateResidualMode::Realizability,
-         "Build + relax the transport. Pins INPUTS only (the result emerges) over "
-         "the topology's exact triangle-hole read-out. Default topology: "
-         "RegisterTopology (the #353 color register); pass TripartiteRegisterTopology "
-         "for the proton junction. d = 3 (color).")
-      .def_property_readonly("input_states", &TransportCobordism::inputStates)
-      .def_property_readonly("cobordism", &TransportCobordism::cobordism,
-                             "The cobordism W (relaxed boundary + bulk).")
-      .def_property_readonly("boundary", &TransportCobordism::boundary,
-                             "The boundary dW top-cells.")
-      .def_property_readonly("bulk", &TransportCobordism::bulk,
-                             "The bulk W - dW interior 1-cells.")
-      .def_property_readonly(
-          "result", &TransportCobordism::result,
-          "The EMERGENT result: the inputs carried through the bulk to the result "
-          "block's color holes (flat, length d). The transport's primary output.")
-      .def_property_readonly(
-          "input_holes", &TransportCobordism::inputHoles,
-          "The pinned INPUT triangle holes (W's own vertex labels). Read the "
-          "emergent result via the carried-input transport: "
-          "carriedRepresentative(input_holes, input_hole_targets) then its periods "
-          "over result_holes.")
-      .def_property_readonly("input_hole_targets",
-                             &TransportCobordism::inputHoleTargets,
-                             "The induced-orientation-signed target periods for "
-                             "input_holes (sign * color amplitude).")
-      .def_property_readonly("result_holes", &TransportCobordism::resultHoles,
-                             "The EMERGENT result block's triangle holes (read, "
-                             "never pinned).")
-      .def_property_readonly("result_signs", &TransportCobordism::resultSigns,
-                             "The result block's induced-orientation signs (+-1 per "
-                             "result hole), applied to the emergent result periods so "
-                             "the read-out is symmetric with the signed inputs "
-                             "(relabeling-invariant sigma_R). Empty if unsigned.")
-      .def_property_readonly("stats", &TransportCobordism::stats);
+  // === MultiCobordism (#491): the C++ source-of-truth port of
+  // examples/cobordism/emergent_optimizer.py — fully emergent topology, user k. ===
+  py::class_<MultiCobordism>(m, "MultiCobordism",
+      "The C++ port of emergent_optimizer.MultiCobordism (#491): merge as a "
+      "fully emergent optimization. From a bare host it grows the register by "
+      "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
+      "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
+      "dynamically off getBoundary. Two stages: run_stage1 (combinatorial), "
+      "relax_stage2 (geometric).")
+      .def(py::init<std::shared_ptr<Spacetime>,
+                    std::vector<std::vector<std::complex<double>>>,
+                    std::vector<std::vector<std::complex<double>>>,
+                    std::vector<int>, double, std::uint64_t>(),
+           py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
+           py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
+           py::arg("seed") = 0)
+      .def_static("betti", &MultiCobordism::betti, py::arg("st"))
+      .def_static("emergent_holes", &MultiCobordism::emergentHoles,
+                  py::arg("st"), py::arg("k"))
+      .def_static("grad_norm2", &MultiCobordism::gradNorm2, py::arg("st"))
+      .def_static("r_state", &MultiCobordism::rState, py::arg("st"),
+                  py::arg("k"), py::arg("target"))
+      .def("r_u", &MultiCobordism::rU, py::arg("st"))
+      .def("objective", &MultiCobordism::objective)
+      .def("construct_inputs", &MultiCobordism::constructInputs,
+           py::arg("seeds"), py::arg("rounds") = 24)
+      .def("construct_outputs", &MultiCobordism::constructOutputs,
+           py::arg("seeds"), py::arg("rounds") = 24)
+      .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
+           py::arg("n_candidates") = 12, py::arg("patience") = 8)
+      .def("relax_stage2", &MultiCobordism::relaxStage2, py::arg("beta") = 1.0,
+           py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
+      .def_property_readonly("st", &MultiCobordism::spacetime);
+
+  // === CobordismDAG (#491): chain emergent merges, output -> input ===
+  py::class_<CobordismDAG>(m, "CobordismDAG",
+      "Chain emergent merges (MultiCobordism) into a DAG: the output of one "
+      "cobordism is an input to the next (the proton_merge_sequence compose, "
+      "generalized). add_node returns a node id; edges pipe upstream outputs into "
+      "downstream input slots; run() executes in topological order, recording each "
+      "node's output (its verified output_target) and realizability residual r_U.")
+      .def(py::init<>())
+      .def("add_node", &CobordismDAG::addNode, py::arg("host"),
+           py::arg("literal_inputs"), py::arg("upstream"),
+           py::arg("output_targets"), py::arg("degrees") = std::vector<int>{3},
+           py::arg("gamma") = 1.0, py::arg("seed") = 0,
+           "Add a node (one co-optimized MultiCobordism system): a bare host, "
+           "literal input targets, `upstream` as (node_id, output_index) tuples "
+           "whose outputs feed further inputs, and `output_targets` (one for a "
+           "merge, two for a 2->2 recombination). Returns the node id.")
+      .def("run", &CobordismDAG::run, py::arg("stage1_max_steps") = 30,
+           py::arg("stage1_candidates") = 8, py::arg("stage1_patience") = 8,
+           py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 40,
+           "Run all nodes in topological order (raises on a cycle).")
+      .def("output", &CobordismDAG::output, py::arg("node"),
+           py::arg("output_index") = 0)
+      .def("num_outputs", &CobordismDAG::numOutputs, py::arg("node"))
+      .def("residual", &CobordismDAG::residual, py::arg("node"))
+      .def("__len__", &CobordismDAG::size);
+
 
   // ----- Orientation-safe, dualComplexValid-gated stellar cone (#459) -----
   py::class_<OrientedCone>(m, "OrientedCone",

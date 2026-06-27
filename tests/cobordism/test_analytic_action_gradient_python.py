@@ -4,32 +4,28 @@
 """The exact analytic gradient of the complex dual (Sorkin) Regge action matches
 finite differences to machine precision -- the regression guard for the
 hand-derived gradient (Simplex::lorentzianDeficitAngleGradient,
-Simplex::dualVolumeGradient, ReggeSolver::actionGradientExact). Run on the merge
-cobordism so both real (spacelike) and complex (boost) hinges are exercised."""
+Simplex::dualVolumeGradient, ReggeSolver::actionGradientExact). Run on a
+Lorentzian 4D CDT mesh so both real (spacelike) and complex (boost) triangle
+hinges are exercised."""
 
-import importlib.util
-import os
-import sys
 import unittest
 
 import tessera
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_EXAMPLE = os.path.join(_HERE, "..", "..", "examples", "cobordism",
-                        "merge_cobordism.py")
-
-
-def _load_merge():
-    spec = importlib.util.spec_from_file_location("merge_cobordism", _EXAMPLE)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["merge_cobordism"] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-MC = _load_merge()
 _FD = 1e-6           # central-difference step in l^2
 _TOL = 1e-5          # analytic vs FD agreement
+
+
+def _make_cdt(n):
+    """A Lorentzian 4D CDT mesh: triangle hinges with both real (spacelike) and
+    genuinely complex (boost) deficit angles."""
+    sig = tessera.Signature(4, tessera.Lorentzian)
+    metric = tessera.Metric(True, sig)
+    st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
+                           tessera.Toroid())
+    st.build(n)
+    st.materializeFacets()
+    return st
 
 
 def _central(setter, get, h=_FD):
@@ -43,9 +39,7 @@ def _central(setter, get, h=_FD):
 class ExactActionGradientTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.m = MC.MergeCobordism()
-        cls.st = cls.m.st
-        cls.st.materializeFacets()
+        cls.st = _make_cdt(80)
         cls.edges = cls.st.getEdgeList().toVector()
         cls.emap, cls.eidx = {}, {}
         for i, e in enumerate(cls.edges):
@@ -53,9 +47,10 @@ class ExactActionGradientTest(unittest.TestCase):
             key = (min(a, b), max(a, b))
             cls.emap[key] = e
             cls.eidx[key] = i
+        # In 4D the hinges (codim-2) are triangles.
         cls.hinges = {tuple(sorted(int(v.getId()) for v in s.getVertices())): s
                       for s in cls.st.getSimplices()
-                      if len(s.getVertices()) == 2}
+                      if len(s.getVertices()) == 3}
 
     def _action(self):
         return complex(tessera.ReggeSolver(
@@ -114,8 +109,8 @@ class ExactActionGradientTest(unittest.TestCase):
     # the gradient norm Sum|dS/dl^2|^2 must include |d Im S|^2. Dropping it lets the
     # geometry drift along directions the imaginary part actually constrains (observed:
     # the Re-only objective drifted up in overall scale because d Im S -- which curbs that
-    # drift -- was missing). The margins below are comfortably met (~0.6) on the merge;
-    # the threshold catches a regression that silently zeroes the imaginary part.
+    # drift -- was missing). The margins below are comfortably met on the Lorentzian
+    # CDT mesh; the threshold catches a regression that silently zeroes the imaginary part.
 
     def test_action_is_materially_complex(self):
         S = self._action()

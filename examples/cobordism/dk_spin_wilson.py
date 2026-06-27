@@ -100,7 +100,7 @@ if __name__ == "__main__":
     for S in range(3, 40):
         host = eo.build_closed_s4(n_refine=20, seed=S % 997)
         opt = eo.EmergentOptimizer(host, [[1, w, w * w], [1, w * w, w]], [1, w, w * w],
-                                   k=3, gamma=1.0, seed=S)
+                                   degrees=[3], gamma=1.0, seed=S)
         sv = [v.getId() for v in host.getVertexList().toVector()][:2]
         opt.construct_inputs(sv, 12)
         opt.run_stage1(max_steps=30, n_candidates=8, patience=8)

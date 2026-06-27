@@ -14,9 +14,7 @@ that the coupling is genuinely local (nnz/row bounded as |E| grows, so density
 → 0 at scale), and that the assembly is symmetric and deterministic.
 """
 
-import importlib.util
 import os
-import sys
 import unittest
 
 import numpy as np
@@ -25,7 +23,6 @@ from scipy.sparse import coo_matrix
 import tessera
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_MERGE = os.path.join(_HERE, "..", "examples", "cobordism", "merge_cobordism.py")
 _TOL = 1e-9
 
 
@@ -35,16 +32,6 @@ def _make_cdt(n):
     st = tessera.Spacetime(metric, tessera.CDT, 1.0, 1.0, tessera.PREFERRED,
                            tessera.Toroid())
     st.build(n)
-    st.materializeFacets()
-    return st
-
-
-def _load_merge():
-    spec = importlib.util.spec_from_file_location("merge_cobordism", _MERGE)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["merge_cobordism"] = module
-    spec.loader.exec_module(module)
-    st = module.MergeCobordism().st
     st.materializeFacets()
     return st
 
@@ -83,15 +70,15 @@ class SparseMatchesDenseTest(unittest.TestCase):
                         f"sparse Hessian != dense actionHessianExact: max|Δ|={worst:.3e}")
         return dense, sparse, nnz, n
 
-    def test_merge_complex_hinges(self):
-        # 3D merge cobordism: edge hinges with genuinely complex (boost) deficits.
-        dense, _, _, _ = self._check(_load_merge())
+    def test_complex_boost_hinges(self):
+        # Lorentzian 4D CDT: triangle hinges with genuinely complex (boost) deficits.
+        dense, _, _, _ = self._check(_make_cdt(200))
         self.assertGreater(float(np.max(np.abs(dense.imag))), 0.1,
-                           "merge Hessian should be materially complex (boost hinges)")
+                           "Hessian should be materially complex (boost hinges)")
 
     def test_cdt_real_triangle_hinges(self):
-        # 4D CDT mesh: triangle hinges — a different ambient dimension.
-        self._check(_make_cdt(200))
+        # A second, larger CDT mesh — the sparse==dense identity at scale.
+        self._check(_make_cdt(600))
 
 
 class SparsityTest(unittest.TestCase):
@@ -114,14 +101,14 @@ class SparsityTest(unittest.TestCase):
 
 class SymmetryTest(unittest.TestCase):
     def test_symmetric(self):
-        sparse, _, _ = _sparse(_solver(_load_merge()))
+        sparse, _, _ = _sparse(_solver(_make_cdt(200)))
         worst = float(np.max(np.abs(sparse - sparse.T)))
         self.assertLess(worst, _TOL, f"sparse Hessian not symmetric: max|S-Sᵀ|={worst:.3e}")
 
 
 class DeterminismTest(unittest.TestCase):
     def test_coo_identical_across_calls(self):
-        rs = _solver(_load_merge())
+        rs = _solver(_make_cdt(200))
         self.assertEqual(rs.actionHessianExactSparse(),
                          rs.actionHessianExactSparse(),
                          "sparse Hessian COO is not deterministic across calls")
