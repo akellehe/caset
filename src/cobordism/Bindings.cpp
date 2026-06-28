@@ -1783,24 +1783,28 @@ prepared states, reproduces the harmonic overlap.)doc")
 
   // === MultiCobordism (#491): the C++ source-of-truth port of
   // examples/cobordism/emergent_optimizer.py — fully emergent topology, user k. ===
-  py::class_<MultiCobordism::Input>(m, "MultiCobordismBlock",
+  py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
       "vertex set whose own sub-complex carries the block, and its target period "
       "vector. Read the block's sub-complex with Spacetime.fromCells over the "
-      "cells inside `verts`, then its holes with MultiCobordism.emergent_holes.")
-      .def_property_readonly("verts", [](const MultiCobordism::Input &b) {
-        return std::vector<std::uint64_t>(b.verts.begin(), b.verts.end());
-      })
-      .def_property_readonly("target", [](const MultiCobordism::Input &b) {
-        return b.target;
-      });
+      "cells inside `vertices`, then its holes with MultiCobordism.emergent_holes.")
+      .def_property_readonly(
+          "vertices",
+          [](const MultiCobordism::BoundaryBlock &block) {
+            return std::vector<std::uint64_t>(block.vertices.begin(),
+                                              block.vertices.end());
+          })
+      .def_property_readonly("target",
+                             [](const MultiCobordism::BoundaryBlock &block) {
+                               return block.target;
+                             });
   py::class_<MultiCobordism>(m, "MultiCobordism",
       "The C++ port of emergent_optimizer.MultiCobordism (#491): merge as a "
       "fully emergent optimization. From a bare host it grows the register by "
       "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
       "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
       "dynamically off getBoundary. Two stages: run_stage1 (combinatorial), "
-      "relax_stage2 (geometric).")
+      "run_stage2 (geometric).")
       .def(py::init<std::shared_ptr<Spacetime>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
@@ -1811,9 +1815,9 @@ prepared states, reproduces the harmonic overlap.)doc")
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
-      .def_static("grad_norm2", &MultiCobordism::gradNorm2, py::arg("st"))
-      .def_static("r_state", &MultiCobordism::rState, py::arg("st"),
-                  py::arg("k"), py::arg("target"))
+      .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
+      .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
+                  py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
       .def("objective", &MultiCobordism::objective)
       .def("construct_inputs", &MultiCobordism::constructInputs,
@@ -1822,7 +1826,7 @@ prepared states, reproduces the harmonic overlap.)doc")
            py::arg("seeds"), py::arg("rounds") = 24)
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
            py::arg("n_candidates") = 12, py::arg("patience") = 8)
-      .def("relax_stage2", &MultiCobordism::relaxStage2, py::arg("beta") = 1.0,
+      .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
       .def_property_readonly("st", &MultiCobordism::spacetime)
       .def_property_readonly("inputs", &MultiCobordism::inputs,

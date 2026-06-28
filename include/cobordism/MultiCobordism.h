@@ -43,10 +43,14 @@ using ::tessera::spacetime::Spacetime;
 ///     search), re-opening the scale DOF.
 class MultiCobordism {
  public:
-  /// An emergent input: the vertex SET whose own sub-complex `L_k` must carry
-  /// `target`, and the target period vector.
-  struct Input {
-    std::set<std::uint64_t> verts;
+  /// An emergent boundary block of the cobordism — an input OR an output. A block is
+  /// NOT itself a complex: it stores the vertex SET it occupies plus the target period
+  /// vector its own `L_k` sub-complex must carry. The sub-complex is recovered on
+  /// demand from `vertices` by `subcomplexWithinVertexSet` (the ambient complex's top
+  /// cells whose vertices all lie in the set), so the vertex set — together with the
+  /// ambient triangulation — determines the block's complex.
+  struct BoundaryBlock {
+    std::set<std::uint64_t> vertices;
     std::vector<std::complex<double>> target;
   };
 
@@ -70,18 +74,24 @@ class MultiCobordism {
   [[nodiscard]] static std::vector<std::vector<std::uint64_t>> emergentHoles(
       const Spacetime &st, int k);
   /// `Σ_e |actionGradientExact_e|²` — the full-complex Regge extremization term.
-  [[nodiscard]] static double gradNorm2(const std::shared_ptr<Spacetime> &st);
-  /// The relabeling-invariant, zero-filled residual of `target` against the
-  /// `L_k` harmonic of `st` over its emergent holes (`r_state` in the reference).
-  [[nodiscard]] static double rState(
-      const std::shared_ptr<Spacetime> &st, int k,
-      const std::vector<std::complex<double>> &target);
+  [[nodiscard]] static double reggeActionGradient(const std::shared_ptr<Spacetime> &st);
+  /// The relabeling-invariant, zero-filled residual of `targetState` against the
+  /// `L_k` harmonic of `spacetime` over its emergent holes (`r_state` in the
+  /// reference, the Python-binding name). For each register degree `k` it reads the
+  /// emergent holes' cycle periods, least-squares-fits the target against them up to
+  /// a relabeling of the target's components, and returns the smallest residual
+  /// `\f$\lVert P c - t\rVert^2\f$`; with no emerged register it is the full leak
+  /// `\f$\lVert t\rVert^2\f$`. Elemental: `residualForBoundaryBlock` sums this over
+  /// the register degrees.
+  [[nodiscard]] static double residualOfTargetStateAgainstHarmonic(
+      const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+      const std::vector<std::complex<double>> &targetState);
 
   // ---- objective ----
-  /// The per-block register residual summed over `degrees_`: `Σ r_U(boundary
+  /// The per-block register residual summed over `registerDegrees_`: `Σ r_U(boundary
   /// block)` over EVERY input and output block (the symmetric cobordism objective).
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
-  /// `F = gradNorm2 (Regge extremization) + gamma * rU`.
+  /// `F = reggeActionGradient (Regge extremization) + gamma * rU`.
   [[nodiscard]] double objective() const;
 
   // ---- the two stages + boundary-block construction ----
@@ -91,12 +101,16 @@ class MultiCobordism {
   void constructOutputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
   std::vector<double> runStage1(int maxSteps = 200, int nCandidates = 12,
                                 int patience = 8);
-  std::vector<double> relaxStage2(double beta = 1.0, int maxIters = 40,
+  std::vector<double> runStage2(double beta = 1.0, int maxIters = 40,
                                   double alpha0 = 0.05);
 
-  [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return st_; }
-  [[nodiscard]] const std::vector<Input> &inputs() const { return inputs_; }
-  [[nodiscard]] const std::vector<Input> &outputs() const { return outputs_; }
+  [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return spacetime_; }
+  [[nodiscard]] const std::vector<BoundaryBlock> &inputs() const {
+    return inputs_;
+  }
+  [[nodiscard]] const std::vector<BoundaryBlock> &outputs() const {
+    return outputs_;
+  }
 
  private:
   using Snapshot =
@@ -105,42 +119,66 @@ class MultiCobordism {
                          std::complex<double>>>;
   using MoveSpec = std::pair<std::string, std::vector<std::uint64_t>>;
 
-  [[nodiscard]] std::shared_ptr<Spacetime> subOf(
-      const std::shared_ptr<Spacetime> &st, const std::set<std::uint64_t> &verts)
-      const;
-  [[nodiscard]] double rInput(const Input &inp,
-                              const std::shared_ptr<Spacetime> &st) const;
+  /// The sub-complex carried by a boundary block: a freshly-built `Spacetime` of
+  /// exactly the top cells of `spacetime` all of whose vertices lie in `vertexSet`
+  /// (the block's region). Returns `nullptr` when the region contains no full cell.
+  /// This is where a block's vertex-set becomes an actual complex — the block itself
+  /// only stores the vertex-set and target, never the cells.
+  [[nodiscard]] std::shared_ptr<Spacetime> subcomplexWithinVertexSet(
+      const std::shared_ptr<Spacetime> &spacetime,
+      const std::set<std::uint64_t> &vertexSet) const;
+  /// One boundary block's `r_U` term: the sum over the register degrees of
+  /// `residualOfTargetStateAgainstHarmonic` evaluated on the block's own
+  /// sub-complex (`subcomplexWithinVertexSet`) against the block's target. When the
+  /// block has no full sub-complex yet, the full leak summed over the degrees.
+  [[nodiscard]] double residualForBoundaryBlock(
+      const BoundaryBlock &boundaryBlock,
+      const std::shared_ptr<Spacetime> &spacetime) const;
   // Build the emergent boundary sub-complexes for `targets` near `seeds`, append
-  // to `dest` (shared by constructInputs/constructOutputs).
+  // to `destinationBlocks` (shared by constructInputs/constructOutputs).
   void constructBlocks(const std::vector<std::uint64_t> &seeds,
                        const std::vector<std::vector<std::complex<double>>> &targets,
-                       std::vector<Input> &dest, int rounds);
+                       std::vector<BoundaryBlock> &destinationBlocks, int rounds);
   // All pinned boundary (input + output) vertices — none may be removed by a move.
   [[nodiscard]] std::set<std::uint64_t> boundaryVerts() const;
 
-  [[nodiscard]] Snapshot snapshotOf(const Spacetime &st) const;
+  [[nodiscard]] Snapshot snapshotOf(const Spacetime &spacetime) const;
   [[nodiscard]] Snapshot snapshot() const;
-  [[nodiscard]] std::shared_ptr<Spacetime> build(const Snapshot &snap) const;
+  [[nodiscard]] std::shared_ptr<Spacetime> build(
+      const Snapshot &complexSnapshot) const;
 
-  [[nodiscard]] MoveSpec randomSpec(const Spacetime &st);
-  [[nodiscard]] bool applySpec(const std::shared_ptr<Spacetime> &st,
-                               const MoveSpec &spec);
-  [[nodiscard]] double deltaF(const std::shared_ptr<Spacetime> &cand,
-                              double baseRu,
-                              const std::set<std::vector<std::uint64_t>> &baseCells)
-      const;
+  /// Draw one random stage-1 move specification on `spacetime`: a `{kind, payload}`
+  /// pair where `kind` is one of `add`/`remove`/`flip`/`iflip` (payload = a seed for
+  /// the Pachner move) or `cone_out`/`cone_in` (payload = the cell/face to cone). The
+  /// move is only described here, not applied — see `applyMoveSpecification`.
+  [[nodiscard]] MoveSpec drawRandomMoveSpecification(const Spacetime &spacetime);
+  /// Apply a move specification from `drawRandomMoveSpecification` to `spacetime`
+  /// in place. Returns true iff the move was applied AND it left every pinned
+  /// boundary vertex intact AND the result passes the `dualComplexValid` gate at
+  /// `dualComplexGateDegree_`; otherwise the caller discards the candidate.
+  [[nodiscard]] bool applyMoveSpecification(
+      const std::shared_ptr<Spacetime> &spacetime,
+      const MoveSpec &moveSpecification);
+  [[nodiscard]] double deltaF(
+      const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
+      const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
   double step(int nCandidates);
 
-  std::shared_ptr<Spacetime> st_;
+  std::shared_ptr<Spacetime> spacetime_;
   std::vector<std::vector<std::complex<double>>> inputTargets_;
   std::vector<std::vector<std::complex<double>>> outputTargets_;
-  std::vector<int> degrees_;
-  int gateK_;
+  /// The register degrees `k` the objective scores at once (every `r_U` term is
+  /// summed over these); a `b_k` register is forced to emerge for each.
+  std::vector<int> registerDegrees_;
+  /// The single degree at which the `dualComplexValid` move gate runs — the maximum
+  /// register degree (the degree-free validity check needs only the coarsest one).
+  int dualComplexGateDegree_;
   double gamma_;
-  std::mt19937_64 rng_;
-  double tol_ = 1e-9;
-  std::vector<Input> inputs_;
-  std::vector<Input> outputs_;
+  /// The move/restart random source driving stage 1 and block construction.
+  std::mt19937_64 randomNumberGenerator_;
+  double convergenceTolerance_ = 1e-9;
+  std::vector<BoundaryBlock> inputs_;
+  std::vector<BoundaryBlock> outputs_;
 };
 
 }  // namespace tessera::cobordism

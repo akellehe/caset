@@ -69,7 +69,7 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1Candidates,
       opt.constructInputs(inSeeds, /*rounds=*/12);
       opt.constructOutputs(outSeeds, /*rounds=*/12);
       opt.runStage1(stage1MaxSteps, stage1Candidates, stage1Patience);
-      opt.relaxStage2(stage2Beta, stage2MaxIters);
+      opt.runStage2(stage2Beta, stage2MaxIters);
 
       residuals_[i] = opt.rU(opt.spacetime());
       outputs_[i] = nd.outputTargets;  // verified outputs, threaded downstream
