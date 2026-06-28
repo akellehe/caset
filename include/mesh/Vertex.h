@@ -263,6 +263,28 @@ class Vertex {
         const Simplices &getSimplices() const noexcept;
 
         ///
+        /// \brief Get the vertex-id set of this vertex's closed star
+        /// \return The set of vertex ids appearing in any simplex that contains this vertex
+        ///
+        /// # Definition
+        ///
+        /// The (open) star of a vertex \f$ v \f$ is the set of simplices that contain
+        /// \f$ v \f$; its closure adds all faces of those simplices. The closed star is
+        /// therefore covered by the vertices of the simplices in getSimplices(), so this
+        /// method returns
+        /// \f[
+        ///   \overline{\mathrm{St}}(v) = \{\, w : w \in \sigma,\ v \in \sigma,\ \sigma \in K \,\}.
+        /// \f]
+        /// The returned set includes \f$ v \f$ itself (every simplex containing \f$ v \f$
+        /// contributes it). Vertices are reported by id rather than by pointer so callers
+        /// that splice or reindex sub-complexes can work purely combinatorially.
+        ///
+        /// This is a clean encapsulation of the "collect the ids of every simplex touching
+        /// this vertex" pattern; it builds on getSimplices() and does not cache.
+        ///
+        std::unordered_set<std::uint64_t> star() const;
+
+        ///
         /// \brief Register a simplex as containing this vertex
         /// \param simplex The simplex to add
         /// \return true if simplex was newly added, false if already present

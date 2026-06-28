@@ -225,6 +225,15 @@ Vertex::getSimplices() const noexcept {
   return simplices;
 }
 
+std::unordered_set<std::uint64_t>
+Vertex::star() const {
+  std::unordered_set<std::uint64_t> starVertexIds;
+  for (const auto &simplex : simplices)
+    for (const auto &vertex : simplex->getVertices())
+      starVertexIds.insert(vertex->getId());
+  return starVertexIds;
+}
+
 #ifdef TESSERA_VERBOSE
 std::string Vertex::toString() const noexcept {
   std::stringstream ss;

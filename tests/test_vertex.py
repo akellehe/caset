@@ -25,3 +25,23 @@ class TestVertex(unittest.TestCase):
         v1.removeOutEdge(edge)
         self.assertEqual(len(v1.getOutEdges()), 0)
 
+    def test_star_collects_closed_star_vertex_ids(self):
+        # Two triangles sharing edge (0,1): 0 is in both, 3 is only in the
+        # second.  The closed star of vertex 0 is {0,1,2,3}; the closed star of
+        # the corner vertex 2 is just its own triangle {0,1,2}.
+        st = Spacetime.fromCells(2, [[0, 1, 2], [0, 1, 3]], 1.0, 0.0)
+        verts = st.getVertexList()
+
+        self.assertEqual(verts.get(0).star(), {0, 1, 2, 3})
+        self.assertEqual(verts.get(2).star(), {0, 1, 2})
+
+    def test_star_includes_self_for_isolated_simplex(self):
+        # A single triangle: every vertex's closed star is the whole triangle,
+        # and always contains the vertex itself.
+        st = Spacetime.fromCells(2, [[5, 6, 7]], 1.0, 0.0)
+        verts = st.getVertexList()
+        for vertex_id in (5, 6, 7):
+            star = verts.get(vertex_id).star()
+            self.assertIn(vertex_id, star)
+            self.assertEqual(star, {5, 6, 7})
+

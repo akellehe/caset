@@ -178,6 +178,10 @@ and containing simplices.)doc")
            "Remove an outgoing edge from this vertex and its containing simplices.")
       .def("setCoordinates", &Vertex::setCoordinates, py::arg("coordinates"),
            "Set the coordinate vector of this vertex.")
+      .def("star", &Vertex::star,
+           "Return the vertex-id set of this vertex's closed star: every vertex "
+           "id that appears in any simplex containing this vertex (includes this "
+           "vertex's own id).")
       .def(py::init<std::uint64_t, std::vector<double> &>(), py::arg("id"), py::arg("coordinates"),
            "Create a vertex with the given ID and coordinates.");
   // ========================================
