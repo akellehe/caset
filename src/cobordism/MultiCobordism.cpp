@@ -32,20 +32,23 @@ using ::tessera::simulations::ReggeSolver;
 using cd = std::complex<double>;
 
 namespace {
-constexpr int kDim = 4;  // framework dimension (closed S^4 host)
+constexpr int kFrameworkDimension = 4;  // framework dimension (closed S^4 host)
 
 // Sorted vertex-id tuple of a top simplex (the reference's `_top_tuple`).
-std::vector<std::uint64_t> topTuple(const ::tessera::mesh::Simplex &s) {
-  std::vector<std::uint64_t> ids;
-  for (const auto *v : s.getVertices()) ids.push_back(v->getId());
-  std::sort(ids.begin(), ids.end());
-  return ids;
+std::vector<std::uint64_t> topTuple(const ::tessera::mesh::Simplex &simplex) {
+  std::vector<std::uint64_t> sortedVertexIdentifiers;
+  for (const auto *vertex : simplex.getVertices())
+    sortedVertexIdentifiers.push_back(vertex->getId());
+  std::sort(sortedVertexIdentifiers.begin(), sortedVertexIdentifiers.end());
+  return sortedVertexIdentifiers;
 }
 
-std::pair<std::uint64_t, std::uint64_t> edgeKey(const ::tessera::mesh::Edge *e) {
-  const auto a = e->getSource()->getId();
-  const auto b = e->getTarget()->getId();
-  return {std::min(a, b), std::max(a, b)};
+std::pair<std::uint64_t, std::uint64_t> edgeKey(
+    const ::tessera::mesh::Edge *edge) {
+  const auto sourceVertexId = edge->getSource()->getId();
+  const auto targetVertexId = edge->getTarget()->getId();
+  return {std::min(sourceVertexId, targetVertexId),
+          std::max(sourceVertexId, targetVertexId)};
 }
 }  // namespace
 
@@ -54,307 +57,383 @@ MultiCobordism::MultiCobordism(
     const std::vector<std::vector<cd>> &inputTargets,
     const std::vector<std::vector<cd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed)
-    : st_(std::move(host)),
+    : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
-      degrees_(degrees),
-      gateK_(degrees_.empty() ? 0
-                              : *std::max_element(degrees_.begin(),
-                                                  degrees_.end())),
+      registerDegrees_(degrees),
+      dualComplexGateDegree_(
+          registerDegrees_.empty()
+              ? 0
+              : *std::max_element(registerDegrees_.begin(),
+                                  registerDegrees_.end())),
       gamma_(gamma),
-      rng_(seed) {}
+      randomNumberGenerator_(seed) {}
 
-std::vector<int> MultiCobordism::betti(const Spacetime &st) {
-  return ChainComplex::fromSpacetime(st).bettiNumbers();
+std::vector<int> MultiCobordism::betti(const Spacetime &spacetime) {
+  return ChainComplex::fromSpacetime(spacetime).bettiNumbers();
 }
 
 std::vector<std::vector<std::uint64_t>> MultiCobordism::emergentHoles(
-    const Spacetime &st, int k) {
+    const Spacetime &spacetime, int registerDegree) {
   // The (k+2)-vertex tuples all of whose drop-one facets are boundary facets.
-  std::set<std::vector<std::uint64_t>> bnd;
-  for (auto f : st.getBoundary()) {
-    std::sort(f.begin(), f.end());
-    bnd.insert(std::move(f));
+  std::set<std::vector<std::uint64_t>> boundaryFacets;
+  for (auto boundaryFacet : spacetime.getBoundary()) {
+    std::sort(boundaryFacet.begin(), boundaryFacet.end());
+    boundaryFacets.insert(std::move(boundaryFacet));
   }
-  std::vector<std::vector<std::uint64_t>> out;
-  if (bnd.empty() ||
-      static_cast<int>(bnd.begin()->size()) != k + 1)  // facets must be k-cells
-    return out;
-  std::set<std::uint64_t> verts;
-  for (const auto &f : bnd)
-    for (auto v : f) verts.insert(v);
-  std::set<std::vector<std::uint64_t>> holes;
-  for (const auto &f : bnd) {
-    for (auto v : verts) {
-      if (std::find(f.begin(), f.end(), v) != f.end()) continue;
-      std::vector<std::uint64_t> tup = f;
-      tup.push_back(v);
-      std::sort(tup.begin(), tup.end());
-      bool allBnd = true;
-      for (std::size_t i = 0; i < tup.size(); ++i) {
-        std::vector<std::uint64_t> facet;
-        for (std::size_t j = 0; j < tup.size(); ++j)
-          if (j != i) facet.push_back(tup[j]);
-        if (!bnd.count(facet)) {
-          allBnd = false;
+  std::vector<std::vector<std::uint64_t>> emergentHoleTuples;
+  if (boundaryFacets.empty() ||
+      static_cast<int>(boundaryFacets.begin()->size()) !=
+          registerDegree + 1)  // facets must be k-cells
+    return emergentHoleTuples;
+  std::set<std::uint64_t> boundaryVertexIds;
+  for (const auto &boundaryFacet : boundaryFacets)
+    for (auto vertexId : boundaryFacet) boundaryVertexIds.insert(vertexId);
+  std::set<std::vector<std::uint64_t>> emergentHoleSet;
+  for (const auto &boundaryFacet : boundaryFacets) {
+    for (auto candidateVertexId : boundaryVertexIds) {
+      if (std::find(boundaryFacet.begin(), boundaryFacet.end(),
+                    candidateVertexId) != boundaryFacet.end())
+        continue;
+      std::vector<std::uint64_t> candidateHole = boundaryFacet;
+      candidateHole.push_back(candidateVertexId);
+      std::sort(candidateHole.begin(), candidateHole.end());
+      bool allFacetsAreBoundary = true;
+      for (std::size_t droppedIndex = 0; droppedIndex < candidateHole.size();
+           ++droppedIndex) {
+        std::vector<std::uint64_t> dropOneFacet;
+        for (std::size_t copyIndex = 0; copyIndex < candidateHole.size();
+             ++copyIndex)
+          if (copyIndex != droppedIndex)
+            dropOneFacet.push_back(candidateHole[copyIndex]);
+        if (!boundaryFacets.count(dropOneFacet)) {
+          allFacetsAreBoundary = false;
           break;
         }
       }
-      if (allBnd) holes.insert(tup);
+      if (allFacetsAreBoundary) emergentHoleSet.insert(candidateHole);
     }
   }
-  out.assign(holes.begin(), holes.end());
-  return out;
+  emergentHoleTuples.assign(emergentHoleSet.begin(), emergentHoleSet.end());
+  return emergentHoleTuples;
 }
 
-double MultiCobordism::gradNorm2(const std::shared_ptr<Spacetime> &st) {
-  ReggeSolver solver(st, MatterConfiguration());
-  double n2 = 0.0;
-  for (const auto &z : solver.actionGradientExact()) n2 += std::norm(z);
-  return n2;
+double MultiCobordism::reggeActionGradient(
+    const std::shared_ptr<Spacetime> &spacetime) {
+  ReggeSolver reggeSolver(spacetime, MatterConfiguration());
+  double squaredGradientNorm = 0.0;
+  for (const auto &gradientComponent : reggeSolver.actionGradientExact())
+    squaredGradientNorm += std::norm(gradientComponent);
+  return squaredGradientNorm;
 }
 
-double MultiCobordism::rState(const std::shared_ptr<Spacetime> &st, int k,
-                                 const std::vector<cd> &target) {
-  const std::size_t d = target.size();
-  Eigen::VectorXcd t(d);
-  for (std::size_t i = 0; i < d; ++i) t(i) = target[i];
-  const double full = t.squaredNorm();  // zero-filled full leak
+double MultiCobordism::residualOfTargetStateAgainstHarmonic(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    const std::vector<cd> &targetState) {
+  const std::size_t targetDimension = targetState.size();
+  Eigen::VectorXcd targetVector(targetDimension);
+  for (std::size_t componentIndex = 0; componentIndex < targetDimension;
+       ++componentIndex)
+    targetVector(componentIndex) = targetState[componentIndex];
+  const double fullLeakResidual = targetVector.squaredNorm();  // zero-filled leak
 
-  const auto bettis = betti(*st);
-  if (k < 0 || k >= static_cast<int>(bettis.size())) return full;
-  const int bk = bettis[k];
-  if (bk == 0) return full;
-  auto holes = emergentHoles(*st, k);
-  if (holes.empty()) return full;
-  if (holes.size() > d) holes.resize(d);
-  const std::size_t m = holes.size();
+  const auto bettiNumbers = betti(*spacetime);
+  if (registerDegree < 0 ||
+      registerDegree >= static_cast<int>(bettiNumbers.size()))
+    return fullLeakResidual;
+  const int degreeBettiNumber = bettiNumbers[registerDegree];
+  if (degreeBettiNumber == 0) return fullLeakResidual;
+  auto emergentHoleTuples = emergentHoles(*spacetime, registerDegree);
+  if (emergentHoleTuples.empty()) return fullLeakResidual;
+  if (emergentHoleTuples.size() > targetDimension)
+    emergentHoleTuples.resize(targetDimension);
+  const std::size_t usableHoleCount = emergentHoleTuples.size();
 
-  EigenstateSynthesis es(st, k);
-  const auto flat = es.cyclePeriods(holes);  // bk x m, row-major
-  // pd: (bk, d), zero-filled beyond m columns; pdT = pd.transpose() is (d, bk).
-  Eigen::MatrixXcd pdT = Eigen::MatrixXcd::Zero(static_cast<int>(d), bk);
-  for (int r = 0; r < bk; ++r)
-    for (std::size_t q = 0; q < m; ++q)
-      pdT(static_cast<int>(q), r) = flat[static_cast<std::size_t>(r) * m + q];
+  EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
+  const auto flattenedCyclePeriods =
+      eigenstateSynthesis.cyclePeriods(emergentHoleTuples);  // bk x m, row-major
+  // periodMatrixTransposed: (d, bk), zero-filled beyond the usable hole columns.
+  Eigen::MatrixXcd periodMatrixTransposed = Eigen::MatrixXcd::Zero(
+      static_cast<int>(targetDimension), degreeBettiNumber);
+  for (int bettiRowIndex = 0; bettiRowIndex < degreeBettiNumber; ++bettiRowIndex)
+    for (std::size_t holeColumnIndex = 0; holeColumnIndex < usableHoleCount;
+         ++holeColumnIndex)
+      periodMatrixTransposed(static_cast<int>(holeColumnIndex), bettiRowIndex) =
+          flattenedCyclePeriods[static_cast<std::size_t>(bettiRowIndex) *
+                                    usableHoleCount +
+                                holeColumnIndex];
 
   // min over permutations of the target components of ||pdT c - ts||^2 (lstsq c).
-  std::vector<int> perm(d);
-  std::iota(perm.begin(), perm.end(), 0);
-  double best = std::numeric_limits<double>::infinity();
-  Eigen::BDCSVD<Eigen::MatrixXcd> svd(pdT, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  std::vector<int> targetPermutation(targetDimension);
+  std::iota(targetPermutation.begin(), targetPermutation.end(), 0);
+  double bestResidual = std::numeric_limits<double>::infinity();
+  Eigen::BDCSVD<Eigen::MatrixXcd> periodSvd(
+      periodMatrixTransposed, Eigen::ComputeThinU | Eigen::ComputeThinV);
   do {
-    Eigen::VectorXcd ts(d);
-    for (std::size_t i = 0; i < d; ++i) ts(i) = t(perm[i]);
-    const Eigen::VectorXcd c = svd.solve(ts);
-    best = std::min(best, (pdT * c - ts).squaredNorm());
-  } while (std::next_permutation(perm.begin(), perm.end()));
-  return best;
+    Eigen::VectorXcd permutedTargetVector(targetDimension);
+    for (std::size_t componentIndex = 0; componentIndex < targetDimension;
+         ++componentIndex)
+      permutedTargetVector(componentIndex) =
+          targetVector(targetPermutation[componentIndex]);
+    const Eigen::VectorXcd leastSquaresCoefficients =
+        periodSvd.solve(permutedTargetVector);
+    bestResidual = std::min(bestResidual,
+                            (periodMatrixTransposed * leastSquaresCoefficients -
+                             permutedTargetVector)
+                                .squaredNorm());
+  } while (std::next_permutation(targetPermutation.begin(),
+                                 targetPermutation.end()));
+  return bestResidual;
 }
 
-std::shared_ptr<Spacetime> MultiCobordism::subOf(
-    const std::shared_ptr<Spacetime> &st,
-    const std::set<std::uint64_t> &verts) const {
-  std::vector<std::vector<std::uint64_t>> cells;
-  for (const auto &s : st->getTopSimplices()) {
-    auto c = topTuple(*s);
-    bool inside = true;
-    for (auto v : c)
-      if (!verts.count(v)) {
-        inside = false;
+std::shared_ptr<Spacetime> MultiCobordism::subcomplexWithinVertexSet(
+    const std::shared_ptr<Spacetime> &spacetime,
+    const std::set<std::uint64_t> &vertexSet) const {
+  std::vector<std::vector<std::uint64_t>> cellsInsideVertexSet;
+  for (const auto &topSimplex : spacetime->getTopSimplices()) {
+    auto cellVertexIds = topTuple(*topSimplex);
+    bool cellIsInsideVertexSet = true;
+    for (auto vertexId : cellVertexIds)
+      if (!vertexSet.count(vertexId)) {
+        cellIsInsideVertexSet = false;
         break;
       }
-    if (inside) cells.push_back(std::move(c));
+    if (cellIsInsideVertexSet)
+      cellsInsideVertexSet.push_back(std::move(cellVertexIds));
   }
-  if (cells.empty()) return nullptr;
-  return Spacetime::fromCells(kDim, cells, 1.0, 0.0);
+  if (cellsInsideVertexSet.empty()) return nullptr;
+  return Spacetime::fromCells(kFrameworkDimension, cellsInsideVertexSet, 1.0,
+                              0.0);
 }
 
-double MultiCobordism::rInput(const Input &inp,
-                                 const std::shared_ptr<Spacetime> &st) const {
-  auto sub = subOf(st, inp.verts);
-  double r = 0.0;
-  if (!sub) {
-    Eigen::VectorXcd t(inp.target.size());
-    for (std::size_t i = 0; i < inp.target.size(); ++i) t(i) = inp.target[i];
-    return static_cast<double>(degrees_.size()) * t.squaredNorm();
+double MultiCobordism::residualForBoundaryBlock(
+    const BoundaryBlock &boundaryBlock,
+    const std::shared_ptr<Spacetime> &spacetime) const {
+  auto blockSubcomplex =
+      subcomplexWithinVertexSet(spacetime, boundaryBlock.vertices);
+  double residual = 0.0;
+  if (!blockSubcomplex) {
+    Eigen::VectorXcd targetVector(boundaryBlock.target.size());
+    for (std::size_t componentIndex = 0;
+         componentIndex < boundaryBlock.target.size(); ++componentIndex)
+      targetVector(componentIndex) = boundaryBlock.target[componentIndex];
+    return static_cast<double>(registerDegrees_.size()) *
+           targetVector.squaredNorm();
   }
-  for (int k : degrees_) r += rState(sub, k, inp.target);
-  return r;
+  for (int registerDegree : registerDegrees_)
+    residual += residualOfTargetStateAgainstHarmonic(
+        blockSubcomplex, registerDegree, boundaryBlock.target);
+  return residual;
 }
 
-double MultiCobordism::rU(const std::shared_ptr<Spacetime> &st) const {
+double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // The symmetric cobordism residual: one r_U term per boundary block — every
   // input AND every output sub-complex (the bulk routes the connectivity between
   // them). The Regge extremization term lives in objective()/stages, not here.
-  double total = 0.0;
-  for (const auto &inp : inputs_) total += rInput(inp, st);
-  for (const auto &out : outputs_) total += rInput(out, st);
+  double totalResidual = 0.0;
+  for (const auto &inputBlock : inputs_)
+    totalResidual += residualForBoundaryBlock(inputBlock, spacetime);
+  for (const auto &outputBlock : outputs_)
+    totalResidual += residualForBoundaryBlock(outputBlock, spacetime);
   // No blocks yet (pre-construction): score the raw output targets as full leak so
   // the bare objective is well-defined and matches the single-merge convention.
   if (inputs_.empty() && outputs_.empty())
-    for (int k : degrees_)
-      for (const auto &t : outputTargets_) total += rState(st, k, t);
-  return total;
+    for (int registerDegree : registerDegrees_)
+      for (const auto &outputTarget : outputTargets_)
+        totalResidual += residualOfTargetStateAgainstHarmonic(
+            spacetime, registerDegree, outputTarget);
+  return totalResidual;
 }
 
 double MultiCobordism::objective() const {
-  return gradNorm2(st_) + gamma_ * rU(st_);
+  return reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
 }
 
 std::set<std::uint64_t> MultiCobordism::boundaryVerts() const {
-  std::set<std::uint64_t> out;
-  for (const auto &inp : inputs_)
-    out.insert(inp.verts.begin(), inp.verts.end());
-  for (const auto &o : outputs_) out.insert(o.verts.begin(), o.verts.end());
-  return out;
+  std::set<std::uint64_t> boundaryVertexIds;
+  for (const auto &inputBlock : inputs_)
+    boundaryVertexIds.insert(inputBlock.vertices.begin(),
+                             inputBlock.vertices.end());
+  for (const auto &outputBlock : outputs_)
+    boundaryVertexIds.insert(outputBlock.vertices.begin(),
+                             outputBlock.vertices.end());
+  return boundaryVertexIds;
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshotOf(
-    const Spacetime &st) const {
-  std::vector<std::vector<std::uint64_t>> cells;
-  for (const auto &s : st.getTopSimplices()) cells.push_back(topTuple(*s));
-  std::map<std::pair<std::uint64_t, std::uint64_t>, cd> l2;
-  for (const auto *e : st.getEdgeList()->toVector())
-    l2[edgeKey(e)] = e->getSquaredLength();
-  return {std::move(cells), std::move(l2)};
+    const Spacetime &spacetime) const {
+  std::vector<std::vector<std::uint64_t>> cellVertexTuples;
+  for (const auto &topSimplex : spacetime.getTopSimplices())
+    cellVertexTuples.push_back(topTuple(*topSimplex));
+  std::map<std::pair<std::uint64_t, std::uint64_t>, cd> squaredLengthsByEdge;
+  for (const auto *edge : spacetime.getEdgeList()->toVector())
+    squaredLengthsByEdge[edgeKey(edge)] = edge->getSquaredLength();
+  return {std::move(cellVertexTuples), std::move(squaredLengthsByEdge)};
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshot() const {
-  return snapshotOf(*st_);
+  return snapshotOf(*spacetime_);
 }
 
-std::shared_ptr<Spacetime> MultiCobordism::build(const Snapshot &snap) const {
-  auto st = Spacetime::fromCells(kDim, snap.first, 1.0, 0.0);
-  for (auto *e : st->getEdgeList()->toVector()) {
-    const auto it = snap.second.find(edgeKey(e));
-    if (it != snap.second.end()) e->setSquaredLength(it->second);
+std::shared_ptr<Spacetime> MultiCobordism::build(
+    const Snapshot &complexSnapshot) const {
+  auto rebuiltSpacetime = Spacetime::fromCells(kFrameworkDimension,
+                                               complexSnapshot.first, 1.0, 0.0);
+  for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
+    const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
+    if (savedEntry != complexSnapshot.second.end())
+      edge->setSquaredLength(savedEntry->second);
   }
-  return st;
+  return rebuiltSpacetime;
 }
 
-MultiCobordism::MoveSpec MultiCobordism::randomSpec(const Spacetime &st) {
-  static const char *kinds[] = {"add",      "remove",  "flip",
-                                "iflip",    "cone_out", "cone_in"};
-  const std::string kind = kinds[rng_() % 6];
-  if (kind == "add" || kind == "remove" || kind == "flip" || kind == "iflip")
-    return {kind, {static_cast<std::uint64_t>(rng_() % (1u << 31))}};
-  std::vector<std::vector<std::uint64_t>> tops;
-  for (const auto &s : st.getTopSimplices()) tops.push_back(topTuple(*s));
-  if (tops.empty()) return {"noop", {}};
-  const auto &cell = tops[rng_() % tops.size()];
-  if (kind == "cone_out") return {"cone_out", cell};
-  const std::size_t drop = rng_() % cell.size();
-  std::vector<std::uint64_t> face;
-  for (std::size_t i = 0; i < cell.size(); ++i)
-    if (i != drop) face.push_back(cell[i]);
-  return {"cone_in", face};
+MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
+    const Spacetime &spacetime) {
+  static const char *moveKinds[] = {"add",   "remove",   "flip",
+                                    "iflip", "cone_out", "cone_in"};
+  const std::string moveKind = moveKinds[randomNumberGenerator_() % 6];
+  if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
+      moveKind == "iflip")
+    return {moveKind,
+            {static_cast<std::uint64_t>(randomNumberGenerator_() % (1u << 31))}};
+  std::vector<std::vector<std::uint64_t>> topCellTuples;
+  for (const auto &topSimplex : spacetime.getTopSimplices())
+    topCellTuples.push_back(topTuple(*topSimplex));
+  if (topCellTuples.empty()) return {"noop", {}};
+  const auto &chosenCell =
+      topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
+  if (moveKind == "cone_out") return {"cone_out", chosenCell};
+  const std::size_t droppedVertexIndex =
+      randomNumberGenerator_() % chosenCell.size();
+  std::vector<std::uint64_t> coneInFace;
+  for (std::size_t vertexIndex = 0; vertexIndex < chosenCell.size();
+       ++vertexIndex)
+    if (vertexIndex != droppedVertexIndex)
+      coneInFace.push_back(chosenCell[vertexIndex]);
+  return {"cone_in", coneInFace};
 }
 
-bool MultiCobordism::applySpec(const std::shared_ptr<Spacetime> &st,
-                                  const MoveSpec &spec) {
-  const auto &kind = spec.first;
-  if (kind == "noop") return false;
-  bool applied = false;
-  if (kind == "add" || kind == "remove" || kind == "flip" || kind == "iflip") {
-    std::mt19937 r(static_cast<std::uint32_t>(spec.second[0]));
+bool MultiCobordism::applyMoveSpecification(
+    const std::shared_ptr<Spacetime> &spacetime,
+    const MoveSpec &moveSpecification) {
+  const auto &moveKind = moveSpecification.first;
+  if (moveKind == "noop") return false;
+  bool moveWasApplied = false;
+  if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
+      moveKind == "iflip") {
+    std::mt19937 moveRandomEngine(
+        static_cast<std::uint32_t>(moveSpecification.second[0]));
     using ::tessera::spacetime::PachnerMode;
-    if (kind == "add") {
-      ::tessera::spacetime::AddMove mv(st.get(), &r, false,
-                                                PachnerMode::PreGeometric, false);
-      applied = mv.propose() && mv.apply();
-    } else if (kind == "remove") {
-      ::tessera::spacetime::RemoveMove mv(st.get(), &r,
-                                                   PachnerMode::PreGeometric, false);
-      applied = mv.propose() && mv.apply();
-    } else if (kind == "flip") {
-      ::tessera::spacetime::FlipMove mv(st.get(), &r,
-                                                 PachnerMode::PreGeometric, false);
-      applied = mv.propose() && mv.apply();
+    if (moveKind == "add") {
+      ::tessera::spacetime::AddMove pachnerMove(
+          spacetime.get(), &moveRandomEngine, false, PachnerMode::PreGeometric,
+          false);
+      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
+    } else if (moveKind == "remove") {
+      ::tessera::spacetime::RemoveMove pachnerMove(
+          spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
+    } else if (moveKind == "flip") {
+      ::tessera::spacetime::FlipMove pachnerMove(
+          spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
     } else {
-      ::tessera::spacetime::IFlipMove mv(st.get(), &r,
-                                                  PachnerMode::PreGeometric, false);
-      applied = mv.propose() && mv.apply();
+      ::tessera::spacetime::IFlipMove pachnerMove(
+          spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
     }
-  } else if (kind == "cone_out") {
-    applied = SurgicalCone(st.get()).coneOut(spec.second).first;
+  } else if (moveKind == "cone_out") {
+    moveWasApplied =
+        SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
   } else {
-    applied = SurgicalCone(st.get()).coneIn(spec.second).first;
+    moveWasApplied =
+        SurgicalCone(spacetime.get()).coneIn(moveSpecification.second).first;
   }
-  if (!applied) return false;
-  std::set<std::uint64_t> live;
-  for (const auto &s : st->getTopSimplices())
-    for (auto v : topTuple(*s)) live.insert(v);
-  for (auto v : boundaryVerts())
-    if (!live.count(v)) return false;  // a pinned boundary vertex was removed
-  return EigenstateSynthesis(st, gateK_).dualComplexValid().first;
+  if (!moveWasApplied) return false;
+  std::set<std::uint64_t> liveVertexIds;
+  for (const auto &topSimplex : spacetime->getTopSimplices())
+    for (auto vertexId : topTuple(*topSimplex)) liveVertexIds.insert(vertexId);
+  for (auto vertexId : boundaryVerts())
+    if (!liveVertexIds.count(vertexId))
+      return false;  // a pinned boundary vertex was removed
+  return EigenstateSynthesis(spacetime, dualComplexGateDegree_)
+      .dualComplexValid()
+      .first;
 }
 
 double MultiCobordism::deltaF(
-    const std::shared_ptr<Spacetime> &cand, double baseRu,
-    const std::set<std::vector<std::uint64_t>> &baseCells) const {
-  std::set<std::vector<std::uint64_t>> candCells;
-  for (const auto &s : cand->getTopSimplices()) candCells.insert(topTuple(*s));
-  std::vector<std::vector<std::uint64_t>> touched;
-  for (const auto &c : baseCells)
-    if (!candCells.count(c)) touched.push_back(c);
-  for (const auto &c : candCells)
-    if (!baseCells.count(c)) touched.push_back(c);
-  ReggeSolver baseSolver(st_, MatterConfiguration());
-  ReggeSolver candSolver(cand, MatterConfiguration());
-  std::set<std::pair<std::uint64_t, std::uint64_t>> edgeSet;
-  for (const auto &p : baseSolver.affectedEdgesOfCells(touched)) edgeSet.insert(p);
-  for (const auto &p : candSolver.affectedEdgesOfCells(touched)) edgeSet.insert(p);
-  std::vector<std::pair<std::uint64_t, std::uint64_t>> edges(edgeSet.begin(),
-                                                            edgeSet.end());
-  const double dGrad = candSolver.gradientNorm2OverEdges(edges) -
-                       baseSolver.gradientNorm2OverEdges(edges);
-  const double dRu = rU(cand) - baseRu;
-  return dGrad + gamma_ * dRu;
+    const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
+    const std::set<std::vector<std::uint64_t>> &baseCellSet) const {
+  std::set<std::vector<std::uint64_t>> candidateCellSet;
+  for (const auto &topSimplex : candidateSpacetime->getTopSimplices())
+    candidateCellSet.insert(topTuple(*topSimplex));
+  std::vector<std::vector<std::uint64_t>> touchedCells;
+  for (const auto &cell : baseCellSet)
+    if (!candidateCellSet.count(cell)) touchedCells.push_back(cell);
+  for (const auto &cell : candidateCellSet)
+    if (!baseCellSet.count(cell)) touchedCells.push_back(cell);
+  ReggeSolver baseReggeSolver(spacetime_, MatterConfiguration());
+  ReggeSolver candidateReggeSolver(candidateSpacetime, MatterConfiguration());
+  std::set<std::pair<std::uint64_t, std::uint64_t>> affectedEdgeSet;
+  for (const auto &edgeEndpoints :
+       baseReggeSolver.affectedEdgesOfCells(touchedCells))
+    affectedEdgeSet.insert(edgeEndpoints);
+  for (const auto &edgeEndpoints :
+       candidateReggeSolver.affectedEdgesOfCells(touchedCells))
+    affectedEdgeSet.insert(edgeEndpoints);
+  std::vector<std::pair<std::uint64_t, std::uint64_t>> affectedEdges(
+      affectedEdgeSet.begin(), affectedEdgeSet.end());
+  const double gradientDelta =
+      candidateReggeSolver.gradientNorm2OverEdges(affectedEdges) -
+      baseReggeSolver.gradientNorm2OverEdges(affectedEdges);
+  const double residualUDelta = rU(candidateSpacetime) - baseResidualU;
+  return gradientDelta + gamma_ * residualUDelta;
 }
 
 double MultiCobordism::step(int nCandidates) {
-  const auto snap = snapshot();
-  const double baseRu = rU(st_);
-  std::set<std::vector<std::uint64_t>> baseCells;
-  for (const auto &s : st_->getTopSimplices()) baseCells.insert(topTuple(*s));
-  double bestDF = -tol_;
-  bool haveBest = false;
-  Snapshot bestSnap;
-  for (int i = 0; i < nCandidates; ++i) {
-    const auto spec = randomSpec(*st_);
-    auto cand = build(snap);
-    if (!applySpec(cand, spec)) continue;
-    const double dF = deltaF(cand, baseRu, baseCells);
-    if (dF < bestDF) {
-      bestDF = dF;
-      bestSnap = snapshotOf(*cand);
-      haveBest = true;
+  const auto currentSnapshot = snapshot();
+  const double baseResidualU = rU(spacetime_);
+  std::set<std::vector<std::uint64_t>> baseCellSet;
+  for (const auto &topSimplex : spacetime_->getTopSimplices())
+    baseCellSet.insert(topTuple(*topSimplex));
+  double bestObjectiveDelta = -convergenceTolerance_;
+  bool foundImprovingMove = false;
+  Snapshot bestSnapshot;
+  for (int candidateIndex = 0; candidateIndex < nCandidates; ++candidateIndex) {
+    const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
+    auto candidateSpacetime = build(currentSnapshot);
+    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
+    const double objectiveDelta =
+        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+    if (objectiveDelta < bestObjectiveDelta) {
+      bestObjectiveDelta = objectiveDelta;
+      bestSnapshot = snapshotOf(*candidateSpacetime);
+      foundImprovingMove = true;
     }
   }
-  if (haveBest) {
-    st_ = build(bestSnap);
-    return bestDF;
+  if (foundImprovingMove) {
+    spacetime_ = build(bestSnapshot);
+    return bestObjectiveDelta;
   }
   return 0.0;
 }
 
 std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidates,
                                                  int patience) {
-  std::vector<double> trace = {objective()};
-  int stalls = 0;
-  for (int s = 0; s < maxSteps; ++s) {
-    const double dF = step(nCandidates);
-    trace.push_back(trace.back() + dF);
-    if (dF >= -tol_) {
-      ++stalls;
-      rng_.seed(rng_());
-      if (stalls >= patience) break;
+  std::vector<double> objectiveTrace = {objective()};
+  int consecutiveStalls = 0;
+  for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex) {
+    const double objectiveDelta = step(nCandidates);
+    objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
+    if (objectiveDelta >= -convergenceTolerance_) {
+      ++consecutiveStalls;
+      randomNumberGenerator_.seed(randomNumberGenerator_());
+      if (consecutiveStalls >= patience) break;
     } else {
-      stalls = 0;
+      consecutiveStalls = 0;
     }
   }
-  return trace;
+  return objectiveTrace;
 }
 
 void MultiCobordism::constructInputs(const std::vector<std::uint64_t> &seeds,
@@ -369,108 +448,129 @@ void MultiCobordism::constructOutputs(const std::vector<std::uint64_t> &seeds,
 
 void MultiCobordism::constructBlocks(
     const std::vector<std::uint64_t> &seeds,
-    const std::vector<std::vector<cd>> &targets, std::vector<Input> &dest,
-    int rounds) {
+    const std::vector<std::vector<cd>> &targets,
+    std::vector<BoundaryBlock> &destinationBlocks, int rounds) {
   // Region-restricted surgical solve per boundary block: grow whatever emergent
   // topology in the seed's neighbourhood carries the block's target (kept by Δr).
-  for (std::size_t idx = 0; idx < targets.size() && idx < seeds.size(); ++idx) {
-    const std::uint64_t seedV = seeds[idx];
-    std::set<std::uint64_t> region;
-    for (const auto &s : st_->getTopSimplices()) {
-      auto c = topTuple(*s);
-      if (std::find(c.begin(), c.end(), seedV) != c.end())
-        region.insert(c.begin(), c.end());
+  for (std::size_t blockIndex = 0;
+       blockIndex < targets.size() && blockIndex < seeds.size(); ++blockIndex) {
+    const std::uint64_t seedVertexId = seeds[blockIndex];
+    std::set<std::uint64_t> regionVertexIds;
+    for (const auto &topSimplex : spacetime_->getTopSimplices()) {
+      auto cellVertexIds = topTuple(*topSimplex);
+      if (std::find(cellVertexIds.begin(), cellVertexIds.end(), seedVertexId) !=
+          cellVertexIds.end())
+        regionVertexIds.insert(cellVertexIds.begin(), cellVertexIds.end());
     }
-    Input inp{region, targets[idx]};
-    double r = rInput(inp, st_);
-    for (int round = 0; round < rounds; ++round) {
-      const auto snap = snapshot();
+    BoundaryBlock boundaryBlock{regionVertexIds, targets[blockIndex]};
+    double residual = residualForBoundaryBlock(boundaryBlock, spacetime_);
+    for (int roundIndex = 0; roundIndex < rounds; ++roundIndex) {
+      const auto roundSnapshot = snapshot();
       // a region-restricted move: cone on a cell inside the region.
-      std::vector<std::vector<std::uint64_t>> regionCells;
-      for (const auto &s : st_->getTopSimplices()) {
-        auto c = topTuple(*s);
-        bool inside = true;
-        for (auto v : c)
-          if (!region.count(v)) {
-            inside = false;
+      std::vector<std::vector<std::uint64_t>> cellsInsideRegion;
+      for (const auto &topSimplex : spacetime_->getTopSimplices()) {
+        auto cellVertexIds = topTuple(*topSimplex);
+        bool cellIsInsideRegion = true;
+        for (auto vertexId : cellVertexIds)
+          if (!regionVertexIds.count(vertexId)) {
+            cellIsInsideRegion = false;
             break;
           }
-        if (inside) regionCells.push_back(std::move(c));
+        if (cellIsInsideRegion)
+          cellsInsideRegion.push_back(std::move(cellVertexIds));
       }
-      if (regionCells.empty()) break;
-      const auto &cell = regionCells[rng_() % regionCells.size()];
-      auto cand = build(snap);
-      const bool applied = (rng_() % 2)
-                               ? SurgicalCone(cand.get()).coneOut(cell).first
-                               : SurgicalCone(cand.get()).coneIn(cell).first;
-      if (!applied ||
-          !EigenstateSynthesis(cand, gateK_).dualComplexValid().first)
+      if (cellsInsideRegion.empty()) break;
+      const auto &chosenCell =
+          cellsInsideRegion[randomNumberGenerator_() % cellsInsideRegion.size()];
+      auto candidateSpacetime = build(roundSnapshot);
+      const bool moveWasApplied =
+          (randomNumberGenerator_() % 2)
+              ? SurgicalCone(candidateSpacetime.get()).coneOut(chosenCell).first
+              : SurgicalCone(candidateSpacetime.get()).coneIn(chosenCell).first;
+      if (!moveWasApplied ||
+          !EigenstateSynthesis(candidateSpacetime, dualComplexGateDegree_)
+               .dualComplexValid()
+               .first)
         continue;
-      const double rNew = rInput(inp, cand);
-      if (rNew < r - tol_) {
-        r = rNew;
-        st_ = build(snapshotOf(*cand));
+      const double newResidual =
+          residualForBoundaryBlock(boundaryBlock, candidateSpacetime);
+      if (newResidual < residual - convergenceTolerance_) {
+        residual = newResidual;
+        spacetime_ = build(snapshotOf(*candidateSpacetime));
         // refresh the region with any new vertices the move added near the seed.
-        for (const auto &s : st_->getTopSimplices()) {
-          auto c = topTuple(*s);
-          if (std::find(c.begin(), c.end(), seedV) != c.end())
-            region.insert(c.begin(), c.end());
+        for (const auto &topSimplex : spacetime_->getTopSimplices()) {
+          auto cellVertexIds = topTuple(*topSimplex);
+          if (std::find(cellVertexIds.begin(), cellVertexIds.end(),
+                        seedVertexId) != cellVertexIds.end())
+            regionVertexIds.insert(cellVertexIds.begin(), cellVertexIds.end());
         }
-        inp.verts = region;
+        boundaryBlock.vertices = regionVertexIds;
       }
     }
-    dest.push_back(inp);
+    destinationBlocks.push_back(boundaryBlock);
   }
 }
 
-std::vector<double> MultiCobordism::relaxStage2(double beta, int maxIters,
-                                                   double alpha0) {
-  auto edges = st_->getEdgeList()->toVector();
-  const std::size_t n = edges.size();
-  auto fullF = [&]() { return beta * gradNorm2(st_) + gamma_ * rU(st_); };
-  std::vector<double> trace = {fullF()};
-  double alpha = alpha0;
-  for (int it = 0; it < maxIters; ++it) {
-    ReggeSolver rs(st_, MatterConfiguration());
-    const auto gv = rs.actionGradientExact();
-    const auto hmat = rs.actionHessianExact();  // vector<vector<complex>> (rows)
-    Eigen::VectorXcd g(n);
-    for (std::size_t i = 0; i < n; ++i) g(i) = gv[i];
-    Eigen::MatrixXcd H(n, n);
-    for (std::size_t r = 0; r < n; ++r)
-      for (std::size_t c = 0; c < n; ++c) H(r, c) = hmat[r][c];
-    const Eigen::VectorXcd grad = beta * 2.0 * (H.conjugate() * g);
-    Eigen::VectorXcd l2(n);
-    for (std::size_t i = 0; i < n; ++i) l2(i) = edges[i]->getSquaredLength();
-    const double f0 = trace.back();
-    double stepSize = alpha;
-    bool improved = false;
-    for (int ls = 0; ls < 24; ++ls) {
-      for (std::size_t i = 0; i < n; ++i) {
-        cd v = l2(i) - stepSize * grad(i);
-        double re = std::min(std::max(v.real(), 0.05), 20.0);  // bound real part
-        edges[i]->setSquaredLength(cd(re, v.imag()));
+std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
+                                                 double alpha0) {
+  auto edges = spacetime_->getEdgeList()->toVector();
+  const std::size_t edgeCount = edges.size();
+  auto fullObjective = [&]() {
+    return beta * reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
+  };
+  std::vector<double> objectiveTrace = {fullObjective()};
+  double stepScale = alpha0;
+  for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
+    ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
+    const auto gradientComponents = reggeSolver.actionGradientExact();
+    const auto hessianRows = reggeSolver.actionHessianExact();  // rows of complex
+    Eigen::VectorXcd gradientVector(edgeCount);
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      gradientVector(edgeIndex) = gradientComponents[edgeIndex];
+    Eigen::MatrixXcd hessianMatrix(edgeCount, edgeCount);
+    for (std::size_t rowIndex = 0; rowIndex < edgeCount; ++rowIndex)
+      for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
+        hessianMatrix(rowIndex, columnIndex) =
+            hessianRows[rowIndex][columnIndex];
+    const Eigen::VectorXcd descentDirection =
+        beta * 2.0 * (hessianMatrix.conjugate() * gradientVector);
+    Eigen::VectorXcd squaredLengths(edgeCount);
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      squaredLengths(edgeIndex) = edges[edgeIndex]->getSquaredLength();
+    const double currentObjective = objectiveTrace.back();
+    double trialStepScale = stepScale;
+    bool objectiveImproved = false;
+    for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
+      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+        cd trialSquaredLength = squaredLengths(edgeIndex) -
+                                trialStepScale * descentDirection(edgeIndex);
+        double boundedRealPart =
+            std::min(std::max(trialSquaredLength.real(), 0.05),
+                     20.0);  // bound the real part
+        edges[edgeIndex]->setSquaredLength(
+            cd(boundedRealPart, trialSquaredLength.imag()));
       }
-      double f1;
+      double trialObjective;
       try {
-        f1 = fullF();
+        trialObjective = fullObjective();
       } catch (...) {
-        f1 = std::numeric_limits<double>::infinity();
+        trialObjective = std::numeric_limits<double>::infinity();
       }
-      if (f1 < f0 - tol_) {
-        trace.push_back(f1);
-        alpha = std::min(alpha * 1.3, 1.0);
-        improved = true;
+      if (trialObjective < currentObjective - convergenceTolerance_) {
+        objectiveTrace.push_back(trialObjective);
+        stepScale = std::min(stepScale * 1.3, 1.0);
+        objectiveImproved = true;
         break;
       }
-      stepSize *= 0.5;
+      trialStepScale *= 0.5;
     }
-    if (!improved) {
-      for (std::size_t i = 0; i < n; ++i) edges[i]->setSquaredLength(l2(i));
+    if (!objectiveImproved) {
+      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+        edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex));
       break;
     }
   }
-  return trace;
+  return objectiveTrace;
 }
 
 }  // namespace tessera::cobordism

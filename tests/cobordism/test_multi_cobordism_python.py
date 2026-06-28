@@ -2,7 +2,7 @@
 # All rights reserved.
 """The C++ MultiCobordism is the source-of-truth port of the Python reference (#491).
 
-Fast: the C++ engine's deterministic objective core (betti, emergent_holes, grad_norm2,
+Fast: the C++ engine's deterministic objective core (betti, emergent_holes, regge_action_gradient,
 r_state, objective) must equal `examples/cobordism/emergent_optimizer.py` to machine precision
 on an identical host. Slow: the two-stage run grows the emergent b₃ register, and a CobordismDAG
 chains merges output->input.
@@ -42,7 +42,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         self.assertEqual(eo.betti(self.host), list(CXX.betti(self.host)))
         self.assertEqual({tuple(h) for h in eo.emergent_holes(self.host, 3)},
                          {tuple(h) for h in CXX.emergent_holes(self.host, 3)})
-        self.assertAlmostEqual(eo._grad_norm2(self.host), CXX.grad_norm2(self.host),
+        self.assertAlmostEqual(eo._grad_norm2(self.host), CXX.regge_action_gradient(self.host),
                                places=8)
         self.assertAlmostEqual(eo.r_state(self.host, 3, tgt),
                                CXX.r_state(self.host, 3, tgt), places=10)

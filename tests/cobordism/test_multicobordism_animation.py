@@ -5,7 +5,7 @@
 Drives a few optimization steps headless (Agg) and checks that the per-step
 history advances, the MDS layout produces 2-D coordinates, and a GIF is written.
 The animation only reads the public MultiCobordism API, so this also guards that
-single-step `run_stage1`/`relax_stage2` keep advancing the optimizer state.
+single-step `run_stage1`/`run_stage2` keep advancing the optimizer state.
 """
 import importlib.util
 import os
@@ -33,7 +33,7 @@ class MultiCobordismAnimationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mca = _load("multicobordism_animation")
-        cls.opt = cls.mca.build_demo_merge(seed=3, n_refine=12)
+        cls.opt = cls.mca.build_demo_recombination(seed=3, n_refine=12)
 
     def test_steps_advance_history(self):
         anim = self.mca.MultiCobordismAnimator(
@@ -50,7 +50,7 @@ class MultiCobordismAnimationTest(unittest.TestCase):
 
     def test_default_is_no_visualization(self):
         # visualize defaults to OFF: run_optimization takes the fast batched path
-        # (one run_stage1 + one relax_stage2, no per-step plotting) and returns the
+        # (one run_stage1 + one run_stage2, no per-step plotting) and returns the
         # final metrics dict rather than an animation.
         res = self.mca.run_optimization(self.opt, stage1_steps=2, stage2_iters=2)
         self.assertIsInstance(res, dict)

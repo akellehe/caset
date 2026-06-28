@@ -18,7 +18,7 @@ So the proton here is **built**, not read off a hand-made singlet, using the eme
 with the diquark/antidiquark forming as emergent interior structure. The legs are co-optimized
 in **one** system (interacted simultaneously); charge is conserved end to end (each input pair
 is neutral, `Σ = 0`). The proton's three quarks are the **three emergent holes of the proton
-output block** — carved out via `MultiCobordism.outputs[0].verts`, with the relaxed metric
+output block** — carved out via `MultiCobordism.outputs[0].vertices`, with the relaxed metric
 copied over.
 
 What this delivers, validated (`tests/cobordism/test_dk_joint_spin.py`):
@@ -96,7 +96,7 @@ def build_pair_creation(seed, n_refine=20, rounds=24, stage1_steps=80,
     opt.construct_inputs(sv[:3], rounds=rounds)
     opt.construct_outputs(sv[3:5], rounds=rounds)
     opt.run_stage1(max_steps=stage1_steps, n_candidates=10, patience=stage1_patience)
-    opt.relax_stage2(beta=1.0, max_iters=stage2_iters)
+    opt.run_stage2(beta=1.0, max_iters=stage2_iters)
     return opt
 
 
@@ -187,7 +187,7 @@ def read_proton(opt, block_index=0):
     """Read the (anti)proton leg off its output block. Returns a dict with the block
     residual (singlet carried?), the quark holes, the per-hole flavor + its spread, and
     the composite `J²` (joint & per-hole product reads). None if no 3-hole register."""
-    sub = block_subcomplex(opt.st, list(opt.outputs[block_index].verts))
+    sub = block_subcomplex(opt.st, list(opt.outputs[block_index].vertices))
     if sub is None:
         return None
     holes = cob.MultiCobordism.emergent_holes(sub, 3)
