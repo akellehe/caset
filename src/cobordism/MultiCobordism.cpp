@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <queue>
 
 #include <Eigen/Dense>
 
@@ -221,21 +222,99 @@ double MultiCobordism::diracKahlerSpinCasimir(
   return casimir.trace().real() / static_cast<double>(fiberDimension);  // -> 3/4
 }
 
-double MultiCobordism::holeDeficit(const std::shared_ptr<Spacetime> &spacetime,
-                                   const std::vector<std::uint64_t> &hole) {
-  const std::set<std::uint64_t> holeVertexSet(hole.begin(), hole.end());
-  double totalDeficit = 0.0;
+std::vector<double> MultiCobordism::holeRegionDeficits(
+    const std::shared_ptr<Spacetime> &spacetime,
+    const std::vector<std::vector<std::uint64_t>> &holes) {
+  const auto &cells = spacetime->getTopSimplices();
+  const std::size_t cellCount = cells.size();
+  const std::size_t holeCount = holes.size();
+  std::vector<double> regionDeficit(holeCount, 0.0);
+  if (cellCount == 0 || holeCount == 0) return regionDeficit;
+
+  std::vector<std::set<std::uint64_t>> cellVertexSets(cellCount);
+  for (std::size_t c = 0; c < cellCount; ++c) {
+    const auto cellTuple = topTuple(*cells[c]);
+    cellVertexSets[c] =
+        std::set<std::uint64_t>(cellTuple.begin(), cellTuple.end());
+  }
+
+  // Dual adjacency: two top cells share a (d-1)-facet (4 common vertices in 4D).
+  std::vector<std::vector<std::size_t>> adjacency(cellCount);
+  for (std::size_t a = 0; a < cellCount; ++a)
+    for (std::size_t b = a + 1; b < cellCount; ++b) {
+      std::size_t shared = 0;
+      for (auto vertexId : cellVertexSets[a])
+        if (cellVertexSets[b].count(vertexId)) ++shared;
+      if (shared == 4) {
+        adjacency[a].push_back(b);
+        adjacency[b].push_back(a);
+      }
+    }
+
+  // Seed one DISTINCT max-overlap cell per hole, then multi-source BFS labels every cell
+  // with its nearest hole (ties resolved to the lower hole index, holes processed in order).
+  std::vector<int> nearestHole(cellCount, -1);
+  std::vector<int> hopDistance(cellCount, std::numeric_limits<int>::max());
+  std::set<std::size_t> seededCells;
+  std::queue<std::size_t> frontier;
+  for (std::size_t h = 0; h < holeCount; ++h) {
+    const std::set<std::uint64_t> holeSet(holes[h].begin(), holes[h].end());
+    std::size_t seedCell = cellCount;
+    std::size_t bestOverlap = 0;
+    for (std::size_t c = 0; c < cellCount; ++c) {
+      if (seededCells.count(c)) continue;
+      std::size_t overlap = 0;
+      for (auto vertexId : cellVertexSets[c])
+        if (holeSet.count(vertexId)) ++overlap;
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        seedCell = c;
+      }
+    }
+    if (seedCell == cellCount) continue;
+    seededCells.insert(seedCell);
+    nearestHole[seedCell] = static_cast<int>(h);
+    hopDistance[seedCell] = 0;
+    frontier.push(seedCell);
+  }
+  while (!frontier.empty()) {
+    const std::size_t c = frontier.front();
+    frontier.pop();
+    for (auto neighbor : adjacency[c])
+      if (hopDistance[neighbor] > hopDistance[c] + 1) {
+        hopDistance[neighbor] = hopDistance[c] + 1;
+        nearestHole[neighbor] = nearestHole[c];
+        frontier.push(neighbor);
+      }
+  }
+
+  // Each hinge (triangle) is added to the region of its nearest containing cell's hole, so
+  // the partition covers ALL curvature (the holes' own hinges and the bulk between them).
   for (const auto &simplex : spacetime->getSimplices()) {
     if (simplex->getVertices().size() != 3) continue;  // hinges (triangles) in 4D
-    bool insideHole = true;
+    std::set<std::uint64_t> hingeVertices;
     for (const auto *vertex : simplex->getVertices())
-      if (!holeVertexSet.count(vertex->getId())) {
-        insideHole = false;
-        break;
+      hingeVertices.insert(vertex->getId());
+    int chosenHole = -1;
+    int chosenDistance = std::numeric_limits<int>::max();
+    for (std::size_t c = 0; c < cellCount; ++c) {
+      if (nearestHole[c] < 0) continue;
+      bool hingeInCell = true;
+      for (auto vertexId : hingeVertices)
+        if (!cellVertexSets[c].count(vertexId)) {
+          hingeInCell = false;
+          break;
+        }
+      if (hingeInCell && hopDistance[c] < chosenDistance) {
+        chosenDistance = hopDistance[c];
+        chosenHole = nearestHole[c];
       }
-    if (insideHole) totalDeficit += simplex->deficitAngle();
+    }
+    if (chosenHole >= 0)
+      regionDeficit[static_cast<std::size_t>(chosenHole)] +=
+          simplex->deficitAngle();
   }
-  return totalDeficit;
+  return regionDeficit;
 }
 
 double MultiCobordism::compositeSpinJ2(std::size_t outputBlockIndex) const {
@@ -255,18 +334,22 @@ double MultiCobordism::compositeSpinJ2(std::size_t outputBlockIndex) const {
   const ReggeSolver reggeSolver(blockSubcomplex, MatterConfiguration());
   (void)reggeSolver;
   const double spinHalfCasimir = diracKahlerSpinCasimir(blockSubcomplex);  // 3/4
-  // The two-quark pair-loop gamma_ij LITERALLY encircles holes i and j; by cycle additivity
-  // gamma_ij = gamma_i + gamma_j, so the deficit it encloses is eps_i + eps_j (the curvature
-  // at the two encircled holes), and <S_i.S_j> = 1/4 cos(eps_i + eps_j). No duality assumed
-  // (this differs from the complementary-hole proxy by the Gauss-Bonnet constant).
-  double holeDeficits[3];
-  for (std::size_t holeIndex = 0; holeIndex < 3; ++holeIndex)
-    holeDeficits[holeIndex] = holeDeficit(blockSubcomplex, holes[holeIndex]);
+  // The two-quark pair-loop gamma_ij encircles holes i and j; the deficit it ENCLOSES is the
+  // curvature of their combined nearest-hole territory, region(i) + region(j) -- the holes'
+  // own concentrated curvature PLUS the bulk nearest them (the fully-literal enclosed deficit,
+  // covering every hinge, not just the holes' boundary triangles). <S_i.S_j> = 1/4 cos(.).
+  // (The host S^4-minus-cells is simply connected, so there is no canonical non-contractible
+  // loop; the enclosed region is fixed by the nearest-hole partition, and the bulk term
+  // vanishes for a flat relaxed interior.)
+  std::vector<std::vector<std::uint64_t>> threeHoles(holes.begin(),
+                                                     holes.begin() + 3);
+  const std::vector<double> regionDeficit =
+      holeRegionDeficits(blockSubcomplex, threeHoles);
   static const int pair[3][2] = {{0, 1}, {0, 2}, {1, 2}};
   double crossTermSum = 0.0;
   for (const auto &twoQuarkLoop : pair)
-    crossTermSum +=
-        0.25 * std::cos(holeDeficits[twoQuarkLoop[0]] + holeDeficits[twoQuarkLoop[1]]);
+    crossTermSum += 0.25 * std::cos(regionDeficit[twoQuarkLoop[0]] +
+                                    regionDeficit[twoQuarkLoop[1]]);
   return 3.0 * spinHalfCasimir + 2.0 * crossTermSum;
 }
 

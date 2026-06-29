@@ -914,9 +914,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("composite_spin_j2", &MultiCobordism::compositeSpinJ2,
            py::arg("output_block_index") = 0,
            "Loops-as-quarks composite spin J^2 of an output block: the two-quark pair-loop "
-           "literally encircles holes i,j (= gamma_i + gamma_j), so it encloses the deficit "
-           "eps_i + eps_j, lifted through the DiracKahler spin-1/2 double cover to "
-           "<S_i.S_j> = 1/4 cos(eps_i + eps_j); J^2 = 9/4 + 1/2 Sum_{i<j} cos(eps_i + eps_j). "
+           "encircles holes i,j, so it encloses region(i)+region(j) -- the fully-literal "
+           "nearest-hole (Voronoi) curvature of the two holes' territory, every hinge "
+           "included -- lifted through the DiracKahler spin-1/2 double cover to "
+           "<S_i.S_j> = 1/4 cos(region(i)+region(j)); J^2 = 9/4 + 1/2 Sum_{i<j} cos(.). "
            "Reduces to the closed-loop holonomy / pairwise C_ij (floors above the entangled "
            "proton 3/4). Raises if the block has no 3-hole register.");
 
