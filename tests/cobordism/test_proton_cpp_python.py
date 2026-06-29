@@ -5,8 +5,9 @@
 A proton is three quarks in a colorless bound state, so it is built in two steps:
 Step A (recombination) makes a *colored* diquark `{1, ω}`; Step B (formation) makes
 the proton *color singlet* `{1, ω, ω²}`. These tests confirm the constants and that
-`Proton` actually assembles a converged proton — its formation block carries the
-singlet with at least three emergent color holes, on the relaxed (non-unit) metric.
+`Proton` actually assembles a converged proton — the whole formation cobordism
+carries the singlet with at least three emergent color holes, on the relaxed
+(non-unit) metric.
 """
 import cmath
 import math
@@ -41,25 +42,32 @@ class ProtonConstantsTest(unittest.TestCase):
 
 @pytest.mark.slow
 class ProtonBuildTest(unittest.TestCase):
-    """Slow: the real two-step emergent build (Step A then Step B, restarts)."""
+    """Slow: the real two-step emergent build (Step A recombination then Step B
+    formation, with restarts)."""
 
-    # (seed, params) pinned to a configuration verified to converge: seed 3 at
-    # refinement 14 with 30 stage-1 steps reaches the proton singlet (colorR ~1e-31,
-    # 3 holes) on the first attempt in ~35s. max_restarts is headroom for round-off
-    # differences on other machines; the happy path stops at the first attempt.
-    SEED = 3
-    REFINE = 14
-    MAX_RESTARTS = 8
-    STAGE1_STEPS = 30
-    STAGE1_CANDIDATES = 8
+    # Pinned to a fast, bounded, verified-converging config. The build trajectory is
+    # nondeterministic (threaded eigensolves reorder floating-point sums, so the "best
+    # move" — and how soon r_U carries — varies run to run). A small pre-grown host
+    # (host_refinement) + capped steps + max_restarts bound the worst case to ~1-2 min
+    # while still converging (colorR → 0, ≥3 holes). The minimal-∂Δ⁵-seed + trap-door
+    # path (growing a register out of a single simplex) is covered fast by
+    # test_trap_door_python.py; here we just confirm the two-step proton assembles.
+    SEED = 1
+    HOST_REFINEMENT = 12
+    MAX_RESTARTS = 2
+    INIT_STEPS = 80
+    EVOLVE_STEPS = 20
+    STAGE1_CANDIDATE_MOVES = 8
     STAGE2_ITERS = 10
     COLOR_TOL = 0.5
 
     @classmethod
     def setUpClass(cls):
-        cls.p = tessera.cobordism.Proton(seed=cls.SEED, host_refinement=cls.REFINE)
-        cls.p.build(max_restarts=cls.MAX_RESTARTS, stage1_max_steps=cls.STAGE1_STEPS,
-                    stage1_candidates=cls.STAGE1_CANDIDATES,
+        cls.p = tessera.cobordism.Proton(seed=cls.SEED,
+                                         host_refinement=cls.HOST_REFINEMENT)
+        cls.p.build(max_restarts=cls.MAX_RESTARTS, init_steps=cls.INIT_STEPS,
+                    evolve_steps=cls.EVOLVE_STEPS,
+                    stage1_candidate_moves=cls.STAGE1_CANDIDATE_MOVES,
                     stage2_max_iters=cls.STAGE2_ITERS,
                     color_tolerance=cls.COLOR_TOL, min_quark_holes=3)
 
@@ -69,25 +77,28 @@ class ProtonBuildTest(unittest.TestCase):
             f"proton did not converge: colorR={self.p.color_residual()}, "
             f"holes={len(self.p.quark_holes())}")
 
-    def test_block_carries_the_singlet(self):
-        # Step B's proton block carries the 3-vector color singlet (r_state → 0).
+    def test_whole_cobordism_carries_the_singlet(self):
+        # The proton is the harmonic of the WHOLE relaxed step-B cobordism: its singlet
+        # residual r_state({1, ω, ω²}) → 0 (the inputs are held by their own residual;
+        # the bulk evolves to carry the colorless 3-vector).
         self.assertLess(self.p.color_residual(), self.COLOR_TOL)
 
-    def test_block_has_at_least_three_quark_holes(self):
+    def test_has_at_least_three_quark_holes(self):
         self.assertGreaterEqual(len(self.p.quark_holes()), 3)
 
-    def test_block_carries_the_relaxed_metric(self):
-        # The block is carved with the relaxed metric copied in, NOT the unit-metric
-        # subOf: at least one edge length must differ from the unit 1.0+0j.
+    def test_proton_carries_the_relaxed_metric(self):
+        # block() IS the whole relaxed cobordism (not a unit-metric carve): at least one
+        # edge length must differ from the unit 1.0+0j.
         block = self.p.block()
         self.assertIsNotNone(block)
         squared = [e.getSquaredLength() for e in block.getEdgeList().toVector()]
-        self.assertTrue(squared, "block has no edges")
+        self.assertTrue(squared, "proton has no edges")
         self.assertTrue(any(abs(l - complex(1.0, 0.0)) > 1e-9 for l in squared),
-                        "block metric is unit — relaxed lengths were not copied in")
+                        "proton metric is unit — the relaxed geometry was lost")
 
     def test_step_a_diquark_recombination_ran(self):
-        # Step A's r_U is finite (the diquark recombination was co-optimized).
+        # Step A's r_U is finite (the diquark recombination was co-optimized) — a
+        # separate physical claim from the proton's formation.
         self.assertTrue(math.isfinite(self.p.diquark_residual()))
 
 

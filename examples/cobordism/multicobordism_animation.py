@@ -51,11 +51,13 @@ _W = cmath.exp(2j * math.pi / 3)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The 2→2 recombination this demo animates: two neutral q-q̄ pairs in, a diquark ⊔
-# anti-diquark out (#491). The diquark color is the canonical √3-normalized 3̄ anti-
-# triplet; the anti-diquark is the conjugate triplet on a distinct color axis.
+# anti-diquark out (#491/#503). A diquark is COLORED (a 2-quark object, an SU(3) 3̄),
+# so its target is the 2-vector {1, ω} — NOT the colorless singlet; the anti-diquark
+# is {1, ω²}. ω = exp(2πi/3). (The dimension tracks the constituent count: 2 quarks
+# → a 2-vector here; the 3-quark proton is the 3-vector singlet {1, ω, ω²}.)
 _PAIRS = [[1, -1, 0], [1, 0, -1]]                  # two neutral q-q̄ color combos (Σ = 0)
-_DIQUARK = [math.sqrt(3.0), 0.0, 0.0]              # canonical 3̄ anti-triplet
-_ANTIDIQUARK = [0.0, math.sqrt(3.0), 0.0]          # conjugate triplet, distinct axis
+_DIQUARK = [1.0, _W]                               # colored diquark, 2-vector (#503)
+_ANTIDIQUARK = [1.0, _W * _W]                      # colored anti-diquark, 2-vector
 
 
 def _load(name):
@@ -125,7 +127,7 @@ class MultiCobordismAnimator:
             # complex and re-evaluates the global spectral r_U, so the per-frame cost climbs
             # super-linearly with max_steps (a 70-step frame measured ~360x a 1-step frame,
             # turning the ~9 s surgery phase into ~52 min). patience is irrelevant at 1 step.
-            self.opt.run_stage1(max_steps=1, n_candidates=self.s1c, patience=10 ** 9)
+            self.opt.run_stage1(max_steps=1, n_candidate_moves=self.s1c, patience=10 ** 9)
             stage = 1
         else:
             self.opt.run_stage2(beta=self.s2_beta, max_iters=1)
@@ -267,16 +269,19 @@ class MultiCobordismAnimator:
 
 
 def build_demo_recombination(seed=3, n_refine=16, rounds=10):
-    """A small demo system: recombine two q-q̄ pairs into a diquark ⊔ anti-diquark on a
-    bare S⁴ (a 2→2 event, #491), wired exactly like `dk_joint_spin.build_pair_creation`.
+    """A small demo system: recombine two neutral q-q̄ pairs into a colored diquark
+    `{1, ω}` ⊔ anti-diquark `{1, ω²}` (a 2→2 event, #491/#503).
 
     `construct_inputs` builds the two input pairs and `construct_outputs` the two output
-    blocks (diquark, anti-diquark); the animation then drives the standard two stages —
-    `run_stage1` (combinatorial surgery) and `run_stage2` (geometric relaxation) — one
-    step at a time so you watch the registers grow and the objective converge."""
+    blocks (diquark, anti-diquark); the animation then drives the two stages —
+    `run_stage1` (combinatorial surgery, including the trap door that grows the complex
+    on a stall) and `run_stage2` (geometric relaxation) — one step at a time so you
+    watch the register grow and the objective converge. Γ is chosen so the realizability
+    residual `Γ·r_U` sits on the same order as the Regge term `‖∇S‖²`; otherwise ∇S
+    dominates and the register is never driven to carry its state."""
     host = eo.build_closed_s4(n_refine=n_refine, seed=seed)
     opt = cob.MultiCobordism(host, _PAIRS, [_DIQUARK, _ANTIDIQUARK],
-                             degrees=[3], gamma=1.0, seed=seed)
+                             degrees=[3], gamma=50.0, seed=seed)
     sv = [v.getId() for v in host.getVertexList().toVector()]
     opt.construct_inputs(sv[:2], rounds=rounds)
     opt.construct_outputs(sv[2:4], rounds=rounds)
@@ -319,7 +324,7 @@ def run_optimization(opt, visualize=False, save=None, degree=3, stage1_steps=70,
     ``save=...`` (GIF/MP4) to animate it step-by-step (slower); that returns the
     per-step history."""
     if not visualize and not save:
-        opt.run_stage1(max_steps=stage1_steps, n_candidates=stage1_candidates)
+        opt.run_stage1(max_steps=stage1_steps, n_candidate_moves=stage1_candidates)
         opt.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
         st = opt.st
         return {"F": float(opt.objective()),

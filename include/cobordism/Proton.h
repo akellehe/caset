@@ -7,7 +7,6 @@
 #include <complex>
 #include <cstdint>
 #include <memory>
-#include <set>
 #include <vector>
 
 namespace tessera::spacetime { class Spacetime; }
@@ -55,26 +54,31 @@ class Proton {
   /// fixed; only the substrate/optimization knobs are exposed.
   ///   * `seed`           — base RNG seed; restart `i` uses A-seed `seed+2i`,
   ///                        B-seed `seed+2i+1` (A and B always distinct).
-  ///   * `hostRefinement` — PreGeometric Pachner refinements of each closed-S⁴
-  ///                        host (surgery room).
+  ///   * `hostRefinement` — Pachner refinements of the bare ∂Δ⁵ seed (default 0 —
+  ///                        the minimal closed seed; the trap door grows it).
   ///   * `registerDegree` — the color register degree `k` (3 on a 4-manifold,
   ///                        where `ker L_{d-1}` is the register holes).
-  ///   * `gamma`          — Γ in `F = ‖∇S_Regge‖² + Γ·r_U`.
-  explicit Proton(std::uint64_t seed = 0, int hostRefinement = 14,
-                  int registerDegree = 3, double gamma = 1.0);
+  ///   * `gamma`          — Γ in `F = ‖∇S_Regge‖² + Γ·r_U`, chosen so Γ·r_U sits on
+  ///                        the same order as ‖∇S‖² (else ∇S trumps r_U and the
+  ///                        register is never driven to carry).
+  ///   * `inputWeight`    — weight on the input residuals so the diquark/quark
+  ///                        inputs are driven to carry rather than dissolve.
+  explicit Proton(std::uint64_t seed = 0, int hostRefinement = 0,
+                  int registerDegree = 3, double gamma = 50.0,
+                  double inputWeight = 20.0);
 
-  /// Build the proton: run step A then step B, restarting across seeds until step
-  /// B's proton block carries the singlet with `≥ minQuarkHoles` holes (or
-  /// `maxRestarts` is exhausted, in which case the best attempt is kept and
-  /// `converged()` is false). Idempotent — a second call is a no-op. The stage
-  /// parameters mirror `MultiCobordism::runStage1`/`runStage2`.
-  void build(int maxRestarts = 16, int constructRounds = 12,
-             int stage1MaxSteps = 30, int stage1Candidates = 8,
-             int stage1Patience = 8, double stage2Beta = 1.0,
-             int stage2MaxIters = 20, double colorTolerance = 0.5,
-             int minQuarkHoles = 3);
+  /// Build the proton, restarting across seeds until step B's whole cobordism
+  /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
+  /// exhausted, keeping the best attempt; `converged()` is then false). Each step
+  /// runs an INITIALIZATION pass (`initSteps`, `grow_boundaries=true` — establishes
+  /// the carrying input regions) then an EVOLUTION pass (`evolveSteps`,
+  /// `grow_boundaries=false` — ∂W frozen) then `runStage2`. Idempotent.
+  void build(int maxRestarts = 16, int constructRounds = 12, int initSteps = 180,
+             int evolveSteps = 60, int stage1CandidateMoves = 8, int stage1Patience = 15,
+             double stage2Beta = 1.0, int stage2MaxIters = 10,
+             double colorTolerance = 0.5, int minQuarkHoles = 3);
 
-  /// True iff step B's proton block carries the singlet (`colorResidual() <
+  /// True iff the whole step-B cobordism carries the singlet (`colorResidual() <
   /// colorTolerance`) with `≥ minQuarkHoles` holes. Triggers `build()`.
   [[nodiscard]] bool converged();
   /// The base seed of the converged (or best) attempt. Triggers `build()`.
@@ -82,16 +86,17 @@ class Proton {
   /// The full relaxed closed-S⁴ complex of step B (proton formation). Triggers
   /// `build()`.
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime();
-  /// Step B's proton sub-complex — the top cells of the formation block carved
-  /// out with the **relaxed metric copied in** (not the unit-metric `subOf`).
-  /// This is what downstream observable readers consume. Triggers `build()`.
+  /// The proton itself: the relaxed WHOLE step-B cobordism. The single output IS the
+  /// whole's harmonic (the inputs are held by their residual, the bulk evolves to
+  /// carry the singlet), so there is no sub-block — this is what downstream
+  /// observable readers consume. Triggers `build()`.
   [[nodiscard]] std::shared_ptr<Spacetime> block();
-  /// The emergent color holes (`(k+2)`-vertex tuples) on the proton block —
+  /// The emergent color holes (`(k+2)`-vertex tuples) on the proton (the whole) —
   /// `≥ minQuarkHoles` when converged. Triggers `build()`.
   [[nodiscard]] std::vector<std::vector<std::uint64_t>> quarkHoles();
-  /// Step B's proton singlet residual — the relabeling-invariant, zero-filled
-  /// `r_state` of `singlet()` against the block's `L_k` harmonic (`≈0` ⇒
-  /// carried). Triggers `build()`.
+  /// The proton singlet residual — the relabeling-invariant, zero-filled `r_state`
+  /// of `singlet()` against the WHOLE cobordism's `L_k` harmonic (`≈0` ⇒ carried).
+  /// Triggers `build()`.
   [[nodiscard]] double colorResidual();
   /// Step A's realizability residual `r_U` — small ⇒ the diquark recombination
   /// converged (a separate physical claim from the proton's formation). Triggers
@@ -106,19 +111,13 @@ class Proton {
   /// `examples/cobordism/emergent_optimizer.build_closed_s4`).
   [[nodiscard]] static std::shared_ptr<Spacetime> buildClosedS4Host(
       int nRefine, std::uint64_t seed);
-  /// The top cells of `full` whose vertices all lie in `vertexSet`, rebuilt as a
-  /// sub-complex with the **relaxed** edge lengths of `full` copied in (unlike the
-  /// unit-metric `MultiCobordism::subcomplexWithinVertexSet`). Null when the
-  /// region contains no full cell.
-  [[nodiscard]] static std::shared_ptr<Spacetime> carveRelaxedSubcomplex(
-      const std::shared_ptr<Spacetime> &full,
-      const std::set<std::uint64_t> &vertexSet);
 
   // ---- configuration ----
   std::uint64_t baseSeed_;
   int hostRefinement_;
   int registerDegree_;
   double gamma_;
+  double inputResidualWeight_;
 
   // ---- build state (populated by build()) ----
   bool attempted_ = false;

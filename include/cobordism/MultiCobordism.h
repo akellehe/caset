@@ -93,14 +93,21 @@ class MultiCobordism {
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
   /// `F = reggeActionGradient (Regge extremization) + gamma * rU`.
   [[nodiscard]] double objective() const;
+  /// Weight on each INPUT block's residual in `rU` (the output/whole term keeps
+  /// weight 1). Raising it makes the optimizer prioritize keeping the input states
+  /// represented, rather than only driving the whole to the output. Default 1.
+  void setInputResidualWeight(double weight) { inputResidualWeight_ = weight; }
 
   // ---- the two stages + boundary-block construction ----
   /// Grow each INPUT block's emergent sub-complex near its seed vertex.
   void constructInputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
   /// Grow each OUTPUT block's emergent sub-complex near its seed vertex.
   void constructOutputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
-  std::vector<double> runStage1(int maxSteps = 200, int nCandidates = 12,
-                                int patience = 8);
+  /// `growBoundaries` is the INITIALIZATION pass: while true the boundary regions
+  /// grow to track the bulk until they carry their states (growBoundaryRegions);
+  /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
+  std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
+                                int patience = 8, bool growBoundaries = false);
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 40,
                                   double alpha0 = 0.05);
 
@@ -162,7 +169,24 @@ class MultiCobordism {
   [[nodiscard]] double deltaF(
       const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
       const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
-  double step(int nCandidates);
+  double step(int nCandidateMoves);
+  /// The trap door (#503): when no candidate move lowers the objective, take the
+  /// first GATED move from the FULL range — Pachner `add`/`remove`/`flip`/`iflip`
+  /// plus surgical `cone_out`/`cone_in` — within `attempts` tries. It is an
+  /// escape/exploration step that need NOT lower F, so the optimizer can leave a
+  /// local minimum (e.g. add material to a too-small complex, or rearrange) rather
+  /// than stall, letting stage 1 build topology from as little as a seed simplex.
+  /// Returns the move's ΔF, or NaN if no valid move exists (a true stall).
+  double trapDoorMove(int attempts);
+  /// Grow each localized boundary block's region to track the bulk's growth: expand
+  /// its vertex set by one shell (every top cell touching the current region), so the
+  /// block gets room to develop the holes that carry its state — instead of staying
+  /// frozen at the (too-small) construct-time region. Applies to every INPUT block
+  /// and every localized OUTPUT block (a multi-output recombination); a single output
+  /// reads off the whole and has no block here. Bounded: a block already carrying
+  /// (residual < inputCarriedTolerance_) is left alone, so it stops growing once it
+  /// represents its state.
+  void growBoundaryRegions();
 
   std::shared_ptr<Spacetime> spacetime_;
   std::vector<std::vector<std::complex<double>>> inputTargets_;
@@ -174,6 +198,11 @@ class MultiCobordism {
   /// register degree (the degree-free validity check needs only the coarsest one).
   int dualComplexGateDegree_;
   double gamma_;
+  /// Weight on the input-block residual terms in `rU` (see setInputResidualWeight).
+  double inputResidualWeight_ = 1.0;
+  /// An input region stops growing (growInputRegions) once its residual drops below
+  /// this — i.e. once it carries its state.
+  double inputCarriedTolerance_ = 0.5;
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   double convergenceTolerance_ = 1e-9;

@@ -62,7 +62,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         self.assertEqual(list(CXX.betti(opt.st))[4], 1)        # bare closed S⁴: b₄=1
         sv = [v.getId() for v in host.getVertexList().toVector()][:2]
         opt.construct_inputs(sv, rounds=12)
-        opt.run_stage1(max_steps=20, n_candidates=8, patience=8)
+        opt.run_stage1(max_steps=20, n_candidate_moves=8, patience=8)
         self.assertGreaterEqual(list(CXX.betti(opt.st))[3], 1)  # a b₃ register emerged
 
     def test_two_step_proton_via_canonical_class(self):
@@ -77,8 +77,8 @@ class MultiCobordismCxxTest(unittest.TestCase):
         Proton = tessera.cobordism.Proton
         self.assertEqual(len(Proton.singlet()), 3)            # the proton is a 3-vector
         p = Proton(seed=3, host_refinement=10)
-        p.build(max_restarts=1, construct_rounds=8, stage1_max_steps=8,
-                stage1_candidates=4, stage1_patience=4, stage2_max_iters=6,
+        p.build(max_restarts=1, construct_rounds=8, init_steps=8, evolve_steps=4,
+                stage1_candidate_moves=4, stage1_patience=4, stage2_max_iters=6,
                 min_quark_holes=1)
         # both steps ran: Step A (diquark recombination) and Step B (proton formation)
         self.assertTrue(math.isfinite(p.diquark_residual()))
@@ -97,7 +97,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         sv = [v.getId() for v in host.getVertexList().toVector()]
         opt.construct_inputs(sv[:2], rounds=8)
         opt.construct_outputs(sv[2:4], rounds=8)   # two output blocks, co-optimized
-        opt.run_stage1(max_steps=6, n_candidates=4, patience=4)
+        opt.run_stage1(max_steps=6, n_candidate_moves=4, patience=4)
         self.assertTrue(math.isfinite(opt.r_u(opt.st)))   # all 4 blocks scored, no crash
 
     def test_dag_recombination_routes_two_outputs(self):
@@ -113,7 +113,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
                            degrees=[3], seed=5)
         apr = dag.add_node(ha, [[0, -1, 1]], [(rec, 1)], [[1, w, w * w]],
                            degrees=[3], seed=6)
-        dag.run(stage1_max_steps=6, stage1_candidates=3, stage1_patience=3,
+        dag.run(stage1_max_steps=6, stage1_candidate_moves=3, stage1_patience=3,
                 stage2_max_iters=6)
         self.assertEqual(dag.num_outputs(rec), 2)
         self.assertEqual(len(dag.output(rec, 0)), 3)   # CobordismDAG.output() threading

@@ -227,21 +227,33 @@ double MultiCobordism::residualForBoundaryBlock(
 }
 
 double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
-  // The symmetric cobordism residual: one r_U term per boundary block — every
-  // input AND every output sub-complex (the bulk routes the connectivity between
-  // them). The Regge extremization term lives in objective()/stages, not here.
+  // The cobordism residual. INPUTS are localized boundary sub-complexes (built near
+  // a seed, held representable by these terms, not pinned) — each read off its own
+  // region and weighted by inputResidualWeight_ so they are not out-competed by the
+  // whole/output term.
   double totalResidual = 0.0;
   for (const auto &inputBlock : inputs_)
-    totalResidual += residualForBoundaryBlock(inputBlock, spacetime);
-  for (const auto &outputBlock : outputs_)
-    totalResidual += residualForBoundaryBlock(outputBlock, spacetime);
-  // No blocks yet (pre-construction): score the raw output targets as full leak so
-  // the bare objective is well-defined and matches the single-merge convention.
-  if (inputs_.empty() && outputs_.empty())
+    totalResidual +=
+        inputResidualWeight_ * residualForBoundaryBlock(inputBlock, spacetime);
+  if (outputTargets_.size() == 1) {
+    // A SINGLE output is the whole cobordism's output boundary: as in the Python
+    // reference it is "the harmonic of the entire structure", NEVER a pinned
+    // region. Read it off the WHOLE complex so the bulk loop drives the whole to
+    // carry it (the output EMERGES; it is not frozen by construct_outputs).
     for (int registerDegree : registerDegrees_)
-      for (const auto &outputTarget : outputTargets_)
-        totalResidual += residualOfTargetStateAgainstHarmonic(
-            spacetime, registerDegree, outputTarget);
+      totalResidual += residualOfTargetStateAgainstHarmonic(
+          spacetime, registerDegree, outputTargets_.front());
+  } else {
+    // Multiple outputs (e.g. a 2->2 recombination → diquark ⊔ antidiquark) live in
+    // distinct regions: read each off its own constructed block.
+    for (const auto &outputBlock : outputs_)
+      totalResidual += residualForBoundaryBlock(outputBlock, spacetime);
+    if (inputs_.empty() && outputs_.empty())  // bare objective, nothing built yet
+      for (int registerDegree : registerDegrees_)
+        for (const auto &outputTarget : outputTargets_)
+          totalResidual += residualOfTargetStateAgainstHarmonic(
+              spacetime, registerDegree, outputTarget);
+  }
   return totalResidual;
 }
 
@@ -250,14 +262,14 @@ double MultiCobordism::objective() const {
 }
 
 std::set<std::uint64_t> MultiCobordism::boundaryVerts() const {
-  std::set<std::uint64_t> boundaryVertexIds;
-  for (const auto &inputBlock : inputs_)
-    boundaryVertexIds.insert(inputBlock.vertices.begin(),
-                             inputBlock.vertices.end());
-  for (const auto &outputBlock : outputs_)
-    boundaryVertexIds.insert(outputBlock.vertices.begin(),
-                             outputBlock.vertices.end());
-  return boundaryVertexIds;
+  // NOTHING is pinned. The boundary states are held representable by their r_U
+  // terms — each input by its OWN residual r(input_i), and the single output by
+  // the WHOLE cobordism's residual r(whole) (with the inputs as its boundary) —
+  // NOT by freezing vertices. The particular input structures are free to change;
+  // they must each merely continue to minimize their residual (keep representing
+  // their state). With the Regge and residual terms on the same order (Gamma), the
+  // optimizer cannot trade a boundary state away just to smooth the geometry.
+  return {};
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshotOf(
@@ -390,7 +402,7 @@ double MultiCobordism::deltaF(
   return gradientDelta + gamma_ * residualUDelta;
 }
 
-double MultiCobordism::step(int nCandidates) {
+double MultiCobordism::step(int nCandidateMoves) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU = rU(spacetime_);
   std::set<std::vector<std::uint64_t>> baseCellSet;
@@ -399,7 +411,7 @@ double MultiCobordism::step(int nCandidates) {
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
-  for (int candidateIndex = 0; candidateIndex < nCandidates; ++candidateIndex) {
+  for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex) {
     const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
     auto candidateSpacetime = build(currentSnapshot);
     if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
@@ -418,19 +430,107 @@ double MultiCobordism::step(int nCandidates) {
   return 0.0;
 }
 
-std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidates,
-                                                 int patience) {
+double MultiCobordism::trapDoorMove(int attempts) {
+  const auto currentSnapshot = snapshot();
+  const double baseResidualU = rU(spacetime_);
+  std::set<std::vector<std::uint64_t>> baseCellSet;
+  for (const auto &topSimplex : spacetime_->getTopSimplices())
+    baseCellSet.insert(topTuple(*topSimplex));
+  // Commit the first gated move we can apply from the FULL range
+  // (drawRandomMoveSpecification: add/remove/flip/iflip/cone_out/cone_in). It need
+  // NOT lower F — that is the escape; the gate (a valid manifold-with-boundary, no
+  // pinned vertex removed) keeps it sound. Several tries because a given random
+  // move may not propose/validate on the current complex.
+  for (int attempt = 0; attempt < std::max(1, attempts); ++attempt) {
+    const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
+    auto candidateSpacetime = build(currentSnapshot);
+    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
+    const double objectiveDelta =
+        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+    spacetime_ = build(snapshotOf(*candidateSpacetime));
+    return objectiveDelta;
+  }
+  return std::numeric_limits<double>::quiet_NaN();
+}
+
+void MultiCobordism::growBoundaryRegions() {
+  // Expand one block's region by a shell — the vertices of every top cell touching
+  // it — so it tracks the bulk's growth and gets room to open the holes that carry
+  // it. A block already carrying (residual < tolerance) is left alone, so it stops
+  // growing once it represents its state.
+  const auto growOneShell = [this](BoundaryBlock &block) {
+    if (residualForBoundaryBlock(block, spacetime_) < inputCarriedTolerance_) return;
+    std::set<std::uint64_t> expanded = block.vertices;
+    for (const auto &topSimplex : spacetime_->getTopSimplices()) {
+      auto cellVertexIds = topTuple(*topSimplex);
+      bool touchesRegion = false;
+      for (auto vertexId : cellVertexIds)
+        if (block.vertices.count(vertexId)) {
+          touchesRegion = true;
+          break;
+        }
+      if (touchesRegion)
+        expanded.insert(cellVertexIds.begin(), cellVertexIds.end());
+    }
+    block.vertices = std::move(expanded);
+  };
+  for (auto &inputBlock : inputs_) growOneShell(inputBlock);
+  // Localized OUTPUT blocks (a 2→2 recombination's diquark ⊔ antidiquark) grow the
+  // same way; a SINGLE output reads off the whole and has no block here, so this is
+  // a no-op for the formation node.
+  for (auto &outputBlock : outputs_) growOneShell(outputBlock);
+}
+
+std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
+                                                 int patience, bool growBoundaries) {
+  // The register is "carried" (converged) once the summed r_U is essentially zero.
+  constexpr double kRegisterCarriedTolerance = 1e-3;
   std::vector<double> objectiveTrace = {objective()};
-  int consecutiveStalls = 0;
+  int trapDoorGrows = 0;   // consecutive cone-ins since the last improving move
+  Snapshot burstStart;     // complex state before the current unproductive grow burst
   for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex) {
-    const double objectiveDelta = step(nCandidates);
-    objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
-    if (objectiveDelta >= -convergenceTolerance_) {
-      ++consecutiveStalls;
+    // INITIALIZATION ONLY: while establishing the boundary, let each not-yet-carrying
+    // region expand a shell so it can develop the holes that carry its state. Off
+    // during the bulk evolution — the boundary ∂W is then frozen.
+    if (growBoundaries) growBoundaryRegions();
+    const double objectiveDelta = step(nCandidateMoves);
+    if (objectiveDelta < -convergenceTolerance_) {
+      // An F-lowering surgery move: progress. Any preceding cone-ins led here, so
+      // keep them and reset the trap-door burst.
+      objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
+      trapDoorGrows = 0;
+      continue;
+    }
+    // No move lowered the objective. If the register is already carried, that IS
+    // convergence — halt (the trap door is unnecessary, and growing further would
+    // only disturb the carried state).
+    if (rU(spacetime_) < kRegisterCarriedTolerance) break;
+    // TRAP DOOR: grow via a gated cone-in so the optimizer escapes a too-small
+    // complex instead of giving up.
+    if (trapDoorGrows == 0) burstStart = snapshot();   // remember the pre-burst state
+    const double growthDelta = trapDoorMove(nCandidateMoves);
+    if (!std::isfinite(growthDelta)) {
+      // No gated move applied in this batch of random tries. Reseed and retry on the
+      // next iteration rather than halting the whole run: with an advanced RNG a
+      // valid move almost always appears (one batch missing is not a true dead end).
+      // `maxSteps` bounds the retries. This is the other half of in-run stall
+      // recovery — without it a single missed batch ends a long call early, which
+      // is exactly what chunking used to paper over.
       randomNumberGenerator_.seed(randomNumberGenerator_());
-      if (consecutiveStalls >= patience) break;
-    } else {
-      consecutiveStalls = 0;
+      continue;
+    }
+    objectiveTrace.push_back(objectiveTrace.back() + growthDelta);
+    if (++trapDoorGrows >= patience) {
+      // `patience` cone-ins with no improving move in between: this grow burst is
+      // not helping. Revert the whole unproductive burst, reseed, and try a FRESH
+      // trajectory from the reverted state rather than halting — the stall recovery
+      // happens within this run, so a single long call is as robust as many short
+      // ones (no need for the caller to chunk its run_stage1 budget). `maxSteps`
+      // still bounds the loop.
+      spacetime_ = build(burstStart);
+      objectiveTrace.push_back(objective());
+      randomNumberGenerator_.seed(randomNumberGenerator_());
+      trapDoorGrows = 0;
     }
   }
   return objectiveTrace;
@@ -483,10 +583,24 @@ void MultiCobordism::constructBlocks(
       const auto &chosenCell =
           cellsInsideRegion[randomNumberGenerator_() % cellsInsideRegion.size()];
       auto candidateSpacetime = build(roundSnapshot);
-      const bool moveWasApplied =
-          (randomNumberGenerator_() % 2)
-              ? SurgicalCone(candidateSpacetime.get()).coneOut(chosenCell).first
-              : SurgicalCone(candidateSpacetime.get()).coneIn(chosenCell).first;
+      bool moveWasApplied;
+      if (randomNumberGenerator_() % 2) {
+        // cone-out removes the whole chosen top cell.
+        moveWasApplied =
+            SurgicalCone(candidateSpacetime.get()).coneOut(chosenCell).first;
+      } else {
+        // cone-in GROWS: a fresh apex joins a d-vertex FACET of the cell (drop one
+        // vertex) to form a new top cell. coneIn needs d targets, NOT the full
+        // (d+1)-vertex cell — same payload drawRandomMoveSpecification builds for a
+        // stage-1 cone_in. Passing the whole cell made every seeding cone-in fail
+        // the arg-count check, so seeding could only ever shrink, never grow.
+        std::vector<std::uint64_t> coneInFace = chosenCell;
+        coneInFace.erase(coneInFace.begin() +
+                         static_cast<std::ptrdiff_t>(randomNumberGenerator_() %
+                                                     coneInFace.size()));
+        moveWasApplied =
+            SurgicalCone(candidateSpacetime.get()).coneIn(coneInFace).first;
+      }
       if (!moveWasApplied ||
           !EigenstateSynthesis(candidateSpacetime, dualComplexGateDegree_)
                .dualComplexValid()
