@@ -99,7 +99,20 @@ class Proton {
   [[nodiscard]] double diquarkResidual();
 
  private:
+  /// Lazily run `build()` with default parameters on first accessor use.
   void ensureBuilt();
+  /// A closed S⁴ host (Betti `[1,0,0,0,1]`) — the bare `∂Δ⁵` sphere refined by
+  /// `nRefine` PreGeometric Pachner moves so surgery has room to act (a port of
+  /// `examples/cobordism/emergent_optimizer.build_closed_s4`).
+  [[nodiscard]] static std::shared_ptr<Spacetime> buildClosedS4Host(
+      int nRefine, std::uint64_t seed);
+  /// The top cells of `full` whose vertices all lie in `vertexSet`, rebuilt as a
+  /// sub-complex with the **relaxed** edge lengths of `full` copied in (unlike the
+  /// unit-metric `MultiCobordism::subcomplexWithinVertexSet`). Null when the
+  /// region contains no full cell.
+  [[nodiscard]] static std::shared_ptr<Spacetime> carveRelaxedSubcomplex(
+      const std::shared_ptr<Spacetime> &full,
+      const std::set<std::uint64_t> &vertexSet);
 
   // ---- configuration ----
   std::uint64_t baseSeed_;
@@ -116,18 +129,6 @@ class Proton {
   std::vector<std::vector<std::uint64_t>> quarkHoles_;
   double colorResidual_ = 0.0;
   double diquarkResidual_ = 0.0;
-
-  // Stored stage parameters so the lazy accessors can run build() with the
-  // configuration the first caller (if any) chose.
-  int maxRestarts_ = 16;
-  int constructRounds_ = 12;
-  int stage1MaxSteps_ = 30;
-  int stage1Candidates_ = 8;
-  int stage1Patience_ = 8;
-  double stage2Beta_ = 1.0;
-  int stage2MaxIters_ = 20;
-  double colorTolerance_ = 0.5;
-  int minQuarkHoles_ = 3;
 };
 
 }  // namespace tessera::cobordism
