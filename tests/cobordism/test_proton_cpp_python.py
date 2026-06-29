@@ -45,26 +45,24 @@ class ProtonBuildTest(unittest.TestCase):
     """Slow: the real two-step emergent build (Step A recombination then Step B
     formation, with restarts)."""
 
-    # Pinned to a fast, bounded, verified-converging config. The build trajectory is
-    # nondeterministic (threaded eigensolves reorder floating-point sums, so the "best
-    # move" — and how soon r_U carries — varies run to run). A small pre-grown host
-    # (host_refinement) + capped steps + max_restarts bound the worst case to ~1-2 min
-    # while still converging (colorR → 0, ≥3 holes). The minimal-∂Δ⁵-seed + trap-door
-    # path (growing a register out of a single simplex) is covered fast by
-    # test_trap_door_python.py; here we just confirm the two-step proton assembles.
+    # Minimal-∂Δ⁵-seed build (there is no host-refinement knob — pre-building a host is
+    # the very footgun this class avoids; all topology emerges via the trap door). It
+    # converges reliably for this seed, but the runtime is VARIABLE: threaded eigensolves
+    # reorder floating-point sums, so the "best move" — and thus how soon r_U carries —
+    # varies run to run (this build can finish in ~1 min or take several). max_restarts
+    # is cross-machine headroom; the fast minimal-seed growth itself is covered by
+    # test_trap_door_python.py.
     SEED = 1
-    HOST_REFINEMENT = 12
     MAX_RESTARTS = 2
-    INIT_STEPS = 80
-    EVOLVE_STEPS = 20
+    INIT_STEPS = 180
+    EVOLVE_STEPS = 60
     STAGE1_CANDIDATE_MOVES = 8
     STAGE2_ITERS = 10
     COLOR_TOL = 0.5
 
     @classmethod
     def setUpClass(cls):
-        cls.p = tessera.cobordism.Proton(seed=cls.SEED,
-                                         host_refinement=cls.HOST_REFINEMENT)
+        cls.p = tessera.cobordism.Proton(seed=cls.SEED)
         cls.p.build(max_restarts=cls.MAX_RESTARTS, init_steps=cls.INIT_STEPS,
                     evolve_steps=cls.EVOLVE_STEPS,
                     stage1_candidate_moves=cls.STAGE1_CANDIDATE_MOVES,

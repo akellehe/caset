@@ -35,13 +35,12 @@ using ::tessera::spacetime::Spacetime;
 /// physical observables (charge/mass/radius/spin) **off** `block()`; those reads
 /// are out of scope here.
 ///
-/// `build()` builds the closed-S⁴ hosts internally (a port of
-/// `examples/cobordism/emergent_optimizer.build_closed_s4`), runs **A then B**,
-/// and **restarts across distinct seeds** (the two-step converges less often than
-/// a single merge) until step B's proton block carries the 3-vector singlet with
-/// at least `minQuarkHoles` (default 3) emergent color holes. The accessors
-/// lazily trigger `build()` on first use, so `Proton p; auto b = p.block();`
-/// just works.
+/// `build()` grows each step out of a **bare ∂Δ⁵ minimal seed** (the proton never
+/// pre-refines its own host — all topology emerges via the trap door), runs **A then
+/// B**, and **restarts across distinct seeds** (the two-step converges less often than
+/// a single merge) until step B's whole cobordism carries the 3-vector singlet with at
+/// least `minQuarkHoles` (default 3) emergent color holes. The accessors lazily trigger
+/// `build()` on first use, so `Proton p; auto b = p.block();` just works.
 class Proton {
  public:
   /// ω = `exp(2πi/3)`, the unit color-charge phase.
@@ -50,12 +49,10 @@ class Proton {
   /// drives the proton block to carry.
   [[nodiscard]] static std::vector<std::complex<double>> singlet();
 
-  /// Configure a proton build. Physics (the targets, the two-step structure) is
-  /// fixed; only the substrate/optimization knobs are exposed.
+  /// Configure a proton build. Physics (the targets, the two-step structure) and the
+  /// bare ∂Δ⁵ minimal seed are fixed; only the optimization knobs are exposed.
   ///   * `seed`           — base RNG seed; restart `i` uses A-seed `seed+2i`,
   ///                        B-seed `seed+2i+1` (A and B always distinct).
-  ///   * `hostRefinement` — Pachner refinements of the bare ∂Δ⁵ seed (default 0 —
-  ///                        the minimal closed seed; the trap door grows it).
   ///   * `registerDegree` — the color register degree `k` (3 on a 4-manifold,
   ///                        where `ker L_{d-1}` is the register holes).
   ///   * `gamma`          — Γ in `F = ‖∇S_Regge‖² + Γ·r_U`, chosen so Γ·r_U sits on
@@ -63,9 +60,8 @@ class Proton {
   ///                        register is never driven to carry).
   ///   * `inputWeight`    — weight on the input residuals so the diquark/quark
   ///                        inputs are driven to carry rather than dissolve.
-  explicit Proton(std::uint64_t seed = 0, int hostRefinement = 0,
-                  int registerDegree = 3, double gamma = 50.0,
-                  double inputWeight = 20.0);
+  explicit Proton(std::uint64_t seed = 0, int registerDegree = 3,
+                  double gamma = 50.0, double inputWeight = 20.0);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -106,15 +102,14 @@ class Proton {
  private:
   /// Lazily run `build()` with default parameters on first accessor use.
   void ensureBuilt();
-  /// A closed S⁴ host (Betti `[1,0,0,0,1]`) — the bare `∂Δ⁵` sphere refined by
-  /// `nRefine` PreGeometric Pachner moves so surgery has room to act (a port of
-  /// `examples/cobordism/emergent_optimizer.build_closed_s4`).
-  [[nodiscard]] static std::shared_ptr<Spacetime> buildClosedS4Host(
-      int nRefine, std::uint64_t seed);
+  /// The minimal closed seed: a bare `∂Δ⁵` sphere (S⁴, Betti `[1,0,0,0,1]`, six
+  /// pentatopes) with a mild deterministic non-uniform metric. The proton grows all of
+  /// its topology out of this via the trap door — there is deliberately no host
+  /// refinement (that would pre-build topology that must instead emerge).
+  [[nodiscard]] static std::shared_ptr<Spacetime> buildMinimalSeed();
 
   // ---- configuration ----
   std::uint64_t baseSeed_;
-  int hostRefinement_;
   int registerDegree_;
   double gamma_;
   double inputResidualWeight_;

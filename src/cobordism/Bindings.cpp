@@ -867,9 +867,9 @@ seeds until step B's proton block carries the singlet with >=3 color holes. The
 accessors lazily trigger build() on first use, so `Proton().block()` just works.
 Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc")
-      .def(py::init<std::uint64_t, int, int, double, double>(), py::arg("seed") = 0,
-           py::arg("host_refinement") = 0, py::arg("register_degree") = 3,
-           py::arg("gamma") = 50.0, py::arg("input_weight") = 20.0)
+      .def(py::init<std::uint64_t, int, double, double>(), py::arg("seed") = 0,
+           py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
+           py::arg("input_weight") = 20.0)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")

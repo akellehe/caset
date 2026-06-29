@@ -76,7 +76,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         # threading and output() stay covered by test_dag_recombination_routes_two_outputs.)
         Proton = tessera.cobordism.Proton
         self.assertEqual(len(Proton.singlet()), 3)            # the proton is a 3-vector
-        p = Proton(seed=3, host_refinement=10)
+        p = Proton(seed=3)
         p.build(max_restarts=1, construct_rounds=8, init_steps=8, evolve_steps=4,
                 stage1_candidate_moves=4, stage1_patience=4, stage2_max_iters=6,
                 min_quark_holes=1)
