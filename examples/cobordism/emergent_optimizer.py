@@ -52,8 +52,8 @@ def build_closed_s4(n_refine=20, seed=0):
     the bare `∂Δ⁵` sphere refined by `n_refine` PreGeometric stellar Pachner moves so
     surgery has somewhere to act (the minimal triangulation is too small)."""
     sig = T.Signature(_DIM, T.Lorentzian)
-    st = T.Spacetime(T.Metric(True, sig), T.CDT, 1.0, 1.0, T.PREFERRED,
-                     T.SimplexBoundarySphere(_DIM))
+    st = T.Spacetime(T.Metric(True, sig), T.HERMITIAN_WEIGHTED, 1.0, 1.0,
+                     T.PREFERRED, T.SimplexBoundarySphere(_DIM))
     st.build()
     for e in st.getEdgeList().toVector():
         e.setSquaredLength(1.0)

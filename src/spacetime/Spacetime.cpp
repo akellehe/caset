@@ -307,7 +307,8 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
   auto metric = std::make_shared<Metric>(
     true, Signature(dimensions, SignatureType::Lorentzian));
   auto st = std::make_shared<Spacetime>(
-    metric, SpacetimeType::CDT, 1.0, 1.0, Foliation::PREFERRED, std::nullopt);
+    metric, SpacetimeType::HERMITIAN_WEIGHTED, 1.0, 1.0, Foliation::PREFERRED,
+    std::nullopt);
 
   // One vertex per distinct id, created in ascending id order so the labels are
   // deterministic. Under the tracked-metric rule each vertex carries its single
