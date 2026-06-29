@@ -1824,10 +1824,11 @@ prepared states, reproduces the harmonic overlap.)doc")
            py::arg("seeds"), py::arg("rounds") = 24)
       .def("construct_outputs", &MultiCobordism::constructOutputs,
            py::arg("seeds"), py::arg("rounds") = 24)
-      .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
-           py::arg("n_candidates") = 12, py::arg("patience") = 8)
+      .def("run_stage1", &MultiCobordism::runStage1,
+           py::arg("max_iterations") = 200, py::arg("candidate_count") = 12,
+           py::arg("patience") = 8)
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
-           py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
+           py::arg("max_iterations") = 40, py::arg("alpha0") = 0.05)
       .def_property_readonly("st", &MultiCobordism::spacetime)
       .def_property_readonly("inputs", &MultiCobordism::inputs,
                              py::return_value_policy::reference_internal,
@@ -1852,9 +1853,9 @@ prepared states, reproduces the harmonic overlap.)doc")
            "literal input targets, `upstream` as (node_id, output_index) tuples "
            "whose outputs feed further inputs, and `output_targets` (one for a "
            "merge, two for a 2->2 recombination). Returns the node id.")
-      .def("run", &CobordismDAG::run, py::arg("stage1_max_steps") = 30,
-           py::arg("stage1_candidates") = 8, py::arg("stage1_patience") = 8,
-           py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 40,
+      .def("run", &CobordismDAG::run, py::arg("stage1_max_iterations") = 30,
+           py::arg("stage1_candidate_count") = 8, py::arg("stage1_patience") = 8,
+           py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iterations") = 40,
            "Run all nodes in topological order (raises on a cycle).")
       .def("output", &CobordismDAG::output, py::arg("node"),
            py::arg("output_index") = 0)

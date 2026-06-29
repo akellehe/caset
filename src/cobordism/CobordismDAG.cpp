@@ -25,9 +25,9 @@ int CobordismDAG::addNode(std::shared_ptr<Spacetime> host,
   return static_cast<int>(nodes_.size()) - 1;
 }
 
-void CobordismDAG::run(int stage1MaxSteps, int stage1Candidates,
+void CobordismDAG::run(int stage1MaxIterations, int stage1CandidateCount,
                        int stage1Patience, double stage2Beta,
-                       int stage2MaxIters) {
+                       int stage2MaxIterations) {
   const std::size_t n = nodes_.size();
   outputs_.assign(n, {});
   residuals_.assign(n, 0.0);
@@ -68,8 +68,8 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1Candidates,
         outSeeds.push_back(verts[v]->getId());
       opt.constructInputs(inSeeds, /*rounds=*/12);
       opt.constructOutputs(outSeeds, /*rounds=*/12);
-      opt.runStage1(stage1MaxSteps, stage1Candidates, stage1Patience);
-      opt.runStage2(stage2Beta, stage2MaxIters);
+      opt.runStage1(stage1MaxIterations, stage1CandidateCount, stage1Patience);
+      opt.runStage2(stage2Beta, stage2MaxIterations);
 
       residuals_[i] = opt.rU(opt.spacetime());
       outputs_[i] = nd.outputTargets;  // verified outputs, threaded downstream

@@ -99,9 +99,9 @@ class MultiCobordism {
   void constructInputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
   /// Grow each OUTPUT block's emergent sub-complex near its seed vertex.
   void constructOutputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
-  std::vector<double> runStage1(int maxSteps = 200, int nCandidates = 12,
+  std::vector<double> runStage1(int maxIterations = 200, int candidateCount = 12,
                                 int patience = 8);
-  std::vector<double> runStage2(double beta = 1.0, int maxIters = 40,
+  std::vector<double> runStage2(double beta = 1.0, int maxIterations = 40,
                                   double alpha0 = 0.05);
 
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return spacetime_; }
@@ -162,7 +162,7 @@ class MultiCobordism {
   [[nodiscard]] double deltaF(
       const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
       const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
-  double step(int nCandidates);
+  double step(int candidateCount);
 
   std::shared_ptr<Spacetime> spacetime_;
   std::vector<std::vector<std::complex<double>>> inputTargets_;

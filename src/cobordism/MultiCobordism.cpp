@@ -390,7 +390,7 @@ double MultiCobordism::deltaF(
   return gradientDelta + gamma_ * residualUDelta;
 }
 
-double MultiCobordism::step(int nCandidates) {
+double MultiCobordism::step(int candidateCount) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU = rU(spacetime_);
   std::set<std::vector<std::uint64_t>> baseCellSet;
@@ -399,7 +399,8 @@ double MultiCobordism::step(int nCandidates) {
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
-  for (int candidateIndex = 0; candidateIndex < nCandidates; ++candidateIndex) {
+  for (int candidateIndex = 0; candidateIndex < candidateCount;
+       ++candidateIndex) {
     const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
     auto candidateSpacetime = build(currentSnapshot);
     if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
@@ -418,12 +419,13 @@ double MultiCobordism::step(int nCandidates) {
   return 0.0;
 }
 
-std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidates,
+std::vector<double> MultiCobordism::runStage1(int maxIterations,
+                                                 int candidateCount,
                                                  int patience) {
   std::vector<double> objectiveTrace = {objective()};
   int consecutiveStalls = 0;
-  for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex) {
-    const double objectiveDelta = step(nCandidates);
+  for (int stepIndex = 0; stepIndex < maxIterations; ++stepIndex) {
+    const double objectiveDelta = step(candidateCount);
     objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
     if (objectiveDelta >= -convergenceTolerance_) {
       ++consecutiveStalls;
@@ -511,7 +513,7 @@ void MultiCobordism::constructBlocks(
   }
 }
 
-std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
+std::vector<double> MultiCobordism::runStage2(double beta, int maxIterations,
                                                  double alpha0) {
   auto edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
@@ -520,7 +522,8 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
   };
   std::vector<double> objectiveTrace = {fullObjective()};
   double stepScale = alpha0;
-  for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
+  for (int iterationIndex = 0; iterationIndex < maxIterations;
+       ++iterationIndex) {
     ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
     const auto gradientComponents = reggeSolver.actionGradientExact();
     const auto hessianRows = reggeSolver.actionHessianExact();  // rows of complex

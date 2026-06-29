@@ -100,12 +100,12 @@ class EmergentLoopTest(unittest.TestCase):
         # incremental T4 ΔF matches the full three-term recompute)
         for _ in range(6):
             before = opt.objective()
-            dF = opt.step(n_candidates=8)
+            dF = opt.step(candidate_count=8)
             after = opt.objective()
             self.assertLess(abs(after - (before + dF)), 1e-5)
             self.assertLessEqual(dF, 1e-9)                  # never a worsening move
 
-        trace = opt.run_stage1(max_steps=20, n_candidates=8, patience=6)
+        trace = opt.run_stage1(max_iterations=20, candidate_count=8, patience=6)
 
         # greedy: monotone non-increasing, F genuinely lowered, never negative
         self.assertTrue(all(trace[i + 1] <= trace[i] + 1e-6
@@ -130,7 +130,7 @@ class EmergentLoopTest(unittest.TestCase):
         # β‖∇S‖² + Γ·r_U — F decreases monotonically, the geometry term falls, the
         # inputs stay representable (every input vertex present), and it stays gated.
         g0 = eo._grad_norm2(opt.st)
-        s2 = opt.relax_stage2(beta=1.0, max_iters=4)
+        s2 = opt.relax_stage2(beta=1.0, max_iterations=4)
         self.assertTrue(all(s2[i + 1] <= s2[i] + 1e-9 for i in range(len(s2) - 1)))
         self.assertLessEqual(s2[-1], s2[0])
         self.assertLessEqual(eo._grad_norm2(opt.st), g0 + 1e-6)

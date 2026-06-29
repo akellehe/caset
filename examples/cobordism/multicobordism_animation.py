@@ -121,10 +121,11 @@ class MultiCobordismAnimator:
     # ---- one optimizer step (stage 1 = surgery, then stage 2 = relaxation) ----
     def _advance(self, frame):
         if frame < self.s1:
-            self.opt.run_stage1(max_steps=70, n_candidates=self.s1c, patience=10 ** 9)
+            self.opt.run_stage1(max_iterations=70, candidate_count=self.s1c,
+                                patience=10 ** 9)
             stage = 1
         else:
-            self.opt.run_stage2(beta=self.s2_beta, max_iters=1)
+            self.opt.run_stage2(beta=self.s2_beta, max_iterations=1)
             stage = 2
         self._record(stage)
 
@@ -315,8 +316,9 @@ def run_optimization(opt, visualize=False, save=None, degree=3, stage1_steps=70,
     ``save=...`` (GIF/MP4) to animate it step-by-step (slower); that returns the
     per-step history."""
     if not visualize and not save:
-        opt.run_stage1(max_steps=stage1_steps, n_candidates=stage1_candidates)
-        opt.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
+        opt.run_stage1(max_iterations=stage1_steps,
+                       candidate_count=stage1_candidates)
+        opt.run_stage2(beta=stage2_beta, max_iterations=stage2_iters)
         st = opt.st
         return {"F": float(opt.objective()),
                 "gradN2": float(cob.MultiCobordism.regge_action_gradient(st)),

@@ -314,8 +314,8 @@ class EmergentOptimizer:
         d_ru = self.r_u(cand) - base_ru
         return d_grad + self.gamma * d_ru
 
-    def step(self, n_candidates=12):
-        """One greedy step: draw `n_candidates` random single moves on the free part,
+    def step(self, candidate_count=12):
+        """One greedy step: draw `candidate_count` random single moves on the free part,
         score each by the incremental ΔF against the live base, commit the most-negative
         (if < 0). The winner's resulting complex is committed as-is; we never re-apply a
         spec (Pachner `propose` is non-deterministic across rebuilds). Returns ΔF."""
@@ -324,7 +324,7 @@ class EmergentOptimizer:
         base_g2_edges = base_solver.gradientNorm2OverEdges
         base_ru = self.r_u(self.st)
         base_cells = {_top_tuple(s) for s in self.st.getTopSimplices()}
-        specs = [self._random_spec(self.st) for _ in range(n_candidates)]
+        specs = [self._random_spec(self.st) for _ in range(candidate_count)]
         best_dF, best_snap = -self._tol, None
         for spec in specs:
             cand = self._build(snap)
@@ -339,13 +339,13 @@ class EmergentOptimizer:
             return best_dF
         return 0.0
 
-    def run_stage1(self, max_steps=200, n_candidates=12, patience=8):
+    def run_stage1(self, max_iterations=200, candidate_count=12, patience=8):
         """Greedy best-ΔF steps until `patience` consecutive no-ops, re-seeding the
         random stream on each stall (restart). Returns the F trace."""
         trace = [self.objective()]
         stalls = 0
-        for _ in range(max_steps):
-            dF = self.step(n_candidates)
+        for _ in range(max_iterations):
+            dF = self.step(candidate_count)
             trace.append(trace[-1] + dF)
             if dF >= -self._tol:
                 stalls += 1
@@ -357,7 +357,7 @@ class EmergentOptimizer:
         return trace
 
     # ----- Stage 2: continuous geometric relaxation (every edge free) -----
-    def relax_stage2(self, beta=1.0, max_iters=40, alpha0=0.05):
+    def relax_stage2(self, beta=1.0, max_iterations=40, alpha0=0.05):
         """Stage 2 (§6/§7): relax **every** edge squared-length toward a stationary point
         of `β‖∇S‖² + Γ·r_U`, re-opening the scale DOF Stage 1 froze. The inputs are held
         *representable*, not frozen — their residual terms are in the objective, so input
@@ -380,7 +380,7 @@ class EmergentOptimizer:
 
         trace = [full_f()]
         alpha = alpha0
-        for _ in range(max_iters):
+        for _ in range(max_iterations):
             rs = T.ReggeSolver(self.st, T.MatterConfiguration())
             g = np.asarray(rs.actionGradientExact(), dtype=complex)
             hmat = np.asarray(rs.actionHessianExact(), dtype=complex).reshape(len(g), len(g))
