@@ -65,21 +65,28 @@ class MultiCobordismCxxTest(unittest.TestCase):
         opt.run_stage1(max_steps=20, n_candidates=8, patience=8)
         self.assertGreaterEqual(list(CXX.betti(opt.st))[3], 1)  # a b₃ register emerged
 
-    def test_dag_chains_output_to_input(self):
-        cob, eo, w = tessera.cobordism, self.eo, self.w
-        dag = cob.CobordismDAG()
-        h0 = eo.build_closed_s4(n_refine=14, seed=3)
-        h1 = eo.build_closed_s4(n_refine=14, seed=4)
-        n0 = dag.add_node(h0, [[1, -1, 0], [1, 0, -1]], [], [[1, w, w * w]],
-                          degrees=[3], seed=3)
-        n1 = dag.add_node(h1, [[0, 1, -1]], [(n0, 0)], [[1, w, w * w]],
-                          degrees=[3], seed=4)
-        self.assertEqual(len(dag), 2)
-        dag.run(stage1_max_steps=8, stage1_candidates=4, stage1_patience=4,
-                stage2_max_iters=10)
-        self.assertEqual(len(dag.output(n1, 0)), 3)            # threaded + ran
-        self.assertTrue(math.isfinite(dag.residual(n0)))
-        self.assertTrue(math.isfinite(dag.residual(n1)))
+    def test_two_step_proton_via_canonical_class(self):
+        # Retrofit of the old hand-rolled proton-shaped DAG smoke (#503): the
+        # canonical two-step proton build now goes through tessera.cobordism.Proton
+        # (Step A recombination -> a *colored* diquark, Step B formation -> the
+        # color singlet) instead of a hand-wired CobordismDAG with the physically
+        # wrong all-singlet recipe. A fast smoke that both steps run end-to-end and
+        # expose the 3-vector proton singlet; the thorough convergence test lives in
+        # tests/cobordism/test_proton_cpp_python.py. (CobordismDAG's output->input
+        # threading and output() stay covered by test_dag_recombination_routes_two_outputs.)
+        Proton = tessera.cobordism.Proton
+        self.assertEqual(len(Proton.singlet()), 3)            # the proton is a 3-vector
+        p = Proton(seed=3, host_refinement=10)
+        p.build(max_restarts=1, construct_rounds=8, stage1_max_steps=8,
+                stage1_candidates=4, stage1_patience=4, stage2_max_iters=6,
+                min_quark_holes=1)
+        # both steps ran: Step A (diquark recombination) and Step B (proton formation)
+        self.assertTrue(math.isfinite(p.diquark_residual()))
+        self.assertTrue(math.isfinite(p.color_residual()))
+        # block() is the carved formation sub-complex (None only if nothing emerged)
+        block = p.block()
+        if block is not None:
+            self.assertGreater(len(block.getEdgeList().toVector()), 0)
 
     def test_recombination_two_in_two_out(self):
         # 2->2 recombination in ONE co-optimized node: 2 input pairs, 2 outputs.
@@ -109,6 +116,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         dag.run(stage1_max_steps=6, stage1_candidates=3, stage1_patience=3,
                 stage2_max_iters=6)
         self.assertEqual(dag.num_outputs(rec), 2)
+        self.assertEqual(len(dag.output(rec, 0)), 3)   # CobordismDAG.output() threading
         for nd in (rec, pro, apr):
             self.assertTrue(math.isfinite(dag.residual(nd)))
 
