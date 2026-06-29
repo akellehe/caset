@@ -124,5 +124,73 @@ class CrossCheckInstrument(unittest.TestCase):
                                    places=9)
 
 
+class JointExtractionObstructions(unittest.TestCase):
+    """The two facts that constrain any joint two-hole read off the field."""
+
+    def test_isotropic_heisenberg_preserves_j2(self):
+        # exp(i theta S_i.S_j) is a total-spin scalar => it cannot move <J^2> off the floor.
+        rng = np.random.default_rng(2)
+        u01 = np.kron(pw.isotropic_heisenberg(0.7), np.eye(2))
+        for _ in range(10):
+            psi = rng.normal(size=8) + 1j * rng.normal(size=8)
+            self.assertAlmostEqual(pw.pairwise_j2_from_state(psi),
+                                   pw.pairwise_j2_from_state(u01 @ psi), places=9)
+
+    def test_classical_field_outer_read_factorizes(self):
+        # a field-weighted joint amplitude over a pair's cells is rank-1 (a product): C_ij = 0
+        rng = np.random.default_rng(3)
+        u = rng.normal(size=(5, 2)); v = rng.normal(size=(5, 2)); f = rng.normal(size=5)
+        amp = sum(f[a] * f[b] * np.kron(u[a], v[b]) for a in range(5) for b in range(5))
+        self.assertEqual(np.linalg.matrix_rank(amp.reshape(2, 2), tol=1e-9), 1)
+
+
+class WernerJointState(unittest.TestCase):
+    """The field-sourced Werner read: a valid, covariant, nonzero-C_ij joint state."""
+
+    def test_correlated_pair_spin_values(self):
+        self.assertAlmostEqual(pw.spin_correlator(pw.correlated_pair(1.0)), -0.75, places=9)
+        self.assertAlmostEqual(pw.spin_correlator(pw.correlated_pair(0.0)), 0.25, places=9)
+        self.assertAlmostEqual(pw.spin_correlator(pw.correlated_pair(0.75)), -0.5, places=9)
+
+    def test_product_limit_recovers_the_floor(self):
+        u, d = np.array([1, 0], complex), np.array([0, 1], complex)
+        pairs = {(0, 1): pw.werner_pair(u, u, 0.0, 0.5),
+                 (0, 2): pw.werner_pair(u, d, 0.0, 0.5),
+                 (1, 2): pw.werner_pair(u, d, 0.0, 0.5)}
+        dec = pw.decomposition_from_pairs(pairs)
+        for c in dec["C_ij"].values():
+            self.assertAlmostEqual(c, 0.0, places=9)
+        self.assertAlmostEqual(dec["j2"], dec["j2_disconnected"], places=9)
+
+    def test_nonzero_lambda_makes_Cij_nonzero(self):
+        u, d = np.array([1, 0], complex), np.array([0, 1], complex)
+        dec = pw.decomposition_from_pairs({
+            (0, 1): pw.werner_pair(u, u, 0.5, 0.75),
+            (0, 2): pw.werner_pair(u, d, 0.5, 0.75),
+            (1, 2): pw.werner_pair(u, d, 0.5, 0.75)})
+        self.assertTrue(any(abs(c) > 1e-6 for c in dec["C_ij"].values()))
+
+    def test_werner_is_valid_density_matrix(self):
+        rng = np.random.default_rng(11)
+        for _ in range(8):
+            qi = rng.normal(size=2) + 1j * rng.normal(size=2); qi /= np.linalg.norm(qi)
+            qj = rng.normal(size=2) + 1j * rng.normal(size=2); qj /= np.linalg.norm(qj)
+            rho = pw.werner_pair(qi, qj, 0.6, 0.7)
+            self.assertAlmostEqual(float(np.trace(rho).real), 1.0, places=9)
+            self.assertLess(float(np.linalg.norm(rho - rho.conj().T)), 1e-9)
+            self.assertGreater(float(np.linalg.eigvalsh(rho).min()), -1e-9)
+
+    def test_rotational_covariance_of_Cij(self):
+        rng = np.random.default_rng(5)
+        qi, qj = np.array([1, 0], complex), np.array([0, 1], complex)
+        q, _ = np.linalg.qr(rng.normal(size=(2, 2)) + 1j * rng.normal(size=(2, 2)))
+
+        def cc(r):
+            return pw.connected_correlator(r, pw._ptrace_second(r), pw._ptrace_first(r))
+
+        self.assertAlmostEqual(cc(pw.werner_pair(qi, qj, 0.6, 0.7)),
+                               cc(pw.werner_pair(q @ qi, q @ qj, 0.6, 0.7)), places=9)
+
+
 if __name__ == "__main__":
     unittest.main()
