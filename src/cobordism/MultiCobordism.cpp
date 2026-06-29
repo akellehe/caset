@@ -11,6 +11,7 @@
 #include <Eigen/Dense>
 
 #include "cobordism/ChainComplex.h"
+#include "cobordism/DiracKahler.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
@@ -184,6 +185,83 @@ double MultiCobordism::residualOfTargetStateAgainstHarmonic(
   } while (std::next_permutation(targetPermutation.begin(),
                                  targetPermutation.end()));
   return bestResidual;
+}
+
+double MultiCobordism::diracKahlerSpinCasimir(
+    const std::shared_ptr<Spacetime> &spacetime) {
+  DiracKahler diracKahler(spacetime);
+  const auto flatGammas = diracKahler.gammas(/*lorentzian=*/false);
+  const std::size_t fiberDimension = diracKahler.gammaDimension();
+  std::vector<Eigen::MatrixXcd> gamma;
+  gamma.reserve(flatGammas.size());
+  for (const auto &flat : flatGammas) {
+    Eigen::MatrixXcd matrix(static_cast<int>(fiberDimension),
+                            static_cast<int>(fiberDimension));
+    for (std::size_t row = 0; row < fiberDimension; ++row)
+      for (std::size_t col = 0; col < fiberDimension; ++col)
+        matrix(static_cast<int>(row), static_cast<int>(col)) =
+            flat[row * fiberDimension + col];
+    gamma.push_back(std::move(matrix));
+  }
+  // S_a = -i Sigma_{jk} over the spatial plane perpendicular to axis a (cyclic over the
+  // spatial gammas 1,2,3); Sigma_ij = 1/4 [gamma_i, gamma_j] has eigenvalues +/- i/2, so
+  // S_a has +/- 1/2 and the Casimir Sum_a S_a^2 = 3/4 * I on the spin-1/2 fiber.
+  const int spatialPlane[3][2] = {{2, 3}, {3, 1}, {1, 2}};
+  Eigen::MatrixXcd casimir = Eigen::MatrixXcd::Zero(
+      static_cast<int>(fiberDimension), static_cast<int>(fiberDimension));
+  for (int axis = 0; axis < 3; ++axis) {
+    const int i = spatialPlane[axis][0];
+    const int j = spatialPlane[axis][1];
+    const Eigen::MatrixXcd sigma =
+        0.25 * (gamma[i] * gamma[j] - gamma[j] * gamma[i]);
+    const Eigen::MatrixXcd spinComponent =
+        std::complex<double>(0.0, -1.0) * sigma;
+    casimir += spinComponent * spinComponent;
+  }
+  return casimir.trace().real() / static_cast<double>(fiberDimension);  // -> 3/4
+}
+
+double MultiCobordism::holeDeficit(const std::shared_ptr<Spacetime> &spacetime,
+                                   const std::vector<std::uint64_t> &hole) {
+  const std::set<std::uint64_t> holeVertexSet(hole.begin(), hole.end());
+  double totalDeficit = 0.0;
+  for (const auto &simplex : spacetime->getSimplices()) {
+    if (simplex->getVertices().size() != 3) continue;  // hinges (triangles) in 4D
+    bool insideHole = true;
+    for (const auto *vertex : simplex->getVertices())
+      if (!holeVertexSet.count(vertex->getId())) {
+        insideHole = false;
+        break;
+      }
+    if (insideHole) totalDeficit += simplex->deficitAngle();
+  }
+  return totalDeficit;
+}
+
+double MultiCobordism::compositeSpinJ2(std::size_t outputBlockIndex) const {
+  if (outputBlockIndex >= outputs_.size())
+    throw std::runtime_error(
+        "MultiCobordism::compositeSpinJ2: output block index out of range");
+  const auto blockSubcomplex =
+      subcomplexWithinVertexSet(spacetime_, outputs_[outputBlockIndex].vertices);
+  if (!blockSubcomplex)
+    throw std::runtime_error(
+        "MultiCobordism::compositeSpinJ2: output block has no sub-complex");
+  const auto holes = emergentHoles(*blockSubcomplex, 3);
+  if (holes.size() < 3)
+    throw std::runtime_error(
+        "MultiCobordism::compositeSpinJ2: output block has no 3-hole (b3) register");
+  // Materialize the skeleton once so the hinges carry deficit angles.
+  const ReggeSolver reggeSolver(blockSubcomplex, MatterConfiguration());
+  (void)reggeSolver;
+  const double spinHalfCasimir = diracKahlerSpinCasimir(blockSubcomplex);  // 3/4
+  // The pair-loop gamma_ij is the Poincare dual of the complementary hole k, so each of
+  // the three holes is dual to exactly one pair: Sum_{i<j} <S_i.S_j> = Sum_k 1/4 cos(eps_k).
+  double crossTermSum = 0.0;
+  for (std::size_t holeIndex = 0; holeIndex < 3; ++holeIndex)
+    crossTermSum +=
+        0.25 * std::cos(holeDeficit(blockSubcomplex, holes[holeIndex]));
+  return 3.0 * spinHalfCasimir + 2.0 * crossTermSum;
 }
 
 std::shared_ptr<Spacetime> MultiCobordism::subcomplexWithinVertexSet(

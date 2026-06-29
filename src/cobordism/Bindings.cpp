@@ -910,7 +910,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              "The emergent input blocks (each a MultiCobordismBlock).")
       .def_property_readonly("outputs", &MultiCobordism::outputs,
                              py::return_value_policy::reference_internal,
-                             "The emergent output blocks (each a MultiCobordismBlock).");
+                             "The emergent output blocks (each a MultiCobordismBlock).")
+      .def("composite_spin_j2", &MultiCobordism::compositeSpinJ2,
+           py::arg("output_block_index") = 0,
+           "Loops-as-quarks composite spin J^2 of an output block: the pair-loop "
+           "closed-loop holonomy is the deficit at the Poincare-dual (complementary) "
+           "hole, lifted through the DiracKahler spin-1/2 double cover to "
+           "<S_i.S_j> = 1/4 cos(eps_k); J^2 = 9/4 + 1/2 Sum_k cos(eps_k). Reduces to the "
+           "closed-loop holonomy / pairwise C_ij (floors above the entangled proton 3/4). "
+           "Raises if the block has no 3-hole register.");
 
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",

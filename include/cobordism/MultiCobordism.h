@@ -112,6 +112,22 @@ class MultiCobordism {
     return outputs_;
   }
 
+  /// # Composite spin — loops-as-quarks closed-loop holonomy (#517)
+  /// The total-spin Casimir \f$ J^2 \f$ of output block `outputBlockIndex`, read in the
+  /// edge (loops-as-quarks) basis. The pair-encircling loop \f$ \gamma_{ij} \f$ is the
+  /// Poincare dual of the complementary hole \f$ k \f$, so its closed-loop spin holonomy is
+  /// the deficit \f$ \varepsilon_k \f$ at hole \f$ k \f$ (sum of `deficitAngle` over the
+  /// hole's hinges), lifted through the Dirac-Kahler spin-1/2 double cover to the pairwise
+  /// correlation \f$ \langle S_i\cdot S_j\rangle = \tfrac14\cos\varepsilon_k \f$. Then
+  /// \f[ J^2 = 3\cdot\tfrac34 + 2\sum_{i<j}\langle S_i\cdot S_j\rangle
+  ///         = \tfrac94 + \tfrac12\sum_k \cos\varepsilon_k, \f]
+  /// the \f$ \tfrac34 \f$ being the structural spin-1/2 Casimir of one `DiracKahler` fiber.
+  /// Honest: this reduces to the closed-loop holonomy / pairwise correlator and **floors**
+  /// above the entangled proton \f$ \tfrac34 \f$ (it does not bypass the fiber-cells kernel);
+  /// the value now lives on the source-of-truth class. Throws if the block has no 3-hole
+  /// (\f$ b_3 \f$) register.
+  [[nodiscard]] double compositeSpinJ2(std::size_t outputBlockIndex = 0) const;
+
  private:
   using Snapshot =
       std::pair<std::vector<std::vector<std::uint64_t>>,
@@ -141,6 +157,17 @@ class MultiCobordism {
                        std::vector<BoundaryBlock> &destinationBlocks, int rounds);
   // All pinned boundary (input + output) vertices — none may be removed by a move.
   [[nodiscard]] std::set<std::uint64_t> boundaryVerts() const;
+
+  /// The structural spin-1/2 Casimir Sum_a S_a^2 = 3/4 of one Dirac-Kahler constituent,
+  /// from the spatial rotation generators Sigma_ij = 1/4 [gamma_i, gamma_j] of `DiracKahler`.
+  [[nodiscard]] static double diracKahlerSpinCasimir(
+      const std::shared_ptr<Spacetime> &spacetime);
+  /// The closed-loop spin holonomy of the pair-loop dual to `hole`: the total deficit at the
+  /// hole, Sum of `deficitAngle` over its hinge (triangle) faces, on the already-materialized
+  /// `spacetime` (skeleton built by a ReggeSolver in `compositeSpinJ2`).
+  [[nodiscard]] static double holeDeficit(
+      const std::shared_ptr<Spacetime> &spacetime,
+      const std::vector<std::uint64_t> &hole);
 
   [[nodiscard]] Snapshot snapshotOf(const Spacetime &spacetime) const;
   [[nodiscard]] Snapshot snapshot() const;
