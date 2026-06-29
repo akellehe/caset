@@ -52,8 +52,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The 2→2 recombination this demo animates: two neutral q-q̄ pairs in, a diquark ⊔
 # anti-diquark out (#491). The diquark color is the canonical √3-normalized 3̄ anti-
-# triplet (`FixedBipartiteSequenceTopology`); the anti-diquark is the conjugate triplet
-# on a distinct color axis.
+# triplet; the anti-diquark is the conjugate triplet on a distinct color axis.
 _PAIRS = [[1, -1, 0], [1, 0, -1]]                  # two neutral q-q̄ color combos (Σ = 0)
 _DIQUARK = [math.sqrt(3.0), 0.0, 0.0]              # canonical 3̄ anti-triplet
 _ANTIDIQUARK = [0.0, math.sqrt(3.0), 0.0]          # conjugate triplet, distinct axis

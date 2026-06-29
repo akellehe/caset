@@ -22,6 +22,73 @@ import tessera
 cobordism = tessera.cobordism
 
 
+def _are_isomorphic(a, b):
+    """Whether two triangulations (lists of top-simplex vertex tuples) are
+    isomorphic under a vertex relabeling. Replaces the retired
+    cob.Cobordism.areIsomorphic with the same degree-pruned, order-preserving
+    backtracking bijection search."""
+    def normalize(simplices):
+        verts = sorted({v for s in simplices for v in s})
+        dense = {v: i for i, v in enumerate(verts)}
+        return (len(verts),
+                frozenset(tuple(sorted(dense[v] for v in s)) for s in simplices))
+
+    nva, sa = normalize(a)
+    nvb, sb = normalize(b)
+    if nva != nvb or len(sa) != len(sb):
+        return False
+    if nva == 0:
+        return True
+    width_a = {len(s) for s in sa}
+    width_b = {len(s) for s in sb}
+    if width_a != width_b:
+        return False
+
+    def degrees(simplices, nv):
+        deg = [0] * nv
+        for s in simplices:
+            for v in s:
+                deg[v] += 1
+        return deg
+
+    deg_a = degrees(sa, nva)
+    deg_b = degrees(sb, nvb)
+    if sorted(deg_a) != sorted(deg_b):
+        return False
+
+    simplices_of = [[] for _ in range(nva)]
+    for s in sa:
+        for v in s:
+            simplices_of[v].append(s)
+    order = sorted(range(nva), key=lambda x: (-deg_a[x], x))
+    mapping = [-1] * nva
+    used_b = [False] * nvb
+
+    def backtrack(pos):
+        if pos == nva:
+            return True
+        u = order[pos]
+        for w in range(nvb):
+            if used_b[w] or deg_b[w] != deg_a[u]:
+                continue
+            mapping[u] = w
+            used_b[w] = True
+            consistent = True
+            for simplex in simplices_of[u]:
+                if any(mapping[v] < 0 for v in simplex):
+                    continue
+                if tuple(sorted(mapping[v] for v in simplex)) not in sb:
+                    consistent = False
+                    break
+            if consistent and backtrack(pos + 1):
+                return True
+            mapping[u] = -1
+            used_b[w] = False
+        return False
+
+    return backtrack(0)
+
+
 def _build(topology):
     sig = tessera.Signature(topology.dimension(), tessera.Lorentzian)
     metric = tessera.Metric(True, sig)
@@ -103,7 +170,7 @@ class TestT3Retriangulations(unittest.TestCase):
     def test_triangulations_are_non_isomorphic(self):
         product = _top_simplices(_t3_product())
         subdivided = _top_simplices(_t3_subdivided())
-        self.assertFalse(cobordism.Cobordism.areIsomorphic(product, subdivided))
+        self.assertFalse(_are_isomorphic(product, subdivided))
 
     def test_homologically_equal_but_combinatorially_distinct(self):
         # Same manifold (equal Betti) ...
@@ -119,7 +186,7 @@ class TestT3Retriangulations(unittest.TestCase):
     def test_each_triangulation_self_isomorphic(self):
         # Sanity guard on the negative result above: areIsomorphic is reflexive.
         product = _top_simplices(_t3_product())
-        self.assertTrue(cobordism.Cobordism.areIsomorphic(product, product))
+        self.assertTrue(_are_isomorphic(product, product))
 
     def test_subdivision_remains_a_closed_manifold(self):
         self.assertTrue(_is_closed_manifold(_top_simplices(_t3_subdivided())))
@@ -142,7 +209,7 @@ class TestStellarSubdivisionPreservesTopology(unittest.TestCase):
         self.assertEqual(len({v for t in s for v in t}),
                          len({v for t in b for v in t}) + 1)
         # ... a genuine retriangulation, not a relabeling.
-        self.assertFalse(cobordism.Cobordism.areIsomorphic(b, s))
+        self.assertFalse(_are_isomorphic(b, s))
 
     def test_iterated_subdivision_preserves_three_torus(self):
         once = _t3_subdivided()
@@ -151,7 +218,7 @@ class TestStellarSubdivisionPreservesTopology(unittest.TestCase):
         self.assertTrue(_is_closed_manifold(_top_simplices(twice)))
         o, t = _top_simplices(once), _top_simplices(twice)
         self.assertEqual(len(t), len(o) + 3)                 # one further move
-        self.assertFalse(cobordism.Cobordism.areIsomorphic(o, t))
+        self.assertFalse(_are_isomorphic(o, t))
 
 
 class TestClosedThreeManifoldInvariants(unittest.TestCase):

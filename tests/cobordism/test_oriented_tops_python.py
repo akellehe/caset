@@ -160,7 +160,7 @@ class TestFundamentalClassRequiresClosedOriented(unittest.TestCase):
 
     def test_closed_oriented_fixtures_still_return_pm1_class(self):
         # The fix must leave b_d = 1 untouched: a valid ±1 fundamental class is
-        # still returned (DijkgraafWitten depends on this).
+        # still returned (the oriented state-sum weight depends on this).
         for topology, dimension in ((_two_sphere(), 2),
                                     (_torus(), 2),
                                     (_three_torus(), 3)):

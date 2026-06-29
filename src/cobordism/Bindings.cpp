@@ -854,7 +854,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       R"doc(Gated surgical cone-out/cone-in: the topology-CHANGING move (#460, T3).
 
 The genuine b_k-hole creator of the Emergent Color Topology epic (#457). Pachner
-moves and the stellar refinement cone (OrientedCone, T1/T2) are topology-
+moves and the orientation-safe stellar refinement cone (T1/T2) are topology-
 PRESERVING; this is not. coneOut removes one top cell (its orphaned edges, then
 any isolated vertex) -- on a closed manifold this opens a manifold-with-boundary
 and, for a cell disjoint from an existing hole, raises b_{d-1} by 1 (on S^3, the

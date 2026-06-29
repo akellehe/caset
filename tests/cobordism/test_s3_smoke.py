@@ -42,6 +42,34 @@ cob = tessera.cobordism
 
 ZERO_TOL = 1e-9  # the |lambda| < tol cut for a near-zero (harmonic) Hodge mode
 
+
+def _facet_connected_components(simplices):
+    """Split same-dimensional simplices into facet-connected pieces (two simplices
+    adjacent iff they share a codimension-one facet). Replaces the retired
+    cob.Cobordism.connectedComponents with the identical union-find."""
+    simplices = [tuple(sorted(s)) for s in simplices]
+    n = len(simplices)
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    owner = {}  # facet -> first simplex index owning it
+    for i, s in enumerate(simplices):
+        for drop in range(len(s)):
+            facet = s[:drop] + s[drop + 1:]
+            if facet in owner:
+                parent[find(i)] = find(owner[facet])
+            else:
+                owner[facet] = i
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(simplices[i])
+    return list(groups.values())
+
 # S^3 Betti / harmonic vector (b_0 = b_3 = 1, b_1 = b_2 = 0). S^3 x I deformation
 # retracts to S^3, so it carries the same homology (its b_4 = 0).
 S3_BETTI = [1, 0, 0, 1]
@@ -123,7 +151,7 @@ class TestS3Smoke(unittest.TestCase):
         boundary = _s3_cross_interval().getBoundary()
         # dW = two S^3 copies, 5 tetrahedra each = 10 boundary tetrahedra.
         self.assertEqual(len(boundary), 10)
-        self.assertEqual(len(cob.Cobordism.connectedComponents(boundary)), 2)
+        self.assertEqual(len(_facet_connected_components(boundary)), 2)
 
     def test_f5_determinism(self):
         """F5 (G7): two in-process builds give bit-for-bit identical spectra."""

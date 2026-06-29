@@ -18,8 +18,6 @@ analytic gradient):
 (The k=1 numerical equivalence with the established path is additionally guarded by
 `test_ru_gradient_gpu_python.py`, whose FP32 GPU oracle mirrors the prior CPU result.)
 """
-import cmath
-import math
 import os
 import sys
 import unittest
@@ -32,6 +30,24 @@ cob = T.cobordism
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _holed_surface import holed_surface  # noqa: E402
+
+
+def _refined_s3(n_refine=12):
+    # A refined S^3 (Betti [1,0,0,1]) with enough tetrahedra that a disjoint top-cell
+    # pair exists — the minimal S^3 has none (every facet pair shares a ridge).
+    sig = T.Signature(3, T.Lorentzian)
+    st = T.Spacetime(T.Metric(True, sig), T.CDT, 1.0, 1.0, T.PREFERRED,
+                     T.SimplexBoundarySphere(3))
+    st.build()
+    for e in st.getEdgeList().toVector():
+        e.setSquaredLength(1.0)
+    for seed in range(n_refine):
+        mv = T.AddMove(st, seed, False, T.PachnerMode.PreGeometric, False)
+        if mv.propose():
+            mv.apply()
+    for i, e in enumerate(st.getEdgeList().toVector()):
+        e.setSquaredLength(1.0 + 0.013 * (i % 6))
+    return st
 
 
 def _edge_l2(st):
@@ -69,19 +85,30 @@ class ArbitraryKRuGradientTest(unittest.TestCase):
 
     def test_k2_euler_on_b2_register(self):
         # k=2 (tetrahedral holes, the b₂ color register): the exact Euler identity is
-        # the analytic correctness certificate where no prior gradient existed.
-        surf = cob.S3WindowSurface.build(1, 1)
-        faces = [list(t) for t in surf.faces]
-        windows = [[list(h) for h in w] for w in surf.windows]
-        hs = {tuple(sorted(h)) for w in windows for h in w}
-        holed = [t for t in faces if tuple(sorted(t)) not in hs]
-        st = T.Spacetime.fromCells(3, [list(t) for t in holed], 1.0, 0.0)
-        for i, e in enumerate(st.getEdgeList().toVector()):
-            e.setSquaredLength(1.0 + 0.013 * (i % 6))
+        # the analytic correctness certificate where no prior gradient existed. The
+        # b₂ register is opened from first principles by a disjoint pair of surgical
+        # cone-outs on a refined S^3 (raising b₂ by 1); the Euler identity is exact on
+        # any such metric 3-complex and does not depend on the register's topology.
+        st = _refined_s3()
+        cells = sorted(tuple(sorted(v.getId() for v in c.getVertices()))
+                       for c in st.getTopSimplices())
+        pair = None
+        for i, a in enumerate(cells):
+            for b in cells[i + 1:]:
+                if set(a).isdisjoint(b):
+                    pair = (a, b)
+                    break
+            if pair:
+                break
+        self.assertIsNotNone(pair, "refined S^3 must contain a disjoint cell pair")
+        a, b = pair
+        sc = cob.SurgicalCone(st)
+        self.assertTrue(sc.coneOut(list(a))[0])   # opens the manifold (b₃ → 0)
+        self.assertTrue(sc.coneOut(list(b))[0])   # disjoint ⇒ raises b₂ by 1
+
         es = cob.EigenstateSynthesis(st, 2)
-        holes = [list(h) for h in windows[0]]
-        w = cmath.exp(2j * math.pi / 3)
-        target = [complex(x) + 0.21 for x in [1.0, w, w * w]]  # non-carriable ⇒ r_U > 0
+        holes = [list(a), list(b)]                 # 2 holes, 1 mode ⇒ over-constrained
+        target = [complex(1.0), complex(0.3)]      # non-carriable ⇒ r_U > 0
 
         r_u = es.residualForPeriods(holes, target)
         self.assertGreater(r_u, 1.0)

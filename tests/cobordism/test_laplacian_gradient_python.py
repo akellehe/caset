@@ -23,13 +23,26 @@ import tessera as T
 cob = T.cobordism
 
 
-def _holed_s3():
-    surf = cob.S3WindowSurface.build(1, 1)
-    faces = [list(t) for t in surf.faces]
-    windows = [[list(h) for h in w] for w in surf.windows]
-    hs = {tuple(sorted(h)) for w in windows for h in w}
-    holed = [t for t in faces if tuple(sorted(t)) not in hs]
-    st = T.Spacetime.fromCells(3, [list(t) for t in holed], 1.0, 0.0)
+def _holed_s3(n_refine=12):
+    # A refined S^3 (Betti [1,0,0,1]) opened by a surgical cone-out so it carries a
+    # nonempty b_2 register; the Euler-homogeneity identity below is exact on any
+    # such metric 3-complex (it does not depend on the register's topology).
+    sig = T.Signature(3, T.Lorentzian)
+    st = T.Spacetime(T.Metric(True, sig), T.CDT, 1.0, 1.0, T.PREFERRED,
+                     T.SimplexBoundarySphere(3))
+    st.build()
+    for e in st.getEdgeList().toVector():
+        e.setSquaredLength(1.0)
+    for seed in range(n_refine):
+        mv = T.AddMove(st, seed, False, T.PachnerMode.PreGeometric, False)
+        if mv.propose():
+            mv.apply()
+    tops = [tuple(sorted(v.getId() for v in c.getVertices()))
+            for c in st.getTopSimplices()]
+    sc = cob.SurgicalCone(st)
+    for t in tops:                      # open one hole (b_3 -> 0, exposes a 2-cycle)
+        if sc.coneOut(list(t))[0]:
+            break
     for i, e in enumerate(st.getEdgeList().toVector()):
         e.setSquaredLength(1.0 + 0.013 * (i % 6))
     return st
