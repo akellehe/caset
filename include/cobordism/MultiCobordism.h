@@ -113,10 +113,10 @@ class MultiCobordism {
 
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return spacetime_; }
   [[nodiscard]] const std::vector<BoundaryBlock> &inputs() const {
-    return inputs_;
+    return inputBlocks_;
   }
   [[nodiscard]] const std::vector<BoundaryBlock> &outputs() const {
-    return outputs_;
+    return outputBlocks_;
   }
 
  private:
@@ -206,8 +206,8 @@ class MultiCobordism {
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   double convergenceTolerance_ = 1e-9;
-  std::vector<BoundaryBlock> inputs_;
-  std::vector<BoundaryBlock> outputs_;
+  std::vector<BoundaryBlock> inputBlocks_;
+  std::vector<BoundaryBlock> outputBlocks_;
 };
 
 }  // namespace tessera::cobordism

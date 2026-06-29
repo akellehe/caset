@@ -232,7 +232,7 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // region and weighted by inputResidualWeight_ so they are not out-competed by the
   // whole/output term.
   double totalResidual = 0.0;
-  for (const auto &inputBlock : inputs_)
+  for (const auto &inputBlock : inputBlocks_)
     totalResidual +=
         inputResidualWeight_ * residualForBoundaryBlock(inputBlock, spacetime);
   if (outputTargets_.size() == 1) {
@@ -246,9 +246,9 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   } else {
     // Multiple outputs (e.g. a 2->2 recombination → diquark ⊔ antidiquark) live in
     // distinct regions: read each off its own constructed block.
-    for (const auto &outputBlock : outputs_)
+    for (const auto &outputBlock : outputBlocks_)
       totalResidual += residualForBoundaryBlock(outputBlock, spacetime);
-    if (inputs_.empty() && outputs_.empty())  // bare objective, nothing built yet
+    if (inputBlocks_.empty() && outputBlocks_.empty())  // bare objective, nothing built yet
       for (int registerDegree : registerDegrees_)
         for (const auto &outputTarget : outputTargets_)
           totalResidual += residualOfTargetStateAgainstHarmonic(
@@ -474,11 +474,11 @@ void MultiCobordism::growBoundaryRegions() {
     }
     block.vertices = std::move(expanded);
   };
-  for (auto &inputBlock : inputs_) growOneShell(inputBlock);
+  for (auto &inputBlock : inputBlocks_) growOneShell(inputBlock);
   // Localized OUTPUT blocks (a 2→2 recombination's diquark ⊔ antidiquark) grow the
   // same way; a SINGLE output reads off the whole and has no block here, so this is
   // a no-op for the formation node.
-  for (auto &outputBlock : outputs_) growOneShell(outputBlock);
+  for (auto &outputBlock : outputBlocks_) growOneShell(outputBlock);
 }
 
 std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
@@ -538,12 +538,12 @@ std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
 
 void MultiCobordism::constructInputs(const std::vector<std::uint64_t> &seeds,
                                         int rounds) {
-  constructBlocks(seeds, inputTargets_, inputs_, rounds);
+  constructBlocks(seeds, inputTargets_, inputBlocks_, rounds);
 }
 
 void MultiCobordism::constructOutputs(const std::vector<std::uint64_t> &seeds,
                                          int rounds) {
-  constructBlocks(seeds, outputTargets_, outputs_, rounds);
+  constructBlocks(seeds, outputTargets_, outputBlocks_, rounds);
 }
 
 void MultiCobordism::constructBlocks(
