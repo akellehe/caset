@@ -3,9 +3,10 @@
 """Loops-as-quarks composite-spin readout on MultiCobordism (#517, part of #410).
 
 `MultiCobordism.composite_spin_j2` reads the total-spin Casimir of an output block in the
-edge (loops-as-quarks) basis: the pair-loop is the Poincare dual of the complementary hole, so
-its closed-loop spin holonomy is that hole's deficit, lifted through the revived DiracKahler
-spin-1/2 double cover to <S_i.S_j> = 1/4 cos(eps_k); J^2 = 9/4 + 1/2 sum_k cos(eps_k).
+edge (loops-as-quarks) basis: the two-quark pair-loop literally encircles holes i,j
+(= gamma_i + gamma_j by cycle additivity), so it encloses the deficit eps_i + eps_j, lifted
+through the revived DiracKahler spin-1/2 double cover to <S_i.S_j> = 1/4 cos(eps_i + eps_j);
+J^2 = 9/4 + 1/2 sum_{i<j} cos(eps_i + eps_j).
 
 Two checks: a fast error-path test (raises without a 3-hole register), and a slow build test
 that drives the simultaneous pair-creation build and confirms the readout lands in the
@@ -72,7 +73,7 @@ class CompositeSpinReadoutTest(unittest.TestCase):
         if result is None:
             self.skipTest("no converged 3-hole proton block in the seed range")
         self.assertTrue(math.isfinite(result))
-        # J^2 = 9/4 + 1/2 sum_k cos(eps_k), cos in [-1,1] over 3 holes -> [3/4, 15/4]
+        # J^2 = 9/4 + 1/2 sum_{i<j} cos(eps_i+eps_j), cos in [-1,1] over 3 pairs -> [3/4, 15/4]
         self.assertGreaterEqual(result, 0.75 - 1e-6)
         self.assertLessEqual(result, 3.75 + 1e-6)
 

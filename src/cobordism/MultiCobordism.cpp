@@ -255,12 +255,18 @@ double MultiCobordism::compositeSpinJ2(std::size_t outputBlockIndex) const {
   const ReggeSolver reggeSolver(blockSubcomplex, MatterConfiguration());
   (void)reggeSolver;
   const double spinHalfCasimir = diracKahlerSpinCasimir(blockSubcomplex);  // 3/4
-  // The pair-loop gamma_ij is the Poincare dual of the complementary hole k, so each of
-  // the three holes is dual to exactly one pair: Sum_{i<j} <S_i.S_j> = Sum_k 1/4 cos(eps_k).
-  double crossTermSum = 0.0;
+  // The two-quark pair-loop gamma_ij LITERALLY encircles holes i and j; by cycle additivity
+  // gamma_ij = gamma_i + gamma_j, so the deficit it encloses is eps_i + eps_j (the curvature
+  // at the two encircled holes), and <S_i.S_j> = 1/4 cos(eps_i + eps_j). No duality assumed
+  // (this differs from the complementary-hole proxy by the Gauss-Bonnet constant).
+  double holeDeficits[3];
   for (std::size_t holeIndex = 0; holeIndex < 3; ++holeIndex)
+    holeDeficits[holeIndex] = holeDeficit(blockSubcomplex, holes[holeIndex]);
+  static const int pair[3][2] = {{0, 1}, {0, 2}, {1, 2}};
+  double crossTermSum = 0.0;
+  for (const auto &twoQuarkLoop : pair)
     crossTermSum +=
-        0.25 * std::cos(holeDeficit(blockSubcomplex, holes[holeIndex]));
+        0.25 * std::cos(holeDeficits[twoQuarkLoop[0]] + holeDeficits[twoQuarkLoop[1]]);
   return 3.0 * spinHalfCasimir + 2.0 * crossTermSum;
 }
 

@@ -114,13 +114,14 @@ class MultiCobordism {
 
   /// # Composite spin — loops-as-quarks closed-loop holonomy (#517)
   /// The total-spin Casimir \f$ J^2 \f$ of output block `outputBlockIndex`, read in the
-  /// edge (loops-as-quarks) basis. The pair-encircling loop \f$ \gamma_{ij} \f$ is the
-  /// Poincare dual of the complementary hole \f$ k \f$, so its closed-loop spin holonomy is
-  /// the deficit \f$ \varepsilon_k \f$ at hole \f$ k \f$ (sum of `deficitAngle` over the
-  /// hole's hinges), lifted through the Dirac-Kahler spin-1/2 double cover to the pairwise
-  /// correlation \f$ \langle S_i\cdot S_j\rangle = \tfrac14\cos\varepsilon_k \f$. Then
+  /// edge (loops-as-quarks) basis. The two-quark pair-loop \f$ \gamma_{ij} \f$ LITERALLY
+  /// encircles holes \f$ i,j \f$; by cycle additivity \f$ \gamma_{ij}=\gamma_i+\gamma_j \f$,
+  /// so the deficit it encloses is \f$ \varepsilon_i+\varepsilon_j \f$ (the curvature at the
+  /// two encircled holes; each `holeDeficit` sums `deficitAngle` over a hole's hinges),
+  /// lifted through the Dirac-Kahler spin-1/2 double cover to the pairwise correlation
+  /// \f$ \langle S_i\cdot S_j\rangle = \tfrac14\cos(\varepsilon_i+\varepsilon_j) \f$. Then
   /// \f[ J^2 = 3\cdot\tfrac34 + 2\sum_{i<j}\langle S_i\cdot S_j\rangle
-  ///         = \tfrac94 + \tfrac12\sum_k \cos\varepsilon_k, \f]
+  ///         = \tfrac94 + \tfrac12\sum_{i<j}\cos(\varepsilon_i+\varepsilon_j), \f]
   /// the \f$ \tfrac34 \f$ being the structural spin-1/2 Casimir of one `DiracKahler` fiber.
   /// Honest: this reduces to the closed-loop holonomy / pairwise correlator and **floors**
   /// above the entangled proton \f$ \tfrac34 \f$ (it does not bypass the fiber-cells kernel);
@@ -162,9 +163,10 @@ class MultiCobordism {
   /// from the spatial rotation generators Sigma_ij = 1/4 [gamma_i, gamma_j] of `DiracKahler`.
   [[nodiscard]] static double diracKahlerSpinCasimir(
       const std::shared_ptr<Spacetime> &spacetime);
-  /// The closed-loop spin holonomy of the pair-loop dual to `hole`: the total deficit at the
-  /// hole, Sum of `deficitAngle` over its hinge (triangle) faces, on the already-materialized
-  /// `spacetime` (skeleton built by a ReggeSolver in `compositeSpinJ2`).
+  /// The total deficit at a single hole: Sum of `deficitAngle` over its hinge (triangle)
+  /// faces, on the already-materialized `spacetime` (skeleton built by a ReggeSolver in
+  /// `compositeSpinJ2`). A two-quark pair-loop's enclosed deficit is the sum over the two
+  /// holes it encircles.
   [[nodiscard]] static double holeDeficit(
       const std::shared_ptr<Spacetime> &spacetime,
       const std::vector<std::uint64_t> &hole);
