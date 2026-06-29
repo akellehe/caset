@@ -180,5 +180,33 @@ class WernerJointState(unittest.TestCase):
                                cc(pw.werner_pair(q @ qi, q @ qj, 0.6, 0.7)), places=9)
 
 
+class EmergentColorRead(unittest.TestCase):
+    """The surviving-APIs color-phase read (pure numpy): measured periods → nonzero C_ij."""
+
+    def test_ideal_singlet_periods_give_120deg_and_nonzero_Cij(self):
+        import cmath
+        import math
+        w = cmath.exp(2j * math.pi / 3)
+        dec = pw.emergent_color_pairwise([1, w, w * w], residual=0.0)
+        for v in dec["phases"].values():                       # 120-degree inter-hole phases
+            self.assertAlmostEqual(abs(v), 2 * math.pi / 3, places=6)
+        self.assertAlmostEqual(dec["j2_disconnected"], 2.25, places=6)   # the 9/4 baseline
+        for c in dec["C_ij"].values():                         # purely color-phase-sourced
+            self.assertAlmostEqual(c, -0.5, places=6)          # 120 deg -> <S.S>_corr = -1/2
+
+    def test_aligned_periods_are_triplet_like(self):
+        dec = pw.emergent_color_pairwise([1, 1, 1], residual=0.0)
+        for v in dec["phases"].values():
+            self.assertAlmostEqual(v, 0.0, places=6)
+        for c in dec["C_ij"].values():
+            self.assertAlmostEqual(c, 0.25, places=6)          # 0 phase -> triplet (+1/4)
+
+    def test_high_residual_recovers_product(self):
+        dec = pw.emergent_color_pairwise([1, 1, 1], residual=50.0)   # lam -> 0
+        for c in dec["C_ij"].values():
+            self.assertAlmostEqual(c, 0.0, places=6)
+        self.assertAlmostEqual(dec["j2"], dec["j2_disconnected"], places=6)
+
+
 if __name__ == "__main__":
     unittest.main()

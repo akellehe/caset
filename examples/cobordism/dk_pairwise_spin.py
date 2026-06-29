@@ -33,7 +33,12 @@ Pure NumPy; the spin lives in (C²)³. (`_j2_direct` is the self-contained full-
 reference: proton eigenstate → ¾, product |uud⟩ → 7/4, Δ |uuu⟩ → 15/4.) The emergent entry
 points at the bottom lazily import `tessera`.
 """
+import cmath
 import collections
+import importlib.util
+import math
+import os
+import sys
 
 import numpy as np
 import scipy.linalg
@@ -245,6 +250,90 @@ def decomposition_from_pairs(pairs):
             "C_ij": cij, "spin_correlators": corr, "bloch": blochs}
 
 
+# =====================================================================================
+# Emergent on-mesh read (surviving APIs only). #509 retired the DK spinor extraction +
+# Wilson transport, so the per-hole spin DIRECTION is no longer readable; what survives is
+# the MultiCobordism build and the COLOR read (EigenstateSynthesis.cyclePeriods). We source
+# the connected correlator from the measured inter-hole color phases — the faithful new
+# quantity — and use mutually-orthogonal reference spins so the disconnected baseline is the
+# 9/4 mixture (n_i.n_j = 0) and every nonzero C_ij is PURELY the color-phase contribution.
+# =====================================================================================
+_W3 = cmath.exp(2j * math.pi / 3)
+
+# Reference per-hole spins with mutually-orthogonal Bloch vectors (+z, +x, +y): the DK spin
+# direction is retired, so this fixes the disconnected baseline at 9/4 and isolates the
+# color-phase-sourced connected correlator.
+_REF_SPINS = [np.array([1, 0], complex),
+              np.array([1, 1], complex) / np.sqrt(2.0),
+              np.array([1, 1j], complex) / np.sqrt(2.0)]
+
+
+def emergent_color_pairwise(periods, residual=0.0, strength=None):
+    """Source the three pairwise Werner states from the measured per-hole cycle-periods
+    `periods` (complex, one per hole — `EigenstateSynthesis.cyclePeriods`) and the singlet
+    carry `residual`. The inter-hole color phase `arg(p_i/p_j)` sets the singlet/triplet
+    character (120 degrees -> w=3/4 -> <S.S>_corr=-1/2, the proton u-d value); the correlation
+    strength `lambda` defaults to `exp(-|residual|)` (a well-carried singlet -> strong
+    correlation). With the orthogonal reference spins the disconnected baseline is 9/4 and each
+    `C_ij` is purely the color-phase contribution. Returns `decomposition_from_pairs` plus
+    `phases` and `lam`. Pure NumPy (no tessera) — testable directly.
+
+    NOTE: summing three independent pairwise color correlations can push `j2` outside
+    `[0, 15/4]` (frustration / pairwise inconsistency) — the honest signal that a globally
+    consistent rho_ij, not three independent reads, is the remaining kernel."""
+    p = [complex(x) for x in periods][:3]
+    lam = float(np.clip(math.exp(-abs(residual)) if strength is None else strength, 0.0, 1.0))
+    pairs, phases = {}, {}
+    for (i, j) in [(0, 1), (0, 2), (1, 2)]:
+        dphi = float(np.angle(p[i] / p[j])) if abs(p[j]) > 1e-30 else 0.0
+        phases[(i, j)] = dphi
+        pairs[(i, j)] = werner_pair(_REF_SPINS[i], _REF_SPINS[j], lam, (1.0 - math.cos(dphi)) / 2.0)
+    out = decomposition_from_pairs(pairs)
+    out["phases"], out["lam"] = phases, lam
+    return out
+
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_example(name):
+    """Load a sibling example module (lazy: pulls in `tessera` only when first called)."""
+    sys.path.insert(0, _HERE)
+    spec = importlib.util.spec_from_file_location(name, os.path.join(_HERE, name + ".py"))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def build_emergent_proton(seed=3, n_refine=18, rounds=24, stage1_steps=60,
+                          stage1_patience=12, stage2_iters=20):
+    """Build a 3-hole proton color register on current main via `MultiCobordism` (the
+    pre-retirement DK spinor machinery is gone; only the build + color readout survive), and
+    return `(st, holes, periods, residual)` where `periods = cyclePeriods(holes)` and
+    `residual = r_state(st, 3, [1,w,w^2])`. `None` if no 3-hole register emerged. Lazy tessera."""
+    import tessera as T
+    cob = T.cobordism
+    eo = _load_example("emergent_optimizer")
+    host = eo.build_closed_s4(n_refine=n_refine, seed=seed)
+    opt = cob.MultiCobordism(host, [[1, -1, 0], [1, 0, -1], [0, 1, -1]],
+                             [[1, _W3, _W3 * _W3], [1, _W3 * _W3, _W3]],
+                             degrees=[3], gamma=1.0, seed=seed)
+    sv = [v.getId() for v in host.getVertexList().toVector()]
+    opt.construct_inputs(sv[:3], rounds=rounds)
+    opt.construct_outputs(sv[3:5], rounds=rounds)
+    opt.run_stage1(max_steps=stage1_steps, n_candidates=10, patience=stage1_patience)
+    opt.run_stage2(beta=1.0, max_iters=stage2_iters)
+    st = opt.st
+    holes = cob.MultiCobordism.emergent_holes(st, 3)
+    if len(holes) < 3:
+        return None
+    holes = holes[:3]
+    periods = list(cob.EigenstateSynthesis(st, 3).cyclePeriods(holes))
+    residual = cob.MultiCobordism.r_state(st, 3, [1, _W3, _W3 * _W3])
+    return st, holes, periods, residual
+
+
 # ----- demo (clean hand-fed states; the emergent entry points are appended once wired) -----
 _UP = np.array([1, 0], complex)
 _DN = np.array([0, 1], complex)
@@ -277,6 +366,33 @@ def main():
               f"{d['j2_connected']:>9.4f}   {cij}")
     print("\n  proton 3/4 (its per-hole Bloch read floors at 9/4; the connected part carries")
     print("  the -3/2). product |uud> 7/4. Delta 15/4. C_ij = 0 iff product.")
+
+    # Emergent on-mesh read (surviving APIs; needs a current-main tessera build).
+    try:
+        import tessera  # noqa: F401
+    except Exception as exc:
+        print(f"\n  [emergent demo skipped: tessera not built: {exc}]")
+        return
+    print("\nEmergent proton (MultiCobordism build; surviving-APIs color-phase read):")
+    res = None
+    for seed in range(3, 20):
+        res = build_emergent_proton(seed=seed)
+        if res is not None:
+            break
+    if res is None:
+        print("  no 3-hole register in the seed range (honest negative).")
+        return
+    _st, _holes, periods, residual = res
+    dec = emergent_color_pairwise(periods, residual)
+    ph = "  ".join(f"{i}{j}={v * 180 / math.pi:+.0f}deg" for (i, j), v in dec["phases"].items())
+    cij = "  ".join(f"{i}{j}={v:+.3f}" for (i, j), v in dec["C_ij"].items())
+    print(f"  seed {seed}: residual={residual:.3f}  lambda={dec['lam']:.3f}")
+    print(f"  inter-hole color phases: {ph}")
+    print(f"  connected C_ij (from measured phases): {cij}")
+    print(f"  J2={dec['j2']:.4f}  disconnected(9/4 baseline)={dec['j2_disconnected']:.4f}  "
+          f"connected={dec['j2_connected']:+.4f}")
+    print("  => measured color phases source nonzero C_ij (the product read forces 0); the")
+    print("  per-hole spin direction (disconnected baseline) is a DK-retired follow-up.")
 
 
 if __name__ == "__main__":
