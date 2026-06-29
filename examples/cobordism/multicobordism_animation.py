@@ -121,7 +121,12 @@ class MultiCobordismAnimator:
     # ---- one optimizer step (stage 1 = surgery, then stage 2 = relaxation) ----
     def _advance(self, frame):
         if frame < self.s1:
-            self.opt.run_stage1(max_steps=70, n_candidates=self.s1c, patience=10 ** 9)
+            # Exactly one greedy surgery step per frame — the animation advances "one move
+            # at a time" (see the module docstring). Keep this at 1: each step grows the
+            # complex and re-evaluates the global spectral r_U, so the per-frame cost climbs
+            # super-linearly with max_steps (a 70-step frame measured ~360x a 1-step frame,
+            # turning the ~9 s surgery phase into ~52 min). patience is irrelevant at 1 step.
+            self.opt.run_stage1(max_steps=1, n_candidates=self.s1c, patience=10 ** 9)
             stage = 1
         else:
             self.opt.run_stage2(beta=self.s2_beta, max_iters=1)
@@ -305,7 +310,7 @@ def animate(opt, save=None, interval=200, **kw):
 
 def run_optimization(opt, visualize=False, save=None, degree=3, stage1_steps=70,
                      stage1_candidates=10, stage2_iters=100, stage2_beta=1.0,
-                     interval=0):
+                     interval=200):   # ms/frame; keep > 0 — GIF/MP4 save() uses fps = 1000/interval
     """Run the two-stage optimization.
 
     Visualization is **off by default**: with ``visualize=False`` (and no
