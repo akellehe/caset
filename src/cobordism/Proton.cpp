@@ -22,7 +22,7 @@
 
 namespace tessera::cobordism {
 
-using cd = std::complex<double>;
+using complexd = std::complex<double>;
 
 namespace {
 constexpr int kDim = 4;  // the closed S^4 host is a 4-manifold
@@ -34,8 +34,8 @@ std::complex<double> Proton::omega() {
 }
 
 std::vector<std::complex<double>> Proton::singlet() {
-  const cd w = omega();
-  return {cd(1.0, 0.0), w, w * w};
+  const complexd w = omega();
+  return {complexd(1.0, 0.0), w, w * w};
 }
 
 Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
@@ -58,7 +58,7 @@ std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   // out of THIS minimal seed via the trap door — it never pre-refines a host.
   int i = 0;
   for (auto *edge : host->getEdgeList()->toVector())
-    edge->setSquaredLength(cd(1.0 + 0.01 * (i++ % 6), 0.0));
+    edge->setSquaredLength(complexd(1.0 + 0.01 * (i++ % 6), 0.0));
   return host;
 }
 
@@ -68,17 +68,17 @@ void Proton::build(int maxRestarts, int constructRounds, int initSteps, int evol
   if (attempted_) return;
   attempted_ = true;
 
-  const cd w = omega();
+  const complexd w = omega();
   // Step A inputs: two neutral q-q̄ pairs (Σ = 0). Step A outputs: a colored diquark
   // {1,ω} ⊔ antidiquark {1,ω²} (2-vectors — NOT the singlet).
-  const std::vector<std::vector<cd>> pairsA = {
-      {cd(1.0, 0.0), cd(-1.0, 0.0), cd(0.0, 0.0)},
-      {cd(1.0, 0.0), cd(0.0, 0.0), cd(-1.0, 0.0)}};
-  const std::vector<cd> diquark = {cd(1.0, 0.0), w};
-  const std::vector<cd> antidiquark = {cd(1.0, 0.0), w * w};
+  const std::vector<std::vector<complexd>> pairsA = {
+      {complexd(1.0, 0.0), complexd(-1.0, 0.0), complexd(0.0, 0.0)},
+      {complexd(1.0, 0.0), complexd(0.0, 0.0), complexd(-1.0, 0.0)}};
+  const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
+  const std::vector<complexd> antidiquark = {complexd(1.0, 0.0), w * w};
   // Step B inputs: the diquark (2-vec) + the third quark (1-vec). Output: the proton.
-  const std::vector<cd> thirdQuark = {w * w};
-  const std::vector<cd> protonSinglet = singlet();
+  const std::vector<complexd> thirdQuark = {w * w};
+  const std::vector<complexd> protonSinglet = singlet();
 
   // One node's run: weight the inputs, an INITIALIZATION pass that grows the boundary
   // regions until they carry (grow_boundaries=true), an EVOLUTION pass with ∂W frozen

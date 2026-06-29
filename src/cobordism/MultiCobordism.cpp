@@ -29,7 +29,7 @@ namespace tessera::cobordism {
 
 using ::tessera::MatterConfiguration;
 using ::tessera::simulations::ReggeSolver;
-using cd = std::complex<double>;
+using complexd = std::complex<double>;
 
 namespace {
 constexpr int kFrameworkDimension = 4;  // framework dimension (closed S^4 host)
@@ -54,8 +54,8 @@ std::pair<std::uint64_t, std::uint64_t> edgeKey(
 
 MultiCobordism::MultiCobordism(
     std::shared_ptr<Spacetime> host,
-    const std::vector<std::vector<cd>> &inputTargets,
-    const std::vector<std::vector<cd>> &outputTargets,
+    const std::vector<std::vector<complexd>> &inputTargets,
+    const std::vector<std::vector<complexd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
@@ -129,7 +129,7 @@ double MultiCobordism::reggeActionGradient(
 
 double MultiCobordism::residualOfTargetStateAgainstHarmonic(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
-    const std::vector<cd> &targetState) {
+    const std::vector<complexd> &targetState) {
   const std::size_t targetDimension = targetState.size();
   Eigen::VectorXcd targetVector(targetDimension);
   for (std::size_t componentIndex = 0; componentIndex < targetDimension;
@@ -277,7 +277,7 @@ MultiCobordism::Snapshot MultiCobordism::snapshotOf(
   std::vector<std::vector<std::uint64_t>> cellVertexTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     cellVertexTuples.push_back(topTuple(*topSimplex));
-  std::map<std::pair<std::uint64_t, std::uint64_t>, cd> squaredLengthsByEdge;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> squaredLengthsByEdge;
   for (const auto *edge : spacetime.getEdgeList()->toVector())
     squaredLengthsByEdge[edgeKey(edge)] = edge->getSquaredLength();
   return {std::move(cellVertexTuples), std::move(squaredLengthsByEdge)};
@@ -548,7 +548,7 @@ void MultiCobordism::constructOutputs(const std::vector<std::uint64_t> &seeds,
 
 void MultiCobordism::constructBlocks(
     const std::vector<std::uint64_t> &seeds,
-    const std::vector<std::vector<cd>> &targets,
+    const std::vector<std::vector<complexd>> &targets,
     std::vector<BoundaryBlock> &destinationBlocks, int rounds) {
   // Region-restricted surgical solve per boundary block: grow whatever emergent
   // topology in the seed's neighbourhood carries the block's target (kept by Δr).
@@ -656,13 +656,13 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     bool objectiveImproved = false;
     for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-        cd trialSquaredLength = squaredLengths(edgeIndex) -
+        complexd trialSquaredLength = squaredLengths(edgeIndex) -
                                 trialStepScale * descentDirection(edgeIndex);
         double boundedRealPart =
             std::min(std::max(trialSquaredLength.real(), 0.05),
                      20.0);  // bound the real part
         edges[edgeIndex]->setSquaredLength(
-            cd(boundedRealPart, trialSquaredLength.imag()));
+            complexd(boundedRealPart, trialSquaredLength.imag()));
       }
       double trialObjective;
       try {

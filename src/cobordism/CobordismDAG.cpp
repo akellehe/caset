@@ -12,12 +12,12 @@
 
 namespace tessera::cobordism {
 
-using cd = std::complex<double>;
+using complexd = std::complex<double>;
 
 int CobordismDAG::addNode(std::shared_ptr<Spacetime> host,
-                          const std::vector<std::vector<cd>> &literalInputs,
+                          const std::vector<std::vector<complexd>> &literalInputs,
                           const std::vector<std::pair<int, int>> &upstream,
-                          const std::vector<std::vector<cd>> &outputTargets,
+                          const std::vector<std::vector<complexd>> &outputTargets,
                           const std::vector<int> &degrees, double gamma,
                           std::uint64_t seed) {
   nodes_.push_back(Node{std::move(host), literalInputs, upstream, outputTargets,
@@ -48,7 +48,7 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
 
       const Node &nd = nodes_[i];
       // Assemble input targets: literals, then each upstream node's chosen output.
-      std::vector<std::vector<cd>> inputs = nd.literalInputs;
+      std::vector<std::vector<complexd>> inputs = nd.literalInputs;
       for (const auto &e : nd.upstream) {
         const auto &up = outputs_[e.first];
         if (e.second < 0 || e.second >= static_cast<int>(up.size()))
@@ -82,7 +82,7 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
   }
 }
 
-std::vector<cd> CobordismDAG::output(int node, int outputIndex) const {
+std::vector<complexd> CobordismDAG::output(int node, int outputIndex) const {
   if (node < 0 || node >= static_cast<int>(outputs_.size()))
     throw std::out_of_range("CobordismDAG::output: node id out of range");
   const auto &outs = outputs_[node];
