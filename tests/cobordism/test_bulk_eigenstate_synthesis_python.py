@@ -110,7 +110,11 @@ def _edge_values(st):
 
 
 def _boundary_faces(st):
-    return frozenset(tuple(f) for f in cob.Cobordism.boundaryFaces(st))
+    # The codimension-one boundary faces (incidence == 1), the canonical
+    # Spacetime-owned derivation. (Formerly cob.Cobordism.boundaryFaces, a thin
+    # wrapper over getBoundary(); that retired class is gone, getBoundary() is the
+    # identical sorted vertex-id tuples.)
+    return frozenset(tuple(sorted(f)) for f in st.getBoundary())
 
 
 def _np_L(st):

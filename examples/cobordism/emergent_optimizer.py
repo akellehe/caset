@@ -370,8 +370,8 @@ class EmergentOptimizer:
         `H` — exact analytic, no finite differences), which reduces to the real gradient
         when the metric is Euclidean. A backtracking line search accepts only a decrease
         of the **full three-term** objective; `r_U` gates the step (its general-k gradient
-        is not folded — the §9.2 precompute, matching `CobordismRelaxer::relaxInterior`'s
-        k≥2 semantics). The conformal/scale runaway is diagnosed by this restoring force,
+        is not folded — the §9.2 precompute, with the k≥2 interior-relaxation semantics).
+        The conformal/scale runaway is diagnosed by this restoring force,
         never pinned to a boundary. Returns the F trace."""
         edges = self.st.getEdgeList().toVector()
 

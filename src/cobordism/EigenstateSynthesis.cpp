@@ -403,9 +403,9 @@ bool EigenstateSynthesis::attachInteriorVertex(
   }
 
   // Fresh interior vertex with the largest id (sorts last; preserves the
-  // boundary-support psi prefix). Mirror GeometrySynthesizer::coneInVertex's
-  // maxId+1 idiom rather than the vertexIdCounter, which can be stale relative
-  // to explicitly-id'd fixture vertices.
+  // boundary-support psi prefix). Use the maxId+1 idiom rather than the
+  // vertexIdCounter, which can be stale relative to explicitly-id'd fixture
+  // vertices.
   Attachment att;
   ::tessera::mesh::Vertex *vnew = st_->createVertex(maxId + 1);
   att.vertex = vnew;

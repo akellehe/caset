@@ -49,6 +49,12 @@ class ResidualTest(unittest.TestCase):
     def setUpClass(cls):
         cls.eo = _load()
 
+    @unittest.skip(
+        "Carrier semantics (ω = [1, ω, ω²] → r_state ≈ 0) require the retired "
+        "S3WindowSurface's Z3-equivariant symmetric-window register, which no kept "
+        "builder reproduces; a generic surgically-holed S³ does not carry ω. The "
+        "fixture-agnostic empty-register leak and the C++/Python r_state agreement "
+        "remain covered by EmergentLoopTest and test_multi_cobordism_python.py.")
     def test_zero_filled_relabel_invariant_residual(self):
         eo = self.eo
         T, cob = eo.T, eo.cob

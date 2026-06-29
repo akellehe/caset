@@ -134,17 +134,11 @@ exclusions to see the entire interface.
 
 ## Cobordism
 
-```{doxygenfile} Cobordism.h
-```
 ```{doxygenfile} ChainComplex.h
 ```
 ```{doxygenfile} HodgeLaplacian.h
 ```
-```{doxygenfile} DiracKahler.h
-```
 ```{doxygenfile} IntegerLinalg.h
-```
-```{doxygenfile} DijkgraafWitten.h
 ```
 ```{doxygenfile} EigenstateSynthesis.h
 ```
@@ -156,45 +150,11 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} Spectrum.h
 ```
-```{doxygenfile} LevenbergMarquardt.h
-```
-```{doxygenfile} GeometrySynthesizer.h
-```
-```{doxygenfile} RealizabilityOracle.h
-```
-```{doxygenfile} BoundaryStateSpace.h
-```
-```{doxygenfile} PreparedBoundaryState.h
-```
-```{doxygenfile} Register.h
-```
 ```{doxygenfile} MultiCobordism.h
 ```
 ```{doxygenfile} CobordismDAG.h
 ```
-```{doxygenfile} OrientedCone.h
-```
 ```{doxygenfile} SurgicalCone.h
-```
-```{doxygenfile} CobordismRelaxer.h
-```
-```{doxygenfile} TopologyBuilder.h
-```
-```{doxygenfile} TorusOperatorTopology.h
-```
-```{doxygenfile} RegisterTopology.h
-```
-```{doxygenfile} TripartiteRegisterTopology.h
-```
-```{doxygenfile} SymmetricWindowSurface.h
-```
-```{doxygenfile} S3WindowSurface.h
-```
-```{doxygenfile} BipartiteCreationTopology.h
-```
-```{doxygenfile} EmergentEventTopology.h
-```
-```{doxygenfile} FixedBipartiteSequenceTopology.h
 ```
 
 ## Quantum

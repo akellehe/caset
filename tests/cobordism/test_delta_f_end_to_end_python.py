@@ -16,15 +16,12 @@ geometry term:
 The geometry term is hinge-local and exact; `r_U` is a global spectral quantity, so
 its exact delta is a before/after `residualForPeriods` recompute.
 """
-import cmath
-import math
 import unittest
 
 import tessera as T
 
 cob = T.cobordism
 
-_W = cmath.exp(2j * math.pi / 3)
 _GAMMA = 1.0
 _TOL = 1e-11
 
@@ -40,15 +37,26 @@ def _tops(st):
 
 
 def _holed_s3():
-    surf = cob.S3WindowSurface.build(1, 1)
-    faces = [list(t) for t in surf.faces]
-    windows = [[list(h) for h in w] for w in surf.windows]
-    hs = {tuple(sorted(h)) for w in windows for h in w}
-    holed = [t for t in faces if tuple(sorted(t)) not in hs]
-    st = T.Spacetime.fromCells(3, [list(t) for t in holed], 1.0, 0.0)
+    # A refined S^3 opened by a disjoint pair of surgical cone-outs (raising b_2 by 1):
+    # the b_2 color register, built from first principles. Returns the complex and the
+    # two emergent hole tetrahedra (the over-constrained 2-cycle period rows).
+    st = _refined_s3()
+    cells = sorted(_tops(st))
+    pair = None
+    for i, a in enumerate(cells):
+        for b in cells[i + 1:]:
+            if set(a).isdisjoint(b):
+                pair = (a, b)
+                break
+        if pair:
+            break
+    a, b = pair
+    sc = cob.SurgicalCone(st)
+    sc.coneOut(list(a))
+    sc.coneOut(list(b))
     for i, e in enumerate(st.getEdgeList().toVector()):
         e.setSquaredLength(1.0 + 0.01 * (i % 7))
-    return st, windows
+    return st, [[list(a), list(b)]]
 
 
 def _cdt4(n=160):
@@ -104,7 +112,7 @@ class DeltaFEndToEndTest(unittest.TestCase):
         st, windows = _holed_s3()
         es = cob.EigenstateSynthesis(st, 2)
         holes = [list(h) for h in windows[0]]
-        target = [complex(x) + 0.21 for x in [1.0, _W, _W * _W]]  # non-carriable
+        target = [complex(1.0), complex(0.3)]   # 2 holes, 1 mode ⇒ non-carriable
         rs = T.ReggeSolver(st, T.MatterConfiguration())
 
         def full_F():
