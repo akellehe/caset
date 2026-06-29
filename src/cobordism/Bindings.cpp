@@ -809,10 +809,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("objective", &MultiCobordism::objective)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
            py::arg("weight"))
-      .def("construct_inputs", &MultiCobordism::constructInputs,
-           py::arg("seeds"), py::arg("rounds") = 24)
-      .def("construct_outputs", &MultiCobordism::constructOutputs,
-           py::arg("seeds"), py::arg("rounds") = 24)
+      .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
+      .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
            py::arg("n_candidate_moves") = 12, py::arg("patience") = 8,
            py::arg("grow_boundaries") = false)
@@ -874,7 +872,7 @@ tickets.)doc")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")
       .def("build", &Proton::build, py::arg("max_restarts") = 16,
-           py::arg("construct_rounds") = 12, py::arg("init_steps") = 180,
+           py::arg("init_steps") = 180,
            py::arg("evolve_steps") = 60, py::arg("stage1_candidate_moves") = 8,
            py::arg("stage1_patience") = 15, py::arg("stage2_beta") = 1.0,
            py::arg("stage2_max_iters") = 10, py::arg("color_tolerance") = 0.5,

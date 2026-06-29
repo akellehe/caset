@@ -69,7 +69,7 @@ class Proton {
   /// runs an INITIALIZATION pass (`initSteps`, `grow_boundaries=true` — establishes
   /// the carrying input regions) then an EVOLUTION pass (`evolveSteps`,
   /// `grow_boundaries=false` — ∂W frozen) then `runStage2`. Idempotent.
-  void build(int maxRestarts = 16, int constructRounds = 12, int initSteps = 180,
+  void build(int maxRestarts = 16, int initSteps = 180,
              int evolveSteps = 60, int stage1CandidateMoves = 8, int stage1Patience = 15,
              double stage2Beta = 1.0, int stage2MaxIters = 10,
              double colorTolerance = 0.5, int minQuarkHoles = 3);

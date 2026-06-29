@@ -99,10 +99,12 @@ class MultiCobordism {
   void setInputResidualWeight(double weight) { inputResidualWeight_ = weight; }
 
   // ---- the two stages + boundary-block construction ----
-  /// Grow each INPUT block's emergent sub-complex near its seed vertex.
-  void constructInputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
-  /// Grow each OUTPUT block's emergent sub-complex near its seed vertex.
-  void constructOutputs(const std::vector<std::uint64_t> &seeds, int rounds = 24);
+  /// Seed one INPUT block per seed vertex (region = the seed's cell-neighbourhood,
+  /// tagged with its target). NOT grown here — runStage1's growBoundaryRegions grows
+  /// it emergently under the objective.
+  void seedInputs(const std::vector<std::uint64_t> &seeds);
+  /// Seed one OUTPUT block per seed vertex (see seedInputs).
+  void seedOutputs(const std::vector<std::uint64_t> &seeds);
   /// `growBoundaries` is the INITIALIZATION pass: while true the boundary regions
   /// grow to track the bulk until they carry their states (growBoundaryRegions);
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
@@ -141,11 +143,12 @@ class MultiCobordism {
   [[nodiscard]] double residualForBoundaryBlock(
       const BoundaryBlock &boundaryBlock,
       const std::shared_ptr<Spacetime> &spacetime) const;
-  // Build the emergent boundary sub-complexes for `targets` near `seeds`, append
-  // to `destinationBlocks` (shared by constructInputs/constructOutputs).
-  void constructBlocks(const std::vector<std::uint64_t> &seeds,
-                       const std::vector<std::vector<std::complex<double>>> &targets,
-                       std::vector<BoundaryBlock> &destinationBlocks, int rounds);
+  // Seed one boundary block per (seed, target) — region = the seed's cell-neighbourhood
+  // — appended to `destinationBlocks` (shared by seedInputs/seedOutputs). The blocks are
+  // grown later by growBoundaryRegions, not here.
+  void seedBlocks(const std::vector<std::uint64_t> &seeds,
+                  const std::vector<std::vector<std::complex<double>>> &targets,
+                  std::vector<BoundaryBlock> &destinationBlocks);
   // All pinned boundary (input + output) vertices — none may be removed by a move.
   [[nodiscard]] std::set<std::uint64_t> boundaryVerts() const;
 

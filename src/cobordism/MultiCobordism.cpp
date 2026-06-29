@@ -239,7 +239,7 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
     // A SINGLE output is the whole cobordism's output boundary: as in the Python
     // reference it is "the harmonic of the entire structure", NEVER a pinned
     // region. Read it off the WHOLE complex so the bulk loop drives the whole to
-    // carry it (the output EMERGES; it is not frozen by construct_outputs).
+    // carry it (the output EMERGES; it is not frozen by seedOutputs).
     for (int registerDegree : registerDegrees_)
       totalResidual += residualOfTargetStateAgainstHarmonic(
           spacetime, registerDegree, outputTargets_.front());
@@ -536,22 +536,23 @@ std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
   return objectiveTrace;
 }
 
-void MultiCobordism::constructInputs(const std::vector<std::uint64_t> &seeds,
-                                        int rounds) {
-  constructBlocks(seeds, inputTargets_, inputBlocks_, rounds);
+void MultiCobordism::seedInputs(const std::vector<std::uint64_t> &seeds) {
+  seedBlocks(seeds, inputTargets_, inputBlocks_);
 }
 
-void MultiCobordism::constructOutputs(const std::vector<std::uint64_t> &seeds,
-                                         int rounds) {
-  constructBlocks(seeds, outputTargets_, outputBlocks_, rounds);
+void MultiCobordism::seedOutputs(const std::vector<std::uint64_t> &seeds) {
+  seedBlocks(seeds, outputTargets_, outputBlocks_);
 }
 
-void MultiCobordism::constructBlocks(
+void MultiCobordism::seedBlocks(
     const std::vector<std::uint64_t> &seeds,
     const std::vector<std::vector<complexd>> &targets,
-    std::vector<BoundaryBlock> &destinationBlocks, int rounds) {
-  // Region-restricted surgical solve per boundary block: grow whatever emergent
-  // topology in the seed's neighbourhood carries the block's target (kept by Δr).
+    std::vector<BoundaryBlock> &destinationBlocks) {
+  // Seed one boundary block per (seed vertex, target): its initial region is the seed
+  // vertex's cell-neighbourhood. The block is NOT pre-grown here — runStage1's
+  // growBoundaryRegions grows it under the objective, so the carrying topology is fully
+  // emergent. The seed vertex is the only anchor (it distinguishes one input/output
+  // from another); everything else emerges.
   for (std::size_t blockIndex = 0;
        blockIndex < targets.size() && blockIndex < seeds.size(); ++blockIndex) {
     const std::uint64_t seedVertexId = seeds[blockIndex];
@@ -562,66 +563,7 @@ void MultiCobordism::constructBlocks(
           cellVertexIds.end())
         regionVertexIds.insert(cellVertexIds.begin(), cellVertexIds.end());
     }
-    BoundaryBlock boundaryBlock{regionVertexIds, targets[blockIndex]};
-    double residual = residualForBoundaryBlock(boundaryBlock, spacetime_);
-    for (int roundIndex = 0; roundIndex < rounds; ++roundIndex) {
-      const auto roundSnapshot = snapshot();
-      // a region-restricted move: cone on a cell inside the region.
-      std::vector<std::vector<std::uint64_t>> cellsInsideRegion;
-      for (const auto &topSimplex : spacetime_->getTopSimplices()) {
-        auto cellVertexIds = topTuple(*topSimplex);
-        bool cellIsInsideRegion = true;
-        for (auto vertexId : cellVertexIds)
-          if (!regionVertexIds.count(vertexId)) {
-            cellIsInsideRegion = false;
-            break;
-          }
-        if (cellIsInsideRegion)
-          cellsInsideRegion.push_back(std::move(cellVertexIds));
-      }
-      if (cellsInsideRegion.empty()) break;
-      const auto &chosenCell =
-          cellsInsideRegion[randomNumberGenerator_() % cellsInsideRegion.size()];
-      auto candidateSpacetime = build(roundSnapshot);
-      bool moveWasApplied;
-      if (randomNumberGenerator_() % 2) {
-        // cone-out removes the whole chosen top cell.
-        moveWasApplied =
-            SurgicalCone(candidateSpacetime.get()).coneOut(chosenCell).first;
-      } else {
-        // cone-in GROWS: a fresh apex joins a d-vertex FACET of the cell (drop one
-        // vertex) to form a new top cell. coneIn needs d targets, NOT the full
-        // (d+1)-vertex cell — same payload drawRandomMoveSpecification builds for a
-        // stage-1 cone_in. Passing the whole cell made every seeding cone-in fail
-        // the arg-count check, so seeding could only ever shrink, never grow.
-        std::vector<std::uint64_t> coneInFace = chosenCell;
-        coneInFace.erase(coneInFace.begin() +
-                         static_cast<std::ptrdiff_t>(randomNumberGenerator_() %
-                                                     coneInFace.size()));
-        moveWasApplied =
-            SurgicalCone(candidateSpacetime.get()).coneIn(coneInFace).first;
-      }
-      if (!moveWasApplied ||
-          !EigenstateSynthesis(candidateSpacetime, dualComplexGateDegree_)
-               .dualComplexValid()
-               .first)
-        continue;
-      const double newResidual =
-          residualForBoundaryBlock(boundaryBlock, candidateSpacetime);
-      if (newResidual < residual - convergenceTolerance_) {
-        residual = newResidual;
-        spacetime_ = build(snapshotOf(*candidateSpacetime));
-        // refresh the region with any new vertices the move added near the seed.
-        for (const auto &topSimplex : spacetime_->getTopSimplices()) {
-          auto cellVertexIds = topTuple(*topSimplex);
-          if (std::find(cellVertexIds.begin(), cellVertexIds.end(),
-                        seedVertexId) != cellVertexIds.end())
-            regionVertexIds.insert(cellVertexIds.begin(), cellVertexIds.end());
-        }
-        boundaryBlock.vertices = regionVertexIds;
-      }
-    }
-    destinationBlocks.push_back(boundaryBlock);
+    destinationBlocks.push_back(BoundaryBlock{regionVertexIds, targets[blockIndex]});
   }
 }
 

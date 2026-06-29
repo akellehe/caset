@@ -66,8 +66,8 @@ void CobordismDAG::run(int stage1MaxSteps, int stage1CandidateMoves,
         inSeeds.push_back(verts[v]->getId());
       for (; v < verts.size() && outSeeds.size() < nd.outputTargets.size(); ++v)
         outSeeds.push_back(verts[v]->getId());
-      opt.constructInputs(inSeeds, /*rounds=*/12);
-      opt.constructOutputs(outSeeds, /*rounds=*/12);
+      opt.seedInputs(inSeeds);
+      opt.seedOutputs(outSeeds);
       opt.runStage1(stage1MaxSteps, stage1CandidateMoves, stage1Patience);
       opt.runStage2(stage2Beta, stage2MaxIters);
 

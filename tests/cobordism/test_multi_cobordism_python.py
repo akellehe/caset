@@ -61,7 +61,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
                   gamma=1.0, seed=3)
         self.assertEqual(list(CXX.betti(opt.st))[4], 1)        # bare closed S⁴: b₄=1
         sv = [v.getId() for v in host.getVertexList().toVector()][:2]
-        opt.construct_inputs(sv, rounds=12)
+        opt.seed_inputs(sv)
         opt.run_stage1(max_steps=20, n_candidate_moves=8, patience=8)
         self.assertGreaterEqual(list(CXX.betti(opt.st))[3], 1)  # a b₃ register emerged
 
@@ -77,7 +77,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         Proton = tessera.cobordism.Proton
         self.assertEqual(len(Proton.singlet()), 3)            # the proton is a 3-vector
         p = Proton(seed=3)
-        p.build(max_restarts=1, construct_rounds=8, init_steps=8, evolve_steps=4,
+        p.build(max_restarts=1, init_steps=8, evolve_steps=4,
                 stage1_candidate_moves=4, stage1_patience=4, stage2_max_iters=6,
                 min_quark_holes=1)
         # both steps ran: Step A (diquark recombination) and Step B (proton formation)
@@ -95,8 +95,8 @@ class MultiCobordismCxxTest(unittest.TestCase):
         opt = CXX(host, [[1, -1, 0], [1, 0, -1]], [[1, w, w * w], [1, w * w, w]],
                   degrees=[3], gamma=1.0, seed=3)
         sv = [v.getId() for v in host.getVertexList().toVector()]
-        opt.construct_inputs(sv[:2], rounds=8)
-        opt.construct_outputs(sv[2:4], rounds=8)   # two output blocks, co-optimized
+        opt.seed_inputs(sv[:2])
+        opt.seed_outputs(sv[2:4])   # two output blocks, co-optimized
         opt.run_stage1(max_steps=6, n_candidate_moves=4, patience=4)
         self.assertTrue(math.isfinite(opt.r_u(opt.st)))   # all 4 blocks scored, no crash
 

@@ -32,7 +32,7 @@ def _opt(st, seed):
     opt = cob.MultiCobordism(st, [[1, W]], [[1, W, W * W]], degrees=[3], gamma=50.0,
                              seed=seed)
     vb = [v.getId() for v in st.getVertexList().toVector()]
-    opt.construct_inputs(vb[:1], rounds=8)
+    opt.seed_inputs(vb[:1])
     return opt
 
 

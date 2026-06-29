@@ -53,16 +53,16 @@ std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   auto host = std::make_shared<Spacetime>(metric, SpacetimeType::CDT, 1.0, 1.0,
                                           Foliation::PREFERRED, topology);
   host->build();
-  // A mild, deterministic non-uniform metric on the bare ∂Δ⁵: breaks exact degeneracy
-  // so the relaxation has a gradient to follow. The proton grows ALL of its topology
-  // out of THIS minimal seed via the trap door — it never pre-refines a host.
-  int i = 0;
+  // A uniform metric on the bare ∂Δ⁵ (ℓ² = 1) — no hand-tuned perturbation. The
+  // geometry, like all the topology, emerges from the relaxation + trap door; verified
+  // to still converge to the proton singlet across seeds (the old 1 + 0.01·(i%6) jitter
+  // was dead weight).
   for (auto *edge : host->getEdgeList()->toVector())
-    edge->setSquaredLength(complexd(1.0 + 0.01 * (i++ % 6), 0.0));
+    edge->setSquaredLength(complexd(1.0, 0.0));
   return host;
 }
 
-void Proton::build(int maxRestarts, int constructRounds, int initSteps, int evolveSteps,
+void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
                    int stage1CandidateMoves, int stage1Patience, double stage2Beta,
                    int stage2MaxIters, double colorTolerance, int minQuarkHoles) {
   if (attempted_) return;
@@ -107,8 +107,8 @@ void Proton::build(int maxRestarts, int constructRounds, int initSteps, int evol
     if (vertsA.size() >= 4) {
       MultiCobordism stepA(hostA, pairsA, {diquark, antidiquark}, {registerDegree_},
                            gamma_, seedA);
-      stepA.constructInputs({vertsA[0]->getId(), vertsA[1]->getId()}, constructRounds);
-      stepA.constructOutputs({vertsA[2]->getId(), vertsA[3]->getId()}, constructRounds);
+      stepA.seedInputs({vertsA[0]->getId(), vertsA[1]->getId()});
+      stepA.seedOutputs({vertsA[2]->getId(), vertsA[3]->getId()});
       runNode(stepA);
       diquarkR = stepA.rU(stepA.spacetime());
     }
@@ -119,8 +119,8 @@ void Proton::build(int maxRestarts, int constructRounds, int initSteps, int evol
     if (vertsB.size() < 3) continue;
     MultiCobordism stepB(hostB, {diquark, thirdQuark}, {protonSinglet}, {registerDegree_},
                          gamma_, seedB);
-    stepB.constructInputs({vertsB[0]->getId(), vertsB[1]->getId()}, constructRounds);
-    runNode(stepB);  // no constructOutputs — the single output IS the whole
+    stepB.seedInputs({vertsB[0]->getId(), vertsB[1]->getId()});
+    runNode(stepB);  // no seedOutputs — the single output IS the whole
 
     // The proton is the harmonic of the WHOLE cobordism (the inputs are held by their
     // residual, the bulk evolves to carry the singlet). Read it off the relaxed whole.

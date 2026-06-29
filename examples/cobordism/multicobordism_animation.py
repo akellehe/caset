@@ -3,7 +3,7 @@
 """Real-time animation of a `MultiCobordism` optimization (#493).
 
 The demo is a 2→2 recombination: two q-q̄ pairs ⟶ a diquark ⊔ an anti-diquark
-(#491), built with the established `construct_inputs`/`construct_outputs` flow. Watch
+(#491), built with the established `seed_inputs`/`seed_outputs` flow. Watch
 the emergent register grow and the objective converge **as it runs**: this drives the
 engine's two stages one move/iteration at a time and refreshes a live matplotlib figure
 each step. Three panels:
@@ -272,7 +272,7 @@ def build_demo_recombination(seed=3, n_refine=16, rounds=10):
     """A small demo system: recombine two neutral q-q̄ pairs into a colored diquark
     `{1, ω}` ⊔ anti-diquark `{1, ω²}` (a 2→2 event, #491/#503).
 
-    `construct_inputs` builds the two input pairs and `construct_outputs` the two output
+    `seed_inputs` builds the two input pairs and `seed_outputs` the two output
     blocks (diquark, anti-diquark); the animation then drives the two stages —
     `run_stage1` (combinatorial surgery, including the trap door that grows the complex
     on a stall) and `run_stage2` (geometric relaxation) — one step at a time so you
@@ -283,8 +283,8 @@ def build_demo_recombination(seed=3, n_refine=16, rounds=10):
     opt = cob.MultiCobordism(host, _PAIRS, [_DIQUARK, _ANTIDIQUARK],
                              degrees=[3], gamma=50.0, seed=seed)
     sv = [v.getId() for v in host.getVertexList().toVector()]
-    opt.construct_inputs(sv[:2], rounds=rounds)
-    opt.construct_outputs(sv[2:4], rounds=rounds)
+    opt.seed_inputs(sv[:2])
+    opt.seed_outputs(sv[2:4])
     return opt
 
 

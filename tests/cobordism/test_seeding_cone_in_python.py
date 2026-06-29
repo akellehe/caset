@@ -1,13 +1,14 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""SurgicalCone.coneIn contract + connectivity (#503 seeding fix).
+"""SurgicalCone.coneIn contract + connectivity (#503).
 
-The seeding path (MultiCobordism.constructBlocks) used to call coneIn with a full
-(d+1)-vertex top cell, but coneIn requires exactly d targets (a facet) — so every
-seeding cone-in failed the arg-count check and the seed could only ever shrink,
-never grow. These tests pin coneIn's contract and the connectivity invariant the
-bug appeared to violate (vertices left unconnected by edges), and show that
-repeated cone-in genuinely grows a connected complex from a single simplex.
+coneIn requires exactly d targets (a facet of a top cell), NOT the full (d+1)-vertex
+cell — passing the whole cell fails the arg-count check, so a cone-in could only ever
+shrink, never grow. These tests pin coneIn's contract and the connectivity invariant
+it must preserve (no vertices left unconnected by edges), and show that repeated
+cone-in genuinely grows a connected complex from a single simplex. coneIn is the
+trap door's surgical escape move in runStage1; the input/output blocks are now seeded
+without it (growBoundaryRegions grows them emergently).
 """
 import collections
 import unittest
