@@ -336,13 +336,17 @@ class ProtonAnimator:
         self._draw_complex(self.axB, 1, self.nodes[1][1])
 
     def update(self, frame):
-        self._advance(frame)
-        self._redraw()
         node_index, phase, _count = self._schedule[frame]
         label = f"{self.nodes[node_index][1]} · {self._PHASE_NAMES[phase]}"
-        # A visible heartbeat: a frame counter + label in the title and a flushed stdout
-        # line. Surgery/relaxation frames are seconds of real compute during which the GUI
-        # window can't repaint — the terminal line updates even while the window is frozen.
+        # A visible heartbeat *before* the step: a surgery frame is several seconds of real
+        # compute during which the GUI window can't repaint, so announce what's running first
+        # (title + flushed stdout line) — otherwise the window looks hung mid-frame.
+        if not self._done:
+            self.fig.suptitle(
+                f"Proton build (two-step) — frame {frame + 1}/{self._frames} · {label}")
+            print(f"\rframe {frame + 1}/{self._frames} ({label})", end="", flush=True)
+        self._advance(frame)
+        self._redraw()
         if frame >= self._frames - 1 and not self._done:   # last frame: announce the verdict
             self._done = True
             ok, res, holes = self.verdict()
@@ -351,10 +355,6 @@ class ProtonAnimator:
                    f"did NOT converge (r_state={res:.2g}, {holes} registers)")
             self.fig.suptitle(f"Proton build (two-step) — {tag}")
             print(f"\rframe {frame + 1}/{self._frames} ({label}) — {tag}")
-        elif not self._done:
-            self.fig.suptitle(
-                f"Proton build (two-step) — frame {frame + 1}/{self._frames} · {label}")
-            print(f"\rframe {frame + 1}/{self._frames} ({label})", end="", flush=True)
         return []
 
 
