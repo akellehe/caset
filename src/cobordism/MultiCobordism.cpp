@@ -609,7 +609,7 @@ void MultiCobordism::seedBlocks(
 }
 
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
-                                                 double alpha0) {
+                                                 double alpha0, double relTol) {
   auto edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
   auto fullObjective = [&]() {
@@ -617,6 +617,7 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
   };
   std::vector<double> objectiveTrace = {fullObjective()};
   double stepScale = alpha0;
+  lastStage2Stationary_ = false;  // set true only on the stationary break below
   for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
     ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
     const auto gradientComponents = reggeSolver.actionGradientExact();
@@ -635,6 +636,12 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
       squaredLengths(edgeIndex) = edges[edgeIndex]->getSquaredLength();
     const double currentObjective = objectiveTrace.back();
+    // Relative stationarity: accept a step only when it lowers F by more than relTol
+    // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
+    // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100
+    // — the rounding floor; this scales the threshold with the objective instead.
+    const double improvementThreshold =
+        relTol * std::max(std::abs(currentObjective), 1.0);
     double trialStepScale = stepScale;
     bool objectiveImproved = false;
     for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
@@ -653,7 +660,7 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
       } catch (...) {
         trialObjective = std::numeric_limits<double>::infinity();
       }
-      if (trialObjective < currentObjective - convergenceTolerance_) {
+      if (trialObjective < currentObjective - improvementThreshold) {
         objectiveTrace.push_back(trialObjective);
         stepScale = std::min(stepScale * 1.3, 1.0);
         objectiveImproved = true;
@@ -664,6 +671,7 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     if (!objectiveImproved) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
         edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex));
+      lastStage2Stationary_ = true;  // no line-search step beat the relative threshold
       break;
     }
   }
