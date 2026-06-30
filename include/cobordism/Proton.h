@@ -62,8 +62,13 @@ class Proton {
   ///                        register is never driven to carry).
   ///   * `inputWeight`    — weight on the input residuals so the diquark/quark
   ///                        inputs are driven to carry rather than dissolve.
+  ///   * `precone`        — pre-grow each step's single-Δ⁴ seed by this many gated
+  ///                        cone-in moves before optimization (forwarded to the
+  ///                        `MultiCobordism` ctor of every node), giving surgery
+  ///                        room to act without prebuilding a host. Default 0.
   explicit Proton(std::uint64_t seed = 0, int registerDegree = 3,
-                  double gamma = 50.0, double inputWeight = 20.0);
+                  double gamma = 50.0, double inputWeight = 20.0,
+                  int precone = 0);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -126,6 +131,7 @@ class Proton {
   int registerDegree_;
   double gamma_;
   double inputResidualWeight_;
+  int precone_;  // gated cone-ins pre-grown into each node's seed (ctor → nodes)
 
   // ---- build state (populated by build()) ----
   bool attempted_ = false;

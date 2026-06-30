@@ -795,10 +795,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def(py::init<std::shared_ptr<Spacetime>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
-                    std::vector<int>, double, std::uint64_t>(),
+                    std::vector<int>, double, std::uint64_t, int>(),
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
-           py::arg("seed") = 0)
+           py::arg("seed") = 0, py::arg("precone") = 0)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
@@ -865,9 +865,9 @@ seeds until step B's proton block carries the singlet with >=3 color holes. The
 accessors lazily trigger build() on first use, so `Proton().block()` just works.
 Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc")
-      .def(py::init<std::uint64_t, int, double, double>(), py::arg("seed") = 0,
+      .def(py::init<std::uint64_t, int, double, double, int>(), py::arg("seed") = 0,
            py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
-           py::arg("input_weight") = 20.0)
+           py::arg("input_weight") = 20.0, py::arg("precone") = 0)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")

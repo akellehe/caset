@@ -56,7 +56,8 @@ MultiCobordism::MultiCobordism(
     std::shared_ptr<Spacetime> host,
     const std::vector<std::vector<complexd>> &inputTargets,
     const std::vector<std::vector<complexd>> &outputTargets,
-    const std::vector<int> &degrees, double gamma, std::uint64_t seed)
+    const std::vector<int> &degrees, double gamma, std::uint64_t seed,
+    int precone)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -67,7 +68,13 @@ MultiCobordism::MultiCobordism(
               : *std::max_element(registerDegrees_.begin(),
                                   registerDegrees_.end())),
       gamma_(gamma),
-      randomNumberGenerator_(seed) {}
+      randomNumberGenerator_(seed) {
+  // Pre-grow the seed by `precone` gated cone-ins before any optimization, so the
+  // stage-1 search starts from a larger complex grown emergently from the host (no
+  // input/output block is seeded yet, so nothing is pinned — the gate is the only
+  // constraint). `precone <= 0` leaves the host and RNG untouched.
+  if (precone > 0) preconeCells(precone);
+}
 
 std::vector<int> MultiCobordism::betti(const Spacetime &spacetime) {
   return ChainComplex::fromSpacetime(spacetime).bettiNumbers();
@@ -451,6 +458,40 @@ double MultiCobordism::trapDoorMove(int attempts) {
     return objectiveDelta;
   }
   return std::numeric_limits<double>::quiet_NaN();
+}
+
+void MultiCobordism::preconeCells(int count) {
+  // Each cone-in cones a fresh apex onto a random codim-1 facet (a top cell with one
+  // vertex dropped) and is committed only through applyMoveSpecification's
+  // dualComplexValid gate — the same gated primitive the trap door uses, so the
+  // pre-growth is sound (nothing inserted by fiat). On the single-Δ⁴ seed (a 4-ball)
+  // a cone-in over a boundary facet is valid, so this enlarges the 4-ball; a draw
+  // onto an already-saturated interior facet is rejected by the gate and retried.
+  constexpr int kAttemptsPerCone = 16;  // gated tries before giving up on one cone
+  for (int conedSoFar = 0; conedSoFar < count; ++conedSoFar) {
+    std::vector<std::vector<std::uint64_t>> topCellTuples;
+    for (const auto &topSimplex : spacetime_->getTopSimplices())
+      topCellTuples.push_back(topTuple(*topSimplex));
+    if (topCellTuples.empty()) return;  // nothing to cone onto
+    bool coned = false;
+    for (int attempt = 0; attempt < kAttemptsPerCone && !coned; ++attempt) {
+      const auto &chosenCell =
+          topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
+      const std::size_t droppedVertexIndex =
+          randomNumberGenerator_() % chosenCell.size();
+      std::vector<std::uint64_t> coneInFace;  // a codim-1 facet: drop one vertex
+      for (std::size_t vertexIndex = 0; vertexIndex < chosenCell.size();
+           ++vertexIndex)
+        if (vertexIndex != droppedVertexIndex)
+          coneInFace.push_back(chosenCell[vertexIndex]);
+      auto candidateSpacetime = build(snapshot());
+      if (applyMoveSpecification(candidateSpacetime, {"cone_in", coneInFace})) {
+        spacetime_ = build(snapshotOf(*candidateSpacetime));
+        coned = true;
+      }
+    }
+    if (!coned) return;  // no valid cone-in found for this cell; stop early
+  }
 }
 
 void MultiCobordism::growBoundaryRegions() {
