@@ -152,7 +152,11 @@ class CobordismObjectiveEnv:
 
     Reward: ``reward_scale · (slog(F_before) − slog(F_after))`` (a monotone, bounded
     surrogate for −ΔF whose episode sum telescopes to the total log-reduction of F), plus
-    a one-time ``carry_bonus`` the step the target is first carried.
+    a one-time ``carry_bonus`` the step the target is first carried, plus two OPTIONAL dense
+    proton-shaping terms (off by default): ``hole_reward_weight`` for progress toward
+    ``target_holes`` (capped) and ``rstate_reward_weight`` for driving the singlet residual
+    ``r_state`` down. The shaping is a *training signal* — it never changes F, the engine, or
+    the carry verdict; with both weights 0 the reward is exactly the foundation's −ΔF drop.
 
     Episode ends (``done``) when the action budget ``max_actions`` is spent (truncation) or
     the target is carried (termination).
@@ -178,6 +182,8 @@ class CobordismObjectiveEnv:
         target_holes: int = 3,
         carry_bonus: float = 3.0,
         reward_scale: float = 1.0,
+        hole_reward_weight: float = 0.0,
+        rstate_reward_weight: float = 0.0,
     ):
         # Default target = the proton singlet on the formation (2→1) node. `gamma` MUST
         # match the factory's node so F = gradN2 + gamma·r_u is reconstructed exactly; the
@@ -200,6 +206,14 @@ class CobordismObjectiveEnv:
         self.target_holes = int(target_holes)
         self.carry_bonus = float(carry_bonus)
         self.reward_scale = float(reward_scale)
+        # Dense proton-shaping weights (a TRAINING SIGNAL only — they never touch F, the
+        # engine, or the carry verdict). `hole_reward_weight` rewards each unit of progress
+        # toward `target_holes` (capped, so over-growing past the target earns nothing);
+        # `rstate_reward_weight` rewards driving the singlet residual `r_state` down. Both
+        # default to 0, so the base env's reward stays exactly `−ΔF` (+ carry bonus) and the
+        # foundation's reward contract (telescoping log-reduction of F) is unchanged.
+        self.hole_reward_weight = float(hole_reward_weight)
+        self.rstate_reward_weight = float(rstate_reward_weight)
 
         # Gym-style space descriptors (no gymnasium dependency).
         self.observation_space = _Box(
@@ -306,6 +320,7 @@ class CobordismObjectiveEnv:
         intensity = float(params[0]) if params.size > 0 else 0.5
         knob = float(params[1]) if params.size > 1 else 0.5
 
+        prev_metrics = self._last_metrics  # the state BEFORE this macro-action
         F_before = self._F
         engine_error = None
         try:
@@ -334,15 +349,41 @@ class CobordismObjectiveEnv:
         F_after = metrics["F"]
         self._F = F_after
 
-        # Reward: monotone, bounded surrogate for −ΔF (drop in the true objective). The
-        # per-step rewards telescope, so the episode return = total log-reduction of F.
-        reward = self.reward_scale * (_slog(F_before) - _slog(F_after))
-        if engine_error is not None:
-            reward -= 0.1  # discourage actions that fault the engine (e.g. degenerate relax)
+        # Reward = the dense −ΔF term (a monotone, bounded surrogate for the drop in the
+        # true objective; its per-step values telescope to the episode's total log-reduction
+        # of F) + the dense PROTON-SHAPING terms (a training signal that points the policy at
+        # the carry outcome F alone is too flat to find — see __init__) + the one-time carry
+        # bonus. The shaping weights default to 0, so the base contract (reward == −ΔF drop)
+        # is recovered exactly when they are off.
+        dF_term = self.reward_scale * (_slog(F_before) - _slog(F_after))
+
+        # Hole-progress: reward closing the gap to `target_holes`, capped so over-growing
+        # past 3 holes earns nothing (the proton wants exactly the 3-quark register). The
+        # capped differences telescope to `w·(min(final,T) − min(initial,T))` over an episode.
+        hole_term = 0.0
+        if self.hole_reward_weight != 0.0:
+            prev_h = min(int(prev_metrics.get("holes", 0)), self.target_holes)
+            cur_h = min(int(metrics["holes"]), self.target_holes)
+            hole_term = self.hole_reward_weight * float(cur_h - prev_h)
+
+        # Singlet-residual descent: reward driving `r_state` toward 0 (only meaningful for a
+        # whole-cobordism target). slog compresses the wide range (full leak ≈ ‖t‖² = 3 down
+        # to ~0 when carried); the per-step values telescope to the total slog-drop of r_state.
+        rstate_term = 0.0
+        if self.rstate_reward_weight != 0.0 and self.target_state is not None:
+            prev_r = prev_metrics.get("rstate", math.nan)
+            cur_r = metrics["rstate"]
+            if math.isfinite(prev_r) and math.isfinite(cur_r):
+                rstate_term = self.rstate_reward_weight * (_slog(prev_r) - _slog(cur_r))
+
+        error_term = -0.1 if engine_error is not None else 0.0  # discourage faulting moves
 
         carried_now = self._is_carried(metrics)
-        if carried_now and not self._carried:
-            reward += self.carry_bonus  # one-time terminal bonus for first carrying the target
+        # One-time bonus the step the target is FIRST carried (the proton criterion).
+        carry_term = self.carry_bonus if (carried_now and not self._carried) else 0.0
+
+        reward = dF_term + hole_term + rstate_term + error_term + carry_term
+
         terminated = carried_now
         self._carried = carried_now
         truncated = self._steps_taken >= self.max_actions
@@ -356,6 +397,8 @@ class CobordismObjectiveEnv:
             "n_top_cells": metrics["n_top_cells"], "n_edges": metrics["n_edges"],
             "carried": carried_now, "terminated": terminated, "truncated": truncated,
             "steps_taken": self._steps_taken, "engine_error": engine_error,
+            "reward_terms": {"dF": dF_term, "hole": hole_term, "rstate": rstate_term,
+                             "error": error_term, "carry": carry_term},
         }
         return self._observation(metrics), float(reward), done, info
 

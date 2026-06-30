@@ -165,5 +165,76 @@ class EnvStepTest(unittest.TestCase):
         self.assertAlmostEqual(total, log_red, places=5)
 
 
+class RewardShapingTest(unittest.TestCase):
+    """The #546 dense proton-shaping reward terms (hole-progress + r_state descent). These
+    are a TRAINING SIGNAL only — they never touch F, the engine, or the carry verdict. The
+    formula checks validate the terms against the engine's own holes/r_state regardless of
+    whether the tiny budget here actually forms a hole, so they stay fast + robust."""
+
+    @staticmethod
+    def _slog(x):
+        return math.copysign(math.log1p(abs(x)), x)
+
+    def test_weights_default_off(self):
+        env = _tiny_env()
+        self.assertEqual(env.hole_reward_weight, 0.0)
+        self.assertEqual(env.rstate_reward_weight, 0.0)
+
+    def test_shaping_off_zeroes_those_terms(self):
+        # Default weights ⇒ the hole/r_state terms are exactly 0, so the reward is the
+        # foundation's −ΔF (+ carry) and the breakdown still sums to the reward.
+        env = _tiny_env()
+        env.reset(seed=5)
+        _o, reward, _d, info = env.step((oe.GROW, [1.0, 0.5]))
+        terms = info["reward_terms"]
+        self.assertEqual(terms["hole"], 0.0)
+        self.assertEqual(terms["rstate"], 0.0)
+        self.assertAlmostEqual(sum(terms.values()), reward, places=6)
+
+    def test_terms_sum_to_reward_with_shaping_on(self):
+        env = _tiny_env(hole_reward_weight=2.0, rstate_reward_weight=1.5, carry_bonus=7.0)
+        env.reset(seed=6)
+        for action in [(oe.GROW, [1.0, 0.5]), (oe.RELAX, [0.5, 0.4])]:
+            _o, reward, _d, info = env.step(action)
+            self.assertAlmostEqual(sum(info["reward_terms"].values()), reward, places=6)
+
+    def test_hole_term_matches_capped_progress(self):
+        # hole term == w·(min(holes, T) − min(prev_holes, T)); tracking the holes sequence
+        # validates the formula AND its cap (no reward past T holes) vs the engine's count.
+        W, T = 3.0, 3
+        env = _tiny_env(hole_reward_weight=W, target_holes=T, rstate_reward_weight=0.0)
+        env.reset(seed=7)
+        prev_h = env.metrics["holes"]
+        for action in [(oe.GROW, [1.0, 0.5]), (oe.GROW, [1.0, 0.5]), (oe.RELAX, [0.5, 0.4])]:
+            _o, _r, _d, info = env.step(action)
+            cur_h = info["holes"]
+            expected = W * (min(cur_h, T) - min(prev_h, T))
+            self.assertAlmostEqual(info["reward_terms"]["hole"], expected, places=6)
+            prev_h = cur_h
+
+    def test_rstate_term_matches_slog_descent(self):
+        W = 1.25
+        env = _tiny_env(rstate_reward_weight=W, hole_reward_weight=0.0)
+        env.reset(seed=8)
+        prev_r = env.metrics["rstate"]
+        for action in [(oe.GROW, [1.0, 0.5]), (oe.RELAX, [0.5, 0.4])]:
+            _o, _r, _d, info = env.step(action)
+            cur_r = info["rstate"]
+            if math.isfinite(prev_r) and math.isfinite(cur_r):
+                expected = W * (self._slog(prev_r) - self._slog(cur_r))
+                self.assertAlmostEqual(info["reward_terms"]["rstate"], expected, places=5)
+            prev_r = cur_r
+
+    def test_rstate_term_off_without_whole_target(self):
+        # The recombination node has no whole-cobordism target, so r_state shaping is a
+        # no-op even with a positive weight (there is nothing to fit the singlet against).
+        env = oe.make_recombination_env(max_actions=2, grow_steps=(2, 3),
+                                        evolve_steps=(2, 3), relax_iters=(1, 2),
+                                        n_candidate_moves=3, rstate_reward_weight=2.0)
+        env.reset(seed=9)
+        _o, _r, _d, info = env.step((oe.GROW, [1.0, 0.5]))
+        self.assertEqual(info["reward_terms"]["rstate"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
