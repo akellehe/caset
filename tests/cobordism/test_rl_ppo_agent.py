@@ -120,6 +120,24 @@ class RandomPolicyTest(unittest.TestCase):
             self.assertTrue(np.all((params >= 0) & (params <= 1)))
 
 
+class GrowOnlyPolicyTest(unittest.TestCase):
+    """The #546 grow-only baseline (#539's learned policy collapsed to all-GROW)."""
+
+    def test_grow_only_always_grows_full_intensity(self):
+        for _ in range(5):
+            move, params = train.grow_only_policy(np.zeros(oe.OBS_DIM, np.float32))
+            self.assertEqual(move, oe.GROW)
+            self.assertEqual(params.shape, (oe.PARAM_DIM,))
+            self.assertEqual(float(params[0]), 1.0)  # full grow intensity
+
+    def test_carry_profile_has_big_grow_budget(self):
+        # The carry profile's defining fix: a single GROW gets a big run_stage1 budget so a
+        # hole can actually form (the foundation's tiny grow_steps never did).
+        self.assertGreaterEqual(train.CARRY_PROFILE["env_kwargs"]["grow_steps"][1], 100)
+        self.assertGreater(train.CARRY_PROFILE["hole_reward_weight"], 0.0)
+        self.assertGreater(train.CARRY_PROFILE["rstate_reward_weight"], 0.0)
+
+
 class TrainSmokeTest(unittest.TestCase):
     """A tiny end-to-end run: the real engine, but a couple of macro-actions and one
     training iteration, so the train → evaluate → compare pipeline is exercised fast."""
@@ -139,6 +157,23 @@ class TrainSmokeTest(unittest.TestCase):
         # The seed Δ⁴ objective is ~3150; any rollout leaves F finite and non-negative.
         self.assertGreaterEqual(result["rl"]["mean_F_final"], 0.0)
         self.assertTrue(np.isfinite(result["random"]["mean_F_final"]))
+
+    def test_carry_smoke_grow_only_and_carry_metrics(self):
+        # The #546 carry-profile pipeline: shaping on, the grow-only baseline is evaluated,
+        # and every policy reports the proton-criterion metrics (carry rate / holes /
+        # r_state). Tiny budgets keep it fast (no hole need actually form here).
+        result = train.benchmark(
+            target="formation", iterations=1, episodes_per_iter=1, eval_seeds=1,
+            max_actions=2, hidden=16, lr=1e-2, agent_seed=0, verbose=False,
+            hole_reward_weight=2.0, rstate_reward_weight=1.0, carry_bonus=5.0,
+            env_kwargs=dict(grow_steps=(2, 3), evolve_steps=(2, 3),
+                            relax_iters=(1, 1), n_candidate_moves=3))
+        self.assertIsNotNone(result["grow_only"])
+        for side in ("rl", "random", "grow_only"):
+            for key in ("carry_rate", "mean_holes", "mean_rstate"):
+                self.assertIn(key, result[side])
+        self.assertGreaterEqual(result["rl"]["carry_rate"], 0.0)
+        self.assertLessEqual(result["rl"]["carry_rate"], 1.0)
 
 
 if __name__ == "__main__":
