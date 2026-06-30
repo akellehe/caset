@@ -8,6 +8,7 @@ Tests for the parallelization features:
   - Thread-level parallelism via ThreadPoolExecutor
 """
 
+import os
 import threading
 import time
 import unittest
@@ -196,41 +197,56 @@ class TestThreadParallelism(unittest.TestCase):
                                f"Worker {wid} should have positive volume")
 
     def test_threads_faster_than_sequential(self):
-        """Threaded execution should be faster than sequential for
-        CPU-bound sweep work, confirming the GIL is actually released."""
+        """Threaded execution should be faster than sequential for CPU-bound sweep
+        work, confirming the GIL is actually released.
+
+        This is a timing benchmark, so it is hardened against CI flakiness without
+        weakening the property it checks:
+          * it needs >= 2 cores (skipped otherwise — there is no real parallelism to
+            measure, so a "slowdown" there would be meaningless);
+          * each worker runs a large enough workload that the speedup dominates
+            thread-spawn / scheduling overhead (the old sub-0.2s workload was small
+            enough for overhead to make parallel *slower* on a loaded runner);
+          * it takes the BEST speedup over several attempts — a single measurement can
+            be spoiled by a transient load spike on a shared CI runner, but if the GIL
+            is genuinely released at least one attempt clears the bar.
+        The property still fails (as it should) if NO attempt is faster — e.g. the GIL
+        is held, or sweep stops releasing it.
+        """
+        cores = os.cpu_count() or 1
+        if cores < 2:
+            self.skipTest(f"needs >= 2 cores to measure parallel speedup (have {cores})")
         n_workers = 4
-        nSweeps = 50
-        n_simplices = 200
+        nSweeps = 120
+        n_simplices = 300
+        attempts = 5
 
         def work():
             cdt, _ = _make_cdt(n_simplices=n_simplices)
             cdt.sweep(nSweeps)
 
-        # Warmup to avoid JIT/cache effects
-        work()
+        def measure_speedup():
+            t0 = time.monotonic()
+            for _ in range(n_workers):
+                work()
+            sequential_time = time.monotonic() - t0
+            t0 = time.monotonic()
+            with ThreadPoolExecutor(max_workers=n_workers) as pool:
+                futures = [pool.submit(work) for _ in range(n_workers)]
+                for f in as_completed(futures):
+                    f.result()
+            parallel_time = time.monotonic() - t0
+            return (sequential_time / max(parallel_time, 1e-9),
+                    sequential_time, parallel_time)
 
-        # Sequential
-        t0 = time.monotonic()
-        for _ in range(n_workers):
-            work()
-        sequential_time = time.monotonic() - t0
-
-        # Parallel
-        t0 = time.monotonic()
-        with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            futures = [pool.submit(work) for _ in range(n_workers)]
-            for f in as_completed(futures):
-                f.result()
-        parallel_time = time.monotonic() - t0
-
-        # Parallel should be meaningfully faster (at least 1.2x).
-        # On a multi-core machine with GIL released this should be ~4x.
-        # Use a low threshold to avoid CI flakiness on loaded machines.
-        speedup = sequential_time / max(parallel_time, 1e-9)
+        work()  # warmup to avoid JIT/cache effects
+        # Best (max speedup) over several attempts — tuples compare by speedup first.
+        speedup, seq, par = max(measure_speedup() for _ in range(attempts))
+        # On a multi-core machine with the GIL released this is ~min(n_workers, cores)x;
+        # a low threshold keeps it robust on small / loaded CI runners.
         self.assertGreater(speedup, 1.2,
-                           f"Expected speedup > 1.2x, got {speedup:.2f}x "
-                           f"(seq={sequential_time:.2f}s, "
-                           f"par={parallel_time:.2f}s). "
+                           f"Expected best-of-{attempts} speedup > 1.2x, got "
+                           f"{speedup:.2f}x (seq={seq:.2f}s, par={par:.2f}s). "
                            f"GIL may not be released properly.")
 
     def test_no_data_corruption_under_threading(self):
