@@ -815,14 +815,26 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("n_candidate_moves") = 12, py::arg("patience") = 8,
            py::arg("grow_boundaries") = false)
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
-           py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
+           py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
+           py::arg("rel_tol") = 1e-9,
+           "Stage 2 (geometric): relax every edge l^2 toward a stationary point of "
+           "beta*||grad S||^2 + gamma*r_U (Wirtinger steepest descent, backtracking "
+           "line search). Stops on the RELATIVE stationarity test -- no line-search "
+           "step lowers F by more than rel_tol*max(|F|,1) -- or the max_iters budget "
+           "cap. Read last_stage2_stationary for which one ended the run. Returns the "
+           "F trace.")
       .def_property_readonly("st", &MultiCobordism::spacetime)
       .def_property_readonly("inputs", &MultiCobordism::inputs,
                              py::return_value_policy::reference_internal,
                              "The emergent input blocks (each a MultiCobordismBlock).")
       .def_property_readonly("outputs", &MultiCobordism::outputs,
                              py::return_value_policy::reference_internal,
-                             "The emergent output blocks (each a MultiCobordismBlock).");
+                             "The emergent output blocks (each a MultiCobordismBlock).")
+      .def_property_readonly("last_stage2_stationary",
+                             &MultiCobordism::lastStage2Stationary,
+                             "True iff the last run_stage2 stopped on the relative-"
+                             "tolerance stationarity test (delta_rel < rel_tol); False "
+                             "if it hit the max_iters budget cap.");
 
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",

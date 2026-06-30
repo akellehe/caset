@@ -117,8 +117,17 @@ class MultiCobordism {
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
                                 int patience = 8, bool growBoundaries = false);
-  std::vector<double> runStage2(double beta = 1.0, int maxIters = 40,
-                                  double alpha0 = 0.05);
+  /// Stage 2 (geometric): relax every (complex) edge `ℓ²` toward a stationary point of
+  /// `β‖∇S‖² + Γ·r_U` (Wirtinger steepest descent, backtracking line search). The line
+  /// search accepts a step only when it lowers `F` by more than `relTol·max(|F|,1)` — a
+  /// RELATIVE stationarity test (an absolute floor of `relTol` for `|F| < 1`), so the
+  /// criterion scales with the objective rather than the absolute `convergenceTolerance_`
+  /// the surgery stages use (for `F ≈ 100` that absolute `1e-9` accepted ~`1e-11` relative
+  /// steps — the rounding floor). "No line-search step beats the threshold" is the
+  /// stationary stop; `maxIters` is the safety budget cap. `lastStage2Stationary()` reports
+  /// which of the two ended the run. Returns the `F` trace.
+  std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
+                                  double alpha0 = 0.05, double relTol = 1e-9);
 
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return spacetime_; }
   [[nodiscard]] const std::vector<BoundaryBlock> &inputs() const {
@@ -127,6 +136,11 @@ class MultiCobordism {
   [[nodiscard]] const std::vector<BoundaryBlock> &outputs() const {
     return outputBlocks_;
   }
+  /// Whether the last `runStage2` ended on the relative-tolerance stationarity test (no
+  /// line-search step lowered `F` by more than `relTol·max(|F|,1)`) — `true` — versus
+  /// hitting the `maxIters` budget cap — `false`. Lets a caller report "stopped:
+  /// stationary" vs "stopped: budget". `false` before the first `runStage2`.
+  [[nodiscard]] bool lastStage2Stationary() const { return lastStage2Stationary_; }
 
  private:
   using Snapshot =
@@ -226,6 +240,9 @@ class MultiCobordism {
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   double convergenceTolerance_ = 1e-9;
+  /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
+  /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
+  bool lastStage2Stationary_ = false;
   std::vector<BoundaryBlock> inputBlocks_;
   std::vector<BoundaryBlock> outputBlocks_;
 };
