@@ -785,7 +785,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.target;
                              });
-  py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
+  auto multiCobordismClass =
+      py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
       "The fully-emergent MultiCobordism merge optimizer (#491): merge as a "
       "fully emergent optimization. From a bare host it grows the register by "
       "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
@@ -835,6 +836,40 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              "True iff the last run_stage2 stopped on the relative-"
                              "tolerance stationarity test (delta_rel < rel_tol); False "
                              "if it hit the max_iters budget cap.");
+  py::enum_<MultiCobordism::BuildAction>(multiCobordismClass, "BuildAction",
+      "One canonical solve action a search policy (Proton's build restart loop, a greedy "
+      "driver, or the RL agent) composes, so the solve runs through the engine rather than "
+      "being re-implemented by each consumer.")
+      .value("GROW", MultiCobordism::BuildAction::Grow)
+      .value("EVOLVE", MultiCobordism::BuildAction::Evolve)
+      .value("RELAX", MultiCobordism::BuildAction::Relax)
+      .value("CONE_OUT", MultiCobordism::BuildAction::ConeOut)
+      .value("CONE_IN", MultiCobordism::BuildAction::ConeIn);
+  py::enum_<MultiCobordism::HolePlacementStrategy>(multiCobordismClass,
+      "HolePlacementStrategy",
+      "Secondary ordering for the directed cone-out probe (both interior-first): "
+      "ADJACENT_HOLES_LAST sends cells sharing vertices with existing holes to the back "
+      "(separated register), ADJACENT_HOLES_FIRST to the front (clustered).")
+      .value("ADJACENT_HOLES_FIRST", MultiCobordism::HolePlacementStrategy::AdjacentHolesFirst)
+      .value("ADJACENT_HOLES_LAST", MultiCobordism::HolePlacementStrategy::AdjacentHolesLast);
+  multiCobordismClass
+      .def("build_step", &MultiCobordism::buildStep, py::arg("action"),
+           py::arg("max_steps") = 30, py::arg("n_candidate_moves") = 8,
+           py::arg("patience") = 15, py::arg("stage2_beta") = 1.0,
+           py::arg("stage2_max_iters") = 10, py::arg("stage2_alpha0") = 0.05,
+           py::arg("hole_placement_strategy") =
+               MultiCobordism::HolePlacementStrategy::AdjacentHolesLast,
+           "Apply one BuildAction to this node in place (GROW/EVOLVE = run_stage1 with "
+           "grow_boundaries true/false; RELAX = run_stage2; CONE_OUT/CONE_IN = the directed "
+           "probes) -- the canonical solve step a policy (build, greedy, or RL) composes.")
+      .def("directed_cone_out", &MultiCobordism::directedConeOut,
+           py::arg("strategy") = MultiCobordism::HolePlacementStrategy::AdjacentHolesLast,
+           py::arg("max_open") = 6,
+           "Directed gated cone-out: deliberately open register holes, keeping the opener "
+           "that most lowers this node's rU (which absorbs r_state). Returns #holes opened.")
+      .def("directed_cone_in", &MultiCobordism::directedConeIn, py::arg("max_close") = 6,
+           "Directed gated cone-in: select the register by capping the hole whose removal "
+           "most lowers rU. Returns #holes capped.");
 
   // === CobordismDAG (#491): chain emergent merges, output -> input ===
   py::class_<CobordismDAG>(m, "CobordismDAG",
@@ -863,7 +898,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("__len__", &CobordismDAG::size);
 
   // === Proton (#503): the canonical two-step MultiCobordism proton build ===
-  py::class_<Proton>(m, "Proton",
+  auto protonClass = py::class_<Proton>(m, "Proton",
       R"doc(The canonical, footgun-free proton builder, composing MultiCobordism.
 
 A proton is THREE quarks in a colorless bound state, so it is built in TWO steps
@@ -876,10 +911,12 @@ build() builds the closed-S^4 hosts internally and restarts across distinct
 seeds until step B's proton block carries the singlet with >=3 color holes. The
 accessors lazily trigger build() on first use, so `Proton().block()` just works.
 Observable readers (charge/mass/radius/spin) read OFF block() in their own
-tickets.)doc")
-      .def(py::init<std::uint64_t, int, double, double, int>(), py::arg("seed") = 0,
+tickets.)doc");
+  protonClass
+      .def(py::init<std::uint64_t, int, double, double, int, bool>(), py::arg("seed") = 0,
            py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
-           py::arg("input_weight") = 20.0, py::arg("precone") = 0)
+           py::arg("input_weight") = 20.0, py::arg("precone") = 0,
+           py::arg("should_use_directed_surgery") = false)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")

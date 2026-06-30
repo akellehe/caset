@@ -129,6 +129,44 @@ class MultiCobordism {
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05, double relTol = 1e-9);
 
+  /// One canonical solve action on THIS node, the unit a search policy (Proton's build
+  /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
+  /// through the engine, not re-implemented by each consumer.
+  enum class BuildAction { Grow, Evolve, Relax, ConeOut, ConeIn };
+
+  /// Candidate ordering for the directed cone-out probe's *secondary* sort (both orders are
+  /// interior-first): `AdjacentHolesLast` sends cells that share vertices with the existing
+  /// holes to the back, so new holes come out separated; `AdjacentHolesFirst` brings them to
+  /// the front, so the register clusters. (For the first hole the orders coincide.)
+  enum class HolePlacementStrategy { AdjacentHolesFirst, AdjacentHolesLast };
+
+  /// Apply one `BuildAction` to this node (in place). Grow/Evolve = `runStage1` with
+  /// `growBoundaries` true/false; Relax = `runStage2`; ConeOut/ConeIn = the directed probes
+  /// below. Irrelevant params for a given action are ignored.
+  void buildStep(BuildAction action, int maxSteps = 30, int nCandidateMoves = 8,
+                 int patience = 15, double stage2Beta = 1.0, int stage2MaxIters = 10,
+                 double stage2Alpha0 = 0.05,
+                 HolePlacementStrategy holePlacementStrategy = HolePlacementStrategy::AdjacentHolesLast);
+
+  /// Directed, gated cone-OUT: open register holes deliberately. Enumerates candidate top
+  /// cells interior-first; `AdjacentHolesLast` then sends cells sharing vertices with the
+  /// existing holes to the back (new holes separated), `AdjacentHolesFirst` to the front
+  /// (register clusters). Tries each with a gated `SurgicalCone::coneOut` (rolled back),
+  /// skipping any that would strand a `pinnedBoundaryVertices()` vertex, and keeps the
+  /// hole-opener that most lowers this node's `rU` (its realizability residual — which absorbs
+  /// the output `r_state`, so this drives the register toward carrying the target on BOTH the
+  /// 2→1 and 2→2 steps). Repeats up to `maxOpen`; stops when no opener lowers `rU`. Returns
+  /// #holes opened.
+  [[nodiscard]] int directedConeOut(HolePlacementStrategy strategy = HolePlacementStrategy::AdjacentHolesLast,
+                                    int maxOpen = 6);
+
+  /// Directed, gated cone-IN: select the register. Enumerates the boundary facets of the
+  /// current emergent holes (capping one closes that hole), tries each with a gated
+  /// `SurgicalCone::coneIn` (a fresh vertex, so nothing pinned is stranded), and keeps the
+  /// cap that most lowers `rU` — i.e. drops the hole that hurts the carry. Repeats up to
+  /// `maxClose`; stops when no cap lowers `rU`. Returns #holes capped.
+  [[nodiscard]] int directedConeIn(int maxClose = 6);
+
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime() const { return spacetime_; }
   [[nodiscard]] const std::vector<BoundaryBlock> &inputs() const {
     return inputBlocks_;
@@ -148,6 +186,12 @@ class MultiCobordism {
                 std::map<std::pair<std::uint64_t, std::uint64_t>,
                          std::complex<double>>>;
   using MoveSpec = std::pair<std::string, std::vector<std::uint64_t>>;
+
+  /// The pinned boundary (input + output) vertices — none may be removed by a move. The move
+  /// gate (`applyMoveSpecification`) and the directed cone-out probe consult it to avoid
+  /// stranding a pinned vertex. (Currently empty — the boundary states are held by their `r_U`
+  /// terms, not by freezing vertices.)
+  [[nodiscard]] std::set<std::uint64_t> pinnedBoundaryVertices() const;
 
   /// The sub-complex carried by a boundary block: a freshly-built `Spacetime` of
   /// exactly the top cells of `spacetime` all of whose vertices lie in `vertexSet`
@@ -170,8 +214,6 @@ class MultiCobordism {
   void seedBlocks(const std::vector<std::uint64_t> &seeds,
                   const std::vector<std::vector<std::complex<double>>> &targets,
                   std::vector<BoundaryBlock> &destinationBlocks);
-  // All pinned boundary (input + output) vertices — none may be removed by a move.
-  [[nodiscard]] std::set<std::uint64_t> boundaryVerts() const;
 
   [[nodiscard]] Snapshot snapshotOf(const Spacetime &spacetime) const;
   [[nodiscard]] Snapshot snapshot() const;

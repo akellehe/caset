@@ -39,12 +39,13 @@ std::vector<std::complex<double>> Proton::singlet() {
 }
 
 Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
-               double inputWeight, int precone)
+               double inputWeight, int precone, bool shouldUseDirectedSurgery)
     : baseSeed_(seed),
       registerDegree_(registerDegree),
       gamma_(gamma),
       inputResidualWeight_(inputWeight),
-      precone_(precone) {}
+      precone_(precone),
+      shouldUseDirectedSurgery_(shouldUseDirectedSurgery) {}
 
 std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   using namespace ::tessera::spacetime;
@@ -128,8 +129,12 @@ void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
   // same factories the animation drives.)
   const auto runNode = [&](MultiCobordism &node) {
     node.runStage1(initSteps, stage1CandidateMoves, stage1Patience, /*growBoundaries=*/true);
+    if (shouldUseDirectedSurgery_)  // deliberately open the register holes
+      (void)node.directedConeOut();
     node.runStage1(evolveSteps, stage1CandidateMoves, stage1Patience,
                    /*growBoundaries=*/false);
+    if (shouldUseDirectedSurgery_)  // select the best register (drop holes that hurt)
+      (void)node.directedConeIn();
     node.runStage2(stage2Beta, stage2MaxIters);
   };
 
