@@ -26,25 +26,32 @@ driving surgery one step at a time (as the old demo did) never grows the registe
 exactly why the proton never showed its three quark holes. `run_stage2` is then advanced one
 relaxation iteration per frame, so the geometric settling animates smoothly.
 
-The four panels:
+The figure is a 2×3 grid, one **step per row**: traces on the left, then the primal complex,
+then its dual:
 
   * **metrics** — the objective `F`, the Regge stationarity term `‖∇S‖²`, and the
     realizability residual `r_U` vs step (a dashed line marks the Step A → Step B boundary);
-  * **register** — the Betti `b₃` (the emergent color register) and the register-hole count
-    vs step (the proton's three registers appear as Step B grows);
-  * **complex — Step A** and **complex — Step B** — 2-D classical-MDS projections of each
-    node's relaxing 1-skeleton (register-hole vertices highlighted). Each frame is
-    normalized to a fixed scale, Procrustes-aligned (rotation/reflection only) to the
-    previous frame, and eased toward it, with the view auto-fit to the cloud — so the
-    structure stays legible instead of collapsing into a dot.
+  * **color register** — the color-register (hole = quark) count and, separately, the Betti
+    number `b_k` vs step (the proton's three registers appear as Step B grows);
+  * **complex — Step A / Step B** — 2-D classical-MDS projections of each node's relaxing
+    1-skeleton; each emergent color hole (register) is outlined in red as a cell and numbered.
+    Each frame is normalized to a fixed scale, Procrustes-aligned (rotation/reflection only)
+    to the previous frame, and eased, with the view auto-fit — so the structure stays legible
+    instead of collapsing into a dot.
+  * **dual complex — Step A / Step B** — the circumcentric dual graph (one node per top cell,
+    edges across shared facets) drawn at the primal cell centroids, with a **curvature heat
+    map**: each dual node is colored by the local Regge curvature (the angle-defect action
+    density `Σ |ε·★|` over the cell's hinges), so hotter regions carry more curvature.
 
 The figure title reports the live **convergence verdict**: whether Step B's whole cobordism
 carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
 holes.
 
-It drives only the **public** `Proton` (`recombination_node`/`formation_node`) and
+It drives only the **public** `Proton` (`recombination_node`/`formation_node`),
 `MultiCobordism` (`run_stage1`/`run_stage2`, plus `betti`, `emergent_holes`,
-`regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`) APIs — the *same* node setups
+`regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`), and the geometry readers
+(`Spacetime.getTopSimplices`/`getDualAdjacency`/`getSimplices`,
+`Simplex.lorentzianDeficitAngle`/`dualVolume`) APIs — the *same* node setups
 and drive `Proton.build()` uses, so the animation shows the real class. The C++ engine is
 untouched.
 
@@ -60,6 +67,7 @@ which is slower.
     python multicobordism_animation.py --save proton.gif
 """
 import argparse
+import itertools
 import math
 
 import numpy as np
@@ -87,6 +95,15 @@ _STAGE1_PATIENCE = 15      # matches Proton.build(): early-stop a pass after thi
 _STAGE1_CANDIDATES = 8
 _COLOR_TOL = 0.5           # singlet r_state below this ⇒ the proton carries the color
 _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
+
+# Dual-complex curvature heat map. Curvature in Regge calculus is the deficit angle on
+# hinges (the (d-2)=2-simplices, i.e. triangles); we localize it to each top cell (dual
+# node) as Σ over its hinges of |Re(lorentzian deficit) · dual volume| — the Regge action
+# density. `Simplex.lorentzianDeficitAngle` is expensive, so the heat is recomputed only
+# every `_HEAT_REFRESH_EVERY` frames on the active node (the frozen node's geometry doesn't
+# change, so its heat is cached) — the cheap dual *graph* still redraws every frame.
+_HEAT_CMAP = "inferno"
+_HEAT_REFRESH_EVERY = 4
 
 
 def _mds_layout(st):
@@ -215,6 +232,7 @@ class ProtonAnimator:
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
         self._done = False          # so the verdict is announced exactly once
+        self._curv_cache = {}       # node_index -> (frame_computed, {cell_tuple: curvature})
 
     @staticmethod
     def _make_schedule(n_nodes, init_steps, init_chunk, evolve_steps, evolve_chunk,
@@ -274,14 +292,27 @@ class ProtonAnimator:
 
     # ---- drawing ----
     def _setup(self, plt):
-        self.fig, axes = plt.subplots(2, 2, figsize=(13, 9))
-        (self.axm, self.axr), (self.axA, self.axB) = axes
+        from matplotlib.cm import ScalarMappable
+        from matplotlib.colors import Normalize
+        # One step per row: [traces | primal complex | dual complex + curvature heat].
+        self.fig, axes = plt.subplots(2, 3, figsize=(17, 9))
+        self.axm, self.axA, self.axDA = axes[0]   # metrics,  Step A primal, Step A dual
+        self.axr, self.axB, self.axDB = axes[1]   # register, Step B primal, Step B dual
+        self._dual_axes = [self.axDA, self.axDB]
+        # Persistent colorbars (created ONCE — recreating per frame piles them up). Each
+        # dual panel self-normalizes per frame; we just update the mappable's clim.
+        self._sms = []
+        for ax in self._dual_axes:
+            sm = ScalarMappable(cmap=_HEAT_CMAP, norm=Normalize(0.0, 1.0))
+            cbar = self.fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+            cbar.set_label("curvature  |ε·★|", fontsize=7)
+            cbar.ax.tick_params(labelsize=6)
+            self._sms.append(sm)
         return self.fig
 
-    def _draw_complex(self, ax, node_index, title):
+    def _draw_complex(self, ax, node_index, coords, title):
         node, _label = self.nodes[node_index]
         st = node.st
-        coords = self._layouts[node_index].coords(st)
         ax.clear()
         # Each emergent color hole (register) is a removed top cell — a k=3 hole is a
         # 4-simplex, 5 vertices — whose boundary edges stay in the complex. OUTLINE each
@@ -321,6 +352,83 @@ class ProtonAnimator:
                      fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
+    # ---- dual complex + curvature heat ----
+    @staticmethod
+    def _cell_curvature(st):
+        """Per-top-cell curvature: Σ over the cell's hinges (triangles) of
+        |Re(lorentzian deficit) · dual volume| — the Regge angle-defect action density
+        localized to each top cell (dual node). Returns {sorted-cell-vertex-tuple: value}."""
+        hinge_w = {}
+        for s in st.getSimplices():
+            vs = s.getVertices()
+            if len(vs) != 3:                     # hinges = (d-2) = 2-simplices (triangles)
+                continue
+            key = tuple(sorted(v.getId() for v in vs))
+            try:
+                hinge_w[key] = (abs(complex(s.lorentzianDeficitAngle()).real)
+                                * abs(float(s.dualVolume())))
+            except Exception:                    # boundary/degenerate hinge → no curvature
+                hinge_w[key] = 0.0
+        curv = {}
+        for c in st.getTopSimplices():
+            cell = tuple(sorted(v.getId() for v in c.getVertices()))
+            curv[cell] = sum(hinge_w.get(tuple(sorted(t)), 0.0)
+                             for t in itertools.combinations(cell, 3))
+        return curv
+
+    def _cell_curvature_cached(self, node_index, st):
+        """`_cell_curvature` is expensive, so recompute it only every `_HEAT_REFRESH_EVERY`
+        frames on the active (changing) node, and always on the final frame; the frozen
+        node's geometry doesn't change, so its last value is reused."""
+        frame = len(self.hist["F"])
+        cached = self._curv_cache.get(node_index)
+        stale = (node_index == self._active
+                 and frame - cached[0] >= _HEAT_REFRESH_EVERY) if cached else True
+        if cached is None or stale or frame >= self._frames:
+            self._curv_cache[node_index] = (frame, self._cell_curvature(st))
+        return self._curv_cache[node_index][1]
+
+    def _draw_dual(self, ax, sm, node_index, coords):
+        """The dual complex (one node per top cell, edges across shared facets) drawn at the
+        primal cell centroids, with a curvature heat map (hotter = more Regge curvature)."""
+        st = self.nodes[node_index][0].st
+        ax.clear()
+        top = st.getTopSimplices()
+        curv_map = self._cell_curvature_cached(node_index, st)
+        n = len(top)
+        pos = np.full((n, 2), np.nan)
+        curv = np.zeros(n)
+        for i, c in enumerate(top):                       # dual node i ↔ getTopSimplices()[i]
+            cell = sorted(v.getId() for v in c.getVertices())
+            here = [coords[v] for v in cell if v in coords]
+            if here:
+                pos[i] = np.mean(here, axis=0)
+            curv[i] = curv_map.get(tuple(cell), 0.0)
+        rows, cols, _N = st.getDualAdjacency()
+        for a, b in zip(rows, cols):                      # dual edges (shared-facet adjacency)
+            if a < n and b < n and np.all(np.isfinite(pos[a])) and np.all(np.isfinite(pos[b])):
+                ax.plot([pos[a, 0], pos[b, 0]], [pos[a, 1], pos[b, 1]],
+                        color="0.8", lw=0.4, zorder=1)
+        finite = np.all(np.isfinite(pos), axis=1)
+        if finite.any():
+            cv = curv[finite]
+            vmax = float(np.percentile(cv, 95)) if finite.sum() >= 5 else float(cv.max())
+            if not vmax > 0:
+                vmax = 1.0
+            sm.set_clim(0.0, vmax)
+            shown = np.clip(cv, 0.0, vmax)
+            if finite.sum() >= 4:                         # filled heat field where possible
+                try:
+                    ax.tricontourf(pos[finite, 0], pos[finite, 1], shown, levels=12,
+                                   cmap=_HEAT_CMAP, vmin=0.0, vmax=vmax, alpha=0.85, zorder=0)
+                except Exception:
+                    pass
+            ax.scatter(pos[finite, 0], pos[finite, 1], c=shown, cmap=_HEAT_CMAP,
+                       vmin=0.0, vmax=vmax, s=14, zorder=2, edgecolors="0.3", linewidths=0.2)
+        ax.set_aspect("equal")
+        ax.set_title(f"dual complex — curvature heat  ({n} cells)", fontsize=9)
+        ax.set_xticks([]); ax.set_yticks([])
+
     def _redraw(self):
         xs = range(len(self.hist["F"]))
         self.axm.clear()
@@ -351,11 +459,14 @@ class ProtonAnimator:
         self.axr.set_xlabel("frame")
         self.axr.legend(loc="upper left", fontsize=8)
 
-        # Both complex panels, every frame: Step A on the left, Step B on the right. The
-        # active node animates; the other holds its current (finished, or not-yet-started)
-        # complex — so both steps are on screen at one time.
-        self._draw_complex(self.axA, 0, self.nodes[0][1])
-        self._draw_complex(self.axB, 1, self.nodes[1][1])
+        # One step per row: primal complex with its dual (curvature heat) beside it. The
+        # active node animates; the other holds its current complex — both steps on screen at
+        # one time. Each node's layout is computed once and shared by its primal+dual panels.
+        for ni, axc, axd, sm in ((0, self.axA, self.axDA, self._sms[0]),
+                                 (1, self.axB, self.axDB, self._sms[1])):
+            coords = self._layouts[ni].coords(self.nodes[ni][0].st)
+            self._draw_complex(axc, ni, coords, self.nodes[ni][1])
+            self._draw_dual(axd, sm, ni, coords)
 
     def update(self, frame):
         node_index, phase, _count = self._schedule[frame]
