@@ -14,6 +14,8 @@ namespace tessera::spacetime { class Spacetime; }
 namespace tessera::cobordism {
 using ::tessera::spacetime::Spacetime;
 
+class MultiCobordism;  // returned (seeded, not run) by the node factories below
+
 /// # Proton
 ///
 /// A high-level, footgun-free builder for **the** emergent proton, composing
@@ -73,6 +75,17 @@ class Proton {
              int evolveSteps = 60, int stage1CandidateMoves = 8, int stage1Patience = 15,
              double stage2Beta = 1.0, int stage2MaxIters = 10,
              double colorTolerance = 0.5, int minQuarkHoles = 3);
+
+  /// A fresh, seeded — but NOT yet run — Step A node (recombination, 2→2): two neutral
+  /// q-q̄ pairs `{1,-1,0}` ⊔ `{1,0,-1}` → a diquark `{1,ω}` ⊔ antidiquark `{1,ω²}`, on a
+  /// single Δ⁴ seed (inputs at v0,v1; outputs at v2,v3; input weight set). `build()` and
+  /// the animation both drive this exact setup via `runStage1`/`runStage2` — the single
+  /// source of truth for the recombination step.
+  [[nodiscard]] std::shared_ptr<MultiCobordism> recombinationNode(std::uint64_t seed) const;
+  /// A fresh, seeded — but NOT yet run — Step B node (formation, 2→1): the diquark
+  /// `{1,ω}` + the third quark `{ω²}` → the proton singlet `{1,ω,ω²}`, on a single Δ⁴
+  /// seed (inputs at v0,v1; the single output is read off the WHOLE, so no `seedOutputs`).
+  [[nodiscard]] std::shared_ptr<MultiCobordism> formationNode(std::uint64_t seed) const;
 
   /// True iff the whole step-B cobordism carries the singlet (`colorResidual() <
   /// colorTolerance`) with `≥ minQuarkHoles` holes. Triggers `build()`.

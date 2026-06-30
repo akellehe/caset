@@ -62,31 +62,60 @@ std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   return host;
 }
 
+std::shared_ptr<MultiCobordism> Proton::recombinationNode(std::uint64_t seed) const {
+  // Step A inputs: two neutral q-q̄ pairs (Σ = 0). Outputs: a colored diquark {1,ω} ⊔
+  // antidiquark {1,ω²} (2-vectors — NOT the singlet). Seeded on a fresh single-Δ⁴ seed,
+  // inputs at v0,v1 and outputs at v2,v3; NOT run (the caller drives it).
+  const complexd w = omega();
+  const std::vector<std::vector<complexd>> pairs = {
+      {complexd(1.0, 0.0), complexd(-1.0, 0.0), complexd(0.0, 0.0)},
+      {complexd(1.0, 0.0), complexd(0.0, 0.0), complexd(-1.0, 0.0)}};
+  const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
+  const std::vector<complexd> antidiquark = {complexd(1.0, 0.0), w * w};
+  auto host = buildMinimalSeed();
+  auto verts = host->getVertexList()->toVector();
+  auto node = std::make_shared<MultiCobordism>(
+      host, pairs, std::vector<std::vector<complexd>>{diquark, antidiquark},
+      std::vector<int>{registerDegree_}, gamma_, seed);
+  node->setInputResidualWeight(inputResidualWeight_);
+  node->seedInputs({verts[0]->getId(), verts[1]->getId()});
+  node->seedOutputs({verts[2]->getId(), verts[3]->getId()});
+  return node;
+}
+
+std::shared_ptr<MultiCobordism> Proton::formationNode(std::uint64_t seed) const {
+  // Step B inputs: the diquark {1,ω} + the third quark {ω²}. Output: the proton singlet,
+  // read off the WHOLE cobordism (no seedOutputs). Seeded on a fresh single-Δ⁴ seed,
+  // inputs at v0,v1; NOT run (the caller drives it).
+  const complexd w = omega();
+  const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
+  const std::vector<complexd> thirdQuark = {w * w};
+  auto host = buildMinimalSeed();
+  auto verts = host->getVertexList()->toVector();
+  auto node = std::make_shared<MultiCobordism>(
+      host, std::vector<std::vector<complexd>>{diquark, thirdQuark},
+      std::vector<std::vector<complexd>>{singlet()},
+      std::vector<int>{registerDegree_}, gamma_, seed);
+  node->setInputResidualWeight(inputResidualWeight_);
+  node->seedInputs({verts[0]->getId(), verts[1]->getId()});
+  return node;
+}
+
 void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
                    int stage1CandidateMoves, int stage1Patience, double stage2Beta,
                    int stage2MaxIters, double colorTolerance, int minQuarkHoles) {
   if (attempted_) return;
   attempted_ = true;
 
-  const complexd w = omega();
-  // Step A inputs: two neutral q-q̄ pairs (Σ = 0). Step A outputs: a colored diquark
-  // {1,ω} ⊔ antidiquark {1,ω²} (2-vectors — NOT the singlet).
-  const std::vector<std::vector<complexd>> pairsA = {
-      {complexd(1.0, 0.0), complexd(-1.0, 0.0), complexd(0.0, 0.0)},
-      {complexd(1.0, 0.0), complexd(0.0, 0.0), complexd(-1.0, 0.0)}};
-  const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
-  const std::vector<complexd> antidiquark = {complexd(1.0, 0.0), w * w};
-  // Step B inputs: the diquark (2-vec) + the third quark (1-vec). Output: the proton.
-  const std::vector<complexd> thirdQuark = {w * w};
   const std::vector<complexd> protonSinglet = singlet();
 
-  // One node's run: weight the inputs, an INITIALIZATION pass that grows the boundary
+  // Drive one already-seeded node: an INITIALIZATION pass that grows the boundary
   // regions until they carry (grow_boundaries=true), an EVOLUTION pass with ∂W frozen
-  // (grow_boundaries=false), then the geometric relaxation. runStage1 self-recovers
-  // from unproductive grow bursts internally (revert + reseed + retry), so one call
-  // per pass is as robust as many short ones.
+  // (grow_boundaries=false), then the geometric relaxation. runStage1 self-recovers from
+  // unproductive grow bursts internally, so one call per pass is robust. (Node setup —
+  // seed, targets, seeding, input weight — lives in recombinationNode/formationNode, the
+  // same factories the animation drives.)
   const auto runNode = [&](MultiCobordism &node) {
-    node.setInputResidualWeight(inputResidualWeight_);
     node.runStage1(initSteps, stage1CandidateMoves, stage1Patience, /*growBoundaries=*/true);
     node.runStage1(evolveSteps, stage1CandidateMoves, stage1Patience,
                    /*growBoundaries=*/false);
@@ -99,32 +128,15 @@ void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
     const std::uint64_t seedA = baseSeed_ + 2ULL * static_cast<std::uint64_t>(attempt);
     const std::uint64_t seedB = seedA + 1ULL;
 
-    // ---- Step A — recombination (2 → 2): the diquark ⊔ antidiquark form. Run as a
-    // best-effort validation; its r_U is reported (diquarkResidual), not gated. ----
-    double diquarkR = std::numeric_limits<double>::quiet_NaN();
-    auto hostA = buildMinimalSeed();
-    auto vertsA = hostA->getVertexList()->toVector();
-    if (vertsA.size() >= 4) {
-      MultiCobordism stepA(hostA, pairsA, {diquark, antidiquark}, {registerDegree_},
-                           gamma_, seedA);
-      stepA.seedInputs({vertsA[0]->getId(), vertsA[1]->getId()});
-      stepA.seedOutputs({vertsA[2]->getId(), vertsA[3]->getId()});
-      runNode(stepA);
-      diquarkR = stepA.rU(stepA.spacetime());
-    }
+    // ---- Step A — recombination: best-effort; its r_U is reported, not gated. ----
+    auto stepA = recombinationNode(seedA);
+    runNode(*stepA);
+    const double diquarkR = stepA->rU(stepA->spacetime());
 
-    // ---- Step B — formation (2 → 1): the proton, read off the WHOLE cobordism ----
-    auto hostB = buildMinimalSeed();
-    auto vertsB = hostB->getVertexList()->toVector();
-    if (vertsB.size() < 3) continue;
-    MultiCobordism stepB(hostB, {diquark, thirdQuark}, {protonSinglet}, {registerDegree_},
-                         gamma_, seedB);
-    stepB.seedInputs({vertsB[0]->getId(), vertsB[1]->getId()});
-    runNode(stepB);  // no seedOutputs — the single output IS the whole
-
-    // The proton is the harmonic of the WHOLE cobordism (the inputs are held by their
-    // residual, the bulk evolves to carry the singlet). Read it off the relaxed whole.
-    auto whole = stepB.spacetime();
+    // ---- Step B — formation: the proton, read off the WHOLE cobordism ----
+    auto stepB = formationNode(seedB);
+    runNode(*stepB);
+    auto whole = stepB->spacetime();
     const double colorR = MultiCobordism::residualOfTargetStateAgainstHarmonic(
         whole, registerDegree_, protonSinglet);
     auto holes = MultiCobordism::emergentHoles(*whole, registerDegree_);
