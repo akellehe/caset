@@ -41,7 +41,8 @@ then its dual:
   * **dual complex — Step A / Step B** — the circumcentric dual graph (one node per top cell,
     edges across shared facets) drawn at the primal cell centroids, with a **curvature heat
     map**: each dual node is colored by the local Regge curvature (the angle-defect action
-    density `Σ |ε·★|` over the cell's hinges), so hotter regions carry more curvature.
+    density `Σ ε·|★|` over the cell's hinges) on a diverging colormap — blue = negative
+    (saddle) curvature, white ≈ flat, red = positive (cone) curvature.
 
 The figure title reports the live **convergence verdict**: whether Step B's whole cobordism
 carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
@@ -98,11 +99,12 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 
 # Dual-complex curvature heat map. Curvature in Regge calculus is the deficit angle on
 # hinges (the (d-2)=2-simplices, i.e. triangles); we localize it to each top cell (dual
-# node) as Σ over its hinges of |Re(lorentzian deficit) · dual volume| — the Regge action
-# density. `Simplex.lorentzianDeficitAngle` is expensive, so the heat is recomputed only
+# node) as the SIGNED sum over its hinges of Re(lorentzian deficit) · |dual volume| — the
+# Regge angle-defect action density, keeping ε's sign so negative (saddle) curvature shows.
+# `Simplex.lorentzianDeficitAngle` is expensive, so the heat is recomputed only
 # every `_HEAT_REFRESH_EVERY` frames on the active node (the frozen node's geometry doesn't
 # change, so its heat is cached) — the cheap dual *graph* still redraws every frame.
-_HEAT_CMAP = "inferno"
+_HEAT_CMAP = "coolwarm"    # diverging: blue = negative curvature, white ≈ 0, red = positive
 _HEAT_REFRESH_EVERY = 4
 
 
@@ -305,7 +307,7 @@ class ProtonAnimator:
         for ax in self._dual_axes:
             sm = ScalarMappable(cmap=_HEAT_CMAP, norm=Normalize(0.0, 1.0))
             cbar = self.fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
-            cbar.set_label("curvature  |ε·★|", fontsize=7)
+            cbar.set_label("curvature  ε·|★|  (signed)", fontsize=7)
             cbar.ax.tick_params(labelsize=6)
             self._sms.append(sm)
         return self.fig
@@ -356,8 +358,9 @@ class ProtonAnimator:
     @staticmethod
     def _cell_curvature(st):
         """Per-top-cell curvature: Σ over the cell's hinges (triangles) of
-        |Re(lorentzian deficit) · dual volume| — the Regge angle-defect action density
-        localized to each top cell (dual node). Returns {sorted-cell-vertex-tuple: value}."""
+        Re(lorentzian deficit) · |dual volume| — the Regge angle-defect action density
+        localized to each top cell (dual node), SIGNED so negative (saddle) curvature is kept.
+        Returns {sorted-cell-vertex-tuple: signed value}."""
         hinge_w = {}
         for s in st.getSimplices():
             vs = s.getVertices()
@@ -365,7 +368,10 @@ class ProtonAnimator:
                 continue
             key = tuple(sorted(v.getId() for v in vs))
             try:
-                hinge_w[key] = (abs(complex(s.lorentzianDeficitAngle()).real)
+                # SIGNED: the deficit angle ε is signed (ε>0 positive/cone curvature, ε<0
+                # negative/saddle curvature when the dihedral angles overfill 2π). Keep the
+                # sign; |dual volume| is the positive dual-measure weight.
+                hinge_w[key] = (complex(s.lorentzianDeficitAngle()).real
                                 * abs(float(s.dualVolume())))
             except Exception:                    # boundary/degenerate hinge → no curvature
                 hinge_w[key] = 0.0
@@ -390,7 +396,8 @@ class ProtonAnimator:
 
     def _draw_dual(self, ax, sm, node_index, coords):
         """The dual complex (one node per top cell, edges across shared facets) drawn at the
-        primal cell centroids, with a curvature heat map (hotter = more Regge curvature)."""
+        primal cell centroids, with a SIGNED curvature heat map (blue = negative/saddle,
+        red = positive/cone Regge curvature)."""
         st = self.nodes[node_index][0].st
         ax.clear()
         top = st.getTopSimplices()
@@ -412,21 +419,24 @@ class ProtonAnimator:
         finite = np.all(np.isfinite(pos), axis=1)
         if finite.any():
             cv = curv[finite]
-            vmax = float(np.percentile(cv, 95)) if finite.sum() >= 5 else float(cv.max())
+            # Symmetric range centered at 0 so the diverging colormap shows sign honestly:
+            # blue = negative (saddle) curvature, white ≈ flat, red = positive (cone).
+            mag = np.abs(cv)
+            vmax = float(np.percentile(mag, 95)) if finite.sum() >= 5 else float(mag.max())
             if not vmax > 0:
                 vmax = 1.0
-            sm.set_clim(0.0, vmax)
-            shown = np.clip(cv, 0.0, vmax)
+            sm.set_clim(-vmax, vmax)
+            shown = np.clip(cv, -vmax, vmax)
             if finite.sum() >= 4:                         # filled heat field where possible
                 try:
                     ax.tricontourf(pos[finite, 0], pos[finite, 1], shown, levels=12,
-                                   cmap=_HEAT_CMAP, vmin=0.0, vmax=vmax, alpha=0.85, zorder=0)
+                                   cmap=_HEAT_CMAP, vmin=-vmax, vmax=vmax, alpha=0.85, zorder=0)
                 except Exception:
                     pass
             ax.scatter(pos[finite, 0], pos[finite, 1], c=shown, cmap=_HEAT_CMAP,
-                       vmin=0.0, vmax=vmax, s=14, zorder=2, edgecolors="0.3", linewidths=0.2)
+                       vmin=-vmax, vmax=vmax, s=14, zorder=2, edgecolors="0.3", linewidths=0.2)
         ax.set_aspect("equal")
-        ax.set_title(f"dual complex — curvature heat  ({n} cells)", fontsize=9)
+        ax.set_title(f"dual complex — signed curvature  ({n} cells)", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
     def _redraw(self):
