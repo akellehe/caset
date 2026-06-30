@@ -184,6 +184,11 @@ class CobordismObjectiveEnv:
         reward_scale: float = 1.0,
         hole_reward_weight: float = 0.0,
         rstate_reward_weight: float = 0.0,
+        terminate_on_carry: bool = True,
+        directed_grow: bool = False,
+        cone_strategy: str = "greedy",
+        cone_max_candidates: int = 200,
+        cone_overshoot: int = 2,
     ):
         # Default target = the proton singlet on the formation (2→1) node. `gamma` MUST
         # match the factory's node so F = gradN2 + gamma·r_u is reconstructed exactly; the
@@ -214,6 +219,28 @@ class CobordismObjectiveEnv:
         # foundation's reward contract (telescoping log-reduction of F) is unchanged.
         self.hole_reward_weight = float(hole_reward_weight)
         self.rstate_reward_weight = float(rstate_reward_weight)
+        # When True (the #539 default), carrying the target ENDS the episode. The proton arc
+        # is grow → evolve → RELAX, though, and the carry happens at the GROW stage — so the
+        # carry profile sets this False to let the policy keep going (relax the geometry,
+        # lower F) after forming the register, learning the full arc rather than stopping the
+        # instant the holes appear. The carry verdict (read off the final state, as
+        # `Proton.build()` does) is unaffected: once carried, GROW/EVOLVE early-break and
+        # RELAX preserves the register, so the register persists to the episode's end.
+        self.terminate_on_carry = bool(terminate_on_carry)
+        # Directed cone-out probe (#546): when on, a GROW first runs the random-draw
+        # `run_stage1` to build the bulk, then DELIBERATELY opens the register holes the
+        # random draws left short of `target_holes` — choosing each cone-out cell by a gated
+        # `SurgicalCone` probe (`directed_cone_out`) instead of hoping a random draw hits a
+        # disjoint cell. Off by default (pure #539 random growth); the carry profile turns it
+        # on. `cone_strategy` ∈ {"greedy", "bfs"}.
+        self.directed_grow = bool(directed_grow)
+        self.cone_strategy = str(cone_strategy)
+        self.cone_max_candidates = int(cone_max_candidates)
+        # GROW (directed) may OVER-open up to `target_holes + cone_overshoot` register holes;
+        # EVOLVE (directed) then SELECTS the best `target_holes` by capping the worst (the
+        # cone-in that leaves the lowest singlet r_state) — register selection, not just
+        # growth (so the policy can drop a sub-optimal hole and keep a better one).
+        self.cone_overshoot = int(cone_overshoot)
 
         # Gym-style space descriptors (no gymnasium dependency).
         self.observation_space = _Box(
@@ -329,11 +356,19 @@ class CobordismObjectiveEnv:
                 self.node.run_stage1(max_steps=max(1, max_steps),
                                      n_candidate_moves=self.n_candidate_moves,
                                      patience=self.patience, grow_boundaries=True)
+                if self.directed_grow:
+                    # Finish the register the random draws left short: deliberately open the
+                    # remaining holes with the gated directed cone-out probe (#546).
+                    self.directed_cone_out(self.cone_strategy)
             elif move == EVOLVE:
                 max_steps = int(round(_lerp(*self.evolve_steps, intensity)))
                 self.node.run_stage1(max_steps=max(1, max_steps),
                                      n_candidate_moves=self.n_candidate_moves,
                                      patience=self.patience, grow_boundaries=False)
+                if self.directed_grow:
+                    # Select the register: cap the worst hole(s) back toward target_holes,
+                    # dropping a sub-optimal hole GROW may have over-opened (#546).
+                    self.directed_cone_in(self.cone_strategy)
             else:  # RELAX
                 max_iters = int(round(_lerp(*self.relax_iters, intensity)))
                 beta = _lerp(*self.beta_range, knob)
@@ -384,7 +419,7 @@ class CobordismObjectiveEnv:
 
         reward = dF_term + hole_term + rstate_term + error_term + carry_term
 
-        terminated = carried_now
+        terminated = carried_now and self.terminate_on_carry
         self._carried = carried_now
         truncated = self._steps_taken >= self.max_actions
         done = bool(terminated or truncated)
@@ -401,6 +436,144 @@ class CobordismObjectiveEnv:
                              "error": error_term, "carry": carry_term},
         }
         return self._observation(metrics), float(reward), done, info
+
+    # ------------------------------------------------------------------ directed probe
+    def _pinned_vertex_ids(self) -> set:
+        """Every pinned input/output block vertex — a directed cone-out must never strand
+        one (the engine's own move gate also forbids removing a pinned boundary vertex)."""
+        pinned = set()
+        for block in list(self.node.inputs) + list(self.node.outputs):
+            pinned.update(int(v) for v in block.vertices)
+        return pinned
+
+    @staticmethod
+    def _top_cell_tuples(st) -> list:
+        """The current top cells as sorted vertex-id tuples — the `coneOut` input form."""
+        return [sorted(int(v.getId()) for v in s.getVertices())
+                for s in st.getTopSimplices()]
+
+    def directed_cone_out(self, strategy: str = "greedy", max_open: int = 6) -> int:
+        """Open register holes by a DIRECTED, gated cone-out probe (#546) instead of
+        `run_stage1`'s random cone draws. `run_stage1` picks ``cone_out`` only 1/6 of the
+        time, on a UNIFORMLY RANDOM cell, and keeps it only if it lowers F — but opening a
+        new disjoint hole can transiently RAISE F, so greedy-ΔF growth misses it and the
+        register stalls below `target_holes`. This probe instead enumerates candidate top
+        cells, tries each with a gated `SurgicalCone.coneOut` (rolled back), and keeps the
+        one that best advances the proton: opens a NEW emergent hole and (tie-break) lowers
+        the singlet `r_state`.
+
+        Candidates are ordered INTERIOR-FIRST — by how many of the cell's facets are already
+        on the boundary, ascending. Coning out a fully-interior cell turns all of its facets
+        into boundary at once, which is exactly what forms a new emergent-hole tuple; a
+        boundary-adjacent cell does not (and only a few percent of cells are interior
+        hole-creators, so a deliberate ordering matters far more than a random draw).
+        ``strategy='bfs'`` additionally prefers cells disjoint from the existing holes
+        (fewest shared vertices), so the holes grow well-separated. Every `coneOut` is gated
+        on `dualComplexValid` and a pinned input/output vertex is never stranded (the
+        candidate is rolled back if it would). Returns the number of holes opened; a no-op
+        once `target_holes` already exist (the carry wants exactly the 3-quark register)."""
+        st = self.node.st
+        pinned = self._pinned_vertex_ids()
+        cone = cob.SurgicalCone(st)
+        opened = 0
+        open_target = self.target_holes + max(0, self.cone_overshoot)
+        for _ in range(int(max_open)):
+            holes = cob.MultiCobordism.emergent_holes(st, self.k)
+            if len(holes) >= open_target:  # over-open; EVOLVE's cone-in selects the best 3
+                break
+            hole_vertices = {v for hole in holes for v in hole}
+            boundary = {tuple(sorted(int(v) for v in f)) for f in st.getBoundary()}
+            hole_vertices = {int(v) for v in hole_vertices}
+
+            def _order_key(cell):
+                cellset = set(cell)
+                # facets already on the boundary (interior cells = 0 → hole-creators first)
+                n_boundary_facets = sum(
+                    1 for i in range(len(cell))
+                    if tuple(c for j, c in enumerate(cell) if j != i) in boundary)
+                shared = len(cellset & hole_vertices)  # overlap with existing holes
+                return (n_boundary_facets, shared) if strategy == "bfs" \
+                    else (n_boundary_facets,)
+
+            cells = sorted(self._top_cell_tuples(st), key=_order_key)[:self.cone_max_candidates]
+            best = None  # (score, cell)
+            for cell in cells:
+                ok, _reason = cone.coneOut(cell)
+                if not ok:
+                    continue
+                current = {int(v.getId()) for v in st.getVertexList().toVector()}
+                if not pinned.issubset(current):  # would strand a pinned vertex: skip
+                    cone.rollback()
+                    continue
+                delta = len(cob.MultiCobordism.emergent_holes(st, self.k)) - len(holes)
+                if delta > 0 and self.target_state is not None:
+                    rstate = float(cob.MultiCobordism.r_state(
+                        st, self.k, self.target_state))
+                    score = (delta, -rstate)
+                else:
+                    score = (delta, 0.0)
+                if best is None or score > best[0]:
+                    best = (score, cell)
+                cone.rollback()
+            if best is None or best[0][0] <= 0:  # nothing opens a new hole
+                break
+            ok, _reason = cone.coneOut(best[1])
+            if not ok:
+                break
+            opened += 1
+        return opened
+
+    def directed_cone_in(self, strategy: str = "greedy", max_close: int = 6) -> int:
+        """Refine the register by DIRECTED, gated cone-in (#546, register SELECTION): cap an
+        existing emergent hole — `coneIn` on one of its boundary facets adds a cell that
+        covers the facet, so that hole's tuple is no longer all-boundary and the hole closes
+        (lowers `b_{d-1}`). The candidates surfaced FIRST are exactly the boundary facets of
+        the current holes (the hole-CAPPING cone-ins), as first-class moves: this lets the
+        policy DROP a sub-optimal register hole and keep a better one, rather than only ever
+        growing structure. While more than `target_holes` holes exist (e.g. after GROW
+        over-opened), the cap chosen is the one leaving the LOWEST singlet `r_state` — i.e.
+        the WORST hole is dropped, selecting the best `target_holes` that carry the singlet.
+        Gated on `dualComplexValid`; cone-in only adds a fresh vertex, so nothing pinned is
+        stranded. Returns the number of holes capped (a no-op at/below `target_holes`)."""
+        st = self.node.st
+        cone = cob.SurgicalCone(st)
+        closed = 0
+        for _ in range(int(max_close)):
+            holes = cob.MultiCobordism.emergent_holes(st, self.k)
+            if len(holes) <= self.target_holes:  # keep exactly the target register
+                break
+            boundary = {tuple(sorted(int(v) for v in f)) for f in st.getBoundary()}
+            # Hole-capping cone-ins, surfaced first: every drop-one facet of a current hole
+            # that is on the boundary (capping it closes that hole).
+            cap_facets = []
+            seen = set()
+            for hole in holes:
+                for i in range(len(hole)):
+                    facet = tuple(c for j, c in enumerate(hole) if j != i)
+                    if facet in boundary and facet not in seen:
+                        seen.add(facet)
+                        cap_facets.append(list(facet))
+            best = None  # (score, facet) — score = (-r_state) of the result; drop the worst
+            for facet in cap_facets[:self.cone_max_candidates]:
+                ok, _reason = cone.coneIn(facet)
+                if not ok:
+                    continue
+                if len(cob.MultiCobordism.emergent_holes(st, self.k)) >= len(holes):
+                    cone.rollback()  # did not actually close a hole
+                    continue
+                rstate = (float(cob.MultiCobordism.r_state(st, self.k, self.target_state))
+                          if self.target_state is not None else 0.0)
+                score = (-rstate,)
+                if best is None or score > best[0]:
+                    best = (score, facet)
+                cone.rollback()
+            if best is None:
+                break
+            ok, _reason = cone.coneIn(best[1])
+            if not ok:
+                break
+            closed += 1
+        return closed
 
     # ------------------------------------------------------------------ helpers
     def dual_complex_valid(self):

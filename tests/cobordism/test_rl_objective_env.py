@@ -236,5 +236,103 @@ class RewardShapingTest(unittest.TestCase):
         self.assertEqual(info["reward_terms"]["rstate"], 0.0)
 
 
+class TerminationFlagTest(unittest.TestCase):
+    """`terminate_on_carry` gates whether forming the proton ENDS the episode. The carry
+    happens at the GROW stage, but the full proton arc is grow → evolve → relax, so the
+    carry profile keeps going past the carry to relax. White-box: force the carry verdict so
+    the logic is tested without a real (slow) carry."""
+
+    def test_default_terminates_on_carry(self):
+        env = _tiny_env()  # default terminate_on_carry=True (#539 behavior)
+        self.assertTrue(env.terminate_on_carry)
+        env.reset(seed=11)
+        env._is_carried = lambda metrics: True  # force the carry verdict
+        _o, _r, done, info = env.step((oe.RELAX, [0.5, 0.5]))
+        self.assertTrue(info["carried"])
+        self.assertTrue(info["terminated"])
+        self.assertTrue(done)
+
+    def test_flag_off_keeps_episode_running_after_carry(self):
+        # With the flag off, carrying does NOT end the episode (only the budget does), so the
+        # policy can relax after forming the register. The one-time carry bonus still fires.
+        env = _tiny_env(terminate_on_carry=False, carry_bonus=5.0)
+        self.assertFalse(env.terminate_on_carry)
+        env.reset(seed=12)
+        env._is_carried = lambda metrics: True
+        _o, _r, done, info = env.step((oe.RELAX, [0.5, 0.5]))
+        self.assertTrue(info["carried"])
+        self.assertFalse(info["terminated"])   # flag off → no termination
+        self.assertFalse(done)                 # step 1 of max_actions=3, so not truncated
+        self.assertEqual(info["reward_terms"]["carry"], 5.0)  # bonus still fires once
+
+
+class DirectedConeOutTest(unittest.TestCase):
+    """The #546 directed cone-out probe — deliberate, gated hole creation (SurgicalCone)
+    instead of run_stage1's random cone draws."""
+
+    def test_config_stored(self):
+        env = _tiny_env(directed_grow=True, cone_strategy="bfs", cone_overshoot=2)
+        self.assertTrue(env.directed_grow)
+        self.assertEqual(env.cone_strategy, "bfs")
+        self.assertEqual(env.cone_overshoot, 2)
+        self.assertFalse(_tiny_env().directed_grow)  # default off (pure #539 growth)
+
+    def test_no_cone_on_bare_seed(self):
+        # The bare Δ⁴ seed has a single top cell; coneOut refuses to remove the last cell, so
+        # the probe opens nothing and leaves the complex untouched + valid.
+        env = _tiny_env()
+        env.reset(seed=4)
+        self.assertEqual(env.metrics["n_top_cells"], 1)
+        self.assertEqual(env.directed_cone_out("greedy"), 0)
+        self.assertTrue(env.dual_complex_valid()[0])
+
+    def test_probe_opens_holes_and_keeps_complex_valid(self):
+        # On a grown complex the directed cone-out probe opens holes (or no-ops), never
+        # closes them, stops by `target_holes + cone_overshoot`, always leaves a valid
+        # manifold-with-boundary, and never strands a pinned input vertex. Both strategies.
+        for strategy in ("greedy", "bfs"):
+            env = oe.make_formation_env(max_actions=2, grow_steps=(8, 12),
+                                        evolve_steps=(3, 5), relax_iters=(1, 2),
+                                        n_candidate_moves=4, target_holes=3, cone_overshoot=2)
+            env.reset(seed=2)
+            env.step((oe.GROW, [1.0, 0.5]))            # build some bulk (random draws)
+            pinned = env._pinned_vertex_ids()
+            holes_before = env.metrics["holes"]
+            opened = env.directed_cone_out(strategy)
+            self.assertGreaterEqual(opened, 0)
+            holes_after = len(oe.cob.MultiCobordism.emergent_holes(env.node.st, env.k))
+            self.assertGreaterEqual(holes_after, holes_before)   # never closes holes
+            self.assertLessEqual(holes_after, env.target_holes + env.cone_overshoot)
+            self.assertTrue(env.dual_complex_valid()[0])         # still a valid manifold
+            current = {int(v.getId()) for v in env.node.st.getVertexList().toVector()}
+            self.assertTrue(pinned.issubset(current))            # no pinned vertex stranded
+
+    def test_cone_in_noop_at_or_below_target(self):
+        # directed_cone_in (register selection) only trims when MORE than target_holes exist;
+        # the bare seed has 1 hole ≤ 3, so it is a no-op and leaves a valid complex.
+        env = _tiny_env()
+        env.reset(seed=4)
+        self.assertEqual(env.directed_cone_in("greedy"), 0)
+        self.assertTrue(env.dual_complex_valid()[0])
+
+    def test_directed_cone_in_caps_to_target_and_stays_valid(self):
+        # On a grown complex, over-open with cone-out (target + overshoot) then cone-in
+        # SELECTS back toward target_holes: it never leaves more holes than it started with,
+        # never drops below target while holes remain above it, and keeps a valid manifold.
+        env = oe.make_formation_env(max_actions=3, grow_steps=(8, 12), evolve_steps=(3, 5),
+                                    relax_iters=(1, 2), n_candidate_moves=4, target_holes=3,
+                                    cone_overshoot=2)
+        env.reset(seed=2)
+        env.step((oe.GROW, [1.0, 0.5]))
+        env.directed_cone_out("greedy")
+        holes_open = len(oe.cob.MultiCobordism.emergent_holes(env.node.st, env.k))
+        closed = env.directed_cone_in("greedy")
+        holes_sel = len(oe.cob.MultiCobordism.emergent_holes(env.node.st, env.k))
+        self.assertGreaterEqual(closed, 0)
+        self.assertLessEqual(holes_sel, holes_open)              # cone-in only closes
+        self.assertGreaterEqual(holes_sel, min(holes_open, env.target_holes))
+        self.assertTrue(env.dual_complex_valid()[0])
+
+
 if __name__ == "__main__":
     unittest.main()

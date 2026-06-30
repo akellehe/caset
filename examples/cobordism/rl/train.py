@@ -69,16 +69,22 @@ def run_episode(env: CobordismObjectiveEnv, policy: Callable, seed: int) -> dict
     done = False
     info: dict = {}
     moves: List[int] = []
+    carried_ever = False
     while not done:
         move, params = policy(obs)
         obs, reward, done, info = env.step((move, params))
         total_reward += reward
         moves.append(int(move))
+        carried_ever = carried_ever or bool(info["carried"])
     return {
         "seed": seed, "F0": F0, "F_final": info["F"],
         "log_reduction": _slog(F0) - _slog(info["F"]),
         "reward": total_reward, "rstate": info["rstate"], "holes": info["holes"],
-        "carried": bool(info["carried"]), "n_actions": len(moves),
+        # `carried` = the proton verdict on the FINAL state (what `Proton.build()` reads);
+        # `carried_ever` = carried at any step, so the two agreeing confirms a later relax
+        # never un-carries the register.
+        "carried": bool(info["carried"]), "carried_ever": carried_ever,
+        "n_actions": len(moves),
         "move_counts": [moves.count(m) for m in range(N_MOVES)],
     }
 
@@ -99,6 +105,7 @@ def evaluate(env: CobordismObjectiveEnv, policy: Callable, seeds: List[int]) -> 
         "mean_rstate": float(np.nanmean(arr("rstate"))),
         "mean_holes": float(arr("holes").mean()),
         "carry_rate": float(arr("carried").mean()),
+        "carry_rate_ever": float(arr("carried_ever").mean()),
     }
 
 
@@ -251,10 +258,23 @@ def _print_comparison(result: dict) -> None:
 # (patience 15, n_candidate_moves 8) match `Proton.build()`'s init/evolve drive, so the RL
 # arc and the reference build see the identical engine.
 CARRY_PROFILE = dict(
-    max_actions=6, hole_reward_weight=2.0, rstate_reward_weight=1.0, carry_bonus=10.0,
+    max_actions=4, hole_reward_weight=2.0, rstate_reward_weight=1.0, carry_bonus=10.0,
     entropy_coef=0.03, entropy_coef_final=0.005,
-    env_kwargs=dict(grow_steps=(60, 180), evolve_steps=(10, 40), relax_iters=(3, 8),
-                    n_candidate_moves=8, patience=15),
+    # grow_steps caps a single GROW: high enough to form the register (carriers converge in
+    # ~50-120 engine steps, then run_stage1 breaks early once carried -- a carrying GROW
+    # costs ~40-60s, and any further GROW on a carried state is a ~1s no-op), but bounded so
+    # a NON-carrying seed -- which runs the full budget on an ever-growing complex -- does
+    # not blow up the wall-clock. terminate_on_carry=False lets the policy keep going after
+    # the carry to relax the geometry (the grow -> evolve -> relax arc); since post-carry
+    # GROW/EVOLVE early-break, the full arc is nearly free on carrying episodes.
+    # directed_grow on: a GROW finishes the register the random draws left short by a gated
+    # DIRECTED cone-out probe (open the missing hole deliberately), and an EVOLVE SELECTS the
+    # best target_holes by a gated cone-in probe (cap the worst over-opened hole). This
+    # rescues a fraction of seeds whose random growth stalls below 3 holes (carrier seeds are
+    # unaffected -- post-carry cone-out/in are no-ops), raising the carry rate.
+    env_kwargs=dict(grow_steps=(50, 130), evolve_steps=(10, 40), relax_iters=(3, 8),
+                    n_candidate_moves=8, patience=15, terminate_on_carry=False,
+                    directed_grow=True, cone_strategy="greedy", cone_overshoot=2),
 )
 
 
@@ -283,9 +303,9 @@ def main():
 
     if args.profile == "carry":
         cfg = dict(CARRY_PROFILE)
-        iterations = args.iterations or 10
-        episodes_per_iter = args.episodes_per_iter or 4
-        eval_seeds = args.eval_seeds or 8
+        iterations = args.iterations or 8
+        episodes_per_iter = args.episodes_per_iter or 3
+        eval_seeds = args.eval_seeds or 6
     else:  # fast: the #539 F-reduction config (shaping off, short horizon)
         cfg = dict(max_actions=5)
         iterations = args.iterations or 18
