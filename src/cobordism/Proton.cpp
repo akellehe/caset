@@ -39,11 +39,12 @@ std::vector<std::complex<double>> Proton::singlet() {
 }
 
 Proton::Proton(std::uint64_t seed, int registerDegree, double gamma,
-               double inputWeight)
+               double inputWeight, int precone)
     : baseSeed_(seed),
       registerDegree_(registerDegree),
       gamma_(gamma),
-      inputResidualWeight_(inputWeight) {}
+      inputResidualWeight_(inputWeight),
+      precone_(precone) {}
 
 std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   using namespace ::tessera::spacetime;
@@ -73,13 +74,19 @@ std::shared_ptr<MultiCobordism> Proton::recombinationNode(std::uint64_t seed) co
   const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
   const std::vector<complexd> antidiquark = {complexd(1.0, 0.0), w * w};
   auto host = buildMinimalSeed();
-  auto verts = host->getVertexList()->toVector();
+  // Capture the seed vertex IDS (not Vertex*) BEFORE constructing the node: with
+  // precone_ > 0 the ctor regrows spacetime_ into a fresh complex, destroying the
+  // original host's Vertex objects — but the seed ids persist through the rebuilds
+  // (build() preserves vertex ids), so the input/output anchors stay valid.
+  std::vector<std::uint64_t> seedVertexIds;
+  for (const auto *vertex : host->getVertexList()->toVector())
+    seedVertexIds.push_back(vertex->getId());
   auto node = std::make_shared<MultiCobordism>(
       host, pairs, std::vector<std::vector<complexd>>{diquark, antidiquark},
-      std::vector<int>{registerDegree_}, gamma_, seed);
+      std::vector<int>{registerDegree_}, gamma_, seed, precone_);
   node->setInputResidualWeight(inputResidualWeight_);
-  node->seedInputs({verts[0]->getId(), verts[1]->getId()});
-  node->seedOutputs({verts[2]->getId(), verts[3]->getId()});
+  node->seedInputs({seedVertexIds[0], seedVertexIds[1]});
+  node->seedOutputs({seedVertexIds[2], seedVertexIds[3]});
   return node;
 }
 
@@ -91,13 +98,17 @@ std::shared_ptr<MultiCobordism> Proton::formationNode(std::uint64_t seed) const 
   const std::vector<complexd> diquark = {complexd(1.0, 0.0), w};
   const std::vector<complexd> thirdQuark = {w * w};
   auto host = buildMinimalSeed();
-  auto verts = host->getVertexList()->toVector();
+  // Capture the seed vertex IDS before constructing the node (see recombinationNode):
+  // precone_ > 0 regrows the complex in the ctor, but the seed ids persist.
+  std::vector<std::uint64_t> seedVertexIds;
+  for (const auto *vertex : host->getVertexList()->toVector())
+    seedVertexIds.push_back(vertex->getId());
   auto node = std::make_shared<MultiCobordism>(
       host, std::vector<std::vector<complexd>>{diquark, thirdQuark},
       std::vector<std::vector<complexd>>{singlet()},
-      std::vector<int>{registerDegree_}, gamma_, seed);
+      std::vector<int>{registerDegree_}, gamma_, seed, precone_);
   node->setInputResidualWeight(inputResidualWeight_);
-  node->seedInputs({verts[0]->getId(), verts[1]->getId()});
+  node->seedInputs({seedVertexIds[0], seedVertexIds[1]});
   return node;
 }
 

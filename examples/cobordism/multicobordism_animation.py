@@ -66,6 +66,8 @@ which is slower.
     python multicobordism_animation.py --live
     # headless: write a GIF (no display needed):
     python multicobordism_animation.py --save proton.gif
+    # pre-grow each node's single-Δ⁴ seed by 12 gated cone-ins before optimizing:
+    python multicobordism_animation.py --precone 12
 """
 import argparse
 import itertools
@@ -501,15 +503,19 @@ class ProtonAnimator:
         return []
 
 
-def build_proton_nodes(seed=3):
+def build_proton_nodes(seed=3, precone=0):
     """The two `MultiCobordism` nodes the `Proton` class drives, in build order, for the
     animation: Step A recombination then Step B formation, each on its own single-Δ⁴ seed.
 
     Built via `Proton.recombination_node`/`formation_node` — the *same* node setups
     `Proton.build()` uses — with `Proton.build`'s attempt-0 seeds (A = `seed`, B =
     `seed + 1`). The default `seed=3` converges on attempt 0 (Step B grows three quark holes
-    and carries the singlet); the animation reports the live verdict either way."""
-    p = cob.Proton(seed=seed)
+    and carries the singlet); the animation reports the live verdict either way.
+
+    `precone` pre-grows each node's single-Δ⁴ seed by that many gated cone-in moves before
+    optimization (forwarded straight to the C++ `MultiCobordism` constructor via `Proton`);
+    `precone=0` (the default) leaves the bare seed untouched."""
+    p = cob.Proton(seed=seed, precone=precone)
     return [
         (p.recombination_node(seed), "Step A — recombination (→ diquark {1, ω})"),
         (p.formation_node(seed + 1), "Step B — formation (→ proton {1, ω, ω²})"),
@@ -595,8 +601,11 @@ def main():
                     help="evolution-pass (grow_boundaries=False) steps per node")
     ap.add_argument("--stage2", type=int, default=_STAGE2_ITERS,
                     help="geometric-relaxation iterations per node")
+    ap.add_argument("--precone", type=int, default=0,
+                    help="pre-grow each node's single-Δ⁴ seed by this many gated "
+                         "cone-in moves before optimization (0 = bare seed)")
     args = ap.parse_args()
-    nodes = build_proton_nodes(seed=args.seed)
+    nodes = build_proton_nodes(seed=args.seed, precone=args.precone)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve, stage2_iters=args.stage2)
     if not args.live and not args.save:

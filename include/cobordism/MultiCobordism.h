@@ -59,12 +59,19 @@ class MultiCobordism {
   /// (diquark ⊔ antidiquark). Each output — like each input — is an emergent
   /// boundary sub-complex carrying its target, scored by its own `r_U`; the bulk
   /// routes the connectivity (which input constituent reaches which output).
+  ///
+  /// `precone` (default 0) pre-grows the host by that many **gated cone-in moves**
+  /// before any optimization — the emergent way to give surgery room to act, in
+  /// place of a prebuilt host refinement. Each cone-in adds one top cell on a fresh
+  /// apex over a random facet and is accepted only through the `dualComplexValid`
+  /// gate (see `preconeCells`); on the single-Δ⁴ seed (a 4-ball) this enlarges the
+  /// 4-ball. Reproducible given `seed`; `precone = 0` leaves the host untouched.
   MultiCobordism(
       std::shared_ptr<Spacetime> host,
       const std::vector<std::vector<std::complex<double>>> &inputTargets,
       const std::vector<std::vector<std::complex<double>>> &outputTargets,
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
-      std::uint64_t seed = 0);
+      std::uint64_t seed = 0, int precone = 0);
 
   // ---- module-level helpers (static; the reference's free functions) ----
   /// Betti numbers (combinatorial, geometry-free).
@@ -190,6 +197,16 @@ class MultiCobordism {
   /// (residual < inputCarriedTolerance_) is left alone, so it stops growing once it
   /// represents its state.
   void growBoundaryRegions();
+  /// Pre-grow the seed by `count` **gated cone-in moves** before any optimization
+  /// (the constructor calls this once when `precone > 0`): each cones a fresh apex
+  /// onto a random codim-1 facet of a random top cell and is committed only through
+  /// `applyMoveSpecification`'s `dualComplexValid` gate — the same gate stage 1 and
+  /// the trap door use, so nothing is inserted by fiat. It enlarges the complex so
+  /// surgery has room to act — the emergent analogue of a prebuilt host refinement.
+  /// `count <= 0` is a no-op (RNG untouched). Best-effort: a draw onto an already-
+  /// saturated facet is rejected by the gate and retried; if no valid cone-in is
+  /// found for a cell, it stops early.
+  void preconeCells(int count);
 
   std::shared_ptr<Spacetime> spacetime_;
   std::vector<std::vector<std::complex<double>>> inputTargets_;

@@ -90,6 +90,16 @@ class MultiCobordismAnimationTest(unittest.TestCase):
             self.assertTrue(os.path.exists(out))
             self.assertGreater(os.path.getsize(out), 0)
 
+    def test_precone_pre_grows_the_seed(self):
+        # The --precone flag flows build_proton_nodes(precone=N) -> Proton(precone=N) ->
+        # the C++ MultiCobordism ctor, so each node's single-Δ⁴ seed is pre-grown before
+        # any optimization. precone=0 leaves the bare seed (one top cell).
+        bare = self.mca.build_proton_nodes(seed=3, precone=0)
+        grown = self.mca.build_proton_nodes(seed=3, precone=6)
+        self.assertEqual(len(bare[0][0].st.getTopSimplices()), 1)
+        self.assertGreater(len(grown[0][0].st.getTopSimplices()), 1)
+        self.assertGreater(len(grown[1][0].st.getTopSimplices()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
