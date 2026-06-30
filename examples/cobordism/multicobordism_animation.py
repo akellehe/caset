@@ -26,8 +26,8 @@ driving surgery one step at a time (as the old demo did) never grows the registe
 exactly why the proton never showed its three quark holes. `run_stage2` is then advanced one
 relaxation iteration per frame, so the geometric settling animates smoothly.
 
-The figure is a 2×3 grid, one **step per row**: traces on the left, then the primal complex,
-then its dual:
+The figure is a 2×4 grid, one **step per row**: traces, the primal complex, then the dual
+split into spatial- and temporal-curvature panels:
 
   * **metrics** — the objective `F`, the Regge stationarity term `‖∇S‖²`, and the
     realizability residual `r_U` vs step (a dashed line marks the Step A → Step B boundary);
@@ -38,11 +38,12 @@ then its dual:
     Each frame is normalized to a fixed scale, Procrustes-aligned (rotation/reflection only)
     to the previous frame, and eased, with the view auto-fit — so the structure stays legible
     instead of collapsing into a dot.
-  * **dual complex — Step A / Step B** — the circumcentric dual graph (one node per top cell,
-    edges across shared facets) drawn at the primal cell centroids, with a **curvature heat
-    map**: each dual node is colored by the local Regge curvature (the angle-defect action
-    density `Σ ε·|★|` over the cell's hinges) on a diverging colormap — blue = negative
-    (saddle) curvature, white ≈ flat, red = positive (cone) curvature.
+  * **dual — spatial / temporal curvature — Step A / Step B** — the circumcentric dual graph
+    (one node per top cell, edges across shared facets) at the primal cell centroids, colored
+    by the local Regge curvature. The Lorentzian deficit ε is COMPLEX, so it splits into two
+    panels: **spatial** = `Re ε·|★|` (the rotation angle-defect, from timelike hinges) and
+    **temporal** = `Im ε·|★|` (the boost / light-cone content, from spacelike hinges — those
+    whose normal plane is timelike). Both use a signed diverging colormap centered at 0.
 
 The figure title reports the live **convergence verdict**: whether Step B's whole cobordism
 carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
@@ -104,7 +105,8 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 # `Simplex.lorentzianDeficitAngle` is expensive, so the heat is recomputed only
 # every `_HEAT_REFRESH_EVERY` frames on the active node (the frozen node's geometry doesn't
 # change, so its heat is cached) — the cheap dual *graph* still redraws every frame.
-_HEAT_CMAP = "coolwarm"    # diverging: blue = negative curvature, white ≈ 0, red = positive
+_HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
+_HEAT_CMAP_IM = "PuOr"     # temporal (Im): distinct diverging map for the boost/rapidity part
 _HEAT_REFRESH_EVERY = 4
 
 
@@ -296,20 +298,29 @@ class ProtonAnimator:
     def _setup(self, plt):
         from matplotlib.cm import ScalarMappable
         from matplotlib.colors import Normalize
-        # One step per row: [traces | primal complex | dual complex + curvature heat].
-        self.fig, axes = plt.subplots(2, 3, figsize=(17, 9))
-        self.axm, self.axA, self.axDA = axes[0]   # metrics,  Step A primal, Step A dual
-        self.axr, self.axB, self.axDB = axes[1]   # register, Step B primal, Step B dual
-        self._dual_axes = [self.axDA, self.axDB]
-        # Persistent colorbars (created ONCE — recreating per frame piles them up). Each
-        # dual panel self-normalizes per frame; we just update the mappable's clim.
-        self._sms = []
-        for ax in self._dual_axes:
-            sm = ScalarMappable(cmap=_HEAT_CMAP, norm=Normalize(0.0, 1.0))
-            cbar = self.fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
-            cbar.set_label("curvature  ε·|★|  (signed)", fontsize=7)
-            cbar.ax.tick_params(labelsize=6)
-            self._sms.append(sm)
+        # One step per row: [traces | primal complex | spatial-curvature dual | temporal-
+        # curvature dual]. The two dual panels split the COMPLEX Lorentzian deficit: the
+        # spatial one shows its real part (Re ε, the rotation angle-defect, from timelike
+        # hinges), the temporal one its imaginary part (Im ε, the boost/light-cone content,
+        # from spacelike hinges — those whose normal plane is timelike).
+        self.fig, axes = plt.subplots(2, 4, figsize=(21, 9))
+        self.axm, self.axA, self.axDA, self.axTA = axes[0]   # metrics,  A primal, A Re, A Im
+        self.axr, self.axB, self.axDB, self.axTB = axes[1]   # register, B primal, B Re, B Im
+        # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
+        # panel self-normalizes per frame; we just update the mappable's clim. Re (spatial) and
+        # Im (temporal) use distinct diverging colormaps so the two channels read apart.
+        self._re_axes = [self.axDA, self.axDB]
+        self._im_axes = [self.axTA, self.axTB]
+        self._re_sms, self._im_sms = [], []
+        for axset, sms, cmap, label in (
+                (self._re_axes, self._re_sms, _HEAT_CMAP, "spatial curvature  Re ε·|★|"),
+                (self._im_axes, self._im_sms, _HEAT_CMAP_IM, "temporal curvature  Im ε·|★|")):
+            for ax in axset:
+                sm = ScalarMappable(cmap=cmap, norm=Normalize(-1.0, 1.0))
+                cbar = self.fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+                cbar.set_label(label, fontsize=7)
+                cbar.ax.tick_params(labelsize=6)
+                sms.append(sm)
         return self.fig
 
     def _draw_complex(self, ax, node_index, coords, title):
@@ -357,29 +368,31 @@ class ProtonAnimator:
     # ---- dual complex + curvature heat ----
     @staticmethod
     def _cell_curvature(st):
-        """Per-top-cell curvature: Σ over the cell's hinges (triangles) of
-        Re(lorentzian deficit) · |dual volume| — the Regge angle-defect action density
-        localized to each top cell (dual node), SIGNED so negative (saddle) curvature is kept.
-        Returns {sorted-cell-vertex-tuple: signed value}."""
-        hinge_w = {}
+        """Per-top-cell curvature, BOTH channels of the COMPLEX Lorentzian deficit, from the one
+        `lorentzianDeficitAngle` per hinge: `Re(deficit)·|★|` — the spatial angle-defect
+        (rotation) curvature, carried by timelike hinges — and `Im(deficit)·|★|` — the temporal
+        boost / light-cone content, carried by spacelike hinges (those whose normal plane is
+        timelike). Both SIGNED (ε<0 = saddle; Im sign = boost direction). Returns
+        {cell-tuple: (re_sum, im_sum)}."""
+        hinge_re, hinge_im = {}, {}
         for s in st.getSimplices():
             vs = s.getVertices()
             if len(vs) != 3:                     # hinges = (d-2) = 2-simplices (triangles)
                 continue
             key = tuple(sorted(v.getId() for v in vs))
             try:
-                # SIGNED: the deficit angle ε is signed (ε>0 positive/cone curvature, ε<0
-                # negative/saddle curvature when the dihedral angles overfill 2π). Keep the
-                # sign; |dual volume| is the positive dual-measure weight.
-                hinge_w[key] = (complex(s.lorentzianDeficitAngle()).real
-                                * abs(float(s.dualVolume())))
+                deficit = complex(s.lorentzianDeficitAngle())
+                weight = abs(float(s.dualVolume()))   # positive dual-measure weight
+                hinge_re[key] = deficit.real * weight
+                hinge_im[key] = deficit.imag * weight
             except Exception:                    # boundary/degenerate hinge → no curvature
-                hinge_w[key] = 0.0
+                hinge_re[key] = hinge_im[key] = 0.0
         curv = {}
         for c in st.getTopSimplices():
             cell = tuple(sorted(v.getId() for v in c.getVertices()))
-            curv[cell] = sum(hinge_w.get(tuple(sorted(t)), 0.0)
-                             for t in itertools.combinations(cell, 3))
+            tris = [tuple(sorted(t)) for t in itertools.combinations(cell, 3)]
+            curv[cell] = (sum(hinge_re.get(t, 0.0) for t in tris),
+                          sum(hinge_im.get(t, 0.0) for t in tris))
         return curv
 
     def _cell_curvature_cached(self, node_index, st):
@@ -394,10 +407,11 @@ class ProtonAnimator:
             self._curv_cache[node_index] = (frame, self._cell_curvature(st))
         return self._curv_cache[node_index][1]
 
-    def _draw_dual(self, ax, sm, node_index, coords):
-        """The dual complex (one node per top cell, edges across shared facets) drawn at the
-        primal cell centroids, with a SIGNED curvature heat map (blue = negative/saddle,
-        red = positive/cone Regge curvature)."""
+    def _draw_dual(self, ax, sm, node_index, coords, channel, cmap, title):
+        """One dual-complex curvature panel (nodes = top cells at their primal centroids, edges
+        = shared-facet adjacency), heat-colored by `channel` of the signed per-cell curvature:
+        0 = spatial (Re ε, angle-defect), 1 = temporal (Im ε, boost/rapidity). Symmetric
+        diverging range centered at 0."""
         st = self.nodes[node_index][0].st
         ax.clear()
         top = st.getTopSimplices()
@@ -410,7 +424,7 @@ class ProtonAnimator:
             here = [coords[v] for v in cell if v in coords]
             if here:
                 pos[i] = np.mean(here, axis=0)
-            curv[i] = curv_map.get(tuple(cell), 0.0)
+            curv[i] = curv_map.get(tuple(cell), (0.0, 0.0))[channel]
         rows, cols, _N = st.getDualAdjacency()
         for a, b in zip(rows, cols):                      # dual edges (shared-facet adjacency)
             if a < n and b < n and np.all(np.isfinite(pos[a])) and np.all(np.isfinite(pos[b])):
@@ -419,8 +433,6 @@ class ProtonAnimator:
         finite = np.all(np.isfinite(pos), axis=1)
         if finite.any():
             cv = curv[finite]
-            # Symmetric range centered at 0 so the diverging colormap shows sign honestly:
-            # blue = negative (saddle) curvature, white ≈ flat, red = positive (cone).
             mag = np.abs(cv)
             vmax = float(np.percentile(mag, 95)) if finite.sum() >= 5 else float(mag.max())
             if not vmax > 0:
@@ -430,13 +442,13 @@ class ProtonAnimator:
             if finite.sum() >= 4:                         # filled heat field where possible
                 try:
                     ax.tricontourf(pos[finite, 0], pos[finite, 1], shown, levels=12,
-                                   cmap=_HEAT_CMAP, vmin=-vmax, vmax=vmax, alpha=0.85, zorder=0)
+                                   cmap=cmap, vmin=-vmax, vmax=vmax, alpha=0.85, zorder=0)
                 except Exception:
                     pass
-            ax.scatter(pos[finite, 0], pos[finite, 1], c=shown, cmap=_HEAT_CMAP,
+            ax.scatter(pos[finite, 0], pos[finite, 1], c=shown, cmap=cmap,
                        vmin=-vmax, vmax=vmax, s=14, zorder=2, edgecolors="0.3", linewidths=0.2)
         ax.set_aspect("equal")
-        ax.set_title(f"dual complex — signed curvature  ({n} cells)", fontsize=9)
+        ax.set_title(f"{title}  ({n} cells)", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
     def _redraw(self):
@@ -469,14 +481,18 @@ class ProtonAnimator:
         self.axr.set_xlabel("frame")
         self.axr.legend(loc="upper left", fontsize=8)
 
-        # One step per row: primal complex with its dual (curvature heat) beside it. The
-        # active node animates; the other holds its current complex — both steps on screen at
-        # one time. Each node's layout is computed once and shared by its primal+dual panels.
-        for ni, axc, axd, sm in ((0, self.axA, self.axDA, self._sms[0]),
-                                 (1, self.axB, self.axDB, self._sms[1])):
+        # One step per row: primal complex, then its dual split into spatial-curvature (Re ε)
+        # and temporal-curvature (Im ε) panels. The active node animates; the other holds its
+        # current complex — both steps on screen at one time. Each node's layout is computed
+        # once and shared by its primal + both dual panels.
+        primal_axes = [self.axA, self.axB]
+        for ni in (0, 1):
             coords = self._layouts[ni].coords(self.nodes[ni][0].st)
-            self._draw_complex(axc, ni, coords, self.nodes[ni][1])
-            self._draw_dual(axd, sm, ni, coords)
+            self._draw_complex(primal_axes[ni], ni, coords, self.nodes[ni][1])
+            self._draw_dual(self._re_axes[ni], self._re_sms[ni], ni, coords,
+                            0, _HEAT_CMAP, "dual — spatial curvature (Re ε)")
+            self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
+                            1, _HEAT_CMAP_IM, "dual — temporal curvature (Im ε)")
 
     def update(self, frame):
         node_index, phase, _count = self._schedule[frame]
