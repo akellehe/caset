@@ -1,13 +1,14 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""Smoke test for the two-step Proton animation (#522).
+"""Smoke test for the two-step Proton animation (#522, #526).
 
-Drives a few optimization steps of the proton's Step A (recombination) and Step B
-(formation) nodes headless (Agg) and checks that the per-step history advances across
-the node boundary, the MDS layout produces 2-D coordinates, and a GIF is written. The
+Drives a few optimization chunks of the proton's Step A (recombination) and Step B
+(formation) nodes headless (Agg) and checks that the per-frame history advances across the
+node boundary through the init → evolve → stage2 phases, the MDS layout produces 2-D
+coordinates, the batched build reports a convergence verdict, and a GIF is written. The
 animation only reads the public `Proton` (node factories) + `MultiCobordism` API, so this
-also guards that single-step `run_stage1`/`run_stage2` keep advancing the optimizer state
-and that the proton's whole topology grows from a single simplex.
+also guards that `run_stage1`/`run_stage2` keep advancing the optimizer state and that the
+proton's whole topology grows from a single simplex.
 """
 import importlib.util
 import os
@@ -36,35 +37,44 @@ class MultiCobordismAnimationTest(unittest.TestCase):
     def setUpClass(cls):
         cls.mca = _load("multicobordism_animation")
 
-    def test_steps_advance_across_both_nodes(self):
-        # Two Proton nodes (Step A, Step B); per_node = stage1_steps + stage2_iters = 4,
-        # so node 0 is frames 0-3 (3 surgery + 1 relax) and node 1 begins at frame 4.
+    def _tiny_anim(self, nodes):
+        # One chunk per phase per node: init → evolve → stage2 = 3 frames/node, so node 0 is
+        # frames 0-2 and node 1 begins at frame 3.
+        return self.mca.ProtonAnimator(nodes, init_steps=2, init_chunk=2, evolve_steps=2,
+                                       evolve_chunk=2, stage2_iters=1)
+
+    def test_frames_advance_across_both_nodes(self):
         nodes = self.mca.build_proton_nodes(seed=3)
-        anim = self.mca.ProtonAnimator(nodes, stage1_steps=3, stage2_iters=1)
-        for f in range(6):                  # all of node 0, then 2 surgery frames of node 1
+        anim = self._tiny_anim(nodes)
+        self.assertEqual(anim._frames, 6)
+        for f in range(6):
             anim._advance(f)
         self.assertEqual(len(anim.hist["F"]), 6)
-        for key in ("gradN2", "rU", "b3", "holes", "stage", "node"):
+        for key in ("gradN2", "rU", "b3", "holes", "phase", "node"):
             self.assertEqual(len(anim.hist[key]), 6)
-        # surgery×3 then relax on node 0, then node 1's surgery
-        self.assertEqual(anim.hist["stage"], [1, 1, 1, 2, 1, 1])
-        self.assertEqual(anim.hist["node"], [0, 0, 0, 0, 1, 1])
-        self.assertEqual(anim._boundaries, [4])   # Step B began at step index 4
+        self.assertEqual(anim.hist["phase"],
+                         ["init", "evolve", "stage2", "init", "evolve", "stage2"])
+        self.assertEqual(anim.hist["node"], [0, 0, 0, 1, 1, 1])
+        self.assertEqual(anim._boundaries, [3])   # Step B began at frame index 3
         self.assertTrue(all(isinstance(v, float) for v in anim.hist["F"]))
 
-    def test_default_is_no_visualization(self):
-        # visualize defaults OFF: run_build takes the fast batched path (one run_stage1 +
-        # one run_stage2 per node) and returns a list of (label, metrics) — one entry per
-        # step (Step A, Step B) — rather than an animation.
+    def test_default_is_no_visualization_with_verdict(self):
+        # visualize defaults OFF: run_build takes the fast batched path and returns one
+        # (label, metrics) entry per node plus a trailing ("verdict", {...}) entry.
         nodes = self.mca.build_proton_nodes(seed=3)
-        res = self.mca.run_build(nodes, stage1_steps=2, stage2_iters=1)
-        self.assertEqual(len(res), 2)
-        for label, metrics in res:
+        res = self.mca.run_build(nodes, init_steps=2, evolve_steps=2, stage2_iters=1)
+        self.assertEqual(len(res), 3)             # Step A, Step B, verdict
+        for label, metrics in res[:2]:
             self.assertIsInstance(label, str)
             for key in ("F", "gradN2", "rU", "b3", "holes"):
                 self.assertIn(key, metrics)
+        label, verdict = res[-1]
+        self.assertEqual(label, "verdict")
+        for key in ("converged", "color_residual", "registers"):
+            self.assertIn(key, verdict)
+        self.assertIsInstance(verdict["converged"], bool)
 
-    def test_mds_layout_is_2d(self):
+    def test_mds_layout_is_2d_and_normalized(self):
         nodes = self.mca.build_proton_nodes(seed=3)
         coords = self.mca._mds_layout(nodes[0][0].st)   # the single-Δ⁴ seed (5 vertices)
         self.assertGreater(len(coords), 0)
@@ -75,7 +85,8 @@ class MultiCobordismAnimationTest(unittest.TestCase):
         nodes = self.mca.build_proton_nodes(seed=3)
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "proton.gif")
-            self.mca.animate(nodes, save=out, stage1_steps=2, stage2_iters=1)
+            self.mca.animate(nodes, save=out, init_steps=2, init_chunk=2, evolve_steps=2,
+                             evolve_chunk=2, stage2_iters=1)
             self.assertTrue(os.path.exists(out))
             self.assertGreater(os.path.getsize(out), 0)
 
