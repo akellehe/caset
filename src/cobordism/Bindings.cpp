@@ -768,8 +768,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                   "Compute the characteristic numbers of the given manifold.");
 
 
-  // === MultiCobordism (#491): the C++ source-of-truth port of
-  // examples/cobordism/emergent_optimizer.py — fully emergent topology, user k. ===
+  // === MultiCobordism (#491): the C++ source-of-truth fully-emergent merge
+  // optimizer — emergent topology at a user-defined degree k. ===
   py::class_<MultiCobordism::BoundaryBlock>(m, "MultiCobordismBlock",
       "An emergent boundary block of a MultiCobordism (an input or output): the "
       "vertex set whose own sub-complex carries the block, and its target period "
@@ -786,7 +786,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                                return block.target;
                              });
   py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
-      "The C++ port of emergent_optimizer.MultiCobordism (#491): merge as a "
+      "The fully-emergent MultiCobordism merge optimizer (#491): merge as a "
       "fully emergent optimization. From a bare host it grows the register by "
       "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
       "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
