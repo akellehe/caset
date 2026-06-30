@@ -447,6 +447,13 @@ class ProtonAnimator:
                     pass
             ax.scatter(pos[finite, 0], pos[finite, 1], c=shown, cmap=cmap,
                        vmin=-vmax, vmax=vmax, s=14, zorder=2, edgecolors="0.3", linewidths=0.2)
+            if mag.max() <= 1e-9:                         # channel is identically zero
+                # The temporal (Im) channel is ≡0 whenever the geometry is all-spacelike
+                # (no timelike hinges → no boost content), so the panel would read as blank;
+                # say why instead of showing an empty box.
+                ax.text(0.5, 0.5, "≡ 0\n(all-spacelike: no timelike hinges)",
+                        transform=ax.transAxes, ha="center", va="center", fontsize=9,
+                        color="0.45")
         ax.set_aspect("equal")
         ax.set_title(f"{title}  ({n} cells)", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
