@@ -17,7 +17,7 @@
 #include "spacetime/Metric.h"
 #include "spacetime/Signature.h"
 #include "spacetime/Spacetime.h"
-#include "spacetime/topologies/SimplexBoundarySphere.h"
+#include "spacetime/topologies/SolidSimplex.h"
 #include "spacetime/topologies/Topology.h"
 
 namespace tessera::cobordism {
@@ -25,7 +25,7 @@ namespace tessera::cobordism {
 using complexd = std::complex<double>;
 
 namespace {
-constexpr int kDim = 4;  // the closed S^4 host is a 4-manifold
+constexpr int kDim = 4;  // framework dimension; the seed is a single Δ⁴ simplex
 }  // namespace
 
 std::complex<double> Proton::omega() {
@@ -49,14 +49,14 @@ std::shared_ptr<Spacetime> Proton::buildMinimalSeed() {
   using namespace ::tessera::spacetime;
   auto metric =
       std::make_shared<Metric>(true, Signature(kDim, SignatureType::Lorentzian));
-  std::shared_ptr<Topology> topology = std::make_shared<SimplexBoundarySphere>(kDim);
+  // A SINGLE Δ⁴ simplex (one pentatope, 5 vertices) — the most minimal seed there is.
+  // Nothing is pre-built: the proton's entire topology emerges from here via the trap
+  // door, and the metric is uniform (ℓ² = 1) so the geometry emerges from the
+  // relaxation too. Only the seed simplex and the target color states are imposed.
+  std::shared_ptr<Topology> topology = std::make_shared<SolidSimplex>(kDim);
   auto host = std::make_shared<Spacetime>(metric, SpacetimeType::CDT, 1.0, 1.0,
                                           Foliation::PREFERRED, topology);
   host->build();
-  // A uniform metric on the bare ∂Δ⁵ (ℓ² = 1) — no hand-tuned perturbation. The
-  // geometry, like all the topology, emerges from the relaxation + trap door; verified
-  // to still converge to the proton singlet across seeds (the old 1 + 0.01·(i%6) jitter
-  // was dead weight).
   for (auto *edge : host->getEdgeList()->toVector())
     edge->setSquaredLength(complexd(1.0, 0.0));
   return host;
