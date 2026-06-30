@@ -35,12 +35,12 @@ using ::tessera::spacetime::Spacetime;
 /// physical observables (charge/mass/radius/spin) **off** `block()`; those reads
 /// are out of scope here.
 ///
-/// `build()` grows each step out of a **bare ∂Δ⁵ minimal seed** (the proton never
-/// pre-refines its own host — all topology emerges via the trap door), runs **A then
-/// B**, and **restarts across distinct seeds** (the two-step converges less often than
-/// a single merge) until step B's whole cobordism carries the 3-vector singlet with at
-/// least `minQuarkHoles` (default 3) emergent color holes. The accessors lazily trigger
-/// `build()` on first use, so `Proton p; auto b = p.block();` just works.
+/// `build()` grows each step out of a **single Δ⁴ simplex seed** (one pentatope — the
+/// proton pre-builds nothing; all topology emerges from one simplex via the trap door),
+/// runs **A then B**, and **restarts across distinct seeds** (the two-step converges
+/// less often than a single merge) until step B's whole cobordism carries the 3-vector
+/// singlet with at least `minQuarkHoles` (default 3) emergent color holes. The accessors
+/// lazily trigger `build()` on first use, so `Proton p; auto b = p.block();` just works.
 class Proton {
  public:
   /// ω = `exp(2πi/3)`, the unit color-charge phase.
@@ -50,7 +50,7 @@ class Proton {
   [[nodiscard]] static std::vector<std::complex<double>> singlet();
 
   /// Configure a proton build. Physics (the targets, the two-step structure) and the
-  /// bare ∂Δ⁵ minimal seed are fixed; only the optimization knobs are exposed.
+  /// single Δ⁴ simplex seed are fixed; only the optimization knobs are exposed.
   ///   * `seed`           — base RNG seed; restart `i` uses A-seed `seed+2i`,
   ///                        B-seed `seed+2i+1` (A and B always distinct).
   ///   * `registerDegree` — the color register degree `k` (3 on a 4-manifold,
@@ -79,8 +79,8 @@ class Proton {
   [[nodiscard]] bool converged();
   /// The base seed of the converged (or best) attempt. Triggers `build()`.
   [[nodiscard]] std::uint64_t seed();
-  /// The full relaxed closed-S⁴ complex of step B (proton formation). Triggers
-  /// `build()`.
+  /// The full relaxed emergent complex of step B (proton formation), grown from the
+  /// single Δ⁴ seed. Triggers `build()`.
   [[nodiscard]] std::shared_ptr<Spacetime> spacetime();
   /// The proton itself: the relaxed WHOLE step-B cobordism. The single output IS the
   /// whole's harmonic (the inputs are held by their residual, the bulk evolves to
@@ -102,10 +102,10 @@ class Proton {
  private:
   /// Lazily run `build()` with default parameters on first accessor use.
   void ensureBuilt();
-  /// The minimal closed seed: a bare `∂Δ⁵` sphere (S⁴, Betti `[1,0,0,0,1]`, six
-  /// pentatopes) with a mild deterministic non-uniform metric. The proton grows all of
-  /// its topology out of this via the trap door — there is deliberately no host
-  /// refinement (that would pre-build topology that must instead emerge).
+  /// The minimal seed: a single `Δ⁴` simplex (one pentatope — 5 vertices, 1 top cell,
+  /// Betti `[1,0,0,0,0]`, a contractible 4-ball) with a uniform metric. The proton grows
+  /// ALL of its topology out of this one simplex via the trap door, and the geometry out
+  /// of the relaxation — nothing is pre-built (no host refinement, no metric jitter).
   [[nodiscard]] static std::shared_ptr<Spacetime> buildMinimalSeed();
 
   // ---- configuration ----

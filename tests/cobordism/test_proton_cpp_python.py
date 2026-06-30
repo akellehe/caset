@@ -45,13 +45,11 @@ class ProtonBuildTest(unittest.TestCase):
     """Slow: the real two-step emergent build (Step A recombination then Step B
     formation, with restarts)."""
 
-    # Minimal-∂Δ⁵-seed build (there is no host-refinement knob — pre-building a host is
-    # the very footgun this class avoids; all topology emerges via the trap door). It
-    # converges reliably for this seed, but the runtime is VARIABLE: threaded eigensolves
-    # reorder floating-point sums, so the "best move" — and thus how soon r_U carries —
-    # varies run to run (this build can finish in ~1 min or take several). max_restarts
-    # is cross-machine headroom; the fast minimal-seed growth itself is covered by
-    # test_trap_door_python.py.
+    # Single-Δ⁴-simplex-seed build (one pentatope; nothing is pre-built — all topology
+    # emerges from one simplex via the trap door). It converges reliably for this seed,
+    # but the runtime is VARIABLE: threaded eigensolves reorder floating-point sums, so
+    # the "best move" — and thus how soon r_U carries — varies run to run (this build can
+    # finish in ~1 min or take several). max_restarts is cross-machine headroom.
     SEED = 1
     MAX_RESTARTS = 2
     INIT_STEPS = 180
