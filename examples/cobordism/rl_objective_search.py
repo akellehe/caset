@@ -23,9 +23,13 @@ Examples::
     # quick smoke (seconds): tiny env + 1 short training iteration
     python examples/cobordism/rl_objective_search.py --smoke
 
-    # a real (minutes) benchmark on the small formation target (diquark + q → singlet)
-    python examples/cobordism/rl_objective_search.py --target formation \
-        --iterations 20 --episodes-per-iter 6 --eval-seeds 10
+    # the proton-carry benchmark (#546, ~30-45 min): long horizon + proton shaping, so the
+    # learned policy actually FORMS the singlet (≥3 colour holes, r_state below tol) — the
+    # default profile. Compares carry rate / holes / r_state vs random and grow-only.
+    python examples/cobordism/rl_objective_search.py --target formation
+
+    # the #539 fast F-reduction benchmark (~2-4 min): short horizon, shaping off
+    python examples/cobordism/rl_objective_search.py --profile fast
 
 Requires the ``rl`` extra (PyTorch): ``pip install -e ".[rl]"`` (or ``".[dev]"``, which
 includes it).
@@ -46,7 +50,8 @@ from rl.objective_env import (  # noqa: E402,F401
 )
 from rl.ppo_agent import PPO, HybridActorCritic, set_seed  # noqa: E402,F401
 from rl.train import (  # noqa: E402,F401
-    benchmark, train, evaluate, run_episode, random_policy, main,
+    benchmark, train, evaluate, run_episode, random_policy, grow_only_policy,
+    CARRY_PROFILE, main,
 )
 
 
