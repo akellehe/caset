@@ -19,11 +19,15 @@ _EX = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
 if _EX not in sys.path:
     sys.path.insert(0, _EX)
 
+import pytest  # noqa: E402
+
+# The PPO agent (and rl.train) require PyTorch, which lives in the optional `rl` extra and
+# is deliberately NOT in `dev`/CI — skip this whole module when torch isn't installed.
+torch = pytest.importorskip("torch")
+
 import rl.objective_env as oe  # noqa: E402
 import rl.ppo_agent as agent  # noqa: E402
 import rl.train as train  # noqa: E402
-
-import torch  # noqa: E402
 
 
 class ActorCriticTest(unittest.TestCase):
