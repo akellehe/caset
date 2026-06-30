@@ -1,45 +1,49 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""Real-time animation of a `MultiCobordism` optimization (#493).
+"""Real-time animation of the canonical two-step **Proton** build (#522).
 
-The demo is a 2→2 recombination: two q-q̄ pairs ⟶ a diquark ⊔ an anti-diquark
-(#491), built with the established `seed_inputs`/`seed_outputs` flow. Watch
-the emergent register grow and the objective converge **as it runs**: this drives the
-engine's two stages one move/iteration at a time and refreshes a live matplotlib figure
-each step. Three panels:
+Supersedes the old MultiCobordism recombination demo: this drives the actual
+`tessera.cobordism.Proton` class and animates the proton assembling in two steps, each
+growing its whole topology from a single Δ⁴ simplex via the trap door —
+
+  * **Step A — recombination** (`Proton.recombination_node`): two neutral q-q̄ pairs ⟶
+    a colored diquark `{1, ω}` ⊔ anti-diquark `{1, ω²}`;
+  * **Step B — formation** (`Proton.formation_node`): the diquark `{1, ω}` + the third
+    quark `{ω²}` ⟶ the colorless proton singlet `{1, ω, ω²}` (ω = exp(2πi/3)).
+
+The two nodes are animated in sequence, one move/iteration at a time, in a live
+three-panel matplotlib figure:
 
   * **metrics** — the objective `F`, the Regge stationarity term `‖∇S‖²`, and the
-    realizability residual `r_U`, traced vs step;
-  * **register** — the Betti `b₃` (the emergent color register) and the
-    register-hole count, traced vs step;
-  * **complex** — a 2-D projection (classical MDS on the dual/edge graph using the
-    relaxed edge lengths) of the current 1-skeleton, with the vertices on the
-    register holes highlighted. Each frame is Procrustes-aligned to the previous one
-    and eased toward it, so the layout glides instead of bouncing and incremental
-    changes are easy to read.
+    realizability residual `r_U` vs step (a dashed line marks the Step A → Step B
+    boundary);
+  * **register** — the Betti `b₃` (the emergent color register) and the register-hole
+    count vs step;
+  * **complex** — a 2-D classical-MDS projection of the current 1-skeleton (using the
+    relaxed edge lengths), register-hole vertices highlighted. Each frame is
+    Procrustes-aligned to the previous and eased toward it so the layout glides; the
+    continuity resets at the Step A → Step B boundary (Step B starts a fresh simplex).
 
-It drives only the **public** `MultiCobordism` API (`run_stage1`/`run_stage2`
-with single-step counts — which continue the optimizer state across calls —
-plus `betti`, `emergent_holes`, `regge_action_gradient`, `r_u`, `objective`, `st`). The C++
-engine is untouched.
+It drives only the **public** `Proton` (the `recombination_node`/`formation_node`
+factories) and `MultiCobordism` (`run_stage1`/`run_stage2` with single-step counts, which
+continue the optimizer state across calls, plus `betti`, `emergent_holes`,
+`regge_action_gradient`, `r_u`, `objective`, `st`) APIs — the *same* node setups
+`Proton.build()` uses, so the animation shows the real class. The C++ engine is untouched,
+and there is no dependency on the (retiring) `emergent_optimizer`.
 
-**Visualization is off by default** — `run_optimization(opt)` takes the fast
-batched path with no per-step plotting overhead. Opt in with `visualize=True`
-(or `--live`/`--save`) to animate, which is slower.
+**Visualization is off by default** — `run_build(...)` takes the fast batched path with no
+per-step plotting overhead. Opt in with `visualize=True` (or `--live`/`--save`) to
+animate, which is slower.
 
-    # default: run the optimization fast, no visualization
+    # default: run the two-step build fast, no visualization
     python multicobordism_animation.py
     # live (interactive backend):
     python multicobordism_animation.py --live
     # headless: write a GIF (no display needed):
-    python multicobordism_animation.py --save recombination.gif
+    python multicobordism_animation.py --save proton.gif
 """
 import argparse
-import cmath
-import importlib.util
 import math
-import os
-import sys
 
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
@@ -47,28 +51,6 @@ from scipy.sparse.csgraph import shortest_path
 import tessera
 
 cob = tessera.cobordism
-_W = cmath.exp(2j * math.pi / 3)
-_HERE = os.path.dirname(os.path.abspath(__file__))
-
-# The 2→2 recombination this demo animates: two neutral q-q̄ pairs in, a diquark ⊔
-# anti-diquark out (#491/#503). A diquark is COLORED (a 2-quark object, an SU(3) 3̄),
-# so its target is the 2-vector {1, ω} — NOT the colorless singlet; the anti-diquark
-# is {1, ω²}. ω = exp(2πi/3). (The dimension tracks the constituent count: 2 quarks
-# → a 2-vector here; the 3-quark proton is the 3-vector singlet {1, ω, ω²}.)
-_PAIRS = [[1, -1, 0], [1, 0, -1]]                  # two neutral q-q̄ color combos (Σ = 0)
-_DIQUARK = [1.0, _W]                               # colored diquark, 2-vector (#503)
-_ANTIDIQUARK = [1.0, _W * _W]                      # colored anti-diquark, 2-vector
-
-
-def _load(name):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(_HERE, name + ".py"))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-eo = _load("emergent_optimizer")
 
 
 def _mds_layout(st):
@@ -100,48 +82,61 @@ def _mds_layout(st):
     return {vids[i]: coords[i] for i in range(n)}
 
 
-class MultiCobordismAnimator:
-    """Steps a `MultiCobordism` and records/draws its progress one step at a time."""
+class ProtonAnimator:
+    """Steps a SEQUENCE of `MultiCobordism` nodes — the proton's Step A (recombination)
+    then Step B (formation) — one move/iteration at a time, recording and drawing the
+    progress. Each node runs `stage1_steps` surgery steps then `stage2_iters` relaxation
+    iterations; the complex-layout continuity resets at each node boundary (the next node
+    starts from a fresh single simplex)."""
 
-    # What each stage is doing, for the on-figure labels.
     _STAGE_NAMES = {1: "combinatorial surgery", 2: "geometric relaxation"}
 
-    def __init__(self, opt, degree=3, stage1_steps=40, stage1_candidates=8,
+    def __init__(self, nodes, degree=3, stage1_steps=40, stage1_candidates=8,
                  stage2_iters=30, stage2_beta=1.0):
-        self.opt = opt
+        self.nodes = nodes                  # [(MultiCobordism, "Step A: ..."), ...] in order
         self.k = degree
         self.s1, self.s1c = stage1_steps, stage1_candidates
         self.s2, self.s2_beta = stage2_iters, stage2_beta
-        self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [], "stage": []}
-        self._frames = stage1_steps + stage2_iters
+        self._per_node = stage1_steps + stage2_iters
+        self._frames = len(nodes) * self._per_node
+        self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
+                     "stage": [], "node": []}
+        self._boundaries = []       # step indices where a later node begins (trace markers)
         self._prev = None           # previous frame's drawn positions (for continuity)
         self._ease = 0.3            # how fast vertices glide to new targets (0=frozen, 1=snap)
         self._view = None           # complex-panel bbox; only grows, so the view never jitters
         self._done = False          # so "done" is announced exactly once
+        self._cur, self._cur_label = nodes[0]   # node currently being animated
 
-    # ---- one optimizer step (stage 1 = surgery, then stage 2 = relaxation) ----
+    # ---- one optimizer step on the current node (stage 1 = surgery, stage 2 = relax) ----
     def _advance(self, frame):
-        if frame < self.s1:
-            # Exactly one greedy surgery step per frame — the animation advances "one move
-            # at a time" (see the module docstring). Keep this at 1: each step grows the
+        node_index, local = divmod(frame, self._per_node)
+        node, label = self.nodes[node_index]
+        if local == 0 and node_index > 0:        # a NEW node starts: reset layout continuity
+            self._prev = None
+            self._view = None
+            self._boundaries.append(len(self.hist["F"]))
+        self._cur, self._cur_label = node, label
+        if local < self.s1:
+            # Exactly one greedy surgery step per frame. Keep this at 1: each step grows the
             # complex and re-evaluates the global spectral r_U, so the per-frame cost climbs
-            # super-linearly with max_steps (a 70-step frame measured ~360x a 1-step frame,
-            # turning the ~9 s surgery phase into ~52 min). patience is irrelevant at 1 step.
-            self.opt.run_stage1(max_steps=1, n_candidate_moves=self.s1c, patience=10 ** 9)
+            # super-linearly with max_steps. patience is irrelevant at 1 step.
+            node.run_stage1(max_steps=1, n_candidate_moves=self.s1c, patience=10 ** 9)
             stage = 1
         else:
-            self.opt.run_stage2(beta=self.s2_beta, max_iters=1)
+            node.run_stage2(beta=self.s2_beta, max_iters=1)
             stage = 2
-        self._record(stage)
+        self._record(node, stage, node_index)
 
-    def _record(self, stage):
-        st = self.opt.st
-        self.hist["F"].append(float(self.opt.objective()))
+    def _record(self, node, stage, node_index):
+        st = node.st
+        self.hist["F"].append(float(node.objective()))
         self.hist["gradN2"].append(float(cob.MultiCobordism.regge_action_gradient(st)))
-        self.hist["rU"].append(float(self.opt.r_u(st)))
+        self.hist["rU"].append(float(node.r_u(st)))
         self.hist["b3"].append(int(cob.MultiCobordism.betti(st)[self.k]))
         self.hist["holes"].append(len(cob.MultiCobordism.emergent_holes(st, self.k)))
         self.hist["stage"].append(stage)
+        self.hist["node"].append(node_index)
 
     # ---- stable layout ----
     def _stable_coords(self, st):
@@ -154,13 +149,13 @@ class MultiCobordismAnimator:
         whole cloud. Two steps tame that:
 
         * **align** the new embedding onto the previous frame over *all* shared vertices
-          via full Procrustes (scale + rotation + reflection) — this removes MDS's
-          orientation/scale ambiguity, the dominant source of bounce;
+          via full Procrustes (scale + rotation + reflection);
         * **ease** each vertex from its old position a fraction `self._ease` of the way to
-          the aligned target (exponential smoothing) — residual hops become smooth glides.
+          the aligned target (exponential smoothing).
 
         New vertices (from surgery) start directly at their aligned position; removed ones
-        simply drop out."""
+        simply drop out. `_prev` is reset to None at a node boundary, so the next node's
+        fresh simplex defines its own frame instead of being aligned to the old complex."""
         coords = _mds_layout(st)
         if len(coords) < 2:
             return coords
@@ -190,9 +185,8 @@ class MultiCobordismAnimator:
 
     # ---- drawing ----
     def _setup(self, plt):
-        self.fig, (self.axm, self.axr, self.axg) = plt.subplots(
-            1, 3, figsize=(15, 5))
-        self.fig.suptitle("MultiCobordism optimization — live")
+        self.fig, (self.axm, self.axr, self.axg) = plt.subplots(1, 3, figsize=(15, 5))
+        self.fig.suptitle("Proton build (two-step) — live")
         return self.fig
 
     def _redraw(self):
@@ -201,6 +195,8 @@ class MultiCobordismAnimator:
         self.axm.plot(xs, self.hist["F"], label="F (objective)", color="C0")
         self.axm.plot(xs, self.hist["gradN2"], label="‖∇S‖²", color="C1")
         self.axm.plot(xs, self.hist["rU"], label="r_U", color="C2")
+        for b in self._boundaries:
+            self.axm.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
         self.axm.set_yscale("symlog")
         self.axm.set_title("metrics")
         self.axm.set_xlabel("step")
@@ -211,12 +207,14 @@ class MultiCobordismAnimator:
                       marker=".")
         self.axr.plot(xs, self.hist["holes"], label="register holes", color="C4",
                       marker=".")
+        for b in self._boundaries:
+            self.axr.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
         self.axr.set_title("emergent register")
         self.axr.set_xlabel("step")
         self.axr.legend(loc="upper left", fontsize=8)
 
         self.axg.clear()
-        st = self.opt.st
+        st = self._cur.st
         coords = self._stable_coords(st)
         hole_vs = {v for h in cob.MultiCobordism.emergent_holes(st, self.k) for v in h}
         for e in st.getEdgeList().toVector():
@@ -241,7 +239,7 @@ class MultiCobordismAnimator:
             self.axg.set_ylim(self._view[2], self._view[3])
         self.axg.set_aspect("equal")
         stage = self.hist["stage"][-1] if self.hist["stage"] else 1
-        self.axg.set_title(f"complex — stage {stage}: {self._STAGE_NAMES[stage]} "
+        self.axg.set_title(f"{self._cur_label} — {self._STAGE_NAMES[stage]} "
                            f"(red = register holes)")
         self.axg.set_xticks([]); self.axg.set_yticks([])
 
@@ -249,47 +247,40 @@ class MultiCobordismAnimator:
         self._advance(frame)
         self._redraw()
         stage = self.hist["stage"][-1]
-        label = f"stage {stage}: {self._STAGE_NAMES[stage]}"
-        # A visible heartbeat: a step counter + stage name in the title and a flushed
-        # stdout line. Stage-2 frames are several seconds of real compute (a dense Regge
-        # Hessian over every edge) during which the GUI window can't repaint — without this
-        # it looks hung even though it's advancing. The terminal line updates even while
-        # the window is frozen mid-frame.
+        label = f"{self._cur_label} · {self._STAGE_NAMES[stage]}"
+        # A visible heartbeat: a step counter + label in the title and a flushed stdout line.
+        # Stage-2 frames are several seconds of real compute (a dense Regge Hessian over
+        # every edge) during which the GUI window can't repaint — the terminal line updates
+        # even while the window is frozen mid-frame.
         if frame >= self._frames - 1 and not self._done:   # last step: announce done
             self._done = True
-            self.fig.suptitle(f"MultiCobordism optimization — {label} — done")
+            self.fig.suptitle(f"Proton build (two-step) — {label} — done")
             print(f"\rstep {frame + 1}/{self._frames} ({label}) — done")
         elif not self._done:
             self.fig.suptitle(
-                f"MultiCobordism optimization — step {frame + 1}/{self._frames} · "
-                f"{label}")
-            print(f"\rstep {frame + 1}/{self._frames} ({label})",
-                  end="", flush=True)
+                f"Proton build (two-step) — step {frame + 1}/{self._frames} · {label}")
+            print(f"\rstep {frame + 1}/{self._frames} ({label})", end="", flush=True)
         return []
 
 
-def build_demo_recombination(seed=3, n_refine=16, rounds=10):
-    """A small demo system: recombine two neutral q-q̄ pairs into a colored diquark
-    `{1, ω}` ⊔ anti-diquark `{1, ω²}` (a 2→2 event, #491/#503).
+def build_proton_nodes(seed=3):
+    """The two `MultiCobordism` nodes the `Proton` class drives, in build order, for the
+    animation: Step A recombination then Step B formation, each on its own single-Δ⁴ seed.
 
-    `seed_inputs` builds the two input pairs and `seed_outputs` the two output
-    blocks (diquark, anti-diquark); the animation then drives the two stages —
-    `run_stage1` (combinatorial surgery, including the trap door that grows the complex
-    on a stall) and `run_stage2` (geometric relaxation) — one step at a time so you
-    watch the register grow and the objective converge. Γ is chosen so the realizability
-    residual `Γ·r_U` sits on the same order as the Regge term `‖∇S‖²`; otherwise ∇S
-    dominates and the register is never driven to carry its state."""
-    host = eo.build_closed_s4(n_refine=n_refine, seed=seed)
-    opt = cob.MultiCobordism(host, _PAIRS, [_DIQUARK, _ANTIDIQUARK],
-                             degrees=[3], gamma=50.0, seed=seed)
-    sv = [v.getId() for v in host.getVertexList().toVector()]
-    opt.seed_inputs(sv[:2])
-    opt.seed_outputs(sv[2:4])
-    return opt
+    Built via `Proton.recombination_node`/`formation_node` — the *same* node setups
+    `Proton.build()` uses — with `Proton.build`'s attempt-0 seeds (A = `seed`,
+    B = `seed + 1`). The animation then drives each node's two stages (`run_stage1`
+    combinatorial surgery, including the trap door that grows the complex from one simplex
+    on a stall; `run_stage2` geometric relaxation) one step at a time."""
+    p = cob.Proton(seed=seed)
+    return [
+        (p.recombination_node(seed), "Step A: recombination (→ diquark {1, ω})"),
+        (p.formation_node(seed + 1), "Step B: formation (→ proton {1, ω, ω²})"),
+    ]
 
 
-def animate(opt, save=None, interval=200, **kw):
-    """Animate `opt`'s optimization. `save` → write a GIF/MP4 (headless, Agg);
+def animate(nodes, save=None, interval=200, **kw):
+    """Animate the proton node sequence. `save` → write a GIF/MP4 (headless, Agg);
     otherwise show a live interactive window. Returns the animator."""
     import matplotlib
     if save:
@@ -297,7 +288,7 @@ def animate(opt, save=None, interval=200, **kw):
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
 
-    anim_state = MultiCobordismAnimator(opt, **kw)
+    anim_state = ProtonAnimator(nodes, **kw)
     anim_state._setup(plt)
     fa = FuncAnimation(anim_state.fig, anim_state.update,
                        frames=anim_state._frames, interval=interval,
@@ -312,27 +303,30 @@ def animate(opt, save=None, interval=200, **kw):
     return anim_state
 
 
-def run_optimization(opt, visualize=False, save=None, degree=3, stage1_steps=70,
-                     stage1_candidates=10, stage2_iters=100, stage2_beta=1.0,
-                     interval=200):   # ms/frame; keep > 0 — GIF/MP4 save() uses fps = 1000/interval
-    """Run the two-stage optimization.
+def run_build(nodes, visualize=False, save=None, degree=3, stage1_steps=70,
+              stage1_candidates=10, stage2_iters=100, stage2_beta=1.0,
+              interval=200):   # ms/frame; keep > 0 — GIF/MP4 save() uses fps = 1000/interval
+    """Run the two-step proton build over `nodes`.
 
-    Visualization is **off by default**: with ``visualize=False`` (and no
-    ``save``) this takes the fast **batched** path — `run_stage1`/`run_stage2`
-    run to completion in one call each, with no per-step layout/redraw overhead —
-    and returns the final metrics. Opt in with ``visualize=True`` (live window) or
-    ``save=...`` (GIF/MP4) to animate it step-by-step (slower); that returns the
-    per-step history."""
+    Visualization is **off by default**: with ``visualize=False`` (and no ``save``) this
+    takes the fast **batched** path — each node's `run_stage1`/`run_stage2` run to
+    completion in one call each, no per-step layout/redraw overhead — and returns each
+    node's final metrics. Opt in with ``visualize=True`` (live window) or ``save=...``
+    (GIF/MP4) to animate it step-by-step (slower); that returns the per-step history."""
     if not visualize and not save:
-        opt.run_stage1(max_steps=stage1_steps, n_candidate_moves=stage1_candidates)
-        opt.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
-        st = opt.st
-        return {"F": float(opt.objective()),
+        out = []
+        for node, label in nodes:
+            node.run_stage1(max_steps=stage1_steps, n_candidate_moves=stage1_candidates)
+            node.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
+            st = node.st
+            out.append((label, {
+                "F": float(node.objective()),
                 "gradN2": float(cob.MultiCobordism.regge_action_gradient(st)),
-                "rU": float(opt.r_u(st)),
+                "rU": float(node.r_u(st)),
                 "b3": int(cob.MultiCobordism.betti(st)[degree]),
-                "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}
-    return animate(opt, save=save, degree=degree, stage1_steps=stage1_steps,
+                "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
+        return out
+    return animate(nodes, save=save, degree=degree, stage1_steps=stage1_steps,
                    stage1_candidates=stage1_candidates, stage2_iters=stage2_iters,
                    stage2_beta=stage2_beta, interval=interval).hist
 
@@ -344,17 +338,17 @@ def main():
                     help="show the live animation window (slower than the default)")
     ap.add_argument("--save", help="write a GIF/MP4 of the animation (slower)")
     ap.add_argument("--seed", type=int, default=3)
-    ap.add_argument("--refine", type=int, default=16)
     ap.add_argument("--stage1", type=int, default=40)
     ap.add_argument("--stage2", type=int, default=30)
     args = ap.parse_args()
-    opt = build_demo_recombination(seed=args.seed, n_refine=args.refine)
-    result = run_optimization(opt, visualize=args.live, save=args.save,
-                              stage1_steps=args.stage1, stage2_iters=args.stage2)
+    nodes = build_proton_nodes(seed=args.seed)
+    result = run_build(nodes, visualize=args.live, save=args.save,
+                       stage1_steps=args.stage1, stage2_iters=args.stage2)
     if not args.live and not args.save:
-        print("optimization finished (visualization off by default — pass --live "
+        print("two-step proton build finished (visualization off by default — pass --live "
               "or --save to watch it):")
-        print("  " + "  ".join(f"{k}={v}" for k, v in result.items()))
+        for label, metrics in result:
+            print(f"  {label}:  " + "  ".join(f"{k}={v}" for k, v in metrics.items()))
 
 
 if __name__ == "__main__":
