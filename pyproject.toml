@@ -26,6 +26,13 @@ optional-dependencies.examples = [
     "scipy>=1.11",
     "tqdm>=4.66",
 ]
+# Reinforcement-learning driver for the cobordism objective search
+# (examples/cobordism/rl/): a PyTorch actor-critic that learns the surgery +
+# relaxation search policy. PyTorch is heavy and only this driver needs it, so it
+# is its own extra rather than a core/examples dependency.
+optional-dependencies.rl = [
+    "torch>=2.0",
+]
 optional-dependencies.dev = [
     "tessera[examples]",
     "pytest",
