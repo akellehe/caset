@@ -187,8 +187,9 @@ class CobordismObjectiveEnv:
         terminate_on_carry: bool = True,
         directed_grow: bool = False,
         cone_strategy: str = "greedy",
-        cone_max_candidates: int = 200,
+        cone_max_candidates: int = 80,
         cone_overshoot: int = 2,
+        cone_probe_openers: int = 6,
     ):
         # Default target = the proton singlet on the formation (2→1) node. `gamma` MUST
         # match the factory's node so F = gradN2 + gamma·r_u is reconstructed exactly; the
@@ -241,6 +242,9 @@ class CobordismObjectiveEnv:
         # cone-in that leaves the lowest singlet r_state) — register selection, not just
         # growth (so the policy can drop a sub-optimal hole and keep a better one).
         self.cone_overshoot = int(cone_overshoot)
+        # The cone-out probe stops scanning candidates once this many hole-openers are found
+        # (interior-first ordering surfaces them up front), so the probe stays affordable.
+        self.cone_probe_openers = int(cone_probe_openers)
 
         # Gym-style space descriptors (no gymnasium dependency).
         self.observation_space = _Box(
@@ -497,6 +501,7 @@ class CobordismObjectiveEnv:
 
             cells = sorted(self._top_cell_tuples(st), key=_order_key)[:self.cone_max_candidates]
             best = None  # (score, cell)
+            openers_found = 0
             for cell in cells:
                 ok, _reason = cone.coneOut(cell)
                 if not ok:
@@ -515,6 +520,13 @@ class CobordismObjectiveEnv:
                 if best is None or score > best[0]:
                     best = (score, cell)
                 cone.rollback()
+                # Early stop: the interior-first ordering surfaces hole-creators up front, so
+                # once a few openers are in hand the best is almost surely among them — bail
+                # rather than scan the (mostly non-opening) tail. Keeps the probe affordable.
+                if delta > 0:
+                    openers_found += 1
+                    if openers_found >= self.cone_probe_openers:
+                        break
             if best is None or best[0][0] <= 0:  # nothing opens a new hole
                 break
             ok, _reason = cone.coneOut(best[1])

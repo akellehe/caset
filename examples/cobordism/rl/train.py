@@ -258,7 +258,7 @@ def _print_comparison(result: dict) -> None:
 # (patience 15, n_candidate_moves 8) match `Proton.build()`'s init/evolve drive, so the RL
 # arc and the reference build see the identical engine.
 CARRY_PROFILE = dict(
-    max_actions=4, hole_reward_weight=2.0, rstate_reward_weight=1.0, carry_bonus=10.0,
+    max_actions=3, hole_reward_weight=2.0, rstate_reward_weight=1.0, carry_bonus=10.0,
     entropy_coef=0.03, entropy_coef_final=0.005,
     # grow_steps caps a single GROW: high enough to form the register (carriers converge in
     # ~50-120 engine steps, then run_stage1 breaks early once carried -- a carrying GROW
