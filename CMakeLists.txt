@@ -415,6 +415,41 @@ endforeach()
 target_link_libraries(_tessera PRIVATE tessera_quantum)
 # ---- </Quantum subsystem> ----
 
+# ---- <RL subsystem (libtorch PPO) — optional, #551> ----
+# The RL module links libtorch, so it is built ONLY when torch is importable in the build
+# interpreter (the `rl` extra). The core `_tessera` stays libtorch-free. torch 2.x uses the
+# CXX11 ABI (matches gcc's default + tessera_core), and the imported `torch` target carries
+# TORCH_CXX_FLAGS + the libtorch include/link directories.
+execute_process(
+    COMMAND ${Python_EXECUTABLE} -c "import torch; print(torch.utils.cmake_prefix_path)"
+    OUTPUT_VARIABLE _torch_cmake_prefix
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE _torch_probe)
+if(_torch_probe EQUAL 0 AND _torch_cmake_prefix)
+    find_package(Torch QUIET HINTS "${_torch_cmake_prefix}")
+endif()
+if(Torch_FOUND)
+    message(STATUS "Building RL subsystem (libtorch ${Torch_VERSION}).")
+    pybind11_add_module(_tessera_rl MODULE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/rl/Bindings.cpp)
+    target_include_directories(_tessera_rl PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(_tessera_rl PRIVATE tessera_core torch)
+    set_target_properties(_tessera_rl PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CXX_VISIBILITY_PRESET default
+            VISIBILITY_INLINES_HIDDEN OFF)
+    install(TARGETS _tessera_rl
+            LIBRARY DESTINATION tessera
+            RUNTIME DESTINATION tessera
+            ARCHIVE DESTINATION tessera)
+else()
+    message(STATUS "torch not found — skipping the optional RL subsystem (_tessera_rl).")
+endif()
+# ---- </RL subsystem> ----
+
 if(NOT TESSERA_ASAN)
 # --- Generate Python stubs for tessera (.pyi) ---
 set(STUB_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/stubs")
