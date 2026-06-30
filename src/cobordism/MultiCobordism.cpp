@@ -34,7 +34,7 @@ using complexd = std::complex<double>;
 namespace {
 constexpr int kFrameworkDimension = 4;  // framework dimension (closed S^4 host)
 
-// Sorted vertex-id tuple of a top simplex (the reference's `_top_tuple`).
+// Sorted vertex-id tuple of a top simplex.
 std::vector<std::uint64_t> topTuple(const ::tessera::mesh::Simplex &simplex) {
   std::vector<std::uint64_t> sortedVertexIdentifiers;
   for (const auto *vertex : simplex.getVertices())

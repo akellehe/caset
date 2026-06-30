@@ -20,7 +20,7 @@ using ::tessera::spacetime::Spacetime;
 
 /// # MultiCobordism
 ///
-/// The C++ source-of-truth port of `examples/cobordism/emergent_optimizer.py`
+/// The C++ source-of-truth emergent-merge optimizer
 /// (epic #457 / T5, #491): the merge as a **fully emergent** optimization — no
 /// prescribed topology, no hand-placed register. From a bare host it grows the
 /// register by **gated surgical moves** under the objective and reads the register
@@ -73,7 +73,7 @@ class MultiCobordism {
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
       std::uint64_t seed = 0, int precone = 0);
 
-  // ---- module-level helpers (static; the reference's free functions) ----
+  // ---- module-level helpers (static) ----
   /// Betti numbers (combinatorial, geometry-free).
   [[nodiscard]] static std::vector<int> betti(const Spacetime &st);
   /// The emergent k-register, read off `getBoundary`: the `(k+2)`-vertex tuples
