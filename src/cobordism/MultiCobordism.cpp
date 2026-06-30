@@ -18,6 +18,7 @@
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
+#include "mesh/VertexList.h"
 #include "simulations/ReggeSolver.h"
 #include "spacetime/Spacetime.h"
 #include "spacetime/pachner/AddMove.h"
@@ -49,6 +50,26 @@ std::pair<std::uint64_t, std::uint64_t> edgeKey(
   const auto targetVertexId = edge->getTarget()->getId();
   return {std::min(sourceVertexId, targetVertexId),
           std::max(sourceVertexId, targetVertexId)};
+}
+
+// The boundary facets of `spacetime`, as sorted vertex-id tuples, for membership tests.
+std::set<std::vector<std::uint64_t>> boundaryFacetSet(const Spacetime &spacetime) {
+  std::set<std::vector<std::uint64_t>> facets;
+  for (auto facet : spacetime.getBoundary()) {  // getBoundary() returns a fresh copy
+    std::sort(facet.begin(), facet.end());
+    facets.insert(facet);
+  }
+  return facets;
+}
+
+// Whether any `pinned` vertex is no longer live in `spacetime` (a stranded pinned vertex).
+bool strandsPinned(const Spacetime &spacetime, const std::set<std::uint64_t> &pinned) {
+  std::set<std::uint64_t> live;
+  for (const auto *vertex : spacetime.getVertexList()->toVector())
+    live.insert(vertex->getId());
+  for (auto vertexId : pinned)
+    if (!live.count(vertexId)) return true;
+  return false;
 }
 }  // namespace
 
@@ -268,7 +289,7 @@ double MultiCobordism::objective() const {
   return reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
 }
 
-std::set<std::uint64_t> MultiCobordism::boundaryVerts() const {
+std::set<std::uint64_t> MultiCobordism::pinnedBoundaryVertices() const {
   // NOTHING is pinned. The boundary states are held representable by their r_U
   // terms — each input by its OWN residual r(input_i), and the single output by
   // the WHOLE cobordism's residual r(whole) (with the inputs as its boundary) —
@@ -372,7 +393,7 @@ bool MultiCobordism::applyMoveSpecification(
   std::set<std::uint64_t> liveVertexIds;
   for (const auto &topSimplex : spacetime->getTopSimplices())
     for (auto vertexId : topTuple(*topSimplex)) liveVertexIds.insert(vertexId);
-  for (auto vertexId : boundaryVerts())
+  for (auto vertexId : pinnedBoundaryVertices())
     if (!liveVertexIds.count(vertexId))
       return false;  // a pinned boundary vertex was removed
   return EigenstateSynthesis(spacetime, dualComplexGateDegree_)
@@ -676,6 +697,153 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     }
   }
   return objectiveTrace;
+}
+
+int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen) {
+  if (registerDegrees_.empty()) return 0;
+  constexpr int kMaxCandidates = 40;  // bound the scan; interior-first surfaces openers early
+  constexpr int kProbeOpeners = 3;    // stop once a few openers are in hand
+  const int registerDegree = registerDegrees_.front();
+  auto spacetime = spacetime_;
+  const auto pinned = pinnedBoundaryVertices();
+  int opened = 0;
+  for (int iteration = 0; iteration < maxOpen; ++iteration) {
+    const auto holesBefore = emergentHoles(*spacetime, registerDegree);
+    const std::size_t holeCountBefore = holesBefore.size();
+    std::set<std::uint64_t> holeVertices;
+    for (const auto &hole : holesBefore) holeVertices.insert(hole.begin(), hole.end());
+    const auto boundary = boundaryFacetSet(*spacetime);
+
+    std::vector<std::vector<std::uint64_t>> cells;
+    for (const auto *simplex : spacetime->getTopSimplices())
+      cells.push_back(topTuple(*simplex));
+    // Order interior-first (fewest boundary facets → hole-creators first); the secondary key
+    // then places cells sharing vertices with the existing holes last (AdjacentHolesLast, a
+    // separated register) or first (AdjacentHolesFirst, a clustered one).
+    const auto orderKey = [&](const std::vector<std::uint64_t> &cell) {
+      int boundaryFacets = 0;
+      for (std::size_t i = 0; i < cell.size(); ++i) {
+        std::vector<std::uint64_t> facet;
+        for (std::size_t j = 0; j < cell.size(); ++j)
+          if (j != i) facet.push_back(cell[j]);
+        if (boundary.count(facet)) ++boundaryFacets;
+      }
+      int shared = 0;
+      for (auto vertexId : cell)
+        if (holeVertices.count(vertexId)) ++shared;
+      return std::pair<int, int>(
+          boundaryFacets,
+          strategy == HolePlacementStrategy::AdjacentHolesFirst ? -shared : shared);
+    };
+    std::sort(cells.begin(), cells.end(),
+              [&](const std::vector<std::uint64_t> &a,
+                  const std::vector<std::uint64_t> &b) { return orderKey(a) < orderKey(b); });
+
+    const double baseResidual = rU(spacetime);
+    double bestResidual = baseResidual;
+    std::vector<std::uint64_t> bestCell;
+    int candidatesScanned = 0;
+    int openersScanned = 0;
+    SurgicalCone cone(spacetime.get());
+    for (const auto &cell : cells) {
+      if (candidatesScanned++ >= kMaxCandidates) break;
+      if (!cone.coneOut(cell).first) continue;  // gate rejected; nothing applied
+      const bool opensHole =
+          !strandsPinned(*spacetime, pinned) &&
+          emergentHoles(*spacetime, registerDegree).size() > holeCountBefore;
+      if (opensHole) {
+        const double candidateResidual = rU(spacetime);  // rU absorbs r_state (both steps)
+        if (candidateResidual < bestResidual) {
+          bestResidual = candidateResidual;
+          bestCell = cell;
+        }
+        ++openersScanned;
+      }
+      cone.rollback();
+      if (opensHole && openersScanned >= kProbeOpeners) break;
+    }
+    if (bestCell.empty()) break;  // no opener lowers rU
+    if (!cone.coneOut(bestCell).first) break;
+    if (strandsPinned(*spacetime, pinned)) {  // defensive: never strand a pinned vertex
+      cone.rollback();
+      break;
+    }
+    ++opened;
+  }
+  return opened;
+}
+
+int MultiCobordism::directedConeIn(int maxClose) {
+  if (registerDegrees_.empty()) return 0;
+  constexpr int kMaxCandidates = 40;
+  const int registerDegree = registerDegrees_.front();
+  auto spacetime = spacetime_;
+  int closed = 0;
+  for (int iteration = 0; iteration < maxClose; ++iteration) {
+    const auto holesBefore = emergentHoles(*spacetime, registerDegree);
+    const std::size_t holeCountBefore = holesBefore.size();
+    if (holeCountBefore == 0) break;
+    const auto boundary = boundaryFacetSet(*spacetime);
+
+    // Cap facets: drop-one facets of the current holes that lie on the boundary — capping
+    // one (a cone-in over it) closes that hole.
+    std::set<std::vector<std::uint64_t>> seen;
+    std::vector<std::vector<std::uint64_t>> capFacets;
+    for (const auto &hole : holesBefore) {
+      for (std::size_t i = 0; i < hole.size(); ++i) {
+        std::vector<std::uint64_t> facet;
+        for (std::size_t j = 0; j < hole.size(); ++j)
+          if (j != i) facet.push_back(hole[j]);
+        std::sort(facet.begin(), facet.end());
+        if (boundary.count(facet) && seen.insert(facet).second) capFacets.push_back(facet);
+      }
+    }
+
+    const double baseResidual = rU(spacetime);
+    double bestResidual = baseResidual;
+    std::vector<std::uint64_t> bestFacet;
+    int candidatesScanned = 0;
+    SurgicalCone cone(spacetime.get());
+    for (const auto &facet : capFacets) {
+      if (candidatesScanned++ >= kMaxCandidates) break;
+      if (!cone.coneIn(facet).first) continue;
+      if (emergentHoles(*spacetime, registerDegree).size() < holeCountBefore) {
+        const double candidateResidual = rU(spacetime);
+        if (candidateResidual < bestResidual) {
+          bestResidual = candidateResidual;
+          bestFacet = facet;
+        }
+      }
+      cone.rollback();
+    }
+    if (bestFacet.empty()) break;  // no cap lowers rU
+    if (!cone.coneIn(bestFacet).first) break;
+    ++closed;
+  }
+  return closed;
+}
+
+void MultiCobordism::buildStep(BuildAction action, int maxSteps, int nCandidateMoves,
+                               int patience, double stage2Beta, int stage2MaxIters,
+                               double stage2Alpha0,
+                               HolePlacementStrategy holePlacementStrategy) {
+  switch (action) {
+    case BuildAction::Grow:
+      runStage1(maxSteps, nCandidateMoves, patience, /*growBoundaries=*/true);
+      break;
+    case BuildAction::Evolve:
+      runStage1(maxSteps, nCandidateMoves, patience, /*growBoundaries=*/false);
+      break;
+    case BuildAction::Relax:
+      runStage2(stage2Beta, stage2MaxIters, stage2Alpha0);
+      break;
+    case BuildAction::ConeOut:
+      (void)directedConeOut(holePlacementStrategy);
+      break;
+    case BuildAction::ConeIn:
+      (void)directedConeIn();
+      break;
+  }
 }
 
 }  // namespace tessera::cobordism

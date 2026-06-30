@@ -66,9 +66,16 @@ class Proton {
   ///                        cone-in moves before optimization (forwarded to the
   ///                        `MultiCobordism` ctor of every node), giving surgery
   ///                        room to act without prebuilding a host. Default 0.
+  ///   * `shouldUseDirectedSurgery` — when true, `build()` augments each step's drive with
+  ///                        the engine's DIRECTED cone-out/cone-in probes
+  ///                        (`MultiCobordism::directedConeOut`/`directedConeIn`): a gated,
+  ///                        score-guided search for the cells
+  ///                        to open the register holes (and the holes to cap), instead of
+  ///                        relying on `runStage1`'s random cone draws. Default false keeps
+  ///                        `build()` byte-identical to its existing drive.
   explicit Proton(std::uint64_t seed = 0, int registerDegree = 3,
                   double gamma = 50.0, double inputWeight = 20.0,
-                  int precone = 0);
+                  int precone = 0, bool shouldUseDirectedSurgery = false);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -132,6 +139,7 @@ class Proton {
   double gamma_;
   double inputResidualWeight_;
   int precone_;  // gated cone-ins pre-grown into each node's seed (ctor → nodes)
+  bool shouldUseDirectedSurgery_;  // build() uses the directed cone-out/cone-in probes
 
   // ---- build state (populated by build()) ----
   bool attempted_ = false;
