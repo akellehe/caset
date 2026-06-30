@@ -50,7 +50,7 @@ class CobordismDAG {
 
   /// Run every node in topological order. Stage-1 (combinatorial) and stage-2
   /// (geometric) parameters are shared across nodes. Raises on a cycle.
-  void run(int stage1MaxSteps = 30, int stage1Candidates = 8,
+  void run(int stage1MaxSteps = 30, int stage1CandidateMoves = 8,
            int stage1Patience = 8, double stage2Beta = 1.0,
            int stage2MaxIters = 40);
 

@@ -19,6 +19,7 @@
 #include "cobordism/CobordismDAG.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/MultiCobordism.h"
+#include "cobordism/Proton.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/SurgicalCone.h"
@@ -806,12 +807,13 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                   py::arg("st"), py::arg("k"), py::arg("target"))
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
       .def("objective", &MultiCobordism::objective)
-      .def("construct_inputs", &MultiCobordism::constructInputs,
-           py::arg("seeds"), py::arg("rounds") = 24)
-      .def("construct_outputs", &MultiCobordism::constructOutputs,
-           py::arg("seeds"), py::arg("rounds") = 24)
+      .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
+           py::arg("weight"))
+      .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
+      .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
-           py::arg("n_candidates") = 12, py::arg("patience") = 8)
+           py::arg("n_candidate_moves") = 12, py::arg("patience") = 8,
+           py::arg("grow_boundaries") = false)
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 40, py::arg("alpha0") = 0.05)
       .def_property_readonly("st", &MultiCobordism::spacetime)
@@ -839,7 +841,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "whose outputs feed further inputs, and `output_targets` (one for a "
            "merge, two for a 2->2 recombination). Returns the node id.")
       .def("run", &CobordismDAG::run, py::arg("stage1_max_steps") = 30,
-           py::arg("stage1_candidates") = 8, py::arg("stage1_patience") = 8,
+           py::arg("stage1_candidate_moves") = 8, py::arg("stage1_patience") = 8,
            py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 40,
            "Run all nodes in topological order (raises on a cycle).")
       .def("output", &CobordismDAG::output, py::arg("node"),
@@ -847,6 +849,50 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("num_outputs", &CobordismDAG::numOutputs, py::arg("node"))
       .def("residual", &CobordismDAG::residual, py::arg("node"))
       .def("__len__", &CobordismDAG::size);
+
+  // === Proton (#503): the canonical two-step MultiCobordism proton build ===
+  py::class_<Proton>(m, "Proton",
+      R"doc(The canonical, footgun-free proton builder, composing MultiCobordism.
+
+A proton is THREE quarks in a colorless bound state, so it is built in TWO steps
+(a single merge would be physically invalid). omega = exp(2*pi*i/3).
+  * Step A (recombination, one 2->2 node): two neutral q-qbar pairs {1,-1,0},
+    {1,0,-1} -> a colored diquark {1,w} + antidiquark {1,w*w} (2-vectors).
+  * Step B (formation, a separate 2->1 node): the diquark {1,w} + the third
+    quark {w*w} -> the proton {1,w,w*w} (the 3-vector color singlet).
+build() builds the closed-S^4 hosts internally and restarts across distinct
+seeds until step B's proton block carries the singlet with >=3 color holes. The
+accessors lazily trigger build() on first use, so `Proton().block()` just works.
+Observable readers (charge/mass/radius/spin) read OFF block() in their own
+tickets.)doc")
+      .def(py::init<std::uint64_t, int, double, double>(), py::arg("seed") = 0,
+           py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
+           py::arg("input_weight") = 20.0)
+      .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
+      .def_static("singlet", &Proton::singlet,
+                  "The proton color singlet {1, w, w*w}.")
+      .def("build", &Proton::build, py::arg("max_restarts") = 16,
+           py::arg("init_steps") = 180,
+           py::arg("evolve_steps") = 60, py::arg("stage1_candidate_moves") = 8,
+           py::arg("stage1_patience") = 15, py::arg("stage2_beta") = 1.0,
+           py::arg("stage2_max_iters") = 10, py::arg("color_tolerance") = 0.5,
+           py::arg("min_quark_holes") = 3,
+           "Restart across seeds until the whole step-B cobordism carries the singlet "
+           "with >= min_quark_holes holes. Each step runs an init pass (grow the "
+           "boundary until it carries) then an evolution pass (boundary frozen).")
+      .def("converged", &Proton::converged,
+           "True iff step B's proton block carries the singlet with enough holes.")
+      .def("seed", &Proton::seed, "Base seed of the converged (or best) attempt.")
+      .def("spacetime", &Proton::spacetime,
+           "Step B's full relaxed closed-S^4 complex.")
+      .def("block", &Proton::block,
+           "Step B's proton sub-complex, with the relaxed metric copied in.")
+      .def("quark_holes", &Proton::quarkHoles,
+           "The emergent color holes on the proton block (>=3 when converged).")
+      .def("color_residual", &Proton::colorResidual,
+           "Step B's proton singlet r_state (~0 => carried).")
+      .def("diquark_residual", &Proton::diquarkResidual,
+           "Step A's r_U (small => the diquark recombination converged).");
 
 
   // ----- Gated surgical cone-out/cone-in (topology change, #460) -----

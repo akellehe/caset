@@ -154,6 +154,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} CobordismDAG.h
 ```
+```{doxygenfile} Proton.h
+```
 ```{doxygenfile} SurgicalCone.h
 ```
 
