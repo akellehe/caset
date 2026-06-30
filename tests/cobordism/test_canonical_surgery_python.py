@@ -61,8 +61,12 @@ class DirectedProbeInvariantTest(unittest.TestCase):
         BA = cob.MultiCobordism.BuildAction
         HP = cob.MultiCobordism.HolePlacementStrategy
         node = cob.Proton(seed=0).formation_node(1)   # a seeded single-Δ⁴ node
-        node.build_step(BA.GROW, max_steps=60, n_candidate_moves=8, patience=15)
+        # A small grow keeps the eigensolve-heavy probe scans cheap; the invariant holds
+        # at any size.
+        node.build_step(BA.GROW, max_steps=25, n_candidate_moves=6, patience=10)
 
+        # A directed probe commits a move ONLY when it lowers rU, so rU is non-increasing.
+        # These two calls also exercise the CONE_OUT / CONE_IN build_step routes.
         before = node.r_u(node.st)
         opened = node.directed_cone_out(HP.ADJACENT_HOLES_LAST)
         self.assertGreaterEqual(opened, 0)
@@ -75,11 +79,10 @@ class DirectedProbeInvariantTest(unittest.TestCase):
         self.assertLessEqual(node.r_u(node.st), before + 1e-6,
                              "directed_cone_in must not raise rU")
 
-        # Every BuildAction dispatches without raising.
-        node.build_step(BA.RELAX, stage2_max_iters=3)
-        node.build_step(BA.EVOLVE, max_steps=5)
-        node.build_step(BA.CONE_OUT, hole_placement_strategy=HP.ADJACENT_HOLES_FIRST)
-        node.build_step(BA.CONE_IN)
+        # The remaining BuildActions dispatch without raising (cheap actions).
+        node.build_step(BA.RELAX, stage2_max_iters=2)
+        node.build_step(BA.EVOLVE, max_steps=3)
+        node.build_step(BA.GROW, max_steps=3)
 
 
 @pytest.mark.slow
