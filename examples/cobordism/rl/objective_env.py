@@ -485,9 +485,8 @@ class CobordismObjectiveEnv:
             holes = cob.MultiCobordism.emergent_holes(st, self.k)
             if len(holes) >= open_target:  # over-open; EVOLVE's cone-in selects the best 3
                 break
-            hole_vertices = {v for hole in holes for v in hole}
+            hole_vertices = {int(v) for hole in holes for v in hole}
             boundary = {tuple(sorted(int(v) for v in f)) for f in st.getBoundary()}
-            hole_vertices = {int(v) for v in hole_vertices}
 
             def _order_key(cell):
                 cellset = set(cell)
@@ -531,6 +530,12 @@ class CobordismObjectiveEnv:
                 break
             ok, _reason = cone.coneOut(best[1])
             if not ok:
+                break
+            # Defensive re-check on the COMMITTED move (probing rolled every candidate back,
+            # so the keep is a fresh coneOut): never leave a pinned vertex stranded.
+            committed = {int(v.getId()) for v in st.getVertexList().toVector()}
+            if not pinned.issubset(committed):
+                cone.rollback()
                 break
             opened += 1
         return opened
