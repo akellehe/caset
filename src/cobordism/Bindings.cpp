@@ -785,7 +785,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              [](const MultiCobordism::BoundaryBlock &block) {
                                return block.target;
                              });
-  py::class_<MultiCobordism>(m, "MultiCobordism",
+  py::class_<MultiCobordism, std::shared_ptr<MultiCobordism>>(m, "MultiCobordism",
       "The C++ port of emergent_optimizer.MultiCobordism (#491): merge as a "
       "fully emergent optimization. From a bare host it grows the register by "
       "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
@@ -880,6 +880,14 @@ tickets.)doc")
            "Restart across seeds until the whole step-B cobordism carries the singlet "
            "with >= min_quark_holes holes. Each step runs an init pass (grow the "
            "boundary until it carries) then an evolution pass (boundary frozen).")
+      .def("recombination_node", &Proton::recombinationNode, py::arg("seed"),
+           "A fresh, seeded (not-yet-run) Step A node: two neutral q-qbar pairs -> a "
+           "diquark {1,w} + antidiquark {1,w*w}, on a single Delta^4 seed. Drive it with "
+           "run_stage1/run_stage2 -- the exact node build() uses for recombination.")
+      .def("formation_node", &Proton::formationNode, py::arg("seed"),
+           "A fresh, seeded (not-yet-run) Step B node: the diquark {1,w} + the third "
+           "quark {w*w} -> the proton singlet, on a single Delta^4 seed (output read off "
+           "the whole). Drive it with run_stage1/run_stage2.")
       .def("converged", &Proton::converged,
            "True iff step B's proton block carries the singlet with enough holes.")
       .def("seed", &Proton::seed, "Base seed of the converged (or best) attempt.")
