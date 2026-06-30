@@ -283,24 +283,41 @@ class ProtonAnimator:
         st = node.st
         coords = self._layouts[node_index].coords(st)
         ax.clear()
-        hole_vs = {v for h in cob.MultiCobordism.emergent_holes(st, self.k) for v in h}
+        # Each emergent color hole (register) is a removed top cell — a k=3 hole is a
+        # 4-simplex, 5 vertices — whose boundary edges stay in the complex. OUTLINE each
+        # register cell by reddening the edges whose endpoints both lie in that hole's vertex
+        # set, and badge it with its index at the cell centroid. So one register reads as one
+        # numbered red cell — unlike the old per-vertex reddening, where a single 5-vertex
+        # hole showed as 5 disconnected red dots and couldn't be counted.
+        holes = cob.MultiCobordism.emergent_holes(st, self.k)
+        hole_vsets = [set(h) for h in holes]
         for e in st.getEdgeList().toVector():
             a, b = e.getSource().getId(), e.getTarget().getId()
-            if a in coords and b in coords:
-                p, q = coords[a], coords[b]
-                ax.plot([p[0], q[0]], [p[1], q[1]], color="0.8", lw=0.5, zorder=1)
-        if len(coords) >= 1:
+            if a not in coords or b not in coords:
+                continue
+            p, q = coords[a], coords[b]
+            if any(a in vs and b in vs for vs in hole_vsets):     # a register-cell edge
+                ax.plot([p[0], q[0]], [p[1], q[1]], color="C3", lw=1.8, zorder=3)
+            else:
+                ax.plot([p[0], q[0]], [p[1], q[1]], color="0.85", lw=0.5, zorder=1)
+        if coords:
             pts = np.array(list(coords.values()))
-            cols = ["C3" if v in hole_vs else "0.4" for v in coords]
-            sz = [40 if v in hole_vs else 8 for v in coords]
-            ax.scatter(pts[:, 0], pts[:, 1], c=cols, s=sz, zorder=2)
+            ax.scatter(pts[:, 0], pts[:, 1], c="0.4", s=8, zorder=2)
+            for i, h in enumerate(holes):                          # number each register
+                hp = np.array([coords[v] for v in h if v in coords])
+                if len(hp):
+                    c = hp.mean(0)
+                    ax.text(c[0], c[1], str(i + 1), color="white", fontsize=8,
+                            fontweight="bold", ha="center", va="center", zorder=4,
+                            bbox=dict(boxstyle="circle,pad=0.2", fc="C3", ec="white",
+                                      lw=0.8))
             if len(coords) >= 2:
                 view = self._layouts[node_index].view(coords)
                 ax.set_xlim(view[0], view[1])
                 ax.set_ylim(view[2], view[3])
-        n_holes = len(cob.MultiCobordism.emergent_holes(st, self.k))
+        n_holes = len(holes)
         ax.set_aspect("equal")
-        ax.set_title(f"{title}  ({n_holes} register{'s' if n_holes != 1 else ''})",
+        ax.set_title(f"{title}  —  {n_holes} register{'s' if n_holes != 1 else ''}",
                      fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
@@ -318,14 +335,19 @@ class ProtonAnimator:
         self.axm.legend(loc="upper right", fontsize=8)
 
         self.axr.clear()
-        self.axr.plot(xs, self.hist["b3"], label=f"b{self.k} (register)", color="C3",
+        # The register count is the number of emergent color holes (= quarks) — the SAME
+        # number the complex panels outline and the titles report. b_k is a Betti number, a
+        # *different* topological invariant that can disagree, so it is drawn separately and
+        # labelled as such, never as "the register" (which conflated the two before).
+        self.axr.plot(xs, self.hist["holes"], label="color registers (holes)", color="C3",
                       marker=".")
-        self.axr.plot(xs, self.hist["holes"], label="register holes", color="C4",
-                      marker=".")
+        self.axr.plot(xs, self.hist["b3"], label=f"b{self.k} (Betti number)", color="C4",
+                      marker=".", alpha=0.55)
         for b in self._boundaries:
             self.axr.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
-        self.axr.axhline(_MIN_QUARK_HOLES, color="0.6", ls=":", lw=0.8)
-        self.axr.set_title("emergent register")
+        self.axr.axhline(_MIN_QUARK_HOLES, color="0.6", ls=":", lw=0.8,
+                         label=f"proton = {_MIN_QUARK_HOLES}")
+        self.axr.set_title("color register")
         self.axr.set_xlabel("frame")
         self.axr.legend(loc="upper left", fontsize=8)
 
