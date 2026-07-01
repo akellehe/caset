@@ -611,6 +611,161 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    stage2_beta=stage2_beta, interval=interval, **anim_kw).hist
 
 
+# ---- RL-policy drive (#553): watch a trained libtorch policy assemble the proton ----
+# The policy (loaded from a checkpoint saved by `rl_objective_search.py --checkpoint`) chooses
+# each `buildStep` macro-action; the env drives the CANONICAL `MultiCobordism` — nothing about
+# proton construction is reimplemented here. Each policy action is a segment, smoothed by the
+# `_StableLayout` glide, so the few large macro-actions still read as a smooth build.
+_RL_MOVE_NAMES = {0: "GROW", 1: "EVOLVE", 2: "RELAX"}
+
+
+class RLPolicyAnimator:
+    """Animate the proton (Step B formation) assembling under a trained RL policy: the complex
+    (register holes numbered) beside the live carry metrics (holes → 3, singlet r_state → 0),
+    titled with the policy's last macro-move."""
+
+    def __init__(self, env, policy, degree=3, seed=3, deterministic=True, max_actions=8,
+                 glide_frames=8):
+        self.env, self.policy, self.k = env, policy, degree
+        self.det = bool(deterministic)
+        self.glide = max(1, glide_frames)
+        self.max_actions = max_actions
+        self._obs = env.reset(seed)
+        self._done = False
+        self._steps = 0
+        self._last_move = None
+        self._layout = _StableLayout()
+        self.hist = {"holes": [], "rstate": []}
+        self._frames = max_actions * self.glide
+        self._record()
+
+    def _record(self):
+        st = self.env.node.st
+        self.hist["holes"].append(len(cob.MultiCobordism.emergent_holes(st, self.k)))
+        self.hist["rstate"].append(
+            float(cob.MultiCobordism.r_state(st, self.k, cob.Proton.singlet())))
+
+    def _advance(self):
+        if self._done or self._steps >= self.max_actions:
+            return
+        import tessera.rl as rl
+        a = rl.select_action(self.policy, self._obs, self.det)
+        res = self.env.step(rl.Move(a.move), list(a.params))  # drives the canonical buildStep
+        self._obs, self._done, self._last_move = res.obs, bool(res.done), int(res.move)
+        self._steps += 1
+        self._record()
+
+    def _setup(self, plt):
+        self.fig, (self.axc, self.axm) = plt.subplots(1, 2, figsize=(13, 6))
+        self.axm2 = self.axm.twinx()   # created ONCE (a per-frame twinx would pile up)
+        return self.fig
+
+    def update(self, frame):
+        if frame % self.glide == 0:
+            self._advance()
+        self._draw_complex()
+        self._draw_metrics()
+        return []
+
+    def _draw_complex(self):
+        st = self.env.node.st
+        coords = self._layout.coords(st)
+        ax = self.axc
+        ax.clear()
+        holes = cob.MultiCobordism.emergent_holes(st, self.k)
+        hole_vsets = [set(h) for h in holes]
+        for e in st.getEdgeList().toVector():
+            a, b = e.getSource().getId(), e.getTarget().getId()
+            if a not in coords or b not in coords:
+                continue
+            p, q = coords[a], coords[b]
+            if any(a in vs and b in vs for vs in hole_vsets):     # a register-cell edge
+                ax.plot([p[0], q[0]], [p[1], q[1]], color="C3", lw=1.8, zorder=3)
+            else:
+                ax.plot([p[0], q[0]], [p[1], q[1]], color="0.85", lw=0.5, zorder=1)
+        if coords:
+            pts = np.array(list(coords.values()))
+            ax.scatter(pts[:, 0], pts[:, 1], c="0.4", s=8, zorder=2)
+            for i, h in enumerate(holes):                          # number each register
+                hp = np.array([coords[v] for v in h if v in coords])
+                if len(hp):
+                    c = hp.mean(0)
+                    ax.text(c[0], c[1], str(i + 1), color="white", fontsize=8,
+                            fontweight="bold", ha="center", va="center", zorder=4,
+                            bbox=dict(boxstyle="circle,pad=0.2", fc="C3", ec="white", lw=0.8))
+            if len(coords) >= 2:
+                view = self._layout.view(coords)
+                ax.set_xlim(view[0], view[1]); ax.set_ylim(view[2], view[3])
+        n = len(holes)
+        move = "" if self._last_move is None else f"  ·  move: {_RL_MOVE_NAMES[self._last_move]}"
+        ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+        ax.set_title(f"proton formation under RL policy — {n} register"
+                     f"{'s' if n != 1 else ''}{move}", fontsize=10)
+
+    def _draw_metrics(self):
+        xs = list(range(len(self.hist["holes"])))
+        self.axm.clear(); self.axm2.clear()
+        self.axm.plot(xs, self.hist["holes"], "-o", color="C3", label="holes")
+        self.axm.axhline(_MIN_QUARK_HOLES, color="C3", ls=":", lw=0.8)
+        self.axm.set_ylabel("emergent holes (→ 3)", color="C3")
+        self.axm.set_xlabel("policy action")
+        self.axm2.plot(xs, self.hist["rstate"], "-s", color="C0", label="r_state")
+        self.axm2.axhline(_COLOR_TOL, color="C0", ls=":", lw=0.8)
+        self.axm2.set_ylabel("singlet r_state (→ 0)", color="C0")
+        carried, res, holes = self.verdict()
+        self.axm.set_title(f"carry: holes={holes}  r_state={res:.3g}  "
+                           f"{'CARRIED ✓' if carried else '…'}", fontsize=10)
+
+    def verdict(self):
+        """Live proton verdict off the formation node: singlet r_state + hole count vs the
+        thresholds (residual < tol, holes ≥ 3) — the same criterion `Proton.build()` uses."""
+        st = self.env.node.st
+        res = float(cob.MultiCobordism.r_state(st, self.k, cob.Proton.singlet()))
+        holes = len(cob.MultiCobordism.emergent_holes(st, self.k))
+        return res < _COLOR_TOL and holes >= _MIN_QUARK_HOLES, res, holes
+
+
+def run_rl_policy(checkpoint, seed=3, deterministic=True, visualize=False, save=None,
+                  degree=3, hidden=64, interval=200):
+    """Drive the proton (Step B formation) build with a trained RL policy from `checkpoint`
+    (saved by `rl_objective_search.py --target formation --checkpoint`). Off by default this
+    runs the policy episode and returns the verdict; `--live`/`--save` animate it. The policy
+    must have been trained with the CARRY_PROFILE (hidden=64)."""
+    import tessera.rl as rl
+    env_cfg = rl.carry_profile_env()
+    env = rl.make_formation_env(env_cfg)
+    policy = rl.load_policy(checkpoint, 17, 3, 2, hidden)
+    if not visualize and not save:
+        obs, done, steps = env.reset(seed), False, 0
+        while not done and steps < env_cfg.max_actions:
+            a = rl.select_action(policy, obs, deterministic)
+            res = env.step(rl.Move(a.move), list(a.params))
+            obs, done, steps = res.obs, bool(res.done), steps + 1
+        st = env.node.st
+        res_ = float(cob.MultiCobordism.r_state(st, degree, cob.Proton.singlet()))
+        holes = len(cob.MultiCobordism.emergent_holes(st, degree))
+        return {"converged": res_ < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
+                "color_residual": res_, "registers": holes, "actions": steps}
+    import matplotlib
+    if save:
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+    anim = RLPolicyAnimator(env, policy, degree=degree, seed=seed,
+                            deterministic=deterministic, max_actions=env_cfg.max_actions)
+    anim._setup(plt)
+    anim.fig.suptitle("Proton formation under a trained RL policy")
+    fa = FuncAnimation(anim.fig, anim.update, frames=anim._frames, interval=interval,
+                       repeat=False, blit=False)
+    if save:
+        fa.save(save, writer="pillow" if save.endswith(".gif") else "ffmpeg", dpi=90)
+        print(f"saved animation -> {save}")
+    else:
+        plt.show()
+    anim._anim = fa   # keep a ref so it isn't GC'd in live mode
+    return anim.verdict()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     # Visualization is OFF by default (fast). Opt in with --live or --save.
@@ -618,6 +773,10 @@ def main():
                     help="show the live animation window (slower than the default)")
     ap.add_argument("--save", help="write a GIF/MP4 of the animation (slower)")
     ap.add_argument("--seed", type=int, default=3)
+    ap.add_argument("--policy",
+                    help="drive the proton FORMATION with a trained RL policy checkpoint "
+                         "(from `rl_objective_search.py --target formation --checkpoint`) "
+                         "instead of the fixed two-step Proton drive")
     ap.add_argument("--init", type=int, default=_INIT_STEPS,
                     help="init-pass (grow_boundaries=True) steps per node")
     ap.add_argument("--evolve", type=int, default=_EVOLVE_STEPS,
@@ -628,6 +787,13 @@ def main():
                     help="pre-grow each node's single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
     args = ap.parse_args()
+    if args.policy:   # RL-driven proton formation — an option alongside the fixed Proton drive
+        verdict = run_rl_policy(args.policy, seed=args.seed, visualize=args.live,
+                                save=args.save)
+        if not args.live and not args.save:
+            print("RL-policy proton formation finished (pass --live/--save to watch it):")
+            print("  " + "  ".join(f"{k}={v}" for k, v in verdict.items()))
+        return
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve, stage2_iters=args.stage2)
