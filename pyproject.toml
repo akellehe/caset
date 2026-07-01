@@ -26,10 +26,12 @@ optional-dependencies.examples = [
     "scipy>=1.11",
     "tqdm>=4.66",
 ]
-# Reinforcement-learning driver for the cobordism objective search
-# (examples/cobordism/rl/): a PyTorch actor-critic that learns the surgery +
-# relaxation search policy. PyTorch is heavy and only this driver needs it, so it
-# is its own extra rather than a core/examples dependency.
+# Reinforcement-learning harness for the cobordism objective search: a libtorch C++
+# actor-critic (the `_tessera_rl` extension, driven via `tessera.rl`) that learns the
+# surgery + relaxation search policy over MultiCobordism.buildStep. The pip `torch` package
+# supplies libtorch both to BUILD _tessera_rl (find_package(Torch); use --no-build-isolation
+# so the build sees it) and at runtime; it is heavy and only the RL needs it, so it is its
+# own extra rather than a core/examples dependency.
 optional-dependencies.rl = [
     "torch>=2.0",
 ]
