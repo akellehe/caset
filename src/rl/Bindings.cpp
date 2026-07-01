@@ -93,7 +93,10 @@ PYBIND11_MODULE(_tessera_rl, m) {
       .def_property_readonly("obs_dim", &CobordismObjectiveEnv::obsDim)
       .def_property_readonly("num_moves", &CobordismObjectiveEnv::numMoves)
       .def_property_readonly("param_dim", &CobordismObjectiveEnv::paramDim)
-      .def_property_readonly("current_F", &CobordismObjectiveEnv::currentF);
+      .def_property_readonly("current_F", &CobordismObjectiveEnv::currentF)
+      .def_property_readonly("node", &CobordismObjectiveEnv::node,
+          "The env's current MultiCobordism node (for drawing / metrics — the animation "
+          "reads node.st, node.objective(), emergent_holes(node.st, k), etc.).");
 
   m.def("make_formation_env", &makeFormationEnv, py::arg("config"),
         py::arg("input_weight") = 20.0,
