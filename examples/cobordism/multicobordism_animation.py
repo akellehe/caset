@@ -69,10 +69,28 @@ which is slower.
     python multicobordism_animation.py --save proton.gif
     # pre-grow each node's single-Δ⁴ seed by 12 gated cone-ins before optimizing:
     python multicobordism_animation.py --precone 12
+
+RL-driven variant (`--rl`): the SAME two-step build and the SAME 2×4 charts, but each step is
+driven by a trained libtorch **RL policy** instead of the fixed `Proton.build()` schedule — the
+policy chooses each `buildStep` macro-move (GROW/EVOLVE/RELAX + intensity). Two policies are
+trained, ONE PER STEP, because Step A recombination (success = `r_U → 0`) and Step B formation
+(carry the singlet) are different RL targets; within a step, the single policy spans both the
+combinatorial (GROW/EVOLVE surgery) and geometric (RELAX) moves. Policies are cached in
+`--policy-dir` (default `/tmp`) — trained once (over many complete convergences to learn the
+search space, not one problem), then reused. `--train` forces a retrain.
+
+    # RL two-step build; trains + caches both policies on first run, reuses them after:
+    python multicobordism_animation.py --rl --live
+    # retrain thoroughly (many convergences over the space) then watch it:
+    python multicobordism_animation.py --train --train-iters 40 --episodes 8 --live
+    # robuster policy: keep the best of 4 independent trainings per step:
+    python multicobordism_animation.py --train --best-of 4 --save proton_rl.gif
 """
 import argparse
 import itertools
 import math
+import os
+import shutil
 
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
@@ -226,12 +244,20 @@ class ProtonAnimator:
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
                  stage2_iters=_STAGE2_ITERS, stage1_candidates=_STAGE1_CANDIDATES,
                  stage1_patience=_STAGE1_PATIENCE, stage2_beta=1.0):
-        self.nodes = nodes                  # [(MultiCobordism, "Step A: ..."), ...] in order
-        self.k = degree
+        self._common_init(nodes, degree)
         self.s1c, self.s1pat, self.s2_beta = stage1_candidates, stage1_patience, stage2_beta
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk, stage2_iters)
         self._frames = len(self._schedule)
+
+    def _common_init(self, nodes, degree):
+        """Shared drawing/recording state used by BOTH the fixed-schedule drive and the
+        RL-policy drive (`RLPolicyAnimator`). Sets the node list, history buffers, per-panel
+        layouts, and curvature cache — everything `_redraw`/`_draw_*`/`verdict` read — so the
+        two drives differ only in how they advance a node (fixed passes vs one policy action),
+        never in what is drawn."""
+        self.nodes = nodes                  # [(MultiCobordism, "Step A: ..."), ...] in order
+        self.k = degree
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
@@ -611,150 +637,235 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    stage2_beta=stage2_beta, interval=interval, **anim_kw).hist
 
 
-# ---- RL-policy drive (#553): watch a trained libtorch policy assemble the proton ----
-# The policy (loaded from a checkpoint saved by `rl_objective_search.py --checkpoint`) chooses
-# each `buildStep` macro-action; the env drives the CANONICAL `MultiCobordism` — nothing about
-# proton construction is reimplemented here. Each policy action is a segment, smoothed by the
-# `_StableLayout` glide, so the few large macro-actions still read as a smooth build.
+# ---- RL-policy drive (#553): watch trained libtorch policies assemble the proton ----
+# The SAME rich 2×4 panels as the fixed Proton drive above (metrics, register+Betti, primal
+# A/B, dual spatial/temporal curvature) — only the DRIVE changes: each active frame the step's
+# trained policy chooses one `buildStep` macro-action and the env drives the CANONICAL
+# `MultiCobordism` (nothing about proton construction is reimplemented here).
+#
+# TWO policies, one per physics step, because the two steps are DIFFERENT RL problems: Step A
+# recombination has no whole-cobordism target (success = r_U → 0) while Step B formation must
+# carry the proton singlet {1, ω, ω²} — a checkpoint trained for one does NOT transfer to the
+# other. WITHIN a step, a SINGLE policy spans both the combinatorial moves (GROW/EVOLVE =
+# stage-1 surgery) and the geometric move (RELAX = stage-2 relaxation); it learns to interleave
+# them, all scored by the one objective F = ‖∇S‖² + Γ·r_U.
 _RL_MOVE_NAMES = {0: "GROW", 1: "EVOLVE", 2: "RELAX"}
+_OBS_DIM, _N_MOVES, _PARAM_DIM = 17, 3, 2   # the env's fixed (obs, move, param) dims
+
+# The two physics steps as RL problems: (cache name, formation flag, env-builder, label).
+_RL_STEPS = [
+    ("recombination", False, "make_recombination_env",
+     "Step A — recombination (→ diquark {1, ω})"),
+    ("formation", True, "make_formation_env",
+     "Step B — formation (→ proton {1, ω, ω²})"),
+]
 
 
-class RLPolicyAnimator:
-    """Animate the proton (Step B formation) assembling under a trained RL policy: the complex
-    (register holes numbered) beside the live carry metrics (holes → 3, singlet r_state → 0),
-    titled with the policy's last macro-move."""
+def _policy_cache_path(cache_dir, name):
+    return os.path.join(cache_dir, f"tessera_proton_policy_{name}.pt")
 
-    def __init__(self, env, policy, degree=3, seed=3, deterministic=True, max_actions=8,
-                 glide_frames=8):
-        self.env, self.policy, self.k = env, policy, degree
+
+def _train_step_policy(name, formation, cache_dir, train_iters, episodes, best_of,
+                       hidden=64, verbose=True):
+    """Train an RL policy for ONE physics step and cache it to `cache_dir`. Training runs many
+    COMPLETE convergences over a rotating set of seeds and is scored on HELD-OUT seeds, so the
+    policy learns the search SPACE (generalizes) rather than one convergence instance. With
+    `best_of > 1`, train that many independent policies (different init seeds) and keep the one
+    with the highest held-out carry rate. Returns (path, best_carry_rate, params-dict)."""
+    import tessera.rl as rl
+    env_cfg = rl.carry_profile_env()
+    train_cfg = rl.carry_profile_train()
+    train_cfg.iterations = train_iters
+    train_cfg.episodes_per_iter = episodes
+    train_cfg.hidden = hidden
+    path = _policy_cache_path(cache_dir, name)
+    convergences = train_iters * episodes
+    if verbose:
+        print(f"[train:{name}] {best_of}×({train_iters} iters × {episodes} eps) = "
+              f"{best_of * convergences} complete convergences over rotating seeds "
+              f"(learning the space; held-out eval) → {path}", flush=True)
+    best_rate, best_tmp = -1.0, None
+    for n in range(best_of):
+        train_cfg.agent_seed = n
+        tmp = f"{path}.cand{n}"
+        res = rl.benchmark(env_cfg, train_cfg, formation=formation, checkpoint_path=tmp)
+        rate = float(res.rl.carry_rate)
+        if verbose:
+            print(f"[train:{name}]   candidate {n + 1}/{best_of}: carry_rate={rate:.2f}  "
+                  f"(random={res.random.carry_rate:.2f}, "
+                  f"grow_only={res.grow_only.carry_rate:.2f}, {res.train_time_s:.0f}s)",
+                  flush=True)
+        if rate > best_rate:
+            best_rate, best_tmp = rate, tmp
+    shutil.copyfile(best_tmp, path)
+    for n in range(best_of):                                    # clean up the candidate files
+        try:
+            os.remove(f"{path}.cand{n}")
+        except OSError:
+            pass
+    return path, best_rate, {"iters": train_iters, "eps": episodes,
+                             "convergences": best_of * convergences, "best_of": best_of,
+                             "carry": round(best_rate, 2)}
+
+
+def ensure_rl_steps(cache_dir="/tmp", retrain=False, train_iters=20, episodes=6, best_of=1,
+                    hidden=64, verbose=True):
+    """Return `[(env, policy, label), ...]` for BOTH steps in build order, training + caching a
+    per-step policy in `cache_dir` when it is missing or `retrain` is set (otherwise the cached
+    checkpoint is reused — train once). Also returns a `train_info` dict for on-figure display."""
+    import tessera.rl as rl
+    steps, info = [], {"iters": train_iters, "eps/iter": episodes, "best_of": best_of}
+    for name, formation, builder, label in _RL_STEPS:
+        path = _policy_cache_path(cache_dir, name)
+        if retrain or not os.path.exists(path):
+            _p, rate, _params = _train_step_policy(name, formation, cache_dir, train_iters,
+                                                   episodes, best_of, hidden, verbose)
+            info[f"{name} carry"] = round(rate, 2)
+        else:
+            if verbose:
+                print(f"[cache] reusing {name} policy: {path}  (pass --train to retrain)",
+                      flush=True)
+            info[f"{name} carry"] = "cached"
+        env = getattr(rl, builder)(rl.carry_profile_env())
+        policy = rl.load_policy(path, _OBS_DIM, _N_MOVES, _PARAM_DIM, hidden)
+        steps.append((env, policy, label))
+    return steps, info
+
+
+class RLPolicyAnimator(ProtonAnimator):
+    """Animate the FULL two-step proton build — Step A recombination then Step B formation —
+    driven by trained RL policies (one per step). Reuses `ProtonAnimator`'s rich 2×4 panels
+    verbatim (metrics F/‖∇S‖²/r_U, register+Betti, primal A/B, dual spatial/temporal
+    curvature); the ONLY difference is the drive — each active frame the step's policy chooses
+    one `buildStep` macro-action (GROW/EVOLVE/RELAX + intensity) and the env drives the
+    canonical `MultiCobordism`. A short glide of hold-frames follows each macro-action so the
+    few large actions still read as a smooth build. The figure footnote shows the training
+    parameters and the title shows the current step + the policy's last macro-move.
+
+    `steps` is `[(env, policy, label), ...]` in build order; `train_info` is displayed."""
+
+    def __init__(self, steps, degree=3, seed=3, deterministic=True, max_actions=3,
+                 glide_frames=6, train_info=None):
+        self.envs = [s[0] for s in steps]
+        self.policies = [s[1] for s in steps]
         self.det = bool(deterministic)
         self.glide = max(1, glide_frames)
         self.max_actions = max_actions
-        self._obs = env.reset(seed)
-        self._done = False
-        self._steps = 0
-        self._last_move = None
-        self._layout = _StableLayout()
-        self.hist = {"holes": [], "rstate": []}
-        self._frames = max_actions * self.glide
-        self._record()
+        self.train_info = train_info or {}
+        self._train_txt = None
+        # Reset each env FIRST (that seeds its single-Δ⁴ node), then bind the node list the
+        # shared drawing reads. Different seed per step so A and B don't share a trajectory.
+        self._obs = [env.reset(seed + i) for i, env in enumerate(self.envs)]
+        self._steps_taken = [0 for _ in self.envs]
+        self._env_done = [False for _ in self.envs]
+        self._last_move = [None for _ in self.envs]
+        nodes = [(env.node, steps[i][2]) for i, env in enumerate(self.envs)]
+        self._common_init(nodes, degree)
+        self._schedule = self._make_rl_schedule(len(self.envs), max_actions, self.glide)
+        self._frames = len(self._schedule)
+        self._record(self.nodes[0][0], 0, "reset")             # initial metrics point
 
-    def _record(self):
-        st = self.env.node.st
-        self.hist["holes"].append(len(cob.MultiCobordism.emergent_holes(st, self.k)))
-        self.hist["rstate"].append(
-            float(cob.MultiCobordism.r_state(st, self.k, cob.Proton.singlet())))
+    @staticmethod
+    def _make_rl_schedule(n_steps, max_actions, glide):
+        """One `act` frame per macro-action, each followed by `glide-1` hold frames (no engine
+        step — just the layout easing toward the new complex), for every step in build order."""
+        sched = []
+        for i in range(n_steps):
+            for _ in range(max_actions):
+                sched.append((i, "act"))
+                sched += [(i, "hold")] * (glide - 1)
+        return sched
 
-    def _advance(self):
-        if self._done or self._steps >= self.max_actions:
-            return
+    def _advance(self, frame):
         import tessera.rl as rl
-        a = rl.select_action(self.policy, self._obs, self.det)
-        res = self.env.step(rl.Move(a.move), list(a.params))  # drives the canonical buildStep
-        self._obs, self._done, self._last_move = res.obs, bool(res.done), int(res.move)
-        self._steps += 1
-        self._record()
+        node_index, kind = self._schedule[frame]
+        if node_index != self._active:                         # a new step begins
+            self._active = node_index
+            self._boundaries.append(len(self.hist["F"]))
+        if kind != "act":                                      # hold frame: no engine step
+            return
+        if self._env_done[node_index] or self._steps_taken[node_index] >= self.max_actions:
+            return
+        env = self.envs[node_index]
+        a = rl.select_action(self.policies[node_index], self._obs[node_index], self.det)
+        res = env.step(rl.Move(a.move), list(a.params))        # drives the canonical buildStep
+        self._obs[node_index] = res.obs
+        self._env_done[node_index] = bool(res.done)
+        self._last_move[node_index] = int(res.move)
+        self._steps_taken[node_index] += 1
+        self.nodes[node_index] = (env.node, self.nodes[node_index][1])   # keep the node fresh
+        self._record(env.node, node_index, _RL_MOVE_NAMES.get(int(res.move), "?"))
 
-    def _setup(self, plt):
-        self.fig, (self.axc, self.axm) = plt.subplots(1, 2, figsize=(13, 6))
-        self.axm2 = self.axm.twinx()   # created ONCE (a per-frame twinx would pile up)
-        return self.fig
+    def _draw_train_info(self):
+        """Add the training-parameter footnote ONCE (a per-frame fig.text would pile up)."""
+        if not self.train_info or self._train_txt is not None:
+            return
+        txt = "   ".join(f"{k}={v}" for k, v in self.train_info.items())
+        self._train_txt = self.fig.text(
+            0.5, 0.006, f"RL policy trained over many complete convergences —  {txt}",
+            ha="center", va="bottom", fontsize=7, color="0.4")
 
     def update(self, frame):
-        if frame % self.glide == 0:
-            self._advance()
-        self._draw_complex()
-        self._draw_metrics()
+        node_index, _kind = self._schedule[frame]
+        mv = self._last_move[node_index]
+        label = (f"{self.nodes[node_index][1]}  ·  RL move: "
+                 f"{_RL_MOVE_NAMES.get(mv, '—') if mv is not None else '—'}")
+        if not self._done:
+            self.fig.suptitle(f"Proton build under RL policy (two-step) — "
+                              f"frame {frame + 1}/{self._frames} · {label}")
+            print(f"\rframe {frame + 1}/{self._frames} ({label})", end="", flush=True)
+        self._advance(frame)
+        self._redraw()
+        self._draw_train_info()
+        if frame >= self._frames - 1 and not self._done:       # last frame: announce verdict
+            self._done = True
+            ok, res, holes = self.verdict()
+            tag = (f"CARRIED ✓ — proton {{1,ω,ω²}} (r_state={res:.2g}, {holes} registers)"
+                   if ok else f"did NOT carry (r_state={res:.2g}, {holes} registers)")
+            self.fig.suptitle(f"Proton build under RL policy (two-step) — {tag}")
+            print(f"\rframe {frame + 1}/{self._frames} ({label}) — {tag}")
         return []
 
-    def _draw_complex(self):
-        st = self.env.node.st
-        coords = self._layout.coords(st)
-        ax = self.axc
-        ax.clear()
-        holes = cob.MultiCobordism.emergent_holes(st, self.k)
-        hole_vsets = [set(h) for h in holes]
-        for e in st.getEdgeList().toVector():
-            a, b = e.getSource().getId(), e.getTarget().getId()
-            if a not in coords or b not in coords:
-                continue
-            p, q = coords[a], coords[b]
-            if any(a in vs and b in vs for vs in hole_vsets):     # a register-cell edge
-                ax.plot([p[0], q[0]], [p[1], q[1]], color="C3", lw=1.8, zorder=3)
-            else:
-                ax.plot([p[0], q[0]], [p[1], q[1]], color="0.85", lw=0.5, zorder=1)
-        if coords:
-            pts = np.array(list(coords.values()))
-            ax.scatter(pts[:, 0], pts[:, 1], c="0.4", s=8, zorder=2)
-            for i, h in enumerate(holes):                          # number each register
-                hp = np.array([coords[v] for v in h if v in coords])
-                if len(hp):
-                    c = hp.mean(0)
-                    ax.text(c[0], c[1], str(i + 1), color="white", fontsize=8,
-                            fontweight="bold", ha="center", va="center", zorder=4,
-                            bbox=dict(boxstyle="circle,pad=0.2", fc="C3", ec="white", lw=0.8))
-            if len(coords) >= 2:
-                view = self._layout.view(coords)
-                ax.set_xlim(view[0], view[1]); ax.set_ylim(view[2], view[3])
-        n = len(holes)
-        move = "" if self._last_move is None else f"  ·  move: {_RL_MOVE_NAMES[self._last_move]}"
-        ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
-        ax.set_title(f"proton formation under RL policy — {n} register"
-                     f"{'s' if n != 1 else ''}{move}", fontsize=10)
 
-    def _draw_metrics(self):
-        xs = list(range(len(self.hist["holes"])))
-        self.axm.clear(); self.axm2.clear()
-        self.axm.plot(xs, self.hist["holes"], "-o", color="C3", label="holes")
-        self.axm.axhline(_MIN_QUARK_HOLES, color="C3", ls=":", lw=0.8)
-        self.axm.set_ylabel("emergent holes (→ 3)", color="C3")
-        self.axm.set_xlabel("policy action")
-        self.axm2.plot(xs, self.hist["rstate"], "-s", color="C0", label="r_state")
-        self.axm2.axhline(_COLOR_TOL, color="C0", ls=":", lw=0.8)
-        self.axm2.set_ylabel("singlet r_state (→ 0)", color="C0")
-        carried, res, holes = self.verdict()
-        self.axm.set_title(f"carry: holes={holes}  r_state={res:.3g}  "
-                           f"{'CARRIED ✓' if carried else '…'}", fontsize=10)
-
-    def verdict(self):
-        """Live proton verdict off the formation node: singlet r_state + hole count vs the
-        thresholds (residual < tol, holes ≥ 3) — the same criterion `Proton.build()` uses."""
-        st = self.env.node.st
-        res = float(cob.MultiCobordism.r_state(st, self.k, cob.Proton.singlet()))
-        holes = len(cob.MultiCobordism.emergent_holes(st, self.k))
-        return res < _COLOR_TOL and holes >= _MIN_QUARK_HOLES, res, holes
-
-
-def run_rl_policy(checkpoint, seed=3, deterministic=True, visualize=False, save=None,
-                  degree=3, hidden=64, interval=200):
-    """Drive the proton (Step B formation) build with a trained RL policy from `checkpoint`
-    (saved by `rl_objective_search.py --target formation --checkpoint`). Off by default this
-    runs the policy episode and returns the verdict; `--live`/`--save` animate it. The policy
-    must have been trained with the CARRY_PROFILE (hidden=64)."""
+def run_rl(cache_dir="/tmp", retrain=False, train_iters=20, episodes=6, best_of=1, seed=3,
+           deterministic=True, visualize=False, save=None, degree=3, interval=200):
+    """Drive the FULL two-step proton build (Step A recombination + Step B formation) with
+    trained RL policies (cached per step in `cache_dir`, trained over many complete convergences
+    when missing or `retrain`). Off by default it runs one episode per step and returns
+    `(result, train_info)`; `--live`/`--save` animate the same rich 2×4 panels as the fixed
+    Proton drive, annotated with the policy's macro-moves and the training parameters."""
     import tessera.rl as rl
-    env_cfg = rl.carry_profile_env()
-    env = rl.make_formation_env(env_cfg)
-    policy = rl.load_policy(checkpoint, 17, 3, 2, hidden)
+    steps, train_info = ensure_rl_steps(cache_dir, retrain, train_iters, episodes, best_of,
+                                        verbose=True)
+    max_actions = rl.carry_profile_env().max_actions
     if not visualize and not save:
-        obs, done, steps = env.reset(seed), False, 0
-        while not done and steps < env_cfg.max_actions:
-            a = rl.select_action(policy, obs, deterministic)
-            res = env.step(rl.Move(a.move), list(a.params))
-            obs, done, steps = res.obs, bool(res.done), steps + 1
-        st = env.node.st
+        out = []
+        for i, (env, policy, label) in enumerate(steps):
+            obs, done, n = env.reset(seed + i), False, 0
+            while not done and n < max_actions:
+                a = rl.select_action(policy, obs, deterministic)
+                res = env.step(rl.Move(a.move), list(a.params))
+                obs, done, n = res.obs, bool(res.done), n + 1
+            st = env.node.st
+            out.append((label, {
+                "F": float(env.node.objective()),
+                "rU": float(env.node.r_u(st)),
+                "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
+        st = steps[-1][0].node.st
         res_ = float(cob.MultiCobordism.r_state(st, degree, cob.Proton.singlet()))
         holes = len(cob.MultiCobordism.emergent_holes(st, degree))
-        return {"converged": res_ < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
-                "color_residual": res_, "registers": holes, "actions": steps}
+        out.append(("verdict", {"converged": res_ < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
+                                "color_residual": res_, "registers": holes}))
+        return out, train_info
     import matplotlib
     if save:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
-    anim = RLPolicyAnimator(env, policy, degree=degree, seed=seed,
-                            deterministic=deterministic, max_actions=env_cfg.max_actions)
+    anim = RLPolicyAnimator(steps, degree=degree, seed=seed, deterministic=deterministic,
+                            max_actions=max_actions, train_info=train_info)
     anim._setup(plt)
-    anim.fig.suptitle("Proton formation under a trained RL policy")
+    anim.fig.suptitle("Proton build under a trained RL policy (two-step)")
     fa = FuncAnimation(anim.fig, anim.update, frames=anim._frames, interval=interval,
                        repeat=False, blit=False)
     if save:
@@ -763,7 +874,7 @@ def run_rl_policy(checkpoint, seed=3, deterministic=True, visualize=False, save=
     else:
         plt.show()
     anim._anim = fa   # keep a ref so it isn't GC'd in live mode
-    return anim.verdict()
+    return anim.verdict(), train_info
 
 
 def main():
@@ -773,10 +884,24 @@ def main():
                     help="show the live animation window (slower than the default)")
     ap.add_argument("--save", help="write a GIF/MP4 of the animation (slower)")
     ap.add_argument("--seed", type=int, default=3)
-    ap.add_argument("--policy",
-                    help="drive the proton FORMATION with a trained RL policy checkpoint "
-                         "(from `rl_objective_search.py --target formation --checkpoint`) "
-                         "instead of the fixed two-step Proton drive")
+    # ---- RL-driven two-step build (trained policies, one per step) ----
+    ap.add_argument("--rl", action="store_true",
+                    help="drive the FULL two-step build with trained RL policies (one per step, "
+                         "cached in --policy-dir; trains over many convergences if missing) "
+                         "instead of the fixed Proton drive — SAME charts as the fixed drive")
+    ap.add_argument("--train", action="store_true",
+                    help="(RL) force-retrain both step policies, overwriting the cache "
+                         "(implies --rl)")
+    ap.add_argument("--train-iters", type=int, default=20, dest="train_iters",
+                    help="(RL) PPO iterations per step; × --episodes = complete convergences")
+    ap.add_argument("--episodes", type=int, default=6,
+                    help="(RL) complete-convergence episodes per iteration — seed diversity, so "
+                         "the policy learns the space, not one convergence problem")
+    ap.add_argument("--best-of", type=int, default=1, dest="best_of",
+                    help="(RL) train N independent policies per step, keep the best carry rate")
+    ap.add_argument("--policy-dir", default="/tmp", dest="policy_dir",
+                    help="(RL) directory for the cached per-step policy checkpoints")
+    # ---- fixed Proton.build() drive knobs ----
     ap.add_argument("--init", type=int, default=_INIT_STEPS,
                     help="init-pass (grow_boundaries=True) steps per node")
     ap.add_argument("--evolve", type=int, default=_EVOLVE_STEPS,
@@ -787,12 +912,16 @@ def main():
                     help="pre-grow each node's single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
     args = ap.parse_args()
-    if args.policy:   # RL-driven proton formation — an option alongside the fixed Proton drive
-        verdict = run_rl_policy(args.policy, seed=args.seed, visualize=args.live,
-                                save=args.save)
+    if args.rl or args.train:   # RL-driven two-step build — SAME charts as the fixed drive
+        result, train_info = run_rl(cache_dir=args.policy_dir, retrain=args.train,
+                                    train_iters=args.train_iters, episodes=args.episodes,
+                                    best_of=args.best_of, seed=args.seed,
+                                    visualize=args.live, save=args.save)
         if not args.live and not args.save:
-            print("RL-policy proton formation finished (pass --live/--save to watch it):")
-            print("  " + "  ".join(f"{k}={v}" for k, v in verdict.items()))
+            print("RL-driven two-step proton build finished (pass --live/--save to watch it):")
+            print("  training:  " + "  ".join(f"{k}={v}" for k, v in train_info.items()))
+            for label, metrics in result:
+                print(f"  {label}:  " + "  ".join(f"{k}={v}" for k, v in metrics.items()))
         return
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
