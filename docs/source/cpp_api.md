@@ -156,6 +156,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} Proton.h
 ```
+```{doxygenfile} ProtonIngredients.h
+```
 ```{doxygenfile} SurgicalCone.h
 ```
 
