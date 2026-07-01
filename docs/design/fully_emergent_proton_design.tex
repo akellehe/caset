@@ -440,6 +440,24 @@ configuration; E4 is the physics unlock), E2 immediately after E1 (cheap, pure r
 \section{Open questions for the discussion}
 \label{sec:questions}
 
+\paragraph{Resolved in discussion.} Three decisions are settled and the first work item
+is cut as \#555:
+(i) \code{Proton.cpp} stays \textbf{canonical and untouched} — the emergent arm is a
+side-by-side sibling, \code{ProtonIngredients}: the identical two-step drive with
+\emph{only} step B's singlet output target dropped (\code{outputTargets} empty), so
+exactly one variable differs from canonical — a minimal-delta A/B rather than the
+rung-1 joint node, which stays a future rung. Its animation
+(\code{examples/cobordism/emergent\_proton.py}) reuses the canonical charts verbatim.
+(ii) The epic is cut only after the rungs are discussed individually; \#555 stands
+alone until then.
+(iii) Question 4 is answered in the negative for \emph{initialization}: \textbf{no
+timelike edges are initialized}. At initialization no time has passed — causal
+structure marks sequences of events (in the causal-set sense) and may only
+\emph{emerge}. Rung L therefore reduces to the causal-aware degeneracy guard plus
+whatever causal content the dynamics produces; Lorentzian \emph{boundary data} is off
+the table for the emergent arm.
+Question 1's composition-real variant and questions 2, 3, and 5 remain open.
+
 \begin{enumerate}[leftmargin=2em]
   \item \textbf{Two-step disposition} --- oracle only, or also make its composition real
     (feed the measured step-A output forward)? Keeping both arms is cheap; the header's
