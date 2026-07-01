@@ -14,6 +14,8 @@
 #include <torch/torch.h>
 
 #include "rl/CobordismObjectiveEnv.h"
+#include "rl/PpoAgent.h"
+#include "rl/Trainer.h"
 
 namespace py = pybind11;
 using namespace tessera::rl;
@@ -99,4 +101,69 @@ PYBIND11_MODULE(_tessera_rl, m) {
   m.def("make_recombination_env", &makeRecombinationEnv, py::arg("config"),
         py::arg("input_weight") = 20.0,
         "The recombination (2->2) env: colored diquark + antidiquark; success = r_U -> 0.");
+
+  // ---- PPO policy + training + checkpoint ----
+  m.def("set_seed", &setSeed, py::arg("seed"),
+        "Seed torch (network init + action sampling).");
+
+  py::class_<ActOutput>(m, "ActOutput")
+      .def_readonly("move", &ActOutput::move)
+      .def_readonly("params", &ActOutput::params)
+      .def_readonly("logp", &ActOutput::logp)
+      .def_readonly("value", &ActOutput::value);
+
+  // Opaque trained-policy handle (produced by load_policy; consumed by select_action). The
+  // torch ModuleHolder is itself a copyable value type, so bind it as an opaque class (a
+  // pybind holder template param would be a torch ModuleHolder, which pybind rejects).
+  py::class_<HybridActorCritic>(m, "Policy");
+  m.def("select_action", &selectPolicyAction, py::arg("policy"), py::arg("obs"),
+        py::arg("deterministic") = true,
+        "The greedy/sampled action for a (loaded) policy given a raw observation vector.");
+  m.def("load_policy", &loadPolicy, py::arg("checkpoint_path"), py::arg("obs_dim"),
+        py::arg("n_moves"), py::arg("param_dim"), py::arg("hidden") = 64,
+        "Load a torch::save'd policy checkpoint into a fresh actor-critic.");
+
+  py::class_<TrainConfig>(m, "TrainConfig")
+      .def(py::init<>())
+      .def_readwrite("iterations", &TrainConfig::iterations)
+      .def_readwrite("episodes_per_iter", &TrainConfig::episodesPerIter)
+      .def_readwrite("eval_seeds", &TrainConfig::evalSeeds)
+      .def_readwrite("hidden", &TrainConfig::hidden)
+      .def_readwrite("lr", &TrainConfig::lr)
+      .def_readwrite("update_epochs", &TrainConfig::updateEpochs)
+      .def_readwrite("entropy_coef", &TrainConfig::entropyCoef)
+      .def_readwrite("entropy_coef_final", &TrainConfig::entropyCoefFinal)
+      .def_readwrite("agent_seed", &TrainConfig::agentSeed)
+      .def_readwrite("eval_deterministic", &TrainConfig::evalDeterministic);
+
+  py::class_<EvalSummary>(m, "EvalSummary")
+      .def_readonly("carry_rate", &EvalSummary::carryRate)
+      .def_readonly("mean_holes", &EvalSummary::meanHoles)
+      .def_readonly("mean_rstate", &EvalSummary::meanRstate)
+      .def_readonly("mean_final_F", &EvalSummary::meanFinalF)
+      .def_readonly("mean_reward", &EvalSummary::meanReward);
+
+  py::class_<IterStat>(m, "IterStat")
+      .def_readonly("iteration", &IterStat::iteration)
+      .def_readonly("mean_return", &IterStat::meanReturn)
+      .def_readonly("policy_loss", &IterStat::policyLoss)
+      .def_readonly("value_loss", &IterStat::valueLoss)
+      .def_readonly("entropy", &IterStat::entropy)
+      .def_readonly("entropy_coef", &IterStat::entropyCoef);
+
+  py::class_<BenchmarkResult>(m, "BenchmarkResult")
+      .def_readonly("history", &BenchmarkResult::history)
+      .def_readonly("rl", &BenchmarkResult::rl)
+      .def_readonly("random", &BenchmarkResult::randomBaseline)
+      .def_readonly("grow_only", &BenchmarkResult::growOnly)
+      .def_readonly("train_time_s", &BenchmarkResult::trainTimeS);
+
+  m.def("carry_profile_env", &carryProfileEnv,
+        "The proton-carry EnvConfig (train.py's CARRY_PROFILE).");
+  m.def("carry_profile_train", &carryProfileTrain,
+        "The proton-carry TrainConfig (train.py's CARRY_PROFILE benchmark args).");
+  m.def("benchmark", &benchmark, py::arg("env_config"), py::arg("train_config"),
+        py::arg("formation") = true, py::arg("checkpoint_path") = "",
+        "Train PPO on the target + evaluate vs random/grow-only baselines; save the trained "
+        "policy to checkpoint_path if given.");
 }
