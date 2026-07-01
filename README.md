@@ -41,6 +41,27 @@ slower because ITensor is compiled from source — `ccache` (below) helps a lot.
 
 Builds also use [`ccache`](https://ccache.dev/) automatically when it is installed (`brew install ccache` / `apt-get install ccache`) — recommended: it makes rebuilds and CI dramatically faster.
 
+### Reinforcement-learning subsystem (optional, libtorch)
+
+The RL harness (`tessera.rl` — a PPO policy over `MultiCobordism.buildStep`, used
+by the proton animation) is an **optional** extension built against libtorch. Because
+it is compiled against torch, torch must be visible to the build interpreter — and
+since torch is heavy and only the RL needs it, it lives in the `[rl]` extra rather
+than as a universal build dependency. Build it with:
+
+```bash
+make rl
+```
+
+That is a thin wrapper over two `pip` steps (populate the environment, then rebuild
+with `--no-build-isolation` so the build sees torch); see the `Makefile` for the
+exact commands and the reasoning. The core and quantum builds are unaffected and
+never require torch. Verify:
+
+```bash
+python -c "import tessera.rl; print('tessera.rl OK')"
+```
+
 ### OpenMP (optional, speeds up large meshes)
 
 Several CPU hot paths — the Regge action gradient/Hessian hinge loop and the
