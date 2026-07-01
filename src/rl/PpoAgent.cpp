@@ -79,7 +79,7 @@ ActOutput HybridActorCriticImpl::act(torch::Tensor obs, bool deterministic) {
   auto logp = categoricalLogProb(moveLogits, move) +
               normalLogProb(params, paramMean, paramStd).sum(-1);
   ActOutput out;
-  out.move = static_cast<int>(move.reshape({-1})[0].item<long>());
+  out.move = static_cast<int>(move.reshape({-1})[0].item<int64_t>());
   auto flat = params.reshape({-1});
   for (int i = 0; i < paramDim_ && i < kParamDim; ++i)
     out.params[i] = flat[i].item<float>();
@@ -165,7 +165,7 @@ UpdateStats PPO::update(std::vector<Transition> &transitions) {
   std::vector<float> obsFlat(static_cast<std::size_t>(n) * kObsDim);
   std::vector<float> paramsFlat(static_cast<std::size_t>(n) * kParamDim);
   std::vector<float> oldLogpV(n), returnsV(n), advV(n);
-  std::vector<long> movesV(n);
+  std::vector<int64_t> movesV(n);
   for (int i = 0; i < n; ++i) {
     const auto &t = transitions[i];
     for (int j = 0; j < kObsDim; ++j) obsFlat[i * kObsDim + j] = t.obs[j];
@@ -190,7 +190,7 @@ UpdateStats PPO::update(std::vector<Transition> &transitions) {
     std::shuffle(order.begin(), order.end(), shuffleRng_);
     for (int start = 0; start < n; start += minibatchSize_) {
       const int end = std::min(start + minibatchSize_, n);
-      std::vector<long> mbv(order.begin() + start, order.begin() + end);
+      std::vector<int64_t> mbv(order.begin() + start, order.begin() + end);
       auto mb = torch::tensor(mbv);  // kLong minibatch indices
       auto logpEntropyValue = policy->evaluateActions(
           obs.index_select(0, mb), moves.index_select(0, mb), params.index_select(0, mb));

@@ -430,6 +430,15 @@ execute_process(
     ERROR_QUIET
     RESULT_VARIABLE _torch_probe)
 if(_torch_probe EQUAL 0 AND _torch_cmake_prefix)
+    # `_torch_cmake_prefix` is `<pip-torch>/share/cmake`; two levels up is the pip torch root,
+    # whose `lib/` holds libtorch/libc10. Prepend it to CMAKE_PREFIX_PATH so the find_library()
+    # calls inside TorchConfig.cmake resolve to THIS libtorch — not a conflicting Homebrew
+    # `pytorch` keg, whose `libtorch.dylib` lives in the default search path /opt/homebrew/lib.
+    # Without this, find_package can report the right version (pip's config/headers) while
+    # linking Homebrew's older dylibs, and `import tessera._tessera_rl` then dies at load time
+    # on a missing libtorch symbol (e.g. at::detail::getXLAHooks).
+    get_filename_component(_torch_root "${_torch_cmake_prefix}/../.." ABSOLUTE)
+    list(PREPEND CMAKE_PREFIX_PATH "${_torch_root}")
     find_package(Torch QUIET HINTS "${_torch_cmake_prefix}")
 endif()
 if(Torch_FOUND)
@@ -443,6 +452,15 @@ if(Torch_FOUND)
     list(FILTER TESSERA_RL_SOURCES EXCLUDE REGEX "/src/rl/Bindings\\.cpp$")
     add_library(tessera_rl STATIC ${TESSERA_RL_SOURCES})
     target_include_directories(tessera_rl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    # Put THIS libtorch's headers at the front of the search path. tessera_core links
+    # Homebrew deps (Eigen/BLAS) that carry a bare `-isystem /opt/homebrew/include`, and if
+    # Homebrew also has a `pytorch` keg installed, `/opt/homebrew/include/torch` shadows the
+    # pip libtorch we are actually building against. Inherited (dependency) include dirs are
+    # emitted after a target's own dirs, and `torch` is linked after `tessera_core`, so
+    # without this the Homebrew copy of e.g. `torch/ordered_dict.h` gets pulled in first and
+    # collides with the pip copy ("redefinition of 'OrderedDict'"). SYSTEM BEFORE pins the
+    # pip torch include dirs ahead of everything so `<torch/...>` always resolves to one tree.
+    target_include_directories(tessera_rl SYSTEM BEFORE PUBLIC ${TORCH_INCLUDE_DIRS})
     target_link_libraries(tessera_rl PUBLIC tessera_core torch)
     set_target_properties(tessera_rl PROPERTIES
             POSITION_INDEPENDENT_CODE ON
@@ -451,6 +469,10 @@ if(Torch_FOUND)
 
     pybind11_add_module(_tessera_rl MODULE
             ${CMAKE_CURRENT_SOURCE_DIR}/src/rl/Bindings.cpp)
+    # Same libtorch-header precedence fix as tessera_rl above: Bindings.cpp includes
+    # <torch/torch.h> directly, so pin the pip torch dirs ahead of the Homebrew include dir
+    # that tessera_core drags in transitively.
+    target_include_directories(_tessera_rl SYSTEM BEFORE PRIVATE ${TORCH_INCLUDE_DIRS})
     target_link_libraries(_tessera_rl PRIVATE tessera_rl)
     # RPATH to libtorch's lib so `import tessera._tessera_rl` resolves libtorch_cpu.so without
     # importing torch first (the tessera.rl facade also imports torch first — belt + suspenders).

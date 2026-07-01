@@ -13,6 +13,9 @@
 #include <pybind11/stl.h>
 #include <torch/torch.h>
 
+// MultiCobordism is only forward-declared in CobordismObjectiveEnv.h, but the env exposes
+// `node()` (a shared_ptr<MultiCobordism>) to Python, so pybind11 needs the complete type here.
+#include "cobordism/MultiCobordism.h"
 #include "rl/CobordismObjectiveEnv.h"
 #include "rl/PpoAgent.h"
 #include "rl/Trainer.h"

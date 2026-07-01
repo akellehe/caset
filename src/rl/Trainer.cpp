@@ -156,7 +156,7 @@ BenchmarkResult benchmark(EnvConfig envConfig, TrainConfig trainConfig, bool for
   };
   const int nMoves = env.numMoves();
   PolicyFn randomPolicy = [nMoves](const std::vector<float> &) {
-    const int move = static_cast<int>(torch::randint(0, nMoves, {1}).item<long>());
+    const int move = static_cast<int>(torch::randint(0, nMoves, {1}).item<int64_t>());
     const auto p = torch::rand({kParamDim});
     std::array<float, kParamDim> params{};
     for (int i = 0; i < kParamDim; ++i) params[i] = p[i].item<float>();
