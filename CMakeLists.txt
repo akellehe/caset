@@ -201,6 +201,9 @@ file(GLOB_RECURSE TESSERA_SOURCES
 # Quantum lives in its own static lib; exclude its sources from tessera_core.
 set(TESSERA_CORE_SOURCES ${TESSERA_SOURCES})
 list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/quantum/")
+# The RL subsystem (libtorch) is its own static lib (tessera_rl) — keep it out of the
+# torch-free core, exactly like quantum.
+list(FILTER TESSERA_CORE_SOURCES EXCLUDE REGEX "/(src|include)/rl/")
 # InteractionSimulation lives in src/simulations/ for architectural
 # alignment with CDT (#44), but depends on Eigen + ITensor and so belongs
 # in tessera_quantum, not tessera_core.
@@ -431,16 +434,33 @@ if(_torch_probe EQUAL 0 AND _torch_cmake_prefix)
 endif()
 if(Torch_FOUND)
     message(STATUS "Building RL subsystem (libtorch ${Torch_VERSION}).")
+    # tessera_rl: the RL harness (env, PPO, training) — it DRIVES MultiCobordism + Proton
+    # (the source of truth) and never reimplements construction. Its own static lib, kept out
+    # of the torch-free tessera_core (rl/ is excluded from TESSERA_CORE_SOURCES above),
+    # mirroring tessera_quantum.
+    file(GLOB TESSERA_RL_SOURCES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/rl/*.cpp")
+    list(FILTER TESSERA_RL_SOURCES EXCLUDE REGEX "/src/rl/Bindings\\.cpp$")
+    add_library(tessera_rl STATIC ${TESSERA_RL_SOURCES})
+    target_include_directories(tessera_rl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(tessera_rl PUBLIC tessera_core torch)
+    set_target_properties(tessera_rl PROPERTIES
+            POSITION_INDEPENDENT_CODE ON
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON)
+
     pybind11_add_module(_tessera_rl MODULE
             ${CMAKE_CURRENT_SOURCE_DIR}/src/rl/Bindings.cpp)
-    target_include_directories(_tessera_rl PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(_tessera_rl PRIVATE tessera_core torch)
+    target_link_libraries(_tessera_rl PRIVATE tessera_rl)
+    # RPATH to libtorch's lib so `import tessera._tessera_rl` resolves libtorch_cpu.so without
+    # importing torch first (the tessera.rl facade also imports torch first — belt + suspenders).
     set_target_properties(_tessera_rl PROPERTIES
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON
             CXX_VISIBILITY_PRESET default
-            VISIBILITY_INLINES_HIDDEN OFF)
+            VISIBILITY_INLINES_HIDDEN OFF
+            INSTALL_RPATH "${TORCH_INSTALL_PREFIX}/lib"
+            BUILD_WITH_INSTALL_RPATH ON)
     install(TARGETS _tessera_rl
             LIBRARY DESTINATION tessera
             RUNTIME DESTINATION tessera
