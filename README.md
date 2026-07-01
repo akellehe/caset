@@ -47,16 +47,18 @@ The RL harness (`tessera.rl` — a PPO policy over `MultiCobordism.buildStep`, u
 by the proton animation) is an **optional** extension built against libtorch. Because
 it is compiled against torch, torch must be visible to the build interpreter — and
 since torch is heavy and only the RL needs it, it lives in the `[rl]` extra rather
-than as a universal build dependency. Build it with:
+than as a universal build dependency. Build it with a single, ordinary (build-isolated)
+install — the `TESSERA_RL` flag pulls torch into the isolated build environment on
+demand:
 
 ```bash
-make rl
+TESSERA_RL=1 pip install -e ".[rl]"     # or: make rl
 ```
 
-That is a thin wrapper over two `pip` steps (populate the environment, then rebuild
-with `--no-build-isolation` so the build sees torch); see the `Makefile` for the
-exact commands and the reasoning. The core and quantum builds are unaffected and
-never require torch. Verify:
+Without `TESSERA_RL`, the core and quantum builds are unaffected and never require
+torch. (`TESSERA_RL` toggles a scikit-build-core override in `pyproject.toml` that adds
+torch to `build.requires` only when set; see the `Makefile` for a fast, no-isolation
+path for rapid C++ iteration.) Verify:
 
 ```bash
 python -c "import tessera.rl; print('tessera.rl OK')"

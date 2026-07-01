@@ -170,6 +170,12 @@ PYBIND11_MODULE(_tessera_rl, m) {
         "The proton-carry TrainConfig (train.py's CARRY_PROFILE benchmark args).");
   m.def("benchmark", &benchmark, py::arg("env_config"), py::arg("train_config"),
         py::arg("formation") = true, py::arg("checkpoint_path") = "",
+        // Release the GIL for the whole call. benchmark runs the PPO training loop, whose
+        // backward pass drives libtorch's autograd engine — and libtorch (2.x) aborts if the
+        // autograd engine is entered while the GIL is held. The call is pure C++ (it drives the
+        // MultiCobordism engine + libtorch and never calls back into Python), so dropping the
+        // GIL for its duration is safe and also lets other Python threads run during training.
+        py::call_guard<py::gil_scoped_release>(),
         "Train PPO on the target + evaluate vs random/grow-only baselines; save the trained "
         "policy to checkpoint_path if given.");
 }

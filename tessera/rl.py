@@ -33,5 +33,19 @@ import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
-# `_tessera_rl` sets an RPATH to libtorch, so it imports without importing torch first.
+# Load libtorch into the process BEFORE the extension. `_tessera_rl` links libtorch and
+# carries an RPATH to it, but when built under standard build isolation that RPATH points at
+# the (now-deleted) isolated build environment — so it cannot be relied on. Importing torch
+# first pulls libtorch_cpu.so / libc10.so into the process by their sonames; the dynamic
+# loader then reuses those already-loaded libraries to satisfy `_tessera_rl`'s DT_NEEDED
+# entries regardless of RPATH. This must come AFTER the OMP setdefaults above so they take
+# effect before libtorch initializes its OpenMP runtime.
+try:
+    import torch  # noqa: E402,F401
+except ModuleNotFoundError as exc:  # pragma: no cover - guidance for a half-set-up env
+    raise ModuleNotFoundError(
+        "tessera.rl requires the optional 'rl' extra (libtorch). Build it with:\n"
+        '    TESSERA_RL=1 pip install -e ".[rl]"'
+    ) from exc
+
 from tessera._tessera_rl import *  # noqa: E402,F401,F403

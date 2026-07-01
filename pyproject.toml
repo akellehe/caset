@@ -69,3 +69,18 @@ wheel.packages = ["tessera"]
 # interpreter; cmake.define values are passed verbatim, so a "${...}" token
 # is not interpolated — it lands in CMake as a literal bogus path and makes
 # find_package(Python) fall back to the wrong interpreter.
+
+# Optional libtorch RL extension (_tessera_rl), built under NORMAL build isolation.
+# The RL module compiles against libtorch, so torch must be visible to the build
+# interpreter. It cannot go in [build-system].requires (that would force a multi-GB
+# torch download into EVERY build, including the torch-free core and CI), and an extra
+# ([rl]) is invisible to the build backend — so neither of the obvious places works.
+# Instead, gate an extra build requirement on the TESSERA_RL env var: when it is set,
+# scikit-build-core adds torch to the isolated build env (via get_requires_for_build_*),
+# find_package(Torch) then succeeds, and CMake compiles _tessera_rl. When it is unset,
+# core builds stay completely torch-free. One command, standard isolation, no
+# --no-build-isolation:
+#     TESSERA_RL=1 pip install -e ".[rl]"
+[[tool.scikit-build.overrides]]
+if.env.TESSERA_RL = true
+build.requires = ["torch>=2.0"]

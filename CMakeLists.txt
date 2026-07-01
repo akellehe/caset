@@ -439,6 +439,22 @@ if(_torch_probe EQUAL 0 AND _torch_cmake_prefix)
     # on a missing libtorch symbol (e.g. at::detail::getXLAHooks).
     get_filename_component(_torch_root "${_torch_cmake_prefix}/../.." ABSOLUTE)
     list(PREPEND CMAKE_PREFIX_PATH "${_torch_root}")
+    # Align Torch's CUDA detection with the core's toolkit. Torch's Caffe2 cuda.cmake uses the
+    # LEGACY FindCUDA module, which locates nvcc via PATH / the CUDA_HOME env var rather than
+    # CMAKE_CUDA_COMPILER. On a box with more than one CUDA toolkit (e.g. /usr/local/cuda plus
+    # an NVIDIA HPC SDK, whose bin/ is often first on PATH and whose CUDA_HOME is exported),
+    # FindCUDA can select a different toolkit than find_package(CUDAToolkit) did and then
+    # FATAL-error on an nvcc-vs-header version mismatch (pytorch/pytorch#8092) — which aborts
+    # the whole configure, not just the RL subsystem. Pin the legacy module to the exact nvcc
+    # the core compiles with so the two always agree; a CUDA-less box (macOS, most CI) skips
+    # this and torch's CPU path is used.
+    if(TESSERA_CUDA AND CMAKE_CUDA_COMPILER)
+        get_filename_component(_cuda_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+        get_filename_component(_cuda_root "${_cuda_bin}" DIRECTORY)
+        set(CUDA_TOOLKIT_ROOT_DIR "${_cuda_root}" CACHE PATH "" FORCE)
+        set(CUDA_NVCC_EXECUTABLE "${CMAKE_CUDA_COMPILER}" CACHE FILEPATH "" FORCE)
+        message(STATUS "RL: pinned Torch's legacy FindCUDA to ${_cuda_root} (core's toolkit).")
+    endif()
     find_package(Torch QUIET HINTS "${_torch_cmake_prefix}")
 endif()
 if(Torch_FOUND)

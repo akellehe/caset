@@ -7,16 +7,18 @@
 # Build the optional libtorch reinforcement-learning extension (`tessera.rl` /
 # `_tessera_rl`, the PPO harness over MultiCobordism.buildStep).
 #
-# Why two commands: the extension is COMPILED against libtorch, so torch must be
-# importable by the build interpreter. torch lives in the optional `[rl]` extra
-# (it is heavy, and only the RL needs it) rather than in [build-system].requires,
-# because a build requirement cannot be conditioned on which extra was requested
-# — putting it there would force a ~2 GB torch download on every core-only build
-# too. So we populate the environment first (step 1, an ordinary isolated build
-# that skips the RL because the isolated build env can't see torch), then rebuild
-# with --no-build-isolation (step 2) so the build interpreter sees the torch we
-# just installed and compiles _tessera_rl.
+# One command, standard build isolation. The extension is COMPILED against libtorch,
+# so torch must be visible to the build interpreter — but torch cannot go in
+# [build-system].requires (that would force a multi-GB torch download into every
+# core-only build too) and an extra ([rl]) is invisible to the build backend. So the
+# TESSERA_RL env var gates a scikit-build-core override (see pyproject.toml) that adds
+# torch to the ISOLATED build environment on demand; find_package(Torch) then succeeds
+# and CMake compiles _tessera_rl. Core builds stay torch-free.
+#
+# For rapid C++ iteration (recompiling _tessera_rl repeatedly), skip the per-build torch
+# install by reusing an env that already has it:
+#     pip install -e ".[dev,rl]"                      # once: build backend + torch
+#     pip install -e ".[rl]" --no-build-isolation     # fast rebuilds thereafter
 rl:
-	pip install -e ".[dev,rl]"
-	pip install -e ".[rl]" --no-build-isolation
+	TESSERA_RL=1 pip install -e ".[rl]"
 	@python -c "import tessera, tessera.rl; print('tessera.rl OK (torch_smoke =', tessera.rl.torch_smoke(), ')')"
