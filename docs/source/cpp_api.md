@@ -159,6 +159,15 @@ exclusions to see the entire interface.
 ```{doxygenfile} SurgicalCone.h
 ```
 
+## Reinforcement Learning
+
+```{doxygenfile} CobordismObjectiveEnv.h
+```
+```{doxygenfile} PpoAgent.h
+```
+```{doxygenfile} Trainer.h
+```
+
 ## Quantum
 
 ```{doxygenfile} SchwingerModel.hpp
