@@ -192,7 +192,13 @@ def layout_from_spacetime(verts, edges, **kwargs):
         ti = vid_to_idx.get(e.getTarget().getId())
         if si is not None and ti is not None:
             edge_idx.append((si, ti))
-            rest_lens.append(math.sqrt(abs(e.getSquaredLength().real)))
+            # Layout-only collapse of the complex signed l^2 to a positive
+            # rest length |Re l^2| (Im and the causal sign are deliberately
+            # NOT drawn), with an epsilon floor so null edges don't pin two
+            # vertices together — the multicobordism animation's convention
+            # (#581).
+            rest_lens.append(
+                math.sqrt(max(abs(e.getSquaredLength().real), 1e-6)))
 
     pos = force_layout_3d(len(verts), edge_idx,
                           rest_lengths=rest_lens, **kwargs)
