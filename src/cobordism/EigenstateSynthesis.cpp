@@ -2008,10 +2008,15 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
   };
 
   // ---- Q (hole-boundary covector) + each hole's leak column ----
+  // Sort each hole's vertices first, exactly as the CPU oracle does (holeLoops /
+  // periodGradientGeneral): the facet signs and the leak edge are defined on the
+  // sorted order, so an unsorted hole would scramble Q and pick the wrong leak
+  // column -- an O(1)-wrong gradient, not an FP32 error.
   MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
   std::vector<std::size_t> leakCol(m);
   for (std::size_t q = 0; q < m; ++q) {
-    const auto &h = holes[q];
+    std::vector<std::uint64_t> h = holes[q];
+    std::sort(h.begin(), h.end());
     for (int j = 0; j < 3; ++j) {
       std::vector<std::uint64_t> facet;
       for (int i = 0; i < 3; ++i)
