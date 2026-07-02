@@ -1,8 +1,9 @@
 # Throwaway sweep renderer (#555): record an attempt as an animation in the style of
-# the animation scripts. Reuses emergent_proton.EmergentProtonAnimator's 2x4 panels
-# verbatim (metrics F/‖∇S‖²/r_U; register+Betti; primal A/B; dual spatial/temporal
-# curvature) — but frames are driven EXTERNALLY at the worker's real pass/chunk
-# boundaries, so the animation shows the exact recorded attempt, not a re-run.
+# the animation scripts. Reuses emergent_proton.EmergentProtonAnimator's panels
+# verbatim (metrics F/‖∇S‖²/r_U; register+Betti; one primal + dual spatial/temporal
+# curvature row per node — node-count-generic, so the joint single-node drive and the
+# two-step oracle both render) — but frames are driven EXTERNALLY at the worker's real
+# pass/chunk boundaries, so the animation shows the exact recorded attempt, not a re-run.
 import os
 import sys
 
@@ -11,7 +12,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-sys.path.insert(0, "/home/andrew/feat-proton-ingredients/examples/cobordism")
+# emergent_proton lives one directory up (examples/cobordism); resolve relative to this
+# file so the canonical copy and a campaign-worktree copy both import their own tree's.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import emergent_proton as ep  # noqa: E402  (brings multicobordism_animation with it)
 
 
