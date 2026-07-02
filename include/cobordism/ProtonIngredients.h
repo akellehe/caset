@@ -82,6 +82,18 @@ class ProtonIngredients {
   /// third quark `{ω²}` inputs as `Proton::formationNode`, but `outputTargets = {}` —
   /// the final state emerges and is read off the whole afterwards.
   [[nodiscard]] std::shared_ptr<MultiCobordism> formationNode(std::uint64_t seed) const;
+  /// The joint inputs-only node (the design note's Rungs 1+2 collapsed to the
+  /// inputs-only shape): ONE MultiCobordism whose inputs are the three Z₃-symmetric
+  /// neutral q-q̄ pairs `{1,−1,0} ⊔ {0,1,−1} ⊔ {−1,0,1}` (each Σ = 0 — the only
+  /// prepared content, held representable through their `r_U` terms for the whole
+  /// build) and whose `outputTargets = {}`. No diquark, no bare quark, no
+  /// intermediate is ever imposed: the objective is `‖∇S‖² + Γ·Σᵢ w·r_U(inputᵢ)` and
+  /// whatever the whole cobordism comes to carry — the pre-registered expectation is
+  /// a baryon with a conjugate partner — is READ afterwards (singlet and
+  /// conjugate-singlet residuals as diagnostics, never drives). Inputs seeded at
+  /// v0/v1/v2 of the single Δ⁴ seed; the two-step nodes above remain the reference
+  /// oracle. NOT run (the caller drives it).
+  [[nodiscard]] std::shared_ptr<MultiCobordism> jointNode(std::uint64_t seed) const;
 
   /// True iff the kept attempt was stationary AND persistent (never a statement about
   /// the singlet or the hole count). Triggers `build()`.
