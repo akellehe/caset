@@ -411,6 +411,12 @@ def _cell_orientation_signs(cells):
                     continue
                 sign[id(c2)] = -sign[id(c)] * (-1) ** (j + j2)
                 q.append(c2)
+    for f, touching in fmap.items():      # verify: a consistent orientation exists
+        if len(touching) == 2:
+            (a, ja), (b, jb) = touching
+            if sign[id(a)] * (-1) ** ja + sign[id(b)] * (-1) ** jb != 0:
+                raise ValueError(f"complex is not consistently orientable at facet "
+                                 f"{tuple(sorted(f))}")
     return sign, fmap
 
 
