@@ -367,13 +367,12 @@ def measure(st, holes=(), label=""):
     C++ skeleton, select the interior hinges, and return the readings dict.
     ``holes`` are the register holes' vertex-id tuples (e.g. ``Proton.quark_holes()``
     / ``ProtonIngredients.emergent_holes()``) — the BFS shell seeds."""
-    skeleton = build_skeleton(st)
+    build_skeleton(st)  # registers the lattice onto st itself; idempotent
     hinges, census = interior_hinges(st, holes)
     mass = masses(hinges)
     rad = radii(st, census)
     loc = localization(hinges)
     table = rm_table(mass, rad)
-    del skeleton
     return dict(label=label, census=census, mass=mass, radius=rad,
                 localization=loc, rm=table, n_holes=len(holes), hinges=hinges)
 
