@@ -34,7 +34,11 @@ Three experiments, in increasing order of commitment (cartan_weyl_gluon.tex §7,
 
 Validation gates (`gauge_gate`, `relabel_gate`): every mesh read must be invariant under a
 random per-cell SO(4) rotation of the embedding (GAUGE) and under a vertex-id permutation
-(RELABEL). Run post-hoc, never as a loop condition.
+(RELABEL). Run post-hoc, never as a loop condition. Passing RELABEL required pinning the
+joint field in the orientation-canonical convention (`hole_orientation_signs`): the period
+API's ascending-vertex-id hole orientation flips with relabeling parity, so the targets are
+ε-signed against one global top-cell orientation — the register sign convention — which is
+what makes the multi-hole carried representative a label-free object.
 
 Prior art, credited: the retired pre-#509 escape-hatch experiment (#512, branch
 `feat/cij-escape-hatch`) found C_ij is NOT a holonomy invariant on the old `dk_*` machinery;
@@ -713,16 +717,19 @@ def gauge_gate(read, st, holes, seed=7):
 
 
 def relabel_gate(read, cells, edges, holes, seed=3):
-    """|Δ J²| under a random vertex-id permutation of the whole complex (same physical
-    holes, relabeled). `cells`/`edges` are the raw fixture data; the complex is rebuilt both
-    ways through the same loader. Post-hoc only."""
+    """|Δ J²| under a random vertex-id permutation of the whole complex — with the cell
+    LIST order shuffled too, so the gate also catches any dependence on enumeration order
+    (same physical holes, relabeled). `cells`/`edges` are the raw fixture data; the complex
+    is rebuilt both ways through the same loader. Post-hoc only."""
     st = build_fixture(cells, edges)
     base = read(st, [tuple(h) for h in holes])["j2"]
+    rng = np.random.default_rng(seed)
     allv = sorted({v for c in cells for v in c})
     shuf = allv[:]
-    np.random.default_rng(seed).shuffle(shuf)
+    rng.shuffle(shuf)
     perm = dict(zip(allv, shuf))
-    st2 = build_fixture([[perm[v] for v in c] for c in cells],
+    relabeled = [[perm[v] for v in c] for c in cells]
+    st2 = build_fixture([relabeled[i] for i in rng.permutation(len(relabeled))],
                         {tuple(sorted((perm[a], perm[b]))): z
                          for (a, b), z in edges.items()})
     holes2 = [tuple(sorted(perm[v] for v in h)) for h in holes]
