@@ -4,6 +4,7 @@
 #ifndef TESSERA_PACHNER_REMOVEMOVE_H
 #define TESSERA_PACHNER_REMOVEMOVE_H
 
+#include <complex>
 #include <memory>
 #include <random>
 #include <vector>
@@ -91,13 +92,17 @@ private:
 
   // Captured by apply() — for rollback
   bool applied_ = false;
-  // Edge data captured before deletion: (sourcePtr, targetPtr,
-  // squaredLength).  EdgePtr alone is not enough because EdgeList::
-  // remove invalidates the slot.
+  // Edge data captured before deletion: (sourcePtr, targetPtr, the full
+  // COMPLEX squaredLength, and the U(1) phase) so rollback restores the
+  // edge bit-exactly — a Re-only record silently projected analytically
+  // continued geometry onto the real axis and dropped the connection
+  // phase on every rejected move (#581).  EdgePtr alone is not enough
+  // because EdgeList::remove invalidates the slot.
   struct EdgeRecord {
     VertexPtr source;
     VertexPtr target;
-    double squaredLength;
+    std::complex<double> squaredLength;
+    double phase;
   };
   std::vector<EdgeRecord> deletedEdges_;
   // Vertex tuples of the 2 replacement simplices we actually created in

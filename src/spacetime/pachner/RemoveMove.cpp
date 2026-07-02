@@ -216,10 +216,10 @@ bool RemoveMove::applyPreGeometric() {
   vertexCoords_.clear();
   for (const auto &e : v_->getInEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength().real()});
+                             e->getSquaredLength(), e->getPhase()});
   for (const auto &e : v_->getOutEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength().real()});
+                             e->getSquaredLength(), e->getPhase()});
 
   // Remove the d+1 incident cells.
   for (const auto &s : incident_) st_->removeSimplex(s);
@@ -265,16 +265,16 @@ bool RemoveMove::apply() {
   vertexId_ = v_->getId();
   vertexCoords_ = v_->getCoordinates();
 
-  // Snapshot incident edges (in + out) and their squared lengths.
-  // (We can't capture EdgePtr — those slots get freed by EdgeList::
-  // remove.)
+  // Snapshot incident edges (in + out): the full complex squared length
+  // AND the U(1) phase, so rollback is bit-exact (#581).  (We can't
+  // capture EdgePtr — those slots get freed by EdgeList::remove.)
   for (const auto &e : v_->getInEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength().real()});
+                             e->getSquaredLength(), e->getPhase()});
   }
   for (const auto &e : v_->getOutEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength().real()});
+                             e->getSquaredLength(), e->getPhase()});
   }
 
   // 2. Remove the 2d incident simplices.
@@ -359,7 +359,15 @@ void RemoveMove::rollback() {
     // After re-creating the vertex with the original ID, the OLD
     // pointer captured in EdgeRecord may have been freed.  We rely on
     // the ID match above; ID-stable accessors are sufficient.
-    auto r = st_->getEdgeList()->tryAdd(src, tgt, er.squaredLength);
+    // tryAdd's factory unit is the real signed l^2; the exact complex
+    // value and the U(1) phase are written onto the fresh edge right
+    // after creation so the restore is bit-exact (#581).  An edge that
+    // already exists was never deleted, so its values are left alone.
+    auto r = st_->getEdgeList()->tryAdd(src, tgt, er.squaredLength.real());
+    if (r.second) {
+      r.first->setSquaredLength(er.squaredLength);
+      r.first->setPhase(er.phase);
+    }
     src->addOutEdge(r.first);
     tgt->addInEdge(r.first);
   }

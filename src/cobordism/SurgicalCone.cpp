@@ -132,7 +132,8 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
   if (otherTop.empty()) return {false, "refusing to remove the last top cell"};
 
   // An edge {u,v} of the cell is orphaned iff no surviving top cell covers both
-  // endpoints. Capture (u, v, l2, phase) for each orphan so rollback restores it.
+  // endpoints. Capture (u, v, complex l2, phase) for each orphan so rollback
+  // restores it bit-exactly (#581: the full complex value, never Re alone).
   const auto covered = [&](std::uint64_t u, std::uint64_t v) {
     for (const auto &c : otherTop) {
       const bool hu = std::find(c.begin(), c.end(), u) != c.end();
@@ -152,7 +153,7 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
       if (covered(u, v)) continue;
       const auto it = eidx.find({std::min(u, v), std::max(u, v)});
       if (it == eidx.end()) continue;  // already absent
-      m.edges.emplace_back(u, v, it->second->getSquaredLength().real(),
+      m.edges.emplace_back(u, v, it->second->getSquaredLength(),
                            it->second->getPhase());
       toRemove.push_back(it->second);
     }
@@ -230,7 +231,7 @@ std::pair<bool, std::string> SurgicalCone::coneIn(
   for (const auto &e : r.newEdges)
     if (e != nullptr && e->getSource() != nullptr && e->getTarget() != nullptr)
       m.edges.emplace_back(e->getSource()->getId(), e->getTarget()->getId(),
-                           e->getSquaredLength().real(), e->getPhase());
+                           e->getSquaredLength(), e->getPhase());
 
   const auto verdict = validate();
   if (!verdict.first) {
@@ -264,7 +265,7 @@ void SurgicalCone::undoConeOut(const Move &m) {
   for (const auto &[u, v, w, theta] : m.edges) {
     const auto it = eidx.find({std::min(u, v), std::max(u, v)});
     if (it != eidx.end()) {
-      it->second->setSquaredLength(std::complex<double>{w, 0.0});
+      it->second->setSquaredLength(w);  // the recorded complex l2, bit-exact
       it->second->setPhase(theta);
     }
   }
