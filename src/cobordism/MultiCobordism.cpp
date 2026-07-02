@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
 
 #include <Eigen/Dense>
 
@@ -632,10 +633,41 @@ void MultiCobordism::seedBlocks(
   }
 }
 
+void MultiCobordism::requireValidCausalGuardEpsilon(double epsilon) {
+  if (std::isnan(epsilon) || epsilon > kMagnitudeCap)
+    throw std::invalid_argument(
+        "causal guard epsilon must be a non-NaN value <= 20 (kMagnitudeCap); "
+        "epsilon <= 0 turns the guard off — see MultiCobordism::setCausalGuard");
+}
+
+void MultiCobordism::setCausalGuard(double epsilon) {
+  requireValidCausalGuardEpsilon(epsilon);
+  causalGuardEpsilon_ = epsilon;
+}
+
+double MultiCobordism::boundedTrialRealPart(double trialRealPart, double epsilon) {
+  requireValidCausalGuardEpsilon(epsilon);
+  if (epsilon > 0.0) {
+    // Causal-aware guard ON — semantics: setCausalGuard in MultiCobordism.h (the
+    // authoritative statement). copysign(_, +0.0) gives the documented exactly-0 →
+    // +epsilon for free; a literal -0.0 trial would land at -epsilon (unreachable
+    // from stored lengths, noted for completeness). The epsilon <= kMagnitudeCap
+    // validation above is std::clamp's lo <= hi precondition.
+    return std::copysign(
+        std::clamp(std::abs(trialRealPart), epsilon, kMagnitudeCap), trialRealPart);
+  }
+  // Guard OFF (the default): the spacelike clamp, the pre-guard expression verbatim.
+  return std::min(std::max(trialRealPart, kDegeneracyFloor), kMagnitudeCap);
+}
+
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
                                                  double alpha0, double relTol) {
   auto edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
+  // Snapshot the guard epsilon ONCE per call: run_stage2's binding releases the GIL,
+  // so setCausalGuard can run concurrently from another Python thread — a mid-run
+  // change takes effect on the NEXT call, never on a partial trial sweep.
+  const double causalGuardEpsilon = causalGuardEpsilon_;
   auto fullObjective = [&]() {
     return beta * reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
   };
@@ -672,28 +704,12 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
         complexd trialSquaredLength = squaredLengths(edgeIndex) -
                                 trialStepScale * descentDirection(edgeIndex);
-        double boundedRealPart;
-        if (causalGuardEpsilon_ > 0.0) {
-          // Causal-aware degeneracy guard (#565): a trial Re ℓ² is admissible on
-          // EITHER side of the light cone; only the degeneracy band |Re ℓ²| < ε is
-          // forbidden — push it out to ±ε preserving the trial's sign (a trial moving
-          // from + toward 0 lands at +ε, one that crossed into Re ℓ² < 0 lands at −ε;
-          // exactly 0 lands at +ε) — with the symmetric magnitude cap |Re ℓ²| ≤ 20.
-          boundedRealPart = trialSquaredLength.real();
-          const double coneSide = boundedRealPart < 0.0 ? -1.0 : 1.0;
-          if (std::abs(boundedRealPart) < causalGuardEpsilon_)
-            boundedRealPart = coneSide * causalGuardEpsilon_;
-          else if (std::abs(boundedRealPart) > 20.0)
-            boundedRealPart = coneSide * 20.0;
-        } else {
-          // Guard OFF (the default): the spacelike clamp — trial Re ℓ² bounded to
-          // [0.05, 20], forbidding the timelike half-line entirely.
-          boundedRealPart =
-              std::min(std::max(trialSquaredLength.real(), 0.05),
-                       20.0);  // bound the real part
-        }
-        edges[edgeIndex]->setSquaredLength(
-            complexd(boundedRealPart, trialSquaredLength.imag()));
+        // Bound the trial's real part — boundedTrialRealPart owns both families
+        // (guard OFF: the spacelike clamp; ON: the causal-aware band push-out);
+        // semantics: setCausalGuard in MultiCobordism.h. Im part untouched.
+        edges[edgeIndex]->setSquaredLength(complexd(
+            boundedTrialRealPart(trialSquaredLength.real(), causalGuardEpsilon),
+            trialSquaredLength.imag()));
       }
       double trialObjective;
       try {

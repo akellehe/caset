@@ -2,14 +2,11 @@
 # All rights reserved.
 """Causal-aware degeneracy guard on run_stage2 + signature-change verification (#565).
 
-#541 found the relaxed geometry stays all-spacelike by DYNAMICS (the Euclidean basin
-of an all-spacelike seed), not by the stage-2 clamp `Re l^2 in [0.05, 20]` — but that
-clamp forbids the entire timelike half-line, and the campaign's machine-precision
-descent does bind its floor. `MultiCobordism.set_causal_guard(epsilon)` replaces it,
-flag-gated: OFF by default (the clamp, byte-identical — the golden-constant suite in
-test_multi_cobordism_python.py is the drift guard); ON forbids only the light-cone
-degeneracy band `|Re l^2| < epsilon` (both cone sides admissible, the trial's sign
-preserved, symmetric `|Re l^2| <= 20` cap, `Im l^2` handling unchanged).
+Guard semantics: `setCausalGuard` in MultiCobordism.h is THE authoritative statement
+(OFF by default = the pre-guard spacelike clamp; ON = both cone sides admissible, only
+the light-cone degeneracy band forbidden). The projection itself is probed directly
+through `bounded_trial_real_part` — the single owner of both trial-bound families —
+so the semantics are pinned unit-level, not inferred from stage-2 dynamics.
 
 Epic #559's rule: NO timelike initialization — causal content may only EMERGE. The
 timelike edge hand-set below is a verification of the READERS (the complex Sorkin
@@ -18,9 +15,15 @@ change — not an initialization policy.
 """
 import cmath
 import math
+import os
+import sys
 import unittest
 
 import tessera as T
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _closed_s4 import closed_s4 as _closed_s4  # noqa: E402  (the shared host fixture)
 
 cob = T.cobordism
 
@@ -34,23 +37,6 @@ def _sphere4(jitter=True):
     st.build()
     for i, e in enumerate(st.getEdgeList().toVector()):
         e.setSquaredLength(1.0 + (0.013 * (i % 5) if jitter else 0.0))
-    return st
-
-
-def _closed_s4(n_refine=12, seed=3):
-    """A refined closed S⁴ host (the test_multi_cobordism_python.py fixture): the bare
-    ∂Δ⁵ sphere refined by `n_refine` PreGeometric stellar Pachner adds, then a mild
-    deterministic non-uniform metric."""
-    st = _sphere4(jitter=False)
-    applied = 0
-    for s in range(seed, seed + n_refine * 4):
-        mv = T.AddMove(st, s, False, T.PachnerMode.PreGeometric, False)
-        if mv.propose() and mv.apply():
-            applied += 1
-        if applied >= n_refine:
-            break
-    for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.01 * (i % 6))
     return st
 
 
@@ -72,6 +58,68 @@ def _edge_census(st):
         timelike += 1 if sq.real < 0.0 else 0
         at_cap += 1 if abs(sq.real) >= 20.0 - 1e-9 else 0
     return min_abs_re, timelike, at_cap, finite
+
+
+class TrialProjectionTest(unittest.TestCase):
+    """Direct unit probe of the projection (`bounded_trial_real_part`), straddling
+    0, ±epsilon, and ±20 — so a sign-flipped push-out or a deleted band branch
+    fails HERE, without relying on stage-2 dynamics to wander into the band."""
+
+    def test_guard_on_projection_is_exact(self):
+        f = cob.MultiCobordism.bounded_trial_real_part
+        eps = 0.05
+        for trial, expected in [
+            (0.0, +eps),         # exactly 0 lands at +epsilon (documented)
+            (+0.01, +eps),       # in-band + pushes out to +epsilon
+            (-0.01, -eps),       # in-band - pushes out to -epsilon (sign preserved)
+            (+eps, +eps),        # the band boundary is admissible
+            (-eps, -eps),
+            (+0.3, +0.3),        # outside the band keeps its value ...
+            (-0.3, -0.3),        # ... on the timelike side too (admissible)
+            (+1.0, +1.0),
+            (-19.0, -19.0),
+            (+20.0, +20.0),      # the cap is admissible
+            (-20.0, -20.0),
+            (+25.0, +20.0),      # symmetric magnitude cap
+            (-25.0, -20.0),
+        ]:
+            self.assertEqual(f(trial, eps), expected,
+                             f"guard-ON projection of {trial} (eps={eps})")
+
+    def test_guard_off_projection_pins_the_clamp_constants(self):
+        # The OFF path (epsilon <= 0) is the pre-guard spacelike clamp — an
+        # EXECUTABLE pin of the 0.05 floor and the 20 cap, for epsilon 0 and negative.
+        f = cob.MultiCobordism.bounded_trial_real_part
+        for eps in (0.0, -1.0):
+            for trial, expected in [
+                (0.01, 0.05),    # the floor
+                (0.0, 0.05),
+                (-5.0, 0.05),    # OFF forbids the whole timelike half-line
+                (-25.0, 0.05),
+                (1.0, 1.0),
+                (20.0, 20.0),
+                (25.0, 20.0),    # the cap
+            ]:
+                self.assertEqual(f(trial, eps), expected,
+                                 f"guard-OFF projection of {trial} (eps={eps})")
+
+    def test_epsilon_validation(self):
+        # set_causal_guard / bounded_trial_real_part reject NaN and epsilon > 20: a
+        # band wider than the cap would contradict it (push-outs past the cap, caps
+        # landing inside the forbidden band) and inf would forbid every trial (see
+        # MultiCobordism.h). epsilon <= 0 (OFF) and epsilon == 20 remain valid.
+        w = cmath.exp(2j * math.pi / 3)
+        opt = cob.MultiCobordism(_sphere4(), [[1, w, w * w]], [], degrees=[3],
+                                 gamma=1.0, seed=0)
+        for bad in (float("nan"), 25.0, float("inf")):
+            with self.assertRaises(ValueError):
+                opt.set_causal_guard(bad)
+            with self.assertRaises(ValueError):
+                cob.MultiCobordism.bounded_trial_real_part(1.0, bad)
+        self.assertEqual(opt.causal_guard_epsilon, 0.0)  # rejects left no trace
+        opt.set_causal_guard(-1.0)   # <= 0 is valid: OFF
+        opt.set_causal_guard(20.0)   # the cap itself is a valid band half-width
+        self.assertEqual(opt.causal_guard_epsilon, 20.0)
 
 
 class SignatureChangeReadersTest(unittest.TestCase):
@@ -114,8 +162,9 @@ class SignatureChangeReadersTest(unittest.TestCase):
 
 
 class CausalGuardStage2Test(unittest.TestCase):
-    """The guard itself: default OFF (spacelike clamp), ON = only the light-cone band
-    forbidden; a guarded step neither NaNs nor collapses a simplex."""
+    """The guard inside run_stage2: default OFF, and a guarded step neither NaNs nor
+    collapses a simplex (the projection semantics themselves are pinned unit-level
+    in TrialProjectionTest)."""
 
     @classmethod
     def setUpClass(cls):
@@ -131,8 +180,8 @@ class CausalGuardStage2Test(unittest.TestCase):
     def test_guard_default_off_keeps_spacelike_clamp(self):
         # DEFAULT OFF: causal_guard_epsilon == 0 and a stage-2 run keeps every edge on
         # the spacelike clamp Re l^2 in [0.05, 20] — the pre-guard behavior (the
-        # byte-identical drift guard is the golden-constant suite; this pins the flag
-        # default and the OFF-path floor).
+        # byte-identical drift guard is the golden-constant suite; the OFF-path
+        # constants are pinned executable in TrialProjectionTest).
         host = _closed_s4(n_refine=8, seed=3)
         opt = self._node(host)
         self.assertEqual(opt.causal_guard_epsilon, 0.0)
@@ -159,18 +208,20 @@ class CausalGuardStage2Test(unittest.TestCase):
         self.assertTrue(finite)
         self.assertGreaterEqual(min_abs_re, 0.05 - 1e-12,
                                 "an edge collapsed into the degeneracy band")
-        # The hand-set timelike edge may keep its side of the cone or relax back —
-        # both are dynamics, not the guard's business. The cap census is the honest
-        # conformal-runaway watch: edges racing to ±20 would show up here.
-        self.assertLessEqual(at_cap, 1)
+        # The hand-set edge may keep its cone side or relax back (dynamics, not the
+        # guard's business) — but at this budget any FURTHER crossing would be an
+        # anomaly, and any edge at the ±20 cap is the conformal runaway this census
+        # exists to catch.
+        self.assertLessEqual(timelike, 1)
+        self.assertEqual(at_cap, 0)
 
     def test_guard_on_all_spacelike_seed_respects_band(self):
         # Guard ON from an ALL-SPACELIKE seed (no timelike initialization — the epic's
         # rule): a short bounded stage-2 run stays finite and outside the degeneracy
-        # band on BOTH cone sides. Per #541's basin analysis no edge is expected to
-        # cross the cone from an all-spacelike seed (the Euclidean basin is where the
-        # descent lives) — that absence is a fine result, so the census asserts the
-        # guard's CONTRACT (any crossing lands outside the band), not a crossing count.
+        # band on BOTH cone sides. Per #541's basin analysis the descent never points
+        # across the cone from an all-spacelike seed, so at this budget a crossing
+        # would be an anomaly worth failing on (the long-horizon run where a crossing
+        # would be a FINDING is the reported bounded experiment on #565).
         host = _closed_s4(n_refine=8, seed=3)
         opt = self._node(host)
         opt.set_causal_guard(0.05)
@@ -180,7 +231,8 @@ class CausalGuardStage2Test(unittest.TestCase):
         min_abs_re, timelike, at_cap, finite = _edge_census(opt.st)
         self.assertTrue(finite)
         self.assertGreaterEqual(min_abs_re, 0.05 - 1e-12)
-        self.assertEqual(at_cap, 0)   # no conformal runaway to the ±20 cap
+        self.assertEqual(timelike, 0)  # nothing crossed at this budget (see above)
+        self.assertEqual(at_cap, 0)    # no conformal runaway to the ±20 cap
 
 
 if __name__ == "__main__":
