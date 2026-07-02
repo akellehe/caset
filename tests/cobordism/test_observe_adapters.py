@@ -321,6 +321,30 @@ class BlockResidualsEquivalenceTest(AdapterFixtureBase):
                          "target_im": [t.imag for t in self.singlet]}]})
         self.assertEqual(by_complex, by_pairs)
 
+    def test_orphaned_region_ids_are_inert_and_survive_the_relabel_gate(self):
+        # An emergent block region can reference vertices no longer in any
+        # top cell (surgical moves orphan them — observed on a real joint
+        # build). They are inert in the residual, and the relabel gate must
+        # carry them without a KeyError while preserving the region size.
+        region = sorted(self.cells[0]) + [10 ** 6]  # one id not in the complex
+        provenance = {"blocks": [{"label": "with_orphan", "vertices": region,
+                                  "target": self.singlet}]}
+        observable = BlockResiduals()
+        entry = observable.gated_measure(self.register, provenance)
+        self.assertEqual(entry["status"], "measured")
+        (row,) = entry["record"]["blocks"]
+        self.assertEqual(row["n_region_vertices"], len(region))
+        # the orphan changed nothing vs the same region without it
+        (clean_row,) = observable.measure(
+            self.register, {"blocks": [{"label": "with_orphan",
+                                        "vertices": region[:-1],
+                                        "target": self.singlet}]})["blocks"]
+        self.assertEqual(row["residual"], clean_row["residual"])
+        self.assertEqual(row["n_cells_in_region"],
+                         clean_row["n_cells_in_region"])
+        self.assertTrue(entry["gates"]["gauge_ok"], entry["gates"])
+        self.assertTrue(entry["gates"]["relabel_ok"], entry["gates"])
+
     def test_block_order_and_labels_are_preserved(self):
         vertices = sorted({v for c in self.cells for v in c})
         record = BlockResiduals().measure(

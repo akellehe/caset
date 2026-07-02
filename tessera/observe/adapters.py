@@ -123,8 +123,18 @@ class BlockResiduals(Observable):
 
     def transform_provenance(self, provenance, perm):
         """Block regions are vertex-id sets — map them through the RELABEL
-        permutation (targets and labels are id-free)."""
-        blocks = [dict(block, vertices=[perm[int(v)] for v in block["vertices"]])
+        permutation (targets and labels are id-free).
+
+        An emergent block region can reference vertices that are no longer in
+        any top cell (surgical moves orphan them); such ids are INERT in the
+        residual (they never match a cell vertex — the C++ read ignores them
+        the same way). The permutation maps the live vertex-id set onto
+        itself, so an inert id kept as itself stays inert on the relabeled
+        complex — ``perm.get(v, v)`` is exact, and the region's size (a
+        reported channel) is preserved."""
+        blocks = [dict(block,
+                       vertices=[perm.get(int(v), int(v))
+                                 for v in block["vertices"]])
                   for block in provenance["blocks"]]
         return dict(provenance, blocks=blocks)
 
