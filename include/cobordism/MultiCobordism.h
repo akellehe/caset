@@ -60,6 +60,11 @@ class MultiCobordism {
   /// boundary sub-complex carrying its target, scored by its own `r_U`; the bulk
   /// routes the connectivity (which input constituent reaches which output).
   ///
+  /// An **empty** `outputTargets` is a supported shape (#555): nothing is pinned
+  /// downstream, `rU` sums only the input blocks (the objective is
+  /// `‖∇S‖² + Γ·Σᵢ r_U(inputᵢ)`), and whatever the whole comes to carry is read
+  /// after the fact — the emergent arm `ProtonIngredients` builds on this.
+  ///
   /// `precone` (default 0) pre-grows the host by that many **gated cone-in moves**
   /// before any optimization — the emergent way to give surgery room to act, in
   /// place of a prebuilt host refinement. Each cone-in adds one top cell on a fresh

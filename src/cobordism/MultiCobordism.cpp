@@ -273,7 +273,10 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
           spacetime, registerDegree, outputTargets_.front());
   } else {
     // Multiple outputs (e.g. a 2->2 recombination → diquark ⊔ antidiquark) live in
-    // distinct regions: read each off its own constructed block.
+    // distinct regions: read each off its own constructed block. EMPTY outputTargets
+    // is the supported nothing-pinned-downstream shape (#555): no output term at
+    // all — rU is the weighted input residuals alone, and the whole's final state
+    // emerges (read after the fact, e.g. ProtonIngredients' singlet diagnostic).
     for (const auto &outputBlock : outputBlocks_)
       totalResidual += residualForBoundaryBlock(outputBlock, spacetime);
     if (inputBlocks_.empty() && outputBlocks_.empty())  // bare objective, nothing built yet

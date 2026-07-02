@@ -20,6 +20,7 @@
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/MultiCobordism.h"
 #include "cobordism/Proton.h"
+#include "cobordism/ProtonIngredients.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
 #include "cobordism/SurgicalCone.h"
@@ -792,7 +793,9 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
       "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
       "dynamically off getBoundary. Two stages: run_stage1 (combinatorial), "
-      "run_stage2 (geometric).")
+      "run_stage2 (geometric). An EMPTY output_targets list is supported (#555): "
+      "nothing is pinned downstream, r_u sums only the input blocks, and the "
+      "whole's final state emerges (read after the fact).")
       .def(py::init<std::shared_ptr<Spacetime>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
@@ -951,6 +954,67 @@ tickets.)doc");
       .def("diquark_residual", &Proton::diquarkResidual,
            "Step A's r_U (small => the diquark recombination converged).");
 
+  // === ProtonIngredients (#555): the emergent arm — nothing pinned downstream ===
+  py::class_<ProtonIngredients>(m, "ProtonIngredients",
+      R"doc(The emergent arm of the proton build (#555). Proton is the canonical line
+in the sand and is composed here unchanged; ProtonIngredients prepares the same
+ingredients through the same two-step drive EXCEPT that the final state is never
+pinned: step B's output-target list is EMPTY, so the objective is
+F = ||grad S||^2 + gamma * sum_i r_U(input_i) and whatever the whole cobordism
+comes to carry is READ afterwards, never driven. Exactly one variable differs
+from Proton.build() (the singlet output target), so the two classes form a clean
+A/B experiment. The seed stays uniform and all-spacelike by design: at
+initialization no time has passed — causal structure marks sequences of events
+and may only emerge. Convergence carries no answer-shaped gate: an attempt
+converges iff it is STATIONARY (stage 2 stopped on its stationarity test) and
+PERSISTENT (a continued evolve+relax pass leaves holes, b_k, and F stable).
+Everything physical is a post-hoc observable, including the singlet residual —
+a diagnostic for comparing against the canonical build's carried level.)doc")
+      .def(py::init<std::uint64_t, int, double, double, int, bool>(),
+           py::arg("seed") = 0, py::arg("register_degree") = 3,
+           py::arg("gamma") = 50.0, py::arg("input_weight") = 20.0,
+           py::arg("precone") = 0, py::arg("should_use_directed_surgery") = false)
+      .def("build", &ProtonIngredients::build, py::arg("max_restarts") = 16,
+           py::arg("init_steps") = 180, py::arg("evolve_steps") = 60,
+           py::arg("stage1_candidate_moves") = 8, py::arg("stage1_patience") = 15,
+           py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 10,
+           py::arg("persist_rel_tol") = 0.05,
+           "Restart across seeds until an attempt is stationary AND persistent (no "
+           "color tolerance, no minimum hole count); otherwise keep the lowest-F "
+           "attempt. Same drive per node as Proton.build().")
+      .def("recombination_node", &ProtonIngredients::recombinationNode,
+           py::arg("seed"),
+           "Step A verbatim: the composed canonical Proton's recombination_node.")
+      .def("formation_node", &ProtonIngredients::formationNode, py::arg("seed"),
+           "Step B with nothing pinned: the same ideal diquark {1,w} + third quark "
+           "{w*w} inputs on the same single Delta^4 seed as Proton.formation_node, "
+           "but with an EMPTY output-target list — the final state emerges.")
+      .def("converged", &ProtonIngredients::converged,
+           "True iff the kept attempt was stationary AND persistent — never a "
+           "statement about the singlet or the hole count.")
+      .def("stationary", &ProtonIngredients::stationary,
+           "Whether the kept attempt's final run_stage2 stopped on stationarity.")
+      .def("persistent", &ProtonIngredients::persistent,
+           "Whether continued evolve+relax left holes, b_k, and F stable.")
+      .def("seed", &ProtonIngredients::seed, "Base seed of the kept attempt.")
+      .def("spacetime", &ProtonIngredients::spacetime,
+           "The full relaxed emergent step-B complex.")
+      .def("block", &ProtonIngredients::block,
+           "The emergent object IS the whole step-B cobordism (parity with "
+           "Proton.block).")
+      .def("emergent_holes", &ProtonIngredients::emergentHoles,
+           "The emergent register holes on the whole — an observable, not a gate; "
+           "may be any count, including zero.")
+      .def("singlet_residual", &ProtonIngredients::singletResidual,
+           "DIAGNOSTIC only: the singlet r_state of Proton.singlet() against the "
+           "whole, read after the fact for comparison with the canonical build. It "
+           "never steers or gates this build.")
+      .def("input_residual", &ProtonIngredients::inputResidual,
+           "Step B's inputs-only r_U — the whole matter term of the emergent arm.")
+      .def("final_objective", &ProtonIngredients::finalObjective,
+           "The kept attempt's final objective F.")
+      .def("diquark_residual", &ProtonIngredients::diquarkResidual,
+           "Step A's r_U — reported exactly as Proton reports it.");
 
   // ----- Gated surgical cone-out/cone-in (topology change, #460) -----
   py::class_<SurgicalCone>(m, "SurgicalCone",
