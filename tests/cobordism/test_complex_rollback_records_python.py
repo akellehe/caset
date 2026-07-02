@@ -32,9 +32,6 @@ gates:
   mixed-causal-character host.
 """
 
-import cmath
-import math
-
 import pytest
 
 import tessera as T
