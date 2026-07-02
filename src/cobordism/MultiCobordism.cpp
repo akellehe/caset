@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
 
 #include <Eigen/Dense>
 
@@ -670,13 +671,12 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     bool objectiveImproved = false;
     for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-        complexd trialSquaredLength = squaredLengths(edgeIndex) -
-                                trialStepScale * descentDirection(edgeIndex);
-        double boundedRealPart =
-            std::min(std::max(trialSquaredLength.real(), 0.05),
-                     20.0);  // bound the real part
-        edges[edgeIndex]->setSquaredLength(
-            complexd(boundedRealPart, trialSquaredLength.imag()));
+        // The trial is UNBOUNDED — fully Lorentzian, no clamp, no causal guard
+        // (semantics: runStage2 in MultiCobordism.h). Spacelike, timelike, and
+        // lightlike trials are all admissible; a trial the objective cannot
+        // evaluate scores +inf below and is backed off by the line search.
+        edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex) -
+                                trialStepScale * descentDirection(edgeIndex));
       }
       double trialObjective;
       try {

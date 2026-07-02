@@ -11,34 +11,18 @@ two-step Proton, and a CobordismDAG chaining merges output->input.
 """
 import cmath
 import math
+import os
+import sys
 import unittest
 
 import tessera
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _closed_s4 import closed_s4 as _closed_s4  # noqa: E402  (the shared host fixture)
+
 T = tessera
 cob = tessera.cobordism
-
-
-def _closed_s4(n_refine=20, seed=3):
-    """A refined closed S⁴ test host: the bare ∂Δ⁵ sphere refined by `n_refine` PreGeometric
-    stellar Pachner adds (so surgery has room to act — the minimal triangulation is too
-    small), then given a mild deterministic non-uniform metric. Built via the public bindings
-    — a local fixture replacing the retired `emergent_optimizer.build_closed_s4`."""
-    st = T.Spacetime(T.Metric(True, T.Signature(4, T.Lorentzian)), T.CDT, 1.0, 1.0,
-                     T.PREFERRED, T.SimplexBoundarySphere(4))
-    st.build()
-    for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
-    applied = 0
-    for s in range(seed, seed + n_refine * 4):
-        mv = T.AddMove(st, s, False, T.PachnerMode.PreGeometric, False)
-        if mv.propose() and mv.apply():
-            applied += 1
-        if applied >= n_refine:
-            break
-    for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.01 * (i % 6))
-    return st
 
 
 class MultiCobordismCxxTest(unittest.TestCase):

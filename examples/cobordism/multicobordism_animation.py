@@ -327,19 +327,30 @@ class ProtonAnimator:
     def _setup(self, plt):
         from matplotlib.cm import ScalarMappable
         from matplotlib.colors import Normalize
-        # One step per row: [traces | primal complex | spatial-curvature dual | temporal-
+        # One node per row: [traces | primal complex | spatial-curvature dual | temporal-
         # curvature dual]. The two dual panels split the COMPLEX Lorentzian deficit: the
         # spatial one shows its real part (Re ε, the rotation angle-defect, from timelike
         # hinges), the temporal one its imaginary part (Im ε, the boost/light-cone content,
-        # from spacelike hinges — those whose normal plane is timelike).
-        self.fig, axes = plt.subplots(2, 4, figsize=(21, 9))
-        self.axm, self.axA, self.axDA, self.axTA = axes[0]   # metrics,  A primal, A Re, A Im
-        self.axr, self.axB, self.axDB, self.axTB = axes[1]   # register, B primal, B Re, B Im
+        # from spacelike hinges — those whose normal plane is timelike). The grid is
+        # node-count-generic (the joint single-node drive gets one panel row; the two-step
+        # keeps its two) with the metrics/register traces always on rows 0/1 of column 0.
+        n_nodes = len(self.nodes)
+        n_rows = max(2, n_nodes)
+        self.fig, axes = plt.subplots(n_rows, 4, figsize=(21, 4.5 * n_rows),
+                                      squeeze=False)
+        self.axm = axes[0][0]                                # metrics trace
+        self.axr = axes[1][0]                                # register trace
+        for row in range(2, n_rows):
+            axes[row][0].axis("off")
+        self._primal_axes = [axes[i][1] for i in range(n_nodes)]
+        self._re_axes = [axes[i][2] for i in range(n_nodes)]
+        self._im_axes = [axes[i][3] for i in range(n_nodes)]
+        for row in range(n_nodes, n_rows):                   # single node: blank row 1 panels
+            for column in (1, 2, 3):
+                axes[row][column].axis("off")
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
         # panel self-normalizes per frame; we just update the mappable's clim. Re (spatial) and
         # Im (temporal) use distinct diverging colormaps so the two channels read apart.
-        self._re_axes = [self.axDA, self.axDB]
-        self._im_axes = [self.axTA, self.axTB]
         self._re_sms, self._im_sms = [], []
         for axset, sms, cmap, label in (
                 (self._re_axes, self._re_sms, _HEAT_CMAP, "spatial curvature  Re ε·|★|"),
@@ -527,14 +538,13 @@ class ProtonAnimator:
         self.axr.set_xlabel("frame")
         self.axr.legend(loc="upper left", fontsize=8)
 
-        # One step per row: primal complex, then its dual split into spatial-curvature (Re ε)
-        # and temporal-curvature (Im ε) panels. The active node animates; the other holds its
-        # current complex — both steps on screen at one time. Each node's layout is computed
+        # One node per row: primal complex, then its dual split into spatial-curvature (Re ε)
+        # and temporal-curvature (Im ε) panels. The active node animates; any other holds its
+        # current complex — every node on screen at one time. Each node's layout is computed
         # once and shared by its primal + both dual panels.
-        primal_axes = [self.axA, self.axB]
-        for ni in (0, 1):
+        for ni in range(len(self.nodes)):
             coords = self._layouts[ni].coords(self.nodes[ni][0].st)
-            self._draw_complex(primal_axes[ni], ni, coords, self.nodes[ni][1])
+            self._draw_complex(self._primal_axes[ni], ni, coords, self.nodes[ni][1])
             self._draw_dual(self._re_axes[ni], self._re_sms[ni], ni, coords,
                             0, _HEAT_CMAP, "dual — spatial curvature (Re ε)")
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,

@@ -1004,6 +1004,15 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            "Step B with nothing pinned: the same ideal diquark {1,w} + third quark "
            "{w*w} inputs on the same single Delta^4 seed as Proton.formation_node, "
            "but with an EMPTY output-target list — the final state emerges.")
+      .def("joint_node", &ProtonIngredients::jointNode, py::arg("seed"),
+           "The joint inputs-only node: ONE MultiCobordism whose inputs are the three "
+           "Z3-symmetric neutral q-qbar pairs {1,-1,0} | {0,1,-1} | {-1,0,1} (each "
+           "Sigma = 0 — the only prepared content, fixed for the whole build) and "
+           "whose output-target list is EMPTY. No diquark, no bare quark, no "
+           "intermediate imposed; the pre-registered expectation (a baryon with a "
+           "conjugate partner) is READ off the relaxed whole afterwards — singlet and "
+           "conjugate-singlet residuals as diagnostics, never drives. The two-step "
+           "nodes remain the reference oracle. NOT run (the caller drives it).")
       .def("converged", &ProtonIngredients::converged,
            "True iff the kept attempt was stationary AND persistent — never a "
            "statement about the singlet or the hole count.")
