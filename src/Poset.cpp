@@ -171,10 +171,11 @@ Poset Poset::fromSpacetime(Spacetime const& st) {
     const int n_dense = static_cast<int>(id_in_order.size());
 
     // Collect strict-precedes pairs (earliest → latest) from timelike
-    // edges. We test "timelike" as squaredLength < 0 (the metric-aware
-    // signal — see include/mesh/Edge.h §EdgeDisposition) AND require a
-    // strict time ordering between endpoints, since a zero-time-diff
-    // negative-squared-length edge would be a metric inconsistency we
+    // edges. "Timelike" is the canonical Edge::isTimelike() classifier
+    // (see include/mesh/Edge.h §EdgeDisposition; the superseded
+    // sign-of-Re-squaredLength test is NOT used, #581) AND we require a
+    // strict time ordering between endpoints, since a timelike edge
+    // with zero time difference would be a metric inconsistency we
     // don't want to silently propagate as a partial-order relation.
     auto const& elist = st.getEdgeList();
     std::vector<std::pair<int, int>> strict_pairs;
