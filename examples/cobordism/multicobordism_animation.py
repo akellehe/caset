@@ -239,6 +239,7 @@ class ProtonAnimator:
 
     _PHASE_NAMES = {"init": "growing register", "evolve": "evolving (∂W frozen)",
                     "stage2": "relaxing geometry"}
+    _TITLE_PREFIX = "Proton build (two-step)"
 
     def __init__(self, nodes, degree=3, init_steps=_INIT_STEPS, init_chunk=_INIT_CHUNK,
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
@@ -529,27 +530,124 @@ class ProtonAnimator:
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
                             1, _HEAT_CMAP_IM, "dual — temporal curvature (Im ε)")
 
-    def update(self, frame):
+    # ---- per-frame text hooks (overridden by the RL drive) ----
+    def _frame_label(self, frame):
+        """The short 'what step / what's running' label for a frame — the node label plus the
+        current phase name. The RL drive overrides this to report the policy's last macro-move."""
         node_index, phase, _count = self._schedule[frame]
-        label = f"{self.nodes[node_index][1]} · {self._PHASE_NAMES[phase]}"
-        # A visible heartbeat *before* the step: a surgery frame is several seconds of real
-        # compute during which the GUI window can't repaint, so announce what's running first
-        # (title + flushed stdout line) — otherwise the window looks hung mid-frame.
-        if not self._done:
-            self.fig.suptitle(
-                f"Proton build (two-step) — frame {frame + 1}/{self._frames} · {label}")
-            print(f"\rframe {frame + 1}/{self._frames} ({label})", end="", flush=True)
-        self._advance(frame)
+        return f"{self.nodes[node_index][1]} · {self._PHASE_NAMES[phase]}"
+
+    def _verdict_tag(self, ok, res, holes):
+        return (f"CONVERGED ✓ — proton {{1,ω,ω²}} carried (r_state={res:.2g}, "
+                f"{holes} registers)" if ok else
+                f"did NOT converge (r_state={res:.2g}, {holes} registers)")
+
+    def _draw_extras(self):
+        """Hook for per-frame figure annotations drawn after `_redraw` (the RL drive adds its
+        training-parameter footnote here); the fixed drive has none."""
+
+    # ---- the three parts of a frame: announce (pre-compute) · advance (compute) · paint ----
+    def _announce(self, frame):
+        """Pre-compute heartbeat: set the title to what's about to run and flush an stdout line.
+        In `--live` this runs on the GUI thread the instant the worker *starts* a frame, so the
+        window immediately shows e.g. 'growing register' for the whole (responsive) compute."""
+        label = self._frame_label(frame)
+        self.fig.suptitle(
+            f"{self._TITLE_PREFIX} — frame {frame + 1}/{self._frames} · {label}")
+        print(f"\rframe {frame + 1}/{self._frames} ({label})", end="", flush=True)
+
+    def _paint(self, frame):
+        """Redraw the whole figure from the current geometry (GUI thread). On the last frame,
+        also read and announce the live convergence verdict. Never touches the engine — safe to
+        call while the compute worker is parked waiting for this paint to finish."""
         self._redraw()
+        self._draw_extras()
         if frame >= self._frames - 1 and not self._done:   # last frame: announce the verdict
             self._done = True
             ok, res, holes = self.verdict()
-            tag = (f"CONVERGED ✓ — proton {{1,ω,ω²}} carried (r_state={res:.2g}, "
-                   f"{holes} registers)" if ok else
-                   f"did NOT converge (r_state={res:.2g}, {holes} registers)")
-            self.fig.suptitle(f"Proton build (two-step) — {tag}")
-            print(f"\rframe {frame + 1}/{self._frames} ({label}) — {tag}")
+            tag = self._verdict_tag(ok, res, holes)
+            self.fig.suptitle(f"{self._TITLE_PREFIX} — {tag}")
+            print(f"\rframe {frame + 1}/{self._frames} "
+                  f"({self._frame_label(frame)}) — {tag}")
+
+    def update(self, frame):
+        """One synchronous frame: announce → compute → paint. Used by the `--save` (off-screen
+        Agg) path, where blocking the render loop on the compute is harmless. `--live` instead
+        drives compute off the GUI thread via `_run_live` so the window stays responsive."""
+        if not self._done:
+            self._announce(frame)
+        self._advance(frame)
+        self._paint(frame)
         return []
+
+    # ---- responsive live driver: compute on a worker thread, paint on the GUI thread ----
+    def _run_live(self, plt, interval):
+        """Animate live without freezing the window. A surgery frame is a *single* multi-second
+        `run_stage1`/`run_stage2` call (it must stay one call — grow-burst recovery and patience
+        early-stop only work within a call), so running it inside the `FuncAnimation` callback on
+        the GUI thread blocks the event loop for tens of seconds and the OS flags the window
+        'not responding'. Instead a background thread runs the build while the GUI thread only
+        paints finished frames on a timer.
+
+        A two-way handshake keeps the engine single-threaded even though two threads are live:
+        the worker computes frame *n* only after the GUI has finished painting frame *n-1*
+        (`paint_done`), and the GUI reads the geometry only while the worker is parked. So the
+        engine's `st` is never mutated and read at once — no data race, no snapshotting, and the
+        drawing code is unchanged. Responsiveness comes from the bindings releasing the GIL for
+        the duration of each compute call, so the GUI thread keeps servicing the event loop."""
+        import itertools
+        import queue
+        import threading
+        from matplotlib.animation import FuncAnimation
+
+        q = queue.Queue()                 # worker -> GUI: ('announce'|'paint'|'error', frame)
+        paint_done = threading.Event()    # GUI -> worker: safe to mutate the engine again
+        paint_done.set()                  # frame 0 may start immediately
+        state = {"error": None}
+
+        def worker():
+            frame = -1
+            try:
+                for frame in range(self._frames):
+                    paint_done.wait()          # previous frame fully painted → engine idle
+                    paint_done.clear()
+                    q.put(("announce", frame))
+                    self._advance(frame)        # heavy compute; GIL released inside the engine
+                    q.put(("paint", frame))
+            except BaseException as exc:         # surface a compute failure, don't hang the GUI
+                state["error"] = exc
+                q.put(("error", frame))
+                paint_done.set()
+
+        def on_timer(_ignored_frame):
+            while True:
+                try:
+                    kind, frame = q.get_nowait()
+                except queue.Empty:
+                    break
+                if kind == "announce":
+                    if not self._done:
+                        self._announce(frame)
+                elif kind == "paint":
+                    self._paint(frame)          # worker is parked → safe to read the engine
+                    paint_done.set()            # release the worker for the next frame
+                    if frame >= self._frames - 1:
+                        self._anim.event_source.stop()
+                else:                            # error: stop and close so plt.show() returns
+                    self._anim.event_source.stop()
+                    plt.close(self.fig)
+            return []
+
+        worker_thread = threading.Thread(target=worker, name="proton-build", daemon=True)
+        # A brisk poll so a finished frame paints promptly; the compute cadence is set by the
+        # engine, not this interval. cache_frame_data=False: the frame source is unbounded.
+        self._anim = FuncAnimation(self.fig, on_timer, frames=itertools.count(),
+                                   interval=max(20, interval // 4), repeat=False,
+                                   cache_frame_data=False, blit=False)
+        worker_thread.start()
+        plt.show()
+        if state["error"] is not None:
+            raise state["error"]
 
 
 def build_proton_nodes(seed=3, precone=0):
@@ -572,8 +670,10 @@ def build_proton_nodes(seed=3, precone=0):
 
 
 def animate(nodes, save=None, interval=200, **kw):
-    """Animate the proton node sequence. `save` → write a GIF/MP4 (headless, Agg);
-    otherwise show a live interactive window. Returns the animator."""
+    """Animate the proton node sequence. `save` → write a GIF/MP4 (headless, Agg) with the
+    synchronous per-frame `update`; otherwise show a live interactive window driven by
+    `_run_live` (compute on a background thread, GUI thread only paints) so the window stays
+    responsive through the multi-second surgery frames. Returns the animator."""
     import matplotlib
     if save:
         matplotlib.use("Agg")
@@ -582,17 +682,17 @@ def animate(nodes, save=None, interval=200, **kw):
 
     anim_state = ProtonAnimator(nodes, **kw)
     anim_state._setup(plt)
-    anim_state.fig.suptitle("Proton build (two-step) — live")
-    fa = FuncAnimation(anim_state.fig, anim_state.update,
-                       frames=anim_state._frames, interval=interval,
-                       repeat=False, blit=False)
+    anim_state.fig.suptitle(f"{anim_state._TITLE_PREFIX} — live")
     if save:
+        fa = FuncAnimation(anim_state.fig, anim_state.update,
+                           frames=anim_state._frames, interval=interval,
+                           repeat=False, blit=False)
         writer = "pillow" if save.endswith(".gif") else "ffmpeg"
         fa.save(save, writer=writer, dpi=90)
         print(f"saved animation -> {save}")
+        anim_state._anim = fa  # keep a ref so it isn't GC'd
     else:
-        plt.show()
-    anim_state._anim = fa  # keep a ref so it isn't GC'd in live mode
+        anim_state._run_live(plt, interval)   # responsive live window; keeps its own _anim ref
     return anim_state
 
 
@@ -744,6 +844,8 @@ class RLPolicyAnimator(ProtonAnimator):
 
     `steps` is `[(env, policy, label), ...]` in build order; `train_info` is displayed."""
 
+    _TITLE_PREFIX = "Proton build under RL policy (two-step)"
+
     def __init__(self, steps, degree=3, seed=3, deterministic=True, max_actions=3,
                  glide_frames=6, train_info=None):
         self.envs = [s[0] for s in steps]
@@ -796,7 +898,20 @@ class RLPolicyAnimator(ProtonAnimator):
         self.nodes[node_index] = (env.node, self.nodes[node_index][1])   # keep the node fresh
         self._record(env.node, node_index, _RL_MOVE_NAMES.get(int(res.move), "?"))
 
-    def _draw_train_info(self):
+    # The RL drive differs from the fixed drive only in these three text/annotation hooks; it
+    # inherits `update` (for --save) and `_run_live` (responsive live window) unchanged, so the
+    # RL animation gets the same GUI-freeze fix for free.
+    def _frame_label(self, frame):
+        node_index, _kind = self._schedule[frame]
+        mv = self._last_move[node_index]
+        return (f"{self.nodes[node_index][1]}  ·  RL move: "
+                f"{_RL_MOVE_NAMES.get(mv, '—') if mv is not None else '—'}")
+
+    def _verdict_tag(self, ok, res, holes):
+        return (f"CARRIED ✓ — proton {{1,ω,ω²}} (r_state={res:.2g}, {holes} registers)"
+                if ok else f"did NOT carry (r_state={res:.2g}, {holes} registers)")
+
+    def _draw_extras(self):
         """Add the training-parameter footnote ONCE (a per-frame fig.text would pile up)."""
         if not self.train_info or self._train_txt is not None:
             return
@@ -804,27 +919,6 @@ class RLPolicyAnimator(ProtonAnimator):
         self._train_txt = self.fig.text(
             0.5, 0.006, f"RL policy trained over many complete convergences —  {txt}",
             ha="center", va="bottom", fontsize=7, color="0.4")
-
-    def update(self, frame):
-        node_index, _kind = self._schedule[frame]
-        mv = self._last_move[node_index]
-        label = (f"{self.nodes[node_index][1]}  ·  RL move: "
-                 f"{_RL_MOVE_NAMES.get(mv, '—') if mv is not None else '—'}")
-        if not self._done:
-            self.fig.suptitle(f"Proton build under RL policy (two-step) — "
-                              f"frame {frame + 1}/{self._frames} · {label}")
-            print(f"\rframe {frame + 1}/{self._frames} ({label})", end="", flush=True)
-        self._advance(frame)
-        self._redraw()
-        self._draw_train_info()
-        if frame >= self._frames - 1 and not self._done:       # last frame: announce verdict
-            self._done = True
-            ok, res, holes = self.verdict()
-            tag = (f"CARRIED ✓ — proton {{1,ω,ω²}} (r_state={res:.2g}, {holes} registers)"
-                   if ok else f"did NOT carry (r_state={res:.2g}, {holes} registers)")
-            self.fig.suptitle(f"Proton build under RL policy (two-step) — {tag}")
-            print(f"\rframe {frame + 1}/{self._frames} ({label}) — {tag}")
-        return []
 
 
 def run_rl(cache_dir="/tmp", retrain=False, train_iters=20, episodes=6, best_of=1, seed=3,
@@ -865,15 +959,15 @@ def run_rl(cache_dir="/tmp", retrain=False, train_iters=20, episodes=6, best_of=
     anim = RLPolicyAnimator(steps, degree=degree, seed=seed, deterministic=deterministic,
                             max_actions=max_actions, train_info=train_info)
     anim._setup(plt)
-    anim.fig.suptitle("Proton build under a trained RL policy (two-step)")
-    fa = FuncAnimation(anim.fig, anim.update, frames=anim._frames, interval=interval,
-                       repeat=False, blit=False)
-    if save:
+    anim.fig.suptitle(f"{anim._TITLE_PREFIX} — live")
+    if save:                                  # off-screen Agg: synchronous per-frame render
+        fa = FuncAnimation(anim.fig, anim.update, frames=anim._frames, interval=interval,
+                           repeat=False, blit=False)
         fa.save(save, writer="pillow" if save.endswith(".gif") else "ffmpeg", dpi=90)
         print(f"saved animation -> {save}")
-    else:
-        plt.show()
-    anim._anim = fa   # keep a ref so it isn't GC'd in live mode
+        anim._anim = fa   # keep a ref so it isn't GC'd
+    else:                                     # responsive live window (compute off GUI thread)
+        anim._run_live(plt, interval)
     return anim.verdict(), train_info
 
 

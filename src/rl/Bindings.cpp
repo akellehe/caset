@@ -92,7 +92,10 @@ PYBIND11_MODULE(_tessera_rl, m) {
       "obs/reward only READ published engine quantities. Constructed via make_formation_env / "
       "make_recombination_env.")
       .def("reset", &CobordismObjectiveEnv::reset, py::arg("seed"))
-      .def("step", &CobordismObjectiveEnv::step, py::arg("move"), py::arg("params"))
+      // step() drives one buildStep (long pure-C++ compute); release the GIL so a background
+      // thread can run the RL-driven build without blocking the GUI (animation --rl --live).
+      .def("step", &CobordismObjectiveEnv::step, py::arg("move"), py::arg("params"),
+           py::call_guard<py::gil_scoped_release>())
       .def_property_readonly("obs_dim", &CobordismObjectiveEnv::obsDim)
       .def_property_readonly("num_moves", &CobordismObjectiveEnv::numMoves)
       .def_property_readonly("param_dim", &CobordismObjectiveEnv::paramDim)
