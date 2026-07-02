@@ -72,7 +72,9 @@ class EmergentProtonAnimationTest(unittest.TestCase):
             anim.update(f)
         title = anim.fig._suptitle.get_text()
         self.assertIn("ProtonIngredients", title)
-        self.assertIn("singlet diagnostic", title)       # observational, not a gate
+        # observational, not a gate; the #586 verdict tag spells the singlet
+        # diagnostic "r_state(singlet)=", in BOTH title branches (#588)
+        self.assertIn("r_state(singlet)", title)
         plt.close(anim.fig)
 
     def test_fast_path_reports_what_emerged(self):
