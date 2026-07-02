@@ -813,23 +813,6 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("objective", &MultiCobordism::objective)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
            py::arg("weight"))
-      .def("set_causal_guard", &MultiCobordism::setCausalGuard, py::arg("epsilon"),
-           "Causal-aware degeneracy guard on run_stage2's per-edge trial bound (#565): "
-           "epsilon <= 0 (the default) = OFF, the pre-guard spacelike clamp [0.05, 20]; "
-           "epsilon > 0 = ON, both cone sides admissible, only the degeneracy band "
-           "|Re l^2| < epsilon forbidden. Full semantics: setCausalGuard in "
-           "MultiCobordism.h -- THE authoritative statement. Raises ValueError for NaN "
-           "or epsilon > 20 (the cap); a call from another thread mid-run takes effect "
-           "on the NEXT run_stage2 call. Epic #559's rule: NO timelike INITIALIZATION "
-           "-- the guard never seeds causal content, it only permits causal content to "
-           "EMERGE from the dynamics (its absence is equally a finding).")
-      .def_static("bounded_trial_real_part", &MultiCobordism::boundedTrialRealPart,
-                  py::arg("trial_re"), py::arg("epsilon"),
-                  "The stage-2 per-edge trial projection -- the single owner of both "
-                  "trial-bound families (epsilon <= 0 = the guard-OFF spacelike clamp, "
-                  "epsilon > 0 = the causal-aware band push-out; semantics: "
-                  "setCausalGuard in MultiCobordism.h). Exposed for direct unit-level "
-                  "probing; raises ValueError exactly as set_causal_guard.")
       .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
       .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
       // Long pure-C++ compute: release the GIL for the duration so a background thread can
@@ -860,12 +843,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
                              &MultiCobordism::lastStage2Stationary,
                              "True iff the last run_stage2 stopped on the relative-"
                              "tolerance stationarity test (delta_rel < rel_tol); False "
-                             "if it hit the max_iters budget cap.")
-      .def_property_readonly("causal_guard_epsilon",
-                             &MultiCobordism::causalGuardEpsilon,
-                             "The causal guard band half-width epsilon; <= 0 (the "
-                             "default 0) = guard OFF (spacelike clamp). See "
-                             "set_causal_guard.");
+                             "if it hit the max_iters budget cap.");
   py::enum_<MultiCobordism::BuildAction>(multiCobordismClass, "BuildAction",
       "One canonical solve action a search policy (Proton's build restart loop, a greedy "
       "driver, or the RL agent) composes, so the solve runs through the engine rather than "

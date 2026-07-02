@@ -131,60 +131,17 @@ class MultiCobordism {
   /// steps — the rounding floor). "No line-search step beats the threshold" is the
   /// stationary stop; `maxIters` is the safety budget cap. `lastStage2Stationary()` reports
   /// which of the two ended the run. Returns the `F` trace.
+  ///
+  /// Trials are UNBOUNDED — fully Lorentzian, no clamp, no causal guard (#565): a trial
+  /// `ℓ²` may land spacelike, timelike, or lightlike (`Re ℓ²` of either sign or inside
+  /// any `(-ε, ε)` band; `Im ℓ²` as ever untouched). The only rejection is the line
+  /// search's own: a trial on which the objective fails to evaluate scores `+inf` and is
+  /// backed off, so degenerate geometry is refused by the PHYSICS, never by a projection.
+  /// Epic #559's rule still holds — nothing here seeds causal content; the whole
+  /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
+  /// the dynamics (its absence is equally a finding).
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05, double relTol = 1e-9);
-
-  /// The spacelike floor of the guard-OFF trial clamp (the pre-guard `0.05`); see
-  /// setCausalGuard / boundedTrialRealPart.
-  static constexpr double kDegeneracyFloor = 0.05;
-  /// The cap on every stage-2 trial's `|Re ℓ²|`, in both guard modes (`20`); also the
-  /// upper bound on a valid guard `epsilon`. See setCausalGuard.
-  static constexpr double kMagnitudeCap = 20.0;
-
-  /// Causal-aware degeneracy guard on `runStage2`'s per-edge trial bound (#565, from
-  /// the #541 investigation). THE AUTHORITATIVE STATEMENT of the guard's semantics —
-  /// the trial-projection comment, the Python binding, and the tests point here.
-  ///
-  ///  * OFF — `epsilon <= 0` (the default `0`): every trial `Re ℓ²` is clamped to the
-  ///    spacelike interval `[kDegeneracyFloor, kMagnitudeCap]` = `[0.05, 20]` —
-  ///    exactly the pre-guard behavior, so the canonical Proton build is untouched.
-  ///  * ON — `0 < epsilon <= kMagnitudeCap`: a trial `Re ℓ²` is admissible on EITHER
-  ///    side of the light cone. Only the degeneracy band `|Re ℓ²| < epsilon` is
-  ///    forbidden: a trial inside it is pushed out to `±epsilon` preserving the
-  ///    trial's sign (exactly `0` lands at `+epsilon`); a trial OUTSIDE the band
-  ///    keeps its value — on either cone side — up to the symmetric magnitude cap
-  ///    `|Re ℓ²| <= kMagnitudeCap`. `Im ℓ²` handling is unchanged in both modes.
-  ///
-  /// Validation: throws `std::invalid_argument` for NaN or `epsilon > kMagnitudeCap`
-  /// (a wider band would contradict the cap — push-outs past it, caps landing inside
-  /// the forbidden band — and `epsilon = inf` would forbid every trial, degenerating
-  /// the run to a seed-restoring no-op that still reports stationary).
-  ///
-  /// Concurrency: `runStage2` snapshots the value ONCE at entry (its Python binding
-  /// releases the GIL), so a `setCausalGuard` from another thread mid-run takes
-  /// effect on the NEXT `runStage2` call, never on a partial trial sweep.
-  ///
-  /// Reachability: MultiCobordism-direct only for now — `Proton`, `ProtonIngredients`,
-  /// `CobordismDAG`, and the RL env construct their nodes internally and do not
-  /// forward it (the RL env's `reset()` rebuilds its node, wiping instance state).
-  /// Driver forwarding follows the `inputResidualWeight_` pattern when the campaign
-  /// integration lands; #565 records the follow-up.
-  ///
-  /// Epic #559's rule: NO timelike initialization — the guard never seeds causal
-  /// content, it only leaves the timelike half-line admissible so causal content may
-  /// EMERGE from the dynamics (its absence is equally a finding).
-  void setCausalGuard(double epsilon);
-  /// The causal guard band half-width `epsilon`; `<= 0` (the default `0`) means the
-  /// guard is OFF and `runStage2` keeps the spacelike clamp. See `setCausalGuard`.
-  [[nodiscard]] double causalGuardEpsilon() const { return causalGuardEpsilon_; }
-  /// The stage-2 per-edge trial projection — the single owner of both trial-bound
-  /// families (semantics: setCausalGuard is authoritative). `epsilon <= 0` applies
-  /// the guard-OFF spacelike clamp `[kDegeneracyFloor, kMagnitudeCap]`; `epsilon > 0`
-  /// the causal-aware band push-out with the symmetric cap. Validates `epsilon`
-  /// exactly as `setCausalGuard` (throws `std::invalid_argument`). Exposed for
-  /// direct unit-level probing of the projection.
-  [[nodiscard]] static double boundedTrialRealPart(double trialRealPart,
-                                                   double epsilon);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
@@ -339,13 +296,6 @@ class MultiCobordism {
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   double convergenceTolerance_ = 1e-9;
-  /// The one owner of the guard-epsilon validity rule (semantics: setCausalGuard):
-  /// throws `std::invalid_argument` for NaN or `epsilon > kMagnitudeCap`. Called by
-  /// `setCausalGuard` and `boundedTrialRealPart`.
-  static void requireValidCausalGuardEpsilon(double epsilon);
-  /// The causal guard band half-width; only ever holds validated values (see
-  /// setCausalGuard, the authoritative doc). `runStage2` reads it once per call.
-  double causalGuardEpsilon_ = 0.0;
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
   bool lastStage2Stationary_ = false;

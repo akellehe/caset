@@ -633,41 +633,10 @@ void MultiCobordism::seedBlocks(
   }
 }
 
-void MultiCobordism::requireValidCausalGuardEpsilon(double epsilon) {
-  if (std::isnan(epsilon) || epsilon > kMagnitudeCap)
-    throw std::invalid_argument(
-        "causal guard epsilon must be a non-NaN value <= 20 (kMagnitudeCap); "
-        "epsilon <= 0 turns the guard off — see MultiCobordism::setCausalGuard");
-}
-
-void MultiCobordism::setCausalGuard(double epsilon) {
-  requireValidCausalGuardEpsilon(epsilon);
-  causalGuardEpsilon_ = epsilon;
-}
-
-double MultiCobordism::boundedTrialRealPart(double trialRealPart, double epsilon) {
-  requireValidCausalGuardEpsilon(epsilon);
-  if (epsilon > 0.0) {
-    // Causal-aware guard ON — semantics: setCausalGuard in MultiCobordism.h (the
-    // authoritative statement). copysign(_, +0.0) gives the documented exactly-0 →
-    // +epsilon for free; a literal -0.0 trial would land at -epsilon (unreachable
-    // from stored lengths, noted for completeness). The epsilon <= kMagnitudeCap
-    // validation above is std::clamp's lo <= hi precondition.
-    return std::copysign(
-        std::clamp(std::abs(trialRealPart), epsilon, kMagnitudeCap), trialRealPart);
-  }
-  // Guard OFF (the default): the spacelike clamp, the pre-guard expression verbatim.
-  return std::min(std::max(trialRealPart, kDegeneracyFloor), kMagnitudeCap);
-}
-
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
                                                  double alpha0, double relTol) {
   auto edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
-  // Snapshot the guard epsilon ONCE per call: run_stage2's binding releases the GIL,
-  // so setCausalGuard can run concurrently from another Python thread — a mid-run
-  // change takes effect on the NEXT call, never on a partial trial sweep.
-  const double causalGuardEpsilon = causalGuardEpsilon_;
   auto fullObjective = [&]() {
     return beta * reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
   };
@@ -702,14 +671,12 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     bool objectiveImproved = false;
     for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-        complexd trialSquaredLength = squaredLengths(edgeIndex) -
-                                trialStepScale * descentDirection(edgeIndex);
-        // Bound the trial's real part — boundedTrialRealPart owns both families
-        // (guard OFF: the spacelike clamp; ON: the causal-aware band push-out);
-        // semantics: setCausalGuard in MultiCobordism.h. Im part untouched.
-        edges[edgeIndex]->setSquaredLength(complexd(
-            boundedTrialRealPart(trialSquaredLength.real(), causalGuardEpsilon),
-            trialSquaredLength.imag()));
+        // The trial is UNBOUNDED — fully Lorentzian, no clamp, no causal guard
+        // (semantics: runStage2 in MultiCobordism.h). Spacelike, timelike, and
+        // lightlike trials are all admissible; a trial the objective cannot
+        // evaluate scores +inf below and is backed off by the line search.
+        edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex) -
+                                trialStepScale * descentDirection(edgeIndex));
       }
       double trialObjective;
       try {
