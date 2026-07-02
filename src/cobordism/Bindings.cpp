@@ -977,7 +977,15 @@ and may only emerge. Convergence carries no answer-shaped gate: an attempt
 converges iff it is STATIONARY (stage 2 stopped on its stationarity test) and
 PERSISTENT (a continued evolve+relax pass leaves holes, b_k, and F stable).
 Everything physical is a post-hoc observable, including the singlet residual —
-a diagnostic for comparing against the canonical build's carried level.)doc")
+a diagnostic for comparing against the canonical build's carried level.
+
+The class also hosts the JOINT arm (#560, rung 1): the two-step event graph
+collapsed into ONE co-optimized node (joint_node / build_joint) — inputs = the
+Z3-orbit neutral triple, outputs = a baryon + antibaryon block pair — driven and
+judged exactly as build(). Exactly one variable then differs from Proton.build():
+the event graph (joint vs two-step). Microcausality lives in the move history
+(every accepted change is one gated local move), not in the boundary-block
+count, so the joint node is physically admissible (epic #559 decision log).)doc")
       .def(py::init<std::uint64_t, int, double, double, int, bool>(),
            py::arg("seed") = 0, py::arg("register_degree") = 3,
            py::arg("gamma") = 50.0, py::arg("input_weight") = 20.0,
@@ -990,6 +998,18 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            "Restart across seeds until an attempt is stationary AND persistent (no "
            "color tolerance, no minimum hole count); otherwise keep the lowest-F "
            "attempt. Same drive per node as Proton.build().")
+      .def("build_joint", &ProtonIngredients::buildJoint, py::arg("max_restarts") = 16,
+           py::arg("init_steps") = 180, py::arg("evolve_steps") = 60,
+           py::arg("stage1_candidate_moves") = 8, py::arg("stage1_patience") = 15,
+           py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 10,
+           py::arg("persist_rel_tol") = 0.05,
+           "The JOINT arm (#560): identical to build() — same per-node drive, same "
+           "stationarity + persistence convergence, same restart policy — except each "
+           "attempt drives ONE joint_node (restart i seeds it at seed + i). Extra "
+           "after-the-fact observables: baryon_residual/antibaryon_residual (per-"
+           "output-block singlet residuals); diquark_residual is NaN (no step A "
+           "exists). Mutually exclusive with build(): whichever runs first claims "
+           "the instance.")
       .def("recombination_node", &ProtonIngredients::recombinationNode,
            py::arg("seed"),
            "Step A verbatim: the composed canonical Proton's recombination_node.")
@@ -997,6 +1017,16 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            "Step B with nothing pinned: the same ideal diquark {1,w} + third quark "
            "{w*w} inputs on the same single Delta^4 seed as Proton.formation_node, "
            "but with an EMPTY output-target list — the final state emerges.")
+      .def("joint_node", &ProtonIngredients::jointNode, py::arg("seed"),
+           "The JOINT formation node (#560, rung 1), fresh, seeded, NOT run: inputs = "
+           "the Z3-orbit neutral triple {1,-1,0}, {0,1,-1}, {-1,0,1} at the Delta^4 "
+           "seed's v0,v1,v2; outputs = TWO localized blocks (the multi-output r_u "
+           "branch, as the 2->2 recombination) — the baryon {1,w,w*w} at v3 and the "
+           "antibaryon {1,conj(w),conj(w)^2} at v4. NOTE: the antibaryon target is a "
+           "component-permutation of the baryon's (conj(w) = w^2) and the block "
+           "residual is relabeling-invariant, so the two targets score identically as "
+           "multisets — the conjugation is carried by the block's location in the "
+           "emergent complex, never by the residual's value.")
       .def("converged", &ProtonIngredients::converged,
            "True iff the kept attempt was stationary AND persistent — never a "
            "statement about the singlet or the hole count.")
@@ -1018,11 +1048,23 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            "whole, read after the fact for comparison with the canonical build. It "
            "never steers or gates this build.")
       .def("input_residual", &ProtonIngredients::inputResidual,
-           "Step B's inputs-only r_U — the whole matter term of the emergent arm.")
+           "The kept node's full matter term r_U: after build() the inputs-only "
+           "residual (nothing pinned downstream there); after build_joint() it also "
+           "contains the two output-block terms.")
       .def("final_objective", &ProtonIngredients::finalObjective,
            "The kept attempt's final objective F.")
       .def("diquark_residual", &ProtonIngredients::diquarkResidual,
-           "Step A's r_U — reported exactly as Proton reports it.");
+           "Step A's r_U — reported exactly as Proton reports it. NaN after "
+           "build_joint(): the joint arm has no step A (never a stale zero).")
+      .def("baryon_residual", &ProtonIngredients::baryonResidual,
+           "The baryon output block's singlet residual (#560): its target {1,w,w*w} "
+           "scored against the block's OWN emergent sub-complex, read after the fact "
+           "exactly as the drive's r_u scored it. NaN unless build_joint() ran (the "
+           "two-step's step B has no localized output blocks).")
+      .def("antibaryon_residual", &ProtonIngredients::antibaryonResidual,
+           "The antibaryon output block's residual: its conjugate target against its "
+           "own sub-complex (the conjugation lives in the block's location, not the "
+           "residual's value — see joint_node). NaN unless build_joint() ran.");
 
   // ----- Gated surgical cone-out/cone-in (topology change, #460) -----
   py::class_<SurgicalCone>(m, "SurgicalCone",
