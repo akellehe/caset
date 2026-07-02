@@ -90,12 +90,6 @@ void EdgeList::remove(const EdgePtr &edge) noexcept {
   edge->liveIdx_ = UINT32_MAX;
 }
 
-void EdgeList::replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept {
-  remove(toRemove);
-  add(toAdd->getSource(), toAdd->getTarget(),
-      toAdd->getSquaredLength().real());
-}
-
 void EdgeList::rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp) {
   if (oldFp == newFp) return;
   auto it = fpToSlot_.find(oldFp);

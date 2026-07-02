@@ -650,6 +650,13 @@ class EigenstateSynthesis {
         bool electricOnly = true) const;
 
   private:
+    // The analytic r_U / r_psi gradient cores project the metric Hodge
+    // operator with laplacian(k).real() — lossless for k >= 1 (the metric L_k
+    // there is real symmetric) but silently the WRONG operator at k = 0,
+    // where L_0 consumes the full complex l^2 (#580/#581). Fail loudly until
+    // a complex k = 0 core exists. `who` names the calling core.
+    void requireGradientDegree(const char *who) const;
+
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
     // The Hodge Laplacian operator over the same complex. laplacian(k_)

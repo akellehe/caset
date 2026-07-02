@@ -1366,9 +1366,21 @@ double EigenstateSynthesis::periodGapForPeriods(
       targetPeriods);
 }
 
+void EigenstateSynthesis::requireGradientDegree(const char *who) const {
+  if (k_ == 0)
+    throw std::runtime_error(
+        std::string("EigenstateSynthesis::") + who +
+        ": the analytic gradient cores read laplacian(k).real(), which is "
+        "lossless for k >= 1 but the WRONG operator at k = 0 (L_0 consumes "
+        "the full complex l^2, so .real() silently truncates it — see #580). "
+        "The complex k = 0 gradient core is not implemented; construct the "
+        "synthesis at k >= 1 or use finite differences of residual().");
+}
+
 std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("periodGradientOverLoops");
   using Eigen::Index;
   using Eigen::MatrixXd;
   using Eigen::VectorXcd;
@@ -1568,6 +1580,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
 std::vector<double> EigenstateSynthesis::periodGradientGeneral(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("periodGradientGeneral");
   // Arbitrary-degree exact d r_U / d l^2 over the removed-(k+1)-cell holes. M = L_k,
   // the per-edge dL_k/dl^2 (HodgeLaplacian::laplacianGradient, on Simplex::volumeGradient)
   // through first-order eigenvector perturbation, period covector + leak from each
@@ -1721,6 +1734,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
 std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("periodGapForLoopsGradient");
   // The hard-pin sibling of periodGradientOverLoops (r_U): same first-order
   // eigenvector-perturbation setup (M = L1, harmonic split Un/Unn, the per-edge
   // low-rank dM, dUn), but the score is the period GAP r_psi = ||A c - t||^2 with
@@ -1925,6 +1939,7 @@ std::vector<double> EigenstateSynthesis::residualForLoopsGradient(
 std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("residualForPeriodsGradientGpu");
 #ifndef TESSERA_CUDA
   (void)holes;
   (void)targetPeriods;
