@@ -13,9 +13,17 @@
 #
 # Keep-policy for animations (disk-bounded): keep the GIF when the attempt ever showed
 # b3 >= 2 or >= 3 holes, or ended with >= 2 holes; any b3 >= 3 sighting is kept
-# unconditionally. Every attempt remains exactly reproducible from its recorded base
-# seed regardless (single-threaded determinism), so a discarded 1-hole GIF loses
-# nothing.
+# unconditionally.
+#
+# EVERY attempt also writes a GEOMETRY DUMP (geometry/seed_<base>_geometry.json): the
+# final complex itself — top cells in intrinsic vertex order, every edge's complex
+# squared length, per-vertex times — enough for Spacetime.fromCells to rebuild the
+# state without re-running anything. The dump is the attempt's ONLY faithful record:
+# the engine build is NOT process-deterministic (identical fresh processes diverge on
+# the same seed — measured, not hypothetical), so a base seed labels an attempt, it
+# does not reproduce it. Dumps are KB-scale (no disk cap), canonically ordered (same
+# state -> same bytes), and written only AFTER the attempt completes — the drive and
+# its RNG draws are untouched.
 import argparse
 import json
 import os
@@ -37,6 +45,7 @@ PERSIST_REL_TOL = 1e-9
 REGISTER_DEGREE = 3
 PROGRESS_BYTE_CAP = 50 * 1024 * 1024        # per worker
 GIF_BYTE_CAP = 5 * 1024 * 1024 * 1024       # global, across all workers
+GEOMETRY_SCHEMA = 1                         # bump on any dump-format change
 
 STEP_A_LABEL = "Step A — recombination (→ diquark {1, ω})"
 STEP_B_LABEL = "Step B — formation (nothing pinned — final state emerges)"
@@ -64,6 +73,41 @@ def gif_dir_full(gif_dir):
     total = sum(os.path.getsize(os.path.join(gif_dir, f))
                 for f in os.listdir(gif_dir) if f.endswith(".gif"))
     return total > GIF_BYTE_CAP
+
+
+def dump_geometry(st, path, meta):
+    """The attempt's faithful record: top cells in intrinsic vertex order, every
+    edge's complex squared length, and per-vertex times — enough for
+    Spacetime.fromCells to rebuild the exact state without re-running anything
+    (the build is not process-deterministic, so nothing else can). Reads state
+    only; canonically ordered so the same state always serializes to the same
+    bytes (each cell/edge keeps its intrinsic internal order — never sorted, per
+    the orientation convention — while the LISTS are sorted by vertex-set key);
+    atomic write."""
+    top = st.getTopSimplices()
+    cells = sorted(([int(v.getId()) for v in c.getVertices()] for c in top),
+                   key=sorted)
+    times = {}
+    for c in top:
+        for v in c.getVertices():
+            times[int(v.getId())] = float(v.getTime())
+    edges = sorted(([int(e.getSource().getId()), int(e.getTarget().getId()),
+                     e.getSquaredLength().real, e.getSquaredLength().imag]
+                    for e in st.getEdgeList().toVector()),
+                   key=lambda r: (min(r[0], r[1]), max(r[0], r[1])))
+    record = dict(meta)
+    record.update({
+        "schema": GEOMETRY_SCHEMA,
+        "dimensions": (len(cells[0]) - 1) if cells else 0,
+        "cells": cells,
+        "edges": edges,
+        "vertex_times": sorted(times.items()),
+    })
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(record, fh)
+    os.replace(tmp, path)
+    return path
 
 
 class AttemptState:
@@ -178,9 +222,9 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
     }
 
 
-def run_one(base, progress, args, frame_dir, gif_dir):
-    """Build the attempt's nodes, run it (recorded when --animate), apply the GIF
-    keep-policy, return the result record fields."""
+def run_one(base, progress, args, frame_dir, gif_dir, geom_dir):
+    """Build the attempt's nodes, run it (recorded when --animate), apply the
+    keep-policy (GIF + geometry dump), return the result record fields."""
     ingredients = cob.ProtonIngredients(seed=base)
     nodes = [(ingredients.recombination_node(base), STEP_A_LABEL),
              (ingredients.formation_node(base + 1), STEP_B_LABEL)]
@@ -198,8 +242,8 @@ def run_one(base, progress, args, frame_dir, gif_dir):
         if recorder:
             recorder.finish(None)
         raise
+    keep = (state.max_b3 >= 2 or result["holes"] >= 2 or state.max_holes >= 3)
     if recorder:
-        keep = (state.max_b3 >= 2 or result["holes"] >= 2 or state.max_holes >= 3)
         gif_path = None
         if keep and not gif_dir_full(gif_dir):
             tag = "CONVERGED" if result["converged"] else "unconverged"
@@ -207,6 +251,22 @@ def run_one(base, progress, args, frame_dir, gif_dir):
                 gif_dir,
                 f"seed_{base}_b3max{state.max_b3}_holes{result['holes']}_{tag}.gif")
         result["gif"] = recorder.finish(gif_path)
+    # EVERY attempt gets a geometry dump — the only faithful record (the build is
+    # not process-deterministic; the seed labels the attempt, it can't reproduce it).
+    try:
+        st = nodes[1][0].st
+        meta = {"base_seed": base, "max_b3": state.max_b3,
+                "max_holes": state.max_holes}
+        meta.update({k: result[k] for k in
+                     ("converged", "stationary", "persistent", "holes",
+                      "betti", "singlet", "F")})
+        meta["hole_cells"] = [list(h) for h in
+                              cob.MultiCobordism.emergent_holes(
+                                  st, REGISTER_DEGREE)]
+        result["geometry"] = dump_geometry(
+            st, os.path.join(geom_dir, f"seed_{base}_geometry.json"), meta)
+    except Exception as error:       # best-effort, like the recorder
+        result["geometry_error"] = repr(error)
     return result
 
 
@@ -222,8 +282,10 @@ def main():
 
     run_dir = os.path.dirname(os.path.abspath(args.out))
     gif_dir = os.path.join(run_dir, "animations")
+    geom_dir = os.path.join(run_dir, "geometry")
     frame_dir = os.path.join(run_dir, f"tmp_frames_w{args.worker}")
     os.makedirs(gif_dir, exist_ok=True)
+    os.makedirs(geom_dir, exist_ok=True)
 
     progress_path = args.out.replace(".jsonl", ".progress.jsonl")
     base = args.seed_base
@@ -260,7 +322,8 @@ def main():
             started = time.time()
             record = {"worker": args.worker, "base_seed": base}
             try:
-                record.update(run_one(base, progress, args, frame_dir, gif_dir))
+                record.update(run_one(base, progress, args, frame_dir, gif_dir,
+                                      geom_dir))
             except Exception as error:   # record and move on — the sweep must survive
                 record["error"] = repr(error)
             record["elapsed_s"] = round(time.time() - started, 1)

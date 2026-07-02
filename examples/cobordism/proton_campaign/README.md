@@ -30,46 +30,48 @@ the physics until its workers exit; deploys land at generation boundaries only.
   attempt: exact replay from its seed, verification against the recorded
   verdict (and geometry dump when present), then the ready observables.
 
-## Exact replay (the rebuild contract)
+## The rebuild contract: dumps, not replays
 
-Attempts are **bit-for-bit reproducible** from their recorded `base_seed`: a
-fresh single-threaded process running the same scripts against the same
-engine build reproduces the recorded snapshots exactly (verified: replayed
-campaign snapshots match `F` to all digits, plus `gradN2`, `rU`, `holes`,
-`b3`, `cells`, `edges`). The contract requires:
+The engine build is **not process-deterministic**: identical fresh single-
+threaded processes running the identical node construction and drive on the
+same seed can produce different complexes (measured: same seed, same calls,
+`F=272.5`/78 cells vs `F=81.0`/43 cells). Occasional bit-exact replays happen
+on stable paths, but they are luck, not a contract. A `base_seed` therefore
+**labels** an attempt; it cannot reproduce one.
 
-- the campaign worktree's editable engine build (its `.venv-build` python);
-- single-threaded numerics: `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-  MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1`;
-- the generation's own `worker.py` drive (this directory, for the generation
-  recorded in the provenance manifest).
-
-The geometry dumps exist so that an interesting find survives even a broken
-contract: they record the final complex itself, not a recipe for rebuilding it.
+The **geometry dump is the attempt's only faithful record**: `worker.py`
+writes one per attempt (`geometry/seed_<base>_geometry.json` — top cells in
+intrinsic vertex order, every edge's complex ℓ², per-vertex times), canonically
+ordered so the same state always serializes to the same bytes, written only
+after the attempt completes. `Spacetime.fromCells` rebuilds the exact final
+state from it in seconds; `analyze_attempt.py --replay` remains available as a
+fresh *sample* of a seed's attempt distribution (its verdict comparison is a
+divergence measurement, not a check).
 
 ## Provenance manifest
 
-Generation boundaries — a verdict replays only under the scripts of the
-generation that recorded it:
+Generation boundaries — which scripts *drove* which verdicts (the drive
+defines the physics of the recorded statistics; it cannot reproduce
+individual attempts, see above):
 
-| generation | window (MDT) | replayable | notes |
-|---|---|---|---|
-| pre-campaign | 2026-07-01 evening → 2026-07-02 08:57 | **no** (superseded scripts) | 16 verdicts: 15× b₃=1, 1× b₃=2; killed by the box crash |
-| campaign | launched 2026-07-02 06:44 (workers from 09:21) | **yes** (these bytes) | deadline 2026-08-01 06:44 MDT |
+| generation | window (MDT) | notes |
+|---|---|---|
+| pre-campaign | 2026-07-01 evening → 2026-07-02 08:57 | 16 verdicts: 15× b₃=1, 1× b₃=2; superseded scripts; killed by the box crash |
+| campaign | launched 2026-07-02 06:44 (workers from 09:21) | two-step drive, dump-less at launch; deadline 2026-08-01 06:44 MDT |
 
-sha256 of the frozen (= running campaign generation) scripts:
+sha256 of the campaign generation's scripts as launched:
 
 ```
-3641c06ca525b0cf43aa11cea42b092d709e531683c30fa64b1f63120bb522cf  worker.py   (as launched; before the geometry-dump addition)
+3641c06ca525b0cf43aa11cea42b092d709e531683c30fa64b1f63120bb522cf  worker.py   (as launched; before dumps-per-attempt)
 9d75f11d1d79103e50660b1ae362db623ce8c4d7dc6ba015a1c8aaf7e4e8929c  renderer.py
 198c263707aca4eeffffcbd2946378befbe3274824abc1b06a9599899994d13f  aggregate.py
 73474a87d000afddefee589ed39ce0156de00b836764e72afadb3793f0deec55  launch_campaign.sh
 ```
 
-The geometry-dump addition to `worker.py` executes only after an attempt
+The dumps-per-attempt addition to `worker.py` executes only after an attempt
 completes (it reads the final state; the drive and its RNG draws are
-untouched), so it does not open a new replay generation: seeds recorded by the
-as-launched bytes replay identically under the dump-enabled bytes.
+untouched), so deploying it mid-generation changes no attempt physics — it
+only starts recording what was previously lost.
 
 ## Analyzing an attempt
 
@@ -80,9 +82,10 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 BLIS_NUM_THREADS=1 \
     --seed <base_seed> --run-dir .overnight
 ```
 
-The analyzer replays the attempt (single-threaded; expect the attempt's
-original wall time), verifies the final state against the recorded verdict
-line and the geometry dump if one exists, runs the ready observables, and
-writes `analysis_seed_<base_seed>.json` into the run directory. Use
-`--skip-replay` to run the dump-only observables (no engine rebuild) on a
-recorded geometry dump.
+The analyzer rebuilds the attempt's final state from its geometry dump
+(seconds), verifies it against the dump's recorded metadata, runs the ready
+observables (color, geometry/curvature in both deficit channels, spectral
+dimension, deficit-angle Wilson loops), and writes
+`analysis_seed_<base_seed>.json` into the run directory. `--replay` re-runs
+the attempt with the frozen drive instead — a fresh sample of the seed's
+attempt distribution whose verdict comparison measures divergence.
