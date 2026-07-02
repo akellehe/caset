@@ -147,7 +147,13 @@ class ReggeSolver {
     [[nodiscard]] double gradientNorm2OverEdges(
         const std::vector<std::pair<std::uint64_t, std::uint64_t>> &edges) const;
 
-    /// Point-particle matter action: \f$S_{\text{matter}} = -M \sum_{e \in W} \sqrt{-\ell^2_e}\f$.
+    /// Point-particle matter action:
+    /// \f$S_{\text{matter}} = -M \sum_{e \in W,\ e\ \text{timelike}} \sqrt{-\mathrm{Re}\,\ell^2_e}\f$.
+    /// Causal character is the canonical ``Edge::isTimelike()`` (null edges
+    /// contribute 0); under the ordinary-Lorentzian convention (resident
+    /// \f$\ell^2\f$ real and signed — see ``Edge::setSquaredLength``, #581)
+    /// the Re basis is exact: \f$\sqrt{-\mathrm{Re}\,\ell^2} = \sqrt{-\ell^2}\f$.
+    /// Real return by construction.
     [[nodiscard]] double matterAction() const;
 
     /// Total action: \f$S = S_{\text{grav}} + S_{\text{matter}}\f$.

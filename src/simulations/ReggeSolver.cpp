@@ -330,9 +330,12 @@ double ReggeSolver::gradientNorm2OverEdges(
 }
 
 double ReggeSolver::matterAction() const {
-    // Point-particle action: S_matter = -M ∫ dτ
-    // Timelike edges (between slices) have ℓ² < 0; spacelike edges (within a
-    // slice) have ℓ² > 0.  Proper time = √(-ℓ²).
+    // Point-particle action: S_matter = -M ∫ dτ. Causal character comes from
+    // the canonical Edge::isTimelike() classifier (Im of the complex length),
+    // not a hand-rolled sign-of-Re test (#581). Under the ordinary-Lorentzian
+    // convention (resident ℓ² real and signed, Edge::setSquaredLength) the
+    // proper time of a timelike step is √(-Re ℓ²) = √(-ℓ²); null edges are
+    // not timelike and contribute nothing.
     double S = 0.0;
     for (const auto &wl : matter_.getWorldlines()) {
         for (std::size_t i = 0; i + 1 < wl.vertices.size(); ++i) {
@@ -343,9 +346,9 @@ double ReggeSolver::matterAction() const {
                 auto *other = (e->getSource()->getId() == v1->getId())
                               ? e->getTarget() : e->getSource();
                 if (other->getId() == v2->getId()) {
-                    double sq = e->getSquaredLength().real();
-                    if (sq < 0.0)  // timelike: ℓ² < 0
-                        S -= wl.mass * std::sqrt(-sq);
+                    if (e->isTimelike())
+                        S -= wl.mass *
+                             std::sqrt(-e->getSquaredLength().real());
                     break;
                 }
             }
