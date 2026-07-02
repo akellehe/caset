@@ -330,6 +330,9 @@ void ProtonIngredients::buildJoint(int maxRestarts, int initSteps, int evolveSte
       // seeding order).
       baryonResidual_ = outputBlockResidual(*node, 0);
       antibaryonResidual_ = outputBlockResidual(*node, 1);
+      // Keep the blocks themselves as the after-the-fact provenance behind those two
+      // residuals (region + target), so external readers can re-score them exactly.
+      outputBlocks_ = node->outputs();
     }
     if (ok) return;  // a stationary, persistent structure emerged — stop restarting
   }
@@ -402,6 +405,11 @@ double ProtonIngredients::baryonResidual() {
 double ProtonIngredients::antibaryonResidual() {
   ensureBuilt();
   return antibaryonResidual_;  // NaN unless buildJoint() ran (see the header note)
+}
+
+std::vector<MultiCobordism::BoundaryBlock> ProtonIngredients::outputBlocks() {
+  ensureBuilt();
+  return outputBlocks_;  // empty unless buildJoint() ran (see the header note)
 }
 
 }  // namespace tessera::cobordism

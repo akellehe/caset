@@ -1064,7 +1064,14 @@ count, so the joint node is physically admissible (epic #559 decision log).)doc"
       .def("antibaryon_residual", &ProtonIngredients::antibaryonResidual,
            "The antibaryon output block's residual: its conjugate target against its "
            "own sub-complex (the conjugation lives in the block's location, not the "
-           "residual's value — see joint_node). NaN unless build_joint() ran.");
+           "residual's value — see joint_node). NaN unless build_joint() ran.")
+      .def("output_blocks", &ProtonIngredients::outputBlocks,
+           "The kept attempt's output boundary blocks (MultiCobordismBlock: vertex "
+           "region + target) — the after-the-fact block PROVENANCE behind "
+           "baryon_residual/antibaryon_residual, so an external observable reader "
+           "can re-score the blocks exactly. Two blocks (baryon first, antibaryon "
+           "second) after build_joint(); EMPTY after the two-step build() (its step "
+           "B pins nothing downstream — never a stale pair).");
 
   // ----- Gated surgical cone-out/cone-in (topology change, #460) -----
   py::class_<SurgicalCone>(m, "SurgicalCone",

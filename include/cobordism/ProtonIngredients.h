@@ -10,14 +10,13 @@
 #include <memory>
 #include <vector>
 
+#include "cobordism/MultiCobordism.h"  // BoundaryBlock (the block-provenance read)
 #include "cobordism/Proton.h"
 
 namespace tessera::spacetime { class Spacetime; }
 
 namespace tessera::cobordism {
 using ::tessera::spacetime::Spacetime;
-
-class MultiCobordism;  // returned (seeded, not run) by the node factories below
 
 /// # ProtonIngredients
 ///
@@ -165,6 +164,13 @@ class ProtonIngredients {
   /// location, not the residual's value). NaN unless `buildJoint()` ran. Triggers
   /// `build()`.
   [[nodiscard]] double antibaryonResidual();
+  /// The kept attempt's output boundary blocks — the after-the-fact block PROVENANCE
+  /// (each block's emergent vertex region and its target), so an external observable
+  /// reader can re-score the blocks exactly as `baryonResidual()`/`antibaryonResidual()`
+  /// did. Two blocks (baryon first, antibaryon second — `jointNode`'s seeding order)
+  /// after `buildJoint()`; EMPTY after the two-step `build()` (its step B pins nothing
+  /// downstream, so there are no output blocks — never a stale pair). Triggers `build()`.
+  [[nodiscard]] std::vector<MultiCobordism::BoundaryBlock> outputBlocks();
 
  private:
   /// Lazily run `build()` with default parameters on first accessor use.
@@ -232,6 +238,9 @@ class ProtonIngredients {
   // header stays <limits>-free.
   double baryonResidual_;
   double antibaryonResidual_;
+  // The kept attempt's output blocks (buildJoint only; empty for the two-step) —
+  // the block provenance behind the residuals above, exposed via outputBlocks().
+  std::vector<MultiCobordism::BoundaryBlock> outputBlocks_;
 };
 
 }  // namespace tessera::cobordism
