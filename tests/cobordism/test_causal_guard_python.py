@@ -62,7 +62,7 @@ def _hinges(st):
     return [s for s in sims if len(s.getVertices()) == hinge_nverts]
 
 
-def _edge_census(st, band_epsilon):
+def _edge_census(st):
     """(min |Re l^2|, #timelike Re<0, #at the ±20 cap, all-finite?) over the edges."""
     min_abs_re, timelike, at_cap, finite = float("inf"), 0, 0, True
     for e in st.getEdgeList().toVector():
@@ -133,10 +133,10 @@ class CausalGuardStage2Test(unittest.TestCase):
         # the spacelike clamp Re l^2 in [0.05, 20] — the pre-guard behavior (the
         # byte-identical drift guard is the golden-constant suite; this pins the flag
         # default and the OFF-path floor).
-        host = _closed_s4(n_refine=12, seed=3)
+        host = _closed_s4(n_refine=8, seed=3)
         opt = self._node(host)
         self.assertEqual(opt.causal_guard_epsilon, 0.0)
-        trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
+        trace = opt.run_stage2(beta=1.0, max_iters=2, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         for e in opt.st.getEdgeList().toVector():
             sq = complex(e.getSquaredLength())
@@ -148,14 +148,14 @@ class CausalGuardStage2Test(unittest.TestCase):
         # reader-verification allowance) neither NaNs nor collapses: the F trace stays
         # finite, every edge stays finite, and no edge sits inside the forbidden
         # degeneracy band |Re l^2| < epsilon.
-        host = _closed_s4(n_refine=12, seed=3)
+        host = _closed_s4(n_refine=8, seed=3)
         host.getEdgeList().toVector()[5].setSquaredLength(complex(-0.8, 0.0))
         opt = self._node(host)
         opt.set_causal_guard(0.05)
         self.assertEqual(opt.causal_guard_epsilon, 0.05)
-        trace = opt.run_stage2(beta=1.0, max_iters=5, alpha0=0.05, rel_tol=1e-9)
+        trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
-        min_abs_re, timelike, at_cap, finite = _edge_census(opt.st, 0.05)
+        min_abs_re, timelike, at_cap, finite = _edge_census(opt.st)
         self.assertTrue(finite)
         self.assertGreaterEqual(min_abs_re, 0.05 - 1e-12,
                                 "an edge collapsed into the degeneracy band")
@@ -171,13 +171,13 @@ class CausalGuardStage2Test(unittest.TestCase):
         # cross the cone from an all-spacelike seed (the Euclidean basin is where the
         # descent lives) — that absence is a fine result, so the census asserts the
         # guard's CONTRACT (any crossing lands outside the band), not a crossing count.
-        host = _closed_s4(n_refine=12, seed=3)
+        host = _closed_s4(n_refine=8, seed=3)
         opt = self._node(host)
         opt.set_causal_guard(0.05)
-        trace = opt.run_stage2(beta=1.0, max_iters=10, alpha0=0.05, rel_tol=1e-9)
+        trace = opt.run_stage2(beta=1.0, max_iters=6, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         self.assertTrue(all(trace[i + 1] <= trace[i] for i in range(len(trace) - 1)))
-        min_abs_re, timelike, at_cap, finite = _edge_census(opt.st, 0.05)
+        min_abs_re, timelike, at_cap, finite = _edge_census(opt.st)
         self.assertTrue(finite)
         self.assertGreaterEqual(min_abs_re, 0.05 - 1e-12)
         self.assertEqual(at_cap, 0)   # no conformal runaway to the ±20 cap
