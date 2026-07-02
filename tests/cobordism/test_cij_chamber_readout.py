@@ -2,7 +2,7 @@
 # All rights reserved.
 """C_ij connected-correlator chamber readout (#564) — instrument regression + gates.
 
-Three layers:
+Four layers:
 
 * **Instrument (fast, load-bearing, pure NumPy).** `J² = 9/4 + 2·Σ ⟨S_i·S_j⟩` read through
   the joint two-hole reduced states must return EXACTLY ¾ / 7/4 / 15/4 on the hand-fed clean
@@ -11,21 +11,31 @@ Three layers:
   vanishes identically on every product state (the K-orbit floor) while carrying the whole
   −3/2 entangling shift on the proton eigenstate.
 
-* **The two routes' identities on a fixture.** The vertical route's C_ij is zero to machine
-  precision (a classical cochain's bilinear factorizes), the horizontal transport channel's
-  C_ij is zero identically (K-type frame alignment cannot entangle), and neither route's J²
-  reaches the proton ¾ — the quantitative gaps are the experiment's report
-  (`examples/cobordism/cij_chamber_readout.py`, PR table), not a test assertion.
+* **Route identities on a fixture.** The vertical route's C_ij is zero to machine precision
+  — the STRUCTURAL consequence of a separable reconstruction (a classical cochain's
+  bilinear pair read factorizes), asserted as the route's documented scope, not as a field
+  measurement. The horizontal route reports no C_ij at all (K-type transport measures
+  none), and its transports are genuine SO(3) rotations whose angles reconstruct its J²
+  exactly. Neither route's J² reaches the proton ¾ on the fixture — the ¾-exclusion; the
+  quantitative gaps are the experiment's report (PR table), not a test assertion.
 
-* **GAUGE / RELABEL gates.** Both routes' J² are invariant under a random per-cell SO(4)
-  rotation of the embedding and under a vertex-id relabeling (the joint field is pinned in
-  the orientation-canonical ε-signed convention, which is what makes the multi-hole carried
-  representative a label-free object).
+* **Register validation.** `register_holes` raises on a deficit (a holeless closed S⁴)
+  and warns on a surplus (`synthetic_b3_3` stores four holes) instead of silently slicing.
+
+* **GAUGE / RELABEL gates.** EVERY reported numeric channel of both routes — per-pair
+  angles and correlators included, not just J² — is invariant under a random per-cell
+  SO(4) rotation of the embedding (threaded through `MeshContext(gauge=...)`) and under a
+  vertex relabeling + cell-order shuffle with the holes re-derived on the relabeled
+  complex. The joint field is pinned in the orientation-canonical ε-signed convention
+  (`ChainComplex.endSignCovector`), which is what makes the multi-hole carried
+  representative a label-free object.
 """
 import importlib.util
+import math
 import os
 import sys
 import unittest
+import warnings
 
 import numpy as np
 import pytest
@@ -102,36 +112,96 @@ class InstrumentTest(unittest.TestCase):
             self.assertLessEqual(abs(d["j2"] - d["j2_disconnected"]), 1e-12)
 
 
-class TwoWaysFixtureTest(unittest.TestCase):
-    """The C_ij-two-ways identities on the synthetic b₃=3 fixture (the escape-hatch test)."""
+class RegisterSelectionTest(unittest.TestCase):
+    """`register_holes` validates the hole count instead of silently slicing."""
+
+    def test_deficit_raises(self):
+        # A closed S⁴ has no removed top cells — no register — and must raise, not slice.
+        import tessera as T
+        st = T.Spacetime(T.Metric(True, T.Signature(4, T.Lorentzian)), T.CDT, 1.0, 1.0,
+                         T.PREFERRED, T.SimplexBoundarySphere(4))
+        st.build()
+        for e in st.getEdgeList().toVector():
+            e.setSquaredLength(1.0)
+        with self.assertRaises(ValueError):
+            cij.register_holes(st)
+
+    def test_surplus_warns_and_is_explicit(self):
+        # synthetic_b3_3 stores FOUR emergent holes (b₃ = 4 − 1 = 3): the register read is
+        # a sub-register, and the selection must say so.
+        with warnings.catch_warnings(record=True) as wlog:
+            warnings.simplefilter("always")
+            _cells, _edges, st, holes = cij.load_fixture("synthetic_b3_3.json")
+        self.assertEqual(len(holes), 3)
+        self.assertTrue(any("register selection" in str(w.message) for w in wlog))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            selected, dropped = cij.register_holes(st)
+        self.assertEqual(selected, holes)
+        self.assertEqual(len(dropped), 1)
+
+
+class TwoRoutesFixtureTest(unittest.TestCase):
+    """The two routes' identities on the synthetic b₃=3 fixture."""
 
     @classmethod
     def setUpClass(cls):
-        cls.cells, cls.edges, cls.st, cls.holes = cij.load_fixture("synthetic_b3_3.json")
-        cls.out = cij.two_ways(cls.st, cls.holes)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cls.cells, cls.edges, cls.st, cls.holes = cij.load_fixture(
+                "synthetic_b3_3.json")
+            cls.out = cij.two_ways(cls.st, cls.holes)
 
-    def test_vertical_cij_is_zero_machine_precision(self):
-        # The reconstructed joint two-hole reduced states of a classical cochain factorize
-        # (rank-1 bilinear => rho_ij = rho_i (x) rho_j), so the vertical C_ij vanishes.
+    def test_vertical_cij_is_the_structural_zero(self):
+        # The separable reconstruction's C_ij vanishes at machine precision — the
+        # documented STRUCTURAL scope of the route (a classical cochain's bilinear pair
+        # read factorizes: rank-1 => rho_ij = rho_i (x) rho_j), not a field measurement.
         vert = self.out["vertical"]
         self.assertIsNotNone(vert)
         for p in _PAIR_KEYS:
             self.assertLessEqual(abs(vert["C_ij"][p]), 1e-12)
 
-    def test_horizontal_transport_cij_is_zero(self):
-        # K-type frame transport cannot entangle: the transport channel's connected part
-        # is identically zero (Claim 1 of cartan_weyl_gluon.tex).
+    def test_horizontal_reports_no_cij(self):
+        # The honest scoping is part of the contract: the horizontal route measures
+        # Wilson-line angles only and must NOT report a C_ij (K-type transport measures
+        # none); its color block is labeled a reference, carrying only the pinned-input
+        # phases and the carry residual.
         horiz = self.out["horizontal"]
         self.assertIsNotNone(horiz)
+        self.assertNotIn("C_ij", horiz)
+        self.assertEqual(set(horiz["color_reference"]), {"phase_deg", "carry_residual"})
+
+    def test_transport_channel_is_a_genuine_rotation_measurement(self):
+        # The Wilson lines are genuine Spin(4) transports: unitary, covering an SO(4)
+        # vector rotation (orthogonal, det +1 — break facet_transport/rotation_to_spin
+        # and this fails). The reported angles are nontrivial, the route's J² is exactly
+        # its own angle reconstruction 9/4 + (1/2)·Σ cos θ, and the reported per-pair
+        # axial_mixing equals its definition (max|MᵀM − I| of the diagonal-spin
+        # projection — the honest measure of how far each projection is from SO(3)).
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ctx = cij.MeshContext(self.st, self.holes)
+        horiz = self.out["horizontal"]
+        recon = 2.25
         for p in _PAIR_KEYS:
-            self.assertEqual(horiz["C_ij"][p], 0.0)
+            W = ctx.line(*p)
+            self.assertLessEqual(np.max(np.abs(W.conj().T @ W - np.eye(4))), 1e-9)
+            R4 = cij.transport_so4(W)
+            self.assertLessEqual(np.max(np.abs(R4.T @ R4 - np.eye(4))), 1e-9)
+            self.assertLessEqual(abs(np.linalg.det(R4) - 1.0), 1e-9)
+            theta = math.radians(horiz["theta_deg"][p])
+            self.assertGreater(theta, 0.0)
+            self.assertLessEqual(theta, math.pi + 1e-12)
+            recon += 0.5 * math.cos(theta)
+            self.assertLessEqual(abs(horiz["axial_mixing"][p] - cij.axial_mixing(W)),
+                                 1e-12)
+        self.assertLessEqual(abs(horiz["j2"] - recon), 1e-9)
 
     def test_neither_route_reaches_three_quarters(self):
-        # The decisive escape-hatch identity on this fixture: no route lands on the
-        # entangled proton 3/4 (the gaps are reported by the example / PR table).
+        # The 3/4-exclusion on this fixture: no route lands on the entangled proton value
+        # (the quantitative gaps are reported by the example / PR table).
         self.assertFalse(self.out["reaches_proton"]["vertical"])
         self.assertFalse(self.out["reaches_proton"]["horizontal"])
-        self.assertFalse(self.out["reaches_proton"]["horizontal_color"])
 
     def test_reads_are_sane(self):
         # Finite, and the vertical J² sits in the three-spin-1/2 product band [3/2, 15/4]
@@ -141,26 +211,51 @@ class TwoWaysFixtureTest(unittest.TestCase):
         self.assertGreaterEqual(v["j2"], 1.5 - 1e-9)
         self.assertLessEqual(v["j2"], 3.75 + 1e-9)
         # the carried register certifies the pin (the emergence certificate)
-        self.assertLessEqual(h["carry_residual"], 1e-9)
+        self.assertLessEqual(h["color_reference"]["carry_residual"], 1e-9)
 
 
 class GatesTest(unittest.TestCase):
-    """GAUGE + RELABEL invariance of both routes' J² on one fixture — machine precision."""
+    """GAUGE + RELABEL over EVERY reported channel of both routes, on one fixture."""
 
     @classmethod
     def setUpClass(cls):
-        cls.cells, cls.edges, cls.st, cls.holes = cij.load_fixture("synthetic_b3_3.json")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cls.cells, cls.edges, cls.st, cls.holes = cij.load_fixture(
+                "synthetic_b3_3.json")
 
     def test_gauge_gate(self):
-        for read in (cij.vertical_read, cij.horizontal_read):
-            self.assertLessEqual(cij.gauge_gate(read, self.st, self.holes), 1e-8,
-                                 read.__name__)
+        # Random per-cell SO(4) rotations threaded through MeshContext(gauge=...): every
+        # reported channel (per-pair values included) must be invariant.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for read in (cij.vertical_read, cij.horizontal_read):
+                self.assertLessEqual(cij.gauge_gate(read, self.st, self.holes), 1e-8,
+                                     read.__name__)
 
     def test_relabel_gate(self):
-        for read in (cij.vertical_read, cij.horizontal_read):
-            self.assertLessEqual(
-                cij.relabel_gate(read, self.cells, self.edges, self.holes), 1e-8,
-                read.__name__)
+        # Vertex relabeling + cell-order shuffle, holes re-derived on the relabeled
+        # complex: every reported channel must be invariant.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for read in (cij.vertical_read, cij.horizontal_read):
+                self.assertLessEqual(
+                    cij.relabel_gate(read, self.cells, self.edges, self.holes), 1e-8,
+                    read.__name__)
+
+    def test_report_delta_flags_a_perturbed_channel(self):
+        # The gate metric itself must see every channel: perturb one per-pair leaf and
+        # one nested color leaf and require report_delta to report exactly that size.
+        import copy
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            base = cij.horizontal_read(self.st, self.holes)
+        mod = copy.deepcopy(base)
+        mod["theta_deg"][(0, 2)] += 1e-3
+        self.assertGreaterEqual(cij.report_delta(base, mod), 1e-3 - 1e-12)
+        mod = copy.deepcopy(base)
+        mod["color_reference"]["carry_residual"] += 5e-4
+        self.assertGreaterEqual(cij.report_delta(base, mod), 5e-4 - 1e-12)
 
 
 class EmergentReadTest(unittest.TestCase):
@@ -177,11 +272,12 @@ class EmergentReadTest(unittest.TestCase):
             # separable reconstructions live in the three-spin-1/2 product band
             self.assertGreaterEqual(rep["j2"], 1.5 - 1e-9)
             self.assertLessEqual(rep["j2"], 3.75 + 1e-9)
-            # and their C_ij vanish (the classical bilinear factorizes)
+            # and their C_ij vanish (the structural separable-by-construction zero)
             for pair in _PAIR_KEYS:
                 self.assertLessEqual(abs(rep["C_ij"][pair]), 1e-12)
-        # whether the joint read moved below the product read is REPORTED (PR table), never
-        # asserted — the honest outcome is the experiment's result, not a test invariant.
+        # whether the joint read moved below the product read is REPORTED (PR table),
+        # never asserted — the honest outcome is the experiment's result, not a test
+        # invariant.
 
 
 if __name__ == "__main__":
