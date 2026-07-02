@@ -658,6 +658,22 @@ std::vector<double> Simplex::cofactorMatrix(
     return C;
 }
 
+double Simplex::realSquaredLengthChecked(const EdgePtr &e) {
+    const std::complex<double> sq = e->getSquaredLength();
+    if (std::abs(sq.imag()) > kResidentImTolerance) {
+        throw std::domain_error(
+            "Simplex geometry: edge (" +
+            std::to_string(e->getSource()->getId()) + ", " +
+            std::to_string(e->getTarget()->getId()) +
+            ") carries resident Im l^2 = " + std::to_string(sq.imag()) +
+            "; the ordinary-Lorentzian convention requires real signed l^2 — "
+            "resident complex lengths are UNSUPPORTED by the geometry stack "
+            "(Picard–Lefschetz deferred; see #580/#581). Wick-rotated (|l^2|) "
+            "paths remain Im-tolerant.");
+    }
+    return sq.real();
+}
+
 std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
     int dPlus1 = static_cast<int>(vertices.size());
     int d = dPlus1 - 1;
@@ -665,12 +681,13 @@ std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
 
     // Squared-distance lookup. Honor the signed l^2 so the Lorentzian sign of
     // timelike edges survives into G; wickRotate takes |l^2| (Euclidean/CDT).
+    // The non-Wick read fails loudly on resident Im l^2 (#581).
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getSquaredLength().real();
+                               : realSquaredLengthChecked(e);
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -693,12 +710,13 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
     if (dPlus1 < 1) return {};
 
     // Squared-distance lookup; signed by default, |l^2| under wickRotate.
+    // The non-Wick read fails loudly on resident Im l^2 (#581).
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getSquaredLength().real();
+                               : realSquaredLengthChecked(e);
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -733,12 +751,13 @@ std::vector<double> Simplex::cayleyMengerCanonical(
     for (int i = 0; i < dPlus1; ++i)
         pos1[sorted[static_cast<std::size_t>(i)]->getId()] = i + 1;  // border-offset
 
+    // Non-Wick reads fail loudly on resident Im l^2 (#581).
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getSquaredLength().real();
+                               : realSquaredLengthChecked(e);
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -1182,18 +1201,13 @@ void Simplex::assertSpacelikeAdmissible(double tol) const {
     if (n < 2) return;                        // trivially admissible
     const int d = n - 1;
 
-    // Skip simplices that contain any null/timelike (worldline) edge: their
-    // admissibility is Lorentzian, not the spacelike triangle inequalities. The
-    // Cayley-Menger bordered matrix carries the squared edge lengths in its
-    // lower-right (d+1)x(d+1) block, offset (1, 1) of the (d+2)x(d+2) array.
-    const std::vector<double> cm = cayleyMengerMatrix(/*wickRotate=*/false);
-    const int mm = n + 1;  // CM is (d+2) x (d+2)
-    for (int a = 0; a < n; ++a) {
-        for (int b = a + 1; b < n; ++b) {
-            const double s = cm[static_cast<std::size_t>(1 + a) * mm + (1 + b)];
-            if (s <= tol) return;  // null/timelike edge → not a spacelike cell
-        }
-    }
+    // Skip simplices that contain any non-spacelike (null/timelike/worldline)
+    // edge: their admissibility is Lorentzian, not the spacelike triangle
+    // inequalities. Causal character is the canonical Edge classification
+    // (Edge::isSpacelike, Im of the complex length), not a hand-rolled
+    // sign-of-l^2 test (#581).
+    for (const auto &e : edges)
+        if (!e->isSpacelike()) return;
 
     // All edges spacelike: the Gram matrix must be positive-definite. Check via
     // Sylvester's criterion (every leading principal minor > 0) so the test

@@ -248,6 +248,21 @@ class Simplex {
     std::uint64_t hash() const noexcept;
 
     // ==================== Geometry ====================
+    //
+    // Ordinary-Lorentzian convention (#580/#581): the geometry stack consumes
+    // REAL, SIGNED resident squared lengths (spacelike l^2 > 0, timelike
+    // l^2 < 0, null 0). A resident Im l^2 != 0 (an analytically continued /
+    // Picard-Lefschetz saddle length) is UNSUPPORTED here: the non-Wick
+    // entry points below (gramMatrix / cayleyMengerMatrix /
+    // cayleyMengerCanonical, hence volume, dihedral and deficit angles, dual
+    // volumes and the dual Regge action) throw std::domain_error rather than
+    // silently projecting it away. The Wick-rotated (|l^2|) paths remain
+    // Im-tolerant by construction.
+
+    /// Tolerance above which a resident |Im l^2| is treated as a genuine
+    /// analytic continuation (and rejected by the non-Wick geometry): float
+    /// noise stays below it.
+    static constexpr double kResidentImTolerance = 1e-12;
 
     /// Gram matrix of this simplex from its edge lengths.
     /// Returns a flat (d x d) row-major matrix where d = size() - 1.
@@ -260,6 +275,9 @@ class Simplex {
     /// ``wickRotate=true`` for the Euclidean/CDT convention that takes |l^2|
     /// on every edge (det(G) > 0 for a valid cell). For a purely spacelike
     /// (all l^2 > 0) simplex the two agree, so the toggle is a no-op there.
+    /// Non-Wick calls throw ``std::domain_error`` on a resident
+    /// ``|Im l^2| > kResidentImTolerance`` (the ordinary-Lorentzian
+    /// convention above).
     [[nodiscard]] std::vector<double> gramMatrix(bool wickRotate = false) const;
 
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
@@ -356,6 +374,13 @@ class Simplex {
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
     /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``
     /// selects signed (default) vs. |l^2| (see ``gramMatrix``).
+    ///
+    /// **Lorentzian note (#581):** on the signed (non-Wick) default a
+    /// triangle whose Heron radicand is non-positive — every timelike
+    /// (negative-content) triangle, e.g. the mixed-causal hinge of a CDT
+    /// (4,1) cell — returns **0**, not an imaginary area: this method reports
+    /// only real spacelike content. Use ``volume()`` for the signed
+    /// (signature-recording) content of a Lorentzian cell.
     [[nodiscard]] double area(bool wickRotate = false) const;
 
     /// Signed d-content (volume) of this simplex on the honest,
@@ -470,6 +495,14 @@ class Simplex {
     /// Cofactor matrix of a square matrix (flat row-major, size n x n).
     [[nodiscard]] static std::vector<double> cofactorMatrix(
         const std::vector<double> &M, int n);
+
+    /// The fail-loud non-Wick squared-length read (#581): returns
+    /// ``Re(l^2)`` after asserting the edge honors the ordinary-Lorentzian
+    /// convention, throwing ``std::domain_error`` (naming the edge's vertex
+    /// ids) when ``|Im l^2| > kResidentImTolerance``. The single guard the
+    /// non-Wick geometry entry points (``gramMatrix`` /
+    /// ``cayleyMengerMatrix`` / ``cayleyMengerCanonical``) share.
+    [[nodiscard]] static double realSquaredLengthChecked(const EdgePtr &e);
 
     // ==================== Computational & Utility Methods ====================
     template<typename T> T binomial(unsigned n, unsigned k) const;
