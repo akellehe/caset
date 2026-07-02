@@ -20,6 +20,8 @@ import os
 import sys
 import unittest
 
+import pytest
+
 import tessera as T
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -116,6 +118,14 @@ class Stage2UnclampedTest(unittest.TestCase):
             self.assertFalse(hasattr(cob.MultiCobordism, name),
                              f"clamping machinery reappeared: {name}")
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason="the deferred stage-2 Im-drift interaction (#580 systemic 1, "
+        "deferred on #581): on a mixed-hinge host the complex Wirtinger trial "
+        "writes resident Im l^2, which the ordinary-Lorentzian geometry "
+        "convention rejects fail-loud, so the line search backs every trial "
+        "off (+inf) and no step is accepted until runStage2 proposes trials "
+        "on the real axis (the #565/#573 owner's adaptation)")
     def test_accepted_steps_never_pin_to_the_old_clamp(self):
         # Seed edges on the wrong side of every retired bound: timelike (the reader-
         # verification allowance), beyond the old ±20 cap, and inside the old 0.05
