@@ -672,9 +672,26 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
         complexd trialSquaredLength = squaredLengths(edgeIndex) -
                                 trialStepScale * descentDirection(edgeIndex);
-        double boundedRealPart =
-            std::min(std::max(trialSquaredLength.real(), 0.05),
-                     20.0);  // bound the real part
+        double boundedRealPart;
+        if (causalGuardEpsilon_ > 0.0) {
+          // Causal-aware degeneracy guard (#565): a trial Re ℓ² is admissible on
+          // EITHER side of the light cone; only the degeneracy band |Re ℓ²| < ε is
+          // forbidden — push it out to ±ε preserving the trial's sign (a trial moving
+          // from + toward 0 lands at +ε, one that crossed into Re ℓ² < 0 lands at −ε;
+          // exactly 0 lands at +ε) — with the symmetric magnitude cap |Re ℓ²| ≤ 20.
+          boundedRealPart = trialSquaredLength.real();
+          const double coneSide = boundedRealPart < 0.0 ? -1.0 : 1.0;
+          if (std::abs(boundedRealPart) < causalGuardEpsilon_)
+            boundedRealPart = coneSide * causalGuardEpsilon_;
+          else if (std::abs(boundedRealPart) > 20.0)
+            boundedRealPart = coneSide * 20.0;
+        } else {
+          // Guard OFF (the default): the spacelike clamp — trial Re ℓ² bounded to
+          // [0.05, 20], forbidding the timelike half-line entirely.
+          boundedRealPart =
+              std::min(std::max(trialSquaredLength.real(), 0.05),
+                       20.0);  // bound the real part
+        }
         edges[edgeIndex]->setSquaredLength(
             complexd(boundedRealPart, trialSquaredLength.imag()));
       }

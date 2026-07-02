@@ -134,6 +134,24 @@ class MultiCobordism {
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05, double relTol = 1e-9);
 
+  /// Causal-aware degeneracy guard on `runStage2`'s per-edge trial bound (#565, from
+  /// the #541 investigation). OFF by default (`epsilon <= 0`): every trial `Re ℓ²` is
+  /// clamped to the spacelike interval `[0.05, 20]` — exactly the pre-guard behavior,
+  /// so the canonical Proton build is untouched. ON (`epsilon > 0`): a trial `Re ℓ²`
+  /// is admissible on EITHER side of the light cone; only the degeneracy band
+  /// `|Re ℓ²| < epsilon` is forbidden. A trial inside the band is pushed out to
+  /// `±epsilon` preserving the trial's sign — a trial moving from + toward 0 lands at
+  /// `+epsilon`, one that crossed into `Re ℓ² < 0` keeps its negative value (or lands
+  /// at `-epsilon` if inside the band); exactly 0 lands at `+epsilon`. The magnitude
+  /// cap becomes the symmetric `|Re ℓ²| <= 20`. `Im ℓ²` handling is unchanged in both
+  /// modes. Epic #559's rule: NO timelike initialization — the guard never seeds
+  /// causal content, it only leaves the timelike half-line admissible so causal
+  /// content may EMERGE from the dynamics (its absence is equally a finding).
+  void setCausalGuard(double epsilon) { causalGuardEpsilon_ = epsilon; }
+  /// The causal guard band half-width `epsilon`; `<= 0` (the default `0`) means the
+  /// guard is OFF and `runStage2` keeps the spacelike clamp. See `setCausalGuard`.
+  [[nodiscard]] double causalGuardEpsilon() const { return causalGuardEpsilon_; }
+
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
   /// through the engine, not re-implemented by each consumer.
@@ -287,6 +305,10 @@ class MultiCobordism {
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   double convergenceTolerance_ = 1e-9;
+  /// Half-width of the light-cone degeneracy band `|Re ℓ²| < ε` that `runStage2`'s
+  /// causal-aware guard forbids; `<= 0` (the default) keeps the guard OFF and the
+  /// spacelike clamp `[0.05, 20]` in force. See setCausalGuard.
+  double causalGuardEpsilon_ = 0.0;
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
   bool lastStage2Stationary_ = false;
