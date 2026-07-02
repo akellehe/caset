@@ -330,9 +330,12 @@ double ReggeSolver::gradientNorm2OverEdges(
 }
 
 double ReggeSolver::matterAction() const {
-    // Point-particle action: S_matter = -M ∫ dτ
-    // Timelike edges (between slices) have ℓ² < 0; spacelike edges (within a
-    // slice) have ℓ² > 0.  Proper time = √(-ℓ²).
+    // Point-particle action: S_matter = -M ∫ dτ. Causal character comes from
+    // the canonical Edge::isTimelike() classifier (Im of the complex length),
+    // not a hand-rolled sign-of-Re test (#581). Under the ordinary-Lorentzian
+    // convention (resident ℓ² real and signed, Edge::setSquaredLength) the
+    // proper time of a timelike step is √(-Re ℓ²) = √(-ℓ²); null edges are
+    // not timelike and contribute nothing.
     double S = 0.0;
     for (const auto &wl : matter_.getWorldlines()) {
         for (std::size_t i = 0; i + 1 < wl.vertices.size(); ++i) {
@@ -343,9 +346,9 @@ double ReggeSolver::matterAction() const {
                 auto *other = (e->getSource()->getId() == v1->getId())
                               ? e->getTarget() : e->getSource();
                 if (other->getId() == v2->getId()) {
-                    double sq = e->getSquaredLength().real();
-                    if (sq < 0.0)  // timelike: ℓ² < 0
-                        S -= wl.mass * std::sqrt(-sq);
+                    if (e->isTimelike())
+                        S -= wl.mass *
+                             std::sqrt(-e->getSquaredLength().real());
                     break;
                 }
             }
@@ -421,6 +424,12 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
     std::vector<std::vector<cd>> partials(
         static_cast<std::size_t>(nThreads), std::vector<cd>(E, cd(0.0, 0.0)));
 
+    // An exception may not escape an OpenMP region (std::terminate, taking the
+    // whole process). The hinge geometry can throw — e.g. the #581 resident-Im
+    // guard firing on a stage-2 Wirtinger trial — so capture the first
+    // exception and rethrow it after the join: callers (the stage-2 line
+    // search) treat an inevaluable trial as +inf and back off.
+    std::exception_ptr pending = nullptr;
     #pragma omp parallel
     {
 #ifdef _OPENMP
@@ -431,19 +440,25 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
         std::vector<cd> &gLocal = partials[static_cast<std::size_t>(tid)];
         #pragma omp for schedule(static)
         for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
-            const auto &h = hinges[static_cast<std::size_t>(hi)];
-            const cd eps = h->lorentzianDeficitAngle();
-            const double dv = h->dualVolume();
-            for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
-                const auto it = eidx.find(e);
-                if (it != eidx.end()) gLocal[it->second] += dv * dEps;
-            }
-            for (const auto &[e, dDv] : h->dualVolumeGradient()) {
-                const auto it = eidx.find(e);
-                if (it != eidx.end()) gLocal[it->second] += dDv * eps;
+            try {
+                const auto &h = hinges[static_cast<std::size_t>(hi)];
+                const cd eps = h->lorentzianDeficitAngle();
+                const double dv = h->dualVolume();
+                for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
+                    const auto it = eidx.find(e);
+                    if (it != eidx.end()) gLocal[it->second] += dv * dEps;
+                }
+                for (const auto &[e, dDv] : h->dualVolumeGradient()) {
+                    const auto it = eidx.find(e);
+                    if (it != eidx.end()) gLocal[it->second] += dDv * eps;
+                }
+            } catch (...) {
+                #pragma omp critical(tessera_regge_grad_eptr)
+                if (!pending) pending = std::current_exception();
             }
         }
     }
+    if (pending) std::rethrow_exception(pending);
 
     std::vector<cd> g(E, cd(0.0, 0.0));
     for (const auto &p : partials)
@@ -480,6 +495,8 @@ ReggeSolver::actionHessianExact() const {
         static_cast<std::size_t>(nThreads),
         std::vector<std::vector<cd>>(E, std::vector<cd>(E, cd(0.0, 0.0))));
 
+    // Same OpenMP exception discipline as actionGradientExact (#581).
+    std::exception_ptr pending = nullptr;
     #pragma omp parallel
     {
 #ifdef _OPENMP
@@ -490,11 +507,18 @@ ReggeSolver::actionHessianExact() const {
         std::vector<std::vector<cd>> &Hloc =
             partials[static_cast<std::size_t>(tid)];
         #pragma omp for schedule(static)
-        for (std::ptrdiff_t hi = 0; hi < nH; ++hi)
-            for (const auto &[i, j, term] :
-                 hingeHessianEntries(hinges[static_cast<std::size_t>(hi)], eidx))
-                Hloc[i][j] += term;
+        for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
+            try {
+                for (const auto &[i, j, term] : hingeHessianEntries(
+                         hinges[static_cast<std::size_t>(hi)], eidx))
+                    Hloc[i][j] += term;
+            } catch (...) {
+                #pragma omp critical(tessera_regge_hess_eptr)
+                if (!pending) pending = std::current_exception();
+            }
+        }
     }
+    if (pending) std::rethrow_exception(pending);
 
     std::vector<std::vector<cd>> H(E, std::vector<cd>(E, cd(0.0, 0.0)));
     for (const auto &P : partials)
@@ -571,6 +595,8 @@ ReggeSolver::actionHessianExactSparse() const {
 #endif
     std::vector<std::vector<Trip>> partials(static_cast<std::size_t>(nThreads));
 
+    // Same OpenMP exception discipline as actionGradientExact (#581).
+    std::exception_ptr pending = nullptr;
     #pragma omp parallel
     {
 #ifdef _OPENMP
@@ -580,11 +606,19 @@ ReggeSolver::actionHessianExactSparse() const {
 #endif
         std::vector<Trip> &local = partials[static_cast<std::size_t>(tid)];
         #pragma omp for schedule(static)
-        for (std::ptrdiff_t hi = 0; hi < nH; ++hi)
-            for (const auto &[i, j, term] :
-                 hingeHessianEntries(hinges[static_cast<std::size_t>(hi)], eidx))
-                local.emplace_back(static_cast<int>(i), static_cast<int>(j), term);
+        for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
+            try {
+                for (const auto &[i, j, term] : hingeHessianEntries(
+                         hinges[static_cast<std::size_t>(hi)], eidx))
+                    local.emplace_back(static_cast<int>(i),
+                                       static_cast<int>(j), term);
+            } catch (...) {
+                #pragma omp critical(tessera_regge_sparse_eptr)
+                if (!pending) pending = std::current_exception();
+            }
+        }
     }
+    if (pending) std::rethrow_exception(pending);
 
     std::vector<Trip> triplets;
     std::size_t total = 0;

@@ -391,10 +391,12 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "content).")
       .def("lorentzianDihedralAngle", &Simplex::lorentzianDihedralAngle,
            py::arg("hinge"),
-           "Complex Lorentzian (Sorkin) dihedral angle at the hinge: real for "
-           "an ordinary wedge, complex (imaginary part = boost rapidity) for a "
-           "timelike normal plane. Unlike dihedralAngle it is not clamped/Wick-"
-           "rotated, so boosts survive.")
+           "Complex Lorentzian (Sorkin) dihedral angle at the hinge — the full "
+           "m in {0,1,2} structure (#581): real for an ordinary wedge, complex "
+           "(imaginary part = boost rapidity) for a same-character wedge in "
+           "the boost regime, and pi/2 - i*asinh(.) for a wedge CROSSING the "
+           "light cone (one facet direction spacelike, one timelike). Unlike "
+           "dihedralAngle it is not clamped/Wick-rotated, so boosts survive.")
       .def("lorentzianDeficitAngle", &Simplex::lorentzianDeficitAngle,
            "Complex Lorentzian deficit 2π − Σ lorentzianDihedralAngle over the "
            "top cells at this hinge; real for an all-spacelike neighbourhood, "

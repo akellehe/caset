@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -651,6 +652,10 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
          "attr.type=\"int\"/>\n"
       << "  <key id=\"sq_length\" for=\"edge\" attr.name=\"squared_length\" "
          "attr.type=\"double\"/>\n"
+      << "  <key id=\"sq_length_im\" for=\"edge\" "
+         "attr.name=\"squared_length_im\" attr.type=\"double\"/>\n"
+      << "  <key id=\"phase\" for=\"edge\" attr.name=\"phase\" "
+         "attr.type=\"double\"/>\n"
       << "  <key id=\"timelike\" for=\"edge\" attr.name=\"timelike\" "
          "attr.type=\"boolean\"/>\n"
       << "  <graph id=\"spacetime\" edgedefault=\"undirected\">\n";
@@ -664,13 +669,18 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
 
     for (std::size_t i = 0; i < edges.size(); ++i) {
         auto *e = edges[i];
-        double sq = e->getSquaredLength().real();
+        // Full complex l^2 + U(1) phase; causal character from the canonical
+        // Edge::isTimelike(), not the superseded sign-of-Re test (#581). The
+        // Re key keeps its name for compatibility with existing consumers.
+        const std::complex<double> sq = e->getSquaredLength();
         f << "    <edge id=\"e" << i << "\" source=\""
           << e->getSource()->getId() << "\" target=\""
           << e->getTarget()->getId() << "\">\n"
-          << "      <data key=\"sq_length\">" << sq << "</data>\n"
+          << "      <data key=\"sq_length\">" << sq.real() << "</data>\n"
+          << "      <data key=\"sq_length_im\">" << sq.imag() << "</data>\n"
+          << "      <data key=\"phase\">" << e->getPhase() << "</data>\n"
           << "      <data key=\"timelike\">"
-          << (sq < 0 ? "true" : "false") << "</data>\n"
+          << (e->isTimelike() ? "true" : "false") << "</data>\n"
           << "    </edge>\n";
     }
 
@@ -698,11 +708,15 @@ bool writeDot(const Spacetime &st, const std::string &path) {
           << ", degree=" << v->degree() << "];\n";
 
     for (auto *e : edges) {
-        double sq = e->getSquaredLength().real();
-        bool tl = sq < 0;
+        // Canonical Edge::isTimelike() classification + the full complex l^2
+        // and phase; squared_length stays Re for compatibility (#581).
+        const std::complex<double> sq = e->getSquaredLength();
+        const bool tl = e->isTimelike();
         f << "  " << e->getSource()->getId()
           << " -- " << e->getTarget()->getId()
-          << " [squared_length=" << sq
+          << " [squared_length=" << sq.real()
+          << ", squared_length_im=" << sq.imag()
+          << ", phase=" << e->getPhase()
           << ", timelike=" << (tl ? "true" : "false")
           << ", color=" << (tl ? "blue" : "red") << "];\n";
     }

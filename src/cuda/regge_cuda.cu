@@ -86,6 +86,10 @@ __device__ double cofactor_ij(const double *M, int n, int i, int j) {
 
 // Compute dihedral angle from a Cayley-Menger bordered matrix B of size n×n,
 // at the hinge opposite local vertices va, vb (0-indexed simplex vertices).
+// Mirrors the CPU Simplex::dihedralAngle Euclidean path exactly (#581): the
+// same (-1)^d diagonal-sign fix (C_ii < 0 in odd dimension would otherwise
+// collapse the angle to its supplement) applied BEFORE the clamp, so the
+// clamped ratio is the same sign-fixed ratio the CPU clamps.
 __device__ double dihedral_from_cm(const double *B, int n, int va, int vb) {
     int bi = va + 1; // shift for border row/col
     int bj = vb + 1;
@@ -94,6 +98,7 @@ __device__ double dihedral_from_cm(const double *B, int n, int va, int vb) {
     double Cjj = cofactor_ij(B, n, bj, bj);
     double denom = sqrt(fabs(Cii * Cjj));
     if (denom < 1e-15) return 0.0;
+    if (Cii < 0.0) denom = -denom;  // (-1)^d diagonal-sign fix (CPU parity)
     double cosTheta = -Cij / denom;
     cosTheta = fmax(-1.0, fmin(1.0, cosTheta));
     return acos(cosTheta);

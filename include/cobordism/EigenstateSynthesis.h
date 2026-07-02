@@ -650,6 +650,13 @@ class EigenstateSynthesis {
         bool electricOnly = true) const;
 
   private:
+    // The analytic r_U / r_psi gradient cores project the metric Hodge
+    // operator with laplacian(k).real() — lossless for k >= 1 (the metric L_k
+    // there is real symmetric) but silently the WRONG operator at k = 0,
+    // where L_0 consumes the full complex l^2 (#580/#581). Fail loudly until
+    // a complex k = 0 core exists. `who` names the calling core.
+    void requireGradientDegree(const char *who) const;
+
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
     // The Hodge Laplacian operator over the same complex. laplacian(k_)
@@ -690,11 +697,13 @@ class EigenstateSynthesis {
 
     // One removeInteriorCell() record, for exact restore. The removed top cell's
     // sorted vertex tuple (its vertices are kept — only the top simplex and its
-    // orphaned edges are deleted), plus each orphaned edge as (u, v, squaredLength,
-    // phase) so restoreLastRemoval re-creates them bit-exactly.
+    // orphaned edges are deleted), plus each orphaned edge as (u, v, complex
+    // squaredLength, phase) so restoreLastRemoval re-creates them bit-exactly —
+    // the FULL complex ℓ², never its real part alone (#581).
     struct Removal {
       std::vector<std::uint64_t> cell{};
-      std::vector<std::tuple<std::uint64_t, std::uint64_t, double, double>>
+      std::vector<std::tuple<std::uint64_t, std::uint64_t,
+                             std::complex<double>, double>>
           removedEdges{};
     };
     std::vector<Removal> removals_{};

@@ -392,14 +392,17 @@ bool EigenstateSynthesis::attachInteriorVertex(
     }
   }
 
-  // Snapshot the pinned boundary (id-pair -> (w, theta)) for the bit-exact check.
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::pair<double, double>>
+  // Snapshot the pinned boundary (id-pair -> (complex w, theta)) for the
+  // bit-exact check. The FULL complex l2 is compared, not (Re, phase) — the
+  // dW invariant must catch Im-only corruption too (#581).
+  std::map<std::pair<std::uint64_t, std::uint64_t>,
+           std::pair<std::complex<double>, double>>
       boundaryBefore;
   for (const auto i : boundaryEdgeIdx_) {
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength().real(), edges_[i]->getPhase()};
+        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
   }
 
   // Fresh interior vertex with the largest id (sorts last; preserves the
@@ -459,7 +462,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
       const auto it =
           boundaryBefore.find({std::min(a, b), std::max(a, b)});
       if (it == boundaryBefore.end() ||
-          it->second.first != edges_[i]->getSquaredLength().real() ||
+          it->second.first != edges_[i]->getSquaredLength() ||
           it->second.second != edges_[i]->getPhase()) {
         valid = false;
         break;
@@ -598,20 +601,21 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(
-          u, v, it->second->getSquaredLength().real(),
-          it->second->getPhase());
+      rem.removedEdges.emplace_back(u, v, it->second->getSquaredLength(),
+                                    it->second->getPhase());
       toRemove.push_back(it->second);
     }
 
-  // Snapshot ∂W (id-pair -> (w, theta)) for the bit-exact check.
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::pair<double, double>>
+  // Snapshot ∂W (id-pair -> (complex w, theta)) for the bit-exact check. Full
+  // complex l2, not (Re, phase): the dW invariant covers Im corruption (#581).
+  std::map<std::pair<std::uint64_t, std::uint64_t>,
+           std::pair<std::complex<double>, double>>
       boundaryBefore;
   for (const auto i : boundaryEdgeIdx_) {
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength().real(), edges_[i]->getPhase()};
+        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
   }
 
   // Mutate: drop the top cell, then its orphaned edges.
@@ -627,14 +631,15 @@ bool EigenstateSynthesis::removeInteriorCell(
   // present with the same weight/phase (newly EXPOSED boundary edges are allowed
   // — the opened hole — so this is a subset check, not equality).
   bool valid = true;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::pair<double, double>>
+  std::map<std::pair<std::uint64_t, std::uint64_t>,
+           std::pair<std::complex<double>, double>>
       liveWeights;
   for (const auto e : edges_) {
     const std::uint64_t a = e->getSource()->getId();
     const std::uint64_t b = e->getTarget()->getId();
     const std::pair<std::uint64_t, std::uint64_t> key{std::min(a, b),
                                                       std::max(a, b)};
-    liveWeights[key] = {e->getSquaredLength().real(), e->getPhase()};
+    liveWeights[key] = {e->getSquaredLength(), e->getPhase()};
   }
   for (const auto &[key, wp] : boundaryBefore) {
     const auto it = liveWeights.find(key);
@@ -684,7 +689,7 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
   for (const auto &[u, v, w, theta] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setSquaredLength(std::complex<double>{w, 0.0});
+      it->second->setSquaredLength(w);  // the recorded complex l2, bit-exact
       it->second->setPhase(theta);
     }
   }
@@ -1361,9 +1366,21 @@ double EigenstateSynthesis::periodGapForPeriods(
       targetPeriods);
 }
 
+void EigenstateSynthesis::requireGradientDegree(const char *who) const {
+  if (k_ == 0)
+    throw std::runtime_error(
+        std::string("EigenstateSynthesis::") + who +
+        ": the analytic gradient cores read laplacian(k).real(), which is "
+        "lossless for k >= 1 but the WRONG operator at k = 0 (L_0 consumes "
+        "the full complex l^2, so .real() silently truncates it — see #580). "
+        "The complex k = 0 gradient core is not implemented; construct the "
+        "synthesis at k >= 1 or use finite differences of residual().");
+}
+
 std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("periodGradientOverLoops");
   using Eigen::Index;
   using Eigen::MatrixXd;
   using Eigen::VectorXcd;
@@ -1563,6 +1580,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
 std::vector<double> EigenstateSynthesis::periodGradientGeneral(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("periodGradientGeneral");
   // Arbitrary-degree exact d r_U / d l^2 over the removed-(k+1)-cell holes. M = L_k,
   // the per-edge dL_k/dl^2 (HodgeLaplacian::laplacianGradient, on Simplex::volumeGradient)
   // through first-order eigenvector perturbation, period covector + leak from each
@@ -1716,6 +1734,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
 std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("periodGapForLoopsGradient");
   // The hard-pin sibling of periodGradientOverLoops (r_U): same first-order
   // eigenvector-perturbation setup (M = L1, harmonic split Un/Unn, the per-edge
   // low-rank dM, dUn), but the score is the period GAP r_psi = ||A c - t||^2 with
@@ -1920,6 +1939,7 @@ std::vector<double> EigenstateSynthesis::residualForLoopsGradient(
 std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
+  requireGradientDegree("residualForPeriodsGradientGpu");
 #ifndef TESSERA_CUDA
   (void)holes;
   (void)targetPeriods;

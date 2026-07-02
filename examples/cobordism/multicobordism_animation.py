@@ -422,10 +422,15 @@ class ProtonAnimator:
             key = tuple(sorted(v.getId() for v in vs))
             try:
                 deficit = complex(s.lorentzianDeficitAngle())
-                weight = abs(float(s.dualVolume()))   # positive dual-measure weight
+                # complex-tolerant positive dual-measure weight (dualVolume
+                # is real today; abs(complex(...)) survives it going complex)
+                weight = abs(complex(s.dualVolume()))
                 hinge_re[key] = deficit.real * weight
                 hinge_im[key] = deficit.imag * weight
-            except Exception:                    # boundary/degenerate hinge → no curvature
+            except RuntimeError:                 # boundary/degenerate hinge → no curvature
+                # Only the geometric failure is swallowed; a type/contract
+                # failure (TypeError, ValueError from the #581 resident-Im
+                # guard) must propagate, never render as zero curvature.
                 hinge_re[key] = hinge_im[key] = 0.0
         curv = {}
         for c in st.getTopSimplices():
@@ -490,8 +495,13 @@ class ProtonAnimator:
             if mag.max() <= 1e-9:                         # channel is identically zero
                 # The temporal (Im) channel is ≡0 whenever the geometry is all-spacelike
                 # (no timelike hinges → no boost content), so the panel would read as blank;
-                # say why instead of showing an empty box.
-                ax.text(0.5, 0.5, "≡ 0\n(all-spacelike: no timelike hinges)",
+                # say why instead of showing an empty box. Only the Im channel gets the
+                # all-spacelike explanation — and only because compute failures now
+                # PROPAGATE out of _cell_curvature (a type failure can no longer zero the
+                # channel and masquerade as all-spacelike, #581).
+                label = ("≡ 0\n(all-spacelike: no timelike hinges)"
+                         if channel == 1 else "≡ 0")
+                ax.text(0.5, 0.5, label,
                         transform=ax.transAxes, ha="center", va="center", fontsize=9,
                         color="0.45")
         ax.set_aspect("equal")

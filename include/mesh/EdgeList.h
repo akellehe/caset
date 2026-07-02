@@ -44,7 +44,6 @@ class EdgeList {
                                     double squaredLength);
     EdgePtr get(const std::uint64_t &fingerprint);
     void remove(const EdgePtr &edge) noexcept;
-    void replace(const EdgePtr &toRemove, const EdgePtr &toAdd) noexcept;
 
     /// Re-key an edge's fingerprint in the lookup map without moving the object.
     void rekeyEdge(std::uint64_t oldFp, std::uint64_t newFp);

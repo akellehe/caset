@@ -170,15 +170,27 @@ class Edge {
     /// sync as \f$\sqrt{l^2}\f$. Prefer this when the geometry is specified by a squared
     /// value (CDT, Van Raamsdonk, the backreaction scan) so \f$l^2\f$ is stored exactly
     /// and the action never sees a round-trip.
+    ///
+    /// **Ordinary-Lorentzian convention (#580/#581):** a *resident* \f$l^2\f$ is real
+    /// and signed (spacelike > 0, timelike < 0, null 0). Storage accepts a general
+    /// complex value (rollback records and saddle bookkeeping round-trip it exactly),
+    /// but the geometry stack does NOT support it: the non-Wick geometry entry points
+    /// (`Simplex::gramMatrix` and the Cayley–Menger builders, hence volumes, Lorentzian
+    /// angles and the dual Regge action) throw `std::domain_error` on
+    /// \f$|\mathrm{Im}\,l^2| > \f$ `Simplex::kResidentImTolerance` instead of silently
+    /// projecting to Re. Genuine Picard–Lefschetz (resident-complex) geometry is
+    /// deferred (#580).
     void setSquaredLength(std::complex<double> l2) noexcept {
       squaredLength_ = l2;
       length_ = std::sqrt(l2);
     }
 
     /// Set the (complex) edge length; the squared length is kept in sync as `l*l`. Use
-    /// when the geometry is specified by a length directly — the off-axis
-    /// (Picard–Lefschetz) saddle the Regge solver explores. Real for spacelike,
-    /// imaginary for timelike, general complex for the saddle.
+    /// when the geometry is specified by a length directly. Real for spacelike,
+    /// imaginary for timelike — under the ordinary-Lorentzian convention (see
+    /// `setSquaredLength`) those are the two supported resident cases; a general
+    /// complex length (the off-axis Picard–Lefschetz saddle) is stored exactly but
+    /// rejected fail-loudly by the non-Wick geometry stack (#580/#581).
     void setLength(std::complex<double> l) noexcept {
       length_ = l;
       squaredLength_ = l * l;

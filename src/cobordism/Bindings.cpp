@@ -375,8 +375,9 @@ the live edge weights/phases on every call, so residual() tracks setWeights /
 setPhases in place. psi is indexed in the same sorted-vertex-id order as
 HodgeLaplacian (k=0).
 
-Parameters: the per-edge squared-length magnitudes {w_ij} (Edge.setSquaredLength)
-and U(1) phases {theta_ij} (Edge.setPhase), in a stable edge order fixed at
+Parameters: the per-edge SIGNED real squared lengths {w_ij} = Re l^2
+(Edge.setSquaredLength; weights() reads Re, not a magnitude — #581) and U(1)
+phases {theta_ij} (Edge.setPhase), in a stable edge order fixed at
 construction (the weight-carrying edges: both endpoints present, no self-loops).
 
 Fixed-boundary interior fill (§5.0): the tunable edges split into a boundary set
@@ -418,11 +419,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "L psi against the current edge weights/phases (no normalization), for "
            "direct L psi || psi cross-checks. Raises if len(psi) != order().")
       .def("weights", &EigenstateSynthesis::weights,
-           "Edge magnitudes {w_ij} (squaredLength) in the stable edge order.")
+           "The SIGNED real parts {Re l^2_ij} of the edge squared lengths, in "
+           "the stable edge order — not magnitudes (a timelike edge reads "
+           "negative), and any resident Im l^2 is not reported (#581).")
       .def("phases", &EigenstateSynthesis::phases,
            "Edge phases {theta_ij} (radians) in the stable edge order.")
       .def("setWeights", &EigenstateSynthesis::setWeights, py::arg("w"),
-           "Write the edge magnitudes in place. Raises if len(w) != numEdges().")
+           "Write the edge squared lengths in place as REAL signed values "
+           "(l^2 = w + 0i, zeroing any resident Im — the ordinary-Lorentzian "
+           "convention, #581). Raises if len(w) != numEdges().")
       .def("setPhases", &EigenstateSynthesis::setPhases, py::arg("theta"),
            "Write the edge phases in place. Raises if len(theta) != numEdges().")
       // ----- Fixed-boundary interior fill (§5.0, #147) -----
@@ -436,13 +441,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "Number of interior vertices (on no boundary face) — the coned-in "
            "apexes; the interior complexity the synthesis grows / reports.")
       .def("interiorWeights", &EigenstateSynthesis::interiorWeights,
-           "Interior edge magnitudes {w_ij} in interior-edge order.")
+           "Interior edge SIGNED real squared lengths {Re l^2_ij} in "
+           "interior-edge order (Re, not magnitudes — #581).")
       .def("interiorPhases", &EigenstateSynthesis::interiorPhases,
            "Interior edge phases {theta_ij} (radians) in interior-edge order.")
       .def("setInteriorWeights", &EigenstateSynthesis::setInteriorWeights,
            py::arg("w"),
-           "Write the interior edge magnitudes in place; the boundary edges are "
-           "left untouched. Raises if len(w) != numInteriorEdges().")
+           "Write the interior edge squared lengths in place as REAL signed "
+           "values (l^2 = w + 0i, zeroing any resident Im — #581); the boundary "
+           "edges are left untouched. Raises if len(w) != numInteriorEdges().")
       .def("setInteriorPhases", &EigenstateSynthesis::setInteriorPhases,
            py::arg("theta"),
            "Write the interior edge phases in place; the boundary edges are left "

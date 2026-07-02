@@ -248,6 +248,21 @@ class Simplex {
     std::uint64_t hash() const noexcept;
 
     // ==================== Geometry ====================
+    //
+    // Ordinary-Lorentzian convention (#580/#581): the geometry stack consumes
+    // REAL, SIGNED resident squared lengths (spacelike l^2 > 0, timelike
+    // l^2 < 0, null 0). A resident Im l^2 != 0 (an analytically continued /
+    // Picard-Lefschetz saddle length) is UNSUPPORTED here: the non-Wick
+    // entry points below (gramMatrix / cayleyMengerMatrix /
+    // cayleyMengerCanonical, hence volume, dihedral and deficit angles, dual
+    // volumes and the dual Regge action) throw std::domain_error rather than
+    // silently projecting it away. The Wick-rotated (|l^2|) paths remain
+    // Im-tolerant by construction.
+
+    /// Tolerance above which a resident |Im l^2| is treated as a genuine
+    /// analytic continuation (and rejected by the non-Wick geometry): float
+    /// noise stays below it.
+    static constexpr double kResidentImTolerance = 1e-12;
 
     /// Gram matrix of this simplex from its edge lengths.
     /// Returns a flat (d x d) row-major matrix where d = size() - 1.
@@ -260,6 +275,9 @@ class Simplex {
     /// ``wickRotate=true`` for the Euclidean/CDT convention that takes |l^2|
     /// on every edge (det(G) > 0 for a valid cell). For a purely spacelike
     /// (all l^2 > 0) simplex the two agree, so the toggle is a no-op there.
+    /// Non-Wick calls throw ``std::domain_error`` on a resident
+    /// ``|Im l^2| > kResidentImTolerance`` (the ordinary-Lorentzian
+    /// convention above).
     [[nodiscard]] std::vector<double> gramMatrix(bool wickRotate = false) const;
 
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
@@ -280,15 +298,33 @@ class Simplex {
     [[nodiscard]] double deficitAngle() const;
 
     /// Lorentzian (Sorkin) dihedral angle at ``hinge`` within this top simplex,
-    /// as a complex number. Built from the **signed** (non-Wick) Cayley-Menger
-    /// cofactor ratio r, UN-clamped: for an ordinary (spacelike-normal-plane)
-    /// wedge |r| <= 1 and this returns the real Euclidean angle; for a timelike
-    /// normal plane |r| > 1 (the boost regime) ``std::acos`` returns a complex
-    /// value whose imaginary part is the rapidity (boost) and whose real part
-    /// (0 or pi) carries the light-cone-crossing structure (Sorkin's N pi/2).
-    /// Unlike ``dihedralAngle`` (which Wick-rotates and clamps), this keeps the
-    /// boost. Refs: Regge (1961); Sorkin, Lorentzian angles & trigonometry;
-    /// Asante-Dittrich-Padua-Arguelles, arXiv:2104.00485 Eq. (10).
+    /// as a complex number, from the **signed** (non-Wick) Cayley-Menger
+    /// cofactors — all three of the Sorkin/Asante-Dittrich m ∈ {0, 1, 2}
+    /// regimes (#581). With ``P = C_ii*C_jj`` and ``D = sqrt(|P|)``:
+    ///
+    /// * **P >= 0, |r| <= 1** (``r = -C_ij/(±D)`` with the ``(-1)^d``
+    ///   diagonal-sign fix): the wedge stays on one side of the light cone and
+    ///   the angle is the real Euclidean one (m = 0).
+    /// * **P >= 0, |r| > 1** (the boost regime, m even): ``std::acos`` returns
+    ///   a complex value whose imaginary part is the rapidity and whose real
+    ///   part (0 or pi) counts the crossed light-cone quadrants.
+    /// * **P < 0** (the m = 1 **light-cone crossing**: one facet direction
+    ///   spacelike, one timelike): the true denominator
+    ///   ``sqrt(C_ii)*sqrt(C_jj)`` (principal branches) is purely imaginary,
+    ///   so the angle is ``pi/2 - i*asinh(C_ij/D)`` — exactly a quarter turn
+    ///   plus a signed boost. Around a flat one-ray-per-quadrant Minkowski
+    ///   vertex star the four boosts telescope to zero (closure pins the
+    ///   sign); generic in CDT (every base-tet triangle of a (4,1) cell).
+    ///
+    /// Unlike ``dihedralAngle`` with ``wickRotate=true`` (the Euclidean/CDT
+    /// path, which takes |l^2| and clamps), this keeps the boost content. Note
+    /// the same-sign (m = 0 / boost) regimes' imaginary sign is the principal
+    /// branch: the wedge's boost *orientation* is not determined by edge
+    /// lengths alone (a PT reflection flips it at identical l^2), so only
+    /// crossing wedges carry an intrinsically signed boost.
+    /// Refs: Regge (1961); Sorkin, Lorentzian angles & trigonometry
+    /// (arXiv:1908.10022); Asante-Dittrich-Padua-Arguelles, arXiv:2104.00485
+    /// Eq. (10).
     [[nodiscard]] std::complex<double>
     lorentzianDihedralAngle(SimplexPtr hinge) const;
 
@@ -306,10 +342,13 @@ class Simplex {
     /// \f$ r = -C_{ij}/\pm\sqrt{|C_{ii}C_{jj}|} \f$ a ratio of cofactors of the
     /// (signed) Cayley-Menger matrix \f$ B \f$ (linear in \f$ \ell^2 \f$). Since
     /// \f$ C = \det(B)\,(B^{-1})^\top \f$ the cofactor derivatives are closed
-    /// form; the boost branch uses \f$ d\theta/dr = -1/\sin\theta \f$ so it
-    /// matches ``std::acos`` exactly. Keyed by sorted vertex-id edge; only the
-    /// edges of the top cells touching the hinge appear. Complex (the boost part
-    /// is carried, not truncated).
+    /// form; the same-sign boost branch uses \f$ d\theta/dr = -1/\sin\theta \f$
+    /// so it matches ``std::acos`` exactly, and the m = 1 light-cone-crossing
+    /// branch (\f$ C_{ii}C_{jj} < 0 \f$, #581) differentiates
+    /// \f$ \theta = \pi/2 - i\,\mathrm{asinh}(y) \f$, \f$ y = C_{ij}/D \f$, via
+    /// \f$ d\theta/dy = -i/\sqrt{1+y^2} \f$ (never singular). Keyed by sorted
+    /// vertex-id edge; only the edges of the top cells touching the hinge
+    /// appear. Complex (the boost part is carried, not truncated).
     [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>,
                            std::complex<double>>
     lorentzianDeficitAngleGradient() const;
@@ -321,8 +360,12 @@ class Simplex {
     /// cofactor second derivative
     /// \f$ \partial^2 C_{pq} = \partial(\det B\,T) \f$ (T the gradient's
     /// bracket), \f$ d\theta/dr = -1/\sin\theta \f$ and
-    /// \f$ d^2\theta/dr^2 = -r/\sin^3\theta \f$. Keyed by the (sorted) edge pair;
-    /// symmetric. Complex (the boost part is carried, not truncated).
+    /// \f$ d^2\theta/dr^2 = -r/\sin^3\theta \f$ on same-sign wedges; on the
+    /// m = 1 crossing (\f$ C_{ii}C_{jj} < 0 \f$, #581)
+    /// \f$ d\theta/dy = -i/\sqrt{1+y^2} \f$ and
+    /// \f$ d^2\theta/dy^2 = +i\,y/(1+y^2)^{3/2} \f$ with \f$ y = C_{ij}/D \f$.
+    /// Keyed by the (sorted) edge pair; symmetric. Complex (the boost part is
+    /// carried, not truncated).
     [[nodiscard]] std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
                                      std::pair<std::uint64_t, std::uint64_t>>,
                            std::complex<double>>
@@ -331,6 +374,13 @@ class Simplex {
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
     /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``
     /// selects signed (default) vs. |l^2| (see ``gramMatrix``).
+    ///
+    /// **Lorentzian note (#581):** on the signed (non-Wick) default a
+    /// triangle whose Heron radicand is non-positive — every timelike
+    /// (negative-content) triangle, e.g. the mixed-causal hinge of a CDT
+    /// (4,1) cell — returns **0**, not an imaginary area: this method reports
+    /// only real spacelike content. Use ``volume()`` for the signed
+    /// (signature-recording) content of a Lorentzian cell.
     [[nodiscard]] double area(bool wickRotate = false) const;
 
     /// Signed d-content (volume) of this simplex on the honest,
@@ -445,6 +495,14 @@ class Simplex {
     /// Cofactor matrix of a square matrix (flat row-major, size n x n).
     [[nodiscard]] static std::vector<double> cofactorMatrix(
         const std::vector<double> &M, int n);
+
+    /// The fail-loud non-Wick squared-length read (#581): returns
+    /// ``Re(l^2)`` after asserting the edge honors the ordinary-Lorentzian
+    /// convention, throwing ``std::domain_error`` (naming the edge's vertex
+    /// ids) when ``|Im l^2| > kResidentImTolerance``. The single guard the
+    /// non-Wick geometry entry points (``gramMatrix`` /
+    /// ``cayleyMengerMatrix`` / ``cayleyMengerCanonical``) share.
+    [[nodiscard]] static double realSquaredLengthChecked(const EdgePtr &e);
 
     // ==================== Computational & Utility Methods ====================
     template<typename T> T binomial(unsigned n, unsigned k) const;
