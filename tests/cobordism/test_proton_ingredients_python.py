@@ -77,6 +77,25 @@ class ProtonIngredientsNodesTest(unittest.TestCase):
         r_at_weight_2 = ingredients_node.r_u(ingredients_node.st)
         self.assertAlmostEqual(r_at_weight_2, 2.0 * r_at_weight_1, places=9)
 
+    def test_joint_node_is_three_fixed_pairs_and_nothing_else(self):
+        # The joint inputs-only node (#585): THREE input blocks — the Z₃-symmetric
+        # neutral pairs, the only prepared content — and ZERO output blocks. Its r_u
+        # is purely the weighted input terms (linear in the input weight), and a short
+        # drive runs on it (the register degree, betti, and holes are readable).
+        node = cob.ProtonIngredients(seed=5).joint_node(5)
+        self.assertEqual(len(node.inputs), 3)
+        self.assertEqual(len(node.outputs), 0)
+        node.set_input_residual_weight(1.0)
+        r_at_weight_1 = node.r_u(node.st)
+        node.set_input_residual_weight(2.0)
+        r_at_weight_2 = node.r_u(node.st)
+        self.assertAlmostEqual(r_at_weight_2, 2.0 * r_at_weight_1, places=9)
+        node.run_stage1(max_steps=10, n_candidate_moves=4, patience=5,
+                        grow_boundaries=True)
+        betti = cob.MultiCobordism.betti(node.st)
+        self.assertTrue(len(betti) > 3)
+        self.assertTrue(math.isfinite(node.objective()))
+
     def test_canonical_formation_node_still_carries_the_singlet_term(self):
         # ...while the CANONICAL formation node has the weight-independent whole-read
         # singlet term on top, so its r_u is strictly sublinear in the input weight.

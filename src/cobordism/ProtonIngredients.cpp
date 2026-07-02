@@ -93,6 +93,33 @@ std::shared_ptr<MultiCobordism> ProtonIngredients::formationNode(
   return node;
 }
 
+std::shared_ptr<MultiCobordism> ProtonIngredients::jointNode(
+    std::uint64_t seed) const {
+  // The joint inputs-only node (semantics: jointNode in ProtonIngredients.h — the
+  // authoritative statement). Inputs are the three Z₃-symmetric neutral pairs, the
+  // ONLY prepared content; outputs = {}. No diquark, no bare quark, no intermediate
+  // imposed anywhere — the pre-registered expectation (a baryon with a conjugate
+  // partner) is read off the relaxed whole afterwards, never driven.
+  const std::vector<std::vector<complexd>> pairs = {
+      {complexd(1.0, 0.0), complexd(-1.0, 0.0), complexd(0.0, 0.0)},
+      {complexd(0.0, 0.0), complexd(1.0, 0.0), complexd(-1.0, 0.0)},
+      {complexd(-1.0, 0.0), complexd(0.0, 0.0), complexd(1.0, 0.0)}};
+  auto host = buildMinimalSeed();
+  // Capture the seed vertex IDS before constructing the node (see
+  // Proton::recombinationNode): precone_ > 0 regrows the complex in the ctor, but the
+  // seed ids persist.
+  std::vector<std::uint64_t> seedVertexIds;
+  for (const auto *vertex : host->getVertexList()->toVector())
+    seedVertexIds.push_back(vertex->getId());
+  auto node = std::make_shared<MultiCobordism>(
+      host, pairs,
+      std::vector<std::vector<complexd>>{},  // nothing pinned — the final state emerges
+      std::vector<int>{registerDegree_}, gamma_, seed, precone_);
+  node->setInputResidualWeight(inputResidualWeight_);
+  node->seedInputs({seedVertexIds[0], seedVertexIds[1], seedVertexIds[2]});
+  return node;
+}
+
 void ProtonIngredients::build(int maxRestarts, int initSteps, int evolveSteps,
                               int stage1CandidateMoves, int stage1Patience,
                               double stage2Beta, int stage2MaxIters,

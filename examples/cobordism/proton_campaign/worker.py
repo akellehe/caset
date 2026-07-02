@@ -1,9 +1,12 @@
-# Throwaway sweep worker (#555): one emergent-arm attempt per base seed, driven
-# stage-by-stage (mirroring ProtonIngredients.build with max_restarts=1) so the
-# unbounded stage-2 descent streams a progress line every chunk, and — for the
-# interesting attempts — records an animation in the style of the animation scripts
-# (renderer.py reuses emergent_proton's panels; frames land at the real pass/chunk
-# boundaries, so the GIF shows the exact recorded attempt).
+# Throwaway sweep worker (#555, #585): one emergent-arm attempt per base seed on the
+# JOINT three-pair node — inputs are the three Z3-symmetric neutral q-q̄ pairs (the
+# only prepared content, fixed for the whole build), output-target list empty, so the
+# proton must emerge from just the initial pairs. Driven stage-by-stage (init → evolve
+# → stage-2 to genuine stationarity → persistence) so the unbounded stage-2 descent
+# streams a progress line every chunk, and — for the interesting attempts — records an
+# animation in the style of the animation scripts (renderer.py reuses emergent_proton's
+# panels; frames land at the real pass/chunk boundaries, so the GIF shows the exact
+# recorded attempt).
 #
 # Machine-precision semantics: stage 2 is chunked, and a chunk that stops early on
 # runStage2's built-in relTol=1e-9 stationarity test IS the stationarity verdict.
@@ -47,8 +50,13 @@ PROGRESS_BYTE_CAP = 50 * 1024 * 1024        # per worker
 GIF_BYTE_CAP = 5 * 1024 * 1024 * 1024       # global, across all workers
 GEOMETRY_SCHEMA = 1                         # bump on any dump-format change
 
-STEP_A_LABEL = "Step A — recombination (→ diquark {1, ω})"
-STEP_B_LABEL = "Step B — formation (nothing pinned — final state emerges)"
+JOINT_LABEL = "Joint — 3 neutral q-q̄ pairs (nothing else prepared)"
+
+
+def conjugate_singlet():
+    """The antibaryon diagnostic target {1, ω̄, ω̄²} — read, never driven (the
+    pre-registered expectation is a baryon WITH a conjugate partner)."""
+    return [complex(z).conjugate() for z in cob.Proton.singlet()]
 
 
 def snapshot(node):
@@ -123,10 +131,11 @@ class AttemptState:
 
 
 def run_attempt_on_nodes(base, progress, recorder, state, nodes):
-    """The attempt physics on already-built nodes: init → evolve → stage-2 to genuine
-    stationarity per node, then the persistence loop on step B. Identical drive with
-    and without a recorder — frames are taken between engine calls, never instead."""
-    step_a, step_b = nodes[0][0], nodes[1][0]
+    """The attempt physics on the already-built joint node: init → evolve → stage-2 to
+    genuine stationarity, then the persistence loop — all on the ONE node whose fixed
+    three-pair inputs are the only prepared content. Identical drive with and without a
+    recorder — frames are taken between engine calls, never instead."""
+    joint = nodes[0][0]
 
     def frame(node_index, phase, subtitle=""):
         if recorder:
@@ -172,34 +181,31 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
 
     progress({"base_seed": base, "phase": "attempt_start"})
     frame(0, "seed")
-    frame(1, "seed")
-    run_node(step_a, 0, "A")
-    diquark_ru = float(step_a.r_u(step_a.st))
-    stage2_iters = run_node(step_b, 1, "B")
+    stage2_iters = run_node(joint, 0, "J")
 
     persistent = False
     for persist_pass in range(1, PERSIST_PASSES + 1):
-        before = snapshot(step_b)
-        step_b.run_stage1(max_steps=EVOLVE_STEPS, n_candidate_moves=CANDIDATES,
-                          patience=PATIENCE, grow_boundaries=False)
-        stage2_iters += stage2_to_stationarity(step_b, 1, "B")
-        after = snapshot(step_b)
+        before = snapshot(joint)
+        joint.run_stage1(max_steps=EVOLVE_STEPS, n_candidate_moves=CANDIDATES,
+                         patience=PATIENCE, grow_boundaries=False)
+        stage2_iters += stage2_to_stationarity(joint, 0, "J")
+        after = snapshot(joint)
         state.see(after)
         stable_f = abs(after["F"] - before["F"]) <= PERSIST_REL_TOL * max(
             abs(before["F"]), 1.0)
         persistent = (after["holes"] == before["holes"]
                       and after["b3"] == before["b3"] and stable_f)
-        progress(dict(base_seed=base, node="B", phase="persistence",
+        progress(dict(base_seed=base, node="J", phase="persistence",
                       persist_pass=persist_pass, persistent=persistent,
                       dF=before["F"] - after["F"], **after))
-        frame(1, "persistence", f" · pass {persist_pass}")
+        frame(0, "persistence", f" · pass {persist_pass}")
         if persistent:
             break
 
-    stationary = bool(step_b.last_stage2_stationary)
-    st = step_b.st
+    stationary = bool(joint.last_stage2_stationary)
+    st = joint.st
     squared = [e.getSquaredLength() for e in st.getEdgeList().toVector()]
-    final = snapshot(step_b)
+    final = snapshot(joint)
     return {
         "converged": stationary and persistent,
         "stationary": stationary,
@@ -211,6 +217,9 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
         "betti": list(cob.MultiCobordism.betti(st)),
         "singlet": float(cob.MultiCobordism.r_state(st, REGISTER_DEGREE,
                                                     cob.Proton.singlet())),
+        # the expected partner sector, read (never driven) beside the singlet
+        "singlet_conj": float(cob.MultiCobordism.r_state(st, REGISTER_DEGREE,
+                                                         conjugate_singlet())),
         "input_ru": final["rU"],
         "F": final["F"],
         "cells": final["cells"],
@@ -218,7 +227,6 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
         "re_min": min(l.real for l in squared),
         "re_max": max(l.real for l in squared),
         "im_max": max(abs(l.imag) for l in squared),
-        "diquark_ru": diquark_ru,
     }
 
 
@@ -226,8 +234,7 @@ def run_one(base, progress, args, frame_dir, gif_dir, geom_dir):
     """Build the attempt's nodes, run it (recorded when --animate), apply the
     keep-policy (GIF + geometry dump), return the result record fields."""
     ingredients = cob.ProtonIngredients(seed=base)
-    nodes = [(ingredients.recombination_node(base), STEP_A_LABEL),
-             (ingredients.formation_node(base + 1), STEP_B_LABEL)]
+    nodes = [(ingredients.joint_node(base), JOINT_LABEL)]
     state = AttemptState()
     recorder = None
     if args.animate:
@@ -254,12 +261,12 @@ def run_one(base, progress, args, frame_dir, gif_dir, geom_dir):
     # EVERY attempt gets a geometry dump — the only faithful record (the build is
     # not process-deterministic; the seed labels the attempt, it can't reproduce it).
     try:
-        st = nodes[1][0].st
+        st = nodes[-1][0].st
         meta = {"base_seed": base, "max_b3": state.max_b3,
                 "max_holes": state.max_holes}
         meta.update({k: result[k] for k in
                      ("converged", "stationary", "persistent", "holes",
-                      "betti", "singlet", "F")})
+                      "betti", "singlet", "singlet_conj", "F")})
         meta["hole_cells"] = [list(h) for h in
                               cob.MultiCobordism.emergent_holes(
                                   st, REGISTER_DEGREE)]

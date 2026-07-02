@@ -43,7 +43,7 @@ cob = tessera.cobordism
 # Wall-time/host fields (elapsed_s, rss_mb) and artifact paths are excluded.
 REPLAY_KEYS = ("converged", "stationary", "persistent", "stage2_iters_total",
                "holes", "max_holes", "max_b3", "betti", "singlet", "input_ru",
-               "F", "cells", "edges", "re_min", "re_max", "im_max", "diquark_ru")
+               "singlet_conj", "F", "cells", "edges", "re_min", "re_max", "im_max")
 
 
 def find_verdict(run_dir, seed):
@@ -73,12 +73,11 @@ def replay(seed):
     attempt distribution, not a reconstruction (the build is not process-
     deterministic). Returns (result_record, final_formation_spacetime, state)."""
     ingredients = cob.ProtonIngredients(seed=seed)
-    nodes = [(ingredients.recombination_node(seed), worker.STEP_A_LABEL),
-             (ingredients.formation_node(seed + 1), worker.STEP_B_LABEL)]
+    nodes = [(ingredients.joint_node(seed), worker.JOINT_LABEL)]
     state = worker.AttemptState()
     result = worker.run_attempt_on_nodes(seed, lambda record: None, None, state,
                                          nodes)
-    return result, nodes[1][0].st, state
+    return result, nodes[-1][0].st, state
 
 
 def rebuild_from_dump(dump):
