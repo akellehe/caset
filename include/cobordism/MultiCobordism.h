@@ -131,6 +131,15 @@ class MultiCobordism {
   /// steps — the rounding floor). "No line-search step beats the threshold" is the
   /// stationary stop; `maxIters` is the safety budget cap. `lastStage2Stationary()` reports
   /// which of the two ended the run. Returns the `F` trace.
+  ///
+  /// Trials are UNBOUNDED — fully Lorentzian, no clamp, no causal guard (#565): a trial
+  /// `ℓ²` may land spacelike, timelike, or lightlike (`Re ℓ²` of either sign or inside
+  /// any `(-ε, ε)` band; `Im ℓ²` as ever untouched). The only rejection is the line
+  /// search's own: a trial on which the objective fails to evaluate scores `+inf` and is
+  /// backed off, so degenerate geometry is refused by the PHYSICS, never by a projection.
+  /// Epic #559's rule still holds — nothing here seeds causal content; the whole
+  /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
+  /// the dynamics (its absence is equally a finding).
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05, double relTol = 1e-9);
 
