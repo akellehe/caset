@@ -812,12 +812,17 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("weight"))
       .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
       .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
+      // Long pure-C++ compute: release the GIL for the duration so a background thread can
+      // drive a pass (a single call, per the register-growth constraint) without blocking the
+      // main thread -- e.g. multicobordism_animation.py --live keeps its GUI responsive.
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
            py::arg("n_candidate_moves") = 12, py::arg("patience") = 8,
-           py::arg("grow_boundaries") = false)
+           py::arg("grow_boundaries") = false,
+           py::call_guard<py::gil_scoped_release>())
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
            py::arg("rel_tol") = 1e-9,
+           py::call_guard<py::gil_scoped_release>(),
            "Stage 2 (geometric): relax every edge l^2 toward a stationary point of "
            "beta*||grad S||^2 + gamma*r_U (Wirtinger steepest descent, backtracking "
            "line search). Stops on the RELATIVE stationarity test -- no line-search "
@@ -859,6 +864,9 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("stage2_max_iters") = 10, py::arg("stage2_alpha0") = 0.05,
            py::arg("hole_placement_strategy") =
                MultiCobordism::HolePlacementStrategy::AdjacentHolesLast,
+           // Composes run_stage1/run_stage2 internally (C++ -> C++, so no nested guard); release
+           // the GIL here too so a background thread driving the build stays off the main thread.
+           py::call_guard<py::gil_scoped_release>(),
            "Apply one BuildAction to this node in place (GROW/EVOLVE = run_stage1 with "
            "grow_boundaries true/false; RELAX = run_stage2; CONE_OUT/CONE_IN = the directed "
            "probes) -- the canonical solve step a policy (build, greedy, or RL) composes.")
