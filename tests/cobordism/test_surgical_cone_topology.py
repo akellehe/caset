@@ -24,7 +24,8 @@ Coverage:
 * a surgical cone-out raises ``b_2`` by exactly 1 on a small ``S^3``, and the
   inverse lowers it by 1 (topology restored);
 * the cone-out round trip restores the dual Regge action (Re AND Im) on a
-  genuinely Lorentzian CDT toroid (``Im S`` ~ -35);
+  genuinely Lorentzian CDT toroid (``Im S`` ~ -11 with the #581 mixed-hinge
+  branch; ~ -35 before it);
 * the gate rejects a non-manifold attempt (a cone-in onto an interior facet ->
   3 cofaces) and leaves the complex unchanged;
 * cone-in needs a boundary (it always rejects on a closed manifold) and is

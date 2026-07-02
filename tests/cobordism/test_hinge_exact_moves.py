@@ -239,8 +239,9 @@ def test_standalone_cone_out_then_in():
 # --------------------------------------------------------------------------- #
 def test_imaginary_part_preserved_under_coning():
     """A surgical cone can flip a local induced orientation -> a spurious sign in the
-    causal (Im S) deficit. On a genuinely complex action (CDT toroid, Im S ~ -35) the
-    cone-in/out round trip must restore Im S, not just |S|."""
+    causal (Im S) deficit. On a genuinely complex action (CDT toroid, Im S ~ -11 with
+    the #581 mixed-hinge branch; ~ -35 before it) the cone-in/out round trip must
+    restore Im S, not just |S|."""
     st = _make_cdt(120)
     a0 = _act(st)
     assert abs(a0.imag) > 1.0, "fixture is not genuinely Lorentzian"

@@ -851,11 +851,27 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     const double Cij = cof[static_cast<std::size_t>(bi) * n + bj];
     const double Cii = cof[static_cast<std::size_t>(bi) * n + bi];
     const double Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
-    double denom = std::sqrt(std::abs(Cii * Cjj));
-    if (denom < 1e-15) return {0.0, 0.0};
-    if (Cii < 0.0) denom = -denom;  // (-1)^d diagonal-sign fix (see dihedralAngle)
-    const double r = -Cij / denom;
-    return std::acos(std::complex<double>(r, 0.0));
+    const double D = std::sqrt(std::abs(Cii * Cjj));
+    if (D < 1e-15) return {0.0, 0.0};
+    if (Cii * Cjj >= 0.0) {
+        // Same-sign cofactors: the wedge stays on one side of the light cone
+        // (the m=0 real angle for |r| <= 1 and the boost regime for |r| > 1).
+        double denom = D;
+        if (Cii < 0.0) denom = -denom;  // (-1)^d diagonal-sign fix (see dihedralAngle)
+        const double r = -Cij / denom;
+        return std::acos(std::complex<double>(r, 0.0));
+    }
+    // Opposite-sign cofactors: the wedge CROSSES the light cone (one facet
+    // direction spacelike, one timelike -- the m=1 case, #581). The true
+    // denominator sqrt(Cii)*sqrt(Cjj) (principal branches) is then purely
+    // imaginary (+i*D), the cosine ratio -Cij/(i*D) = i*(Cij/D) is purely
+    // imaginary, and the principal acos is
+    //     theta = pi/2 - i*asinh(Cij/D).
+    // Each crossing contributes exactly pi/2 to Re(theta) (Sorkin's quarter
+    // turn) plus a signed boost; around a flat one-ray-per-quadrant vertex
+    // star the boosts telescope to zero, which pins this sign convention.
+    const double y = Cij / D;
+    return {std::numbers::pi / 2.0, -std::asinh(y)};
 }
 
 std::complex<double> Simplex::lorentzianDeficitAngle() const {
@@ -914,12 +930,23 @@ Simplex::lorentzianDeficitAngleGradient() const {
         const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
         const double D = std::sqrt(std::abs(Cii * Cjj));
         if (D < 1e-300) continue;
+        // Opposite-sign cofactors = the m=1 light-cone-crossing wedge (#581):
+        // theta = pi/2 - i*asinh(y), y = Cij/D, so d theta/dy = -i/sqrt(1+y^2)
+        // (never singular: |sin theta| = sqrt(1+y^2) >= 1). Same-sign wedges
+        // keep the acos branch bit-for-bit.
+        const bool crossing = sP < 0.0;
         const double denom = sC * D;
-        const double r = -Cij / denom;
-        const cd theta = std::acos(cd(r, 0.0));
-        const cd sinTheta = std::sin(theta);
-        if (std::abs(sinTheta) < 1e-300) continue;           // flat/folded: skip
-        const cd dthetaDr = cd(-1.0, 0.0) / sinTheta;        // boost-safe branch
+        const double y = Cij / D;
+        cd dthetaDr;
+        if (crossing) {
+            dthetaDr = cd(0.0, -1.0) / std::sqrt(1.0 + y * y);
+        } else {
+            const double r = -Cij / denom;
+            const cd theta = std::acos(cd(r, 0.0));
+            const cd sinTheta = std::sin(theta);
+            if (std::abs(sinTheta) < 1e-300) continue;       // flat/folded: skip
+            dthetaDr = cd(-1.0, 0.0) / sinTheta;             // boost-safe branch
+        }
 
         // dC_pq for the edge (a,b): dB is the indicator at (a+1,b+1)&(b+1,a+1);
         // dC = det[ tr(B^-1 dB) B^-1 - B^-1 dB B^-1 ], extracted entrywise.
@@ -934,10 +961,16 @@ Simplex::lorentzianDeficitAngleGradient() const {
                 const double dCij = dCof(bi, bj, a, b);
                 const double dCii = dCof(bi, bi, a, b);
                 const double dCjj = dCof(bj, bj, a, b);
+                // d sqrt(|Cii*Cjj|) — the sP factor makes this valid on both
+                // sides of the crossing.
                 const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
-                const double ddenom = sC * dD;
-                const double dr =
-                    -(dCij * denom - Cij * ddenom) / (denom * denom);
+                double dr;
+                if (crossing) {
+                    dr = (dCij * D - Cij * dD) / (D * D);    // dy
+                } else {
+                    const double ddenom = sC * dD;
+                    dr = -(dCij * denom - Cij * ddenom) / (denom * denom);
+                }
                 const std::uint64_t va = tv[a]->getId(), vb = tv[b]->getId();
                 grad[{std::min(va, vb), std::max(va, vb)}] -= dthetaDr * dr;
             }
@@ -996,13 +1029,27 @@ Simplex::lorentzianDeficitAngleHessian() const {
         const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
         const double D = std::sqrt(std::abs(Cii * Cjj));
         if (D < 1e-300) continue;
+        // Same m=1 crossing branch as the gradient (#581): on opposite-sign
+        // cofactors theta = pi/2 - i*asinh(y) with y = Cij/D, so
+        // d theta/dy = -i/(1+y^2)^{1/2} and d^2 theta/dy^2 = +i*y/(1+y^2)^{3/2}
+        // (never singular). Same-sign wedges keep the acos machinery.
+        const bool crossing = sP < 0.0;
         const double denom = sC * D;
-        const double r = -Cij / denom;
-        const cd theta = std::acos(cd(r, 0.0));
-        const cd sinT = std::sin(theta);
-        if (std::abs(sinT) < 1e-300) continue;
-        const cd dthetaDr = cd(-1.0, 0.0) / sinT;
-        const cd d2thetaDr2 = cd(-r, 0.0) / (sinT * sinT * sinT);
+        const double y = Cij / D;
+        cd dthetaDr, d2thetaDr2;
+        if (crossing) {
+            const double onePlus = 1.0 + y * y;
+            const double sq = std::sqrt(onePlus);
+            dthetaDr = cd(0.0, -1.0) / sq;
+            d2thetaDr2 = cd(0.0, y) / (onePlus * sq);
+        } else {
+            const double r = -Cij / denom;
+            const cd theta = std::acos(cd(r, 0.0));
+            const cd sinT = std::sin(theta);
+            if (std::abs(sinT) < 1e-300) continue;
+            dthetaDr = cd(-1.0, 0.0) / sinT;
+            d2thetaDr2 = cd(-r, 0.0) / (sinT * sinT * sinT);
+        }
 
         auto bb = [&](int x, int y) -> double { return Binv[x * n + y]; };
         // dC_pq/dl^2_(a,b): a,b local vertex indices (CM border = +1).
@@ -1037,9 +1084,13 @@ Simplex::lorentzianDeficitAngleHessian() const {
                 const double dCii = dCof(bi, bi, a, b);
                 const double dCjj = dCof(bj, bj, a, b);
                 const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
-                const double ddenom = sC * dD;
-                const double dr =
-                    -(dCij * denom - Cij * ddenom) / (denom * denom);
+                double dr;
+                if (crossing) {
+                    dr = (dCij * D - Cij * dD) / (D * D);    // dy
+                } else {
+                    const double ddenom = sC * dD;
+                    dr = -(dCij * denom - Cij * ddenom) / (denom * denom);
+                }
                 es.push_back({a, b, tv[a]->getId(), tv[b]->getId(), dr});
             }
 
@@ -1048,13 +1099,15 @@ Simplex::lorentzianDeficitAngleHessian() const {
             const double dCii_e = dCof(bi, bi, e.a, e.b);
             const double dCjj_e = dCof(bj, bj, e.a, e.b);
             const double dP_e = dCii_e * Cjj + Cii * dCjj_e;
-            const double ddenom_e = sC * sP * dP_e / (2.0 * D);
+            const double dD_e = sP * dP_e / (2.0 * D);
+            const double ddenom_e = sC * dD_e;
             for (const auto &f : es) {
                 const double dCij_f = dCof(bi, bj, f.a, f.b);
                 const double dCii_f = dCof(bi, bi, f.a, f.b);
                 const double dCjj_f = dCof(bj, bj, f.a, f.b);
                 const double dP_f = dCii_f * Cjj + Cii * dCjj_f;
-                const double ddenom_f = sC * sP * dP_f / (2.0 * D);
+                const double dD_f = sP * dP_f / (2.0 * D);
+                const double ddenom_f = sC * dD_f;
 
                 const double d2Cij = d2Cof(bi, bj, e.a, e.b, f.a, f.b);
                 const double d2Cii = d2Cof(bi, bi, e.a, e.b, f.a, f.b);
@@ -1063,12 +1116,18 @@ Simplex::lorentzianDeficitAngleHessian() const {
                                    + dCii_f * dCjj_e + Cii * d2Cjj;
                 const double d2D = sP * d2P / (2.0 * D)
                                    - dP_e * dP_f / (4.0 * D * D * D);
-                const double d2denom = sC * d2D;
 
-                // r = N/Den, N = -Cij, Den = denom.
-                const double N = -Cij, Ne = -dCij_e, Nf = -dCij_f, Nef = -d2Cij;
-                const double Den = denom, De = ddenom_e, Df = ddenom_f,
-                             Def = d2denom;
+                // Quotient rule, second order. Same-sign: r = N/Den with
+                // N = -Cij, Den = denom. Crossing: y = Cij/D (#581).
+                double N, Ne, Nf, Nef, Den, De, Df, Def;
+                if (crossing) {
+                    N = Cij; Ne = dCij_e; Nf = dCij_f; Nef = d2Cij;
+                    Den = D; De = dD_e; Df = dD_f; Def = d2D;
+                } else {
+                    N = -Cij; Ne = -dCij_e; Nf = -dCij_f; Nef = -d2Cij;
+                    Den = denom; De = ddenom_e; Df = ddenom_f;
+                    Def = sC * d2D;
+                }
                 const double d2r =
                     ((Nef * Den + Ne * Df - Nf * De - N * Def) * Den
                      - 2.0 * (Ne * Den - N * De) * Df) / (Den * Den * Den);
