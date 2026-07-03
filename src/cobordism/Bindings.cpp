@@ -544,8 +544,12 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "1-cell (edge) order. M = L_k, the per-edge dL_k/dl^2 = HodgeLaplacian."
            "laplacianGradient (built on Simplex.volumeGradient), through eigenvector-"
            "perturbation theory; period covector + leak from each removed-(k+1)-cell "
-           "hole's facets. Reproduces the k=1 edge-loop core on triangle holes; "
-           "certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
+           "hole's facets. Reproduces the k=1 edge-loop core on triangle holes. At "
+           "k=0 the core runs against the genuinely COMPLEX Hermitian vertex "
+           "operator L_0 = D - A (full l^2 + U(1) phases; holes are removed "
+           "1-cells, i.e. vertex pairs) with the SVD pseudo-inverse fit (#589) — "
+           "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (L_0 is degree +1 in "
+           "l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
            "converge). Raises on a hole/target length mismatch.")
       .def("residualForPeriodsGradientGpu",
            &EigenstateSynthesis::residualForPeriodsGradientGpu,
