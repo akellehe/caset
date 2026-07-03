@@ -132,6 +132,31 @@ exclusions to see the entire interface.
 ```{doxygenfile} SparseGraph.h
 ```
 
+### Emergent-proton readout battery (#593)
+
+```{doxygenfile} Record.h
+```
+```{doxygenfile} RegisterContext.h
+```
+```{doxygenfile} LiveComplex.h
+```
+```{doxygenfile} InteriorHinges.h
+```
+```{doxygenfile} RegisterObservable.h
+```
+```{doxygenfile} SingletResidual.h
+```
+```{doxygenfile} BlockResiduals.h
+```
+```{doxygenfile} EmergentMass.h
+```
+```{doxygenfile} EmergentRadius.h
+```
+```{doxygenfile} PairLoopFlavor.h
+```
+```{doxygenfile} ObservableGates.h
+```
+
 ## Cobordism
 
 ```{doxygenfile} ChainComplex.h

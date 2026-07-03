@@ -41,11 +41,18 @@ class InteriorHinges;  // the shared 4D hinge-selection core (InteriorHinges.h)
 /// protected readout cores (`cobordism::EigenstateSynthesis`,
 /// `cobordism::MultiCobordism`, `cobordism::ChainComplex`), never refactoring them.
 ///
-///   * **Skeleton in C++ only.** The constructor materializes the facet/coface
-///     lattice through the `ReggeSolver(st, MatterConfiguration())` constructor —
-///     the blessed path (the #451 corruption lesson: a Python-driven
-///     materialization corrupted coface lists and `dualVolume()` saw half its
-///     cofaces). Idempotent.
+///   * **A pure reader — never a builder.** The context READS an already-built,
+///     relaxed spacetime (a `Proton::block()`, a `ProtonIngredients` state, a
+///     relaxed `MultiCobordism` complex, or a dump the loader already rehydrated
+///     into a live complex). It never builds, solves, or materializes anything —
+///     the emergent build lives exclusively in Proton/ProtonIngredients/
+///     MultiCobordism and is never re-run here. The facet/coface skeleton the
+///     `dualVolume()` / `lorentzianDeficitAngle()` reads walk is expected to be
+///     already present on the live complex (it is, on every built state); the
+///     construction that completes a bare `Spacetime::fromCells` skeleton — the
+///     dump-rehydration and the RELABEL-gate rebuild — lives OUTSIDE this class,
+///     in `LiveComplex` (the loader/transform), and only ever reads the recorded
+///     geometry back, never the emergent dynamics.
 ///   * **Hole selection validated at ONE entry point.** The register holes are the
 ///     emergent `(degree+2)`-vertex removed top cells
 ///     (`cobordism::MultiCobordism::emergentHoles`), in emergent-hole order. A
@@ -70,27 +77,17 @@ class InteriorHinges;  // the shared 4D hinge-selection core (InteriorHinges.h)
 ///     \f$ k \f$-cell index, the Betti vector, the 4D interior-hinge selection).
 ///     `gauged()` copies share the caches — the gauge knob only rotates the target.
 ///
-/// The GAUGE and RELABEL gate transforms act on the context, not on the
-/// observables: `gauged(theta)` rotates the register target by the surviving
-/// global U(1) phase (which contains the Z₃ cyclic recolor of the singlet and the
-/// orientation flip); `relabeled(seed)` rebuilds the whole complex under a random
-/// vertex-id permutation with the cell enumeration order shuffled too, carries the
-/// metric (complex squared lengths) and vertex times across, re-derives the
-/// emergent holes on the relabeled complex, and matches this register's images by
-/// permuted vertex SET (a missing image throws — the gate must compare like with
-/// like). See `ObservableGates`.
+/// The GAUGE gate transform acts on the context, not on the observables:
+/// `gauged(theta)` rotates the register target by the surviving global U(1) phase
+/// (which contains the Z₃ cyclic recolor of the singlet and the orientation flip)
+/// — a construction-free operation that shares the same live complex. The RELABEL
+/// gate needs a rebuilt (relabeled) complex, which is a construction: that lives
+/// in `LiveComplex` and is orchestrated by `ObservableGates`, never here — this
+/// reader never rebuilds anything.
 class RegisterContext {
   public:
-    /// A RELABEL-gate rebuild: the relabeled context plus the vertex-id
-    /// permutation that produced it (original id → relabeled id), so
-    /// vertex-id-bearing observable configuration (e.g. provenance block
-    /// regions) can be mapped through it.
-    struct Relabeled {
-      std::shared_ptr<RegisterContext> context;
-      std::map<std::uint64_t, std::uint64_t> vertexMap;
-    };
-
-    /// Build the context over `spacetime`, selecting and validating `count`
+    /// Read the context over the already-built `spacetime`, selecting and
+    /// validating `count`
     /// register holes at `degree` (see the class note: deficit throws, surplus
     /// is recorded in `selectionWarning()` naming the dropped holes). `target`
     /// is the register target state, one component per hole slot — the color
@@ -154,8 +151,10 @@ class RegisterContext {
     [[nodiscard]] const std::string &selectionWarning() const noexcept {
       return selectionWarning_;
     }
-    /// The top-cell dimension, or -1 when top cells are mixed-size (the
-    /// driver's dimension gates read this).
+    /// The canonical spacetime dimension \f$ d \f$ — the metric signature's
+    /// dimension (`getMetric()->getSignature()->getDimensions()`, the same
+    /// accessor WilsonLoop / ReggeSolver read). The driver's dimension gates
+    /// read this.
     [[nodiscard]] int dimensions() const noexcept { return dimensions_; }
     /// The number of top cells.
     [[nodiscard]] int topCellCount() const noexcept { return topCellCount_; }
@@ -185,43 +184,15 @@ class RegisterContext {
     /// @throws std::invalid_argument if the complex is not genuinely 4D.
     [[nodiscard]] const std::shared_ptr<InteriorHinges> &interiorHinges() const;
 
-    // ---- the gate transforms ----
-    /// The GAUGE-gate variant: the same complex and register with the target
-    /// rotated by the global U(1) phase \f$ e^{i\theta} \f$ — the register's
-    /// one surviving gauge freedom (it contains the Z₃ cyclic recolor of the
-    /// singlet and the orientation flip). Shares this context's spacetime and
-    /// caches (the gauge knob only rotates the target).
+    // ---- the GAUGE gate transform (construction-free) ----
+    /// The GAUGE-gate variant: the same live complex and register with the
+    /// target rotated by the global U(1) phase \f$ e^{i\theta} \f$ — the
+    /// register's one surviving gauge freedom (it contains the Z₃ cyclic recolor
+    /// of the singlet and the orientation flip). Shares this context's spacetime
+    /// and caches (the gauge knob only rotates the target; nothing is rebuilt).
+    /// The RELABEL gate — which needs a rebuilt, relabeled complex — is a
+    /// construction and lives in `LiveComplex` / `ObservableGates`, never here.
     [[nodiscard]] std::shared_ptr<RegisterContext> gauged(double theta) const;
-    /// The RELABEL-gate variant: rebuild the whole complex under a random
-    /// vertex-id permutation (deterministic given `seed`) with the cell
-    /// enumeration order shuffled too (catching enumeration-order dependence),
-    /// carry the metric (complex squared lengths) and vertex times across,
-    /// re-derive the emergent holes on the relabeled complex, and match this
-    /// register's images among them by permuted vertex SET.
-    /// @throws std::runtime_error if a hole's image is missing from the
-    ///   relabeled complex's emergent census (the gate must compare like with
-    ///   like).
-    [[nodiscard]] Relabeled relabeled(std::uint64_t seed) const;
-
-    /// A live complex from explicit top cells + per-edge complex squared
-    /// lengths, with the skeleton materialized in C++ (the `ReggeSolver`
-    /// constructor — the blessed path). `cells` keep their intrinsic vertex
-    /// order (never sorted — the stored order carries the orientation);
-    /// `squaredLengths` maps each `(min id, max id)` vertex pair to its complex
-    /// squared length; `vertexTimes` (may be empty) maps vertex id → recorded
-    /// time, applied before the lengths. `dimensions < 0` derives the dimension
-    /// from the first cell. This is the schema-1 geometry-dump rebuild core
-    /// (the dump is an attempt's ONLY faithful record — the engine build is not
-    /// process-deterministic, so a seed labels an attempt, never reproduces it).
-    /// @throws std::invalid_argument if `cells` is empty.
-    /// @throws std::out_of_range if a built edge has no recorded squared
-    ///   length — a partial metric is never silently defaulted.
-    [[nodiscard]] static std::shared_ptr<Spacetime> buildComplex(
-        const std::vector<std::vector<std::uint64_t>> &cells,
-        const std::map<std::pair<std::uint64_t, std::uint64_t>,
-                       std::complex<double>> &squaredLengths,
-        const std::map<std::uint64_t, double> &vertexTimes = {},
-        int dimensions = -1);
 
   private:
     /// The lazily-built shared structures. Held behind one shared_ptr so
@@ -229,8 +200,9 @@ class RegisterContext {
     /// context is visible to the other — the complex is the same object).
     struct Caches;
 
-    /// Shared constructor tail: skeleton materialization, censuses, hole
-    /// validation (`explicitHoles` empty ⇒ select from the emergent census).
+    /// Shared constructor tail: read the live complex's censuses and validate
+    /// the hole selection (`explicitHoles` null ⇒ select from the emergent
+    /// census). Reads only — nothing is built or materialized.
     void initialize(int count,
                     const std::vector<std::vector<std::uint64_t>> *explicitHoles);
 
