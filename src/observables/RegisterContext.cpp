@@ -4,8 +4,7 @@
 #include "observables/RegisterContext.h"
 
 #include <algorithm>
-#include <cmath>
-#include <set>
+#include <complex>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
