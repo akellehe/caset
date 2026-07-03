@@ -327,11 +327,16 @@ class EigenstateSynthesis {
     /// of `residualForPeriods` w.r.t. each edge's squared length, in `ChainComplex`
     /// 1-cell (edge) order, certified by the exact Euler identity
     /// \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = -r_U \f$ at every register degree
-    /// (finite difference is roundoff-limited and does not converge). At \f$ k = 1 \f$
-    /// it routes through the **fast** low-rank edge-loop core (`periodGradientOverLoops`,
-    /// which builds the chain complex once) so a relaxation loop stays affordable; at
-    /// \f$ k \ge 2 \f$ it uses the degree-generic `periodGradientGeneral`. The two are
-    /// value-identical at \f$ k = 1 \f$ (verified to 1.7e-15).
+    /// \f$ k \ge 1 \f$ (finite difference is roundoff-limited and does not converge).
+    /// At \f$ k = 1 \f$ it routes through the **fast** low-rank edge-loop core
+    /// (`periodGradientOverLoops`, which builds the chain complex once) so a relaxation
+    /// loop stays affordable; at \f$ k \ge 2 \f$ it uses the degree-generic
+    /// `periodGradientGeneral`. The two are value-identical at \f$ k = 1 \f$ (verified
+    /// to 1.7e-15). At \f$ k = 0 \f$ the gradient runs against the genuinely
+    /// **complex Hermitian** vertex operator \f$ L_0 = D - A \f$ (full \f$ l^2 \f$ and
+    /// U(1) phases — `periodGradientDegreeZero`, #589); \f$ L_0 \f$ is homogeneous of
+    /// degree **+1** in \f$ l^2 \f$, so the \f$ k = 0 \f$ Euler identity is
+    /// \f$ \sum_e l^2_e\,\partial r_U/\partial l^2_e = +2\,r_U \f$.
     /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`.
     [[nodiscard]] std::vector<double> residualForPeriodsGradient(
         const std::vector<std::vector<std::uint64_t>> &holes,
@@ -650,13 +655,6 @@ class EigenstateSynthesis {
         bool electricOnly = true) const;
 
   private:
-    // The analytic r_U / r_psi gradient cores project the metric Hodge
-    // operator with laplacian(k).real() — lossless for k >= 1 (the metric L_k
-    // there is real symmetric) but silently the WRONG operator at k = 0,
-    // where L_0 consumes the full complex l^2 (#580/#581). Fail loudly until
-    // a complex k = 0 core exists. `who` names the calling core.
-    void requireGradientDegree(const char *who) const;
-
     std::shared_ptr<Spacetime> st_;
     int k_{0};  // the Hodge degree of L_k that apply()/residual() score against
     // The Hodge Laplacian operator over the same complex. laplacian(k_)
@@ -749,9 +747,26 @@ class EigenstateSynthesis {
         const std::vector<std::complex<double>> &targetPeriods) const;
 
     // Degree-generic d r_U / d l^2 over removed-(k+1)-cell holes (M = L_k, the
-    // per-edge analytic dL_k/dl^2). The k >= 2 path of residualForPeriodsGradient;
+    // per-edge analytic dL_k/dl^2). The k = 0 and k >= 2 path of
+    // residualForPeriodsGradient (k = 0 dispatches to periodGradientDegreeZero);
     // value-identical to periodGradientOverLoops at k = 1.
     [[nodiscard]] std::vector<double> periodGradientGeneral(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    // Exact d r_U / d l^2 at k = 0 against the genuinely COMPLEX Hermitian
+    // vertex operator L_0 = D - A (D_ii = sum |l^2|, A_ij = l^2 e^{i phase};
+    // the k >= 1 cores' laplacian(k).real() projection would be the WRONG
+    // operator here, #580/#589). A hole is a removed 1-cell: a vertex pair
+    // whose drop-v_j facets carry (-1)^j, the assembleRegisterReadout
+    // convention. The least-squares fit uses the SVD pseudo-inverse (matching
+    // lstsqOverReadout) and its constant-rank derivative — at k = 0 the
+    // period matrix is generically rank-deficient (a globally gauge-flat
+    // harmonic has zero period on every hole), so the k >= 1 cores'
+    // normal-equations inverse would be singular. Euler identity at k = 0:
+    // Sum_e l^2_e d r_U/d l^2_e = +2 r_U (L_0 is homogeneous of degree +1 in
+    // l^2, vs the degree -1 metric L_k at k >= 1 whose identity is -r_U).
+    [[nodiscard]] std::vector<double> periodGradientDegreeZero(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 

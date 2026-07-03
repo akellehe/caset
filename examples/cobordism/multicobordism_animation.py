@@ -429,8 +429,8 @@ class ProtonAnimator:
                 hinge_im[key] = deficit.imag * weight
             except RuntimeError:                 # boundary/degenerate hinge → no curvature
                 # Only the geometric failure is swallowed; a type/contract
-                # failure (TypeError, ValueError from the #581 resident-Im
-                # guard) must propagate, never render as zero curvature.
+                # failure (TypeError, ValueError) must propagate, never
+                # render as zero curvature.
                 hinge_re[key] = hinge_im[key] = 0.0
         curv = {}
         for c in st.getTopSimplices():

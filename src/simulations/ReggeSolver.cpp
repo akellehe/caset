@@ -425,10 +425,10 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
         static_cast<std::size_t>(nThreads), std::vector<cd>(E, cd(0.0, 0.0)));
 
     // An exception may not escape an OpenMP region (std::terminate, taking the
-    // whole process). The hinge geometry can throw — e.g. the #581 resident-Im
-    // guard firing on a stage-2 Wirtinger trial — so capture the first
-    // exception and rethrow it after the join: callers (the stage-2 line
-    // search) treat an inevaluable trial as +inf and back off.
+    // whole process). Nothing in the hinge geometry throws in normal operation,
+    // but a genuine error can (std::bad_alloc, a corrupted/empty simplex) — so
+    // capture the first exception and rethrow it after the join, turning a
+    // silent process abort into a loudly propagating error.
     std::exception_ptr pending = nullptr;
     #pragma omp parallel
     {
@@ -495,7 +495,8 @@ ReggeSolver::actionHessianExact() const {
         static_cast<std::size_t>(nThreads),
         std::vector<std::vector<cd>>(E, std::vector<cd>(E, cd(0.0, 0.0))));
 
-    // Same OpenMP exception discipline as actionGradientExact (#581).
+    // Same OpenMP exception discipline as actionGradientExact: a genuine error
+    // must propagate loudly, never std::terminate.
     std::exception_ptr pending = nullptr;
     #pragma omp parallel
     {
@@ -595,7 +596,8 @@ ReggeSolver::actionHessianExactSparse() const {
 #endif
     std::vector<std::vector<Trip>> partials(static_cast<std::size_t>(nThreads));
 
-    // Same OpenMP exception discipline as actionGradientExact (#581).
+    // Same OpenMP exception discipline as actionGradientExact: a genuine error
+    // must propagate loudly, never std::terminate.
     std::exception_ptr pending = nullptr;
     #pragma omp parallel
     {

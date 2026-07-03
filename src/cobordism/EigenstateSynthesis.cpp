@@ -1366,21 +1366,20 @@ double EigenstateSynthesis::periodGapForPeriods(
       targetPeriods);
 }
 
-void EigenstateSynthesis::requireGradientDegree(const char *who) const {
-  if (k_ == 0)
-    throw std::runtime_error(
-        std::string("EigenstateSynthesis::") + who +
-        ": the analytic gradient cores read laplacian(k).real(), which is "
-        "lossless for k >= 1 but the WRONG operator at k = 0 (L_0 consumes "
-        "the full complex l^2, so .real() silently truncates it — see #580). "
-        "The complex k = 0 gradient core is not implemented; construct the "
-        "synthesis at k >= 1 or use finite differences of residual().");
-}
-
 std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
-  requireGradientDegree("periodGradientOverLoops");
+  // Contract: the signed edge-loop machinery is degree-1 by construction — a
+  // loop period reads an edge (1-cell) cochain, and everything below (M = L_1,
+  // the triangle low-rank dM, the cell->index map over 2-vertex tuples) is the
+  // k = 1 layout. Other degrees go through the hole APIs
+  // (residualForPeriodsGradient routes by degree).
+  if (k_ != 1)
+    throw std::runtime_error(
+        "EigenstateSynthesis::periodGradientOverLoops: the edge-loop core is "
+        "degree-1 machinery (loops are closed walks of 1-cells); this "
+        "synthesis is degree " + std::to_string(k_) +
+        " — use residualForPeriodsGradient, which routes holes by degree.");
   using Eigen::Index;
   using Eigen::MatrixXd;
   using Eigen::VectorXcd;
@@ -1580,7 +1579,10 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
 std::vector<double> EigenstateSynthesis::periodGradientGeneral(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
-  requireGradientDegree("periodGradientGeneral");
+  // k = 0 is a different operator, not a different weight: L_0 = D - A is
+  // genuinely complex Hermitian (full l^2 + U(1) phases), so it gets its own
+  // complex core rather than the laplacian(k).real() projection below (#589).
+  if (k_ == 0) return periodGradientDegreeZero(holes, targetPeriods);
   // Arbitrary-degree exact d r_U / d l^2 over the removed-(k+1)-cell holes. M = L_k,
   // the per-edge dL_k/dl^2 (HodgeLaplacian::laplacianGradient, on Simplex::volumeGradient)
   // through first-order eigenvector perturbation, period covector + leak from each
@@ -1714,6 +1716,193 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   return grad;
 }
 
+std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+  // Exact d r_U / d l^2 at k = 0, against the operator residualForPeriods
+  // actually scores: the genuinely COMPLEX Hermitian vertex operator
+  // L_0 = D - A (HodgeLaplacian::assemble — D_ii = sum_e |l^2_e|,
+  // A_ij = l^2_e e^{i phase_e}). Structure mirrors periodGradientGeneral in
+  // complex arithmetic; the product rule d||rho||^2 = 2 Re(rho^dagger d rho)
+  // is complex-safe as-is. Differences from the k >= 1 core, both forced by
+  // the operator:
+  //   * dL_0 per edge has exactly four entries — dL_ii = dL_jj = d|w|/dw
+  //     evaluated along the real axis (Re w / |w|; the manifold is real
+  //     signed l^2), dL_ij = -e^{i phase}, dL_ji = -e^{-i phase} — no volume
+  //     weights (W_0 = I).
+  //   * The least-squares fit uses the SVD pseudo-inverse and its
+  //     constant-rank derivative (Golub–Pereyra): at k = 0 a globally
+  //     gauge-flat harmonic has zero period on every hole, so A = Q U_n is
+  //     generically COLUMN-RANK-DEFICIENT and the k >= 1 cores'
+  //     (A^dagger A)^{-1} would be singular. The SVD fit is exactly what the
+  //     functional's lstsqOverReadout applies, so the gradient differentiates
+  //     the value actually returned.
+  // Euler identity: L_0(s l^2) = s L_0(l^2) for s > 0 (degree +1), so
+  // Sum_e l^2_e d r_U/d l^2_e = +2 r_U (the k >= 1 metric L_k is degree -1,
+  // giving -r_U there).
+  using Eigen::Index;
+  using Eigen::MatrixXcd;
+  using Eigen::MatrixXd;
+  using Eigen::VectorXcd;
+  using Eigen::VectorXd;
+  const std::size_t n0 = order_;  // # vertices (rows/cols of L_0)
+  const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
+  const std::vector<std::vector<std::uint64_t>> edges1 = cc.kSimplexVertices(1);
+  std::vector<double> grad(edges1.size(), 0.0);  // d r_U / d l^2_e, 1-cell order
+  const std::size_t m = holes.size();
+  if (n0 == 0 || m == 0) return grad;
+  if (targetPeriods.size() != m)
+    throw std::runtime_error(
+        "EigenstateSynthesis::periodGradientDegreeZero: " +
+        std::to_string(targetPeriods.size()) + " target periods for " +
+        std::to_string(m) + " holes");
+  static constexpr double kNullTol = 1e-7;
+  const Index N = static_cast<Index>(n0);
+
+  // ---- M = L_0 (Hermitian complex; the full l^2 and U(1) phases) ----
+  const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(0);
+  MatrixXcd M(N, N);
+  for (std::size_t i = 0; i < n0; ++i)
+    for (std::size_t j = 0; j < n0; ++j)
+      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n0 + j];
+
+  // ---- Q (period covector, m x n0) + leak column: a k = 0 hole is a removed
+  // 1-cell (a vertex pair); its drop-v_j facets are the two vertices with sign
+  // (-1)^j — the assembleRegisterReadout convention, leak on the first facet. ----
+  std::map<std::vector<std::uint64_t>, std::size_t> col;
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
+  const std::size_t hv = 2;  // k + 2 vertices per hole at k = 0
+  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  std::vector<std::size_t> leakCol(m, 0);
+  for (std::size_t q = 0; q < m; ++q) {
+    std::vector<std::uint64_t> h = holes[q];
+    std::sort(h.begin(), h.end());
+    if (h.size() != hv)
+      throw std::runtime_error(
+          "EigenstateSynthesis::periodGradientDegreeZero: hole has " +
+          std::to_string(h.size()) + " vertices, expected " +
+          std::to_string(hv));
+    for (std::size_t j = 0; j < hv; ++j) {
+      std::vector<std::uint64_t> f;
+      f.reserve(hv - 1);
+      for (std::size_t i = 0; i < hv; ++i)
+        if (i != j) f.push_back(h[i]);
+      const auto it = col.find(f);
+      if (it == col.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::periodGradientDegreeZero: a hole vertex is "
+            "not a 0-cell of the complex");
+      if (j == 0) leakCol[q] = it->second;
+      Q(static_cast<Index>(q), static_cast<Index>(it->second)) +=
+          (j % 2 == 0) ? 1.0 : -1.0;
+    }
+  }
+
+  // ---- harmonic (null) / non-null eigensplit of M (Hermitian ⇒ real λ) ----
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  const VectorXd lam = eig.eigenvalues();
+  const MatrixXcd U = eig.eigenvectors();
+  std::vector<Index> nullIdx, nnIdx;
+  for (Index i = 0; i < N; ++i)
+    (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
+  const Index nd = static_cast<Index>(nullIdx.size());
+  const Index nnd = static_cast<Index>(nnIdx.size());
+  if (nd == 0) return grad;  // no harmonics -> nothing carried
+  MatrixXcd Un(N, nd), Unn(N, nnd);
+  for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
+  for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
+  VectorXd invlam(nnd);
+  for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
+
+  // ---- the SVD pseudo-inverse fit (min-norm, as lstsqOverReadout) ----
+  VectorXcd target(static_cast<Index>(m));
+  for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
+  const MatrixXcd A = Q.cast<cd>() * Un;  // m x nd
+  Eigen::JacobiSVD<MatrixXcd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  const Index rank = svd.rank();
+  MatrixXcd Aplus = MatrixXcd::Zero(nd, static_cast<Index>(m));
+  if (rank > 0) {
+    const MatrixXcd Ur = svd.matrixU().leftCols(rank);
+    const MatrixXcd Vr = svd.matrixV().leftCols(rank);
+    const VectorXd sr = svd.singularValues().head(rank);
+    Aplus = Vr * sr.cwiseInverse().asDiagonal() * Ur.adjoint();
+  }
+  const VectorXcd c = Aplus * target;
+
+  // ---- carried representative psi, p, rho, r_U (as the k >= 1 cores) ----
+  VectorXcd psi = Un * c;
+  const VectorXcd carried = Q.cast<cd>() * psi;
+  for (std::size_t q = 0; q < m; ++q)
+    psi[static_cast<Index>(leakCol[q])] +=
+        target[static_cast<Index>(q)] - carried[static_cast<Index>(q)];
+  const double nrm = psi.norm();
+  if (nrm <= 0.0) return grad;
+  const VectorXcd p = psi / nrm;
+  const VectorXcd Mp = M * p;
+  const double lamR = (p.dot(Mp)).real();
+  const VectorXcd rho = Mp - lamR * p;
+  const double rU = rho.squaredNorm();
+
+  // Constant-rank pseudo-inverse pieces: the range/row-space projectors and
+  // the two Gram factors of the Golub–Pereyra derivative.
+  const MatrixXcd Im_AAp =
+      MatrixXcd::Identity(static_cast<Index>(m), static_cast<Index>(m)) - A * Aplus;
+  const MatrixXcd Ind_ApA = MatrixXcd::Identity(nd, nd) - Aplus * A;
+  const MatrixXcd ApApAdj = Aplus * Aplus.adjoint();   // nd x nd
+  const MatrixXcd ApAdjAp = Aplus.adjoint() * Aplus;   // m x m
+
+  // ---- per-edge index/value lookups ----
+  std::map<std::pair<std::uint64_t, std::uint64_t>, const Edge *> edgeOf;
+  for (const auto *e : edges_)
+    edgeOf[{std::min(e->getSource()->getId(), e->getTarget()->getId()),
+            std::max(e->getSource()->getId(), e->getTarget()->getId())}] = e;
+
+  // ---- per-edge analytic gradient: the four-entry dL_0, dense perturbation ----
+  for (std::size_t je = 0; je < edges1.size(); ++je) {
+    const auto eIt = edgeOf.find({std::min(edges1[je][0], edges1[je][1]),
+                                  std::max(edges1[je][0], edges1[je][1])});
+    if (eIt == edgeOf.end()) continue;  // no live edge carries this 1-cell
+    const Edge *edge = eIt->second;
+    const auto srcIt = col.find({edge->getSource()->getId()});
+    const auto tgtIt = col.find({edge->getTarget()->getId()});
+    if (srcIt == col.end() || tgtIt == col.end()) continue;
+    const Index is = static_cast<Index>(srcIt->second);
+    const Index it = static_cast<Index>(tgtIt->second);
+    const cd w = edge->getSquaredLength();
+    // d|w|/d(Re w): Re w / |w| — the real-axis directional derivative (sign w
+    // for real w). At the |w| kink (w == 0) take the symmetric subgradient 0.
+    const double dAbs = (std::abs(w) > 0.0) ? w.real() / std::abs(w) : 0.0;
+    const cd zPhase = std::exp(cd(0.0, edge->getPhase()));
+    MatrixXcd dM = MatrixXcd::Zero(N, N);
+    dM(is, is) += dAbs;                  // dD_ii
+    dM(it, it) += dAbs;                  // dD_jj
+    dM(is, it) -= zPhase;                // -dA_ij
+    dM(it, is) -= std::conj(zPhase);     // -dA_ji (Hermitian)
+    const VectorXcd dMp = dM * p;
+    // Eigenvector perturbation of the harmonic block (complex Hermitian):
+    // dUn = Unn diag(1/(0 - λ_nn)) Unn^dagger dM Un.
+    const MatrixXcd core = (Unn.adjoint() * dM) * Un;         // nnd x nd
+    const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core); // N x nd
+    const MatrixXcd dA = Q.cast<cd>() * dUn;                  // m x nd
+    // Constant-rank derivative of the pseudo-inverse (Golub–Pereyra):
+    // dA+ = -A+ dA A+ + (A+ A+^dagger) dA^dagger (I - A A+)
+    //       + (I - A+ A) dA^dagger (A+^dagger A+).
+    const MatrixXcd dAplus = -Aplus * dA * Aplus +
+                             ApApAdj * dA.adjoint() * Im_AAp +
+                             Ind_ApA * dA.adjoint() * ApAdjAp;
+    const VectorXcd dc = dAplus * target;
+    VectorXcd dpsi = dUn * c + Un * dc;
+    const VectorXcd dcarried = Q.cast<cd>() * dpsi;
+    for (std::size_t q = 0; q < m; ++q)
+      dpsi[static_cast<Index>(leakCol[q])] += -dcarried[static_cast<Index>(q)];
+    const VectorXcd Mdpsi = M * dpsi;
+    grad[je] = 2.0 * (rho.dot(dMp)).real() +
+               (2.0 / nrm) * (rho.dot(Mdpsi - lamR * dpsi)).real() -
+               (2.0 * rU / nrm) * (p.dot(dpsi)).real();
+  }
+  return grad;
+}
+
 std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
@@ -1734,7 +1923,14 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
 std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
-  requireGradientDegree("periodGapForLoopsGradient");
+  // Contract: degree-1 machinery, exactly as periodGradientOverLoops (and as
+  // the r_psi functional itself — periodGapForLoops reads loop periods of an
+  // edge cochain, defined only at k = 1).
+  if (k_ != 1)
+    throw std::runtime_error(
+        "EigenstateSynthesis::periodGapForLoopsGradient: the edge-loop core "
+        "is degree-1 machinery (loops are closed walks of 1-cells); this "
+        "synthesis is degree " + std::to_string(k_) + ".");
   // The hard-pin sibling of periodGradientOverLoops (r_U): same first-order
   // eigenvector-perturbation setup (M = L1, harmonic split Un/Unn, the per-edge
   // low-rank dM, dUn), but the score is the period GAP r_psi = ||A c - t||^2 with
@@ -1939,7 +2135,15 @@ std::vector<double> EigenstateSynthesis::residualForLoopsGradient(
 std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
-  requireGradientDegree("residualForPeriodsGradientGpu");
+  // Contract: this port mirrors the k = 1 loop core verbatim (M = L_1, 3-vertex
+  // holes, the triangle low-rank dM); other degrees use the CPU
+  // residualForPeriodsGradient, which routes by degree.
+  if (k_ != 1)
+    throw std::runtime_error(
+        "EigenstateSynthesis::residualForPeriodsGradientGpu: the GPU port "
+        "mirrors the degree-1 loop core (M = L_1, 3-vertex holes); this "
+        "synthesis is degree " + std::to_string(k_) +
+        " — use the CPU residualForPeriodsGradient, which routes by degree.");
 #ifndef TESSERA_CUDA
   (void)holes;
   (void)targetPeriods;

@@ -38,9 +38,10 @@ using ::tessera::spacetime::Spacetime;
 ///   * **Stage 1 (combinatorial):** greedy best-ΔF single random moves
 ///     `{add,remove,flip,iflip,cone_out,cone_in}`, each gated by `dualComplexValid`
 ///     and "no input vertex removed", committed only if ΔF < 0; re-seed on stall.
-///   * **Stage 2 (geometric):** relax every (complex) edge `ℓ²` toward a stationary
-///     point of `β‖∇S‖² + Γ·r_U` (Wirtinger steepest descent, backtracking line
-///     search), re-opening the scale DOF.
+///   * **Stage 2 (geometric):** relax every edge `ℓ²` along the **real signed-ℓ²
+///     manifold** toward a stationary point of `β‖∇S‖² + Γ·r_U` (steepest descent
+///     on `Re(2β·H̄·g)` — the exact restriction of the Wirtinger gradient to the
+///     real axis — with a backtracking line search), re-opening the scale DOF.
 class MultiCobordism {
  public:
   /// An emergent boundary block of the cobordism — an input OR an output. A block is
@@ -122,21 +123,28 @@ class MultiCobordism {
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
                                 int patience = 8, bool growBoundaries = false);
-  /// Stage 2 (geometric): relax every (complex) edge `ℓ²` toward a stationary point of
-  /// `β‖∇S‖² + Γ·r_U` (Wirtinger steepest descent, backtracking line search). The line
-  /// search accepts a step only when it lowers `F` by more than `relTol·max(|F|,1)` — a
-  /// RELATIVE stationarity test (an absolute floor of `relTol` for `|F| < 1`), so the
+  /// Stage 2 (geometric): relax every edge `ℓ²` along the **real signed-ℓ² manifold**
+  /// toward a stationary point of `β‖∇S‖² + Γ·r_U`. The configuration space is real
+  /// signed `ℓ²` (ordinary Lorentzian Regge; the complexified theory is unbuilt), so
+  /// the descent direction is the exact gradient of `F` restricted to that manifold:
+  /// for real `F` of a complex variable on the real axis `dF/dx = 2·Re(∂F/∂z̄)`, i.e.
+  /// `Re(2β·H̄·g)` — the real part of the Wirtinger direction. Every trial is
+  /// constructed exactly real, so **`Im ℓ² ≡ 0` holds for all time by construction**
+  /// — no writer of `Im ℓ²` exists anywhere in the dynamics, nothing is enforced at
+  /// runtime, and the invariant is proven by the suite tests. The line search accepts
+  /// a step only when it lowers `F` by more than `relTol·max(|F|,1)` — a RELATIVE
+  /// stationarity test (an absolute floor of `relTol` for `|F| < 1`), so the
   /// criterion scales with the objective rather than the absolute `convergenceTolerance_`
   /// the surgery stages use (for `F ≈ 100` that absolute `1e-9` accepted ~`1e-11` relative
   /// steps — the rounding floor). "No line-search step beats the threshold" is the
   /// stationary stop; `maxIters` is the safety budget cap. `lastStage2Stationary()` reports
   /// which of the two ended the run. Returns the `F` trace.
   ///
-  /// Trials are UNBOUNDED — fully Lorentzian, no clamp, no causal guard (#565): a trial
-  /// `ℓ²` may land spacelike, timelike, or lightlike (`Re ℓ²` of either sign or inside
-  /// any `(-ε, ε)` band; `Im ℓ²` as ever untouched). The only rejection is the line
-  /// search's own: a trial on which the objective fails to evaluate scores `+inf` and is
-  /// backed off, so degenerate geometry is refused by the PHYSICS, never by a projection.
+  /// Trials are UNBOUNDED on the real axis — fully Lorentzian, no clamp, no causal
+  /// guard (#565): a trial `Re ℓ²` may land spacelike, timelike, or lightlike (either
+  /// sign or inside any `(-ε, ε)` band). The objective is total on the real manifold,
+  /// so no trial can fail to evaluate — there is no backoff and no rejection beyond
+  /// the line search's own variational acceptance; a genuine error propagates loudly.
   /// Epic #559's rule still holds — nothing here seeds causal content; the whole
   /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
   /// the dynamics (its absence is equally a finding).
@@ -190,8 +198,11 @@ class MultiCobordism {
   }
   /// Whether the last `runStage2` ended on the relative-tolerance stationarity test (no
   /// line-search step lowered `F` by more than `relTol·max(|F|,1)`) — `true` — versus
-  /// hitting the `maxIters` budget cap — `false`. Lets a caller report "stopped:
-  /// stationary" vs "stopped: budget". `false` before the first `runStage2`.
+  /// hitting the `maxIters` budget cap — `false`. `true` means **real-manifold
+  /// stationarity, `δF = 0` along real signed-ℓ² perturbations**: the exact
+  /// on-manifold gradient direction `Re(2β·H̄·g)` buys no further descent (#589).
+  /// Lets a caller report "stopped: stationary" vs "stopped: budget". `false` before
+  /// the first `runStage2`.
   [[nodiscard]] bool lastStage2Stationary() const { return lastStage2Stationary_; }
 
  private:

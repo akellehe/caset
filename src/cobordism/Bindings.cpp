@@ -544,8 +544,12 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "1-cell (edge) order. M = L_k, the per-edge dL_k/dl^2 = HodgeLaplacian."
            "laplacianGradient (built on Simplex.volumeGradient), through eigenvector-"
            "perturbation theory; period covector + leak from each removed-(k+1)-cell "
-           "hole's facets. Reproduces the k=1 edge-loop core on triangle holes; "
-           "certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
+           "hole's facets. Reproduces the k=1 edge-loop core on triangle holes. At "
+           "k=0 the core runs against the genuinely COMPLEX Hermitian vertex "
+           "operator L_0 = D - A (full l^2 + U(1) phases; holes are removed "
+           "1-cells, i.e. vertex pairs) with the SVD pseudo-inverse fit (#589) — "
+           "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (L_0 is degree +1 in "
+           "l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
            "converge). Raises on a hole/target length mismatch.")
       .def("residualForPeriodsGradientGpu",
            &EigenstateSynthesis::residualForPeriodsGradientGpu,
@@ -833,12 +837,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
            py::arg("rel_tol") = 1e-9,
            py::call_guard<py::gil_scoped_release>(),
-           "Stage 2 (geometric): relax every edge l^2 toward a stationary point of "
-           "beta*||grad S||^2 + gamma*r_U (Wirtinger steepest descent, backtracking "
-           "line search). Stops on the RELATIVE stationarity test -- no line-search "
-           "step lowers F by more than rel_tol*max(|F|,1) -- or the max_iters budget "
-           "cap. Read last_stage2_stationary for which one ended the run. Returns the "
-           "F trace.")
+           "Stage 2 (geometric): relax every edge l^2 along the REAL signed-l^2 "
+           "manifold (ordinary Lorentzian Regge) toward a stationary point of "
+           "beta*||grad S||^2 + gamma*r_U. The descent direction is the exact "
+           "on-manifold gradient Re(2*beta*conj(H)*g) and every trial is "
+           "constructed exactly real, so Im l^2 == 0 by construction (#589); "
+           "backtracking line search. Stops on the RELATIVE stationarity test -- "
+           "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
+           "the max_iters budget cap. Read last_stage2_stationary for which one "
+           "ended the run. Returns the F trace.")
       .def_property_readonly("st", &MultiCobordism::spacetime)
       .def_property_readonly("inputs", &MultiCobordism::inputs,
                              py::return_value_policy::reference_internal,
@@ -849,8 +856,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_property_readonly("last_stage2_stationary",
                              &MultiCobordism::lastStage2Stationary,
                              "True iff the last run_stage2 stopped on the relative-"
-                             "tolerance stationarity test (delta_rel < rel_tol); False "
-                             "if it hit the max_iters budget cap.");
+                             "tolerance stationarity test (delta_rel < rel_tol) -- "
+                             "real-manifold stationarity, dF = 0 along real signed-"
+                             "l^2 perturbations (#589); False if it hit the "
+                             "max_iters budget cap.");
   py::enum_<MultiCobordism::BuildAction>(multiCobordismClass, "BuildAction",
       "One canonical solve action a search policy (Proton's build restart loop, a greedy "
       "driver, or the RL agent) composes, so the solve runs through the engine rather than "

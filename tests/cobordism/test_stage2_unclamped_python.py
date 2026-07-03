@@ -1,13 +1,17 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""run_stage2's trials are UNBOUNDED — fully Lorentzian, no clamp, no causal guard
-(#565) — + signature-change verification of every reader the objective is built from.
+"""run_stage2's trials are UNBOUNDED on the real axis — fully Lorentzian, no clamp,
+no causal guard (#565, #589) — + signature-change verification of every reader the
+objective is built from.
 
-Semantics: `runStage2` in MultiCobordism.h is THE authoritative statement. A trial
-`Re ℓ²` may land spacelike, timelike, or lightlike (any `(-ε, ε)` band admissible);
-the only rejection is the line search's own — a trial the objective cannot evaluate
-scores +inf and is backed off. Nothing projects a trial onto a floor, a cap, or a
-cone side, so the old clamp pins (`0.05`, `20`) must never reappear on an edge.
+Semantics: `runStage2` in MultiCobordism.h is THE authoritative statement. The
+configuration space is real signed ℓ²; every trial is constructed exactly real
+(descent along `Re(2β·H̄·g)`, the exact on-manifold gradient), and a trial `Re ℓ²`
+may land spacelike, timelike, or lightlike (any `(-ε, ε)` band admissible). The
+only rejection is the line search's own variational acceptance — the objective is
+total on the real manifold, so no trial can fail to evaluate and there is no
+backoff. Nothing projects a trial onto a floor, a cap, or a cone side, so the old
+clamp pins (`0.05`, `20`) must never reappear on an edge.
 
 Epic #559's rule: NO timelike initialization — causal content may only EMERGE. The
 timelike edge hand-set below is a verification of the READERS (the complex Sorkin
@@ -19,8 +23,6 @@ import math
 import os
 import sys
 import unittest
-
-import pytest
 
 import tessera as T
 
@@ -118,14 +120,6 @@ class Stage2UnclampedTest(unittest.TestCase):
             self.assertFalse(hasattr(cob.MultiCobordism, name),
                              f"clamping machinery reappeared: {name}")
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="the deferred stage-2 Im-drift interaction (#580 systemic 1, "
-        "deferred on #581): on a mixed-hinge host the complex Wirtinger trial "
-        "writes resident Im l^2, which the ordinary-Lorentzian geometry "
-        "convention rejects fail-loud, so the line search backs every trial "
-        "off (+inf) and no step is accepted until runStage2 proposes trials "
-        "on the real axis (the #565/#573 owner's adaptation)")
     def test_accepted_steps_never_pin_to_the_old_clamp(self):
         # Seed edges on the wrong side of every retired bound: timelike (the reader-
         # verification allowance), beyond the old ±20 cap, and inside the old 0.05
@@ -165,8 +159,8 @@ class Stage2UnclampedTest(unittest.TestCase):
     def test_unclamped_step_with_timelike_edge_no_nan(self):
         # A stage-2 run on a host carrying one hand-set timelike edge neither NaNs
         # nor collapses: finite F trace, every edge finite. Cone-side changes and
-        # magnitudes are dynamics — the physics rejects inevaluable trials via the
-        # line search's +inf backoff, not via a projection.
+        # magnitudes are dynamics — every trial is exactly real and evaluable, and
+        # only the line search's variational acceptance decides (#589).
         host = _closed_s4(n_refine=8, seed=3)
         host.getEdgeList().toVector()[5].setSquaredLength(complex(-0.8, 0.0))
         opt = self._node(host)
