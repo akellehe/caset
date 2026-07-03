@@ -28,9 +28,11 @@
 # state -> same bytes), and written only AFTER the attempt completes — the drive and
 # its RNG draws are untouched.
 import argparse
+import gzip
 import json
 import os
 import resource
+import sys
 import time
 
 import tessera
@@ -46,8 +48,10 @@ STAGE2_CHUNK = 25            # progress granularity; the stationarity test is th
 PERSIST_PASSES = 3
 PERSIST_REL_TOL = 1e-9
 REGISTER_DEGREE = 3
-PROGRESS_BYTE_CAP = 50 * 1024 * 1024        # per worker
+PROGRESS_BYTE_CAP = 50 * 1024 * 1024        # per worker, UNCOMPRESSED bytes
+VERDICT_BYTE_CAP = 50 * 1024 * 1024         # per worker; reaching it ends the worker
 GIF_BYTE_CAP = 5 * 1024 * 1024 * 1024       # global, across all workers
+ERROR_BACKOFF_SECONDS = 5.0                 # sleep after a failed attempt (harness only)
 GEOMETRY_SCHEMA = 1                         # bump on any dump-format change
 
 JOINT_LABEL = "Joint — 3 neutral q-q̄ pairs (nothing else prepared)"
@@ -287,6 +291,18 @@ def main():
                     help="record per-attempt frames; GIFs kept by the keep-policy")
     args = ap.parse_args()
 
+    # Startup self-check: a worker that cannot even construct the drive's node
+    # (stale engine build, missing binding, broken venv) must die ONCE, loudly,
+    # before the seed loop — not record one instant failure per seed until the
+    # deadline (a stale-build worker once wrote 139 GB of identical
+    # AttributeError verdict lines overnight, #591).
+    try:
+        cob.ProtonIngredients(seed=0).joint_node(0)
+    except Exception as error:
+        print(f"worker {args.worker}: startup self-check failed — {error!r}",
+              file=sys.stderr)
+        sys.exit(1)
+
     run_dir = os.path.dirname(os.path.abspath(args.out))
     gif_dir = os.path.join(run_dir, "animations")
     geom_dir = os.path.join(run_dir, "geometry")
@@ -294,7 +310,12 @@ def main():
     os.makedirs(gif_dir, exist_ok=True)
     os.makedirs(geom_dir, exist_ok=True)
 
-    progress_path = args.out.replace(".jsonl", ".progress.jsonl")
+    # The progress stream is machine-read diagnostics (nothing canonical tails it):
+    # gzip it at the source. `tell()` on a gzip text handle reports the UNCOMPRESSED
+    # offset, so the byte cap keeps its meaning; append mode yields a multi-member
+    # gzip that `gzip`/`zcat` read straight through. Inspect with
+    # `zcat worker_N.progress.jsonl.gz`.
+    progress_path = args.out.replace(".jsonl", ".progress.jsonl.gz")
     base = args.seed_base
     # Restart-safe: after a reboot/relaunch, skip every base seed already recorded so
     # the campaign never re-runs (and double-counts) an attempt.
@@ -307,23 +328,57 @@ def main():
                 except Exception:
                     pass
     with open(args.out, "a", buffering=1) as out, \
-            open(progress_path, "a", buffering=1) as prog:
+            gzip.open(progress_path, "at") as prog:
+        # Explicit uncompressed-byte counters: text-mode tell() on a gzip handle
+        # is an opaque cookie, and this keeps the cap's meaning obvious. Caps are
+        # per process; a relaunch appends a fresh gzip member and counts anew.
         capped = False
+        prog_bytes = 0
 
         def progress(record):
-            nonlocal capped
+            nonlocal capped, prog_bytes
             if capped:
                 return
-            if prog.tell() > PROGRESS_BYTE_CAP:
+            if prog_bytes > PROGRESS_BYTE_CAP:
                 prog.write(json.dumps({"worker": args.worker,
                                        "progress_capped": True}) + "\n")
                 capped = True
                 return
             record["worker"] = args.worker
             record["t"] = round(time.time())
-            prog.write(json.dumps(record) + "\n")
+            line = json.dumps(record) + "\n"
+            prog_bytes += len(line)
+            prog.write(line)
+
+        # Repeated identical failures collapse into ONE summary record (the sweep
+        # must survive an occasional bad attempt, but an error storm must not
+        # become a firehose): the first occurrence is written in full; repeats
+        # only advance the streak, flushed when the streak breaks or the worker
+        # exits. Every failed attempt also sleeps ERROR_BACKOFF_SECONDS.
+        streak = {"error": None, "first": None, "last": None, "repeats": 0}
+        out_bytes = 0
+
+        def write_verdict(payload):
+            nonlocal out_bytes
+            line = json.dumps(payload) + "\n"
+            out_bytes += len(line)
+            out.write(line)
+
+        def flush_streak():
+            if streak["repeats"] > 0:
+                write_verdict({
+                    "worker": args.worker, "base_seed": streak["last"],
+                    "error": streak["error"], "error_repeats": streak["repeats"],
+                    "first_seed": streak["first"], "last_seed": streak["last"],
+                })
+            streak.update(error=None, first=None, last=None, repeats=0)
 
         while time.time() < args.deadline:
+            # A worker whose ledger is full cannot record what it runs: stop.
+            if out_bytes > VERDICT_BYTE_CAP:
+                flush_streak()
+                write_verdict({"worker": args.worker, "verdicts_capped": True})
+                break
             while base in recorded:
                 base += 2
             started = time.time()
@@ -332,12 +387,30 @@ def main():
                 record.update(run_one(base, progress, args, frame_dir, gif_dir,
                                       geom_dir))
             except Exception as error:   # record and move on — the sweep must survive
-                record["error"] = repr(error)
+                failure = repr(error)
+                if failure == streak["error"]:
+                    # A repeat of the error already written in full: fold it into
+                    # the streak summary (which spans ONLY the collapsed repeats).
+                    if streak["first"] is None:
+                        streak["first"] = base
+                    streak["last"] = base
+                    streak["repeats"] += 1
+                else:
+                    flush_streak()
+                    streak.update(error=failure, first=None, last=None, repeats=0)
+                    record["error"] = failure
+                    record["elapsed_s"] = round(time.time() - started, 1)
+                    write_verdict(record)
+                base += 2
+                time.sleep(ERROR_BACKOFF_SECONDS)
+                continue
+            flush_streak()
             record["elapsed_s"] = round(time.time() - started, 1)
             record["rss_mb"] = round(
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
-            out.write(json.dumps(record) + "\n")
+            write_verdict(record)
             base += 2
+        flush_streak()
     with open(args.out + ".done", "w") as marker:
         marker.write("done\n")
 

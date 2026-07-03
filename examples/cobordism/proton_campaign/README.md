@@ -19,6 +19,16 @@ the physics until its workers exit; deploys land at generation boundaries only.
 - `worker.py` — one attempt per base seed: build `ProtonIngredients` nodes,
   init → evolve → stage-2 to stationarity per node, persistence passes on the
   formation node, verdict + progress records, GIF + geometry-dump keep-policy.
+  Streams and failure semantics (#591): the progress stream is written gzipped
+  (`worker_N.progress.jsonl.gz` — inspect with `zcat`; 50 MB uncompressed cap
+  per process); the verdict stream is capped at 50 MB (a `verdicts_capped`
+  marker line, then the worker exits — a worker that cannot record must not
+  run); a startup self-check constructs the drive's node once and exits
+  non-zero on a broken environment (stale build, missing binding) instead of
+  recording one instant failure per seed; and consecutive attempts failing
+  with an identical error collapse into one summary record (`error_repeats`,
+  `first_seed`/`last_seed` spanning the collapsed repeats), with a short sleep
+  after every failed attempt. All harness-only — attempt physics untouched.
 - `renderer.py` — per-attempt animation recorder (reuses the emergent-proton
   panels; frames at real pass/chunk boundaries).
 - `aggregate.py` — sweep statistics over the verdict files.
