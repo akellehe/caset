@@ -171,15 +171,12 @@ class Edge {
     /// value (CDT, Van Raamsdonk, the backreaction scan) so \f$l^2\f$ is stored exactly
     /// and the action never sees a round-trip.
     ///
-    /// **Ordinary-Lorentzian convention (#580/#581):** a *resident* \f$l^2\f$ is real
-    /// and signed (spacelike > 0, timelike < 0, null 0). Storage accepts a general
-    /// complex value (rollback records and saddle bookkeeping round-trip it exactly),
-    /// but the geometry stack does NOT support it: the non-Wick geometry entry points
-    /// (`Simplex::gramMatrix` and the Cayley–Menger builders, hence volumes, Lorentzian
-    /// angles and the dual Regge action) throw `std::domain_error` on
-    /// \f$|\mathrm{Im}\,l^2| > \f$ `Simplex::kResidentImTolerance` instead of silently
-    /// projecting to Re. Genuine Picard–Lefschetz (resident-complex) geometry is
-    /// deferred (#580).
+    /// **Ordinary-Lorentzian convention (#580/#589):** \f$l^2\f$ is real and signed
+    /// (spacelike > 0, timelike < 0, null 0); the geometry stack reads
+    /// \f$\mathrm{Re}\,l^2\f$. The complexified (Picard–Lefschetz) theory is unbuilt,
+    /// and nothing is enforced at runtime — the dynamics keeps \f$l^2\f$ on the real
+    /// axis by construction (`MultiCobordism::runStage2`); storage round-trips a
+    /// general complex value exactly (rollback records, saddle bookkeeping).
     void setSquaredLength(std::complex<double> l2) noexcept {
       squaredLength_ = l2;
       length_ = std::sqrt(l2);
@@ -187,10 +184,8 @@ class Edge {
 
     /// Set the (complex) edge length; the squared length is kept in sync as `l*l`. Use
     /// when the geometry is specified by a length directly. Real for spacelike,
-    /// imaginary for timelike — under the ordinary-Lorentzian convention (see
-    /// `setSquaredLength`) those are the two supported resident cases; a general
-    /// complex length (the off-axis Picard–Lefschetz saddle) is stored exactly but
-    /// rejected fail-loudly by the non-Wick geometry stack (#580/#581).
+    /// imaginary for timelike — the two cases of the ordinary-Lorentzian convention
+    /// (see `setSquaredLength`); the off-axis (Picard–Lefschetz) saddle is unbuilt.
     void setLength(std::complex<double> l) noexcept {
       length_ = l;
       squaredLength_ = l * l;

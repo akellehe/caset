@@ -1,17 +1,22 @@
-"""Fail-loud guard on resident Im l^2 in the non-Wick geometry stack (#581
-scope item 6).
+"""The ordinary-Lorentzian convention on the geometry stack (#580/#589).
 
-The ordinary-Lorentzian convention: resident l^2 is REAL and SIGNED; a
-resident Im l^2 != 0 (Picard-Lefschetz / analytically continued length) is
-unsupported by the geometry stack, which previously projected it to Re
-SILENTLY at every Gram / Cayley-Menger build.  The non-Wick entry points now
-throw std::domain_error (ValueError in Python) naming the offending edge; the
-Wick-rotated (|l^2|) paths stay Im-tolerant; storage-level paths (the
-rollback records of item 2) never evaluate geometry and are untouched.
+Resident l^2 is REAL and SIGNED (spacelike > 0, timelike < 0, null 0); the
+non-Wick geometry entry points consume Re l^2 and the Wick-rotated paths |l^2|.
+There is NO runtime enforcement — the #582 interim `domain_error` guard is
+deleted (#589): the dynamics keeps l^2 on the real axis by construction
+(`MultiCobordism::runStage2` proposes exactly-real trials), and that invariant
+is proven where invariants live — in the suite
+(tests/cobordism/test_stage2_real_manifold_python.py) — never by a throw,
+veto, or backoff inside the physics loop.
 
-Also the plot-layout collapse (item 8): the layout rest length is the
-documented |Re l^2| with an epsilon floor, so a null edge cannot pin two
-vertices together.
+These tests pin the convention itself: geometry never throws on a resident
+Im l^2 (nothing polices storage), the non-Wick read IS the Re projection
+(value-equal to the Im-zeroed twin), Wick paths stay Im-tolerant, and signed
+real (timelike) geometry — the supported Lorentzian case — keeps working.
+
+Also the plot-layout collapse: the layout rest length is the documented
+|Re l^2| with an epsilon floor, so a null edge cannot pin two vertices
+together.
 """
 
 from __future__ import annotations
@@ -60,65 +65,47 @@ def _by_verts(st, ids):
     raise AssertionError(f"no simplex {want}")
 
 
-class TestResidentImGuard(unittest.TestCase):
-    def _im_host(self, im=0.25):
-        st = _triangle_host()
-        for k, e in _edge_map(st).items():
-            e.setSquaredLength(1.0)
-        _edge_map(st)[(0, 1)].setSquaredLength(complex(1.0, im))
-        return st
+class TestRealSignedConvention(unittest.TestCase):
+    def _twin_hosts(self, im=0.25):
+        """Two identical triangles; one carries Im l^2 on an edge, one does not."""
+        with_im, without_im = _triangle_host(), _triangle_host()
+        for st in (with_im, without_im):
+            for e in _edge_map(st).values():
+                e.setSquaredLength(1.0)
+        _edge_map(with_im)[(0, 1)].setSquaredLength(complex(1.0, im))
+        _edge_map(without_im)[(0, 1)].setSquaredLength(complex(1.0, 0.0))
+        return with_im, without_im
 
-    def test_volume_throws_with_edge_ids(self):
-        st = self._im_host()
-        tri = _by_verts(st, [0, 1, 2])
-        with self.assertRaises(ValueError) as ctx:
-            tri.volume()
-        msg = str(ctx.exception)
-        self.assertIn("Im l^2", msg)
-        self.assertIn("(0, 1)", msg)
-        self.assertIn("580", msg)  # cites the audit / convention decision
-
-    def test_lorentzian_angles_throw(self):
-        st = self._im_host()
-        tri = _by_verts(st, [0, 1, 2])
-        v0 = _by_verts(st, [0])
-        with self.assertRaises(ValueError):
-            tri.lorentzianDihedralAngle(v0)
-        with self.assertRaises(ValueError):
-            v0.lorentzianDeficitAngle()
-
-    def test_dual_regge_action_throws(self):
-        st = _triangle_host()
-        for k, e in _edge_map(st).items():
-            e.setSquaredLength(1.0)
-        solver = tessera.ReggeSolver(st, tessera.MatterConfiguration())
-        self.assertTrue(math.isfinite(solver.dualReggeAction().real))
-        _edge_map(st)[(0, 2)].setSquaredLength(complex(1.0, 0.5))
-        with self.assertRaises(ValueError):
-            solver.dualReggeAction()
+    def test_non_wick_reads_are_the_re_projection_no_throw(self):
+        # The convention, executable: geometry on an Im-carrying host neither
+        # throws (no runtime enforcement) nor differs from the Im-zeroed twin
+        # (the non-Wick read is exactly Re l^2).
+        with_im, without_im = self._twin_hosts()
+        tri_a = _by_verts(with_im, [0, 1, 2])
+        tri_b = _by_verts(without_im, [0, 1, 2])
+        self.assertEqual(tri_a.volume(), tri_b.volume())
+        v0_a, v0_b = _by_verts(with_im, [0]), _by_verts(without_im, [0])
+        self.assertEqual(complex(tri_a.lorentzianDihedralAngle(v0_a)),
+                         complex(tri_b.lorentzianDihedralAngle(v0_b)))
+        self.assertEqual(complex(v0_a.lorentzianDeficitAngle()),
+                         complex(v0_b.lorentzianDeficitAngle()))
+        solver_a = tessera.ReggeSolver(with_im, tessera.MatterConfiguration())
+        solver_b = tessera.ReggeSolver(without_im, tessera.MatterConfiguration())
+        self.assertEqual(complex(solver_a.dualReggeAction()),
+                         complex(solver_b.dualReggeAction()))
 
     def test_wick_paths_stay_im_tolerant(self):
-        st = self._im_host()
-        tri = _by_verts(st, [0, 1, 2])
-        v0 = _by_verts(st, [0])
-        # |l^2| paths: the Euclidean/CDT pipeline must keep working
+        # |l^2| paths: the Euclidean/CDT pipeline reads the modulus and keeps
+        # working whatever the phase of the stored value.
+        with_im, _ = self._twin_hosts()
+        tri = _by_verts(with_im, [0, 1, 2])
+        v0 = _by_verts(with_im, [0])
         theta = tri.dihedralAngle(v0, True)
         self.assertTrue(math.isfinite(theta))
         eps = v0.deficitAngle()          # wick-rotated by definition
         self.assertTrue(math.isfinite(eps))
         area = tri.area(True)
         self.assertTrue(math.isfinite(area))
-
-    def test_float_noise_below_tolerance_is_accepted(self):
-        st = _triangle_host()
-        for k, e in _edge_map(st).items():
-            e.setSquaredLength(1.0)
-        _edge_map(st)[(0, 1)].setSquaredLength(complex(1.0, 1e-13))
-        tri = _by_verts(st, [0, 1, 2])
-        self.assertTrue(math.isfinite(tri.volume()))
-        self.assertTrue(
-            math.isfinite(complex(tri.lorentzianDihedralAngle(
-                _by_verts(st, [0]))).real))
 
     def test_signed_real_geometry_still_works(self):
         # timelike (negative REAL) l^2 is the supported Lorentzian case

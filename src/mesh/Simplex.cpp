@@ -658,22 +658,6 @@ std::vector<double> Simplex::cofactorMatrix(
     return C;
 }
 
-double Simplex::realSquaredLengthChecked(const EdgePtr &e) {
-    const std::complex<double> sq = e->getSquaredLength();
-    if (std::abs(sq.imag()) > kResidentImTolerance) {
-        throw std::domain_error(
-            "Simplex geometry: edge (" +
-            std::to_string(e->getSource()->getId()) + ", " +
-            std::to_string(e->getTarget()->getId()) +
-            ") carries resident Im l^2 = " + std::to_string(sq.imag()) +
-            "; the ordinary-Lorentzian convention requires real signed l^2 — "
-            "resident complex lengths are UNSUPPORTED by the geometry stack "
-            "(Picard–Lefschetz deferred; see #580/#581). Wick-rotated (|l^2|) "
-            "paths remain Im-tolerant.");
-    }
-    return sq.real();
-}
-
 std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
     int dPlus1 = static_cast<int>(vertices.size());
     int d = dPlus1 - 1;
@@ -681,13 +665,13 @@ std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
 
     // Squared-distance lookup. Honor the signed l^2 so the Lorentzian sign of
     // timelike edges survives into G; wickRotate takes |l^2| (Euclidean/CDT).
-    // The non-Wick read fails loudly on resident Im l^2 (#581).
+    // Ordinary-Lorentzian convention: l^2 is real signed, read as Re (#589).
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : realSquaredLengthChecked(e);
+                               : e->getSquaredLength().real();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -709,14 +693,14 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
     int dPlus1 = static_cast<int>(vertices.size());
     if (dPlus1 < 1) return {};
 
-    // Squared-distance lookup; signed by default, |l^2| under wickRotate.
-    // The non-Wick read fails loudly on resident Im l^2 (#581).
+    // Squared-distance lookup; signed by default (real signed l^2, read as
+    // Re — the ordinary-Lorentzian convention, #589), |l^2| under wickRotate.
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : realSquaredLengthChecked(e);
+                               : e->getSquaredLength().real();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -751,13 +735,14 @@ std::vector<double> Simplex::cayleyMengerCanonical(
     for (int i = 0; i < dPlus1; ++i)
         pos1[sorted[static_cast<std::size_t>(i)]->getId()] = i + 1;  // border-offset
 
-    // Non-Wick reads fail loudly on resident Im l^2 (#581).
+    // Signed by default (real signed l^2, read as Re — the ordinary-Lorentzian
+    // convention, #589), |l^2| under wickRotate.
     std::unordered_map<std::uint64_t, double> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : realSquaredLengthChecked(e);
+                               : e->getSquaredLength().real();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;

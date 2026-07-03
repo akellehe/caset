@@ -655,11 +655,16 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
       for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
         hessianMatrix(rowIndex, columnIndex) =
             hessianRows[rowIndex][columnIndex];
-    const Eigen::VectorXcd descentDirection =
-        beta * 2.0 * (hessianMatrix.conjugate() * gradientVector);
-    Eigen::VectorXcd squaredLengths(edgeCount);
+    // The exact gradient of F restricted to the real signed-l^2 manifold: for a
+    // real-valued F of a complex variable evaluated on the real axis,
+    // dF/dx = 2 Re(dF/dz̄), so the on-manifold descent direction is the REAL
+    // PART of the Wirtinger direction 2β(H̄·g) (#589).
+    const Eigen::VectorXd descentDirection =
+        (beta * 2.0 * (hessianMatrix.conjugate() * gradientVector)).real();
+    Eigen::VectorXd squaredLengths(edgeCount);
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-      squaredLengths(edgeIndex) = edges[edgeIndex]->getSquaredLength();
+      squaredLengths(edgeIndex) =
+          edges[edgeIndex]->getSquaredLength().real();
     const double currentObjective = objectiveTrace.back();
     // Relative stationarity: accept a step only when it lowers F by more than relTol
     // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
@@ -671,19 +676,19 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     bool objectiveImproved = false;
     for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-        // The trial is UNBOUNDED — fully Lorentzian, no clamp, no causal guard
-        // (semantics: runStage2 in MultiCobordism.h). Spacelike, timelike, and
-        // lightlike trials are all admissible; a trial the objective cannot
-        // evaluate scores +inf below and is backed off by the line search.
-        edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex) -
-                                trialStepScale * descentDirection(edgeIndex));
+        // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
+        // clamp, no causal guard (semantics: runStage2 in MultiCobordism.h).
+        // Spacelike, timelike, and lightlike trials are all admissible, and
+        // every trial is constructed EXACTLY real, so Im l^2 == 0 holds for
+        // all time by construction — no backoff, no projection (#589).
+        edges[edgeIndex]->setSquaredLength(complexd(
+            squaredLengths(edgeIndex) -
+                trialStepScale * descentDirection(edgeIndex),
+            0.0));
       }
-      double trialObjective;
-      try {
-        trialObjective = fullObjective();
-      } catch (...) {
-        trialObjective = std::numeric_limits<double>::infinity();
-      }
+      // The objective is total on the real signed-l^2 manifold, so a trial
+      // cannot fail to evaluate; a genuine error propagates loudly (#589).
+      const double trialObjective = fullObjective();
       if (trialObjective < currentObjective - improvementThreshold) {
         objectiveTrace.push_back(trialObjective);
         stepScale = std::min(stepScale * 1.3, 1.0);
@@ -694,7 +699,8 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     }
     if (!objectiveImproved) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-        edges[edgeIndex]->setSquaredLength(squaredLengths(edgeIndex));
+        edges[edgeIndex]->setSquaredLength(
+            complexd(squaredLengths(edgeIndex), 0.0));
       lastStage2Stationary_ = true;  // no line-search step beat the relative threshold
       break;
     }

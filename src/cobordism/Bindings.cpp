@@ -833,12 +833,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
            py::arg("rel_tol") = 1e-9,
            py::call_guard<py::gil_scoped_release>(),
-           "Stage 2 (geometric): relax every edge l^2 toward a stationary point of "
-           "beta*||grad S||^2 + gamma*r_U (Wirtinger steepest descent, backtracking "
-           "line search). Stops on the RELATIVE stationarity test -- no line-search "
-           "step lowers F by more than rel_tol*max(|F|,1) -- or the max_iters budget "
-           "cap. Read last_stage2_stationary for which one ended the run. Returns the "
-           "F trace.")
+           "Stage 2 (geometric): relax every edge l^2 along the REAL signed-l^2 "
+           "manifold (ordinary Lorentzian Regge) toward a stationary point of "
+           "beta*||grad S||^2 + gamma*r_U. The descent direction is the exact "
+           "on-manifold gradient Re(2*beta*conj(H)*g) and every trial is "
+           "constructed exactly real, so Im l^2 == 0 by construction (#589); "
+           "backtracking line search. Stops on the RELATIVE stationarity test -- "
+           "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
+           "the max_iters budget cap. Read last_stage2_stationary for which one "
+           "ended the run. Returns the F trace.")
       .def_property_readonly("st", &MultiCobordism::spacetime)
       .def_property_readonly("inputs", &MultiCobordism::inputs,
                              py::return_value_policy::reference_internal,
@@ -849,8 +852,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_property_readonly("last_stage2_stationary",
                              &MultiCobordism::lastStage2Stationary,
                              "True iff the last run_stage2 stopped on the relative-"
-                             "tolerance stationarity test (delta_rel < rel_tol); False "
-                             "if it hit the max_iters budget cap.");
+                             "tolerance stationarity test (delta_rel < rel_tol) -- "
+                             "real-manifold stationarity, dF = 0 along real signed-"
+                             "l^2 perturbations (#589); False if it hit the "
+                             "max_iters budget cap.");
   py::enum_<MultiCobordism::BuildAction>(multiCobordismClass, "BuildAction",
       "One canonical solve action a search policy (Proton's build restart loop, a greedy "
       "driver, or the RL agent) composes, so the solve runs through the engine rather than "
