@@ -136,6 +136,22 @@ class PairLoopFlavorPublishedTableTest(unittest.TestCase):
                 self.assertEqual(record["multiplicity_2_1"], verdict)
                 self.assertLess(record["r_u"], 1e-20)
 
+    def test_frozen_oracle_high_precision(self):
+        # The full-precision pair-loop read frozen from the tessera/observe
+        # pair_loop_flavor oracle on synthetic_b3_3 — the C++ read must match to
+        # the pair-loop gate tolerance (1e-9), tighter than the 5-dp table above.
+        _meta, st = _composite_spin("synthetic_b3_3.json")
+        record = obs.PairLoopFlavor().record(_register(st))
+        q = [0.0298121883979804, 0.03073188676971647, 0.02990226224557105]
+        loop_q = [0.060544075167696866, 0.05971445064355145,
+                  0.06063414901528751]
+        for measured, oracle in zip(record["q"], q):
+            self.assertAlmostEqual(measured, oracle, places=9)
+        for measured, oracle in zip(record["loop_q"], loop_q):
+            self.assertAlmostEqual(measured, oracle, places=9)
+        self.assertAlmostEqual(record["rho"], 0.10298138531509772, places=9)
+        self.assertLess(record["r_u"], 1e-20)
+
     def test_oriented_weights_pin_the_singlet_root_fixed(self):
         # w_h == the induced-orientation singlet; in the root-fixed convention
         # w0 has zero phase so w_re/w_im are [1, -1/2, -1/2] / [0, ±√3/2].
