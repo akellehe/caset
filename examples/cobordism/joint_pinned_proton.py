@@ -260,20 +260,42 @@ def block_read(st, vertices, target, register_degree=REGISTER_DEGREE):
     }
 
 
-def per_hole_charges(st, register_degree=REGISTER_DEGREE):
-    """Per-hole Z₃ charge, read pairwise (a single hole's phase is gauge; only
-    relative phases are physical): hole 0 is the reference, and hole j carries
-    charge m_j = argmin_m residualForPeriods([h0, hj], [1, ω^m]). The spread of
-    the carried phases stands in for the ticket's per-hole DK charge spread —
-    the Dirac–Kähler readout was retired in #509, so the spread criterion is
-    evaluated on this period-based read (recorded as such)."""
+def flavor_read(st, register_degree=REGISTER_DEGREE):
+    """The landed C++ ``PairLoopFlavor`` observable (#576/#594) on the relaxed
+    whole: ONE correlated multi-hole read whose record carries the per-hole DK
+    charges ``q`` (q_h = Σ_{c∈∂h} W_c |ψ_c|², orientation-signed and
+    gauge/relabel-fixed), the pair-loop charges, ρ, and the dual residuals.
+    This is the ticket's per-hole-charge read, exactly as written — no
+    substitution. Requires 3 register holes; below that the observable's own
+    skip reason is recorded."""
+    observables = tessera.observables
+    available = len(cob.MultiCobordism.emergent_holes(st, register_degree))
+    context = observables.RegisterContext(st, min(available, 3),
+                                          register_degree, cob.Proton.singlet())
+    flavor = observables.PairLoopFlavor()
+    reason = flavor.skip_reason(context)
+    if reason:
+        return {"evaluable": False, "n_holes": available, "reason": str(reason)}
+    record = dict(flavor.record(context))
+    record["evaluable"] = True
+    record["n_holes"] = available
+    return record
+
+
+def charge_probe_pairwise(st, register_degree=REGISTER_DEGREE):
+    """DIAGNOSTIC ONLY (never a criterion): the pairwise period fit — hole 0 as
+    reference, hole j's best-fitting relative phase over {1, ω, ω²}. When the
+    carried period space is rich enough, a 2-hole fit is exactly solvable for
+    EVERY phase (measured: winner→runner-up margins ~1e-29 on a b₃=2 campaign
+    specimen), so the argmin is noise; ``degenerate`` flags that honestly and
+    the criterion read lives in ``flavor_read`` instead."""
     holes = [list(h) for h in
              cob.MultiCobordism.emergent_holes(st, register_degree)]
     if len(holes) < 2:
         return {"evaluable": False, "n_holes": len(holes)}
     es = cob.EigenstateSynthesis(st, register_degree)
     omega = cob.Proton.omega()
-    charges, margins = [0], [None]
+    charges, margins = [0], []
     for hole in holes[1:]:
         residuals = [float(es.residualForPeriods([holes[0], hole],
                                                  [complex(1.0), omega ** m]))
@@ -281,13 +303,12 @@ def per_hole_charges(st, register_degree=REGISTER_DEGREE):
         ranked = sorted(range(3), key=residuals.__getitem__)
         charges.append(ranked[0])
         margins.append(residuals[ranked[1]] - residuals[ranked[0]])
-    phases = [2.0 * math.pi * m / 3.0 for m in charges]
     return {
         "evaluable": True,
         "n_holes": len(holes),
         "charges": charges,                    # units of 2π/3, hole 0 = reference
-        "margins": margins[1:],                # residual gap winner → runner-up
-        "phase_spread": max(phases) - min(phases),
+        "margins": margins,                    # residual gap winner → runner-up
+        "degenerate": bool(margins and min(margins) < 1e-9),
         "unit_carry": [float(es.residualForPeriods([h], [1.0])) for h in holes],
     }
 
@@ -365,9 +386,13 @@ def attempt_joint_pinned(seed, gamma, input_weight, budgets, geom_dir=None):
         except Exception as error:      # best-effort read, analyzer-style
             record[f"{spec['label']}_block"] = {"error": repr(error)}
     try:
-        record["charge"] = per_hole_charges(st)
+        record["flavor"] = flavor_read(st)
     except Exception as error:
-        record["charge"] = {"error": repr(error)}
+        record["flavor"] = {"evaluable": False, "error": repr(error)}
+    try:
+        record["charge_probe"] = charge_probe_pairwise(st)
+    except Exception as error:
+        record["charge_probe"] = {"error": repr(error)}
     if geom_dir:
         meta = {"arm": "joint-pinned", "base_seed": seed, "gamma": gamma,
                 "input_weight": input_weight, "blocks": blocks}
@@ -419,9 +444,13 @@ def attempt_two_step(seed, gamma, input_weight, budgets, geom_dir=None):
         record["singlet"] < CRITERIA_RESIDUAL_TOL
         and record["holes"] >= CRITERIA_CLUSTER_HOLES)
     try:
-        record["charge"] = per_hole_charges(step_b.st)
+        record["flavor"] = flavor_read(step_b.st)
     except Exception as error:
-        record["charge"] = {"error": repr(error)}
+        record["flavor"] = {"evaluable": False, "error": repr(error)}
+    try:
+        record["charge_probe"] = charge_probe_pairwise(step_b.st)
+    except Exception as error:
+        record["charge_probe"] = {"error": repr(error)}
     if geom_dir:
         meta = {"arm": "two-step", "base_seed": seed, "gamma": gamma,
                 "input_weight": input_weight}
@@ -440,7 +469,8 @@ def evaluate_criteria(record):
     (None = not evaluable on this attempt, with the reason recorded)."""
     baryon = record.get("baryon_block", {})
     antibaryon = record.get("antibaryon_block", {})
-    charge = record.get("charge", {})
+    flavor = record.get("flavor", {})
+    q = flavor.get("q") if flavor.get("evaluable") else None
     criteria = {
         "holes_clustered_on_baryon": (
             baryon.get("holes_in_region", 0) >= CRITERIA_CLUSTER_HOLES
@@ -452,8 +482,8 @@ def evaluate_criteria(record):
             antibaryon["residual"] < CRITERIA_RESIDUAL_TOL
             if "residual" in antibaryon else None),
         "charge_spread_ge_tol": (
-            charge["phase_spread"] >= CRITERIA_CHARGE_SPREAD
-            if charge.get("evaluable") else None),
+            (max(q) - min(q)) >= CRITERIA_CHARGE_SPREAD
+            if q else None),
     }
     return criteria
 
@@ -527,6 +557,8 @@ def aggregate(paths, by):
     for record in records:
         if "error" in record and "arm" not in record:
             continue
+        if by == "config" and record.get("arm") != "joint-pinned":
+            continue  # the calibration grid is the joint-pinned arm only
         key = (record["arm"] if by == "arm"
                else (record["gamma"], record["input_weight"]))
         groups.setdefault(key, []).append(record)
