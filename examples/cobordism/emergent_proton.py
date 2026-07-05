@@ -79,6 +79,18 @@ def build_joint_node(seed=3, precone=0):
              "Joint — 3 neutral q-q̄ pairs (nothing else prepared)")]
 
 
+def build_joint_pinned_node(seed=3, precone=0):
+    """The #560 control arm — the joint node WITH the final-state knob: the same
+    three Z₃ pair inputs, plus PINNED baryon `{1,ω,ω²}` ⊔ antibaryon `{1,ω̄,ω̄²}`
+    output targets at v3/v4. Assembled in the experiment layer from the public
+    engine surface (`joint_pinned_proton.joint_pinned_node`); it can never claim
+    an emergent singlet (the answer is pinned) — it measures joint-shape
+    feasibility beside the inputs-only arm and the two-step oracle."""
+    import joint_pinned_proton
+    return [(joint_pinned_proton.joint_pinned_node(seed, precone=precone),
+             "Joint — 3 neutral q-q̄ pairs → baryon ⊔ antibaryon (pinned)")]
+
+
 def build_ingredients_nodes(seed=3, precone=0):
     """The two-step reference-oracle nodes, in build order: Step A recombination (the
     canonical node, targets intact) then Step B formation with NOTHING pinned (empty
@@ -243,16 +255,27 @@ def main():
     ap.add_argument("--two-step", action="store_true", dest="two_step",
                     help="drive the two-step reference oracle (Step A recombination + "
                          "Step B formation) instead of the joint three-pair node")
+    ap.add_argument("--joint-pinned", action="store_true", dest="joint_pinned",
+                    help="drive the #560 control arm instead: the joint node WITH the "
+                         "final-state knob (pinned baryon ⊔ antibaryon output targets)")
     args = ap.parse_args()
+    if args.two_step and args.joint_pinned:
+        ap.error("--two-step and --joint-pinned are mutually exclusive arms")
     if args.two_step:
         nodes = build_ingredients_nodes(seed=args.seed, precone=args.precone)
+    elif args.joint_pinned:
+        nodes = build_joint_pinned_node(seed=args.seed, precone=args.precone)
     else:
         nodes = build_joint_node(seed=args.seed, precone=args.precone)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve, stage2_iters=args.stage2)
     if not args.live and not args.save:
-        arm = "two-step reference-oracle" if args.two_step else "joint three-pair"
-        print(f"emergent-arm {arm} build finished (final state unpinned; "
+        arm = ("two-step reference-oracle" if args.two_step
+               else "joint pinned-outputs" if args.joint_pinned
+               else "joint three-pair")
+        state = ("baryon ⊔ antibaryon pinned" if args.joint_pinned
+                 else "final state unpinned")
+        print(f"emergent-arm {arm} build finished ({state}; "
               "pass --live or --save to watch it):")
         for label, metrics in result:
             print(f"  {label}:  " + "  ".join(f"{k}={v}" for k, v in metrics.items()))
