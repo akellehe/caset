@@ -664,7 +664,7 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     Eigen::VectorXd squaredLengths(edgeCount);
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
       squaredLengths(edgeIndex) =
-          edges[edgeIndex]->getSquaredLength().real();
+          edges[edgeIndex]->getRealSquaredLength();
     const double currentObjective = objectiveTrace.back();
     // Relative stationarity: accept a step only when it lowers F by more than relTol
     // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The

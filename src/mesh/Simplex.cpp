@@ -671,7 +671,7 @@ std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getSquaredLength().real();
+                               : e->getRealSquaredLength();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -700,7 +700,7 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getSquaredLength().real();
+                               : e->getRealSquaredLength();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -742,7 +742,7 @@ std::vector<double> Simplex::cayleyMengerCanonical(
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
         sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getSquaredLength().real();
+                               : e->getRealSquaredLength();
     }
     auto getSq = [&](int i, int j) -> double {
         if (i == j) return 0.0;
@@ -1151,7 +1151,7 @@ double Simplex::area(bool wickRotate) const {
     if (edges.size() < 3) return 0.0;
     auto sq = [&](std::size_t k) -> double {
         return wickRotate ? std::abs(edges[k]->getSquaredLength())
-                          : edges[k]->getSquaredLength().real();
+                          : edges[k]->getRealSquaredLength();
     };
     double a2 = sq(0);
     double b2 = sq(1);
