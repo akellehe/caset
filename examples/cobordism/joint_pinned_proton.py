@@ -698,6 +698,15 @@ def main(argv=None):
         aggregate(args.paths, args.by)
         return 0
 
+    # Startup self-check (the #591 lesson, and a wrong-interpreter guard: a
+    # venv symlink resolved with readlink -f runs the SHARED env's tessera,
+    # not this worktree's build): die once, loudly, before any compute if the
+    # engine surface isn't the one this experiment was written against.
+    if not hasattr(tessera, "observables") or not hasattr(
+            tessera.observables, "PairLoopFlavor"):
+        print("startup self-check failed: tessera.observables.PairLoopFlavor "
+              f"missing — wrong build on {sys.executable}", file=sys.stderr)
+        return 1
     budgets = {
         "init_steps": args.init_steps,
         "evolve_steps": args.evolve_steps,
