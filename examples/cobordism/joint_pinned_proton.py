@@ -172,15 +172,26 @@ def snapshot(node, register_degree=REGISTER_DEGREE):
 
 
 class _Extremes:
-    """Running maxima the keep-policy-style fields report."""
+    """Running extremes over every snapshot (post-init, post-evolve, each
+    stage-2 chunk, each persistence pass). ``max_im`` and ``min_re_min`` are
+    the trajectory-level metric channels: stage 2 constructs every trial
+    exactly real (Im ℓ² ≡ 0 by construction, #589), so any nonzero ``max_im``
+    would flag an upstream Im producer that final-state reads could never see
+    — and ``min_re_min`` records how close the drive ever came to the causal
+    sector (Re ℓ² < 0), the channel where causal content would actually
+    appear."""
 
     def __init__(self):
         self.max_b3 = 0
         self.max_holes = 0
+        self.max_im = 0.0
+        self.min_re_min = math.inf
 
     def see(self, snap):
         self.max_b3 = max(self.max_b3, snap["b3"])
         self.max_holes = max(self.max_holes, snap["holes"])
+        self.max_im = max(self.max_im, snap["im_max"])
+        self.min_re_min = min(self.min_re_min, snap["re_min"])
 
 
 def stage2_to_stationarity(node, extremes, iter_cap, chunk=STAGE2_CHUNK,
@@ -407,6 +418,9 @@ def attempt_joint_pinned(seed, gamma, input_weight, budgets, geom_dir=None):
         "stage2_iters_total": iters + extra,
         "max_holes": extremes.max_holes,
         "max_b3": extremes.max_b3,
+        "max_im_seen": extremes.max_im,
+        "min_re_min": (None if math.isinf(extremes.min_re_min)
+                       else extremes.min_re_min),
         "elapsed_s": round(time.time() - started, 1),
     }
     record.update(whole_reads(node))
@@ -433,14 +447,20 @@ def attempt_joint_pinned(seed, gamma, input_weight, budgets, geom_dir=None):
     except Exception as error:
         record["charge_probe"] = {"error": repr(error)}
     if geom_dir:
-        meta = {"arm": "joint-pinned", "base_seed": seed, "gamma": gamma,
-                "input_weight": input_weight, "blocks": blocks}
-        meta.update({k: record[k] for k in
-                     ("converged", "stationary", "persistent", "holes",
-                      "betti", "singlet", "singlet_conj", "F")})
-        record["geometry"] = campaign_worker.dump_geometry(
-            st, os.path.join(geom_dir, f"joint_pinned_seed_{seed}_geometry.json"),
-            meta)
+        # Best-effort, like the campaign worker: a failed dump must never
+        # convert hours of completed compute into an error record.
+        try:
+            meta = {"arm": "joint-pinned", "base_seed": seed, "gamma": gamma,
+                    "input_weight": input_weight, "blocks": blocks}
+            meta.update({k: record[k] for k in
+                         ("converged", "stationary", "persistent", "holes",
+                          "betti", "singlet", "singlet_conj", "F")})
+            record["geometry"] = campaign_worker.dump_geometry(
+                st,
+                os.path.join(geom_dir, f"joint_pinned_seed_{seed}_geometry.json"),
+                meta)
+        except Exception as error:
+            record["geometry_error"] = repr(error)
     return record
 
 
@@ -449,9 +469,10 @@ def attempt_two_step(seed, gamma, input_weight, budgets, geom_dir=None):
     budgets — the A/B partner. Reads are on step B's whole, as the canonical
     build reads them."""
     extremes = _Extremes()
+    extremes_a = _Extremes()
     step_a, step_b = two_step_nodes(seed, gamma=gamma, input_weight=input_weight)
     started = time.time()
-    iters_a, stationary_a = drive_node(step_a, _Extremes(),
+    iters_a, stationary_a = drive_node(step_a, extremes_a,
                                        budgets["init_steps"],
                                        budgets["evolve_steps"],
                                        budgets["stage2_iter_cap"])
@@ -474,6 +495,12 @@ def attempt_two_step(seed, gamma, input_weight, budgets, geom_dir=None):
         "stage2_iters_total": iters_a + iters_b + extra,
         "max_holes": extremes.max_holes,
         "max_b3": extremes.max_b3,
+        "max_im_seen": extremes.max_im,
+        "min_re_min": (None if math.isinf(extremes.min_re_min)
+                       else extremes.min_re_min),
+        "max_im_seen_a": extremes_a.max_im,
+        "min_re_min_a": (None if math.isinf(extremes_a.min_re_min)
+                         else extremes_a.min_re_min),
         "elapsed_s": round(time.time() - started, 1),
     }
     record.update(whole_reads(step_b))
@@ -491,14 +518,35 @@ def attempt_two_step(seed, gamma, input_weight, budgets, geom_dir=None):
     except Exception as error:
         record["charge_probe"] = {"error": repr(error)}
     if geom_dir:
-        meta = {"arm": "two-step", "base_seed": seed, "gamma": gamma,
-                "input_weight": input_weight}
-        meta.update({k: record[k] for k in
-                     ("converged", "stationary", "persistent", "holes",
-                      "betti", "singlet", "singlet_conj", "F")})
-        record["geometry"] = campaign_worker.dump_geometry(
-            step_b.st,
-            os.path.join(geom_dir, f"two_step_seed_{seed}_geometry.json"), meta)
+        # Best-effort dumps of BOTH relaxed spacetimes: step B (the proton
+        # carrier the verdict reads) and step A (the relaxed diquark node —
+        # its own specimen for further analysis, not just a scalar r_U).
+        try:
+            meta = {"arm": "two-step", "base_seed": seed, "gamma": gamma,
+                    "input_weight": input_weight}
+            meta.update({k: record[k] for k in
+                         ("converged", "stationary", "persistent", "holes",
+                          "betti", "singlet", "singlet_conj", "F")})
+            record["geometry"] = campaign_worker.dump_geometry(
+                step_b.st,
+                os.path.join(geom_dir, f"two_step_seed_{seed}_geometry.json"),
+                meta)
+        except Exception as error:
+            record["geometry_error"] = repr(error)
+        try:
+            meta_a = {"arm": "two-step-stepA", "base_seed": seed,
+                      "gamma": gamma, "input_weight": input_weight,
+                      "stationary": bool(stationary_a),
+                      "diquark_ru": diquark_ru,
+                      "betti": [int(b) for b in
+                                cob.MultiCobordism.betti(step_a.st)]}
+            record["geometry_step_a"] = campaign_worker.dump_geometry(
+                step_a.st,
+                os.path.join(geom_dir,
+                             f"two_step_seed_{seed}_stepA_geometry.json"),
+                meta_a)
+        except Exception as error:
+            record["geometry_step_a_error"] = repr(error)
     return record
 
 
