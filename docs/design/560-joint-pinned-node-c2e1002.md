@@ -122,6 +122,31 @@ The physics of the attempt is the first finding:
   `PairLoopFlavor` joint read (per-hole DK charges `q`), exactly as the
   ticket names it.
 
+### Two-step smoke (seed 44, same reduced budgets)
+
+The canonical arm's first battery-recipe attempt produced a **full 3-hole,
+machine-precision singlet-carrying specimen**: b₃ = 3, whole singlet residual
+6.7e-31, `canonical_converged` (singlet < 0.5 ∧ ≥ 3 holes), step B genuinely
+stationary (persistence not yet — one continued pass still moved the summary;
+110 cells, 2h37m for both nodes). Two reads on it matter beyond the A/B:
+
+* **The full `PairLoopFlavor` read ran on a real specimen**: oriented per-hole
+  weights exactly `[1, ω, ω²]` (root-fixed convention), pair-loop duality
+  `[γ_ij] = −[k]` at ~2e-16, per-hole DK charges `q = [0.0111, 0.0181,
+  0.0183]`, and the **2:1 multiplicity verdict TRUE** with ρ = 0.021 ≪ 0.5
+  (odd loop [1,2], dual hole 0; odd-vs-diquark not evaluable — the two-step
+  drive has no hole-level diquark provenance, honestly reported).
+* **Criterion 5's threshold is mis-scaled for the read it names**: the q
+  spread on this textbook specimen is 0.0071 — the 2:1 *structure* is
+  unambiguous (ρ), but the ticket's `spread ≥ 0.1` fails on it. The battery
+  reports the as-written verdict alongside ρ; the threshold's scale is a
+  findings item, not something this experiment silently rewrites.
+* **The whole-complex r_state is target-insensitive on full-rank registers**:
+  `singlet` = `singlet_conj` = 6.7e-31 — with 3 holes and 3 independent
+  harmonics, ANY 3-vector target fits exactly, so the whole-singlet diagnostic
+  cannot distinguish the baryon from its conjugate there. Content lives in
+  the orientation-fixed flavor read and the block reads.
+
 ### Calibration grid
 
 *(pending — filled by `aggregate --by config` over the 12 grid attempts;
