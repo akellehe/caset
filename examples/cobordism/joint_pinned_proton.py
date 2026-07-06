@@ -234,29 +234,64 @@ def persistence_loop(node, extremes, evolve_steps, iter_cap,
     return persistent, extra_iters, stationary
 
 
+def region_cells(st, vertices):
+    """The ambient top cells whose vertices ALL lie in the region — the
+    ``BlockResiduals`` sub-complex selection rule (intrinsic vertex order
+    preserved per cell)."""
+    region = set(int(v) for v in vertices)
+    return [[int(v.getId()) for v in c.getVertices()]
+            for c in st.getTopSimplices()
+            if all(int(v.getId()) in region for v in c.getVertices())]
+
+
 def block_read(st, vertices, target, register_degree=REGISTER_DEGREE):
     """One provenance block's read, mirroring the landed ``BlockResiduals``
-    scoring: the ambient top cells whose vertices ALL lie in the block's region
-    form its own sub-complex (uniform metric, via the canonical ``fromCells``),
-    scored with the relabeling-invariant r_state; an empty region reports the
-    full leak ‖target‖². Also reports the sub-complex's own emergent holes —
-    the ticket's \"holes clustered on the block's region\" count."""
-    region = set(int(v) for v in vertices)
-    inside = [[int(v.getId()) for v in c.getVertices()]
-              for c in st.getTopSimplices()
-              if all(int(v.getId()) in region for v in c.getVertices())]
+    scoring: the block's own sub-complex (uniform metric, via the canonical
+    ``fromCells``), scored with the relabeling-invariant r_state; an empty
+    region reports the full leak ‖target‖². Also reports the sub-complex's own
+    emergent holes — the ticket's \"holes clustered on the block's region\"
+    count — and the region fraction, so a block that swallowed the whole
+    complex (measured on the first smoke: both output blocks grew to 49 of 54
+    cells and fit BOTH conjugate targets exactly) is visible as such."""
+    inside = region_cells(st, vertices)
+    n_total = len(st.getTopSimplices())
     leak = sum(abs(z) ** 2 for z in target)
     if not inside:
-        return {"n_cells_in_region": 0, "holes_in_region": 0,
+        return {"n_cells_in_region": 0, "n_cells_total": n_total,
+                "region_fraction": 0.0, "holes_in_region": 0,
                 "residual": leak, "full_leak": leak}
     sub = tessera.spacetime.Spacetime.fromCells(len(inside[0]) - 1, inside)
     return {
         "n_cells_in_region": len(inside),
+        "n_cells_total": n_total,
+        "region_fraction": len(inside) / n_total if n_total else 0.0,
         "holes_in_region": len(cob.MultiCobordism.emergent_holes(
             sub, register_degree)),
         "residual": float(cob.MultiCobordism.r_state(
             sub, register_degree, list(target))),
         "full_leak": leak,
+    }
+
+
+def blocks_overlap(st, blocks):
+    """How separated the two output blocks actually are: shared vertices and
+    shared sub-complex cells between the baryon and antibaryon regions. The
+    ticket's criteria are evaluated as written, but a pass with near-total
+    overlap is a delocalized fit, not two localized blocks — the findings
+    read this alongside the criteria."""
+    if len(blocks) != 2:
+        return {}
+    v0 = set(int(v) for v in blocks[0]["vertices"])
+    v1 = set(int(v) for v in blocks[1]["vertices"])
+    cells0 = {tuple(sorted(c)) for c in region_cells(st, v0)}
+    cells1 = {tuple(sorted(c)) for c in region_cells(st, v1)}
+    union_v = v0 | v1
+    return {
+        "shared_vertices": len(v0 & v1),
+        "vertex_jaccard": (len(v0 & v1) / len(union_v)) if union_v else 0.0,
+        "shared_cells": len(cells0 & cells1),
+        "cells_baryon": len(cells0),
+        "cells_antibaryon": len(cells1),
     }
 
 
@@ -385,6 +420,10 @@ def attempt_joint_pinned(seed, gamma, input_weight, budgets, geom_dir=None):
                 st, spec["vertices"], target)
         except Exception as error:      # best-effort read, analyzer-style
             record[f"{spec['label']}_block"] = {"error": repr(error)}
+    try:
+        record["blocks_overlap"] = blocks_overlap(st, blocks)
+    except Exception as error:
+        record["blocks_overlap"] = {"error": repr(error)}
     try:
         record["flavor"] = flavor_read(st)
     except Exception as error:
@@ -589,6 +628,10 @@ def aggregate(paths, by):
                           and "residual" in r.get("antibaryon_block", {})]
             entry["mean_block_residual_sum"] = (
                 sum(block_sums) / len(block_sums) if block_sums else None)
+            overlaps = [r["blocks_overlap"]["vertex_jaccard"] for r in joint
+                        if "vertex_jaccard" in r.get("blocks_overlap", {})]
+            entry["mean_block_vertex_jaccard"] = (
+                sum(overlaps) / len(overlaps) if overlaps else None)
             criteria_rates = {}
             for name in ("holes_clustered_on_baryon", "baryon_singlet_lt_tol",
                          "antibaryon_conjugate_lt_tol", "charge_spread_ge_tol"):
