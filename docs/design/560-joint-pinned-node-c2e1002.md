@@ -147,11 +147,40 @@ stationary (persistence not yet — one continued pass still moved the summary;
   cannot distinguish the baryon from its conjugate there. Content lives in
   the orientation-fixed flavor read and the block reads.
 
-### Calibration grid
+### Calibration grid (12 attempts: Γ ∈ {20, 50, 100} × w ∈ {5, 20} × seeds {11, 13}; init 90 / evolve 30 / stage-2 cap 600 / 1 persistence pass)
 
-*(pending — filled by `aggregate --by config` over the 12 grid attempts;
-early returns: stationarity+persistence in as little as 75 stage-2 iterations
-at Γ=100/w=5; Γ=20/w=20 budget-stopped with both blocks at full leak)*
+| Γ | w | stationary | persistent | mean F | mean holes | max b₃ | mean block-residual sum |
+|---|---|---|---|---|---|---|---|
+| 100 | 5  | **2/2** | 1/2 | 49.4 | 1.5 | 2 | **3.2e-31** |
+| 100 | 20 | **2/2** | 1/2 | 35.0 | 2.5 | 3 | 2.0e-30 |
+| 50  | 5  | 1/2 | 0/2 | 21.2 | 2.5 | 3 | 1.1e-30 |
+| 50  | 20 | 1/2 | 0/2 | 24.8 | 2.0 | 2 | 4.0e-31 |
+| 20  | 5  | 0/2 | 0/2 | 19.8 | 2.5 | 3 | 6.4e-31 |
+| 20  | 20 | 0/2 | 0/2 | 1273.1 | 1.0 | 2 | **3.0 (full leak)** |
+
+* **Γ orders stationarity**: 4/4 at Γ=100, 2/4 at Γ=50, 0/4 at Γ=20 within the
+  600-iteration budget — a weak matter term cannot drive the 5-block carry,
+  and Γ=20/w=20 is catastrophic (both output blocks at full leak, F ≈ 1273).
+* Every config that carried at all carried at **machine precision**
+  (block-residual sums 1e-31–2e-30): the block residual is a cliff, not a
+  dial — the calibration discriminates on *reaching stationarity*, not on
+  carry quality.
+* Wall times 15 min – 5.5 h per attempt (single-threaded); the 600-iteration
+  cap bound on 5 of 12 attempts (all at Γ ≤ 50).
+* **Chosen (pre-registered rule)**: among stationary configs, lowest mean
+  block-residual sum → **(Γ = 100, w = 5)**.
+
+### Battery operating points (recorded before the battery ran)
+
+The joint-pinned arm runs at the calibrated **(Γ = 100, w = 5)**; the
+canonical two-step arm runs at `Proton`'s own defaults **(Γ = 50, w = 20)**.
+The 5-block node's r_U scale is *why* the ticket calibrates, so each arm gets
+its own operating point — running the canonical arm at the joint node's scale
+(or vice versa) would handicap one side. Battery budgets: init 180 / evolve
+60 (engine canon), stage-2 cap **1200** per relax, **2** persistence passes —
+a bounded-tail deviation from the campaign's unbounded 3-pass recipe
+(worst-case ≈ 3 × 1200 iterations per attempt), with cap-stops recorded as
+`stationary = False`, never promoted.
 
 ### A/B battery
 
