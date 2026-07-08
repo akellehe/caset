@@ -162,7 +162,41 @@ interpolating between year-boundary states, where tessera's builds
 4-cells. Interrogating the built bulk with HodgeLaplacian at k = 2, 3 is
 the correct transplant of "use L₂ and L₃."
 
-## 10. Correspondence table (paper ↔ economy)
+## 10. The economic action (the Proton-semantics swap)
+
+The bulk builds keep the Proton/ProtonIngredients semantics unchanged —
+boundary states pinned as **period targets** (dual data; never primal
+weight assignments), an interior grown and relaxed by `buildStep`-style
+moves with surgery permitted, and the outer objective
+
+    F = ‖∇S‖² + Γ · Σᵢ r_periods(boundaryᵢ)
+
+driven toward zero, with a stuck positive floor as the verdict. The only
+substitution is the action. In place of the Regge/matter free energy
+G(l²) = Re S + κ·E + λ·|Im S|, the economic action is the integrated
+gauge energy of the interpolating flow history:
+
+    S_econ[f] = Σ_slabs Σ_edges R_e f_e²  (+ the magnetic face terms)
+
+— the Kogut–Susskind form of §5, accumulated through the bulk. Its
+boundary data are the year-t and year-t+1 registers (periods); its
+per-slab constrained ground state is the IPF fit (§6), so the
+action-mediated bulk is the *path* version of the one-step null: a
+minimal-energy transport history between the pinned registers. A
+residual floor then certifies that **no flow history on the fixed bulk
+topology connects the two years**, and the surgery moves that restore
+feasibility localize the structural change — priced by the action, not
+budgeted ad hoc.
+
+Geometry of the bulk: the year boundaries are the 2-complexes of §1
+(graphs with filled triads), so the interpolating bulk is a 3-complex —
+economic time supplies the extra dimension — and it is there, not on
+the boundary (§9), that the L₂ and L₃ Laplacians have genuine 3-cells
+to act on. The bulk's k = 2, 3 harmonic content and spectra are read
+out after the build, exactly as the proton builds interrogate their
+emergent interiors.
+
+## 11. Correspondence table (paper ↔ economy)
 
 | cobordism paper | economic register |
 |---|---|
