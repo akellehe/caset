@@ -141,7 +141,28 @@ So at the industry grain, "certified structural break" means precisely:
 recomposition explains** — and the statistic detecting it is calibrated,
 exact on positive controls, and silent on negative ones.
 
-## 9. Correspondence table (paper ↔ economy)
+## 9. Higher-degree structure lives in the bulk, not the boundary
+
+A sharp combinatorial fact constrains any attempt to run L₂/L₃ analysis
+directly on the economic 1-complex: after pairwise netting, the net
+flows orient the complete graph into a **tournament**, and a 4-vertex
+tournament contains at most two cyclic triangles (out-degree counting:
+the cyclic-triangle count is C(4,3) − Σᵢ C(dᵢ,2) with Σdᵢ = 6, so at
+least two of the four faces are transitive). Since our 2-cells are
+directed 3-cycles, **no tetrahedron can ever have all four faces
+filled**: the boundary complex admits no 3-cells, verified empirically
+(zero tetrahedra in every year at every threshold, as the theorem
+requires). Consequently L₂ on the boundary degenerates to the co-closed
+condition alone and L₃ has empty domain.
+
+The higher Laplacians therefore live where the cobordism paper puts them
+— in the **bulk**: the triangulated 3-/4-dimensional geometry
+interpolating between year-boundary states, where tessera's builds
+(Proton, ProtonIngredients, MultiCobordism) create genuine 3- and
+4-cells. Interrogating the built bulk with HodgeLaplacian at k = 2, 3 is
+the correct transplant of "use L₂ and L₃."
+
+## 10. Correspondence table (paper ↔ economy)
 
 | cobordism paper | economic register |
 |---|---|
