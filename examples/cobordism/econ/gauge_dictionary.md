@@ -164,10 +164,20 @@ the correct transplant of "use L₂ and L₃."
 
 ## 10. The economic action (the Proton-semantics swap)
 
-The bulk builds keep the Proton/ProtonIngredients semantics unchanged —
-boundary states pinned as **period targets** (dual data; never primal
-weight assignments), an interior grown and relaxed by `buildStep`-style
-moves with surgery permitted, and the outer objective
+The bulk builds keep the Proton/ProtonIngredients semantics unchanged,
+with the boundary treatment split exactly as in the proton input builds:
+
+- **Initial boundary — full primal pin.** The entire year-t complex is
+  the input block: every industry–industry edge with its transaction
+  value as the weight (or inverse value, per the §5 metric knob), plus
+  the filled triads. Nothing about the initial economy is left free —
+  it is the held-fixed initial geometry, the way ProtonIngredients pins
+  its input pair carriers as complete specified geometries.
+- **Target — dual.** The year-t+1 state enters only through its
+  register: period targets, never primal weight assignments.
+
+The interior is grown and relaxed by `buildStep`-style moves with
+surgery permitted, and the outer objective is
 
     F = ‖∇S‖² + Γ · Σᵢ r_periods(boundaryᵢ)
 
@@ -182,11 +192,12 @@ gauge energy of the interpolating flow history:
 boundary data are the year-t and year-t+1 registers (periods); its
 per-slab constrained ground state is the IPF fit (§6), so the
 action-mediated bulk is the *path* version of the one-step null: a
-minimal-energy transport history between the pinned registers. A
-residual floor then certifies that **no flow history on the fixed bulk
-topology connects the two years**, and the surgery moves that restore
-feasibility localize the structural change — priced by the action, not
-budgeted ad hoc.
+minimal-energy transport history from the fully pinned year-t economy
+to the year-t+1 register. A residual floor then certifies that **no
+interior grown from this exact initial economy carries the next year's
+register on the fixed bulk topology**, and the surgery moves that
+restore feasibility localize the structural change — priced by the
+action, not budgeted ad hoc.
 
 Geometry of the bulk: the year boundaries are the 2-complexes of §1
 (graphs with filled triads), so the interpolating bulk is a 3-complex —
