@@ -119,13 +119,14 @@ is the leading candidate there); this is Recommendation 4.
 ## 6. Finding 4 — what a damped Gauss–Newton finisher actually buys
 
 - **2001004 (b₃ = 2):** from the dead stall (zero line-search steps possible), the
-  damped Gauss–Newton loop immediately recovers descent — `F: 5.620 → 3.149` over
-  3,570 iterations — with near-perfect model agreement on accepted steps early on
-  (median ρ ≈ 0.99), then a hard plateau: the final ~250 iterations buy ~0.0015 while
-  λ climbs and the one-branch `‖∇F‖` jumps erratically (10³–10⁵), the signature of
-  crawling along walls. The damped-method plateau in this basin is **positive,
-  ≈ 3.15 — not 0**; whether some other continuous path reaches lower was not
-  observed.
+  damped Gauss–Newton loop immediately recovers descent — `F: 5.620 → 3.139` over
+  ~6,500 iterations (4,135 accepted; 25-minute wall) — with near-perfect model
+  agreement on accepted steps early on (median ρ ≈ 0.99), then a hard plateau: the
+  final ~2,900 iterations buy `ΔF < 0.01` while the total displacement freezes at
+  `‖Δx‖/‖x₀‖ = 0.176`, λ climbs, and the one-branch `‖∇F‖` jumps erratically
+  (10³–10⁶) — the signature of crawling along walls. The damped-method plateau in
+  this basin is **positive, ≈ 3.14 — not 0**; whether some other continuous path
+  reaches lower was not observed.
 - **2001002 (b₃ = 1):** immovable for the damped loop as well (three accepted steps
   of cumulative `ΔF ≈ 4×10⁻⁶`, then rejection at every damping up to λ = 10¹⁸) —
   consistent with Finding 3's diagnosis of a wall-pinned nonsmooth local minimum.
