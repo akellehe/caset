@@ -71,9 +71,14 @@ def held_fixed_leak(reg: Register, flows_next: pd.DataFrame) -> dict:
     p = periods(reg, delta)
     rnorm = lambda v: float(np.sqrt(np.sum(reg.metric * v * v)))
     base = rnorm(reg.net)
+    dn = rnorm(delta)
     return {
+        # fraction of the change that is irreducible — bounded [0, 1],
+        # self-normalized (the primary discriminator)
+        "leak_frac": float(np.linalg.norm(p)) / max(dn, 1e-300),
+        # obstruction relative to the base configuration
         "leak": float(np.linalg.norm(p)) / max(base, 1e-300),
-        "delta_norm": rnorm(delta) / max(base, 1e-300),
+        "delta_norm": dn / max(base, 1e-300),
         "off_mass": off_mass / max(float(np.abs(reg.net).sum()), 1e-300),
         "periods": p,
     }
@@ -174,6 +179,9 @@ def cmd_history(args: argparse.Namespace) -> None:
             "pair": f"{t0}-{t1}",
             "recession": (t0, t1) in RECESSION_PAIRS,
             "b1": reg.b1,
+            "leak_frac": obs["leak_frac"],
+            "leak_frac_null": null["leak_frac"],
+            "leak_frac_excess": obs["leak_frac"] - null["leak_frac"],
             "leak_observed": obs["leak"],
             "leak_ipf_null": null["leak"],
             "leak_excess": obs["leak"] - null["leak"],
@@ -183,8 +191,9 @@ def cmd_history(args: argparse.Namespace) -> None:
             "leontief": leontief_distance(f0, f1),
         })
         top = attribute(reg, obs["periods"], top=5)
-        print(f"{t0}->{t1}  leak {obs['leak']:.4f}  null {null['leak']:.4f}  "
-              f"excess {obs['leak']-null['leak']:+.4f}  "
+        print(f"{t0}->{t1}  frac {obs['leak_frac']:.4f}  "
+              f"null-frac {null['leak_frac']:.4f}  "
+              f"leak {obs['leak']:.3e}  null {null['leak']:.3e}  "
               f"frob {rows[-1]['frobenius']:.4f}  "
               f"top: {', '.join(f'{k} {v:.0%}' for k, v in top.items())}")
 
@@ -203,8 +212,8 @@ def _decision_plot(df: pd.DataFrame, path: pathlib.Path) -> None:
     fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
     x = np.arange(len(df))
     for ax, cols, title in (
-        (axes[0], [("leak_observed", "period leak (held-fixed geometry)"),
-                   ("leak_ipf_null", "IPF null leak")],
+        (axes[0], [("leak_frac", "irreducible fraction of the change"),
+                   ("leak_frac_null", "irreducible fraction, IPF null")],
          "Topological obstruction vs size-recomposition null"),
         (axes[1], [("frobenius", "Frobenius distance"),
                    ("leontief", "Leontief-inverse distance")],

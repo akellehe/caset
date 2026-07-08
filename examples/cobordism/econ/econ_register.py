@@ -333,7 +333,12 @@ def build_register(
     V = list(flows.index)
     A = flows.values
     net = A - A.T
-    gross = A + A.T
+    # gross = total absolute bilateral volume. abs() because negative
+    # bookings (inventory drawdowns, subsidy rebates) are still volume;
+    # the floor is the table's data quantum (BEA reports millions of
+    # USD), below which "conductance" is rounding noise. Without both, a
+    # single degenerate edge dominates every R-weighted norm.
+    gross = np.maximum(np.abs(A) + np.abs(A.T), 1.0)
 
     edges, net_w, gross_w = [], [], []
     n = len(V)
@@ -382,9 +387,9 @@ def build_register(
             d2[idx, tcol] = sign
 
     if metric_mode == "conductance":
-        R = 1.0 / np.maximum(gross_w, 1e-12)
+        R = 1.0 / gross_w
     elif metric_mode == "length":
-        R = np.maximum(gross_w, 1e-12)
+        R = gross_w.copy()
     elif metric_mode == "unit":
         R = np.ones(E)
     else:
