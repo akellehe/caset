@@ -1,8 +1,12 @@
 # Kill-experiment report — economic register on BEA 1997–2024
 
-> Go/no-go report for tessera#602. **Status: DRAFT — decision section
-> pending the historical run.** Exploratory research; not the official
-> development track of tessera or the TVL platform.
+> Go/no-go report for tessera#602. **Status: COMPLETE — the decision is
+> NO-GO at the summary-industry annual grain** (§6). Exploratory
+> research; not the official development track of tessera or the TVL
+> platform.
+
+![leak vs null and baselines](out/comparison.png)
+![recession ranks](out/recession_ranks.png)
 
 ## 1. What was tested
 
@@ -49,19 +53,22 @@ negative controls, and localizes.
 Production MRIO holds one vintage: 2018, county grain (~92.7 M
 A-coefficients). Aggregated to the national industry level and tested on
 the frozen national 2018 register: raw cell distance is enormous
-(‖A_mrio − A_nat‖_F / ‖A_nat‖_F = 1.54 — a naive Frobenius criterion
-would declare a massive structural difference, partly construction-basis,
-partly the unweighted detail→summary aggregation), yet the certificate is
-correctly silent (leak ≈ 0, off-complex mass 0): the MRIO layer
-regionalizes the same accounts, and the machinery classifies the
-difference as absorbable. Discrimination runs in both directions.
+(‖A_mrio − A_nat‖_F / ‖A_nat‖_F = 1.54) while the held-fixed leak is
+0.136 of the base configuration — several times a typical year-over-year
+transition (0.011–0.033). **This control is inconclusive as designed**:
+the two sides differ by construction basis (benchmark-detail basic
+prices with the platform's de-marginalization treatment vs. this spike's
+summary purchaser-price derivation) and by the unweighted detail→summary
+aggregation, not only by regionalization. A clean control requires the
+same construction on both sides — post-decision work.
 
 ## 4. The historical decision experiment
 
-**PENDING** — 27 consecutive year-pairs, each on the frozen earlier-year
-geometry: observed leak vs IPF-null leak vs Frobenius vs Leontief-inverse
-distances; per-pair sector attribution. Results: `out/leak_history.csv`,
-decision plot `out/decision.png`.
+27 consecutive year-pairs, each on the frozen earlier-year geometry.
+Primary statistic: `leak_frac` — the fraction of the year's change that
+is topologically irreducible (bounded [0, 1], self-normalized). Results:
+`out/leak_history.csv` (conductance metric), `out_unit/leak_history.csv`
+(unit metric robustness), decision plot `out/decision.png`.
 
 Decision criteria (from the issue):
 
@@ -70,6 +77,32 @@ Decision criteria (from the issue):
 2. Sector attribution consistent with the known episodes (finance and
    construction 2008–09; transportation, accommodation, health 2020).
 3. Signal not reproduced by Frobenius, Leontief-inverse, or the IPF null.
+
+**Findings (conductance metric):**
+
+- `leak_frac` runs 0.04–0.18 across all pairs: roughly one-tenth of any
+  year's change is irreducible circulation — a real, steady drift of the
+  economy's circuit structure.
+- **Criterion 1 fails.** Recession pairs do not separate: by leak-excess
+  rank (of 27), 2000–01 is 16th, 2007–08 is **27th — dead last**,
+  2008–09 is 6th, 2019–20 is 7th. Recession mean excess (0.0046) is
+  below the calm mean (0.0064). The 2008 crisis year-pair was *more*
+  absorbable by re-weighting than any calm year.
+- **Criterion 3 fails in the damning direction.** The magnitude
+  baselines rank recessions *better* than the topological statistic:
+  Leontief-inverse distance puts 2008–09 first of 27; Frobenius puts it
+  third. The register statistic adds no discriminative information at
+  this grain — it subtracts it.
+- The IPF null frequently carries a *higher* irreducible fraction than
+  the observed transition (negative excess in 10 of 27 pairs):
+  proportional rescaling manufactures spurious circulation that the real
+  economy does not exhibit. Observed transitions are, if anything,
+  *smoother* than the size-recomposition null.
+- Attribution is dominated in nearly every pair by the same
+  household–health–government circuit (HH, 621/622/624, GSLG/GOV, CAP)
+  — secular drift of the fiscal-health loop, not episode-specific
+  rewiring. The 2019–20 attribution (HH 14%, GOV 11%, GSLG 10%, 622 8%,
+  624 7%) is the same circuit, amplified.
 
 ## 5. Caveats and known limitations
 
@@ -95,6 +128,60 @@ Decision criteria (from the issue):
   `ChainComplex` entry point is the natural upstream improvement if this
   program continues.
 
+## 5a. Robustness
+
+- **Metric independence**: the unit-metric rerun reproduces the negative
+  result (2007–08 again last of 27 by leak excess; recession mean excess
+  0.0065 vs calm 0.0113). The conclusion does not depend on the
+  value→metric knob.
+- **Threshold scan** (2005 and 2017): b₁ depends only on the netting
+  threshold τ, never on the metric — as the Hodge theorem requires — and
+  grows smoothly from 77–134 (τ = 0, maximal netting) toward the
+  complete-graph ceiling as τ rises. τ = 0 is the principled operating
+  point (fill everything nettable); there is no privileged intermediate
+  regime, and no choice of τ changes which year-pairs stand out.
+- **Numerical honesty**: two artifacts were found and killed en route — a
+  metric-dynamic-range collapse of the harmonic rank (fixed by
+  null-space-preserving row normalization) and a degenerate-edge
+  inflation of the normalization base that manufactured a spurious
+  bimodal "signal" (fixed by reversal-agnostic gross volumes, the data-
+  quantum floor, and the self-normalized `leak_frac`). The final
+  statistic passes an exact positive control and a silent negative
+  control (§2).
+
 ## 6. Decision
 
-**PENDING the historical run.**
+**NO-GO at this grain, by the issue's own criteria.** Criterion 1
+(recession separation) fails — the 2008 crisis transition is the single
+*most* absorbable year-pair of the 27. Criterion 3 fails in the damning
+direction — the magnitude baselines rank recessions better than the
+register statistic does. Criterion 2 is moot given 1 and 3.
+
+The negative result is scoped and informative:
+
+1. **What it establishes.** At 71-industry annual resolution, recessions
+   re-weight the flow network; they do not rewire its irreducible
+   circulation. This is consistent with the machinery's own Gate-2
+   finding that proportional contractions are absorbable — 2008–09 was,
+   topologically, a proportional event at this aggregation. The economy
+   does exhibit a steady ~10% irreducible drift concentrated in the
+   household–health–government circuit, but it is secular, not cyclical
+   — a finding, just not the one the program needed.
+2. **What it does not establish.** Nothing here tests the firm-grain
+   sparse network (where off-complex mass — new and severed
+   relationships, the genuinely surgical signal — is alive; at industry
+   grain the graph is complete and that channel is structurally zero),
+   nor sub-annual frequency. Those are the gist's own designated
+   fallbacks, and they are *different experiments*, not rescues of this
+   one: they would need the transaction-inference firm network and a
+   fresh kill design.
+3. **Recommendation.** Terminate the industry-grain program. If the
+   register idea is pursued further, the next kill experiment is the
+   firm-grain off-complex-mass test on `transaction_inference`
+   `FlowEstimate` data — cheap to specify, and it tests the channel this
+   experiment structurally could not.
+
+A clean negative result was an acceptable outcome, and this one is
+well-defended: gates passed, controls calibrated and exact, two
+normalization artifacts found and removed before they could masquerade
+as signal, and the conclusion stable across metrics and thresholds.

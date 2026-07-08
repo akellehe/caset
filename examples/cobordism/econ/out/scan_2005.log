@@ -1,0 +1,16 @@
+threshold x metric scan, 2005:
+  metric=conductance  tau=         0.0  edges  2775  tris   7975  b1 = 77
+  metric=conductance  tau=       558.9  edges  2775  tris   1488  b1 = 1647
+  metric=conductance  tau=      2344.8  edges  2775  tris    458  b1 = 2293
+  metric=conductance  tau=      9708.7  edges  2775  tris    107  b1 = 2594
+  metric=conductance  tau=     23727.3  edges  2775  tris     41  b1 = 2660
+  metric=length       tau=         0.0  edges  2775  tris   7975  b1 = 77
+  metric=length       tau=       558.9  edges  2775  tris   1488  b1 = 1647
+  metric=length       tau=      2344.8  edges  2775  tris    458  b1 = 2293
+  metric=length       tau=      9708.7  edges  2775  tris    107  b1 = 2594
+  metric=length       tau=     23727.3  edges  2775  tris     41  b1 = 2660
+  metric=unit         tau=         0.0  edges  2775  tris   7975  b1 = 77
+  metric=unit         tau=       558.9  edges  2775  tris   1488  b1 = 1647
+  metric=unit         tau=      2344.8  edges  2775  tris    458  b1 = 2293
+  metric=unit         tau=      9708.7  edges  2775  tris    107  b1 = 2594
+  metric=unit         tau=     23727.3  edges  2775  tris     41  b1 = 2660
