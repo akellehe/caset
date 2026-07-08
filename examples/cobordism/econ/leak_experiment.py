@@ -364,8 +364,8 @@ def cmd_mrio(args: argparse.Namespace) -> None:
     mrio_flows.loc[common_c, common_s] = scaled.values
     obs = held_fixed_leak(reg, mrio_flows)
     top = attribute(reg, obs["periods"], top=5)
-    print(f"  held-fixed leak of MRIO-implied structure: {obs['leak']:.4f} "
-          f"(off-complex mass {obs['off_mass']:.4f})")
+    print(f"  held-fixed leak of MRIO-implied structure: {obs['leak']:.3e} "
+          f"(off-complex mass {obs['off_mass']:.3e})")
     print(f"  attribution: {', '.join(f'{k} {v:.0%}' for k, v in top.items())}")
 
 
