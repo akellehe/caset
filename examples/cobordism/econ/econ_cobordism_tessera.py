@@ -119,26 +119,20 @@ def bulk_harmonics(bulk: TesseraBulk, tol: float = 1e-9):
     cc = cobordism.ChainComplex.fromSpacetime(st)
     edge_cols = [tuple(e) for e in cc.kSimplexVertices(1)]
     hl = cobordism.HodgeLaplacian(st)
+    E = len(edge_cols)
+    # tessera assembles the operator; numpy (threaded) does the eigensolve
+    # — hl.harmonics() runs a single-threaded dense solve, prohibitive at
+    # full-economy bulk sizes. Metric weights from economic values can be
+    # Heron-degenerate; fall back to the combinatorial operator (the
+    # harmonic DIMENSION and the period image are metric-independent).
     for metric in (True, False):
-        try:
-            harm = hl.harmonics(1, tol) if metric else None
-            if not metric:
-                L = np.asarray(hl.laplacian(1, metric=False)).reshape(
-                    len(edge_cols), len(edge_cols)).real
-                w, v = np.linalg.eigh(L)
-                Psi = v[:, w < tol * max(w.max(), 1.0)]
-                return Psi, edge_cols
-            Psi = np.array([np.asarray(h.coeffs()).real
-                            if callable(getattr(h, "coeffs", None))
-                            else np.asarray(h.coeffs).real
-                            for h in harm]).T
-            if Psi.size == 0:
-                Psi = np.zeros((len(edge_cols), 0))
-            if not np.all(np.isfinite(Psi)):
-                raise FloatingPointError("degenerate metric harmonics")
-            return Psi, edge_cols
-        except Exception:
+        L = np.asarray(hl.laplacian(1, metric=metric)).reshape(E, E).real
+        if not np.all(np.isfinite(L)):
             continue
+        w, v = np.linalg.eigh(L)
+        Psi = v[:, np.abs(w) < max(tol, 1e3 * np.finfo(float).eps * w.max())]
+        if Psi.size and np.all(np.isfinite(Psi)):
+            return Psi, edge_cols
     raise RuntimeError("no harmonic basis obtainable")
 
 

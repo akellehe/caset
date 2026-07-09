@@ -1,0 +1,21 @@
+[calm] 2005->2006: V=75 E=2775 T=7975 b1=77 (build 13s)
+  anchor   r = 1.665e-05  harmonic_dim = 77  (71s)
+  observed r = 7.415e-04   (dp scale 1.539e-03)
+  random   r = 4.689e-01
+  separation: observed/anchor = 44.5x, random/observed = 632.4x
+[crisis] 2007->2008: V=75 E=2775 T=8107 b1=83 (build 14s)
+  anchor   r = 3.160e-05  harmonic_dim = 83  (71s)
+  observed r = 1.246e-03   (dp scale 2.267e-03)
+  random   r = 5.365e-01
+  separation: observed/anchor = 39.4x, random/observed = 430.8x
+[pandemic] 2019->2020: V=75 E=2775 T=8071 b1=104 (build 14s)
+  anchor   r = 4.367e-05  harmonic_dim = 104  (109s)
+  observed r = 4.575e-03   (dp scale 9.469e-03)
+  random   r = 5.186e-01
+  separation: observed/anchor = 104.8x, random/observed = 113.4x
+
+surgery on 2007->2008 (3 steps x 6 candidates):
+  step 0: edge ('337', '521CI')  gain +1.400e-07  accepted=True  r -> 1.245e-03  (516s)
+  step 1: edge ('323', 'GSLE')  gain +3.260e-08  accepted=True  r -> 1.245e-03  (493s)
+  step 2: edge ('326', '5412OP')  gain +4.228e-07  accepted=True  r -> 1.245e-03  (519s)
+r trajectory: 1.246e-03 -> 1.245e-03 -> 1.245e-03 -> 1.245e-03
