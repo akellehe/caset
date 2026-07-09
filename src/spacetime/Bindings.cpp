@@ -474,7 +474,9 @@ materialized facets. A closed manifold returns an empty list.
 Unlike getExternalSimplices (which returns whole boundary top cells and
 materializes facets as a side-effect), this returns the boundary faces
 themselves and leaves the complex untouched.)doc")
-      .def("materializeFacets", &Spacetime::materializeFacets,
+      .def("materializeFacets",
+           static_cast<void (Spacetime::*)() noexcept>(
+               &Spacetime::materializeFacets),
            R"doc(Force lazy facet materialization to a fixpoint.
 
 Creates and registers every face of every dimension (down to the
@@ -585,7 +587,9 @@ its top cells match.)doc")
            "Return a uniformly random vertex.")
       .def("removeSimplex", &Spacetime::removeSimplex, py::arg("simplex"),
            "Remove a top-dimensional simplex from the complex.")
-      .def("pruneOrphanedSimplices", &Spacetime::pruneOrphanedSimplices,
+      .def("pruneOrphanedSimplices",
+           static_cast<std::size_t (Spacetime::*)()>(
+               &Spacetime::pruneOrphanedSimplices),
            "Unregister sub-simplices (facets/hinges) orphaned by a move — "
            "registered but no longer a face of any current top cell. Returns "
            "the count pruned. Restores the simplex set to the exact closure of "
