@@ -8,6 +8,7 @@
 // (was: #include <pybind11/pybind11.h> — removed; unreferenced.)
 #include "Logger.h"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <map>
 #include <memory>
@@ -714,6 +715,18 @@ void Spacetime::materializeFacets() noexcept {
   }
 }
 
+void Spacetime::materializeFacets(const SimplexPtr &root) noexcept {
+  // ``getFacets()`` hash-reuses a face that already exists (adding only the
+  // missing coface link back to its parent) and creates-and-registers the
+  // missing ones, so recursing from the root down to the vertices completes
+  // the root's whole face lattice and its coface wiring. Shared sub-faces are
+  // visited once per parent; every visit past the first is a cached no-op.
+  if (root == nullptr || root->size() <= 1) return;
+  for (const auto &facet : root->getFacets()) {
+    materializeFacets(facet);
+  }
+}
+
 SimplexSet Spacetime::getExternalSimplices() noexcept {
   // Boundary detection needs every facet's coface count to be complete: a facet
   // is on the boundary iff it has fewer than two cofaces. Force lazy facet
@@ -1348,6 +1361,39 @@ std::size_t Spacetime::pruneOrphanedSimplices() {
     if (s->hasTopCoface()) continue;                       // genuine face
     removeSimplex(s);
     ++pruned;
+  }
+  return pruned;
+}
+
+std::size_t Spacetime::pruneOrphanedSimplices(
+    const std::vector<std::uint64_t> &cellVertexIds) {
+  // Enumerate the proper faces of the cell (every non-empty strict subset of
+  // its vertex ids) and unregister each registered one that no current top
+  // cell covers. Largest faces first, so removeSimplex cleans a face's coface
+  // back-references while the face's own facets are still registered. The
+  // subset lookup uses the same commutative id-hash as createSimplex /
+  // findSimplexByVerts; the vertex-count check below keeps an (astronomically
+  // unlikely) hash collision from unregistering an unrelated simplex.
+  const std::size_t n = cellVertexIds.size();
+  if (n < 2 || n > 16) return 0;
+  std::size_t pruned = 0;
+  for (std::size_t faceSize = n - 1; faceSize >= 1; --faceSize) {
+    for (std::uint64_t mask = 1; mask < (std::uint64_t{1} << n); ++mask) {
+      if (static_cast<std::size_t>(std::popcount(mask)) != faceSize) continue;
+      std::uint64_t hash = 0;
+      for (std::size_t i = 0; i < n; ++i) {
+        if (mask & (std::uint64_t{1} << i)) {
+          hash ^= Fingerprint::mix64(cellVertexIds[i]);
+        }
+      }
+      auto *found = simplexIndex_.find(hash);
+      if (!found) continue;
+      SimplexPtr face = *found;
+      if (face->isStale() || face->size() != faceSize) continue;
+      if (face->hasTopCoface()) continue;  // covered by a surviving top cell
+      removeSimplex(face);
+      ++pruned;
+    }
   }
   return pruned;
 }

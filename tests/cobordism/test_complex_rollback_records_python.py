@@ -97,6 +97,34 @@ def _tops(st):
                   for s in st.getTopSimplices())
 
 
+def _hinge_dual_volumes(st):
+    """{vertex id: dualVolume} over the registered 0-simplices — the
+    (d-2)-hinges of this 2D host. Reads the circumcentric coface walk, so it
+    is sensitive to the facet/coface bookkeeping, not just to edge values."""
+    out = {}
+    for s in st.getSimplices():
+        if len(s.getVertices()) == 1:
+            out[s.getVertices()[0].getId()] = s.dualVolume()
+    return out
+
+
+def _registered_faces(st, n_vertices):
+    """Sorted vertex-id tuples of the registered simplices carrying exactly
+    ``n_vertices`` vertices."""
+    return sorted(tuple(sorted(v.getId() for v in s.getVertices()))
+                  for s in st.getSimplices()
+                  if len(s.getVertices()) == n_vertices)
+
+
+def _assert_dual_volumes_equal(before, after, tol=1e-12):
+    assert set(after) == set(before), (
+        f"hinge set drifted: only-before={set(before) - set(after)} "
+        f"only-after={set(after) - set(before)}")
+    for vid, dv in before.items():
+        assert abs(after[vid] - dv) < tol, (
+            f"hinge v{vid}: dualVolume {dv!r} -> {after[vid]!r}")
+
+
 def _assert_state_equal(before, after, allow_missing=()):
     assert set(after) == set(before) - set(allow_missing), (
         f"edge set drifted: only-before={set(before) - set(after)} "
@@ -172,11 +200,10 @@ def test_cone_round_trip_preserves_complex_action_on_timelike_host():
     # may evaluate): the accepted cone-out round trip must retrace the full
     # COMPLEX dual Regge action, Re and Im — the hinge-exactness contract on
     # a mixed-causal-character host.  Closed host (the full icosahedron), the
-    # domain the existing hinge-exactness suites cover: on already-holed
-    # hosts an orphan-restoring rollback has a PRE-EXISTING circumcentric
-    # dual-volume bookkeeping drift (hinge deficits exact, dualVolume not)
-    # that is orthogonal to #581 — see the follow-up issue filed with this
-    # test.
+    # domain the existing hinge-exactness suites cover; the already-holed
+    # host, where the rollback must additionally restore an ORPHANED edge and
+    # the facet/coface bookkeeping around it (#587), is covered by
+    # test_cone_round_trip_retraces_dual_volumes_on_holed_host below.
     st = _full_icosa()
     _seed_signed_geometry(st, timelike_keys={(0, 1), (7, 10)})
     s0 = complex(T.ReggeSolver(st, T.MatterConfiguration()).dualReggeAction())
@@ -192,6 +219,83 @@ def test_cone_round_trip_preserves_complex_action_on_timelike_host():
     s1 = complex(T.ReggeSolver(st, T.MatterConfiguration()).dualReggeAction())
     assert abs(s1.real - s0.real) < 1e-9
     assert abs(s1.imag - s0.imag) < 1e-9
+
+
+def test_cone_round_trip_retraces_dual_volumes_on_holed_host():
+    # The #587 repro. Face [5,11,4] is the sole surviving coface of window
+    # rim edge (5,11), so coning it out orphans that edge. Removing the edge
+    # must also remove the registered (5,11) 1-simplex (a face that outlived
+    # its edge would read l^2 = 0 in every later Gram-matrix computation),
+    # and the rollback must restore the facet/coface lattice along with the
+    # edge values — every hinge's dualVolume and the complex dual action
+    # retrace IMMEDIATELY, not only after a global re-materialization.
+    st = _holed_icosa()
+    _seed_signed_geometry(st, timelike_keys={(0, 1), (7, 10)})
+    s0 = complex(T.ReggeSolver(st, T.MatterConfiguration()).dualReggeAction())
+    dv0 = _hinge_dual_volumes(st)
+    before = _edge_state(st)
+    faces0 = _registered_faces(st, 2)
+    tops_before = _tops(st)
+
+    sc = cob.SurgicalCone(st)
+    ok, reason = sc.coneOut([5, 11, 4])
+    assert ok, reason
+    # No zombie: the orphaned rim edge's 1-simplex is pruned with the edge.
+    assert (5, 11) not in _registered_faces(st, 2)
+
+    assert sc.rollback()
+    _assert_state_equal(before, _edge_state(st))
+    assert _tops(st) == tops_before
+    assert _registered_faces(st, 2) == faces0
+    _assert_dual_volumes_equal(dv0, _hinge_dual_volumes(st))
+    s1 = complex(T.ReggeSolver(st, T.MatterConfiguration()).dualReggeAction())
+    assert abs(s1.real - s0.real) < 1e-12
+    assert abs(s1.imag - s0.imag) < 1e-12
+    # A later global re-materialization must not shift anything either (the
+    # pre-fix failure mode: it wired a pruned-edge zombie back into the walk).
+    st.materializeFacets()
+    _assert_dual_volumes_equal(dv0, _hinge_dual_volumes(st))
+
+
+def test_rejected_cone_out_retraces_dual_volumes():
+    # The directedConeOut hot path scores dF across rejected probes on the
+    # SAME spacetime; the auto-rollback must leave every hinge's dualVolume
+    # unchanged or every later probe sees a phantom dual-volume delta (#587).
+    # Face [0,1,7] shares only vertex 0 with the window hole [0,11,5], so the
+    # gate rejects it (pinched link) after the cell was already removed.
+    st = _holed_icosa()
+    _seed_signed_geometry(st, timelike_keys={(0, 1), (7, 10)})
+    dv0 = _hinge_dual_volumes(st)
+
+    sc = cob.SurgicalCone(st)
+    ok, _ = sc.coneOut([0, 1, 7])
+    assert not ok, "removal pinching the hole rim must be rejected"
+    assert sc.depth == 0
+    _assert_dual_volumes_equal(dv0, _hinge_dual_volumes(st))
+
+
+def test_cone_in_rollback_after_materialization_leaves_no_orphan_faces():
+    # If the lattice is materialized between an accepted cone-in and its
+    # rollback (e.g. a solver scoring the probe), the fresh cell's faces
+    # exist by then; the rollback must drop them with the cell and its fresh
+    # edges — faces shared with surviving cells stay — so the registered
+    # simplex set returns exactly to the pre-move closure.
+    st = _holed_icosa()
+    _seed_complex_geometry(st)
+    before = _edge_state(st)
+    n_simplices_before = len(st.getSimplices())
+    faces0 = _registered_faces(st, 2)
+
+    sc = cob.SurgicalCone(st)
+    ok, reason = sc.coneIn([0, 5])  # cap part of the [0,11,5] window
+    if not ok:
+        pytest.skip(f"cone-in rejected on this host: {reason}")
+    st.materializeFacets()
+
+    assert sc.rollback()
+    _assert_state_equal(before, _edge_state(st))
+    assert _registered_faces(st, 2) == faces0
+    assert len(st.getSimplices()) == n_simplices_before
 
 
 # --------------------------------------------------------------------------- #

@@ -488,6 +488,23 @@ class Spacetime {
     /// number of simplices pruned.
     std::size_t pruneOrphanedSimplices();
 
+    /// Scoped variant: unregister the orphaned proper faces of **one** cell —
+    /// every registered sub-simplex spanned by a proper subset of
+    /// \p cellVertexIds that no current top cell covers. This is the same
+    /// operation as the full sweep restricted to a single (typically
+    /// just-removed) top cell's face lattice, so a move class can keep the
+    /// "registered simplices = closure of the top cells" invariant at
+    /// \f$ O(2^d) \f$ per move instead of an \f$ O(N) \f$ pass. Faces still
+    /// covered by a surviving top cell are kept. Pruning is essential before
+    /// :func:`removeEdge` on an orphaned edge: a registered face that outlives
+    /// its edge keeps an empty edge set and silently reads
+    /// \f$ \ell^2 = 0 \f$ in every Gram-matrix computation thereafter (#587).
+    /// Returns the number of simplices pruned.
+    /// @param cellVertexIds The vertex ids spanning the cell whose face
+    ///   lattice is checked (need not itself be registered).
+    std::size_t pruneOrphanedSimplices(
+        const std::vector<std::uint64_t> &cellVertexIds);
+
     /// Fully remove an edge from the complex: drop it from its endpoints'
     /// in/out edge lists and from the EdgeList. The caller is responsible
     /// for first removing any simplices that contain the edge.
@@ -562,6 +579,17 @@ class Spacetime {
     /// side-effect that :func:`getExternalSimplices` performs internally; call
     /// it directly when you want the materialization without the boundary scan.
     void materializeFacets() noexcept;
+
+    /// Scoped variant: materialize the face lattice of **one** simplex —
+    /// recursive ``Simplex::getFacets()`` from \p root down to its vertices,
+    /// wiring the facet/coface incidence of every face on the way. Faces that
+    /// already exist are reused (gaining only the missing coface link); the
+    /// rest are created and registered. ``Simplex::dualVolume`` walks a hinge
+    /// **up** through exactly these coface links, so a move class restoring a
+    /// removed cell must restore this lattice too (#587) — this does that at
+    /// \f$ O(2^d) \f$ instead of the full-complex fixpoint pass above.
+    /// @param root The simplex whose face lattice to materialize.
+    void materializeFacets(const SimplexPtr &root) noexcept;
 
     /// @return Simplices around the boundary of the simplicial complex. These simplices have at
     /// least one external face. They will tend to be in order of orientation (e.g. (4, 1) and (3, 2) for 4D CDT). Note
