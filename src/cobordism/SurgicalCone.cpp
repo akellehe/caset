@@ -173,7 +173,11 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
   // stripped of its edge would stay wired into the hinges' coface walk while
   // reading l2 = 0 in every Gram-matrix computation, the #587 drift.
   st_->removeSimplex(target);
-  st_->pruneOrphanedSimplices(want);
+  // If anything was pruned, the undo must re-materialize even when the cell
+  // itself carried no facet cache (a partially materialized host can hold
+  // faces registered by a neighbor cell's getFacets) — registered faces are
+  // never lost across a round trip.
+  if (st_->pruneOrphanedSimplices(want) > 0) m.hadFacets = true;
   for (auto *e : toRemove)
     if (e != nullptr) st_->removeEdge(e);
 
