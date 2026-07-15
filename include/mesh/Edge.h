@@ -15,6 +15,8 @@
 #include <complex>
 #include <random>
 #include <memory>
+#include <stdexcept>
+#include <string>
 #include <vector>
 #include <cstdint>
 
@@ -172,14 +174,36 @@ class Edge {
     /// and the action never sees a round-trip.
     ///
     /// **Ordinary-Lorentzian convention (#580/#589):** \f$l^2\f$ is real and signed
-    /// (spacelike > 0, timelike < 0, null 0); the geometry stack reads
-    /// \f$\mathrm{Re}\,l^2\f$. The complexified (Picard–Lefschetz) theory is unbuilt,
-    /// and nothing is enforced at runtime — the dynamics keeps \f$l^2\f$ on the real
-    /// axis by construction (`MultiCobordism::runStage2`); storage round-trips a
-    /// general complex value exactly (rollback records, saddle bookkeeping).
+    /// (spacelike > 0, timelike < 0, null 0); the geometry stack reads it through
+    /// `getRealSquaredLength()`, which enforces the on-axis invariant loudly (#597)
+    /// instead of projecting. The complexified (Picard–Lefschetz) theory is unbuilt;
+    /// the dynamics keeps \f$l^2\f$ on the real axis by construction
+    /// (`MultiCobordism::runStage2`), and storage round-trips a general complex
+    /// value exactly (rollback records, saddle bookkeeping, historical dumps) —
+    /// only geometry consumption is on-axis.
     void setSquaredLength(std::complex<double> l2) noexcept {
       squaredLength_ = l2;
       length_ = std::sqrt(l2);
+    }
+
+    /// The geometry stack's read of \f$l^2\f$ (#589/#597): the real signed value,
+    /// with the ordinary-Lorentzian on-axis invariant enforced. A nonzero
+    /// \f$\mathrm{Im}\,l^2\f$ reaching the Gram/Cayley–Menger/action/register
+    /// pipeline is an upstream bug that a silent `.real()` projection would mask,
+    /// so it throws instead of truncating. Storage
+    /// (`getSquaredLength`/`setSquaredLength`) stays general-complex — use it, not
+    /// this, wherever a complex value is legitimate (Wick \f$|l^2|\f$ reads,
+    /// snapshots, rollback records, dump rehydration).
+    [[nodiscard]] double getRealSquaredLength() const {
+      if (squaredLength_.imag() != 0.0)
+        throw std::runtime_error(
+            "Edge(" + std::to_string(source->getId()) + "," +
+            std::to_string(target->getId()) + "): nonzero Im l^2 = " +
+            std::to_string(squaredLength_.imag()) +
+            " reached the geometry stack — the ordinary-Lorentzian convention "
+            "(#589) keeps l^2 real and signed, so this is an upstream bug, not "
+            "a value to project away");
+      return squaredLength_.real();
     }
 
     /// Set the (complex) edge length; the squared length is kept in sync as `l*l`. Use

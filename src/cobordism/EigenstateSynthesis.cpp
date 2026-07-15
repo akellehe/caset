@@ -239,7 +239,7 @@ double EigenstateSynthesis::rayleigh(const std::vector<cd> &psi) const {
 std::vector<double> EigenstateSynthesis::weights() const {
   std::vector<double> w;
   w.reserve(edges_.size());
-  for (const auto e : edges_) w.push_back(e->getSquaredLength().real());
+  for (const auto e : edges_) w.push_back(e->getRealSquaredLength());
   return w;
 }
 
@@ -274,7 +274,7 @@ std::vector<double> EigenstateSynthesis::interiorWeights() const {
   std::vector<double> w;
   w.reserve(interiorEdgeIdx_.size());
   for (const auto i : interiorEdgeIdx_)
-    w.push_back(edges_[i]->getSquaredLength().real());
+    w.push_back(edges_[i]->getRealSquaredLength());
   return w;
 }
 
@@ -1443,7 +1443,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getSquaredLength().real();
+        e->getRealSquaredLength();
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
@@ -2006,7 +2006,7 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getSquaredLength().real();
+        e->getRealSquaredLength();
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
@@ -2219,7 +2219,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
   std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getSquaredLength().real();
+        e->getRealSquaredLength();
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)

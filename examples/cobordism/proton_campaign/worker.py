@@ -123,15 +123,37 @@ def dump_geometry(st, path, meta):
 
 
 class AttemptState:
-    """Running extremes the keep-policy and the final record read."""
+    """Running extremes the keep-policy and the final record read.
+
+    max_im / min_re_min are the trajectory-level metric channels: stage 2
+    constructs every trial exactly real (Im l^2 == 0 by construction, #589),
+    so a nonzero max_im flags an upstream Im producer that final-state reads
+    can never see — and min_re_min records how close the drive ever came to
+    the causal sector (Re l^2 < 0), the channel where causal content would
+    actually appear, at snapshot (pass/chunk) resolution."""
 
     def __init__(self):
         self.max_b3 = 0
         self.max_holes = 0
+        self.max_im = 0.0
+        self.min_re_min = float("inf")
 
     def see(self, snap):
         self.max_b3 = max(self.max_b3, snap["b3"])
         self.max_holes = max(self.max_holes, snap["holes"])
+        self.max_im = max(self.max_im, snap["im_max"])
+        self.min_re_min = min(self.min_re_min, snap["re_min"])
+
+    def verdict_fields(self):
+        """The extremes exactly as the verdict record carries them (min_re_min
+        is None when no snapshot was ever taken — never JSON Infinity)."""
+        return {
+            "max_holes": self.max_holes,
+            "max_b3": self.max_b3,
+            "max_im_seen": self.max_im,
+            "min_re_min": (None if self.min_re_min == float("inf")
+                           else self.min_re_min),
+        }
 
 
 def run_attempt_on_nodes(base, progress, recorder, state, nodes):
@@ -216,8 +238,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
         "persistent": persistent,
         "stage2_iters_total": stage2_iters,
         "holes": final["holes"],
-        "max_holes": state.max_holes,
-        "max_b3": state.max_b3,
+        **state.verdict_fields(),
         "betti": list(cob.MultiCobordism.betti(st)),
         "singlet": float(cob.MultiCobordism.r_state(st, REGISTER_DEGREE,
                                                     cob.Proton.singlet())),

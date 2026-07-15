@@ -348,7 +348,7 @@ double ReggeSolver::matterAction() const {
                 if (other->getId() == v2->getId()) {
                     if (e->isTimelike())
                         S -= wl.mass *
-                             std::sqrt(-e->getSquaredLength().real());
+                             std::sqrt(-e->getRealSquaredLength());
                     break;
                 }
             }

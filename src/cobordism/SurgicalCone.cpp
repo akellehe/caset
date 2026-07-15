@@ -146,6 +146,7 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
   Move m;
   m.kind = Move::Kind::ConeOut;
   m.cell = want;
+  m.hadFacets = target->hasFacets();
   std::vector<::tessera::mesh::Edge *> toRemove;
   for (std::size_t i = 0; i + 1 < want.size(); ++i)
     for (std::size_t j = i + 1; j < want.size(); ++j) {
@@ -166,8 +167,17 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
     if (it != vidx.end()) coordSnap[id] = coordsOf(it->second);
   }
 
-  // Mutate: drop the top cell, then its orphaned edges.
+  // Mutate: drop the top cell, then its orphaned faces, then its orphaned
+  // edges. The face prune must precede the edge removal (removeEdge's
+  // contract: no simplex may still contain the edge) — a registered face
+  // stripped of its edge would stay wired into the hinges' coface walk while
+  // reading l2 = 0 in every Gram-matrix computation, the #587 drift.
   st_->removeSimplex(target);
+  // If anything was pruned, the undo must re-materialize even when the cell
+  // itself carried no facet cache (a partially materialized host can hold
+  // faces registered by a neighbor cell's getFacets) — registered faces are
+  // never lost across a round trip.
+  if (st_->pruneOrphanedSimplices(want) > 0) m.hadFacets = true;
   for (auto *e : toRemove)
     if (e != nullptr) st_->removeEdge(e);
 
@@ -259,7 +269,7 @@ void SurgicalCone::undoConeOut(const Move &m) {
     if (it == vidx.end()) return;  // a cell vertex vanished — cannot restore
     verts.push_back(it->second);
   }
-  st_->createSimplexTracked(verts);
+  const auto restored = st_->createSimplexTracked(verts);
 
   auto eidx = edgeIndex(st_);
   for (const auto &[u, v, w, theta] : m.edges) {
@@ -269,10 +279,24 @@ void SurgicalCone::undoConeOut(const Move &m) {
       it->second->setPhase(theta);
     }
   }
+
+  // Restore the cell's facet/coface lattice: createSimplexTracked wires the
+  // cell to vertices and edges only, so without this the restored cell is
+  // nobody's coface and every surrounding hinge's dualVolume misses its
+  // wedges until some global re-materialization — and the pruned faces
+  // (fresh objects bound to the fresh edges) would never come back at all.
+  // Skipped when the pre-move cell had no materialized facets, so the undo
+  // never creates bookkeeping the pre-move complex lacked.
+  if (m.hadFacets) st_->materializeFacets(restored.simplex);
 }
 
 void SurgicalCone::undoConeIn(const Move &m) {
-  // Drop the added top cell, its fresh edges, then the fresh apex vertex.
+  // Drop the added top cell, its orphaned faces, its fresh edges, then the
+  // fresh apex vertex. The face prune covers the case where the lattice was
+  // materialized between the accepted move and this rollback (e.g. a solver
+  // scoring the probe): the apex's faces would otherwise stay registered
+  // with their edges stripped — the same zombie class as the cone-out side.
+  // Faces shared with surviving top cells are kept.
   auto vidx = vertexIndex(st_);
   ::tessera::mesh::VertexPtrs verts;
   verts.reserve(m.cell.size());
@@ -283,6 +307,7 @@ void SurgicalCone::undoConeIn(const Move &m) {
   if (verts.size() == m.cell.size()) {
     if (auto s = st_->findSimplexByVerts(verts)) st_->removeSimplex(s);
   }
+  st_->pruneOrphanedSimplices(m.cell);
   auto eidx = edgeIndex(st_);
   for (const auto &[u, v, w, theta] : m.edges) {
     (void)w;

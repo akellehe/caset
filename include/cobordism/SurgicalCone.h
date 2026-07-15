@@ -52,9 +52,15 @@ using namespace ::tessera::spacetime;
 /// ## Lifecycle and exact reversibility
 /// Accepted moves are pushed on a stack; `rollback()` undoes the last one,
 /// restoring the complex — every edge length and phase — bit-for-bit, so a
-/// round trip leaves the dual Regge action (Re **and** Im) invariant. The moves
-/// are first-class and composable (cone-out two disjoint cells, then roll both
-/// back LIFO).
+/// round trip leaves the dual Regge action (Re **and** Im) invariant. The
+/// facet/coface bookkeeping is restored along with the values: a cone-out
+/// prunes the removed cell's orphaned faces before dropping their edges (a
+/// registered sub-simplex must never outlive its edges — one that does reads
+/// \f$ \ell^2 = 0 \f$ in every later Gram-matrix computation), and the
+/// rollback re-materializes the restored cell's face lattice, so the coface
+/// walk behind ``Simplex::dualVolume`` retraces the pre-move circumcentric
+/// dual volumes exactly (#587). The moves are first-class and composable
+/// (cone-out two disjoint cells, then roll both back LIFO).
 class SurgicalCone {
  public:
   /// Bind the cone to a spacetime. Does not mutate it.
@@ -65,8 +71,10 @@ class SurgicalCone {
   SurgicalCone &operator=(const SurgicalCone &) = delete;
 
   /// Gated surgical **cone-out**: remove the top cell whose sorted vertex ids
-  /// equal \p cell (plus its orphaned edges and any vertex thereby isolated),
-  /// then accept only if the result is a valid manifold-with-boundary. Returns
+  /// equal \p cell (plus its orphaned faces, its orphaned edges, and any
+  /// vertex thereby isolated — the registered simplex set stays exactly the
+  /// closure of the surviving top cells), then accept only if the result is a
+  /// valid manifold-with-boundary. Returns
   /// `(true, "ok")` on acceptance; otherwise the complex is restored and the
   /// reason returned. Rejects removing the last top cell (it would drop the
   /// complex dimension).
@@ -80,7 +88,9 @@ class SurgicalCone {
       const std::vector<std::uint64_t> &targetVerts);
 
   /// Undo the last accepted move (LIFO), restoring the complex bit-for-bit —
-  /// every edge length and phase. Returns `false` if nothing is applied.
+  /// every edge length and phase, and the restored cell's facet/coface
+  /// lattice (so circumcentric dual volumes retrace too). Returns `false` if
+  /// nothing is applied.
   bool rollback();
 
   /// Roll every accepted move back, restoring the original complex. Returns the
@@ -122,6 +132,13 @@ class SurgicalCone {
     /// the single fresh vertex (cone-in, to drop), each (id, coords). An empty
     /// coords vector marks a coordinate-free vertex.
     std::vector<std::pair<std::uint64_t, std::vector<double>>> verts;
+    /// Whether the removed top cell carried a materialized facet lattice at
+    /// move time (cone-out only). The undo then re-materializes the restored
+    /// cell's face lattice — the coface links ``Simplex::dualVolume`` walks —
+    /// instead of leaving the cell wired to vertices and edges alone. Left
+    /// `false` for cone-in and for hosts that never materialized facets, so
+    /// a rollback never creates bookkeeping the pre-move complex lacked.
+    bool hadFacets{false};
   };
 
   /// Top cells of the bound spacetime as sorted vertex-id tuples (canonical
