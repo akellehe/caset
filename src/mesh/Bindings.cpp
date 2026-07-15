@@ -92,7 +92,13 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
 
 Stored verbatim — NOT getLength()**2 — so the action never sees a sqrt/square
 round-trip. Real-signed for an ordinary Lorentzian edge, complex for a saddle
-geometry. This is what all geometry/action math reads.)doc")
+geometry. Storage-level read; the geometry stack reads getRealSquaredLength().)doc")
+      .def("getRealSquaredLength", &Edge::getRealSquaredLength,
+           R"doc(The geometry stack's read of l^2 (#589/#597): the real signed value
+with the ordinary-Lorentzian on-axis invariant enforced — raises RuntimeError on
+a nonzero Im l^2 instead of silently projecting it away. Use getSquaredLength()
+wherever a complex value is legitimate (Wick |l^2| reads, snapshots, rollback
+records, dump rehydration).)doc")
       .def("getLength", &Edge::getLength,
            R"doc(Return the (possibly complex) edge length — the causal DOF.
 

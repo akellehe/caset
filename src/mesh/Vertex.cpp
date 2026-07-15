@@ -132,13 +132,25 @@ Vertex::moveEdgesToImpl(
       targetVertex->removeInEdge(oldEdge);
     }
 
+    // Capture the exact state BEFORE the slot is freed: EdgeList::remove frees
+    // the pool slot and createEdge reuses freed slots, so oldEdge can alias the
+    // NEW edge afterwards — reading through it then returns the new edge's own
+    // fresh state, not the moved edge's (#597).
+    const std::complex<double> movedSquaredLength = oldEdge->getSquaredLength();
+    const double movedPhase = oldEdge->getPhase();
+
     spacetime->getEdgeList()->remove(oldEdge);
 
     // For inEdges: redirect edge to point TO the new vertex (new source = vertex)
     // For outEdges: redirect edge to point FROM the new vertex (new target = vertex)
     const auto &newEdge = (direction == EdgeDirection::In)
-                            ? spacetime->createEdge(sourceVertex, recipient, oldEdge->getSquaredLength().real())
-                            : spacetime->createEdge(recipient, targetVertex, oldEdge->getSquaredLength().real());
+                            ? spacetime->createEdge(sourceVertex, recipient, movedSquaredLength.real())
+                            : spacetime->createEdge(recipient, targetVertex, movedSquaredLength.real());
+    // The double-typed createEdge funnel launders the exact edge state; re-apply
+    // it in full (the RemoveMove/SurgicalCone restore idiom, #597): the complex
+    // l^2 verbatim and the U(1) connection phase, which the funnel drops to 0.
+    newEdge->setSquaredLength(movedSquaredLength);
+    newEdge->setPhase(movedPhase);
 
     newEdges.insert(newEdge);
   }
