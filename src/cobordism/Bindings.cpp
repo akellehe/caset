@@ -23,6 +23,7 @@
 #include "cobordism/ProtonIngredients.h"
 #include "cobordism/HodgeLaplacian.h"
 #include "cobordism/IntegerLinalg.h"
+#include "cobordism/SlicedCobordism.h"
 #include "cobordism/SurgicalCone.h"
 #include "cobordism/Spectrum.h"
 #include "spacetime/Spacetime.h"  // complete type required by pybind (typeid)
@@ -1124,4 +1125,58 @@ invariant.)doc")
       .def("validate", &SurgicalCone::validate,
            "(ok, reason): the manifold-with-boundary verdict on the CURRENT "
            "complex -- the same gate coneOut / coneIn apply.");
+
+  // ========================================
+  // SlicedCobordism (#614, #615)
+  // ========================================
+  py::class_<SlicedCobordism>(m, "SlicedCobordism",
+      R"doc(The two-phase boundary-then-bulk construction (#614, #615).
+
+Phase 1 (closed_slice) is a closed 3-complex -- a spatial slice, every edge
+spacelike, Im S = 0 correct rather than symptomatic. Its register is
+ker L_{d-1} at d = 3, i.e. degree k = 2 read as b_2, with holes made by
+REMOVING tetrahedra (SurgicalCone.coneOut); a closed complex has no boundary
+facets for MultiCobordism.emergent_holes to read.
+
+Phase 2 (cone_to_bulk) joins every tetrahedron of the slice to a single SHARED
+apex through timelike edges: cone(S^3) = D^4, one 4-simplex per tetrahedron, a
+genuine 4-manifold-with-boundary whose boundary is the slice. Its register is
+degree k = 3 (b_3), and the Regge term becomes meaningful because there is now
+4D bulk for it to act on.
+
+The apex is shared rather than one-per-tetrahedron because a 4D CDT slab needs
+BOTH (4,1) and (3,2) simplices; (4,1) cells alone leave gaps and do not tile.
+The shared apex tiles exactly, at the price of a conical singularity -- a valid
+first bulk step, not a time layer.
+
+This constructs; it does not police. The timelike dispositions it seeds are free
+to be driven spacelike by the geometric relaxation and nothing prevents that --
+a runtime guard on the dynamics is what this project does not do. Whether they
+survive is a MEASUREMENT, and either answer is a result.
+
+Nothing existing is modified: Proton, ProtonIngredients, MultiCobordism and
+SurgicalCone are untouched; a caller opts in or does not.)doc")
+      .def_readonly_static("DEFAULT_TIMELIKE_SQUARED_LENGTH",
+                           &SlicedCobordism::kDefaultTimelikeSquaredLength)
+      .def_static("closed_slice", &SlicedCobordism::closedSlice,
+           "Phase-1 seed: the closed 3-complex dDelta^4 = S^3 -- five tetrahedra "
+           "on five vertices, every 4-subset of {0..4}. Closed by construction "
+           "(each triangle lies in exactly two tetrahedra), so it is a spatial "
+           "slice rather than a 3-ball, which is what cone_to_bulk requires. "
+           "Every edge spacelike; combinatorial dimension 3.")
+      .def_static("cone_to_bulk", &SlicedCobordism::coneToBulk,
+           py::arg("slice"),
+           py::arg("apex_edge_squared_length") =
+               std::complex<double>(
+                   SlicedCobordism::kDefaultTimelikeSquaredLength, 0.0),
+           "(bulk, reason): cone every top cell of the closed 3-complex `slice` "
+           "to one fresh SHARED apex joined by edges of the given squared length "
+           "(timelike by default), yielding a 4-complex. Gated by the same "
+           "ChainComplex.dualComplexIsValid check every surgical move uses. "
+           "Spacelike lengths are carried over from the slice unchanged; only "
+           "apex-incident edges are written. reason is 'ok' on success, and "
+           "`bulk` is None on failure.")
+      .def_static("top_cells", &SlicedCobordism::topCells, py::arg("complex"),
+           "Top-cell vertex tuples, each sorted ascending -- the canonical form "
+           "MultiCobordism snapshots use.");
 }
