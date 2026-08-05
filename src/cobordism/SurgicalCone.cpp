@@ -204,7 +204,7 @@ std::pair<bool, std::string> SurgicalCone::coneOut(
 }
 
 std::pair<bool, std::string> SurgicalCone::coneIn(
-    const std::vector<std::uint64_t> &targetVerts) {
+    const std::vector<std::uint64_t> &targetVerts, bool timelike) {
   if (st_ == nullptr) return {false, "no spacetime"};
   const std::size_t tv = topVerts();
   if (tv < 2) return {false, "degenerate dimension"};
@@ -238,6 +238,20 @@ std::pair<bool, std::string> SurgicalCone::coneIn(
   m.cell = cellIds;
 
   auto r = st_->createSimplexTracked(verts);
+  // #613: seed the apex edges' causal disposition BEFORE they are recorded below,
+  // so the rollback record and the complex never disagree. Only edges incident to
+  // the fresh apex are written; every pre-existing edge is left exactly as it was.
+  // `timelike == false` (the default) writes nothing at all.
+  if (timelike) {
+    const std::uint64_t apexId = apex->getId();
+    for (const auto &e : r.newEdges)
+      if (e != nullptr && e->getSource() != nullptr &&
+          e->getTarget() != nullptr &&
+          (e->getSource()->getId() == apexId ||
+           e->getTarget()->getId() == apexId))
+        e->setSquaredLength(
+            std::complex<double>(kTimelikeSquaredLength, 0.0));
+  }
   for (const auto &e : r.newEdges)
     if (e != nullptr && e->getSource() != nullptr && e->getTarget() != nullptr)
       m.edges.emplace_back(e->getSource()->getId(), e->getTarget()->getId(),

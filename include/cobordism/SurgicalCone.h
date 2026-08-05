@@ -84,8 +84,24 @@ class SurgicalCone {
   /// vertices \p targetVerts to form a new top cell, then accept only if the
   /// result is a valid manifold-with-boundary. Returns `(true, "ok")` on
   /// acceptance; otherwise the additions are undone and the reason returned.
+  /// \p timelike (#613) makes the edges joining the fresh apex to \p targetVerts
+  /// **timelike** instead of spacelike — the CDT \f$ (4,1) \f$ split, \f$ d \f$
+  /// vertices on one slice and the apex on the next. Only apex-incident edges are
+  /// affected; pre-existing edges are never touched. Defaults to `false`, which is
+  /// byte-identical to the behaviour before this parameter existed.
+  ///
+  /// The magnitude follows the CDT convention \f$ \ell_t^2 = -\alpha\,\ell_s^2 \f$
+  /// with \f$ \alpha = 1 \f$ on unit spacelike edges.
+  ///
+  /// This seeds a disposition; it does not police one. Nothing prevents the
+  /// geometric relaxation from later driving such an edge spacelike — that would be
+  /// a runtime guard on the dynamics, which this project does not do.
   std::pair<bool, std::string> coneIn(
-      const std::vector<std::uint64_t> &targetVerts);
+      const std::vector<std::uint64_t> &targetVerts, bool timelike = false);
+
+  /// The timelike squared length a `timelike` cone-in writes, in the CDT
+  /// convention \f$ \ell_t^2 = -\alpha\,\ell_s^2 \f$ with \f$ \alpha = 1 \f$.
+  static constexpr double kTimelikeSquaredLength = -1.0;
 
   /// Undo the last accepted move (LIFO), restoring the complex bit-for-bit —
   /// every edge length and phase, and the restored cell's facet/coface

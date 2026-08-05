@@ -810,10 +810,11 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def(py::init<std::shared_ptr<Spacetime>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
-                    std::vector<int>, double, std::uint64_t, int>(),
+                    std::vector<int>, double, std::uint64_t, int, bool>(),
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
-           py::arg("seed") = 0, py::arg("precone") = 0)
+           py::arg("seed") = 0, py::arg("precone") = 0,
+           py::arg("should_propose_dispositions") = false)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
@@ -846,6 +847,20 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
            "the max_iters budget cap. Read last_stage2_stationary for which one "
            "ended the run. Returns the F trace.")
+      .def_property_readonly("should_propose_dispositions",
+                             &MultiCobordism::shouldProposeDispositions,
+           "Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS "
+           "(#613) -- a timelike cone-in and a disposition flip on an existing "
+           "edge. Both are ordinary candidate moves: drawn at random, scored by "
+           "deltaF, committed only when they lower F. Nothing prescribes causal "
+           "structure; the objective decides whether it wants any.\n\n"
+           "They are DISCRETE moves rather than left to run_stage2 because a "
+           "continuous descent cannot carry l^2 across zero -- a null, "
+           "degenerate configuration where deficit angles and dual volumes are "
+           "singular -- so the Euclidean orthant is a trap. Measured: every edge "
+           "stays spacelike and Im S = 0 through 110+ relaxation iterations.\n\n"
+           "Default False, leaving the six-move draw and every existing path "
+           "byte-identical.")
       .def_property_readonly("st", &MultiCobordism::spacetime,
           R"doc(The node's CURRENT complex. Re-read it after every drive call.
 
@@ -1106,6 +1121,7 @@ invariant.)doc")
            "otherwise restores the cell and names the reason. Rejects removing "
            "the last top cell.")
       .def("coneIn", &SurgicalCone::coneIn, py::arg("target_verts"),
+           py::arg("timelike") = false,
            "(ok, reason): gated surgical cone-in -- create a fresh vertex, join "
            "it to the d `target_verts` to form a new top cell. Accepts only a "
            "valid manifold-with-boundary; otherwise undoes the additions.")

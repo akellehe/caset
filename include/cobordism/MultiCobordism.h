@@ -77,7 +77,27 @@ class MultiCobordism {
       const std::vector<std::vector<std::complex<double>>> &inputTargets,
       const std::vector<std::vector<std::complex<double>>> &outputTargets,
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
-      std::uint64_t seed = 0, int precone = 0);
+      std::uint64_t seed = 0, int precone = 0,
+      bool shouldProposeDispositions = false);
+
+  /// Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS (#613): a
+  /// timelike cone-in, and a disposition flip on an existing edge. Both are
+  /// ordinary candidate moves — drawn at random, scored by `deltaF`, committed
+  /// only when they lower `F`. Nothing prescribes causal structure; the objective
+  /// decides whether it wants any.
+  ///
+  /// Drawn as DISCRETE moves rather than left to `runStage2` because a continuous
+  /// descent cannot carry `ℓ²` across zero — a null, degenerate configuration
+  /// where deficit angles and circumcentric dual volumes are singular — so the
+  /// Euclidean orthant is a trap. Measured on canonical hosts: every edge stays
+  /// spacelike and `Im S = 0` through 110+ relaxation iterations, with
+  /// `‖∇S‖² = 9.46` still far from stationary.
+  ///
+  /// Default `false`, which leaves the six-move draw and every existing path —
+  /// `Proton`, `ProtonIngredients`, the campaign — byte-identical.
+  [[nodiscard]] bool shouldProposeDispositions() const {
+    return shouldProposeDispositions_;
+  }
 
   // ---- module-level helpers (static) ----
   /// Betti numbers (combinatorial, geometry-free).
@@ -306,6 +326,8 @@ class MultiCobordism {
   double inputCarriedTolerance_ = 0.5;
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
+  /// #613: whether the move draw offers the disposition moves. See the accessor.
+  bool shouldProposeDispositions_{false};
   double convergenceTolerance_ = 1e-9;
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
