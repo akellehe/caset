@@ -156,6 +156,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} ObservableGates.h
 ```
+```{doxygenfile} DualVolumeSigns.h
+```
 
 ## Cobordism
 
