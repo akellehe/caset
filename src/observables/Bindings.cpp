@@ -38,6 +38,7 @@
 #include "observables/EmergentRadius.h"
 #include "observables/PairLoopFlavor.h"
 #include "observables/ObservableGates.h"
+#include "observables/DualVolumeSigns.h"
 #include "cobordism/Proton.h"
 #include "spacetime/Spacetime.h"
 #include "ForceLayout.h"
@@ -818,4 +819,70 @@ never builds, solves, or materializes anything.)doc")
   m.attr("ObservableGates").attr("GAUGE_THETA") = ObservableGates::GAUGE_THETA;
   m.attr("ObservableGates").attr("GATE_SEED") =
       py::int_(ObservableGates::GATE_SEED);
+
+  // ========================================
+  // DualVolumeSigns (#605)
+  // ========================================
+  py::class_<DualVolumeSigns::DimensionReport>(m, "DualVolumeDimensionReport",
+      "Per-dimension counts from the diagonal DEC Hodge star sign audit.")
+      .def_readonly("dimension", &DualVolumeSigns::DimensionReport::dimension)
+      .def_readonly("n_simplices", &DualVolumeSigns::DimensionReport::nSimplices)
+      .def_readonly("n_negative_dual_volume",
+                    &DualVolumeSigns::DimensionReport::nNegativeDualVolume)
+      .def_readonly("n_degenerate_volume",
+                    &DualVolumeSigns::DimensionReport::nDegenerateVolume)
+      .def_readonly("n_circumcenter_outside",
+                    &DualVolumeSigns::DimensionReport::nCircumcenterOutside)
+      .def_readonly("n_negative_circumradius",
+                    &DualVolumeSigns::DimensionReport::nNegativeCircumradius)
+      .def_readonly("n_negative_star",
+                    &DualVolumeSigns::DimensionReport::nNegativeStar)
+      .def_readonly("n_all_spacelike",
+                    &DualVolumeSigns::DimensionReport::nAllSpacelike)
+      .def_readonly("n_negative_star_all_spacelike",
+                    &DualVolumeSigns::DimensionReport::nNegativeStarAllSpacelike)
+      .def_readonly("n_mixed_signature",
+                    &DualVolumeSigns::DimensionReport::nMixedSignature)
+      .def_readonly(
+          "n_negative_star_mixed_signature",
+          &DualVolumeSigns::DimensionReport::nNegativeStarMixedSignature)
+      .def_readonly("min_star_ratio",
+                    &DualVolumeSigns::DimensionReport::minStarRatio)
+      .def_readonly("max_star_ratio",
+                    &DualVolumeSigns::DimensionReport::maxStarRatio)
+      .def_readonly("mean_star_ratio",
+                    &DualVolumeSigns::DimensionReport::meanStarRatio);
+
+  py::class_<DualVolumeSigns::Report>(m, "DualVolumeReport",
+      "The full diagonal DEC Hodge star sign audit, one entry per simplex "
+      "dimension.")
+      .def_readonly("dimensions", &DualVolumeSigns::Report::dimensions)
+      .def_readonly("n_simplices", &DualVolumeSigns::Report::nSimplices)
+      .def_readonly("n_negative_star", &DualVolumeSigns::Report::nNegativeStar);
+
+  py::class_<DualVolumeSigns, std::shared_ptr<DualVolumeSigns> >(
+      m, "DualVolumeSigns",
+      R"doc(Read-only audit of the sign of the diagonal DEC Hodge star.
+
+The diagonal Discrete Exterior Calculus Hodge star assigns each k-simplex the
+scalar ratio |*sigma| / |sigma|, the signed circumcentric dual cell content over
+the simplex's own signed content. A Maxwell-type or gauge term discretised with
+DEC carries its whole metric dependence in that ratio, so a negative entry costs
+positive-definiteness of the Hodge Laplacian and breaks the sign structure a
+self-dual / anti-self-dual split of a 2-cochain relies on.
+
+The audit separates the two causes of a negative ratio. A circumcenter falling
+outside its simplex (a negative barycentric coordinate) is the Riemannian
+well-centeredness violation and indicates badly shaped cells. A timelike
+circumcenter displacement (negative signed circumradius squared) is reachable
+only in Lorentzian signature and is expected rather than defective. Counts are
+therefore broken out by all-spacelike versus mixed-signature cells.
+
+Measures only: changes no geometry and enforces nothing.)doc")
+      .def(py::init<double>(), py::arg("tolerance") = 1e-12)
+      .def("analyze", &DualVolumeSigns::analyze, py::arg("spacetime"),
+           "The full per-dimension audit.")
+      .def("compute", &DualVolumeSigns::compute, py::arg("spacetime"),
+           "Fraction of audited, non-degenerate simplices whose star ratio is "
+           "negative. Zero means the diagonal star is positive everywhere.");
 }
