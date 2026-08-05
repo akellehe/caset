@@ -19,7 +19,18 @@ cmake-build
 benchmarks/runs/
 Testing/
 examples/quantum/_out/
-papers/
+# Manuscript SOURCE under papers/ is tracked (see papers/cobordism-residual).
+# Only the regenerable LaTeX build artifacts are ignored. main.bbl is
+# deliberately NOT ignored: bibtex generates it, but arXiv requires it inside
+# the submission tarball because arXiv does not run bibtex itself.
+papers/**/*.aux
+papers/**/*.log
+papers/**/*.out
+papers/**/*.blg
+papers/**/*.synctex.gz
+papers/**/*.fdb_latexmk
+papers/**/*.fls
+papers/**/main.pdf
 refs/
 third_party/itensor_tdvp/
 .venv-build/
