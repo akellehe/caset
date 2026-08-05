@@ -558,7 +558,23 @@ std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
     // INITIALIZATION ONLY: while establishing the boundary, let each not-yet-carrying
     // region expand a shell so it can develop the holes that carry its state. Off
     // during the bulk evolution — the boundary ∂W is then frozen.
-    if (growBoundaries) growBoundaryRegions();
+    //
+    // Growing a region CHANGES F and so must be booked into the trace (#607).
+    // `growBoundaryRegions` mutates only the boundary blocks' vertex sets and never
+    // touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
+    // whole objective change is `gamma_ * Δr_U` — exact, not an approximation of the
+    // kind `deltaF` makes for the gradient term. Leaving it unbooked let the
+    // accumulated trace drift arbitrarily far from `objective()` (measured at tens of
+    // thousands on preconed hosts), and since the SAME accumulated quantity gates
+    // acceptance, moves were being committed against a number that was not F.
+    if (growBoundaries) {
+      const double residualBeforeGrowth = rU(spacetime_);
+      growBoundaryRegions();
+      const double growthObjectiveDelta =
+          gamma_ * (rU(spacetime_) - residualBeforeGrowth);
+      if (growthObjectiveDelta != 0.0)
+        objectiveTrace.push_back(objectiveTrace.back() + growthObjectiveDelta);
+    }
     const double objectiveDelta = step(nCandidateMoves);
     if (objectiveDelta < -convergenceTolerance_) {
       // An F-lowering surgery move: progress. Any preceding cone-ins led here, so
