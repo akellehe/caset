@@ -513,6 +513,28 @@ In increasing order of commitment:
         like a gluon.''
 \end{enumerate}
 
+\paragraph{Outcome (steps 1--2 run; \#512).}
+The instrument (step 1) reproduces the measuring stick exactly: in correlator
+coordinates $J^2=\tfrac94+2\sum_{i<j}\expval{\bm S_i\!\cdot\!\bm S_j}$ returns
+$\tfrac34,\tfrac74,\tfrac{15}{4}$ for proton / product / $\Delta$, and the
+connected $C_{ij}$ is non--zero (summing to $-\tfrac34$) \emph{only} for the
+entangled proton; both the product $\ket{uud}$ and the $\Delta$ reach their $J^2$
+from the marginals alone ($C_{ij}=0$). So $C_{ij}$ is exactly the entangling
+content a holonomy read would have to supply. The escape--hatch test (step 2) then
+\textbf{closes the hatch}: on \code{synthetic\_b3\_3} and \code{converged\_b3\_3}
+neither route reaches $\tfrac34$. The vertical route is separable
+($\sum C_{ij}\approx0$, $J^2\approx2.4$--$3.1$); the horizontal route reproduces
+only the separable transport--angle correlation $\tfrac14\cos\theta_{ij}$
+($J^2\approx1.4$--$2.3$, GAUGE/RELABEL--invariant to ${\sim}10^{-15}$, and even
+dipping \emph{below} the $3/2$ floor because the pair--independent angles are not a
+realizable state). $C_{ij}$ is therefore \textbf{not} a holonomy invariant: the
+holonomy carries the $C_{ij}=0$ part and none of the entanglement, exactly as
+Claim~\ref{cl:onlyA} predicts ($K$--type transport cannot entangle). The
+fiber$\leftrightarrow$cell quantum two--hole lift remains necessary; the negative
+\emph{narrows} the open work by ruling out the shortcut and pointing the
+total--space effort (\#477/\#495) at the joint--state lift specifically. Details:
+\code{docs/design/connected\_correlator\_escape\_hatch\_findings.md}.
+
 \paragraph{One sentence.}
 The Cartan/Weyl lens does not by itself produce $\tfrac34$, but it names the
 missing object (the abelian factor $A$), gives it a gauge--invariant coordinate
