@@ -846,7 +846,34 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
            "the max_iters budget cap. Read last_stage2_stationary for which one "
            "ended the run. Returns the F trace.")
-      .def_property_readonly("st", &MultiCobordism::spacetime)
+      .def_property_readonly("st", &MultiCobordism::spacetime,
+          R"doc(The node's CURRENT complex. Re-read it after every drive call.
+
+Do not cache this handle across a drive. run_stage1 commits an accepted move by
+REPLACING the node's complex (spacetime_ = build(bestSnapshot)) rather than
+mutating it in place, so a handle taken before the call keeps referring to the
+old complex while the node moves on. run_stage2, build_step and the directed
+cone probes reach the same reassignment.
+
+A stale handle fails SILENTLY: every read succeeds and returns self-consistent
+values -- for a complex the node no longer holds. Note that objective() and
+r_u(st) are not interchangeable here. objective() reads the node's live complex
+internally, while r_u(st) reads whichever complex you hand it, so mixing the two
+against a cached handle yields figures that cannot be reconciled with each
+other.
+
+Wrong -- st describes the pre-drive complex, so every later read is stale:
+
+    st = node.st
+    node.run_stage1(180, 8, 15, True)
+    holes = len(MultiCobordism.emergent_holes(st, 3))   # the OLD complex
+
+Right -- re-read after each drive call:
+
+    node.run_stage1(180, 8, 15, True)
+    st = node.st
+    holes = len(MultiCobordism.emergent_holes(st, 3))   # the node's complex
+)doc")
       .def_property_readonly("inputs", &MultiCobordism::inputs,
                              py::return_value_policy::reference_internal,
                              "The emergent input blocks (each a MultiCobordismBlock).")
@@ -1031,7 +1058,11 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            "Whether continued evolve+relax left holes, b_k, and F stable.")
       .def("seed", &ProtonIngredients::seed, "Base seed of the kept attempt.")
       .def("spacetime", &ProtonIngredients::spacetime,
-           "The full relaxed emergent step-B complex.")
+           "The full relaxed emergent step-B complex of the KEPT attempt.\n\n"
+           "Safe to hold: it is set once when build() finishes and is not "
+           "reassigned afterwards, unlike MultiCobordism.st, which a drive call "
+           "replaces (see its docstring). Read it AFTER build(); before that it "
+           "is the not-yet-driven complex.")
       .def("block", &ProtonIngredients::block,
            "The emergent object IS the whole step-B cobordism (parity with "
            "Proton.block).")
