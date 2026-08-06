@@ -80,6 +80,14 @@ class MultiCobordism {
       std::uint64_t seed = 0, int precone = 0,
       bool shouldProposeDispositions = false);
 
+  /// Move-kind names for the two disposition moves (#613). Named rather than
+  /// spelled as string literals at each site: each kind is written once in the
+  /// draw and compared once in the apply, and a typo in either place would not
+  /// fail to compile — it would silently fall through to the plain cone-in and
+  /// quietly disable the move.
+  static constexpr const char *kConeInTimelike = "cone_in_timelike";
+  static constexpr const char *kFlipDisposition = "flip_disposition";
+
   /// Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS (#613): a
   /// timelike cone-in, and a disposition flip on an existing edge. Both are
   /// ordinary candidate moves — drawn at random, scored by `deltaF`, committed

@@ -16,6 +16,7 @@
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
+#include "mesh/EdgeKey.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
@@ -351,8 +352,8 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
   static const char *baseMoveKinds[] = {"add",   "remove",   "flip",
                                         "iflip", "cone_out", "cone_in"};
   static const char *dispositionMoveKinds[] = {
-      "add",      "remove",  "flip",             "iflip",
-      "cone_out", "cone_in", "cone_in_timelike", "flip_disposition"};
+      "add",      "remove",  "flip",           "iflip",
+      "cone_out", "cone_in", kConeInTimelike,  kFlipDisposition};
   const char *const *moveKinds =
       shouldProposeDispositions_ ? dispositionMoveKinds : baseMoveKinds;
   const std::size_t nMoveKinds = shouldProposeDispositions_ ? 8u : 6u;
@@ -360,7 +361,7 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
 
   // Flip the disposition of one existing edge, chosen uniformly. The payload is
   // the edge's two vertex ids.
-  if (moveKind == "flip_disposition") {
+  if (moveKind == kFlipDisposition) {
     std::vector<std::pair<std::uint64_t, std::uint64_t>> edgeEndpoints;
     if (spacetime.getEdgeList())
       for (const auto *edge : spacetime.getEdgeList()->toVector())
@@ -371,7 +372,7 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
     if (edgeEndpoints.empty()) return {"noop", {}};
     const auto &chosen =
         edgeEndpoints[randomNumberGenerator_() % edgeEndpoints.size()];
-    return {"flip_disposition", {chosen.first, chosen.second}};
+    return {kFlipDisposition, {chosen.first, chosen.second}};
   }
   if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
       moveKind == "iflip")
@@ -428,32 +429,27 @@ bool MultiCobordism::applyMoveSpecification(
   } else if (moveKind == "cone_out") {
     moveWasApplied =
         SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
-  } else if (moveKind == "flip_disposition") {
+  } else if (moveKind == kFlipDisposition) {
     // #613: negate one edge's squared length, carrying it across the light cone.
     // Spacelike <-> timelike is a DISCRETE step stage 2 cannot take (it would have
     // to pass through the singular l^2 = 0), which is why it is a move. Not gated
     // here -- deltaF and step()'s acceptance test gate it, exactly as for every
     // other move.
     if (moveSpecification.second.size() == 2 && spacetime->getEdgeList()) {
-      const std::uint64_t a = moveSpecification.second[0];
-      const std::uint64_t b = moveSpecification.second[1];
-      for (auto *edge : spacetime->getEdgeList()->toVector()) {
-        if (edge == nullptr || edge->getSource() == nullptr ||
-            edge->getTarget() == nullptr)
-          continue;
-        const std::uint64_t u = edge->getSource()->getId();
-        const std::uint64_t v = edge->getTarget()->getId();
-        if ((u == a && v == b) || (u == b && v == a)) {
-          edge->setSquaredLength(-edge->getSquaredLength());
-          moveWasApplied = true;
-          break;
-        }
+      // O(1) via the EdgeList's fingerprint -> slot map, not an O(|E|) scan:
+      // EdgeKey canonicalizes the endpoint pair, so orientation does not matter.
+      const ::tessera::mesh::EdgeKey key(moveSpecification.second[0],
+                                         moveSpecification.second[1]);
+      if (auto *edge =
+              spacetime->getEdgeList()->get(key.fingerprint.fingerprint())) {
+        edge->setSquaredLength(-edge->getSquaredLength());
+        moveWasApplied = true;
       }
     }
   } else {
     moveWasApplied = SurgicalCone(spacetime.get())
                          .coneIn(moveSpecification.second,
-                                 /*timelike=*/moveKind == "cone_in_timelike")
+                                 /*timelike=*/moveKind == kConeInTimelike)
                          .first;
   }
   if (!moveWasApplied) return false;
