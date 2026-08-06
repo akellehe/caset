@@ -80,13 +80,30 @@ class MultiCobordism {
       std::uint64_t seed = 0, int precone = 0,
       bool shouldProposeDispositions = false);
 
-  /// Move-kind names for the two disposition moves (#613). Named rather than
-  /// spelled as string literals at each site: each kind is written once in the
-  /// draw and compared once in the apply, and a typo in either place would not
-  /// fail to compile — it would silently fall through to the plain cone-in and
-  /// quietly disable the move.
+  /// Move-kind names. Named rather than spelled as string literals at each site:
+  /// every kind is written in the draw and compared in the apply, and a typo in
+  /// either place would not fail to compile — it would silently misroute or
+  /// disable the move.
+  static constexpr const char *kAddMove = "add";
+  static constexpr const char *kRemoveMove = "remove";
+  static constexpr const char *kFlipMove = "flip";
+  static constexpr const char *kIFlipMove = "iflip";
+  static constexpr const char *kConeOut = "cone_out";
+  static constexpr const char *kConeIn = "cone_in";
+  static constexpr const char *kNoop = "noop";
+  /// The two disposition moves (#613).
   static constexpr const char *kConeInTimelike = "cone_in_timelike";
   static constexpr const char *kFlipDisposition = "flip_disposition";
+
+  /// A `kFlipDisposition` payload names one edge by its two endpoint vertex ids.
+  static constexpr std::size_t kEdgeEndpointCount = 2;
+
+  /// True when \p payload names an edge — exactly two endpoint vertex ids. Reads
+  /// as the question being asked, where a bare `size() == 2` does not.
+  [[nodiscard]] static bool payloadNamesAnEdge(
+      const std::vector<std::uint64_t> &payload) {
+    return payload.size() == kEdgeEndpointCount;
+  }
 
   /// Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS (#613): a
   /// timelike cone-in, and a disposition flip on an existing edge. Both are

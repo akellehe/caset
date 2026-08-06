@@ -349,11 +349,11 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
   // configuration where the deficit angles and dual volumes are singular, so the
   // Euclidean orthant is a trap. Measured: every edge stays spacelike and Im S = 0
   // through 110+ relaxation iterations.
-  static const char *baseMoveKinds[] = {"add",   "remove",   "flip",
-                                        "iflip", "cone_out", "cone_in"};
+  static const char *baseMoveKinds[] = {kAddMove,  kRemoveMove, kFlipMove,
+                                        kIFlipMove, kConeOut,   kConeIn};
   static const char *dispositionMoveKinds[] = {
-      "add",      "remove",  "flip",           "iflip",
-      "cone_out", "cone_in", kConeInTimelike,  kFlipDisposition};
+      kAddMove, kRemoveMove,     kFlipMove,        kIFlipMove,
+      kConeOut, kConeIn,         kConeInTimelike,  kFlipDisposition};
   const char *const *moveKinds =
       shouldProposeDispositions_ ? dispositionMoveKinds : baseMoveKinds;
   const std::size_t nMoveKinds = shouldProposeDispositions_ ? 8u : 6u;
@@ -369,22 +369,22 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
             edge->getTarget() != nullptr)
           edgeEndpoints.emplace_back(edge->getSource()->getId(),
                                      edge->getTarget()->getId());
-    if (edgeEndpoints.empty()) return {"noop", {}};
+    if (edgeEndpoints.empty()) return {kNoop, {}};
     const auto &chosen =
         edgeEndpoints[randomNumberGenerator_() % edgeEndpoints.size()];
     return {kFlipDisposition, {chosen.first, chosen.second}};
   }
-  if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
-      moveKind == "iflip")
+  if (moveKind == kAddMove || moveKind == kRemoveMove ||
+      moveKind == kFlipMove || moveKind == kIFlipMove)
     return {moveKind,
             {static_cast<std::uint64_t>(randomNumberGenerator_() % (1u << 31))}};
   std::vector<std::vector<std::uint64_t>> topCellTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     topCellTuples.push_back(topTuple(*topSimplex));
-  if (topCellTuples.empty()) return {"noop", {}};
+  if (topCellTuples.empty()) return {kNoop, {}};
   const auto &chosenCell =
       topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
-  if (moveKind == "cone_out") return {"cone_out", chosenCell};
+  if (moveKind == kConeOut) return {kConeOut, chosenCell};
   // cone_in and cone_in_timelike share a payload (the facet to cone onto); only
   // the apex-edge disposition differs when applied.
   const std::size_t droppedVertexIndex =
@@ -401,23 +401,23 @@ bool MultiCobordism::applyMoveSpecification(
     const std::shared_ptr<Spacetime> &spacetime,
     const MoveSpec &moveSpecification) {
   const auto &moveKind = moveSpecification.first;
-  if (moveKind == "noop") return false;
+  if (moveKind == kNoop) return false;
   bool moveWasApplied = false;
-  if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
-      moveKind == "iflip") {
+  if (moveKind == kAddMove || moveKind == kRemoveMove ||
+      moveKind == kFlipMove || moveKind == kIFlipMove) {
     std::mt19937 moveRandomEngine(
         static_cast<std::uint32_t>(moveSpecification.second[0]));
     using ::tessera::spacetime::PachnerMode;
-    if (moveKind == "add") {
+    if (moveKind == kAddMove) {
       ::tessera::spacetime::AddMove pachnerMove(
           spacetime.get(), &moveRandomEngine, false, PachnerMode::PreGeometric,
           false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
-    } else if (moveKind == "remove") {
+    } else if (moveKind == kRemoveMove) {
       ::tessera::spacetime::RemoveMove pachnerMove(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
-    } else if (moveKind == "flip") {
+    } else if (moveKind == kFlipMove) {
       ::tessera::spacetime::FlipMove pachnerMove(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
@@ -426,7 +426,7 @@ bool MultiCobordism::applyMoveSpecification(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
     }
-  } else if (moveKind == "cone_out") {
+  } else if (moveKind == kConeOut) {
     moveWasApplied =
         SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
   } else if (moveKind == kFlipDisposition) {
@@ -435,7 +435,8 @@ bool MultiCobordism::applyMoveSpecification(
     // to pass through the singular l^2 = 0), which is why it is a move. Not gated
     // here -- deltaF and step()'s acceptance test gate it, exactly as for every
     // other move.
-    if (moveSpecification.second.size() == 2 && spacetime->getEdgeList()) {
+    if (payloadNamesAnEdge(moveSpecification.second) &&
+        spacetime->getEdgeList()) {
       // O(1) via the EdgeList's fingerprint -> slot map, not an O(|E|) scan:
       // EdgeKey canonicalizes the endpoint pair, so orientation does not matter.
       const ::tessera::mesh::EdgeKey key(moveSpecification.second[0],
@@ -569,7 +570,7 @@ void MultiCobordism::preconeCells(int count) {
         if (vertexIndex != droppedVertexIndex)
           coneInFace.push_back(chosenCell[vertexIndex]);
       auto candidateSpacetime = build(snapshot());
-      if (applyMoveSpecification(candidateSpacetime, {"cone_in", coneInFace})) {
+      if (applyMoveSpecification(candidateSpacetime, {kConeIn, coneInFace})) {
         spacetime_ = build(snapshotOf(*candidateSpacetime));
         coned = true;
       }
