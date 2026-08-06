@@ -131,21 +131,54 @@ comparison even when both runs are individually correct.
 
 ---
 
-## 7. Converge before concluding, and say which convergence you mean
+## 7. Define convergence as a target on the value, not a change between steps
 
-"Converged" is ambiguous and the distinction matters. A drive reaching a fixed
-point of its own iteration (`|ΔF| = 0` because no move is accepted) is not the
-same as reaching stationarity (`‖∇S‖² → 0`). Report which one occurred.
+An experiment that waits for a quantity to stop changing is not measuring
+convergence. It is measuring whether the process has stopped, which any stall
+satisfies. State the target the objective is supposed to reach, and test against
+that.
 
-Measurements taken far from convergence describe transients, not the object of
-study.
+For the objective `F = ‖∇S‖² + Γ·r_U`, both terms are non-negative, so a target
+such as `F ≤ 1e-15` requires **both** genuine stationarity (`δS = 0`, i.e.
+`‖∇S‖² ≤ 1e-15`) and a carried register. A relative test on the change between
+passes requires neither.
 
-> **Incident.** Fifteen Lorentzian-inadmissible cells and two degenerate cells
-> were measured at `stage2_max_iters = 10` and used to argue that a validity gate
-> was needed. At a converged tolerance the same configuration produced zero of
-> each. The evidence for the proposal was an artifact of stopping early.
+Report which outcome occurred, in these words or equivalent:
 
----
+- **reached** — the objective is at or below the target;
+- **stalled** — the drive reached a fixed point away from the target; state the
+  value it stalled at.
+
+A relative test is additionally meaningless at large magnitudes. At
+`F = 7.8e300`, a tolerance of `1e-15 · |F|` admits changes of `7.8e285` per pass
+while reporting success.
+
+> **Incident.** A convergence experiment tested `|ΔF| ≤ 1e-15 · |F|` — the change
+> between successive passes — and reported "CONVERGED" for runs sitting at
+> `F = 7.8e300` and `F = 2.0e301`. Those were the drive halting at a fixed point
+> with the geometry destroyed, not convergence. Under the intended criterion,
+> `F ≤ 1e-15`, **no run in the entire session converged**: the lowest value
+> reached anywhere was `3.56`, fifteen orders of magnitude above target. Every
+> structural conclusion drawn from those runs measured stalls.
+
+### Do not report pre-convergence measurements
+
+A caveat at the end of a paragraph does not undo a headline. If a number cannot
+support a claim, do not present it as though it might.
+
+A non-converged run reports on **convergence behaviour** and nothing else. "Did
+not reach the target in 40 passes, with the objective still falling" is a
+legitimate finding about the drive. The same run's cell counts, admissibility
+figures and structural distributions are findings about nothing.
+
+Build reporting so that uninterpretable rows are not surfaced at all. Filtering a
+monitor to show the first row of each run guarantees the least meaningful
+measurement arrives first and frames everything after it.
+
+> **Incident.** An initial-pass row showing `F = 2.3e301` with 80 inadmissible
+> cells was reported as "the clearest evidence yet" for adding a validity gate,
+> with the caveat that it was an initial pass appended at the end. The row
+> supported nothing; it described a starting configuration.
 
 ## 8. Do not add a filter that removes the phenomenon under test
 
@@ -220,7 +253,9 @@ Before reporting any experimental result:
 - [ ] Every factor of a compound quantity has been examined.
 - [ ] Node construction came from the factories, not from a reimplementation.
 - [ ] Anything being compared differs only in the variable under study.
-- [ ] The convergence state is reported, and which kind of convergence it is.
+- [ ] Convergence was tested against a TARGET VALUE, not a change between
+      steps, and the outcome is reported as reached or stalled.
+- [ ] No pre-convergence measurement is presented as a result.
 - [ ] No filter has been added that would remove the phenomenon under test.
 - [ ] Conditions are applied at the level at which they are stated.
 - [ ] Any difference is attributed to a cause that has been established.
