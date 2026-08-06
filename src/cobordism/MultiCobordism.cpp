@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <set>
 #include <stdexcept>
 
 #include <Eigen/Dense>
@@ -352,11 +353,38 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
                                         "iflip", "cone_out", "cone_in"};
   static const char *dispositionMoveKinds[] = {
       "add",      "remove",  "flip",             "iflip",
-      "cone_out", "cone_in", "cone_in_timelike", "flip_disposition"};
+      "cone_out", "cone_in", "cone_in_timelike", "flip_disposition",
+      "flip_cell_disposition"};
   const char *const *moveKinds =
       shouldProposeDispositions_ ? dispositionMoveKinds : baseMoveKinds;
-  const std::size_t nMoveKinds = shouldProposeDispositions_ ? 8u : 6u;
+  const std::size_t nMoveKinds = shouldProposeDispositions_ ? 9u : 6u;
   const std::string moveKind = moveKinds[randomNumberGenerator_() % nMoveKinds];
+
+  // #618: set one top cell's disposition COHERENTLY -- choose a bipartition of its
+  // five vertices and mark exactly the crossing edges timelike. Sizes (4,1) and
+  // (3,2) give 4 and 6 crossing edges respectively; those, with 0, are the only
+  // timelike counts a genuine bipartition can produce. Measured with per-edge
+  // flips alone: no (3,2) cell ever formed and most timelike-carrying cells were
+  // non-bipartite (18 cells with a single timelike edge in one run), because
+  // nothing rewarded bipartite consistency. Payload: the 5 cell vertices followed
+  // by the k vertices of the chosen group, so k = size - 5.
+  if (moveKind == "flip_cell_disposition") {
+    std::vector<std::vector<std::uint64_t>> cellTuples;
+    for (const auto &topSimplex : spacetime.getTopSimplices())
+      cellTuples.push_back(topTuple(*topSimplex));
+    if (cellTuples.empty()) return {"noop", {}};
+    const auto &cell = cellTuples[randomNumberGenerator_() % cellTuples.size()];
+    if (cell.size() < 3) return {"noop", {}};
+    // k = 1 gives (n-1,1); k = 2 gives (n-2,2). Both are drawn.
+    const std::size_t k = 1 + (randomNumberGenerator_() % 2);
+    if (k >= cell.size()) return {"noop", {}};
+    std::vector<std::uint64_t> shuffled = cell;
+    for (std::size_t i = shuffled.size(); i > 1; --i)
+      std::swap(shuffled[i - 1], shuffled[randomNumberGenerator_() % i]);
+    std::vector<std::uint64_t> payload = cell;
+    for (std::size_t i = 0; i < k; ++i) payload.push_back(shuffled[i]);
+    return {"flip_cell_disposition", payload};
+  }
 
   // Flip the disposition of one existing edge, chosen uniformly. The payload is
   // the edge's two vertex ids.
@@ -428,6 +456,31 @@ bool MultiCobordism::applyMoveSpecification(
   } else if (moveKind == "cone_out") {
     moveWasApplied =
         SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
+  } else if (moveKind == "flip_cell_disposition") {
+    // #618: write the cell's WHOLE disposition pattern in one move -- crossing
+    // edges of the chosen bipartition timelike, every other edge of the cell
+    // spacelike. Coherent by construction, which per-edge flipping cannot be.
+    // Not gated here: deltaF and step()'s acceptance test gate it like any move.
+    const auto &payload = moveSpecification.second;
+    if (payload.size() > 5 && spacetime->getEdgeList()) {
+      const std::vector<std::uint64_t> cell(payload.begin(), payload.begin() + 5);
+      const std::set<std::uint64_t> group(payload.begin() + 5, payload.end());
+      const std::set<std::uint64_t> cellSet(cell.begin(), cell.end());
+      for (auto *edge : spacetime->getEdgeList()->toVector()) {
+        if (edge == nullptr || edge->getSource() == nullptr ||
+            edge->getTarget() == nullptr)
+          continue;
+        const std::uint64_t u = edge->getSource()->getId();
+        const std::uint64_t v = edge->getTarget()->getId();
+        if (!cellSet.count(u) || !cellSet.count(v)) continue;  // not this cell's
+        const bool crossing = group.count(u) != group.count(v);
+        const double magnitude = std::abs(edge->getSquaredLength());
+        const double target = (magnitude > 0.0) ? magnitude : 1.0;
+        edge->setSquaredLength(
+            complexd(crossing ? -target : target, 0.0));
+        moveWasApplied = true;
+      }
+    }
   } else if (moveKind == "flip_disposition") {
     // #613: negate one edge's squared length, carrying it across the light cone.
     // Spacelike <-> timelike is a DISCRETE step stage 2 cannot take (it would have
