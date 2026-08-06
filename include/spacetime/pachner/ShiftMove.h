@@ -58,7 +58,11 @@ public:
   void rollback() override;
   bool isApplied() const override { return applied_; }
   std::vector<std::uint64_t> touchedVertexIds() const override;
-  std::string moveType() const override { return "shift"; }
+  /// The canonical name of this move type, defined ONCE here so callers
+  /// that dispatch on it (MultiCobordism's move draw, CDT's acceptance-rate
+  /// accounting) reference this rather than re-spelling the literal.
+  static constexpr const char *kMoveType = "shift";
+  std::string moveType() const override { return kMoveType; }
 
 private:
   Spacetime *st_;

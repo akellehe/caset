@@ -183,7 +183,9 @@ class TestCDTAcceptanceRates(unittest.TestCase):
         cdt.sweep()
         rates = cdt.getAcceptanceRates()
 
-        for move_type in ["add", "remove", "flip", "shift", "ishift"]:
+        for move_type in [tessera.AddMove.MOVE_TYPE, tessera.RemoveMove.MOVE_TYPE,
+                          tessera.FlipMove.MOVE_TYPE, tessera.ShiftMove.MOVE_TYPE,
+                          "ishift"]:
             self.assertIn(move_type, rates, f"Missing acceptance rate for {move_type}")
             self.assertGreaterEqual(rates[move_type], 0.0)
             self.assertLessEqual(rates[move_type], 1.0)

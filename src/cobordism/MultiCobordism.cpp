@@ -16,6 +16,7 @@
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
+#include "mesh/EdgeKey.h"
 #include "mesh/EdgeList.h"
 #include "mesh/Simplex.h"
 #include "mesh/Vertex.h"
@@ -79,7 +80,7 @@ MultiCobordism::MultiCobordism(
     const std::vector<std::vector<complexd>> &inputTargets,
     const std::vector<std::vector<complexd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
-    int precone)
+    int precone, bool shouldProposeDispositions)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -91,6 +92,11 @@ MultiCobordism::MultiCobordism(
                                   registerDegrees_.end())),
       gamma_(gamma),
       randomNumberGenerator_(seed) {
+  // Assigned in the body rather than the init list: the member is declared last,
+  // and C++ initializes in DECLARATION order, so an init-list entry here would
+  // reorder-warn. It is a plain bool with an in-class default, so nothing depends
+  // on it being set earlier.
+  shouldProposeDispositions_ = shouldProposeDispositions;
   // Pre-grow the seed by `precone` gated cone-ins before any optimization, so the
   // stage-1 search starts from a larger complex grown emergently from the host (no
   // input/output block is seeded yet, so nothing is pinned — the gate is the only
@@ -333,20 +339,54 @@ std::shared_ptr<Spacetime> MultiCobordism::build(
 
 MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
     const Spacetime &spacetime) {
-  static const char *moveKinds[] = {"add",   "remove",   "flip",
-                                    "iflip", "cone_out", "cone_in"};
-  const std::string moveKind = moveKinds[randomNumberGenerator_() % 6];
-  if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
-      moveKind == "iflip")
+  // #613: with emergent dispositions ON the draw also offers a TIMELIKE cone-in
+  // and a disposition flip on an existing edge. Both are ordinary candidate moves:
+  // proposed at random, scored by deltaF, committed only if they lower F. Nothing
+  // prescribes causal structure -- the objective decides whether it wants any.
+  //
+  // The disposition is drawn as a DISCRETE move rather than left to stage 2 because
+  // a continuous descent cannot carry l^2 across zero: that is a null, degenerate
+  // configuration where the deficit angles and dual volumes are singular, so the
+  // Euclidean orthant is a trap. Measured: every edge stays spacelike and Im S = 0
+  // through 110+ relaxation iterations.
+  static const char *baseMoveKinds[] = {kAddMove,  kRemoveMove, kFlipMove,
+                                        kIFlipMove, kConeOut,   kConeIn};
+  static const char *dispositionMoveKinds[] = {
+      kAddMove, kRemoveMove,     kFlipMove,        kIFlipMove,
+      kConeOut, kConeIn,         kConeInTimelike,  kFlipDisposition};
+  const char *const *moveKinds =
+      shouldProposeDispositions_ ? dispositionMoveKinds : baseMoveKinds;
+  const std::size_t nMoveKinds = shouldProposeDispositions_ ? 8u : 6u;
+  const std::string moveKind = moveKinds[randomNumberGenerator_() % nMoveKinds];
+
+  // Flip the disposition of one existing edge, chosen uniformly. The payload is
+  // the edge's two vertex ids.
+  if (moveKind == kFlipDisposition) {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> edgeEndpoints;
+    if (spacetime.getEdgeList())
+      for (const auto *edge : spacetime.getEdgeList()->toVector())
+        if (edge != nullptr && edge->getSource() != nullptr &&
+            edge->getTarget() != nullptr)
+          edgeEndpoints.emplace_back(edge->getSource()->getId(),
+                                     edge->getTarget()->getId());
+    if (edgeEndpoints.empty()) return {kNoop, {}};
+    const auto &chosen =
+        edgeEndpoints[randomNumberGenerator_() % edgeEndpoints.size()];
+    return {kFlipDisposition, {chosen.first, chosen.second}};
+  }
+  if (moveKind == kAddMove || moveKind == kRemoveMove ||
+      moveKind == kFlipMove || moveKind == kIFlipMove)
     return {moveKind,
             {static_cast<std::uint64_t>(randomNumberGenerator_() % (1u << 31))}};
   std::vector<std::vector<std::uint64_t>> topCellTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     topCellTuples.push_back(topTuple(*topSimplex));
-  if (topCellTuples.empty()) return {"noop", {}};
+  if (topCellTuples.empty()) return {kNoop, {}};
   const auto &chosenCell =
       topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
-  if (moveKind == "cone_out") return {"cone_out", chosenCell};
+  if (moveKind == kConeOut) return {kConeOut, chosenCell};
+  // cone_in and cone_in_timelike share a payload (the facet to cone onto); only
+  // the apex-edge disposition differs when applied.
   const std::size_t droppedVertexIndex =
       randomNumberGenerator_() % chosenCell.size();
   std::vector<std::uint64_t> coneInFace;
@@ -354,30 +394,30 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
        ++vertexIndex)
     if (vertexIndex != droppedVertexIndex)
       coneInFace.push_back(chosenCell[vertexIndex]);
-  return {"cone_in", coneInFace};
+  return {moveKind, coneInFace};
 }
 
 bool MultiCobordism::applyMoveSpecification(
     const std::shared_ptr<Spacetime> &spacetime,
     const MoveSpec &moveSpecification) {
   const auto &moveKind = moveSpecification.first;
-  if (moveKind == "noop") return false;
+  if (moveKind == kNoop) return false;
   bool moveWasApplied = false;
-  if (moveKind == "add" || moveKind == "remove" || moveKind == "flip" ||
-      moveKind == "iflip") {
+  if (moveKind == kAddMove || moveKind == kRemoveMove ||
+      moveKind == kFlipMove || moveKind == kIFlipMove) {
     std::mt19937 moveRandomEngine(
         static_cast<std::uint32_t>(moveSpecification.second[0]));
     using ::tessera::spacetime::PachnerMode;
-    if (moveKind == "add") {
+    if (moveKind == kAddMove) {
       ::tessera::spacetime::AddMove pachnerMove(
           spacetime.get(), &moveRandomEngine, false, PachnerMode::PreGeometric,
           false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
-    } else if (moveKind == "remove") {
+    } else if (moveKind == kRemoveMove) {
       ::tessera::spacetime::RemoveMove pachnerMove(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
-    } else if (moveKind == "flip") {
+    } else if (moveKind == kFlipMove) {
       ::tessera::spacetime::FlipMove pachnerMove(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
@@ -386,12 +426,32 @@ bool MultiCobordism::applyMoveSpecification(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
     }
-  } else if (moveKind == "cone_out") {
+  } else if (moveKind == kConeOut) {
     moveWasApplied =
         SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
+  } else if (moveKind == kFlipDisposition) {
+    // #613: negate one edge's squared length, carrying it across the light cone.
+    // Spacelike <-> timelike is a DISCRETE step stage 2 cannot take (it would have
+    // to pass through the singular l^2 = 0), which is why it is a move. Not gated
+    // here -- deltaF and step()'s acceptance test gate it, exactly as for every
+    // other move.
+    if (payloadNamesAnEdge(moveSpecification.second) &&
+        spacetime->getEdgeList()) {
+      // O(1) via the EdgeList's fingerprint -> slot map, not an O(|E|) scan:
+      // EdgeKey canonicalizes the endpoint pair, so orientation does not matter.
+      const ::tessera::mesh::EdgeKey key(moveSpecification.second[0],
+                                         moveSpecification.second[1]);
+      if (auto *edge =
+              spacetime->getEdgeList()->get(key.fingerprint.fingerprint())) {
+        edge->setSquaredLength(-edge->getSquaredLength());
+        moveWasApplied = true;
+      }
+    }
   } else {
-    moveWasApplied =
-        SurgicalCone(spacetime.get()).coneIn(moveSpecification.second).first;
+    moveWasApplied = SurgicalCone(spacetime.get())
+                         .coneIn(moveSpecification.second,
+                                 /*timelike=*/moveKind == kConeInTimelike)
+                         .first;
   }
   if (!moveWasApplied) return false;
   std::set<std::uint64_t> liveVertexIds;
@@ -510,7 +570,7 @@ void MultiCobordism::preconeCells(int count) {
         if (vertexIndex != droppedVertexIndex)
           coneInFace.push_back(chosenCell[vertexIndex]);
       auto candidateSpacetime = build(snapshot());
-      if (applyMoveSpecification(candidateSpacetime, {"cone_in", coneInFace})) {
+      if (applyMoveSpecification(candidateSpacetime, {kConeIn, coneInFace})) {
         spacetime_ = build(snapshotOf(*candidateSpacetime));
         coned = true;
       }

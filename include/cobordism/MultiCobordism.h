@@ -5,6 +5,11 @@
 #define TESSERA_COBORDISM_MULTICOBORDISM_H
 
 #include <complex>
+
+#include "spacetime/pachner/AddMove.h"
+#include "spacetime/pachner/FlipMove.h"
+#include "spacetime/pachner/IFlipMove.h"
+#include "spacetime/pachner/RemoveMove.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -77,7 +82,60 @@ class MultiCobordism {
       const std::vector<std::vector<std::complex<double>>> &inputTargets,
       const std::vector<std::vector<std::complex<double>>> &outputTargets,
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
-      std::uint64_t seed = 0, int precone = 0);
+      std::uint64_t seed = 0, int precone = 0,
+      bool shouldProposeDispositions = false);
+
+  /// Move-kind names. Named rather than spelled as string literals at each site:
+  /// every kind is written in the draw and compared in the apply, and a typo in
+  /// either place would not fail to compile — it would silently misroute or
+  /// disable the move.
+  /// The four Pachner kinds are NOT redefined here — each move class owns its
+  /// name (`AddMove::kMoveType` and siblings), and these alias those so there is
+  /// exactly one definition per kind rather than one per dispatch site.
+  static constexpr const char *kAddMove = ::tessera::spacetime::AddMove::kMoveType;
+  static constexpr const char *kRemoveMove =
+      ::tessera::spacetime::RemoveMove::kMoveType;
+  static constexpr const char *kFlipMove =
+      ::tessera::spacetime::FlipMove::kMoveType;
+  static constexpr const char *kIFlipMove =
+      ::tessera::spacetime::IFlipMove::kMoveType;
+  /// Surgical kinds, owned here: they are `SurgicalCone` operations reached only
+  /// through this draw, with no other definition to alias.
+  static constexpr const char *kConeOut = "cone_out";
+  static constexpr const char *kConeIn = "cone_in";
+  static constexpr const char *kNoop = "noop";
+  /// The two disposition moves (#613).
+  static constexpr const char *kConeInTimelike = "cone_in_timelike";
+  static constexpr const char *kFlipDisposition = "flip_disposition";
+
+  /// A `kFlipDisposition` payload names one edge by its two endpoint vertex ids.
+  static constexpr std::size_t kEdgeEndpointCount = 2;
+
+  /// True when \p payload names an edge — exactly two endpoint vertex ids. Reads
+  /// as the question being asked, where a bare `size() == 2` does not.
+  [[nodiscard]] static bool payloadNamesAnEdge(
+      const std::vector<std::uint64_t> &payload) {
+    return payload.size() == kEdgeEndpointCount;
+  }
+
+  /// Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS (#613): a
+  /// timelike cone-in, and a disposition flip on an existing edge. Both are
+  /// ordinary candidate moves — drawn at random, scored by `deltaF`, committed
+  /// only when they lower `F`. Nothing prescribes causal structure; the objective
+  /// decides whether it wants any.
+  ///
+  /// Drawn as DISCRETE moves rather than left to `runStage2` because a continuous
+  /// descent cannot carry `ℓ²` across zero — a null, degenerate configuration
+  /// where deficit angles and circumcentric dual volumes are singular — so the
+  /// Euclidean orthant is a trap. Measured on canonical hosts: every edge stays
+  /// spacelike and `Im S = 0` through 110+ relaxation iterations, with
+  /// `‖∇S‖² = 9.46` still far from stationary.
+  ///
+  /// Default `false`, which leaves the six-move draw and every existing path —
+  /// `Proton`, `ProtonIngredients`, the campaign — byte-identical.
+  [[nodiscard]] bool shouldProposeDispositions() const {
+    return shouldProposeDispositions_;
+  }
 
   // ---- module-level helpers (static) ----
   /// Betti numbers (combinatorial, geometry-free).
@@ -306,6 +364,8 @@ class MultiCobordism {
   double inputCarriedTolerance_ = 0.5;
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
+  /// #613: whether the move draw offers the disposition moves. See the accessor.
+  bool shouldProposeDispositions_{false};
   double convergenceTolerance_ = 1e-9;
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.

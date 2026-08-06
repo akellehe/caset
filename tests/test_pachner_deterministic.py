@@ -488,7 +488,12 @@ class TestMultiIterationRoundTrips(unittest.TestCase):
         cdt, st = _build_small(n_simplices=30)
 
         moves = [cdt.add, cdt.remove, cdt.flip, cdt.iflip, cdt.shift, cdt.ishift]
-        move_names = ["add", "remove", "flip", "iflip", "shift", "ishift"]
+        # Canonical names from the move classes, so a rename cannot leave this
+        # loop silently driving nothing. "ishift" has no class of its own -- it
+        # is ShiftMove's inverse direction, named only here.
+        move_names = [tessera.AddMove.MOVE_TYPE, tessera.RemoveMove.MOVE_TYPE,
+                      tessera.FlipMove.MOVE_TYPE, tessera.IFlipMove.MOVE_TYPE,
+                      tessera.ShiftMove.MOVE_TYPE, "ishift"]
 
         for iteration in range(20):
             for move, name in zip(moves, move_names):

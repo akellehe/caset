@@ -40,6 +40,17 @@ References
 import unittest
 import tessera
 
+# Canonical move-type names, taken from the move classes rather than re-spelled,
+# so a rename cannot leave these loops silently driving nothing. Assertions on
+# moveType() deliberately keep their string literals: compared against these they
+# could never fail.
+_ALL_MOVE_NAMES = (tessera.AddMove.MOVE_TYPE, tessera.RemoveMove.MOVE_TYPE,
+                   tessera.FlipMove.MOVE_TYPE, tessera.IFlipMove.MOVE_TYPE,
+                   tessera.ShiftMove.MOVE_TYPE)
+# The moves a growth-only sweep drives (remove would shrink the complex).
+_NON_REMOVE_MOVE_NAMES = tuple(n for n in _ALL_MOVE_NAMES
+                               if n != tessera.RemoveMove.MOVE_TYPE)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -138,7 +149,7 @@ class TestStateUnchangedOnRejection(unittest.TestCase):
         snapshot = _state_snapshot(st)
         rejections = 0
         for _ in range(n_per_move):
-            for move_name in ("add", "remove", "flip", "iflip", "shift"):
+            for move_name in _ALL_MOVE_NAMES:
                 method = getattr(cdt, move_name)
                 if method():
                     snapshot = _state_snapshot(st)
@@ -230,19 +241,19 @@ class TestEdgeInventoryDeltas(unittest.TestCase):
     def test_add_flip_iflip_shift_monotonic_d4(self):
         cdt, st = _make_cdt(d=4, relabel=False)
         self._check_monotonic_for(
-            cdt, st, ("add", "flip", "iflip", "shift"), n_calls=80
+            cdt, st, _NON_REMOVE_MOVE_NAMES, n_calls=80
         )
 
     def test_add_flip_iflip_shift_monotonic_d3(self):
         cdt, st = _make_cdt(d=3, relabel=False)
         self._check_monotonic_for(
-            cdt, st, ("add", "flip", "iflip", "shift"), n_calls=80
+            cdt, st, _NON_REMOVE_MOVE_NAMES, n_calls=80
         )
 
     def test_add_flip_iflip_shift_monotonic_d2(self):
         cdt, st = _make_cdt(d=2, relabel=False)
         self._check_monotonic_for(
-            cdt, st, ("add", "flip", "iflip", "shift"), n_calls=80
+            cdt, st, _NON_REMOVE_MOVE_NAMES, n_calls=80
         )
 
     def test_remove_drops_exactly_dropped_vertex_edges(self):
@@ -355,7 +366,8 @@ class TestCofaceIntegrityEventuallyConsistent(unittest.TestCase):
         holds."""
         cdt, st = _make_cdt(d=4)
         for _ in range(400):
-            for move_name in ("add", "flip", "shift"):
+            for move_name in (tessera.AddMove.MOVE_TYPE, tessera.FlipMove.MOVE_TYPE,
+                              tessera.ShiftMove.MOVE_TYPE):
                 if getattr(cdt, move_name)():
                     self._walk_to_register_cofaces(st)
                     self._verify_coface_integrity(st)
