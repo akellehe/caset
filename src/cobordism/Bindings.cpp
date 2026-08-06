@@ -12,6 +12,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "cobordism/CausalCellShape.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/Characteristic.h"
 #include "cobordism/Cochain.h"
@@ -1140,4 +1141,81 @@ invariant.)doc")
       .def("validate", &SurgicalCone::validate,
            "(ok, reason): the manifold-with-boundary verdict on the CURRENT "
            "complex -- the same gate coneOut / coneIn apply.");
+
+  // ========================================
+  // CausalCellShape (#620)
+  // ========================================
+  py::enum_<CausalCellShape::Shape>(m, "CellShape",
+      "How a top cell's vertices split across the temporal direction.")
+      .value("SPACELIKE", CausalCellShape::Shape::Spacelike)
+      .value("FOUR_ONE", CausalCellShape::Shape::FourOne)
+      .value("THREE_TWO", CausalCellShape::Shape::ThreeTwo)
+      .value("NON_BIPARTITE", CausalCellShape::Shape::NonBipartite);
+
+  py::class_<CausalCellShape::DualHeightCensus>(m, "DualHeightCensus",
+      "Census of dual-height signs: mesh defect versus timelike separation.")
+      .def_readonly("terms", &CausalCellShape::DualHeightCensus::terms)
+      .def_readonly("centeredness_defects",
+                    &CausalCellShape::DualHeightCensus::centerednessDefects)
+      .def_readonly("timelike_separations",
+                    &CausalCellShape::DualHeightCensus::timelikeSeparations)
+      .def_readonly("negative_heights",
+                    &CausalCellShape::DualHeightCensus::negativeHeights);
+
+  py::class_<CausalCellShape>(m, "CausalCellShape",
+      R"doc(Causal shape of top cells, and Lorentzian admissibility (#620).
+
+A 4-simplex has 5 vertices and 10 edges. If its vertices split (a,b) with
+a+b=5, exactly a*b edges cross between the groups: (5,0) gives 0 timelike
+edges, (4,1) gives 4, (3,2) gives 6. Those three are the ONLY timelike-edge
+counts a genuine bipartition can produce, so a cell carrying one or two
+timelike edges corresponds to no consistent temporal splitting at all.
+
+classify() therefore VERIFIES that the timelike edges are exactly the crossing
+set of some split rather than inferring a shape from the count, and reports
+NON_BIPARTITE when they are not.
+
+is_lorentzian_admissible() answers whether a cell has a consistent Lorentzian
+geometry: Gram matrix non-degenerate with exactly one timelike direction,
+signature (-,+,+,+). This is needed because ChainComplex.dualComplexIsValid is
+purely COMBINATORIAL and never reads l^2 -- every complex that reached
+F ~ 6e300 in the per-cell experiment passed it -- while
+Simplex.assertSpacelikeAdmissible explicitly skips any simplex containing a
+timelike or null edge, so under a causal construction nearly every bulk cell
+went unchecked.
+
+Both are config-space validity definitions in the same family as
+dualComplexIsValid, not runtime clamps on the dynamics.)doc")
+      .def_static("classify", &CausalCellShape::classify, py::arg("cell"),
+           "The causal shape of a top cell, verifying bipartiteness.")
+      .def_static("shape_name", &CausalCellShape::shapeName, py::arg("shape"),
+           "Human-readable name of a CellShape.")
+      .def_static("distribution", &CausalCellShape::distribution,
+           py::arg("spacetime"),
+           "Counts per shape over the complex's top cells, indexed by the "
+           "CellShape enumerator value.")
+      .def_static("is_lorentzian_admissible",
+           &CausalCellShape::isLorentzianAdmissible, py::arg("cell"),
+           py::arg("tolerance") = 1e-12,
+           "Whether the cell has a consistent Lorentzian geometry: Gram matrix "
+           "non-degenerate with exactly one timelike direction. A purely "
+           "spacelike cell is admissible when positive-definite.")
+      .def_static("dual_height_census", &CausalCellShape::dualHeightCensus,
+           py::arg("spacetime"),
+           "Why dual heights carry negative signs, over every (simplex, coface) "
+           "term of the circumcentric dual recursion.\n\n"
+           "Each height is oppositeVertexSign(cf,s) * signedSqrt(R^2(cf) - "
+           "R^2(s)). The barycentric factor going negative is a MESH DEFECT (the "
+           "circumcentre crossed the facet); the radicand going negative is a "
+           "TIMELIKE dual separation -- correct Lorentzian structure, not a "
+           "defect, and the dual is where S = sum_h |*h| eps_h lives.\n\n"
+           "Measured ~4:1 defect to timelike on a converged charge-conserving "
+           "complex, so remedial work aimed at 'eliminate negative dual volumes' "
+           "would wrongly destroy about a fifth of them.")
+      .def_static("timelike_direction_count",
+           &CausalCellShape::timelikeDirectionCount, py::arg("cell"),
+           py::arg("tolerance") = 1e-12,
+           "Negative eigenvalues of the cell's Gram matrix, read by Jacobi's "
+           "criterion (sign changes in the leading principal minors). Returns "
+           "-1 when degenerate, since the signature is then undefined.");
 }

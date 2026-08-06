@@ -187,6 +187,8 @@ exclusions to see the entire interface.
 ```
 ```{doxygenfile} SurgicalCone.h
 ```
+```{doxygenfile} CausalCellShape.h
+```
 
 ## Reinforcement Learning
 
