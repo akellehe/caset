@@ -54,7 +54,11 @@ public:
   void rollback() override;
   bool isApplied() const override { return applied_; }
   std::vector<std::uint64_t> touchedVertexIds() const override;
-  std::string moveType() const override { return "remove"; }
+  /// The canonical name of this move type, defined ONCE here so callers
+  /// that dispatch on it (MultiCobordism's move draw, CDT's acceptance-rate
+  /// accounting) reference this rather than re-spelling the literal.
+  static constexpr const char *kMoveType = "remove";
+  std::string moveType() const override { return kMoveType; }
 
 private:
   // Pre-geometric (d+1)→1 stellar weld: the inverse of the 1→(d+1)

@@ -5,6 +5,11 @@
 #define TESSERA_COBORDISM_MULTICOBORDISM_H
 
 #include <complex>
+
+#include "spacetime/pachner/AddMove.h"
+#include "spacetime/pachner/FlipMove.h"
+#include "spacetime/pachner/IFlipMove.h"
+#include "spacetime/pachner/RemoveMove.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -84,10 +89,18 @@ class MultiCobordism {
   /// every kind is written in the draw and compared in the apply, and a typo in
   /// either place would not fail to compile — it would silently misroute or
   /// disable the move.
-  static constexpr const char *kAddMove = "add";
-  static constexpr const char *kRemoveMove = "remove";
-  static constexpr const char *kFlipMove = "flip";
-  static constexpr const char *kIFlipMove = "iflip";
+  /// The four Pachner kinds are NOT redefined here — each move class owns its
+  /// name (`AddMove::kMoveType` and siblings), and these alias those so there is
+  /// exactly one definition per kind rather than one per dispatch site.
+  static constexpr const char *kAddMove = ::tessera::spacetime::AddMove::kMoveType;
+  static constexpr const char *kRemoveMove =
+      ::tessera::spacetime::RemoveMove::kMoveType;
+  static constexpr const char *kFlipMove =
+      ::tessera::spacetime::FlipMove::kMoveType;
+  static constexpr const char *kIFlipMove =
+      ::tessera::spacetime::IFlipMove::kMoveType;
+  /// Surgical kinds, owned here: they are `SurgicalCone` operations reached only
+  /// through this draw, with no other definition to alias.
   static constexpr const char *kConeOut = "cone_out";
   static constexpr const char *kConeIn = "cone_in";
   static constexpr const char *kNoop = "noop";
