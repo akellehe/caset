@@ -195,7 +195,34 @@ the experiment first; introduce the mechanism only if the result requires it.
 
 ---
 
-## 9. Distinguish the level at which a condition applies
+## 9. A negative result about a search space needs a search that can address it
+
+"Nothing improves the objective" is a claim about the space of available moves.
+Before making it, check that the search can actually *name* the moves it is
+sampling from — a sampler that draws blindly cannot distinguish "no improving
+move exists" from "no improving move was drawn", and the two are identical in the
+trace.
+
+> **Incident.** Stage 1's descent was reported as stopping for landscape reasons
+> after repeated runs where no candidate move lowered `F`. The candidate draw for
+> the four Pachner kinds emitted a random *seed*, not a target: the move class was
+> handed a fresh engine and picked its own target, so a draw named no particular
+> move, could not be reproduced or compared, and often landed on a target that
+> failed to propose at all. Roughly half of every step's draws were Pachner kinds,
+> so "eight candidate moves" was a considerable overstatement of the coverage, and
+> the negative result rested on it.
+
+The fix is to make the space enumerable — targets addressed by identity, a
+`candidates()` that lists them — and then to scan it, so the negative result is a
+statement about the set rather than about a handful of samples. Where scanning
+the whole set is too expensive to do always, scan it *at the point of the
+negative claim*: sample while things are going well, enumerate before reporting
+failure. Log entry into that exhaustive check, and log what it found, so the
+claim is visible rather than inferred from a step that quietly returned zero.
+
+---
+
+## 10. Distinguish the level at which a condition applies
 
 Conditions stated about an operation are not conditions on each of its parts.
 
@@ -208,7 +235,7 @@ Conditions stated about an operation are not conditions on each of its parts.
 
 ---
 
-## 10. Identify the cause of a difference before attributing it
+## 11. Identify the cause of a difference before attributing it
 
 When two runs differ, determine which changed variable produced the difference.
 Attributing it to the most salient change is not the same as establishing it.
@@ -227,7 +254,7 @@ Attributing it to the most salient change is not the same as establishing it.
 
 ---
 
-## 11. Correct the record where the claim was made
+## 12. Correct the record where the claim was made
 
 Incorrect results propagate into commit messages, pull request descriptions and
 issue comments, which later work then builds on. When a reported result turns out
@@ -257,5 +284,7 @@ Before reporting any experimental result:
       steps, and the outcome is reported as reached or stalled.
 - [ ] No pre-convergence measurement is presented as a result.
 - [ ] No filter has been added that would remove the phenomenon under test.
+- [ ] Any "nothing works" claim rests on a search that enumerated the space, not
+      on one that sampled it.
 - [ ] Conditions are applied at the level at which they are stated.
 - [ ] Any difference is attributed to a cause that has been established.
