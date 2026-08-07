@@ -132,7 +132,7 @@ class Stage2UnclampedTest(unittest.TestCase):
         edges[7].setSquaredLength(complex(25.0, 0.0))    # beyond the old cap
         edges[9].setSquaredLength(complex(0.01, 0.0))    # inside the old floor band
         opt = self._node(host)
-        trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
+        trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         self.assertGreaterEqual(len(trace), 2, "no accepted step — vacuous run")
         for e in opt.st.getEdgeList().toVector():
@@ -149,7 +149,7 @@ class Stage2UnclampedTest(unittest.TestCase):
         host = _closed_s4(n_refine=8, seed=3)
         host.getEdgeList().toVector()[3].setSquaredLength(complex(1e-6, 0.0))
         opt = self._node(host)
-        trace = opt.run_stage2(beta=1.0, max_iters=2, alpha0=0.05, rel_tol=1e-9)
+        trace = opt.run_stage2(beta=1.0, max_iters=2, alpha0=0.05)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         sq = complex(opt.st.getEdgeList().toVector()[3].getSquaredLength())
         self.assertTrue(cmath.isfinite(sq))
@@ -164,7 +164,7 @@ class Stage2UnclampedTest(unittest.TestCase):
         host = _closed_s4(n_refine=8, seed=3)
         host.getEdgeList().toVector()[5].setSquaredLength(complex(-0.8, 0.0))
         opt = self._node(host)
-        trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
+        trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         for e in opt.st.getEdgeList().toVector():
             self.assertTrue(cmath.isfinite(complex(e.getSquaredLength())))

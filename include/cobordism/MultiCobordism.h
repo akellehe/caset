@@ -190,12 +190,12 @@ class MultiCobordism {
   /// constructed exactly real, so **`Im ℓ² ≡ 0` holds for all time by construction**
   /// — no writer of `Im ℓ²` exists anywhere in the dynamics, nothing is enforced at
   /// runtime, and the invariant is proven by the suite tests. The line search accepts
-  /// a step only when it lowers `F` by more than `relTol·max(|F|,1)` — a RELATIVE
-  /// stationarity test (an absolute floor of `relTol` for `|F| < 1`), so the
+  /// every step that lowers `F`, however little — there is no improvement
+  /// threshold, since a threshold stops descent while `F` is still decreasable and
   /// criterion scales with the objective rather than the absolute `convergenceTolerance_`
   /// the surgery stages use (for `F ≈ 100` that absolute `1e-9` accepted ~`1e-11` relative
   /// steps — the rounding floor). "No line-search step beats the threshold" is the
-  /// stationary stop; `maxIters` is the safety budget cap. `lastStage2Stationary()` reports
+  /// no-downhill-direction stop; `maxIters` is the budget cap. `lastStage2Outcome()` reports
   /// which of the two ended the run. Returns the `F` trace.
   ///
   /// Trials are UNBOUNDED on the real axis — fully Lorentzian, no clamp, no causal
@@ -207,7 +207,9 @@ class MultiCobordism {
   /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
   /// the dynamics (its absence is equally a finding).
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
-                                  double alpha0 = 0.05, double relTol = 1e-9);
+                                  double alpha0 = 0.05,
+                                  double convergenceTarget =
+                                      kDefaultConvergenceTarget);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
@@ -255,13 +257,46 @@ class MultiCobordism {
     return outputBlocks_;
   }
   /// Whether the last `runStage2` ended on the relative-tolerance stationarity test (no
-  /// line-search step lowered `F` by more than `relTol·max(|F|,1)`) — `true` — versus
   /// hitting the `maxIters` budget cap — `false`. `true` means **real-manifold
   /// stationarity, `δF = 0` along real signed-ℓ² perturbations**: the exact
   /// on-manifold gradient direction `Re(2β·H̄·g)` buys no further descent (#589).
   /// Lets a caller report "stopped: stationary" vs "stopped: budget". `false` before
   /// the first `runStage2`.
-  [[nodiscard]] bool lastStage2Stationary() const { return lastStage2Stationary_; }
+  /// Backtracking halvings the stage-2 line search will try before concluding
+  /// there is no downhill direction. From `alpha0 = 0.05` this reaches a step
+  /// scale of `0.05 * 2^-64 ~ 3e-21`, far below the point at which a step
+  /// perturbs unit-scale `l^2` at all — so exhausting the ladder means the step
+  /// underflowed the geometry, not that it was merely small. The previous value
+  /// of 24 bottomed out at `~3e-9`, which could stop a descent that was still
+  /// available.
+  static constexpr int kMaxLineSearchHalvings = 64;
+
+  /// The value `F` must reach for `runStage2` to report `Converged`.
+  static constexpr double kDefaultConvergenceTarget = 1e-15;
+
+  /// How the last `runStage2` ended. Convergence means the objective REACHED ITS
+  /// TARGET; a descent that merely ran out of downhill is `Stalled`, which is a
+  /// failure to converge and is reported as one.
+  ///
+  /// The previous name for this flag was "stationary" and it covered both cases
+  /// at once, which invited reading it as `∇S = 0`. It never meant that: runs
+  /// reporting it sat at `‖∇S‖²` between 2 and 15, a gradient of magnitude 1.5
+  /// to 4.
+  enum class Stage2Outcome {
+    /// `F <= convergenceTarget`. The objective is MET. This is the only outcome
+    /// that may be called convergence.
+    Converged,
+    /// No step at any scale lowers `F`, but `F` is still above the target. A
+    /// local minimum of `F` at non-zero value — the descent is stuck, not done.
+    /// This is NOT convergence and must never be reported as such.
+    Stalled,
+    /// The `maxIters` budget ran out with `F` still descendable.
+    Truncated,
+  };
+
+  [[nodiscard]] Stage2Outcome lastStage2Outcome() const {
+    return lastStage2Outcome_;
+  }
 
  private:
   using Snapshot =
@@ -368,8 +403,8 @@ class MultiCobordism {
   bool shouldProposeDispositions_{false};
   double convergenceTolerance_ = 1e-9;
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
-  /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
-  bool lastStage2Stationary_ = false;
+  /// How the last `runStage2` ended. See `lastStage2Outcome`.
+  Stage2Outcome lastStage2Outcome_ = Stage2Outcome::Truncated;
   std::vector<BoundaryBlock> inputBlocks_;
   std::vector<BoundaryBlock> outputBlocks_;
 };

@@ -836,17 +836,28 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::call_guard<py::gil_scoped_release>())
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
-           py::arg("rel_tol") = 1e-9,
+           py::arg("convergence_target") = 1e-15,
            py::call_guard<py::gil_scoped_release>(),
            "Stage 2 (geometric): relax every edge l^2 along the REAL signed-l^2 "
            "manifold (ordinary Lorentzian Regge) toward a stationary point of "
            "beta*||grad S||^2 + gamma*r_U. The descent direction is the exact "
            "on-manifold gradient Re(2*beta*conj(H)*g) and every trial is "
            "constructed exactly real, so Im l^2 == 0 by construction (#589); "
-           "backtracking line search. Stops on the RELATIVE stationarity test -- "
-           "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
-           "the max_iters budget cap. Read last_stage2_stationary for which one "
-           "ended the run. Returns the F trace.")
+           "backtracking line search taking the BEST rung, not the first that "
+           "improves.\n\n"
+           "Three exits (#625), reported by last_stage2_outcome:\n"
+           "  CONVERGED -- F <= convergence_target. The objective is MET. Only "
+           "this may be called convergence.\n"
+           "  STALLED   -- no step at any scale lowers F, but F is still above "
+           "target: a local minimum at non-zero value. The descent is stuck, "
+           "NOT done, and this is a failure to converge.\n"
+           "  TRUNCATED -- the max_iters budget ran out with F still "
+           "descendable.\n\n"
+           "There is NO improvement threshold: a step is taken whenever it "
+           "lowers F, however little. A threshold on the step's improvement "
+           "stops descent while F is still decreasable, which is not "
+           "convergence.\n\n"
+           "Returns the F trace.")
       .def_property_readonly("should_propose_dispositions",
                              &MultiCobordism::shouldProposeDispositions,
            "Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS "
@@ -895,10 +906,19 @@ Right -- re-read after each drive call:
       .def_property_readonly("outputs", &MultiCobordism::outputs,
                              py::return_value_policy::reference_internal,
                              "The emergent output blocks (each a MultiCobordismBlock).")
-      .def_property_readonly("last_stage2_stationary",
-                             &MultiCobordism::lastStage2Stationary,
+      .def_property_readonly("last_stage2_outcome",
+                             [](const MultiCobordism &node) {
+                               switch (node.lastStage2Outcome()) {
+                                 case MultiCobordism::Stage2Outcome::Converged:
+                                   return "CONVERGED";
+                                 case MultiCobordism::Stage2Outcome::Stalled:
+                                   return "STALLED";
+                                 default:
+                                   return "TRUNCATED";
+                               }
+                             },
                              "True iff the last run_stage2 stopped on the relative-"
-                             "tolerance stationarity test (delta_rel < rel_tol) -- "
+                             "no-downhill-direction stop -- "
                              "real-manifold stationarity, dF = 0 along real signed-"
                              "l^2 perturbations (#589); False if it hit the "
                              "max_iters budget cap.");

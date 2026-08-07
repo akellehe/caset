@@ -145,12 +145,12 @@ class ImExactlyZeroInvariantTest(unittest.TestCase):
         opt.run_stage1(max_steps=4, n_candidate_moves=4, patience=3,
                        grow_boundaries=True)
         trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05,
-                               rel_tol=1e-9)
+)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         if len(trace) == 1:
             # No accepted step is legitimate ONLY as the variational verdict
             # (real-manifold stationarity), never as a backed-off error path.
-            self.assertTrue(opt.last_stage2_stationary)
+            self.assertTrue((opt.last_stage2_outcome == "CONVERGED"))
         self.assertEqual(_max_abs_im(opt.st), 0.0)
 
     def test_descent_descends_through_the_crossing_regime(self):
@@ -160,7 +160,7 @@ class ImExactlyZeroInvariantTest(unittest.TestCase):
         host.getEdgeList().toVector()[5].setSquaredLength(complex(-0.8, 0.0))
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=6, alpha0=0.05,
-                               rel_tol=1e-9)
+)
         self.assertGreaterEqual(len(trace), 2)
         self.assertLess(trace[-1], trace[0])
         self.assertEqual(_max_abs_im(opt.st), 0.0)
@@ -182,7 +182,7 @@ class CausalSpecimenContinuationTest(unittest.TestCase):
         self.assertLess(re_min, 0.0)
         self.assertEqual(_max_abs_im(st), 0.0)  # dumps carry Im == 0
         trace = node.run_stage2(beta=1.0, max_iters=3, alpha0=0.05,
-                                rel_tol=1e-9)
+)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         self.assertEqual(_max_abs_im(node.st), 0.0)
         # Timelike content is dynamics, not policy — but the reader must agree

@@ -710,7 +710,8 @@ void MultiCobordism::seedBlocks(
 }
 
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
-                                                 double alpha0, double relTol) {
+                                                 double alpha0,
+                                                 double convergenceTarget) {
   auto edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
   auto fullObjective = [&]() {
@@ -718,7 +719,7 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
   };
   std::vector<double> objectiveTrace = {fullObjective()};
   double stepScale = alpha0;
-  lastStage2Stationary_ = false;  // set true only on the stationary break below
+  lastStage2Outcome_ = Stage2Outcome::Truncated;  // set Converged only below
   for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
     ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
     const auto gradientComponents = reggeSolver.actionGradientExact();
@@ -742,15 +743,23 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
       squaredLengths(edgeIndex) =
           edges[edgeIndex]->getRealSquaredLength();
     const double currentObjective = objectiveTrace.back();
-    // Relative stationarity: accept a step only when it lowers F by more than relTol
-    // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
-    // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100
-    // — the rounding floor; this scales the threshold with the objective instead.
-    const double improvementThreshold =
-        relTol * std::max(std::abs(currentObjective), 1.0);
+    // No improvement threshold (#625): a step is taken when it LOWERS F, however
+    // little. A threshold on the step's improvement stops the descent while F is
+    // still decreasable, which is not convergence — measured, tightening it from
+    // 1e-9 to 1e-15 barely moved the stopping value (5.5-14.3 versus 1.4-8.9), so
+    // it was never the binding constraint either.
+    //
+    // The halving ladder runs until a step improves or the step underflows the
+    // geometry it is perturbing. For smooth F with nonzero gradient a small enough
+    // step ALWAYS lowers F, so exhausting the ladder without improvement means
+    // there is genuinely no downhill direction here -- that, and only that, is
+    // reported as Converged.
     double trialStepScale = stepScale;
     bool objectiveImproved = false;
-    for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
+    double bestTrialObjective = currentObjective;
+    Eigen::VectorXd bestTrialLengths;
+    for (int lineSearchIndex = 0; lineSearchIndex < kMaxLineSearchHalvings;
+         ++lineSearchIndex) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
         // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
         // clamp, no causal guard (semantics: runStage2 in MultiCobordism.h).
@@ -765,19 +774,37 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
       // The objective is total on the real signed-l^2 manifold, so a trial
       // cannot fail to evaluate; a genuine error propagates loudly (#589).
       const double trialObjective = fullObjective();
-      if (trialObjective < currentObjective - improvementThreshold) {
-        objectiveTrace.push_back(trialObjective);
-        stepScale = std::min(stepScale * 1.3, 1.0);
+      // Keep the BEST rung rather than the first that happens to improve.
+      if (trialObjective < bestTrialObjective) {
+        bestTrialObjective = trialObjective;
+        bestTrialLengths.resize(edgeCount);
+        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+          bestTrialLengths(edgeIndex) = edges[edgeIndex]->getRealSquaredLength();
         objectiveImproved = true;
-        break;
       }
       trialStepScale *= 0.5;
+    }
+    if (objectiveImproved) {
+      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+        edges[edgeIndex]->setSquaredLength(
+            complexd(bestTrialLengths(edgeIndex), 0.0));
+      objectiveTrace.push_back(bestTrialObjective);
+      stepScale = std::min(stepScale * 1.3, 1.0);
+      if (bestTrialObjective <= convergenceTarget) {
+        lastStage2Outcome_ = Stage2Outcome::Converged;
+        break;
+      }
     }
     if (!objectiveImproved) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
         edges[edgeIndex]->setSquaredLength(
             complexd(squaredLengths(edgeIndex), 0.0));
-      lastStage2Stationary_ = true;  // no line-search step beat the relative threshold
+      // No step at any scale lowered F. That is NOT convergence unless F has
+      // actually reached the target -- a descent with nowhere left to go while
+      // F is still large is stuck, and is reported as such.
+      lastStage2Outcome_ = (objectiveTrace.back() <= convergenceTarget)
+                               ? Stage2Outcome::Converged
+                               : Stage2Outcome::Stalled;
       break;
     }
   }

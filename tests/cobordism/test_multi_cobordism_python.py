@@ -72,34 +72,49 @@ class MultiCobordismCxxTest(unittest.TestCase):
                 break
         self.assertTrue(grew, "no b₃ register emerged across surgery seeds 3..10")
 
-    def test_run_stage2_stops_on_relative_stationarity(self):
-        # run_stage2 stops on a RELATIVE stationarity test — no line-search step lowers F
-        # by more than rel_tol·max(|F|,1) — and last_stage2_stationary reports whether the
-        # run ended that way (True) or hit the max_iters budget cap (False). Only this
-        # geometric tail is relative; the surgery stages keep the absolute tolerance.
+    def test_run_stage2_reports_converged_stalled_or_truncated(self):
+        # run_stage2 has THREE exits (#625), reported by last_stage2_outcome:
+        #
+        #   CONVERGED -- F <= convergence_target. The objective is MET. Only this
+        #                may be called convergence.
+        #   STALLED   -- no step at any scale lowers F, but F is still above the
+        #                target: a local minimum at non-zero value. The descent is
+        #                stuck, NOT done, and this is a failure to converge.
+        #   TRUNCATED -- the max_iters budget ran out with F still descendable.
+        #
+        # There is no improvement threshold: a step is taken whenever it lowers F,
+        # however little, and the line search keeps the BEST rung of the halving
+        # ladder rather than the first that improves. A threshold stops descent
+        # while F is still decreasable, which is not convergence.
         CXX, w = self.CXX, self.w
         host = _closed_s4(n_refine=12, seed=3)
         opt = CXX(host, [[1, w, w * w], [1, w * w, w]], [[1, w, w * w]],
                   degrees=[3], gamma=1.0, seed=3)
         opt.seed_inputs([v.getId() for v in host.getVertexList().toVector()][:2])
 
-        # Budget cap: one iteration under a tight tol on the fresh, jittered (non-
-        # stationary) geometry takes a single improving step and stops on the iteration
-        # budget — NOT the stationarity test. last_stage2_stationary is False.
-        t_budget = opt.run_stage2(beta=1.0, max_iters=1, alpha0=0.05, rel_tol=1e-13)
-        self.assertFalse(opt.last_stage2_stationary)         # stopped: budget
-        self.assertLess(t_budget[-1], t_budget[0])           # the step strictly lowered F
+        # TRUNCATED: one iteration on fresh, jittered geometry takes an improving
+        # step and stops on the budget with F still descendable.
+        t_budget = opt.run_stage2(beta=1.0, max_iters=1, alpha0=0.05)
+        self.assertEqual(opt.last_stage2_outcome, "TRUNCATED")
+        self.assertLess(t_budget[-1], t_budget[0])   # the step strictly lowered F
 
-        # Stationary stop: with the relative threshold wider than any achievable decrease
-        # (F = ||grad S||^2 + gamma*r_U >= 0, so no edge step can lower F by 10*max(|F|,1)),
-        # the first line search accepts nothing and run_stage2 stops on the stationarity
-        # test — reported by the accessor — before exhausting max_iters. This exercises the
-        # exact "no step beats relTol*max(|F|,1)" branch the relative criterion introduced.
-        t_stat = opt.run_stage2(beta=1.0, max_iters=50, alpha0=0.05, rel_tol=10.0)
-        self.assertTrue(opt.last_stage2_stationary)          # stopped: stationary
-        self.assertLess(len(t_stat), 51)                     # broke before the budget cap
-        self.assertTrue(all(t_stat[i + 1] <= t_stat[i]       # never increases
-                            for i in range(len(t_stat) - 1)))
+        # CONVERGED: a target above the current value is met immediately.
+        current = t_budget[-1]
+        t_hit = opt.run_stage2(beta=1.0, max_iters=50, alpha0=0.05,
+                               convergence_target=current * 10.0)
+        self.assertEqual(opt.last_stage2_outcome, "CONVERGED")
+        self.assertLessEqual(t_hit[-1], current * 10.0)
+
+        # STALLED: run to exhaustion against the real target. F cannot reach 1e-15
+        # -- measured runs bottom out between 2 and 15 -- so the descent runs out of
+        # downhill while the objective is still large. That is a failure to
+        # converge and must be reported as one, never as convergence.
+        t_stall = opt.run_stage2(beta=1.0, max_iters=40, alpha0=0.05)
+        self.assertIn(opt.last_stage2_outcome, ("STALLED", "TRUNCATED"))
+        if opt.last_stage2_outcome == "STALLED":
+            self.assertGreater(t_stall[-1], 1e-15)   # stalled ABOVE the target
+        self.assertTrue(all(t_stall[i + 1] <= t_stall[i]
+                            for i in range(len(t_stall) - 1)))   # never increases
 
     def test_two_step_proton_via_canonical_class(self):
         # The canonical two-step proton build goes through tessera.cobordism.Proton (Step A

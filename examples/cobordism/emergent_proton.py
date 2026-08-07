@@ -119,7 +119,7 @@ class EmergentProtonAnimator(mca.ProtonAnimator):
         st = node.st
         res = float(cob.MultiCobordism.r_state(st, self.k, cob.Proton.singlet()))
         holes = len(cob.MultiCobordism.emergent_holes(st, self.k))
-        return bool(node.last_stage2_stationary), res, holes
+        return bool((node.last_stage2_outcome == "CONVERGED")), res, holes
 
     def _verdict_tag(self, stationary, res, holes):
         st = self.nodes[-1][0].st
@@ -192,7 +192,7 @@ def run_build(nodes, visualize=False, save=None, degree=3,
         res = float(cob.MultiCobordism.r_state(st, degree, cob.Proton.singlet()))
         conj = float(cob.MultiCobordism.r_state(st, degree, _conjugate_singlet()))
         holes = len(cob.MultiCobordism.emergent_holes(st, degree))
-        stationary = bool(step_b.last_stage2_stationary)
+        stationary = bool((step_b.last_stage2_outcome == "CONVERGED"))
         out.append(("what emerged", {
             "stationary": stationary,
             "persistent": persistent,

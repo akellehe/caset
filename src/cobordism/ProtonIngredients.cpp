@@ -189,7 +189,8 @@ void ProtonIngredients::build(int maxRestarts, int initSteps, int evolveSteps,
                   std::abs(objectiveAfter - objectiveBefore) <=
                       persistRelTol * std::max(std::abs(objectiveBefore), 1.0);
     }
-    const bool isStationary = stepB->lastStage2Stationary();
+    const bool isStationary =
+        stepB->lastStage2Outcome() == MultiCobordism::Stage2Outcome::Converged;
     const bool ok = isStationary && persisted;
 
     const auto whole = stepB->spacetime();

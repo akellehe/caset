@@ -174,7 +174,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
             t0 = time.time()
             node.run_stage2(beta=STAGE2_BETA, max_iters=STAGE2_CHUNK)
             iters_done += STAGE2_CHUNK
-            stationary = bool(node.last_stage2_stationary)
+            stationary = bool((node.last_stage2_outcome == "CONVERGED"))
             snap = snapshot(node)
             state.see(snap)
             progress(dict(base_seed=base, node=node_tag, phase="stage2",
@@ -228,7 +228,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
         if persistent:
             break
 
-    stationary = bool(joint.last_stage2_stationary)
+    stationary = bool((joint.last_stage2_outcome == "CONVERGED"))
     st = joint.st
     squared = [e.getSquaredLength() for e in st.getEdgeList().toVector()]
     final = snapshot(joint)
