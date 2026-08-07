@@ -590,6 +590,7 @@ double MultiCobordism::step(int nCandidateMoves) {
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
+  std::string bestMoveKind;
 
   // Price one move specification against the current complex, keeping it if it is
   // the best improver so far. Returns its ΔF, or 0.0 when the move did not apply.
@@ -601,6 +602,7 @@ double MultiCobordism::step(int nCandidateMoves) {
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
       bestSnapshot = snapshotOf(*candidateSpacetime);
+      bestMoveKind = moveSpecification.first;
       foundImprovingMove = true;
     }
     return objectiveDelta;
@@ -615,6 +617,13 @@ double MultiCobordism::step(int nCandidateMoves) {
   for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex)
     priceMove(drawRandomMoveSpecification(*spacetime_));
   if (foundImprovingMove) {
+    // WHICH KIND the descent keeps taking separates a drive that is growing the
+    // complex from one that is only re-dressing a fixed one. `runStage1` grows
+    // solely through the trap door, and the trap door fires only when this returns
+    // no improvement -- so a topology-preserving move that always improves (an edge
+    // disposition flip, say) starves growth without ever looking like a failure.
+    CLOG(DEBUG_LEVEL, "stage-1 step: ", bestMoveKind, " dF = ", bestObjectiveDelta,
+         " cells = ", spacetime_->getTopSimplices().size());
     spacetime_ = build(bestSnapshot);
     return bestObjectiveDelta;
   }
@@ -627,33 +636,51 @@ double MultiCobordism::step(int nCandidateMoves) {
   // move. The trial budget is ignored HERE and only here; it still caps how many
   // improving moves are collected before choosing among them.
   //
-  // Shuffled so the early exit is not biased toward whichever cells the complex
-  // happens to list first, and shuffled with this node's engine so a run stays
-  // reproducible from its seed.
-  auto moveSpecifications = enumerateMoveSpecifications(*spacetime_);
-  std::shuffle(moveSpecifications.begin(), moveSpecifications.end(),
-               randomNumberGenerator_);
+  // NOT shuffled, and deliberately consuming NO randomness: this check is a
+  // read-only observation of the drive, so it must not perturb the drive it is
+  // observing. Drawing from `randomNumberGenerator_` here would shift every
+  // subsequent move draw, trap-door attempt and patience reseed — a measurement
+  // that changes the trajectory it is measuring. Order does not matter to a
+  // report-only check that stops at the first improver: the question is whether an
+  // improver EXISTS, not which one.
+  const auto moveSpecifications = enumerateMoveSpecifications(*spacetime_);
   CLOG(INFO_LEVEL, "stage-1 final check: ", nCandidateMoves,
        " sampled moves found no improvement; pricing all ",
        moveSpecifications.size(), " available moves (F = ", objective(), ")");
 
-  // Take the FIRST move that lowers F and stop. This pass is a rescue from an
-  // apparent dead end, not a second optimization pass: choosing well among improvers
-  // is the normal pass's job, and any descent at all is enough to show the step was
-  // not stuck. Collecting a quota before choosing would keep pricing the set after
-  // the question ("does anything improve?") has already been answered.
+  // REPORT-ONLY. The check answers "does any move lower F", which is what makes the
+  // failure report trustworthy; it does NOT commit what it finds, and it stops at
+  // the first improver because one is enough to answer the question.
+  //
+  // It must not commit, because `runStage1` GROWS THE COMPLEX ONLY THROUGH THE TRAP
+  // DOOR, and the trap door fires only when this function reports no improvement.
+  // Committing here therefore suppresses growth. That is not hypothetical: measured
+  // from the canonical single-Δ⁴ seed, one cone-in takes ‖∇S‖² from 0.257 to 1.034
+  // (10 edges to 14) and the cone-out that undoes it pays -0.777, so a search strong
+  // enough to find the removal every time pins the complex at the seed. A census of
+  // one build showed the drive committing 303 growth moves through the trap door and
+  // 295 removals through the descent, never exceeding 5 cells, ending back at 1.
+  //
+  // The early regime is a BARRIER: Γ·r_U is flat at the full-leak floor until the
+  // complex is large enough to carry holes, so the only gradient the descent can see
+  // points at collapse. Growth has to accumulate across that barrier blindly, and
+  // the trap door is what carries it. Nothing here may take that away.
   for (const auto &moveSpecification : moveSpecifications) {
-    const double objectiveDelta = priceMove(moveSpecification);
+    auto candidateSpacetime = build(currentSnapshot);
+    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
+    const double objectiveDelta =
+        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
     if (objectiveDelta >= -convergenceTolerance_) continue;
-    CLOG(INFO_LEVEL, "stage-1 final check: improving move ",
-         moveSpecification.first, " dF = ", objectiveDelta,
-         " -- the sampled draws missed it; taking it");
-    spacetime_ = build(bestSnapshot);
-    return bestObjectiveDelta;
+    CLOG(INFO_LEVEL, "stage-1 final check: the move set DOES contain an improver (",
+         moveSpecification.first, ", dF = ", objectiveDelta,
+         ") that the sampled draws missed -- not committed; the trap door owns this "
+         "step");
+    return 0.0;
   }
   CLOG(INFO_LEVEL,
-       "stage-1 final check: NO move in the entire set lowers F -- stage 1 cannot "
-       "descend from here (F = ", objective(), ")");
+       "stage-1 final check: NO move in the entire set lowers F -- this step's "
+       "failure to descend is a property of the move set, not of the sampling "
+       "(F = ", objective(), ")");
   return 0.0;
 }
 
@@ -674,6 +701,12 @@ double MultiCobordism::trapDoorMove(int attempts) {
     if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
     const double objectiveDelta =
         deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+    // The trap door is the ONLY path that grows the complex, and unlike `step` it
+    // commits a move that need not lower F. Logged alongside `step`'s commits so a
+    // census of the drive covers both halves: counting only `step` shows what the
+    // descent CHOOSES, not what the complex actually does.
+    CLOG(DEBUG_LEVEL, "stage-1 trapdoor: ", moveSpecification.first, " dF = ",
+         objectiveDelta, " cells = ", candidateSpacetime->getTopSimplices().size());
     spacetime_ = build(snapshotOf(*candidateSpacetime));
     return objectiveDelta;
   }
