@@ -5,6 +5,14 @@
 
 Three read-only measurements, all composed from existing `Simplex` helpers.
 
+**Primal or dual.** Cell shape and admissibility read the PRIMAL complex — a
+simplex's own vertices, edges and Gram matrix. The dual is where the Lorentzian
+spacetime lives: S = sum_h |*h| eps_h is a sum over dual volumes. So a primal
+shape statistic is a diagnostic, not the physics; the primal bipartition is the
+combinatorial precondition for a foliation-like dual structure, and its absence
+says the complex has not developed one. The dual-height census is the
+measurement that reaches the dual directly.
+
 **Cell shape.** A 4-simplex has 5 vertices and 10 edges. If its vertices split
 (a, b) with a + b = 5, exactly a*b edges cross between the groups, so (5,0) gives
 0 timelike edges, (4,1) gives 4 and (3,2) gives 6. Those are the ONLY counts a

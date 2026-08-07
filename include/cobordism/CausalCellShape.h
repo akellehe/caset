@@ -23,7 +23,23 @@ using ::tessera::spacetime::Spacetime;
 /// geometry at all. Both are read-only measurements composed from `Simplex`'s
 /// existing helpers; nothing here modifies geometry.
 ///
-/// ## Cell shape
+/// ## Primal or dual?
+///
+/// **Cell shape and admissibility are properties of the PRIMAL complex** — a
+/// simplex's own vertices, its own edges, its own Gram matrix. The dual is where
+/// the Lorentzian spacetime lives: the action \f$ S = \sum_h |\star h|\,
+/// \varepsilon_h \f$ is a sum over dual volumes, and it is dual separations that
+/// carry the causal character the dynamics feels. The primal complex is
+/// bookkeeping for it.
+///
+/// So a primal cell shape is not itself the physics, and no primal shape statistic
+/// should be read as one. It is a **diagnostic**: the primal bipartition is the
+/// combinatorial precondition for a foliation-like dual structure, and its absence
+/// says the complex has not developed one. `dualHeightCensus` is the measurement
+/// that reaches the dual directly, and it is the one whose split between mesh
+/// defect and timelike separation says something about \f$ S \f$.
+///
+/// ## Cell shape (primal)
 ///
 /// A 4-simplex has 5 vertices and \f$ \binom{5}{2} = 10 \f$ edges. If its vertices
 /// split into groups of sizes \f$ a \f$ and \f$ b \f$ with \f$ a + b = 5 \f$, then
@@ -46,7 +62,7 @@ using ::tessera::spacetime::Spacetime;
 /// most twice, and most timelike-carrying cells were non-bipartite — eighteen
 /// cells in one run holding a single timelike edge where \f$ (4,1) \f$ needs four.
 ///
-/// ## Lorentzian admissibility
+/// ## Lorentzian admissibility (primal)
 ///
 /// `ChainComplex::dualComplexIsValid` is purely **combinatorial** — facet coface
 /// counts, ridge links, recursive vertex-link checks — and never reads
