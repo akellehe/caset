@@ -176,9 +176,16 @@ class MultiCobordism {
   void seedInputs(const std::vector<std::uint64_t> &seeds);
   /// Seed one OUTPUT block per seed vertex (see seedInputs).
   void seedOutputs(const std::vector<std::uint64_t> &seeds);
+  /// Stage 1 (combinatorial): repeatedly `step()` — price moves and commit the best
+  /// one that lowers `F` — with the trap door for escaping a too-small complex.
+  ///
   /// `growBoundaries` is the INITIALIZATION pass: while true the boundary regions
   /// grow to track the bulk until they carry their states (growBoundaryRegions);
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
+  ///
+  /// `nCandidateMoves` is the per-step trial budget: how many moves `step()` samples
+  /// before concluding it cannot descend. It is ignored only in `step()`'s final
+  /// check, which prices the whole move set before reporting failure.
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
                                 int patience = 8, bool growBoundaries = false);
   /// Stage 2 (geometric): relax every edge `ℓ²` along the **real signed-ℓ² manifold**
@@ -379,14 +386,27 @@ class MultiCobordism {
   /// One stage-1 surgery step: price moves against `deltaF` and commit the single
   /// best one that lowers `F`. Returns its `ΔF`, or `0.0` when nothing lowers `F`.
   ///
-  /// Scans the FULL `enumerateMoveSpecifications` set in a shuffled order, stopping
-  /// early once `nCandidateMoves` improving moves are in hand and taking the best of
-  /// those. So `nCandidateMoves` now bounds how many improving moves are needed to
-  /// choose among, not how many random draws are taken: the scan runs to completion
-  /// exactly when fewer than that many improving moves EXIST anywhere in the set.
-  /// That completion is logged, with each improving move and its `ΔF`, because it is
-  /// the check that decides whether a stall belongs to the landscape or to the
-  /// search.
+  /// Two passes:
+  ///
+  ///   1. **Normal** — at most `nCandidateMoves` random draws. Bounded work: pricing
+  ///      one move costs a complex rebuild, a `dualComplexValid` check and two
+  ///      `ReggeSolver` constructions, so the trial budget is what keeps a long run
+  ///      tractable. If any draw lowers `F`, the best is committed and the step ends
+  ///      here.
+  ///   2. **Final check** — reached only when the draws found nothing, i.e. when the
+  ///      step is about to report that it cannot descend. That claim is about the
+  ///      whole move SET, which `nCandidateMoves` samples cannot support, so before
+  ///      reporting failure every available move is priced.
+  ///      `enumerateMoveSpecifications` supplies the set, and `nCandidateMoves` is
+  ///      ignored here and only here. It takes the **first** move that lowers `F`
+  ///      and stops: this pass is a rescue from an apparent dead end, not a second
+  ///      optimization pass — choosing well among improvers is pass 1's job, and any
+  ///      descent at all already answers the question it was entered to ask.
+  ///
+  /// Entry into the final check is logged, as is the improving move it finds with
+  /// its `ΔF`, and the case where the entire set yields nothing. Without that, a
+  /// step that reports no improvement while improving moves exist and were simply
+  /// never drawn is indistinguishable in the trace from a genuine local minimum.
   double step(int nCandidateMoves);
   /// The trap door (#503): when no candidate move lowers the objective, take the
   /// first GATED move from the FULL range — Pachner `add`/`remove`/`flip`/`iflip`

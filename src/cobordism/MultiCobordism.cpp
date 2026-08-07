@@ -587,70 +587,73 @@ double MultiCobordism::step(int nCandidateMoves) {
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topTuple(*topSimplex));
 
-  // The FULL move set, not `nCandidateMoves` random draws. Scanned in a shuffled
-  // order so the early exit below is not biased toward whichever cells the complex
-  // happens to list first, and shuffled with this node's engine so a run stays
-  // reproducible from its seed.
-  //
-  // This is what lets "no move lowers F" be a claim about the move set. With random
-  // draws it was a claim about a handful of samples: a step could report no
-  // improvement while improving moves existed and were simply never drawn, and that
-  // is indistinguishable in the trace from a genuine local minimum. Which of those
-  // two the stall at `F ~ 2.2` actually is, is the open question this answers.
-  auto moveSpecifications = enumerateMoveSpecifications(*spacetime_);
-  std::shuffle(moveSpecifications.begin(), moveSpecifications.end(),
-               randomNumberGenerator_);
-
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
-  int improvingMovesFound = 0;
-  int movesEvaluated = 0;
-  // Held rather than logged as they are found: a step that early-exits is the
-  // healthy case and says nothing worth reading, while a step that scans the whole
-  // set is the one under investigation and gets the full account below.
-  std::vector<std::pair<std::string, double>> improvingMoves;
 
-  for (const auto &moveSpecification : moveSpecifications) {
+  // Price one move specification against the current complex, keeping it if it is
+  // the best improver so far. Returns its ΔF, or 0.0 when the move did not apply.
+  const auto priceMove = [&](const MoveSpec &moveSpecification) -> double {
     auto candidateSpacetime = build(currentSnapshot);
-    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
-    ++movesEvaluated;
+    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) return 0.0;
     const double objectiveDelta =
         deltaF(candidateSpacetime, baseResidualU, baseCellSet);
-    if (objectiveDelta >= -convergenceTolerance_) continue;
-    ++improvingMovesFound;
-    improvingMoves.emplace_back(moveSpecification.first, objectiveDelta);
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
       bestSnapshot = snapshotOf(*candidateSpacetime);
       foundImprovingMove = true;
     }
-    // Enough improving moves are in hand to choose well among them; take the best
-    // of those and stop, rather than pricing the rest of the set. The scan runs to
-    // completion only when fewer than this many improving moves EXIST -- the
-    // near-stall regime, where the cost is what buys the exhaustive claim.
-    if (improvingMovesFound >= nCandidateMoves) break;
-  }
+    return objectiveDelta;
+  };
 
-  if (improvingMovesFound < nCandidateMoves) {
-    // The whole move set was priced. Report it: this is the check that decides
-    // whether a stall is a property of the landscape or of the search, so it must
-    // be visible rather than inferred from a step that quietly returned zero.
-    CLOG(INFO_LEVEL, "exhaustive stage-1 scan: ", moveSpecifications.size(),
-         " moves enumerated, ", movesEvaluated, " applied, ", improvingMovesFound,
-         " improving");
-    for (const auto &[moveKind, objectiveDelta] : improvingMoves)
-      CLOG(INFO_LEVEL, "  improving move ", moveKind, " dF = ", objectiveDelta);
-    if (!foundImprovingMove)
-      CLOG(INFO_LEVEL,
-           "  NO move in the entire set lowers F -- stage 1 cannot descend from "
-           "here (F = ", objective(), ")");
-  }
-
+  // NORMAL PASS: at most `nCandidateMoves` random draws, exactly as before. Bounded
+  // work per step -- pricing one move costs a complex rebuild, a `dualComplexValid`
+  // check and two `ReggeSolver` constructions, so the trial budget is what keeps a
+  // long run tractable. The draws now name real TARGETS rather than RNG seeds, so a
+  // draw that lands somewhere ineligible is a genuine rejection rather than a wasted
+  // roll of a private engine.
+  for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex)
+    priceMove(drawRandomMoveSpecification(*spacetime_));
   if (foundImprovingMove) {
     spacetime_ = build(bestSnapshot);
     return bestObjectiveDelta;
   }
+
+  // FINAL PASS: the sampled moves found nothing, so the step is about to report that
+  // it cannot descend. That claim is about the whole move SET, and `nCandidateMoves`
+  // random draws cannot support it -- a step reporting no improvement while
+  // improving moves exist and were never drawn is indistinguishable in the trace
+  // from a genuine local minimum. So before reporting failure, try every available
+  // move. The trial budget is ignored HERE and only here; it still caps how many
+  // improving moves are collected before choosing among them.
+  //
+  // Shuffled so the early exit is not biased toward whichever cells the complex
+  // happens to list first, and shuffled with this node's engine so a run stays
+  // reproducible from its seed.
+  auto moveSpecifications = enumerateMoveSpecifications(*spacetime_);
+  std::shuffle(moveSpecifications.begin(), moveSpecifications.end(),
+               randomNumberGenerator_);
+  CLOG(INFO_LEVEL, "stage-1 final check: ", nCandidateMoves,
+       " sampled moves found no improvement; pricing all ",
+       moveSpecifications.size(), " available moves (F = ", objective(), ")");
+
+  // Take the FIRST move that lowers F and stop. This pass is a rescue from an
+  // apparent dead end, not a second optimization pass: choosing well among improvers
+  // is the normal pass's job, and any descent at all is enough to show the step was
+  // not stuck. Collecting a quota before choosing would keep pricing the set after
+  // the question ("does anything improve?") has already been answered.
+  for (const auto &moveSpecification : moveSpecifications) {
+    const double objectiveDelta = priceMove(moveSpecification);
+    if (objectiveDelta >= -convergenceTolerance_) continue;
+    CLOG(INFO_LEVEL, "stage-1 final check: improving move ",
+         moveSpecification.first, " dF = ", objectiveDelta,
+         " -- the sampled draws missed it; taking it");
+    spacetime_ = build(bestSnapshot);
+    return bestObjectiveDelta;
+  }
+  CLOG(INFO_LEVEL,
+       "stage-1 final check: NO move in the entire set lowers F -- stage 1 cannot "
+       "descend from here (F = ", objective(), ")");
   return 0.0;
 }
 
