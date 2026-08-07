@@ -42,6 +42,14 @@ public:
            PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
+  /// Targets are facets, named by their ``d`` vertex ids — the face the
+  /// flip acts across, not the cell.  Prefiltered to INTERIOR facets
+  /// (exactly two top cofaces): a boundary facet has one, so the flip has
+  /// no second cell to work with and would change ``∂W``.  Enumerated by
+  /// dropping one vertex from each top cell in turn and de-duplicating,
+  /// since the two cells sharing a facet each produce it.
+  [[nodiscard]] std::vector<Target> candidates() const override;
+  bool propose(const Target &target) override;
   int dN0() const override { return 0; }
   int dN41() const override { return dN41_; }
   int dN32() const override { return dN32_; }
@@ -67,6 +75,10 @@ private:
   /// manifold-preservation check (apex edge must not pre-exist).  In
   /// boundary-fixed mode the operative facet must be interior.
   bool proposePreGeometric();
+  /// The pre-geometric validation and capture, for one already-chosen
+  /// facet.  Shared by the random and the targeted path so they cannot
+  /// drift apart.
+  bool proposePreGeometricAt(const VertexPtrs &facetVerts);
 
   bool proposed_ = false;
   std::vector<VertexPtrs> oldSimplexVerts_;

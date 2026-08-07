@@ -3,7 +3,9 @@
 
 #include "spacetime/pachner/IFlipMove.h"
 
+#include <algorithm>
 #include <cmath>
+#include <set>
 #include <random>
 
 #include "mesh/Edge.h"
@@ -57,8 +59,55 @@ bool IFlipMove::propose() {
   std::uniform_int_distribution<std::size_t> edgeDist(0, edges.size() - 1);
   EdgePtr edge = edges[edgeDist(*rng_)];
 
-  VertexPtr v1 = edge->getSource();
-  VertexPtr v2 = edge->getTarget();
+  return proposeAtEdge(edge->getSource(), edge->getTarget(), d);
+}
+
+std::vector<PachnerMove::Target> IFlipMove::candidates() const {
+  // CDT keeps its random proposal distribution; nothing enumerates there.
+  if (mode_ == PachnerMode::CDT) return {};
+  const int dPlus1 = pachner_detail::topCellSize(*st_);
+  const int d = dPlus1 - 1;
+  if (d < 2) return {};
+  // Sorted-id key for the de-dup only: an edge is reached from either
+  // endpoint and from every cell containing it. The target is a vertex
+  // SET (see [[feedback_vertex_order_agnostic]]).
+  std::set<Target> distinctEdges;
+  for (const auto &s : st_->getTopSimplices()) {
+    if (s == nullptr || static_cast<int>(s->size()) != dPlus1) continue;
+    const auto &sv = s->getVertices();
+    for (std::size_t i = 0; i + 1 < sv.size(); ++i) {
+      for (std::size_t j = i + 1; j < sv.size(); ++j) {
+        if (sv[i] == nullptr || sv[j] == nullptr) continue;
+        // A d→2 flip collapses an edge shared by exactly d top cells.
+        // Cheap prefilter; the duplicate-cell and weld-facet manifold
+        // checks still run in proposeAtEdge.
+        int sharing = 0;
+        for (const auto &cell : sv[i]->getSimplices())
+          if (static_cast<int>(cell->size()) == dPlus1 && cell->hasVertex(sv[j]))
+            ++sharing;
+        if (sharing != d) continue;
+        Target ids{sv[i]->getId(), sv[j]->getId()};
+        std::sort(ids.begin(), ids.end());
+        distinctEdges.insert(std::move(ids));
+      }
+    }
+  }
+  return {distinctEdges.begin(), distinctEdges.end()};
+}
+
+bool IFlipMove::propose(const Target &target) {
+  if (proposed_ || mode_ == PachnerMode::CDT) return false;
+  if (target.size() != 2) return false;  // an iflip target names ONE edge
+  VertexPtrs endpoints = pachner_detail::verticesByIds(*st_, target);
+  if (endpoints.size() != 2) return false;
+  return proposeAtEdge(endpoints[0], endpoints[1],
+                       pachner_detail::topCellSize(*st_) - 1);
+}
+
+bool IFlipMove::proposeAtEdge(const VertexPtr &v1, const VertexPtr &v2, int d) {
+  using namespace pachner_detail;
+  if (!v1 || !v2 || d < 2) return false;
+  const int dPlus1 = d + 1;
 
   // Find all top simplices containing both endpoints.
   std::vector<SimplexPtr> sharing;

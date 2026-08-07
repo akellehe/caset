@@ -45,6 +45,13 @@ public:
             PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
+  /// Targets are edges, named by their ``2`` endpoint vertex ids — the
+  /// edge the flip collapses.  Prefiltered to edges shared by exactly
+  /// ``d`` top cells, the incidence a d→2 flip requires.  The manifold
+  /// checks (the welded facet must not already exist, neither new cell
+  /// may duplicate one) still run in ``propose(target)``.
+  [[nodiscard]] std::vector<Target> candidates() const override;
+  bool propose(const Target &target) override;
   int dN0() const override { return 0; }
   int dN41() const override { return dN41_; }
   int dN32() const override { return dN32_; }
@@ -60,6 +67,13 @@ public:
   std::string moveType() const override { return MOVE_TYPE; }
 
 private:
+  /// The validation and capture, for one already-chosen edge.  Shared by
+  /// the random and the targeted path so they cannot drift apart.
+  /// \p d is passed in because the two paths read it differently: the
+  /// random path takes it from the sampled cell (or, in CDT mode, the
+  /// metric signature), the targeted path from the complex's top cells.
+  bool proposeAtEdge(const VertexPtr &v1, const VertexPtr &v2, int d);
+
   Spacetime *st_;
   std::unique_ptr<std::mt19937> ownedRng_;
   std::mt19937 *rng_;

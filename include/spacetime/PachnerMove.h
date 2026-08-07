@@ -159,6 +159,58 @@ inline void sortByVertexId(VertexPtrs &verts) {
             });
 }
 
+// ===================================================================
+// Target resolution.
+//
+// A move target is named by vertex ids (see ``PachnerMove::Target``)
+// because ids survive the snapshot/rebuild round trip that
+// ``MultiCobordism`` performs between drawing a move and applying it,
+// where a raw ``SimplexPtr`` would dangle.  These turn a set of ids
+// back into the objects the propose bodies work with.
+// ===================================================================
+
+/// The vertices named by ``ids``, or an empty list if ANY id is absent
+/// from the complex — a partially-resolved target is not a target.
+inline VertexPtrs verticesByIds(const Spacetime &st,
+                                const std::vector<std::uint64_t> &ids) {
+  VertexPtrs out;
+  const auto &vertexList = st.getVertexList();
+  if (!vertexList) return out;
+  out.reserve(ids.size());
+  for (auto id : ids) {
+    VertexPtr v = vertexList->get(id);
+    if (v == nullptr) return {};
+    out.push_back(v);
+  }
+  return out;
+}
+
+/// The top cell (``topVerts`` vertices) whose vertex SET is exactly
+/// ``ids``, or ``nullptr``.  Matched by set rather than by tuple order:
+/// a cell's stored order is its orientation and must not be assumed.
+inline SimplexPtr topCellByIds(const Spacetime &st,
+                               const std::vector<std::uint64_t> &ids,
+                               int topVerts) {
+  if (static_cast<int>(ids.size()) != topVerts) return nullptr;
+  VertexPtrs verts = verticesByIds(st, ids);
+  if (verts.size() != ids.size()) return nullptr;
+  auto cofaces = topCofacesOf(verts, topVerts);
+  // Containing all of `ids` AND having exactly `topVerts` vertices makes
+  // the vertex sets equal, so at most one cell can match.
+  return cofaces.empty() ? nullptr : cofaces.front();
+}
+
+/// The number of vertices in the widest simplex of ``st`` — the
+/// top-cell size ``d+1``, read off the complex rather than the metric
+/// so it is right on a pre-geometric complex whose metric dimension may
+/// differ from the manifold's.
+inline int topCellSize(const Spacetime &st) {
+  int widest = 0;
+  for (const auto &s : st.getTopSimplices())
+    if (s != nullptr) widest = std::max(widest, static_cast<int>(s->size()));
+  return widest;
+}
+
 /// True iff vertices ``a`` and ``b`` already co-occur in some simplex
 /// (i.e. the edge ``a–b`` already exists).  Used to reject a 2→(d+1)
 /// flip whose new apex edge would collide with existing structure.
@@ -284,9 +336,50 @@ public:
   /// (codim-1 faces in exactly one top cell) unchanged.
   bool boundaryFixed() const { return boundaryFixed_; }
 
-  /// Pick a target and validate it.  No spacetime mutation.
+  /// Pick a target at random and validate it.  No spacetime mutation.
   /// Returns ``true`` on success, ``false`` if no eligible target.
   virtual bool propose() = 0;
+
+  /// A move's **target**: the piece of the complex it acts on, named by
+  /// vertex ids so it survives the snapshot/rebuild round trip that
+  /// ``MultiCobordism`` performs between proposing a move and applying
+  /// it.  Which ids depends on the move:
+  ///
+  /// * ``AddMove`` — the ``d+1`` vertices of the top cell to subdivide;
+  /// * ``RemoveMove`` — the single vertex to weld away;
+  /// * ``FlipMove`` — the ``d`` vertices of the facet to flip across;
+  /// * ``IFlipMove`` — the ``2`` endpoints of the edge to collapse.
+  ///
+  /// The ids are the target's *identity*, not an ordering convention:
+  /// each move matches by vertex set (see
+  /// [[feedback_vertex_order_agnostic]]).
+  using Target = std::vector<std::uint64_t>;
+
+  /// Every target this move could act on, in an order fixed by the
+  /// complex rather than by the RNG.  This is the enumeration a search
+  /// needs in order to ask "does *any* move of this kind lower the
+  /// objective" — with only ``propose()`` available, a caller can do no
+  /// better than draw targets at random and hope to cover the space.
+  ///
+  /// **Prefiltered, not validated.**  Entries pass a cheap structural
+  /// test (right incidence count, interior facet, and so on); the full
+  /// validation still happens in ``propose(target)``, which may reject.
+  /// So this is an upper bound on the eligible set, and a caller must
+  /// treat a ``false`` from ``propose(target)`` as ordinary.
+  ///
+  /// **Pre-geometric mode only.**  Returns empty under
+  /// :enumerator:`PachnerMode::CDT`: the CDT Markov chain is a *sampler*
+  /// whose proposal distribution is part of its correctness, and its
+  /// paths are kept byte-identical to the pre-#112 behaviour.  Nothing
+  /// enumerates targets there, so nothing needs to.
+  [[nodiscard]] virtual std::vector<Target> candidates() const = 0;
+
+  /// Propose this move **at one named target** rather than at a random
+  /// one.  Validates exactly as ``propose()`` does — the two share their
+  /// validation body — and returns ``false`` if this particular target
+  /// is ineligible, if it names nothing in the complex, or if the move
+  /// is in CDT mode.  No spacetime mutation.
+  virtual bool propose(const Target &target) = 0;
 
   /// Combinatorial change in vertex count if this move is applied.
   /// Valid only after a successful ``propose()``.

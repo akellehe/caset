@@ -46,6 +46,13 @@ public:
              PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
+  /// Targets are single vertices, each named by its one id.  Prefiltered
+  /// to vertices incident to exactly ``d+1`` top cells — the degree a
+  /// (d+1)→1 weld requires — so the enumeration is the star-degree
+  /// shortlist rather than every vertex.  The link-sphere check that
+  /// decides eligibility still runs in ``propose(target)``.
+  [[nodiscard]] std::vector<Target> candidates() const override;
+  bool propose(const Target &target) override;
   int dN0() const override { return -1; }
   int dN41() const override { return dN41_; }
   int dN32() const override { return 0; }
@@ -69,6 +76,10 @@ private:
   // interior, so the move never touches ∂W.  rollback() is shared with
   // the CDT path (it is generic over the removed-cell count).
   bool proposePreGeometric();
+  /// The pre-geometric validation and capture, for one already-chosen
+  /// vertex.  Shared by the random and the targeted path so they cannot
+  /// drift apart.
+  bool proposePreGeometricAt(const VertexPtr &v);
   bool applyPreGeometric();
 
   // Unregister every sub-top-dimensional simplex (facet/hinge) still incident to

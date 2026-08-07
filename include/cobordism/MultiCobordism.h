@@ -338,10 +338,33 @@ class MultiCobordism {
   [[nodiscard]] std::shared_ptr<Spacetime> build(
       const Snapshot &complexSnapshot) const;
 
+  /// Every target of one Pachner `moveKind` on `spacetime`, from that move class's
+  /// `PachnerMove::candidates()`. Prefiltered, not validated — a target here may
+  /// still be rejected by the move's own `propose`.
+  [[nodiscard]] static std::vector<std::vector<std::uint64_t>> pachnerTargets(
+      const Spacetime &spacetime, const std::string &moveKind);
+
+  /// EVERY move reachable from `spacetime`: the four Pachner kinds over all their
+  /// targets, `cone_out` over every top cell, `cone_in` over every codim-1 facet,
+  /// and (with dispositions on) `cone_in_timelike` over every facet and
+  /// `flip_disposition` over every edge.
+  ///
+  /// This is what makes "nothing lowers `F`" a statement about the MOVE SET rather
+  /// than about a handful of random draws — the difference between a genuine local
+  /// minimum and a search that never looked in the right place, which the trace
+  /// alone cannot distinguish.
+  [[nodiscard]] std::vector<MoveSpec> enumerateMoveSpecifications(
+      const Spacetime &spacetime) const;
+
   /// Draw one random stage-1 move specification on `spacetime`: a `{kind, payload}`
-  /// pair where `kind` is one of `add`/`remove`/`flip`/`iflip` (payload = a seed for
-  /// the Pachner move) or `cone_out`/`cone_in` (payload = the cell/face to cone). The
-  /// move is only described here, not applied — see `applyMoveSpecification`.
+  /// pair where `kind` is one of `add`/`remove`/`flip`/`iflip` (payload = the move's
+  /// TARGET, per `PachnerMove::Target`) or `cone_out`/`cone_in` (payload = the
+  /// cell/face to cone). The move is only described here, not applied — see
+  /// `applyMoveSpecification`.
+  ///
+  /// The Pachner payload used to be a random SEED rather than a target, so a
+  /// specification named no particular move: the move class was handed a fresh
+  /// engine and chose its own target, often one that failed to propose at all.
   [[nodiscard]] MoveSpec drawRandomMoveSpecification(const Spacetime &spacetime);
   /// Apply a move specification from `drawRandomMoveSpecification` to `spacetime`
   /// in place. Returns true iff the move was applied AND it left every pinned
@@ -353,6 +376,17 @@ class MultiCobordism {
   [[nodiscard]] double deltaF(
       const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
       const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
+  /// One stage-1 surgery step: price moves against `deltaF` and commit the single
+  /// best one that lowers `F`. Returns its `ΔF`, or `0.0` when nothing lowers `F`.
+  ///
+  /// Scans the FULL `enumerateMoveSpecifications` set in a shuffled order, stopping
+  /// early once `nCandidateMoves` improving moves are in hand and taking the best of
+  /// those. So `nCandidateMoves` now bounds how many improving moves are needed to
+  /// choose among, not how many random draws are taken: the scan runs to completion
+  /// exactly when fewer than that many improving moves EXIST anywhere in the set.
+  /// That completion is logged, with each improving move and its `ΔF`, because it is
+  /// the check that decides whether a stall belongs to the landscape or to the
+  /// search.
   double step(int nCandidateMoves);
   /// The trap door (#503): when no candidate move lowers the objective, take the
   /// first GATED move from the FULL range — Pachner `add`/`remove`/`flip`/`iflip`

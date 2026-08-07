@@ -50,6 +50,14 @@ public:
             PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
+  /// **Not enumerable.**  The shift is a CDT-only move — it has no
+  /// pre-geometric path, since what it shifts is a time-sliced
+  /// (d-1,2)/(2,d-1) pair that only exists under a foliation.  Both
+  /// return empty/``false`` in every mode.  Spelled out here rather than
+  /// inherited as a default so that "this move cannot be enumerated" is a
+  /// statement in the class, not an omission.
+  [[nodiscard]] std::vector<Target> candidates() const override { return {}; }
+  bool propose(const Target &) override { return false; }
   int dN0() const override { return 0; }
   int dN41() const override { return dN41_; }
   int dN32() const override { return dN32_; }

@@ -129,7 +129,39 @@ bool RemoveMove::propose() {
 }
 
 bool RemoveMove::proposePreGeometric() {
-  VertexPtr v = st_->getRandomVertex();
+  return proposePreGeometricAt(st_->getRandomVertex());
+}
+
+std::vector<PachnerMove::Target> RemoveMove::candidates() const {
+  // CDT keeps its random proposal distribution; nothing enumerates there.
+  if (mode_ == PachnerMode::CDT) return {};
+  const int dPlus1 = pachner_detail::topCellSize(*st_);
+  if (dPlus1 < 3) return {};
+  std::vector<Target> targets;
+  const auto &vertexList = st_->getVertexList();
+  if (!vertexList) return targets;
+  for (const auto &v : vertexList->toVector()) {
+    if (v == nullptr) continue;
+    // (d+1)→1 welds a vertex whose star is exactly d+1 top cells. Cheap
+    // prefilter; proposePreGeometricAt still checks the link is the
+    // (d-1)-sphere ∂(newTop), which is what makes the weld a manifold move.
+    int incidentTopCells = 0;
+    for (const auto &s : v->getSimplices())
+      if (static_cast<int>(s->size()) == dPlus1) ++incidentTopCells;
+    if (incidentTopCells == dPlus1) targets.push_back({v->getId()});
+  }
+  return targets;
+}
+
+bool RemoveMove::propose(const Target &target) {
+  if (proposed_ || mode_ == PachnerMode::CDT) return false;
+  if (target.size() != 1) return false;  // a remove target names ONE vertex
+  const auto &vertexList = st_->getVertexList();
+  if (!vertexList) return false;
+  return proposePreGeometricAt(vertexList->get(target.front()));
+}
+
+bool RemoveMove::proposePreGeometricAt(const VertexPtr &v) {
   if (!v) return false;
 
   // Read the top-cell vertex count off v's incident cells.

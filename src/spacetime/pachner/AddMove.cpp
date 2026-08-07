@@ -3,7 +3,9 @@
 
 #include "spacetime/pachner/AddMove.h"
 
+#include <algorithm>
 #include <cmath>
+#include <set>
 
 #include "mesh/Edge.h"
 #include "mesh/Simplex.h"
@@ -135,7 +137,32 @@ bool AddMove::propose() {
 }
 
 bool AddMove::proposePreGeometric() {
-  SimplexPtr sigma = st_->getRandomTopSimplex(*rng_);  // seeded rng (#262)
+  return proposePreGeometricAt(
+      st_->getRandomTopSimplex(*rng_));  // seeded rng (#262)
+}
+
+std::vector<PachnerMove::Target> AddMove::candidates() const {
+  // CDT keeps its random proposal distribution; nothing enumerates there.
+  if (mode_ == PachnerMode::CDT) return {};
+  std::vector<Target> targets;
+  for (const auto &s : st_->getTopSimplices()) {
+    if (s == nullptr || s->size() < 3) continue;  // need a triangle to subdivide
+    Target ids;
+    ids.reserve(s->size());
+    for (const auto &v : s->getVertices())
+      if (v != nullptr) ids.push_back(v->getId());
+    targets.push_back(std::move(ids));
+  }
+  return targets;
+}
+
+bool AddMove::propose(const Target &target) {
+  if (proposed_ || mode_ == PachnerMode::CDT) return false;
+  return proposePreGeometricAt(pachner_detail::topCellByIds(
+      *st_, target, static_cast<int>(target.size())));
+}
+
+bool AddMove::proposePreGeometricAt(const SimplexPtr &sigma) {
   if (!sigma) return false;
   const int dPlus1 = static_cast<int>(sigma->size());
   if (dPlus1 < 3) return false;  // need at least a triangle to subdivide

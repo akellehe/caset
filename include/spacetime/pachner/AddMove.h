@@ -46,6 +46,12 @@ public:
           PachnerMode mode = PachnerMode::CDT, bool boundaryFixed = false);
 
   bool propose() override;
+  /// Targets are top cells, named by their ``d+1`` vertex ids.  Every top
+  /// cell of at least 3 vertices is a candidate: a 1→(d+1) stellar
+  /// subdivision lives entirely inside one cell, so it never touches
+  /// ``∂W`` and can never be rejected for boundary reasons.
+  [[nodiscard]] std::vector<Target> candidates() const override;
+  bool propose(const Target &target) override;
   int dN0() const override { return 1; }
   int dN41() const override { return dN41_; }
   int dN32() const override { return 0; }
@@ -66,6 +72,11 @@ private:
   // 1 cell with d+1.  Always interior (it never touches ∂W), so it is
   // unconditionally boundary-fixed-safe.
   bool proposePreGeometric();
+  /// The pre-geometric validation and capture, for one already-chosen
+  /// cell.  ``proposePreGeometric`` samples a cell and calls this;
+  /// ``propose(target)`` resolves the target and calls this.  Shared so
+  /// the random and the targeted path cannot drift apart.
+  bool proposePreGeometricAt(const SimplexPtr &sigma);
   bool applyPreGeometric();
   void rollbackPreGeometric();
 

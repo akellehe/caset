@@ -11,6 +11,7 @@
 
 #include <Eigen/Dense>
 
+#include "Logger.h"
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
 #include "cobordism/SurgicalCone.h"
@@ -337,6 +338,76 @@ std::shared_ptr<Spacetime> MultiCobordism::build(
   return rebuiltSpacetime;
 }
 
+std::vector<std::vector<std::uint64_t>> MultiCobordism::pachnerTargets(
+    const Spacetime &spacetime, const std::string &moveKind) {
+  // A throwaway engine: `candidates()` reads the complex and consumes no
+  // randomness, and neither does the targeted `propose`. The moves take an RNG
+  // only for their random-target path, which nothing here uses.
+  std::mt19937 unusedRandomEngine(0);
+  using ::tessera::spacetime::PachnerMode;
+  auto *mutableSpacetime = const_cast<Spacetime *>(&spacetime);
+  if (moveKind == ADD_MOVE)
+    return ::tessera::spacetime::AddMove(mutableSpacetime, &unusedRandomEngine,
+                                         false, PachnerMode::PreGeometric, false)
+        .candidates();
+  if (moveKind == REMOVE_MOVE)
+    return ::tessera::spacetime::RemoveMove(
+               mutableSpacetime, &unusedRandomEngine, PachnerMode::PreGeometric,
+               false)
+        .candidates();
+  if (moveKind == FLIP_MOVE)
+    return ::tessera::spacetime::FlipMove(mutableSpacetime, &unusedRandomEngine,
+                                          PachnerMode::PreGeometric, false)
+        .candidates();
+  if (moveKind == IFLIP_MOVE)
+    return ::tessera::spacetime::IFlipMove(mutableSpacetime, &unusedRandomEngine,
+                                           PachnerMode::PreGeometric, false)
+        .candidates();
+  return {};
+}
+
+std::vector<MultiCobordism::MoveSpec> MultiCobordism::enumerateMoveSpecifications(
+    const Spacetime &spacetime) const {
+  // EVERY move reachable from this complex, in one list: the four Pachner kinds
+  // over all their targets, plus the surgical kinds over every cell and facet, plus
+  // (when dispositions are on) every edge. This is what makes "no move lowers F" a
+  // statement about the move set rather than about eight lucky draws.
+  std::vector<MoveSpec> moveSpecifications;
+  for (const char *moveKind :
+       {ADD_MOVE, REMOVE_MOVE, FLIP_MOVE, IFLIP_MOVE})
+    for (auto &target : pachnerTargets(spacetime, moveKind))
+      moveSpecifications.emplace_back(moveKind, std::move(target));
+
+  for (const auto &topSimplex : spacetime.getTopSimplices()) {
+    if (topSimplex == nullptr) continue;
+    auto cellVertexIds = topTuple(*topSimplex);
+    // cone_out removes the whole cell; cone_in caps one of its codim-1 facets.
+    moveSpecifications.emplace_back(CONE_OUT, cellVertexIds);
+    for (std::size_t droppedVertexIndex = 0;
+         droppedVertexIndex < cellVertexIds.size(); ++droppedVertexIndex) {
+      std::vector<std::uint64_t> coneInFace;
+      coneInFace.reserve(cellVertexIds.size() - 1);
+      for (std::size_t vertexIndex = 0; vertexIndex < cellVertexIds.size();
+           ++vertexIndex)
+        if (vertexIndex != droppedVertexIndex)
+          coneInFace.push_back(cellVertexIds[vertexIndex]);
+      moveSpecifications.emplace_back(CONE_IN, coneInFace);
+      if (shouldProposeDispositions_)
+        moveSpecifications.emplace_back(CONE_IN_TIMELIKE, coneInFace);
+    }
+  }
+
+  if (shouldProposeDispositions_ && spacetime.getEdgeList())
+    for (const auto *edge : spacetime.getEdgeList()->toVector())
+      if (edge != nullptr && edge->getSource() != nullptr &&
+          edge->getTarget() != nullptr)
+        moveSpecifications.emplace_back(
+            FLIP_DISPOSITION, std::vector<std::uint64_t>{
+                                  edge->getSource()->getId(),
+                                  edge->getTarget()->getId()});
+  return moveSpecifications;
+}
+
 MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
     const Spacetime &spacetime) {
   // #613: with emergent dispositions ON the draw also offers a TIMELIKE cone-in
@@ -375,9 +446,20 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
     return {FLIP_DISPOSITION, {chosen.first, chosen.second}};
   }
   if (moveKind == ADD_MOVE || moveKind == REMOVE_MOVE ||
-      moveKind == FLIP_MOVE || moveKind == IFLIP_MOVE)
-    return {moveKind,
-            {static_cast<std::uint64_t>(randomNumberGenerator_() % (1u << 31))}};
+      moveKind == FLIP_MOVE || moveKind == IFLIP_MOVE) {
+    // The payload is the move's TARGET -- the cell, vertex, facet or edge it acts
+    // on, named by vertex ids. It used to be a random SEED: the move was handed a
+    // fresh `mt19937` and picked its own target, so a draw named no particular move
+    // and could not be reproduced, compared, or enumerated. Half the draws were
+    // Pachner kinds, and each landed wherever its private RNG sent it -- frequently
+    // on a target that failed `propose` outright, spending the draw on nothing. The
+    // search could not ask "does ANY add move lower F", only "does this seed happen
+    // to". Targets make the random draw and the exhaustive scan address moves the
+    // same way.
+    const auto targets = pachnerTargets(spacetime, moveKind);
+    if (targets.empty()) return {NOOP, {}};
+    return {moveKind, targets[randomNumberGenerator_() % targets.size()]};
+  }
   std::vector<std::vector<std::uint64_t>> topCellTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     topCellTuples.push_back(topTuple(*topSimplex));
@@ -405,26 +487,30 @@ bool MultiCobordism::applyMoveSpecification(
   bool moveWasApplied = false;
   if (moveKind == ADD_MOVE || moveKind == REMOVE_MOVE ||
       moveKind == FLIP_MOVE || moveKind == IFLIP_MOVE) {
-    std::mt19937 moveRandomEngine(
-        static_cast<std::uint32_t>(moveSpecification.second[0]));
+    // The payload is the TARGET (see drawRandomMoveSpecification), so the move is
+    // proposed exactly where the specification says. The engine is unused on this
+    // path -- the targeted propose consumes no randomness -- but the constructors
+    // require one.
+    const auto &target = moveSpecification.second;
+    std::mt19937 unusedRandomEngine(0);
     using ::tessera::spacetime::PachnerMode;
     if (moveKind == ADD_MOVE) {
       ::tessera::spacetime::AddMove pachnerMove(
-          spacetime.get(), &moveRandomEngine, false, PachnerMode::PreGeometric,
-          false);
-      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
+          spacetime.get(), &unusedRandomEngine, false,
+          PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose(target) && pachnerMove.apply();
     } else if (moveKind == REMOVE_MOVE) {
       ::tessera::spacetime::RemoveMove pachnerMove(
-          spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
-      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
+          spacetime.get(), &unusedRandomEngine, PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose(target) && pachnerMove.apply();
     } else if (moveKind == FLIP_MOVE) {
       ::tessera::spacetime::FlipMove pachnerMove(
-          spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
-      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
+          spacetime.get(), &unusedRandomEngine, PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose(target) && pachnerMove.apply();
     } else {
       ::tessera::spacetime::IFlipMove pachnerMove(
-          spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
-      moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
+          spacetime.get(), &unusedRandomEngine, PachnerMode::PreGeometric, false);
+      moveWasApplied = pachnerMove.propose(target) && pachnerMove.apply();
     }
   } else if (moveKind == CONE_OUT) {
     moveWasApplied =
@@ -500,21 +586,67 @@ double MultiCobordism::step(int nCandidateMoves) {
   std::set<std::vector<std::uint64_t>> baseCellSet;
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topTuple(*topSimplex));
+
+  // The FULL move set, not `nCandidateMoves` random draws. Scanned in a shuffled
+  // order so the early exit below is not biased toward whichever cells the complex
+  // happens to list first, and shuffled with this node's engine so a run stays
+  // reproducible from its seed.
+  //
+  // This is what lets "no move lowers F" be a claim about the move set. With random
+  // draws it was a claim about a handful of samples: a step could report no
+  // improvement while improving moves existed and were simply never drawn, and that
+  // is indistinguishable in the trace from a genuine local minimum. Which of those
+  // two the stall at `F ~ 2.2` actually is, is the open question this answers.
+  auto moveSpecifications = enumerateMoveSpecifications(*spacetime_);
+  std::shuffle(moveSpecifications.begin(), moveSpecifications.end(),
+               randomNumberGenerator_);
+
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
-  for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex) {
-    const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
+  int improvingMovesFound = 0;
+  int movesEvaluated = 0;
+  // Held rather than logged as they are found: a step that early-exits is the
+  // healthy case and says nothing worth reading, while a step that scans the whole
+  // set is the one under investigation and gets the full account below.
+  std::vector<std::pair<std::string, double>> improvingMoves;
+
+  for (const auto &moveSpecification : moveSpecifications) {
     auto candidateSpacetime = build(currentSnapshot);
     if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
+    ++movesEvaluated;
     const double objectiveDelta =
         deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+    if (objectiveDelta >= -convergenceTolerance_) continue;
+    ++improvingMovesFound;
+    improvingMoves.emplace_back(moveSpecification.first, objectiveDelta);
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
       bestSnapshot = snapshotOf(*candidateSpacetime);
       foundImprovingMove = true;
     }
+    // Enough improving moves are in hand to choose well among them; take the best
+    // of those and stop, rather than pricing the rest of the set. The scan runs to
+    // completion only when fewer than this many improving moves EXIST -- the
+    // near-stall regime, where the cost is what buys the exhaustive claim.
+    if (improvingMovesFound >= nCandidateMoves) break;
   }
+
+  if (improvingMovesFound < nCandidateMoves) {
+    // The whole move set was priced. Report it: this is the check that decides
+    // whether a stall is a property of the landscape or of the search, so it must
+    // be visible rather than inferred from a step that quietly returned zero.
+    CLOG(INFO_LEVEL, "exhaustive stage-1 scan: ", moveSpecifications.size(),
+         " moves enumerated, ", movesEvaluated, " applied, ", improvingMovesFound,
+         " improving");
+    for (const auto &[moveKind, objectiveDelta] : improvingMoves)
+      CLOG(INFO_LEVEL, "  improving move ", moveKind, " dF = ", objectiveDelta);
+    if (!foundImprovingMove)
+      CLOG(INFO_LEVEL,
+           "  NO move in the entire set lowers F -- stage 1 cannot descend from "
+           "here (F = ", objective(), ")");
+  }
+
   if (foundImprovingMove) {
     spacetime_ = build(bestSnapshot);
     return bestObjectiveDelta;

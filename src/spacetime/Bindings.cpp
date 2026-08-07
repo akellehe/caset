@@ -693,9 +693,25 @@ deltas (dN0, dN41, dN32) and Metropolis log prefactor so callers can
 plug them into action-based acceptance criteria.
 
 See ``docs/source/modularity-plan.md`` for the design rationale.)doc")
-      .def("propose", &PachnerMove::propose,
-           "Pick a target and validate.  No state change.  Returns "
-           "True on success.")
+      .def("propose",
+           static_cast<bool (PachnerMove::*)()>(&PachnerMove::propose),
+           "Pick a target at random and validate.  No state change.  "
+           "Returns True on success.")
+      .def("propose",
+           static_cast<bool (PachnerMove::*)(const PachnerMove::Target &)>(
+               &PachnerMove::propose),
+           py::arg("target"),
+           "Propose this move AT one named target -- a list of vertex ids "
+           "naming the cell (add), vertex (remove), facet (flip) or edge "
+           "(iflip) to act on.  Validates exactly as the no-argument form "
+           "does.  Returns False if the target is ineligible, names nothing, "
+           "or the move is in CDT mode.  No state change.")
+      .def("candidates", &PachnerMove::candidates,
+           "Every target this move could act on, in an order fixed by the "
+           "complex rather than the RNG.  Prefiltered, not validated: an "
+           "entry may still be rejected by propose(target).  Empty in CDT "
+           "mode, whose random proposal distribution is part of its "
+           "correctness and is left alone.")
       .def("apply", &PachnerMove::apply,
            "Commit the proposed move; build the undo log.  Returns "
            "True on success.")

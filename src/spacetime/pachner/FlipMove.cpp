@@ -3,7 +3,9 @@
 
 #include "spacetime/pachner/FlipMove.h"
 
+#include <algorithm>
 #include <cmath>
+#include <set>
 #include <random>
 
 #include "mesh/Simplex.h"
@@ -151,6 +153,53 @@ bool FlipMove::proposePreGeometric() {
   for (std::size_t i = 0; i < sigmaV.size(); ++i) {
     if (i != drop) facetVerts.push_back(sigmaV[i]);
   }
+  return proposePreGeometricAt(facetVerts);
+}
+
+std::vector<PachnerMove::Target> FlipMove::candidates() const {
+  // CDT keeps its random proposal distribution; nothing enumerates there.
+  if (mode_ == PachnerMode::CDT) return {};
+  const int dPlus1 = pachner_detail::topCellSize(*st_);
+  if (dPlus1 < 3) return {};
+  // Sorted-id key for the de-dup only: the two cells sharing a facet both
+  // produce it, in whatever order each stores its vertices. The target
+  // itself is a vertex SET, so the key's ordering imposes no convention on
+  // the complex (see [[feedback_vertex_order_agnostic]]).
+  std::set<Target> distinctFacets;
+  for (const auto &s : st_->getTopSimplices()) {
+    if (s == nullptr || static_cast<int>(s->size()) != dPlus1) continue;
+    const auto &sv = s->getVertices();
+    for (std::size_t drop = 0; drop < sv.size(); ++drop) {
+      VertexPtrs facetVerts;
+      facetVerts.reserve(sv.size() - 1);
+      for (std::size_t i = 0; i < sv.size(); ++i)
+        if (i != drop && sv[i] != nullptr) facetVerts.push_back(sv[i]);
+      if (facetVerts.size() + 1 != sv.size()) continue;
+      // Interior facets only: exactly two top cofaces. One means the facet
+      // is on ∂W and the flip has no second cell; more means non-manifold.
+      if (pachner_detail::topCofacesOf(facetVerts, dPlus1).size() != 2) continue;
+      Target ids;
+      ids.reserve(facetVerts.size());
+      for (const auto &v : facetVerts) ids.push_back(v->getId());
+      std::sort(ids.begin(), ids.end());
+      distinctFacets.insert(std::move(ids));
+    }
+  }
+  return {distinctFacets.begin(), distinctFacets.end()};
+}
+
+bool FlipMove::propose(const Target &target) {
+  if (proposed_ || mode_ == PachnerMode::CDT) return false;
+  VertexPtrs facetVerts = pachner_detail::verticesByIds(*st_, target);
+  if (facetVerts.size() != target.size()) return false;
+  return proposePreGeometricAt(facetVerts);
+}
+
+bool FlipMove::proposePreGeometricAt(const VertexPtrs &facetVerts) {
+  using namespace pachner_detail;
+  const int d = static_cast<int>(facetVerts.size());
+  if (d < 2) return false;
+  const int dPlus1 = d + 1;
 
   // The two top cells sharing this facet, found by a local scan so we
   // don't depend on a pre-materialised coface cache (buildExplicit
