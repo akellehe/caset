@@ -833,9 +833,9 @@ moves via ``CDT.proposeShift()`` instead.)doc");
   // the literal. Tests that ASSERT the name deliberately keep their literals --
   // comparing moveType() against this constant could never fail, so it would
   // weaken the characterization rather than strengthen it.
-  m.attr("AddMove").attr("MOVE_TYPE") = AddMove::kMoveType;
-  m.attr("RemoveMove").attr("MOVE_TYPE") = RemoveMove::kMoveType;
-  m.attr("FlipMove").attr("MOVE_TYPE") = FlipMove::kMoveType;
-  m.attr("IFlipMove").attr("MOVE_TYPE") = IFlipMove::kMoveType;
-  m.attr("ShiftMove").attr("MOVE_TYPE") = ShiftMove::kMoveType;
+  m.attr("AddMove").attr("MOVE_TYPE") = AddMove::MOVE_TYPE;
+  m.attr("RemoveMove").attr("MOVE_TYPE") = RemoveMove::MOVE_TYPE;
+  m.attr("FlipMove").attr("MOVE_TYPE") = FlipMove::MOVE_TYPE;
+  m.attr("IFlipMove").attr("MOVE_TYPE") = IFlipMove::MOVE_TYPE;
+  m.attr("ShiftMove").attr("MOVE_TYPE") = ShiftMove::MOVE_TYPE;
 }

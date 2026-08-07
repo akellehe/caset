@@ -61,8 +61,8 @@ public:
   /// The canonical name of this move type, defined ONCE here so callers
   /// that dispatch on it (MultiCobordism's move draw, CDT's acceptance-rate
   /// accounting) reference this rather than re-spelling the literal.
-  static constexpr const char *kMoveType = "shift";
-  std::string moveType() const override { return kMoveType; }
+  static constexpr const char *MOVE_TYPE = "shift";
+  std::string moveType() const override { return MOVE_TYPE; }
 
 private:
   Spacetime *st_;

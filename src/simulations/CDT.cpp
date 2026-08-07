@@ -328,11 +328,11 @@ std::map<std::string, double> CDT::getAcceptanceRates() const {
     return attempted > 0 ? static_cast<double>(accepted) / static_cast<double>(attempted) : 0.0;
   };
   return {
-    {::tessera::spacetime::AddMove::kMoveType, rate(addAccepted, addAttempts)},
-    {::tessera::spacetime::RemoveMove::kMoveType, rate(removeAccepted, removeAttempts)},
-    {::tessera::spacetime::FlipMove::kMoveType, rate(flipAccepted, flipAttempts)},
-    {::tessera::spacetime::IFlipMove::kMoveType, rate(iflipAccepted, iflipAttempts)},
-    {::tessera::spacetime::ShiftMove::kMoveType, rate(shiftAccepted, shiftAttempts)},
+    {::tessera::spacetime::AddMove::MOVE_TYPE, rate(addAccepted, addAttempts)},
+    {::tessera::spacetime::RemoveMove::MOVE_TYPE, rate(removeAccepted, removeAttempts)},
+    {::tessera::spacetime::FlipMove::MOVE_TYPE, rate(flipAccepted, flipAttempts)},
+    {::tessera::spacetime::IFlipMove::MOVE_TYPE, rate(iflipAccepted, iflipAttempts)},
+    {::tessera::spacetime::ShiftMove::MOVE_TYPE, rate(shiftAccepted, shiftAttempts)},
     {"ishift", rate(ishiftAccepted, ishiftAttempts)},
   };
 }

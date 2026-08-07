@@ -90,32 +90,32 @@ class MultiCobordism {
   /// either place would not fail to compile — it would silently misroute or
   /// disable the move.
   /// The four Pachner kinds are NOT redefined here — each move class owns its
-  /// name (`AddMove::kMoveType` and siblings), and these alias those so there is
+  /// name (`AddMove::MOVE_TYPE` and siblings), and these alias those so there is
   /// exactly one definition per kind rather than one per dispatch site.
-  static constexpr const char *kAddMove = ::tessera::spacetime::AddMove::kMoveType;
-  static constexpr const char *kRemoveMove =
-      ::tessera::spacetime::RemoveMove::kMoveType;
-  static constexpr const char *kFlipMove =
-      ::tessera::spacetime::FlipMove::kMoveType;
-  static constexpr const char *kIFlipMove =
-      ::tessera::spacetime::IFlipMove::kMoveType;
+  static constexpr const char *ADD_MOVE = ::tessera::spacetime::AddMove::MOVE_TYPE;
+  static constexpr const char *REMOVE_MOVE =
+      ::tessera::spacetime::RemoveMove::MOVE_TYPE;
+  static constexpr const char *FLIP_MOVE =
+      ::tessera::spacetime::FlipMove::MOVE_TYPE;
+  static constexpr const char *IFLIP_MOVE =
+      ::tessera::spacetime::IFlipMove::MOVE_TYPE;
   /// Surgical kinds, owned here: they are `SurgicalCone` operations reached only
   /// through this draw, with no other definition to alias.
-  static constexpr const char *kConeOut = "cone_out";
-  static constexpr const char *kConeIn = "cone_in";
-  static constexpr const char *kNoop = "noop";
+  static constexpr const char *CONE_OUT = "cone_out";
+  static constexpr const char *CONE_IN = "cone_in";
+  static constexpr const char *NOOP = "noop";
   /// The two disposition moves (#613).
-  static constexpr const char *kConeInTimelike = "cone_in_timelike";
-  static constexpr const char *kFlipDisposition = "flip_disposition";
+  static constexpr const char *CONE_IN_TIMELIKE = "cone_in_timelike";
+  static constexpr const char *FLIP_DISPOSITION = "flip_disposition";
 
-  /// A `kFlipDisposition` payload names one edge by its two endpoint vertex ids.
-  static constexpr std::size_t kEdgeEndpointCount = 2;
+  /// A `FLIP_DISPOSITION` payload names one edge by its two endpoint vertex ids.
+  static constexpr std::size_t EDGE_ENDPOINT_COUNT = 2;
 
   /// True when \p payload names an edge — exactly two endpoint vertex ids. Reads
   /// as the question being asked, where a bare `size() == 2` does not.
   [[nodiscard]] static bool payloadNamesAnEdge(
       const std::vector<std::uint64_t> &payload) {
-    return payload.size() == kEdgeEndpointCount;
+    return payload.size() == EDGE_ENDPOINT_COUNT;
   }
 
   /// Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS (#613): a
@@ -189,14 +189,19 @@ class MultiCobordism {
   /// `Re(2β·H̄·g)` — the real part of the Wirtinger direction. Every trial is
   /// constructed exactly real, so **`Im ℓ² ≡ 0` holds for all time by construction**
   /// — no writer of `Im ℓ²` exists anywhere in the dynamics, nothing is enforced at
-  /// runtime, and the invariant is proven by the suite tests. The line search accepts
-  /// every step that lowers `F`, however little — there is no improvement
-  /// threshold, since a threshold stops descent while `F` is still decreasable and
-  /// criterion scales with the objective rather than the absolute `convergenceTolerance_`
-  /// the surgery stages use (for `F ≈ 100` that absolute `1e-9` accepted ~`1e-11` relative
-  /// steps — the rounding floor). "No line-search step beats the threshold" is the
-  /// no-downhill-direction stop; `maxIters` is the budget cap. `lastStage2Outcome()` reports
-  /// which of the two ended the run. Returns the `F` trace.
+  /// runtime, and the invariant is proven by the suite tests.
+  ///
+  /// The line search takes **every step that lowers `F`, however little**. There is no
+  /// improvement threshold: any threshold abandons a descent while `F` is still
+  /// decreasable, which is a stop for a reason that is neither reaching the target nor
+  /// running out of downhill. Among the halving ladder's rungs it keeps the **best**,
+  /// not the first that improves.
+  ///
+  /// The run ends in exactly one of three ways, reported by `lastStage2Outcome()`:
+  /// `F <= convergenceTarget` (`Converged` — the objective is met), no rung of the
+  /// ladder lowers `F` while `F` is still above target (`Stalled` — a local minimum at
+  /// non-zero value, which is a FAILURE to converge), or the `maxIters` budget runs out
+  /// with `F` still descendable (`Truncated`). Returns the `F` trace.
   ///
   /// Trials are UNBOUNDED on the real axis — fully Lorentzian, no clamp, no causal
   /// guard (#565): a trial `Re ℓ²` may land spacelike, timelike, or lightlike (either
@@ -209,7 +214,7 @@ class MultiCobordism {
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05,
                                   double convergenceTarget =
-                                      kDefaultConvergenceTarget);
+                                      DEFAULT_CONVERGENCE_TARGET);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
@@ -256,12 +261,7 @@ class MultiCobordism {
   [[nodiscard]] const std::vector<BoundaryBlock> &outputs() const {
     return outputBlocks_;
   }
-  /// Whether the last `runStage2` ended on the relative-tolerance stationarity test (no
-  /// hitting the `maxIters` budget cap — `false`. `true` means **real-manifold
-  /// stationarity, `δF = 0` along real signed-ℓ² perturbations**: the exact
-  /// on-manifold gradient direction `Re(2β·H̄·g)` buys no further descent (#589).
-  /// Lets a caller report "stopped: stationary" vs "stopped: budget". `false` before
-  /// the first `runStage2`.
+
   /// Backtracking halvings the stage-2 line search will try before concluding
   /// there is no downhill direction. From `alpha0 = 0.05` this reaches a step
   /// scale of `0.05 * 2^-64 ~ 3e-21`, far below the point at which a step
@@ -269,10 +269,10 @@ class MultiCobordism {
   /// underflowed the geometry, not that it was merely small. The previous value
   /// of 24 bottomed out at `~3e-9`, which could stop a descent that was still
   /// available.
-  static constexpr int kMaxLineSearchHalvings = 64;
+  static constexpr int MAX_LINE_SEARCH_HALVINGS = 64;
 
   /// The value `F` must reach for `runStage2` to report `Converged`.
-  static constexpr double kDefaultConvergenceTarget = 1e-15;
+  static constexpr double DEFAULT_CONVERGENCE_TARGET = 1e-15;
 
   /// How the last `runStage2` ended. Convergence means the objective REACHED ITS
   /// TARGET; a descent that merely ran out of downhill is `Stalled`, which is a

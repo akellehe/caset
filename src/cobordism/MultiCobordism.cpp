@@ -35,7 +35,7 @@ using ::tessera::simulations::ReggeSolver;
 using complexd = std::complex<double>;
 
 namespace {
-constexpr int kFrameworkDimension = 4;  // framework dimension (closed S^4 host)
+constexpr int FRAMEWORK_DIMENSION = 4;  // framework dimension (closed S^4 host)
 
 // Sorted vertex-id tuple of a top simplex.
 std::vector<std::uint64_t> topTuple(const ::tessera::mesh::Simplex &simplex) {
@@ -237,7 +237,7 @@ std::shared_ptr<Spacetime> MultiCobordism::subcomplexWithinVertexSet(
       cellsInsideVertexSet.push_back(std::move(cellVertexIds));
   }
   if (cellsInsideVertexSet.empty()) return nullptr;
-  return Spacetime::fromCells(kFrameworkDimension, cellsInsideVertexSet, 1.0,
+  return Spacetime::fromCells(FRAMEWORK_DIMENSION, cellsInsideVertexSet, 1.0,
                               0.0);
 }
 
@@ -327,7 +327,7 @@ MultiCobordism::Snapshot MultiCobordism::snapshot() const {
 
 std::shared_ptr<Spacetime> MultiCobordism::build(
     const Snapshot &complexSnapshot) const {
-  auto rebuiltSpacetime = Spacetime::fromCells(kFrameworkDimension,
+  auto rebuiltSpacetime = Spacetime::fromCells(FRAMEWORK_DIMENSION,
                                                complexSnapshot.first, 1.0, 0.0);
   for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
     const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
@@ -349,11 +349,11 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
   // configuration where the deficit angles and dual volumes are singular, so the
   // Euclidean orthant is a trap. Measured: every edge stays spacelike and Im S = 0
   // through 110+ relaxation iterations.
-  static const char *baseMoveKinds[] = {kAddMove,  kRemoveMove, kFlipMove,
-                                        kIFlipMove, kConeOut,   kConeIn};
+  static const char *baseMoveKinds[] = {ADD_MOVE,  REMOVE_MOVE, FLIP_MOVE,
+                                        IFLIP_MOVE, CONE_OUT,   CONE_IN};
   static const char *dispositionMoveKinds[] = {
-      kAddMove, kRemoveMove,     kFlipMove,        kIFlipMove,
-      kConeOut, kConeIn,         kConeInTimelike,  kFlipDisposition};
+      ADD_MOVE, REMOVE_MOVE,     FLIP_MOVE,        IFLIP_MOVE,
+      CONE_OUT, CONE_IN,         CONE_IN_TIMELIKE,  FLIP_DISPOSITION};
   const char *const *moveKinds =
       shouldProposeDispositions_ ? dispositionMoveKinds : baseMoveKinds;
   const std::size_t nMoveKinds = shouldProposeDispositions_ ? 8u : 6u;
@@ -361,7 +361,7 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
 
   // Flip the disposition of one existing edge, chosen uniformly. The payload is
   // the edge's two vertex ids.
-  if (moveKind == kFlipDisposition) {
+  if (moveKind == FLIP_DISPOSITION) {
     std::vector<std::pair<std::uint64_t, std::uint64_t>> edgeEndpoints;
     if (spacetime.getEdgeList())
       for (const auto *edge : spacetime.getEdgeList()->toVector())
@@ -369,22 +369,22 @@ MultiCobordism::MoveSpec MultiCobordism::drawRandomMoveSpecification(
             edge->getTarget() != nullptr)
           edgeEndpoints.emplace_back(edge->getSource()->getId(),
                                      edge->getTarget()->getId());
-    if (edgeEndpoints.empty()) return {kNoop, {}};
+    if (edgeEndpoints.empty()) return {NOOP, {}};
     const auto &chosen =
         edgeEndpoints[randomNumberGenerator_() % edgeEndpoints.size()];
-    return {kFlipDisposition, {chosen.first, chosen.second}};
+    return {FLIP_DISPOSITION, {chosen.first, chosen.second}};
   }
-  if (moveKind == kAddMove || moveKind == kRemoveMove ||
-      moveKind == kFlipMove || moveKind == kIFlipMove)
+  if (moveKind == ADD_MOVE || moveKind == REMOVE_MOVE ||
+      moveKind == FLIP_MOVE || moveKind == IFLIP_MOVE)
     return {moveKind,
             {static_cast<std::uint64_t>(randomNumberGenerator_() % (1u << 31))}};
   std::vector<std::vector<std::uint64_t>> topCellTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     topCellTuples.push_back(topTuple(*topSimplex));
-  if (topCellTuples.empty()) return {kNoop, {}};
+  if (topCellTuples.empty()) return {NOOP, {}};
   const auto &chosenCell =
       topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
-  if (moveKind == kConeOut) return {kConeOut, chosenCell};
+  if (moveKind == CONE_OUT) return {CONE_OUT, chosenCell};
   // cone_in and cone_in_timelike share a payload (the facet to cone onto); only
   // the apex-edge disposition differs when applied.
   const std::size_t droppedVertexIndex =
@@ -401,23 +401,23 @@ bool MultiCobordism::applyMoveSpecification(
     const std::shared_ptr<Spacetime> &spacetime,
     const MoveSpec &moveSpecification) {
   const auto &moveKind = moveSpecification.first;
-  if (moveKind == kNoop) return false;
+  if (moveKind == NOOP) return false;
   bool moveWasApplied = false;
-  if (moveKind == kAddMove || moveKind == kRemoveMove ||
-      moveKind == kFlipMove || moveKind == kIFlipMove) {
+  if (moveKind == ADD_MOVE || moveKind == REMOVE_MOVE ||
+      moveKind == FLIP_MOVE || moveKind == IFLIP_MOVE) {
     std::mt19937 moveRandomEngine(
         static_cast<std::uint32_t>(moveSpecification.second[0]));
     using ::tessera::spacetime::PachnerMode;
-    if (moveKind == kAddMove) {
+    if (moveKind == ADD_MOVE) {
       ::tessera::spacetime::AddMove pachnerMove(
           spacetime.get(), &moveRandomEngine, false, PachnerMode::PreGeometric,
           false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
-    } else if (moveKind == kRemoveMove) {
+    } else if (moveKind == REMOVE_MOVE) {
       ::tessera::spacetime::RemoveMove pachnerMove(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
-    } else if (moveKind == kFlipMove) {
+    } else if (moveKind == FLIP_MOVE) {
       ::tessera::spacetime::FlipMove pachnerMove(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
@@ -426,10 +426,10 @@ bool MultiCobordism::applyMoveSpecification(
           spacetime.get(), &moveRandomEngine, PachnerMode::PreGeometric, false);
       moveWasApplied = pachnerMove.propose() && pachnerMove.apply();
     }
-  } else if (moveKind == kConeOut) {
+  } else if (moveKind == CONE_OUT) {
     moveWasApplied =
         SurgicalCone(spacetime.get()).coneOut(moveSpecification.second).first;
-  } else if (moveKind == kFlipDisposition) {
+  } else if (moveKind == FLIP_DISPOSITION) {
     // #613: negate one edge's squared length, carrying it across the light cone.
     // Spacelike <-> timelike is a DISCRETE step stage 2 cannot take (it would have
     // to pass through the singular l^2 = 0), which is why it is a move. Not gated
@@ -450,7 +450,7 @@ bool MultiCobordism::applyMoveSpecification(
   } else {
     moveWasApplied = SurgicalCone(spacetime.get())
                          .coneIn(moveSpecification.second,
-                                 /*timelike=*/moveKind == kConeInTimelike)
+                                 /*timelike=*/moveKind == CONE_IN_TIMELIKE)
                          .first;
   }
   if (!moveWasApplied) return false;
@@ -552,14 +552,14 @@ void MultiCobordism::preconeCells(int count) {
   // pre-growth is sound (nothing inserted by fiat). On the single-Δ⁴ seed (a 4-ball)
   // a cone-in over a boundary facet is valid, so this enlarges the 4-ball; a draw
   // onto an already-saturated interior facet is rejected by the gate and retried.
-  constexpr int kAttemptsPerCone = 16;  // gated tries before giving up on one cone
+  constexpr int ATTEMPTS_PER_CONE = 16;  // gated tries before giving up on one cone
   for (int conedSoFar = 0; conedSoFar < count; ++conedSoFar) {
     std::vector<std::vector<std::uint64_t>> topCellTuples;
     for (const auto &topSimplex : spacetime_->getTopSimplices())
       topCellTuples.push_back(topTuple(*topSimplex));
     if (topCellTuples.empty()) return;  // nothing to cone onto
     bool coned = false;
-    for (int attempt = 0; attempt < kAttemptsPerCone && !coned; ++attempt) {
+    for (int attempt = 0; attempt < ATTEMPTS_PER_CONE && !coned; ++attempt) {
       const auto &chosenCell =
           topCellTuples[randomNumberGenerator_() % topCellTuples.size()];
       const std::size_t droppedVertexIndex =
@@ -570,7 +570,7 @@ void MultiCobordism::preconeCells(int count) {
         if (vertexIndex != droppedVertexIndex)
           coneInFace.push_back(chosenCell[vertexIndex]);
       auto candidateSpacetime = build(snapshot());
-      if (applyMoveSpecification(candidateSpacetime, {kConeIn, coneInFace})) {
+      if (applyMoveSpecification(candidateSpacetime, {CONE_IN, coneInFace})) {
         spacetime_ = build(snapshotOf(*candidateSpacetime));
         coned = true;
       }
@@ -610,7 +610,7 @@ void MultiCobordism::growBoundaryRegions() {
 std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
                                                  int patience, bool growBoundaries) {
   // The register is "carried" (converged) once the summed r_U is essentially zero.
-  constexpr double kRegisterCarriedTolerance = 1e-3;
+  constexpr double REGISTER_CARRIED_TOLERANCE = 1e-3;
   std::vector<double> objectiveTrace = {objective()};
   int trapDoorGrows = 0;   // consecutive cone-ins since the last improving move
   Snapshot burstStart;     // complex state before the current unproductive grow burst
@@ -646,7 +646,7 @@ std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
     // No move lowered the objective. If the register is already carried, that IS
     // convergence — halt (the trap door is unnecessary, and growing further would
     // only disturb the carried state).
-    if (rU(spacetime_) < kRegisterCarriedTolerance) break;
+    if (rU(spacetime_) < REGISTER_CARRIED_TOLERANCE) break;
     // TRAP DOOR: grow via a gated cone-in so the optimizer escapes a too-small
     // complex instead of giving up.
     if (trapDoorGrows == 0) burstStart = snapshot();   // remember the pre-burst state
@@ -758,7 +758,7 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     bool objectiveImproved = false;
     double bestTrialObjective = currentObjective;
     Eigen::VectorXd bestTrialLengths;
-    for (int lineSearchIndex = 0; lineSearchIndex < kMaxLineSearchHalvings;
+    for (int lineSearchIndex = 0; lineSearchIndex < MAX_LINE_SEARCH_HALVINGS;
          ++lineSearchIndex) {
       for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
         // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
@@ -813,8 +813,8 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
 
 int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen) {
   if (registerDegrees_.empty()) return 0;
-  constexpr int kMaxCandidates = 40;  // bound the scan; interior-first surfaces openers early
-  constexpr int kProbeOpeners = 3;    // stop once a few openers are in hand
+  constexpr int MAX_CANDIDATES = 40;  // bound the scan; interior-first surfaces openers early
+  constexpr int PROBE_OPENERS = 3;    // stop once a few openers are in hand
   const int registerDegree = registerDegrees_.front();
   auto spacetime = spacetime_;
   const auto pinned = pinnedBoundaryVertices();
@@ -858,7 +858,7 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
     int openersScanned = 0;
     SurgicalCone cone(spacetime.get());
     for (const auto &cell : cells) {
-      if (candidatesScanned++ >= kMaxCandidates) break;
+      if (candidatesScanned++ >= MAX_CANDIDATES) break;
       if (!cone.coneOut(cell).first) continue;  // gate rejected; nothing applied
       const bool opensHole =
           !strandsPinned(*spacetime, pinned) &&
@@ -872,7 +872,7 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
         ++openersScanned;
       }
       cone.rollback();
-      if (opensHole && openersScanned >= kProbeOpeners) break;
+      if (opensHole && openersScanned >= PROBE_OPENERS) break;
     }
     if (bestCell.empty()) break;  // no opener lowers rU
     if (!cone.coneOut(bestCell).first) break;
@@ -887,7 +887,7 @@ int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen)
 
 int MultiCobordism::directedConeIn(int maxClose) {
   if (registerDegrees_.empty()) return 0;
-  constexpr int kMaxCandidates = 40;
+  constexpr int MAX_CANDIDATES = 40;
   const int registerDegree = registerDegrees_.front();
   auto spacetime = spacetime_;
   int closed = 0;
@@ -917,7 +917,7 @@ int MultiCobordism::directedConeIn(int maxClose) {
     int candidatesScanned = 0;
     SurgicalCone cone(spacetime.get());
     for (const auto &facet : capFacets) {
-      if (candidatesScanned++ >= kMaxCandidates) break;
+      if (candidatesScanned++ >= MAX_CANDIDATES) break;
       if (!cone.coneIn(facet).first) continue;
       if (emergentHoles(*spacetime, registerDegree).size() < holeCountBefore) {
         const double candidateResidual = rU(spacetime);
