@@ -192,11 +192,40 @@ class MultiCobordism {
   [[nodiscard]] static double residualOfTargetStateAgainstHarmonic(
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
       const std::vector<std::complex<double>> &targetState);
+  /// The exact analytic gradient `∂r_state/∂ℓ²_e` of
+  /// `residualOfTargetStateAgainstHarmonic`, aligned to
+  /// `spacetime->getEdgeList()->toVector()`. Reproduces the value's hole
+  /// truncation, zero-fill and relabeling argmin, then differentiates the selected
+  /// relabeling through `EigenstateSynthesis::periodGapForPeriodsGradient`.
+  ///
+  /// Exactly zero where the value is the constant full leak (no register at this
+  /// degree, or no emergent holes) — the derivative of a constant, not a guard. The
+  /// relabeling argmin is locally constant, so this is the true derivative away
+  /// from a tie between relabelings; at a tie the functional is genuinely
+  /// non-smooth and `runStage2`'s line search arbitrates.
+  [[nodiscard]] static std::vector<double> gradientOfTargetStateAgainstHarmonic(
+      const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+      const std::vector<std::complex<double>> &targetState);
 
   // ---- objective ----
   /// The per-block register residual summed over `registerDegrees_`: `Σ r_U(boundary
   /// block)` over EVERY input and output block (the symmetric cobordism objective).
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
+  /// The exact analytic gradient `∂r_U/∂ℓ²_e` of `rU`, aligned to
+  /// `st->getEdgeList()->toVector()` — the register half of `runStage2`'s descent
+  /// direction, so the geometric relaxation can PURSUE a carrying metric instead of
+  /// only vetoing steps that break one.
+  ///
+  /// It mirrors `rU`'s branches term for term, with one asymmetry that is a fact
+  /// about `rU` and not a simplification here: a boundary BLOCK's residual is read
+  /// off `subcomplexWithinVertexSet`, which rebuilds the block through
+  /// `Spacetime::fromCells(..., weight = 1, phase = 0)` — a UNIFORM metric that
+  /// discards the ambient `ℓ²`. Every block term is therefore constant in `ℓ²` and
+  /// contributes exactly zero. All of `rU`'s metric dependence lives in the terms
+  /// read off the WHOLE complex: the single-output case, and the bare-objective
+  /// case with nothing built yet.
+  [[nodiscard]] std::vector<double> rUGradient(
+      const std::shared_ptr<Spacetime> &st) const;
   /// `F = reggeActionGradient (Regge extremization) + gamma * rU`.
   [[nodiscard]] double objective() const;
   /// Weight on each INPUT block's residual in `rU` (the output/whole term keeps

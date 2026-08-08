@@ -472,10 +472,22 @@ class EigenstateSynthesis {
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 
-    /// The analytic gradient of `periodGapForPeriods` (holes routed to
-    /// `periodGapForLoopsGradient`), in `cellSimplices()` order.
-    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()` or a
-    ///   hole has \f$ \ne 3 \f$ vertices.
+    /// **Arbitrary-degree** exact analytic gradient
+    /// \f$ \partial r_\psi/\partial l^2_e \f$ of the period gap, in `ChainComplex`
+    /// 1-cell (edge) order. Routed by degree exactly as `residualForPeriodsGradient`
+    /// is: at \f$ k = 1 \f$ (removed-triangle holes) through the fast low-rank
+    /// edge-loop core `periodGapForLoopsGradient`; at \f$ k \ge 2 \f$ through the
+    /// degree-generic `periodGapGradientOverHoles` (\f$ M = L_k \f$ and the per-edge
+    /// analytic \f$ \partial L_k/\partial l^2 \f$). Certified by the exact scale
+    /// identity \f$ \sum_e l^2_e\,\partial r_\psi/\partial l^2_e = 0 \f$: a uniform
+    /// \f$ l^2 \to s\,l^2 \f$ takes \f$ L_k \to s^{-1/2}L_k \f$, which leaves its
+    /// eigenvectors — and therefore every period — unchanged, so the gap is
+    /// homogeneous of degree **0** (contrast the leak'd \f$ r_U \f$, degree
+    /// \f$ -1 \f$). The register residual is a pure SHAPE functional: it has no
+    /// component along the conformal direction.
+    /// @throws std::runtime_error if `targetPeriods.size() != holes.size()`, if a
+    ///   hole has \f$ \ne k+2 \f$ vertices, or at \f$ k = 0 \f$ (the vertex
+    ///   operator \f$ L_0 = D - A \f$ is a different, genuinely complex operator).
     [[nodiscard]] std::vector<double> periodGapForPeriodsGradient(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
@@ -751,6 +763,23 @@ class EigenstateSynthesis {
     // residualForPeriodsGradient (k = 0 dispatches to periodGradientDegreeZero);
     // value-identical to periodGradientOverLoops at k = 1.
     [[nodiscard]] std::vector<double> periodGradientGeneral(
+        const std::vector<std::vector<std::uint64_t>> &holes,
+        const std::vector<std::complex<double>> &targetPeriods) const;
+
+    // Degree-generic d r_psi / d l^2 (the period GAP, no leak) over
+    // removed-(k+1)-cell holes: the k >= 2 path of periodGapForPeriodsGradient,
+    // the gap sibling of periodGradientGeneral. Same M = L_k, Q, eigensplit and
+    // per-edge dL_k/dl^2, but the score is ||A c - t||^2 with A = Q U_n, so the
+    // envelope theorem (A^dagger r = 0) leaves only 2 Re( r^dagger (Q dU_n) c ) —
+    // no leak column, no dpsi chain. The fit is the SVD pseudo-inverse (min-norm,
+    // matching lstsqOverReadout exactly, and rank-deficiency-safe where the k >= 1
+    // r_U cores' normal-equations inverse would be singular); the constant-rank
+    // Golub-Pereyra derivative of A A^+ reduces to that same expression.
+    //
+    // NB the null tolerance here is harmonicMatrix's 1e-9, NOT the 1e-7 the r_U
+    // cores use: this gradient must differentiate the harmonic set the VALUE
+    // (assembleRegisterReadout -> harmonicMatrix(k, 1e-9)) actually reads.
+    [[nodiscard]] std::vector<double> periodGapGradientOverHoles(
         const std::vector<std::vector<std::uint64_t>> &holes,
         const std::vector<std::complex<double>> &targetPeriods) const;
 

@@ -2120,9 +2120,139 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
 std::vector<double> EigenstateSynthesis::periodGapForPeriodsGradient(
     const std::vector<std::vector<std::uint64_t>> &holes,
     const std::vector<cd> &targetPeriods) const {
-  return periodGapForLoopsGradient(
-      holeLoops(holes, "EigenstateSynthesis::periodGapForPeriodsGradient"),
-      targetPeriods);
+  // Routed by degree exactly as residualForPeriodsGradient: the fast low-rank
+  // edge-loop core on triangle holes, the degree-generic core above that. k = 0
+  // is a different operator (complex L_0 = D - A) and has no gap core.
+  if (k_ == 0)
+    throw std::runtime_error(
+        "EigenstateSynthesis::periodGapForPeriodsGradient: the period-gap "
+        "gradient needs the metric Hodge Laplacian (degree k >= 1); this "
+        "synthesis is degree 0, where the operator is the complex Hermitian "
+        "L_0 = D - A and there is no gap core.");
+  if (k_ == 1)
+    return periodGapForLoopsGradient(
+        holeLoops(holes, "EigenstateSynthesis::periodGapForPeriodsGradient"),
+        targetPeriods);
+  return periodGapGradientOverHoles(holes, targetPeriods);
+}
+
+std::vector<double> EigenstateSynthesis::periodGapGradientOverHoles(
+    const std::vector<std::vector<std::uint64_t>> &holes,
+    const std::vector<cd> &targetPeriods) const {
+  // Arbitrary-degree exact d r_psi / d l^2 over the removed-(k+1)-cell holes.
+  // M = L_k and the per-edge dL_k/dl^2 (HodgeLaplacian::laplacianGradient, on
+  // Simplex::volumeGradient) through first-order eigenvector perturbation; the
+  // period covector Q is the assembleRegisterReadout facet-walk convention, so
+  // A = Q U_n is exactly the period matrix the value builds. Certified by the
+  // exact scale identity Sum_e l^2_e d r_psi/d l^2_e = 0.
+  using Eigen::Index;
+  using Eigen::MatrixXcd;
+  using Eigen::MatrixXd;
+  using Eigen::VectorXcd;
+  using Eigen::VectorXd;
+  const std::size_t nk = order_;  // # k-cells (rows/cols of L_k)
+  const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
+  const std::vector<std::vector<std::uint64_t>> edges1 = cc.kSimplexVertices(1);
+  std::vector<double> grad(edges1.size(), 0.0);  // d r_psi / d l^2_e, 1-cell order
+  const std::size_t m = holes.size();
+  if (nk == 0 || m == 0) return grad;
+  if (targetPeriods.size() != m)
+    throw std::runtime_error(
+        "EigenstateSynthesis::periodGapGradientOverHoles: " +
+        std::to_string(targetPeriods.size()) + " target periods for " +
+        std::to_string(m) + " holes");
+  // harmonicMatrix's tolerance, so this differentiates the harmonic set the
+  // value (assembleRegisterReadout) reads — not the r_U cores' 1e-7 set.
+  static constexpr double kNullTol = 1e-9;
+  const Index N = static_cast<Index>(nk);
+
+  // ---- M = L_k (symmetric metric Hodge Laplacian) ----
+  const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(k_, /*metric=*/true);
+  MatrixXd M(N, N);
+  for (std::size_t i = 0; i < nk; ++i)
+    for (std::size_t j = 0; j < nk; ++j)
+      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * nk + j].real();
+
+  // ---- Q (period covector, m x nk), the assembleRegisterReadout boundary
+  // convention: a hole is a removed (k+1)-cell; its facets (drop v_j, sign
+  // (-1)^j) are k-cells. No leak column — the gap keeps psi a pure harmonic. ----
+  std::map<std::vector<std::uint64_t>, std::size_t> col;
+  for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
+  const std::size_t hv = static_cast<std::size_t>(k_) + 2;
+  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  for (std::size_t q = 0; q < m; ++q) {
+    std::vector<std::uint64_t> h = holes[q];
+    std::sort(h.begin(), h.end());
+    if (h.size() != hv)
+      throw std::runtime_error(
+          "EigenstateSynthesis::periodGapGradientOverHoles: hole has " +
+          std::to_string(h.size()) + " vertices, expected " + std::to_string(hv));
+    for (std::size_t j = 0; j < hv; ++j) {
+      std::vector<std::uint64_t> f;
+      f.reserve(hv - 1);
+      for (std::size_t i = 0; i < hv; ++i)
+        if (i != j) f.push_back(h[i]);
+      const auto it = col.find(f);
+      if (it == col.end())
+        throw std::runtime_error(
+            "EigenstateSynthesis::periodGapGradientOverHoles: a hole facet is not "
+            "a k-cell of the complex");
+      Q(static_cast<Index>(q), static_cast<Index>(it->second)) +=
+          (j % 2 == 0) ? 1.0 : -1.0;
+    }
+  }
+
+  // ---- harmonic (null) / non-null eigensplit of M ----
+  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(M);
+  const VectorXd lam = eig.eigenvalues();
+  const MatrixXd U = eig.eigenvectors();
+  std::vector<Index> nullIdx, nnIdx;
+  for (Index i = 0; i < N; ++i)
+    (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
+  const Index nd = static_cast<Index>(nullIdx.size());
+  const Index nnd = static_cast<Index>(nnIdx.size());
+  if (nd == 0) return grad;  // no harmonics -> nothing carried, gap is constant
+  MatrixXd Un(N, nd), Unn(N, nnd);
+  for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
+  for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
+  VectorXd invlam(nnd);
+  for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
+
+  // ---- the SVD pseudo-inverse fit (min-norm, as lstsqOverReadout) ----
+  VectorXcd target(static_cast<Index>(m));
+  for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
+  const MatrixXcd A = Q.cast<cd>() * Un.cast<cd>();  // m x nd
+  Eigen::JacobiSVD<MatrixXcd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  const Index rank = svd.rank();
+  MatrixXcd Aplus = MatrixXcd::Zero(nd, static_cast<Index>(m));
+  if (rank > 0) {
+    const MatrixXcd Ur = svd.matrixU().leftCols(rank);
+    const MatrixXcd Vr = svd.matrixV().leftCols(rank);
+    const VectorXd sr = svd.singularValues().head(rank);
+    Aplus = Vr * sr.cwiseInverse().asDiagonal() * Ur.adjoint();
+  }
+  const VectorXcd c = Aplus * target;
+  const VectorXcd r = A * c - target;  // the uncarried remainder
+
+  // ---- per-edge analytic gradient: dM_e = laplacianGradient, dense perturbation.
+  // The harmonic-subspace perturbation dUn, then dA = Q dUn; least-squares
+  // optimality A^dagger r = 0 kills the dc term, leaving 2 Re( r^dagger dA c ). ----
+  const HodgeLaplacian hl(st_);
+  for (std::size_t je = 0; je < edges1.size(); ++je) {
+    const std::vector<double> dMflat =
+        hl.laplacianGradient(k_, edges1[je][0], edges1[je][1]);
+    if (dMflat.empty()) continue;
+    MatrixXd dM(N, N);
+    for (std::size_t i = 0; i < nk; ++i)
+      for (std::size_t j = 0; j < nk; ++j)
+        dM(static_cast<Index>(i), static_cast<Index>(j)) = dMflat[i * nk + j];
+    // dUn = Unn diag(-1/lam) Unn^T dM Un
+    const MatrixXd core = (Unn.transpose() * dM) * Un;        // nnd x nd
+    const MatrixXd dUn = Unn * (invlam.asDiagonal() * core);  // N x nd
+    const MatrixXd dA = Q * dUn;                              // m x nd
+    grad[je] = 2.0 * (r.dot(dA.cast<cd>() * c)).real();
+  }
+  return grad;
 }
 
 

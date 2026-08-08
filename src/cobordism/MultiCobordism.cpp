@@ -221,6 +221,111 @@ double MultiCobordism::residualOfTargetStateAgainstHarmonic(
   return bestResidual;
 }
 
+std::vector<double> MultiCobordism::gradientOfTargetStateAgainstHarmonic(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    const std::vector<complexd> &targetState) {
+  // d r_state / d l^2_e, aligned to the EdgeList (runStage2's edge order).
+  const auto edges = spacetime->getEdgeList()->toVector();
+  std::vector<double> gradient(edges.size(), 0.0);
+
+  // Every early return below is a branch where the VALUE is the constant full
+  // leak ||t||^2 — no register at this degree, or no emergent holes — so the
+  // derivative is exactly zero. Mirrors residualOfTargetStateAgainstHarmonic.
+  const std::size_t targetDimension = targetState.size();
+  const auto bettiNumbers = betti(*spacetime);
+  if (registerDegree < 0 ||
+      registerDegree >= static_cast<int>(bettiNumbers.size()))
+    return gradient;
+  const int degreeBettiNumber = bettiNumbers[registerDegree];
+  if (degreeBettiNumber == 0) return gradient;
+  auto emergentHoleTuples = emergentHoles(*spacetime, registerDegree);
+  if (emergentHoleTuples.empty()) return gradient;
+  if (emergentHoleTuples.size() > targetDimension)
+    emergentHoleTuples.resize(targetDimension);
+  const std::size_t usableHoleCount = emergentHoleTuples.size();
+
+  EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
+  const auto flattenedCyclePeriods =
+      eigenstateSynthesis.cyclePeriods(emergentHoleTuples);  // bk x m, row-major
+
+  // The relabeling argmin. DELIBERATELY duplicated from the value rather than
+  // shared: the value is load-bearing on six call sites, and this only has to
+  // AGREE with it, not restructure it. Keep the two in sync — same zero-filled
+  // (d x bk) period matrix, same SVD least-squares fit, same permutation walk.
+  Eigen::MatrixXcd periodMatrixTransposed = Eigen::MatrixXcd::Zero(
+      static_cast<int>(targetDimension), degreeBettiNumber);
+  for (int bettiRowIndex = 0; bettiRowIndex < degreeBettiNumber; ++bettiRowIndex)
+    for (std::size_t holeColumnIndex = 0; holeColumnIndex < usableHoleCount;
+         ++holeColumnIndex)
+      periodMatrixTransposed(static_cast<int>(holeColumnIndex), bettiRowIndex) =
+          flattenedCyclePeriods[static_cast<std::size_t>(bettiRowIndex) *
+                                    usableHoleCount +
+                                holeColumnIndex];
+  Eigen::VectorXcd targetVector(targetDimension);
+  for (std::size_t componentIndex = 0; componentIndex < targetDimension;
+       ++componentIndex)
+    targetVector(componentIndex) = targetState[componentIndex];
+
+  std::vector<int> targetPermutation(targetDimension);
+  std::iota(targetPermutation.begin(), targetPermutation.end(), 0);
+  std::vector<int> bestPermutation = targetPermutation;
+  double bestResidual = std::numeric_limits<double>::infinity();
+  Eigen::BDCSVD<Eigen::MatrixXcd> periodSvd(
+      periodMatrixTransposed, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  do {
+    Eigen::VectorXcd permutedTargetVector(targetDimension);
+    for (std::size_t componentIndex = 0; componentIndex < targetDimension;
+         ++componentIndex)
+      permutedTargetVector(componentIndex) =
+          targetVector(targetPermutation[componentIndex]);
+    const Eigen::VectorXcd leastSquaresCoefficients =
+        periodSvd.solve(permutedTargetVector);
+    const double permutationResidual =
+        (periodMatrixTransposed * leastSquaresCoefficients -
+         permutedTargetVector)
+            .squaredNorm();
+    if (permutationResidual < bestResidual) {
+      bestResidual = permutationResidual;
+      bestPermutation = targetPermutation;
+    }
+  } while (std::next_permutation(targetPermutation.begin(),
+                                 targetPermutation.end()));
+
+  // Only the USED hole rows carry a derivative: the zero-filled rows past
+  // usableHoleCount are structurally zero, and the fit they induce is the same
+  // one the used rows alone induce (a zero row adds a constant to the residual
+  // and nothing to the normal equations).
+  std::vector<complexd> usedTargetPeriods(usableHoleCount);
+  for (std::size_t holeIndex = 0; holeIndex < usableHoleCount; ++holeIndex)
+    usedTargetPeriods[holeIndex] =
+        targetState[static_cast<std::size_t>(bestPermutation[holeIndex])];
+  const auto periodGapGradient = eigenstateSynthesis.periodGapForPeriodsGradient(
+      emergentHoleTuples, usedTargetPeriods);
+
+  // periodGapForPeriodsGradient answers in ChainComplex 1-cell order; runStage2
+  // walks the EdgeList. Map by sorted endpoint pair.
+  const auto oneCells =
+      ChainComplex::fromSpacetime(*spacetime).kSimplexVertices(1);
+  std::map<std::pair<std::uint64_t, std::uint64_t>, double> gradientByEndpoints;
+  for (std::size_t cellIndex = 0;
+       cellIndex < oneCells.size() && cellIndex < periodGapGradient.size();
+       ++cellIndex)
+    gradientByEndpoints[{oneCells[cellIndex][0], oneCells[cellIndex][1]}] =
+        periodGapGradient[cellIndex];
+  for (std::size_t edgeIndex = 0; edgeIndex < edges.size(); ++edgeIndex) {
+    const auto *edge = edges[edgeIndex];
+    if (edge == nullptr || edge->getSource() == nullptr ||
+        edge->getTarget() == nullptr)
+      continue;
+    const std::uint64_t a = edge->getSource()->getId();
+    const std::uint64_t b = edge->getTarget()->getId();
+    const auto found =
+        gradientByEndpoints.find({std::min(a, b), std::max(a, b)});
+    if (found != gradientByEndpoints.end()) gradient[edgeIndex] = found->second;
+  }
+  return gradient;
+}
+
 std::shared_ptr<Spacetime> MultiCobordism::subcomplexWithinVertexSet(
     const std::shared_ptr<Spacetime> &spacetime,
     const std::set<std::uint64_t> &vertexSet) const {
@@ -293,6 +398,36 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
               spacetime, registerDegree, outputTarget);
   }
   return totalResidual;
+}
+
+std::vector<double> MultiCobordism::rUGradient(
+    const std::shared_ptr<Spacetime> &spacetime) const {
+  // Mirrors rU() branch for branch. The INPUT and OUTPUT BLOCK terms are absent
+  // here because their derivative is exactly zero, not because they are skipped:
+  // residualForBoundaryBlock reads each block off subcomplexWithinVertexSet,
+  // which rebuilds it via Spacetime::fromCells(..., weight = 1, phase = 0) — a
+  // UNIFORM metric that never copies the ambient l^2. A block's residual is
+  // therefore a constant function of the edge lengths being relaxed. All of rU's
+  // metric dependence is in the terms read off the WHOLE complex below, and
+  // inputResidualWeight_ multiplies only the (constant) block terms.
+  const auto edges = spacetime->getEdgeList()->toVector();
+  std::vector<double> totalGradient(edges.size(), 0.0);
+  const auto accumulate = [&totalGradient](const std::vector<double> &term) {
+    for (std::size_t edgeIndex = 0;
+         edgeIndex < totalGradient.size() && edgeIndex < term.size(); ++edgeIndex)
+      totalGradient[edgeIndex] += term[edgeIndex];
+  };
+  if (outputTargets_.size() == 1) {
+    for (int registerDegree : registerDegrees_)
+      accumulate(gradientOfTargetStateAgainstHarmonic(
+          spacetime, registerDegree, outputTargets_.front()));
+  } else if (inputBlocks_.empty() && outputBlocks_.empty()) {
+    for (int registerDegree : registerDegrees_)
+      for (const auto &outputTarget : outputTargets_)
+        accumulate(gradientOfTargetStateAgainstHarmonic(
+            spacetime, registerDegree, outputTarget));
+  }
+  return totalGradient;
 }
 
 double MultiCobordism::objective() const {
@@ -788,8 +923,18 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
     // real-valued F of a complex variable evaluated on the real axis,
     // dF/dx = 2 Re(dF/dz̄), so the on-manifold descent direction is the REAL
     // PART of the Wirtinger direction 2β(H̄·g) (#589).
-    const Eigen::VectorXd descentDirection =
+    //
+    // BOTH terms of F are descended (#630). Before, this was the Regge term
+    // alone and Gamma*r_U entered only through the line-search accept test
+    // below, so the relaxation could VETO a step that broke the register but
+    // never PURSUE one that carried it; every r_U reduction had to come from
+    // stage 1's random gated moves. rUGradient is the exact analytic
+    // d r_U / d l^2 in this same EdgeList order.
+    Eigen::VectorXd descentDirection =
         (beta * 2.0 * (hessianMatrix.conjugate() * gradientVector)).real();
+    const std::vector<double> residualGradient = rUGradient(spacetime_);
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      descentDirection(edgeIndex) += gamma_ * residualGradient[edgeIndex];
     Eigen::VectorXd squaredLengths(edgeCount);
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
       squaredLengths(edgeIndex) =

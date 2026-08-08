@@ -821,7 +821,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
       .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
                   py::arg("st"), py::arg("k"), py::arg("target"))
+      .def_static("r_state_gradient",
+                  &MultiCobordism::gradientOfTargetStateAgainstHarmonic,
+                  py::arg("st"), py::arg("k"), py::arg("target"),
+                  "Exact d r_state / d l^2 in st edge-list order; exactly zero "
+                  "where r_state is the constant full leak.")
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
+      .def("r_u_gradient", &MultiCobordism::rUGradient, py::arg("st"),
+           "Exact d r_U / d l^2 in st edge-list order -- the register half of "
+           "run_stage2's descent direction.")
       .def("objective", &MultiCobordism::objective)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
            py::arg("weight"))
