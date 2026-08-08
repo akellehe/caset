@@ -855,6 +855,37 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("n_candidate_moves") = 12, py::arg("patience") = 8,
            py::arg("grow_boundaries") = false,
            py::call_guard<py::gil_scoped_release>())
+      .def("run_unified", &MultiCobordism::runUnified, py::arg("max_steps") = 200,
+           py::arg("n_candidate_moves") = 12, py::arg("beta") = 1.0,
+           py::arg("alpha0") = 0.05, py::arg("convergence_target") = 1e-15,
+           py::call_guard<py::gil_scoped_release>(),
+           "The UNIFIED stage (#627): one stage, both kinds of move. Each step "
+           "prices every candidate -- combinatorial (Pachner moves and surgical "
+           "cones, changing topology) and geometric (a relaxation step, changing "
+           "only edge l^2) -- against the SAME objective F = beta*||grad S||^2 + "
+           "gamma*r_U, and commits whichever lowers F most. Stops when nothing "
+           "lowers F.\n\n"
+           "Both kinds are priced by the FULL objective, not by deltaF's incremental "
+           "sum over affected edges: those are different quantities, and a move "
+           "winning because of which estimator scored it would be an artifact of the "
+           "code rather than of the physics.\n\n"
+           "NO TRAP DOOR and no heuristic. run_stage1 grows the complex only via a "
+           "move committed WITHOUT having to lower F, wrapped in a patience counter "
+           "and a burst revert. None of that exists here. If no move lowers F that is "
+           "the finding, reported via last_unified_exhausted_moves.\n\n"
+           "Returns the F trace, one entry per committed move plus the initial value; "
+           "last_unified_move_kinds runs parallel to it.")
+      .def_property_readonly("last_unified_exhausted_moves",
+                             &MultiCobordism::lastUnifiedExhaustedMoves,
+                             "True iff the last run_unified stopped because no "
+                             "available move lowered F; False iff it ran out of "
+                             "max_steps. Convergence is NOT implied -- a drive with "
+                             "nowhere left to go while F is still large is stuck.")
+      .def_property_readonly("last_unified_move_kinds",
+                             &MultiCobordism::lastUnifiedMoveKinds,
+                             "The kind of move committed at each step of the last "
+                             "run_unified ('add'/'remove'/'flip'/'iflip'/'cone_out'/"
+                             "'cone_in'/'relax'), parallel to its returned trace.")
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
            py::arg("rel_tol") = 1e-9,

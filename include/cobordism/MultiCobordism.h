@@ -246,6 +246,58 @@ class MultiCobordism {
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05, double relTol = 1e-9);
 
+  /// **The unified stage (#627): ONE stage, both kinds of move.**
+  ///
+  /// Each step prices every candidate — combinatorial (Pachner moves and surgical
+  /// cones, changing the topology) and geometric (a relaxation step along the
+  /// on-manifold descent direction, changing only edge `ℓ²`) — against the SAME
+  /// objective `F = β‖∇S‖² + Γ·r_U`, and commits whichever lowers `F` most. When
+  /// nothing lowers `F`, the drive stops.
+  ///
+  /// **Why merge the stages.** `deltaF` prices a combinatorial move at the CURRENT,
+  /// UN-RELAXED metric, so a freshly grown cell is charged for curvature it has not
+  /// yet been allowed to relax: growth reads as a loss and undoing it reads as a
+  /// gain. Staged, the relaxation that would justify the growth cannot happen until
+  /// stage 2 — by which point stage 1 has already rejected it. Interleaving removes
+  /// that penalty at its source, because growth that pays off once relaxed can be
+  /// found by relaxing.
+  ///
+  /// **Both kinds are priced by the FULL objective**, not by `deltaF`'s incremental
+  /// sum over affected edges. Those are different quantities, and a combinatorial
+  /// move competing against a geometric one under different estimators would be
+  /// decided by the estimator rather than by the physics. This costs a full
+  /// `‖∇S‖²` evaluation per candidate and is the price of a meaningful comparison.
+  ///
+  /// **There is no trap door and no heuristic.** `runStage1` grows the complex only
+  /// through `trapDoorMove`, which commits a gated move WITHOUT requiring it to lower
+  /// `F` — an escape, with a patience counter and burst-revert around it. None of
+  /// that exists here: no manufactured move, no patience, no reseeding, no backoff.
+  /// If no available move lowers `F`, that is the finding and the drive reports it.
+  ///
+  /// Adding an escape would destroy the measurement this exists to make. The open
+  /// question is whether growth survives on its own once relaxation can compete for
+  /// the same step; a complex that grows because it was pushed answers nothing.
+  ///
+  /// Returns the `F` trace, one entry per committed move plus the initial value, so a
+  /// caller can animate the whole emergence rather than two disjoint phases.
+  std::vector<double> runUnified(int maxSteps = 200, int nCandidateMoves = 12,
+                                 double beta = 1.0, double alpha0 = 0.05,
+                                 double convergenceTarget = 1e-15);
+
+  /// What ended the last `runUnified`: `true` iff it stopped because no available move
+  /// lowered `F`, `false` iff it exhausted `maxSteps`. Convergence is NOT implied — a
+  /// drive with nowhere left to go while `F` is still large is stuck, not done.
+  [[nodiscard]] bool lastUnifiedExhaustedMoves() const {
+    return lastUnifiedExhaustedMoves_;
+  }
+
+  /// Which kind of move `runUnified` committed at each step, parallel to the trace it
+  /// returns. Lets a caller see whether the drive is building structure or settling
+  /// geometry at any point, which a single `F` curve cannot show.
+  [[nodiscard]] const std::vector<std::string> &lastUnifiedMoveKinds() const {
+    return lastUnifiedMoveKinds_;
+  }
+
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
   /// through the engine, not re-implemented by each consumer.
@@ -407,6 +459,10 @@ class MultiCobordism {
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
   bool lastStage2Stationary_ = false;
+  /// Set by `runUnified`: true iff it stopped because no move lowered `F`.
+  bool lastUnifiedExhaustedMoves_ = false;
+  /// The kind of move `runUnified` committed at each step, parallel to its trace.
+  std::vector<std::string> lastUnifiedMoveKinds_;
   std::vector<BoundaryBlock> inputBlocks_;
   std::vector<BoundaryBlock> outputBlocks_;
 };

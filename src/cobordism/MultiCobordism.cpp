@@ -715,6 +715,137 @@ std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
   return objectiveTrace;
 }
 
+std::vector<double> MultiCobordism::runUnified(int maxSteps,
+                                                int nCandidateMoves, double beta,
+                                                double alpha0,
+                                                double convergenceTarget) {
+  // ONE stage. Combinatorial and geometric candidates are priced against the SAME
+  // objective and the best is committed; when nothing lowers F the drive stops.
+  //
+  // There is no trap door here and no heuristic of any kind -- no move committed
+  // without lowering F, no patience counter, no burst revert, no reseeding, no
+  // backoff. runStage1 needs an escape because a combinatorial move is priced at the
+  // un-relaxed metric and freshly grown cells therefore always look like a loss;
+  // letting relaxation compete for the same step removes that penalty at its source,
+  // which is the whole point of merging the stages. Adding an escape back would
+  // destroy the measurement: a complex that grows because it was pushed says nothing
+  // about whether growth pays.
+  const auto fullObjectiveOf = [&](const std::shared_ptr<Spacetime> &candidate) {
+    return beta * reggeActionGradient(candidate) + gamma_ * rU(candidate);
+  };
+
+  lastUnifiedExhaustedMoves_ = false;
+  lastUnifiedMoveKinds_.clear();
+  std::vector<double> objectiveTrace = {fullObjectiveOf(spacetime_)};
+  double stepScale = alpha0;
+
+  for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex) {
+    const double currentObjective = objectiveTrace.back();
+    if (currentObjective <= convergenceTarget) break;   // the objective is MET
+
+    const auto currentSnapshot = snapshot();
+    double bestObjective = currentObjective;
+    Snapshot bestSnapshot;
+    std::string bestMoveKind;
+    bool foundImprovingMove = false;
+
+    // ---- combinatorial candidates ----
+    // Priced by the FULL objective on the candidate complex, NOT by deltaF's
+    // incremental sum over affected edges. deltaF and the geometric step measure
+    // different quantities, and a move that won a step because of which estimator
+    // scored it would be an artifact of the code rather than of the physics.
+    for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex) {
+      const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
+      auto candidateSpacetime = build(currentSnapshot);
+      if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
+      const double candidateObjective = fullObjectiveOf(candidateSpacetime);
+      if (candidateObjective < bestObjective) {
+        bestObjective = candidateObjective;
+        bestSnapshot = snapshotOf(*candidateSpacetime);
+        bestMoveKind = moveSpecification.first;
+        foundImprovingMove = true;
+      }
+    }
+
+    // ---- the geometric candidate ----
+    // One relaxation step along the exact on-manifold descent direction: for real F
+    // of a complex variable on the real axis dF/dx = 2 Re(dF/dz-bar), so the
+    // direction is Re(2*beta*H-bar*g) (#589). Trials are constructed exactly real, so
+    // Im l^2 == 0 holds by construction. Evaluated on a COPY, so a losing geometric
+    // trial cannot perturb the complex the combinatorial candidates were priced
+    // against.
+    {
+      auto geometricCandidate = build(currentSnapshot);
+      auto candidateEdges = geometricCandidate->getEdgeList()->toVector();
+      const std::size_t edgeCount = candidateEdges.size();
+      if (edgeCount > 0) {
+        ReggeSolver reggeSolver(geometricCandidate, MatterConfiguration());
+        const auto gradientComponents = reggeSolver.actionGradientExact();
+        const auto hessianRows = reggeSolver.actionHessianExact();
+        Eigen::VectorXcd gradientVector(edgeCount);
+        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+          gradientVector(edgeIndex) = gradientComponents[edgeIndex];
+        Eigen::MatrixXcd hessianMatrix(edgeCount, edgeCount);
+        for (std::size_t rowIndex = 0; rowIndex < edgeCount; ++rowIndex)
+          for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
+            hessianMatrix(rowIndex, columnIndex) = hessianRows[rowIndex][columnIndex];
+        const Eigen::VectorXd descentDirection =
+            (beta * 2.0 * (hessianMatrix.conjugate() * gradientVector)).real();
+        Eigen::VectorXd squaredLengths(edgeCount);
+        for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+          squaredLengths(edgeIndex) = candidateEdges[edgeIndex]->getRealSquaredLength();
+
+        // A backtracking ladder, which is not a heuristic but the standard way to
+        // pick a step LENGTH along a direction that is itself exact: for smooth F
+        // with non-zero gradient some small enough step lowers F, so exhausting the
+        // ladder means there is no downhill along this direction. The best rung is
+        // kept rather than the first that improves.
+        double trialStepScale = stepScale;
+        double bestGeometricObjective = currentObjective;
+        Eigen::VectorXd bestGeometricLengths;
+        for (int rung = 0; rung < 64; ++rung) {
+          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+            candidateEdges[edgeIndex]->setSquaredLength(
+                complexd(squaredLengths(edgeIndex) -
+                             trialStepScale * descentDirection(edgeIndex),
+                         0.0));
+          const double trialObjective = fullObjectiveOf(geometricCandidate);
+          if (trialObjective < bestGeometricObjective) {
+            bestGeometricObjective = trialObjective;
+            bestGeometricLengths = Eigen::VectorXd(edgeCount);
+            for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+              bestGeometricLengths(edgeIndex) =
+                  candidateEdges[edgeIndex]->getRealSquaredLength();
+          }
+          trialStepScale *= 0.5;
+        }
+        if (bestGeometricLengths.size() > 0 &&
+            bestGeometricObjective < bestObjective) {
+          for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+            candidateEdges[edgeIndex]->setSquaredLength(
+                complexd(bestGeometricLengths(edgeIndex), 0.0));
+          bestObjective = bestGeometricObjective;
+          bestSnapshot = snapshotOf(*geometricCandidate);
+          bestMoveKind = "relax";
+          foundImprovingMove = true;
+          stepScale = std::min(stepScale * 1.3, 1.0);
+        }
+      }
+    }
+
+    if (!foundImprovingMove) {
+      // No available move -- of EITHER kind -- lowers F. That is the result, and it
+      // is reported rather than escaped.
+      lastUnifiedExhaustedMoves_ = true;
+      break;
+    }
+    spacetime_ = build(bestSnapshot);
+    objectiveTrace.push_back(bestObjective);
+    lastUnifiedMoveKinds_.push_back(bestMoveKind);
+  }
+  return objectiveTrace;
+}
+
 void MultiCobordism::seedInputs(const std::vector<std::uint64_t> &seeds) {
   seedBlocks(seeds, inputTargets_, inputBlocks_);
 }
