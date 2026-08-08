@@ -5,6 +5,7 @@
 #define TESSERA_COBORDISM_MULTICOBORDISM_H
 
 #include <complex>
+#include <functional>
 
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
@@ -206,6 +207,39 @@ class MultiCobordism {
   /// represented, rather than only driving the whole to the output. Default 1.
   void setInputResidualWeight(double weight) { inputResidualWeight_ = weight; }
 
+  /// How `rU` scores a target state against a complex's degree-k register:
+  /// `(spacetime, registerDegree, targetState) -> residual`.
+  using RegisterResidualFn = std::function<double(
+      const std::shared_ptr<Spacetime> &, int,
+      const std::vector<std::complex<double>> &)>;
+
+  /// Replace the register residual `rU` uses. Defaults to the hard kernel
+  /// projection (`residualOfTargetStateAgainstHarmonic`), so nothing changes until a
+  /// caller supplies something else.
+  ///
+  /// Injected rather than selected by a flag: which residual to score against is a
+  /// question about the PHYSICS being tested, and the objective must be changeable
+  /// without the engine growing a branch per answer. `spectralResidualFn` below is
+  /// one such answer, not a privileged one.
+  ///
+  /// A null function restores the default. The function is called once per candidate
+  /// evaluation, so a Python callable will dominate the runtime of any real drive —
+  /// prefer a C++-side factory for anything but a quick experiment.
+  void setRegisterResidual(RegisterResidualFn fn) {
+    registerResidualFn_ = std::move(fn);
+  }
+
+  /// The spectral register residual (#628) as an injectable function, built in C++
+  /// so the hot path never crosses into Python. `mu` is the energy scale below which
+  /// a mode counts as a register slot.
+  [[nodiscard]] static RegisterResidualFn spectralResidualFn(double mu) {
+    return [mu](const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+                const std::vector<std::complex<double>> &targetState) {
+      return spectralResidualOfTargetState(spacetime, registerDegree, targetState,
+                                           mu);
+    };
+  }
+
   // ---- the two stages + boundary-block construction ----
   /// Seed one INPUT block per seed vertex (region = the seed's cell-neighbourhood,
   /// tagged with its target). NOT grown here — runStage1's growBoundaryRegions grows
@@ -363,6 +397,13 @@ class MultiCobordism {
   /// gate (`applyMoveSpecification`) and the directed cone-out probe consult it to avoid
   /// stranding a pinned vertex. (Currently empty — the boundary states are held by their `r_U`
   /// terms, not by freezing vertices.)
+  /// The register residual actually used by `rU`: the spectral one when
+  /// `spectralResidualMu_ > 0`, the hard kernel projection otherwise. One place, so
+  /// the two cannot diverge across `rU`'s three call sites.
+  [[nodiscard]] double registerResidual(
+      const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+      const std::vector<std::complex<double>> &targetState) const;
+
   [[nodiscard]] std::set<std::uint64_t> pinnedBoundaryVertices() const;
 
   /// The sub-complex carried by a boundary block: a freshly-built `Spacetime` of
@@ -459,6 +500,8 @@ class MultiCobordism {
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
   bool lastStage2Stationary_ = false;
+  /// The injected register residual; empty = the hard kernel projection.
+  RegisterResidualFn registerResidualFn_;
   /// Set by `runUnified`: true iff it stopped because no move lowered `F`.
   bool lastUnifiedExhaustedMoves_ = false;
   /// The kind of move `runUnified` committed at each step, parallel to its trace.

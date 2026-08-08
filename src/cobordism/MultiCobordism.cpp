@@ -293,9 +293,18 @@ double MultiCobordism::residualForBoundaryBlock(
            targetVector.squaredNorm();
   }
   for (int registerDegree : registerDegrees_)
-    residual += residualOfTargetStateAgainstHarmonic(
-        blockSubcomplex, registerDegree, boundaryBlock.target);
+    residual +=
+        registerResidual(blockSubcomplex, registerDegree, boundaryBlock.target);
   return residual;
+}
+
+double MultiCobordism::registerResidual(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    const std::vector<complexd> &targetState) const {
+  return registerResidualFn_
+             ? registerResidualFn_(spacetime, registerDegree, targetState)
+             : residualOfTargetStateAgainstHarmonic(spacetime, registerDegree,
+                                                    targetState);
 }
 
 double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
@@ -313,8 +322,8 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
     // region. Read it off the WHOLE complex so the bulk loop drives the whole to
     // carry it (the output EMERGES; it is not frozen by seedOutputs).
     for (int registerDegree : registerDegrees_)
-      totalResidual += residualOfTargetStateAgainstHarmonic(
-          spacetime, registerDegree, outputTargets_.front());
+      totalResidual +=
+          registerResidual(spacetime, registerDegree, outputTargets_.front());
   } else {
     // Multiple outputs (e.g. a 2->2 recombination → diquark ⊔ antidiquark) live in
     // distinct regions: read each off its own constructed block. EMPTY outputTargets
@@ -326,8 +335,8 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
     if (inputBlocks_.empty() && outputBlocks_.empty())  // bare objective, nothing built yet
       for (int registerDegree : registerDegrees_)
         for (const auto &outputTarget : outputTargets_)
-          totalResidual += residualOfTargetStateAgainstHarmonic(
-              spacetime, registerDegree, outputTarget);
+          totalResidual +=
+              registerResidual(spacetime, registerDegree, outputTarget);
   }
   return totalResidual;
 }

@@ -10,6 +10,7 @@
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/functional.h>
 #include <pybind11/stl.h>
 
 #include "cobordism/ChainComplex.h"
@@ -846,6 +847,24 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("objective", &MultiCobordism::objective)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
            py::arg("weight"))
+      .def("set_register_residual", &MultiCobordism::setRegisterResidual,
+           py::arg("fn"),
+           "Replace the register residual r_U scores with: a callable\n"
+           "    (spacetime, register_degree, target) -> float\n"
+           "Defaults to the hard kernel projection, so nothing changes until you "
+           "pass something.\n\n"
+           "Injected rather than flag-selected: which residual to score against is a "
+           "question about the physics being tested, and the objective should be "
+           "changeable without the engine growing a branch per answer.\n\n"
+           "Called once per candidate evaluation, so a PYTHON callable will dominate "
+           "the runtime of any real drive. Use spectral_residual_fn(mu) for the "
+           "C++-side spectral residual, which never crosses back into Python.")
+      .def_static("spectral_residual_fn", &MultiCobordism::spectralResidualFn,
+                  py::arg("mu"),
+                  "The spectral register residual (#628) as an injectable function "
+                  "for set_register_residual, built in C++ so the hot path stays "
+                  "there. mu is the energy scale below which a mode counts as a "
+                  "register slot.")
       .def("seed_inputs", &MultiCobordism::seedInputs, py::arg("seeds"))
       .def("seed_outputs", &MultiCobordism::seedOutputs, py::arg("seeds"))
       // Long pure-C++ compute: release the GIL for the duration so a background thread can
