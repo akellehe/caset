@@ -154,6 +154,43 @@ class MultiCobordism {
   /// `\f$\lVert P c - t\rVert^2\f$`; with no emerged register it is the full leak
   /// `\f$\lVert t\rVert^2\f$`. Elemental: `residualForBoundaryBlock` sums this over
   /// the register degrees.
+  /// **The spectral register residual (#628).** How far the complex is from being
+  /// able to host \p targetState on its degree-\p registerDegree register, measured
+  /// against the LOW-LYING Hodge spectrum rather than the exact kernel.
+  ///
+  /// `residualOfTargetStateAgainstHarmonic` projects onto \f$ \ker \Delta_k \f$ and
+  /// falls back to the constant zero-filled leak \f$ \|\psi\|^2 \f$ whenever
+  /// \f$ b_k = 0 \f$. That constant is FLAT: on the single-\f$ \Delta^4 \f$ seed
+  /// every available move leaves it at 6000 to every digit while
+  /// \f$ \|\nabla S\|^2 \f$ rises, so the only term that can reward structure
+  /// supplies no gradient and the only term with a gradient opposes growth. The
+  /// unified drive takes zero steps from the seed for exactly this reason (#627).
+  ///
+  /// Here the \f$ n = \f$ `targetState.size()` register slots are the \f$ n \f$
+  /// SMALLEST eigenvalues \f$ \lambda_i \f$ of \f$ \Delta_k \f$, and each slot is
+  /// charged for its stiffness:
+  ///
+  /// \f[ r_{\mathrm{soft}}(\psi) = \sum_{i=1}^{n} |\psi_i|^2
+  ///        \frac{\mu\lambda_i}{1 + \mu\lambda_i} \f]
+  ///
+  /// By Hodge the register IS \f$ H^k \cong \ker\Delta_k \f$ — but on a finite
+  /// complex "eigenvalue exactly zero" is a measure-zero condition, and the physical
+  /// content of a hole is the SPECTRAL GAP. A complex one move from a hole has a
+  /// small \f$ \lambda \f$, not a zero one. This says a register slot is a mode the
+  /// geometry supports at low energy, with \p mu the energy scale below which a mode
+  /// counts as a slot — a stiffness, not a search parameter. The weight
+  /// \f$ \lambda/(\lambda + 1/\mu) \f$ is the ordinary resolvent response below a
+  /// cutoff. `HodgeLaplacian` already takes this view for the Lorentzian case, where
+  /// "harmonic" is documented as the small-\f$ |\lambda| \f$ near-kernel.
+  ///
+  /// Both limits are exact. With \f$ n \f$ genuine harmonics the weights vanish and
+  /// this is 0, agreeing with the hard projection on a carried register; with every
+  /// mode stiff the weights saturate and it returns \f$ \|\psi\|^2 \f$, the same
+  /// full leak. In between it VARIES, which is the whole point.
+  [[nodiscard]] static double spectralResidualOfTargetState(
+      const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+      const std::vector<std::complex<double>> &targetState, double mu = 1.0);
+
   [[nodiscard]] static double residualOfTargetStateAgainstHarmonic(
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
       const std::vector<std::complex<double>> &targetState);

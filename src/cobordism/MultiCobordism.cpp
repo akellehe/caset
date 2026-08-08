@@ -13,6 +13,7 @@
 
 #include "cobordism/ChainComplex.h"
 #include "cobordism/EigenstateSynthesis.h"
+#include "cobordism/HodgeLaplacian.h"
 #include "cobordism/SurgicalCone.h"
 #include "matter/MatterConfiguration.h"
 #include "mesh/Edge.h"
@@ -160,6 +161,42 @@ double MultiCobordism::reggeActionGradient(
   for (const auto &gradientComponent : reggeSolver.actionGradientExact())
     squaredGradientNorm += std::norm(gradientComponent);
   return squaredGradientNorm;
+}
+
+double MultiCobordism::spectralResidualOfTargetState(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    const std::vector<complexd> &targetState, double mu) {
+  // The n register slots are the n SOFTEST modes of Delta_k, each charged for its
+  // stiffness. See the header for why the spectral gap, rather than the exact kernel,
+  // is what carries the physical content of a hole.
+  const std::size_t targetDimension = targetState.size();
+  if (targetDimension == 0) return 0.0;
+  double fullLeakResidual = 0.0;
+  for (const auto &component : targetState) fullLeakResidual += std::norm(component);
+  if (registerDegree < 0) return fullLeakResidual;
+
+  // Ascending eigenvalues of the degree-k Hodge Laplacian. A complex too small to
+  // carry k-forms at all offers no modes, which is the full leak -- the same answer
+  // the hard projection gives, reached without a special case.
+  const auto spectrum =
+      HodgeLaplacian(spacetime).eigenvalues(registerDegree, /*metric=*/true);
+  if (spectrum.empty()) return fullLeakResidual;
+
+  double spectralResidual = 0.0;
+  for (std::size_t slotIndex = 0; slotIndex < targetDimension; ++slotIndex) {
+    const double amplitude = std::norm(targetState[slotIndex]);
+    if (slotIndex >= spectrum.size()) {
+      // Fewer modes than the target needs slots: those slots cannot be hosted at
+      // any stiffness, so they leak in full.
+      spectralResidual += amplitude;
+      continue;
+    }
+    // |lambda|: the Lorentzian spectrum is not sign-definite, and it is DISTANCE
+    // from harmonic that costs, in either direction.
+    const double stiffness = mu * std::abs(spectrum[slotIndex]);
+    spectralResidual += amplitude * stiffness / (1.0 + stiffness);
+  }
+  return spectralResidual;
 }
 
 double MultiCobordism::residualOfTargetStateAgainstHarmonic(

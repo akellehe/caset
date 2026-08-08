@@ -821,6 +821,27 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def_static("regge_action_gradient", &MultiCobordism::reggeActionGradient, py::arg("st"))
       .def_static("r_state", &MultiCobordism::residualOfTargetStateAgainstHarmonic,
                   py::arg("st"), py::arg("k"), py::arg("target"))
+      .def_static("r_state_spectral", &MultiCobordism::spectralResidualOfTargetState,
+                  py::arg("st"), py::arg("k"), py::arg("target"), py::arg("mu") = 1.0,
+                  "The SPECTRAL register residual (#628): how far the complex is from "
+                  "hosting `target` on its degree-k register, measured against the "
+                  "low-lying Hodge spectrum rather than the exact kernel.\n\n"
+                  "r_state projects onto ker Delta_k and falls back to the constant "
+                  "zero-filled leak whenever b_k = 0. That constant is FLAT -- on the "
+                  "single-Delta^4 seed every available move leaves it unchanged to "
+                  "every digit while ||grad S||^2 rises -- so the only term that can "
+                  "reward structure supplies no gradient.\n\n"
+                  "Here the n = len(target) register slots are the n SMALLEST "
+                  "eigenvalues of Delta_k, each charged for its stiffness:\n"
+                  "    r_soft = sum_i |psi_i|^2 * mu*lambda_i / (1 + mu*lambda_i)\n\n"
+                  "By Hodge the register IS ker Delta_k, but on a finite complex "
+                  "'eigenvalue exactly zero' is measure-zero; the physical content of "
+                  "a hole is the SPECTRAL GAP. A complex one move from a hole has a "
+                  "small lambda, not a zero one. `mu` is the energy scale below which "
+                  "a mode counts as a register slot -- a stiffness, not a tuning knob. "
+                  "Both limits are exact: n genuine harmonics give 0 (agreeing with "
+                  "r_state on a carried register), all-stiff gives ||target||^2 (the "
+                  "same full leak). In between it VARIES, which is the point.")
       .def("r_u", &MultiCobordism::rU, py::arg("st"))
       .def("objective", &MultiCobordism::objective)
       .def("set_input_residual_weight", &MultiCobordism::setInputResidualWeight,
