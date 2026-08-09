@@ -14,10 +14,12 @@ iflip / cone_out / cone_in: proposed at random, scored by `deltaF`, committed on
 when it lowers `F`. Nothing prescribes causal structure; the objective decides
 whether it wants any.
 
-These tests pin two things: that the feature is OFF by default and leaves every
-existing path untouched, and that when ON the mechanism does what it claims. They
-deliberately do NOT assert that timelike edges emerge from any particular seed --
-that is a measurement whose outcome is a result either way, not an invariant.
+These tests pin two things: that the causal moves are ON by default (#632 -- they
+are the seed's ONLY descent directions, so a draw without them hides the physics
+and leaves stage 1 reporting a stall it does not have), and that the mechanism does
+what it claims in both settings. They deliberately do NOT assert that timelike edges
+emerge from any particular seed -- that is a measurement whose outcome is a result
+either way, not an invariant.
 """
 
 import collections
@@ -78,29 +80,35 @@ class TestConeInTimelikeFlag(unittest.TestCase):
                                  f"pre-existing edge ({a},{b}) must be untouched")
 
 
-class TestDispositionMovesAreOptIn(unittest.TestCase):
-    """The feature is off by default and leaves existing paths alone."""
+class TestDispositionMovesAreOnByDefault(unittest.TestCase):
+    """The causal moves are in the draw by default; opting out still works."""
 
     def _node(self, propose):
         node = MC(_pentatope_host(), [[1 + 0j]], [], [3], 50.0, 1, 0, propose)
         node.seed_inputs([0])
         return node
 
-    def test_default_is_off(self):
+    def test_default_is_on(self):
+        """Measured on the single-Delta^4 seed over EVERY move that adds a vertex:
+        each of the five spacelike cone-ins raises F by +0.777 and the Pachner add
+        by +2.58, while each of the five timelike cone-ins LOWERS F, ||grad S||^2
+        and Re S (dF = -0.208, all five equal by the seed's S5 symmetry), and they
+        are the only moves giving Im S != 0. Without them in the draw the seed's
+        only descent directions are never proposed at all."""
         node = MC(_pentatope_host(), [[1 + 0j]], [], [3], 50.0, 1, 0)
-        self.assertFalse(node.should_propose_dispositions,
-                         "disposition proposal must be opt-in, so Proton, "
-                         "ProtonIngredients and the campaign are unaffected")
+        self.assertTrue(node.should_propose_dispositions,
+                        "the causal moves are the seed's only descent directions; "
+                        "they must be drawn by default")
 
     def test_flag_is_reported(self):
         self.assertTrue(self._node(True).should_propose_dispositions)
         self.assertFalse(self._node(False).should_propose_dispositions)
 
     def test_off_never_produces_a_timelike_edge(self):
-        """With the flag off the drive cannot leave the Euclidean orthant.
+        """Explicitly opting out still pins every edge spacelike.
 
-        This is the parity guard: it is what makes the default safe, and it is
-        also the measured baseline that motivated the feature.
+        This is the measured baseline that motivated the feature, and it is what
+        `should_propose_dispositions=False` continues to buy a caller who wants it.
         """
         node = self._node(False)
         node.run_stage1(60, 8, 15, True)

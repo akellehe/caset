@@ -814,7 +814,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
            py::arg("seed") = 0, py::arg("precone") = 0,
-           py::arg("should_propose_dispositions") = false)
+           py::arg("should_propose_dispositions") = true)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
