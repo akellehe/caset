@@ -476,6 +476,59 @@ double MultiCobordism::deltaF(
     if (!candidateCellSet.count(cell)) touchedCells.push_back(cell);
   for (const auto &cell : candidateCellSet)
     if (!baseCellSet.count(cell)) touchedCells.push_back(cell);
+
+  // The touched-cell diff alone is NOT the whole affected set (#633): a
+  // flip_disposition changes an edge's l^2 SIGN and changes no cells at all, so the
+  // diff comes back empty and the geometry term would be scored as exactly 0 --
+  // while flipping an edge between spacelike and timelike changes the deficit angle
+  // of every hinge on it. So diff the edge l^2 values too, and pull in the top cells
+  // incident to any edge that moved. Move-agnostic on purpose: this also covers
+  // cone_in_timelike's apex edges and any future move that perturbs geometry without
+  // changing cells, rather than special-casing a move kind.
+  //
+  // Widening is safe: Delta||grad S||^2 = after - before is exact over any FIXED
+  // SUPERSET of the truly-affected edges, because every edge outside the set keeps
+  // its gradient and cancels. A superset costs compute, never correctness.
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> baseSquaredLengths;
+  for (const auto *edge : spacetime_->getEdgeList()->toVector())
+    baseSquaredLengths[edgeKey(edge)] = edge->getSquaredLength();
+  std::set<std::pair<std::uint64_t, std::uint64_t>> movedEdges;
+  for (const auto *edge : candidateSpacetime->getEdgeList()->toVector()) {
+    const auto key = edgeKey(edge);
+    const auto found = baseSquaredLengths.find(key);
+    if (found == baseSquaredLengths.end() ||
+        found->second != edge->getSquaredLength())
+      movedEdges.insert(key);
+    if (found != baseSquaredLengths.end()) baseSquaredLengths.erase(found);
+  }
+  for (const auto &leftover : baseSquaredLengths)  // in base, absent from candidate
+    movedEdges.insert(leftover.first);
+  if (!movedEdges.empty()) {
+    std::set<std::vector<std::uint64_t>> incidentCells;
+    const auto collectIncident = [&](const Spacetime &spacetime) {
+      for (const auto &topSimplex : spacetime.getTopSimplices()) {
+        auto cellVertexIds = topTuple(*topSimplex);
+        for (const auto &moved : movedEdges) {
+          const bool cellHoldsBothEndpoints =
+              std::find(cellVertexIds.begin(), cellVertexIds.end(),
+                        moved.first) != cellVertexIds.end() &&
+              std::find(cellVertexIds.begin(), cellVertexIds.end(),
+                        moved.second) != cellVertexIds.end();
+          if (cellHoldsBothEndpoints) {
+            incidentCells.insert(std::move(cellVertexIds));
+            break;
+          }
+        }
+      }
+    };
+    collectIncident(*spacetime_);
+    collectIncident(*candidateSpacetime);
+    for (const auto &cell : incidentCells)
+      if (std::find(touchedCells.begin(), touchedCells.end(), cell) ==
+          touchedCells.end())
+        touchedCells.push_back(cell);
+  }
+
   ReggeSolver baseReggeSolver(spacetime_, MatterConfiguration());
   ReggeSolver candidateReggeSolver(candidateSpacetime, MatterConfiguration());
   std::set<std::pair<std::uint64_t, std::uint64_t>> affectedEdgeSet;
