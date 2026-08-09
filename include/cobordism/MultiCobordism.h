@@ -41,8 +41,10 @@ using ::tessera::spacetime::Spacetime;
 ///
 /// Two stages, exactly as the reference:
 ///   * **Stage 1 (combinatorial):** greedy best-ΔF single random moves
-///     `{add,remove,flip,iflip,cone_out,cone_in}`, each gated by `dualComplexValid`
-///     and "no input vertex removed", committed only if ΔF < 0; re-seed on stall.
+///     `{add,remove,flip,iflip,cone_out,cone_in}`, optionally joined by the causal
+///     dispositions `{cone_in_timelike,flip_disposition}` (see
+///     `shouldProposeDispositions`), each gated by `dualComplexValid` and "no input
+///     vertex removed", committed only if ΔF < 0; re-seed on stall.
 ///   * **Stage 2 (geometric):** relax every edge `ℓ²` along the **real signed-ℓ²
 ///     manifold** toward a stationary point of `β‖∇S‖² + Γ·r_U` (steepest descent
 ///     on `Re(2β·H̄·g)` — the exact restriction of the Wirtinger gradient to the
@@ -131,8 +133,41 @@ class MultiCobordism {
   /// spacelike and `Im S = 0` through 110+ relaxation iterations, with
   /// `‖∇S‖² = 9.46` still far from stationary.
   ///
-  /// Default `false`, which leaves the six-move draw and every existing path —
-  /// `Proton`, `ProtonIngredients`, the campaign — byte-identical.
+  /// Default `false` — but NOT because spacelike-only is right. Measured on the
+  /// single-Δ⁴ seed by enumerating EVERY move that adds a vertex (each of the C(5,4)
+  /// facets coned in, both apex dispositions, plus the Pachner insertion): each of the
+  /// five spacelike cone-ins RAISES `F` by `+0.777` and the Pachner add by `+2.58`,
+  /// while each of the five timelike cone-ins LOWERS `F`, `‖∇S‖²` and `Re S`
+  /// (`ΔF = -0.208`, all five equal by the seed's S₅ symmetry), and they are the only
+  /// moves giving `Im S ≠ 0`. So the six-move draw never proposes the seed's only
+  /// descent directions, and stage 1 reports a stall it does not actually have.
+  ///
+  /// Turning it on by default is blocked (#632): `‖∇S‖²` runs to `1.1e+15` on a
+  /// 13-cell host and `1.03e+298` on a `Proton` node, while the ACTION itself stays
+  /// finite (`S = -24.45 - 10.15i`). Value finite, gradient astronomical.
+  ///
+  /// The cause is NOT mixed disposition as such — it is exact degeneracy of the
+  /// **tetrahedral facets**. The circumcentre solves `G β = ½ diag G`, so it is
+  /// undefined exactly when `det G = 0`. The metric is Lorentzian throughout, so `G`
+  /// is indefinite and `det G = 0` is a configuration the complex can actually reach:
+  /// a facet whose span is tangent to the light cone — a NULL 3-face, zero 3-volume
+  /// even though every one of its edges has `|ℓ²| = 1`. Quantising every `ℓ²` to
+  /// exactly `±1` then lands on that locus **exactly**, rather than with measure zero
+  /// as generic lengths would. Enumerating all `2⁶` sign patterns of a tetrahedron's
+  /// edges:
+  ///
+  ///   * `0,1,2,4,5,6` timelike edges — never degenerate (`|det G| ∈ {0.5,1.0,1.5}`)
+  ///   * **`3/6` timelike — 12 of those 20 patterns give `det G = 0` exactly**
+  ///
+  /// so `12/64` of all patterns are degenerate. Triangles and pentatopes never are at
+  /// `±1` (`min|det G|` = `0.75` and `0.3125`); it is only the facets, and they poison
+  /// the DEC dual recursion, which evaluates `circumradiusSquared` on the hinge's
+  /// cofaces. `Simplex::circumFromGram` divides by `detG` under an EXACT-zero guard,
+  /// so a rounding-level residue instead of a clean `0` gives `β ~ 1/detG`.
+  ///
+  /// The lever is therefore the uniform `±1` initialisation sitting on the degenerate
+  /// locus, not a clamp in the dynamics: generic edge lengths essentially never hit
+  /// `det G = 0`.
   [[nodiscard]] bool shouldProposeDispositions() const {
     return shouldProposeDispositions_;
   }
