@@ -41,10 +41,10 @@ using ::tessera::spacetime::Spacetime;
 ///
 /// Two stages, exactly as the reference:
 ///   * **Stage 1 (combinatorial):** greedy best-ΔF single random moves
-///     `{add,remove,flip,iflip,cone_out,cone_in}`, optionally joined by the causal
-///     dispositions `{cone_in_timelike,flip_disposition}` (see
-///     `shouldProposeDispositions`), each gated by `dualComplexValid` and "no input
-///     vertex removed", committed only if ΔF < 0; re-seed on stall.
+///     `{add,remove,flip,iflip,cone_out,cone_in,cone_in_timelike,flip_disposition}`
+///     (the last two are the causal dispositions — see `shouldProposeDispositions`),
+///     each gated by `dualComplexValid` and "no input vertex removed", committed
+///     only if ΔF < 0; re-seed on stall.
 ///   * **Stage 2 (geometric):** relax every edge `ℓ²` along the **real signed-ℓ²
 ///     manifold** toward a stationary point of `β‖∇S‖² + Γ·r_U` (steepest descent
 ///     on `Re(2β·H̄·g)` — the exact restriction of the Wirtinger gradient to the
@@ -85,7 +85,7 @@ class MultiCobordism {
       const std::vector<std::vector<std::complex<double>>> &outputTargets,
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
       std::uint64_t seed = 0, int precone = 0,
-      bool shouldProposeDispositions = false);
+      bool shouldProposeDispositions = true);
 
   /// Move-kind names. Named rather than spelled as string literals at each site:
   /// every kind is written in the draw and compared in the apply, and a typo in
@@ -133,18 +133,23 @@ class MultiCobordism {
   /// spacelike and `Im S = 0` through 110+ relaxation iterations, with
   /// `‖∇S‖² = 9.46` still far from stationary.
   ///
-  /// Default `false` — but NOT because spacelike-only is right. Measured on the
-  /// single-Δ⁴ seed by enumerating EVERY move that adds a vertex (each of the C(5,4)
-  /// facets coned in, both apex dispositions, plus the Pachner insertion): each of the
-  /// five spacelike cone-ins RAISES `F` by `+0.777` and the Pachner add by `+2.58`,
-  /// while each of the five timelike cone-ins LOWERS `F`, `‖∇S‖²` and `Re S`
-  /// (`ΔF = -0.208`, all five equal by the seed's S₅ symmetry), and they are the only
-  /// moves giving `Im S ≠ 0`. So the six-move draw never proposes the seed's only
-  /// descent directions, and stage 1 reports a stall it does not actually have.
+  /// Default **`true`** (#632): the causal moves are the seed's ONLY descent
+  /// directions, so a draw without them is not a neutral default — it hides the
+  /// physics. Measured on the single-Δ⁴ seed by enumerating EVERY move that adds a
+  /// vertex (each of the C(5,4) facets coned in, both apex dispositions, plus the
+  /// Pachner insertion): each of the five spacelike cone-ins RAISES `F` by `+0.777`
+  /// and the Pachner add by `+2.58`, while each of the five timelike cone-ins LOWERS
+  /// `F`, `‖∇S‖²` and `Re S` (`ΔF = -0.208`, all five equal by the seed's S₅
+  /// symmetry), and they are the only moves giving `Im S ≠ 0`. With the six-move draw
+  /// stage 1 finds nothing that lowers `F`, reports a stall it does not actually
+  /// have, and leaves the seed through the trap door — building an all-spacelike
+  /// complex whose `Im S` is identically zero.
   ///
-  /// Turning it on by default is blocked (#632): `‖∇S‖²` runs to `1.1e+15` on a
-  /// 13-cell host and `1.03e+298` on a `Proton` node, while the ACTION itself stays
-  /// finite (`S = -24.45 - 10.15i`). Value finite, gradient astronomical.
+  /// KNOWN, UNRESOLVED (#632): with the moves in the draw, `‖∇S‖²` runs to `1.1e+15`
+  /// on a 13-cell host and `1.03e+298` on a `Proton` node, while the ACTION itself
+  /// stays finite (`S = -24.45 - 10.15i`). Value finite, gradient astronomical. The
+  /// causal structure that emerges is real; the objective scoring it is not yet
+  /// trustworthy on these hosts.
   ///
   /// The cause is NOT mixed disposition as such — it is exact degeneracy of the
   /// **tetrahedral facets**. The circumcentre solves `G β = ½ diag G`, so it is
@@ -168,6 +173,9 @@ class MultiCobordism {
   /// The lever is therefore the uniform `±1` initialisation sitting on the degenerate
   /// locus, not a clamp in the dynamics: generic edge lengths essentially never hit
   /// `det G = 0`.
+  ///
+  /// Pass `false` to recover the spacelike-only six-move draw — every edge stays
+  /// spacelike, `Im S` is identically `0`, and the objective is well-behaved.
   [[nodiscard]] bool shouldProposeDispositions() const {
     return shouldProposeDispositions_;
   }
@@ -400,7 +408,7 @@ class MultiCobordism {
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   /// #613: whether the move draw offers the disposition moves. See the accessor.
-  bool shouldProposeDispositions_{false};
+  bool shouldProposeDispositions_{true};
   double convergenceTolerance_ = 1e-9;
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
