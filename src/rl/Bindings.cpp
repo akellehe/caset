@@ -61,7 +61,6 @@ PYBIND11_MODULE(_tessera_rl, m) {
       .def_readwrite("beta_range", &EnvConfig::betaRange)
       .def_readwrite("alpha_range", &EnvConfig::alphaRange)
       .def_readwrite("n_candidate_moves", &EnvConfig::nCandidateMoves)
-      .def_readwrite("patience", &EnvConfig::patience)
       .def_readwrite("carry_tol", &EnvConfig::carryTol)
       .def_readwrite("target_holes", &EnvConfig::targetHoles)
       .def_readwrite("carry_bonus", &EnvConfig::carryBonus)

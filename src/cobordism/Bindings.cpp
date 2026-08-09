@@ -804,7 +804,8 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       "gated surgical moves under F = ||grad S||^2 + gamma*(r_U(output) + "
       "sum_i r_U(input_i)) at a USER-DEFINED degree k (degrees), reading holes "
       "dynamically off getBoundary. Two stages: run_stage1 (combinatorial), "
-      "run_stage2 (geometric). An EMPTY output_targets list is supported (#555): "
+      "run_stage2 (geometric) -- or run(), which interleaves both updates in one "
+      "loop. An EMPTY output_targets list is supported (#555): "
       "nothing is pinned downstream, r_u sums only the input blocks, and the "
       "whole's final state emerges (read after the fact).")
       .def(py::init<std::shared_ptr<Spacetime>,
@@ -831,8 +832,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       // drive a pass (a single call, per the register-growth constraint) without blocking the
       // main thread -- e.g. multicobordism_animation.py --live keeps its GUI responsive.
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
-           py::arg("n_candidate_moves") = 12, py::arg("patience") = 8,
-           py::arg("grow_boundaries") = false,
+           py::arg("n_candidate_moves") = 12, py::arg("grow_boundaries") = false,
            py::call_guard<py::gil_scoped_release>())
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
@@ -847,6 +847,24 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "no line-search step lowers F by more than rel_tol*max(|F|,1) -- or "
            "the max_iters budget cap. Read last_stage2_stationary for which one "
            "ended the run. Returns the F trace.")
+      .def("run", &MultiCobordism::run, py::arg("max_iters") = 200,
+           py::arg("n_candidate_moves") = 12,
+           py::arg("grow_boundaries") = false, py::arg("beta") = 1.0,
+           py::arg("alpha0") = 0.05, py::arg("rel_tol") = 1e-9,
+           py::call_guard<py::gil_scoped_release>(),
+           "The combined drive: ONE loop running BOTH updates -- the stage-1 "
+           "combinatorial update and the stage-2 geometric update -- once each "
+           "per iteration, so the optimizer makes whichever kind of progress "
+           "helps at each point (a surgery move, a geometric descent step, or "
+           "both). Neither stall is final on its own -- a stage-2 stationary "
+           "point can be reopened by the next topology change and vice versa -- "
+           "so it halts only when BOTH halves stall in the same iteration, or "
+           "at the max_iters budget cap. n_candidate_moves/"
+           "grow_boundaries parameterize the combinatorial half exactly as in "
+           "run_stage1; beta/alpha0/rel_tol the geometric half exactly as in "
+           "run_stage2 (keep beta=1 for one coherent F trace). "
+           "last_stage2_stationary reports the LAST geometric update's outcome. "
+           "Returns the combined F trace.")
       .def_property_readonly("should_propose_dispositions",
                              &MultiCobordism::shouldProposeDispositions,
            "Whether the stage-1 move draw also proposes CAUSAL DISPOSITIONS "
@@ -921,7 +939,7 @@ Right -- re-read after each drive call:
   multiCobordismClass
       .def("build_step", &MultiCobordism::buildStep, py::arg("action"),
            py::arg("max_steps") = 30, py::arg("n_candidate_moves") = 8,
-           py::arg("patience") = 15, py::arg("stage2_beta") = 1.0,
+           py::arg("stage2_beta") = 1.0,
            py::arg("stage2_max_iters") = 10, py::arg("stage2_alpha0") = 0.05,
            py::arg("hole_placement_strategy") =
                MultiCobordism::HolePlacementStrategy::AdjacentHolesLast,
@@ -957,7 +975,7 @@ Right -- re-read after each drive call:
            "whose outputs feed further inputs, and `output_targets` (one for a "
            "merge, two for a 2->2 recombination). Returns the node id.")
       .def("run", &CobordismDAG::run, py::arg("stage1_max_steps") = 30,
-           py::arg("stage1_candidate_moves") = 8, py::arg("stage1_patience") = 8,
+           py::arg("stage1_candidate_moves") = 8,
            py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 40,
            "Run all nodes in topological order (raises on a cycle).")
       .def("output", &CobordismDAG::output, py::arg("node"),
@@ -992,7 +1010,7 @@ tickets.)doc");
       .def("build", &Proton::build, py::arg("max_restarts") = 16,
            py::arg("init_steps") = 180,
            py::arg("evolve_steps") = 60, py::arg("stage1_candidate_moves") = 8,
-           py::arg("stage1_patience") = 15, py::arg("stage2_beta") = 1.0,
+           py::arg("stage2_beta") = 1.0,
            py::arg("stage2_max_iters") = 10, py::arg("color_tolerance") = 0.5,
            py::arg("min_quark_holes") = 3,
            "Restart across seeds until the whole step-B cobordism carries the singlet "
@@ -1042,7 +1060,7 @@ a diagnostic for comparing against the canonical build's carried level.)doc")
            py::arg("precone") = 0, py::arg("should_use_directed_surgery") = false)
       .def("build", &ProtonIngredients::build, py::arg("max_restarts") = 16,
            py::arg("init_steps") = 180, py::arg("evolve_steps") = 60,
-           py::arg("stage1_candidate_moves") = 8, py::arg("stage1_patience") = 15,
+           py::arg("stage1_candidate_moves") = 8,
            py::arg("stage2_beta") = 1.0, py::arg("stage2_max_iters") = 10,
            py::arg("persist_rel_tol") = 0.05,
            "Restart across seeds until an attempt is stationary AND persistent (no "

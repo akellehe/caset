@@ -121,7 +121,7 @@ std::shared_ptr<MultiCobordism> ProtonIngredients::jointNode(
 }
 
 void ProtonIngredients::build(int maxRestarts, int initSteps, int evolveSteps,
-                              int stage1CandidateMoves, int stage1Patience,
+                              int stage1CandidateMoves,
                               double stage2Beta, int stage2MaxIters,
                               double persistRelTol) {
   if (attempted_) return;
@@ -131,11 +131,11 @@ void ProtonIngredients::build(int maxRestarts, int initSteps, int evolveSteps,
   // optional directed cone-out, EVOLUTION pass (∂W frozen), optional directed cone-in,
   // then the geometric relaxation.
   const auto runNode = [&](MultiCobordism &node) {
-    node.runStage1(initSteps, stage1CandidateMoves, stage1Patience,
+    node.runStage1(initSteps, stage1CandidateMoves,
                    /*growBoundaries=*/true);
     if (shouldUseDirectedSurgery_)
       (void)node.directedConeOut();
-    node.runStage1(evolveSteps, stage1CandidateMoves, stage1Patience,
+    node.runStage1(evolveSteps, stage1CandidateMoves,
                    /*growBoundaries=*/false);
     if (shouldUseDirectedSurgery_)
       (void)node.directedConeIn();
@@ -179,7 +179,7 @@ void ProtonIngredients::build(int maxRestarts, int initSteps, int evolveSteps,
       const int holesBefore = holeCount(whole);
       const int bettiBefore = bettiAtRegisterDegree(whole);
       const double objectiveBefore = stepB->objective();
-      stepB->runStage1(evolveSteps, stage1CandidateMoves, stage1Patience,
+      stepB->runStage1(evolveSteps, stage1CandidateMoves,
                        /*growBoundaries=*/false);
       stepB->runStage2(stage2Beta, stage2MaxIters);
       const auto settled = stepB->spacetime();

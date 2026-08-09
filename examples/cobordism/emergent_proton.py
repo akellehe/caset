@@ -66,6 +66,10 @@ cob = tessera.cobordism
 # answer-agnostic summary (holes, b_k, F) stable within the relative tolerance.
 _PERSIST_PASSES = 3
 _PERSIST_REL_TOL = 0.05
+# Geometric-relaxation iterations for the batched path's run_stage2 calls (this example
+# mirrors ProtonIngredients.build()'s staged drive; the animated path inherits the
+# combined-`run` drive from ProtonAnimator, which has no separate stage-2 phase).
+_STAGE2_ITERS = 10
 
 
 def build_joint_node(seed=3, precone=0):
@@ -130,7 +134,7 @@ class EmergentProtonAnimator(mca.ProtonAnimator):
                 f"diagnostics r_state(singlet)={res:.2g} / r_state(conjugate)={conj:.2g}")
 
 
-def _persistence_check(node, evolve_steps, stage1_candidates, stage1_patience,
+def _persistence_check(node, evolve_steps, stage1_candidates,
                        stage2_beta, stage2_iters, degree):
     """`ProtonIngredients.build()`'s persistence check, on an already-driven node: up to
     `_PERSIST_PASSES` continued evolve+relax passes; persistent once one pass leaves the
@@ -145,7 +149,7 @@ def _persistence_check(node, evolve_steps, stage1_candidates, stage1_patience,
         before = (len(cob.MultiCobordism.emergent_holes(st, degree)), betti_k(st),
                   float(node.objective()))
         node.run_stage1(max_steps=evolve_steps, n_candidate_moves=stage1_candidates,
-                        patience=stage1_patience, grow_boundaries=False)
+                        grow_boundaries=False)
         node.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
         st = node.st
         after = (len(cob.MultiCobordism.emergent_holes(st, degree)), betti_k(st),
@@ -158,8 +162,8 @@ def _persistence_check(node, evolve_steps, stage1_candidates, stage1_patience,
 
 def run_build(nodes, visualize=False, save=None, degree=3,
               init_steps=mca._INIT_STEPS, evolve_steps=mca._EVOLVE_STEPS,
-              stage2_iters=mca._STAGE2_ITERS, stage1_candidates=mca._STAGE1_CANDIDATES,
-              stage1_patience=mca._STAGE1_PATIENCE, stage2_beta=1.0, interval=200):
+              stage2_iters=_STAGE2_ITERS, stage1_candidates=mca._STAGE1_CANDIDATES,
+              stage2_beta=1.0, interval=200):
     """Run the emergent-arm two-step build over `nodes`, driving each node the way
     `ProtonIngredients.build()` does (init pass → evolution pass → `run_stage2`).
 
@@ -173,9 +177,9 @@ def run_build(nodes, visualize=False, save=None, degree=3,
         out = []
         for node, label in nodes:
             node.run_stage1(max_steps=init_steps, n_candidate_moves=stage1_candidates,
-                            patience=stage1_patience, grow_boundaries=True)
+                            grow_boundaries=True)
             node.run_stage1(max_steps=evolve_steps, n_candidate_moves=stage1_candidates,
-                            patience=stage1_patience, grow_boundaries=False)
+                            grow_boundaries=False)
             node.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
             st = node.st
             out.append((label, {
@@ -186,8 +190,7 @@ def run_build(nodes, visualize=False, save=None, degree=3,
                 "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
         step_b = nodes[-1][0]
         persistent, passes = _persistence_check(step_b, evolve_steps, stage1_candidates,
-                                                stage1_patience, stage2_beta,
-                                                stage2_iters, degree)
+                                                stage2_beta, stage2_iters, degree)
         st = step_b.st
         res = float(cob.MultiCobordism.r_state(st, degree, cob.Proton.singlet()))
         conj = float(cob.MultiCobordism.r_state(st, degree, _conjugate_singlet()))
@@ -209,9 +212,9 @@ def run_build(nodes, visualize=False, save=None, degree=3,
     from matplotlib.animation import FuncAnimation
 
     anim = EmergentProtonAnimator(nodes, degree=degree, init_steps=init_steps,
-                                  evolve_steps=evolve_steps, stage2_iters=stage2_iters,
+                                  evolve_steps=evolve_steps,
                                   stage1_candidates=stage1_candidates,
-                                  stage1_patience=stage1_patience, stage2_beta=stage2_beta)
+                                  stage2_beta=stage2_beta)
     anim._setup(plt)
     anim.fig.suptitle(f"{anim._TITLE_PREFIX} — live")
     if save:                                  # off-screen Agg: synchronous per-frame render
@@ -235,8 +238,9 @@ def main():
                     help="init-pass (grow_boundaries=True) steps per node")
     ap.add_argument("--evolve", type=int, default=mca._EVOLVE_STEPS,
                     help="evolution-pass (grow_boundaries=False) steps per node")
-    ap.add_argument("--stage2", type=int, default=mca._STAGE2_ITERS,
-                    help="geometric-relaxation iterations per node")
+    ap.add_argument("--stage2", type=int, default=_STAGE2_ITERS,
+                    help="geometric-relaxation iterations per node (batched path only; "
+                         "the animated path interleaves relaxation into every frame)")
     ap.add_argument("--precone", type=int, default=0,
                     help="pre-grow each node's single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")

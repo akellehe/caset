@@ -55,7 +55,6 @@ struct EnvConfig {
   std::pair<double, double> betaRange = {0.25, 2.0};
   std::pair<double, double> alphaRange = {0.02, 0.2};
   int nCandidateMoves = 6;
-  int patience = 15;
   double carryTol = 0.5;
   int targetHoles = 3;
   double carryBonus = 3.0;

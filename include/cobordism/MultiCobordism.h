@@ -44,7 +44,8 @@ using ::tessera::spacetime::Spacetime;
 ///     `{add,remove,flip,iflip,cone_out,cone_in,cone_in_timelike,flip_disposition}`
 ///     (the last two are the causal dispositions — see `shouldProposeDispositions`),
 ///     each gated by `dualComplexValid` and "no input vertex removed", committed
-///     only if ΔF < 0; re-seed on stall.
+///     only if ΔF < 0; a batch with no improving move simply redraws (halting
+///     only once the register is carried).
 ///   * **Stage 2 (geometric):** relax every edge `ℓ²` along the **real signed-ℓ²
 ///     manifold** toward a stationary point of `β‖∇S‖² + Γ·r_U` (steepest descent
 ///     on `Re(2β·H̄·g)` — the exact restriction of the Wirtinger gradient to the
@@ -142,8 +143,8 @@ class MultiCobordism {
   /// `F`, `‖∇S‖²` and `Re S` (`ΔF = -0.208`, all five equal by the seed's S₅
   /// symmetry), and they are the only moves giving `Im S ≠ 0`. With the six-move draw
   /// stage 1 finds nothing that lowers `F`, reports a stall it does not actually
-  /// have, and leaves the seed through the trap door — building an all-spacelike
-  /// complex whose `Im S` is identically zero.
+  /// have, and left the seed through the since-removed trap-door escape — building
+  /// an all-spacelike complex whose `Im S` is identically zero.
   ///
   /// KNOWN, UNRESOLVED (#632): with the moves in the draw, `‖∇S‖²` runs to `1.1e+15`
   /// on a 13-cell host and `1.03e+298` on a `Proton` node, while the ACTION itself
@@ -223,7 +224,7 @@ class MultiCobordism {
   /// grow to track the bulk until they carry their states (growBoundaryRegions);
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
-                                int patience = 8, bool growBoundaries = false);
+                                bool growBoundaries = false);
   /// Stage 2 (geometric): relax every edge `ℓ²` along the **real signed-ℓ² manifold**
   /// toward a stationary point of `β‖∇S‖² + Γ·r_U`. The configuration space is real
   /// signed `ℓ²` (ordinary Lorentzian Regge; the complexified theory is unbuilt), so
@@ -251,6 +252,25 @@ class MultiCobordism {
   /// the dynamics (its absence is equally a finding).
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
                                   double alpha0 = 0.05, double relTol = 1e-9);
+  /// The combined drive: ONE loop running BOTH updates — the stage-1 combinatorial
+  /// update and the stage-2 geometric update — once each per iteration, so the
+  /// optimizer is free to make whichever kind of progress helps at each point (a
+  /// surgery move, a geometric descent step, or both). Neither stall is final on
+  /// its own: a stage-2 stationary point can be reopened by the next stage-1
+  /// topology change and vice versa, so the loop halts only when BOTH halves
+  /// stall in the same iteration (stage 1: register carried with no improving
+  /// move; stage 2: real-manifold stationarity) or at the `maxIters` budget cap.
+  /// `nCandidateMoves`/`growBoundaries` parameterize the combinatorial
+  /// half exactly as in `runStage1`; `beta`/`alpha0`/`relTol` the geometric half
+  /// exactly as in `runStage2`. NOTE with `beta != 1` the two halves weight
+  /// `‖∇S‖²` differently (stage 1 books deltas of `objective()`, stage 2 descends
+  /// `β‖∇S‖² + Γ·r_U`), so the shared trace mixes the two scales — the default
+  /// `beta = 1` keeps one coherent `F`. `lastStage2Stationary()` reports the LAST
+  /// geometric update's outcome. Returns the combined `F` trace.
+  std::vector<double> run(int maxIters = 200, int nCandidateMoves = 12,
+                          bool growBoundaries = false,
+                          double beta = 1.0, double alpha0 = 0.05,
+                          double relTol = 1e-9);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
@@ -267,7 +287,7 @@ class MultiCobordism {
   /// `growBoundaries` true/false; Relax = `runStage2`; ConeOut/ConeIn = the directed probes
   /// below. Irrelevant params for a given action are ignored.
   void buildStep(BuildAction action, int maxSteps = 30, int nCandidateMoves = 8,
-                 int patience = 15, double stage2Beta = 1.0, int stage2MaxIters = 10,
+                 double stage2Beta = 1.0, int stage2MaxIters = 10,
                  double stage2Alpha0 = 0.05,
                  HolePlacementStrategy holePlacementStrategy = HolePlacementStrategy::AdjacentHolesLast);
 
@@ -303,7 +323,9 @@ class MultiCobordism {
   /// stationarity, `δF = 0` along real signed-ℓ² perturbations**: the exact
   /// on-manifold gradient direction `Re(2β·H̄·g)` buys no further descent (#589).
   /// Lets a caller report "stopped: stationary" vs "stopped: budget". `false` before
-  /// the first `runStage2`.
+  /// the first `runStage2`/`run`; after `run`, reports the LAST geometric update's
+  /// outcome (each update resets the flag, so an earlier stationary point that a
+  /// later topology change reopened does not latch).
   [[nodiscard]] bool lastStage2Stationary() const { return lastStage2Stationary_; }
 
  private:
@@ -362,14 +384,21 @@ class MultiCobordism {
       const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
       const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
   double step(int nCandidateMoves);
-  /// The trap door (#503): when no candidate move lowers the objective, take the
-  /// first GATED move from the FULL range — Pachner `add`/`remove`/`flip`/`iflip`
-  /// plus surgical `cone_out`/`cone_in` — within `attempts` tries. It is an
-  /// escape/exploration step that need NOT lower F, so the optimizer can leave a
-  /// local minimum (e.g. add material to a too-small complex, or rearrange) rather
-  /// than stall, letting stage 1 build topology from as little as a seed simplex.
-  /// Returns the move's ΔF, or NaN if no valid move exists (a true stall).
-  double trapDoorMove(int attempts);
+  /// One iteration of `runStage1`'s loop: optional boundary growth plus one
+  /// best-ΔF candidate-move step, booked into `objectiveTrace`. A batch with no
+  /// improving move is NOT a stall — the batch is a random sample, so the next
+  /// iteration simply redraws. Returns `false` only when the run should halt: no
+  /// improving move AND the register already carried (converged); `true` to keep
+  /// iterating.
+  bool stage1Update(int nCandidateMoves, bool growBoundaries,
+                    std::vector<double> &objectiveTrace);
+  /// One iteration of `runStage2`'s loop: exact gradient/Hessian, the on-manifold
+  /// descent direction `Re(2β·H̄·g)`, and the backtracking line search. Appends the
+  /// accepted objective to `objectiveTrace` and adapts `stepScale`. Returns `false`
+  /// on the stationary stop (no line-search step beat the relative threshold —
+  /// lengths restored and `lastStage2Stationary_` set), `true` to keep iterating.
+  bool stage2Update(double beta, double relTol,
+                    std::vector<double> &objectiveTrace, double &stepScale);
   /// Grow each localized boundary block's region to track the bulk's growth: expand
   /// its vertex set by one shell (every top cell touching the current region), so the
   /// block gets room to develop the holes that carry its state — instead of staying
@@ -382,8 +411,8 @@ class MultiCobordism {
   /// Pre-grow the seed by `count` **gated cone-in moves** before any optimization
   /// (the constructor calls this once when `precone > 0`): each cones a fresh apex
   /// onto a random codim-1 facet of a random top cell and is committed only through
-  /// `applyMoveSpecification`'s `dualComplexValid` gate — the same gate stage 1 and
-  /// the trap door use, so nothing is inserted by fiat. It enlarges the complex so
+  /// `applyMoveSpecification`'s `dualComplexValid` gate — the same gate stage 1
+  /// uses, so nothing is inserted by fiat. It enlarges the complex so
   /// surgery has room to act — the emergent analogue of a prebuilt host refinement.
   /// `count <= 0` is a no-op (RNG untouched). Best-effort: a draw onto an already-
   /// saturated facet is rejected by the gate and retried; if no valid cone-in is

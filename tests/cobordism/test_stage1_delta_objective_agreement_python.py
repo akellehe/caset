@@ -59,7 +59,7 @@ class TestStage1DeltaObjectiveAgreement(unittest.TestCase):
 
         for call_index in range(calls):
             trace = node.run_stage1(max_steps=steps, n_candidate_moves=8,
-                                    patience=15, grow_boundaries=True)
+                                    grow_boundaries=True)
             objective = node.objective()
 
             self.assertGreaterEqual(
@@ -107,7 +107,7 @@ class TestStage1DeltaObjectiveAgreement(unittest.TestCase):
                          "precone = 0 must leave exactly one 4-simplex")
         for _ in range(3):
             trace = node.run_stage1(max_steps=15, n_candidate_moves=8,
-                                    patience=15, grow_boundaries=True)
+                                    grow_boundaries=True)
             objective = node.objective()
             self.assertAlmostEqual(
                 trace[-1], objective,

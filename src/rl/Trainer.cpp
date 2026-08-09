@@ -24,7 +24,6 @@ EnvConfig carryProfileEnv() {
   c.evolveSteps = {10, 40};
   c.relaxIters = {3, 8};
   c.nCandidateMoves = 8;
-  c.patience = 15;
   c.holeRewardWeight = 2.0;
   c.rstateRewardWeight = 1.0;
   c.carryBonus = 10.0;

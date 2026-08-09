@@ -575,33 +575,10 @@ double MultiCobordism::step(int nCandidateMoves) {
   return 0.0;
 }
 
-double MultiCobordism::trapDoorMove(int attempts) {
-  const auto currentSnapshot = snapshot();
-  const double baseResidualU = rU(spacetime_);
-  std::set<std::vector<std::uint64_t>> baseCellSet;
-  for (const auto &topSimplex : spacetime_->getTopSimplices())
-    baseCellSet.insert(topTuple(*topSimplex));
-  // Commit the first gated move we can apply from the FULL range
-  // (drawRandomMoveSpecification: add/remove/flip/iflip/cone_out/cone_in). It need
-  // NOT lower F — that is the escape; the gate (a valid manifold-with-boundary, no
-  // pinned vertex removed) keeps it sound. Several tries because a given random
-  // move may not propose/validate on the current complex.
-  for (int attempt = 0; attempt < std::max(1, attempts); ++attempt) {
-    const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
-    auto candidateSpacetime = build(currentSnapshot);
-    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
-    const double objectiveDelta =
-        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
-    spacetime_ = build(snapshotOf(*candidateSpacetime));
-    return objectiveDelta;
-  }
-  return std::numeric_limits<double>::quiet_NaN();
-}
-
 void MultiCobordism::preconeCells(int count) {
   // Each cone-in cones a fresh apex onto a random codim-1 facet (a top cell with one
   // vertex dropped) and is committed only through applyMoveSpecification's
-  // dualComplexValid gate — the same gated primitive the trap door uses, so the
+  // dualComplexValid gate — the same gated primitive the stage-1 draw uses, so the
   // pre-growth is sound (nothing inserted by fiat). On the single-Δ⁴ seed (a 4-ball)
   // a cone-in over a boundary facet is valid, so this enlarges the 4-ball; a draw
   // onto an already-saturated interior facet is rejected by the gate and retried.
@@ -661,74 +638,50 @@ void MultiCobordism::growBoundaryRegions() {
 }
 
 std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
-                                                 int patience, bool growBoundaries) {
+                                                 bool growBoundaries) {
+  std::vector<double> objectiveTrace = {objective()};
+  for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex)
+    if (!stage1Update(nCandidateMoves, growBoundaries, objectiveTrace)) break;
+  return objectiveTrace;
+}
+
+bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
+                                  std::vector<double> &objectiveTrace) {
   // The register is "carried" (converged) once the summed r_U is essentially zero.
   constexpr double kRegisterCarriedTolerance = 1e-3;
-  std::vector<double> objectiveTrace = {objective()};
-  int trapDoorGrows = 0;   // consecutive cone-ins since the last improving move
-  Snapshot burstStart;     // complex state before the current unproductive grow burst
-  for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex) {
-    // INITIALIZATION ONLY: while establishing the boundary, let each not-yet-carrying
-    // region expand a shell so it can develop the holes that carry its state. Off
-    // during the bulk evolution — the boundary ∂W is then frozen.
-    //
-    // Growing a region CHANGES F and so must be booked into the trace (#607).
-    // `growBoundaryRegions` mutates only the boundary blocks' vertex sets and never
-    // touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
-    // whole objective change is `gamma_ * Δr_U` — exact, not an approximation of the
-    // kind `deltaF` makes for the gradient term. Leaving it unbooked let the
-    // accumulated trace drift arbitrarily far from `objective()` (measured at tens of
-    // thousands on preconed hosts), and since the SAME accumulated quantity gates
-    // acceptance, moves were being committed against a number that was not F.
-    if (growBoundaries) {
-      const double residualBeforeGrowth = rU(spacetime_);
-      growBoundaryRegions();
-      const double growthObjectiveDelta =
-          gamma_ * (rU(spacetime_) - residualBeforeGrowth);
-      if (growthObjectiveDelta != 0.0)
-        objectiveTrace.push_back(objectiveTrace.back() + growthObjectiveDelta);
-    }
-    const double objectiveDelta = step(nCandidateMoves);
-    if (objectiveDelta < -convergenceTolerance_) {
-      // An F-lowering surgery move: progress. Any preceding cone-ins led here, so
-      // keep them and reset the trap-door burst.
-      objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
-      trapDoorGrows = 0;
-      continue;
-    }
-    // No move lowered the objective. If the register is already carried, that IS
-    // convergence — halt (the trap door is unnecessary, and growing further would
-    // only disturb the carried state).
-    if (rU(spacetime_) < kRegisterCarriedTolerance) break;
-    // TRAP DOOR: grow via a gated cone-in so the optimizer escapes a too-small
-    // complex instead of giving up.
-    if (trapDoorGrows == 0) burstStart = snapshot();   // remember the pre-burst state
-    const double growthDelta = trapDoorMove(nCandidateMoves);
-    if (!std::isfinite(growthDelta)) {
-      // No gated move applied in this batch of random tries. Reseed and retry on the
-      // next iteration rather than halting the whole run: with an advanced RNG a
-      // valid move almost always appears (one batch missing is not a true dead end).
-      // `maxSteps` bounds the retries. This is the other half of in-run stall
-      // recovery — without it a single missed batch ends a long call early, which
-      // is exactly what chunking used to paper over.
-      randomNumberGenerator_.seed(randomNumberGenerator_());
-      continue;
-    }
-    objectiveTrace.push_back(objectiveTrace.back() + growthDelta);
-    if (++trapDoorGrows >= patience) {
-      // `patience` cone-ins with no improving move in between: this grow burst is
-      // not helping. Revert the whole unproductive burst, reseed, and try a FRESH
-      // trajectory from the reverted state rather than halting — the stall recovery
-      // happens within this run, so a single long call is as robust as many short
-      // ones (no need for the caller to chunk its run_stage1 budget). `maxSteps`
-      // still bounds the loop.
-      spacetime_ = build(burstStart);
-      objectiveTrace.push_back(objective());
-      randomNumberGenerator_.seed(randomNumberGenerator_());
-      trapDoorGrows = 0;
-    }
+  // INITIALIZATION ONLY: while establishing the boundary, let each not-yet-carrying
+  // region expand a shell so it can develop the holes that carry its state. Off
+  // during the bulk evolution — the boundary ∂W is then frozen.
+  //
+  // Growing a region CHANGES F and so must be booked into the trace (#607).
+  // `growBoundaryRegions` mutates only the boundary blocks' vertex sets and never
+  // touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
+  // whole objective change is `gamma_ * Δr_U` — exact, not an approximation of the
+  // kind `deltaF` makes for the gradient term. Leaving it unbooked let the
+  // accumulated trace drift arbitrarily far from `objective()` (measured at tens of
+  // thousands on preconed hosts), and since the SAME accumulated quantity gates
+  // acceptance, moves were being committed against a number that was not F.
+  if (growBoundaries) {
+    const double residualBeforeGrowth = rU(spacetime_);
+    growBoundaryRegions();
+    const double growthObjectiveDelta =
+        gamma_ * (rU(spacetime_) - residualBeforeGrowth);
+    if (growthObjectiveDelta != 0.0)
+      objectiveTrace.push_back(objectiveTrace.back() + growthObjectiveDelta);
   }
-  return objectiveTrace;
+  const double objectiveDelta = step(nCandidateMoves);
+  if (objectiveDelta < -convergenceTolerance_) {
+    // An F-lowering surgery move: progress.
+    objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
+    return true;
+  }
+  // No candidate in this batch lowered the objective. If the register is already
+  // carried, that IS convergence — halt. Otherwise keep drawing: a batch is a
+  // random sample, so one miss is not proof no improving move exists — under the
+  // default disposition-enabled draw (#632) the seed always has an F-lowering
+  // move — and the next iteration redraws fresh candidates. `maxSteps` bounds
+  // the retries.
+  return rU(spacetime_) >= kRegisterCarriedTolerance;
 }
 
 void MultiCobordism::seedInputs(const std::vector<std::uint64_t> &seeds) {
@@ -764,77 +717,114 @@ void MultiCobordism::seedBlocks(
 
 std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
                                                  double alpha0, double relTol) {
-  auto edges = spacetime_->getEdgeList()->toVector();
+  std::vector<double> objectiveTrace = {beta * reggeActionGradient(spacetime_) +
+                                        gamma_ * rU(spacetime_)};
+  double stepScale = alpha0;
+  lastStage2Stationary_ = false;  // for maxIters == 0; each update reports its own
+  for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex)
+    if (!stage2Update(beta, relTol, objectiveTrace, stepScale)) break;
+  return objectiveTrace;
+}
+
+std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
+                                        bool growBoundaries, double beta,
+                                        double alpha0, double relTol) {
+  std::vector<double> objectiveTrace = {objective()};
+  double stepScale = alpha0;
+  lastStage2Stationary_ = false;  // for maxIters == 0; each update reports its own
+  for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
+    // Both updates run every iteration, so the optimizer takes whichever kind of
+    // progress is available — combinatorial, geometric, or both. Neither stall is
+    // final on its own: a stage-2 stationary point can be reopened by the next
+    // stage-1 topology change (stage2Update re-reads the edge list each call) and
+    // a stalled stage-1 search can be unstuck by relaxed geometry, so halt only
+    // when BOTH halves stall within the same iteration.
+    const bool combinatorialProgressing =
+        stage1Update(nCandidateMoves, growBoundaries, objectiveTrace);
+    const bool geometricProgressing =
+        stage2Update(beta, relTol, objectiveTrace, stepScale);
+    if (!combinatorialProgressing && !geometricProgressing) break;
+  }
+  return objectiveTrace;
+}
+
+bool MultiCobordism::stage2Update(double beta, double relTol,
+                                  std::vector<double> &objectiveTrace,
+                                  double &stepScale) {
+  // Reset-then-set: the flag reports THIS call's outcome, so in the combined
+  // drive (`run`) it reflects the most recent geometric update instead of
+  // latching true after a stationary point a later topology change reopened.
+  // (`runStage2` is unaffected: there a true flag breaks its loop immediately.)
+  lastStage2Stationary_ = false;
+  // Within one `runStage2` call the topology is fixed (only edge lengths move), so
+  // re-reading the edge list here is free; in the combined drive (`run`) it is what
+  // picks up the edges a stage-1 move just created or removed.
+  const auto &edges = spacetime_->getEdgeList()->toVector();
   const std::size_t edgeCount = edges.size();
   auto fullObjective = [&]() {
     return beta * reggeActionGradient(spacetime_) + gamma_ * rU(spacetime_);
   };
-  std::vector<double> objectiveTrace = {fullObjective()};
-  double stepScale = alpha0;
-  lastStage2Stationary_ = false;  // set true only on the stationary break below
-  for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
-    ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
-    const auto gradientComponents = reggeSolver.actionGradientExact();
-    const auto hessianRows = reggeSolver.actionHessianExact();  // rows of complex
-    Eigen::VectorXcd gradientVector(edgeCount);
-    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-      gradientVector(edgeIndex) = gradientComponents[edgeIndex];
-    Eigen::MatrixXcd hessianMatrix(edgeCount, edgeCount);
-    for (std::size_t rowIndex = 0; rowIndex < edgeCount; ++rowIndex)
-      for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
-        hessianMatrix(rowIndex, columnIndex) =
-            hessianRows[rowIndex][columnIndex];
-    // The exact gradient of F restricted to the real signed-l^2 manifold: for a
-    // real-valued F of a complex variable evaluated on the real axis,
-    // dF/dx = 2 Re(dF/dz̄), so the on-manifold descent direction is the REAL
-    // PART of the Wirtinger direction 2β(H̄·g) (#589).
-    const Eigen::VectorXd descentDirection =
-        (beta * 2.0 * (hessianMatrix.conjugate() * gradientVector)).real();
-    Eigen::VectorXd squaredLengths(edgeCount);
-    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-      squaredLengths(edgeIndex) =
-          edges[edgeIndex]->getRealSquaredLength();
-    const double currentObjective = objectiveTrace.back();
-    // Relative stationarity: accept a step only when it lowers F by more than relTol
-    // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
-    // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100
-    // — the rounding floor; this scales the threshold with the objective instead.
-    const double improvementThreshold =
-        relTol * std::max(std::abs(currentObjective), 1.0);
-    double trialStepScale = stepScale;
-    bool objectiveImproved = false;
-    for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
-      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-        // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
-        // clamp, no causal guard (semantics: runStage2 in MultiCobordism.h).
-        // Spacelike, timelike, and lightlike trials are all admissible, and
-        // every trial is constructed EXACTLY real, so Im l^2 == 0 holds for
-        // all time by construction — no backoff, no projection (#589).
-        edges[edgeIndex]->setSquaredLength(complexd(
-            squaredLengths(edgeIndex) -
-                trialStepScale * descentDirection(edgeIndex),
-            0.0));
-      }
-      // The objective is total on the real signed-l^2 manifold, so a trial
-      // cannot fail to evaluate; a genuine error propagates loudly (#589).
-      const double trialObjective = fullObjective();
-      if (trialObjective < currentObjective - improvementThreshold) {
-        objectiveTrace.push_back(trialObjective);
-        stepScale = std::min(stepScale * 1.3, 1.0);
-        objectiveImproved = true;
-        break;
-      }
-      trialStepScale *= 0.5;
+  ReggeSolver reggeSolver(spacetime_, MatterConfiguration());
+  const auto gradientComponents = reggeSolver.actionGradientExact();
+  const auto hessianRows = reggeSolver.actionHessianExact();  // rows of complex
+  Eigen::VectorXcd gradientVector(edgeCount);
+  for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+    gradientVector(edgeIndex) = gradientComponents[edgeIndex];
+  Eigen::MatrixXcd hessianMatrix(edgeCount, edgeCount);
+  for (std::size_t rowIndex = 0; rowIndex < edgeCount; ++rowIndex)
+    for (std::size_t columnIndex = 0; columnIndex < edgeCount; ++columnIndex)
+      hessianMatrix(rowIndex, columnIndex) =
+          hessianRows[rowIndex][columnIndex];
+  // The exact gradient of F restricted to the real signed-l^2 manifold: for a
+  // real-valued F of a complex variable evaluated on the real axis,
+  // dF/dx = 2 Re(dF/dz̄), so the on-manifold descent direction is the REAL
+  // PART of the Wirtinger direction 2β(H̄·g) (#589).
+  const Eigen::VectorXd descentDirection =
+      (beta * 2.0 * (hessianMatrix.conjugate() * gradientVector)).real();
+  Eigen::VectorXd squaredLengths(edgeCount);
+  for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+    squaredLengths(edgeIndex) =
+        edges[edgeIndex]->getRealSquaredLength();
+  const double currentObjective = objectiveTrace.back();
+  // Relative stationarity: accept a step only when it lowers F by more than relTol
+  // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
+  // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100
+  // — the rounding floor; this scales the threshold with the objective instead.
+  const double improvementThreshold =
+      relTol * std::max(std::abs(currentObjective), 1.0);
+  double trialStepScale = stepScale;
+  bool objectiveImproved = false;
+  for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+      // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
+      // clamp, no causal guard (semantics: runStage2 in MultiCobordism.h).
+      // Spacelike, timelike, and lightlike trials are all admissible, and
+      // every trial is constructed EXACTLY real, so Im l^2 == 0 holds for
+      // all time by construction — no backoff, no projection (#589).
+      edges[edgeIndex]->setSquaredLength(complexd(
+          squaredLengths(edgeIndex) -
+              trialStepScale * descentDirection(edgeIndex),
+          0.0));
     }
-    if (!objectiveImproved) {
-      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
-        edges[edgeIndex]->setSquaredLength(
-            complexd(squaredLengths(edgeIndex), 0.0));
-      lastStage2Stationary_ = true;  // no line-search step beat the relative threshold
+    // The objective is total on the real signed-l^2 manifold, so a trial
+    // cannot fail to evaluate; a genuine error propagates loudly (#589).
+    const double trialObjective = fullObjective();
+    if (trialObjective < currentObjective - improvementThreshold) {
+      objectiveTrace.push_back(trialObjective);
+      stepScale = std::min(stepScale * 1.3, 1.0);
+      objectiveImproved = true;
       break;
     }
+    trialStepScale *= 0.5;
   }
-  return objectiveTrace;
+  if (!objectiveImproved) {
+    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
+      edges[edgeIndex]->setSquaredLength(
+          complexd(squaredLengths(edgeIndex), 0.0));
+    lastStage2Stationary_ = true;  // no line-search step beat the relative threshold
+    return false;
+  }
+  return true;
 }
 
 int MultiCobordism::directedConeOut(HolePlacementStrategy strategy, int maxOpen) {
@@ -962,15 +952,15 @@ int MultiCobordism::directedConeIn(int maxClose) {
 }
 
 void MultiCobordism::buildStep(BuildAction action, int maxSteps, int nCandidateMoves,
-                               int patience, double stage2Beta, int stage2MaxIters,
+                               double stage2Beta, int stage2MaxIters,
                                double stage2Alpha0,
                                HolePlacementStrategy holePlacementStrategy) {
   switch (action) {
     case BuildAction::Grow:
-      runStage1(maxSteps, nCandidateMoves, patience, /*growBoundaries=*/true);
+      runStage1(maxSteps, nCandidateMoves, /*growBoundaries=*/true);
       break;
     case BuildAction::Evolve:
-      runStage1(maxSteps, nCandidateMoves, patience, /*growBoundaries=*/false);
+      runStage1(maxSteps, nCandidateMoves, /*growBoundaries=*/false);
       break;
     case BuildAction::Relax:
       runStage2(stage2Beta, stage2MaxIters, stage2Alpha0);

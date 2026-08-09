@@ -114,7 +114,7 @@ std::shared_ptr<MultiCobordism> Proton::formationNode(std::uint64_t seed) const 
 }
 
 void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
-                   int stage1CandidateMoves, int stage1Patience, double stage2Beta,
+                   int stage1CandidateMoves, double stage2Beta,
                    int stage2MaxIters, double colorTolerance, int minQuarkHoles) {
   if (attempted_) return;
   attempted_ = true;
@@ -123,15 +123,14 @@ void Proton::build(int maxRestarts, int initSteps, int evolveSteps,
 
   // Drive one already-seeded node: an INITIALIZATION pass that grows the boundary
   // regions until they carry (grow_boundaries=true), an EVOLUTION pass with ∂W frozen
-  // (grow_boundaries=false), then the geometric relaxation. runStage1 self-recovers from
-  // unproductive grow bursts internally, so one call per pass is robust. (Node setup —
+  // (grow_boundaries=false), then the geometric relaxation. (Node setup —
   // seed, targets, seeding, input weight — lives in recombinationNode/formationNode, the
   // same factories the animation drives.)
   const auto runNode = [&](MultiCobordism &node) {
-    node.runStage1(initSteps, stage1CandidateMoves, stage1Patience, /*growBoundaries=*/true);
+    node.runStage1(initSteps, stage1CandidateMoves, /*growBoundaries=*/true);
     if (shouldUseDirectedSurgery_)  // deliberately open the register holes
       (void)node.directedConeOut();
-    node.runStage1(evolveSteps, stage1CandidateMoves, stage1Patience,
+    node.runStage1(evolveSteps, stage1CandidateMoves,
                    /*growBoundaries=*/false);
     if (shouldUseDirectedSurgery_)  // select the best register (drop holes that hurt)
       (void)node.directedConeIn();

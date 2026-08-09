@@ -109,14 +109,14 @@ StepResult CobordismObjectiveEnv::step(Move move, std::array<float, kParamDim> p
       const int maxSteps = static_cast<int>(std::lround(
           lerp(config_.growSteps.first, config_.growSteps.second, intensity)));
       node_->buildStep(MultiCobordism::BuildAction::Grow, std::max(1, maxSteps),
-                       config_.nCandidateMoves, config_.patience);
+                       config_.nCandidateMoves);
       if (config_.directedGrow)  // finish the register the random draws left short
         (void)node_->directedConeOut();
     } else if (move == Move::Evolve) {
       const int maxSteps = static_cast<int>(std::lround(
           lerp(config_.evolveSteps.first, config_.evolveSteps.second, intensity)));
       node_->buildStep(MultiCobordism::BuildAction::Evolve, std::max(1, maxSteps),
-                       config_.nCandidateMoves, config_.patience);
+                       config_.nCandidateMoves);
       if (config_.directedGrow)  // select the register (drop a hole that hurts the carry)
         (void)node_->directedConeIn();
     } else {  // Move::Relax
@@ -126,7 +126,7 @@ StepResult CobordismObjectiveEnv::step(Move move, std::array<float, kParamDim> p
       const double alpha0 =
           lerp(config_.alphaRange.first, config_.alphaRange.second, intensity);
       node_->buildStep(MultiCobordism::BuildAction::Relax, /*maxSteps=*/30,
-                       config_.nCandidateMoves, config_.patience, beta,
+                       config_.nCandidateMoves, beta,
                        std::max(1, maxIters), alpha0);
     }
   } catch (...) {

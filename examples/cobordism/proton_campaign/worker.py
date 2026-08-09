@@ -42,7 +42,6 @@ cob = tessera.cobordism
 INIT_STEPS = 180
 EVOLVE_STEPS = 60
 CANDIDATES = 8
-PATIENCE = 15
 STAGE2_BETA = 1.0
 STAGE2_CHUNK = 25            # progress granularity; the stationarity test is the exit
 PERSIST_PASSES = 3
@@ -189,7 +188,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
     def run_node(node, node_index, node_tag):
         t0 = time.time()
         node.run_stage1(max_steps=INIT_STEPS, n_candidate_moves=CANDIDATES,
-                        patience=PATIENCE, grow_boundaries=True)
+                        grow_boundaries=True)
         snap = snapshot(node)
         state.see(snap)
         progress(dict(base_seed=base, node=node_tag, phase="init",
@@ -197,7 +196,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
         frame(node_index, "init")
         t0 = time.time()
         node.run_stage1(max_steps=EVOLVE_STEPS, n_candidate_moves=CANDIDATES,
-                        patience=PATIENCE, grow_boundaries=False)
+                        grow_boundaries=False)
         snap = snapshot(node)
         state.see(snap)
         progress(dict(base_seed=base, node=node_tag, phase="evolve",
@@ -213,7 +212,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
     for persist_pass in range(1, PERSIST_PASSES + 1):
         before = snapshot(joint)
         joint.run_stage1(max_steps=EVOLVE_STEPS, n_candidate_moves=CANDIDATES,
-                         patience=PATIENCE, grow_boundaries=False)
+                         grow_boundaries=False)
         stage2_iters += stage2_to_stationarity(joint, 0, "J")
         after = snapshot(joint)
         state.see(after)

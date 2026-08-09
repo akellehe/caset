@@ -46,7 +46,8 @@ class ProtonBuildTest(unittest.TestCase):
     formation, with restarts)."""
 
     # Single-Δ⁴-simplex-seed build (one pentatope; nothing is pre-built — all topology
-    # emerges from one simplex via the trap door). It converges reliably for this seed,
+    # emerges from one simplex through stage 1's F-lowering draw). It converges reliably
+    # for this seed,
     # but the runtime is VARIABLE: threaded eigensolves reorder floating-point sums, so
     # the "best move" — and thus how soon r_U carries — varies run to run (this build can
     # finish in ~1 min or take several). max_restarts is cross-machine headroom.

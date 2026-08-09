@@ -66,7 +66,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
                       gamma=1.0, seed=seed)
             sv = [v.getId() for v in host.getVertexList().toVector()][:2]
             opt.seed_inputs(sv)
-            opt.run_stage1(max_steps=25, n_candidate_moves=8, patience=8)
+            opt.run_stage1(max_steps=25, n_candidate_moves=8)
             if list(CXX.betti(opt.st))[3] >= 1:
                 grew = True
                 break
@@ -110,7 +110,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         self.assertEqual(len(Proton.singlet()), 3)            # the proton is a 3-vector
         p = Proton(seed=3)
         p.build(max_restarts=1, init_steps=8, evolve_steps=4,
-                stage1_candidate_moves=4, stage1_patience=4, stage2_max_iters=6,
+                stage1_candidate_moves=4, stage2_max_iters=6,
                 min_quark_holes=1)
         # both steps ran: Step A (diquark recombination) and Step B (proton formation)
         self.assertTrue(math.isfinite(p.diquark_residual()))
@@ -129,7 +129,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
         sv = [v.getId() for v in host.getVertexList().toVector()]
         opt.seed_inputs(sv[:2])
         opt.seed_outputs(sv[2:4])   # two output blocks, co-optimized
-        opt.run_stage1(max_steps=6, n_candidate_moves=4, patience=4)
+        opt.run_stage1(max_steps=6, n_candidate_moves=4)
         self.assertTrue(math.isfinite(opt.r_u(opt.st)))   # all 4 blocks scored, no crash
 
     def test_dag_recombination_routes_two_outputs(self):
@@ -145,7 +145,7 @@ class MultiCobordismCxxTest(unittest.TestCase):
                            degrees=[3], seed=5)
         apr = dag.add_node(ha, [[0, -1, 1]], [(rec, 1)], [[1, w, w * w]],
                            degrees=[3], seed=6)
-        dag.run(stage1_max_steps=6, stage1_candidate_moves=3, stage1_patience=3,
+        dag.run(stage1_max_steps=6, stage1_candidate_moves=3,
                 stage2_max_iters=6)
         self.assertEqual(dag.num_outputs(rec), 2)
         self.assertEqual(len(dag.output(rec, 0)), 3)   # CobordismDAG.output() threading

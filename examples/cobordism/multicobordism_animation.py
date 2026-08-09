@@ -3,8 +3,8 @@
 """Real-time animation of the canonical two-step **Proton** build (#522, #526).
 
 Drives the actual `tessera.cobordism.Proton` class and animates the proton assembling in
-its two physical steps, each growing its whole topology from a single Δ⁴ simplex via the
-trap door —
+its two physical steps, each growing its whole topology from a single Δ⁴ simplex through
+stage 1's F-lowering candidate draw —
 
   * **Step A — recombination** (`Proton.recombination_node`): two neutral q-q̄ pairs ⟶
     a colored diquark `{1, ω}` ⊔ anti-diquark `{1, ω²}`;
@@ -17,14 +17,14 @@ Step A animates first (Step B waiting on its seed simplex); then Step B animates
 A holds its finished complex, so at the end you see the full diquark next to the full
 proton, side by side.
 
-Each node is driven the way `Proton.build()` drives it: an **init pass**
-(`grow_boundaries=True`) that grows the color register, an **evolution pass**
-(`grow_boundaries=False`) with the boundary frozen, then the **geometric relaxation**
-(`run_stage2`). Each surgery pass runs as a *single* `run_stage1` call (one frame): its
-grow-burst self-recovery and `patience` early-stop both work only *within one call*, so
-driving surgery one step at a time (as the old demo did) never grows the register — which is
-exactly why the proton never showed its three quark holes. `run_stage2` is then advanced one
-relaxation iteration per frame, so the geometric settling animates smoothly.
+Each node is driven with the COMBINED `run` drive: an **init pass** (`grow_boundaries=True`)
+that grows the color register, then an **evolution pass** (`grow_boundaries=False`) with the
+boundary frozen. Every `run` iteration interleaves the stage-1 combinatorial update with the
+stage-2 geometric relaxation, so the optimizer makes whichever kind of progress helps at each
+point — no separate relaxation pass. The animation advances ONE `run` iteration per frame:
+stage 1 keeps no state across iterations (the trap-door burst machinery is gone), so
+splitting a pass into per-frame calls is exact — every accepted move and relaxation step
+gets its own frame.
 
 The figure is a 2×4 grid, one **step per row**: traces, the primal complex, then the dual
 split into spatial- and temporal-curvature panels:
@@ -50,7 +50,7 @@ carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 
 holes.
 
 It drives only the **public** `Proton` (`recombination_node`/`formation_node`),
-`MultiCobordism` (`run_stage1`/`run_stage2`, plus `betti`, `emergent_holes`,
+`MultiCobordism` (the combined `run`, plus `betti`, `emergent_holes`,
 `regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`), and the geometry readers
 (`Spacetime.getTopSimplices`/`getDualAdjacency`/`getSimplices`,
 `Simplex.lorentzianDeficitAngle`/`dualVolume`) APIs — the *same* node setups
@@ -99,21 +99,18 @@ import tessera
 
 cob = tessera.cobordism
 
-# The drive `Proton.build()` uses per node, mirrored here. The surgery (init/evolution)
-# passes each run as ONE `run_stage1` call per node — `run_stage1`'s grow-burst self-recovery
-# and its `patience` early-stop both work *within a single call*, so chunking a pass into
-# small per-frame calls neither grows the register nor early-stops (it just does far more,
-# slower steps). The register growth is therefore shown as one surgery frame per pass; the
-# *geometric relaxation* is what animates smoothly, one `run_stage2` iteration per frame.
-# `_*_CHUNK` cap a pass's per-frame call (defaulting to the whole pass = one call =
-# `Proton.build()`'s exact drive); `_STAGE1_PATIENCE` matches `Proton.build()`. These totals
-# are sized so Step B reliably grows its three quark holes and carries the singlet.
-_INIT_STEPS = 180          # init-pass (grow_boundaries=True) steps per node
-_EVOLVE_STEPS = 60         # evolution-pass (grow_boundaries=False) steps per node
-_INIT_CHUNK = _INIT_STEPS  # init steps per frame (whole pass = one call, so it converges)
-_EVOLVE_CHUNK = _EVOLVE_STEPS  # evolution steps per frame (whole pass = one call)
-_STAGE2_ITERS = 10         # geometric-relaxation iterations per node (one per frame)
-_STAGE1_PATIENCE = 15      # matches Proton.build(): early-stop a pass after this many stalls
+# Two combined-`run` passes per node — init (grow_boundaries=True) then evolution
+# (grow_boundaries=False) — each interleaving the stage-1 surgery update with the stage-2
+# geometric relaxation every iteration, so the optimizer makes whichever kind of progress
+# helps at each point. The animation runs ONE iteration per frame (`_*_CHUNK = 1`): stage 1
+# keeps no state across iterations, so per-frame chunking is exact and every accepted move
+# and relaxation step is visible. (The batched no-visualization path still runs each pass
+# as one call — same result, no per-frame overhead.) These totals are sized so Step B
+# reliably grows its three quark holes and carries the singlet.
+_INIT_STEPS = 180          # init-pass (grow_boundaries=True) iterations per node
+_EVOLVE_STEPS = 60         # evolution-pass (grow_boundaries=False) iterations per node
+_INIT_CHUNK = 1            # init iterations per frame (1 = smoothest animation)
+_EVOLVE_CHUNK = 1          # evolution iterations per frame
 _STAGE1_CANDIDATES = 8
 _COLOR_TOL = 0.5           # singlet r_state below this ⇒ the proton carries the color
 _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
@@ -230,25 +227,23 @@ class ProtonAnimator:
     """Animates the proton's two steps — Step A (recombination) then Step B (formation) —
     with BOTH steps' complexes on screen at one time.
 
-    Each node is driven the way `Proton.build()` drives it: an init pass
+    Each node is driven with the combined `run` drive: an init pass
     (`grow_boundaries=True`, grows the color register) and an evolution pass
-    (`grow_boundaries=False`), advanced in chunks of several surgery steps per frame, then
-    `run_stage2` one relaxation iteration per frame. The two complex panels are bound one
-    each to Step A and Step B for the whole run, so Step A's finished diquark stays visible
-    beside the proton as Step B forms."""
+    (`grow_boundaries=False`), each interleaving the stage-1 surgery update with the
+    stage-2 geometric relaxation every iteration, advanced one iteration per frame by
+    default. The two complex panels are bound one each to Step A and Step B for the whole
+    run, so Step A's finished diquark stays visible beside the proton as Step B forms."""
 
-    _PHASE_NAMES = {"init": "growing register", "evolve": "evolving (∂W frozen)",
-                    "stage2": "relaxing geometry"}
+    _PHASE_NAMES = {"init": "growing register", "evolve": "evolving (∂W frozen)"}
     _TITLE_PREFIX = "Proton build (two-step)"
 
     def __init__(self, nodes, degree=3, init_steps=_INIT_STEPS, init_chunk=_INIT_CHUNK,
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
-                 stage2_iters=_STAGE2_ITERS, stage1_candidates=_STAGE1_CANDIDATES,
-                 stage1_patience=_STAGE1_PATIENCE, stage2_beta=1.0):
+                 stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0):
         self._common_init(nodes, degree)
-        self.s1c, self.s1pat, self.s2_beta = stage1_candidates, stage1_patience, stage2_beta
+        self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
-                                             evolve_steps, evolve_chunk, stage2_iters)
+                                             evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
 
     def _common_init(self, nodes, degree):
@@ -268,11 +263,11 @@ class ProtonAnimator:
         self._curv_cache = {}       # node_index -> (frame_computed, {cell_tuple: curvature})
 
     @staticmethod
-    def _make_schedule(n_nodes, init_steps, init_chunk, evolve_steps, evolve_chunk,
-                       stage2_iters):
+    def _make_schedule(n_nodes, init_steps, init_chunk, evolve_steps, evolve_chunk):
         """A flat list of (node_index, phase, count) ops, one per frame: each node's init
         pass (in `init_chunk`-sized bites), then its evolution pass (in `evolve_chunk`
-        bites), then `stage2_iters` single relaxation iterations."""
+        bites). Each op is one combined `run` call, so the geometric relaxation is
+        interleaved into every iteration rather than scheduled as its own phase."""
         def chunks(total, size):
             done = 0
             while done < total:
@@ -283,7 +278,6 @@ class ProtonAnimator:
         for i in range(n_nodes):
             sched += [(i, "init", c) for c in chunks(init_steps, init_chunk)]
             sched += [(i, "evolve", c) for c in chunks(evolve_steps, evolve_chunk)]
-            sched += [(i, "stage2", 1) for _ in range(stage2_iters)]
         return sched
 
     # ---- one scheduled chunk on the active node ----
@@ -293,14 +287,8 @@ class ProtonAnimator:
             self._active = node_index
             self._boundaries.append(len(self.hist["F"]))
         node, _label = self.nodes[node_index]
-        if phase == "init":
-            node.run_stage1(max_steps=count, n_candidate_moves=self.s1c,
-                            patience=self.s1pat, grow_boundaries=True)
-        elif phase == "evolve":
-            node.run_stage1(max_steps=count, n_candidate_moves=self.s1c,
-                            patience=self.s1pat, grow_boundaries=False)
-        else:
-            node.run_stage2(beta=self.s2_beta, max_iters=count)
+        node.run(max_iters=count, n_candidate_moves=self.s1c,
+                 grow_boundaries=(phase == "init"), beta=self.s2_beta)
         self._record(node, node_index, phase)
 
     def _record(self, node, node_index, phase):
@@ -602,12 +590,12 @@ class ProtonAnimator:
 
     # ---- responsive live driver: compute on a worker thread, paint on the GUI thread ----
     def _run_live(self, plt, interval):
-        """Animate live without freezing the window. A surgery frame is a *single* multi-second
-        `run_stage1`/`run_stage2` call (it must stay one call — grow-burst recovery and patience
-        early-stop only work within a call), so running it inside the `FuncAnimation` callback on
-        the GUI thread blocks the event loop for tens of seconds and the OS flags the window
-        'not responding'. Instead a background thread runs the build while the GUI thread only
-        paints finished frames on a timer.
+        """Animate live without freezing the window. A build frame — one combined `run`
+        iteration: a candidate-move batch plus a Hessian-backed relaxation step — can still
+        take seconds on a grown complex, so running it inside the `FuncAnimation` callback on
+        the GUI thread blocks the event loop and the OS flags the window 'not responding'.
+        Instead a background thread runs the build while the GUI thread only paints finished
+        frames on a timer.
 
         A two-way handshake keeps the engine single-threaded even though two threads are live:
         the worker computes frame *n* only after the GUI has finished painting frame *n-1*
@@ -717,13 +705,14 @@ def animate(nodes, save=None, interval=200, **kw):
 
 
 def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEPS,
-              evolve_steps=_EVOLVE_STEPS, stage2_iters=_STAGE2_ITERS,
-              stage1_candidates=_STAGE1_CANDIDATES, stage1_patience=_STAGE1_PATIENCE,
+              evolve_steps=_EVOLVE_STEPS,
+              stage1_candidates=_STAGE1_CANDIDATES,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
               **anim_kw):
-    """Run the two-step proton build over `nodes`, driving each node the way
-    `Proton.build()` does: init pass (`grow_boundaries=True`) → evolution pass
-    (`grow_boundaries=False`) → `run_stage2`.
+    """Run the two-step proton build over `nodes` with the combined `run` drive: an init
+    pass (`grow_boundaries=True`) then an evolution pass (`grow_boundaries=False`), each
+    interleaving the stage-1 surgery update with the stage-2 geometric relaxation every
+    iteration.
 
     Visualization is **off by default**: with ``visualize=False`` (and no ``save``) this
     takes the fast **batched** path — each node's passes run to completion in one call each,
@@ -733,11 +722,10 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
     if not visualize and not save:
         out = []
         for node, label in nodes:
-            node.run_stage1(max_steps=init_steps, n_candidate_moves=stage1_candidates,
-                            patience=stage1_patience, grow_boundaries=True)
-            node.run_stage1(max_steps=evolve_steps, n_candidate_moves=stage1_candidates,
-                            patience=stage1_patience, grow_boundaries=False)
-            node.run_stage2(beta=stage2_beta, max_iters=stage2_iters)
+            node.run(max_iters=init_steps, n_candidate_moves=stage1_candidates,
+                     grow_boundaries=True, beta=stage2_beta)
+            node.run(max_iters=evolve_steps, n_candidate_moves=stage1_candidates,
+                     grow_boundaries=False, beta=stage2_beta)
             st = node.st
             out.append((label, {
                 "F": float(node.objective()),
@@ -752,8 +740,8 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                                 "color_residual": res, "registers": holes}))
         return out
     return animate(nodes, save=save, degree=degree, init_steps=init_steps,
-                   evolve_steps=evolve_steps, stage2_iters=stage2_iters,
-                   stage1_candidates=stage1_candidates, stage1_patience=stage1_patience,
+                   evolve_steps=evolve_steps,
+                   stage1_candidates=stage1_candidates,
                    stage2_beta=stage2_beta, interval=interval, **anim_kw).hist
 
 
@@ -1017,11 +1005,10 @@ def main():
                     help="(RL) directory for the cached per-step policy checkpoints")
     # ---- fixed Proton.build() drive knobs ----
     ap.add_argument("--init", type=int, default=_INIT_STEPS,
-                    help="init-pass (grow_boundaries=True) steps per node")
+                    help="init-pass (grow_boundaries=True) combined-run iterations per node")
     ap.add_argument("--evolve", type=int, default=_EVOLVE_STEPS,
-                    help="evolution-pass (grow_boundaries=False) steps per node")
-    ap.add_argument("--stage2", type=int, default=_STAGE2_ITERS,
-                    help="geometric-relaxation iterations per node")
+                    help="evolution-pass (grow_boundaries=False) combined-run iterations "
+                         "per node")
     ap.add_argument("--precone", type=int, default=0,
                     help="pre-grow each node's single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
@@ -1039,7 +1026,7 @@ def main():
         return
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
-                       evolve_steps=args.evolve, stage2_iters=args.stage2)
+                       evolve_steps=args.evolve)
     if not args.live and not args.save:
         print("two-step proton build finished (visualization off by default — pass --live "
               "or --save to watch it):")

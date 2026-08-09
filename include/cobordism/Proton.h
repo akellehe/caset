@@ -38,7 +38,8 @@ class MultiCobordism;  // returned (seeded, not run) by the node factories below
 /// are out of scope here.
 ///
 /// `build()` grows each step out of a **single Δ⁴ simplex seed** (one pentatope — the
-/// proton pre-builds nothing; all topology emerges from one simplex via the trap door),
+/// proton pre-builds nothing; all topology emerges from one simplex through stage 1's
+/// F-lowering candidate draw),
 /// runs **A then B**, and **restarts across distinct seeds** (the two-step converges
 /// less often than a single merge) until step B's whole cobordism carries the 3-vector
 /// singlet with at least `minQuarkHoles` (default 3) emergent color holes. The accessors
@@ -84,7 +85,7 @@ class Proton {
   /// the carrying input regions) then an EVOLUTION pass (`evolveSteps`,
   /// `grow_boundaries=false` — ∂W frozen) then `runStage2`. Idempotent.
   void build(int maxRestarts = 16, int initSteps = 180,
-             int evolveSteps = 60, int stage1CandidateMoves = 8, int stage1Patience = 15,
+             int evolveSteps = 60, int stage1CandidateMoves = 8,
              double stage2Beta = 1.0, int stage2MaxIters = 10,
              double colorTolerance = 0.5, int minQuarkHoles = 3);
 
@@ -129,8 +130,9 @@ class Proton {
   void ensureBuilt();
   /// The minimal seed: a single `Δ⁴` simplex (one pentatope — 5 vertices, 1 top cell,
   /// Betti `[1,0,0,0,0]`, a contractible 4-ball) with a uniform metric. The proton grows
-  /// ALL of its topology out of this one simplex via the trap door, and the geometry out
-  /// of the relaxation — nothing is pre-built (no host refinement, no metric jitter).
+  /// ALL of its topology out of this one simplex through stage 1's F-lowering candidate
+  /// draw, and the geometry out of the relaxation — nothing is pre-built (no host
+  /// refinement, no metric jitter).
   [[nodiscard]] static std::shared_ptr<Spacetime> buildMinimalSeed();
 
   // ---- configuration ----

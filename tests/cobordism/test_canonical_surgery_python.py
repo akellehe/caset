@@ -63,7 +63,7 @@ class DirectedProbeInvariantTest(unittest.TestCase):
         node = cob.Proton(seed=0).formation_node(1)   # a seeded single-Δ⁴ node
         # A small grow keeps the eigensolve-heavy probe scans cheap; the invariant holds
         # at any size.
-        node.build_step(BA.GROW, max_steps=25, n_candidate_moves=6, patience=10)
+        node.build_step(BA.GROW, max_steps=25, n_candidate_moves=6)
 
         # A directed probe commits a move ONLY when it lowers rU, so rU is non-increasing.
         # These two calls also exercise the CONE_OUT / CONE_IN build_step routes.

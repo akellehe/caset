@@ -142,7 +142,7 @@ class ImExactlyZeroInvariantTest(unittest.TestCase):
         opt = self._node(host)
         _assert_mixed_hinge_regime(self, host)
         # No exception may surface from any trial either stage constructs.
-        opt.run_stage1(max_steps=4, n_candidate_moves=4, patience=3,
+        opt.run_stage1(max_steps=4, n_candidate_moves=4,
                        grow_boundaries=True)
         trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05,
                                rel_tol=1e-9)

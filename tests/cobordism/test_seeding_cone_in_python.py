@@ -6,8 +6,8 @@ coneIn requires exactly d targets (a facet of a top cell), NOT the full (d+1)-ve
 cell — passing the whole cell fails the arg-count check, so a cone-in could only ever
 shrink, never grow. These tests pin coneIn's contract and the connectivity invariant
 it must preserve (no vertices left unconnected by edges), and show that repeated
-cone-in genuinely grows a connected complex from a single simplex. coneIn is the
-trap door's surgical escape move in runStage1; the input/output blocks are now seeded
+cone-in genuinely grows a connected complex from a single simplex. coneIn is one of
+runStage1's gated surgical candidate moves; the input/output blocks are now seeded
 without it (growBoundaryRegions grows them emergently).
 """
 import collections

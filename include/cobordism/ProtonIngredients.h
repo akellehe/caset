@@ -71,7 +71,7 @@ class ProtonIngredients {
   /// pass reuses `evolveSteps`/`stage2MaxIters`, and `persistRelTol` is the relative
   /// `F`-stability tolerance. No color tolerance, no minimum hole count. Idempotent.
   void build(int maxRestarts = 16, int initSteps = 180, int evolveSteps = 60,
-             int stage1CandidateMoves = 8, int stage1Patience = 15,
+             int stage1CandidateMoves = 8,
              double stage2Beta = 1.0, int stage2MaxIters = 10,
              double persistRelTol = 0.05);
 
