@@ -1,23 +1,19 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
-"""Real-time animation of the canonical two-step **Proton** build (#522, #526).
+"""Real-time animation of the ONE-STEP **Proton** build: three q-q̄ pairs → the proton.
 
-Drives the actual `tessera.cobordism.Proton` class and animates the proton assembling in
-its two physical steps, each growing its whole topology from a single Δ⁴ simplex through
-stage 1's F-lowering candidate draw —
+Drives the actual `tessera.cobordism.Proton` class through its experimental single-merge
+arm: ONE `MultiCobordism` node (`Proton.direct_node`) whose inputs are the three bare
+quarks `{1}`, `{ω}`, `{ω²}` (ω = exp(2πi/3)) plus their three anti-quarks (the
+elementwise conjugates — three neutral q-q̄ pairs, as pair production demands) and whose
+single output is the colorless proton singlet `{1, ω, ω²}`, read off the WHOLE cobordism
+— the anti-baryon partner is left to emerge unpinned. No diquark intermediate, no
+recombination/formation split — the canonical two-step reference build is animated by
+`multicobordism_animation.py`; this example asks whether the proton can emerge in one go,
+growing its whole topology from a single Δ⁴ simplex through stage 1's F-lowering
+candidate draw.
 
-  * **Step A — recombination** (`Proton.recombination_node`): two neutral q-q̄ pairs ⟶
-    a colored diquark `{1, ω}` ⊔ anti-diquark `{1, ω²}`;
-  * **Step B — formation** (`Proton.formation_node`): the diquark `{1, ω}` + the third
-    quark `{ω²}` ⟶ the colorless proton singlet `{1, ω, ω²}` (ω = exp(2πi/3)).
-
-**Both steps are shown at one time.** The figure is a 2×2 grid whose *bottom row holds two
-complex panels — Step A on the left, Step B on the right — both visible the whole run.*
-Step A animates first (Step B waiting on its seed simplex); then Step B animates while Step
-A holds its finished complex, so at the end you see the full diquark next to the full
-proton, side by side.
-
-Each node is driven with the COMBINED `run` drive: an **init pass** (`grow_boundaries=True`)
+The node is driven with the COMBINED `run` drive: an **init pass** (`grow_boundaries=True`)
 that grows the color register, then an **evolution pass** (`grow_boundaries=False`) with the
 boundary frozen. Every `run` iteration interleaves the stage-1 combinatorial update with the
 stage-2 geometric relaxation, so the optimizer makes whichever kind of progress helps at each
@@ -26,71 +22,53 @@ stage 1 keeps no state across iterations (the trap-door burst machinery is gone)
 splitting a pass into per-frame calls is exact — every accepted move and relaxation step
 gets its own frame.
 
-The figure is a 2×4 grid, one **step per row**: traces, the primal complex, then the dual
+The figure is one panel row for the single node: traces, the primal complex, then the dual
 split into spatial- and temporal-curvature panels:
 
   * **metrics** — the objective `F`, the Regge stationarity term `‖∇S‖²`, and the
-    realizability residual `r_U` vs step (a dashed line marks the Step A → Step B boundary);
+    realizability residual `r_U` vs step;
   * **color register** — the color-register (hole = quark) count and, separately, the Betti
-    number `b_k` vs step (the proton's three registers appear as Step B grows);
-  * **complex — Step A / Step B** — 2-D classical-MDS projections of each node's relaxing
-    1-skeleton; each emergent color hole (register) is outlined in red as a cell and numbered.
+    number `b_k` vs step (the proton's three registers appear as the node grows);
+  * **complex** — a 2-D classical-MDS projection of the node's relaxing 1-skeleton; each
+    emergent color hole (register) is outlined in red as a cell and numbered.
     Each frame is normalized to a fixed scale, Procrustes-aligned (rotation/reflection only)
     to the previous frame, and eased, with the view auto-fit — so the structure stays legible
     instead of collapsing into a dot.
-  * **dual — spatial / temporal curvature — Step A / Step B** — the circumcentric dual graph
+  * **dual — spatial / temporal curvature** — the circumcentric dual graph
     (one node per top cell, edges across shared facets) at the primal cell centroids, colored
     by the local Regge curvature. The Lorentzian deficit ε is COMPLEX, so it splits into two
     panels: **spatial** = `Re ε·|★|` (the rotation angle-defect, from timelike hinges) and
     **temporal** = `Im ε·|★|` (the boost / light-cone content, from spacelike hinges — those
     whose normal plane is timelike). Both use a signed diverging colormap centered at 0.
 
-The figure title reports the live **convergence verdict**: whether Step B's whole cobordism
+The figure title reports the live **convergence verdict**: whether the whole cobordism
 carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
 holes.
 
-It drives only the **public** `Proton` (`recombination_node`/`formation_node`),
+It drives only the **public** `Proton` (`direct_node`),
 `MultiCobordism` (the combined `run`, plus `betti`, `emergent_holes`,
 `regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`), and the geometry readers
 (`Spacetime.getTopSimplices`/`getDualAdjacency`/`getSimplices`,
-`Simplex.lorentzianDeficitAngle`/`dualVolume`) APIs — the *same* node setups
-and drive `Proton.build()` uses, so the animation shows the real class. The C++ engine is
-untouched.
+`Simplex.lorentzianDeficitAngle`/`dualVolume`) APIs — the *same* node setup
+and drive `Proton.build_direct()` uses, so the animation shows the real class. The C++
+engine is untouched.
 
 **Visualization is off by default** — `run_build(...)` takes the fast batched path with no
 per-step plotting overhead. Opt in with `visualize=True` (or `--live`/`--save`) to animate,
 which is slower.
 
-    # default: run the two-step build fast, no visualization
-    python multicobordism_animation.py
+    # default: run the one-step build fast, no visualization
+    python proton_animation.py
     # live (interactive backend):
-    python multicobordism_animation.py --live
+    python proton_animation.py --live
     # headless: write a GIF (no display needed):
-    python multicobordism_animation.py --save proton.gif
-    # pre-grow each node's single-Δ⁴ seed by 12 gated cone-ins before optimizing:
-    python multicobordism_animation.py --precone 12
-
-RL-driven variant (`--rl`): the SAME two-step build and the SAME 2×4 charts, but each step is
-driven by a trained libtorch **RL policy** instead of the fixed `Proton.build()` schedule — the
-policy chooses each `buildStep` macro-move (GROW/EVOLVE/RELAX + intensity). Two policies are
-trained, ONE PER STEP, because Step A recombination (success = `r_U → 0`) and Step B formation
-(carry the singlet) are different RL targets; within a step, the single policy spans both the
-combinatorial (GROW/EVOLVE surgery) and geometric (RELAX) moves. Policies are cached in
-`--policy-dir` (default `/tmp`) — trained once (over many complete convergences to learn the
-search space, not one problem), then reused. `--train` forces a retrain.
-
-    # RL two-step build; trains + caches both policies on first run, reuses them after:
-    python multicobordism_animation.py --rl --live
-    # retrain thoroughly (many convergences over the space) then watch it:
-    python multicobordism_animation.py --train --train-iters 40 --episodes 8 --live
-    # robuster policy: keep the best of 4 independent trainings per step:
-    python multicobordism_animation.py --train --best-of 4 --save proton_rl.gif
+    python proton_animation.py --save proton.gif
+    # pre-grow the single-Δ⁴ seed by 12 gated cone-ins before optimizing:
+    python proton_animation.py --precone 12
 """
 import argparse
 import itertools
 import math
-import os
-import shutil
 
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
@@ -99,19 +77,20 @@ import tessera
 
 cob = tessera.cobordism
 
-# Two combined-`run` passes per node — init (grow_boundaries=True) then evolution
+# Two combined-`run` passes on the one node — init (grow_boundaries=True) then evolution
 # (grow_boundaries=False) — each interleaving the stage-1 surgery update with the stage-2
 # geometric relaxation every iteration, so the optimizer makes whichever kind of progress
 # helps at each point. The animation runs ONE iteration per frame (`_*_CHUNK = 1`): stage 1
 # keeps no state across iterations, so per-frame chunking is exact and every accepted move
 # and relaxation step is visible. (The batched no-visualization path still runs each pass
-# as one call — same result, no per-frame overhead.) These totals are sized so Step B
-# reliably grows its three quark holes and carries the singlet.
+# as one call — same result, no per-frame overhead.)
 _INIT_STEPS = 180          # init-pass (grow_boundaries=True) iterations per node
 _EVOLVE_STEPS = 60         # evolution-pass (grow_boundaries=False) iterations per node
 _INIT_CHUNK = 1            # init iterations per frame (1 = smoothest animation)
 _EVOLVE_CHUNK = 1          # evolution iterations per frame
 _STAGE1_CANDIDATES = 8
+_MAX_LOOKAHEAD = 10        # deepen to sequences of up to this many moves on a stall
+                           # (deepened batches scan up to ~128 candidates each)
 _COLOR_TOL = 0.5           # singlet r_state below this ⇒ the proton carries the color
 _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 
@@ -125,6 +104,55 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 _HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
 _HEAT_CMAP_IM = "PuOr"     # temporal (Im): distinct diverging map for the boost/rapidity part
 _HEAT_REFRESH_EVERY = 4
+
+
+def face_gram_determinants(cells, squared_length):
+    """Gram determinant of every distinct triangle (2-face) and tetrahedron
+    (3-face) of the given top cells, from the signed edge intervals alone via
+    the polarization identity  G_ij = ½(ℓ²(v0,vi) + ℓ²(v0,vj) − ℓ²(vi,vj)).
+
+    det G = 0 ⇔ the face is NULL — its span tangent to the light cone — the
+    degenerate configurations of #632 where circumcentric dual volumes and
+    deficit angles are singular and gradients blow up. |det G| is therefore a
+    direct "distance from degeneracy" for each face; the per-frame minimum is
+    the complex's closest approach to the null locus.
+
+    `squared_length(u, v)` returns the edge's Re ℓ²; every vertex pair inside a
+    top cell is an edge of the complex, so lookups never miss (the Gram
+    diagonal's ℓ²(v,v) = 0 is supplied here, not looked up)."""
+    def interval(u, v):
+        return 0.0 if u == v else squared_length(u, v)
+    dets = {2: {}, 3: {}}
+    for cell in cells:
+        ordered = sorted(cell)
+        for k in (2, 3):
+            for face in itertools.combinations(ordered, k + 1):
+                if face in dets[k]:
+                    continue
+                v0, rest = face[0], face[1:]
+                gram = np.array(
+                    [[0.5 * (interval(v0, a) + interval(v0, b)
+                             - interval(a, b))
+                      for b in rest] for a in rest])
+                dets[k][face] = float(np.linalg.det(gram))
+    return {k: np.array(list(v.values())) for k, v in dets.items()}
+
+
+def _min_abs_gram_dets(st):
+    """(min |det G| over triangles, over tets) of the live complex — the
+    null-face proximity scalars the animation traces per frame."""
+    cells = [tuple(sorted(v.getId() for v in c.getVertices()))
+             for c in st.getTopSimplices()]
+    lengths = {}
+    for e in st.getEdgeList().toVector():
+        a, b = e.getSource().getId(), e.getTarget().getId()
+        lengths[(min(a, b), max(a, b))] = e.getSquaredLength().real
+    if not cells:
+        return float("nan"), float("nan")
+    dets = face_gram_determinants(
+        cells, lambda u, v: lengths[(min(u, v), max(u, v))])
+    return (float(np.abs(dets[2]).min()) if len(dets[2]) else float("nan"),
+            float(np.abs(dets[3]).min()) if len(dets[3]) else float("nan"))
 
 
 def _mds_layout(st):
@@ -224,38 +252,38 @@ class _StableLayout:
 
 
 class ProtonAnimator:
-    """Animates the proton's two steps — Step A (recombination) then Step B (formation) —
-    with BOTH steps' complexes on screen at one time.
+    """Animates the one-step proton build: the single `direct_node` — three bare quarks
+    in, the singlet out — growing and relaxing on screen.
 
-    Each node is driven with the combined `run` drive: an init pass
+    The node is driven with the combined `run` drive: an init pass
     (`grow_boundaries=True`, grows the color register) and an evolution pass
     (`grow_boundaries=False`), each interleaving the stage-1 surgery update with the
     stage-2 geometric relaxation every iteration, advanced one iteration per frame by
-    default. The two complex panels are bound one each to Step A and Step B for the whole
-    run, so Step A's finished diquark stays visible beside the proton as Step B forms."""
+    default. (The panel grid is node-count-generic, inherited from the two-step
+    animation this example was copied from.)"""
 
     _PHASE_NAMES = {"init": "growing register", "evolve": "evolving (∂W frozen)"}
-    _TITLE_PREFIX = "Proton build (two-step)"
+    _TITLE_PREFIX = "Proton build (one-step, 3 quarks)"
 
     def __init__(self, nodes, degree=3, init_steps=_INIT_STEPS, init_chunk=_INIT_CHUNK,
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
-                 stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0):
+                 stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0,
+                 max_lookahead=_MAX_LOOKAHEAD):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
+        self.lookahead = max_lookahead
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
 
     def _common_init(self, nodes, degree):
-        """Shared drawing/recording state used by BOTH the fixed-schedule drive and the
-        RL-policy drive (`RLPolicyAnimator`). Sets the node list, history buffers, per-panel
-        layouts, and curvature cache — everything `_redraw`/`_draw_*`/`verdict` read — so the
-        two drives differ only in how they advance a node (fixed passes vs one policy action),
-        never in what is drawn."""
-        self.nodes = nodes                  # [(MultiCobordism, "Step A: ..."), ...] in order
+        """Shared drawing/recording state: the node list, history buffers, per-panel
+        layouts, and curvature cache — everything `_redraw`/`_draw_*`/`verdict` read."""
+        self.nodes = nodes                  # [(MultiCobordism, label), ...] in order
         self.k = degree
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
-                     "phase": [], "node": []}
+                     "phase": [], "node": [], "lookahead": [],
+                     "min_det2": [], "min_det3": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -288,7 +316,8 @@ class ProtonAnimator:
             self._boundaries.append(len(self.hist["F"]))
         node, _label = self.nodes[node_index]
         node.run(max_iters=count, n_candidate_moves=self.s1c,
-                 grow_boundaries=(phase == "init"), beta=self.s2_beta)
+                 grow_boundaries=(phase == "init"), beta=self.s2_beta,
+                 max_lookahead=self.lookahead)
         self._record(node, node_index, phase)
 
     def _record(self, node, node_index, phase):
@@ -300,10 +329,19 @@ class ProtonAnimator:
         self.hist["holes"].append(len(cob.MultiCobordism.emergent_holes(st, self.k)))
         self.hist["phase"].append(phase)
         self.hist["node"].append(node_index)
+        # Lookahead depth of the frame's committed stage-1 sequence: 1 = ordinary
+        # single move, >1 = the search had to look several moves ahead, 0 = stage-1
+        # stall (nothing committed at any depth this frame).
+        self.hist["lookahead"].append(int(node.last_stage1_lookahead))
+        # Null-face proximity: the smallest |det G| over the complex's triangles
+        # and tets — 0 = a face exactly tangent to the light cone (degenerate).
+        min_det2, min_det3 = _min_abs_gram_dets(st)
+        self.hist["min_det2"].append(min_det2)
+        self.hist["min_det3"].append(min_det3)
 
     # ---- convergence ----
     def verdict(self):
-        """The honest, live convergence verdict read off Step B's *current* whole cobordism:
+        """The honest, live convergence verdict read off the node's *current* whole cobordism:
         the singlet `r_state` and the emergent color-hole count, and whether both clear the
         proton thresholds (residual < tol, holes ≥ 3)."""
         st = self.nodes[-1][0].st
@@ -333,8 +371,14 @@ class ProtonAnimator:
         self._primal_axes = [axes[i][1] for i in range(n_nodes)]
         self._re_axes = [axes[i][2] for i in range(n_nodes)]
         self._im_axes = [axes[i][3] for i in range(n_nodes)]
-        for row in range(n_nodes, n_rows):                   # single node: blank row 1 panels
+        # A single-node run leaves row 1's panels free: claim the first for the
+        # null-face proximity trace, blank the rest. (Multi-node grids keep every
+        # panel for complexes, so the trace is skipped there.)
+        self.ax_null = axes[n_nodes][1] if n_nodes < n_rows else None
+        for row in range(n_nodes, n_rows):
             for column in (1, 2, 3):
+                if self.ax_null is not None and axes[row][column] is self.ax_null:
+                    continue
                 axes[row][column].axis("off")
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
         # panel self-normalizes per frame; we just update the mappable's clim. Re (spatial) and
@@ -504,6 +548,24 @@ class ProtonAnimator:
         self.axm.plot(xs, self.hist["rU"], label="r_U", color="C2")
         for b in self._boundaries:
             self.axm.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
+        # LOOKAHEAD INDICATOR: ring the F trace where the committed stage-1 sequence
+        # needed more than one move of lookahead (numbered with its depth), and mark
+        # a grey x where stage 1 stalled outright (no F-lowering sequence found).
+        lookahead = self.hist["lookahead"]
+        deep = [i for i, d in enumerate(lookahead) if d > 1]
+        if deep:
+            self.axm.scatter(deep, [self.hist["F"][i] for i in deep], marker="o",
+                             s=48, facecolors="none", edgecolors="C3", linewidths=1.4,
+                             zorder=5, label="multi-move sequence (lookahead > 1)")
+            for i in deep:
+                self.axm.annotate(str(lookahead[i]), (i, self.hist["F"][i]),
+                                  textcoords="offset points", xytext=(0, 7),
+                                  ha="center", fontsize=7, color="C3")
+        stalled = [i for i, d in enumerate(lookahead) if d == 0]
+        if stalled:
+            self.axm.scatter(stalled, [self.hist["F"][i] for i in stalled],
+                             marker="x", s=22, color="0.55", zorder=5,
+                             label="stage-1 stalled (no sequence found)")
         self.axm.set_yscale("symlog")
         self.axm.set_title("metrics")
         self.axm.set_xlabel("frame")
@@ -538,10 +600,25 @@ class ProtonAnimator:
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
                             1, _HEAT_CMAP_IM, "dual — temporal curvature (Im ε)")
 
-    # ---- per-frame text hooks (overridden by the RL drive) ----
+        if getattr(self, "ax_null", None) is not None:
+            self.ax_null.clear()
+            xs = range(len(self.hist["min_det2"]))
+            self.ax_null.semilogy(xs, self.hist["min_det2"], color="C0",
+                                  marker=".", label="min |det G| — triangles")
+            self.ax_null.semilogy(xs, self.hist["min_det3"], color="C3",
+                                  marker=".", label="min |det G| — tets")
+            self.ax_null.axhline(1e-6, color="0.6", ls=":", lw=0.8,
+                                 label="1e-6 (danger: near-degenerate)")
+            self.ax_null.set_title("null-face proximity (det G = 0 ⇔ face "
+                                   "tangent to the light cone)", fontsize=9)
+            self.ax_null.set_xlabel("frame")
+            self.ax_null.set_ylabel("min |det G|")
+            self.ax_null.legend(loc="lower right", fontsize=7)
+
+    # ---- per-frame text hooks ----
     def _frame_label(self, frame):
-        """The short 'what step / what's running' label for a frame — the node label plus the
-        current phase name. The RL drive overrides this to report the policy's last macro-move."""
+        """The short 'what's running' label for a frame — the node label plus the
+        current phase name."""
         node_index, phase, _count = self._schedule[frame]
         return f"{self.nodes[node_index][1]} · {self._PHASE_NAMES[phase]}"
 
@@ -551,8 +628,7 @@ class ProtonAnimator:
                 f"did NOT converge (r_state={res:.2g}, {holes} registers)")
 
     def _draw_extras(self):
-        """Hook for per-frame figure annotations drawn after `_redraw` (the RL drive adds its
-        training-parameter footnote here); the fixed drive has none."""
+        """Hook for per-frame figure annotations drawn after `_redraw`; none by default."""
 
     # ---- the three parts of a frame: announce (pre-compute) · advance (compute) · paint ----
     def _announce(self, frame):
@@ -570,6 +646,21 @@ class ProtonAnimator:
         call while the compute worker is parked waiting for this paint to finish."""
         self._redraw()
         self._draw_extras()
+        # Post-compute lookahead tag: the announce title says what's about to run;
+        # this rewrites it with what the frame actually did whenever that is
+        # noteworthy — a multi-move sequence or a stage-1 stall.
+        if not self._done and self.hist["lookahead"]:
+            depth = self.hist["lookahead"][-1]
+            tag = (f"  ·  LOOKAHEAD: committed a {depth}-move sequence" if depth > 1
+                   else (f"  ·  stage-1 stalled (searched depths 1–"
+                         f"{self.lookahead}; nothing F-lowering)") if depth == 0
+                   else "")
+            if tag:
+                label = self._frame_label(frame)
+                self.fig.suptitle(f"{self._TITLE_PREFIX} — frame {frame + 1}/"
+                                  f"{self._frames} · {label}{tag}")
+                print(f"\rframe {frame + 1}/{self._frames} ({label}){tag}",
+                      end="", flush=True)
         if frame >= self._frames - 1 and not self._done:   # last frame: announce the verdict
             self._done = True
             ok, res, holes = self.verdict()
@@ -658,22 +749,20 @@ class ProtonAnimator:
             raise state["error"]
 
 
-def build_proton_nodes(seed=3, precone=0):
-    """The two `MultiCobordism` nodes the `Proton` class drives, in build order, for the
-    animation: Step A recombination then Step B formation, each on its own single-Δ⁴ seed.
+def build_proton_nodes(seed=3, precone=0, precone_timelike=False):
+    """The single one-step `MultiCobordism` node the animation drives, as a 1-element
+    list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
+    three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
+    output, read off the WHOLE cobordism — the *same* node setup `Proton.build_direct()`
+    uses, on a single-Δ⁴ seed (attempt-0 seed = `seed`). The animation reports the live
+    verdict either way.
 
-    Built via `Proton.recombination_node`/`formation_node` — the *same* node setups
-    `Proton.build()` uses — with `Proton.build`'s attempt-0 seeds (A = `seed`, B =
-    `seed + 1`). The default `seed=3` converges on attempt 0 (Step B grows three quark holes
-    and carries the singlet); the animation reports the live verdict either way.
-
-    `precone` pre-grows each node's single-Δ⁴ seed by that many gated cone-in moves before
+    `precone` pre-grows the single-Δ⁴ seed by that many gated cone-in moves before
     optimization (forwarded straight to the C++ `MultiCobordism` constructor via `Proton`);
     `precone=0` (the default) leaves the bare seed untouched."""
-    p = cob.Proton(seed=seed, precone=precone)
+    p = cob.Proton(seed=seed, precone=precone, precone_timelike=precone_timelike)
     return [
-        #(p.recombination_node(seed), "Step A — recombination (→ diquark {1, ω})"),
-        (p.formation_node(seed + 1), "Step B — formation (→ proton {1, ω, ω²})"),
+        (p.direct_node(seed), "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
 
 
@@ -706,10 +795,10 @@ def animate(nodes, save=None, interval=200, **kw):
 
 def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEPS,
               evolve_steps=_EVOLVE_STEPS,
-              stage1_candidates=_STAGE1_CANDIDATES,
+              stage1_candidates=_STAGE1_CANDIDATES, max_lookahead=_MAX_LOOKAHEAD,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
               **anim_kw):
-    """Run the two-step proton build over `nodes` with the combined `run` drive: an init
+    """Run the one-step proton build over `nodes` with the combined `run` drive: an init
     pass (`grow_boundaries=True`) then an evolution pass (`grow_boundaries=False`), each
     interleaving the stage-1 surgery update with the stage-2 geometric relaxation every
     iteration.
@@ -723,9 +812,11 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
         out = []
         for node, label in nodes:
             node.run(max_iters=init_steps, n_candidate_moves=stage1_candidates,
-                     grow_boundaries=True, beta=stage2_beta)
+                     grow_boundaries=True, beta=stage2_beta,
+                     max_lookahead=max_lookahead)
             node.run(max_iters=evolve_steps, n_candidate_moves=stage1_candidates,
-                     grow_boundaries=False, beta=stage2_beta)
+                     grow_boundaries=False, beta=stage2_beta,
+                     max_lookahead=max_lookahead)
             st = node.st
             out.append((label, {
                 "F": float(node.objective()),
@@ -741,242 +832,8 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
         return out
     return animate(nodes, save=save, degree=degree, init_steps=init_steps,
                    evolve_steps=evolve_steps,
-                   stage1_candidates=stage1_candidates,
+                   stage1_candidates=stage1_candidates, max_lookahead=max_lookahead,
                    stage2_beta=stage2_beta, interval=interval, **anim_kw).hist
-
-
-# ---- RL-policy drive (#553): watch trained libtorch policies assemble the proton ----
-# The SAME rich 2×4 panels as the fixed Proton drive above (metrics, register+Betti, primal
-# A/B, dual spatial/temporal curvature) — only the DRIVE changes: each active frame the step's
-# trained policy chooses one `buildStep` macro-action and the env drives the CANONICAL
-# `MultiCobordism` (nothing about proton construction is reimplemented here).
-#
-# TWO policies, one per physics step, because the two steps are DIFFERENT RL problems: Step A
-# recombination has no whole-cobordism target (success = r_U → 0) while Step B formation must
-# carry the proton singlet {1, ω, ω²} — a checkpoint trained for one does NOT transfer to the
-# other. WITHIN a step, a SINGLE policy spans both the combinatorial moves (GROW/EVOLVE =
-# stage-1 surgery) and the geometric move (RELAX = stage-2 relaxation); it learns to interleave
-# them, all scored by the one objective F = ‖∇S‖² + Γ·r_U.
-_RL_MOVE_NAMES = {0: "GROW", 1: "EVOLVE", 2: "RELAX"}
-_OBS_DIM, _N_MOVES, _PARAM_DIM = 17, 3, 2   # the env's fixed (obs, move, param) dims
-
-# The two physics steps as RL problems: (cache name, formation flag, env-builder, label).
-_RL_STEPS = [
-    ("recombination", False, "make_recombination_env",
-     "Step A — recombination (→ diquark {1, ω})"),
-    ("formation", True, "make_formation_env",
-     "Step B — formation (→ proton {1, ω, ω²})"),
-]
-
-
-def _policy_cache_path(cache_dir, name):
-    return os.path.join(cache_dir, f"tessera_proton_policy_{name}.pt")
-
-
-def _train_step_policy(name, formation, cache_dir, train_iters, episodes, best_of,
-                       hidden=64, verbose=True):
-    """Train an RL policy for ONE physics step and cache it to `cache_dir`. Training runs many
-    COMPLETE convergences over a rotating set of seeds and is scored on HELD-OUT seeds, so the
-    policy learns the search SPACE (generalizes) rather than one convergence instance. With
-    `best_of > 1`, train that many independent policies (different init seeds) and keep the one
-    with the highest held-out carry rate. Returns (path, best_carry_rate, params-dict)."""
-    import tessera.rl as rl
-    env_cfg = rl.carry_profile_env()
-    train_cfg = rl.carry_profile_train()
-    train_cfg.iterations = train_iters
-    train_cfg.episodes_per_iter = episodes
-    train_cfg.hidden = hidden
-    path = _policy_cache_path(cache_dir, name)
-    convergences = train_iters * episodes
-    if verbose:
-        print(f"[train:{name}] {best_of}×({train_iters} iters × {episodes} eps) = "
-              f"{best_of * convergences} complete convergences over rotating seeds "
-              f"(learning the space; held-out eval) → {path}", flush=True)
-    best_rate, best_tmp = -1.0, None
-    for n in range(best_of):
-        train_cfg.agent_seed = n
-        tmp = f"{path}.cand{n}"
-        res = rl.benchmark(env_cfg, train_cfg, formation=formation, checkpoint_path=tmp)
-        rate = float(res.rl.carry_rate)
-        if verbose:
-            print(f"[train:{name}]   candidate {n + 1}/{best_of}: carry_rate={rate:.2f}  "
-                  f"(random={res.random.carry_rate:.2f}, "
-                  f"grow_only={res.grow_only.carry_rate:.2f}, {res.train_time_s:.0f}s)",
-                  flush=True)
-        if rate > best_rate:
-            best_rate, best_tmp = rate, tmp
-    shutil.copyfile(best_tmp, path)
-    for n in range(best_of):                                    # clean up the candidate files
-        try:
-            os.remove(f"{path}.cand{n}")
-        except OSError:
-            pass
-    return path, best_rate, {"iters": train_iters, "eps": episodes,
-                             "convergences": best_of * convergences, "best_of": best_of,
-                             "carry": round(best_rate, 2)}
-
-
-def ensure_rl_steps(cache_dir="/tmp", retrain=False, train_iters=20, episodes=6, best_of=1,
-                    hidden=64, verbose=True):
-    """Return `[(env, policy, label), ...]` for BOTH steps in build order, training + caching a
-    per-step policy in `cache_dir` when it is missing or `retrain` is set (otherwise the cached
-    checkpoint is reused — train once). Also returns a `train_info` dict for on-figure display."""
-    import tessera.rl as rl
-    steps, info = [], {"iters": train_iters, "eps/iter": episodes, "best_of": best_of}
-    for name, formation, builder, label in _RL_STEPS:
-        path = _policy_cache_path(cache_dir, name)
-        if retrain or not os.path.exists(path):
-            _p, rate, _params = _train_step_policy(name, formation, cache_dir, train_iters,
-                                                   episodes, best_of, hidden, verbose)
-            info[f"{name} carry"] = round(rate, 2)
-        else:
-            if verbose:
-                print(f"[cache] reusing {name} policy: {path}  (pass --train to retrain)",
-                      flush=True)
-            info[f"{name} carry"] = "cached"
-        env = getattr(rl, builder)(rl.carry_profile_env())
-        policy = rl.load_policy(path, _OBS_DIM, _N_MOVES, _PARAM_DIM, hidden)
-        steps.append((env, policy, label))
-    return steps, info
-
-
-class RLPolicyAnimator(ProtonAnimator):
-    """Animate the FULL two-step proton build — Step A recombination then Step B formation —
-    driven by trained RL policies (one per step). Reuses `ProtonAnimator`'s rich 2×4 panels
-    verbatim (metrics F/‖∇S‖²/r_U, register+Betti, primal A/B, dual spatial/temporal
-    curvature); the ONLY difference is the drive — each active frame the step's policy chooses
-    one `buildStep` macro-action (GROW/EVOLVE/RELAX + intensity) and the env drives the
-    canonical `MultiCobordism`. A short glide of hold-frames follows each macro-action so the
-    few large actions still read as a smooth build. The figure footnote shows the training
-    parameters and the title shows the current step + the policy's last macro-move.
-
-    `steps` is `[(env, policy, label), ...]` in build order; `train_info` is displayed."""
-
-    _TITLE_PREFIX = "Proton build under RL policy (two-step)"
-
-    def __init__(self, steps, degree=3, seed=3, deterministic=True, max_actions=3,
-                 glide_frames=6, train_info=None):
-        self.envs = [s[0] for s in steps]
-        self.policies = [s[1] for s in steps]
-        self.det = bool(deterministic)
-        self.glide = max(1, glide_frames)
-        self.max_actions = max_actions
-        self.train_info = train_info or {}
-        self._train_txt = None
-        # Reset each env FIRST (that seeds its single-Δ⁴ node), then bind the node list the
-        # shared drawing reads. Different seed per step so A and B don't share a trajectory.
-        self._obs = [env.reset(seed + i) for i, env in enumerate(self.envs)]
-        self._steps_taken = [0 for _ in self.envs]
-        self._env_done = [False for _ in self.envs]
-        self._last_move = [None for _ in self.envs]
-        nodes = [(env.node, steps[i][2]) for i, env in enumerate(self.envs)]
-        self._common_init(nodes, degree)
-        self._schedule = self._make_rl_schedule(len(self.envs), max_actions, self.glide)
-        self._frames = len(self._schedule)
-        self._record(self.nodes[0][0], 0, "reset")             # initial metrics point
-
-    @staticmethod
-    def _make_rl_schedule(n_steps, max_actions, glide):
-        """One `act` frame per macro-action, each followed by `glide-1` hold frames (no engine
-        step — just the layout easing toward the new complex), for every step in build order."""
-        sched = []
-        for i in range(n_steps):
-            for _ in range(max_actions):
-                sched.append((i, "act"))
-                sched += [(i, "hold")] * (glide - 1)
-        return sched
-
-    def _advance(self, frame):
-        import tessera.rl as rl
-        node_index, kind = self._schedule[frame]
-        if node_index != self._active:                         # a new step begins
-            self._active = node_index
-            self._boundaries.append(len(self.hist["F"]))
-        if kind != "act":                                      # hold frame: no engine step
-            return
-        if self._env_done[node_index] or self._steps_taken[node_index] >= self.max_actions:
-            return
-        env = self.envs[node_index]
-        a = rl.select_action(self.policies[node_index], self._obs[node_index], self.det)
-        res = env.step(rl.Move(a.move), list(a.params))        # drives the canonical buildStep
-        self._obs[node_index] = res.obs
-        self._env_done[node_index] = bool(res.done)
-        self._last_move[node_index] = int(res.move)
-        self._steps_taken[node_index] += 1
-        self.nodes[node_index] = (env.node, self.nodes[node_index][1])   # keep the node fresh
-        self._record(env.node, node_index, _RL_MOVE_NAMES.get(int(res.move), "?"))
-
-    # The RL drive differs from the fixed drive only in these three text/annotation hooks; it
-    # inherits `update` (for --save) and `_run_live` (responsive live window) unchanged, so the
-    # RL animation gets the same GUI-freeze fix for free.
-    def _frame_label(self, frame):
-        node_index, _kind = self._schedule[frame]
-        mv = self._last_move[node_index]
-        return (f"{self.nodes[node_index][1]}  ·  RL move: "
-                f"{_RL_MOVE_NAMES.get(mv, '—') if mv is not None else '—'}")
-
-    def _verdict_tag(self, ok, res, holes):
-        return (f"CARRIED ✓ — proton {{1,ω,ω²}} (r_state={res:.2g}, {holes} registers)"
-                if ok else f"did NOT carry (r_state={res:.2g}, {holes} registers)")
-
-    def _draw_extras(self):
-        """Add the training-parameter footnote ONCE (a per-frame fig.text would pile up)."""
-        if not self.train_info or self._train_txt is not None:
-            return
-        txt = "   ".join(f"{k}={v}" for k, v in self.train_info.items())
-        self._train_txt = self.fig.text(
-            0.5, 0.006, f"RL policy trained over many complete convergences —  {txt}",
-            ha="center", va="bottom", fontsize=7, color="0.4")
-
-
-def run_rl(cache_dir="/tmp", retrain=False, train_iters=20, episodes=6, best_of=1, seed=3,
-           deterministic=True, visualize=False, save=None, degree=3, interval=200):
-    """Drive the FULL two-step proton build (Step A recombination + Step B formation) with
-    trained RL policies (cached per step in `cache_dir`, trained over many complete convergences
-    when missing or `retrain`). Off by default it runs one episode per step and returns
-    `(result, train_info)`; `--live`/`--save` animate the same rich 2×4 panels as the fixed
-    Proton drive, annotated with the policy's macro-moves and the training parameters."""
-    import tessera.rl as rl
-    steps, train_info = ensure_rl_steps(cache_dir, retrain, train_iters, episodes, best_of,
-                                        verbose=True)
-    max_actions = rl.carry_profile_env().max_actions
-    if not visualize and not save:
-        out = []
-        for i, (env, policy, label) in enumerate(steps):
-            obs, done, n = env.reset(seed + i), False, 0
-            while not done and n < max_actions:
-                a = rl.select_action(policy, obs, deterministic)
-                res = env.step(rl.Move(a.move), list(a.params))
-                obs, done, n = res.obs, bool(res.done), n + 1
-            st = env.node.st
-            out.append((label, {
-                "F": float(env.node.objective()),
-                "rU": float(env.node.r_u(st)),
-                "holes": len(cob.MultiCobordism.emergent_holes(st, degree))}))
-        st = steps[-1][0].node.st
-        res_ = float(cob.MultiCobordism.r_state(st, degree, cob.Proton.singlet()))
-        holes = len(cob.MultiCobordism.emergent_holes(st, degree))
-        out.append(("verdict", {"converged": res_ < _COLOR_TOL and holes >= _MIN_QUARK_HOLES,
-                                "color_residual": res_, "registers": holes}))
-        return out, train_info
-    import matplotlib
-    if save:
-        matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.animation import FuncAnimation
-    anim = RLPolicyAnimator(steps, degree=degree, seed=seed, deterministic=deterministic,
-                            max_actions=max_actions, train_info=train_info)
-    anim._setup(plt)
-    anim.fig.suptitle(f"{anim._TITLE_PREFIX} — live")
-    if save:                                  # off-screen Agg: synchronous per-frame render
-        fa = FuncAnimation(anim.fig, anim.update, frames=anim._frames, interval=interval,
-                           repeat=False, blit=False)
-        fa.save(save, writer="pillow" if save.endswith(".gif") else "ffmpeg", dpi=90)
-        print(f"saved animation -> {save}")
-        anim._anim = fa   # keep a ref so it isn't GC'd
-    else:                                     # responsive live window (compute off GUI thread)
-        anim._run_live(plt, interval)
-    return anim.verdict(), train_info
 
 
 def main():
@@ -986,49 +843,27 @@ def main():
                     help="show the live animation window (slower than the default)")
     ap.add_argument("--save", help="write a GIF/MP4 of the animation (slower)")
     ap.add_argument("--seed", type=int, default=3)
-    # ---- RL-driven two-step build (trained policies, one per step) ----
-    ap.add_argument("--rl", action="store_true",
-                    help="drive the FULL two-step build with trained RL policies (one per step, "
-                         "cached in --policy-dir; trains over many convergences if missing) "
-                         "instead of the fixed Proton drive — SAME charts as the fixed drive")
-    ap.add_argument("--train", action="store_true",
-                    help="(RL) force-retrain both step policies, overwriting the cache "
-                         "(implies --rl)")
-    ap.add_argument("--train-iters", type=int, default=20, dest="train_iters",
-                    help="(RL) PPO iterations per step; × --episodes = complete convergences")
-    ap.add_argument("--episodes", type=int, default=6,
-                    help="(RL) complete-convergence episodes per iteration — seed diversity, so "
-                         "the policy learns the space, not one convergence problem")
-    ap.add_argument("--best-of", type=int, default=1, dest="best_of",
-                    help="(RL) train N independent policies per step, keep the best carry rate")
-    ap.add_argument("--policy-dir", default="/tmp", dest="policy_dir",
-                    help="(RL) directory for the cached per-step policy checkpoints")
-    # ---- fixed Proton.build() drive knobs ----
     ap.add_argument("--init", type=int, default=_INIT_STEPS,
-                    help="init-pass (grow_boundaries=True) combined-run iterations per node")
+                    help="init-pass (grow_boundaries=True) combined-run iterations")
     ap.add_argument("--evolve", type=int, default=_EVOLVE_STEPS,
-                    help="evolution-pass (grow_boundaries=False) combined-run iterations "
-                         "per node")
+                    help="evolution-pass (grow_boundaries=False) combined-run iterations")
+    ap.add_argument("--max-lookahead", type=int, default=_MAX_LOOKAHEAD,
+                    dest="max_lookahead",
+                    help="on a stall, deepen the stage-1 search to sequences of up "
+                         "to this many moves (1 = single moves only)")
     ap.add_argument("--precone", type=int, default=0,
-                    help="pre-grow each node's single-Δ⁴ seed by this many gated "
+                    help="pre-grow the single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
+    ap.add_argument("--precone-timelike", action="store_true", dest="precone_timelike",
+                    help="draw every precone cone-in as the TIMELIKE disposition, so "
+                         "the pre-grown material carries causal content")
     args = ap.parse_args()
-    if args.rl or args.train:   # RL-driven two-step build — SAME charts as the fixed drive
-        result, train_info = run_rl(cache_dir=args.policy_dir, retrain=args.train,
-                                    train_iters=args.train_iters, episodes=args.episodes,
-                                    best_of=args.best_of, seed=args.seed,
-                                    visualize=args.live, save=args.save)
-        if not args.live and not args.save:
-            print("RL-driven two-step proton build finished (pass --live/--save to watch it):")
-            print("  training:  " + "  ".join(f"{k}={v}" for k, v in train_info.items()))
-            for label, metrics in result:
-                print(f"  {label}:  " + "  ".join(f"{k}={v}" for k, v in metrics.items()))
-        return
-    nodes = build_proton_nodes(seed=args.seed, precone=args.precone)
+    nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
+                               precone_timelike=args.precone_timelike)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
-                       evolve_steps=args.evolve)
+                       evolve_steps=args.evolve, max_lookahead=args.max_lookahead)
     if not args.live and not args.save:
-        print("two-step proton build finished (visualization off by default — pass --live "
+        print("one-step proton build finished (visualization off by default — pass --live "
               "or --save to watch it):")
         for label, metrics in result:
             print(f"  {label}:  " + "  ".join(f"{k}={v}" for k, v in metrics.items()))

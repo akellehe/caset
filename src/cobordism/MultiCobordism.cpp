@@ -80,7 +80,8 @@ MultiCobordism::MultiCobordism(
     const std::vector<std::vector<complexd>> &inputTargets,
     const std::vector<std::vector<complexd>> &outputTargets,
     const std::vector<int> &degrees, double gamma, std::uint64_t seed,
-    int precone, bool shouldProposeDispositions)
+    int precone, bool shouldProposeDispositions, bool preconeTimelike,
+    bool preconeAlternate)
     : spacetime_(std::move(host)),
       inputTargets_(inputTargets),
       outputTargets_(outputTargets),
@@ -101,7 +102,10 @@ MultiCobordism::MultiCobordism(
   // stage-1 search starts from a larger complex grown emergently from the host (no
   // input/output block is seeded yet, so nothing is pinned — the gate is the only
   // constraint). `precone <= 0` leaves the host and RNG untouched.
-  if (precone > 0) preconeCells(precone);
+  // `preconeTimelike` draws every cone-in as the TIMELIKE disposition (#613);
+  // `preconeAlternate` instead ALTERNATES timelike/spacelike for balanced
+  // causal content (it wins when both are set). Default: all-spacelike.
+  if (precone > 0) preconeCells(precone, preconeTimelike, preconeAlternate);
 }
 
 std::vector<int> MultiCobordism::betti(const Spacetime &spacetime) {
@@ -186,11 +190,26 @@ double MultiCobordism::residualOfTargetStateAgainstHarmonic(
 
   EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
   const auto flattenedCyclePeriods =
-      eigenstateSynthesis.cyclePeriods(emergentHoleTuples);  // bk x m, row-major
-  // periodMatrixTransposed: (d, bk), zero-filled beyond the usable hole columns.
+      eigenstateSynthesis.cyclePeriods(emergentHoleTuples);  // dim x m, row-major
+  // The row count of the flattened periods is the NUMERIC harmonic-kernel
+  // dimension the synthesizer actually computed (HodgeLaplacian::harmonicMatrix
+  // at its rank threshold, metric-dependent) — NOT necessarily the INTEGER
+  // Betti number: on geometrically extreme complexes (e.g. the deep-lookahead
+  // relax-scoring candidates near the null-face locus) the numeric rank can
+  // fall below the topological one, and indexing by the Betti count then reads
+  // past the end of the vector — the measured segfault (thread 1 in
+  // residualOfTargetStateAgainstHarmonic under relaxedObjectiveOf). Bound every
+  // index by the data's own shape; fewer usable harmonics honestly means a
+  // LARGER residual, never an out-of-bounds read.
+  const std::size_t periodRowCount =
+      usableHoleCount == 0 ? 0 : flattenedCyclePeriods.size() / usableHoleCount;
+  const int harmonicRank =
+      std::min(degreeBettiNumber, static_cast<int>(periodRowCount));
+  if (harmonicRank <= 0) return fullLeakResidual;
+  // periodMatrixTransposed: (d, rank), zero-filled beyond the usable hole columns.
   Eigen::MatrixXcd periodMatrixTransposed = Eigen::MatrixXcd::Zero(
-      static_cast<int>(targetDimension), degreeBettiNumber);
-  for (int bettiRowIndex = 0; bettiRowIndex < degreeBettiNumber; ++bettiRowIndex)
+      static_cast<int>(targetDimension), harmonicRank);
+  for (int bettiRowIndex = 0; bettiRowIndex < harmonicRank; ++bettiRowIndex)
     for (std::size_t holeColumnIndex = 0; holeColumnIndex < usableHoleCount;
          ++holeColumnIndex)
       periodMatrixTransposed(static_cast<int>(holeColumnIndex), bettiRowIndex) =
@@ -547,23 +566,51 @@ double MultiCobordism::deltaF(
   return gradientDelta + gamma_ * residualUDelta;
 }
 
-double MultiCobordism::step(int nCandidateMoves) {
+double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
   const auto currentSnapshot = snapshot();
   const double baseResidualU = rU(spacetime_);
   std::set<std::vector<std::uint64_t>> baseCellSet;
   for (const auto &topSimplex : spacetime_->getTopSimplices())
     baseCellSet.insert(topTuple(*topSimplex));
+  // Depth 1 keeps the fast, localized deltaF scoring — the common case. A
+  // DEEPENED search (reached only after depth 1 stalls) scores each candidate
+  // by its RELAXED exact objective instead: fresh material always carries
+  // unrelaxed edges whose gradient contributions stage 2 would largely relax
+  // away, so unrelaxed scoring makes every growth sequence look bad and the
+  // deepening could never see a way forward from a relaxed stall (measured on
+  // the bare-seed direct node: ~3000 sequences to depth 8, zero accepted).
+  // Relaxed scoring asks the honest question: is there a short sequence whose
+  // RELAXED end state beats where we are now?
+  const bool scoreRelaxed = lookaheadDepth > 1;
+  const double baseObjective = scoreRelaxed ? objective() : 0.0;
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
   for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex) {
-    const auto moveSpecification = drawRandomMoveSpecification(*spacetime_);
+    // One candidate = `lookaheadDepth` gated random moves applied in sequence,
+    // each drawn against the evolving candidate complex. The sequence is scored
+    // — and, if best, committed — as a WHOLE, so an F-lowering pair whose first
+    // move alone raises F is still an honest descent step.
     auto candidateSpacetime = build(currentSnapshot);
-    if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) continue;
+    bool wholeSequenceApplied = true;
+    for (int moveIndex = 0; moveIndex < lookaheadDepth; ++moveIndex) {
+      const auto moveSpecification =
+          drawRandomMoveSpecification(*candidateSpacetime);
+      if (!applyMoveSpecification(candidateSpacetime, moveSpecification)) {
+        wholeSequenceApplied = false;  // one link failed the gate: discard the candidate
+        break;
+      }
+    }
+    if (!wholeSequenceApplied) continue;
     const double objectiveDelta =
-        deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+        scoreRelaxed
+            ? relaxedObjectiveOf(candidateSpacetime) - baseObjective
+            : deltaF(candidateSpacetime, baseResidualU, baseCellSet);
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
+      // For a relaxed-scored candidate this snapshot CARRIES the relaxed edge
+      // lengths, so a committed sequence starts from the state that earned its
+      // score rather than re-paying the relaxation.
       bestSnapshot = snapshotOf(*candidateSpacetime);
       foundImprovingMove = true;
     }
@@ -575,13 +622,40 @@ double MultiCobordism::step(int nCandidateMoves) {
   return 0.0;
 }
 
-void MultiCobordism::preconeCells(int count) {
+double MultiCobordism::relaxedObjectiveOf(
+    const std::shared_ptr<Spacetime> &candidateSpacetime) {
+  // Score a lookahead candidate as stage 2 WOULD leave it: swap the candidate
+  // in, run a few geometric relaxation iterations on it, read the exact
+  // objective, and swap the real complex back. The relaxation mutates the
+  // candidate's edge lengths in place — intentional, see the commit note in
+  // step(). beta is fixed at 1 because `objective()` (the stage-1 functional)
+  // is the beta = 1 objective.
+  constexpr int kLookaheadRelaxIters = 3;
+  const auto savedSpacetime = spacetime_;
+  const bool savedStationary = lastStage2Stationary_;  // scoring must not report
+  spacetime_ = candidateSpacetime;
+  std::vector<double> scratchTrace = {objective()};
+  double stepScale = 0.05;
+  for (int relaxIndex = 0; relaxIndex < kLookaheadRelaxIters; ++relaxIndex)
+    if (!stage2Update(/*beta=*/1.0, /*relTol=*/1e-9, scratchTrace, stepScale))
+      break;
+  const double relaxedObjectiveValue = objective();
+  spacetime_ = savedSpacetime;
+  lastStage2Stationary_ = savedStationary;
+  return relaxedObjectiveValue;
+}
+
+void MultiCobordism::preconeCells(int count, bool timelike, bool alternate) {
   // Each cone-in cones a fresh apex onto a random codim-1 facet (a top cell with one
   // vertex dropped) and is committed only through applyMoveSpecification's
   // dualComplexValid gate — the same gated primitive the stage-1 draw uses, so the
   // pre-growth is sound (nothing inserted by fiat). On the single-Δ⁴ seed (a 4-ball)
   // a cone-in over a boundary facet is valid, so this enlarges the 4-ball; a draw
   // onto an already-saturated interior facet is rejected by the gate and retried.
+  // `timelike` draws every cone-in as the TIMELIKE disposition (apex edges
+  // ℓ² = −1); `alternate` instead interleaves timelike/spacelike cone-ins for
+  // balanced causal content. Either way every edge sits at one uniform
+  // magnitude |ℓ²| = 1; the default is the all-spacelike precone.
   constexpr int kAttemptsPerCone = 16;  // gated tries before giving up on one cone
   for (int conedSoFar = 0; conedSoFar < count; ++conedSoFar) {
     std::vector<std::vector<std::uint64_t>> topCellTuples;
@@ -600,7 +674,11 @@ void MultiCobordism::preconeCells(int count) {
         if (vertexIndex != droppedVertexIndex)
           coneInFace.push_back(chosenCell[vertexIndex]);
       auto candidateSpacetime = build(snapshot());
-      if (applyMoveSpecification(candidateSpacetime, {kConeIn, coneInFace})) {
+      const bool coneTimelike =
+          alternate ? (conedSoFar % 2 == 0) : timelike;
+      if (applyMoveSpecification(
+              candidateSpacetime,
+              {coneTimelike ? kConeInTimelike : kConeIn, coneInFace})) {
         spacetime_ = build(snapshotOf(*candidateSpacetime));
         coned = true;
       }
@@ -614,8 +692,15 @@ void MultiCobordism::growBoundaryRegions() {
   // it — so it tracks the bulk's growth and gets room to open the holes that carry
   // it. A block already carrying (residual < tolerance) is left alone, so it stops
   // growing once it represents its state.
+  //
+  // GATED on the block's own residual: the shell is kept only when it does not
+  // RAISE the block's r_U term, so region growth can never raise F. The gate is
+  // Δ <= 0, not Δ < 0: a region too small to hold a full cell scores the constant
+  // full-leak residual, so its early shells are exactly Δ == 0 and must pass —
+  // a strict gate would starve initialization at the seed.
   const auto growOneShell = [this](BoundaryBlock &block) {
-    if (residualForBoundaryBlock(block, spacetime_) < inputCarriedTolerance_) return;
+    const double residualBefore = residualForBoundaryBlock(block, spacetime_);
+    if (residualBefore < inputCarriedTolerance_) return;
     std::set<std::uint64_t> expanded = block.vertices;
     for (const auto &topSimplex : spacetime_->getTopSimplices()) {
       auto cellVertexIds = topTuple(*topSimplex);
@@ -628,7 +713,10 @@ void MultiCobordism::growBoundaryRegions() {
       if (touchesRegion)
         expanded.insert(cellVertexIds.begin(), cellVertexIds.end());
     }
+    std::set<std::uint64_t> original = std::move(block.vertices);
     block.vertices = std::move(expanded);
+    if (residualForBoundaryBlock(block, spacetime_) > residualBefore)
+      block.vertices = std::move(original);  // the shell hurt the carry: revert it
   };
   for (auto &inputBlock : inputBlocks_) growOneShell(inputBlock);
   // Localized OUTPUT blocks (a 2→2 recombination's diquark ⊔ antidiquark) grow the
@@ -638,22 +726,28 @@ void MultiCobordism::growBoundaryRegions() {
 }
 
 std::vector<double> MultiCobordism::runStage1(int maxSteps, int nCandidateMoves,
-                                                 bool growBoundaries) {
+                                                 bool growBoundaries,
+                                                 int maxLookahead) {
   std::vector<double> objectiveTrace = {objective()};
   for (int stepIndex = 0; stepIndex < maxSteps; ++stepIndex)
-    if (!stage1Update(nCandidateMoves, growBoundaries, objectiveTrace)) break;
+    if (!stage1Update(nCandidateMoves, growBoundaries, objectiveTrace,
+                      maxLookahead))
+      break;
   return objectiveTrace;
 }
 
 bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
-                                  std::vector<double> &objectiveTrace) {
+                                  std::vector<double> &objectiveTrace,
+                                  int maxLookahead) {
   // The register is "carried" (converged) once the summed r_U is essentially zero.
   constexpr double kRegisterCarriedTolerance = 1e-3;
   // INITIALIZATION ONLY: while establishing the boundary, let each not-yet-carrying
   // region expand a shell so it can develop the holes that carry its state. Off
   // during the bulk evolution — the boundary ∂W is then frozen.
   //
-  // Growing a region CHANGES F and so must be booked into the trace (#607).
+  // Growing a region CHANGES F and so must be booked into the trace (#607) —
+  // though with the per-block gate in `growBoundaryRegions` (a shell that raises
+  // the block's residual is reverted) the booked delta is now always <= 0.
   // `growBoundaryRegions` mutates only the boundary blocks' vertex sets and never
   // touches `spacetime_`, so `reggeActionGradient` is provably unchanged and the
   // whole objective change is `gamma_ * Δr_U` — exact, not an approximation of the
@@ -669,17 +763,37 @@ bool MultiCobordism::stage1Update(int nCandidateMoves, bool growBoundaries,
     if (growthObjectiveDelta != 0.0)
       objectiveTrace.push_back(objectiveTrace.back() + growthObjectiveDelta);
   }
-  const double objectiveDelta = step(nCandidateMoves);
-  if (objectiveDelta < -convergenceTolerance_) {
-    // An F-lowering surgery move: progress.
-    objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
-    return true;
+  // ITERATIVE-DEEPENING LOOKAHEAD: try single moves first (depth 1 — the cheap,
+  // common case); only when that batch finds no improvement does the search
+  // deepen to 2-move sequences, then 3, up to `maxLookahead`. A sequence is
+  // scored and committed as a WHOLE, so an F-lowering pair whose first move
+  // alone raises F — the plateau that used to need the trap-door escape — is
+  // reached by honest descent rather than growth on faith.
+  lastStage1LookaheadDepth_ = 0;  // report: nothing committed until proven otherwise
+  // A stalled search is allowed to go WIDE as well as deep: depth 1 keeps the
+  // caller's fast batch (the common, cheap case), while each deepened batch
+  // scans on the order of a hundred candidate sequences — deep sequences die on
+  // the gate chain far more often and the move space grows with depth, so a
+  // handful of draws would badly under-sample it. The budget is only spent
+  // when depth 1 already failed, i.e. exactly when it is worth it.
+  constexpr int kDeepLookaheadCandidates = 128;
+  for (int lookaheadDepth = 1; lookaheadDepth <= std::max(1, maxLookahead);
+       ++lookaheadDepth) {
+    const int batchSize =
+        lookaheadDepth == 1 ? nCandidateMoves
+                            : std::max(nCandidateMoves, kDeepLookaheadCandidates);
+    const double objectiveDelta = step(batchSize, lookaheadDepth);
+    if (objectiveDelta < -convergenceTolerance_) {
+      // An F-lowering surgery sequence: progress.
+      objectiveTrace.push_back(objectiveTrace.back() + objectiveDelta);
+      lastStage1LookaheadDepth_ = lookaheadDepth;
+      return true;
+    }
   }
-  // No candidate in this batch lowered the objective. If the register is already
-  // carried, that IS convergence — halt. Otherwise keep drawing: a batch is a
-  // random sample, so one miss is not proof no improving move exists — under the
-  // default disposition-enabled draw (#632) the seed always has an F-lowering
-  // move — and the next iteration redraws fresh candidates. `maxSteps` bounds
+  // No sequence up to maxLookahead moves lowered the objective. If the register
+  // is already carried, that IS convergence — halt. Otherwise keep drawing: the
+  // batches are random samples, so one miss is not proof no improving sequence
+  // exists, and the next iteration redraws fresh candidates. `maxSteps` bounds
   // the retries.
   return rU(spacetime_) >= kRegisterCarriedTolerance;
 }
@@ -728,22 +842,61 @@ std::vector<double> MultiCobordism::runStage2(double beta, int maxIters,
 
 std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
                                         bool growBoundaries, double beta,
-                                        double alpha0, double relTol) {
+                                        double alpha0, double relTol,
+                                        int maxLookahead) {
   std::vector<double> objectiveTrace = {objective()};
   double stepScale = alpha0;
   lastStage2Stationary_ = false;  // for maxIters == 0; each update reports its own
+  // A single stalled stage-1 batch is a random-draw miss, not proof the moves
+  // have no effect (measured on a timelike-preconed drive: committed moves landed
+  // several stalled batches apart), so exhaustion is only concluded after this
+  // many CONSECUTIVE no-effect iterations.
+  constexpr int kConsecutiveNoEffectLimit = 3;
+  int consecutiveNoEffect = 0;
   for (int iterationIndex = 0; iterationIndex < maxIters; ++iterationIndex) {
-    // Both updates run every iteration, so the optimizer takes whichever kind of
-    // progress is available — combinatorial, geometric, or both. Neither stall is
-    // final on its own: a stage-2 stationary point can be reopened by the next
-    // stage-1 topology change (stage2Update re-reads the edge list each call) and
-    // a stalled stage-1 search can be unstuck by relaxed geometry, so halt only
-    // when BOTH halves stall within the same iteration.
-    const bool combinatorialProgressing =
-        stage1Update(nCandidateMoves, growBoundaries, objectiveTrace);
-    const bool geometricProgressing =
-        stage2Update(beta, relTol, objectiveTrace, stepScale);
-    if (!combinatorialProgressing && !geometricProgressing) break;
+    // ONE combinatorial move (or lookahead sequence), then a FULL geometric
+    // relaxation: stage-2 updates repeat until the relative-stationarity test
+    // reports diminishing returns. Every committed move is therefore scored
+    // from — and leaves behind — relaxed geometry (stage2Update re-reads the
+    // edge list each call, picking up whatever the move just created).
+    const bool registerNotCarried = stage1Update(
+        nCandidateMoves, growBoundaries, objectiveTrace, maxLookahead);
+    const bool moveCommitted = lastStage1LookaheadDepth_ > 0;
+    // "Full" relaxation still needs a safety budget (as runStage2's maxIters):
+    // near a slow descent tail the line search can accept a near-unbounded
+    // number of threshold-sized micro-steps, so the stationarity test alone
+    // does not bound the loop in practice.
+    constexpr int kRelaxBudgetPerMove = 200;
+    bool geometryRelaxed = false;
+    for (int relaxIndex = 0; relaxIndex < kRelaxBudgetPerMove; ++relaxIndex) {
+      if (!stage2Update(beta, relTol, objectiveTrace, stepScale)) break;
+      geometryRelaxed = true;
+    }
+    // "The combinatorial moves have no effect": nothing committed at any
+    // lookahead depth AND nothing left to relax — but only after enough
+    // consecutive misses to rule out draw noise.
+    if (!moveCommitted && !geometryRelaxed)
+      ++consecutiveNoEffect;
+    else
+      consecutiveNoEffect = 0;
+    const bool wantsExit =
+        (!registerNotCarried && !geometryRelaxed) ||  // carried + stationary
+        consecutiveNoEffect >= kConsecutiveNoEffectLimit;
+    if (wantsExit) {
+      // The LAST geometric relaxation before exit runs at a much tighter
+      // tolerance than the in-loop diminishing-returns cut. If the tighter pass
+      // still finds descent the state was NOT truly stationary — the exit was
+      // premature — so keep looping on the freshly relaxed geometry (which may
+      // also enable new moves). Exit only once stationary at 1e-12 too.
+      constexpr double kExitRelTol = 1e-12;
+      bool tighterPassFoundDescent = false;
+      for (int relaxIndex = 0; relaxIndex < kRelaxBudgetPerMove; ++relaxIndex) {
+        if (!stage2Update(beta, kExitRelTol, objectiveTrace, stepScale)) break;
+        tighterPassFoundDescent = true;
+      }
+      if (!tighterPassFoundDescent) break;
+      consecutiveNoEffect = 0;  // it moved: not done after all
+    }
   }
   return objectiveTrace;
 }
@@ -785,7 +938,14 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
   for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
     squaredLengths(edgeIndex) =
         edges[edgeIndex]->getRealSquaredLength();
-  const double currentObjective = objectiveTrace.back();
+  // Exact acceptance baseline: recompute F at the CURRENT state rather than
+  // reading objectiveTrace.back(). In the combined drive (`run`) the trace is
+  // accumulated from stage-1 deltas and can drift from the true objective; a
+  // drifted-HIGH baseline would let the line search accept a trial that RAISES
+  // the true F. One extra objective evaluation per iteration buys an exact
+  // gate; in a standalone `runStage2` the two values coincide (every trace
+  // entry there is an exactly recomputed objective).
+  const double currentObjective = fullObjective();
   // Relative stationarity: accept a step only when it lowers F by more than relTol
   // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
   // old absolute convergenceTolerance_ accepted ~1e-11 *relative* steps for F ~ 100

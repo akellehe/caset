@@ -80,13 +80,19 @@ class MultiCobordism {
   /// apex over a random facet and is accepted only through the `dualComplexValid`
   /// gate (see `preconeCells`); on the single-Δ⁴ seed (a 4-ball) this enlarges the
   /// 4-ball. Reproducible given `seed`; `precone = 0` leaves the host untouched.
+  /// `preconeTimelike` draws every precone cone-in as the TIMELIKE disposition
+  /// (#613, apex edges ℓ² = −1); `preconeAlternate` instead ALTERNATES the
+  /// cone-ins timelike/spacelike for balanced causal content at one uniform
+  /// edge-length magnitude (it wins when both are set). Defaults keep the
+  /// all-spacelike precone.
   MultiCobordism(
       std::shared_ptr<Spacetime> host,
       const std::vector<std::vector<std::complex<double>>> &inputTargets,
       const std::vector<std::vector<std::complex<double>>> &outputTargets,
       const std::vector<int> &degrees = {3}, double gamma = 1.0,
       std::uint64_t seed = 0, int precone = 0,
-      bool shouldProposeDispositions = true);
+      bool shouldProposeDispositions = true, bool preconeTimelike = false,
+      bool preconeAlternate = false);
 
   /// Move-kind names. Named rather than spelled as string literals at each site:
   /// every kind is written in the draw and compared in the apply, and a typo in
@@ -223,8 +229,12 @@ class MultiCobordism {
   /// `growBoundaries` is the INITIALIZATION pass: while true the boundary regions
   /// grow to track the bulk until they carry their states (growBoundaryRegions);
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
+  /// `maxLookahead`: when a batch of single moves finds no improvement, the
+  /// search deepens iteratively — 2-move sequences, then 3, up to this many
+  /// moves — committing an F-lowering sequence as a whole (1 = single moves only).
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
-                                bool growBoundaries = false);
+                                bool growBoundaries = false,
+                                int maxLookahead = 10);
   /// Stage 2 (geometric): relax every edge `ℓ²` along the **real signed-ℓ² manifold**
   /// toward a stationary point of `β‖∇S‖² + Γ·r_U`. The configuration space is real
   /// signed `ℓ²` (ordinary Lorentzian Regge; the complexified theory is unbuilt), so
@@ -250,27 +260,38 @@ class MultiCobordism {
   /// Epic #559's rule still holds — nothing here seeds causal content; the whole
   /// timelike/lightlike range is merely admissible, so causal content may EMERGE from
   /// the dynamics (its absence is equally a finding).
+  /// Default `relTol` 1e-12: `runStage2` is the FINAL, precise relaxation of a
+  /// drive (the combined `run` iterates its in-loop relaxations at the looser
+  /// 10e-9 diminishing-returns cut and applies the same 1e-12 on its exit path).
   std::vector<double> runStage2(double beta = 1.0, int maxIters = 200,
-                                  double alpha0 = 0.05, double relTol = 1e-9);
-  /// The combined drive: ONE loop running BOTH updates — the stage-1 combinatorial
-  /// update and the stage-2 geometric update — once each per iteration, so the
-  /// optimizer is free to make whichever kind of progress helps at each point (a
-  /// surgery move, a geometric descent step, or both). Neither stall is final on
-  /// its own: a stage-2 stationary point can be reopened by the next stage-1
-  /// topology change and vice versa, so the loop halts only when BOTH halves
-  /// stall in the same iteration (stage 1: register carried with no improving
-  /// move; stage 2: real-manifold stationarity) or at the `maxIters` budget cap.
-  /// `nCandidateMoves`/`growBoundaries` parameterize the combinatorial
-  /// half exactly as in `runStage1`; `beta`/`alpha0`/`relTol` the geometric half
-  /// exactly as in `runStage2`. NOTE with `beta != 1` the two halves weight
-  /// `‖∇S‖²` differently (stage 1 books deltas of `objective()`, stage 2 descends
-  /// `β‖∇S‖² + Γ·r_U`), so the shared trace mixes the two scales — the default
-  /// `beta = 1` keeps one coherent `F`. `lastStage2Stationary()` reports the LAST
-  /// geometric update's outcome. Returns the combined `F` trace.
+                                  double alpha0 = 0.05, double relTol = 1e-12);
+  /// The combined drive. Each iteration takes ONE combinatorial stage-1 update —
+  /// a best-ΔF move, deepening to `maxLookahead`-move sequences on a stall — and
+  /// then relaxes the geometry FULLY: stage-2 updates repeat until the relative
+  /// stationarity test at `relTol` (default 10e-9) reports diminishing returns,
+  /// so every move is proposed from, and leaves behind, relaxed geometry.
+  ///
+  /// Exit protocol: the loop wants to exit once the register is carried with the
+  /// geometry stationary, or once the combinatorial moves have had no effect
+  /// (nothing committed at any lookahead depth AND nothing left to relax) for a
+  /// few consecutive iterations (one stalled batch is draw noise, not proof).
+  /// The LAST geometric relaxation before exit then runs at the tight 1e-12: if
+  /// it still finds descent, the exit was premature and the loop continues on
+  /// the freshly relaxed geometry; only a state stationary at 1e-12 exits.
+  /// `maxIters` remains the hard budget cap.
+  ///
+  /// `nCandidateMoves`/`growBoundaries`/`maxLookahead` parameterize the
+  /// combinatorial half exactly as in `runStage1`; `beta`/`alpha0`/`relTol` the
+  /// geometric half exactly as in `runStage2`. NOTE with `beta != 1` the two
+  /// halves weight `‖∇S‖²` differently (stage 1 books deltas of `objective()`,
+  /// stage 2 descends `β‖∇S‖² + Γ·r_U`), so the shared trace mixes the two
+  /// scales — the default `beta = 1` keeps one coherent `F`.
+  /// `lastStage2Stationary()` reports the LAST geometric update's outcome.
+  /// Returns the combined `F` trace.
   std::vector<double> run(int maxIters = 200, int nCandidateMoves = 12,
                           bool growBoundaries = false,
                           double beta = 1.0, double alpha0 = 0.05,
-                          double relTol = 1e-9);
+                          double relTol = 10e-9, int maxLookahead = 10);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
@@ -328,6 +349,14 @@ class MultiCobordism {
   /// later topology change reopened does not latch).
   [[nodiscard]] bool lastStage2Stationary() const { return lastStage2Stationary_; }
 
+  /// The lookahead depth of the LAST stage-1 update's committed sequence: 1 = an
+  /// ordinary single move, >1 = the search had to deepen (the single-move batch
+  /// stalled and an F-lowering multi-move sequence was found at this depth), 0 =
+  /// no F-lowering sequence found at ANY depth up to the update's `maxLookahead`
+  /// (a stage-1 stall). 0 before the first update. Lets a driver/animation show
+  /// WHEN the optimizer is looking more than one move into the future.
+  [[nodiscard]] int lastStage1Lookahead() const { return lastStage1LookaheadDepth_; }
+
  private:
   using Snapshot =
       std::pair<std::vector<std::vector<std::uint64_t>>,
@@ -383,7 +412,21 @@ class MultiCobordism {
   [[nodiscard]] double deltaF(
       const std::shared_ptr<Spacetime> &candidateSpacetime, double baseResidualU,
       const std::set<std::vector<std::uint64_t>> &baseCellSet) const;
-  double step(int nCandidateMoves);
+  /// One best-ΔF batch: `nCandidateMoves` candidates, each a sequence of
+  /// `lookaheadDepth` gated random moves applied successively (each drawn against
+  /// the evolving candidate), committed as a whole iff the best sequence lowers
+  /// F. Depth 1 scores by the fast localized `deltaF`; deepened batches (depth
+  /// > 1, reached only after depth 1 stalls) score by `relaxedObjectiveOf` — the
+  /// exact objective after a few relaxation iterations on the candidate — since
+  /// unrelaxed fresh material always looks bad and would hide every way forward.
+  /// Returns the committed ΔF, or 0.
+  double step(int nCandidateMoves, int lookaheadDepth = 1);
+  /// The exact objective of `candidateSpacetime` after a few geometric relaxation
+  /// iterations (beta = 1, the stage-1 functional), used to score deepened
+  /// lookahead candidates as stage 2 WOULD leave them. Mutates the candidate's
+  /// edge lengths in place (a committed candidate keeps its relaxed geometry);
+  /// the node's own complex and `lastStage2Stationary_` are restored.
+  double relaxedObjectiveOf(const std::shared_ptr<Spacetime> &candidateSpacetime);
   /// One iteration of `runStage1`'s loop: optional boundary growth plus one
   /// best-ΔF candidate-move step, booked into `objectiveTrace`. A batch with no
   /// improving move is NOT a stall — the batch is a random sample, so the next
@@ -391,7 +434,7 @@ class MultiCobordism {
   /// improving move AND the register already carried (converged); `true` to keep
   /// iterating.
   bool stage1Update(int nCandidateMoves, bool growBoundaries,
-                    std::vector<double> &objectiveTrace);
+                    std::vector<double> &objectiveTrace, int maxLookahead = 10);
   /// One iteration of `runStage2`'s loop: exact gradient/Hessian, the on-manifold
   /// descent direction `Re(2β·H̄·g)`, and the backtracking line search. Appends the
   /// accepted objective to `objectiveTrace` and adapts `stepScale`. Returns `false`
@@ -406,7 +449,9 @@ class MultiCobordism {
   /// and every localized OUTPUT block (a multi-output recombination); a single output
   /// reads off the whole and has no block here. Bounded: a block already carrying
   /// (residual < inputCarriedTolerance_) is left alone, so it stops growing once it
-  /// represents its state.
+  /// represents its state. GATED per block: a shell that would RAISE the block's
+  /// own r_U term is reverted (Δ <= 0 passes — the full-leak plateau of a region
+  /// with no full cell yet is Δ == 0), so region growth can never raise F.
   void growBoundaryRegions();
   /// Pre-grow the seed by `count` **gated cone-in moves** before any optimization
   /// (the constructor calls this once when `precone > 0`): each cones a fresh apex
@@ -417,7 +462,9 @@ class MultiCobordism {
   /// `count <= 0` is a no-op (RNG untouched). Best-effort: a draw onto an already-
   /// saturated facet is rejected by the gate and retried; if no valid cone-in is
   /// found for a cell, it stops early.
-  void preconeCells(int count);
+  /// `timelike` draws every cone timelike; `alternate` interleaves
+  /// timelike/spacelike (and wins over `timelike`); default all-spacelike.
+  void preconeCells(int count, bool timelike = false, bool alternate = false);
 
   std::shared_ptr<Spacetime> spacetime_;
   std::vector<std::vector<std::complex<double>>> inputTargets_;
@@ -442,6 +489,9 @@ class MultiCobordism {
   /// Set by `runStage2`: `true` iff its last call stopped on the relative-tolerance
   /// stationarity test, `false` iff it hit the `maxIters` budget. See lastStage2Stationary.
   bool lastStage2Stationary_ = false;
+  /// Set by `stage1Update`: the committed sequence's lookahead depth (see
+  /// `lastStage1Lookahead`). 0 = the update committed nothing.
+  int lastStage1LookaheadDepth_ = 0;
   std::vector<BoundaryBlock> inputBlocks_;
   std::vector<BoundaryBlock> outputBlocks_;
 };
