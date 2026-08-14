@@ -52,6 +52,15 @@ using namespace ::tessera::quantum;
   #define TESSERA_TRIPWIRE_LIVE(method_name) ((void)0)
 #endif
 
+
+std::vector<std::uint64_t> Simplex::topTuple() const {
+  std::vector<std::uint64_t> sortedVertexIdentifiers;
+  for (const auto *vertex : getVertices())
+    sortedVertexIdentifiers.push_back(vertex->getId());
+  std::sort(sortedVertexIdentifiers.begin(), sortedVertexIdentifiers.end());
+  return sortedVertexIdentifiers;
+}
+
 bool Simplex::hasFacets() const {
   TESSERA_TRIPWIRE_LIVE("hasFacets");
   return !facets.empty();

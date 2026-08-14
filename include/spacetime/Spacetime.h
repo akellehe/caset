@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <set>
 
 #include "topologies/Topology.h"
 #include "observables/Observable.h"
@@ -676,6 +677,14 @@ class Spacetime {
         int topK = 4,
         int skeletonDim = 1) const;
 
+    /// The sub-complex carried by a boundary block: a freshly-built `Spacetime` of
+    /// exactly the top cells of `spacetime` all of whose vertices lie in `vertexSet`
+    /// (the block's region). Returns `nullptr` when the region contains no full cell.
+    /// This is where a block's vertex-set becomes an actual complex — the block itself
+    /// only stores the vertex-set and target, never the cells.
+    [[nodiscard]] std::shared_ptr<Spacetime> subcomplexWithinVertexSet(
+      const std::set<std::uint64_t> &vertexSet) const;
+
     /// Newman-Girvan modularity Q on the vertex/edge 1-skeleton, with
     /// implicit labels ``label(v) = v.id() % M``.
     ///
@@ -788,6 +797,8 @@ class Spacetime {
     ///
     /// @return The constant spacelike edge length.
     [[nodiscard]] double getA() const noexcept;
+
+    [[nodiscard]] int getDimensions() const noexcept;
 
     /// Unregisters a simplex from the spacetime's internal data structures.
     ///

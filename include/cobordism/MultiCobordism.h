@@ -341,14 +341,6 @@ class MultiCobordism {
   /// terms, not by freezing vertices.)
   [[nodiscard]] std::set<std::uint64_t> pinnedBoundaryVertices() const;
 
-  /// The sub-complex carried by a boundary block: a freshly-built `Spacetime` of
-  /// exactly the top cells of `spacetime` all of whose vertices lie in `vertexSet`
-  /// (the block's region). Returns `nullptr` when the region contains no full cell.
-  /// This is where a block's vertex-set becomes an actual complex — the block itself
-  /// only stores the vertex-set and target, never the cells.
-  [[nodiscard]] std::shared_ptr<Spacetime> subcomplexWithinVertexSet(
-      const std::shared_ptr<Spacetime> &spacetime,
-      const std::set<std::uint64_t> &vertexSet) const;
   /// One boundary block's `r_U` term: the sum over the register degrees of
   /// `residualOfTargetStateAgainstHarmonic` evaluated on the block's own
   /// sub-complex (`subcomplexWithinVertexSet`) against the block's target. When the
@@ -433,7 +425,7 @@ class MultiCobordism {
   double inputResidualWeight_ = 1.0;
   /// An input region stops growing (growInputRegions) once its residual drops below
   /// this — i.e. once it carries its state.
-  double inputCarriedTolerance_ = 0.5;
+  double inputCarriedTolerance_ = 1e-12;
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   /// #613: whether the move draw offers the disposition moves. See the accessor.

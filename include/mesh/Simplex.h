@@ -71,6 +71,9 @@ class Simplex {
     /// Simplex by Vertex is pretty handy for bookkeeping.
     void initialize(Simplex* simplex);
 
+    // Sorted vertex-id tuple of a top simplex.
+    std::vector<std::uint64_t> topTuple() const;
+
     // ==================== String Representation ====================
 #ifdef TESSERA_VERBOSE
     std::string toString() const noexcept;
@@ -171,7 +174,7 @@ class Simplex {
     ///
     /// @return all k-1 simplices contained within this k-simplex, in canonical
     ///   topological order (facet \f$ i \f$ omits vertex \f$ i \f$).
-    [[nodiscard]] const Simplices &getFacets();
+    const Simplices &getFacets();
 
     bool hasFacets() const;
     bool hasStoredFacet(const SimplexPtr &facet) const;
