@@ -65,10 +65,29 @@ which is slower.
     python proton_animation.py --save proton.gif
     # pre-grow the single-Δ⁴ seed by 12 gated cone-ins before optimizing:
     python proton_animation.py --precone 12
+    # give each frame up to 20 fresh candidate draws before it advances, and let
+    # each draw search move-sequences up to 100 deep:
+    python proton_animation.py --live --max-lookahead 20 --max-lookahead-depth 100
+    # record every frame's dual-curvature panels for later numerical analysis
+    # (see dual_perp_check.py):
+    python proton_animation.py --live --dump-dir proton_dumps/run-1
+
+Two independent lookahead knobs, easy to confuse:
+
+  * ``--max-lookahead-depth`` — how far AHEAD one draw looks: the longest move
+    *sequence* stage 1 will search when single moves stall. (Called
+    ``--max-lookahead`` in earlier revisions.)
+  * ``--max-lookahead`` — how many TIMES a frame redraws candidates before
+    giving up and advancing. Candidates are drawn at random, so a stalled frame
+    is usually an unlucky draw; only stalled frames spend the extra tries. Note
+    that a stalled frame is not wasted — stage 2 still relaxes the geometry —
+    so this buys committed *moves*, not progress in general.
 """
 import argparse
 import itertools
+import json
 import math
+import os
 
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
@@ -89,7 +108,14 @@ _EVOLVE_STEPS = 60         # evolution-pass (grow_boundaries=False) iterations p
 _INIT_CHUNK = 1            # init iterations per frame (1 = smoothest animation)
 _EVOLVE_CHUNK = 1          # evolution iterations per frame
 _STAGE1_CANDIDATES = 8
-_MAX_LOOKAHEAD = 10        # deepen to sequences of up to this many moves on a stall
+_MAX_LOOKAHEAD_DEPTH = 10  # deepen to sequences of up to this many moves on a stall
+# Retries of the whole frame when stage 1 commits nothing. Stage-1 candidates are
+# drawn at RANDOM (MultiCobordism.cpp: "the batches are random samples, so one miss
+# is not proof no improving sequence exists"), and the engine concludes exhaustion
+# after 3 consecutive no-effect iterations — but with one iteration per frame a
+# stalled draw wastes the whole frame. Re-calling `run` redraws fresh candidates.
+# 1 = the historical behaviour (a single draw per frame).
+_MAX_LOOKAHEAD_TRIES = 1
                            # (deepened batches scan up to ~128 candidates each)
 _COLOR_TOL = 0.5           # singlet r_state below this ⇒ the proton carries the color
 _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
@@ -268,10 +294,12 @@ class ProtonAnimator:
     def __init__(self, nodes, degree=3, init_steps=_INIT_STEPS, init_chunk=_INIT_CHUNK,
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
                  stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0,
-                 max_lookahead=_MAX_LOOKAHEAD):
+                 max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
+                 max_lookahead_tries=_MAX_LOOKAHEAD_TRIES):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
-        self.lookahead = max_lookahead
+        self.lookahead_depth = max_lookahead_depth
+        self.lookahead_tries = max_lookahead_tries
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
@@ -282,13 +310,14 @@ class ProtonAnimator:
         self.nodes = nodes                  # [(MultiCobordism, label), ...] in order
         self.k = degree
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
-                     "phase": [], "node": [], "lookahead": [],
+                     "phase": [], "node": [], "lookahead": [], "tries": [],
                      "min_det2": [], "min_det3": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
         self._done = False          # so the verdict is announced exactly once
         self._curv_cache = {}       # node_index -> (frame_computed, {cell_tuple: curvature})
+        self._dump_dir = None       # set by run_build(dump_dir=...); None = no dumping
 
     @staticmethod
     def _make_schedule(n_nodes, init_steps, init_chunk, evolve_steps, evolve_chunk):
@@ -315,12 +344,22 @@ class ProtonAnimator:
             self._active = node_index
             self._boundaries.append(len(self.hist["F"]))
         node, _label = self.nodes[node_index]
-        node.run(max_iters=count, n_candidate_moves=self.s1c,
-                 grow_boundaries=(phase == "init"), beta=self.s2_beta,
-                 max_lookahead=self.lookahead)
-        self._record(node, node_index, phase)
+        # Redraw fresh candidates while the frame commits nothing: a stall is a
+        # random-draw miss, not proof that no improving move exists, so give the
+        # frame `lookahead_tries` draws before advancing. The first try that
+        # commits anything (last_stage1_lookahead > 0) ends the loop, so the
+        # default of 1 try is exactly the historical single-draw behaviour and
+        # the retries cost nothing on frames that succeed immediately.
+        tries = 0
+        for tries in range(1, max(self.lookahead_tries, 1) + 1):
+            node.run(max_iters=count, n_candidate_moves=self.s1c,
+                     grow_boundaries=(phase == "init"), beta=self.s2_beta,
+                     max_lookahead=self.lookahead_depth)
+            if int(node.last_stage1_lookahead) > 0:
+                break
+        self._record(node, node_index, phase, tries)
 
-    def _record(self, node, node_index, phase):
+    def _record(self, node, node_index, phase, tries=1):
         st = node.st
         self.hist["F"].append(float(node.objective()))
         self.hist["gradN2"].append(float(cob.MultiCobordism.regge_action_gradient(st)))
@@ -333,6 +372,9 @@ class ProtonAnimator:
         # single move, >1 = the search had to look several moves ahead, 0 = stage-1
         # stall (nothing committed at any depth this frame).
         self.hist["lookahead"].append(int(node.last_stage1_lookahead))
+        # How many candidate draws this frame needed; > 1 means earlier draws
+        # stalled and were retried (see `_advance`).
+        self.hist["tries"].append(int(tries))
         # Null-face proximity: the smallest |det G| over the complex's triangles
         # and tets — 0 = a face exactly tangent to the light cone (degenerate).
         min_det2, min_det3 = _min_abs_gram_dets(st)
@@ -484,6 +526,75 @@ class ProtonAnimator:
             self._curv_cache[node_index] = (frame, self._cell_curvature(st))
         return self._curv_cache[node_index][1]
 
+    def _dump_frame(self, frame, coords_by_node):
+        """Write this frame's dual-curvature panels as data, so a claim about the
+        picture (e.g. "Re ε and Im ε run perpendicular around frame 200") can be
+        checked numerically instead of by eye — reaching frame ~200 takes hours,
+        so the frame must be recoverable without re-running.
+
+        Frames are numbered as the window title numbers them (1-based "frame
+        N/total"), so the file for the panel on screen is `frame_<N>.json`.
+
+        Costs nothing extra: the curvature comes from `_cell_curvature_cached`,
+        the same value the panels just drew, and `heat_frame` records the frame it
+        was actually computed on (the cache refreshes every `_HEAT_REFRESH_EVERY`
+        frames, so consecutive dumps can share one heat field).
+
+        The complex is written in the schema `observables.LiveComplex.load`
+        consumes — identical to `laplacian_clusters.dump_state` — so the existing
+        rehydration path works unchanged:
+
+            d = json.load(open("frame_0213.json"))
+            n = d["nodes"][0]
+            st = tessera.observables.LiveComplex.load(
+                n["cells"],
+                {(u, v): complex(re, im) for u, v, re, im in n["squared_lengths"]},
+                {int(v): t for v, t in n["vertex_times"].items()}, 4)
+        """
+        payload = {"frame": frame, "dimensions": 4, "nodes": []}
+        for key in ("F", "gradN2", "rU", "b3", "holes", "phase", "node",
+                    "lookahead", "tries", "min_det2", "min_det3"):
+            series = self.hist.get(key) or []
+            payload[key] = series[-1] if series else None
+        for ni, (cobordism, label) in enumerate(self.nodes):
+            st = cobordism.st
+            coords = coords_by_node.get(ni, {})
+            heat_frame, curv_map = self._curv_cache.get(ni, (None, {}))
+            cells, re_heat, im_heat, dual_pos = [], [], [], []
+            for c in st.getTopSimplices():
+                cell = sorted(v.getId() for v in c.getVertices())
+                cells.append(cell)
+                re_c, im_c = curv_map.get(tuple(cell), (0.0, 0.0))
+                re_heat.append(float(re_c))
+                im_heat.append(float(im_c))
+                here = [coords[v] for v in cell if v in coords]
+                dual_pos.append([float(np.mean([p[0] for p in here])),
+                                 float(np.mean([p[1] for p in here]))]
+                                if here else [None, None])
+            rows, cols, _n = st.getDualAdjacency()
+            payload["nodes"].append({
+                "label": label,
+                "active": ni == self._active,
+                "cells": cells,
+                "squared_lengths": [
+                    [min(e.getSource().getId(), e.getTarget().getId()),
+                     max(e.getSource().getId(), e.getTarget().getId()),
+                     e.getSquaredLength().real, e.getSquaredLength().imag]
+                    for e in st.getEdgeList().toVector()],
+                "vertex_times": {str(v.getId()): float(v.getTime())
+                                 for v in st.getVertexList().toVector()},
+                # the two panels, as data: index i of each array is the dual node
+                # drawn at dual_positions[i], i.e. getTopSimplices()[i] / cells[i]
+                "re_heat": re_heat,       # spatial curvature  Re(ε)·|★|
+                "im_heat": im_heat,       # temporal curvature Im(ε)·|★|
+                "dual_positions": dual_pos,
+                "dual_adjacency": [list(map(int, rows)), list(map(int, cols))],
+                "heat_frame": heat_frame,  # frame the heat was computed on
+            })
+        path = os.path.join(self._dump_dir, f"frame_{frame:04d}.json")
+        with open(path, "w") as f:
+            json.dump(payload, f)
+
     def _draw_dual(self, ax, sm, node_index, coords, channel, cmap, title):
         """One dual-complex curvature panel (nodes = top cells at their primal centroids, edges
         = shared-facet adjacency), heat-colored by `channel` of the signed per-cell curvature:
@@ -592,13 +703,24 @@ class ProtonAnimator:
         # and temporal-curvature (Im ε) panels. The active node animates; any other holds its
         # current complex — every node on screen at one time. Each node's layout is computed
         # once and shared by its primal + both dual panels.
+        coords_by_node = {}
         for ni in range(len(self.nodes)):
             coords = self._layouts[ni].coords(self.nodes[ni][0].st)
+            coords_by_node[ni] = coords
             self._draw_complex(self._primal_axes[ni], ni, coords, self.nodes[ni][1])
             self._draw_dual(self._re_axes[ni], self._re_sms[ni], ni, coords,
                             0, _HEAT_CMAP, "dual — spatial curvature (Re ε)")
             self._draw_dual(self._im_axes[ni], self._im_sms[ni], ni, coords,
                             1, _HEAT_CMAP_IM, "dual — temporal curvature (Im ε)")
+        # Dumped AFTER the panels draw, so the cached curvature is exactly what
+        # was rendered. A dump failure must not kill a multi-hour run.
+        if self._dump_dir:
+            try:
+                # numbered like the window title ("frame N/total"), so the file
+                # for the panel you are looking at is frame_<N>.json
+                self._dump_frame(len(self.hist["F"]), coords_by_node)
+            except Exception as exc:
+                print(f"\nframe dump failed: {exc!r}", flush=True)
 
         if getattr(self, "ax_null", None) is not None:
             self.ax_null.clear()
@@ -651,10 +773,15 @@ class ProtonAnimator:
         # noteworthy — a multi-move sequence or a stage-1 stall.
         if not self._done and self.hist["lookahead"]:
             depth = self.hist["lookahead"][-1]
-            tag = (f"  ·  LOOKAHEAD: committed a {depth}-move sequence" if depth > 1
+            used = self.hist["tries"][-1] if self.hist["tries"] else 1
+            retried = f", {used} tries" if used > 1 else ""
+            tag = (f"  ·  LOOKAHEAD: committed a {depth}-move sequence{retried}"
+                   if depth > 1
                    else (f"  ·  stage-1 stalled (searched depths 1–"
-                         f"{self.lookahead}; nothing F-lowering)") if depth == 0
-                   else "")
+                         f"{self.lookahead_depth} on {used} "
+                         f"{'try' if used == 1 else 'tries'}; nothing F-lowering)")
+                   if depth == 0
+                   else (f"  ·  committed after {used} tries" if used > 1 else ""))
             if tag:
                 label = self._frame_label(frame)
                 self.fig.suptitle(f"{self._TITLE_PREFIX} — frame {frame + 1}/"
@@ -766,11 +893,13 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False):
     ]
 
 
-def animate(nodes, save=None, interval=200, **kw):
+def animate(nodes, save=None, interval=200, dump_dir=None, **kw):
     """Animate the proton node sequence. `save` → write a GIF/MP4 (headless, Agg) with the
     synchronous per-frame `update`; otherwise show a live interactive window driven by
     `_run_live` (compute on a background thread, GUI thread only paints) so the window stays
-    responsive through the multi-second surgery frames. Returns the animator."""
+    responsive through the multi-second surgery frames. `dump_dir` additionally writes each
+    frame's dual-curvature panels as JSON (see `ProtonAnimator._dump_frame`). Returns the
+    animator."""
     import matplotlib
     if save:
         matplotlib.use("Agg")
@@ -778,6 +907,10 @@ def animate(nodes, save=None, interval=200, **kw):
     from matplotlib.animation import FuncAnimation
 
     anim_state = ProtonAnimator(nodes, **kw)
+    if dump_dir:
+        os.makedirs(dump_dir, exist_ok=True)
+        anim_state._dump_dir = dump_dir
+        print(f"per-frame dumps -> {dump_dir}/frame_0000.json, ...")
     anim_state._setup(plt)
     anim_state.fig.suptitle(f"{anim_state._TITLE_PREFIX} — live")
     if save:
@@ -795,9 +928,11 @@ def animate(nodes, save=None, interval=200, **kw):
 
 def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEPS,
               evolve_steps=_EVOLVE_STEPS,
-              stage1_candidates=_STAGE1_CANDIDATES, max_lookahead=_MAX_LOOKAHEAD,
+              stage1_candidates=_STAGE1_CANDIDATES,
+              max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
+              max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
               stage2_beta=1.0, interval=200,  # interval: ms/frame; GIF/MP4 fps = 1000/interval
-              **anim_kw):
+              dump_dir=None, **anim_kw):
     """Run the one-step proton build over `nodes` with the combined `run` drive: an init
     pass (`grow_boundaries=True`) then an evolution pass (`grow_boundaries=False`), each
     interleaving the stage-1 surgery update with the stage-2 geometric relaxation every
@@ -811,12 +946,16 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
     if not visualize and not save:
         out = []
         for node, label in nodes:
+            # The batched path runs each pass in ONE `run` call, so the engine's
+            # own internal retry loop already spans every iteration — the
+            # per-frame `max_lookahead_tries` retry has no meaning here and is
+            # deliberately not applied.
             node.run(max_iters=init_steps, n_candidate_moves=stage1_candidates,
                      grow_boundaries=True, beta=stage2_beta,
-                     max_lookahead=max_lookahead)
+                     max_lookahead=max_lookahead_depth)
             node.run(max_iters=evolve_steps, n_candidate_moves=stage1_candidates,
                      grow_boundaries=False, beta=stage2_beta,
-                     max_lookahead=max_lookahead)
+                     max_lookahead=max_lookahead_depth)
             st = node.st
             out.append((label, {
                 "F": float(node.objective()),
@@ -832,8 +971,11 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
         return out
     return animate(nodes, save=save, degree=degree, init_steps=init_steps,
                    evolve_steps=evolve_steps,
-                   stage1_candidates=stage1_candidates, max_lookahead=max_lookahead,
-                   stage2_beta=stage2_beta, interval=interval, **anim_kw).hist
+                   stage1_candidates=stage1_candidates,
+                   max_lookahead_depth=max_lookahead_depth,
+                   max_lookahead_tries=max_lookahead_tries,
+                   stage2_beta=stage2_beta, interval=interval,
+                   dump_dir=dump_dir, **anim_kw).hist
 
 
 def main():
@@ -847,21 +989,38 @@ def main():
                     help="init-pass (grow_boundaries=True) combined-run iterations")
     ap.add_argument("--evolve", type=int, default=_EVOLVE_STEPS,
                     help="evolution-pass (grow_boundaries=False) combined-run iterations")
-    ap.add_argument("--max-lookahead", type=int, default=_MAX_LOOKAHEAD,
-                    dest="max_lookahead",
+    ap.add_argument("--max-lookahead-depth", type=int,
+                    default=_MAX_LOOKAHEAD_DEPTH, dest="max_lookahead_depth",
                     help="on a stall, deepen the stage-1 search to sequences of up "
-                         "to this many moves (1 = single moves only)")
+                         "to this many moves (1 = single moves only). This was "
+                         "called --max-lookahead before the retry flag took that "
+                         "name")
+    ap.add_argument("--max-lookahead", type=int, default=_MAX_LOOKAHEAD_TRIES,
+                    dest="max_lookahead_tries",
+                    help="how many times to redraw stage-1 candidates within one "
+                         "frame before giving up and advancing (1 = one draw, the "
+                         "historical behaviour). Candidates are drawn at random, so "
+                         "a stalled frame is usually a bad draw rather than a dead "
+                         "end; only stalled frames cost extra tries")
     ap.add_argument("--precone", type=int, default=0,
                     help="pre-grow the single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
     ap.add_argument("--precone-timelike", action="store_true", dest="precone_timelike",
                     help="draw every precone cone-in as the TIMELIKE disposition, so "
                          "the pre-grown material carries causal content")
+    ap.add_argument("--dump-dir", dest="dump_dir",
+                    help="write each frame's dual-curvature panels (Re ε / Im ε per "
+                         "dual node, their positions, the dual adjacency, and the "
+                         "rehydratable complex) as JSON here — so a claim about a "
+                         "late frame can be checked without re-running to it")
     args = ap.parse_args()
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
-                       evolve_steps=args.evolve, max_lookahead=args.max_lookahead)
+                       evolve_steps=args.evolve,
+                       max_lookahead_depth=args.max_lookahead_depth,
+                       max_lookahead_tries=args.max_lookahead_tries,
+                       dump_dir=args.dump_dir)
     if not args.live and not args.save:
         print("one-step proton build finished (visualization off by default — pass --live "
               "or --save to watch it):")
