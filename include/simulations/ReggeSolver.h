@@ -72,17 +72,17 @@ class ReggeSolver {
     // ==================== Geometry queries ====================
 
     /// Dihedral angle at hinge \a h within top-simplex \a sigma.
-    [[nodiscard]] double dihedralAngle(SimplexPtr sigma,
+    [[nodiscard]] std::complex<double> dihedralAngle(SimplexPtr sigma,
                                         SimplexPtr hinge) const;
 
     /// Deficit angle at a hinge: \f$\varepsilon_h = 2\pi - \sum_\sigma \theta_h^{(\sigma)}\f$.
-    [[nodiscard]] double deficitAngle(SimplexPtr hinge) const;
+    [[nodiscard]] std::complex<double> deficitAngle(SimplexPtr hinge) const;
 
     /// Area of a triangular hinge (for the Regge action weighting).
-    [[nodiscard]] static double hingeArea(SimplexPtr hinge);
+    [[nodiscard]] static std::complex<double> hingeArea(SimplexPtr hinge);
 
-    /// Gravitational Regge action: \f$S_{\text{grav}} = \sum_h A_h\,\varepsilon_h\f$.
-    [[nodiscard]] double reggeAction() const;
+    /// Gravitational Regge action: \f$S_{\text{grav}} = \sum_h A_h\,\varepsilon_h\f$, with \f$A_h\f$ the honest signed Lorentzian hinge area and \f$\varepsilon_h\f$ the complex Lorentzian deficit (#641).
+    [[nodiscard]] std::complex<double> reggeAction() const;
 
     /// **Dual** Lorentzian Regge action on \f$W^*\f$:
     /// \f$S_{\text{Regge}}(W^*) = \sum_h |\!\star\! h|\,\varepsilon_h\f$, the
@@ -158,7 +158,7 @@ class ReggeSolver {
 
     /// Total action: \f$S = S_{\text{grav}} + S_{\text{matter}}\f$.
     /// The Regge equations are \f$\partial S/\partial \ell^2_e = 0\f$.
-    [[nodiscard]] double totalAction() const;
+    [[nodiscard]] std::complex<double> totalAction() const;
 
     /// Squared gradient norm: \f$F = \sum_e (\partial S/\partial \ell^2_e)^2\f$.
     /// Non-negative; zero exactly when the Regge equations are satisfied.

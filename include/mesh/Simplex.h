@@ -267,15 +267,15 @@ class Simplex {
     /// By default the geometry is **signature-aware**: the signed l^2 is kept,
     /// so a timelike edge (l^2 < 0) carries its Lorentzian sign into G and
     /// det(G) records the metric signature of the cell.
-    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
-    [[nodiscard]] std::vector<double> gramMatrix(bool wickRotate = false) const;
+    /// Always signature-aware: there is no Euclidean/Wick-rotated mode (#641).
+    [[nodiscard]] std::vector<std::complex<double>> gramMatrix() const;
 
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
     /// row-major matrix with a zero corner, a border of ones, and the squared
     /// edge-length matrix in the lower-right (d+1) x (d+1) block. Its cofactors
     /// give the dihedral angles (see ``lorentzianDihedralAngle``).
-    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
-    [[nodiscard]] std::vector<std::complex<double>> cayleyMengerMatrix(bool wickRotate = false) const;
+    /// Always signature-aware: there is no Euclidean/Wick-rotated mode (#641).
+    [[nodiscard]] std::vector<std::complex<double>> cayleyMengerMatrix() const;
 
     /// Lorentzian (Sorkin) dihedral angle at ``hinge`` within this top simplex,
     /// as a complex number, from the **signed** (non-Wick) Cayley-Menger
@@ -371,13 +371,13 @@ class Simplex {
     ///
     /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
     ///
-    /// **Lorentzian note (#581):** on the signed (non-Wick) default a
-    /// triangle whose Heron radicand is non-positive — every timelike
-    /// (negative-content) triangle, e.g. the mixed-causal hinge of a CDT
-    /// (4,1) cell — returns **0**, not an imaginary area: this method reports
-    /// only real spacelike content. Use ``volume()`` for the signed
-    /// (signature-recording) content of a Lorentzian cell.
-    [[nodiscard]] double area(bool wickRotate = false) const;
+    /// **Lorentzian note (#641):** the Heron radicand is carried under a complex
+    /// square root, so a triangle with a negative radicand — every timelike
+    /// (negative-content) triangle, e.g. the mixed-causal hinge of a CDT (4,1)
+    /// cell — returns an **imaginary** area rather than the 0 the old real-typed
+    /// clamp produced. Zero was never the area of those triangles; it was the
+    /// value a real return type could represent.
+    [[nodiscard]] std::complex<double> area() const;
 
     /// Signed d-content (volume) of this simplex on the honest,
     /// signature-respecting geometry: sign(det G) * sqrt(|det G|) / d!, with G
@@ -386,7 +386,7 @@ class Simplex {
     /// Lorentzian cell whose tangent metric has a negative Gram determinant
     /// returns a negative content, recording the signature rather than
     /// discarding it the way |l^2| would.
-    [[nodiscard]] double volume() const;
+    [[nodiscard]] std::complex<double> volume() const;
 
     /// Exact analytic gradient of this simplex's **signed `volume()`** with respect
     /// to the squared length of each of its edges:
@@ -399,7 +399,7 @@ class Simplex {
     /// **Hodge inner-product weight** gradient (the weights \f$ W_k \f$ are signed
     /// simplex volumes), the keystone for an arbitrary-degree analytic
     /// \f$ \partial L_k/\partial\ell^2 \f$ and hence the general-k \f$ r_U \f$ gradient.
-    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
     volumeGradient() const;
 
     /// Fail-loudly admissibility check for a purely-spacelike simplex.
@@ -423,12 +423,12 @@ class Simplex {
     /// G β = ½·diag(G) with G the Gram matrix relative to vertex 0, then
     /// λ_0 = 1 − Σβ, λ_i = β_i. Eigen-free (uses the determinant/cofactor
     /// helpers). A vertex falling outside the simplex has a negative λ.
-    [[nodiscard]] std::vector<double> circumcenterBarycentric() const;
+    [[nodiscard]] std::vector<std::complex<double>> circumcenterBarycentric() const;
 
     /// Signed circumradius squared R² of this simplex (intrinsic, signature-
     /// aware): R² = ½·Σ_i β_i G_ii. Positive for a spacelike simplex; can be
     /// negative when the circumcenter–vertex displacement is timelike.
-    [[nodiscard]] double circumradiusSquared() const;
+    [[nodiscard]] std::complex<double> circumradiusSquared() const;
 
     /// True iff this simplex is a genuine face of the current triangulation:
     /// some registered **top** cell (a (d+1)-vertex simplex, d the ambient
@@ -451,7 +451,7 @@ class Simplex {
     /// barycentric coordinate at the opposite vertex. Signature-aware: a
     /// timelike height contributes signed content (sign·√|h²|), matching
     /// ``volume()``. Negative content is meaningful, not an error.
-    [[nodiscard]] double dualVolume() const;
+    [[nodiscard]] std::complex<double> dualVolume() const;
 
     /// Exact analytic gradient of this hinge's ``dualVolume`` with respect to the
     /// squared length of each surrounding edge:
@@ -464,7 +464,7 @@ class Simplex {
     /// edge in 3D), the dual being the two-level edge→facet→top recursion. Keyed
     /// by sorted vertex-id edge over the top cells touching the hinge. Returns an
     /// empty map for other codimensions.
-    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+    [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
     dualVolumeGradient() const;
 
     /// Exact analytic Hessian of this hinge's ``dualVolume``:
@@ -476,13 +476,13 @@ class Simplex {
     /// by the (sorted) edge pair; symmetric.
     [[nodiscard]] std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
                                      std::pair<std::uint64_t, std::uint64_t>>,
-                           double>
+                           std::complex<double>>
     dualVolumeHessian() const;
 
     /// Diagonal Hodge-star ratio ⋆ = |★σ| / |σ| (dual content over primal
     /// content) for this simplex — the bridge between the primal Laplacian
     /// weights and the dual Regge action.
-    [[nodiscard]] double hodgeStar() const;
+    [[nodiscard]] std::complex<double> hodgeStar() const;
 
     /// Determinant of a square matrix (flat row-major, size n x n).
     [[nodiscard]] static std::complex<double> determinant(
@@ -642,9 +642,9 @@ class Simplex {
     /// the geometry. Evaluating the standard formula in this fixed reference frame
     /// makes the deficit a true relabelling/order invariant. Identical to
     /// ``cayleyMengerMatrix`` when the cell is already stored sorted.
-    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
+    /// Always signature-aware: there is no Euclidean/Wick-rotated mode (#641).
     [[nodiscard]] std::vector<std::complex<double>> cayleyMengerCanonical(
-        bool wickRotate, std::unordered_map<std::uint64_t, int> &pos1) const;
+        std::unordered_map<std::uint64_t, int> &pos1) const;
 
     /// Ambient top dimension n for the circumcentric-dual recursion. When this
     /// simplex carries an owning spacetime, n is read straight off the metric

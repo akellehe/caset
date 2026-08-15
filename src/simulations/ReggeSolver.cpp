@@ -82,18 +82,19 @@ ReggeSolver::ReggeSolver(std::shared_ptr<Spacetime> spacetime,
 // Geometry delegations to Simplex
 // =====================================================================
 
-double ReggeSolver::dihedralAngle(SimplexPtr sigma,
+std::complex<double> ReggeSolver::dihedralAngle(SimplexPtr sigma,
                                    SimplexPtr hinge) const {
-    return sigma->dihedralAngle(hinge, /*wickRotate=*/false);
+    return sigma->lorentzianDihedralAngle(hinge);
 }
 
-double ReggeSolver::deficitAngle(SimplexPtr hinge) const {
-    return hinge->deficitAngle();
+std::complex<double> ReggeSolver::deficitAngle(SimplexPtr hinge) const {
+    return hinge->lorentzianDeficitAngle();
 }
 
-double ReggeSolver::hingeArea(SimplexPtr hinge) {
-    // Regge calculus runs on the Wick-rotated (Euclidean) geometry.
-    return hinge->area(/*wickRotate=*/true);
+std::complex<double> ReggeSolver::hingeArea(SimplexPtr hinge) {
+    // The honest signed Lorentzian area. There is no Wick-rotated mode: a
+    // timelike hinge's area is imaginary, not |l^2|-real (#641).
+    return hinge->area();
 }
 
 // =====================================================================
@@ -131,10 +132,10 @@ std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
 // Actions
 // =====================================================================
 
-double ReggeSolver::reggeAction() const {
-    double S = 0.0;
+std::complex<double> ReggeSolver::reggeAction() const {
+    std::complex<double> S{0.0, 0.0};
     for (const auto &h : collectHinges()) {
-        S += hingeArea(h) * deficitAngle(h);
+        S += hingeArea(h) * h->lorentzianDeficitAngle();
     }
     return S;
 }
@@ -310,7 +311,7 @@ double ReggeSolver::gradientNorm2OverEdges(
         const auto h = spacetime_->findSimplexByVerts(vp);
         if (h == nullptr || !h->hasTopCoface()) continue;
         const std::complex<double> eps = h->lorentzianDeficitAngle();
-        const double dv = h->dualVolume();
+        const std::complex<double> dv = h->dualVolume();
         for (const auto &[ed, dEps] : h->lorentzianDeficitAngleGradient()) {
             const std::pair<std::uint64_t, std::uint64_t> k{
                 std::min(ed.first, ed.second), std::max(ed.first, ed.second)};
@@ -347,7 +348,7 @@ double ReggeSolver::matterAction() const {
                 if (other->getId() == v2->getId()) {
                     if (e->isTimelike())
                         S -= wl.mass *
-                             std::sqrt(-e->getRealSquaredLength());
+                             std::sqrt(-e->getSquaredLength()).real();
                     break;
                 }
             }
@@ -356,7 +357,7 @@ double ReggeSolver::matterAction() const {
     return S;
 }
 
-double ReggeSolver::totalAction() const {
+std::complex<double> ReggeSolver::totalAction() const {
     return reggeAction() + matterAction();
 }
 
@@ -442,7 +443,7 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
             try {
                 const auto &h = hinges[static_cast<std::size_t>(hi)];
                 const cd eps = h->lorentzianDeficitAngle();
-                const double dv = h->dualVolume();
+                const std::complex<double> dv = h->dualVolume();
                 for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
                     const auto it = eidx.find(e);
                     if (it != eidx.end()) gLocal[it->second] += dv * dEps;
@@ -538,7 +539,7 @@ ReggeSolver::hingeHessianEntries(
     // contributions; both the dense and sparse assemblies sum them per (e,f).
     std::vector<std::tuple<std::size_t, std::size_t, cd>> entries;
     const cd eps = hinge->lorentzianDeficitAngle();
-    const double V = hinge->dualVolume();
+    const cd V = hinge->dualVolume();
     const auto dEps = hinge->lorentzianDeficitAngleGradient();
     const auto dV = hinge->dualVolumeGradient();
     const auto d2Eps = hinge->lorentzianDeficitAngleHessian();
