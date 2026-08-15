@@ -49,6 +49,19 @@ import numpy as np
 import tessera
 import cmath
 
+
+def _real_spectrum(evals):
+    """Degree 0 is the Hermitian graph Laplacian D - A, so its spectrum is REAL.
+
+    `eigenvalues()` is complex-typed for parity with the k >= 1 d'Alembertian.
+    This ASSERTS the imaginary part vanishes rather than discarding it (#644)."""
+    a = np.asarray(evals)
+    np.testing.assert_allclose(a.imag, 0.0, atol=1e-12,
+                               err_msg="degree-0 spectrum must be real")
+    return a.real
+
+
+
 cob = tessera.cobordism
 obs = tessera.observables
 
@@ -311,7 +324,7 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, _ = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        evals_old = np.array(hl_old.eigenvalues())
+        evals_old = _real_spectrum(hl_old.eigenvalues())
         V_old = _matrix(hl_old.eigenvectors(), n)
         flux_old = [_cycle_flux(st, c) for c in cycles]
 
@@ -319,7 +332,7 @@ class TestGaugeInvariance(unittest.TestCase):
         _apply_gauge(st, alpha)
 
         hl_new = cob.HodgeLaplacian(st)
-        evals_new = np.array(hl_new.eigenvalues())
+        evals_new = _real_spectrum(hl_new.eigenvalues())
         V_new = _matrix(hl_new.eigenvectors(), n)
 
         # (i) spectrum unchanged
@@ -371,7 +384,7 @@ class TestGaugeInvariance(unittest.TestCase):
         ids, _ = _ordering(st)
         n = len(ids)
         hl_old = cob.HodgeLaplacian(st)
-        evals_old = np.array(hl_old.eigenvalues())
+        evals_old = _real_spectrum(hl_old.eigenvalues())
         V_old = _matrix(hl_old.eigenvectors(), n)
         # the degenerate low pair really is present
         self.assertAlmostEqual(evals_old[1] - evals_old[0], 0.0, places=9)
@@ -380,7 +393,7 @@ class TestGaugeInvariance(unittest.TestCase):
         alpha = {vid: float(rng.uniform(-PI, PI)) for vid in ids}
         _apply_gauge(st, alpha)
         hl_new = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(np.array(hl_new.eigenvalues()), evals_old,
+        np.testing.assert_allclose(_real_spectrum(hl_new.eigenvalues()), evals_old,
                                    atol=1e-12)
         V_new = _matrix(hl_new.eigenvectors(), n)
         G = np.diag([np.exp(1j * alpha[vid]) for vid in ids])
@@ -462,29 +475,29 @@ class TestFluxSpectrum(unittest.TestCase):
         for phi in np.linspace(-2.0 * PI, 2.0 * PI, 25):
             with self.subTest(phi=float(phi)):
                 hl = cob.HodgeLaplacian(self._triangle_total_flux(phi))
-                np.testing.assert_allclose(sorted(hl.eigenvalues()),
+                np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())),
                                            self._ring(phi), atol=1e-12)
 
     def test_spectrum_depends_only_on_total_flux(self):
         # Concentrated vs. spread flux of the same total are gauge-equivalent.
         for phi in (PI / 3, PI / 2, 2 * PI / 3, 1.234):
             with self.subTest(phi=phi):
-                concentrated = sorted(cob.HodgeLaplacian(
-                    self._triangle_total_flux(phi)).eigenvalues())
-                spread = sorted(cob.HodgeLaplacian(
-                    self._triangle_total_flux(phi, spread=True)).eigenvalues())
+                concentrated = sorted(_real_spectrum(cob.HodgeLaplacian(
+                    self._triangle_total_flux(phi)).eigenvalues()))
+                spread = sorted(_real_spectrum(cob.HodgeLaplacian(
+                    self._triangle_total_flux(phi, spread=True)).eigenvalues()))
                 np.testing.assert_allclose(concentrated, spread, atol=1e-12)
 
     def test_half_quantum_collapses_gap_and_lifts_zero_mode(self):
         hl = cob.HodgeLaplacian(self._triangle_total_flux(PI))
-        np.testing.assert_allclose(sorted(hl.eigenvalues()), [1.0, 1.0, 4.0],
+        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [1.0, 1.0, 4.0],
                                    atol=1e-12)
         self.assertEqual(len(hl.harmonics()), 0)  # the zero mode is gone
 
     def test_zero_mode_restored_at_full_flux_quantum(self):
         # Φ = 2π is gauge-equivalent to Φ = 0: spectrum {0, 3, 3}, zero mode back.
         hl = cob.HodgeLaplacian(self._triangle_total_flux(2.0 * PI))
-        np.testing.assert_allclose(sorted(hl.eigenvalues()), [0.0, 3.0, 3.0],
+        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [0.0, 3.0, 3.0],
                                    atol=1e-10)
         self.assertEqual(len(hl.harmonics()), 1)
 
@@ -502,9 +515,13 @@ class TestFluxSpectrum(unittest.TestCase):
 # (5) Lorentzian d'Alembertian (§5.6): the null-norm (2 − α)/3 crossing α = 2
 # --------------------------------------------------------------------------- #
 def _triangle_one_timelike(alpha):
-    """The 3-cycle 0-1-2-0 with edge (1,2) timelike (l² = −α²; signed volume −α);
-    edges (0,1),(0,2) spacelike (l² = 1). Closed form: spec(L₁) = {0, 3, 1−2/α},
-    harmonic null-norm ⟨h,h⟩_W = (2 − α)/3."""
+    """The 3-cycle 0-1-2-0 with edge (1,2) timelike (l² = −α²), edges (0,1),(0,2)
+    spacelike (l² = 1).
+
+    The timelike edge's 1-volume is sqrt(l²) = iα — IMAGINARY, not the −α a
+    real-signed convention gave it (#641). The harmonic indefinite norm is
+    therefore ⟨h,h⟩_W = 2/3 + iα/3: the two spacelike edges contribute the real
+    2/3 and the timelike edge the imaginary α/3, exactly 90° apart."""
     st = _cycle()  # all-spacelike unit triangle
     _edge(st, 1, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
     return st
@@ -514,64 +531,73 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
 
     def _null_norm(self, alpha):
         norms = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
-                         .nullNorms(1, 1e-9), dtype=float)
+                         .nullNorms(1, 1e-9), dtype=complex)
         self.assertEqual(len(norms), 1)  # the single 1-cycle harmonic
         return norms[0]
 
-    def _real_spectrum(self, alpha):
-        # ascending real spectrum {min, 0-ish, max} = {0, 3, 1 − 2/α} sorted
-        return np.sort(np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
-                                .eigenvalues(1), dtype=complex).real)
+    def _sorted_spectrum(self, alpha):
+        # spec(L₁) = {0, 3, 1 − 2i/α}, complex, ordered by (Re, Im).
+        ev = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
+                      .eigenvalues(1), dtype=complex)
+        return sorted(ev, key=lambda z: (round(z.real, 9), round(z.imag, 9)))
 
-    def test_null_norm_closed_form_and_sign_flip(self):
-        # Bracket the crossing: positive (spacelike-dominated) below α = 2,
-        # negative (timelike-dominated) above, monotonically decreasing.
+    def test_null_norm_closed_form_is_orthogonal_in_the_complex_plane(self):
+        # ⟨h,h⟩_W = 2/3 + iα/3. The two spacelike edges give the real part and
+        # the timelike edge the imaginary part, so the two contributions are 90°
+        # apart and CANNOT cancel. The real part is α-independent; only the
+        # imaginary part grows, linearly.
         sweep = (0.5, 1.0, 1.5, 1.9, 1.99, 2.01, 2.1, 2.5, 3.0)
-        norms = []
+        imags = []
         for alpha in sweep:
             with self.subTest(alpha=alpha):
                 norm = self._null_norm(alpha)
-                self.assertAlmostEqual(norm, (2.0 - alpha) / 3.0, places=6)
-                self.assertEqual(norm > 0.0, alpha < 2.0)
-                self.assertEqual(norm < 0.0, alpha > 2.0)
-                norms.append(norm)
-        self.assertTrue(all(x > y for x, y in zip(norms, norms[1:])))
+                self.assertAlmostEqual(norm.real, 2.0 / 3.0, places=6)
+                self.assertAlmostEqual(norm.imag, alpha / 3.0, places=6)
+                imags.append(norm.imag)
+        self.assertTrue(all(x < y for x, y in zip(imags, imags[1:])))
 
-    def test_crossing_is_at_alpha_two(self):
-        # The null-norm is positive just below the crossing and negative just
-        # above; linear interpolation (it is exactly linear in α) puts the unique
-        # root at α = 2. (α = 2 itself is a defective coincidence — two modes
-        # collide on the kernel — so it is bracketed rather than probed directly.)
-        a_lo, a_hi = 1.9, 2.1
-        n_lo, n_hi = self._null_norm(a_lo), self._null_norm(a_hi)
-        self.assertGreater(n_lo, 0.0)
-        self.assertLess(n_hi, 0.0)
-        root = a_lo - n_lo * (a_hi - a_lo) / (n_hi - n_lo)
-        self.assertAlmostEqual(root, 2.0, places=9)
+    def test_there_is_no_null_crossing(self):
+        # PHYSICS CHANGE (#641), not a re-baselining. Under the old real-signed
+        # convention the timelike edge's 1-volume was −α, so it could cancel the
+        # spacelike +2/3 and the norm passed through zero at α = 2 — a genuine
+        # null (lightlike) harmonic direction. With the honest imaginary volume
+        # the two contributions are orthogonal, |⟨h,h⟩_W|² = (2/3)² + (α/3)² > 0
+        # for every α, and no null direction exists at any α.
+        for alpha in (0.5, 1.0, 1.9, 2.0, 2.1, 3.0, 10.0):
+            with self.subTest(alpha=alpha):
+                norm = self._null_norm(alpha)
+                self.assertAlmostEqual(abs(norm) ** 2,
+                                       (2.0 / 3.0) ** 2 + (alpha / 3.0) ** 2,
+                                       places=6)
+                self.assertGreater(abs(norm), 0.0)
 
-    def test_eigenvalue_crossing_tracks_sign_of_alpha_minus_two(self):
-        # The non-cycle eigenvalue 1 − 2/α is the crossing mode: < 0 (indefinite)
-        # for α < 2, ≈ 0 at α = 2, > 0 for α > 2.
+    def test_third_eigenvalue_is_one_minus_two_i_over_alpha(self):
+        # PHYSICS CHANGE (#641). spec(L₁) = {0, 3, 1 − 2i/α}, where the
+        # real-signed convention gave {0, 3, 1 − 2/α}. The timelike edge's
+        # 1-volume rotated from −α to +iα, so the third eigenvalue's α-dependence
+        # rotated with it: its REAL part is pinned at 1 and only the imaginary
+        # part moves. It therefore never reaches 0, and the α = 2 crossing that
+        # the old form had is gone.
         for alpha in (0.5, 1.0, 1.5, 1.9, 2.1, 2.5, 3.0):
             with self.subTest(alpha=alpha):
-                eigs = self._real_spectrum(alpha)
-                np.testing.assert_allclose(
-                    eigs, np.sort([0.0, 3.0, 1.0 - 2.0 / alpha]), atol=1e-7)
-                crossing = 1.0 - 2.0 / alpha
-                self.assertEqual(np.min(eigs) < -1e-9, alpha < 2.0)
-                self.assertEqual(crossing > 0.0, alpha > 2.0)
+                eigs = self._sorted_spectrum(alpha)
+                expected = sorted([complex(0.0, 0.0), complex(3.0, 0.0),
+                                   complex(1.0, -2.0 / alpha)],
+                                  key=lambda z: (round(z.real, 9), round(z.imag, 9)))
+                np.testing.assert_allclose(eigs, expected, atol=1e-7)
+                self.assertGreater(abs(eigs[1] - 0.0), 0.5)  # never joins the kernel
 
-    def test_at_alpha_two_a_second_mode_joins_the_kernel(self):
-        # At the crossing the eigenvalue 1 − 2/α hits 0, so the near-kernel count
-        # jumps from 1 (the cycle, away from 2) to 2 (the defective coincidence).
-        away = cob.HodgeLaplacian(_triangle_one_timelike(1.5))
-        at = cob.HodgeLaplacian(_triangle_one_timelike(2.0))
-        n_away = int(np.sum(np.abs(np.array(
-            away.eigenvalues(1), dtype=complex)) < 1e-6))
-        n_at = int(np.sum(np.abs(np.array(
-            at.eigenvalues(1), dtype=complex)) < 1e-6))
-        self.assertEqual(n_away, 1)
-        self.assertEqual(n_at, 2)
+    def test_no_second_mode_joins_the_kernel_at_alpha_two(self):
+        # PHYSICS CHANGE (#641). The third eigenvalue is 1 − 2i/α, whose real
+        # part is pinned at 1, so it never hits 0 and α = 2 is no longer a
+        # defective coincidence. The kernel stays one-dimensional (the 1-cycle)
+        # for every α, where the real-signed convention gave 2 at α = 2.
+        for alpha in (1.5, 2.0, 2.5):
+            with self.subTest(alpha=alpha):
+                hl = cob.HodgeLaplacian(_triangle_one_timelike(alpha))
+                n = int(np.sum(np.abs(np.array(
+                    hl.eigenvalues(1), dtype=complex)) < 1e-6))
+                self.assertEqual(n, 1)
 
     def test_harmonic_is_the_unit_cycle(self):
         # The kernel mode is the 1-cycle: |h_i|² = 1/3 on every edge, for any α.
@@ -610,7 +636,7 @@ class TestEdgeCases(unittest.TestCase):
         # vertex as nothing — recorded here so a change in either is noticed.
         st = _single_vertex()
         hl = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(np.array(hl.eigenvalues()), [0.0], atol=1e-12)
+        np.testing.assert_allclose(_real_spectrum(hl.eigenvalues()), [0.0], atol=1e-12)
         self.assertEqual(_kernel_dim(hl, 0, True), 1)
         self.assertEqual(len(hl.harmonics()), 1)
         self.assertEqual(obs.HarmonicDimension().compute(st), 1.0)
@@ -620,7 +646,7 @@ class TestEdgeCases(unittest.TestCase):
     def test_two_vertex_edge(self):
         st = _two_vertex_edge()
         hl = cob.HodgeLaplacian(st)
-        np.testing.assert_allclose(sorted(hl.eigenvalues()), [0.0, 2.0], atol=1e-12)
+        np.testing.assert_allclose(sorted(_real_spectrum(hl.eigenvalues())), [0.0, 2.0], atol=1e-12)
         self.assertAlmostEqual(obs.SpectralGap().compute(st), 2.0, places=12)
 
     def test_disconnected_kernel_is_component_count(self):
@@ -678,7 +704,7 @@ class TestSpectralObservables(unittest.TestCase):
     def test_spectral_gap_matches_operator_across_fixtures(self):
         for name, build, _ in FIXTURES:
             st = build()
-            evals = sorted(cob.HodgeLaplacian(st).eigenvalues())
+            evals = sorted(_real_spectrum(cob.HodgeLaplacian(st).eigenvalues()))
             with self.subTest(fixture=name):
                 self.assertAlmostEqual(obs.SpectralGap().compute(st),
                                        evals[1] - evals[0], places=10)

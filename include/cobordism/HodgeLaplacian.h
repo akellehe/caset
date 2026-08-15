@@ -209,7 +209,7 @@ class HodgeLaplacian {
     /// \f$ \approx 0 \f$ flags a **null** harmonic (a lightlike kernel direction);
     /// all entries are positive on an all-spacelike complex.
     /// @throws std::runtime_error for \f$ k < 0 \f$.
-    [[nodiscard]] std::vector<double> nullNorms(
+    [[nodiscard]] std::vector<std::complex<double>> nullNorms(
         int k, double tol = 1e-9, bool metric = true) const;
 
   private:

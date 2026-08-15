@@ -568,27 +568,29 @@ std::vector<cd> HodgeLaplacian::harmonicMatrix(int k, double tol,
   return rows;
 }
 
-std::vector<double> HodgeLaplacian::nullNorms(int k, double tol,
+std::vector<std::complex<double>> HodgeLaplacian::nullNorms(int k, double tol,
                                                         bool metric) const {
   requireNonNegativeDegree(k);
   const SpectrumCache &sp = ensureSpectrum(k, metric);
   const std::size_t N = static_cast<std::size_t>(sp.dim);
   if (N == 0) return {};
 
-  std::vector<double> norms;
+  std::vector<cd> norms;
   for (std::size_t j = 0; j < N; ++j) {
     if (std::abs(sp.evals[j]) >= tol) continue;
     // Indefinite W-norm <h,h>_W = sum_i W_{k,i} |h_i|^2 (real; signed W_k). A
     // value ≈ 0 marks a null (lightlike) harmonic direction.
     // <h,h>_W = sum_i W_{k,i} |h_i|^2. |h_i|^2 is real but W_k is complex once a
     // Lorentzian cell's signed content is imaginary, so the indefinite norm is
-    // complex; its MODULUS is the null test (~0 marks a lightlike direction).
+    // COMPLEX and is returned as such. Taking a modulus here would destroy the
+    // sign, and the sign is the physics: it says whether the direction is
+    // spacelike- or timelike-dominated, and ~0 marks a lightlike one.
     cd nrm{0.0, 0.0};
     for (std::size_t i = 0; i < N; ++i) {
       const cd hi = sp.evecs[i * N + j];
       nrm += sp.wk[i] * std::norm(hi);  // std::norm = |hi|^2
     }
-    norms.push_back(std::abs(nrm));
+    norms.push_back(nrm);
   }
   return norms;
 }
