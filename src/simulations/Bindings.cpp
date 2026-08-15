@@ -331,36 +331,6 @@ Einstein equations).  F ≥ 0, and F = 0 at the solution.)doc")
            "n), getEdgeList order — wrap with "
            "scipy.sparse.coo_matrix((values, (rows, cols)), shape=(n, n)). Same "
            "values as the dense actionHessianExact on the nonzero pattern (edge "
-           "pairs sharing a hinge), assembled at O(nnz) memory instead of O(|E|²).")
-      .def("step", &ReggeSolver::step,
-           py::arg("learningRate") = 0.001,
-           "One gradient-descent step on F = ||∇S||². Returns F before the update.")
-      .def("solve", [](ReggeSolver &self, double tol, int maxIters,
-                        double learningRate, py::object progress) {
-          ReggeSolver::ProgressCallback cb = nullptr;
-          if (!progress.is_none()) {
-              cb = [&progress](int iter, double F) {
-                  py::gil_scoped_acquire acquire;
-                  progress(iter, F);
-              };
-          }
-          py::gil_scoped_release release;
-          return self.solve(tol, maxIters, learningRate, cb);
-      },
-           py::arg("tol") = 1e-8,
-           py::arg("maxIters") = 5000,
-           py::arg("learningRate") = 0.001,
-           py::arg("progress") = py::none(),
-           R"doc(Find stationary point of the total Regge action (discrete Einstein eqs).
+           "pairs sharing a hinge), assembled at O(nnz) memory instead of O(|E|²).");
 
-Minimizes F = ||∇S||² until F < tol or maxIters reached.
-
-Args:
-    tol: Convergence tolerance on F = ||∇S||².
-    maxIters: Maximum number of iterations.
-    learningRate: Gradient descent step size.
-    progress: Optional callback(iter, F) called after each iteration.
-
-Returns:
-    Tuple of (converged: bool, final_F: float, iterations: int).)doc");
 }

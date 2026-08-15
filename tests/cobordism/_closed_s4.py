@@ -15,6 +15,7 @@ byte-stable so the two suites cannot silently drift apart.
 """
 
 import tessera as T
+import cmath
 
 
 def closed_s4(n_refine=20, seed=3):
@@ -22,7 +23,7 @@ def closed_s4(n_refine=20, seed=3):
                      T.PREFERRED, T.SimplexBoundarySphere(4))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
     applied = 0
     for s in range(seed, seed + n_refine * 4):
         mv = T.AddMove(st, s, False, T.PachnerMode.PreGeometric, False)
@@ -31,5 +32,5 @@ def closed_s4(n_refine=20, seed=3):
         if applied >= n_refine:
             break
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.01 * (i % 6))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.01 * (i % 6))))
     return st

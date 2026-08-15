@@ -14,6 +14,7 @@ import math
 import unittest
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 obs = tessera.observables  # SpectralGap / HarmonicDimension live in the observables subsystem
@@ -44,7 +45,7 @@ def _from_simplices(num_vertices, simplices):
 
 def _set_uniform(st, sq=1.0, phase=0.0):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(sq)
+        e.setLength(cmath.sqrt(complex(sq)))
         e.setPhase(phase)
 
 

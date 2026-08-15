@@ -22,6 +22,7 @@ import unittest
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -54,7 +55,7 @@ def _from_simplices(num_vertices, simplices):
 
 def _set_uniform(st, squared_length=1.0, phase=0.0):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(squared_length)
+        e.setLength(cmath.sqrt(complex(squared_length)))
         e.setPhase(phase)
 
 
@@ -114,7 +115,7 @@ def _np_laplacian(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength().real
+        w = (e.getLength() * e.getLength()).real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -257,7 +258,7 @@ class TestAssemblyAndSpectrum(unittest.TestCase):
                          ("testbed", _testbed())):
             with self.subTest(fixture=name):
                 for e in st.getEdgeList().toVector():
-                    e.setSquaredLength(float(rng.uniform(0.5, 2.0)))
+                    e.setLength(cmath.sqrt(complex(float(rng.uniform(0.5, 2.0)))))
                     e.setPhase(float(rng.uniform(-math.pi, math.pi)))
                 self._check_against_numpy(st)
 
@@ -279,7 +280,7 @@ class TestAssemblyAndSpectrum(unittest.TestCase):
         st = _path()
         _ids, idx = _ordering(st)
         e = _edge(st, 0, 1)
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
         e.setPhase(math.pi / 2.0)
         s, t = e.getSource().getId(), e.getTarget().getId()
         A = _matrix(cob.HodgeLaplacian(st).adjacency(), st.getVertexCount())
@@ -297,7 +298,7 @@ class TestHermiticityUnitarity(unittest.TestCase):
         out = []
         for name, st in (("triangle", _triangle()), ("testbed", _testbed())):
             for e in st.getEdgeList().toVector():
-                e.setSquaredLength(float(rng.uniform(0.5, 2.0)))
+                e.setLength(cmath.sqrt(complex(float(rng.uniform(0.5, 2.0)))))
                 e.setPhase(float(rng.uniform(-math.pi, math.pi)))
             out.append((name, st))
         return out
@@ -387,7 +388,7 @@ class TestGaugeInvariance(unittest.TestCase):
         # Random Hermitian weights + base phases (a generic point in the b1=2
         # connection space).
         for e in st.getEdgeList().toVector():
-            e.setSquaredLength(float(rng.uniform(0.5, 2.0)))
+            e.setLength(cmath.sqrt(complex(float(rng.uniform(0.5, 2.0)))))
             e.setPhase(float(rng.uniform(-math.pi, math.pi)))
 
         ids, idx = _ordering(st)
@@ -542,7 +543,7 @@ class TestMetricHodgeAssembly(unittest.TestCase):
                                ("torus k=2", _torus, 2)):
             st = build()
             for e in st.getEdgeList().toVector():
-                e.setSquaredLength(float(rng.uniform(0.3, 3.0)))
+                e.setLength(cmath.sqrt(complex(float(rng.uniform(0.3, 3.0)))))
                 e.setPhase(0.0)
             with self.subTest(case=name):
                 nk = cob.ChainComplex.fromSpacetime(st).numSimplices(k)
@@ -590,7 +591,7 @@ class TestMetricHodgeKernel(unittest.TestCase):
         rng = np.random.default_rng(2)
         st = _torus()
         for e in st.getEdgeList().toVector():
-            e.setSquaredLength(float(rng.uniform(0.3, 3.0)))
+            e.setLength(cmath.sqrt(complex(float(rng.uniform(0.3, 3.0)))))
             e.setPhase(0.0)
         self.assertEqual(_kernel_dim_from_eigenvalues(st, 1, True), 2)
         self.assertEqual(_harmonic_dim(st, 1, True), 2)
@@ -611,7 +612,7 @@ class TestMetricWeights(unittest.TestCase):
         lengths = {(0, 1): 1.0, (0, 2): 4.0, (0, 3): 9.0, (1, 2): 16.0, (2, 3): 25.0}
         for e in st.getEdgeList().toVector():
             key = tuple(sorted((e.getSource().getId(), e.getTarget().getId())))
-            e.setSquaredLength(lengths[key])
+            e.setLength(cmath.sqrt(complex(lengths[key])))
             e.setPhase(0.0)
         order = sorted(lengths)  # (0,1),(0,2),(0,3),(1,2),(2,3)
         expected = [math.sqrt(lengths[t]) for t in order]

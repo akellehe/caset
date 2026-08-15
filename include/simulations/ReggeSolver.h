@@ -14,9 +14,6 @@
 
 #include <Eigen/SparseCore>
 
-#ifdef TESSERA_CUDA
-#include "cuda/regge_cuda.h"
-#endif
 
 // === tessera subsystem ns fwd-decls ===
 namespace tessera::graph {}
@@ -194,23 +191,6 @@ class ReggeSolver {
     [[nodiscard]] Eigen::SparseMatrix<std::complex<double>>
     actionHessianExactSparse() const;
 
-    // ==================== Solver ====================
-
-    /// One gradient-descent step minimizing \f$F = \|\nabla S\|^2\f$.
-    ///
-    /// @return F = \f$\|\nabla S\|^2\f$ before the update
-    double step(double learningRate = 0.001);
-
-    /// Iterate step() until convergence or max iterations.
-    ///
-    /// @param progress Optional callback invoked after each iteration with
-    ///   (iteration, F).  Useful for progress bars.
-    /// @return (converged, final_F, iterations)
-    using ProgressCallback = std::function<void(int iter, double F)>;
-    std::tuple<bool, double, int> solve(double tol = 1e-8,
-                                         int maxIters = 5000,
-                                         double learningRate = 0.001,
-                                         ProgressCallback progress = nullptr);
 
     // ==================== Accessors ====================
 
@@ -243,10 +223,6 @@ class ReggeSolver {
     /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
     [[nodiscard]] std::vector<std::complex<double>> actionGradient() const;
 
-#ifdef TESSERA_CUDA
-    /// Flatten mesh topology into GPU-friendly arrays.
-    [[nodiscard]] cuda::GpuMeshData flattenMeshForGpu() const;
-#endif
 
 };
 

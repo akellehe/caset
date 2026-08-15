@@ -47,7 +47,7 @@ def _sphere4(jitter=True):
                      T.SimplexBoundarySphere(4))
     st.build()
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + (0.013 * (i % 5) if jitter else 0.0))
+        e.setLength(cmath.sqrt(complex(1.0 + (0.013 * (i % 5) if jitter else 0.0))))
     return st
 
 
@@ -71,7 +71,7 @@ class SignatureChangeReadersTest(unittest.TestCase):
         self.assertTrue(cmath.isfinite(action_before))
 
         # Hand-set ONE edge timelike — a reader verification, not initialization.
-        st.getEdgeList().toVector()[3].setSquaredLength(complex(-0.8, 0.0))
+        st.getEdgeList().toVector()[3].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
 
         # (a) The complex Sorkin/Asante–Dittrich deficit is sane on EVERY hinge.
         for h in _hinges(st):
@@ -128,15 +128,15 @@ class Stage2UnclampedTest(unittest.TestCase):
         # pin. Requires an accepted step (len(trace) >= 2) to be meaningful.
         host = _closed_s4(n_refine=8, seed=3)
         edges = host.getEdgeList().toVector()
-        edges[5].setSquaredLength(complex(-0.8, 0.0))    # timelike
-        edges[7].setSquaredLength(complex(25.0, 0.0))    # beyond the old cap
-        edges[9].setSquaredLength(complex(0.01, 0.0))    # inside the old floor band
+        edges[5].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))    # timelike
+        edges[7].setLength(cmath.sqrt(complex(complex(25.0, 0.0))))    # beyond the old cap
+        edges[9].setLength(cmath.sqrt(complex(complex(0.01, 0.0))))    # inside the old floor band
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         self.assertGreaterEqual(len(trace), 2, "no accepted step — vacuous run")
         for e in opt.st.getEdgeList().toVector():
-            sq = complex(e.getSquaredLength())
+            sq = (complex(e.getLength() * complex(e.getLength()))
             self.assertTrue(cmath.isfinite(sq))
             for pin in (_OLD_FLOOR, _OLD_CAP, -_OLD_CAP):
                 self.assertGreater(abs(sq.real - pin), 1e-12,
@@ -147,11 +147,11 @@ class Stage2UnclampedTest(unittest.TestCase):
         # run it as-is — no push-out, no floor, no exception. Whether descent moves it
         # is dynamics; snapping it to a pin would be a projection.
         host = _closed_s4(n_refine=8, seed=3)
-        host.getEdgeList().toVector()[3].setSquaredLength(complex(1e-6, 0.0))
+        host.getEdgeList().toVector()[3].setLength(cmath.sqrt(complex(complex(1e-6, 0.0))))
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=2, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
-        sq = complex(opt.st.getEdgeList().toVector()[3].getSquaredLength())
+        sq = (complex(opt.st.getEdgeList().toVector()[3].getLength() * complex(opt.st.getEdgeList().toVector()[3].getLength()))
         self.assertTrue(cmath.isfinite(sq))
         self.assertGreater(abs(sq.real - _OLD_FLOOR), 1e-12,
                            "the lightlike-band edge was snapped to the old floor")
@@ -162,12 +162,12 @@ class Stage2UnclampedTest(unittest.TestCase):
         # magnitudes are dynamics — every trial is exactly real and evaluable, and
         # only the line search's variational acceptance decides (#589).
         host = _closed_s4(n_refine=8, seed=3)
-        host.getEdgeList().toVector()[5].setSquaredLength(complex(-0.8, 0.0))
+        host.getEdgeList().toVector()[5].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         for e in opt.st.getEdgeList().toVector():
-            self.assertTrue(cmath.isfinite(complex(e.getSquaredLength())))
+            (self.assertTrue(cmath.isfinite(complex(e.getLength() * self.assertTrue(cmath.isfinite(complex(e.getLength()))))
 
 
 if __name__ == "__main__":

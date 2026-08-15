@@ -20,6 +20,7 @@ round trip on the CDT toroid extends the hinge-exactness contract.
 import unittest
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -36,7 +37,7 @@ def _seed_complex_geometry(st):
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         lo, hi = min(a, b), max(a, b)
-        e.setSquaredLength(complex(1.0 + 0.001 * lo, 0.02 + 0.001 * hi))
+        e.setLength(cmath.sqrt(complex(complex(1.0 + 0.001 * lo, 0.02 + 0.001 * hi))))
         e.setPhase(0.05 + 0.002 * (lo * 7 + hi))
 
 
@@ -44,7 +45,7 @@ def _edge_state(st):
     out = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = (complex(e.getSquaredLength()),
+        out[(min(a, b), max(a, b))] = ((complex(e.getLength() * complex(e.getLength())),
                                        e.getPhase())
     return out
 

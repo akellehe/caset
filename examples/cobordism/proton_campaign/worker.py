@@ -65,7 +65,7 @@ def conjugate_singlet():
 def snapshot(node):
     st = node.st
     betti = cob.MultiCobordism.betti(st)
-    squared = [e.getSquaredLength() for e in st.getEdgeList().toVector()]
+    squared = [(e.getLength() * e.getLength()) for e in st.getEdgeList().toVector()]
     return {
         "F": float(node.objective()),
         "gradN2": float(cob.MultiCobordism.regge_action_gradient(st)),
@@ -103,7 +103,7 @@ def dump_geometry(st, path, meta):
         for v in c.getVertices():
             times[int(v.getId())] = float(v.getTime())
     edges = sorted(([int(e.getSource().getId()), int(e.getTarget().getId()),
-                     e.getSquaredLength().real, e.getSquaredLength().imag]
+                     (e.getLength() * e.getLength()).real, (e.getLength() * e.getLength()).imag]
                     for e in st.getEdgeList().toVector()),
                    key=lambda r: (min(r[0], r[1]), max(r[0], r[1])))
     record = dict(meta)
@@ -229,7 +229,7 @@ def run_attempt_on_nodes(base, progress, recorder, state, nodes):
 
     stationary = bool(joint.last_stage2_stationary)
     st = joint.st
-    squared = [e.getSquaredLength() for e in st.getEdgeList().toVector()]
+    squared = [(e.getLength() * e.getLength()) for e in st.getEdgeList().toVector()]
     final = snapshot(joint)
     return {
         "converged": stationary and persistent,

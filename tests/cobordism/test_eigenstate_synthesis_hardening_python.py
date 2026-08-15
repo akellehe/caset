@@ -35,6 +35,7 @@ import unittest
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -55,7 +56,7 @@ def _from_simplices(num_vertices, simplices):
 
 def _set_uniform(st, squared_length=1.0, phase=0.0):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(squared_length)
+        e.setLength(cmath.sqrt(complex(squared_length)))
         e.setPhase(phase)
 
 
@@ -93,7 +94,7 @@ def _np_L(st):
         if s == t:
             continue
         i, j = idx[s], idx[t]
-        w = e.getSquaredLength().real
+        w = (e.getLength() * e.getLength()).real
         z = w * np.exp(1j * e.getPhase())
         A[i, j] += z
         A[j, i] += np.conj(z)
@@ -240,7 +241,7 @@ class RandomComplexResidualTest(unittest.TestCase):
                 edges.add((min(a, b), max(a, b)))
         st = _from_simplices(n, sorted(edges))
         for e in st.getEdgeList().toVector():
-            e.setSquaredLength(float(rng.uniform(0.4, 3.0)))
+            e.setLength(cmath.sqrt(complex(float(rng.uniform(0.4, 3.0)))))
             e.setPhase(float(rng.uniform(-math.pi, math.pi)))
         return st
 
@@ -298,7 +299,7 @@ class ParameterOrderTest(unittest.TestCase):
 
         # The k-th parameter is the k-th EdgeList edge (the stable order).
         live = st.getEdgeList().toVector()
-        self.assertTrue(np.allclose([e.getSquaredLength().real for e in live], w))
+        (self.assertTrue(np.allclose([e.getLength() * self.assertTrue(np.allclose([e.getLength()).real for e in live], w))
         self.assertTrue(np.allclose([e.getPhase() for e in live], th))
 
         # And the operator (apply) is built in that same edge order: it agrees
@@ -347,7 +348,7 @@ class GeneralAmplitudeFloorOracleTest(unittest.TestCase):
         edge = st.getEdgeList().toVector()[0]
 
         def f(x):
-            edge.setSquaredLength(x[0])
+            edge.setLength(cmath.sqrt(complex(x[0])))
             edge.setPhase(x[1])
             return _np_residual(_np_L(st), psi)
 

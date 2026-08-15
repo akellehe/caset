@@ -32,6 +32,7 @@ import math
 import pytest
 
 import tessera as T
+import cmath
 
 # Action is restored by re-creating cells at identical edge lengths, so the round
 # trip is bit-exact up to summation reassociation: a few ULPs on small complexes,
@@ -63,7 +64,7 @@ def _sphere(d, sq=1.0):
     st = T.Spacetime(metric, T.CDT, 1.0, 1.0, T.PREFERRED, T.SimplexBoundarySphere(d))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(sq)
+        e.setLength(cmath.sqrt(complex(sq)))
     return st
 
 
@@ -73,7 +74,7 @@ def _s2_cross_s1():
     st = T.Spacetime(metric, T.CDT, 1.0, 1.0, T.PREFERRED, T.SphereCircleProduct())
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
     return st
 
 

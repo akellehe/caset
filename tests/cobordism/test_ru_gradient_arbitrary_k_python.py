@@ -30,6 +30,7 @@ cob = T.cobordism
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _holed_surface import holed_surface  # noqa: E402
+import cmath
 
 
 def _refined_s3(n_refine=12):
@@ -40,19 +41,19 @@ def _refined_s3(n_refine=12):
                      T.SimplexBoundarySphere(3))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
     for seed in range(n_refine):
         mv = T.AddMove(st, seed, False, T.PachnerMode.PreGeometric, False)
         if mv.propose():
             mv.apply()
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.013 * (i % 6))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.013 * (i % 6))))
     return st
 
 
 def _edge_l2(st):
     return {tuple(sorted((e.getSource().getId(), e.getTarget().getId()))):
-            e.getSquaredLength().real for e in st.getEdgeList().toVector()}
+            (e.getLength() * e.getLength()).real for e in st.getEdgeList().toVector()}
 
 
 def _edges_1cell(st):

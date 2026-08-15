@@ -87,25 +87,14 @@ endpoint vertex IDs, so Edge(v1, v2) == Edge(v2, v1).)doc")
       .def("__hash__", &Edge::toHash)
       .def("getSource", &Edge::getSource, py::return_value_policy::reference,
            "Return the source vertex of this edge.")
-      .def("getSquaredLength", &Edge::getSquaredLength,
-           R"doc(Return the exact (possibly complex) squared length l^2.
-
-Stored verbatim — NOT getLength()**2 — so the action never sees a sqrt/square
-round-trip. Real-signed for an ordinary Lorentzian edge, complex for a saddle
-geometry. Storage-level read; the geometry stack reads getRealSquaredLength().)doc")
-      .def("getRealSquaredLength", &Edge::getRealSquaredLength,
-           R"doc(The geometry stack's read of l^2 (#589/#597): the real signed value
-with the ordinary-Lorentzian on-axis invariant enforced — raises RuntimeError on
-a nonzero Im l^2 instead of silently projecting it away. Use getSquaredLength()
-wherever a complex value is legitimate (Wick |l^2| reads, snapshots, rollback
-records, dump rehydration).)doc")
       .def("getLength", &Edge::getLength,
            R"doc(Return the (possibly complex) edge length — the causal DOF.
 
-Real for spacelike, imaginary for timelike, general complex for an
-analytically-continued (saddle) geometry. Causal character is read from THIS
-(Im(length)). Distinct from l^2 (getSquaredLength) and getPhase() (the U(1)
-connection).)doc")
+Real for spacelike, imaginary for timelike, general complex off the
+real-Lorentzian locus. This is the edge's ONE degree of freedom: l^2 is derived
+by squaring and is never stored (#639), so square getLength() where you need it.
+Causal character is read from THIS (Im(length)). Distinct from getPhase() (the
+U(1) connection).)doc")
       .def("isTimelike", &Edge::isTimelike,
            "Timelike iff the length has a non-negligible imaginary part "
            "(supersedes the fragile sign(l^2) test).")
@@ -116,29 +105,25 @@ connection).)doc")
       .def("getPhase", &Edge::getPhase,
            R"doc(Return the U(1) connection phase carried by this edge (radians).
 
-Paired with the signed squared length it gives the complex edge weight
-squaredLength * exp(i * phase) used by the Hermitian-weighted Laplacian.
+Paired with the squared length it gives the complex edge weight
+l^2 * exp(i * phase) used by the weighted Laplacian.
 The default of 0 leaves an ordinary real-weighted CDT edge unchanged.)doc")
-      .def("setSquaredLength", &Edge::setSquaredLength, py::arg("squaredLength"),
-           "Set the exact (complex) squared length l^2; the length is kept in sync "
-           "as its sqrt. Prefer this when the geometry is given by a squared value "
-           "(CDT, Van Raamsdonk, the backreaction scan) so l^2 is stored exactly.")
       .def("setLength", &Edge::setLength, py::arg("length"),
-           "Set the (complex) edge length: real=spacelike, imaginary=timelike, "
-           "general complex for the off-axis saddle. l^2 is kept in sync as l*l.")
+           "Set the (complex) edge LENGTH: real=spacelike, imaginary=timelike, "
+           "general complex off the real-Lorentzian locus. There is no squared "
+           "setter (#639) -- pass sqrt(l2) and choose the branch explicitly.")
       .def("setPhase", &Edge::setPhase, py::arg("phase"),
            "Set the U(1) connection phase carried by this edge (radians).")
-      .def_static("vanRaamsdonkSquaredLength", &Edge::vanRaamsdonkSquaredLength,
+      .def_static("vanRaamsdonkLength", &Edge::vanRaamsdonkLength,
                   py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
-                  "Van Raamsdonk metric law: the spacelike squared length "
-                  "(-log(I/iMax))^2, floored to a finite value when "
-                  "I < epsilon*iMax. Always >= 0.")
-      .def("vanRaamsdonkSquaredLengthFor", &Edge::vanRaamsdonkSquaredLengthFor,
+                  "Van Raamsdonk metric law: the spacelike length -log(I/iMax), "
+                  "floored to a finite value when I < epsilon*iMax. Always >= 0.")
+      .def("vanRaamsdonkLengthFor", &Edge::vanRaamsdonkLengthFor,
            py::arg("I"), py::arg("iMax"), py::arg("epsilon") = 1e-10,
-           "Time-aware Van Raamsdonk signed squared length for this edge given "
-           "the mutual information I between its endpoints: 0 (null) when the "
-           "endpoints lie on different time slices (a forward-time worldline "
-           "edge), else the spacelike vanRaamsdonkSquaredLength.")
+           "Time-aware Van Raamsdonk length for this edge given the mutual "
+           "information I between its endpoints: 0 (null) when the endpoints lie "
+           "on different time slices (a forward-time worldline edge), else the "
+           "spacelike vanRaamsdonkLength.")
       .def("getTarget", &Edge::getTarget, py::return_value_policy::reference,
            "Return the target vertex of this edge.");
   // ========================================
@@ -217,10 +202,12 @@ and containing simplices.)doc")
   py::class_<EdgeList, std::shared_ptr<EdgeList> >(m, "EdgeList",
       "Container storing all edges in the spacetime, keyed by fingerprint.")
       .def(py::init<>())
-      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &, double>(&EdgeList::add),
-           py::arg("source"), py::arg("target"), py::arg("squaredLength"),
+      .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &,
+                                    std::complex<double>>(&EdgeList::add),
+           py::arg("source"), py::arg("target"), py::arg("length"),
            py::return_value_policy::reference,
-           "Add an edge with a specified squared length, or return existing if duplicate.")
+           "Add an edge with a specified complex LENGTH (pass sqrt(l2) to give it "
+           "by squared value), or return the existing one if duplicate.")
       .def("add", py::overload_cast<const VertexPtr &, const VertexPtr &>(&EdgeList::add),
            py::arg("source"), py::arg("target"),
            py::return_value_policy::reference,
@@ -341,60 +328,11 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
       .def("validate", &Simplex::validate,
            "Run internal consistency checks on this simplex.")
       .def("gramMatrix", &Simplex::gramMatrix,
-           py::arg("wickRotate") = false,
-           "Gram matrix from edge lengths (flat d*d row-major). Signature-aware "
-           "(signed l^2) by default; pass wickRotate=True for the Euclidean/CDT "
-           "|l^2| convention.")
+           "Gram matrix from edge lengths (flat d*d row-major), complex and always "
+           "signature-aware (signed l^2). There is no Wick-rotated |l^2| mode.")
       .def("cayleyMengerMatrix", &Simplex::cayleyMengerMatrix,
-           py::arg("wickRotate") = false,
            "Cayley-Menger bordered matrix (flat (d+2)*(d+2) row-major) whose "
-           "cofactors give the dihedral angles. Signed l^2 by default; "
-           "wickRotate=True takes |l^2|.")
-      .def("dihedralAngle", &Simplex::dihedralAngle,
-           py::arg("hinge"), py::arg("wickRotate") = false,
-           "Dihedral angle at a hinge within this simplex. Signed l^2 by "
-           "default; wickRotate=True takes |l^2| (the CDT/Regge convention).")
-      .def("deficitAngle", &Simplex::deficitAngle,
-           "Deficit angle at this hinge (2*pi - sum of dihedral angles).")
-      .def("area", &Simplex::area,
-           py::arg("wickRotate") = false,
-           "Area of this triangle (hinge) via Heron's formula. Signed l^2 by "
-           "default; wickRotate=True takes |l^2|.")
-      .def("volume", &Simplex::volume,
-           "Signed d-content sqrt(det G)/d! on the honest (non-Wick-rotated) "
-           "geometry; negative for a Lorentzian cell with timelike content.")
-      .def("volumeGradient", &Simplex::volumeGradient,
-           "Exact analytic gradient dV/dl^2_e of the signed volume() w.r.t. each "
-           "edge's squared length (edge-keyed map), via Jacobi's formula on the "
-           "Gram determinant: dV = (V/2) tr(G^-1 dG). The per-degree Hodge weight "
-           "gradient (W_k are signed simplex volumes) — keystone for arbitrary-k.")
-      .def("circumcenterBarycentric", &Simplex::circumcenterBarycentric,
-           "Circumcenter in barycentric coordinates (sum 1), intrinsic from the "
-           "signature-aware edge lengths; entry i weights getVertices()[i].")
-      .def("circumradiusSquared", &Simplex::circumradiusSquared,
-           "Signed circumradius squared R^2 (intrinsic, signature-aware); can be "
-           "negative for a timelike circumcenter displacement.")
-      .def("dualVolume", &Simplex::dualVolume,
-           "Signed circumcentric dual cell content |*sigma| in the surrounding "
-           "complex (DEC recursion over cofaces, n = top dimension). "
-           "Signature-aware; negative content is meaningful.")
-      .def("hasTopCoface", &Simplex::hasTopCoface,
-           "True iff this simplex is a genuine face of a current top cell (not "
-           "an orphan stranded by a Pachner move). The hinges the Regge action "
-           "sums over are exactly the (d-2)-faces for which this is true.")
-      .def("dualVolumeGradient", &Simplex::dualVolumeGradient,
-           "Exact analytic d(dualVolume)/d(l^2_e) for each surrounding edge, as a "
-           "dict {(v0,v1): float}. Differentiates the DEC circumradius recursion "
-           "(R^2 = h^T G^-1 h); matches finite differences to machine precision. "
-           "(n-2)-hinge case only.")
-      .def("dualVolumeHessian", &Simplex::dualVolumeHessian,
-           "Exact analytic d^2(dualVolume)/d(l^2_e)d(l^2_f), as a dict "
-           "{((v0,v1),(v2,v3)): float}. One derivative beyond the gradient "
-           "(d2CircumR2 + signed-sqrt second derivative); symmetric. "
-           "(n-2)-hinge case only.")
-      .def("hodgeStar", &Simplex::hodgeStar,
-           "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
-           "content).")
+           "cofactors give the dihedral angles. Complex, always signed l^2.")
       .def("lorentzianDihedralAngle", &Simplex::lorentzianDihedralAngle,
            py::arg("hinge"),
            "Complex Lorentzian (Sorkin) dihedral angle at the hinge — the full "
@@ -402,7 +340,7 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "(imaginary part = boost rapidity) for a same-character wedge in "
            "the boost regime, and pi/2 - i*asinh(.) for a wedge CROSSING the "
            "light cone (one facet direction spacelike, one timelike). Unlike "
-           "dihedralAngle it is not clamped/Wick-rotated, so boosts survive.")
+           "the removed real-typed pair it is not clamped, so boosts survive.")
       .def("lorentzianDeficitAngle", &Simplex::lorentzianDeficitAngle,
            "Complex Lorentzian deficit 2π − Σ lorentzianDihedralAngle over the "
            "top cells at this hinge; real for an all-spacelike neighbourhood, "

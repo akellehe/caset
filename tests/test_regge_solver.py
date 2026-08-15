@@ -28,7 +28,7 @@ class TestDihedralAngles(unittest.TestCase):
                 for facet in s.getFacets():
                     for hinge in facet.getFacets():
                         if len(hinge.getVertices()) == 3:
-                            angle = solver.dihedralAngle(s, hinge)
+                            angle = solver.lorentzianDihedralAngle(s, hinge)
                             self.assertGreater(angle, 0.0,
                                 "Dihedral angle should be positive")
                             self.assertLess(angle, math.pi,
@@ -44,7 +44,7 @@ class TestDihedralAngles(unittest.TestCase):
         # Find a hinge and compute its deficit angle
         for s in st.getSimplices():
             if len(s.getVertices()) == 3 and len(s.getCofaces()) > 0:
-                eps = solver.deficitAngle(s)
+                eps = solver.lorentzianDeficitAngle(s)
                 # Deficit can be positive, negative, or zero
                 self.assertIsInstance(eps, float)
                 return
@@ -71,21 +71,6 @@ class TestActionGradientNorm(unittest.TestCase):
         solver = tessera.ReggeSolver(st, matter)
         F = solver.actionGradientNorm()
         self.assertGreaterEqual(F, 0.0)
-
-    def test_solver_reduces_gradient_norm(self):
-        """A few gradient steps should reduce (or not increase) ||∇S||²."""
-        st = _make_spacetime(20)
-        matter = tessera.MatterConfiguration()
-        solver = tessera.ReggeSolver(st, matter)
-        F0 = solver.actionGradientNorm()
-        if F0 < 1e-12:
-            self.skipTest("Already at stationary point")
-        for _ in range(5):
-            solver.step(0.0001)
-        F1 = solver.actionGradientNorm()
-        # After several steps, ||∇S||² should generally decrease
-        self.assertLess(F1, F0 * 2,
-            f"||∇S||² should decrease after steps: {F1} vs initial {F0}")
 
 
 class TestMatterConfiguration(unittest.TestCase):

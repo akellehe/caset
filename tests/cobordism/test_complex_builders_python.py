@@ -16,6 +16,7 @@ could not express (5d, for level 2).
 import unittest
 
 import tessera
+import cmath
 
 
 # --------------------------------------------------------------------------- #
@@ -32,7 +33,7 @@ def _old_surface(faces, weight=1.0, phase=0.0):
         t = sorted(f)
         st.createSimplex([vmap[t[0]], vmap[t[1]], vmap[t[2]]])
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(weight)
+        e.setLength(cmath.sqrt(complex(weight)))
         e.setPhase(phase)
     return st
 
@@ -47,7 +48,7 @@ def _old_bulk(cells, weight=1.0, phase=0.0):
         t = sorted(c)
         st.createSimplex([vmap[t[0]], vmap[t[1]], vmap[t[2]], vmap[t[3]]])
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(weight)
+        e.setLength(cmath.sqrt(complex(weight)))
         e.setPhase(phase)
     return st
 
@@ -100,7 +101,7 @@ def _snapshot(st):
     edges = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        edges[(min(a, b), max(a, b))] = (round(e.getSquaredLength().real, 12),
+        edges[(min(a, b), max(a, b))] = ((round(e.getLength() * round(e.getLength()).real, 12),
                                          round(e.getPhase(), 12))
     simplices = sorted(tuple(sorted(v.getId() for v in s.getVertices()))
                        for s in st.getSimplices())

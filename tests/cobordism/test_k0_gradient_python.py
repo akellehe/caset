@@ -32,6 +32,7 @@ import numpy as np
 import pytest
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -49,11 +50,11 @@ def _two_component_host(phases=True, signed=True):
         a, b = e.getSource().getId(), e.getTarget().getId()
         by_pair[(min(a, b), max(a, b))] = e
     for i, e in enumerate(edges):
-        e.setSquaredLength(1.0 + 0.17 * (i % 4))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.17 * (i % 4))))
     if signed:
-        by_pair[(3, 4)].setSquaredLength(-1.3)
-        by_pair[(3, 5)].setSquaredLength(-1.1)
-        by_pair[(4, 5)].setSquaredLength(1.2)
+        by_pair[(3, 4)].setLength(cmath.sqrt(complex(-1.3)))
+        by_pair[(3, 5)].setLength(cmath.sqrt(complex(-1.1)))
+        by_pair[(4, 5)].setLength(cmath.sqrt(complex(1.2)))
     if phases:
         # holonomy 0.7 + 0.3 - 1.0 = 0 around (0,1,2): gauge-flat, kernel kept
         ph = {(0, 1): 0.7, (1, 2): 0.3, (0, 2): 1.0}
@@ -73,12 +74,12 @@ def _fd_gradient(st, holes, target, by_pair, h=1e-6):
     fd = []
     for pair in _cc_edges(st):
         e = by_pair[pair]
-        w0 = e.getSquaredLength()
-        e.setSquaredLength(complex(w0.real + h, 0.0))
+        w0 = (e.getLength() * e.getLength())
+        e.setLength(cmath.sqrt(complex(complex(w0.real + h, 0.0))))
         rp = cob.EigenstateSynthesis(st, 0).residualForPeriods(holes, target)
-        e.setSquaredLength(complex(w0.real - h, 0.0))
+        e.setLength(cmath.sqrt(complex(complex(w0.real - h, 0.0))))
         rm = cob.EigenstateSynthesis(st, 0).residualForPeriods(holes, target)
-        e.setSquaredLength(w0)
+        e.setLength(cmath.sqrt(complex(w0)))
         fd.append((rp - rm) / (2 * h))
     return np.asarray(fd)
 
@@ -124,7 +125,7 @@ class TestK0Gradient:
         es = cob.EigenstateSynthesis(st, 0)
         r0 = es.residualForPeriods(_HOLES, _TARGET)
         g = np.asarray(es.residualForPeriodsGradient(_HOLES, _TARGET))
-        l2 = np.asarray([by_pair[p].getSquaredLength().real
+        l2 = (np.asarray([by_pair[p].getLength() * np.asarray([by_pair[p].getLength()).real
                          for p in _cc_edges(st)])
         assert math.isclose(float(np.dot(l2, g)), 2.0 * r0,
                             rel_tol=1e-10, abs_tol=1e-12)

@@ -76,18 +76,16 @@ std::vector<std::vector<SimplexPtr>> orderedFaces(const Spacetime &K) {
 // cells still fall back to +1 so W_k stays invertible (W_k^{-1} is finite).
 std::vector<std::complex<double>> simplexWeights(
     const std::vector<std::vector<SimplexPtr>> &faces, int k, int count,
-    bool metric, bool lorentzian = false) {
+    bool metric) {
   using cdw = std::complex<double>;
   std::vector<cdw> w(static_cast<std::size_t>(std::max(count, 0)), cdw{1.0, 0.0});
   if (!metric || k == 0 || k < 0 || k >= static_cast<int>(faces.size())) return w;
   const auto &fk = faces[static_cast<std::size_t>(k)];
   for (int j = 0; j < count && j < static_cast<int>(fk.size()); ++j) {
-    // volume() is complex now: a Lorentzian cell with det G < 0 has an IMAGINARY
-    // d-content (#640). The `lorentzian` weights keep that verbatim; the Hermitian
-    // (metric) weights take the modulus, which is real by construction -- so the
-    // symmetric Laplacian path is unchanged and stays self-adjoint.
-    const cdw signedVol = fk[static_cast<std::size_t>(j)]->volume();
-    const cdw vol = lorentzian ? signedVol : cdw{std::abs(signedVol), 0.0};
+    // The signed complex d-content, verbatim. There is no |vol| mode: taking the
+    // modulus was a Euclidean read that discarded the cell's causal character, and
+    // a Lorentzian cell with det G < 0 has an IMAGINARY content (#640/#641).
+    const cdw vol = fk[static_cast<std::size_t>(j)]->volume();
     w[static_cast<std::size_t>(j)] = (std::abs(vol) > 0.0) ? vol : cdw{1.0, 0.0};
   }
   return w;
@@ -97,68 +95,20 @@ std::vector<std::complex<double>> simplexWeights(
 //   L_k^sym = B_k^T B_k + B_{k+1} B_{k+1}^T,  B_k = W_{k-1}^{1/2} d_k W_k^{-1/2}.
 // With metric == false all W = I, giving the combinatorial d_k^T d_k +
 // d_{k+1} d_{k+1}^T. Returns a |C_k| x |C_k| real SPD matrix (0 x 0 if no k-cells).
-Eigen::MatrixXd metricLaplacian(const Spacetime &K, int k, bool metric) {
+// Exact d(L_k)/d(l^2_(ea,eb)) for the signed-weight Laplacian
+//   L_k = W_k^-1 d_k^T W_{k-1} d_k + d_{k+1} W_{k+1}^-1 d_{k+1}^T W_k,
+// so with every W diagonal and linear-free in l^2 only through the cell contents,
+//   dL = -W_k^-1 dW_k W_k^-1 d_k^T W_{k-1} d_k + W_k^-1 d_k^T dW_{k-1} d_k
+//        -d_{k+1} W_{k+1}^-1 dW_{k+1} W_{k+1}^-1 d_{k+1}^T W_k
+//        +d_{k+1} W_{k+1}^-1 d_{k+1}^T dW_k.
+// dW is the SIGNED volumeGradient verbatim -- no modulus chain rule, because the
+// weights are no longer moduli (#641).
+Eigen::MatrixXcd signedLaplacianGradient(const Spacetime &K, int k,
+                                         std::uint64_t ea, std::uint64_t eb) {
   const ChainComplex cc = ChainComplex::fromSpacetime(K);
   const int n = cc.dimension();
   const int nk = static_cast<int>(cc.numSimplices(k));
-  Eigen::MatrixXd L = Eigen::MatrixXd::Zero(nk, nk);
-  if (nk == 0) return L;
-
-  const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
-  const auto weightArr = [&](int kk) {
-    const std::vector<std::complex<double>> wv =
-        simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), metric);
-    // lorentzian = false, so every entry is |vol| or 1: real by construction, and
-    // .real() is exact rather than a projection.
-    Eigen::ArrayXd a(static_cast<Eigen::Index>(wv.size()));
-    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i].real();
-    return a;
-  };
-  const auto boundary = [&](int kk, int rows, int cols) {
-    const std::vector<long> &flat = cc.boundaryMatrix(kk);
-    Eigen::MatrixXd d(rows, cols);
-    for (int r = 0; r < rows; ++r)
-      for (int c = 0; c < cols; ++c)
-        d(r, c) = static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
-    return d;
-  };
-
-  const Eigen::ArrayXd wk = weightArr(k);
-  const Eigen::ArrayXd invSqrtWk = wk.sqrt().inverse();
-
-  // Term 1: B_k^T B_k (always present for k >= 1, since k-simplices have faces).
-  const int rows = static_cast<int>(cc.numSimplices(k - 1));
-  if (rows > 0) {
-    const Eigen::MatrixXd dk = boundary(k, rows, nk);
-    const Eigen::ArrayXd sqrtWkm1 = weightArr(k - 1).sqrt();
-    const Eigen::MatrixXd Bk =
-        sqrtWkm1.matrix().asDiagonal() * dk * invSqrtWk.matrix().asDiagonal();
-    L.noalias() += Bk.transpose() * Bk;
-  }
-
-  // Term 2: B_{k+1} B_{k+1}^T (absent when there are no (k+1)-cells, e.g. k = n).
-  const int cols = (k + 1 <= n) ? static_cast<int>(cc.numSimplices(k + 1)) : 0;
-  if (cols > 0) {
-    const Eigen::MatrixXd dkp1 = boundary(k + 1, nk, cols);
-    const Eigen::ArrayXd invSqrtWkp1 = weightArr(k + 1).sqrt().inverse();
-    const Eigen::MatrixXd Bkp1 =
-        wk.sqrt().matrix().asDiagonal() * dkp1 * invSqrtWkp1.matrix().asDiagonal();
-    L.noalias() += Bkp1 * Bkp1.transpose();
-  }
-  return L;
-}
-
-// Exact analytic dL_k^sym / dl^2_e for the symmetric metric Hodge Laplacian. Only
-// the weights W_j = |vol| (j = k-1, k, k+1) depend on l^2; W_0 = I is constant. With
-// B_k = diag(sqrt W_{k-1}) d_k diag(1/sqrt W_k), dB_k = diag(a_{k-1}) B_k + B_k diag(b_k),
-// a_j = dW_j/(2 W_j), and dL = dB_k^T B_k + B_k^T dB_k + dB_{k+1} B_{k+1}^T + B_{k+1} dB_{k+1}^T.
-// dW_j[i] = sgn(vol_i) * Simplex::volumeGradient(face_i)[e] (signed for the |vol| weight).
-Eigen::MatrixXd metricLaplacianGradient(const Spacetime &K, int k,
-                                        std::uint64_t ea, std::uint64_t eb) {
-  const ChainComplex cc = ChainComplex::fromSpacetime(K);
-  const int n = cc.dimension();
-  const int nk = static_cast<int>(cc.numSimplices(k));
-  Eigen::MatrixXd dL = Eigen::MatrixXd::Zero(nk, nk);
+  Eigen::MatrixXcd dL = Eigen::MatrixXcd::Zero(nk, nk);
   if (k < 1 || nk == 0) return dL;
   const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
   const std::uint64_t lo = std::min(ea, eb), hi = std::max(ea, eb);
@@ -166,15 +116,13 @@ Eigen::MatrixXd metricLaplacianGradient(const Spacetime &K, int k,
   const auto weightArr = [&](int kk) {
     const std::vector<std::complex<double>> wv =
         simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), /*metric=*/true);
-    // lorentzian defaults to false, so these are |vol| or 1: real by construction.
-    Eigen::ArrayXd a(static_cast<Eigen::Index>(wv.size()));
-    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i].real();
+    Eigen::ArrayXcd a(static_cast<Eigen::Index>(wv.size()));
+    for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
     return a;
   };
-  // dW_j (per-cell weight derivative w.r.t. l^2_(lo,hi)); 0 for k=0 (W_0 const).
   const auto dWeightArr = [&](int kk) {
     const int cnt = static_cast<int>(cc.numSimplices(kk));
-    Eigen::ArrayXd dw = Eigen::ArrayXd::Zero(std::max(cnt, 0));
+    Eigen::ArrayXcd dw = Eigen::ArrayXcd::Zero(std::max(cnt, 0));
     if (kk < 1 || kk >= static_cast<int>(faces.size())) return dw;  // W_0 = I
     const auto &fk = faces[static_cast<std::size_t>(kk)];
     for (int i = 0; i < cnt && i < static_cast<int>(fk.size()); ++i) {
@@ -182,47 +130,42 @@ Eigen::MatrixXd metricLaplacianGradient(const Spacetime &K, int k,
       if (std::abs(vol) <= 0.0) continue;  // degenerate weight pinned to 1 (const)
       const auto g = fk[static_cast<std::size_t>(i)]->volumeGradient();
       const auto it = g.find({lo, hi});
-      // The Hermitian weight is |vol|, so d|vol| = Re(conj(vol) dvol)/|vol|. The old
-      // sgn(vol)*dvol was that formula's real-vol special case (#640).
-      if (it != g.end())
-        dw[i] = (std::conj(vol) * it->second).real() / std::abs(vol);
+      if (it != g.end()) dw[i] = it->second;
     }
     return dw;
   };
   const auto boundary = [&](int kk, int rows, int cols) {
     const std::vector<long> &flat = cc.boundaryMatrix(kk);
-    Eigen::MatrixXd d(rows, cols);
+    Eigen::MatrixXcd d(rows, cols);
     for (int r = 0; r < rows; ++r)
       for (int c = 0; c < cols; ++c)
         d(r, c) = static_cast<double>(flat[static_cast<std::size_t>(r) * cols + c]);
     return d;
   };
 
-  const Eigen::ArrayXd Wk = weightArr(k), dWk = dWeightArr(k);
-  // Term 1 (down): B_k = diag(sqrt W_{k-1}) d_k diag(1/sqrt W_k).
+  const Eigen::ArrayXcd Wk = weightArr(k), dWk = dWeightArr(k);
+  const Eigen::ArrayXcd invWk = Wk.inverse();
+
   const int rows = static_cast<int>(cc.numSimplices(k - 1));
   if (rows > 0) {
-    const Eigen::ArrayXd Wm = weightArr(k - 1), dWm = dWeightArr(k - 1);
-    const Eigen::MatrixXd Bk = Wm.sqrt().matrix().asDiagonal() * boundary(k, rows, nk) *
-                               Wk.sqrt().inverse().matrix().asDiagonal();
-    const Eigen::VectorXd aL = (dWm / (2.0 * Wm)).matrix();   // rows (k-1)
-    const Eigen::VectorXd bR = (-dWk / (2.0 * Wk)).matrix();  // nk
-    const Eigen::MatrixXd dBk =
-        aL.asDiagonal() * Bk + Bk * bR.asDiagonal();
-    dL.noalias() += dBk.transpose() * Bk + Bk.transpose() * dBk;
+    const Eigen::MatrixXcd dk = boundary(k, rows, nk);
+    const Eigen::ArrayXcd Wm = weightArr(k - 1), dWm = dWeightArr(k - 1);
+    const Eigen::ArrayXcd t = -(invWk * dWk * invWk);
+    dL.noalias() += t.matrix().asDiagonal() * dk.transpose() *
+                    Wm.matrix().asDiagonal() * dk;
+    dL.noalias() += invWk.matrix().asDiagonal() * dk.transpose() *
+                    dWm.matrix().asDiagonal() * dk;
   }
-  // Term 2 (up): B_{k+1} = diag(sqrt W_k) d_{k+1} diag(1/sqrt W_{k+1}).
   const int cols = (k + 1 <= n) ? static_cast<int>(cc.numSimplices(k + 1)) : 0;
   if (cols > 0) {
-    const Eigen::ArrayXd Wp = weightArr(k + 1), dWp = dWeightArr(k + 1);
-    const Eigen::MatrixXd Bkp1 = Wk.sqrt().matrix().asDiagonal() *
-                                 boundary(k + 1, nk, cols) *
-                                 Wp.sqrt().inverse().matrix().asDiagonal();
-    const Eigen::VectorXd aL = (dWk / (2.0 * Wk)).matrix();   // nk
-    const Eigen::VectorXd bR = (-dWp / (2.0 * Wp)).matrix();  // cols (k+1)
-    const Eigen::MatrixXd dBkp1 =
-        aL.asDiagonal() * Bkp1 + Bkp1 * bR.asDiagonal();
-    dL.noalias() += dBkp1 * Bkp1.transpose() + Bkp1 * dBkp1.transpose();
+    const Eigen::MatrixXcd dkp1 = boundary(k + 1, nk, cols);
+    const Eigen::ArrayXcd Wp = weightArr(k + 1), dWp = dWeightArr(k + 1);
+    const Eigen::ArrayXcd invWp = Wp.inverse();
+    const Eigen::ArrayXcd u = -(invWp * dWp * invWp);
+    dL.noalias() += dkp1 * u.matrix().asDiagonal() * dkp1.transpose() *
+                    Wk.matrix().asDiagonal();
+    dL.noalias() += dkp1 * invWp.matrix().asDiagonal() * dkp1.transpose() *
+                    dWk.matrix().asDiagonal();
   }
   return dL;
 }
@@ -249,7 +192,7 @@ Eigen::MatrixXcd signedLaplacian(const Spacetime &K, int k, bool metric) {
   const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
   const auto weightArr = [&](int kk) {
     const std::vector<std::complex<double>> wv = simplexWeights(
-        faces, kk, static_cast<int>(cc.numSimplices(kk)), metric, /*lorentzian=*/true);
+        faces, kk, static_cast<int>(cc.numSimplices(kk)), metric);
     Eigen::ArrayXcd a(static_cast<Eigen::Index>(wv.size()));
     for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
     return a;
@@ -398,18 +341,19 @@ std::vector<double> HodgeLaplacian::degree() const {
   return D;
 }
 
-std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric, bool lorentzian) const {
+std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
   requireNonNegativeDegree(k);
-  if (lorentzian && k >= 1) {
-    // The signed-weight d'Alembertian (generally non-symmetric); real operator
-    // returned complex (imag 0) for type parity with the other paths.
+  if (k >= 1) {
+    // The signed-weight d'Alembertian, complex and generally non-symmetric. This is
+    // the ONLY k >= 1 operator: the |vol|-weighted symmetric variant was a Euclidean
+    // read and is gone (#641).
     if (!st_) return {};
-    const Eigen::MatrixXd L = signedLaplacian(*st_, k, metric);
+    const Eigen::MatrixXcd L = signedLaplacian(*st_, k, metric);
     const int nk = static_cast<int>(L.rows());
     std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
     for (int i = 0; i < nk; ++i)
       for (int j = 0; j < nk; ++j)
-        out[static_cast<std::size_t>(i) * nk + j] = cd(L(i, j), 0.0);
+        out[static_cast<std::size_t>(i) * nk + j] = L(i, j);
     return out;
   }
   if (k == 0) {
@@ -424,20 +368,10 @@ std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric, bool lorentzian) c
     for (std::size_t i = 0; i < N; ++i) L[i * N + i] += D[i];
     return L;
   }
-  // k >= 1: the symmetric metric (or, with metric == false, combinatorial)
-  // Laplacian L_k^sym, returned complex (imaginary parts zero) for type parity
-  // with the k = 0 operator.
-  if (!st_) return {};
-  const Eigen::MatrixXd L = metricLaplacian(*st_, k, metric);
-  const int nk = static_cast<int>(L.rows());
-  std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
-  for (int i = 0; i < nk; ++i)
-    for (int j = 0; j < nk; ++j)
-      out[static_cast<std::size_t>(i) * nk + j] = cd(L(i, j), 0.0);
-  return out;
+  return {};
 }
 
-std::vector<std::complex<double>> HodgeLaplacian::weights(int k, bool lorentzian) const {
+std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
   if (k < 0 || !st_) return {};
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   if (k > cc.dimension()) return {};
@@ -445,45 +379,20 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k, bool lorentzian
   if (k == 0)
     return std::vector<std::complex<double>>(static_cast<std::size_t>(m),
                                              std::complex<double>{1.0, 0.0});
-  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true, lorentzian);
+  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true);
 }
 
-std::vector<double> HodgeLaplacian::laplacianGradient(int k, std::uint64_t ea,
-                                                      std::uint64_t eb) const {
+std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
+    int k, std::uint64_t ea, std::uint64_t eb) const {
   if (k < 1 || !st_) return {};
-  const Eigen::MatrixXd dL = metricLaplacianGradient(*st_, k, ea, eb);
+  const Eigen::MatrixXcd dL = signedLaplacianGradient(*st_, k, ea, eb);
   const int nk = static_cast<int>(dL.rows());
-  std::vector<double> out(static_cast<std::size_t>(nk) * nk, 0.0);
+  std::vector<std::complex<double>> out(static_cast<std::size_t>(nk) * nk,
+                                        std::complex<double>{0.0, 0.0});
   for (int i = 0; i < nk; ++i)
     for (int j = 0; j < nk; ++j)
       out[static_cast<std::size_t>(i) * nk + j] = dL(i, j);
   return out;
-}
-
-const HodgeLaplacian::MetricSpectrum &HodgeLaplacian::ensureMetricSpectrum(
-    int k, bool metric) const {
-  const long long key = static_cast<long long>(k) * 2 + (metric ? 1 : 0);
-  const auto cached = metricCache_.find(key);
-  if (cached != metricCache_.end()) return cached->second;
-
-  MetricSpectrum sp;
-  if (st_) {
-    const Eigen::MatrixXd L = metricLaplacian(*st_, k, metric);
-    const int nk = static_cast<int>(L.rows());
-    sp.dim = nk;
-    sp.evals.assign(static_cast<std::size_t>(nk), 0.0);
-    sp.evecs.assign(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
-    if (nk > 0) {
-      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(L);
-      const Eigen::VectorXd &lam = es.eigenvalues();   // ascending
-      const Eigen::MatrixXd &V = es.eigenvectors();    // orthonormal columns
-      for (int i = 0; i < nk; ++i) sp.evals[static_cast<std::size_t>(i)] = lam[i];
-      for (int i = 0; i < nk; ++i)
-        for (int j = 0; j < nk; ++j)
-          sp.evecs[static_cast<std::size_t>(i) * nk + j] = cd(V(i, j), 0.0);
-    }
-  }
-  return metricCache_.emplace(key, std::move(sp)).first->second;
 }
 
 const HodgeLaplacian::LorentzianSpectrum &HodgeLaplacian::ensureLorentzianSpectrum(
@@ -494,16 +403,16 @@ const HodgeLaplacian::LorentzianSpectrum &HodgeLaplacian::ensureLorentzianSpectr
 
   LorentzianSpectrum sp;
   if (st_) {
-    const Eigen::MatrixXd L = signedLaplacian(*st_, k, metric);
+    const Eigen::MatrixXcd L = signedLaplacian(*st_, k, metric);
     const int nk = static_cast<int>(L.rows());
     sp.dim = nk;
     sp.evals.assign(static_cast<std::size_t>(nk), cd(0.0, 0.0));
     sp.evecs.assign(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
-    sp.wk = weights(k, /*lorentzian=*/true);
+    sp.wk = weights(k);
     if (nk > 0) {
       // Indefinite metric ⇒ the operator is non-self-adjoint; a general solver is
       // needed (eigenvalues may be negative or complex-conjugate pairs).
-      Eigen::EigenSolver<Eigen::MatrixXd> es(L);
+      Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es(L);
       const Eigen::VectorXcd lam = es.eigenvalues();
       const Eigen::MatrixXcd V = es.eigenvectors();
 
@@ -596,20 +505,21 @@ Spectrum HodgeLaplacian::spectrum(int k, bool metric) const {
     return makeSpectrum(0, cochainOrdering(0, /*useVertexSet=*/true), evalsC,
                         evecs_, static_cast<int>(order_), /*hermitian=*/true);
   }
-  const MetricSpectrum &sp = ensureMetricSpectrum(k, metric);
-  std::vector<cd> evalsC(sp.evals.size());
-  for (std::size_t i = 0; i < sp.evals.size(); ++i) evalsC[i] = cd(sp.evals[i], 0.0);
-  return makeSpectrum(k, cochainOrdering(k, /*useVertexSet=*/true), evalsC,
-                      sp.evecs, sp.dim, /*hermitian=*/true);
+  const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);
+  // The k >= 1 operator is the signed d'Alembertian: complex and generally
+  // non-self-adjoint, so the spectrum is not flagged Hermitian (#641).
+  return makeSpectrum(k, cochainOrdering(k, /*useVertexSet=*/true), sp.evals,
+                      sp.evecs, sp.dim, /*hermitian=*/false);
 }
 
-std::vector<double> HodgeLaplacian::eigenvalues(int k, bool metric) const {
+std::vector<std::complex<double>> HodgeLaplacian::eigenvalues(int k, bool metric) const {
   requireNonNegativeDegree(k);
   if (k == 0) {
+    // k = 0 is the graph Laplacian D - A, genuinely Hermitian; widen for type parity.
     ensureDecomposition();
-    return evals_;
+    return std::vector<cd>(evals_.begin(), evals_.end());
   }
-  return ensureMetricSpectrum(k, metric).evals;
+  return ensureLorentzianSpectrum(k, metric).evals;
 }
 
 std::vector<cd> HodgeLaplacian::eigenvectors(int k, bool metric) const {
@@ -618,7 +528,7 @@ std::vector<cd> HodgeLaplacian::eigenvectors(int k, bool metric) const {
     ensureDecomposition();
     return evecs_;
   }
-  return ensureMetricSpectrum(k, metric).evecs;
+  return ensureLorentzianSpectrum(k, metric).evecs;
 }
 
 std::vector<Cochain> HodgeLaplacian::harmonics(int k, double tol,
@@ -633,16 +543,18 @@ std::vector<cd> HodgeLaplacian::harmonicMatrix(int k, double tol,
   requireNonNegativeDegree(k);
   // The same cached eigendecompositions harmonics() reads, emitted column-by-
   // selected-column so no Cochain objects are materialized.
-  const std::vector<double> *evals = nullptr;
+  std::vector<cd> evals0;
+  const std::vector<cd> *evals = nullptr;
   const std::vector<cd> *evecs = nullptr;
   int dim = 0;
   if (k == 0) {
     ensureDecomposition();
-    evals = &evals_;
+    evals0.assign(evals_.begin(), evals_.end());
+    evals = &evals0;
     evecs = &evecs_;
     dim = static_cast<int>(order_);
   } else {
-    const MetricSpectrum &sp = ensureMetricSpectrum(k, metric);
+    const LorentzianSpectrum &sp = ensureLorentzianSpectrum(k, metric);
     evals = &sp.evals;
     evecs = &sp.evecs;
     dim = sp.dim;
