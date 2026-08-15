@@ -826,7 +826,17 @@ std::complex<double> Simplex::dihedralAngle(SimplexPtr hinge) const {
     const std::complex<double> Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
     const std::complex<double> denom = principalSqrt(Cii) * principalSqrt(Cjj);
     if (std::abs(denom) < 1e-15) return {0.0, 0.0};
-    return std::acos(-Cij / denom);
+    std::complex<double> r = -Cij / denom;
+    // acos is cut on (-inf,-1] and [1,inf), so for a REAL ratio with |r| > 1 --
+    // the same-sign (boost) wedge -- the sign of Im(theta) is decided by which
+    // side of the cut the argument sits on, i.e. by the sign of its zero
+    // imaginary part. Complex division leaves that to floating-point accident,
+    // so it is pinned here instead: +0.0, the side the real-typed
+    // acos(complex(r, 0.0)) took. The boost ORIENTATION is not determined by
+    // edge lengths alone (a PT reflection flips it at identical l^2), so this is
+    // a convention -- but it must be a stated one, not an emergent rounding.
+    if (r.imag() == 0.0) r = {r.real(), 0.0};
+    return std::acos(r);
 }
 
 std::complex<double> Simplex::deficitAngle() const {
@@ -887,7 +897,12 @@ Simplex::deficitAngleGradient() const {
         // artifacts of folding the product under one root.
         const cd denom = principalSqrt(Cii) * principalSqrt(Cjj);
         if (std::abs(denom) < 1e-300) continue;
-        const cd r = -Cij / denom;
+        cd r = -Cij / denom;
+        // Pin the branch side exactly as the value does: for a real ratio with
+        // |r| > 1 the sign of Im(theta) is decided by the sign of the zero
+        // imaginary part, and the derivative must sit on the SAME sheet as the
+        // value or it disagrees with a finite difference of it.
+        if (r.imag() == 0.0) r = {r.real(), 0.0};
         const cd theta = std::acos(r);
         const cd sinTheta = std::sin(theta);
         if (std::abs(sinTheta) < 1e-300) continue;       // flat/folded: skip
@@ -970,7 +985,12 @@ Simplex::deficitAngleHessian() const {
         // dtheta/dr = -1/sin(theta) and d2theta/dr2 = -r/sin^3(theta).
         const cd denom = principalSqrt(Cii) * principalSqrt(Cjj);
         if (std::abs(denom) < 1e-300) continue;
-        const cd r = -Cij / denom;
+        cd r = -Cij / denom;
+        // Pin the branch side exactly as the value does: for a real ratio with
+        // |r| > 1 the sign of Im(theta) is decided by the sign of the zero
+        // imaginary part, and the derivative must sit on the SAME sheet as the
+        // value or it disagrees with a finite difference of it.
+        if (r.imag() == 0.0) r = {r.real(), 0.0};
         const cd theta = std::acos(r);
         const cd sinT = std::sin(theta);
         if (std::abs(sinT) < 1e-300) continue;

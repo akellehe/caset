@@ -212,11 +212,10 @@ class TestLorentzianBoost(unittest.TestCase):
         # Real part sits at a light-cone branch point (0 or π).
         self.assertTrue(abs(theta.real) < 1e-8 or
                         abs(theta.real - math.pi) < 1e-8)
-        # Contrast: the clamped dihedralAngle throws the boost away — it lands at
-        # a real branch point (0 or π) instead of carrying the rapidity.
-        clamped = tri.dihedralAngle(v0, False)
+        # The boost is carried, not thrown away: the real part sits at a branch
+        # point (0 or pi) and the rapidity is the imaginary part. There is no
+        # longer a clamped real-typed overload to contrast against (#638).
         self.assertGreater(abs(theta.imag), 1e-2)
-        self.assertTrue(abs(clamped) < 1e-8 or abs(clamped - math.pi) < 1e-8)
 
     def test_dual_action_goes_complex_with_a_timelike_edge(self):
         st = _tetra_surface(timelike_edge=(0, 1))   # one edge timelike

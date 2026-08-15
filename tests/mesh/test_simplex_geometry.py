@@ -73,21 +73,27 @@ def _cofactor(M):
 
 def _dihedral_from_cm(B, bi, bj):
     """Dihedral angle from a Cayley-Menger matrix, mirroring the C++ cofactor
-    formula (including the cos clamp).
+    formula: acos(-C_ij / (sqrt(C_ii) * sqrt(C_jj))).
 
-    The diagonal cofactors C_ii, C_jj carry the dimension-parity sign (-1)^d
-    (negative for odd-dimensional simplices, e.g. -3 for a unit tetrahedron).
-    That sign is reapplied to the normalization; without it the angle collapses
-    to its supplement (pi - theta) in odd dimension (issue #161).
+    TWO separate principal square roots, never sqrt(C_ii * C_jj) -- the
+    denominator is a product of two independently rooted norms, and folding it
+    under one root loses the factor of i a timelike normal carries. On a regular
+    tetrahedron (C_ii = C_jj = -3) the folded form returns the SUPPLEMENT. That
+    is what the old dimension-parity sign fix was hand-restoring; taking the
+    roots separately makes it emerge (#638).
+
+    There is no cos clamp: |r| > 1 is the boost regime and acos carries it as an
+    imaginary part. The branch side for a real ratio is pinned to +0.0, matching
+    the engine.
     """
     C = _cofactor(B)
-    denom = math.sqrt(abs(C[bi, bi] * C[bj, bj]))
-    if denom < 1e-15:
-        return 0.0
-    if C[bi, bi] < 0.0:
-        denom = -denom
-    cos = max(-1.0, min(1.0, -C[bi, bj] / denom))
-    return math.acos(cos)
+    denom = cmath.sqrt(complex(C[bi, bi])) * cmath.sqrt(complex(C[bj, bj]))
+    if abs(denom) < 1e-15:
+        return 0.0 + 0.0j
+    r = -complex(C[bi, bj]) / denom
+    if r.imag == 0.0:
+        r = complex(r.real, 0.0)
+    return cmath.acos(r)
 
 
 def _regular_squares(vertex_ids, l2=1.0):
@@ -192,7 +198,8 @@ class TestSimplexGramSignatureAware(unittest.TestCase):
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
         # There is only the honest signed Gram now; the |l^2| mode is gone (#641).
         honest = np.array(simplex.gramMatrix()).reshape(2, 2)
-        np.testing.assert_allclose(honest.real, _expected_gram(simplex, sq, False))
+        np.testing.assert_allclose(honest.real, _expected_gram(simplex, sq, False),
+                                   atol=1e-15)
         np.testing.assert_allclose(honest.imag, np.zeros((2, 2)), atol=1e-15)
 
 
@@ -257,7 +264,9 @@ class TestCayleyMengerMatrix(unittest.TestCase):
                 simplex.cayleyMengerMatrix()).reshape(n, n)
             reconstructed = _dihedral_from_cm(B, bi, bj)
             actual = simplex.dihedralAngle(hinge)
-            self.assertAlmostEqual(actual, reconstructed, places=7)
+            # Both are complex: a wedge on a timelike-normal plane has an
+            # imaginary (boost) part (#638).
+            self.assertAlmostEqual(abs(actual - reconstructed), 0.0, places=7)
 
 
 class TestDihedralAngle(unittest.TestCase):
@@ -300,10 +309,13 @@ class TestDihedralAngle(unittest.TestCase):
         hinge, _ = self.st.createSimplex(
             [verts[2], verts[3]], [edges[frozenset({2, 3})]])
         theta = simplex.dihedralAngle(hinge)
-        self.assertAlmostEqual(theta, math.acos(1.0 / 3.0), places=9)
-        self.assertAlmostEqual(math.degrees(theta), 70.528779, places=4)
-        # Explicitly NOT the supplement the unsigned formula produced.
-        self.assertNotAlmostEqual(theta, math.acos(-1.0 / 3.0), places=6)
+        # All-spacelike, so the angle is real: assert that rather than drop the
+        # imaginary part. arccos(1/3) = 70.53 deg is the interior angle; the
+        # single-root denominator sqrt(C_ii*C_jj) returns its supplement (#638).
+        self.assertAlmostEqual(theta.imag, 0.0, places=12)
+        self.assertAlmostEqual(theta.real, math.acos(1.0 / 3.0), places=9)
+        self.assertAlmostEqual(math.degrees(theta.real), 70.528779, places=4)
+        self.assertNotAlmostEqual(theta.real, math.acos(-1.0 / 3.0), places=6)
 
     def test_equilateral_triangle_unchanged(self):
         # 2-simplex (even dim): the angle at a vertex hinge = pi/3. Even
@@ -365,13 +377,14 @@ class TestSimplexVolumeAcrossDims(unittest.TestCase):
         simplex, _, _ = _make_simplex(self.st, [0, 1], {frozenset({0, 1}): 4.0})
         self.assertAlmostEqual(simplex.volume(), 2.0, places=9)
 
-    def test_timelike_edge_content_is_signed(self):
-        # A timelike 1-simplex (l^2 < 0) keeps the Lorentzian sign: -sqrt(|l^2|),
-        # distinct from the Wick-rotated |l^2| length (+1).
+    def test_timelike_edge_content_is_imaginary(self):
+        # A timelike 1-simplex (l^2 < 0) has V = sqrt(l^2) = i*sqrt(|l^2|). That
+        # is its content: not the -sqrt(|l^2|) a real-signed convention gave it,
+        # and not the +1 a Wick-rotated |l^2| would (#641).
         simplex, _, _ = _make_simplex(self.st, [0, 1], {frozenset({0, 1}): -1.0})
         vol = simplex.volume()
-        self.assertAlmostEqual(vol, -1.0, places=9)
-        self.assertFalse(math.isclose(vol, 1.0, abs_tol=1e-6))
+        self.assertAlmostEqual(vol.real, 0.0, places=12)
+        self.assertAlmostEqual(vol.imag, 1.0, places=9)
 
     def test_regular_unit_tetrahedron_volume(self):
         # Regular tetra, all l^2 = 1: det G = 1/2, so volume = sqrt(2)/12.
@@ -407,8 +420,10 @@ class TestDeterminantThroughContent(unittest.TestCase):
             frozenset({2, 3}): 1.0,
         }
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
-        self.assertAlmostEqual(simplex.volume(), -1.0 / 6.0, places=9)
-        self.assertGreater(np.linalg.det(_expected_gram(simplex, sq, True)), 0.0)
+        # det G < 0, so V = sqrt(det G)/3! is IMAGINARY, not negative-real.
+        vol = simplex.volume()
+        self.assertAlmostEqual(vol.real, 0.0, places=12)
+        self.assertAlmostEqual(vol.imag, 1.0 / 6.0, places=9)
 
     def test_content_squared_recovers_signed_gram_determinant(self):
         sq = {
@@ -420,8 +435,11 @@ class TestDeterminantThroughContent(unittest.TestCase):
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
         vol = simplex.volume()
         det = np.linalg.det(_expected_gram(simplex, sq, wick=False))
-        recovered = math.copysign(vol * vol, vol) * (math.factorial(3) ** 2)
-        self.assertAlmostEqual(recovered, det, places=9)
+        # V^2 = det G/(d!)^2 exactly -- no copysign, because V is the complex
+        # root and squaring it recovers the sign on its own (#641).
+        recovered = (vol * vol) * (math.factorial(3) ** 2)
+        self.assertAlmostEqual(recovered.real, det, places=9)
+        self.assertAlmostEqual(recovered.imag, 0.0, places=9)
         self.assertLess(det, 0.0)
 
     def test_coplanar_tetra_has_zero_content(self):
@@ -437,7 +455,7 @@ class TestDeterminantThroughContent(unittest.TestCase):
             frozenset({1, 3}): 8.0,   # BD (diagonal)
         }
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2, 3], sq)
-        self.assertAlmostEqual(simplex.volume(), 0.0, places=12)
+        self.assertAlmostEqual(abs(simplex.volume()), 0.0, places=7)
 
 
 class TestSimplexArea(unittest.TestCase):
@@ -473,15 +491,15 @@ class TestSimplexArea(unittest.TestCase):
         self.assertAlmostEqual(self._triangle(1.0, 4.0, 1.0).area(), 0.0,
                                places=12)
 
-    def test_lorentzian_triangle_area_signed_vs_wick(self):
-        # A timelike edge drives Heron's radicand negative, so the honest area
-        # clamps to 0 (Heron is undefined for these Lorentzian edge lengths)
-        # while the Wick-rotated |l^2| triangle has a real area sqrt(3)/2.
+    def test_lorentzian_triangle_area_is_imaginary_not_zero(self):
+        # A timelike edge drives Heron's radicand negative, so the area is
+        # IMAGINARY. The old real-typed path clamped it to 0, which reported
+        # zero area for every timelike triangle -- zero was never their area,
+        # it was what a double could represent (#641).
         tri = self._triangle(-1.0, 4.0, 3.0)
-        self.assertEqual(tri.area(), 0.0)
-        self.assertEqual(tri.area(), 0.0)
-        self.assertAlmostEqual(tri.area(), math.sqrt(3.0) / 2.0,
-                               places=9)
+        area = tri.area()
+        self.assertAlmostEqual(area.real, 0.0, places=12)
+        self.assertGreater(abs(area.imag), 0.5)
 
     def test_all_spacelike_area_toggle_is_noop(self):
         tri = self._triangle(9.0, 16.0, 25.0)
