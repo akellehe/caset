@@ -843,35 +843,50 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
   const double improvementThreshold =
       relTol * std::max(std::abs(currentObjective), 1.0);
   auto trialStepScale = complexd(stepScale, stepScale);
-  bool objectiveImproved = false;
-  for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
-    for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-      // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
-      // clamp, no causal guard (semantics: runStage2 in MultiCobordism.h).
-      // Spacelike, timelike, and lightlike trials are all admissible, and
-      // every trial is constructed EXACTLY real, so Im l^2 == 0 holds for
-      // all time by construction — no backoff, no projection (#589).
-      // TODO: setSquaredLength takes a complex number. the SQUARED length can only be real. We need to fix this to use
-      //   imaginary length; we're losing detail on the real/imaginary split.
-      // edges[edgeIndex]->setSquaredLength(complexd(
-          // squaredLengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex),
-          // 0.0));
-      edges[edgeIndex]->setLength(complexd(lengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex)));
-    }
-    // The objective is total on the real signed-l^2 manifold, so a trial
-    // cannot fail to evaluate; a genuine error propagates loudly (#589).
-    const double trialObjective = fullObjective();
-    if (trialObjective < currentObjective - improvementThreshold) {
-      objectiveTrace.push_back(trialObjective);
-      stepScale = std::min(stepScale * 1.3, 1.0);
-      objectiveImproved = true;
-      break;
-    }
-    trialStepScale *= 0.5;
-  }
-  if (!objectiveImproved) {
+  // Put the geometry back the way this call found it. Both early exits use it: the
+  // line search that never beat the threshold, and an objective evaluation that threw
+  // — a trial the caller never accepted must not survive as the complex's geometry.
+  const auto restoreEdgeLengths = [&]() {
     for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex)
       edges[edgeIndex]->setLength(lengths(edgeIndex));
+  };
+  bool objectiveImproved = false;
+  try {
+    for (int lineSearchIndex = 0; lineSearchIndex < 24; ++lineSearchIndex) {
+      for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
+        // The trial is UNBOUNDED on the real axis — fully Lorentzian, no
+        // clamp, no causal guard (semantics: runStage2 in MultiCobordism.h).
+        // Spacelike, timelike, and lightlike trials are all admissible, and
+        // every trial is constructed EXACTLY real, so Im l^2 == 0 holds for
+        // all time by construction — no backoff, no projection (#589).
+        // TODO: setSquaredLength takes a complex number. the SQUARED length can only be real. We need to fix this to use
+        //   imaginary length; we're losing detail on the real/imaginary split.
+        // edges[edgeIndex]->setSquaredLength(complexd(
+            // squaredLengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex),
+            // 0.0));
+        edges[edgeIndex]->setLength(complexd(lengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex)));
+      }
+      // The objective is total on the real signed-l^2 manifold, so a trial
+      // cannot fail to evaluate; a genuine error propagates loudly (#589).
+      const double trialObjective = fullObjective();
+      if (trialObjective < currentObjective - improvementThreshold) {
+        objectiveTrace.push_back(trialObjective);
+        stepScale = std::min(stepScale * 1.3, 1.0);
+        objectiveImproved = true;
+        break;
+      }
+      trialStepScale *= 0.5;
+    }
+  } catch (...) {
+    // The error still propagates loudly — it just does not take the geometry with
+    // it. The throw comes from a TRIAL the line search had not accepted, so the
+    // complex the caller still holds must be the one it had on entry, not a
+    // half-applied step everything downstream would then read.
+    restoreEdgeLengths();
+    throw;
+  }
+  if (!objectiveImproved) {
+    restoreEdgeLengths();
     lastStage2Stationary_ = true;  // no line-search step beat the relative threshold
     return false;
   }
