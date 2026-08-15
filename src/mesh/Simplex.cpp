@@ -772,68 +772,6 @@ std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     return B;
 }
 
-double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
-  if (wickRotate) {
-    CLOG(WARN_LEVEL, "Attempted to wickRotate in dihedralAngle. We only do Lorentzian spacetimes.");
-    throw std::runtime_error("Attempted to wickRotate in dihedralAngle. We only do Lorentzian spacetimes.");
-  }
-    int dPlus1 = static_cast<int>(vertices.size());
-
-    // Find the two vertices in this simplex but not in the hinge.
-    auto hingeVerts = hinge->getVertices();
-    std::vector<int> opposite;
-    for (int k = 0; k < dPlus1; ++k) {
-        bool inHinge = false;
-        for (const auto &hv : hingeVerts)
-            if (hv->getId() == vertices[k]->getId()) { inHinge = true; break; }
-        if (!inHinge) opposite.push_back(k);
-    }
-    if (opposite.size() != 2) return 0.0;
-    int vi = opposite[0], vj = opposite[1];
-
-    // Cayley-Menger bordered matrix; its cofactors give the dihedral angle.
-    int n = dPlus1 + 1;
-    auto B = cayleyMengerMatrix(wickRotate);
-    auto cof = cofactorMatrix(B, n);
-    int bi = vi + 1, bj = vj + 1;
-    std::complex<double> Cij = cof[bi * n + bj];
-    std::complex<double> Cii = cof[bi * n + bi];
-    std::complex<double> Cjj = cof[bj * n + bj];
-
-    std::complex<double> denom = std::sqrt(Cii * Cjj);
-    // if (denom < 1e-15) return 0.0;
-
-    // The diagonal Cayley–Menger cofactors C_ii, C_jj share the
-    // dimension-parity sign (-1)^d: positive in even dimension, negative in odd
-    // (e.g. -3 for a unit tetrahedron). Taking |C_ii·C_jj| under the sqrt drops
-    // that sign, so the normalization must reapply it — otherwise
-    // cos θ = -C_ij / sqrt(C_ii·C_jj) collapses to its supplement (π - θ) for
-    // odd-dimensional simplices. In even dimension C_ii > 0 and this is a no-op.
-    // if (Cii < 0.0) denom = -denom;
-
-    std::complex<double> cosTheta = -Cij / denom;
-    return std::cos(cosTheta.real()) + std::acos(cosTheta.imag());
-}
-
-double Simplex::deficitAngle() const {
-    if (!spacetime) return 2.0 * std::numbers::pi;
-    int d = spacetime->getMetric()->getSignature()->getDimensions();
-    int topSize = d + 1;
-
-    double sum = 0.0;
-    if (vertices.empty()) return 2.0 * std::numbers::pi;
-
-    for (const auto &sigma : vertices[0]->getSimplices()) {
-        if (static_cast<int>(sigma->size()) != topSize) continue;
-        bool containsAll = true;
-        for (std::size_t i = 1; i < vertices.size(); ++i)
-            if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
-        if (containsAll)
-            sum += sigma->dihedralAngle(const_cast<Simplex*>(this), /*wickRotate=*/false);
-    }
-    return 2.0 * std::numbers::pi - sum;
-}
-
 std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     const int dPlus1 = static_cast<int>(vertices.size());
     // The two vertices of this simplex not in the hinge.
@@ -848,49 +786,47 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     if (opposite.size() != 2) return {0.0, 0.0};
     const int vi = opposite[0], vj = opposite[1];
 
-    // Signed (non-Wick) Cayley-Menger cofactors → the dihedral cosine ratio r,
-    // UN-clamped. std::acos on its complex extension returns the ordinary angle
-    // for |r| <= 1 and a boost (complex) for |r| > 1 — see the header.
+    // Cayley-Menger cofactors -> the dihedral cosine ratio, UN-clamped:
     //
-    // Evaluate in the canonical (sorted-by-id) frame: the signed cofactor sign fix
-    // below (Cii<0) is sensitive to the order the cell's vertices are stored in, so
-    // a cell a Pachner move stored in causal order would otherwise yield a
-    // different deficit than the same geometry built sorted — making the action
-    // depend on build history. The canonical frame makes it a true invariant.
+    //     cos(theta) = -C_ij / (sqrt(C_ii) * sqrt(C_jj))
+    //
+    // TWO separate principal square roots, never sqrt(C_ii * C_jj). For complex
+    // a, b the two differ by a sign exactly when both sit on the negative real
+    // axis -- with the unit tetrahedron's C_ii = C_jj = -3, sqrt(C_ii*C_jj) is
+    // +3 while sqrt(C_ii)*sqrt(C_jj) is (i*r3)(i*r3) = -3. Folding the product
+    // under one root is what used to force a hand-applied (-1)^d parity fix, a
+    // three-way branch dispatch, and an i<->j anchoring swap; taking the roots
+    // separately makes all three emerge from the branch structure instead (#638).
+    //
+    // Every causal configuration is this one expression. Same-sign cofactors put
+    // the wedge on one side of the light cone: a real angle for |r| <= 1, a boost
+    // (pure-imaginary acos) for |r| > 1. Opposite signs mean the wedge CROSSES the
+    // cone -- the denominator turns pure-imaginary, r = i*y, and the principal
+    // acos(i*y) = pi/2 - i*asinh(y) reproduces Sorkin's quarter turn (#581) with
+    // no special case. Around a flat one-ray-per-quadrant vertex star the boosts
+    // telescope to zero and four crossings sum to 2*pi, so 2*pi - sum = 0 holds.
+    //
+    // Evaluate in the canonical (sorted-by-id) frame so a cell a Pachner move
+    // stored in causal order yields the same deficit as the same geometry built
+    // sorted -- otherwise the action depends on build history.
     const int n = dPlus1 + 1;
     std::unordered_map<std::uint64_t, int> pos1;
     const auto B = cayleyMengerCanonical(/*wickRotate=*/false, pos1);
     const auto cof = cofactorMatrix(B, n);
-    int bi = pos1[vertices[vi]->getId()];
-    int bj = pos1[vertices[vj]->getId()];
-    // The Cii<0 sign fix below is asymmetric in (i,j); anchor it on the lower
-    // canonical position so the result does not depend on which opposite vertex
-    // the (stored) ordering happened to present first.
-    if (bi > bj) std::swap(bi, bj);
+    const int bi = pos1[vertices[vi]->getId()];
+    const int bj = pos1[vertices[vj]->getId()];
     const std::complex<double> Cij = cof[static_cast<std::size_t>(bi) * n + bj];
     const std::complex<double> Cii = cof[static_cast<std::size_t>(bi) * n + bi];
     const std::complex<double> Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
-    const double D = std::sqrt(std::abs(Cii * Cjj));
-    if (D < 1e-15) return {0.0, 0.0};
-    if (Cii * Cjj >= 0.0) {
-        // Same-sign cofactors: the wedge stays on one side of the light cone
-        // (the m=0 real angle for |r| <= 1 and the boost regime for |r| > 1).
-        double denom = D;
-        if (Cii < 0.0) denom = -denom;  // (-1)^d diagonal-sign fix (see dihedralAngle)
-        const double r = -Cij / denom;
-        return std::acos(std::complex<double>(r, 0.0));
-    }
-    // Opposite-sign cofactors: the wedge CROSSES the light cone (one facet
-    // direction spacelike, one timelike -- the m=1 case, #581). The true
-    // denominator sqrt(Cii)*sqrt(Cjj) (principal branches) is then purely
-    // imaginary (+i*D), the cosine ratio -Cij/(i*D) = i*(Cij/D) is purely
-    // imaginary, and the principal acos is
-    //     theta = pi/2 - i*asinh(Cij/D).
-    // Each crossing contributes exactly pi/2 to Re(theta) (Sorkin's quarter
-    // turn) plus a signed boost; around a flat one-ray-per-quadrant vertex
-    // star the boosts telescope to zero, which pins this sign convention.
-    const double y = Cij / D;
-    return {std::numbers::pi / 2.0, -std::asinh(y)};
+    // std::sqrt lands on the far side of the cut when the imaginary part is -0.0,
+    // so normalise a negative zero away before rooting.
+    const auto root = [](std::complex<double> z) {
+        if (z.imag() == 0.0) z = {z.real(), 0.0};
+        return std::sqrt(z);
+    };
+    const std::complex<double> denom = root(Cii) * root(Cjj);
+    if (std::abs(denom) < 1e-15) return {0.0, 0.0};
+    return std::acos(-Cij / denom);
 }
 
 std::complex<double> Simplex::lorentzianDeficitAngle() const {

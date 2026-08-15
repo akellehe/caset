@@ -273,38 +273,45 @@ class Simplex {
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
     /// row-major matrix with a zero corner, a border of ones, and the squared
     /// edge-length matrix in the lower-right (d+1) x (d+1) block. Its cofactors
-    /// give the dihedral angles (see ``dihedralAngle``).
+    /// give the dihedral angles (see ``lorentzianDihedralAngle``).
     /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
     [[nodiscard]] std::vector<std::complex<double>> cayleyMengerMatrix(bool wickRotate = false) const;
-
-    /// Dihedral angle at a hinge within this simplex.
-    /// The hinge must be a (d-2)-subsimplex of this d-simplex.
-    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
-    [[nodiscard]] double dihedralAngle(SimplexPtr hinge, bool wickRotate = false) const;
-
-    /// Deficit angle at this hinge: 2*pi minus the sum of dihedral angles
-    /// from all top-simplices containing this hinge.
-    [[nodiscard]] double deficitAngle() const;
 
     /// Lorentzian (Sorkin) dihedral angle at ``hinge`` within this top simplex,
     /// as a complex number, from the **signed** (non-Wick) Cayley-Menger
     /// cofactors — all three of the Sorkin/Asante-Dittrich m ∈ {0, 1, 2}
-    /// regimes (#581). With ``P = C_ii*C_jj`` and ``D = sqrt(|P|)``:
+    /// regimes (#581), from a single expression (#638):
     ///
-    /// * **P >= 0, |r| <= 1** (``r = -C_ij/(±D)`` with the ``(-1)^d``
-    ///   diagonal-sign fix): the wedge stays on one side of the light cone and
-    ///   the angle is the real Euclidean one (m = 0).
-    /// * **P >= 0, |r| > 1** (the boost regime, m even): ``std::acos`` returns
-    ///   a complex value whose imaginary part is the rapidity and whose real
-    ///   part (0 or pi) counts the crossed light-cone quadrants.
-    /// * **P < 0** (the m = 1 **light-cone crossing**: one facet direction
-    ///   spacelike, one timelike): the true denominator
-    ///   ``sqrt(C_ii)*sqrt(C_jj)`` (principal branches) is purely imaginary,
-    ///   so the angle is ``pi/2 - i*asinh(C_ij/D)`` — exactly a quarter turn
-    ///   plus a signed boost. Around a flat one-ray-per-quadrant Minkowski
-    ///   vertex star the four boosts telescope to zero (closure pins the
-    ///   sign); generic in CDT (every base-tet triangle of a (4,1) cell).
+    /// \f[ \cos\theta = \frac{-C_{ij}}{\sqrt{C_{ii}}\,\sqrt{C_{jj}}} \f]
     ///
+<<<<<<< HEAD
+=======
+    /// **Two separate principal square roots, never** ``sqrt(C_ii*C_jj)``. For
+    /// complex \f$a, b\f$ the two differ by a sign exactly when both sit on the
+    /// negative real axis: with a unit tetrahedron's ``C_ii = C_jj = -3``,
+    /// ``sqrt(C_ii*C_jj)`` is ``+3`` while ``sqrt(C_ii)*sqrt(C_jj)`` is
+    /// ``(i*sqrt3)(i*sqrt3) = -3``. Folding the product under one root is what
+    /// used to force a hand-applied ``(-1)^d`` parity fix, a three-way branch
+    /// dispatch, and an i<->j anchoring swap; taking the roots separately makes
+    /// all three *emerge* from the branch structure.
+    ///
+    /// The causal regimes are then cases of one formula, not code paths:
+    ///
+    /// * **Same-sign cofactors, |r| <= 1** — the wedge stays on one side of the
+    ///   light cone and the angle is the ordinary real one (m = 0).
+    /// * **Same-sign cofactors, |r| > 1** — the boost regime (m even):
+    ///   ``std::acos`` returns a complex value whose imaginary part is the
+    ///   rapidity and whose real part (0 or pi) counts crossed quadrants.
+    /// * **Opposite-sign cofactors** — the m = 1 **light-cone crossing** (one
+    ///   facet direction spacelike, one timelike). The denominator turns purely
+    ///   imaginary, ``r = i*y``, and the principal
+    ///   \f$\arccos(iy) = \pi/2 - i\,\mathrm{asinh}(y)\f$ is exactly Sorkin's
+    ///   quarter turn plus a signed boost — with no special case. Around a flat
+    ///   one-ray-per-quadrant Minkowski vertex star the four boosts telescope to
+    ///   zero and four crossings sum to 2*pi, so ``2*pi - sum = 0`` still holds;
+    ///   generic in CDT (every base-tet triangle of a (4,1) cell).
+    ///
+>>>>>>> 5d1c651 (fix(mesh): unify the dihedral angle on one complex branch (#638))
     /// This keeps the boost content, as it should be EVERYWHERE. Note
     /// the same-sign (m = 0 / boost) regimes' imaginary sign is the principal
     /// branch: the wedge's boost *orientation* is not determined by edge
