@@ -318,14 +318,14 @@ WilsonResult WilsonLoop::evaluateDeficitAngle(const LoopPath &loop) const {
 
     if (enclosedHinges.size() == 1) {
         // Hinge loop: exact Wilson loop value
-        double eps = enclosedHinges[0]->lorentzianDeficitAngle().real();
+        double eps = enclosedHinges[0]->deficitAngle().real();
         r.value = (static_cast<double>(d_ - 2) + 2.0 * std::cos(eps))
                   / static_cast<double>(d_);
     } else {
         // General loop: U(1) approximation — product of cos(epsilon)
         double product = 1.0;
         for (const auto &h : enclosedHinges)
-            product *= std::cos(h->lorentzianDeficitAngle().real());
+            product *= std::cos(h->deficitAngle().real());
         r.value = product;
     }
     return r;

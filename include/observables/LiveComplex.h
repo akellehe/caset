@@ -30,7 +30,7 @@ using namespace ::tessera::spacetime;
 ///
 ///   * `Spacetime::fromCells` materializes ONLY the top cells (measured: `∂Δ⁵`
 ///     comes back as its 6 pentatopes and nothing else). The facet/coface
-///     skeleton that `dualVolume()` / `lorentzianDeficitAngle()` walk is then
+///     skeleton that `dualVolume()` / `deficitAngle()` walk is then
 ///     completed with the honest direct call `Spacetime::materializeFacets()` —
 ///     never a solver-named one — which reproduces the `ReggeSolver` +
 ///     `ChainComplex::fromSpacetime` skeleton bit-for-bit (verified: interior

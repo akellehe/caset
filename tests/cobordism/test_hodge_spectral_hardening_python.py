@@ -514,14 +514,14 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
 
     def _null_norm(self, alpha):
         norms = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
-                         .lorentzianNullNorms(1, 1e-9), dtype=float)
+                         .nullNorms(1, 1e-9), dtype=float)
         self.assertEqual(len(norms), 1)  # the single 1-cycle harmonic
         return norms[0]
 
     def _real_spectrum(self, alpha):
         # ascending real spectrum {min, 0-ish, max} = {0, 3, 1 − 2/α} sorted
         return np.sort(np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
-                                .lorentzianEigenvalues(1), dtype=complex).real)
+                                .eigenvalues(1), dtype=complex).real)
 
     def test_null_norm_closed_form_and_sign_flip(self):
         # Bracket the crossing: positive (spacelike-dominated) below α = 2,
@@ -567,9 +567,9 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
         away = cob.HodgeLaplacian(_triangle_one_timelike(1.5))
         at = cob.HodgeLaplacian(_triangle_one_timelike(2.0))
         n_away = int(np.sum(np.abs(np.array(
-            away.lorentzianEigenvalues(1), dtype=complex)) < 1e-6))
+            away.eigenvalues(1), dtype=complex)) < 1e-6))
         n_at = int(np.sum(np.abs(np.array(
-            at.lorentzianEigenvalues(1), dtype=complex)) < 1e-6))
+            at.eigenvalues(1), dtype=complex)) < 1e-6))
         self.assertEqual(n_away, 1)
         self.assertEqual(n_at, 2)
 
@@ -578,7 +578,7 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
         for alpha in (0.7, 1.3, 2.4):
             with self.subTest(alpha=alpha):
                 harmonics = (cob.HodgeLaplacian(_triangle_one_timelike(alpha))
-                             .lorentzianHarmonics(1, 1e-9))
+                             .harmonics(1, 1e-9))
                 self.assertEqual(len(harmonics), 1)
                 h = np.asarray(harmonics[0].coeffs())
                 self.assertEqual(h.size, 3)
@@ -590,11 +590,11 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
         # has |h_i|² = 1/3 each, so its norm is Σ W_i|h_i|² = 1 > 0 (definite),
         # the spectrum is the Euclidean {0, 3, 3}, and the kernel dim = b₁ = 1.
         st = _cycle()
-        norms = np.array(cob.HodgeLaplacian(st).lorentzianNullNorms(1, 1e-9))
+        norms = np.array(cob.HodgeLaplacian(st).nullNorms(1, 1e-9))
         self.assertEqual(len(norms), 1)
         self.assertAlmostEqual(norms[0], 1.0, places=9)
         eigs = np.sort(np.array(cob.HodgeLaplacian(st)
-                                .lorentzianEigenvalues(1), dtype=complex).real)
+                                .eigenvalues(1), dtype=complex).real)
         np.testing.assert_allclose(eigs, [0.0, 3.0, 3.0], atol=1e-7)
 
 
@@ -649,8 +649,8 @@ class TestEdgeCases(unittest.TestCase):
                     self.assertEqual(hl.eigenvectors(k), [])
                     self.assertEqual(hl.harmonics(k), [])
                     self.assertEqual(hl.weights(k), [])
-                    self.assertEqual(hl.lorentzianEigenvalues(k), [])
-                    self.assertEqual(hl.lorentzianNullNorms(k), [])
+                    self.assertEqual(hl.eigenvalues(k), [])
+                    self.assertEqual(hl.nullNorms(k), [])
 
     def test_negative_degree_raises(self):
         hl = cob.HodgeLaplacian(_cycle())
@@ -658,10 +658,10 @@ class TestEdgeCases(unittest.TestCase):
                      lambda: hl.eigenvalues(-1),
                      lambda: hl.eigenvectors(-1),
                      lambda: hl.harmonics(-1),
-                     lambda: hl.lorentzianEigenvalues(-1),
-                     lambda: hl.lorentzianEigenvectors(-1),
-                     lambda: hl.lorentzianHarmonics(-1),
-                     lambda: hl.lorentzianNullNorms(-1)):
+                     lambda: hl.eigenvalues(-1),
+                     lambda: hl.eigenvectors(-1),
+                     lambda: hl.harmonics(-1),
+                     lambda: hl.nullNorms(-1)):
             with self.subTest(call=call):
                 with self.assertRaises(RuntimeError):
                     call()

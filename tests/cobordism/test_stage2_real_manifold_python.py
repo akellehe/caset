@@ -66,7 +66,7 @@ def _assert_mixed_hinge_regime(test, st):
     direction is complex and the real-axis restriction is load-bearing."""
     T.ReggeSolver(st, T.MatterConfiguration())  # materialize the hinges
     n_complex = sum(1 for h in _hinges(st)
-                    if abs(complex(h.lorentzianDeficitAngle()).imag) > 1e-9)
+                    if abs(complex(h.deficitAngle()).imag) > 1e-9)
     test.assertGreater(n_complex, 0, "fixture lost its mixed-hinge regime")
 
 

@@ -3,7 +3,7 @@
 
 """The exact analytic gradient of the complex dual (Sorkin) Regge action matches
 finite differences to machine precision -- the regression guard for the
-hand-derived gradient (Simplex::lorentzianDeficitAngleGradient,
+hand-derived gradient (Simplex::deficitAngleGradient,
 Simplex::dualVolumeGradient, ReggeSolver::actionGradientExact). Run on a
 Lorentzian 4D CDT mesh so both real (spacelike) and complex (boost) triangle
 hinges are exercised."""
@@ -82,13 +82,13 @@ class ExactActionGradientTest(unittest.TestCase):
     def test_deficit_gradient_matches_fd_complex_hinge(self):
         # the most-complex-deficit hinge: exercises the boost branch of d(eps)/dl^2
         hk = max(self.hinges, key=lambda k: abs(
-            complex(self.hinges[k].lorentzianDeficitAngle()).imag))
+            complex(self.hinges[k].deficitAngle()).imag))
         hs = self.hinges[hk]
-        grad = hs.lorentzianDeficitAngleGradient()
+        grad = hs.deficitAngleGradient()
         worst = 0.0
         for e in list(grad)[:8]:
             fd = _central(self._set(self.emap[e]),
-                          lambda: complex(hs.lorentzianDeficitAngle()))
+                          lambda: complex(hs.deficitAngle()))
             worst = max(worst, abs(complex(grad[e]) - fd))
         self.assertLess(worst, _TOL)
 

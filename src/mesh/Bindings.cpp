@@ -370,7 +370,7 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
       .def("hodgeStar", &Simplex::hodgeStar,
            "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
            "content), complex.")
-      .def("lorentzianDihedralAngle", &Simplex::lorentzianDihedralAngle,
+      .def("dihedralAngle", &Simplex::dihedralAngle,
            py::arg("hinge"),
            "Complex Lorentzian (Sorkin) dihedral angle at the hinge — the full "
            "m in {0,1,2} structure (#581): real for an ordinary wedge, complex "
@@ -378,18 +378,18 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
            "the boost regime, and pi/2 - i*asinh(.) for a wedge CROSSING the "
            "light cone (one facet direction spacelike, one timelike). Unlike "
            "the removed real-typed pair it is not clamped, so boosts survive.")
-      .def("lorentzianDeficitAngle", &Simplex::lorentzianDeficitAngle,
-           "Complex Lorentzian deficit 2π − Σ lorentzianDihedralAngle over the "
+      .def("deficitAngle", &Simplex::deficitAngle,
+           "Complex Lorentzian deficit 2π − Σ dihedralAngle over the "
            "top cells at this hinge; real for an all-spacelike neighbourhood, "
            "complex when timelike cells contribute boosts.")
-      .def("lorentzianDeficitAngleGradient",
-           &Simplex::lorentzianDeficitAngleGradient,
+      .def("deficitAngleGradient",
+           &Simplex::deficitAngleGradient,
            "Exact analytic d(deficit)/d(l^2_e) for each surrounding edge, as a "
            "dict {(v0,v1): complex}. Cofactor-derivative of the Cayley-Menger "
            "dihedral with the boost-safe sin(theta) branch; matches finite "
            "differences to machine precision.")
-      .def("lorentzianDeficitAngleHessian",
-           &Simplex::lorentzianDeficitAngleHessian,
+      .def("deficitAngleHessian",
+           &Simplex::deficitAngleHessian,
            "Exact analytic d^2(deficit)/d(l^2_e)d(l^2_f), as a dict "
            "{((v0,v1),(v2,v3)): complex}. One derivative beyond the gradient "
            "(cofactor second derivative + d^2theta/dr^2); symmetric.");

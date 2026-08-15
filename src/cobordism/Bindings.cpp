@@ -314,35 +314,11 @@ Euclidean spectrum/kernel.)doc")
            "harmonics(k)[r].amplitude(c) exactly -- one call instead of one "
            "amplitudeFor round-trip per cell per harmonic. Raises for k<0; "
            "empty when the kernel is empty or k is above the top dimension.")
-      // ----- Lorentzian (signed-weight) d'Alembertian (#105, spec §5.6) -----
-      .def("lorentzianSpectrum", &HodgeLaplacian::lorentzianSpectrum,
-           py::arg("k"), py::arg("metric") = true,
-           "The eigendecomposition of the signed-weight d'Alembertian L_k as a "
-           "Spectrum (isHermitian()==False): complex eigenvalues sorted by "
-           "(Re, Im) + eigenvectors as Cochains. metric=False falls back to unit "
-           "weights (the real combinatorial spectrum). Raises for k<0; empty "
-           "above the top dimension.")
-      .def("lorentzianEigenvalues", &HodgeLaplacian::lorentzianEigenvalues,
-           py::arg("k"), py::arg("metric") = true,
-           "Eigenvalues of the signed-weight d'Alembertian L_k (k>=1) as complex "
-           "numbers sorted ascending by (Re, Im): may be negative or complex-"
-           "conjugate pairs (the indefinite metric ⇒ non-self-adjoint operator). "
-           "On an all-spacelike complex they reproduce eigenvalues(k). Raises for "
-           "k<0; empty above the top dimension.")
-      .def("lorentzianEigenvectors", &HodgeLaplacian::lorentzianEigenvectors,
-           py::arg("k"), py::arg("metric") = true,
-           "Eigenvectors of the signed-weight L_k as a flat row-major M*M complex "
-           "array; column j is the eigenvector for lorentzianEigenvalues(k)[j].")
-      .def("lorentzianHarmonics", &HodgeLaplacian::lorentzianHarmonics,
-           py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
-           "Near-kernel ('harmonic') representatives of the d'Alembertian "
-           "(eigenvectors with |lambda| < tol) as a list of Cochains. The count "
-           "is b_k on an all-spacelike complex; with timelike cells it can differ "
-           "(pseudo-Hodge decomposition). Matching W-norms: lorentzianNullNorms.")
-      .def("lorentzianNullNorms", &HodgeLaplacian::lorentzianNullNorms,
+      // ----- indefinite W-norms of the near-kernel (spec §5.6) -----
+      .def("nullNorms", &HodgeLaplacian::nullNorms,
            py::arg("k"), py::arg("tol") = 1e-9, py::arg("metric") = true,
            "Indefinite W-norms <h,h>_W = sum_i W_{k,i} |h_i|^2 of the near-kernel "
-           "representatives, one per column of lorentzianHarmonics (same order). "
+           "representatives, one per column of harmonics (same order). "
            "A value ~0 flags a NULL (lightlike) harmonic; all positive on an "
            "all-spacelike complex.");
 

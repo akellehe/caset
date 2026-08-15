@@ -385,7 +385,7 @@ double cellHingeAction(const double edgeSq[10]) {
     for (SimplexPtr facet : cell->getFacets())
         for (SimplexPtr hinge : facet->getFacets())
             if (hinge->getVertices().size() == 3)
-                s += (hinge->area() * hinge->lorentzianDeficitAngle()).real();
+                s += (hinge->area() * hinge->deficitAngle()).real();
     return s;
 }
 
@@ -992,7 +992,7 @@ bool InteractionSimulation::interact() {
         for (SimplexPtr hinge : facet->getFacets())
             if (hinge->getVertices().size() == 3)
                 hingeAction_[hinge] =
-                    (hinge->area() * hinge->lorentzianDeficitAngle()).real();
+                    (hinge->area() * hinge->deficitAngle()).real();
 
     stateOf_[xp] = res.statePrimeX;
     stateOf_[ab] = res.stateAB;
@@ -1490,7 +1490,7 @@ InteractionSimulation::getDeficitAngleDistribution() const {
     for (SimplexPtr s : spacetime_->getSimplices()) {
         if (s->getVertices().size() != 3) continue;
         if (s->getCofaces().empty()) continue;
-        out.push_back(s->lorentzianDeficitAngle().real());
+        out.push_back(s->deficitAngle().real());
     }
     return out;
 }

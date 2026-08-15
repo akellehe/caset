@@ -121,7 +121,7 @@ class TestDeficitAngleMode(unittest.TestCase):
         if len(loop) < 2:
             self.skipTest("Hinge loop too small")
         result = wl.evaluateDeficitAngle(loop)
-        eps = solver.lorentzianDeficitAngle(hinge)
+        eps = solver.deficitAngle(hinge)
         expected = ((4 - 2) + 2 * math.cos(eps)) / 4
         self.assertAlmostEqual(result.value, expected, places=6,
             msg=f"Wilson value {result.value} != expected {expected}")

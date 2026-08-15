@@ -48,7 +48,7 @@ def _vertex_curvatures(verts, solver, t):
                 continue
             if not all(round(hv.getTime()) == t for hv in sv):
                 continue
-            eps = solver.lorentzianDeficitAngle(s)
+            eps = solver.deficitAngle(s)
             area = tessera.ReggeSolver.hingeArea(s)
             total += eps * area
             count += 1

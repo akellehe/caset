@@ -28,7 +28,7 @@ class TestDihedralAngles(unittest.TestCase):
                 for facet in s.getFacets():
                     for hinge in facet.getFacets():
                         if len(hinge.getVertices()) == 3:
-                            angle = solver.lorentzianDihedralAngle(s, hinge)
+                            angle = solver.dihedralAngle(s, hinge)
                             self.assertGreater(angle, 0.0,
                                 "Dihedral angle should be positive")
                             self.assertLess(angle, math.pi,
@@ -44,7 +44,7 @@ class TestDihedralAngles(unittest.TestCase):
         # Find a hinge and compute its deficit angle
         for s in st.getSimplices():
             if len(s.getVertices()) == 3 and len(s.getCofaces()) > 0:
-                eps = solver.lorentzianDeficitAngle(s)
+                eps = solver.deficitAngle(s)
                 # Deficit can be positive, negative, or zero
                 self.assertIsInstance(eps, float)
                 return

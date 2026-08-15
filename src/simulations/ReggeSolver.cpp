@@ -81,11 +81,11 @@ ReggeSolver::ReggeSolver(std::shared_ptr<Spacetime> spacetime,
 
 std::complex<double> ReggeSolver::dihedralAngle(SimplexPtr sigma,
                                    SimplexPtr hinge) const {
-    return sigma->lorentzianDihedralAngle(hinge);
+    return sigma->dihedralAngle(hinge);
 }
 
 std::complex<double> ReggeSolver::deficitAngle(SimplexPtr hinge) const {
-    return hinge->lorentzianDeficitAngle();
+    return hinge->deficitAngle();
 }
 
 std::complex<double> ReggeSolver::hingeArea(SimplexPtr hinge) {
@@ -106,7 +106,7 @@ std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
     // Only *genuine* hinges count toward the Regge action: a (d-2)-face of at
     // least one current top (d)-cell. A Pachner move that removes a cell can
     // leave a lazily-materialised hinge registered with no surviving top coface
-    // (an orphan); ``lorentzianDeficitAngle`` then returns a bare 2π for it
+    // (an orphan); ``deficitAngle`` then returns a bare 2π for it
     // while its gradient maps are empty, so an unfiltered sum would let the
     // resident action and ``actionGradientExact`` disagree (#365/#371). Skipping
     // orphans (``hasTopCoface``) makes ``dualReggeAction`` a pure function of the
@@ -132,7 +132,7 @@ std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
 std::complex<double> ReggeSolver::reggeAction() const {
     std::complex<double> S{0.0, 0.0};
     for (const auto &h : collectHinges()) {
-        S += hingeArea(h) * h->lorentzianDeficitAngle();
+        S += hingeArea(h) * h->deficitAngle();
     }
     return S;
 }
@@ -143,7 +143,7 @@ std::complex<double> ReggeSolver::dualReggeAction() const {
     // registered (sub-simplices materialize via getFacets), as for reggeAction().
     std::complex<double> S(0.0, 0.0);
     for (const auto &h : collectHinges()) {
-        S += h->dualVolume() * h->lorentzianDeficitAngle();
+        S += h->dualVolume() * h->deficitAngle();
     }
     return S;
 }
@@ -205,7 +205,7 @@ std::complex<double> ReggeSolver::dualReggeActionOverHinges(
         if (!ok) continue;
         const auto s = spacetime_->findSimplexByVerts(vp);
         if (s == nullptr || !s->hasTopCoface()) continue;
-        S += s->dualVolume() * s->lorentzianDeficitAngle();
+        S += s->dualVolume() * s->deficitAngle();
     }
     return S;
 }
@@ -307,9 +307,9 @@ double ReggeSolver::gradientNorm2OverEdges(
         if (!ok) continue;
         const auto h = spacetime_->findSimplexByVerts(vp);
         if (h == nullptr || !h->hasTopCoface()) continue;
-        const std::complex<double> eps = h->lorentzianDeficitAngle();
+        const std::complex<double> eps = h->deficitAngle();
         const std::complex<double> dv = h->dualVolume();
-        for (const auto &[ed, dEps] : h->lorentzianDeficitAngleGradient()) {
+        for (const auto &[ed, dEps] : h->deficitAngleGradient()) {
             const std::pair<std::uint64_t, std::uint64_t> k{
                 std::min(ed.first, ed.second), std::max(ed.first, ed.second)};
             if (E.count(k)) g[k] += dv * dEps;
@@ -400,7 +400,7 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
 
     // dS/dl^2_e = sum_h [ d|*h|/dl^2_e * eps_h + |*h| * d eps_h/dl^2_e ].
     //
-    // The per-hinge work is independent: lorentzianDeficitAngle/dualVolume and
+    // The per-hinge work is independent: deficitAngle/dualVolume and
     // their gradients are pure const reads over already-materialized cofaces
     // (no mutable members, no lazy caches), so hinges parallelize cleanly. But
     // many hinges contribute to the same edge, so writing the shared g directly
@@ -439,9 +439,9 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
         for (std::ptrdiff_t hi = 0; hi < nH; ++hi) {
             try {
                 const auto &h = hinges[static_cast<std::size_t>(hi)];
-                const cd eps = h->lorentzianDeficitAngle();
+                const cd eps = h->deficitAngle();
                 const std::complex<double> dv = h->dualVolume();
-                for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
+                for (const auto &[e, dEps] : h->deficitAngleGradient()) {
                     const auto it = eidx.find(e);
                     if (it != eidx.end()) gLocal[it->second] += dv * dEps;
                 }
@@ -535,11 +535,11 @@ ReggeSolver::hingeHessianEntries(
     // summed over the hinges that couple e and f. This emits one hinge's
     // contributions; both the dense and sparse assemblies sum them per (e,f).
     std::vector<std::tuple<std::size_t, std::size_t, cd>> entries;
-    const cd eps = hinge->lorentzianDeficitAngle();
+    const cd eps = hinge->deficitAngle();
     const cd V = hinge->dualVolume();
-    const auto dEps = hinge->lorentzianDeficitAngleGradient();
+    const auto dEps = hinge->deficitAngleGradient();
     const auto dV = hinge->dualVolumeGradient();
-    const auto d2Eps = hinge->lorentzianDeficitAngleHessian();
+    const auto d2Eps = hinge->deficitAngleHessian();
     const auto d2V = hinge->dualVolumeHessian();
     entries.reserve(dV.size() * dV.size());
     for (const auto &[e, dVe] : dV) {

@@ -172,7 +172,7 @@ def _lor_matrix(st, k, metric=True):
 
 
 def _lor_eigs(st, k, metric=True):
-    return np.array(cob.HodgeLaplacian(st).lorentzianEigenvalues(k, metric),
+    return np.array(cob.HodgeLaplacian(st).eigenvalues(k, metric),
                     dtype=complex)
 
 
@@ -181,7 +181,7 @@ def _near_kernel_count(st, k, metric=True, tol=TOL):
 
 
 def _null_norms(st, k, metric=True, tol=1e-9):
-    return np.array(cob.HodgeLaplacian(st).lorentzianNullNorms(k, tol, metric),
+    return np.array(cob.HodgeLaplacian(st).nullNorms(k, tol, metric),
                     dtype=float)
 
 
@@ -295,7 +295,7 @@ class TestLorentzianDAlembertian(unittest.TestCase):
     def test_harmonic_is_the_cycle_with_unit_magnitude_support(self):
         # The kernel mode is the 1-cycle: |h_i|^2 = 1/3 on every edge.
         harmonics = (cob.HodgeLaplacian(_triangle_one_timelike(1.3))
-                     .lorentzianHarmonics(1, 1e-9))
+                     .harmonics(1, 1e-9))
         self.assertEqual(len(harmonics), 1)  # one harmonic, a degree-1 Cochain
         h = np.asarray(harmonics[0].coeffs())
         self.assertEqual(h.size, 3)  # three edges
@@ -365,7 +365,7 @@ class TestLorentzianBothTerms(unittest.TestCase):
         eigs = _lor_eigs(st, 1)
         self.assertTrue(_is_not_psd(eigs))                  # not PSD
         # near-kernel modes are well-defined and their null-norms line up 1:1
-        harmonics = cob.HodgeLaplacian(st).lorentzianHarmonics(1, TOL)
+        harmonics = cob.HodgeLaplacian(st).harmonics(1, TOL)
         norms = _null_norms(st, 1, tol=TOL)
         self.assertEqual(len(harmonics), len(norms))
 
@@ -409,10 +409,10 @@ class TestLorentzianDegreeParameterization(unittest.TestCase):
 
     def test_negative_degree_raises(self):
         hl = cob.HodgeLaplacian(_triangle_cycle())
-        for call in (lambda: hl.lorentzianEigenvalues(-1),
-                     lambda: hl.lorentzianEigenvectors(-1),
-                     lambda: hl.lorentzianHarmonics(-1),
-                     lambda: hl.lorentzianNullNorms(-1),
+        for call in (lambda: hl.eigenvalues(-1),
+                     lambda: hl.eigenvectors(-1),
+                     lambda: hl.harmonics(-1),
+                     lambda: hl.nullNorms(-1),
                      lambda: hl.laplacian(-1, True, True)):
             with self.subTest(call=call):
                 with self.assertRaises(RuntimeError):
@@ -422,10 +422,10 @@ class TestLorentzianDegreeParameterization(unittest.TestCase):
         hl = cob.HodgeLaplacian(_triangle_cycle())  # S^1, top dim 1
         for k in (2, 3):
             with self.subTest(k=k):
-                self.assertEqual(hl.lorentzianEigenvalues(k), [])
-                self.assertEqual(hl.lorentzianEigenvectors(k), [])
-                self.assertEqual(hl.lorentzianHarmonics(k), [])
-                self.assertEqual(hl.lorentzianNullNorms(k), [])
+                self.assertEqual(hl.eigenvalues(k), [])
+                self.assertEqual(hl.eigenvectors(k), [])
+                self.assertEqual(hl.harmonics(k), [])
+                self.assertEqual(hl.nullNorms(k), [])
                 self.assertEqual(hl.laplacian(k, True, True), [])
 
     def test_metric_false_is_positive_combinatorial(self):

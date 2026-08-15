@@ -778,7 +778,7 @@ std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     return B;
 }
 
-std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
+std::complex<double> Simplex::dihedralAngle(SimplexPtr hinge) const {
     const int dPlus1 = static_cast<int>(vertices.size());
     // The two vertices of this simplex not in the hinge.
     const auto hingeVerts = hinge->getVertices();
@@ -829,7 +829,7 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     return std::acos(-Cij / denom);
 }
 
-std::complex<double> Simplex::lorentzianDeficitAngle() const {
+std::complex<double> Simplex::deficitAngle() const {
     using cd = std::complex<double>;
     const cd twoPi(2.0 * std::numbers::pi, 0.0);
     if (!spacetime || vertices.empty()) return twoPi;
@@ -838,19 +838,19 @@ std::complex<double> Simplex::lorentzianDeficitAngle() const {
     (void)topSize;
     cd sum(0.0, 0.0);
     for (auto *sigma : incidentTopCells())
-        sum += sigma->lorentzianDihedralAngle(const_cast<Simplex *>(this));
+        sum += sigma->dihedralAngle(const_cast<Simplex *>(this));
     return twoPi - sum;
 }
 
 std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
-Simplex::lorentzianDeficitAngleGradient() const {
+Simplex::deficitAngleGradient() const {
     using cd = std::complex<double>;
     std::map<std::pair<std::uint64_t, std::uint64_t>, cd> grad;
     if (!spacetime || vertices.empty()) return grad;
     const int topSize =
         spacetime->getMetric()->getSignature()->getDimensions() + 1;
 
-    // The top cells containing this hinge -- the same set lorentzianDeficitAngle
+    // The top cells containing this hinge -- the same set deficitAngle
     // sums over. d(eps)/dl^2 = -sum_tau d(theta_tau)/dl^2.
     (void)topSize;
     for (auto *tau : incidentTopCells()) {
@@ -881,7 +881,7 @@ Simplex::lorentzianDeficitAngleGradient() const {
         const cd Cij = C[bi * n + bj];
         const cd Cii = C[bi * n + bi];
         const cd Cjj = C[bj * n + bj];
-        // Same unified branch as lorentzianDihedralAngle (#638): two separate
+        // Same unified branch as dihedralAngle (#638): two separate
         // principal roots, one expression for every causal regime. The sC/sP
         // sign flags and the crossing/non-crossing dispatch this replaces were
         // artifacts of folding the product under one root.
@@ -922,7 +922,7 @@ Simplex::lorentzianDeficitAngleGradient() const {
 std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
                    std::pair<std::uint64_t, std::uint64_t>>,
          std::complex<double>>
-Simplex::lorentzianDeficitAngleHessian() const {
+Simplex::deficitAngleHessian() const {
     using cd = std::complex<double>;
     using EK = std::pair<std::uint64_t, std::uint64_t>;
     std::map<std::pair<EK, EK>, cd> hess;
@@ -931,7 +931,7 @@ Simplex::lorentzianDeficitAngleHessian() const {
         spacetime->getMetric()->getSignature()->getDimensions() + 1;
 
     // d^2(eps)/dl^2_e dl^2_f = -sum_tau d^2(theta_tau). Same top-cell set and
-    // cofactor machinery as lorentzianDeficitAngleGradient, carried one more
+    // cofactor machinery as deficitAngleGradient, carried one more
     // derivative: d^2 theta = (d2theta/dr^2) dr_e dr_f + (dtheta/dr) d2r.
     for (const auto &tau : vertices[0]->getSimplices()) {
         if (static_cast<int>(tau->size()) != topSize) continue;

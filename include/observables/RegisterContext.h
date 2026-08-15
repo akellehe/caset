@@ -47,7 +47,7 @@ class InteriorHinges;  // the shared 4D hinge-selection core (InteriorHinges.h)
 ///     into a live complex). It never builds, solves, or materializes anything —
 ///     the emergent build lives exclusively in Proton/ProtonIngredients/
 ///     MultiCobordism and is never re-run here. The facet/coface skeleton the
-///     `dualVolume()` / `lorentzianDeficitAngle()` reads walk is expected to be
+///     `dualVolume()` / `deficitAngle()` reads walk is expected to be
 ///     already present on the live complex (it is, on every built state); the
 ///     construction that completes a bare `Spacetime::fromCells` skeleton — the
 ///     dump-rehydration and the RELABEL-gate rebuild — lives OUTSIDE this class,

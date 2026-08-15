@@ -273,7 +273,7 @@ class Simplex {
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
     /// row-major matrix with a zero corner, a border of ones, and the squared
     /// edge-length matrix in the lower-right (d+1) x (d+1) block. Its cofactors
-    /// give the dihedral angles (see ``lorentzianDihedralAngle``).
+    /// give the dihedral angles (see ``dihedralAngle``).
     /// Always signature-aware: there is no Euclidean/Wick-rotated mode (#641).
     [[nodiscard]] std::vector<std::complex<double>> cayleyMengerMatrix() const;
 
@@ -318,15 +318,15 @@ class Simplex {
     /// (arXiv:1908.10022); Asante-Dittrich-Padua-Arguelles, arXiv:2104.00485
     /// Eq. (10).
     [[nodiscard]] std::complex<double>
-    lorentzianDihedralAngle(SimplexPtr hinge) const;
+    dihedralAngle(SimplexPtr hinge) const;
 
     /// Complex Lorentzian deficit at this hinge: 2*pi minus the sum of
-    /// ``lorentzianDihedralAngle`` over the top simplices containing it. Real
+    /// ``dihedralAngle`` over the top simplices containing it. Real
     /// for an all-spacelike (Euclidean) neighbourhood (the ordinary angle
     /// defect); complex when timelike cells contribute boosts.
-    [[nodiscard]] std::complex<double> lorentzianDeficitAngle() const;
+    [[nodiscard]] std::complex<double> deficitAngle() const;
 
-    /// Exact analytic gradient of this hinge's ``lorentzianDeficitAngle`` with
+    /// Exact analytic gradient of this hinge's ``deficitAngle`` with
     /// respect to the squared length of each surrounding edge:
     /// \f$ \partial \varepsilon / \partial \ell^2_e \f$. The deficit is
     /// \f$ 2\pi - \sum_\tau \theta_\tau \f$ over the top cells \f$ \tau \f$
@@ -343,11 +343,11 @@ class Simplex {
     /// appear. Complex (the boost part is carried, not truncated).
     [[nodiscard]] std::map<std::pair<std::uint64_t, std::uint64_t>,
                            std::complex<double>>
-    lorentzianDeficitAngleGradient() const;
+    deficitAngleGradient() const;
 
     /// Exact analytic Hessian of this hinge's deficit angle:
     /// \f$ \partial^2 \varepsilon / \partial \ell^2_e \partial \ell^2_f \f$.
-    /// One derivative beyond ``lorentzianDeficitAngleGradient``: the same
+    /// One derivative beyond ``deficitAngleGradient``: the same
     /// per-top-cell Cayley-Menger machinery carried to second order, with the
     /// cofactor second derivative
     /// \f$ \partial^2 C_{pq} = \partial(\det B\,T) \f$ (T the gradient's
@@ -361,7 +361,7 @@ class Simplex {
     [[nodiscard]] std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
                                      std::pair<std::uint64_t, std::uint64_t>>,
                            std::complex<double>>
-    lorentzianDeficitAngleHessian() const;
+    deficitAngleHessian() const;
 
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
     /// Uses Heron's formula on the three edge squared lengths;
@@ -436,7 +436,7 @@ class Simplex {
     /// contribute to the Regge action (it would carry a spurious bare-2π
     /// deficit). The hinge set the action sums over is exactly the (d-2)-faces
     /// for which this returns ``true``. Mirrors the top-cell scan in
-    /// ``lorentzianDeficitAngle``; requires a non-null owning spacetime.
+    /// ``deficitAngle``; requires a non-null owning spacetime.
     [[nodiscard]] bool hasTopCoface() const;
 
     /// Signed **circumcentric dual cell volume** |★σ| of this k-simplex in the
@@ -634,7 +634,7 @@ class Simplex {
     /// with each vertex id's 1-based bordered position in that canonical order.
     /// The signed (Lorentzian) dihedral-angle cofactor formula is sensitive to the
     /// order a cell's vertices happen to be stored in (a Pachner move stores them
-    /// in causal, not sorted, order), which would make ``lorentzianDeficitAngle``
+    /// in causal, not sorted, order), which would make ``deficitAngle``
     /// -- and hence ``dualReggeAction`` -- depend on build history rather than on
     /// the geometry. Evaluating the standard formula in this fixed reference frame
     /// makes the deficit a true relabelling/order invariant. Identical to

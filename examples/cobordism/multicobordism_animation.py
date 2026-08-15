@@ -53,7 +53,7 @@ It drives only the **public** `Proton` (`recombination_node`/`formation_node`),
 `MultiCobordism` (the combined `run`, plus `betti`, `emergent_holes`,
 `regge_action_gradient`, `r_state`, `r_u`, `objective`, `st`), and the geometry readers
 (`Spacetime.getTopSimplices`/`getDualAdjacency`/`getSimplices`,
-`Simplex.lorentzianDeficitAngle`/`dualVolume`) APIs — the *same* node setups
+`Simplex.deficitAngle`/`dualVolume`) APIs — the *same* node setups
 and drive `Proton.build()` uses, so the animation shows the real class. The C++ engine is
 untouched.
 
@@ -119,7 +119,7 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 # hinges (the (d-2)=2-simplices, i.e. triangles); we localize it to each top cell (dual
 # node) as the SIGNED sum over its hinges of Re(lorentzian deficit) · |dual volume| — the
 # Regge angle-defect action density, keeping ε's sign so negative (saddle) curvature shows.
-# `Simplex.lorentzianDeficitAngle` is expensive, so the heat is recomputed only
+# `Simplex.deficitAngle` is expensive, so the heat is recomputed only
 # every `_HEAT_REFRESH_EVERY` frames on the active node (the frozen node's geometry doesn't
 # change, so its heat is cached) — the cheap dual *graph* still redraws every frame.
 _HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
@@ -397,7 +397,7 @@ class ProtonAnimator:
     @staticmethod
     def _cell_curvature(st):
         """Per-top-cell curvature, BOTH channels of the COMPLEX Lorentzian deficit, from the one
-        `lorentzianDeficitAngle` per hinge: `Re(deficit)·|★|` — the spatial angle-defect
+        `deficitAngle` per hinge: `Re(deficit)·|★|` — the spatial angle-defect
         (rotation) curvature, carried by timelike hinges — and `Im(deficit)·|★|` — the temporal
         boost / light-cone content, carried by spacelike hinges (those whose normal plane is
         timelike). Both SIGNED (ε<0 = saddle; Im sign = boost direction). Returns
@@ -409,7 +409,7 @@ class ProtonAnimator:
                 continue
             key = tuple(sorted(v.getId() for v in vs))
             try:
-                deficit = complex(s.lorentzianDeficitAngle())
+                deficit = complex(s.deficitAngle())
                 # complex-tolerant positive dual-measure weight (dualVolume
                 # is real today; abs(complex(...)) survives it going complex)
                 weight = abs(complex(s.dualVolume()))
