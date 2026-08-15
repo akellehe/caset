@@ -91,10 +91,40 @@ using namespace ::tessera::spacetime;
 /// (Eigen `SelfAdjointEigenSolver<MatrixXcd>`) and cached.
 class HodgeLaplacian {
   public:
+    /// Which quantity the diagonal inner-product weight \f$ W_k \f$ is built from.
+    ///
+    /// BOTH are fully Lorentzian and complex-valued; this is a choice of inner
+    /// product, not of signature, and neither reintroduces a Euclidean path.
+    ///
+    /// * `Content` — the \f$ k \f$-content itself, \f$ W_k = V \f$. This is the
+    ///   textbook diagonal DEC star: the weight of a \f$ k \f$-simplex is its
+    ///   \f$ k \f$-volume. For an edge that is \f$ \ell = \sqrt{\ell^2} \f$, so a
+    ///   TIMELIKE edge's weight is imaginary. Consequence: spacelike and timelike
+    ///   contributions to \f$ \langle h,h\rangle_W \f$ are 90° apart in the complex
+    ///   plane and can never cancel, so no null (lightlike) kernel direction
+    ///   exists at any boost.
+    ///
+    /// * `SquaredContent` — the squared \f$ k \f$-content, \f$ W_k = V^2 \f$. For an
+    ///   edge that is exactly \f$ \ell^2 \f$. Being \f$ \det G/(d!)^2 \f$ it is a
+    ///   POLYNOMIAL in the squared edge lengths, so on real signed \f$ \ell^2 \f$ it
+    ///   is real and signed — timelike cells carry a negative weight rather than
+    ///   an imaginary one, and genuine null kernel directions survive.
+    ///
+    /// The two give measurably different spectra. On the 3-cycle with one
+    /// timelike edge (\f$ \ell^2 = -\alpha^2 \f$) `Content` gives
+    /// \f$ \mathrm{spec}(L_1) = \{0, 3, 1 - 2i/\alpha\} \f$ and
+    /// \f$ \langle h,h\rangle_W = 2/3 + i\alpha/3 \f$, with no null crossing;
+    /// `SquaredContent` keeps the weights real-signed and restores one.
+    enum class WeightConvention { Content, SquaredContent };
+
     /// Construct the operator over a triangulation. Edge weights/phases are read
     /// lazily (at the first matrix/spectrum query), so the spacetime must
     /// outlive the operator; the held `shared_ptr` keeps it alive.
-    explicit HodgeLaplacian(std::shared_ptr<Spacetime> st);
+    ///
+    /// @param weights Which quantity \f$ W_k \f$ is built from (see
+    ///   `WeightConvention`). Defaults to the \f$ k \f$-content.
+    explicit HodgeLaplacian(std::shared_ptr<Spacetime> st,
+                            WeightConvention weights = WeightConvention::Content);
 
     /// Weighted adjacency \f$ A \f$ as a flat row-major \f$ N\times N \f$ array
     /// of complex entries. Hermitian by construction.
@@ -214,6 +244,7 @@ class HodgeLaplacian {
 
   private:
     std::shared_ptr<Spacetime> st_;
+    WeightConvention weightConvention_{WeightConvention::Content};
 
     // Stable vertex order: ids_[idx] = vertex id, idToIndex_[id] = idx. Built
     // once in the constructor (the vertex set is fixed for the operator's life;

@@ -76,17 +76,24 @@ std::vector<std::vector<SimplexPtr>> orderedFaces(const Spacetime &K) {
 // cells still fall back to +1 so W_k stays invertible (W_k^{-1} is finite).
 std::vector<std::complex<double>> simplexWeights(
     const std::vector<std::vector<SimplexPtr>> &faces, int k, int count,
-    bool metric) {
+    bool metric, HodgeLaplacian::WeightConvention convention) {
   using cdw = std::complex<double>;
   std::vector<cdw> w(static_cast<std::size_t>(std::max(count, 0)), cdw{1.0, 0.0});
   if (!metric || k == 0 || k < 0 || k >= static_cast<int>(faces.size())) return w;
   const auto &fk = faces[static_cast<std::size_t>(k)];
   for (int j = 0; j < count && j < static_cast<int>(fk.size()); ++j) {
-    // The signed complex d-content, verbatim. There is no |vol| mode: taking the
-    // modulus was a Euclidean read that discarded the cell's causal character, and
-    // a Lorentzian cell with det G < 0 has an IMAGINARY content (#640/#641).
+    // Both branches are signed and complex-valued; there is no |vol| mode, which
+    // was a Euclidean read that discarded a cell's causal character (#640/#641).
+    //
+    //  Content        W = V, the k-content. For an edge that is sqrt(l^2), so a
+    //                 timelike cell's weight is IMAGINARY.
+    //  SquaredContent W = V^2 = det G/(d!)^2, a polynomial in the squared edge
+    //                 lengths, so on real signed l^2 it is real and SIGNED.
     const cdw vol = fk[static_cast<std::size_t>(j)]->volume();
-    w[static_cast<std::size_t>(j)] = (std::abs(vol) > 0.0) ? vol : cdw{1.0, 0.0};
+    const cdw wt = (convention == HodgeLaplacian::WeightConvention::SquaredContent)
+                       ? vol * vol
+                       : vol;
+    w[static_cast<std::size_t>(j)] = (std::abs(wt) > 0.0) ? wt : cdw{1.0, 0.0};
   }
   return w;
 }
@@ -104,7 +111,8 @@ std::vector<std::complex<double>> simplexWeights(
 // dW is the SIGNED volumeGradient verbatim -- no modulus chain rule, because the
 // weights are no longer moduli (#641).
 Eigen::MatrixXcd laplacianGradientMatrix(const Spacetime &K, int k,
-                                         std::uint64_t ea, std::uint64_t eb) {
+                                         std::uint64_t ea, std::uint64_t eb,
+                                         HodgeLaplacian::WeightConvention conv) {
   const ChainComplex cc = ChainComplex::fromSpacetime(K);
   const int n = cc.dimension();
   const int nk = static_cast<int>(cc.numSimplices(k));
@@ -115,7 +123,7 @@ Eigen::MatrixXcd laplacianGradientMatrix(const Spacetime &K, int k,
 
   const auto weightArr = [&](int kk) {
     const std::vector<std::complex<double>> wv =
-        simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), /*metric=*/true);
+        simplexWeights(faces, kk, static_cast<int>(cc.numSimplices(kk)), /*metric=*/true, conv);
     Eigen::ArrayXcd a(static_cast<Eigen::Index>(wv.size()));
     for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
     return a;
@@ -182,7 +190,8 @@ Eigen::MatrixXcd laplacianGradientMatrix(const Spacetime &K, int k,
 // d-content is imaginary once volume() is complex (#640), so the signed weights are
 // no longer real. `metric == false` ⇒ unit weights (the positive combinatorial
 // operator, no Lorentzian content).
-Eigen::MatrixXcd laplacianMatrix(const Spacetime &K, int k, bool metric) {
+Eigen::MatrixXcd laplacianMatrix(const Spacetime &K, int k, bool metric,
+                                 HodgeLaplacian::WeightConvention conv) {
   const ChainComplex cc = ChainComplex::fromSpacetime(K);
   const int n = cc.dimension();
   const int nk = static_cast<int>(cc.numSimplices(k));
@@ -192,7 +201,7 @@ Eigen::MatrixXcd laplacianMatrix(const Spacetime &K, int k, bool metric) {
   const std::vector<std::vector<SimplexPtr>> faces = orderedFaces(K);
   const auto weightArr = [&](int kk) {
     const std::vector<std::complex<double>> wv = simplexWeights(
-        faces, kk, static_cast<int>(cc.numSimplices(kk)), metric);
+        faces, kk, static_cast<int>(cc.numSimplices(kk)), metric, conv);
     Eigen::ArrayXcd a(static_cast<Eigen::Index>(wv.size()));
     for (std::size_t i = 0; i < wv.size(); ++i) a[static_cast<Eigen::Index>(i)] = wv[i];
     return a;
@@ -231,7 +240,9 @@ Eigen::MatrixXcd laplacianMatrix(const Spacetime &K, int k, bool metric) {
 
 }  // namespace
 
-HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st) : st_(std::move(st)) {
+HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st,
+                               WeightConvention weights)
+    : st_(std::move(st)), weightConvention_(weights) {
   if (!st_) return;
   // Stable vertex order: sort by id, then id -> 0..N-1.
   const auto &verts = st_->getVertexList()->toVector();
@@ -348,7 +359,7 @@ std::vector<cd> HodgeLaplacian::laplacian(int k, bool metric) const {
     // the ONLY k >= 1 operator: the |vol|-weighted symmetric variant was a Euclidean
     // read and is gone (#641).
     if (!st_) return {};
-    const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric);
+    const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric, weightConvention_);
     const int nk = static_cast<int>(L.rows());
     std::vector<cd> out(static_cast<std::size_t>(nk) * nk, cd(0.0, 0.0));
     for (int i = 0; i < nk; ++i)
@@ -379,13 +390,13 @@ std::vector<std::complex<double>> HodgeLaplacian::weights(int k) const {
   if (k == 0)
     return std::vector<std::complex<double>>(static_cast<std::size_t>(m),
                                              std::complex<double>{1.0, 0.0});
-  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true);
+  return simplexWeights(orderedFaces(*st_), k, m, /*metric=*/true, weightConvention_);
 }
 
 std::vector<std::complex<double>> HodgeLaplacian::laplacianGradient(
     int k, std::uint64_t ea, std::uint64_t eb) const {
   if (k < 1 || !st_) return {};
-  const Eigen::MatrixXcd dL = laplacianGradientMatrix(*st_, k, ea, eb);
+  const Eigen::MatrixXcd dL = laplacianGradientMatrix(*st_, k, ea, eb, weightConvention_);
   const int nk = static_cast<int>(dL.rows());
   std::vector<std::complex<double>> out(static_cast<std::size_t>(nk) * nk,
                                         std::complex<double>{0.0, 0.0});
@@ -403,7 +414,7 @@ const HodgeLaplacian::SpectrumCache &HodgeLaplacian::ensureSpectrum(
 
   SpectrumCache sp;
   if (st_) {
-    const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric);
+    const Eigen::MatrixXcd L = laplacianMatrix(*st_, k, metric, weightConvention_);
     const int nk = static_cast<int>(L.rows());
     sp.dim = nk;
     sp.evals.assign(static_cast<std::size_t>(nk), cd(0.0, 0.0));

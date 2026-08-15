@@ -599,6 +599,48 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
                     hl.eigenvalues(1), dtype=complex)) < 1e-6))
                 self.assertEqual(n, 1)
 
+    def test_squared_content_convention_restores_the_null_crossing(self):
+        # The two weight conventions are both fully Lorentzian and complex-typed;
+        # they differ in WHAT the diagonal W_k is built from (#644).
+        #
+        #   W = V     (Content)         edge weight sqrt(l^2) = i*alpha
+        #   W = V^2   (SquaredContent)  edge weight l^2       = -alpha^2
+        #
+        # Closed forms, verified exactly rather than fitted:
+        #
+        #                    Content              SquaredContent
+        #   <h,h>_W          2/3 + i*alpha/3      (2 - alpha^2)/3
+        #   spec(L_1) third  1 - 2i/alpha         1 - 2/alpha^2
+        #
+        # Content puts the timelike contribution on the imaginary axis, so it can
+        # never cancel the spacelike part and no null direction exists at any
+        # alpha. SquaredContent keeps the weights real and signed, so the norm
+        # passes through zero at alpha = sqrt(2) and a second mode joins the
+        # kernel there.
+        sq = cob.HodgeWeightConvention.SquaredContent
+        for alpha in (0.5, 1.0, 1.5, 2.0, 3.0):
+            with self.subTest(alpha=alpha):
+                hl = cob.HodgeLaplacian(_triangle_one_timelike(alpha), sq)
+                norm = np.array(hl.nullNorms(1, 1e-9), dtype=complex)[0]
+                self.assertAlmostEqual(norm.imag, 0.0, places=9)
+                self.assertAlmostEqual(norm.real, (2.0 - alpha ** 2) / 3.0, places=6)
+                ev = np.array(hl.eigenvalues(1), dtype=complex)
+                third = [z for z in ev if abs(z - 3.0) > 1e-6 and abs(z) > 1e-9]
+                if third:
+                    self.assertAlmostEqual(third[0].real,
+                                           1.0 - 2.0 / alpha ** 2, places=6)
+                    self.assertAlmostEqual(third[0].imag, 0.0, places=9)
+
+    def test_squared_content_crossing_is_at_sqrt_two(self):
+        # The kernel is one-dimensional (the 1-cycle) away from the crossing and
+        # two-dimensional exactly at it, where 1 - 2/alpha^2 hits zero.
+        sq = cob.HodgeWeightConvention.SquaredContent
+        for alpha, expected in ((1.30, 1), (math.sqrt(2.0), 2), (1.55, 1)):
+            with self.subTest(alpha=alpha):
+                ev = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha), sq)
+                              .eigenvalues(1), dtype=complex)
+                self.assertEqual(int(np.sum(np.abs(ev) < 1e-6)), expected)
+
     def test_harmonic_is_the_unit_cycle(self):
         # The kernel mode is the 1-cycle: |h_i|² = 1/3 on every edge, for any α.
         for alpha in (0.7, 1.3, 2.4):

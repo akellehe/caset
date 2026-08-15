@@ -217,6 +217,23 @@ eigenvector Cochain).)doc")
            "The i-th eigenvector Cochain. Raises IndexError if out of range.");
 
   // ----- Hodge Laplacian: k=0 Hermitian graph (#90), k>=1 metric Hodge (#104) -----
+  py::enum_<HodgeLaplacian::WeightConvention>(m, "HodgeWeightConvention",
+      R"doc(Which quantity the diagonal inner-product weight W_k is built from.
+
+BOTH are fully Lorentzian and complex-valued. This is a choice of inner product,
+not of signature; neither reintroduces a Euclidean path.)doc")
+      .value("Content", HodgeLaplacian::WeightConvention::Content,
+             "W_k = V, the k-content (the textbook diagonal DEC star). For an "
+             "edge that is sqrt(l^2), so a TIMELIKE cell's weight is imaginary. "
+             "Spacelike and timelike contributions to <h,h>_W are then 90 degrees "
+             "apart and cannot cancel, so no null kernel direction exists.")
+      .value("SquaredContent", HodgeLaplacian::WeightConvention::SquaredContent,
+             "W_k = V^2, the squared k-content; for an edge exactly l^2. It is "
+             "det G/(d!)^2, a polynomial in the squared edge lengths, so on real "
+             "signed l^2 it is real and SIGNED -- timelike cells carry a negative "
+             "weight and genuine null kernel directions survive.")
+      .export_values();
+
   py::class_<HodgeLaplacian>(m, "HodgeLaplacian",
       R"doc(Hodge Laplacian on a Spacetime, degree-parameterized by int k.
 
@@ -247,8 +264,12 @@ generally non-self-adjoint — eigenvalues may be negative or complex. ker L_k ~
 degrades: 'harmonic' becomes the small-|lambda| near-kernel and a representative h
 can be null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0). All-spacelike ⇒ reproduces the
 Euclidean spectrum/kernel.)doc")
-      .def(py::init<std::shared_ptr<Spacetime>>(), py::arg("spacetime"),
-           "Build the Hodge Laplacian operator over a triangulation.")
+      .def(py::init<std::shared_ptr<Spacetime>, HodgeLaplacian::WeightConvention>(),
+           py::arg("spacetime"),
+           py::arg("weights") = HodgeLaplacian::WeightConvention::Content,
+           "Build the Hodge Laplacian operator over a triangulation. `weights` "
+           "selects which quantity the diagonal W_k is built from -- the "
+           "k-content (default) or its square. See HodgeWeightConvention.")
       .def("adjacency", &HodgeLaplacian::adjacency,
            "Weighted adjacency A as a flat row-major N*N complex array "
            "(Hermitian; A_ij = sum squaredLength * exp(i*phase)).")
