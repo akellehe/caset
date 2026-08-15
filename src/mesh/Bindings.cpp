@@ -333,6 +333,43 @@ Python-driven materialization corrupted dualVolume(). Reference fixes it
       .def("cayleyMengerMatrix", &Simplex::cayleyMengerMatrix,
            "Cayley-Menger bordered matrix (flat (d+2)*(d+2) row-major) whose "
            "cofactors give the dihedral angles. Complex, always signed l^2.")
+      .def("area", &Simplex::area,
+           "Area of this triangle (hinge) via Heron's formula, COMPLEX: a "
+           "negative Heron radicand (every timelike triangle) gives an imaginary "
+           "area, not the 0 the old real-typed clamp returned (#641).")
+      .def("volume", &Simplex::volume,
+           "d-content sqrt(det G)/d! on the honest geometry, COMPLEX. A "
+           "Lorentzian cell with det G < 0 has an IMAGINARY content -- that is "
+           "what its d-content is, not the negative real a double could hold.")
+      .def("volumeGradient", &Simplex::volumeGradient,
+           "Exact analytic gradient dV/dl^2_e of volume() w.r.t. each edge's "
+           "squared length (edge-keyed map, complex values), via Jacobi's formula "
+           "on the Gram determinant: dV = (V/2) tr(G^-1 dG). The per-degree Hodge "
+           "weight gradient -- keystone for arbitrary-k.")
+      .def("circumcenterBarycentric", &Simplex::circumcenterBarycentric,
+           "Circumcenter in barycentric coordinates (sum 1), complex, intrinsic "
+           "from the signature-aware edge lengths; entry i weights "
+           "getVertices()[i].")
+      .def("circumradiusSquared", &Simplex::circumradiusSquared,
+           "Circumradius squared R^2 (intrinsic, signature-aware), complex.")
+      .def("dualVolume", &Simplex::dualVolume,
+           "Signed circumcentric dual cell content |*sigma| in the surrounding "
+           "complex (DEC recursion over cofaces, n = top dimension), complex. "
+           "The orientation sign is geometric and is retained.")
+      .def("hasTopCoface", &Simplex::hasTopCoface,
+           "True iff this simplex is a genuine face of a current top cell (not "
+           "an orphan stranded by a Pachner move). The hinges the Regge action "
+           "sums over are exactly the (d-2)-faces for which this is true.")
+      .def("dualVolumeGradient", &Simplex::dualVolumeGradient,
+           "Exact analytic d(dualVolume)/d(l^2_e) for each surrounding edge, as a "
+           "dict {(v0,v1): complex}. Differentiates the DEC circumradius recursion "
+           "(R^2 = h^T G^-1 h). (n-2)-hinge case only.")
+      .def("dualVolumeHessian", &Simplex::dualVolumeHessian,
+           "Exact analytic d^2(dualVolume)/d(l^2_e)d(l^2_f), as a dict "
+           "{((v0,v1),(v2,v3)): complex}; symmetric. (n-2)-hinge case only.")
+      .def("hodgeStar", &Simplex::hodgeStar,
+           "Diagonal Hodge-star ratio |*sigma|/|sigma| (dual over primal "
+           "content), complex.")
       .def("lorentzianDihedralAngle", &Simplex::lorentzianDihedralAngle,
            py::arg("hinge"),
            "Complex Lorentzian (Sorkin) dihedral angle at the hinge — the full "
