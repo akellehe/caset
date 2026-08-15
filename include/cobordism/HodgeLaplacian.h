@@ -126,7 +126,7 @@ class HodgeLaplacian {
     /// or \f$ k \f$ above the top dimension. With `lorentzian = true` the entries
     /// are the **signed** `Simplex::volume()` (timelike cells negative; degenerate
     /// cells still fall back to \f$ +1 \f$ so \f$ W_k \f$ stays invertible).
-    [[nodiscard]] std::vector<double> weights(int k, bool lorentzian = false) const;
+    [[nodiscard]] std::vector<std::complex<double>> weights(int k, bool lorentzian = false) const;
 
     /// Exact analytic gradient \f$ \partial L_k^{\text{sym}} / \partial \ell^2_e \f$
     /// of the symmetric metric Hodge Laplacian (\f$ k \ge 1 \f$) with respect to one
@@ -284,7 +284,7 @@ class HodgeLaplacian {
       int dim{0};
       std::vector<std::complex<double>> evals{};         // sorted, length |C_k|
       std::vector<std::complex<double>> evecs{};         // flat |C_k|*|C_k|, columns
-      std::vector<double> wk{};                          // signed W_k, length |C_k|
+      std::vector<std::complex<double>> wk{};                          // signed W_k, length |C_k|
     };
     mutable std::unordered_map<long long, LorentzianSpectrum> lorentzianCache_{};
 

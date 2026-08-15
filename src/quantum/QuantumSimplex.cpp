@@ -210,7 +210,7 @@ buildSimplexFromJoint(::tessera::spacetime::Spacetime& spacetime,
         }
         const double dvrSq = dvr * dvr;
         ::tessera::mesh::EdgePtr edge =
-            spacetime.createEdge(positions[u], positions[v], dvrSq);
+            spacetime.createEdge(positions[u], positions[v], std::sqrt(std::complex<double>(dvrSq)));
         if (edge != nullptr) edges.push_back(edge);
     }
 

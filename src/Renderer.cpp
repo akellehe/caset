@@ -672,7 +672,7 @@ bool writeGraphML(const Spacetime &st, const std::string &path) {
         // Full complex l^2 + U(1) phase; causal character from the canonical
         // Edge::isTimelike(), not the superseded sign-of-Re test (#581). The
         // Re key keeps its name for compatibility with existing consumers.
-        const std::complex<double> sq = e->getSquaredLength();
+        const std::complex<double> sq = (e->getLength() * e->getLength());
         f << "    <edge id=\"e" << i << "\" source=\""
           << e->getSource()->getId() << "\" target=\""
           << e->getTarget()->getId() << "\">\n"
@@ -710,7 +710,7 @@ bool writeDot(const Spacetime &st, const std::string &path) {
     for (auto *e : edges) {
         // Canonical Edge::isTimelike() classification + the full complex l^2
         // and phase; squared_length stays Re for compatibility (#581).
-        const std::complex<double> sq = e->getSquaredLength();
+        const std::complex<double> sq = (e->getLength() * e->getLength());
         const bool tl = e->isTimelike();
         f << "  " << e->getSource()->getId()
           << " -- " << e->getTarget()->getId()

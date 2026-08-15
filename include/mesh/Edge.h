@@ -60,19 +60,21 @@ enum class EdgeDisposition : uint8_t {
 ///   undirected edges; it's just one of two Vertices that define the Edge.
 /// @param target_If this Edge represents a directed Edge; then this is the Vertex at which the Edge terminates. For
 ///   undirected edges; it's just one of two Vertices that define the Edge.
-/// @param squaredLength_ The squared length of the edge according to whatever spacetime metric is being used. We work
-///   in squared lengths to allow the use of imaginary Edge lengths (they have negative values).
+/// @param length_ The complex length of the edge according to whatever spacetime metric is
+///   being used. Real for spacelike, imaginary for timelike; the squared length is derived
+///   by squaring it and is never stored (#639).
 ///
 class Edge {
   public:
-    /// Construct from the (possibly complex) squared length \f$l^2\f$ — the exact metric
-    /// value, stored verbatim. The complex length is derived as \f$\sqrt{l^2}\f$ (real =
-    /// spacelike, imaginary = timelike). A real `double` binds here as a real \f$l^2\f$
-    /// (`complex(l2, 0)`) — that is the intended meaning, not a length.
+    /// Construct from the (possibly complex) LENGTH \f$l\f$ — real for spacelike,
+    /// imaginary for timelike, general complex off the real-Lorentzian locus. This is
+    /// the edge's one degree of freedom; \f$l^2\f$ is derived by squaring, never stored
+    /// (#639). Callers holding an \f$l^2\f$ pass ``std::sqrt(l2)`` and so choose the
+    /// branch explicitly rather than having one chosen for them.
     Edge(
       const VertexPtr &source,
       const VertexPtr &target,
-      std::complex<double> squaredLength
+      std::complex<double> length
     );
 
     Edge(
@@ -98,14 +100,6 @@ class Edge {
     /// @return The U(1) connection phase, in radians.
     [[nodiscard]] double getPhase() const noexcept;
 
-    /// The exact (possibly complex) squared length \f$l^2\f$ — stored verbatim, NOT
-    /// `getLength()*getLength()`. ALL geometry/action math reads this so it never incurs
-    /// a `sqrt`→`square` round-trip; that ~1-ULP round-trip detonates in the
-    /// ill-conditioned Lorentzian action at near-degenerate simplices (dual-volume
-    /// circumradius blows up as the Cayley–Menger determinant → 0). Real-signed for an
-    /// ordinary Lorentzian edge; complex for an analytically-continued (saddle) geometry.
-    [[nodiscard]] std::complex<double> getSquaredLength() const noexcept;
-
     /// The (possibly complex) edge length — the causal DOF, distinct from the U(1)
     /// `phase` and from \f$l^2\f$. Real for spacelike, imaginary for timelike, general
     /// complex for the Picard–Lefschetz saddle. Causal character is read from THIS
@@ -115,7 +109,7 @@ class Edge {
     /// Causal character read from the LENGTH, not the fragile `sign(l^2)`: an edge
     /// is timelike iff its length has a (non-negligible) imaginary part. A genuinely
     /// spacelike (real) length has `Im == 0`; the epsilon only guards float noise.
-    /// These supersede the scattered `getSquaredLength() < 0` / `>= 0` tests.
+    /// These supersede the scattered `sign(l^2)` tests.
     static constexpr double kCausalEpsilon = 1e-12;
     [[nodiscard]] bool isTimelike() const noexcept;
     [[nodiscard]] bool isSpacelike() const noexcept;
@@ -168,51 +162,23 @@ class Edge {
     /// @returns A tuple of {sourceId, targetId}.
     EdgeKey getKey() const noexcept;
 
-    /// Set the exact (complex) squared length \f$l^2\f$; the complex length is kept in
-    /// sync as \f$\sqrt{l^2}\f$. Prefer this when the geometry is specified by a squared
-    /// value (CDT, Van Raamsdonk, the backreaction scan) so \f$l^2\f$ is stored exactly
-    /// and the action never sees a round-trip.
+    /// Set the (complex) edge LENGTH \f$l\f$ — the edge's one degree of freedom.
+    /// Real for spacelike, imaginary for timelike, general complex off the
+    /// real-Lorentzian locus.
     ///
-    /// **Ordinary-Lorentzian convention (#580/#589):** \f$l^2\f$ is real and signed
-    /// (spacelike > 0, timelike < 0, null 0); the geometry stack reads it through
-    /// `getRealSquaredLength()`, which enforces the on-axis invariant loudly (#597)
-    /// instead of projecting. The complexified (Picard–Lefschetz) theory is unbuilt;
-    /// the dynamics keeps \f$l^2\f$ on the real axis by construction
-    /// (`MultiCobordism::runStage2`), and storage round-trips a general complex
-    /// value exactly (rollback records, saddle bookkeeping, historical dumps) —
-    /// only geometry consumption is on-axis.
-    void setSquaredLength(std::complex<double> l2) noexcept {
-      squaredLength_ = l2;
-      length_ = std::sqrt(l2);
-    }
-
-    /// The geometry stack's read of \f$l^2\f$ (#589/#597): the real signed value,
-    /// with the ordinary-Lorentzian on-axis invariant enforced. A nonzero
-    /// \f$\mathrm{Im}\,l^2\f$ reaching the Gram/Cayley–Menger/action/register
-    /// pipeline is an upstream bug that a silent `.real()` projection would mask,
-    /// so it throws instead of truncating. Storage
-    /// (`getSquaredLength`/`setSquaredLength`) stays general-complex — use it, not
-    /// this, wherever a complex value is legitimate (Wick \f$|l^2|\f$ reads,
-    /// snapshots, rollback records, dump rehydration).
-    [[nodiscard]] double getRealSquaredLength() const {
-      if (squaredLength_.imag() != 0.0)
-        throw std::runtime_error(
-            "Edge(" + std::to_string(source->getId()) + "," +
-            std::to_string(target->getId()) + "): nonzero Im l^2 = " +
-            std::to_string(squaredLength_.imag()) +
-            " reached the geometry stack — the ordinary-Lorentzian convention "
-            "(#589) keeps l^2 real and signed, so this is an upstream bug, not "
-            "a value to project away");
-      return squaredLength_.real();
-    }
-
-    /// Set the (complex) edge length; the squared length is kept in sync as `l*l`. Use
-    /// when the geometry is specified by a length directly. Real for spacelike,
-    /// imaginary for timelike — the two cases of the ordinary-Lorentzian convention
-    /// (see `setSquaredLength`); the off-axis (Picard–Lefschetz) saddle is unbuilt.
+    /// There is no squared-length setter (#639). \f$l^2\f$ is not stored, so it cannot
+    /// drift out of sync with \f$l\f$, and a caller holding an \f$l^2\f$ writes
+    /// ``setLength(std::sqrt(l2))`` — picking the branch explicitly instead of having
+    /// one picked silently. \f$l\f$ is the right primitive: \f$l \mapsto l^2\f$ is
+    /// two-to-one, so \f$l^2\f$ cannot express which of \f$\pm l\f$ this edge is.
+    ///
+    /// **Cost, accepted:** a geometry SPECIFIED by a squared value (CDT, Van
+    /// Raamsdonk, the backreaction scan) now round-trips through
+    /// \f$\sqrt{\cdot}\f$ and back, so consumers see \f$l^2 \pm 1\f$ ULP rather
+    /// than the exact value the old verbatim store gave them. That matters most in the
+    /// ill-conditioned regime where the Cayley-Menger determinant approaches zero.
     void setLength(std::complex<double> l) noexcept {
       length_ = l;
-      squaredLength_ = l * l;
     }
 
     /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
@@ -233,22 +199,22 @@ class Edge {
     }
 
     /// The Van Raamsdonk metric law: the spacelike signed squared length for a
-    /// given mutual information ``I`` — the value to store as ``squaredLength``
-    /// on a same-time-slice edge. Returns (−log(I/iMax))², with the length
-    /// floored to −log(epsilon) (so the squared length stays finite) when
-    /// I < epsilon·iMax (and when iMax ≤ 0 or I ≤ 0). Always ≥ 0 (spacelike).
+    /// given mutual information ``I`` — the value to store via ``setLength`` on a
+    /// same-time-slice edge. Returns −log(I/iMax), floored at −log(epsilon) (so the
+    /// length stays finite) when I < epsilon·iMax (and when iMax ≤ 0 or I ≤ 0).
+    /// Always real and ≥ 0, i.e. spacelike.
     [[nodiscard]] static double
-    vanRaamsdonkSquaredLength(double I, double iMax,
-                              double epsilon = 1e-10) noexcept;
+    vanRaamsdonkLength(double I, double iMax,
+                       double epsilon = 1e-10) noexcept;
 
-    /// Time-aware Van Raamsdonk signed squared length for THIS edge, given the
-    /// mutual information ``I`` between its endpoints (the one-forward-step
-    /// convention): a worldline edge whose endpoints lie on different time
-    /// slices (``Vertex::getTime``) is null and returns 0; a same-slice edge is
-    /// spacelike and returns ``vanRaamsdonkSquaredLength(I, iMax, epsilon)``.
+    /// Time-aware Van Raamsdonk length for THIS edge, given the mutual information
+    /// ``I`` between its endpoints (the one-forward-step convention): a worldline edge
+    /// whose endpoints lie on different time slices (``Vertex::getTime``) is null and
+    /// returns 0; a same-slice edge is spacelike and returns
+    /// ``vanRaamsdonkLength(I, iMax, epsilon)``.
     [[nodiscard]] double
-    vanRaamsdonkSquaredLengthFor(double I, double iMax,
-                                 double epsilon = 1e-10) const;
+    vanRaamsdonkLengthFor(double I, double iMax,
+                          double epsilon = 1e-10) const;
 
     /// Index into EdgeList::liveVec_ (maintained by EdgeList).
     std::uint32_t liveIdx_{UINT32_MAX};
@@ -281,12 +247,9 @@ class Edge {
     VertexPtr source = nullptr;
     VertexPtr target = nullptr;
 
-    /// The exact (possibly complex) squared length \f$l^2\f$ — the metric value read by
-    /// the action and all geometry math. `length_` is its principal `sqrt`; the two are
-    /// kept in sync by `setSquaredLength`/`setLength`.
-    std::complex<double> squaredLength_{};
-    /// The complex length (causal DOF, distinct from the U(1) `phase`). Causal character
-    /// is `Im(length_)`; carries the sqrt-branch a real \f$l^2\f$ cannot express.
+    /// The complex edge length \f$l\f$ — the edge's ONE stored degree of freedom
+    /// (distinct from the U(1) `phase`). Causal character is `Im(length_)`.
+    /// \f$l^2\f$ is derived by squaring at the point of use, never stored (#639).
     std::complex<double> length_{};
     double phase = 0.0;
 

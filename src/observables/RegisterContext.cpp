@@ -204,7 +204,11 @@ const std::vector<int> &RegisterContext::epsilonSigns() const {
 
 const std::vector<double> &RegisterContext::hodgeWeights() const {
   if (!caches_->weightsBuilt) {
-    caches_->hodgeWeights = HodgeLaplacian(spacetime_).weights(degree_);
+    // weights(degree_) defaults to lorentzian = false, i.e. the |vol| weights, which
+    // are real by construction -- .real() here is exact, not a projection (#640).
+    const auto w = HodgeLaplacian(spacetime_).weights(degree_);
+    caches_->hodgeWeights.resize(w.size());
+    for (std::size_t i = 0; i < w.size(); ++i) caches_->hodgeWeights[i] = w[i].real();
     caches_->weightsBuilt = true;
   }
   return caches_->hodgeWeights;

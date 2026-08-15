@@ -549,7 +549,7 @@ void InteractionSimulation::buildInitialLayer() {
     for (auto const& [i, j] : config_.delaunayEdges) {
         VertexPtr a = verts[static_cast<std::size_t>(i)];
         VertexPtr b = verts[static_cast<std::size_t>(j)];
-        (void)spacetime_->createEdge(a, b, zeroMiSq);
+        (void)spacetime_->createEdge(a, b, std::sqrt(std::complex<double>(zeroMiSq)));
     }
 }
 

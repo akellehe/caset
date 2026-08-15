@@ -348,7 +348,7 @@ double ReggeSolver::matterAction() const {
                 if (other->getId() == v2->getId()) {
                     if (e->isTimelike())
                         S -= wl.mass *
-                             std::sqrt(-e->getSquaredLength()).real();
+                             std::sqrt(-(e->getLength() * e->getLength())).real();
                     break;
                 }
             }
@@ -370,7 +370,7 @@ std::vector<std::complex<double>> ReggeSolver::actionGradient() const {
     auto edges = edgeList->toVector();
     std::vector<std::complex<double>> g(edges.size());
     for (std::size_t i = 0; i < edges.size(); ++i) {
-        const std::complex<double> origSq = edges[i]->getSquaredLength();
+        const std::complex<double> origSq = (edges[i]->getLength() * edges[i]->getLength());
         const double W = std::abs(origSq);              // |l^2|
         const double h = std::max(W * 1e-4, 1e-8);
         const bool tl = edges[i]->isTimelike();
@@ -380,12 +380,12 @@ std::vector<std::complex<double>> ReggeSolver::actionGradient() const {
         };
         // Central differences in W-space, preserving edge character; perturb l^2
         // exactly and restore the original l^2 exactly (no sqrt round-trip drift).
-        edges[i]->setSquaredLength(sqAtW(W + h));
+        edges[i]->setLength(std::sqrt(sqAtW(W + h)));
         const std::complex<double> Sp = totalAction();
-        edges[i]->setSquaredLength(sqAtW(std::max(W - h, 1e-12)));
+        edges[i]->setLength(std::sqrt(sqAtW(std::max(W - h, 1e-12))));
         const std::complex<double> Sm = totalAction();
         g[i] = (Sp - Sm) / (2.0 * h);
-        edges[i]->setSquaredLength(origSq);
+        edges[i]->setLength(std::sqrt(origSq));
     }
     return g;
 }
@@ -688,7 +688,7 @@ cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
         for (const auto &e : topSimplices[si]->getEdges()) {
             auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                       Fingerprint::mix64(e->getTarget()->getId());
-            sqMap[fp] = std::abs(e->getSquaredLength());  // |l^2|, Wick-rotated
+            sqMap[fp] = std::abs((e->getLength() * e->getLength()));  // |l^2|, Wick-rotated
         }
 
         for (int i = 0; i < nv; ++i) {
@@ -902,11 +902,11 @@ double ReggeSolver::step(double learningRate) {
     // dF[j] is ∂F/∂W_j; gradient descent: W_j -= lr · ∂F/∂W_j.
     for (int j = 0; j < n; ++j) {
         const bool tl = edges[j]->isTimelike();
-        double W = std::abs(edges[j]->getSquaredLength());     // |l^2|
+        double W = std::abs((edges[j]->getLength() * edges[j]->getLength()));     // |l^2|
         double W_new = W - learningRate * dF[j];
         if (W_new < 1e-12) W_new = 1e-12;
-        edges[j]->setSquaredLength(tl ? std::complex<double>{-W_new, 0.0}
-                                      : std::complex<double>{W_new, 0.0});
+        edges[j]->setLength(std::sqrt(tl ? std::complex<double>{-W_new, 0.0}
+                                      : std::complex<double>{W_new, 0.0}));
     }
 #else
     // CPU path: gradient descent on ∂S/∂ℓ² directly.
@@ -920,14 +920,14 @@ double ReggeSolver::step(double learningRate) {
     // overshooting.
     for (int j = 0; j < n; ++j) {
         const bool tl = edges[j]->isTimelike();
-        double W = std::abs(edges[j]->getSquaredLength());     // |l^2|
+        double W = std::abs((edges[j]->getLength() * edges[j]->getLength()));     // |l^2|
         double delta = learningRate * g[j];
         double maxDelta = W * 0.05;
         delta = std::clamp(delta, -maxDelta, maxDelta);
         double W_new = W - delta;
         if (W_new < 1e-12) W_new = 1e-12;
-        edges[j]->setSquaredLength(tl ? std::complex<double>{-W_new, 0.0}
-                                      : std::complex<double>{W_new, 0.0});
+        edges[j]->setLength(std::sqrt(tl ? std::complex<double>{-W_new, 0.0}
+                                      : std::complex<double>{W_new, 0.0}));
     }
 #endif
 

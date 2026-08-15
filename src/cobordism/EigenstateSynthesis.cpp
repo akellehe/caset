@@ -236,10 +236,20 @@ double EigenstateSynthesis::rayleigh(const std::vector<cd> &psi) const {
   return num.real() / den;
 }
 
-std::vector<double> EigenstateSynthesis::weights() const {
-  std::vector<double> w;
+double EigenstateSynthesis::onAxisSquaredLength(std::complex<double> l2) {
+  if (l2.imag() != 0.0)
+    throw std::runtime_error(
+        "EigenstateSynthesis: nonzero Im l^2 = " + std::to_string(l2.imag()) +
+        " reached the register spectrum, which is still real-typed. The geometry "
+        "stack is complex (#640) but the r_U machinery is not yet; this is the "
+        "boundary, not a value to project away.");
+  return l2.real();
+}
+
+std::vector<std::complex<double>> EigenstateSynthesis::weights() const {
+  std::vector<std::complex<double>> w;
   w.reserve(edges_.size());
-  for (const auto e : edges_) w.push_back(e->getRealSquaredLength());
+  for (const auto e : edges_) w.push_back((e->getLength() * e->getLength()));
   return w;
 }
 
@@ -256,7 +266,7 @@ void EigenstateSynthesis::setWeights(const std::vector<double> &w) {
         "EigenstateSynthesis::setWeights: got " + std::to_string(w.size()) +
         " weights, expected " + std::to_string(edges_.size()));
   for (std::size_t i = 0; i < edges_.size(); ++i)
-    edges_[i]->setSquaredLength(std::complex<double>{w[i], 0.0});
+    edges_[i]->setLength(std::sqrt(std::complex<double>{w[i], 0.0}));
 }
 
 void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
@@ -270,11 +280,11 @@ void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
 
 // === Fixed-boundary interior fill (§5.0) ===
 
-std::vector<double> EigenstateSynthesis::interiorWeights() const {
-  std::vector<double> w;
+std::vector<std::complex<double>> EigenstateSynthesis::interiorWeights() const {
+  std::vector<std::complex<double>> w;
   w.reserve(interiorEdgeIdx_.size());
   for (const auto i : interiorEdgeIdx_)
-    w.push_back(edges_[i]->getRealSquaredLength());
+    w.push_back((edges_[i]->getLength() * edges_[i]->getLength()));
   return w;
 }
 
@@ -292,7 +302,7 @@ void EigenstateSynthesis::setInteriorWeights(const std::vector<double> &w) {
         std::to_string(w.size()) + " weights, expected " +
         std::to_string(interiorEdgeIdx_.size()));
   for (std::size_t k = 0; k < interiorEdgeIdx_.size(); ++k)
-    edges_[interiorEdgeIdx_[k]]->setSquaredLength(std::complex<double>{w[k], 0.0});
+    edges_[interiorEdgeIdx_[k]]->setLength(std::sqrt(std::complex<double>{w[k], 0.0}));
 }
 
 void EigenstateSynthesis::setInteriorPhases(const std::vector<double> &theta) {
@@ -402,7 +412,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
+        (edges_[i]->getLength() * edges_[i]->getLength()), edges_[i]->getPhase()};
   }
 
   // Fresh interior vertex with the largest id (sorts last; preserves the
@@ -462,7 +472,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
       const auto it =
           boundaryBefore.find({std::min(a, b), std::max(a, b)});
       if (it == boundaryBefore.end() ||
-          it->second.first != edges_[i]->getSquaredLength() ||
+          it->second.first != (edges_[i]->getLength() * edges_[i]->getLength()) ||
           it->second.second != edges_[i]->getPhase()) {
         valid = false;
         break;
@@ -601,7 +611,7 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(u, v, it->second->getSquaredLength(),
+      rem.removedEdges.emplace_back(u, v, (it->second->getLength() * it->second->getLength()),
                                     it->second->getPhase());
       toRemove.push_back(it->second);
     }
@@ -615,7 +625,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
+        (edges_[i]->getLength() * edges_[i]->getLength()), edges_[i]->getPhase()};
   }
 
   // Mutate: drop the top cell, then its orphaned edges.
@@ -639,7 +649,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t b = e->getTarget()->getId();
     const std::pair<std::uint64_t, std::uint64_t> key{std::min(a, b),
                                                       std::max(a, b)};
-    liveWeights[key] = {e->getSquaredLength(), e->getPhase()};
+    liveWeights[key] = {(e->getLength() * e->getLength()), e->getPhase()};
   }
   for (const auto &[key, wp] : boundaryBefore) {
     const auto it = liveWeights.find(key);
@@ -689,7 +699,7 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
   for (const auto &[u, v, w, theta] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setSquaredLength(w);  // the recorded complex l2, bit-exact
+      it->second->setLength(std::sqrt(w));  // the recorded complex l2, bit-exact
       it->second->setPhase(theta);
     }
   }
@@ -1405,8 +1415,12 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
   const HodgeLaplacian hl(st_);
-  const std::vector<double> W1v = hl.weights(1);  // n1
-  const std::vector<double> W2v = hl.weights(2);  // n2
+  // lorentzian defaults to false, so these are |vol| weights: real by construction.
+  const std::vector<std::complex<double>> W1c = hl.weights(1);  // n1
+  const std::vector<std::complex<double>> W2c = hl.weights(2);  // n2
+  std::vector<double> W1v(W1c.size()), W2v(W2c.size());
+  for (std::size_t i = 0; i < W1c.size(); ++i) W1v[i] = W1c[i].real();
+  for (std::size_t i = 0; i < W2c.size(); ++i) W2v[i] = W2c[i].real();
   const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
 
   MatrixXd M(N, N);
@@ -1440,10 +1454,10 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   };
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
   for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getRealSquaredLength();
+        (e->getLength() * e->getLength());
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
@@ -1452,7 +1466,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
     if (a == b) return 0.0;
     auto it = l2map.find(key(a, b));
-    return it == l2map.end() ? 0.0 : it->second;
+    return it == l2map.end() ? 0.0 : EigenstateSynthesis::onAxisSquaredLength(it->second);
   };
 
   // ---- Q (signed edge-loop covector) + each cycle's leak column ----
@@ -1513,8 +1527,11 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const double l2 = l2map.at(ek);
-    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
+    const std::complex<double> l2 = l2map.at(ek);
+    // W_1 = |l|, so dW_1/dl^2 = Re(conj(v)/(2v))/|v| with v = sqrt(l^2). On the real
+    // axis that is exactly the old sign(l^2)/(2 sqrt|l^2|).
+    const std::complex<double> v = std::sqrt(l2);
+    const double dW1je = (std::conj(v) / (2.0 * v)).real() / std::abs(v);
     const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
     const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
     const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
@@ -1868,7 +1885,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
     if (srcIt == col.end() || tgtIt == col.end()) continue;
     const Index is = static_cast<Index>(srcIt->second);
     const Index it = static_cast<Index>(tgtIt->second);
-    const cd w = edge->getSquaredLength();
+    const cd w = (edge->getLength() * edge->getLength());
     // d|w|/d(Re w): Re w / |w| — the real-axis directional derivative (sign w
     // for real w). At the |w| kink (w == 0) take the symmetric subgradient 0.
     const double dAbs = (std::abs(w) > 0.0) ? w.real() / std::abs(w) : 0.0;
@@ -1968,8 +1985,12 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
   const HodgeLaplacian hl(st_);
-  const std::vector<double> W1v = hl.weights(1);  // n1
-  const std::vector<double> W2v = hl.weights(2);  // n2
+  // lorentzian defaults to false, so these are |vol| weights: real by construction.
+  const std::vector<std::complex<double>> W1c = hl.weights(1);  // n1
+  const std::vector<std::complex<double>> W2c = hl.weights(2);  // n2
+  std::vector<double> W1v(W1c.size()), W2v(W2c.size());
+  for (std::size_t i = 0; i < W1c.size(); ++i) W1v[i] = W1c[i].real();
+  for (std::size_t i = 0; i < W2c.size(); ++i) W2v[i] = W2c[i].real();
   const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
 
   MatrixXd M(N, N);
@@ -2003,10 +2024,10 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   };
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
   for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getRealSquaredLength();
+        (e->getLength() * e->getLength());
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
@@ -2015,7 +2036,7 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
     if (a == b) return 0.0;
     auto it = l2map.find(key(a, b));
-    return it == l2map.end() ? 0.0 : it->second;
+    return it == l2map.end() ? 0.0 : EigenstateSynthesis::onAxisSquaredLength(it->second);
   };
 
   // ---- Q (signed edge-loop covector); the gap needs no leak column ----
@@ -2065,8 +2086,11 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const double l2 = l2map.at(ek);
-    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
+    const std::complex<double> l2 = l2map.at(ek);
+    // W_1 = |l|, so dW_1/dl^2 = Re(conj(v)/(2v))/|v| with v = sqrt(l^2). On the real
+    // axis that is exactly the old sign(l^2)/(2 sqrt|l^2|).
+    const std::complex<double> v = std::sqrt(l2);
+    const double dW1je = (std::conj(v) / (2.0 * v)).real() / std::abs(v);
     const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
     const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
     const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
@@ -2181,8 +2205,12 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
   const HodgeLaplacian hl(st_);
-  const std::vector<double> W1v = hl.weights(1);  // n1
-  const std::vector<double> W2v = hl.weights(2);  // n2
+  // lorentzian defaults to false, so these are |vol| weights: real by construction.
+  const std::vector<std::complex<double>> W1c = hl.weights(1);  // n1
+  const std::vector<std::complex<double>> W2c = hl.weights(2);  // n2
+  std::vector<double> W1v(W1c.size()), W2v(W2c.size());
+  for (std::size_t i = 0; i < W1c.size(); ++i) W1v[i] = W1c[i].real();
+  for (std::size_t i = 0; i < W2c.size(); ++i) W2v[i] = W2c[i].real();
   const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
 
   MatrixXd M(N, N);
@@ -2216,10 +2244,10 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
   };
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
   for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getRealSquaredLength();
+        (e->getLength() * e->getLength());
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
@@ -2228,7 +2256,7 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
   auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
     if (a == b) return 0.0;
     auto it = l2map.find(key(a, b));
-    return it == l2map.end() ? 0.0 : it->second;
+    return it == l2map.end() ? 0.0 : EigenstateSynthesis::onAxisSquaredLength(it->second);
   };
 
   // ---- Q (hole-boundary covector) + each hole's leak column ----
@@ -2314,8 +2342,11 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const double l2 = l2map.at(ek);
-    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
+    const std::complex<double> l2 = l2map.at(ek);
+    // W_1 = |l|, so dW_1/dl^2 = Re(conj(v)/(2v))/|v| with v = sqrt(l^2). On the real
+    // axis that is exactly the old sign(l^2)/(2 sqrt|l^2|).
+    const std::complex<double> v = std::sqrt(l2);
+    const double dW1je = (std::conj(v) / (2.0 * v)).real() / std::abs(v);
     const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
     const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
     const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +

@@ -15,11 +15,11 @@ using namespace ::tessera::observables;
 using namespace ::tessera::simulations;
 using namespace ::tessera::quantum;
 
-std::uint32_t EdgeList::allocSlot(const VertexPtr &source, const VertexPtr &target, double squaredLength) {
-  // Factory layer speaks the CDT "signed squared length" unit; store it as the exact
-  // complex l^2 (real-signed, Im = 0) so the action never sees a sqrt/square round-trip.
-  // The Edge derives its complex length as sqrt(l^2) (real = spacelike, imag = timelike).
-  const std::complex<double> squared{squaredLength, 0.0};
+std::uint32_t EdgeList::allocSlot(const VertexPtr &source, const VertexPtr &target, std::complex<double> length) {
+  // The factory layer speaks the edge's one degree of freedom: the complex LENGTH
+  // (real = spacelike, imaginary = timelike). l^2 is derived by squaring at the point
+  // of use and is never stored, so the two cannot fall out of sync (#639).
+  const std::complex<double> squared = length;
   std::uint32_t slot;
   if (!freeSlots_.empty()) {
     slot = freeSlots_.back();
@@ -39,22 +39,22 @@ EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target) {
   return getOrInsert(source, target, 0.0);
 }
 
-EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target, double squaredLength) noexcept {
+EdgePtr EdgeList::add(const VertexPtr &source, const VertexPtr &target, std::complex<double> length) noexcept {
   std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
   auto it = fpToSlot_.find(fp);
   if (it != fpToSlot_.end()) return &pool_[it->second];
-  return getOrInsert(source, target, squaredLength);
+  return getOrInsert(source, target, length);
 }
 
 std::pair<EdgePtr, bool> EdgeList::tryAdd(const VertexPtr &source, const VertexPtr &target,
-                                          double squaredLength) {
+                                          std::complex<double> length) {
   std::uint64_t fp = Fingerprint::mix64(source->getId()) ^ Fingerprint::mix64(target->getId());
   auto it = fpToSlot_.find(fp);
   if (it != fpToSlot_.end()) return {&pool_[it->second], false};
-  return {getOrInsert(source, target, squaredLength), true};
+  return {getOrInsert(source, target, length), true};
 }
 
-EdgePtr EdgeList::getOrInsert(const VertexPtr &source, const VertexPtr &target, double squaredLength) {
+EdgePtr EdgeList::getOrInsert(const VertexPtr &source, const VertexPtr &target, std::complex<double> length) {
   if (source->getId() == target->getId()) {
     throw std::runtime_error("You cannot create an edge from a vertex to itself.");
   }
@@ -62,7 +62,7 @@ EdgePtr EdgeList::getOrInsert(const VertexPtr &source, const VertexPtr &target, 
   auto it = fpToSlot_.find(fp);
   if (it != fpToSlot_.end()) return &pool_[it->second];
 
-  auto slot = allocSlot(source, target, squaredLength);
+  auto slot = allocSlot(source, target, length);
   fpToSlot_.emplace(fp, slot);
   EdgePtr raw = &pool_[slot];
   raw->liveIdx_ = static_cast<std::uint32_t>(liveVec_.size());

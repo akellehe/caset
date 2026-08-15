@@ -145,7 +145,20 @@ class EigenstateSynthesis {
 
     /// The edge magnitudes \f$ \{w_{ij}\} \f$ (`Edge::getSquaredLength`) in the
     /// stable edge order, length `numEdges()`.
-    [[nodiscard]] std::vector<double> weights() const;
+    /// The register's read of \f$\ell^2\f$ as a real signed value.
+    ///
+    /// The geometry stack is complex end to end (#640), but the r_U spectral
+    /// machinery here is still real-typed (`MatrixXd`/`VectorXd` throughout), so it
+    /// has a genuine precondition: the geometry it is handed must sit on the
+    /// real-Lorentzian axis. That holds by construction of the dynamics today.
+    ///
+    /// This throws on a nonzero \f$\mathrm{Im}\,\ell^2\f$ rather than projecting it
+    /// away, so the first genuinely off-axis geometry to reach the register says so
+    /// instead of being silently scored on its real part. Removing this is the
+    /// remaining half of #640: complexifying the register spectrum itself.
+    [[nodiscard]] static double onAxisSquaredLength(std::complex<double> l2);
+
+    [[nodiscard]] std::vector<std::complex<double>> weights() const;
 
     /// The edge phases \f$ \{\theta_{ij}\} \f$ (`Edge::getPhase`) in the stable
     /// edge order, length `numEdges()`.
@@ -181,7 +194,7 @@ class EigenstateSynthesis {
 
     /// The interior edge magnitudes \f$ \{w_{ij}\} \f$ in interior-edge order,
     /// length `numInteriorEdges()`.
-    [[nodiscard]] std::vector<double> interiorWeights() const;
+    [[nodiscard]] std::vector<std::complex<double>> interiorWeights() const;
 
     /// The interior edge phases \f$ \{\theta_{ij}\} \f$ in interior-edge order,
     /// length `numInteriorEdges()`.

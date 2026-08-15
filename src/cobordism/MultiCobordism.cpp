@@ -362,7 +362,7 @@ MultiCobordism::Snapshot MultiCobordism::snapshotOf(
     cellVertexTuples.push_back(topSimplex->topTuple());
   std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> squaredLengthsByEdge;
   for (const auto *edge : spacetime.getEdgeList()->toVector())
-    squaredLengthsByEdge[edgeKey(edge)] = edge->getSquaredLength();
+    squaredLengthsByEdge[edgeKey(edge)] = (edge->getLength() * edge->getLength());
   return {std::move(cellVertexTuples), std::move(squaredLengthsByEdge)};
 }
 
@@ -377,7 +377,7 @@ std::shared_ptr<Spacetime> MultiCobordism::build(
   for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
     const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
     if (savedEntry != complexSnapshot.second.end())
-      edge->setSquaredLength(savedEntry->second);
+      edge->setLength(std::sqrt(savedEntry->second));
   }
   return rebuiltSpacetime;
 }
@@ -489,7 +489,7 @@ bool MultiCobordism::applyMoveSpecification(
                                          moveSpecification.second[1]);
       if (auto *edge =
               spacetime->getEdgeList()->get(key.fingerprint.fingerprint())) {
-        edge->setSquaredLength(-edge->getSquaredLength());
+        edge->setLength(std::sqrt(-(edge->getLength() * edge->getLength())));
         moveWasApplied = true;
       }
     }
@@ -537,13 +537,13 @@ double MultiCobordism::deltaF(
   // its gradient and cancels. A superset costs compute, never correctness.
   std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> baseSquaredLengths;
   for (const auto *edge : spacetime_->getEdgeList()->toVector())
-    baseSquaredLengths[edgeKey(edge)] = edge->getSquaredLength();
+    baseSquaredLengths[edgeKey(edge)] = (edge->getLength() * edge->getLength());
   std::set<std::pair<std::uint64_t, std::uint64_t>> movedEdges;
   for (const auto *edge : candidateSpacetime->getEdgeList()->toVector()) {
     const auto key = edgeKey(edge);
     const auto found = baseSquaredLengths.find(key);
     if (found == baseSquaredLengths.end() ||
-        found->second != edge->getSquaredLength())
+        found->second != (edge->getLength() * edge->getLength()))
       movedEdges.insert(key);
     if (found != baseSquaredLengths.end()) baseSquaredLengths.erase(found);
   }
@@ -861,9 +861,9 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
         // all time by construction — no backoff, no projection (#589).
         // TODO: setSquaredLength takes a complex number. the SQUARED length can only be real. We need to fix this to use
         //   imaginary length; we're losing detail on the real/imaginary split.
-        // edges[edgeIndex]->setSquaredLength(complexd(
+        // edges[edgeIndex]->setLength(std::sqrt(complexd(
             // squaredLengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex),
-            // 0.0));
+            // 0.0)));
         edges[edgeIndex]->setLength(complexd(lengths(edgeIndex) - trialStepScale * descentDirection(edgeIndex)));
       }
       // The objective is total on the real signed-l^2 manifold, so a trial

@@ -284,8 +284,6 @@ class Simplex {
     ///
     /// \f[ \cos\theta = \frac{-C_{ij}}{\sqrt{C_{ii}}\,\sqrt{C_{jj}}} \f]
     ///
-<<<<<<< HEAD
-=======
     /// **Two separate principal square roots, never** ``sqrt(C_ii*C_jj)``. For
     /// complex \f$a, b\f$ the two differ by a sign exactly when both sit on the
     /// negative real axis: with a unit tetrahedron's ``C_ii = C_jj = -3``,
@@ -311,7 +309,6 @@ class Simplex {
     ///   zero and four crossings sum to 2*pi, so ``2*pi - sum = 0`` still holds;
     ///   generic in CDT (every base-tet triangle of a (4,1) cell).
     ///
->>>>>>> 5d1c651 (fix(mesh): unify the dihedral angle on one complex branch (#638))
     /// This keeps the boost content, as it should be EVERYWHERE. Note
     /// the same-sign (m = 0 / boost) regimes' imaginary sign is the principal
     /// branch: the wedge's boost *orientation* is not determined by edge

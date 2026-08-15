@@ -602,10 +602,10 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr vertex) {
   for (auto &existing : kPlusOneVertices) {
     if (existing->getTime() == vertex->getTime()) {
       // Spacelike edge (same time slice): ℓ² = a
-      newEdges.push_back(spacetime->createEdge(existing, vertex, spacetime->getA()));
+      newEdges.push_back(spacetime->createEdge(existing, vertex, std::sqrt(std::complex<double>(spacetime->getA()))));
     } else {
       // Timelike edge (different time slices): ℓ² = -α·a
-      newEdges.push_back(spacetime->createEdge(existing, vertex, -(spacetime->getAlpha() * spacetime->getA())));
+      newEdges.push_back(spacetime->createEdge(existing, vertex, std::sqrt(std::complex<double>(-(spacetime->getAlpha() * spacetime->getA())))));
     }
   }
   kPlusOneVertices.push_back(vertex);
@@ -690,7 +690,7 @@ std::vector<std::complex<double>> Simplex::gramMatrix() const {
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = e->getSquaredLength();
+        sqMap[fp] = (e->getLength() * e->getLength());
     }
     auto getSq = [&](int i, int j) -> std::complex<double> {
         if (i == j) return {0.0, 0.0};
@@ -718,7 +718,7 @@ std::vector<std::complex<double>> Simplex::cayleyMengerMatrix() const {
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = e->getSquaredLength();
+        sqMap[fp] = (e->getLength() * e->getLength());
     }
     auto getSq = [&](int i, int j) -> std::complex<double> {
         if (i == j) return std::complex<double>{0, 0};
@@ -759,7 +759,7 @@ std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = e->getSquaredLength();
+        sqMap[fp] = (e->getLength() * e->getLength());
     }
     auto getSq = [&](int i, int j) -> std::complex<double> {
         if (i == j) return 0.0;
@@ -1056,7 +1056,7 @@ Simplex::lorentzianDeficitAngleHessian() const {
 
 std::complex<double> Simplex::area() const {
     if (edges.size() < 3) return {0.0, 0.0};
-    auto sq = [&](std::size_t k) { return edges[k]->getSquaredLength(); };
+    auto sq = [&](std::size_t k) { return (edges[k]->getLength() * edges[k]->getLength()); };
     const std::complex<double> a2 = sq(0), b2 = sq(1), c2 = sq(2);
     const std::complex<double> val = 2.0 * (a2 * b2 + b2 * c2 + c2 * a2)
                                      - (a2 * a2 + b2 * b2 + c2 * c2);
