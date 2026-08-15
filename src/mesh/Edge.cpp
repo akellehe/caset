@@ -32,9 +32,8 @@ class Simplex;
     Edge::Edge(
       const VertexPtr &source_,
       const VertexPtr &target_,
-      std::complex<double> squaredLength
-    ) : source(source_), target(target_),
-        squaredLength_(squaredLength), length_(std::sqrt(squaredLength)),
+      std::complex<double> length
+    ) : source(source_), target(target_), length_(length),
         phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
     }
 
@@ -43,9 +42,8 @@ class Simplex;
       const VertexPtr &target_
     ) : source(source_), target(target_), phase(0.0), fingerprint({source_->getId(), target_->getId()}) {
       // Fallback (CDT always provides explicit edge lengths): a random real,
-      // i.e. spacelike, length; keep l^2 in sync.
+      // i.e. spacelike, length.
       length_ = {random_uniform(), 0.0};
-      squaredLength_ = length_ * length_;
     }
 
     [[nodiscard]] const VertexPtr &Edge::getSource() const noexcept {
@@ -58,10 +56,6 @@ class Simplex;
 
     [[nodiscard]] double Edge::getPhase() const noexcept {
       return phase;
-    }
-
-    [[nodiscard]] std::complex<double> Edge::getSquaredLength() const noexcept {
-      return squaredLength_;
     }
 
     [[nodiscard]] std::complex<double> Edge::getLength() const noexcept {
@@ -149,20 +143,20 @@ class Simplex;
       }
     }
 
-double Edge::vanRaamsdonkSquaredLength(double I, double iMax,
-                                       double epsilon) noexcept {
-  const double cap = -std::log(epsilon);  // floor on d_VR ⇒ finite squared length
+double Edge::vanRaamsdonkLength(double I, double iMax,
+                                double epsilon) noexcept {
+  const double cap = -std::log(epsilon);  // floor on d_VR => finite length
   const double x = (iMax > 0.0 && I > 0.0) ? (I / iMax) : 0.0;
   double dVR = (x > 0.0) ? -std::log(x)
                          : std::numeric_limits<double>::infinity();
   if (!std::isfinite(dVR) || dVR > cap) {
     dVR = cap;
   }
-  return dVR * dVR;
+  return dVR;
 }
 
-double Edge::vanRaamsdonkSquaredLengthFor(double I, double iMax,
-                                          double epsilon) const {
+double Edge::vanRaamsdonkLengthFor(double I, double iMax,
+                                   double epsilon) const {
   const VertexPtr s = getSource();
   const VertexPtr t = getTarget();
   // Forward-time worldline edge (endpoints on different time slices) → null.
@@ -170,7 +164,7 @@ double Edge::vanRaamsdonkSquaredLengthFor(double I, double iMax,
       std::abs(s->getTime() - t->getTime()) > 1e-12) {
     return 0.0;
   }
-  return vanRaamsdonkSquaredLength(I, iMax, epsilon);  // spacelike
+  return vanRaamsdonkLength(I, iMax, epsilon);  // spacelike
 }
 
 }

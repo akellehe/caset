@@ -14,6 +14,7 @@ import math
 import unittest
 
 import tessera as T
+import cmath
 
 
 def _top_of_dim(st, nverts):
@@ -24,7 +25,7 @@ def _top_of_dim(st, nverts):
 def _l2(st):
     return {(min(e.getSource().getId(), e.getTarget().getId()),
              max(e.getSource().getId(), e.getTarget().getId())):
-            e.getSquaredLength().real for e in st.getEdgeList().toVector()}
+            (e.getLength() * e.getLength()).real for e in st.getEdgeList().toVector()}
 
 
 def _jittered_s4():
@@ -33,7 +34,7 @@ def _jittered_s4():
                      T.SimplexBoundarySphere(4))
     st.build()
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.017 * (i % 5))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.017 * (i % 5))))
     # materialize sub-simplices down to triangles
     for s in list(st.getTopSimplices()):
         for f in s.getFacets():
@@ -74,7 +75,7 @@ class VolumeGradientHandCalcTest(unittest.TestCase):
             st = T.Spacetime.fromCells(nverts - 1, [cell], 1.0, 0.0)
             # jitter so the identity is non-trivial (not just the symmetric point)
             for i, e in enumerate(st.getEdgeList().toVector()):
-                e.setSquaredLength(1.0 + 0.07 * (i % 4))
+                e.setLength(cmath.sqrt(complex(1.0 + 0.07 * (i % 4))))
             s = _top_of_dim(st, nverts)
             l2 = _l2(st)
             j = nverts - 1
@@ -102,12 +103,12 @@ class VolumeGradientTest(unittest.TestCase):
                     e = em.get((a, b))
                     if e is None:
                         continue
-                    o = e.getSquaredLength()
-                    e.setSquaredLength(o + h)
+                    o = (e.getLength() * e.getLength())
+                    e.setLength(cmath.sqrt(complex(o + h)))
                     vp = s.volume()
-                    e.setSquaredLength(o - h)
+                    e.setLength(cmath.sqrt(complex(o - h)))
                     vm = s.volume()
-                    e.setSquaredLength(o)
+                    e.setLength(cmath.sqrt(complex(o)))
                     worst = max(worst, abs(ga - (vp - vm) / (2 * h)))
                     tested += 1
             self.assertGreater(tested, 0, f"no edge-derivatives tested at size {size}")

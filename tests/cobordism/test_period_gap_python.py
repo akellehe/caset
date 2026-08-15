@@ -32,6 +32,7 @@ sys.path.insert(0, _HERE)
 
 import tessera  # noqa: E402
 from _holed_surface import holed_surface  # noqa: E402
+import cmath
 
 cob = tessera.cobordism
 
@@ -56,7 +57,7 @@ def _perturb(st, cells1, every, factor):
     em = _emap(st)
     for i in range(0, len(cells1), every):
         ek = (min(cells1[i]), max(cells1[i]))
-        em[ek].setSquaredLength(em[ek].getSquaredLength().real * factor)
+        em[ek].setLength(cmath.sqrt(complex((em[ek].getLength() ** 2).real * factor)))
     st.materializeFacets()
 
 
@@ -105,12 +106,12 @@ class PeriodGapGradientTest(unittest.TestCase):
         for idx in probe:
             ek = (min(cells1[idx]), max(cells1[idx]))
             e = em[ek]
-            l0 = e.getSquaredLength().real
-            e.setSquaredLength(l0 + h); st.materializeFacets()
+            l0 = (e.getLength() * e.getLength()).real
+            e.setLength(cmath.sqrt(complex(l0 + h))); st.materializeFacets()
             rp = es.periodGapForPeriods(holes, target)
-            e.setSquaredLength(l0 - h); st.materializeFacets()
+            e.setLength(cmath.sqrt(complex(l0 - h))); st.materializeFacets()
             rm = es.periodGapForPeriods(holes, target)
-            e.setSquaredLength(l0); st.materializeFacets()
+            e.setLength(cmath.sqrt(complex(l0))); st.materializeFacets()
             fd = (rp - rm) / (2 * h)
             worst = max(worst, abs(g[idx] - fd))
         self.assertLess(worst, 1e-4, f"worst |analytic - FD| = {worst:.2e}")

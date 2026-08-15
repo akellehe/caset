@@ -34,6 +34,7 @@ import tessera
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import worker  # the frozen drive — replay MUST use the recording generation's bytes
+import cmath
 
 cob = tessera.cobordism
 
@@ -93,7 +94,7 @@ def rebuild_from_dump(dump):
         by_pair[(min(a, b), max(a, b))] = e
     for u, v, re_l2, im_l2 in dump["edges"]:
         key = (min(int(u), int(v)), max(int(u), int(v)))
-        by_pair[key].setSquaredLength(complex(re_l2, im_l2))
+        by_pair[key].setLength(cmath.sqrt(complex(complex(re_l2, im_l2))))
     st.materializeFacets()
     return st
 
@@ -120,7 +121,7 @@ def verify_state_against_dump(st, dump):
     lengths = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        l2 = e.getSquaredLength()
+        l2 = (e.getLength() * e.getLength())
         lengths[(min(a, b), max(a, b))] = (l2.real, l2.imag)
     dumped_lengths = {(min(int(u), int(v)), max(int(u), int(v))): (re, im)
                       for u, v, re, im in dump["edges"]}
@@ -163,7 +164,7 @@ def characterize(st, degree=worker.REGISTER_DEGREE):
         }
 
     def geometry():
-        squared = [e.getSquaredLength() for e in st.getEdgeList().toVector()]
+        squared = [(e.getLength() * e.getLength()) for e in st.getEdgeList().toVector()]
         deficits, dual = [], []
         for s in st.getSimplices():
             if len(s.getVertices()) != 3:      # hinges = (d-2)=2-simplices

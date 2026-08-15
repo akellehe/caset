@@ -19,6 +19,7 @@ its exact delta is a before/after `residualForPeriods` recompute.
 import unittest
 
 import tessera as T
+import cmath
 
 cob = T.cobordism
 
@@ -55,7 +56,7 @@ def _holed_s3():
     sc.coneOut(list(a))
     sc.coneOut(list(b))
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.01 * (i % 7))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.01 * (i % 7))))
     return st, [[list(a), list(b)]]
 
 
@@ -64,7 +65,7 @@ def _cdt4(n=160):
     st = T.Spacetime(T.Metric(True, sig), T.CDT, 1.0, 1.0, T.PREFERRED, T.Toroid())
     st.build(n)
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.011 * (i % 5))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.011 * (i % 5))))
     return st
 
 
@@ -74,7 +75,7 @@ def _sphere3():
                      T.SimplexBoundarySphere(3))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
     return st
 
 
@@ -96,13 +97,13 @@ def _refined_s3(n_refine=12):
                      T.SimplexBoundarySphere(3))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
     for seed in range(n_refine):
         mv = T.AddMove(st, seed, False, T.PachnerMode.PreGeometric, False)
         if mv.propose():
             mv.apply()
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.01 * (i % 6))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.01 * (i % 6))))
     return st
 
 
@@ -126,12 +127,12 @@ class DeltaFEndToEndTest(unittest.TestCase):
         before_F = full_F()
         before_gn = rs.gradientNorm2OverEdges(E)
         before_ru = es.residualForPeriods(holes, target)
-        orig = e.getSquaredLength()
-        e.setSquaredLength(orig * 1.06)
+        orig = (e.getLength() * e.getLength())
+        e.setLength(cmath.sqrt(complex(orig * 1.06)))
         after_F = full_F()
         after_gn = rs.gradientNorm2OverEdges(E)
         after_ru = es.residualForPeriods(holes, target)
-        e.setSquaredLength(orig)
+        e.setLength(cmath.sqrt(complex(orig)))
 
         d_full = after_F - before_F
         d_incr = (after_gn - before_gn) + _GAMMA * (after_ru - before_ru)
@@ -222,7 +223,7 @@ class DeltaFEndToEndTest(unittest.TestCase):
         self.assertGreater(r_u, 1.0)
         g = es.residualForPeriodsGradient(holes, target)
         l2 = {tuple(sorted((e.getSource().getId(), e.getTarget().getId()))):
-              e.getSquaredLength().real for e in st.getEdgeList().toVector()}
+              (e.getLength() * e.getLength()).real for e in st.getEdgeList().toVector()}
         edges = [tuple(sorted(c)) for c in
                  cob.ChainComplex.fromSpacetime(st).kSimplexVertices(1)]
         euler = sum(l2[edges[i]] * g[i] for i in range(len(edges)))

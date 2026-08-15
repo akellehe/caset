@@ -34,6 +34,7 @@ part of the star (the pitfall recorded on the mesh bindings).
 import unittest
 
 import tessera
+import cmath
 
 TOLERANCE = 1e-12
 
@@ -67,7 +68,7 @@ def _two_pentatopes():
 
 def _set_all_squared_lengths(st, value):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(value)
+        e.setLength(cmath.sqrt(complex(value)))
 
 
 def _edge(st, a, b):
@@ -180,15 +181,15 @@ class TestDualVolumeSigns(unittest.TestCase):
         """One timelike edge -- exercises the mixed-signature branch."""
         st = _two_pentatopes()
         _set_all_squared_lengths(st, 1.0)
-        _edge(st, 0, 1).setSquaredLength(-1.0)
+        _edge(st, 0, 1).setLength(cmath.sqrt(complex(-1.0)))
         self._assert_matches_oracle(st)
 
     def test_signature_partition_is_exact(self):
         """All-spacelike and mixed-signature counts partition every dimension."""
         st = _two_pentatopes()
         _set_all_squared_lengths(st, 1.0)
-        _edge(st, 0, 1).setSquaredLength(-1.0)
-        _edge(st, 2, 3).setSquaredLength(-1.0)
+        _edge(st, 0, 1).setLength(cmath.sqrt(complex(-1.0)))
+        _edge(st, 2, 3).setLength(cmath.sqrt(complex(-1.0)))
 
         for entry in tessera.DualVolumeSigns().analyze(st).dimensions:
             self.assertEqual(
@@ -215,7 +216,7 @@ class TestDualVolumeSigns(unittest.TestCase):
             "a uniformly spacelike complex has no mixed-signature cells",
         )
 
-        _edge(st, 0, 1).setSquaredLength(-1.0)
+        _edge(st, 0, 1).setLength(cmath.sqrt(complex(-1.0)))
         mixed = tessera.DualVolumeSigns().analyze(st)
         self.assertGreater(
             sum(entry.n_mixed_signature for entry in mixed.dimensions), 0,
@@ -226,7 +227,7 @@ class TestDualVolumeSigns(unittest.TestCase):
         """compute() equals n_negative_star / n_simplices over the whole report."""
         st = _two_pentatopes()
         _set_all_squared_lengths(st, 1.0)
-        _edge(st, 0, 1).setSquaredLength(-1.0)
+        _edge(st, 0, 1).setLength(cmath.sqrt(complex(-1.0)))
 
         observable = tessera.DualVolumeSigns()
         report = observable.analyze(st)

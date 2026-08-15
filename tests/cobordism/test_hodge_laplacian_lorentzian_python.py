@@ -38,6 +38,7 @@ import unittest
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -69,7 +70,7 @@ def _edge(st, a, b):
 
 def _set_all_spacelike(st, l2=1.0):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(l2)
+        e.setLength(cmath.sqrt(complex(l2)))
         e.setPhase(0.0)
     return st
 
@@ -83,7 +84,7 @@ def _triangle_one_timelike(alpha):
     """The 3-cycle with edge (1,2) timelike: l^2 = -alpha^2 (signed volume
     -alpha); edges (0,1),(0,2) spacelike (l^2 = 1)."""
     st = _triangle_cycle()
-    _edge(st, 1, 2).setSquaredLength(-(alpha ** 2))
+    _edge(st, 1, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
     return st
 
 
@@ -110,7 +111,7 @@ def _filled_square_timelike(alpha):
     """The filled square with its shared diagonal (0,2) timelike — exercises the
     indefinite d'Alembertian on a both-terms (d_1 and d_2) k=1 operator."""
     st = _filled_square()
-    _edge(st, 0, 2).setSquaredLength(-(alpha ** 2))
+    _edge(st, 0, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
     return st
 
 
@@ -146,10 +147,10 @@ def _torus_lorentzian(alpha):
     for i, e in enumerate(edges):
         e.setPhase(0.0)
         if i % 3 == 0:  # every third edge is timelike
-            e.setSquaredLength(-(alpha ** 2))
+            e.setLength(cmath.sqrt(complex(-(alpha ** 2))))
             n_time += 1
         else:
-            e.setSquaredLength(1.0)
+            e.setLength(cmath.sqrt(complex(1.0)))
     return st, n_time
 
 

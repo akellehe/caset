@@ -11,6 +11,7 @@ hinges are exercised."""
 import unittest
 
 import tessera
+import cmath
 
 _FD = 1e-6           # central-difference step in l^2
 _TOL = 1e-5          # analytic vs FD agreement
@@ -59,8 +60,8 @@ class ExactActionGradientTest(unittest.TestCase):
     def _set(self, edge):
         def setter(val):
             if val is None:
-                return edge.getSquaredLength().real
-            edge.setSquaredLength(float(val)); self.st.materializeFacets()
+                return (edge.getLength() * edge.getLength()).real
+            edge.setLength(cmath.sqrt(complex(float(val)))); self.st.materializeFacets()
             return None
         return setter
 

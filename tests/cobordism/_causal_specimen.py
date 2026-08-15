@@ -27,6 +27,7 @@ import json
 import os
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -65,7 +66,7 @@ def rebuild_spacetime(dump):
         by_pair[(min(a, b), max(a, b))] = e
     for u, v, re_l2, im_l2 in dump["edges"]:
         key = (min(int(u), int(v)), max(int(u), int(v)))
-        by_pair[key].setSquaredLength(complex(re_l2, im_l2))
+        by_pair[key].setLength(cmath.sqrt(complex(complex(re_l2, im_l2))))
     st.materializeFacets()
     return st
 

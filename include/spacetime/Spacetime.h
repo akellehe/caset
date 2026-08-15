@@ -238,19 +238,21 @@ class Spacetime {
     /// Creates an edge \f$ e = (v_s, v_t) \f$ as a NULL edge: \f$ \ell^2 = 0 \f$,
     /// explicitly — no metric evaluation happens (#581; the doc previously
     /// claimed a metric-computed length). Callers that want a geometric length
-    /// use the explicit-\f$\ell^2\f$ overload or set it afterwards
-    /// (``Edge::setSquaredLength``).
+    /// use the explicit-length overload or set it afterwards (``Edge::setLength``).
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
     /// @return Shared pointer to the created (null) edge
     [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt) const noexcept;
 
-    /// Creates an edge \f$ e = (v_s, v_t) \f$ with explicit squared length.
+    /// Creates an edge \f$ e = (v_s, v_t) \f$ with an explicit complex LENGTH.
+    /// A caller holding an \f$\ell^2\f$ passes ``std::sqrt(l2)`` and so chooses the
+    /// branch explicitly (#639); this used to be a ``double`` funnel that could only
+    /// express a real \f$\ell^2\f$.
     /// @param src The source vertex \f$ v_s \f$
     /// @param tgt The target vertex \f$ v_t \f$
-    /// @param squaredLength The squared length \f$ \ell^2 \f$ of the edge
+    /// @param length The complex length \f$ \ell \f$ of the edge
     /// @return Shared pointer to the created edge
-    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, double squaredLength) const noexcept;
+    [[nodiscard]] EdgePtr createEdge(const VertexPtr &src, const VertexPtr &tgt, std::complex<double> length) const noexcept;
 
     // ========================================
     // Complex Building Methods

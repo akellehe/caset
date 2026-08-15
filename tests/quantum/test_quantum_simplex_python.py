@@ -87,7 +87,7 @@ def edge_squared_length(s, p, q):
         tgt = e.getTarget()
         if (src.getId() == u.getId() and tgt.getId() == v.getId()) \
                 or (src.getId() == v.getId() and tgt.getId() == u.getId()):
-            return e.getSquaredLength().real
+            return (e.getLength() * e.getLength()).real
     raise KeyError(f"no edge between {p} and {q}")
 
 

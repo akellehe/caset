@@ -17,6 +17,7 @@ exactly those genuine hinges, term-for-term identical to `dualReggeAction`.
 import unittest
 
 import tessera as T
+import cmath
 
 _TOL = 1e-12
 
@@ -29,7 +30,7 @@ def _sphere4(jitter=True):
                      T.SimplexBoundarySphere(4))
     st.build()
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + (0.013 * (i % 5) if jitter else 0.0))
+        e.setLength(cmath.sqrt(complex(1.0 + (0.013 * (i % 5) if jitter else 0.0))))
     return st
 
 
@@ -63,11 +64,11 @@ class IncrementalDeltaSReggeTest(unittest.TestCase):
 
         before_full = rs.dualReggeAction()
         before_loc = rs.dualReggeActionOverHinges(hinges)
-        orig = e.getSquaredLength()
-        e.setSquaredLength(orig * 1.07)
+        orig = (e.getLength() * e.getLength())
+        e.setLength(cmath.sqrt(complex(orig * 1.07)))
         after_full = rs.dualReggeAction()
         after_loc = rs.dualReggeActionOverHinges(hinges)
-        e.setSquaredLength(orig)
+        e.setLength(cmath.sqrt(complex(orig)))
 
         self.assertLess(abs((after_full - before_full) - (after_loc - before_loc)),
                         _TOL)
@@ -136,10 +137,10 @@ class GradientNormObjectiveTest(unittest.TestCase):
         self.assertTrue(E)
 
         before_full, before_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
-        orig = e.getSquaredLength()
-        e.setSquaredLength(orig * 1.07)
+        orig = (e.getLength() * e.getLength())
+        e.setLength(cmath.sqrt(complex(orig * 1.07)))
         after_full, after_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
-        e.setSquaredLength(orig)
+        e.setLength(cmath.sqrt(complex(orig)))
 
         self.assertLess(abs((after_full - before_full) - (after_loc - before_loc)),
                         _TOL)
@@ -184,10 +185,10 @@ class LocalityTest(unittest.TestCase):
         self.assertLess(len(E), n_total // 2, "update is not local on a large mesh")
 
         before_full, before_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
-        orig = e.getSquaredLength()
-        e.setSquaredLength(orig * 1.05)
+        orig = (e.getLength() * e.getLength())
+        e.setLength(cmath.sqrt(complex(orig * 1.05)))
         after_full, after_loc = _grad_norm2(rs), rs.gradientNorm2OverEdges(E)
-        e.setSquaredLength(orig)
+        e.setLength(cmath.sqrt(complex(orig)))
         self.assertLess(abs((after_full - before_full) - (after_loc - before_loc)),
                         1e-9)  # larger complex ⇒ looser abs tol, still ~machine
 

@@ -138,7 +138,7 @@ class ProtonIngredientsBuildTest(unittest.TestCase):
     def test_whole_complex_exists_with_relaxed_metric(self):
         whole = self.ingredients.spacetime()
         self.assertIsNotNone(whole)
-        squared = [e.getSquaredLength() for e in whole.getEdgeList().toVector()]
+        squared = [(e.getLength() * e.getLength()) for e in whole.getEdgeList().toVector()]
         self.assertTrue(squared, "emergent complex has no edges")
         self.assertTrue(any(abs(l - complex(1.0, 0.0)) > 1e-9 for l in squared),
                         "metric is unit — the relaxed geometry was lost")

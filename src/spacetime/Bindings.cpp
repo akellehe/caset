@@ -489,15 +489,16 @@ the materialization without the boundary scan.)doc")
            py::arg("source"),
            py::arg("target"),
            py::return_value_policy::reference,
-           "Create an edge between two vertices (squared length computed from metric).")
+           "Create an edge between two vertices as a NULL edge (l^2 = 0).")
       .def("createEdge",
-           static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &, double) const>(&
+           static_cast<EdgePtr (Spacetime::*)(const VertexPtr &, const VertexPtr &,
+                                              std::complex<double>) const>(&
              Spacetime::createEdge),
            py::arg("source"),
            py::arg("target"),
-           py::arg("squaredLength"),
+           py::arg("length"),
            py::return_value_policy::reference,
-           "Create an edge between two vertices with a specified squared length.")
+           "Create an edge between two vertices with a specified complex LENGTH (pass sqrt(l2) to give it by squared value)!")
       .def("createVertex",
            static_cast<VertexPtr (Spacetime::*)(const std::uint64_t) const noexcept>(
              &Spacetime::createVertex),

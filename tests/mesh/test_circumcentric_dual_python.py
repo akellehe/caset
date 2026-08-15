@@ -19,6 +19,7 @@ import math
 import unittest
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -59,7 +60,7 @@ def _triangle(st):
 
 def _set_equilateral(st, a2=1.0):
     for e in _edge_map(st).values():
-        e.setSquaredLength(a2)
+        e.setLength(cmath.sqrt(complex(a2)))
         e.setPhase(0.0)
 
 
@@ -84,7 +85,7 @@ class TestCircumcenter(unittest.TestCase):
         # no crash, no Euclidean |.|.
         st = _solid_triangle(); _set_equilateral(st, 1.0)
         em = _edge_map(st)
-        em[(1, 2)].setSquaredLength(-1.0)
+        em[(1, 2)].setLength(cmath.sqrt(complex(-1.0)))
         edge_simplex = None
         for e in _triangle(st).getFacets():
             ids = sorted(v.getId() for v in e.getVertices())
@@ -146,9 +147,9 @@ class TestRightTriangleHandCalc(unittest.TestCase):
     def _right_triangle(self):
         st = _solid_triangle()
         em = _edge_map(st)
-        em[(0, 1)].setSquaredLength(1.0)   # leg
-        em[(0, 2)].setSquaredLength(1.0)   # leg
-        em[(1, 2)].setSquaredLength(2.0)   # hypotenuse (√2)
+        em[(0, 1)].setLength(cmath.sqrt(complex(1.0)))   # leg
+        em[(0, 2)].setLength(cmath.sqrt(complex(1.0)))   # leg
+        em[(1, 2)].setLength(cmath.sqrt(complex(2.0)))   # hypotenuse (√2)
         for e in em.values():
             e.setPhase(0.0)
         return st
@@ -192,9 +193,9 @@ def _unit_square_diag(diag):
         raise ValueError(diag)
     em = _edge_map(st)
     for key in sides:
-        em[key].setSquaredLength(1.0)
+        em[key].setLength(cmath.sqrt(complex(1.0)))
         em[key].setPhase(0.0)
-    em[diag].setSquaredLength(2.0)   # diagonal = √2
+    em[diag].setLength(cmath.sqrt(complex(2.0)))   # diagonal = √2
     em[diag].setPhase(0.0)
     return st
 

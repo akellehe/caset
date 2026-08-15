@@ -13,6 +13,7 @@ emergent analogue of a prebuilt host refinement.
 import unittest
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -28,7 +29,7 @@ def _single_delta4():
                            tessera.PREFERRED, tessera.SolidSimplex(_DIM))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
     return st
 
 

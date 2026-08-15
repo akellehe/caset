@@ -216,10 +216,10 @@ bool RemoveMove::applyPreGeometric() {
   vertexCoords_.clear();
   for (const auto &e : v_->getInEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength(), e->getPhase()});
+                             (e->getLength() * e->getLength()), e->getPhase()});
   for (const auto &e : v_->getOutEdges())
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength(), e->getPhase()});
+                             (e->getLength() * e->getLength()), e->getPhase()});
 
   // Remove the d+1 incident cells.
   for (const auto &s : incident_) st_->removeSimplex(s);
@@ -270,11 +270,11 @@ bool RemoveMove::apply() {
   // capture EdgePtr — those slots get freed by EdgeList::remove.)
   for (const auto &e : v_->getInEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength(), e->getPhase()});
+                             (e->getLength() * e->getLength()), e->getPhase()});
   }
   for (const auto &e : v_->getOutEdges()) {
     deletedEdges_.push_back({e->getSource(), e->getTarget(),
-                             e->getSquaredLength(), e->getPhase()});
+                             (e->getLength() * e->getLength()), e->getPhase()});
   }
 
   // 2. Remove the 2d incident simplices.
@@ -365,7 +365,7 @@ void RemoveMove::rollback() {
     // already exists was never deleted, so its values are left alone.
     auto r = st_->getEdgeList()->tryAdd(src, tgt, er.squaredLength.real());
     if (r.second) {
-      r.first->setSquaredLength(er.squaredLength);
+      r.first->setLength(std::sqrt(er.squaredLength));
       r.first->setPhase(er.phase);
     }
     src->addOutEdge(r.first);

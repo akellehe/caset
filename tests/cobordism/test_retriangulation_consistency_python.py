@@ -33,6 +33,7 @@ import math
 import unittest
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -61,7 +62,7 @@ def _surface(faces, edge_sq=None):
         st.createSimplex([vmap[t[0]], vmap[t[1]], vmap[t[2]]])
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        e.setSquaredLength(edge_sq.get((min(a, b), max(a, b)), 1.0))
+        e.setLength(cmath.sqrt(complex(edge_sq.get((min(a, b), max(a, b)), 1.0))))
         e.setPhase(0.0)
     return st
 

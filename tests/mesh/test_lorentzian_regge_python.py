@@ -35,6 +35,7 @@ import math
 import unittest
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -72,9 +73,9 @@ def _edge_map(st):
 def _set_edges(st, mapping, default=None):
     for k, e in _edge_map(st).items():
         if k in mapping:
-            e.setSquaredLength(mapping[k])
+            e.setLength(cmath.sqrt(complex(mapping[k])))
         elif default is not None:
-            e.setSquaredLength(default)
+            e.setLength(cmath.sqrt(complex(default)))
         e.setPhase(0.0)
 
 
@@ -213,7 +214,7 @@ class TestLorentzianBoost(unittest.TestCase):
                         abs(theta.real - math.pi) < 1e-8)
         # Contrast: the clamped dihedralAngle throws the boost away — it lands at
         # a real branch point (0 or π) instead of carrying the rapidity.
-        clamped = tri.dihedralAngle(v0, False)
+        clamped = tri.lorentzianDihedralAngle(v0, False)
         self.assertGreater(abs(theta.imag), 1e-2)
         self.assertTrue(abs(clamped) < 1e-8 or abs(clamped - math.pi) < 1e-8)
 

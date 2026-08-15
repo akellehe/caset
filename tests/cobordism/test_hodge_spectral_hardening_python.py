@@ -47,6 +47,7 @@ import unittest
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 obs = tessera.observables
@@ -83,7 +84,7 @@ def _from_simplices(num_vertices, simplices):
 
 def _set_uniform(st, sq=1.0, phase=0.0):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(sq)
+        e.setLength(cmath.sqrt(complex(sq)))
         e.setPhase(phase)
     return st
 
@@ -304,7 +305,7 @@ class TestGaugeInvariance(unittest.TestCase):
         eigenvectors rephase (projector P → G P G†)."""
         rng = np.random.default_rng(seed)
         for e in st.getEdgeList().toVector():
-            e.setSquaredLength(float(rng.uniform(0.5, 2.0)))
+            e.setLength(cmath.sqrt(complex(float(rng.uniform(0.5, 2.0)))))
             e.setPhase(float(rng.uniform(-PI, PI)))
 
         ids, _ = _ordering(st)
@@ -399,7 +400,7 @@ class TestHermiticityUnitarity(unittest.TestCase):
                             ("K4", _complete_k4), ("S^2", _s2)):
             st = build()
             for e in st.getEdgeList().toVector():
-                e.setSquaredLength(float(rng.uniform(0.5, 2.0)))
+                e.setLength(cmath.sqrt(complex(float(rng.uniform(0.5, 2.0)))))
                 e.setPhase(float(rng.uniform(-PI, PI)))
             with self.subTest(fixture=name):
                 hl = cob.HodgeLaplacian(st)
@@ -505,7 +506,7 @@ def _triangle_one_timelike(alpha):
     edges (0,1),(0,2) spacelike (l² = 1). Closed form: spec(L₁) = {0, 3, 1−2/α},
     harmonic null-norm ⟨h,h⟩_W = (2 − α)/3."""
     st = _cycle()  # all-spacelike unit triangle
-    _edge(st, 1, 2).setSquaredLength(-(alpha ** 2))
+    _edge(st, 1, 2).setLength(cmath.sqrt(complex(-(alpha ** 2))))
     return st
 
 
@@ -708,7 +709,7 @@ class TestSpectralObservables(unittest.TestCase):
         rng = np.random.default_rng(515)
         st = _testbed()
         for e in st.getEdgeList().toVector():
-            e.setSquaredLength(float(rng.uniform(0.5, 2.0)))
+            e.setLength(cmath.sqrt(complex(float(rng.uniform(0.5, 2.0)))))
             e.setPhase(float(rng.uniform(-PI, PI)))
         gap0 = obs.SpectralGap().compute(st)
         dim0 = obs.HarmonicDimension().compute(st)
