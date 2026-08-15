@@ -122,9 +122,11 @@ class HodgeLaplacian {
     /// outlive the operator; the held `shared_ptr` keeps it alive.
     ///
     /// @param weights Which quantity \f$ W_k \f$ is built from (see
-    ///   `WeightConvention`). Defaults to the \f$ k \f$-content.
+    ///   `WeightConvention`). Defaults to `SquaredContent`: it is real and signed
+    ///   on real signed \f$ \ell^2 \f$, polynomial in the squared edge lengths so
+    ///   it carries no branch, and it preserves genuine null kernel directions.
     explicit HodgeLaplacian(std::shared_ptr<Spacetime> st,
-                            WeightConvention weights = WeightConvention::Content);
+                            WeightConvention weights = WeightConvention::SquaredContent);
 
     /// Weighted adjacency \f$ A \f$ as a flat row-major \f$ N\times N \f$ array
     /// of complex entries. Hermitian by construction.
@@ -244,7 +246,7 @@ class HodgeLaplacian {
 
   private:
     std::shared_ptr<Spacetime> st_;
-    WeightConvention weightConvention_{WeightConvention::Content};
+    WeightConvention weightConvention_{WeightConvention::SquaredContent};
 
     // Stable vertex order: ids_[idx] = vertex id, idToIndex_[id] = idx. Built
     // once in the constructor (the vertex set is fixed for the operator's life;

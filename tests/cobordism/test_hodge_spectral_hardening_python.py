@@ -530,14 +530,18 @@ def _triangle_one_timelike(alpha):
 class TestLorentzianNullNormCrossing(unittest.TestCase):
 
     def _null_norm(self, alpha):
-        norms = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
+        # Explicitly the k-content convention: the default is SquaredContent.
+        norms = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha),
+                                            cob.HodgeWeightConvention.Content)
                          .nullNorms(1, 1e-9), dtype=complex)
         self.assertEqual(len(norms), 1)  # the single 1-cycle harmonic
         return norms[0]
 
     def _sorted_spectrum(self, alpha):
-        # spec(L₁) = {0, 3, 1 − 2i/α}, complex, ordered by (Re, Im).
-        ev = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha))
+        # spec(L₁) = {0, 3, 1 − 2i/α} under the k-content convention, complex,
+        # ordered by (Re, Im). The default is SquaredContent.
+        ev = np.array(cob.HodgeLaplacian(_triangle_one_timelike(alpha),
+                                         cob.HodgeWeightConvention.Content)
                       .eigenvalues(1), dtype=complex)
         return sorted(ev, key=lambda z: (round(z.real, 9), round(z.imag, 9)))
 
@@ -594,7 +598,8 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
         # for every α, where the real-signed convention gave 2 at α = 2.
         for alpha in (1.5, 2.0, 2.5):
             with self.subTest(alpha=alpha):
-                hl = cob.HodgeLaplacian(_triangle_one_timelike(alpha))
+                hl = cob.HodgeLaplacian(_triangle_one_timelike(alpha),
+                                         cob.HodgeWeightConvention.Content)
                 n = int(np.sum(np.abs(np.array(
                     hl.eigenvalues(1), dtype=complex)) < 1e-6))
                 self.assertEqual(n, 1)
@@ -617,7 +622,7 @@ class TestLorentzianNullNormCrossing(unittest.TestCase):
         # alpha. SquaredContent keeps the weights real and signed, so the norm
         # passes through zero at alpha = sqrt(2) and a second mode joins the
         # kernel there.
-        sq = cob.HodgeWeightConvention.SquaredContent
+        sq = cob.HodgeWeightConvention.SquaredContent  # now the default
         for alpha in (0.5, 1.0, 1.5, 2.0, 3.0):
             with self.subTest(alpha=alpha):
                 hl = cob.HodgeLaplacian(_triangle_one_timelike(alpha), sq)

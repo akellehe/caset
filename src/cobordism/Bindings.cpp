@@ -266,10 +266,10 @@ can be null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0). All-spacelike ⇒ reproduces 
 Euclidean spectrum/kernel.)doc")
       .def(py::init<std::shared_ptr<Spacetime>, HodgeLaplacian::WeightConvention>(),
            py::arg("spacetime"),
-           py::arg("weights") = HodgeLaplacian::WeightConvention::Content,
+           py::arg("weights") = HodgeLaplacian::WeightConvention::SquaredContent,
            "Build the Hodge Laplacian operator over a triangulation. `weights` "
            "selects which quantity the diagonal W_k is built from -- the "
-           "k-content (default) or its square. See HodgeWeightConvention.")
+           "k-content or its square (the default). See HodgeWeightConvention.")
       .def("adjacency", &HodgeLaplacian::adjacency,
            "Weighted adjacency A as a flat row-major N*N complex array "
            "(Hermitian; A_ij = sum squaredLength * exp(i*phase)).")
