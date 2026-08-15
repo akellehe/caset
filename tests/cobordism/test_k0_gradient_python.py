@@ -74,7 +74,7 @@ def _fd_gradient(st, holes, target, by_pair, h=1e-6):
     fd = []
     for pair in _cc_edges(st):
         e = by_pair[pair]
-        w0 = (e.getLength() * e.getLength())
+        w0 = e.getLength()**2
         e.setLength(cmath.sqrt(complex(complex(w0.real + h, 0.0))))
         rp = cob.EigenstateSynthesis(st, 0).residualForPeriods(holes, target)
         e.setLength(cmath.sqrt(complex(complex(w0.real - h, 0.0))))
@@ -125,7 +125,7 @@ class TestK0Gradient:
         es = cob.EigenstateSynthesis(st, 0)
         r0 = es.residualForPeriods(_HOLES, _TARGET)
         g = np.asarray(es.residualForPeriodsGradient(_HOLES, _TARGET))
-        l2 = (np.asarray([by_pair[p].getLength() * np.asarray([by_pair[p].getLength()).real
+        l2 = np.asarray([(by_pair[p].getLength()**2).real
                          for p in _cc_edges(st)])
         assert math.isclose(float(np.dot(l2, g)), 2.0 * r0,
                             rel_tol=1e-10, abs_tol=1e-12)

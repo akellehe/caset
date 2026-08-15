@@ -136,7 +136,7 @@ class Stage2UnclampedTest(unittest.TestCase):
         self.assertTrue(all(math.isfinite(f) for f in trace))
         self.assertGreaterEqual(len(trace), 2, "no accepted step — vacuous run")
         for e in opt.st.getEdgeList().toVector():
-            sq = (complex(e.getLength() * complex(e.getLength()))
+            sq = complex(e.getLength()**2)
             self.assertTrue(cmath.isfinite(sq))
             for pin in (_OLD_FLOOR, _OLD_CAP, -_OLD_CAP):
                 self.assertGreater(abs(sq.real - pin), 1e-12,
@@ -151,7 +151,7 @@ class Stage2UnclampedTest(unittest.TestCase):
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=2, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
-        sq = (complex(opt.st.getEdgeList().toVector()[3].getLength() * complex(opt.st.getEdgeList().toVector()[3].getLength()))
+        sq = complex(opt.st.getEdgeList().toVector()[3].getLength()**2)
         self.assertTrue(cmath.isfinite(sq))
         self.assertGreater(abs(sq.real - _OLD_FLOOR), 1e-12,
                            "the lightlike-band edge was snapped to the old floor")
@@ -167,7 +167,7 @@ class Stage2UnclampedTest(unittest.TestCase):
         trace = opt.run_stage2(beta=1.0, max_iters=3, alpha0=0.05, rel_tol=1e-9)
         self.assertTrue(all(math.isfinite(f) for f in trace))
         for e in opt.st.getEdgeList().toVector():
-            (self.assertTrue(cmath.isfinite(complex(e.getLength() * self.assertTrue(cmath.isfinite(complex(e.getLength()))))
+            self.assertTrue(cmath.isfinite(complex(e.getLength()**2)))
 
 
 if __name__ == "__main__":

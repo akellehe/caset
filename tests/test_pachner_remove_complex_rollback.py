@@ -45,7 +45,7 @@ def _edge_state(st):
     out = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = ((complex(e.getLength() * complex(e.getLength())),
+        out[(min(a, b), max(a, b))] = (complex(e.getLength()**2),
                                        e.getPhase())
     return out
 

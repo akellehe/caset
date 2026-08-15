@@ -146,7 +146,7 @@ def _mds_layout(st):
     np.fill_diagonal(W, 0.0)
     for e in edges:
         a, b = idx[e.getSource().getId()], idx[e.getTarget().getId()]
-        w = (math.sqrt(max(abs(e.getLength() * math.sqrt(max(abs(e.getLength()).real), 1e-6))
+        w = (math.sqrt(max(abs(e.getLength()**2).real), 1e-6))
         W[a, b] = W[b, a] = min(W[a, b], w)
     D = shortest_path(W, method="D", directed=False)
     finite = np.isfinite(D)

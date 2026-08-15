@@ -101,7 +101,7 @@ def _snapshot(st):
     edges = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        edges[(min(a, b), max(a, b))] = ((round(e.getLength() * round(e.getLength()).real, 12),
+        edges[(min(a, b), max(a, b))] = ((round(e.getLength()**2).real, 12),
                                          round(e.getPhase(), 12))
     simplices = sorted(tuple(sorted(v.getId() for v in s.getVertices()))
                        for s in st.getSimplices())

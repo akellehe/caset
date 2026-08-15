@@ -158,11 +158,11 @@ class TestConeExact(unittest.TestCase):
             other_id = tgt_id if src_id == new_vid else src_id
             if other_id == 0:
                 # Both at t=0 → spacelike
-                (self.assertGreater(e.getLength() * self.assertGreater(e.getLength()).real, 0,
+                (self.assertGreater(e.getLength()**2).real, 0,
                                    "v0-new_v edge should be spacelike (sqlen>0)")
             else:
                 # new_v@t=0 to other@t=1 → timelike
-                (self.assertLess(e.getLength() * self.assertLess(e.getLength()).real, 0,
+                (self.assertLess(e.getLength()**2).real, 0,
                                 f"v{other_id}-new_v edge should be timelike (sqlen<0)")
 
         # Orientation counts

@@ -71,7 +71,7 @@ def _assert_mixed_hinge_regime(test, st):
 
 
 def _max_abs_im(st):
-    return (max(abs(complex(e.getLength() * max(abs(complex(e.getLength())).imag)
+    return max(abs(complex(e.getLength()**2).imag)
                for e in st.getEdgeList().toVector())
 
 
@@ -107,7 +107,7 @@ class RealAxisDirectionTest(unittest.TestCase):
         h = 1e-6
         fd = np.zeros(len(edges))
         for i, e in enumerate(edges):
-            re0 = (complex(e.getLength() * complex(e.getLength())).real
+            re0 = complex(e.getLength()**2).real
             e.setLength(cmath.sqrt(complex(complex(re0 + h, 0.0))))
             fp = objective()
             e.setLength(cmath.sqrt(complex(complex(re0 - h, 0.0))))
@@ -177,7 +177,7 @@ class CausalSpecimenContinuationTest(unittest.TestCase):
         node = rebuild_joint_node(dump, seed=11001000)
         st = node.st
         # The specimen is causal: its recorded re_min < 0 must survive rebuild.
-        re_min = (min(complex(e.getLength() * min(complex(e.getLength())).real
+        re_min = min(complex(e.getLength()**2).real
                      for e in st.getEdgeList().toVector())
         self.assertLess(re_min, 0.0)
         self.assertEqual(_max_abs_im(st), 0.0)  # dumps carry Im == 0
@@ -188,7 +188,7 @@ class CausalSpecimenContinuationTest(unittest.TestCase):
         # Timelike content is dynamics, not policy — but the reader must agree
         # the geometry stayed finite and classifiable.
         for e in node.st.getEdgeList().toVector():
-            (self.assertTrue(cmath.isfinite(complex(e.getLength() * self.assertTrue(cmath.isfinite(complex(e.getLength()))))
+            self.assertTrue(cmath.isfinite(complex(e.getLength()**2)))
 
 
 if __name__ == "__main__":
