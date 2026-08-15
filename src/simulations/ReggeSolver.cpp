@@ -365,10 +365,10 @@ std::complex<double> ReggeSolver::totalAction() const {
 // Action gradient: ∂S/∂ℓ²_e for each edge (numerical)
 // =====================================================================
 
-std::vector<double> ReggeSolver::actionGradient() const {
+std::vector<std::complex<double>> ReggeSolver::actionGradient() const {
     auto edgeList = spacetime_->getEdgeList();
     auto edges = edgeList->toVector();
-    std::vector<double> g(edges.size());
+    std::vector<std::complex<double>> g(edges.size());
     for (std::size_t i = 0; i < edges.size(); ++i) {
         const std::complex<double> origSq = edges[i]->getSquaredLength();
         const double W = std::abs(origSq);              // |l^2|
@@ -381,9 +381,9 @@ std::vector<double> ReggeSolver::actionGradient() const {
         // Central differences in W-space, preserving edge character; perturb l^2
         // exactly and restore the original l^2 exactly (no sqrt round-trip drift).
         edges[i]->setSquaredLength(sqAtW(W + h));
-        double Sp = totalAction();
+        const std::complex<double> Sp = totalAction();
         edges[i]->setSquaredLength(sqAtW(std::max(W - h, 1e-12)));
-        double Sm = totalAction();
+        const std::complex<double> Sm = totalAction();
         g[i] = (Sp - Sm) / (2.0 * h);
         edges[i]->setSquaredLength(origSq);
     }
@@ -637,7 +637,9 @@ ReggeSolver::actionHessianExactSparse() const {
 double ReggeSolver::actionGradientNorm() const {
     auto g = actionGradient();
     double F = 0.0;
-    for (double gi : g) F += gi * gi;
+    // Sum |dS/dl^2|^2 over edges: std::norm is the squared modulus, so Re and Im
+    // both constrain the objective. Summing (Re g)^2 alone would build it on Re S.
+    for (const std::complex<double> &gi : g) F += std::norm(gi);
     return F;
 }
 

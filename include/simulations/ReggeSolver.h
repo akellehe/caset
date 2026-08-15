@@ -241,7 +241,7 @@ class ReggeSolver {
             &eidx) const;
 
     /// Compute the gradient of the total action: ∂S/∂ℓ²_e for each edge.
-    [[nodiscard]] std::vector<double> actionGradient() const;
+    [[nodiscard]] std::vector<std::complex<double>> actionGradient() const;
 
 #ifdef TESSERA_CUDA
     /// Flatten mesh topology into GPU-friendly arrays.
