@@ -153,15 +153,94 @@ double MultiCobordism::reggeActionGradient(
   return squaredGradientNorm;
 }
 
+Eigen::VectorXcd MultiCobordism::targetStateVector(
+    const std::vector<complexd> &targetState) {
+  Eigen::VectorXcd targetVector(targetState.size());
+  for (std::size_t componentIndex = 0; componentIndex < targetState.size();
+       ++componentIndex)
+    targetVector(componentIndex) = targetState[componentIndex];
+  return targetVector;
+}
+
+std::vector<std::vector<std::uint64_t>> MultiCobordism::holesCarryingTheTarget(
+    const Spacetime &spacetime, int registerDegree, std::size_t targetDimension) {
+  auto emergentHoleTuples = emergentHoles(spacetime, registerDegree);
+  // One target component per hole: holes beyond the target's width have no component
+  // to carry and take no part in the fit.
+  if (emergentHoleTuples.size() > targetDimension)
+    emergentHoleTuples.resize(targetDimension);
+  return emergentHoleTuples;
+}
+
+Eigen::MatrixXcd MultiCobordism::holePeriodMatrix(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    int degreeBettiNumber,
+    const std::vector<std::vector<std::uint64_t>> &registerHoles,
+    std::size_t targetDimension) {
+  EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
+  const auto flattenedCyclePeriods =
+      eigenstateSynthesis.cyclePeriods(registerHoles);  // bk x m, row-major
+  const std::size_t holeCount = registerHoles.size();
+  Eigen::MatrixXcd periodMatrixTransposed = Eigen::MatrixXcd::Zero(
+      static_cast<int>(targetDimension), degreeBettiNumber);
+  for (int harmonicIndex = 0; harmonicIndex < degreeBettiNumber; ++harmonicIndex)
+    for (std::size_t holeIndex = 0; holeIndex < holeCount; ++holeIndex)
+      periodMatrixTransposed(static_cast<int>(holeIndex), harmonicIndex) =
+          flattenedCyclePeriods[static_cast<std::size_t>(harmonicIndex) * holeCount +
+                                holeIndex];
+  return periodMatrixTransposed;
+}
+
+Eigen::VectorXcd MultiCobordism::relabeledTargetVector(
+    const Eigen::VectorXcd &targetVector, const std::vector<int> &relabeling) {
+  Eigen::VectorXcd relabeled(targetVector.size());
+  for (std::size_t holeIndex = 0; holeIndex < relabeling.size(); ++holeIndex)
+    relabeled(holeIndex) = targetVector(relabeling[holeIndex]);
+  return relabeled;
+}
+
+MultiCobordism::RelabelingMatch MultiCobordism::bestRelabelingOfTarget(
+    const Eigen::MatrixXcd &periodMatrixTransposed,
+    const Eigen::VectorXcd &targetVector,
+    const std::set<std::vector<int>> &claimedMatchings, bool skipClaimed) {
+  // min over the relabelings of the target components of ||pdT c - ts||^2 (lstsq c).
+  Eigen::BDCSVD<Eigen::MatrixXcd> periodSvd(
+      periodMatrixTransposed, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  RelabelingMatch bestMatch;
+  std::vector<int> relabeling(static_cast<std::size_t>(targetVector.size()));
+  std::iota(relabeling.begin(), relabeling.end(), 0);
+  do {
+    if (skipClaimed && claimedMatchings.count(relabeling)) continue;
+    const Eigen::VectorXcd relabeledTarget =
+        relabeledTargetVector(targetVector, relabeling);
+    const Eigen::VectorXcd leastSquaresCoefficients =
+        periodSvd.solve(relabeledTarget);
+    const double residual =
+        (periodMatrixTransposed * leastSquaresCoefficients - relabeledTarget)
+            .squaredNorm();
+    if (!bestMatch.scored || residual < bestMatch.residual)
+      bestMatch = {residual, relabeling, true};
+  } while (std::next_permutation(relabeling.begin(), relabeling.end()));
+  return bestMatch;
+}
+
 double MultiCobordism::residualOfTargetStateAgainstHarmonic(
     const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
     const std::vector<complexd> &targetState) {
-  const std::size_t targetDimension = targetState.size();
-  Eigen::VectorXcd targetVector(targetDimension);
-  for (std::size_t componentIndex = 0; componentIndex < targetDimension;
-       ++componentIndex)
-    targetVector(componentIndex) = targetState[componentIndex];
+  // No other register to collide with: an empty claim set excludes nothing, so this
+  // is the unconstrained min over the relabelings (`r_state`, the reference read-out).
+  std::set<std::vector<int>> claimedMatchings;
+  return residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+      spacetime, registerDegree, targetState, claimedMatchings);
+}
+
+double MultiCobordism::residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+    const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+    const std::vector<complexd> &targetState,
+    std::set<std::vector<int>> &claimedMatchings) {
+  const Eigen::VectorXcd targetVector = targetStateVector(targetState);
   const double fullLeakResidual = targetVector.squaredNorm();  // zero-filled leak
+
   const auto bettiNumbers = betti(*spacetime);
   if (registerDegree < 0) //||  # TODO: why would we exit if registerDegree is higher than betti numbers?
     return fullLeakResidual;
@@ -171,66 +250,50 @@ double MultiCobordism::residualOfTargetStateAgainstHarmonic(
   }
   const int degreeBettiNumber = bettiNumbers[registerDegree];
   if (degreeBettiNumber == 0) return fullLeakResidual;
-  auto emergentHoleTuples = emergentHoles(*spacetime, registerDegree);
-  if (emergentHoleTuples.empty()) return fullLeakResidual;
-  if (emergentHoleTuples.size() > targetDimension)
-    emergentHoleTuples.resize(targetDimension);
-  const std::size_t usableHoleCount = emergentHoleTuples.size();
 
-  EigenstateSynthesis eigenstateSynthesis(spacetime, registerDegree);
-  const auto flattenedCyclePeriods =
-      eigenstateSynthesis.cyclePeriods(emergentHoleTuples);  // bk x m, row-major
-  // periodMatrixTransposed: (d, bk), zero-filled beyond the usable hole columns.
-  Eigen::MatrixXcd periodMatrixTransposed = Eigen::MatrixXcd::Zero(
-      static_cast<int>(targetDimension), degreeBettiNumber);
-  for (int bettiRowIndex = 0; bettiRowIndex < degreeBettiNumber; ++bettiRowIndex)
-    for (std::size_t holeColumnIndex = 0; holeColumnIndex < usableHoleCount;
-         ++holeColumnIndex)
-      periodMatrixTransposed(static_cast<int>(holeColumnIndex), bettiRowIndex) =
-          flattenedCyclePeriods[static_cast<std::size_t>(bettiRowIndex) *
-                                    usableHoleCount +
-                                holeColumnIndex];
+  const auto registerHoles =
+      holesCarryingTheTarget(*spacetime, registerDegree, targetState.size());
+  if (registerHoles.empty()) return fullLeakResidual;
+  const Eigen::MatrixXcd periodMatrixTransposed =
+      holePeriodMatrix(spacetime, registerDegree, degreeBettiNumber, registerHoles,
+                       targetState.size());
 
-  // min over permutations of the target components of ||pdT c - ts||^2 (lstsq c).
-  std::vector<int> targetPermutation(targetDimension);
-  std::iota(targetPermutation.begin(), targetPermutation.end(), 0);
-  double bestResidual = std::numeric_limits<double>::infinity();
-  Eigen::BDCSVD<Eigen::MatrixXcd> periodSvd(
-      periodMatrixTransposed, Eigen::ComputeThinU | Eigen::ComputeThinV);
-  do {
-    Eigen::VectorXcd permutedTargetVector(targetDimension);
-    for (std::size_t componentIndex = 0; componentIndex < targetDimension;
-         ++componentIndex)
-      permutedTargetVector(componentIndex) =
-          targetVector(targetPermutation[componentIndex]);
-    const Eigen::VectorXcd leastSquaresCoefficients =
-        periodSvd.solve(permutedTargetVector);
-    // TODO: I don't think this removes a permutation after it's already been seen, that will encourage all the registers to carry equal weights by accident.
-    bestResidual = std::min(bestResidual,
-                            (periodMatrixTransposed * leastSquaresCoefficients -
-                             permutedTargetVector)
-                                .squaredNorm());
-  } while (std::next_permutation(targetPermutation.begin(),
-                                 targetPermutation.end()));
-  return bestResidual;
+  // The relabeling this register wins is withheld from the registers scored after it,
+  // so no two of them are read against the same matching of components onto holes.
+  RelabelingMatch match = bestRelabelingOfTarget(
+      periodMatrixTransposed, targetVector, claimedMatchings, /*skipClaimed=*/true);
+  if (!match.scored) {
+    // Every relabeling is already claimed — more registers than the d! this target
+    // admits. Restart the exclusion rather than return the empty minimum.
+    claimedMatchings.clear();
+    match = bestRelabelingOfTarget(periodMatrixTransposed, targetVector,
+                                   claimedMatchings, /*skipClaimed=*/false);
+  }
+  claimedMatchings.insert(match.relabeling);
+  return match.residual;
 }
 
 double MultiCobordism::residualForBoundaryBlock(
     const BoundaryBlock &boundaryBlock,
     const std::shared_ptr<Spacetime> &spacetime) const {
+  std::set<std::vector<int>> claimedMatchings;
+  return residualForBoundaryBlockWithDistinctMatchings(boundaryBlock, spacetime,
+                                                       claimedMatchings);
+}
+
+double MultiCobordism::residualForBoundaryBlockWithDistinctMatchings(
+    const BoundaryBlock &boundaryBlock,
+    const std::shared_ptr<Spacetime> &spacetime,
+    std::set<std::vector<int>> &claimedMatchings) const {
   auto blockSubcomplex = spacetime->subcomplexWithinVertexSet(
     boundaryBlock.vertices);
   double residual = 0.0;
-  if (!blockSubcomplex) {
-    Eigen::VectorXcd targetVector(boundaryBlock.target.size());
-    for (std::size_t componentIndex = 0;
-         componentIndex < boundaryBlock.target.size(); ++componentIndex)
-      targetVector(componentIndex) = boundaryBlock.target[componentIndex];
-    return static_cast<double>(registerDegrees_.size()) * targetVector.squaredNorm();
-  }
+  if (!blockSubcomplex)  // no complex to read: the target leaks in full, per degree
+    return static_cast<double>(registerDegrees_.size()) *
+           targetStateVector(boundaryBlock.target).squaredNorm();
   for (int registerDegree : registerDegrees_)
-    residual += residualOfTargetStateAgainstHarmonic(
-        blockSubcomplex, registerDegree, boundaryBlock.target);
+    residual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+        blockSubcomplex, registerDegree, boundaryBlock.target, claimedMatchings);
   return residual;
 }
 
@@ -239,18 +302,25 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
   // a seed, held representable by these terms, not pinned) — each read off its own
   // region and weighted by inputResidualWeight_ so they are not out-competed by the
   // whole/output term.
+  //
+  // ONE claim set spans the whole evaluation: every register here is scored by the
+  // same min-over-relabelings, so without it they all pick the same argmin matching
+  // and the sum is smallest when the registers carry identical weights. The set
+  // records each register's winning matching and withholds it from the ones after.
+  std::set<std::vector<int>> claimedMatchings;
   double totalResidual = 0.0;
   for (const auto &inputBlock : inputBlocks_)
-    totalResidual +=
-        inputResidualWeight_ * residualForBoundaryBlock(inputBlock, spacetime);
+    totalResidual += inputResidualWeight_ *
+                     residualForBoundaryBlockWithDistinctMatchings(inputBlock, spacetime,
+                                                   claimedMatchings);
   if (outputTargets_.size() == 1) {
     // A SINGLE output is the whole cobordism's output boundary: as in the Python
     // reference it is "the harmonic of the entire structure", NEVER a pinned
     // region. Read it off the WHOLE complex so the bulk loop drives the whole to
     // carry it (the output EMERGES; it is not frozen by seedOutputs).
     for (int registerDegree : registerDegrees_)
-      totalResidual += residualOfTargetStateAgainstHarmonic(
-          spacetime, registerDegree, outputTargets_.front());
+      totalResidual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+          spacetime, registerDegree, outputTargets_.front(), claimedMatchings);
   } else {
     // Multiple outputs (e.g. a 2->2 recombination → diquark ⊔ antidiquark) live in
     // distinct regions: read each off its own constructed block. EMPTY outputTargets
@@ -258,12 +328,14 @@ double MultiCobordism::rU(const std::shared_ptr<Spacetime> &spacetime) const {
     // all — rU is the weighted input residuals alone, and the whole's final state
     // emerges (read after the fact, e.g. ProtonIngredients' singlet diagnostic).
     for (const auto &outputBlock : outputBlocks_)
-      totalResidual += residualForBoundaryBlock(outputBlock, spacetime);
+      totalResidual +=
+          residualForBoundaryBlockWithDistinctMatchings(outputBlock, spacetime,
+                                                        claimedMatchings);
     if (inputBlocks_.empty() && outputBlocks_.empty())  // bare objective, nothing built yet
       for (int registerDegree : registerDegrees_)
         for (const auto &outputTarget : outputTargets_)
-          totalResidual += residualOfTargetStateAgainstHarmonic(
-              spacetime, registerDegree, outputTarget);
+          totalResidual += residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+              spacetime, registerDegree, outputTarget, claimedMatchings);
   }
   return totalResidual;
 }

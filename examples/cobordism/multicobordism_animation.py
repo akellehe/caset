@@ -627,6 +627,22 @@ class ProtonAnimator:
                 q.put(("error", frame))
                 paint_done.set()
 
+        def close_after_this_tick():
+            """Tear the window down on a LATER event-loop turn, never from inside
+            `on_timer`. `plt.close` fires the figure's close_event, which runs
+            `Animation._stop()` and sets `event_source = None` — and `on_timer` is called
+            by `TimedAnimation._step`, which touches `self.event_source` again the moment
+            it returns. Closing in-callback therefore raises `AttributeError` inside the
+            GUI toolkit's timer slot, and PyQt aborts the process on an unhandled
+            exception in a slot: the whole run dies with a core dump instead of the
+            compute error. A one-shot timer runs the teardown after `_step` has finished."""
+            self._anim.event_source.stop()
+            closer = self.fig.canvas.new_timer(interval=1)
+            closer.single_shot = True
+            closer.add_callback(lambda: plt.close(self.fig))
+            self._closer = closer               # keep a ref so it isn't GC'd before it fires
+            closer.start()
+
         def on_timer(_ignored_frame):
             while True:
                 try:
@@ -641,9 +657,8 @@ class ProtonAnimator:
                     paint_done.set()            # release the worker for the next frame
                     if frame >= self._frames - 1:
                         self._anim.event_source.stop()
-                else:                            # error: stop and close so plt.show() returns
-                    self._anim.event_source.stop()
-                    plt.close(self.fig)
+                else:                            # error: close so plt.show() returns
+                    close_after_this_tick()
             return []
 
         worker_thread = threading.Thread(target=worker, name="proton-build", daemon=True)
