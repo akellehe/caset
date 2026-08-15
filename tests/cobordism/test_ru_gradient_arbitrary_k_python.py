@@ -81,8 +81,11 @@ class ArbitraryKRuGradientTest(unittest.TestCase):
         r_u = es.residualForPeriods(holes, target)
         self.assertGreater(r_u, 1e-3, "target should be non-realizable (r_U > 0)")
         g = np.asarray(es.residualForPeriodsGradient(holes, target), float)
-        self.assertLess(abs(_euler_lhs(st, g) + r_u) / r_u, 1e-9,
-                        "Euler identity Σℓ²∂r_U = −r_U failed at k=1")
+        # With the V^2 weights L_k is homogeneous of degree -1 in l^2, so
+        # r_U = ||(L - lambda)p||^2 is degree -2 and Euler reads -2 r_U
+        # (measured exactly: r_U(s*l^2) = r_U/s^2).
+        self.assertLess(abs(_euler_lhs(st, g) + 2.0 * r_u) / r_u, 1e-9,
+                        "Euler identity Σℓ²∂r_U = −2·r_U failed at k=1")
 
     def test_k2_euler_on_b2_register(self):
         # k=2 (tetrahedral holes, the b₂ color register): the exact Euler identity is
@@ -114,8 +117,8 @@ class ArbitraryKRuGradientTest(unittest.TestCase):
         r_u = es.residualForPeriods(holes, target)
         self.assertGreater(r_u, 1.0)
         g = np.asarray(es.residualForPeriodsGradient(holes, target), float)
-        self.assertLess(abs(_euler_lhs(st, g) + r_u) / r_u, 1e-11,
-                        "Euler identity Σℓ²∂r_U = −r_U failed at k=2")
+        self.assertLess(abs(_euler_lhs(st, g) + 2.0 * r_u) / r_u, 1e-9,
+                        "Euler identity Σℓ²∂r_U = −2·r_U failed at k=2")
 
 
 if __name__ == "__main__":

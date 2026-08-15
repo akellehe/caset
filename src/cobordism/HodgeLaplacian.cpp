@@ -138,7 +138,11 @@ Eigen::MatrixXcd laplacianGradientMatrix(const Spacetime &K, int k,
       if (std::abs(vol) <= 0.0) continue;  // degenerate weight pinned to 1 (const)
       const auto g = fk[static_cast<std::size_t>(i)]->volumeGradient();
       const auto it = g.find({lo, hi});
-      if (it != g.end()) dw[i] = it->second;
+      // Convention-aware: W = V  =>  dW = dV;  W = V^2  =>  dW = 2 V dV.
+      if (it != g.end())
+        dw[i] = (conv == HodgeLaplacian::WeightConvention::SquaredContent)
+                    ? 2.0 * vol * it->second
+                    : it->second;
     }
     return dw;
   };
