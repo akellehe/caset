@@ -601,7 +601,7 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(u, v, (it->second->getLength() * it->second->getLength()),
+      rem.removedEdges.emplace_back(u, v, it->second->getLength(),
                                     it->second->getPhase());
       toRemove.push_back(it->second);
     }
@@ -689,7 +689,7 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
   for (const auto &[u, v, w, theta] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setLength(std::sqrt(w));  // the recorded complex l2, bit-exact
+      it->second->setLength(w);  // the recorded complex LENGTH, bit-exact
       it->second->setPhase(theta);
     }
   }

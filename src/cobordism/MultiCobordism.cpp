@@ -360,10 +360,10 @@ MultiCobordism::Snapshot MultiCobordism::snapshotOf(
   std::vector<std::vector<std::uint64_t>> cellVertexTuples;
   for (const auto &topSimplex : spacetime.getTopSimplices())
     cellVertexTuples.push_back(topSimplex->topTuple());
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> squaredLengthsByEdge;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> lengthsByEdge;
   for (const auto *edge : spacetime.getEdgeList()->toVector())
-    squaredLengthsByEdge[edgeKey(edge)] = (edge->getLength() * edge->getLength());
-  return {std::move(cellVertexTuples), std::move(squaredLengthsByEdge)};
+    lengthsByEdge[edgeKey(edge)] = edge->getLength();  // verbatim, branch-exact
+  return {std::move(cellVertexTuples), std::move(lengthsByEdge)};
 }
 
 MultiCobordism::Snapshot MultiCobordism::snapshot() const {
@@ -377,7 +377,7 @@ std::shared_ptr<Spacetime> MultiCobordism::build(
   for (auto *edge : rebuiltSpacetime->getEdgeList()->toVector()) {
     const auto savedEntry = complexSnapshot.second.find(edgeKey(edge));
     if (savedEntry != complexSnapshot.second.end())
-      edge->setLength(std::sqrt(savedEntry->second));
+      edge->setLength(savedEntry->second);  // verbatim, branch-exact
   }
   return rebuiltSpacetime;
 }
@@ -535,19 +535,19 @@ double MultiCobordism::deltaF(
   // Widening is safe: Delta||grad S||^2 = after - before is exact over any FIXED
   // SUPERSET of the truly-affected edges, because every edge outside the set keeps
   // its gradient and cancels. A superset costs compute, never correctness.
-  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> baseSquaredLengths;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, complexd> baseLengths;
   for (const auto *edge : spacetime_->getEdgeList()->toVector())
-    baseSquaredLengths[edgeKey(edge)] = (edge->getLength() * edge->getLength());
+    baseLengths[edgeKey(edge)] = edge->getLength();
   std::set<std::pair<std::uint64_t, std::uint64_t>> movedEdges;
   for (const auto *edge : candidateSpacetime->getEdgeList()->toVector()) {
     const auto key = edgeKey(edge);
-    const auto found = baseSquaredLengths.find(key);
-    if (found == baseSquaredLengths.end() ||
-        found->second != (edge->getLength() * edge->getLength()))
+    const auto found = baseLengths.find(key);
+    if (found == baseLengths.end() ||
+        found->second != edge->getLength())
       movedEdges.insert(key);
-    if (found != baseSquaredLengths.end()) baseSquaredLengths.erase(found);
+    if (found != baseLengths.end()) baseLengths.erase(found);
   }
-  for (const auto &leftover : baseSquaredLengths)  // in base, absent from candidate
+  for (const auto &leftover : baseLengths)  // in base, absent from candidate
     movedEdges.insert(leftover.first);
   if (!movedEdges.empty()) {
     std::set<std::vector<std::uint64_t>> incidentCells;
