@@ -32,7 +32,10 @@ def _make_simplex(st, vertex_ids, squared_by_pair):
     edges = {}
     for pair, l2 in squared_by_pair.items():
         a, b = tuple(pair)
-        edges[pair] = st.createEdge(verts[a], verts[b], float(l2))
+        # createEdge takes the complex LENGTH now, so a squared value goes in
+        # as its principal root: real for spacelike, imaginary for timelike.
+        edges[pair] = st.createEdge(verts[a], verts[b],
+                                    cmath.sqrt(complex(l2)))
     simplex, _ = st.createSimplex([verts[i] for i in vertex_ids],
                                   list(edges.values()))
     return simplex, verts, edges
@@ -561,7 +564,7 @@ class TestSimplexDeficitAngle(unittest.TestCase):
         def edge(a, b):
             key = frozenset({a, b})
             if key not in edge_cache:
-                edge_cache[key] = st.createEdge(verts[a], verts[b], 1.0)
+                edge_cache[key] = st.createEdge(verts[a], verts[b], cmath.sqrt(complex(1.0)))
             return edge_cache[key]
 
         e01 = edge(0, 1)

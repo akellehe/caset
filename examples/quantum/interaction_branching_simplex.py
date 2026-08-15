@@ -81,6 +81,7 @@ from tessera.quantum.holography import (
     ChoiTDVPSettings,
     SchwingerParams,
 )
+import cmath
 
 LOG2 = math.log(2.0)
 I_MAX = 2.0 * LOG2   # algebraic maximum of the MI between two single sites
@@ -251,7 +252,7 @@ def assemble_cell(mi: dict, epsilon: float):
         sq = d * d
         if kind == "timelike":
             sq = -sq
-        st.createEdge(vert[u], vert[v], sq)
+        st.createEdge(vert[u], vert[v], cmath.sqrt(complex(sq)))
 
     # An edge whose MI fell below the floor is infinitely long: the cell is
     # disconnected and has no Gram determinant.

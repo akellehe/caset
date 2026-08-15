@@ -3,6 +3,7 @@
 
 import unittest
 from tessera import Edge, EdgeList, Vertex
+import cmath
 
 class TestEdgeList(unittest.TestCase):
 
@@ -20,6 +21,6 @@ class TestEdgeList(unittest.TestCase):
         self.assertEqual(len(el.toVector()), 1)
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
-        el.add(v1, v2, 3.)
+        el.add(v1, v2, cmath.sqrt(complex(3.)))
         self.assertEqual(el.size(), 1)
         self.assertEqual(len(el.toVector()), 1)
