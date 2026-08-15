@@ -88,7 +88,7 @@ class ProtonBuildTest(unittest.TestCase):
         # edge length must differ from the unit 1.0+0j.
         block = self.p.block()
         self.assertIsNotNone(block)
-        squared = [e.getSquaredLength() for e in block.getEdgeList().toVector()]
+        squared = [(e.getLength() * e.getLength()) for e in block.getEdgeList().toVector()]
         self.assertTrue(squared, "proton has no edges")
         self.assertTrue(any(abs(l - complex(1.0, 0.0)) > 1e-9 for l in squared),
                         "proton metric is unit — the relaxed geometry was lost")

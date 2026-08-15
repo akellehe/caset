@@ -82,7 +82,7 @@ bool AddMove::propose() {
     }
   }
   if (!sigmaAdj) return false;
-  if (!isN41Type(sigmaAdj, d)) return false;
+  if (!isN41Type(sigmaAdj, d)) return false; // TODO: This can never be true for != 4-complexes!
 
   // Identify the non-spatial ("top" and "bottom") vertices.
   VertexPtr vertA = nullptr, vertB = nullptr;

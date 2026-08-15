@@ -35,6 +35,7 @@ gates:
 import pytest
 
 import tessera as T
+import cmath
 
 cob = T.cobordism
 
@@ -69,7 +70,7 @@ def _seed_complex_geometry(st):
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         lo, hi = min(a, b), max(a, b)
-        e.setSquaredLength(complex(1.0 + 0.01 * lo, 0.05 + 0.01 * hi))
+        e.setLength(cmath.sqrt(complex(complex(1.0 + 0.01 * lo, 0.05 + 0.01 * hi))))
         e.setPhase(0.1 + 0.003 * (lo * 13 + hi))
 
 
@@ -78,7 +79,7 @@ def _seed_signed_geometry(st, timelike_keys):
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         k = (min(a, b), max(a, b))
-        e.setSquaredLength(-1.5 if k in timelike_keys else 1.0 + 0.01 * k[0])
+        e.setLength(cmath.sqrt(complex(-1.5 if k in timelike_keys else 1.0 + 0.01 * k[0])))
         e.setPhase(0.2 + 0.001 * k[1])
 
 
@@ -87,7 +88,7 @@ def _edge_state(st):
     out = {}
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
-        out[(min(a, b), max(a, b))] = (complex(e.getSquaredLength()),
+        out[(min(a, b), max(a, b))] = (complex(e.getLength()**2),
                                        e.getPhase())
     return out
 

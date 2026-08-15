@@ -26,6 +26,16 @@ namespace tessera::quantum {}
 namespace tessera::simulations {}
 namespace tessera::spacetime {}
 namespace tessera::mesh {
+namespace {
+/// Principal complex square root with a negative-zero imaginary part normalised
+/// away first: std::sqrt lands on the far side of the branch cut for -0.0, and the
+/// real-typed sign tests this replaces were immune to that where the complex form
+/// is not (#638).
+inline std::complex<double> principalSqrt(std::complex<double> z) {
+    if (z.imag() == 0.0) z = {z.real(), 0.0};
+    return std::sqrt(z);
+}
+}  // namespace
 using namespace ::tessera::graph;
 using namespace ::tessera::spacetime;
 using namespace ::tessera::observables;
@@ -51,6 +61,15 @@ using namespace ::tessera::quantum;
 #else
   #define TESSERA_TRIPWIRE_LIVE(method_name) ((void)0)
 #endif
+
+
+std::vector<std::uint64_t> Simplex::topTuple() const {
+  std::vector<std::uint64_t> sortedVertexIdentifiers;
+  for (const auto *vertex : getVertices())
+    sortedVertexIdentifiers.push_back(vertex->getId());
+  std::sort(sortedVertexIdentifiers.begin(), sortedVertexIdentifiers.end());
+  return sortedVertexIdentifiers;
+}
 
 bool Simplex::hasFacets() const {
   TESSERA_TRIPWIRE_LIVE("hasFacets");
@@ -583,10 +602,10 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr vertex) {
   for (auto &existing : kPlusOneVertices) {
     if (existing->getTime() == vertex->getTime()) {
       // Spacelike edge (same time slice): ℓ² = a
-      newEdges.push_back(spacetime->createEdge(existing, vertex, spacetime->getA()));
+      newEdges.push_back(spacetime->createEdge(existing, vertex, std::sqrt(std::complex<double>(spacetime->getA()))));
     } else {
       // Timelike edge (different time slices): ℓ² = -α·a
-      newEdges.push_back(spacetime->createEdge(existing, vertex, -(spacetime->getAlpha() * spacetime->getA())));
+      newEdges.push_back(spacetime->createEdge(existing, vertex, std::sqrt(std::complex<double>(-(spacetime->getAlpha() * spacetime->getA())))));
     }
   }
   kPlusOneVertices.push_back(vertex);
@@ -605,11 +624,11 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr vertex) {
 // Geometry
 // =====================================================================
 
-double Simplex::determinant(const std::vector<double> &M, int n) {
+std::complex<double> Simplex::determinant(const std::vector<std::complex<double>> &M, int n) {
     if (n == 1) return M[0];
     if (n == 2) return M[0] * M[3] - M[1] * M[2];
-    std::vector<double> A(M);
-    double det = 1.0;
+    std::vector<std::complex<double>> A(M);
+    std::complex<double> det = 1.0;
     for (int col = 0; col < n; ++col) {
         int pivot = col;
         double maxVal = std::abs(A[col * n + col]);
@@ -625,7 +644,7 @@ double Simplex::determinant(const std::vector<double> &M, int n) {
         }
         det *= A[col * n + col];
         for (int row = col + 1; row < n; ++row) {
-            double factor = A[row * n + col] / A[col * n + col];
+            std::complex<double> factor = A[row * n + col] / A[col * n + col];
             for (int j = col + 1; j < n; ++j)
                 A[row * n + j] -= factor * A[col * n + j];
         }
@@ -633,11 +652,11 @@ double Simplex::determinant(const std::vector<double> &M, int n) {
     return det;
 }
 
-std::vector<double> Simplex::cofactorMatrix(
-    const std::vector<double> &M, int n) {
-    std::vector<double> C(n * n, 0.0);
+std::vector<std::complex<double>> Simplex::cofactorMatrix(
+    const std::vector<std::complex<double>> &M, int n) {
+    std::vector<std::complex<double>> C(n * n, 0.0);
     if (n == 1) { C[0] = 1.0; return C; }
-    std::vector<double> sub((n - 1) * (n - 1));
+    std::vector<std::complex<double>> sub((n - 1) * (n - 1));
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             int si = 0;
@@ -651,37 +670,37 @@ std::vector<double> Simplex::cofactorMatrix(
                 }
                 si++;
             }
-            double sign = ((i + j) % 2 == 0) ? 1.0 : -1.0;
+            std::complex<double> sign = ((i + j) % 2 == 0) ? 1.0 : -1.0;
             C[i * n + j] = sign * determinant(sub, n - 1);
         }
     }
     return C;
 }
 
-std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
+std::vector<std::complex<double>> Simplex::gramMatrix() const {
     int dPlus1 = static_cast<int>(vertices.size());
     int d = dPlus1 - 1;
     if (d < 1) return {};
 
-    // Squared-distance lookup. Honor the signed l^2 so the Lorentzian sign of
-    // timelike edges survives into G; wickRotate takes |l^2| (Euclidean/CDT).
-    // Ordinary-Lorentzian convention: l^2 is real signed, read as Re (#589).
-    std::unordered_map<std::uint64_t, double> sqMap;
+    // Squared-distance lookup on the honest signed l^2: a timelike edge keeps its
+    // Lorentzian sign in G, so det(G) records the cell's metric signature. There is
+    // no Wick-rotated (|l^2|) mode -- the Euclidean path is gone, not merely unused
+    // (#641).
+    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getRealSquaredLength();
+        sqMap[fp] = (e->getLength() * e->getLength());
     }
-    auto getSq = [&](int i, int j) -> double {
-        if (i == j) return 0.0;
+    auto getSq = [&](int i, int j) -> std::complex<double> {
+        if (i == j) return {0.0, 0.0};
         auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
                   Fingerprint::mix64(vertices[j]->getId());
         auto it = sqMap.find(fp);
-        return it != sqMap.end() ? it->second : 0.0;
+        return it != sqMap.end() ? it->second : std::complex<double>{0.0, 0.0};
     };
 
-    std::vector<double> G(d * d, 0.0);
+    std::vector<std::complex<double>> G(d * d, std::complex<double>{0.0, 0.0});
     for (int i = 0; i < d; ++i)
         for (int j = 0; j < d; ++j)
             G[i * d + j] = 0.5 * (getSq(0, i + 1) + getSq(0, j + 1)
@@ -689,21 +708,20 @@ std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
     return G;
 }
 
-std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
+std::vector<std::complex<double>> Simplex::cayleyMengerMatrix() const {
+    {
+    }
     int dPlus1 = static_cast<int>(vertices.size());
     if (dPlus1 < 1) return {};
 
-    // Squared-distance lookup; signed by default (real signed l^2, read as
-    // Re — the ordinary-Lorentzian convention, #589), |l^2| under wickRotate.
-    std::unordered_map<std::uint64_t, double> sqMap;
+    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getRealSquaredLength();
+        sqMap[fp] = (e->getLength() * e->getLength());
     }
-    auto getSq = [&](int i, int j) -> double {
-        if (i == j) return 0.0;
+    auto getSq = [&](int i, int j) -> std::complex<double> {
+        if (i == j) return std::complex<double>{0, 0};
         auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
                   Fingerprint::mix64(vertices[j]->getId());
         auto it = sqMap.find(fp);
@@ -712,7 +730,7 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
 
     // Bordered matrix: zero corner, a border of ones, squared distances inside.
     int n = dPlus1 + 1;
-    std::vector<double> B(n * n, 0.0);
+    std::vector<std::complex<double>> B(n * n, 0.0);
     for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
     for (int i = 0; i < dPlus1; ++i)
         for (int j = 0; j < dPlus1; ++j)
@@ -720,8 +738,10 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
     return B;
 }
 
-std::vector<double> Simplex::cayleyMengerCanonical(
-    bool wickRotate, std::unordered_map<std::uint64_t, int> &pos1) const {
+std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
+    std::unordered_map<std::uint64_t, int> &pos1) const {
+  {
+  }
     const int dPlus1 = static_cast<int>(vertices.size());
     pos1.clear();
     if (dPlus1 < 1) return {};
@@ -735,16 +755,13 @@ std::vector<double> Simplex::cayleyMengerCanonical(
     for (int i = 0; i < dPlus1; ++i)
         pos1[sorted[static_cast<std::size_t>(i)]->getId()] = i + 1;  // border-offset
 
-    // Signed by default (real signed l^2, read as Re — the ordinary-Lorentzian
-    // convention, #589), |l^2| under wickRotate.
-    std::unordered_map<std::uint64_t, double> sqMap;
+    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getRealSquaredLength();
+        sqMap[fp] = (e->getLength() * e->getLength());
     }
-    auto getSq = [&](int i, int j) -> double {
+    auto getSq = [&](int i, int j) -> std::complex<double> {
         if (i == j) return 0.0;
         auto fp = Fingerprint::mix64(sorted[static_cast<std::size_t>(i)]->getId()) ^
                   Fingerprint::mix64(sorted[static_cast<std::size_t>(j)]->getId());
@@ -753,70 +770,12 @@ std::vector<double> Simplex::cayleyMengerCanonical(
     };
 
     const int n = dPlus1 + 1;
-    std::vector<double> B(static_cast<std::size_t>(n) * n, 0.0);
+    std::vector<std::complex<double>> B(static_cast<std::size_t>(n) * n, 0.0);
     for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
     for (int i = 0; i < dPlus1; ++i)
         for (int j = 0; j < dPlus1; ++j)
             B[(i + 1) * n + (j + 1)] = getSq(i, j);
     return B;
-}
-
-double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
-    int dPlus1 = static_cast<int>(vertices.size());
-
-    // Find the two vertices in this simplex but not in the hinge.
-    auto hingeVerts = hinge->getVertices();
-    std::vector<int> opposite;
-    for (int k = 0; k < dPlus1; ++k) {
-        bool inHinge = false;
-        for (const auto &hv : hingeVerts)
-            if (hv->getId() == vertices[k]->getId()) { inHinge = true; break; }
-        if (!inHinge) opposite.push_back(k);
-    }
-    if (opposite.size() != 2) return 0.0;
-    int vi = opposite[0], vj = opposite[1];
-
-    // Cayley-Menger bordered matrix; its cofactors give the dihedral angle.
-    int n = dPlus1 + 1;
-    auto B = cayleyMengerMatrix(wickRotate);
-    auto cof = cofactorMatrix(B, n);
-    int bi = vi + 1, bj = vj + 1;
-    double Cij = cof[bi * n + bj];
-    double Cii = cof[bi * n + bi];
-    double Cjj = cof[bj * n + bj];
-
-    double denom = std::sqrt(std::abs(Cii * Cjj));
-    if (denom < 1e-15) return 0.0;
-    // The diagonal Cayley–Menger cofactors C_ii, C_jj share the
-    // dimension-parity sign (-1)^d: positive in even dimension, negative in odd
-    // (e.g. -3 for a unit tetrahedron). Taking |C_ii·C_jj| under the sqrt drops
-    // that sign, so the normalization must reapply it — otherwise
-    // cos θ = -C_ij / sqrt(C_ii·C_jj) collapses to its supplement (π - θ) for
-    // odd-dimensional simplices. In even dimension C_ii > 0 and this is a no-op.
-    if (Cii < 0.0) denom = -denom;
-    double cosTheta = std::clamp(-Cij / denom, -1.0, 1.0);
-    return std::acos(cosTheta);
-}
-
-double Simplex::deficitAngle() const {
-    if (!spacetime) return 2.0 * std::numbers::pi;
-    int d = spacetime->getMetric()->getSignature()->getDimensions();
-    int topSize = d + 1;
-
-    double sum = 0.0;
-    if (vertices.empty()) return 2.0 * std::numbers::pi;
-
-    for (const auto &sigma : vertices[0]->getSimplices()) {
-        if (static_cast<int>(sigma->size()) != topSize) continue;
-        bool containsAll = true;
-        for (std::size_t i = 1; i < vertices.size(); ++i)
-            if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
-        if (containsAll)
-            // Deficit angles drive the CDT/Regge action, which is defined on
-            // the Wick-rotated (Euclidean) geometry — request |l^2| explicitly.
-            sum += sigma->dihedralAngle(const_cast<Simplex*>(this), /*wickRotate=*/true);
-    }
-    return 2.0 * std::numbers::pi - sum;
 }
 
 std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
@@ -833,49 +792,41 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     if (opposite.size() != 2) return {0.0, 0.0};
     const int vi = opposite[0], vj = opposite[1];
 
-    // Signed (non-Wick) Cayley-Menger cofactors → the dihedral cosine ratio r,
-    // UN-clamped. std::acos on its complex extension returns the ordinary angle
-    // for |r| <= 1 and a boost (complex) for |r| > 1 — see the header.
+    // Cayley-Menger cofactors -> the dihedral cosine ratio, UN-clamped:
     //
-    // Evaluate in the canonical (sorted-by-id) frame: the signed cofactor sign fix
-    // below (Cii<0) is sensitive to the order the cell's vertices are stored in, so
-    // a cell a Pachner move stored in causal order would otherwise yield a
-    // different deficit than the same geometry built sorted — making the action
-    // depend on build history. The canonical frame makes it a true invariant.
+    //     cos(theta) = -C_ij / (sqrt(C_ii) * sqrt(C_jj))
+    //
+    // TWO separate principal square roots, never sqrt(C_ii * C_jj). For complex
+    // a, b the two differ by a sign exactly when both sit on the negative real
+    // axis -- with the unit tetrahedron's C_ii = C_jj = -3, sqrt(C_ii*C_jj) is
+    // +3 while sqrt(C_ii)*sqrt(C_jj) is (i*r3)(i*r3) = -3. Folding the product
+    // under one root is what used to force a hand-applied (-1)^d parity fix, a
+    // three-way branch dispatch, and an i<->j anchoring swap; taking the roots
+    // separately makes all three emerge from the branch structure instead (#638).
+    //
+    // Every causal configuration is this one expression. Same-sign cofactors put
+    // the wedge on one side of the light cone: a real angle for |r| <= 1, a boost
+    // (pure-imaginary acos) for |r| > 1. Opposite signs mean the wedge CROSSES the
+    // cone -- the denominator turns pure-imaginary, r = i*y, and the principal
+    // acos(i*y) = pi/2 - i*asinh(y) reproduces Sorkin's quarter turn (#581) with
+    // no special case. Around a flat one-ray-per-quadrant vertex star the boosts
+    // telescope to zero and four crossings sum to 2*pi, so 2*pi - sum = 0 holds.
+    //
+    // Evaluate in the canonical (sorted-by-id) frame so a cell a Pachner move
+    // stored in causal order yields the same deficit as the same geometry built
+    // sorted -- otherwise the action depends on build history.
     const int n = dPlus1 + 1;
     std::unordered_map<std::uint64_t, int> pos1;
-    const auto B = cayleyMengerCanonical(/*wickRotate=*/false, pos1);
+    const auto B = cayleyMengerCanonical(pos1);
     const auto cof = cofactorMatrix(B, n);
-    int bi = pos1[vertices[vi]->getId()];
-    int bj = pos1[vertices[vj]->getId()];
-    // The Cii<0 sign fix below is asymmetric in (i,j); anchor it on the lower
-    // canonical position so the result does not depend on which opposite vertex
-    // the (stored) ordering happened to present first.
-    if (bi > bj) std::swap(bi, bj);
-    const double Cij = cof[static_cast<std::size_t>(bi) * n + bj];
-    const double Cii = cof[static_cast<std::size_t>(bi) * n + bi];
-    const double Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
-    const double D = std::sqrt(std::abs(Cii * Cjj));
-    if (D < 1e-15) return {0.0, 0.0};
-    if (Cii * Cjj >= 0.0) {
-        // Same-sign cofactors: the wedge stays on one side of the light cone
-        // (the m=0 real angle for |r| <= 1 and the boost regime for |r| > 1).
-        double denom = D;
-        if (Cii < 0.0) denom = -denom;  // (-1)^d diagonal-sign fix (see dihedralAngle)
-        const double r = -Cij / denom;
-        return std::acos(std::complex<double>(r, 0.0));
-    }
-    // Opposite-sign cofactors: the wedge CROSSES the light cone (one facet
-    // direction spacelike, one timelike -- the m=1 case, #581). The true
-    // denominator sqrt(Cii)*sqrt(Cjj) (principal branches) is then purely
-    // imaginary (+i*D), the cosine ratio -Cij/(i*D) = i*(Cij/D) is purely
-    // imaginary, and the principal acos is
-    //     theta = pi/2 - i*asinh(Cij/D).
-    // Each crossing contributes exactly pi/2 to Re(theta) (Sorkin's quarter
-    // turn) plus a signed boost; around a flat one-ray-per-quadrant vertex
-    // star the boosts telescope to zero, which pins this sign convention.
-    const double y = Cij / D;
-    return {std::numbers::pi / 2.0, -std::asinh(y)};
+    const int bi = pos1[vertices[vi]->getId()];
+    const int bj = pos1[vertices[vj]->getId()];
+    const std::complex<double> Cij = cof[static_cast<std::size_t>(bi) * n + bj];
+    const std::complex<double> Cii = cof[static_cast<std::size_t>(bi) * n + bi];
+    const std::complex<double> Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
+    const std::complex<double> denom = principalSqrt(Cii) * principalSqrt(Cjj);
+    if (std::abs(denom) < 1e-15) return {0.0, 0.0};
+    return std::acos(-Cij / denom);
 }
 
 std::complex<double> Simplex::lorentzianDeficitAngle() const {
@@ -917,64 +868,49 @@ Simplex::lorentzianDeficitAngleGradient() const {
         const int bi = opp[0] + 1, bj = opp[1] + 1;          // CM border offset
 
         const int n = m + 1;                                 // CM is (d+2)x(d+2)
-        const std::vector<double> B = tau->cayleyMengerMatrix(/*wickRotate=*/false);
-        const double detB = determinant(B, n);
+        const std::vector<std::complex<double>> B = tau->cayleyMengerMatrix();
+        const std::complex<double> detB = determinant(B, n);
         if (std::abs(detB) < 1e-300) continue;
-        const std::vector<double> C = cofactorMatrix(B, n);
+        const std::vector<std::complex<double>> C = cofactorMatrix(B, n);
         // B^-1 = adj(B)/det = cof^T/det ; B symmetric => Binv symmetric.
-        std::vector<double> Binv(static_cast<std::size_t>(n) * n);
+        std::vector<std::complex<double>> Binv(static_cast<std::size_t>(n) * n);
         for (int i = 0; i < n; ++i)
             for (int j = 0; j < n; ++j)
                 Binv[i * n + j] = C[j * n + i] / detB;
 
-        const double Cij = C[bi * n + bj];
-        const double Cii = C[bi * n + bi];
-        const double Cjj = C[bj * n + bj];
-        const double sC = (Cii >= 0.0) ? 1.0 : -1.0;
-        const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
-        const double D = std::sqrt(std::abs(Cii * Cjj));
-        if (D < 1e-300) continue;
-        // Opposite-sign cofactors = the m=1 light-cone-crossing wedge (#581):
-        // theta = pi/2 - i*asinh(y), y = Cij/D, so d theta/dy = -i/sqrt(1+y^2)
-        // (never singular: |sin theta| = sqrt(1+y^2) >= 1). Same-sign wedges
-        // keep the acos branch bit-for-bit.
-        const bool crossing = sP < 0.0;
-        const double denom = sC * D;
-        const double y = Cij / D;
-        cd dthetaDr;
-        if (crossing) {
-            dthetaDr = cd(0.0, -1.0) / std::sqrt(1.0 + y * y);
-        } else {
-            const double r = -Cij / denom;
-            const cd theta = std::acos(cd(r, 0.0));
-            const cd sinTheta = std::sin(theta);
-            if (std::abs(sinTheta) < 1e-300) continue;       // flat/folded: skip
-            dthetaDr = cd(-1.0, 0.0) / sinTheta;             // boost-safe branch
-        }
+        const cd Cij = C[bi * n + bj];
+        const cd Cii = C[bi * n + bi];
+        const cd Cjj = C[bj * n + bj];
+        // Same unified branch as lorentzianDihedralAngle (#638): two separate
+        // principal roots, one expression for every causal regime. The sC/sP
+        // sign flags and the crossing/non-crossing dispatch this replaces were
+        // artifacts of folding the product under one root.
+        const cd denom = principalSqrt(Cii) * principalSqrt(Cjj);
+        if (std::abs(denom) < 1e-300) continue;
+        const cd r = -Cij / denom;
+        const cd theta = std::acos(r);
+        const cd sinTheta = std::sin(theta);
+        if (std::abs(sinTheta) < 1e-300) continue;       // flat/folded: skip
+        const cd dthetaDr = cd(-1.0, 0.0) / sinTheta;
 
         // dC_pq for the edge (a,b): dB is the indicator at (a+1,b+1)&(b+1,a+1);
         // dC = det[ tr(B^-1 dB) B^-1 - B^-1 dB B^-1 ], extracted entrywise.
-        auto dCof = [&](int p, int q, int a, int b) -> double {
-            const double bab = Binv[(a + 1) * n + (b + 1)];
+        auto dCof = [&](int p, int q, int a, int b) -> cd {
+            const cd bab = Binv[(a + 1) * n + (b + 1)];
             return detB * (2.0 * bab * Binv[p * n + q]
                            - (Binv[p * n + (a + 1)] * Binv[(b + 1) * n + q]
                               + Binv[p * n + (b + 1)] * Binv[(a + 1) * n + q]));
         };
         for (int a = 0; a < m; ++a) {
             for (int b = a + 1; b < m; ++b) {
-                const double dCij = dCof(bi, bj, a, b);
-                const double dCii = dCof(bi, bi, a, b);
-                const double dCjj = dCof(bj, bj, a, b);
-                // d sqrt(|Cii*Cjj|) — the sP factor makes this valid on both
-                // sides of the crossing.
-                const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
-                double dr;
-                if (crossing) {
-                    dr = (dCij * D - Cij * dD) / (D * D);    // dy
-                } else {
-                    const double ddenom = sC * dD;
-                    dr = -(dCij * denom - Cij * ddenom) / (denom * denom);
-                }
+                const cd dCij = dCof(bi, bj, a, b);
+                const cd dCii = dCof(bi, bi, a, b);
+                const cd dCjj = dCof(bj, bj, a, b);
+                // d(sqrt(Cii)*sqrt(Cjj)) = denom * (dCii/Cii + dCjj/Cjj) / 2 --
+                // branch-free, and valid on both sides of a light-cone crossing
+                // without a sign flag.
+                const cd ddenom = denom * 0.5 * (dCii / Cii + dCjj / Cjj);
+                const cd dr = -(dCij * denom - Cij * ddenom) / (denom * denom);
                 const std::uint64_t va = tv[a]->getId(), vb = tv[b]->getId();
                 grad[{std::min(va, vb), std::max(va, vb)}] -= dthetaDr * dr;
             }
@@ -1017,127 +953,98 @@ Simplex::lorentzianDeficitAngleHessian() const {
         const int bi = opp[0] + 1, bj = opp[1] + 1;
 
         const int n = m + 1;
-        const std::vector<double> B = tau->cayleyMengerMatrix(/*wickRotate=*/false);
-        const double detB = determinant(B, n);
+        const std::vector<std::complex<double>> B = tau->cayleyMengerMatrix();
+        const std::complex<double> detB = determinant(B, n);
         if (std::abs(detB) < 1e-300) continue;
-        const std::vector<double> C = cofactorMatrix(B, n);
-        std::vector<double> Binv(static_cast<std::size_t>(n) * n);
+        const std::vector<std::complex<double>> C = cofactorMatrix(B, n);
+        std::vector<std::complex<double>> Binv(static_cast<std::size_t>(n) * n);
         for (int i = 0; i < n; ++i)
             for (int j = 0; j < n; ++j)
                 Binv[i * n + j] = C[j * n + i] / detB;
 
-        const double Cij = C[bi * n + bj];
-        const double Cii = C[bi * n + bi];
-        const double Cjj = C[bj * n + bj];
-        const double sC = (Cii >= 0.0) ? 1.0 : -1.0;
-        const double sP = (Cii * Cjj >= 0.0) ? 1.0 : -1.0;
-        const double D = std::sqrt(std::abs(Cii * Cjj));
-        if (D < 1e-300) continue;
-        // Same m=1 crossing branch as the gradient (#581): on opposite-sign
-        // cofactors theta = pi/2 - i*asinh(y) with y = Cij/D, so
-        // d theta/dy = -i/(1+y^2)^{1/2} and d^2 theta/dy^2 = +i*y/(1+y^2)^{3/2}
-        // (never singular). Same-sign wedges keep the acos machinery.
-        const bool crossing = sP < 0.0;
-        const double denom = sC * D;
-        const double y = Cij / D;
-        cd dthetaDr, d2thetaDr2;
-        if (crossing) {
-            const double onePlus = 1.0 + y * y;
-            const double sq = std::sqrt(onePlus);
-            dthetaDr = cd(0.0, -1.0) / sq;
-            d2thetaDr2 = cd(0.0, y) / (onePlus * sq);
-        } else {
-            const double r = -Cij / denom;
-            const cd theta = std::acos(cd(r, 0.0));
-            const cd sinT = std::sin(theta);
-            if (std::abs(sinT) < 1e-300) continue;
-            dthetaDr = cd(-1.0, 0.0) / sinT;
-            d2thetaDr2 = cd(-r, 0.0) / (sinT * sinT * sinT);
-        }
+        const cd Cij = C[bi * n + bj];
+        const cd Cii = C[bi * n + bi];
+        const cd Cjj = C[bj * n + bj];
+        // One branch for every causal regime, as in the value and the gradient
+        // (#638). theta = acos(r), r = -Cij/(sqrt(Cii)*sqrt(Cjj)), so
+        // dtheta/dr = -1/sin(theta) and d2theta/dr2 = -r/sin^3(theta).
+        const cd denom = principalSqrt(Cii) * principalSqrt(Cjj);
+        if (std::abs(denom) < 1e-300) continue;
+        const cd r = -Cij / denom;
+        const cd theta = std::acos(r);
+        const cd sinT = std::sin(theta);
+        if (std::abs(sinT) < 1e-300) continue;
+        const cd dthetaDr = cd(-1.0, 0.0) / sinT;
+        const cd d2thetaDr2 = -r / (sinT * sinT * sinT);
 
-        auto bb = [&](int x, int y) -> double { return Binv[x * n + y]; };
+        auto bb = [&](int x, int y) -> cd { return Binv[x * n + y]; };
         // dC_pq/dl^2_(a,b): a,b local vertex indices (CM border = +1).
-        auto dCof = [&](int p, int q, int a, int b) -> double {
+        auto dCof = [&](int p, int q, int a, int b) -> cd {
             const int A = a + 1, Bn = b + 1;
             return detB * (2.0 * bb(A, Bn) * bb(p, q)
                            - bb(p, A) * bb(Bn, q) - bb(p, Bn) * bb(A, q));
         };
         // dBinv_xy/dl^2_(c,d) = -(Binv_xC Binv_Dy + Binv_xD Binv_Cy).
-        auto dBi = [&](int x, int y, int c, int d) -> double {
+        auto dBi = [&](int x, int y, int c, int d) -> cd {
             const int Cn = c + 1, Dn = d + 1;
             return -(bb(x, Cn) * bb(Dn, y) + bb(x, Dn) * bb(Cn, y));
         };
         // d^2 C_pq/dl^2_(a,b) dl^2_(c,d) = ddetB*T + detB*dT.
-        auto d2Cof = [&](int p, int q, int a, int b, int c, int d) -> double {
+        auto d2Cof = [&](int p, int q, int a, int b, int c, int d) -> cd {
             const int A = a + 1, Bn = b + 1, Cn = c + 1, Dn = d + 1;
-            const double T = 2.0 * bb(A, Bn) * bb(p, q)
+            const cd T = 2.0 * bb(A, Bn) * bb(p, q)
                              - bb(p, A) * bb(Bn, q) - bb(p, Bn) * bb(A, q);
-            const double ddetB = detB * 2.0 * bb(Cn, Dn);
-            const double dT =
+            const cd ddetB = detB * 2.0 * bb(Cn, Dn);
+            const cd dT =
                 2.0 * (dBi(A, Bn, c, d) * bb(p, q) + bb(A, Bn) * dBi(p, q, c, d))
                 - (dBi(p, A, c, d) * bb(Bn, q) + bb(p, A) * dBi(Bn, q, c, d))
                 - (dBi(p, Bn, c, d) * bb(A, q) + bb(p, Bn) * dBi(A, q, c, d));
             return ddetB * T + detB * dT;
         };
 
-        struct Loc { int a, b; std::uint64_t va, vb; double dr; };
+        struct Loc { int a, b; std::uint64_t va, vb; cd dr; };
         std::vector<Loc> es;
         for (int a = 0; a < m; ++a)
             for (int b = a + 1; b < m; ++b) {
-                const double dCij = dCof(bi, bj, a, b);
-                const double dCii = dCof(bi, bi, a, b);
-                const double dCjj = dCof(bj, bj, a, b);
-                const double dD = sP * (dCii * Cjj + Cii * dCjj) / (2.0 * D);
-                double dr;
-                if (crossing) {
-                    dr = (dCij * D - Cij * dD) / (D * D);    // dy
-                } else {
-                    const double ddenom = sC * dD;
-                    dr = -(dCij * denom - Cij * ddenom) / (denom * denom);
-                }
+                const cd dCij = dCof(bi, bj, a, b);
+                const cd dCii = dCof(bi, bi, a, b);
+                const cd dCjj = dCof(bj, bj, a, b);
+                const cd ddenom = denom * 0.5 * (dCii / Cii + dCjj / Cjj);
+                const cd dr = -(dCij * denom - Cij * ddenom) / (denom * denom);
                 es.push_back({a, b, tv[a]->getId(), tv[b]->getId(), dr});
             }
 
         for (const auto &e : es) {
-            const double dCij_e = dCof(bi, bj, e.a, e.b);
-            const double dCii_e = dCof(bi, bi, e.a, e.b);
-            const double dCjj_e = dCof(bj, bj, e.a, e.b);
-            const double dP_e = dCii_e * Cjj + Cii * dCjj_e;
-            const double dD_e = sP * dP_e / (2.0 * D);
-            const double ddenom_e = sC * dD_e;
+            const cd dCij_e = dCof(bi, bj, e.a, e.b);
+            const cd dCii_e = dCof(bi, bi, e.a, e.b);
+            const cd dCjj_e = dCof(bj, bj, e.a, e.b);
+            // denom = exp((ln Cii + ln Cjj)/2), so d denom = denom * L' and
+            // d2 denom = denom * (L'_e L'_f + L''_ef) with
+            // L' = (dCii/Cii + dCjj/Cjj)/2. Branch-free, no sign flags.
+            const cd Le = 0.5 * (dCii_e / Cii + dCjj_e / Cjj);
+            const cd ddenom_e = denom * Le;
             for (const auto &f : es) {
-                const double dCij_f = dCof(bi, bj, f.a, f.b);
-                const double dCii_f = dCof(bi, bi, f.a, f.b);
-                const double dCjj_f = dCof(bj, bj, f.a, f.b);
-                const double dP_f = dCii_f * Cjj + Cii * dCjj_f;
-                const double dD_f = sP * dP_f / (2.0 * D);
-                const double ddenom_f = sC * dD_f;
+                const cd dCij_f = dCof(bi, bj, f.a, f.b);
+                const cd dCii_f = dCof(bi, bi, f.a, f.b);
+                const cd dCjj_f = dCof(bj, bj, f.a, f.b);
+                const cd Lf = 0.5 * (dCii_f / Cii + dCjj_f / Cjj);
+                const cd ddenom_f = denom * Lf;
 
-                const double d2Cij = d2Cof(bi, bj, e.a, e.b, f.a, f.b);
-                const double d2Cii = d2Cof(bi, bi, e.a, e.b, f.a, f.b);
-                const double d2Cjj = d2Cof(bj, bj, e.a, e.b, f.a, f.b);
-                const double d2P = d2Cii * Cjj + dCii_e * dCjj_f
-                                   + dCii_f * dCjj_e + Cii * d2Cjj;
-                const double d2D = sP * d2P / (2.0 * D)
-                                   - dP_e * dP_f / (4.0 * D * D * D);
+                const cd d2Cij = d2Cof(bi, bj, e.a, e.b, f.a, f.b);
+                const cd d2Cii = d2Cof(bi, bi, e.a, e.b, f.a, f.b);
+                const cd d2Cjj = d2Cof(bj, bj, e.a, e.b, f.a, f.b);
+                const cd Lef = 0.5 * (d2Cii / Cii - dCii_e * dCii_f / (Cii * Cii)
+                                      + d2Cjj / Cjj - dCjj_e * dCjj_f / (Cjj * Cjj));
+                const cd d2denom = denom * (Le * Lf + Lef);
 
-                // Quotient rule, second order. Same-sign: r = N/Den with
-                // N = -Cij, Den = denom. Crossing: y = Cij/D (#581).
-                double N, Ne, Nf, Nef, Den, De, Df, Def;
-                if (crossing) {
-                    N = Cij; Ne = dCij_e; Nf = dCij_f; Nef = d2Cij;
-                    Den = D; De = dD_e; Df = dD_f; Def = d2D;
-                } else {
-                    N = -Cij; Ne = -dCij_e; Nf = -dCij_f; Nef = -d2Cij;
-                    Den = denom; De = ddenom_e; Df = ddenom_f;
-                    Def = sC * d2D;
-                }
-                const double d2r =
+                // Quotient rule, second order, on r = N/Den with N = -Cij.
+                const cd N = -Cij, Ne = -dCij_e, Nf = -dCij_f, Nef = -d2Cij;
+                const cd Den = denom, De = ddenom_e, Df = ddenom_f, Def = d2denom;
+                const cd d2r =
                     ((Nef * Den + Ne * Df - Nf * De - N * Def) * Den
                      - 2.0 * (Ne * Den - N * De) * Df) / (Den * Den * Den);
 
-                const cd d2theta = d2thetaDr2 * cd(e.dr, 0.0) * cd(f.dr, 0.0)
-                                   + dthetaDr * cd(d2r, 0.0);
+                const cd d2theta = d2thetaDr2 * e.dr * f.dr + dthetaDr * d2r;
                 const EK ke{std::min(e.va, e.vb), std::max(e.va, e.vb)};
                 const EK kf{std::min(f.va, f.vb), std::max(f.va, f.vb)};
                 hess[{ke, kf}] -= d2theta;      // eps = 2pi - sum theta
@@ -1147,38 +1054,39 @@ Simplex::lorentzianDeficitAngleHessian() const {
     return hess;
 }
 
-double Simplex::area(bool wickRotate) const {
-    if (edges.size() < 3) return 0.0;
-    auto sq = [&](std::size_t k) -> double {
-        return wickRotate ? std::abs(edges[k]->getSquaredLength())
-                          : edges[k]->getRealSquaredLength();
-    };
-    double a2 = sq(0);
-    double b2 = sq(1);
-    double c2 = sq(2);
-    double val = 2.0 * (a2 * b2 + b2 * c2 + c2 * a2)
-                 - (a2 * a2 + b2 * b2 + c2 * c2);
-    if (val <= 0.0) return 0.0;
+std::complex<double> Simplex::area() const {
+    if (edges.size() < 3) return {0.0, 0.0};
+    auto sq = [&](std::size_t k) { return (edges[k]->getLength() * edges[k]->getLength()); };
+    const std::complex<double> a2 = sq(0), b2 = sq(1), c2 = sq(2);
+    const std::complex<double> val = 2.0 * (a2 * b2 + b2 * c2 + c2 * a2)
+                                     - (a2 * a2 + b2 * b2 + c2 * c2);
+    // Heron's radicand under a COMPLEX root. The old real path clamped a
+    // non-positive radicand to 0, which silently reported zero area for every
+    // timelike triangle (the mixed-causal hinge of a CDT (4,1) cell, among
+    // others). Zero was never their area; it was what a double could represent.
     return std::sqrt(val) / 4.0;
 }
 
-double Simplex::volume() const {
+std::complex<double> Simplex::volume() const {
     int d = static_cast<int>(vertices.size()) - 1;
-    if (d < 1) return 0.0;
+    if (d < 1) return {0.0, 0.0};
 
     // Honest, signature-respecting Gram matrix: timelike edges keep l^2 < 0,
     // so det(G) can be negative for a Lorentzian cell.
-    const std::vector<double> G = gramMatrix(/*wickRotate=*/false);
-    if (static_cast<int>(G.size()) != d * d) return 0.0;
+    const std::vector<std::complex<double>> G = gramMatrix();
+    if (static_cast<int>(G.size()) != d * d) return {0.0, 0.0};
 
-    const double detG = determinant(G, d);
+    const std::complex<double> detG = determinant(G, d);
     double factorial = 1.0;
     for (int i = 2; i <= d; ++i) factorial *= static_cast<double>(i);
 
-    // Signed d-content: sqrt(det G)/d! with the sign of det(G) carried out so
-    // the result stays real and records the signature instead of |det G|.
-    const double sign = (detG < 0.0) ? -1.0 : 1.0;
-    return sign * std::sqrt(std::abs(detG)) / factorial;
+    // V = sqrt(det G)/d!, principal branch. The old real path took
+    // sqrt(|det G|) and hand-restored sign(det G) -- the same artifact as the
+    // dihedral parity fix (#638): folding the magnitude under the root discards
+    // a sign the complex root carries by itself. A Lorentzian cell with
+    // det G < 0 therefore returns an IMAGINARY content, which is what its
+    // d-content is, rather than the negative real a double could hold.
+    return std::sqrt(detG) / factorial;
 }
 
 void Simplex::assertSpacelikeAdmissible(double tol) const {
@@ -1197,19 +1105,23 @@ void Simplex::assertSpacelikeAdmissible(double tol) const {
     // All edges spacelike: the Gram matrix must be positive-definite. Check via
     // Sylvester's criterion (every leading principal minor > 0) so the test
     // stays Eigen-free, reusing the existing determinant helper.
-    const std::vector<double> g = gramMatrix(/*wickRotate=*/false);
+    const std::vector<std::complex<double>> g = gramMatrix();
     for (int k = 1; k <= d; ++k) {
-        std::vector<double> sub(static_cast<std::size_t>(k) * k);
+        std::vector<std::complex<double>> sub(static_cast<std::size_t>(k) * k);
         for (int i = 0; i < k; ++i)
             for (int j = 0; j < k; ++j)
                 sub[static_cast<std::size_t>(i) * k + j] =
                     g[static_cast<std::size_t>(i) * d + j];
-        const double minor = determinant(sub, k);
-        if (!(minor > tol)) {
+        const std::complex<double> minor = determinant(sub, k);
+        // A genuinely spacelike cell has real, positive leading minors. A
+        // nonzero imaginary part means the cell is not spacelike at all, which
+        // this assertion exists to catch, so it fails rather than projecting.
+        if (!(minor.imag() == 0.0 && minor.real() > tol)) {
             throw std::runtime_error(
                 "Simplex::assertSpacelikeAdmissible: inadmissible spacelike "
                 "simplex — Gram matrix is not positive-definite (leading minor "
-                + std::to_string(k) + " = " + std::to_string(minor) +
+                + std::to_string(k) + " = " + std::to_string(minor.real()) +
+                " + " + std::to_string(minor.imag()) + "i" +
                 "); the spacelike triangle inequalities are violated. The metric "
                 "is not silently repaired.");
         }
@@ -1218,39 +1130,39 @@ void Simplex::assertSpacelikeAdmissible(double tol) const {
 
 namespace {
 
-// Signed real square root: sign(x)·sqrt(|x|). The signed-content convention
-// (matching Simplex::volume), so a timelike circumcentric height contributes
-// negative content rather than throwing on a negative radicand.
-double signedSqrt(double x) {
-    return (x < 0.0) ? -std::sqrt(-x) : std::sqrt(x);
-}
+// The old signedSqrt = sign(x)*sqrt(|x|) is gone: it was not a branch choice but a
+// real-valued convention that refused to go imaginary, mapping a timelike
+// circumcentric height to a negative real instead of the imaginary value it is.
+// principalSqrt (file scope, above) replaces it (#641).
 
 // Circumcenter (barycentric) + signed R² from the Gram matrix G (flat d×d,
 // relative to vertex 0). Solves G β = ½·diag(G) Eigen-free via the adjugate
 // (cofactorᵀ/det); λ_0 = 1−Σβ, λ_i = β_i; R² = Σ_i β_i·(½ G_ii).
-void circumFromGram(const std::vector<double>& G, int d,
-                    std::vector<double>& bary, double& r2) {
-    bary.assign(static_cast<std::size_t>(d) + 1, 0.0);
-    if (d <= 0) { bary[0] = 1.0; r2 = 0.0; return; }  // single vertex
-    std::vector<double> halfDiag(d);
+void circumFromGram(const std::vector<std::complex<double>>& G, int d,
+                    std::vector<std::complex<double>>& bary,
+                    std::complex<double>& r2) {
+    using cd = std::complex<double>;
+    bary.assign(static_cast<std::size_t>(d) + 1, cd{0.0, 0.0});
+    if (d <= 0) { bary[0] = cd{1.0, 0.0}; r2 = cd{0.0, 0.0}; return; }  // single vertex
+    std::vector<cd> halfDiag(d);
     for (int i = 0; i < d; ++i)
         halfDiag[i] = 0.5 * G[static_cast<std::size_t>(i) * d + i];
-    const double detG = ::tessera::mesh::Simplex::determinant(G, d);
-    const std::vector<double> cof =
+    const cd detG = ::tessera::mesh::Simplex::determinant(G, d);
+    const std::vector<cd> cof =
         ::tessera::mesh::Simplex::cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
     // β_i = Σ_j (G⁻¹)_ij·halfDiag_j, with (G⁻¹)_ij = adj_ij/det = C_ji/det.
-    std::vector<double> beta(d, 0.0);
-    double sum = 0.0;
+    std::vector<cd> beta(d, cd{0.0, 0.0});
+    cd sum{0.0, 0.0};
     for (int i = 0; i < d; ++i) {
-        double acc = 0.0;
+        cd acc{0.0, 0.0};
         for (int j = 0; j < d; ++j)
             acc += cof[static_cast<std::size_t>(j) * d + i] * halfDiag[j];
-        beta[i] = (detG != 0.0) ? acc / detG : 0.0;
+        beta[i] = (detG != cd{0.0, 0.0}) ? acc / detG : cd{0.0, 0.0};
         bary[static_cast<std::size_t>(i) + 1] = beta[i];
         sum += beta[i];
     }
-    bary[0] = 1.0 - sum;
-    r2 = 0.0;
+    bary[0] = cd{1.0, 0.0} - sum;
+    r2 = cd{0.0, 0.0};
     for (int i = 0; i < d; ++i) r2 += beta[i] * halfDiag[i];
 }
 
@@ -1268,19 +1180,29 @@ double oppositeVertexSign(const ::tessera::mesh::Simplex* cf,
         if (!inS) { oppIdx = static_cast<int>(i); break; }
     }
     if (oppIdx < 0) return 1.0;
-    const std::vector<double> bary = cf->circumcenterBarycentric();
-    return (bary[static_cast<std::size_t>(oppIdx)] < 0.0) ? -1.0 : 1.0;
+    const std::vector<std::complex<double>> bary = cf->circumcenterBarycentric();
+    // This +/-1 is GEOMETRIC, not a branch of a square root: it records which side
+    // of the shared facet c(cf) fell on, and an obtuse cell genuinely needs the -1.
+    // Orientation is not a function of edge lengths, so no complex root supplies
+    // it -- deleting this would silently switch the signed dual-volume convention
+    // to the unsigned overcount (#605 audits exactly this sign).
+    //
+    // Reading it off Re(bary) is bit-identical to the real-Lorentzian behaviour,
+    // since bary is real there, and continues off-axis by continuity in Re. How it
+    // should generalise for a genuinely off-axis geometry is the open design
+    // question on #637; it is deliberately NOT settled here.
+    return (bary[static_cast<std::size_t>(oppIdx)].real() < 0.0) ? -1.0 : 1.0;
 }
 
 // Recursive signed circumcentric dual content of `s` in an n-complex.
-double dualVolRec(const ::tessera::mesh::Simplex* s, int n) {
+std::complex<double> dualVolRec(const ::tessera::mesh::Simplex* s, int n) {
     const int k = static_cast<int>(s->size()) - 1;
-    if (k >= n) return 1.0;  // top cell: dual is a point (content 1)
-    const double rk2 = s->circumradiusSquared();
-    double acc = 0.0;
+    if (k >= n) return {1.0, 0.0};  // top cell: dual is a point (content 1)
+    const std::complex<double> rk2 = s->circumradiusSquared();
+    std::complex<double> acc{0.0, 0.0};
     for (const auto& cf : s->getCofaces()) {
-        const double h =
-            oppositeVertexSign(cf, s) * signedSqrt(cf->circumradiusSquared() - rk2);
+        const std::complex<double> h =
+            oppositeVertexSign(cf, s) * principalSqrt(cf->circumradiusSquared() - rk2);
         acc += h * dualVolRec(cf, n);
     }
     return acc / static_cast<double>(n - k);
@@ -1289,20 +1211,20 @@ double dualVolRec(const ::tessera::mesh::Simplex* s, int n) {
 // Exact d(R^2)/d(l^2_e) for simplex `s` w.r.t. edge (ea,eb): R^2 = h^T G^-1 h
 // (h = 1/2 diag G), so dR^2 = 2(dh)^T beta - beta^T (dG) beta, beta = G^-1 h.
 // The Gram matrix is linear in l^2, so dG/dh are indicator matrices.
-double dCircumR2(const ::tessera::mesh::Simplex* s,
+std::complex<double> dCircumR2(const ::tessera::mesh::Simplex* s,
                  std::uint64_t ea, std::uint64_t eb) {
     const int d = static_cast<int>(s->size()) - 1;
-    if (d <= 0) return 0.0;
+    if (d <= 0) return {0.0, 0.0};
     const auto& sv = s->getVertices();
-    const std::vector<double> G = s->gramMatrix(/*wickRotate=*/false);
-    const double detG = ::tessera::mesh::Simplex::determinant(G, d);
-    if (std::abs(detG) < 1e-300) return 0.0;
-    const std::vector<double> cofG =
+    const std::vector<std::complex<double>> G = s->gramMatrix();
+    const std::complex<double> detG = ::tessera::mesh::Simplex::determinant(G, d);
+    if (std::abs(detG) < 1e-300) return {0.0, 0.0};
+    const std::vector<std::complex<double>> cofG =
         ::tessera::mesh::Simplex::cofactorMatrix(G, d);
-    std::vector<double> h(d), beta(d, 0.0);
+    std::vector<std::complex<double>> h(d), beta(d, std::complex<double>{0.0, 0.0});
     for (int i = 0; i < d; ++i) h[i] = 0.5 * G[i * d + i];
     for (int i = 0; i < d; ++i) {              // beta = G^-1 h, (G^-1)_ij=cof_ji/det
-        double a = 0.0;
+        std::complex<double> a{0.0, 0.0};
         for (int j = 0; j < d; ++j) a += cofG[j * d + i] * h[j];
         beta[i] = a / detG;
     }
@@ -1312,12 +1234,12 @@ double dCircumR2(const ::tessera::mesh::Simplex* s,
         const std::uint64_t a = sv[p]->getId(), b = sv[q]->getId();
         return (std::min(a, b) == lo && std::max(a, b) == hi) ? 1.0 : 0.0;
     };
-    std::vector<double> dG(static_cast<std::size_t>(d) * d), dh(d);
+    std::vector<std::complex<double>> dG(static_cast<std::size_t>(d) * d), dh(d);
     for (int i = 0; i < d; ++i)
         for (int j = 0; j < d; ++j)
             dG[i * d + j] = 0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
     for (int i = 0; i < d; ++i) dh[i] = 0.5 * dG[i * d + i];
-    double r = 0.0;
+    std::complex<double> r{0.0, 0.0};
     for (int i = 0; i < d; ++i) r += 2.0 * dh[i] * beta[i];
     for (int i = 0; i < d; ++i)
         for (int j = 0; j < d; ++j) r -= beta[i] * dG[i * d + j] * beta[j];
@@ -1328,30 +1250,30 @@ double dCircumR2(const ::tessera::mesh::Simplex* s,
 // G is linear in l^2 (dG, dh constant indicators), the second derivative is
 // 2(dh_e)^T (d_f beta) - 2 beta^T dG_e (d_f beta), with
 // d_f beta = G^-1 (dh_f - dG_f beta). Symmetric in (e,f).
-double d2CircumR2(const ::tessera::mesh::Simplex* s,
+std::complex<double> d2CircumR2(const ::tessera::mesh::Simplex* s,
                   std::uint64_t ea, std::uint64_t eb,
                   std::uint64_t fa, std::uint64_t fb) {
     const int d = static_cast<int>(s->size()) - 1;
-    if (d <= 0) return 0.0;
+    if (d <= 0) return {0.0, 0.0};
     const auto& sv = s->getVertices();
-    const std::vector<double> G = s->gramMatrix(/*wickRotate=*/false);
-    const double detG = ::tessera::mesh::Simplex::determinant(G, d);
-    if (std::abs(detG) < 1e-300) return 0.0;
-    const std::vector<double> cofG =
+    const std::vector<std::complex<double>> G = s->gramMatrix();
+    const std::complex<double> detG = ::tessera::mesh::Simplex::determinant(G, d);
+    if (std::abs(detG) < 1e-300) return {0.0, 0.0};
+    const std::vector<std::complex<double>> cofG =
         ::tessera::mesh::Simplex::cofactorMatrix(G, d);
-    std::vector<double> Ginv(static_cast<std::size_t>(d) * d);
+    std::vector<std::complex<double>> Ginv(static_cast<std::size_t>(d) * d);
     for (int i = 0; i < d; ++i)
         for (int j = 0; j < d; ++j)
             Ginv[i * d + j] = cofG[j * d + i] / detG;   // (G^-1)_ij = C_ji/det
-    std::vector<double> h(d), beta(d, 0.0);
+    std::vector<std::complex<double>> h(d), beta(d, std::complex<double>{0.0, 0.0});
     for (int i = 0; i < d; ++i) h[i] = 0.5 * G[i * d + i];
     for (int i = 0; i < d; ++i) {
-        double a = 0.0;
+        std::complex<double> a{0.0, 0.0};
         for (int j = 0; j < d; ++j) a += Ginv[i * d + j] * h[j];
         beta[i] = a;
     }
     auto indMat = [&](std::uint64_t e0, std::uint64_t e1,
-                      std::vector<double>& dG, std::vector<double>& dh) {
+                      std::vector<std::complex<double>>& dG, std::vector<std::complex<double>>& dh) {
         const std::uint64_t lo = std::min(e0, e1), hi = std::max(e0, e1);
         auto ind = [&](int p, int q) -> double {
             if (p == q) return 0.0;
@@ -1366,22 +1288,22 @@ double d2CircumR2(const ::tessera::mesh::Simplex* s,
                     0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
         for (int i = 0; i < d; ++i) dh[i] = 0.5 * dG[i * d + i];
     };
-    std::vector<double> dG_e, dh_e, dG_f, dh_f;
+    std::vector<std::complex<double>> dG_e, dh_e, dG_f, dh_f;
     indMat(ea, eb, dG_e, dh_e);
     indMat(fa, fb, dG_f, dh_f);
     // d_f beta = G^-1 (dh_f - dG_f beta)
-    std::vector<double> tmp(d, 0.0), dbeta_f(d, 0.0);
+    std::vector<std::complex<double>> tmp(d, {0.0, 0.0}), dbeta_f(d, {0.0, 0.0});
     for (int i = 0; i < d; ++i) {
-        double a = dh_f[i];
+        std::complex<double> a = dh_f[i];
         for (int j = 0; j < d; ++j) a -= dG_f[i * d + j] * beta[j];
         tmp[i] = a;
     }
     for (int i = 0; i < d; ++i) {
-        double a = 0.0;
+        std::complex<double> a{0.0, 0.0};
         for (int j = 0; j < d; ++j) a += Ginv[i * d + j] * tmp[j];
         dbeta_f[i] = a;
     }
-    double r = 0.0;
+    std::complex<double> r{0.0, 0.0};
     for (int i = 0; i < d; ++i) r += 2.0 * dh_e[i] * dbeta_f[i];
     for (int i = 0; i < d; ++i)
         for (int j = 0; j < d; ++j)
@@ -1391,19 +1313,19 @@ double d2CircumR2(const ::tessera::mesh::Simplex* s,
 
 }  // namespace
 
-std::vector<double> Simplex::circumcenterBarycentric() const {
+std::vector<std::complex<double>> Simplex::circumcenterBarycentric() const {
     const int d = static_cast<int>(size()) - 1;
-    std::vector<double> bary;
-    double r2 = 0.0;
-    circumFromGram(gramMatrix(/*wickRotate=*/false), d, bary, r2);
+    std::vector<std::complex<double>> bary;
+    std::complex<double> r2{0.0, 0.0};
+    circumFromGram(gramMatrix(), d, bary, r2);
     return bary;
 }
 
-double Simplex::circumradiusSquared() const {
+std::complex<double> Simplex::circumradiusSquared() const {
     const int d = static_cast<int>(size()) - 1;
-    std::vector<double> bary;
-    double r2 = 0.0;
-    circumFromGram(gramMatrix(/*wickRotate=*/false), d, bary, r2);
+    std::vector<std::complex<double>> bary;
+    std::complex<double> r2{0.0, 0.0};
+    circumFromGram(gramMatrix(), d, bary, r2);
     return r2;
 }
 
@@ -1445,25 +1367,25 @@ int Simplex::ambientTopDimension() const {
     return static_cast<int>(top->size()) - 1;
 }
 
-double Simplex::dualVolume() const {
+std::complex<double> Simplex::dualVolume() const {
     return dualVolRec(this, ambientTopDimension());
 }
 
-std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
 Simplex::volumeGradient() const {
     // dV/dl^2_e = (V/2) tr(G^-1 dG_e), Jacobi's formula on the Gram determinant
     // (V = sgn sqrt(|det G|)/d!, G linear in l^2 so dG_e is an indicator matrix —
     // the same dG the #354 dCircumR2 uses). G^-1 via the adjugate (cofactor^T/det),
     // Eigen-free, matching circumFromGram / volume().
-    std::map<std::pair<std::uint64_t, std::uint64_t>, double> grad;
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> grad;
     const int d = static_cast<int>(size()) - 1;
     if (d < 1) return grad;
-    const std::vector<double> G = gramMatrix(/*wickRotate=*/false);
+    const std::vector<std::complex<double>> G = gramMatrix();
     if (static_cast<int>(G.size()) != d * d) return grad;
-    const double detG = determinant(G, d);
+    const std::complex<double> detG = determinant(G, d);
     if (std::abs(detG) < 1e-300) return grad;
-    const std::vector<double> cofG = cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
-    const double V = volume();
+    const std::vector<std::complex<double>> cofG = cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
+    const std::complex<double> V = volume();
     const auto &sv = vertices;
     for (std::size_t p = 0; p < sv.size(); ++p)
         for (std::size_t q = p + 1; q < sv.size(); ++q) {
@@ -1478,12 +1400,12 @@ Simplex::volumeGradient() const {
                            ? 1.0 : 0.0;
             };
             // tr(G^-1 dG) = sum_ij (G^-1)_ij dG_ji; dG symmetric, (G^-1)_ij=cof_ji/det.
-            double tr = 0.0;
+            std::complex<double> tr{0.0, 0.0};
             for (int i = 0; i < d; ++i)
                 for (int j = 0; j < d; ++j) {
-                    const double dGij =
+                    const std::complex<double> dGij =
                         0.5 * (ind(0, i + 1) + ind(0, j + 1) - ind(i + 1, j + 1));
-                    const double GinvIJ =
+                    const std::complex<double> GinvIJ =
                         cofG[static_cast<std::size_t>(j) * d + i] / detG;
                     tr += GinvIJ * dGij;
                 }
@@ -1492,29 +1414,31 @@ Simplex::volumeGradient() const {
     return grad;
 }
 
-std::map<std::pair<std::uint64_t, std::uint64_t>, double>
+std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>>
 Simplex::dualVolumeGradient() const {
-    std::map<std::pair<std::uint64_t, std::uint64_t>, double> grad;
+    std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> grad;
     if (vertices.empty()) return grad;
     const int n = ambientTopDimension();
     const int k = static_cast<int>(size()) - 1;
     if (k != n - 2) return grad;          // the (n-2) hinge the Regge action needs
 
-    const double Rh2 = circumradiusSquared();
+    const std::complex<double> Rh2 = circumradiusSquared();
     struct Facet {
-        const Simplex* cf; double sgn; double R1; double inner;
-        std::vector<std::pair<const Simplex*, std::pair<double, double>>> tops;
+        const Simplex* cf; double sgn;
+        std::complex<double> R1; std::complex<double> inner;
+        std::vector<std::pair<const Simplex*,
+                              std::pair<double, std::complex<double>>>> tops;
     };
     std::vector<Facet> fs;
     std::set<std::pair<std::uint64_t, std::uint64_t>> edges;
     for (const auto& cf : getCofaces()) {
         Facet f;
         f.cf = cf; f.sgn = oppositeVertexSign(cf, this);
-        f.R1 = cf->circumradiusSquared(); f.inner = 0.0;
+        f.R1 = cf->circumradiusSquared(); f.inner = {0.0, 0.0};
         for (const auto& tp : cf->getCofaces()) {
             const double sgn2 = oppositeVertexSign(tp, cf);
-            const double R2 = tp->circumradiusSquared();
-            f.inner += sgn2 * signedSqrt(R2 - f.R1);
+            const std::complex<double> R2 = tp->circumradiusSquared();
+            f.inner += sgn2 * principalSqrt(R2 - f.R1);
             f.tops.push_back({tp, {sgn2, R2}});
             const auto& tv = tp->getVertices();
             for (std::size_t i = 0; i < tv.size(); ++i)
@@ -1527,20 +1451,23 @@ Simplex::dualVolumeGradient() const {
     }
     const double inv = 1.0 / (static_cast<double>(n - k) * (n - k - 1));
     for (const auto& e : edges) {
-        const double dRh = dCircumR2(this, e.first, e.second);
-        double dV = 0.0;
+        const std::complex<double> dRh = dCircumR2(this, e.first, e.second);
+        std::complex<double> dV{0.0, 0.0};
         for (const auto& f : fs) {
-            const double dR1 = dCircumR2(f.cf, e.first, e.second);
-            const double x1 = f.R1 - Rh2;
-            const double ss1 = signedSqrt(x1);
-            const double dss1 = 1.0 / (2.0 * std::sqrt(std::abs(x1) + 1e-300));
-            double dinner = 0.0;
+            const std::complex<double> dR1 = dCircumR2(f.cf, e.first, e.second);
+            const std::complex<double> x1 = f.R1 - Rh2;
+            const std::complex<double> ss1 = principalSqrt(x1);
+            // d/dx sqrt(x) = 1/(2 sqrt(x)) on the principal branch. The old form
+            // took 1/(2 sqrt(|x| + eps)), which is the derivative of signedSqrt
+            // plus a regulator; neither is needed once the root is complex.
+            const std::complex<double> dss1 = 0.5 / ss1;
+            std::complex<double> dinner{0.0, 0.0};
             for (const auto& t : f.tops) {
-                const double R2 = t.second.second, sgn2 = t.second.first;
-                const double dR2 = dCircumR2(t.first, e.first, e.second);
-                const double x2 = R2 - f.R1;
-                dinner += sgn2 * (dR2 - dR1)
-                          / (2.0 * std::sqrt(std::abs(x2) + 1e-300));
+                const std::complex<double> R2 = t.second.second;
+                const double sgn2 = t.second.first;
+                const std::complex<double> dR2 = dCircumR2(t.first, e.first, e.second);
+                const std::complex<double> x2 = R2 - f.R1;
+                dinner += sgn2 * (dR2 - dR1) / (2.0 * principalSqrt(x2));
             }
             dV += f.sgn * (dss1 * (dR1 - dRh) * f.inner + ss1 * dinner);
         }
@@ -1551,19 +1478,20 @@ Simplex::dualVolumeGradient() const {
 
 std::map<std::pair<std::pair<std::uint64_t, std::uint64_t>,
                    std::pair<std::uint64_t, std::uint64_t>>,
-         double>
+         std::complex<double>>
 Simplex::dualVolumeHessian() const {
     using EK = std::pair<std::uint64_t, std::uint64_t>;
-    std::map<std::pair<EK, EK>, double> hess;
+    std::map<std::pair<EK, EK>, std::complex<double>> hess;
     if (vertices.empty()) return hess;
     const int n = ambientTopDimension();
     const int k = static_cast<int>(size()) - 1;
     if (k != n - 2) return hess;
 
-    const double Rh2 = circumradiusSquared();
+    const std::complex<double> Rh2 = circumradiusSquared();
     struct Facet {
-        const Simplex* cf; double sgn; double R1;
-        std::vector<std::pair<const Simplex*, std::pair<double, double>>> tops;
+        const Simplex* cf; double sgn; std::complex<double> R1;
+        std::vector<std::pair<const Simplex*,
+                              std::pair<double, std::complex<double>>>> tops;
     };
     std::vector<Facet> fs;
     std::set<EK> edges;
@@ -1583,41 +1511,45 @@ Simplex::dualVolumeHessian() const {
         fs.push_back(std::move(f));
     }
     const double inv = 1.0 / (static_cast<double>(n - k) * (n - k - 1));
-    auto gp = [](double x) -> double {
-        return 1.0 / (2.0 * std::sqrt(std::abs(x) + 1e-300));
+    // g(x) = sqrt(x) on the principal branch, so g'(x) = 1/(2 sqrt(x)) and
+    // g''(x) = -1/(4 x sqrt(x)). The old real forms carried an |x| + eps
+    // regulator and a sign flip -- both artifacts of signedSqrt, not of the
+    // derivative (#641).
+    auto gp = [](std::complex<double> x) {
+        return 0.5 / principalSqrt(x);
     };
-    auto gpp = [](double x) -> double {
-        const double ax = std::abs(x) + 1e-300;
-        return -((x < 0.0) ? -1.0 : 1.0) / (4.0 * ax * std::sqrt(ax));
+    auto gpp = [](std::complex<double> x) {
+        return -0.25 / (x * principalSqrt(x));
     };
     const std::vector<EK> ev(edges.begin(), edges.end());
     for (const auto& e : ev) {
-        const double dRh_e = dCircumR2(this, e.first, e.second);
+        const std::complex<double> dRh_e = dCircumR2(this, e.first, e.second);
         for (const auto& f : ev) {
-            const double dRh_f = dCircumR2(this, f.first, f.second);
-            const double d2Rh =
+            const std::complex<double> dRh_f = dCircumR2(this, f.first, f.second);
+            const std::complex<double> d2Rh =
                 d2CircumR2(this, e.first, e.second, f.first, f.second);
-            double dV2 = 0.0;
+            std::complex<double> dV2{0.0, 0.0};
             for (const auto& fac : fs) {
-                const double dR1_e = dCircumR2(fac.cf, e.first, e.second);
-                const double dR1_f = dCircumR2(fac.cf, f.first, f.second);
-                const double d2R1 =
+                const std::complex<double> dR1_e = dCircumR2(fac.cf, e.first, e.second);
+                const std::complex<double> dR1_f = dCircumR2(fac.cf, f.first, f.second);
+                const std::complex<double> d2R1 =
                     d2CircumR2(fac.cf, e.first, e.second, f.first, f.second);
-                const double x1 = fac.R1 - Rh2;
-                const double ss1 = signedSqrt(x1);
-                const double dx1_e = dR1_e - dRh_e, dx1_f = dR1_f - dRh_f;
-                const double dss1_e = gp(x1) * dx1_e, dss1_f = gp(x1) * dx1_f;
-                const double d2ss1 = gpp(x1) * dx1_e * dx1_f + gp(x1) * (d2R1 - d2Rh);
-                double S = 0.0, dS_e = 0.0, dS_f = 0.0, d2S = 0.0;
+                const std::complex<double> x1 = fac.R1 - Rh2;
+                const std::complex<double> ss1 = principalSqrt(x1);
+                const std::complex<double> dx1_e = dR1_e - dRh_e, dx1_f = dR1_f - dRh_f;
+                const std::complex<double> dss1_e = gp(x1) * dx1_e, dss1_f = gp(x1) * dx1_f;
+                const std::complex<double> d2ss1 = gpp(x1) * dx1_e * dx1_f + gp(x1) * (d2R1 - d2Rh);
+                std::complex<double> S{0.0,0.0}, dS_e{0.0,0.0}, dS_f{0.0,0.0}, d2S{0.0,0.0};
                 for (const auto& t : fac.tops) {
-                    const double sgn2 = t.second.first, R2 = t.second.second;
-                    const double dR2_e = dCircumR2(t.first, e.first, e.second);
-                    const double dR2_f = dCircumR2(t.first, f.first, f.second);
-                    const double d2R2 =
+                    const double sgn2 = t.second.first;
+                    const std::complex<double> R2 = t.second.second;
+                    const std::complex<double> dR2_e = dCircumR2(t.first, e.first, e.second);
+                    const std::complex<double> dR2_f = dCircumR2(t.first, f.first, f.second);
+                    const std::complex<double> d2R2 =
                         d2CircumR2(t.first, e.first, e.second, f.first, f.second);
-                    const double x2 = R2 - fac.R1;
-                    const double dx2_e = dR2_e - dR1_e, dx2_f = dR2_f - dR1_f;
-                    S += sgn2 * signedSqrt(x2);
+                    const std::complex<double> x2 = R2 - fac.R1;
+                    const std::complex<double> dx2_e = dR2_e - dR1_e, dx2_f = dR2_f - dR1_f;
+                    S += sgn2 * principalSqrt(x2);
                     dS_e += sgn2 * gp(x2) * dx2_e;
                     dS_f += sgn2 * gp(x2) * dx2_f;
                     d2S += sgn2 * (gpp(x2) * dx2_e * dx2_f + gp(x2) * (d2R2 - d2R1));
@@ -1631,9 +1563,9 @@ Simplex::dualVolumeHessian() const {
     return hess;
 }
 
-double Simplex::hodgeStar() const {
-    const double v = volume();
-    if (v == 0.0) {
+std::complex<double> Simplex::hodgeStar() const {
+    const std::complex<double> v = volume();
+    if (v == std::complex<double>{0.0, 0.0}) {
         throw std::runtime_error(
             "Simplex::hodgeStar: primal volume is zero (degenerate simplex)");
     }

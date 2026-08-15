@@ -50,7 +50,7 @@ def _sphere4():
                      T.SimplexBoundarySphere(4))
     st.build()
     for i, e in enumerate(st.getEdgeList().toVector()):
-        e.setSquaredLength(1.0 + 0.013 * (i % 5))
+        e.setLength(cmath.sqrt(complex(1.0 + 0.013 * (i % 5))))
     return st
 
 
@@ -71,7 +71,7 @@ def _assert_mixed_hinge_regime(test, st):
 
 
 def _max_abs_im(st):
-    return max(abs(complex(e.getSquaredLength()).imag)
+    return max(abs(complex(e.getLength()**2).imag)
                for e in st.getEdgeList().toVector())
 
 
@@ -85,7 +85,7 @@ class RealAxisDirectionTest(unittest.TestCase):
         # Hand-set one edge timelike: every base triangle wedge against it has
         # a cofactor pair straddling zero — the m=1 crossing branch (#582) —
         # so the action gradient/Hessian are genuinely complex here.
-        st.getEdgeList().toVector()[3].setSquaredLength(complex(-0.8, 0.0))
+        st.getEdgeList().toVector()[3].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
         rs = T.ReggeSolver(st, T.MatterConfiguration())
         _assert_mixed_hinge_regime(self, st)
 
@@ -107,12 +107,12 @@ class RealAxisDirectionTest(unittest.TestCase):
         h = 1e-6
         fd = np.zeros(len(edges))
         for i, e in enumerate(edges):
-            re0 = complex(e.getSquaredLength()).real
-            e.setSquaredLength(complex(re0 + h, 0.0))
+            re0 = complex(e.getLength()**2).real
+            e.setLength(cmath.sqrt(complex(complex(re0 + h, 0.0))))
             fp = objective()
-            e.setSquaredLength(complex(re0 - h, 0.0))
+            e.setLength(cmath.sqrt(complex(complex(re0 - h, 0.0))))
             fm = objective()
-            e.setSquaredLength(complex(re0, 0.0))
+            e.setLength(cmath.sqrt(complex(complex(re0, 0.0))))
             fd[i] = (fp - fm) / (2 * h)
 
         scale = np.max(np.abs(fd))
@@ -137,8 +137,8 @@ class ImExactlyZeroInvariantTest(unittest.TestCase):
     def test_stage1_stage2_on_cone_crossing_host(self):
         host = _closed_s4(n_refine=8, seed=3)
         edges = host.getEdgeList().toVector()
-        edges[5].setSquaredLength(complex(-0.8, 0.0))   # timelike
-        edges[9].setSquaredLength(complex(0.01, 0.0))   # inside the null band
+        edges[5].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))   # timelike
+        edges[9].setLength(cmath.sqrt(complex(complex(0.01, 0.0))))   # inside the null band
         opt = self._node(host)
         _assert_mixed_hinge_regime(self, host)
         # No exception may surface from any trial either stage constructs.
@@ -157,7 +157,7 @@ class ImExactlyZeroInvariantTest(unittest.TestCase):
         # The objective genuinely decreases while hinges cross the cone — the
         # regime the interim guard could only veto.
         host = _closed_s4(n_refine=8, seed=3)
-        host.getEdgeList().toVector()[5].setSquaredLength(complex(-0.8, 0.0))
+        host.getEdgeList().toVector()[5].setLength(cmath.sqrt(complex(complex(-0.8, 0.0))))
         opt = self._node(host)
         trace = opt.run_stage2(beta=1.0, max_iters=6, alpha0=0.05,
                                rel_tol=1e-9)
@@ -177,7 +177,7 @@ class CausalSpecimenContinuationTest(unittest.TestCase):
         node = rebuild_joint_node(dump, seed=11001000)
         st = node.st
         # The specimen is causal: its recorded re_min < 0 must survive rebuild.
-        re_min = min(complex(e.getSquaredLength()).real
+        re_min = min(complex(e.getLength()**2).real
                      for e in st.getEdgeList().toVector())
         self.assertLess(re_min, 0.0)
         self.assertEqual(_max_abs_im(st), 0.0)  # dumps carry Im == 0
@@ -188,7 +188,7 @@ class CausalSpecimenContinuationTest(unittest.TestCase):
         # Timelike content is dynamics, not policy — but the reader must agree
         # the geometry stayed finite and classifiable.
         for e in node.st.getEdgeList().toVector():
-            self.assertTrue(cmath.isfinite(complex(e.getSquaredLength())))
+            self.assertTrue(cmath.isfinite(complex(e.getLength()**2)))
 
 
 if __name__ == "__main__":

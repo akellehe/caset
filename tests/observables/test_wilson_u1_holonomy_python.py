@@ -29,6 +29,7 @@ import unittest
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -75,7 +76,7 @@ def _set_phases(st, phases):
     weights everywhere, phase 0 on edges not in the map."""
     for e in st.getEdgeList().toVector():
         key = frozenset({e.getSource().getId(), e.getTarget().getId()})
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
         e.setPhase(phases.get(key, 0.0))
 
 

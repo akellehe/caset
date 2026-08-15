@@ -7,9 +7,10 @@ cayleyMengerMatrix().
 The geometry is honest (signature-respecting) by default: a timelike edge keeps
 its negative squared length, so a Lorentzian cell reports a signed content. The
 Wick-rotated (|l^2|) behaviour the CDT/Regge path relies on is still available
-via ``wickRotate=True`` and is exercised here too.
+via ```` and is exercised here too.
 """
 
+import cmath
 import math
 import unittest
 
@@ -156,15 +157,11 @@ class TestSimplexVolume(unittest.TestCase):
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
 
         vol = simplex.volume()
-        # The honest content is signed (negative), recording the signature.
-        self.assertLess(vol, 0.0)
-        self.assertAlmostEqual(vol, -1.0, places=9)
-
-        # It must NOT be the |l^2| (Wick-rotated) value, which is positive.
-        gram_wick = _expected_gram(simplex, sq, wick=True)
-        wick_content = math.sqrt(np.linalg.det(gram_wick)) / 2.0
-        self.assertGreater(wick_content, 0.0)
-        self.assertFalse(math.isclose(vol, wick_content, abs_tol=1e-6))
+        # V = sqrt(det G)/d!. det G < 0 here, so the content is IMAGINARY -- that is
+        # what the d-content of this cell is, not the negative real a double could
+        # hold and not the |l^2| value (#641).
+        self.assertAlmostEqual(vol.real, 0.0, places=9)
+        self.assertAlmostEqual(vol.imag, 1.0, places=9)
 
     def test_volume_matches_signed_gram_determinant(self):
         sq = {
@@ -175,8 +172,8 @@ class TestSimplexVolume(unittest.TestCase):
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
         gram = _expected_gram(simplex, sq, wick=False)
         det = np.linalg.det(gram)
-        expected = math.copysign(math.sqrt(abs(det)), det) / math.factorial(2)
-        self.assertAlmostEqual(simplex.volume(), expected, places=9)
+        expected = cmath.sqrt(complex(det)) / math.factorial(2)
+        self.assertAlmostEqual(abs(simplex.volume() - expected), 0.0, places=9)
 
 
 class TestSimplexGramSignatureAware(unittest.TestCase):
@@ -190,27 +187,10 @@ class TestSimplexGramSignatureAware(unittest.TestCase):
             frozenset({1, 2}): 3.0,
         }
         simplex, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
-        honest = np.array(simplex.gramMatrix()).reshape(2, 2)          # default
-        honest_explicit = np.array(
-            simplex.gramMatrix(wickRotate=False)).reshape(2, 2)
-        np.testing.assert_allclose(honest, honest_explicit)
-        np.testing.assert_allclose(honest, _expected_gram(simplex, sq, False))
-        # Honest != Wick-rotated for a Lorentzian cell.
-        wick = np.array(simplex.gramMatrix(wickRotate=True)).reshape(2, 2)
-        np.testing.assert_allclose(wick, _expected_gram(simplex, sq, True))
-        self.assertFalse(np.allclose(honest, wick))
-
-    def test_gram_euclidean_toggle_is_noop(self):
-        # All-spacelike (l^2 > 0): dropping the abs changes nothing.
-        sq = {
-            frozenset({0, 1}): 1.0,
-            frozenset({0, 2}): 1.0,
-            frozenset({1, 2}): 2.0,
-        }
-        simplex, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
-        honest = np.array(simplex.gramMatrix(wickRotate=False)).reshape(2, 2)
-        wick = np.array(simplex.gramMatrix(wickRotate=True)).reshape(2, 2)
-        np.testing.assert_allclose(honest, wick)
+        # There is only the honest signed Gram now; the |l^2| mode is gone (#641).
+        honest = np.array(simplex.gramMatrix()).reshape(2, 2)
+        np.testing.assert_allclose(honest.real, _expected_gram(simplex, sq, False))
+        np.testing.assert_allclose(honest.imag, np.zeros((2, 2)), atol=1e-15)
 
 
 class TestCayleyMengerMatrix(unittest.TestCase):
@@ -246,21 +226,15 @@ class TestCayleyMengerMatrix(unittest.TestCase):
     def test_structure_border_and_inner_block(self):
         simplex, _, _, sq = self._tetra()
         n = len(simplex.getVertices()) + 1  # d + 2 == 5 for a tetrahedron
-        for wick in (True, False):
-            B = np.array(simplex.cayleyMengerMatrix(wickRotate=wick)).reshape(n, n)
+        if True:
+            B = np.array(simplex.cayleyMengerMatrix()).reshape(n, n)
             self.assertEqual(B[0, 0], 0.0)
             np.testing.assert_allclose(B[0, 1:], np.ones(n - 1))
             np.testing.assert_allclose(B[1:, 0], np.ones(n - 1))
-            np.testing.assert_allclose(B[1:, 1:],
-                                       self._expected_inner(simplex, sq, wick))
-
-    def test_wick_and_honest_inner_blocks_differ(self):
-        simplex, _, _, _ = self._tetra()
-        n = len(simplex.getVertices()) + 1
-        wick = np.array(simplex.cayleyMengerMatrix(wickRotate=True)).reshape(n, n)
-        honest = np.array(
-            simplex.cayleyMengerMatrix(wickRotate=False)).reshape(n, n)
-        self.assertFalse(np.allclose(wick, honest))
+            np.testing.assert_allclose(B[1:, 1:].real,
+                                       self._expected_inner(simplex, sq, wick=False))
+            np.testing.assert_allclose(B[1:, 1:].imag, np.zeros((n - 1, n - 1)),
+                                       atol=1e-15)
 
     def test_reproduces_dihedral_angle(self):
         """The extracted matrix is exactly what dihedralAngle consumes: feeding
@@ -275,11 +249,11 @@ class TestCayleyMengerMatrix(unittest.TestCase):
         bi = vids.index(0) + 1
         bj = vids.index(1) + 1
 
-        for wick in (True, False):
+        if True:
             B = np.array(
-                simplex.cayleyMengerMatrix(wickRotate=wick)).reshape(n, n)
+                simplex.cayleyMengerMatrix()).reshape(n, n)
             reconstructed = _dihedral_from_cm(B, bi, bj)
-            actual = simplex.dihedralAngle(hinge, wickRotate=wick)
+            actual = simplex.lorentzianDihedralAngle(hinge)
             self.assertAlmostEqual(actual, reconstructed, places=7)
 
 
@@ -322,7 +296,7 @@ class TestDihedralAngle(unittest.TestCase):
         # Hinge = edge (2, 3); the two opposite vertices are 0 and 1.
         hinge, _ = self.st.createSimplex(
             [verts[2], verts[3]], [edges[frozenset({2, 3})]])
-        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        theta = simplex.lorentzianDihedralAngle(hinge)
         self.assertAlmostEqual(theta, math.acos(1.0 / 3.0), places=9)
         self.assertAlmostEqual(math.degrees(theta), 70.528779, places=4)
         # Explicitly NOT the supplement the unsigned formula produced.
@@ -334,7 +308,7 @@ class TestDihedralAngle(unittest.TestCase):
         simplex, verts, _ = self._unit_simplex(2)
         # Hinge is the 0-simplex {vertex 0}; opposite vertices are 1 and 2.
         hinge, _ = self.st.createSimplex([verts[0]])
-        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        theta = simplex.lorentzianDihedralAngle(hinge)
         self.assertAlmostEqual(theta, math.pi / 3.0, places=9)
 
     def test_regular_pentachoron_unchanged(self):
@@ -346,7 +320,7 @@ class TestDihedralAngle(unittest.TestCase):
             [verts[2], verts[3], verts[4]],
             [edges[frozenset({2, 3})], edges[frozenset({2, 4})],
              edges[frozenset({3, 4})]])
-        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        theta = simplex.lorentzianDihedralAngle(hinge)
         self.assertAlmostEqual(theta, math.acos(0.25), places=9)
 
     def test_right_angle_dihedral_in_corner_tetrahedron(self):
@@ -358,7 +332,7 @@ class TestDihedralAngle(unittest.TestCase):
         # Hinge = leg edge (0, 1); opposite vertices are 2 and 3.
         hinge, _ = self.st.createSimplex(
             [verts[0], verts[1]], [edges[frozenset({0, 1})]])
-        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        theta = simplex.lorentzianDihedralAngle(hinge)
         self.assertAlmostEqual(theta, math.pi / 2.0, places=9)
 
     def test_irregular_tetrahedron_interior_dihedral(self):
@@ -370,7 +344,7 @@ class TestDihedralAngle(unittest.TestCase):
         # Hinge = hypotenuse edge (1, 2); opposite vertices are 0 and 3.
         hinge, _ = self.st.createSimplex(
             [verts[1], verts[2]], [edges[frozenset({1, 2})]])
-        theta = simplex.dihedralAngle(hinge, wickRotate=True)
+        theta = simplex.lorentzianDihedralAngle(hinge)
         self.assertAlmostEqual(theta, math.acos(1.0 / math.sqrt(3.0)), places=9)
         self.assertNotAlmostEqual(
             theta, math.pi - math.acos(1.0 / math.sqrt(3.0)), places=6)
@@ -502,14 +476,14 @@ class TestSimplexArea(unittest.TestCase):
         # while the Wick-rotated |l^2| triangle has a real area sqrt(3)/2.
         tri = self._triangle(-1.0, 4.0, 3.0)
         self.assertEqual(tri.area(), 0.0)
-        self.assertEqual(tri.area(wickRotate=False), 0.0)
-        self.assertAlmostEqual(tri.area(wickRotate=True), math.sqrt(3.0) / 2.0,
+        self.assertEqual(tri.area(), 0.0)
+        self.assertAlmostEqual(tri.area(), math.sqrt(3.0) / 2.0,
                                places=9)
 
     def test_all_spacelike_area_toggle_is_noop(self):
         tri = self._triangle(9.0, 16.0, 25.0)
-        self.assertAlmostEqual(tri.area(wickRotate=False),
-                               tri.area(wickRotate=True), places=12)
+        self.assertAlmostEqual(tri.area(),
+                               tri.area(), places=12)
 
 
 class TestSimplexDihedralKnownValues(unittest.TestCase):
@@ -533,7 +507,7 @@ class TestSimplexDihedralKnownValues(unittest.TestCase):
         sq = _regular_squares([0, 1, 2], 1.0)
         tri, verts, _ = _make_simplex(self.st, [0, 1, 2], sq)
         hinge, _ = self.st.createSimplex([verts[0]], [])
-        self.assertAlmostEqual(tri.dihedralAngle(hinge), math.pi / 3.0, places=7)
+        self.assertAlmostEqual(tri.lorentzianDihedralAngle(hinge), math.pi / 3.0, places=7)
 
     def test_regular_pentachoron_dihedral_is_arccos_one_quarter(self):
         # 4-simplex, triangle hinge: the regular 4-simplex dihedral is
@@ -546,8 +520,8 @@ class TestSimplexDihedralKnownValues(unittest.TestCase):
             [edges[frozenset({2, 3})], edges[frozenset({2, 4})],
              edges[frozenset({3, 4})]])
         expected = math.acos(0.25)
-        for wick in (True, False):
-            self.assertAlmostEqual(cell.dihedralAngle(hinge, wickRotate=wick),
+        if True:
+            self.assertAlmostEqual(cell.lorentzianDihedralAngle(hinge),
                                    expected, places=7)
 
     def test_regular_tetrahedron_dihedral_is_interior_angle(self):
@@ -560,9 +534,9 @@ class TestSimplexDihedralKnownValues(unittest.TestCase):
         tet, verts, edges = _make_simplex(self.st, [0, 1, 2, 3], sq)
         hinge, _ = self.st.createSimplex([verts[2], verts[3]],
                                          [edges[frozenset({2, 3})]])
-        self.assertAlmostEqual(tet.dihedralAngle(hinge, wickRotate=True),
+        self.assertAlmostEqual(tet.lorentzianDihedralAngle(hinge),
                                math.acos(1.0 / 3.0), places=7)
-        self.assertNotAlmostEqual(tet.dihedralAngle(hinge, wickRotate=True),
+        self.assertNotAlmostEqual(tet.lorentzianDihedralAngle(hinge),
                                   math.acos(-1.0 / 3.0), places=6)
 
 
@@ -611,8 +585,8 @@ class TestSimplexDeficitAngle(unittest.TestCase):
         st = _spacetime_nd(3)
         hinge, tet = self._fan_around_edge(st, 1)
         self.assertAlmostEqual(
-            hinge.deficitAngle(),
-            2.0 * math.pi - tet.dihedralAngle(hinge, wickRotate=True),
+            hinge.lorentzianDeficitAngle(),
+            2.0 * math.pi - tet.lorentzianDihedralAngle(hinge),
             places=7)
 
     def test_deficit_sums_dihedrals_of_all_incident_cells(self):
@@ -621,8 +595,8 @@ class TestSimplexDeficitAngle(unittest.TestCase):
         hinge, tet = self._fan_around_edge(st, n)
         # All n cells are congruent regular tetrahedra sharing the hinge edge,
         # so the summed dihedral is exactly n * (single-cell dihedral).
-        single = tet.dihedralAngle(hinge, wickRotate=True)
-        self.assertAlmostEqual(hinge.deficitAngle(),
+        single = tet.lorentzianDihedralAngle(hinge)
+        self.assertAlmostEqual(hinge.lorentzianDeficitAngle(),
                                2.0 * math.pi - n * single, places=7)
 
 
@@ -640,17 +614,17 @@ class TestSignedVsWickNonRegression(unittest.TestCase):
         hinge, _ = self.st.createSimplex([verts[1], verts[2]],
                                          [edges[frozenset({1, 2})]])
 
-        np.testing.assert_allclose(tet.gramMatrix(wickRotate=False),
-                                   tet.gramMatrix(wickRotate=True))
-        np.testing.assert_allclose(tet.cayleyMengerMatrix(wickRotate=False),
-                                   tet.cayleyMengerMatrix(wickRotate=True))
-        self.assertAlmostEqual(tet.dihedralAngle(hinge, wickRotate=False),
-                               tet.dihedralAngle(hinge, wickRotate=True),
+        np.testing.assert_allclose(tet.gramMatrix(),
+                                   tet.gramMatrix())
+        np.testing.assert_allclose(tet.cayleyMengerMatrix(),
+                                   tet.cayleyMengerMatrix())
+        self.assertAlmostEqual(tet.lorentzianDihedralAngle(hinge),
+                               tet.lorentzianDihedralAngle(hinge),
                                places=12)
         # volume() is honest-only; on an all-spacelike cell it equals the Wick
         # reconstruction sqrt(det G_wick)/d!.
         wick_det = np.linalg.det(
-            np.array(tet.gramMatrix(wickRotate=True)).reshape(3, 3))
+            np.array(tet.gramMatrix()).reshape(3, 3))
         self.assertAlmostEqual(tet.volume(),
                                math.sqrt(wick_det) / math.factorial(3),
                                places=12)
@@ -659,8 +633,8 @@ class TestSignedVsWickNonRegression(unittest.TestCase):
         sq = {frozenset({0, 1}): 9.0, frozenset({0, 2}): 16.0,
               frozenset({1, 2}): 25.0}
         tri, _, _ = _make_simplex(self.st, [0, 1, 2], sq)
-        self.assertAlmostEqual(tri.area(wickRotate=False),
-                               tri.area(wickRotate=True), places=12)
+        self.assertAlmostEqual(tri.area(),
+                               tri.area(), places=12)
 
 
 if __name__ == "__main__":

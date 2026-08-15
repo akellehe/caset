@@ -256,18 +256,16 @@ Euclidean spectrum/kernel.)doc")
            "Degree vector (length N, real): D_ii = sum |squaredLength| over "
            "incident edges (magnitude convention).")
       .def("laplacian", &HodgeLaplacian::laplacian, py::arg("k") = 0,
-           py::arg("metric") = true, py::arg("lorentzian") = false,
+           py::arg("metric") = true,
            "Laplacian L_k as a flat row-major complex array: N*N for k=0 "
-           "(L = D - A), else |C_k|*|C_k| (the symmetric metric Laplacian; "
-           "imag 0). metric=False uses unit weights (combinatorial) for k>=1 and "
-           "is ignored at k=0. lorentzian=True (k>=1) assembles the signed-weight "
-           "d'Alembertian directly (generally non-symmetric; still real). Raises "
-           "for k<0; empty above the top dimension.")
+           "(L = D - A), else |C_k|*|C_k|, the signed-weight d'Alembertian "
+           "(complex, generally non-symmetric). There is no |volume| variant. "
+           "metric=False uses unit weights (combinatorial) for k>=1 and is ignored "
+           "at k=0. Raises for k<0; empty above the top dimension.")
       .def("weights", &HodgeLaplacian::weights, py::arg("k"),
-           py::arg("lorentzian") = false,
            "Diagonal inner-product weights W_k (length |C_k|) in ChainComplex "
-           "column order: per-k-simplex |volume| (W_0 = I). lorentzian=True returns "
-           "the signed volume (timelike cells negative). Empty for k<0 or k above "
+           "column order: the per-k-simplex SIGNED complex volume (W_0 = I). A "
+           "Lorentzian cell's content is imaginary. Empty for k<0 or k above "
            "the top dimension.")
       .def("laplacianGradient", &HodgeLaplacian::laplacianGradient, py::arg("k"),
            py::arg("edgeA"), py::arg("edgeB"),
@@ -551,17 +549,6 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            "the k=0 Euler identity is Σ l² ∂r_U = +2 r_U (L_0 is degree +1 in "
            "l²). At k>=1, certified by the exact Euler identity Σ l² ∂r_U = −r_U (FD does not "
            "converge). Raises on a hole/target length mismatch.")
-      .def("residualForPeriodsGradientGpu",
-           &EigenstateSynthesis::residualForPeriodsGradientGpu,
-           py::arg("holes"), py::arg("target_periods"),
-           "FP32 cuBLAS (SGEMM) GPU port of residualForPeriodsGradient (#348): "
-           "the identical analytic gradient, with the dominant per-edge GEMMs run "
-           "in single precision on the GPU and the eigensolve + cheap small-dim "
-           "algebra + final reductions kept on the CPU in FP64. FP32 is the only "
-           "approximation (~1e-5 vs FP64); residualForPeriodsGradient stays the "
-           "default and the correctness oracle. Requires a TESSERA_CUDA build "
-           "(raises otherwise), and raises on a hole/target length mismatch.")
-      // ----- The hard period-pin r_psi (the realizability alternative, #377) -----
       .def("periodGapForPeriods", &EigenstateSynthesis::periodGapForPeriods,
            py::arg("holes"), py::arg("target_periods"),
            "The hard period-pin r_psi over the holes' cycles: r_psi = "

@@ -19,6 +19,7 @@ checks need, while a carried period row stays realizable (``r_U ~ 0``).
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -43,7 +44,7 @@ def holed_surface(degree=1, jitter=True):
     st = tessera.Spacetime.fromCells(2, holed, 1.0, 0.0)
     if jitter:
         for i, e in enumerate(st.getEdgeList().toVector()):
-            e.setSquaredLength(1.0 + 0.013 * (i % 6))
+            e.setLength(cmath.sqrt(complex(1.0 + 0.013 * (i % 6))))
     st.materializeFacets()
     es = cob.EigenstateSynthesis(st, degree)
     holes = [list(t) for t in _WINDOWS]

@@ -259,13 +259,13 @@ def assemble_cell(mi: dict, epsilon: float):
         return float("nan"), float("nan"), float("inf"), lengths
 
     simplex, _ = st.createSimplex([vert[n] for n in times])
-    gram = np.array(simplex.gramMatrix(wickRotate=True),
+    gram = np.array(simplex.gramMatrix(),
                     dtype=np.float64).reshape(4, 4)
     with np.errstate(invalid="ignore"):
         det_gram = float(np.linalg.det(gram))
 
     spatial, _ = st.createSimplex([vert["A'"], vert["AB"], vert["B'"]])
-    spatial_area = float(spatial.area(wickRotate=True))
+    spatial_area = float(spatial.area())
 
     return det_gram, spatial_area, max(lengths.values()), lengths
 

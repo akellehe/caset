@@ -3,10 +3,10 @@
 Covers the three acceptance criteria:
 
   1. the spacelike VR metric law d_VR² = (−log(I/iMax))² with the I < ε·iMax
-     floor — ``Edge.vanRaamsdonkSquaredLength`` (static law);
+     floor — ``Edge.vanRaamsdonkLength`` (static law);
   2. the time-aware signed squared length — a forward-time *worldline* edge
      (endpoints on different time slices) is null (0), a same-slice edge is
-     spacelike — ``Edge.vanRaamsdonkSquaredLengthFor``;
+     spacelike — ``Edge.vanRaamsdonkLengthFor``;
   3. fail-loudly admissibility — an inadmissible spacelike simplex raises, a
      valid one does not, and a simplex carrying a null/timelike (worldline)
      edge is skipped — ``Simplex.assertSpacelikeAdmissible``.
@@ -20,6 +20,7 @@ import math
 import unittest
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -75,25 +76,25 @@ class TestMetricLaw(unittest.TestCase):
         for frac in (0.9, 0.5, 0.1):
             I = frac * IMAX
             expected = (-math.log(I / IMAX)) ** 2
-            got = tessera.Edge.vanRaamsdonkSquaredLength(I, IMAX, 1e-10)
+            got = tessera.Edge.vanRaamsdonkLength(I, IMAX, 1e-10)
             self.assertAlmostEqual(got, expected, places=12)
 
     def test_maximal_correlation_is_zero_length(self):
         self.assertAlmostEqual(
-            tessera.Edge.vanRaamsdonkSquaredLength(IMAX, IMAX), 0.0, places=12)
+            tessera.Edge.vanRaamsdonkLength(IMAX, IMAX), 0.0, places=12)
 
     def test_floor_below_epsilon(self):
         for eps in (1e-10, 1e-3, 0.1):
             cap2 = (-math.log(eps)) ** 2
             self.assertAlmostEqual(
-                tessera.Edge.vanRaamsdonkSquaredLength(0.0, IMAX, eps),
+                tessera.Edge.vanRaamsdonkLength(0.0, IMAX, eps),
                 cap2, places=9)
             self.assertAlmostEqual(
-                tessera.Edge.vanRaamsdonkSquaredLength(0.5 * eps * IMAX, IMAX, eps),
+                tessera.Edge.vanRaamsdonkLength(0.5 * eps * IMAX, IMAX, eps),
                 cap2, places=9)
         eps = 0.1
         self.assertLess(
-            tessera.Edge.vanRaamsdonkSquaredLength(2.0 * eps * IMAX, IMAX, eps),
+            tessera.Edge.vanRaamsdonkLength(2.0 * eps * IMAX, IMAX, eps),
             (-math.log(eps)) ** 2)
 
 
@@ -114,14 +115,14 @@ class TestForwardTimeNullEdges(unittest.TestCase):
 
         # (0, 1): same slice -> spacelike, the metric law value.
         self.assertAlmostEqual(
-            em[(0, 1)].vanRaamsdonkSquaredLengthFor(I, IMAX, 1e-10),
+            em[(0, 1)].vanRaamsdonkLengthFor(I, IMAX, 1e-10),
             expected_spacelike, places=12)
 
         # (0, 2) and (1, 2): cross-slice worldline edges -> null.
         self.assertEqual(
-            em[(0, 2)].vanRaamsdonkSquaredLengthFor(I, IMAX, 1e-10), 0.0)
+            em[(0, 2)].vanRaamsdonkLengthFor(I, IMAX, 1e-10), 0.0)
         self.assertEqual(
-            em[(1, 2)].vanRaamsdonkSquaredLengthFor(I, IMAX, 1e-10), 0.0)
+            em[(1, 2)].vanRaamsdonkLengthFor(I, IMAX, 1e-10), 0.0)
 
 
 # --------------------------------------------------------------------------- #
@@ -131,9 +132,9 @@ class TestSpacelikeAdmissibility(unittest.TestCase):
     def _triangle_with(self, s01, s02, s12):
         st = _solid_triangle()
         em = _edge_map(st)
-        em[(0, 1)].setSquaredLength(s01)
-        em[(0, 2)].setSquaredLength(s02)
-        em[(1, 2)].setSquaredLength(s12)
+        em[(0, 1)].setLength(cmath.sqrt(complex(s01)))
+        em[(0, 2)].setLength(cmath.sqrt(complex(s02)))
+        em[(1, 2)].setLength(cmath.sqrt(complex(s12)))
         return _triangle(st)
 
     def test_valid_spacelike_triangle_ok(self):

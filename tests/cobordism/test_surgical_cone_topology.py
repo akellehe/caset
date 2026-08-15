@@ -36,6 +36,7 @@ Coverage:
 import pytest
 
 import tessera as T
+import cmath
 
 cob = T.cobordism
 
@@ -57,7 +58,7 @@ def _sphere(d, sq=1.0):
                      T.SimplexBoundarySphere(d))
     st.build()
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(sq)
+        e.setLength(cmath.sqrt(complex(sq)))
     return st
 
 

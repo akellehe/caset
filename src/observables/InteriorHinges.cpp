@@ -166,7 +166,7 @@ InteriorHinges::InteriorHinges(std::shared_ptr<const Spacetime> spacetime,
     Hinge hinge;
     hinge.re = deficit.real();
     hinge.im = deficit.imag();
-    hinge.dv = s->dualVolume();
+    hinge.dv = s->dualVolume().real();
     // shell = min BFS distance over the triangle's vertices reachable from a
     // hole (None when no vertex is reachable / no holes were given).
     std::optional<int> shell;
@@ -266,7 +266,7 @@ InteriorHinges::Radii InteriorHinges::radii() const {
     if (!s->hasTopCoface()) continue;  // orphan 0-simplex stranded by a move
     const std::uint64_t vid = s->getVertices()[0]->getId();
     if (boundaryVertexIds.count(vid)) continue;
-    vDual += std::fabs(s->dualVolume());
+    vDual += std::abs(s->dualVolume());
     ++nInterior;
   }
   double vPrimal = 0.0;

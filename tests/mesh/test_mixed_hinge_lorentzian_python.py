@@ -82,9 +82,9 @@ def _edge_map(st):
 def _set_edges(st, mapping, default=None):
     for k, e in _edge_map(st).items():
         if k in mapping:
-            e.setSquaredLength(mapping[k])
+            e.setLength(cmath.sqrt(complex(mapping[k])))
         elif default is not None:
-            e.setSquaredLength(default)
+            e.setLength(cmath.sqrt(complex(default)))
         e.setPhase(0.0)
 
 
@@ -171,12 +171,12 @@ def _fd_deficit_grad(st, hinge, key, h=1e-6):
     """Central difference of the implemented lorentzianDeficitAngle in ℓ² of
     the given edge (internal consistency, not a correctness oracle)."""
     e = _edge_map(st)[key]
-    orig = e.getSquaredLength()
-    e.setSquaredLength(orig + h)
+    orig = (e.getLength() * e.getLength())
+    e.setLength(cmath.sqrt(complex(orig + h)))
     fp = complex(hinge.lorentzianDeficitAngle())
-    e.setSquaredLength(orig - h)
+    e.setLength(cmath.sqrt(complex(orig - h)))
     fm = complex(hinge.lorentzianDeficitAngle())
-    e.setSquaredLength(orig)
+    e.setLength(cmath.sqrt(complex(orig)))
     return (fp - fm) / (2.0 * h)
 
 
@@ -367,7 +367,7 @@ class TestMixedHingeGradient(unittest.TestCase):
         total = complex(0.0, 0.0)
         seen = 0
         for key, g in _grad_by_edge(hinge).items():
-            total += em[key].getSquaredLength() * complex(g)
+            total += (em[key].getLength() * em[key].getLength()) * complex(g)
             seen += 1
         self.assertGreater(seen, 0)
         self.assertAlmostEqual(total.real, 0.0, delta=tol)
@@ -426,7 +426,7 @@ class TestMixedHingeHessian(unittest.TestCase):
         rows = {}
         for (ke, kf), v in hess.items():
             rows.setdefault(ke, complex(0.0, 0.0))
-            rows[ke] += em[kf].getSquaredLength() * complex(v)
+            rows[ke] += (em[kf].getLength() * em[kf].getLength()) * complex(v)
         self.assertGreater(len(rows), 0)
         for ke, total in rows.items():
             want = -complex(grad[ke])
@@ -456,12 +456,12 @@ class TestMixedHingeHessian(unittest.TestCase):
                     abs(complex(hess[(ke, kf)]) - complex(hess[(kf, ke)])),
                     0.0, delta=1e-12)
                 e = em[kf]
-                orig = e.getSquaredLength()
-                e.setSquaredLength(orig + h)
+                orig = (e.getLength() * e.getLength())
+                e.setLength(cmath.sqrt(complex(orig + h)))
                 gp = complex(_grad_by_edge(hinge)[ke])
-                e.setSquaredLength(orig - h)
+                e.setLength(cmath.sqrt(complex(orig - h)))
                 gm = complex(_grad_by_edge(hinge)[ke])
-                e.setSquaredLength(orig)
+                e.setLength(cmath.sqrt(complex(orig)))
                 fd = (gp - gm) / (2.0 * h)
                 got = complex(hess[(ke, kf)])
                 self.assertAlmostEqual(got.real, fd.real, delta=5e-5)
@@ -489,12 +489,12 @@ class TestActionOnMixedComplex(unittest.TestCase):
         grad = solver.actionGradientExact()
         h = 1e-6
         for i, e in enumerate(edges):
-            orig = e.getSquaredLength()
-            e.setSquaredLength(orig + h)
+            orig = (e.getLength() * e.getLength())
+            e.setLength(cmath.sqrt(complex(orig + h)))
             sp = complex(solver.dualReggeAction())
-            e.setSquaredLength(orig - h)
+            e.setLength(cmath.sqrt(complex(orig - h)))
             sm = complex(solver.dualReggeAction())
-            e.setSquaredLength(orig)
+            e.setLength(cmath.sqrt(complex(orig)))
             fd = (sp - sm) / (2.0 * h)
             g = complex(grad[i])
             self.assertAlmostEqual(g.real, fd.real, delta=2e-5)

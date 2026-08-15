@@ -6,6 +6,8 @@
 
 #include <complex>
 
+#include <Eigen/Core>
+
 #include "spacetime/pachner/AddMove.h"
 #include "spacetime/pachner/FlipMove.h"
 #include "spacetime/pachner/IFlipMove.h"
@@ -201,6 +203,20 @@ class MultiCobordism {
   [[nodiscard]] static double residualOfTargetStateAgainstHarmonic(
       const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
       const std::vector<std::complex<double>> &targetState);
+  /// The same residual, with the winning relabeling RECORDED so no two registers in
+  /// one `r_U` evaluation are scored against the same one. Every register scored
+  /// independently picks its own argmin relabeling, and nothing stops a second
+  /// register from picking that same matching — which reads both registers as
+  /// carrying the same target component and rewards a complex whose registers all
+  /// carry equal weights. `claimedMatchings` holds the relabelings the registers
+  /// before this one already won: they are skipped here, and this register's argmin
+  /// is inserted on the way out. Once every relabeling is claimed (more registers
+  /// than the `d!` the target admits) the set is cleared and the exclusion restarts,
+  /// so the residual is never the empty minimum.
+  [[nodiscard]] static double residualOfTargetStateAgainstHarmonicWithDistinctMatching(
+      const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+      const std::vector<std::complex<double>> &targetState,
+      std::set<std::vector<int>> &claimedMatchings);
 
   // ---- objective ----
   /// The per-block register residual summed over `registerDegrees_`: `Σ r_U(boundary
@@ -341,14 +357,47 @@ class MultiCobordism {
   /// terms, not by freezing vertices.)
   [[nodiscard]] std::set<std::uint64_t> pinnedBoundaryVertices() const;
 
-  /// The sub-complex carried by a boundary block: a freshly-built `Spacetime` of
-  /// exactly the top cells of `spacetime` all of whose vertices lie in `vertexSet`
-  /// (the block's region). Returns `nullptr` when the region contains no full cell.
-  /// This is where a block's vertex-set becomes an actual complex — the block itself
-  /// only stores the vertex-set and target, never the cells.
-  [[nodiscard]] std::shared_ptr<Spacetime> subcomplexWithinVertexSet(
-      const std::shared_ptr<Spacetime> &spacetime,
-      const std::set<std::uint64_t> &vertexSet) const;
+  // ---- the pieces of residualOfTargetStateAgainstHarmonic ----
+  /// The target state as a dense complex vector — the `t` the harmonic is fitted to,
+  /// and (as its squared norm) the full leak when no register has emerged.
+  [[nodiscard]] static Eigen::VectorXcd targetStateVector(
+      const std::vector<std::complex<double>> &targetState);
+  /// The emergent holes that can carry `targetDimension` components: `emergentHoles`
+  /// at this degree, truncated to at most one hole per target component. Empty when
+  /// no register has emerged.
+  [[nodiscard]] static std::vector<std::vector<std::uint64_t>> holesCarryingTheTarget(
+      const Spacetime &spacetime, int registerDegree, std::size_t targetDimension);
+  /// The period matrix \f$ P^{\top} \f$ of the degree's harmonics over `registerHoles`:
+  /// `(targetDimension, b_k)`, row = hole, column = harmonic, zero-filled past the
+  /// holes that emerged (a component with no hole to sit in leaks in full).
+  [[nodiscard]] static Eigen::MatrixXcd holePeriodMatrix(
+      const std::shared_ptr<Spacetime> &spacetime, int registerDegree,
+      int degreeBettiNumber,
+      const std::vector<std::vector<std::uint64_t>> &registerHoles,
+      std::size_t targetDimension);
+  /// The target's components reordered onto the holes by `relabeling`: component
+  /// `relabeling[q]` sits in hole `q`. A relabeling is a bijection, so each hole
+  /// takes exactly one component.
+  [[nodiscard]] static Eigen::VectorXcd relabeledTargetVector(
+      const Eigen::VectorXcd &targetVector, const std::vector<int> &relabeling);
+  /// One register's winning relabeling: which target component each of its holes
+  /// carries, and the least-squares residual \f$ \min_c \lVert P^{\top} c - t \rVert^2 \f$
+  /// that matching leaves. `scored` is false when every relabeling was skipped as
+  /// already claimed, so nothing was evaluated.
+  struct RelabelingMatch {
+    double residual = 0.0;
+    std::vector<int> relabeling;
+    bool scored = false;
+  };
+  /// The argmin over the `d!` relabelings of the target components onto the holes.
+  /// With `skipClaimed` the relabelings in `claimedMatchings` — the ones registers
+  /// scored earlier already won — are passed over, so this register is read against
+  /// a matching of its own.
+  [[nodiscard]] static RelabelingMatch bestRelabelingOfTarget(
+      const Eigen::MatrixXcd &periodMatrixTransposed,
+      const Eigen::VectorXcd &targetVector,
+      const std::set<std::vector<int>> &claimedMatchings, bool skipClaimed);
+
   /// One boundary block's `r_U` term: the sum over the register degrees of
   /// `residualOfTargetStateAgainstHarmonic` evaluated on the block's own
   /// sub-complex (`subcomplexWithinVertexSet`) against the block's target. When the
@@ -356,6 +405,14 @@ class MultiCobordism {
   [[nodiscard]] double residualForBoundaryBlock(
       const BoundaryBlock &boundaryBlock,
       const std::shared_ptr<Spacetime> &spacetime) const;
+  /// The same block term, sharing one `claimedMatchings` set with the rest of the
+  /// `r_U` evaluation so this block's register degrees cannot re-use a relabeling
+  /// another register already won (see
+  /// `residualOfTargetStateAgainstHarmonicWithDistinctMatching`).
+  [[nodiscard]] double residualForBoundaryBlockWithDistinctMatchings(
+      const BoundaryBlock &boundaryBlock,
+      const std::shared_ptr<Spacetime> &spacetime,
+      std::set<std::vector<int>> &claimedMatchings) const;
   // Seed one boundary block per (seed, target) — region = the seed's cell-neighbourhood
   // — appended to `destinationBlocks` (shared by seedInputs/seedOutputs). The blocks are
   // grown later by growBoundaryRegions, not here.
@@ -433,7 +490,7 @@ class MultiCobordism {
   double inputResidualWeight_ = 1.0;
   /// An input region stops growing (growInputRegions) once its residual drops below
   /// this — i.e. once it carries its state.
-  double inputCarriedTolerance_ = 0.5;
+  double inputCarriedTolerance_ = 1e-12;
   /// The move/restart random source driving stage 1 and block construction.
   std::mt19937_64 randomNumberGenerator_;
   /// #613: whether the move draw offers the disposition moves. See the accessor.

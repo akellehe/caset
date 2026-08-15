@@ -236,10 +236,10 @@ double EigenstateSynthesis::rayleigh(const std::vector<cd> &psi) const {
   return num.real() / den;
 }
 
-std::vector<double> EigenstateSynthesis::weights() const {
-  std::vector<double> w;
+std::vector<std::complex<double>> EigenstateSynthesis::weights() const {
+  std::vector<std::complex<double>> w;
   w.reserve(edges_.size());
-  for (const auto e : edges_) w.push_back(e->getRealSquaredLength());
+  for (const auto e : edges_) w.push_back((e->getLength() * e->getLength()));
   return w;
 }
 
@@ -256,7 +256,7 @@ void EigenstateSynthesis::setWeights(const std::vector<double> &w) {
         "EigenstateSynthesis::setWeights: got " + std::to_string(w.size()) +
         " weights, expected " + std::to_string(edges_.size()));
   for (std::size_t i = 0; i < edges_.size(); ++i)
-    edges_[i]->setSquaredLength(std::complex<double>{w[i], 0.0});
+    edges_[i]->setLength(std::sqrt(std::complex<double>{w[i], 0.0}));
 }
 
 void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
@@ -270,11 +270,11 @@ void EigenstateSynthesis::setPhases(const std::vector<double> &theta) {
 
 // === Fixed-boundary interior fill (§5.0) ===
 
-std::vector<double> EigenstateSynthesis::interiorWeights() const {
-  std::vector<double> w;
+std::vector<std::complex<double>> EigenstateSynthesis::interiorWeights() const {
+  std::vector<std::complex<double>> w;
   w.reserve(interiorEdgeIdx_.size());
   for (const auto i : interiorEdgeIdx_)
-    w.push_back(edges_[i]->getRealSquaredLength());
+    w.push_back((edges_[i]->getLength() * edges_[i]->getLength()));
   return w;
 }
 
@@ -292,7 +292,7 @@ void EigenstateSynthesis::setInteriorWeights(const std::vector<double> &w) {
         std::to_string(w.size()) + " weights, expected " +
         std::to_string(interiorEdgeIdx_.size()));
   for (std::size_t k = 0; k < interiorEdgeIdx_.size(); ++k)
-    edges_[interiorEdgeIdx_[k]]->setSquaredLength(std::complex<double>{w[k], 0.0});
+    edges_[interiorEdgeIdx_[k]]->setLength(std::sqrt(std::complex<double>{w[k], 0.0}));
 }
 
 void EigenstateSynthesis::setInteriorPhases(const std::vector<double> &theta) {
@@ -402,7 +402,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
+        (edges_[i]->getLength() * edges_[i]->getLength()), edges_[i]->getPhase()};
   }
 
   // Fresh interior vertex with the largest id (sorts last; preserves the
@@ -462,7 +462,7 @@ bool EigenstateSynthesis::attachInteriorVertex(
       const auto it =
           boundaryBefore.find({std::min(a, b), std::max(a, b)});
       if (it == boundaryBefore.end() ||
-          it->second.first != edges_[i]->getSquaredLength() ||
+          it->second.first != (edges_[i]->getLength() * edges_[i]->getLength()) ||
           it->second.second != edges_[i]->getPhase()) {
         valid = false;
         break;
@@ -601,7 +601,7 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(u, v, it->second->getSquaredLength(),
+      rem.removedEdges.emplace_back(u, v, (it->second->getLength() * it->second->getLength()),
                                     it->second->getPhase());
       toRemove.push_back(it->second);
     }
@@ -615,7 +615,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t a = edges_[i]->getSource()->getId();
     const std::uint64_t b = edges_[i]->getTarget()->getId();
     boundaryBefore[{std::min(a, b), std::max(a, b)}] = {
-        edges_[i]->getSquaredLength(), edges_[i]->getPhase()};
+        (edges_[i]->getLength() * edges_[i]->getLength()), edges_[i]->getPhase()};
   }
 
   // Mutate: drop the top cell, then its orphaned edges.
@@ -639,7 +639,7 @@ bool EigenstateSynthesis::removeInteriorCell(
     const std::uint64_t b = e->getTarget()->getId();
     const std::pair<std::uint64_t, std::uint64_t> key{std::min(a, b),
                                                       std::max(a, b)};
-    liveWeights[key] = {e->getSquaredLength(), e->getPhase()};
+    liveWeights[key] = {(e->getLength() * e->getLength()), e->getPhase()};
   }
   for (const auto &[key, wp] : boundaryBefore) {
     const auto it = liveWeights.find(key);
@@ -689,7 +689,7 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
   for (const auto &[u, v, w, theta] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setSquaredLength(w);  // the recorded complex l2, bit-exact
+      it->second->setLength(std::sqrt(w));  // the recorded complex l2, bit-exact
       it->second->setPhase(theta);
     }
   }
@@ -1381,9 +1381,8 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
         "synthesis is degree " + std::to_string(k_) +
         " — use residualForPeriodsGradient, which routes holes by degree.");
   using Eigen::Index;
-  using Eigen::MatrixXd;
+  using Eigen::MatrixXcd;
   using Eigen::VectorXcd;
-  using Eigen::VectorXd;
   const std::size_t n1 = order_;
   std::vector<double> grad(n1, 0.0);
   const std::size_t m = loops.size();
@@ -1405,34 +1404,34 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
   const HodgeLaplacian hl(st_);
-  const std::vector<double> W1v = hl.weights(1);  // n1
-  const std::vector<double> W2v = hl.weights(2);  // n2
-  const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
+  const std::vector<cd> W1v = hl.weights(1);  // n1, signed complex
+  const std::vector<cd> W2v = hl.weights(2);  // n2, signed complex
+  const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true);
 
-  MatrixXd M(N, N);
+  MatrixXcd M(N, N);
   for (std::size_t i = 0; i < n1; ++i)
     for (std::size_t j = 0; j < n1; ++j)
-      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j].real();
-  VectorXd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
+      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j];
+  VectorXcd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
   for (std::size_t i = 0; i < n1; ++i) {
     W1[static_cast<Index>(i)] = W1v[i];
     D1pd[static_cast<Index>(i)] = std::sqrt(W1v[i]);
     D1d[static_cast<Index>(i)] = 1.0 / std::sqrt(W1v[i]);
   }
-  MatrixXd d1m(static_cast<Index>(n0), N);
+  MatrixXcd d1m(static_cast<Index>(n0), N);
   for (std::size_t v = 0; v < n0; ++v)
     for (std::size_t c = 0; c < n1; ++c)
       d1m(static_cast<Index>(v), static_cast<Index>(c)) =
           static_cast<double>(d1flat[v * n1 + c]);
-  MatrixXd d2m(N, static_cast<Index>(n2));
+  MatrixXcd d2m(N, static_cast<Index>(n2));
   for (std::size_t c = 0; c < n1; ++c)
     for (std::size_t t = 0; t < n2; ++t)
       d2m(static_cast<Index>(c), static_cast<Index>(t)) =
           static_cast<double>(d2flat[c * n2 + t]);
-  const MatrixXd K1 = d1m.transpose() * d1m;  // n1 x n1
-  VectorXd W2inv(static_cast<Index>(n2));
+  const MatrixXcd K1 = d1m.transpose() * d1m;  // n1 x n1
+  VectorXcd W2inv(static_cast<Index>(n2));
   for (std::size_t t = 0; t < n2; ++t) W2inv[static_cast<Index>(t)] = 1.0 / W2v[t];
-  const MatrixXd K2 = d2m * W2inv.asDiagonal() * d2m.transpose();  // n1 x n1
+  const MatrixXcd K2 = d2m * W2inv.asDiagonal() * d2m.transpose();  // n1 x n1
 
   // ---- index maps: cell -> index, edge -> l^2, edge -> incident triangles ----
   auto key = [](std::uint64_t a, std::uint64_t b) {
@@ -1440,26 +1439,26 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   };
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
   for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getRealSquaredLength();
+        (e->getLength() * e->getLength());
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
       for (int j = i + 1; j < 3; ++j)
         trisOf[key(tris[ti][i], tris[ti][j])].push_back(ti);
-  auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
-    if (a == b) return 0.0;
+  auto L2 = [&](std::uint64_t a, std::uint64_t b) -> cd {
+    if (a == b) return cd(0.0, 0.0);
     auto it = l2map.find(key(a, b));
-    return it == l2map.end() ? 0.0 : it->second;
+    return it == l2map.end() ? cd(0.0, 0.0) : it->second;
   };
 
   // ---- Q (signed edge-loop covector) + each cycle's leak column ----
   // Generalizes the removed-triangle boundary to any closed walk of oriented
   // edges: Q(q, edge) += +1 along the stored orientation, -1 against; the leak
   // is the loop's first edge.
-  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  MatrixXcd Q = MatrixXcd::Zero(static_cast<Index>(m), N);
   std::vector<std::size_t> leakCol(m);
   for (std::size_t q = 0; q < m; ++q) {
     const EdgeLoop &loop = loops[q];
@@ -1476,25 +1475,25 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   }
 
   // ---- eigendecomposition of M; harmonic (null) / non-null split ----
-  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(M);
-  const VectorXd lam = eig.eigenvalues();
-  const MatrixXd U = eig.eigenvectors();
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  const VectorXcd lam = eig.eigenvalues();
+  const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
   for (Index i = 0; i < N; ++i) (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
   const Index nd = static_cast<Index>(nullIdx.size());
   const Index nnd = static_cast<Index>(nnIdx.size());
   if (nd == 0) return grad;  // no harmonics -> nothing carried
-  MatrixXd Un(N, nd), Unn(N, nnd);
+  MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
-  VectorXd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
+  VectorXcd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
   // ---- carried representative psi (via Un / Q / pseudo-inverse), p, rho, r_U ----
   VectorXcd target(static_cast<Index>(m));
   for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
-  const MatrixXd A = Q * Un;                            // m x nd
-  const MatrixXd AtAi = (A.transpose() * A).inverse();  // nd x nd
+  const MatrixXcd A = Q * Un;                            // m x nd
+  const MatrixXcd AtAi = (A.transpose() * A).inverse();  // nd x nd
   const VectorXcd c = (AtAi * A.transpose()).cast<cd>() * target;  // nd
   VectorXcd psi = Un.cast<cd>() * c;                    // n1
   const VectorXcd carried = Q.cast<cd>() * psi;         // m
@@ -1513,15 +1512,19 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const double l2 = l2map.at(ek);
-    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
-    const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
-    const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
-    const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
+    const std::complex<double> l2 = l2map.at(ek);
+    // W_1 is the SIGNED content of a 1-simplex, i.e. the length itself:
+    // W_1 = sqrt(l^2), so dW_1/dl^2 = 1/(2 sqrt(l^2)). Holomorphic -- no modulus
+    // chain rule, which is what the |vol| weights used to force (#641).
+    const cd v = std::sqrt(l2);
+    const cd dW1je = 1.0 / (2.0 * v);
+    const cd s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
+    const cd s2 = 0.5 * dW1je / std::sqrt(W1[j]);
+    const VectorXcd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
                        s2 * K2.row(j).transpose().cwiseProduct(D1pd);
     // dM = fa * fb^T (symmetric, low rank): columns [e, w] then one per triangle.
-    std::vector<VectorXd> colsA, colsB;
-    VectorXd ev = VectorXd::Zero(N);
+    std::vector<VectorXcd> colsA, colsB;
+    VectorXcd ev = VectorXcd::Zero(N);
     ev[j] = 1.0;
     colsA.push_back(ev);
     colsB.push_back(w);
@@ -1529,38 +1532,38 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
     colsB.push_back(ev);
     for (std::size_t ti : trisOf[ek]) {
       const auto &t = tris[ti];
-      Eigen::Matrix2d G;
+      Eigen::Matrix2cd G;
       for (int i = 0; i < 2; ++i)
         for (int jj = 0; jj < 2; ++jj)
           G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
-      const double detG = G.determinant();
-      const double W2ti = W2v[ti];
+      const cd detG = G.determinant();
+      const cd W2ti = W2v[ti];
       if (std::abs(std::sqrt(std::abs(detG)) / 2.0 - W2ti) > 1e-9 || std::abs(detG) < 1e-12)
         continue;
       auto ind = [&](int pp, int qq) -> double {
         return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
       };
-      Eigen::Matrix2d dG;
+      Eigen::Matrix2cd dG;
       for (int i = 0; i < 2; ++i)
         for (int jj = 0; jj < 2; ++jj)
           dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
-      const double dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
-      const VectorXd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
+      const cd dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
+      const VectorXcd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
       colsA.push_back(cj);
       colsB.push_back((-dW2ti / (W2ti * W2ti)) * cj);
     }
     const Index r = static_cast<Index>(colsA.size());
-    MatrixXd fa(N, r), fb(N, r);
+    MatrixXcd fa(N, r), fb(N, r);
     for (Index k = 0; k < r; ++k) {
       fa.col(k) = colsA[static_cast<std::size_t>(k)];
       fb.col(k) = colsB[static_cast<std::size_t>(k)];
     }
     // dM p, the eigenvector perturbation dUn, the pseudo-inverse perturbation, dpsi.
     const VectorXcd dMp = fa.cast<cd>() * (fb.transpose().cast<cd>() * p);
-    const MatrixXd core = (Unn.transpose() * fa) * (fb.transpose() * Un);  // nnd x nd
-    const MatrixXd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
-    const MatrixXd dA = Q * dUn;                                           // m x nd
-    const MatrixXd dAplus =
+    const MatrixXcd core = (Unn.transpose() * fa) * (fb.transpose() * Un);  // nnd x nd
+    const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
+    const MatrixXcd dA = Q * dUn;                                           // m x nd
+    const MatrixXcd dAplus =
         -AtAi * (dA.transpose() * A + A.transpose() * dA) * AtAi * A.transpose() +
         AtAi * dA.transpose();                                             // nd x m
     const VectorXcd dc = dAplus.cast<cd>() * target;                       // nd
@@ -1591,9 +1594,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   // identity Sum_e l^2_e d r_U/d l^2_e = -r_U.
   using Eigen::Index;
   using Eigen::MatrixXcd;
-  using Eigen::MatrixXd;
   using Eigen::VectorXcd;
-  using Eigen::VectorXd;
   const std::size_t nk = order_;                 // # k-cells (rows/cols of L_k)
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   const std::vector<std::vector<std::uint64_t>> edges1 = cc.kSimplexVertices(1);
@@ -1610,7 +1611,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
 
   // ---- M = L_k (symmetric metric Hodge Laplacian) ----
   const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(k_, /*metric=*/true);
-  MatrixXd M(N, N);
+  MatrixXcd M(N, N);
   for (std::size_t i = 0; i < nk; ++i)
     for (std::size_t j = 0; j < nk; ++j)
       M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * nk + j].real();
@@ -1621,7 +1622,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   std::map<std::vector<std::uint64_t>, std::size_t> col;
   for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
   const std::size_t hv = static_cast<std::size_t>(k_) + 2;
-  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  MatrixXcd Q = MatrixXcd::Zero(static_cast<Index>(m), N);
   std::vector<std::size_t> leakCol(m, 0);
   for (std::size_t q = 0; q < m; ++q) {
     std::vector<std::uint64_t> h = holes[q];
@@ -1651,26 +1652,26 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   }
 
   // ---- harmonic (null) / non-null eigensplit of M ----
-  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(M);
-  const VectorXd lam = eig.eigenvalues();
-  const MatrixXd U = eig.eigenvectors();
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  const VectorXcd lam = eig.eigenvalues();
+  const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
   for (Index i = 0; i < N; ++i)
     (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
   const Index nd = static_cast<Index>(nullIdx.size());
   const Index nnd = static_cast<Index>(nnIdx.size());
   if (nd == 0) return grad;  // no harmonics -> nothing carried
-  MatrixXd Un(N, nd), Unn(N, nnd);
+  MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
-  VectorXd invlam(nnd);
+  VectorXcd invlam(nnd);
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
   // ---- carried representative psi, p, rho, r_U (same as the loop core) ----
   VectorXcd target(static_cast<Index>(m));
   for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
-  const MatrixXd A = Q * Un;                            // m x nd
-  const MatrixXd AtAi = (A.transpose() * A).inverse();  // nd x nd
+  const MatrixXcd A = Q * Un;                            // m x nd
+  const MatrixXcd AtAi = (A.transpose() * A).inverse();  // nd x nd
   const VectorXcd c = (AtAi * A.transpose()).cast<cd>() * target;
   VectorXcd psi = Un.cast<cd>() * c;
   const VectorXcd carried = Q.cast<cd>() * psi;
@@ -1688,19 +1689,19 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   // ---- per-edge analytic gradient: dM_e = laplacianGradient, dense perturbation ----
   const HodgeLaplacian hl(st_);
   for (std::size_t je = 0; je < edges1.size(); ++je) {
-    const std::vector<double> dMflat =
+    const std::vector<cd> dMflat =
         hl.laplacianGradient(k_, edges1[je][0], edges1[je][1]);
     if (dMflat.empty()) continue;
-    MatrixXd dM(N, N);
+    MatrixXcd dM(N, N);
     for (std::size_t i = 0; i < nk; ++i)
       for (std::size_t j = 0; j < nk; ++j)
         dM(static_cast<Index>(i), static_cast<Index>(j)) = dMflat[i * nk + j];
     const VectorXcd dMp = dM.cast<cd>() * p;
     // eigenvector perturbation of the harmonic block: dUn = Unn diag(invlam) Unn^T dM Un
-    const MatrixXd core = (Unn.transpose() * dM) * Un;          // nnd x nd
-    const MatrixXd dUn = Unn * (invlam.asDiagonal() * core);    // N x nd
-    const MatrixXd dA = Q * dUn;                                // m x nd
-    const MatrixXd dAplus =
+    const MatrixXcd core = (Unn.transpose() * dM) * Un;          // nnd x nd
+    const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);    // N x nd
+    const MatrixXcd dA = Q * dUn;                                // m x nd
+    const MatrixXcd dAplus =
         -AtAi * (dA.transpose() * A + A.transpose() * dA) * AtAi * A.transpose() +
         AtAi * dA.transpose();                                  // nd x m
     const VectorXcd dc = dAplus.cast<cd>() * target;
@@ -1742,9 +1743,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
   // giving -r_U there).
   using Eigen::Index;
   using Eigen::MatrixXcd;
-  using Eigen::MatrixXd;
   using Eigen::VectorXcd;
-  using Eigen::VectorXd;
   const std::size_t n0 = order_;  // # vertices (rows/cols of L_0)
   const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
   const std::vector<std::vector<std::uint64_t>> edges1 = cc.kSimplexVertices(1);
@@ -1772,7 +1771,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
   std::map<std::vector<std::uint64_t>, std::size_t> col;
   for (std::size_t i = 0; i < cellOrdering_.size(); ++i) col[cellOrdering_[i]] = i;
   const std::size_t hv = 2;  // k + 2 vertices per hole at k = 0
-  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  MatrixXcd Q = MatrixXcd::Zero(static_cast<Index>(m), N);
   std::vector<std::size_t> leakCol(m, 0);
   for (std::size_t q = 0; q < m; ++q) {
     std::vector<std::uint64_t> h = holes[q];
@@ -1800,7 +1799,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
 
   // ---- harmonic (null) / non-null eigensplit of M (Hermitian ⇒ real λ) ----
   Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
-  const VectorXd lam = eig.eigenvalues();
+  const VectorXcd lam = eig.eigenvalues();
   const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
   for (Index i = 0; i < N; ++i)
@@ -1811,7 +1810,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
   MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
-  VectorXd invlam(nnd);
+  VectorXcd invlam(nnd);
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
   // ---- the SVD pseudo-inverse fit (min-norm, as lstsqOverReadout) ----
@@ -1824,7 +1823,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
   if (rank > 0) {
     const MatrixXcd Ur = svd.matrixU().leftCols(rank);
     const MatrixXcd Vr = svd.matrixV().leftCols(rank);
-    const VectorXd sr = svd.singularValues().head(rank);
+    const VectorXcd sr = svd.singularValues().head(rank);
     Aplus = Vr * sr.cwiseInverse().asDiagonal() * Ur.adjoint();
   }
   const VectorXcd c = Aplus * target;
@@ -1868,7 +1867,7 @@ std::vector<double> EigenstateSynthesis::periodGradientDegreeZero(
     if (srcIt == col.end() || tgtIt == col.end()) continue;
     const Index is = static_cast<Index>(srcIt->second);
     const Index it = static_cast<Index>(tgtIt->second);
-    const cd w = edge->getSquaredLength();
+    const cd w = (edge->getLength() * edge->getLength());
     // d|w|/d(Re w): Re w / |w| — the real-axis directional derivative (sign w
     // for real w). At the |w| kink (w == 0) take the symmetric subgradient 0.
     const double dAbs = (std::abs(w) > 0.0) ? w.real() / std::abs(w) : 0.0;
@@ -1944,9 +1943,7 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   // two copies in sync; test_period_gap_python.py FD-guards this one.
   using Eigen::Index;
   using Eigen::MatrixXcd;
-  using Eigen::MatrixXd;
   using Eigen::VectorXcd;
-  using Eigen::VectorXd;
   const std::size_t n1 = order_;
   std::vector<double> grad(n1, 0.0);
   const std::size_t m = loops.size();
@@ -1968,34 +1965,34 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
   const std::size_t n0 = d1flat.size() / n1;
   const HodgeLaplacian hl(st_);
-  const std::vector<double> W1v = hl.weights(1);  // n1
-  const std::vector<double> W2v = hl.weights(2);  // n2
-  const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
+  const std::vector<cd> W1v = hl.weights(1);  // n1, signed complex
+  const std::vector<cd> W2v = hl.weights(2);  // n2, signed complex
+  const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true);
 
-  MatrixXd M(N, N);
+  MatrixXcd M(N, N);
   for (std::size_t i = 0; i < n1; ++i)
     for (std::size_t j = 0; j < n1; ++j)
-      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j].real();
-  VectorXd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
+      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j];
+  VectorXcd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
   for (std::size_t i = 0; i < n1; ++i) {
     W1[static_cast<Index>(i)] = W1v[i];
     D1pd[static_cast<Index>(i)] = std::sqrt(W1v[i]);
     D1d[static_cast<Index>(i)] = 1.0 / std::sqrt(W1v[i]);
   }
-  MatrixXd d1m(static_cast<Index>(n0), N);
+  MatrixXcd d1m(static_cast<Index>(n0), N);
   for (std::size_t v = 0; v < n0; ++v)
     for (std::size_t c = 0; c < n1; ++c)
       d1m(static_cast<Index>(v), static_cast<Index>(c)) =
           static_cast<double>(d1flat[v * n1 + c]);
-  MatrixXd d2m(N, static_cast<Index>(n2));
+  MatrixXcd d2m(N, static_cast<Index>(n2));
   for (std::size_t c = 0; c < n1; ++c)
     for (std::size_t t = 0; t < n2; ++t)
       d2m(static_cast<Index>(c), static_cast<Index>(t)) =
           static_cast<double>(d2flat[c * n2 + t]);
-  const MatrixXd K1 = d1m.transpose() * d1m;  // n1 x n1
-  VectorXd W2inv(static_cast<Index>(n2));
+  const MatrixXcd K1 = d1m.transpose() * d1m;  // n1 x n1
+  VectorXcd W2inv(static_cast<Index>(n2));
   for (std::size_t t = 0; t < n2; ++t) W2inv[static_cast<Index>(t)] = 1.0 / W2v[t];
-  const MatrixXd K2 = d2m * W2inv.asDiagonal() * d2m.transpose();  // n1 x n1
+  const MatrixXcd K2 = d2m * W2inv.asDiagonal() * d2m.transpose();  // n1 x n1
 
   // ---- index maps: cell -> index, edge -> l^2, edge -> incident triangles ----
   auto key = [](std::uint64_t a, std::uint64_t b) {
@@ -2003,23 +2000,23 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   };
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
   for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
+  std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> l2map;
   for (auto *e : edges_)
     l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getRealSquaredLength();
+        (e->getLength() * e->getLength());
   std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
   for (std::size_t ti = 0; ti < n2; ++ti)
     for (int i = 0; i < 3; ++i)
       for (int j = i + 1; j < 3; ++j)
         trisOf[key(tris[ti][i], tris[ti][j])].push_back(ti);
-  auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
-    if (a == b) return 0.0;
+  auto L2 = [&](std::uint64_t a, std::uint64_t b) -> cd {
+    if (a == b) return cd(0.0, 0.0);
     auto it = l2map.find(key(a, b));
-    return it == l2map.end() ? 0.0 : it->second;
+    return it == l2map.end() ? cd(0.0, 0.0) : it->second;
   };
 
   // ---- Q (signed edge-loop covector); the gap needs no leak column ----
-  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
+  MatrixXcd Q = MatrixXcd::Zero(static_cast<Index>(m), N);
   for (std::size_t q = 0; q < m; ++q) {
     if (loops[q].empty())
       throw std::runtime_error(
@@ -2031,18 +2028,18 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   }
 
   // ---- eigendecomposition of M; harmonic (null) / non-null split ----
-  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(M);
-  const VectorXd lam = eig.eigenvalues();
-  const MatrixXd U = eig.eigenvectors();
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  const VectorXcd lam = eig.eigenvalues();
+  const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
   for (Index i = 0; i < N; ++i) (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
   const Index nd = static_cast<Index>(nullIdx.size());
   const Index nnd = static_cast<Index>(nnIdx.size());
   if (nd == 0) return grad;  // no harmonics -> nothing carried, gap is constant
-  MatrixXd Un(N, nd), Unn(N, nnd);
+  MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
-  VectorXd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
+  VectorXcd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
   // ---- the least-squares fit c and the period-gap residual r = A c - target ----
@@ -2055,7 +2052,7 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   // (the dropped dc term) is unaffected by the min-norm choice.
   VectorXcd target(static_cast<Index>(m));
   for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
-  const MatrixXd A = Q * Un;                            // m x nd
+  const MatrixXcd A = Q * Un;                            // m x nd
   const MatrixXcd Ac = A.cast<cd>();
   const VectorXcd c =
       Ac.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(target);  // nd
@@ -2065,15 +2062,19 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const double l2 = l2map.at(ek);
-    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
-    const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
-    const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
-    const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
+    const std::complex<double> l2 = l2map.at(ek);
+    // W_1 is the SIGNED content of a 1-simplex, i.e. the length itself:
+    // W_1 = sqrt(l^2), so dW_1/dl^2 = 1/(2 sqrt(l^2)). Holomorphic -- no modulus
+    // chain rule, which is what the |vol| weights used to force (#641).
+    const cd v = std::sqrt(l2);
+    const cd dW1je = 1.0 / (2.0 * v);
+    const cd s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
+    const cd s2 = 0.5 * dW1je / std::sqrt(W1[j]);
+    const VectorXcd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
                        s2 * K2.row(j).transpose().cwiseProduct(D1pd);
     // dM = fa * fb^T (symmetric, low rank): columns [e, w] then one per triangle.
-    std::vector<VectorXd> colsA, colsB;
-    VectorXd ev = VectorXd::Zero(N);
+    std::vector<VectorXcd> colsA, colsB;
+    VectorXcd ev = VectorXcd::Zero(N);
     ev[j] = 1.0;
     colsA.push_back(ev);
     colsB.push_back(w);
@@ -2081,37 +2082,37 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
     colsB.push_back(ev);
     for (std::size_t ti : trisOf[ek]) {
       const auto &t = tris[ti];
-      Eigen::Matrix2d G;
+      Eigen::Matrix2cd G;
       for (int i = 0; i < 2; ++i)
         for (int jj = 0; jj < 2; ++jj)
           G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
-      const double detG = G.determinant();
-      const double W2ti = W2v[ti];
+      const cd detG = G.determinant();
+      const cd W2ti = W2v[ti];
       if (std::abs(std::sqrt(std::abs(detG)) / 2.0 - W2ti) > 1e-9 || std::abs(detG) < 1e-12)
         continue;
       auto ind = [&](int pp, int qq) -> double {
         return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
       };
-      Eigen::Matrix2d dG;
+      Eigen::Matrix2cd dG;
       for (int i = 0; i < 2; ++i)
         for (int jj = 0; jj < 2; ++jj)
           dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
-      const double dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
-      const VectorXd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
+      const cd dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
+      const VectorXcd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
       colsA.push_back(cj);
       colsB.push_back((-dW2ti / (W2ti * W2ti)) * cj);
     }
     const Index rk = static_cast<Index>(colsA.size());
-    MatrixXd fa(N, rk), fb(N, rk);
+    MatrixXcd fa(N, rk), fb(N, rk);
     for (Index k = 0; k < rk; ++k) {
       fa.col(k) = colsA[static_cast<std::size_t>(k)];
       fb.col(k) = colsB[static_cast<std::size_t>(k)];
     }
     // The harmonic-subspace perturbation dUn, then dA = Q dUn; the envelope
     // theorem (A^T r = 0) leaves only 2 Re( r^H (dA c) ).
-    const MatrixXd core = (Unn.transpose() * fa) * (fb.transpose() * Un);  // nnd x nd
-    const MatrixXd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
-    const MatrixXd dA = Q * dUn;                                           // m x nd
+    const MatrixXcd core = (Unn.transpose() * fa) * (fb.transpose() * Un);  // nnd x nd
+    const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
+    const MatrixXcd dA = Q * dUn;                                           // m x nd
     grad[je] = 2.0 * (r.dot(dA.cast<cd>() * c)).real();
   }
   return grad;
@@ -2130,271 +2131,6 @@ std::vector<double> EigenstateSynthesis::residualForLoopsGradient(
     const std::vector<EdgeLoop> &loops,
     const std::vector<cd> &targetPeriods) const {
   return periodGradientOverLoops(loops, targetPeriods);
-}
-
-std::vector<double> EigenstateSynthesis::residualForPeriodsGradientGpu(
-    const std::vector<std::vector<std::uint64_t>> &holes,
-    const std::vector<cd> &targetPeriods) const {
-  // Contract: this port mirrors the k = 1 loop core verbatim (M = L_1, 3-vertex
-  // holes, the triangle low-rank dM); other degrees use the CPU
-  // residualForPeriodsGradient, which routes by degree.
-  if (k_ != 1)
-    throw std::runtime_error(
-        "EigenstateSynthesis::residualForPeriodsGradientGpu: the GPU port "
-        "mirrors the degree-1 loop core (M = L_1, 3-vertex holes); this "
-        "synthesis is degree " + std::to_string(k_) +
-        " — use the CPU residualForPeriodsGradient, which routes by degree.");
-#ifndef TESSERA_CUDA
-  (void)holes;
-  (void)targetPeriods;
-  throw std::runtime_error(
-      "EigenstateSynthesis::residualForPeriodsGradientGpu: tessera was built "
-      "without CUDA (TESSERA_CUDA=OFF); use the CPU residualForPeriodsGradient.");
-#else
-  using Eigen::Index;
-  using Eigen::MatrixXd;
-  using Eigen::MatrixXf;
-  using Eigen::VectorXcd;
-  using Eigen::VectorXd;
-  // The setup below MIRRORS residualForPeriodsGradient verbatim through r_U so
-  // the FP64 CPU method stays the untouched correctness oracle; only the
-  // dominant per-edge GEMMs are offloaded to FP32 cuBLAS (the sole
-  // approximation). Any divergence here would be a bug, not a design choice.
-  const std::size_t n1 = order_;
-  std::vector<double> grad(n1, 0.0);
-  const std::size_t m = holes.size();
-  if (n1 == 0 || m == 0) return grad;
-  if (targetPeriods.size() != m)
-    throw std::runtime_error(
-        "EigenstateSynthesis::residualForPeriodsGradientGpu: " +
-        std::to_string(targetPeriods.size()) + " target periods for " +
-        std::to_string(m) + " holes");
-  static constexpr double kNullTol = 1e-7;
-  const Index N = static_cast<Index>(n1);
-
-  // ---- chain complex, weights, and the metric Laplacian M = L1 ----
-  const ChainComplex cc = ChainComplex::fromSpacetime(*st_);
-  const std::vector<std::vector<std::uint64_t>> &cells1 = cellSimplices();
-  const auto tris = cc.kSimplexVertices(2);
-  const std::size_t n2 = tris.size();
-  const std::vector<long> &d1flat = cc.boundaryMatrix(1);  // n0 x n1
-  const std::vector<long> &d2flat = cc.boundaryMatrix(2);  // n1 x n2
-  const std::size_t n0 = d1flat.size() / n1;
-  const HodgeLaplacian hl(st_);
-  const std::vector<double> W1v = hl.weights(1);  // n1
-  const std::vector<double> W2v = hl.weights(2);  // n2
-  const std::vector<cd> Lflat = hl.laplacian(1, /*metric=*/true, /*lorentzian=*/false);
-
-  MatrixXd M(N, N);
-  for (std::size_t i = 0; i < n1; ++i)
-    for (std::size_t j = 0; j < n1; ++j)
-      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j].real();
-  VectorXd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
-  for (std::size_t i = 0; i < n1; ++i) {
-    W1[static_cast<Index>(i)] = W1v[i];
-    D1pd[static_cast<Index>(i)] = std::sqrt(W1v[i]);
-    D1d[static_cast<Index>(i)] = 1.0 / std::sqrt(W1v[i]);
-  }
-  MatrixXd d1m(static_cast<Index>(n0), N);
-  for (std::size_t v = 0; v < n0; ++v)
-    for (std::size_t c = 0; c < n1; ++c)
-      d1m(static_cast<Index>(v), static_cast<Index>(c)) =
-          static_cast<double>(d1flat[v * n1 + c]);
-  MatrixXd d2m(N, static_cast<Index>(n2));
-  for (std::size_t c = 0; c < n1; ++c)
-    for (std::size_t t = 0; t < n2; ++t)
-      d2m(static_cast<Index>(c), static_cast<Index>(t)) =
-          static_cast<double>(d2flat[c * n2 + t]);
-  const MatrixXd K1 = d1m.transpose() * d1m;  // n1 x n1
-  VectorXd W2inv(static_cast<Index>(n2));
-  for (std::size_t t = 0; t < n2; ++t) W2inv[static_cast<Index>(t)] = 1.0 / W2v[t];
-  const MatrixXd K2 = d2m * W2inv.asDiagonal() * d2m.transpose();  // n1 x n1
-
-  // ---- index maps: cell -> index, edge -> l^2, edge -> incident triangles ----
-  auto key = [](std::uint64_t a, std::uint64_t b) {
-    return std::pair<std::uint64_t, std::uint64_t>(std::min(a, b), std::max(a, b));
-  };
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::size_t> cidx1;
-  for (std::size_t i = 0; i < n1; ++i) cidx1[key(cells1[i][0], cells1[i][1])] = i;
-  std::map<std::pair<std::uint64_t, std::uint64_t>, double> l2map;
-  for (auto *e : edges_)
-    l2map[key(e->getSource()->getId(), e->getTarget()->getId())] =
-        e->getRealSquaredLength();
-  std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<std::size_t>> trisOf;
-  for (std::size_t ti = 0; ti < n2; ++ti)
-    for (int i = 0; i < 3; ++i)
-      for (int j = i + 1; j < 3; ++j)
-        trisOf[key(tris[ti][i], tris[ti][j])].push_back(ti);
-  auto L2 = [&](std::uint64_t a, std::uint64_t b) -> double {
-    if (a == b) return 0.0;
-    auto it = l2map.find(key(a, b));
-    return it == l2map.end() ? 0.0 : it->second;
-  };
-
-  // ---- Q (hole-boundary covector) + each hole's leak column ----
-  // Sort each hole's vertices first, exactly as the CPU oracle does (holeLoops /
-  // periodGradientGeneral): the facet signs and the leak edge are defined on the
-  // sorted order, so an unsorted hole would scramble Q and pick the wrong leak
-  // column -- an O(1)-wrong gradient, not an FP32 error.
-  MatrixXd Q = MatrixXd::Zero(static_cast<Index>(m), N);
-  std::vector<std::size_t> leakCol(m);
-  for (std::size_t q = 0; q < m; ++q) {
-    std::vector<std::uint64_t> h = holes[q];
-    std::sort(h.begin(), h.end());
-    for (int j = 0; j < 3; ++j) {
-      std::vector<std::uint64_t> facet;
-      for (int i = 0; i < 3; ++i)
-        if (i != j) facet.push_back(h[i]);
-      Q(static_cast<Index>(q), static_cast<Index>(cidx1.at(key(facet[0], facet[1])))) +=
-          (j % 2 == 0 ? 1.0 : -1.0);
-    }
-    leakCol[q] = cidx1.at(key(h[0], h[1]));
-  }
-
-  // ---- eigendecomposition of M; harmonic (null) / non-null split ----
-  Eigen::SelfAdjointEigenSolver<MatrixXd> eig(M);
-  const VectorXd lam = eig.eigenvalues();
-  const MatrixXd U = eig.eigenvectors();
-  std::vector<Index> nullIdx, nnIdx;
-  for (Index i = 0; i < N; ++i) (std::abs(lam[i]) < kNullTol ? nullIdx : nnIdx).push_back(i);
-  const Index nd = static_cast<Index>(nullIdx.size());
-  const Index nnd = static_cast<Index>(nnIdx.size());
-  if (nd == 0) return grad;  // no harmonics -> nothing carried
-  MatrixXd Un(N, nd), Unn(N, nnd);
-  for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
-  for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
-  VectorXd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
-  for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
-
-  // ---- carried representative psi (via Un / Q / pseudo-inverse), p, rho, r_U ----
-  VectorXcd target(static_cast<Index>(m));
-  for (std::size_t q = 0; q < m; ++q) target[static_cast<Index>(q)] = targetPeriods[q];
-  const MatrixXd A = Q * Un;                            // m x nd
-  const MatrixXd AtAi = (A.transpose() * A).inverse();  // nd x nd
-  const VectorXcd c = (AtAi * A.transpose()).cast<cd>() * target;  // nd
-  VectorXcd psi = Un.cast<cd>() * c;                    // n1
-  const VectorXcd carried = Q.cast<cd>() * psi;         // m
-  for (std::size_t q = 0; q < m; ++q)
-    psi[static_cast<Index>(leakCol[q])] +=
-        target[static_cast<Index>(q)] - carried[static_cast<Index>(q)];
-  const double nrm = psi.norm();
-  if (nrm <= 0.0) return grad;
-  const VectorXcd p = psi / nrm;
-  const VectorXcd Mp = M.cast<cd>() * p;
-  const double lamR = (p.dot(Mp)).real();
-  const VectorXcd rho = Mp - lamR * p;
-  const double rU = rho.squaredNorm();
-  if (nnd == 0) return grad;  // eigenvector perturbation needs a non-null block
-
-  // ---- upload the loop-invariant blocks (FP32, column-major) to the GPU ----
-  // UnnS = Unn * diag(invlam): by associativity this hoists the per-edge
-  // diagonal so dUn = UnnS * core == Unn * (invlam.asDiagonal() * core).
-  const MatrixXf UnnF = Unn.cast<float>();
-  const MatrixXf UnnSF = (Unn * invlam.asDiagonal()).cast<float>();
-  const MatrixXf UnF = Un.cast<float>();
-  const MatrixXf MF = M.cast<float>();
-  MatrixXf P2F(N, 2);
-  P2F.col(0) = p.real().cast<float>();
-  P2F.col(1) = p.imag().cast<float>();
-  // rmax: the widest per-edge low-rank dM = fa*fb^T (the 2 fixed [e,w] columns
-  // plus one per incident triangle) — sizes the GPU scratch once.
-  std::size_t rmax = 2;
-  for (const auto &kv : trisOf) rmax = std::max(rmax, 2 + kv.second.size());
-
-  cuda::RuGradientGpu gpu(static_cast<int>(N), static_cast<int>(nnd),
-                          static_cast<int>(nd), static_cast<int>(rmax),
-                          UnnF.data(), UnnSF.data(), UnF.data(), MF.data(),
-                          P2F.data());
-
-  // ---- per-edge analytic gradient d r_U / d l^2 (FP32 GEMMs on GPU) ----
-  std::vector<float> dUnBuf(static_cast<std::size_t>(N) * nd);
-  std::vector<float> dMp2Buf(static_cast<std::size_t>(N) * 2);
-  std::vector<float> dpsi2Buf(static_cast<std::size_t>(N) * 2);
-  std::vector<float> Mdpsi2Buf(static_cast<std::size_t>(N) * 2);
-  for (std::size_t je = 0; je < n1; ++je) {
-    const Index j = static_cast<Index>(je);
-    const auto ek = key(cells1[je][0], cells1[je][1]);
-    const double l2 = l2map.at(ek);
-    const double dW1je = (l2 >= 0.0 ? 1.0 : -1.0) / (2.0 * std::sqrt(std::abs(l2)));
-    const double s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
-    const double s2 = 0.5 * dW1je / std::sqrt(W1[j]);
-    const VectorXd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
-                       s2 * K2.row(j).transpose().cwiseProduct(D1pd);
-    // dM = fa * fb^T (symmetric, low rank): columns [e, w] then one per triangle.
-    std::vector<VectorXd> colsA, colsB;
-    VectorXd ev = VectorXd::Zero(N);
-    ev[j] = 1.0;
-    colsA.push_back(ev);
-    colsB.push_back(w);
-    colsA.push_back(w);
-    colsB.push_back(ev);
-    for (std::size_t ti : trisOf[ek]) {
-      const auto &t = tris[ti];
-      Eigen::Matrix2d G;
-      for (int i = 0; i < 2; ++i)
-        for (int jj = 0; jj < 2; ++jj)
-          G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
-      const double detG = G.determinant();
-      const double W2ti = W2v[ti];
-      if (std::abs(std::sqrt(std::abs(detG)) / 2.0 - W2ti) > 1e-9 || std::abs(detG) < 1e-12)
-        continue;
-      auto ind = [&](int pp, int qq) -> double {
-        return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
-      };
-      Eigen::Matrix2d dG;
-      for (int i = 0; i < 2; ++i)
-        for (int jj = 0; jj < 2; ++jj)
-          dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
-      const double dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
-      const VectorXd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
-      colsA.push_back(cj);
-      colsB.push_back((-dW2ti / (W2ti * W2ti)) * cj);
-    }
-    const int r = static_cast<int>(colsA.size());
-    MatrixXf fa(N, r), fb(N, r);
-    for (int k = 0; k < r; ++k) {
-      fa.col(k) = colsA[static_cast<std::size_t>(k)].cast<float>();
-      fb.col(k) = colsB[static_cast<std::size_t>(k)].cast<float>();
-    }
-
-    // GPU stage 1 (FP32 GEMMs): dUn (N x nd) and dMp = dM*p (N, complex).
-    gpu.edgeStage1(fa.data(), fb.data(), r, dUnBuf.data(), dMp2Buf.data());
-    const MatrixXd dUn =
-        Eigen::Map<const MatrixXf>(dUnBuf.data(), N, nd).cast<double>();
-    VectorXcd dMp(N);
-    for (Index i = 0; i < N; ++i)
-      dMp[i] = cd(dMp2Buf[static_cast<std::size_t>(i)],
-                  dMp2Buf[static_cast<std::size_t>(N + i)]);
-
-    // Cheap small-dimension algebra stays FP64 on the host (as the oracle does):
-    // pseudo-inverse perturbation, dc, dpsi, and the minimal-leak adjustment.
-    const MatrixXd dA = Q * dUn;                                          // m x nd
-    const MatrixXd dAplus =
-        -AtAi * (dA.transpose() * A + A.transpose() * dA) * AtAi * A.transpose() +
-        AtAi * dA.transpose();                                            // nd x m
-    const VectorXcd dc = dAplus.cast<cd>() * target;                      // nd
-    VectorXcd dpsi = dUn.cast<cd>() * c + Un.cast<cd>() * dc;             // n1
-    const VectorXcd dcarried = Q.cast<cd>() * dpsi;                       // m
-    for (std::size_t q = 0; q < m; ++q)
-      dpsi[static_cast<Index>(leakCol[q])] += -dcarried[static_cast<Index>(q)];
-
-    // GPU stage 2 (FP32 GEMV): Mdpsi = M*dpsi for the post-leak perturbation.
-    for (Index i = 0; i < N; ++i) {
-      dpsi2Buf[static_cast<std::size_t>(i)] = static_cast<float>(dpsi[i].real());
-      dpsi2Buf[static_cast<std::size_t>(N + i)] = static_cast<float>(dpsi[i].imag());
-    }
-    gpu.edgeStage2(dpsi2Buf.data(), Mdpsi2Buf.data());
-    VectorXcd Mdpsi(N);
-    for (Index i = 0; i < N; ++i)
-      Mdpsi[i] = cd(Mdpsi2Buf[static_cast<std::size_t>(i)],
-                    Mdpsi2Buf[static_cast<std::size_t>(N + i)]);
-
-    grad[je] = 2.0 * (rho.dot(dMp)).real() +
-               (2.0 / nrm) * (rho.dot(Mdpsi - lamR * dpsi)).real() -
-               (2.0 * rU / nrm) * (p.dot(dpsi)).real();
-  }
-  return grad;
-#endif
 }
 
 }  // namespace tessera::cobordism

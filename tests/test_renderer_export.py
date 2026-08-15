@@ -13,6 +13,7 @@ import re
 import xml.etree.ElementTree as ET
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -37,7 +38,7 @@ def _host():
     for e in st.getEdgeList().toVector():
         a, b = e.getSource().getId(), e.getTarget().getId()
         sq, ph = values[(min(a, b), max(a, b))]
-        e.setSquaredLength(sq)
+        e.setLength(cmath.sqrt(complex(sq)))
         e.setPhase(ph)
     return st, values
 

@@ -15,6 +15,7 @@ import unittest
 import numpy as np
 
 import tessera
+import cmath
 
 cob = tessera.cobordism
 
@@ -33,7 +34,7 @@ def _build_topology(topology):
 
 def _set_uniform(st, squared_length=1.0, phase=0.0):
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(squared_length)
+        e.setLength(cmath.sqrt(complex(squared_length)))
         e.setPhase(phase)
     return st
 
@@ -75,7 +76,7 @@ def _triangle_one_timelike(alpha):
     st = _set_uniform(_from_simplices(3, [(0, 1), (1, 2), (2, 0)]), 1.0, 0.0)
     for e in st.getEdgeList().toVector():
         if {e.getSource().getId(), e.getTarget().getId()} == {1, 2}:
-            e.setSquaredLength(-(alpha ** 2))
+            e.setLength(cmath.sqrt(complex(-(alpha ** 2))))
     return st
 
 

@@ -9,9 +9,6 @@
 #include "mesh/VertexList.h"
 #include "mesh/Fingerprint.h"
 
-#ifdef TESSERA_CUDA
-#include "cuda/regge_cuda.h"
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -82,19 +79,19 @@ ReggeSolver::ReggeSolver(std::shared_ptr<Spacetime> spacetime,
 // Geometry delegations to Simplex
 // =====================================================================
 
-double ReggeSolver::dihedralAngle(SimplexPtr sigma,
+std::complex<double> ReggeSolver::dihedralAngle(SimplexPtr sigma,
                                    SimplexPtr hinge) const {
-    // Regge calculus runs on the Wick-rotated (Euclidean) geometry.
-    return sigma->dihedralAngle(hinge, /*wickRotate=*/true);
+    return sigma->lorentzianDihedralAngle(hinge);
 }
 
-double ReggeSolver::deficitAngle(SimplexPtr hinge) const {
-    return hinge->deficitAngle();
+std::complex<double> ReggeSolver::deficitAngle(SimplexPtr hinge) const {
+    return hinge->lorentzianDeficitAngle();
 }
 
-double ReggeSolver::hingeArea(SimplexPtr hinge) {
-    // Regge calculus runs on the Wick-rotated (Euclidean) geometry.
-    return hinge->area(/*wickRotate=*/true);
+std::complex<double> ReggeSolver::hingeArea(SimplexPtr hinge) {
+    // The honest signed Lorentzian area. There is no Wick-rotated mode: a
+    // timelike hinge's area is imaginary, not |l^2|-real (#641).
+    return hinge->area();
 }
 
 // =====================================================================
@@ -132,10 +129,10 @@ std::vector<SimplexPtr> ReggeSolver::collectHinges() const {
 // Actions
 // =====================================================================
 
-double ReggeSolver::reggeAction() const {
-    double S = 0.0;
+std::complex<double> ReggeSolver::reggeAction() const {
+    std::complex<double> S{0.0, 0.0};
     for (const auto &h : collectHinges()) {
-        S += hingeArea(h) * deficitAngle(h);
+        S += hingeArea(h) * h->lorentzianDeficitAngle();
     }
     return S;
 }
@@ -311,7 +308,7 @@ double ReggeSolver::gradientNorm2OverEdges(
         const auto h = spacetime_->findSimplexByVerts(vp);
         if (h == nullptr || !h->hasTopCoface()) continue;
         const std::complex<double> eps = h->lorentzianDeficitAngle();
-        const double dv = h->dualVolume();
+        const std::complex<double> dv = h->dualVolume();
         for (const auto &[ed, dEps] : h->lorentzianDeficitAngleGradient()) {
             const std::pair<std::uint64_t, std::uint64_t> k{
                 std::min(ed.first, ed.second), std::max(ed.first, ed.second)};
@@ -348,7 +345,7 @@ double ReggeSolver::matterAction() const {
                 if (other->getId() == v2->getId()) {
                     if (e->isTimelike())
                         S -= wl.mass *
-                             std::sqrt(-e->getRealSquaredLength());
+                             std::sqrt(-(e->getLength() * e->getLength())).real();
                     break;
                 }
             }
@@ -357,7 +354,7 @@ double ReggeSolver::matterAction() const {
     return S;
 }
 
-double ReggeSolver::totalAction() const {
+std::complex<double> ReggeSolver::totalAction() const {
     return reggeAction() + matterAction();
 }
 
@@ -365,12 +362,12 @@ double ReggeSolver::totalAction() const {
 // Action gradient: ∂S/∂ℓ²_e for each edge (numerical)
 // =====================================================================
 
-std::vector<double> ReggeSolver::actionGradient() const {
+std::vector<std::complex<double>> ReggeSolver::actionGradient() const {
     auto edgeList = spacetime_->getEdgeList();
     auto edges = edgeList->toVector();
-    std::vector<double> g(edges.size());
+    std::vector<std::complex<double>> g(edges.size());
     for (std::size_t i = 0; i < edges.size(); ++i) {
-        const std::complex<double> origSq = edges[i]->getSquaredLength();
+        const std::complex<double> origSq = (edges[i]->getLength() * edges[i]->getLength());
         const double W = std::abs(origSq);              // |l^2|
         const double h = std::max(W * 1e-4, 1e-8);
         const bool tl = edges[i]->isTimelike();
@@ -380,12 +377,12 @@ std::vector<double> ReggeSolver::actionGradient() const {
         };
         // Central differences in W-space, preserving edge character; perturb l^2
         // exactly and restore the original l^2 exactly (no sqrt round-trip drift).
-        edges[i]->setSquaredLength(sqAtW(W + h));
-        double Sp = totalAction();
-        edges[i]->setSquaredLength(sqAtW(std::max(W - h, 1e-12)));
-        double Sm = totalAction();
+        edges[i]->setLength(std::sqrt(sqAtW(W + h)));
+        const std::complex<double> Sp = totalAction();
+        edges[i]->setLength(std::sqrt(sqAtW(std::max(W - h, 1e-12))));
+        const std::complex<double> Sm = totalAction();
         g[i] = (Sp - Sm) / (2.0 * h);
-        edges[i]->setSquaredLength(origSq);
+        edges[i]->setLength(std::sqrt(origSq));
     }
     return g;
 }
@@ -443,7 +440,7 @@ std::vector<std::complex<double>> ReggeSolver::actionGradientExact() const {
             try {
                 const auto &h = hinges[static_cast<std::size_t>(hi)];
                 const cd eps = h->lorentzianDeficitAngle();
-                const double dv = h->dualVolume();
+                const std::complex<double> dv = h->dualVolume();
                 for (const auto &[e, dEps] : h->lorentzianDeficitAngleGradient()) {
                     const auto it = eidx.find(e);
                     if (it != eidx.end()) gLocal[it->second] += dv * dEps;
@@ -539,7 +536,7 @@ ReggeSolver::hingeHessianEntries(
     // contributions; both the dense and sparse assemblies sum them per (e,f).
     std::vector<std::tuple<std::size_t, std::size_t, cd>> entries;
     const cd eps = hinge->lorentzianDeficitAngle();
-    const double V = hinge->dualVolume();
+    const cd V = hinge->dualVolume();
     const auto dEps = hinge->lorentzianDeficitAngleGradient();
     const auto dV = hinge->dualVolumeGradient();
     const auto d2Eps = hinge->lorentzianDeficitAngleHessian();
@@ -637,321 +634,10 @@ ReggeSolver::actionHessianExactSparse() const {
 double ReggeSolver::actionGradientNorm() const {
     auto g = actionGradient();
     double F = 0.0;
-    for (double gi : g) F += gi * gi;
+    // Sum |dS/dl^2|^2 over edges: std::norm is the squared modulus, so Re and Im
+    // both constrain the objective. Summing (Re g)^2 alone would build it on Re S.
+    for (const std::complex<double> &gi : g) F += std::norm(gi);
     return F;
-}
-
-// =====================================================================
-// GPU mesh flattening (CUDA path)
-// =====================================================================
-
-#ifdef TESSERA_CUDA
-cuda::GpuMeshData ReggeSolver::flattenMeshForGpu() const {
-    cuda::GpuMeshData mesh;
-    int d = spacetime_->getMetric()->getSignature()->getDimensions();
-    int topSize = d + 1;
-
-    // --- Collect top-simplices ---
-    std::vector<SimplexPtr> topSimplices;
-    std::unordered_map<std::uint64_t, int> simplexToIdx;
-    for (const auto &s : spacetime_->getSimplices()) {
-        if (static_cast<int>(s->size()) == topSize) {
-            simplexToIdx[s->fingerprint.fingerprint()] =
-                static_cast<int>(topSimplices.size());
-            topSimplices.push_back(s);
-        }
-    }
-    mesh.n_simplices = static_cast<int>(topSimplices.size());
-
-    // --- Collect edges and assign indices ---
-    auto edgeVec = spacetime_->getEdgeList()->toVector();
-    mesh.n_edges = static_cast<int>(edgeVec.size());
-    auto edgeToIdx = ::tessera::graph::indexByKey(
-        edgeVec, [](auto const& e) { return e->fingerprint.fingerprint(); });
-
-    // --- Per-simplex squared-distance matrices ---
-    // Also record which (simplex, row, col) positions correspond to each edge.
-    mesh.simplex_sq_dist_offsets.resize(mesh.n_simplices + 1);
-    mesh.simplex_n_verts.resize(mesh.n_simplices);
-    std::vector<std::vector<int>> edgeDistPos(mesh.n_edges); // per edge: positions in flat array
-    int sq_offset = 0;
-
-    for (int si = 0; si < mesh.n_simplices; ++si) {
-        auto verts = topSimplices[si]->getVertices();
-        int nv = static_cast<int>(verts.size());
-        mesh.simplex_n_verts[si] = nv;
-        mesh.simplex_sq_dist_offsets[si] = sq_offset;
-
-        std::unordered_map<std::uint64_t, double> sqMap;
-        for (const auto &e : topSimplices[si]->getEdges()) {
-            auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
-                      Fingerprint::mix64(e->getTarget()->getId());
-            sqMap[fp] = std::abs(e->getSquaredLength());  // |l^2|, Wick-rotated
-        }
-
-        for (int i = 0; i < nv; ++i) {
-            for (int j = 0; j < nv; ++j) {
-                int pos = sq_offset + i * nv + j;
-                if (i == j) {
-                    mesh.simplex_sq_dist_flat.push_back(0.0);
-                } else {
-                    auto fp = Fingerprint::mix64(verts[i]->getId()) ^
-                              Fingerprint::mix64(verts[j]->getId());
-                    auto sqIt = sqMap.find(fp);
-                    mesh.simplex_sq_dist_flat.push_back(
-                        sqIt != sqMap.end() ? sqIt->second : 0.0);
-                    // Record this position for the edge
-                    auto eIt = edgeToIdx.find(fp);
-                    if (eIt != edgeToIdx.end())
-                        edgeDistPos[eIt->second].push_back(pos);
-                }
-            }
-        }
-        sq_offset += nv * nv;
-    }
-    mesh.simplex_sq_dist_offsets[mesh.n_simplices] = sq_offset;
-
-    // --- Collect hinges ---
-    auto hinges = collectHinges();
-    mesh.n_hinges = static_cast<int>(hinges.size());
-    std::unordered_map<std::uint64_t, int> hingeToIdx;
-    for (int hi = 0; hi < mesh.n_hinges; ++hi)
-        hingeToIdx[hinges[hi]->fingerprint.fingerprint()] = hi;
-
-    // --- Hinge → simplex CSR ---
-    mesh.hinge_simplex_offsets.resize(mesh.n_hinges + 1, 0);
-    std::vector<std::vector<std::tuple<int,int,int>>> hingeEntries(mesh.n_hinges);
-    for (int si = 0; si < mesh.n_simplices; ++si) {
-        auto sigmaVerts = topSimplices[si]->getVertices();
-        int nv = static_cast<int>(sigmaVerts.size());
-        for (int a = 0; a < nv; ++a) {
-            for (int b = a + 1; b < nv; ++b) {
-                std::uint64_t hingeFp = 0;
-                for (int k = 0; k < nv; ++k)
-                    if (k != a && k != b) hingeFp ^= Fingerprint::mix64(sigmaVerts[k]->getId());
-                auto it = hingeToIdx.find(hingeFp);
-                if (it != hingeToIdx.end())
-                    hingeEntries[it->second].emplace_back(si, a, b);
-            }
-        }
-    }
-    for (int hi = 0; hi < mesh.n_hinges; ++hi)
-        mesh.hinge_simplex_offsets[hi+1] =
-            mesh.hinge_simplex_offsets[hi] + static_cast<int>(hingeEntries[hi].size());
-    int nnz_hs = mesh.hinge_simplex_offsets[mesh.n_hinges];
-    mesh.hinge_simplex_ids.resize(nnz_hs);
-    mesh.hinge_opposite_a.resize(nnz_hs);
-    mesh.hinge_opposite_b.resize(nnz_hs);
-    for (int hi = 0; hi < mesh.n_hinges; ++hi) {
-        int off = mesh.hinge_simplex_offsets[hi];
-        for (int k = 0; k < static_cast<int>(hingeEntries[hi].size()); ++k) {
-            auto [si, a, b] = hingeEntries[hi][k];
-            mesh.hinge_simplex_ids[off+k] = si;
-            mesh.hinge_opposite_a[off+k] = a;
-            mesh.hinge_opposite_b[off+k] = b;
-        }
-    }
-
-    // --- Edge → hinge CSR (which hinges does each edge affect?) ---
-    // An edge affects a hinge if they share a simplex.
-    // Equivalently: edge (u,v) affects hinge h if some top-simplex contains
-    // both edge vertices and all hinge vertices.
-    std::vector<std::set<int>> edgeHingesSets(mesh.n_edges);
-    for (int si = 0; si < mesh.n_simplices; ++si) {
-        auto sigmaVerts = topSimplices[si]->getVertices();
-        int nv = static_cast<int>(sigmaVerts.size());
-
-        // Edges in this simplex
-        std::vector<int> simplexEdgeIds;
-        for (const auto &e : topSimplices[si]->getEdges()) {
-            auto it = edgeToIdx.find(e->fingerprint.fingerprint());
-            if (it != edgeToIdx.end()) simplexEdgeIds.push_back(it->second);
-        }
-        // Hinges in this simplex (complement of each pair)
-        for (int a = 0; a < nv; ++a) {
-            for (int b = a + 1; b < nv; ++b) {
-                std::uint64_t hingeFp = 0;
-                for (int k = 0; k < nv; ++k)
-                    if (k != a && k != b) hingeFp ^= Fingerprint::mix64(sigmaVerts[k]->getId());
-                auto it = hingeToIdx.find(hingeFp);
-                if (it == hingeToIdx.end()) continue;
-                int hid = it->second;
-                for (int eid : simplexEdgeIds)
-                    edgeHingesSets[eid].insert(hid);
-            }
-        }
-    }
-    mesh.edge_hinge_offsets.resize(mesh.n_edges + 1, 0);
-    for (int ei = 0; ei < mesh.n_edges; ++ei)
-        mesh.edge_hinge_offsets[ei+1] =
-            mesh.edge_hinge_offsets[ei] + static_cast<int>(edgeHingesSets[ei].size());
-    int nnz_eh = mesh.edge_hinge_offsets[mesh.n_edges];
-    mesh.edge_hinge_ids.resize(nnz_eh);
-    for (int ei = 0; ei < mesh.n_edges; ++ei) {
-        int off = mesh.edge_hinge_offsets[ei];
-        int k = 0;
-        for (int hid : edgeHingesSets[ei])
-            mesh.edge_hinge_ids[off + k++] = hid;
-    }
-
-    // --- Edge → dist positions CSR ---
-    mesh.edge_dist_offsets.resize(mesh.n_edges + 1, 0);
-    for (int ei = 0; ei < mesh.n_edges; ++ei)
-        mesh.edge_dist_offsets[ei+1] =
-            mesh.edge_dist_offsets[ei] + static_cast<int>(edgeDistPos[ei].size());
-    int nnz_ed = mesh.edge_dist_offsets[mesh.n_edges];
-    mesh.edge_dist_positions.resize(nnz_ed);
-    for (int ei = 0; ei < mesh.n_edges; ++ei) {
-        int off = mesh.edge_dist_offsets[ei];
-        for (int k = 0; k < static_cast<int>(edgeDistPos[ei].size()); ++k)
-            mesh.edge_dist_positions[off + k] = edgeDistPos[ei][k];
-    }
-
-    // --- Edge → neighbor edges CSR ---
-    // Two edges are neighbors if they share at least one hinge.
-    // Build reverse map: hinge → edges (inverse of edge → hinges).
-    std::vector<std::vector<int>> hingeEdges(mesh.n_hinges);
-    for (int ei = 0; ei < mesh.n_edges; ++ei) {
-        for (int k = mesh.edge_hinge_offsets[ei];
-             k < mesh.edge_hinge_offsets[ei + 1]; ++k)
-            hingeEdges[mesh.edge_hinge_ids[k]].push_back(ei);
-    }
-    std::vector<std::set<int>> nbrSets(mesh.n_edges);
-    for (int ei = 0; ei < mesh.n_edges; ++ei) {
-        nbrSets[ei].insert(ei); // self-neighbor
-        for (int k = mesh.edge_hinge_offsets[ei];
-             k < mesh.edge_hinge_offsets[ei + 1]; ++k) {
-            int hid = mesh.edge_hinge_ids[k];
-            for (int nb : hingeEdges[hid])
-                nbrSets[ei].insert(nb);
-        }
-    }
-    mesh.edge_nbr_offsets.resize(mesh.n_edges + 1, 0);
-    for (int ei = 0; ei < mesh.n_edges; ++ei)
-        mesh.edge_nbr_offsets[ei + 1] =
-            mesh.edge_nbr_offsets[ei] +
-            static_cast<int>(nbrSets[ei].size());
-    int nnz_nbr = mesh.edge_nbr_offsets[mesh.n_edges];
-    mesh.edge_nbr_ids.resize(nnz_nbr);
-    for (int ei = 0; ei < mesh.n_edges; ++ei) {
-        int off = mesh.edge_nbr_offsets[ei];
-        int k = 0;
-        for (int nb : nbrSets[ei])
-            mesh.edge_nbr_ids[off + k++] = nb;
-    }
-
-    // --- Target deficits (zero for deficit-residual kernel) ---
-    mesh.target_deficits.resize(mesh.n_hinges, 0.0);
-
-    // --- Base hinge contributions A_h * ε_h (for action gradient kernel) ---
-    mesh.base_hinge_contribs.resize(mesh.n_hinges);
-    for (int hi = 0; hi < mesh.n_hinges; ++hi) {
-        mesh.base_hinge_contribs[hi] =
-            hingeArea(hinges[hi]) * deficitAngle(hinges[hi]);
-    }
-
-    // --- Worldline mask and per-edge mass ---
-    mesh.worldline_edge_mask.resize(mesh.n_edges, 0);
-    mesh.worldline_edge_mass.resize(mesh.n_edges, 0.0);
-    for (const auto &wl : matter_.getWorldlines()) {
-        for (std::size_t i = 0; i + 1 < wl.vertices.size(); ++i) {
-            auto fp = Fingerprint::mix64(wl.vertices[i]->getId()) ^
-                      Fingerprint::mix64(wl.vertices[i + 1]->getId());
-            auto it = edgeToIdx.find(fp);
-            if (it != edgeToIdx.end()) {
-                mesh.worldline_edge_mask[it->second] = 1;
-                mesh.worldline_edge_mass[it->second] = wl.mass;
-            }
-        }
-    }
-
-    return mesh;
-}
-#endif
-
-// =====================================================================
-// Gradient descent step
-// =====================================================================
-
-double ReggeSolver::step(double learningRate) {
-    auto edgeList = spacetime_->getEdgeList();
-    auto edges = edgeList->toVector();
-    int n = static_cast<int>(edges.size());
-
-    // Minimize F = ||∇S||² = Σ_e (∂S/∂ℓ²_e)².
-    // F ≥ 0 and F = 0 exactly at a stationary point of S (= Regge equations).
-    // We cannot minimize S directly because it is unbounded below.
-
-#ifdef TESSERA_CUDA
-    // GPU path: 2 kernel launches total.
-    //   1. Base action gradient ∂S/∂W_e  (one thread per edge)
-    //   2. Fused ∂F/∂W_j  (one thread per edge, using edge neighborhoods)
-    // All GPU memory allocated/uploaded/downloaded/freed in one cycle.
-    auto mesh = flattenMeshForGpu();
-
-    std::vector<double> g0(n);
-    std::vector<double> dF(n, 0.0);
-    cuda::compute_step_gpu(mesh, g0.data(), dF.data());
-
-    double F = 0.0;
-    for (double gi : g0) F += gi * gi;
-
-    // Update in Wick-rotated (W) space, preserving edge signature.
-    // dF[j] is ∂F/∂W_j; gradient descent: W_j -= lr · ∂F/∂W_j.
-    for (int j = 0; j < n; ++j) {
-        const bool tl = edges[j]->isTimelike();
-        double W = std::abs(edges[j]->getSquaredLength());     // |l^2|
-        double W_new = W - learningRate * dF[j];
-        if (W_new < 1e-12) W_new = 1e-12;
-        edges[j]->setSquaredLength(tl ? std::complex<double>{-W_new, 0.0}
-                                      : std::complex<double>{W_new, 0.0});
-    }
-#else
-    // CPU path: gradient descent on ∂S/∂ℓ² directly.
-    // At the solution, ∂S/∂ℓ² = 0 (the Regge equations).
-    auto g = actionGradient();
-    double F = 0.0;
-    for (double gi : g) F += gi * gi;
-
-    // Update in Wick-rotated space, preserving edge signature.
-    // Clamp per-edge change to at most 5% of magnitude to prevent
-    // overshooting.
-    for (int j = 0; j < n; ++j) {
-        const bool tl = edges[j]->isTimelike();
-        double W = std::abs(edges[j]->getSquaredLength());     // |l^2|
-        double delta = learningRate * g[j];
-        double maxDelta = W * 0.05;
-        delta = std::clamp(delta, -maxDelta, maxDelta);
-        double W_new = W - delta;
-        if (W_new < 1e-12) W_new = 1e-12;
-        edges[j]->setSquaredLength(tl ? std::complex<double>{-W_new, 0.0}
-                                      : std::complex<double>{W_new, 0.0});
-    }
-#endif
-
-    return F;
-}
-
-// =====================================================================
-// Solve
-// =====================================================================
-
-std::tuple<bool, double, int> ReggeSolver::solve(
-    double tol, int maxIters, double learningRate,
-    ProgressCallback progress) {
-    double F = 0.0;
-    double F0 = -1.0; // initial F, for relative tolerance
-    for (int i = 0; i < maxIters; ++i) {
-        F = step(learningRate);   // returns ||∇S||² before the update
-        if (F0 < 0.0) F0 = F;
-        if (progress) progress(i, F);
-        // Converge when F < tol (absolute) or F < tol * F0 (relative)
-        double threshold = std::max(tol, tol * F0);
-        if (F < threshold) {
-            return {true, F, i + 1};
-        }
-    }
-    return {false, F, maxIters};
 }
 
 } // namespace tessera::simulations

@@ -55,7 +55,7 @@ std::shared_ptr<Spacetime> LiveComplex::load(
           ") of the loaded complex has no recorded squared length — a partial "
           "metric is never silently defaulted");
     }
-    e->setSquaredLength(it->second);
+    e->setLength(std::sqrt(it->second));
   }
   // Complete the facet/coface skeleton the dual-volume / deficit reads walk —
   // the honest direct call, never a solver (fromCells leaves only the top
@@ -95,7 +95,7 @@ LiveComplex::Relabeled LiveComplex::relabel(const Spacetime &spacetime,
     const std::uint64_t a = e->getSource()->getId();
     const std::uint64_t b = e->getTarget()->getId();
     edges[a < b ? std::make_pair(a, b) : std::make_pair(b, a)] =
-        e->getSquaredLength();
+        (e->getLength() * e->getLength());
   }
   std::map<std::uint64_t, double> times;
   const auto &vertexList = spacetime.getVertexList();

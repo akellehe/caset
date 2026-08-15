@@ -116,8 +116,7 @@ class HodgeLaplacian {
     /// non-symmetric; the imaginary parts of the returned entries are still zero,
     /// the operator being real).
     [[nodiscard]] std::vector<std::complex<double>> laplacian(int k = 0,
-                                                             bool metric = true,
-                                                             bool lorentzian = false) const;
+                                                             bool metric = true) const;
 
     /// Diagonal inner-product weights \f$ W_k \f$ (length \f$ |C_k| \f$) in the
     /// canonical `ChainComplex` column order: the per-\f$ k \f$-simplex Euclidean
@@ -126,7 +125,7 @@ class HodgeLaplacian {
     /// or \f$ k \f$ above the top dimension. With `lorentzian = true` the entries
     /// are the **signed** `Simplex::volume()` (timelike cells negative; degenerate
     /// cells still fall back to \f$ +1 \f$ so \f$ W_k \f$ stays invertible).
-    [[nodiscard]] std::vector<double> weights(int k, bool lorentzian = false) const;
+    [[nodiscard]] std::vector<std::complex<double>> weights(int k) const;
 
     /// Exact analytic gradient \f$ \partial L_k^{\text{sym}} / \partial \ell^2_e \f$
     /// of the symmetric metric Hodge Laplacian (\f$ k \ge 1 \f$) with respect to one
@@ -139,7 +138,7 @@ class HodgeLaplacian {
     /// per-simplex `Simplex::volumeGradient` (signed for the `|vol|` weight). The
     /// degree-generic keystone for the arbitrary-\f$ k \f$ \f$ r_U \f$ gradient.
     /// Empty for \f$ k < 1 \f$ or an absent edge.
-    [[nodiscard]] std::vector<double> laplacianGradient(
+    [[nodiscard]] std::vector<std::complex<double>> laplacianGradient(
         int k, std::uint64_t edgeA, std::uint64_t edgeB) const;
 
     /// Whether \f$ \| L - L^\dagger \| \le \text{tol} \f$ (Frobenius norm) for
@@ -166,7 +165,7 @@ class HodgeLaplacian {
     /// `spectrum(k, metric)`. For \f$ k \geq 1 \f$, `metric` selects volume vs.
     /// unit weights (ignored at \f$ k = 0 \f$).
     /// @throws std::runtime_error for \f$ k < 0 \f$. Empty above the top dimension.
-    [[nodiscard]] std::vector<double> eigenvalues(int k = 0, bool metric = true) const;
+    [[nodiscard]] std::vector<std::complex<double>> eigenvalues(int k = 0, bool metric = true) const;
 
     /// Eigenvectors of \f$ L_k \f$ as a flat row-major \f$ M\times M \f$ array
     /// (\f$ M = N \f$ for \f$ k = 0 \f$, else \f$ |C_k| \f$); column \f$ j \f$
@@ -266,16 +265,6 @@ class HodgeLaplacian {
     mutable std::vector<double> evals_{};               // ascending, length N
     mutable std::vector<std::complex<double>> evecs_{};  // flat N*N, columns
 
-    // Real symmetric eigendecomposition of the k>=1 metric Laplacian L_k^sym,
-    // cached per (k, metric). evecs is flat |C_k|*|C_k| (columns = ascending
-    // eigenvectors), stored complex (imag 0) to share the public return type.
-    struct MetricSpectrum {
-      int dim{0};
-      std::vector<double> evals{};                       // ascending, length |C_k|
-      std::vector<std::complex<double>> evecs{};         // flat |C_k|*|C_k|, columns
-    };
-    mutable std::unordered_map<long long, MetricSpectrum> metricCache_{};
-
     // General (non-symmetric) eigendecomposition of the signed-weight d'Alembertian
     // L_k, cached per (k, metric). Eigenvalues/eigenvectors are complex and sorted
     // ascending by (Re, Im); `wk` is the signed weight diagonal kept for the
@@ -284,7 +273,7 @@ class HodgeLaplacian {
       int dim{0};
       std::vector<std::complex<double>> evals{};         // sorted, length |C_k|
       std::vector<std::complex<double>> evecs{};         // flat |C_k|*|C_k|, columns
-      std::vector<double> wk{};                          // signed W_k, length |C_k|
+      std::vector<std::complex<double>> wk{};                          // signed W_k, length |C_k|
     };
     mutable std::unordered_map<long long, LorentzianSpectrum> lorentzianCache_{};
 
@@ -310,7 +299,6 @@ class HodgeLaplacian {
 
     // Build/fetch the cached symmetric spectrum of L_k^sym (k >= 1). Key folds in
     // `metric` so the metric and combinatorial spectra are cached separately.
-    const MetricSpectrum &ensureMetricSpectrum(int k, bool metric) const;
 
     // Build/fetch the cached general spectrum of the signed-weight d'Alembertian.
     const LorentzianSpectrum &ensureLorentzianSpectrum(int k, bool metric) const;

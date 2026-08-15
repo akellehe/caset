@@ -14,6 +14,7 @@ from __future__ import annotations
 import unittest
 
 import pytest
+import cmath
 
 try:
     import tessera
@@ -37,7 +38,7 @@ def _bipyramid():
     v3 = st.createVertex(3)
     st.createSimplex([v[0], v[1], v3])
     for e in st.getEdgeList().toVector():
-        e.setSquaredLength(1.0)
+        e.setLength(cmath.sqrt(complex(1.0)))
         e.setPhase(0.0)
     return st
 

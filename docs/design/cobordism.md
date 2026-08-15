@@ -118,6 +118,7 @@ emergent quantity is the one the caller did NOT supply**:
 As well as any useful statistics about the convergence process. We should especially make note of topological parameters, 
 and call out the observed topologies.
 
+<<<<<<< Updated upstream
 ### Emergence modes (which quantity is primary)
 
 `outputState` is populated in **both** modes — the primary emergent quantity when $U$ was supplied, and a
@@ -140,6 +141,8 @@ distinguished interior **Choi-cycles** the topology does not yet supply — the 
 rework (building $W$ from the closed $S^2 \times S^1$ handle so the operator is a genuine interior $1$-cycle).
 Until then `operatorU` / `choiState` stay **empty** rather than report a frame-dependent value.
 
+=======
+>>>>>>> Stashed changes
 ## Notes
 
 ### The Period Matrix

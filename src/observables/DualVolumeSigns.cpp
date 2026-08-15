@@ -55,32 +55,41 @@ DualVolumeSigns::Report DualVolumeSigns::analyze(
       entry.nMixedSignature += 1;
     }
 
-    const double dualVolume = simplex.dualVolume();
-    if (dualVolume < 0.0) entry.nNegativeDualVolume += 1;
+    // This audit measures SIGNS. On the real-Lorentzian locus every quantity
+    // below is real and the reads are exact; off-axis the real part is what the
+    // tallies are defined on, and the imaginary part is separate information this
+    // observable does not yet report (#640).
+    const std::complex<double> dualVolume = simplex.dualVolume();
+    if (dualVolume.real() < 0.0) entry.nNegativeDualVolume += 1;
 
     // A negative barycentric coordinate places the circumcenter outside the
     // simplex on that vertex's side: the Riemannian well-centeredness violation.
-    const std::vector<double> barycentric = simplex.circumcenterBarycentric();
+    const std::vector<std::complex<double>> barycentric =
+        simplex.circumcenterBarycentric();
     if (!barycentric.empty()) {
       const double smallest =
-          *std::min_element(barycentric.begin(), barycentric.end());
+          std::min_element(barycentric.begin(), barycentric.end(),
+                           [](const std::complex<double> &a,
+                              const std::complex<double> &b) {
+                             return a.real() < b.real();
+                           })->real();
       if (smallest < 0.0) entry.nCircumcenterOutside += 1;
     }
 
     // Negative signed circumradius squared means the circumcenter-to-vertex
     // displacement is timelike — reachable only in Lorentzian signature.
-    if (simplex.circumradiusSquared() < 0.0) entry.nNegativeCircumradius += 1;
+    if (simplex.circumradiusSquared().real() < 0.0) entry.nNegativeCircumradius += 1;
 
     // The diagonal Hodge star entry itself. An almost-zero own-content makes the
     // ratio meaningless, so those simplices are counted separately and left out
     // of both the negative tally and the ratio statistics.
-    const double volume = simplex.volume();
+    const std::complex<double> volume = simplex.volume();
     if (std::abs(volume) <= tolerance_) {
       entry.nDegenerateVolume += 1;
       continue;
     }
 
-    const double starRatio = dualVolume / volume;
+    const double starRatio = (dualVolume / volume).real();
     if (starRatio < 0.0) {
       entry.nNegativeStar += 1;
       if (allSpacelike) {

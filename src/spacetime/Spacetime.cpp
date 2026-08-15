@@ -277,15 +277,17 @@ EdgePtr Spacetime::createEdge(
 EdgePtr Spacetime::createEdge(
   const VertexPtr &src,
   const VertexPtr &tgt,
-  double squaredLength
+  std::complex<double> length
 ) const noexcept {
 #ifdef TESSERA_ASSERTIONS
-  if (src->getTime() == tgt->getTime() && squaredLength <= 0) {
+  const std::complex<double> squaredLength = length * length;
+  if (src->getTime() == tgt->getTime() &&
+      !(squaredLength.imag() == 0.0 && squaredLength.real() > 0.0)) {
     CLOG(INFO_LEVEL, "You attempted to create a same-time (spacelike) edge with non-positive squared length");
     std::abort();
   }
 #endif
-  EdgePtr edge = edgeList->add(src, tgt, squaredLength);
+  EdgePtr edge = edgeList->add(src, tgt, length);
   src->addOutEdge(edge);
   tgt->addInEdge(edge);
   return edge;
@@ -344,13 +346,35 @@ std::shared_ptr<Spacetime> Spacetime::fromCells(
 
   // Uniform Hermitian pin: overwrite every edge's geometry. Skipped under the
   // tracked-metric rule, where the auto-wired causal lengths are the geometry.
-  if (!vertexTimes) {
+  // if (!vertexTimes) {
     for (const auto &edge : st->getEdgeList()->toVector()) {
-      edge->setSquaredLength(std::complex<double>{weight, 0.0});
+      edge->setLength(std::sqrt(std::complex<double>{weight, 0.0}));
       edge->setPhase(phase);
     }
-  }
+  // }
   return st;
+}
+
+std::shared_ptr<Spacetime> Spacetime::subcomplexWithinVertexSet(
+    const std::set<std::uint64_t> &vertexSet) const {
+  std::vector<std::vector<std::uint64_t>> cellsInsideVertexSet;
+  for (const auto &topSimplex : getTopSimplices()) {
+    auto cellVertexIds = topSimplex->topTuple();
+    bool cellIsInsideVertexSet = true;
+    for (auto vertexId : cellVertexIds)
+      if (!vertexSet.count(vertexId)) {
+        cellIsInsideVertexSet = false;
+        break;
+      }
+    if (cellIsInsideVertexSet)
+      cellsInsideVertexSet.push_back(std::move(cellVertexIds));
+  }
+  if (cellsInsideVertexSet.empty()) return nullptr;
+  return Spacetime::fromCells(getDimensions(), cellsInsideVertexSet, 1.0, 0.0);
+}
+
+int Spacetime::getDimensions() const noexcept {
+  return metric->getSignature()->getDimensions();
 }
 
 std::vector<std::vector<std::uint64_t>> Spacetime::prismCells(
