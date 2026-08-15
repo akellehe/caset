@@ -84,8 +84,7 @@ ReggeSolver::ReggeSolver(std::shared_ptr<Spacetime> spacetime,
 
 double ReggeSolver::dihedralAngle(SimplexPtr sigma,
                                    SimplexPtr hinge) const {
-    // Regge calculus runs on the Wick-rotated (Euclidean) geometry.
-    return sigma->dihedralAngle(hinge, /*wickRotate=*/true);
+    return sigma->dihedralAngle(hinge, /*wickRotate=*/false);
 }
 
 double ReggeSolver::deficitAngle(SimplexPtr hinge) const {

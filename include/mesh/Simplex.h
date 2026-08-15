@@ -266,23 +266,20 @@ class Simplex {
     ///
     /// By default the geometry is **signature-aware**: the signed l^2 is kept,
     /// so a timelike edge (l^2 < 0) carries its Lorentzian sign into G and
-    /// det(G) records the metric signature of the cell. Pass
-    /// ``wickRotate=true`` for the Euclidean/CDT convention that takes |l^2|
-    /// on every edge (det(G) > 0 for a valid cell). For a purely spacelike
-    /// (all l^2 > 0) simplex the two agree, so the toggle is a no-op there.
+    /// det(G) records the metric signature of the cell.
+    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
     [[nodiscard]] std::vector<double> gramMatrix(bool wickRotate = false) const;
 
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
     /// row-major matrix with a zero corner, a border of ones, and the squared
     /// edge-length matrix in the lower-right (d+1) x (d+1) block. Its cofactors
-    /// give the dihedral angles (see ``dihedralAngle``). ``wickRotate`` selects
-    /// signed (default) vs. |l^2| squared lengths, the same toggle as
-    /// ``gramMatrix``.
-    [[nodiscard]] std::vector<double> cayleyMengerMatrix(bool wickRotate = false) const;
+    /// give the dihedral angles (see ``dihedralAngle``).
+    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
+    [[nodiscard]] std::vector<std::complex<double>> cayleyMengerMatrix(bool wickRotate = false) const;
 
     /// Dihedral angle at a hinge within this simplex.
     /// The hinge must be a (d-2)-subsimplex of this d-simplex.
-    /// ``wickRotate`` selects signed vs. |l^2| edge lengths (see ``gramMatrix``).
+    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
     [[nodiscard]] double dihedralAngle(SimplexPtr hinge, bool wickRotate = false) const;
 
     /// Deficit angle at this hinge: 2*pi minus the sum of dihedral angles
@@ -308,8 +305,7 @@ class Simplex {
     ///   vertex star the four boosts telescope to zero (closure pins the
     ///   sign); generic in CDT (every base-tet triangle of a (4,1) cell).
     ///
-    /// Unlike ``dihedralAngle`` with ``wickRotate=true`` (the Euclidean/CDT
-    /// path, which takes |l^2| and clamps), this keeps the boost content. Note
+    /// This keeps the boost content, as it should be EVERYWHERE. Note
     /// the same-sign (m = 0 / boost) regimes' imaginary sign is the principal
     /// branch: the wedge's boost *orientation* is not determined by edge
     /// lengths alone (a PT reflection flips it at identical l^2), so only
@@ -364,8 +360,9 @@ class Simplex {
     lorentzianDeficitAngleHessian() const;
 
     /// Area of this simplex interpreted as a triangular hinge (3 vertices).
-    /// Uses Heron's formula on the three edge squared lengths; ``wickRotate``
-    /// selects signed (default) vs. |l^2| (see ``gramMatrix``).
+    /// Uses Heron's formula on the three edge squared lengths;
+    ///
+    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
     ///
     /// **Lorentzian note (#581):** on the signed (non-Wick) default a
     /// triangle whose Heron radicand is non-positive — every timelike
@@ -481,12 +478,12 @@ class Simplex {
     [[nodiscard]] double hodgeStar() const;
 
     /// Determinant of a square matrix (flat row-major, size n x n).
-    [[nodiscard]] static double determinant(
-        const std::vector<double> &M, int n);
+    [[nodiscard]] static std::complex<double> determinant(
+        const std::vector<std::complex<double>> &M, int n);
 
     /// Cofactor matrix of a square matrix (flat row-major, size n x n).
-    [[nodiscard]] static std::vector<double> cofactorMatrix(
-        const std::vector<double> &M, int n);
+    [[nodiscard]] static std::vector<std::complex<double>> cofactorMatrix(
+        const std::vector<std::complex<double>> &M, int n);
 
     // ==================== Computational & Utility Methods ====================
     template<typename T> T binomial(unsigned n, unsigned k) const;
@@ -638,7 +635,8 @@ class Simplex {
     /// the geometry. Evaluating the standard formula in this fixed reference frame
     /// makes the deficit a true relabelling/order invariant. Identical to
     /// ``cayleyMengerMatrix`` when the cell is already stored sorted.
-    [[nodiscard]] std::vector<double> cayleyMengerCanonical(
+    /// wickRotate is no longer supported. Everything should be fully Lorentzian. Passing wickRotate=true is an error.
+    [[nodiscard]] std::vector<std::complex<double>> cayleyMengerCanonical(
         bool wickRotate, std::unordered_map<std::uint64_t, int> &pos1) const;
 
     /// Ambient top dimension n for the circumcentric-dual recursion. When this

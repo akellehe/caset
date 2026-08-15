@@ -614,11 +614,11 @@ std::pair<SimplexPtr, Simplices> Simplex::cone(VertexPtr vertex) {
 // Geometry
 // =====================================================================
 
-double Simplex::determinant(const std::vector<double> &M, int n) {
+std::complex<double> Simplex::determinant(const std::vector<std::complex<double>> &M, int n) {
     if (n == 1) return M[0];
     if (n == 2) return M[0] * M[3] - M[1] * M[2];
-    std::vector<double> A(M);
-    double det = 1.0;
+    std::vector<std::complex<double>> A(M);
+    std::complex<double> det = 1.0;
     for (int col = 0; col < n; ++col) {
         int pivot = col;
         double maxVal = std::abs(A[col * n + col]);
@@ -634,7 +634,7 @@ double Simplex::determinant(const std::vector<double> &M, int n) {
         }
         det *= A[col * n + col];
         for (int row = col + 1; row < n; ++row) {
-            double factor = A[row * n + col] / A[col * n + col];
+            std::complex<double> factor = A[row * n + col] / A[col * n + col];
             for (int j = col + 1; j < n; ++j)
                 A[row * n + j] -= factor * A[col * n + j];
         }
@@ -642,11 +642,11 @@ double Simplex::determinant(const std::vector<double> &M, int n) {
     return det;
 }
 
-std::vector<double> Simplex::cofactorMatrix(
-    const std::vector<double> &M, int n) {
-    std::vector<double> C(n * n, 0.0);
+std::vector<std::complex<double>> Simplex::cofactorMatrix(
+    const std::vector<std::complex<double>> &M, int n) {
+    std::vector<std::complex<double>> C(n * n, 0.0);
     if (n == 1) { C[0] = 1.0; return C; }
-    std::vector<double> sub((n - 1) * (n - 1));
+    std::vector<std::complex<double>> sub((n - 1) * (n - 1));
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             int si = 0;
@@ -660,7 +660,7 @@ std::vector<double> Simplex::cofactorMatrix(
                 }
                 si++;
             }
-            double sign = ((i + j) % 2 == 0) ? 1.0 : -1.0;
+            std::complex<double> sign = ((i + j) % 2 == 0) ? 1.0 : -1.0;
             C[i * n + j] = sign * determinant(sub, n - 1);
         }
     }
@@ -698,21 +698,22 @@ std::vector<double> Simplex::gramMatrix(bool wickRotate) const {
     return G;
 }
 
-std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
+std::vector<std::complex<double>> Simplex::cayleyMengerMatrix(bool wickRotate) const {
+    if (wickRotate) {
+      CLOG(WARN_LEVEL, "Attempted to wickRotate in the cayleyMengerMatrix!");
+      throw std::runtime_error("Attempted to wickRotate in the cayleyMengerMatrix (we only support fully Lorentzian spacetimes");
+    }
     int dPlus1 = static_cast<int>(vertices.size());
     if (dPlus1 < 1) return {};
 
-    // Squared-distance lookup; signed by default (real signed l^2, read as
-    // Re — the ordinary-Lorentzian convention, #589), |l^2| under wickRotate.
-    std::unordered_map<std::uint64_t, double> sqMap;
+    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getRealSquaredLength();
+        sqMap[fp] = e->getSquaredLength();
     }
-    auto getSq = [&](int i, int j) -> double {
-        if (i == j) return 0.0;
+    auto getSq = [&](int i, int j) -> std::complex<double> {
+        if (i == j) return std::complex<double>{0, 0};
         auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
                   Fingerprint::mix64(vertices[j]->getId());
         auto it = sqMap.find(fp);
@@ -721,7 +722,7 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
 
     // Bordered matrix: zero corner, a border of ones, squared distances inside.
     int n = dPlus1 + 1;
-    std::vector<double> B(n * n, 0.0);
+    std::vector<std::complex<double>> B(n * n, 0.0);
     for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
     for (int i = 0; i < dPlus1; ++i)
         for (int j = 0; j < dPlus1; ++j)
@@ -729,8 +730,12 @@ std::vector<double> Simplex::cayleyMengerMatrix(bool wickRotate) const {
     return B;
 }
 
-std::vector<double> Simplex::cayleyMengerCanonical(
+std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     bool wickRotate, std::unordered_map<std::uint64_t, int> &pos1) const {
+  if (wickRotate) {
+    CLOG(WARN_LEVEL, "wickRotate was true, that is not supported. Everything is Lorentzian.")
+    throw std::runtime_error("wickRotate was true!");
+  }
     const int dPlus1 = static_cast<int>(vertices.size());
     pos1.clear();
     if (dPlus1 < 1) return {};
@@ -744,16 +749,13 @@ std::vector<double> Simplex::cayleyMengerCanonical(
     for (int i = 0; i < dPlus1; ++i)
         pos1[sorted[static_cast<std::size_t>(i)]->getId()] = i + 1;  // border-offset
 
-    // Signed by default (real signed l^2, read as Re — the ordinary-Lorentzian
-    // convention, #589), |l^2| under wickRotate.
-    std::unordered_map<std::uint64_t, double> sqMap;
+    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
     for (const auto &e : edges) {
         auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
                   Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = wickRotate ? std::abs(e->getSquaredLength())
-                               : e->getRealSquaredLength();
+        sqMap[fp] = e->getSquaredLength();
     }
-    auto getSq = [&](int i, int j) -> double {
+    auto getSq = [&](int i, int j) -> std::complex<double> {
         if (i == j) return 0.0;
         auto fp = Fingerprint::mix64(sorted[static_cast<std::size_t>(i)]->getId()) ^
                   Fingerprint::mix64(sorted[static_cast<std::size_t>(j)]->getId());
@@ -762,7 +764,7 @@ std::vector<double> Simplex::cayleyMengerCanonical(
     };
 
     const int n = dPlus1 + 1;
-    std::vector<double> B(static_cast<std::size_t>(n) * n, 0.0);
+    std::vector<std::complex<double>> B(static_cast<std::size_t>(n) * n, 0.0);
     for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
     for (int i = 0; i < dPlus1; ++i)
         for (int j = 0; j < dPlus1; ++j)
@@ -771,6 +773,10 @@ std::vector<double> Simplex::cayleyMengerCanonical(
 }
 
 double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
+  if (wickRotate) {
+    CLOG(WARN_LEVEL, "Attempted to wickRotate in dihedralAngle. We only do Lorentzian spacetimes.");
+    throw std::runtime_error("Attempted to wickRotate in dihedralAngle. We only do Lorentzian spacetimes.");
+  }
     int dPlus1 = static_cast<int>(vertices.size());
 
     // Find the two vertices in this simplex but not in the hinge.
@@ -790,21 +796,23 @@ double Simplex::dihedralAngle(SimplexPtr hinge, bool wickRotate) const {
     auto B = cayleyMengerMatrix(wickRotate);
     auto cof = cofactorMatrix(B, n);
     int bi = vi + 1, bj = vj + 1;
-    double Cij = cof[bi * n + bj];
-    double Cii = cof[bi * n + bi];
-    double Cjj = cof[bj * n + bj];
+    std::complex<double> Cij = cof[bi * n + bj];
+    std::complex<double> Cii = cof[bi * n + bi];
+    std::complex<double> Cjj = cof[bj * n + bj];
 
-    double denom = std::sqrt(std::abs(Cii * Cjj));
-    if (denom < 1e-15) return 0.0;
+    std::complex<double> denom = std::sqrt(Cii * Cjj);
+    // if (denom < 1e-15) return 0.0;
+
     // The diagonal Cayley–Menger cofactors C_ii, C_jj share the
     // dimension-parity sign (-1)^d: positive in even dimension, negative in odd
     // (e.g. -3 for a unit tetrahedron). Taking |C_ii·C_jj| under the sqrt drops
     // that sign, so the normalization must reapply it — otherwise
     // cos θ = -C_ij / sqrt(C_ii·C_jj) collapses to its supplement (π - θ) for
     // odd-dimensional simplices. In even dimension C_ii > 0 and this is a no-op.
-    if (Cii < 0.0) denom = -denom;
-    double cosTheta = std::clamp(-Cij / denom, -1.0, 1.0);
-    return std::acos(cosTheta);
+    // if (Cii < 0.0) denom = -denom;
+
+    std::complex<double> cosTheta = -Cij / denom;
+    return std::cos(cosTheta.real()) + std::acos(cosTheta.imag());
 }
 
 double Simplex::deficitAngle() const {
@@ -821,9 +829,7 @@ double Simplex::deficitAngle() const {
         for (std::size_t i = 1; i < vertices.size(); ++i)
             if (!sigma->hasVertex(vertices[i])) { containsAll = false; break; }
         if (containsAll)
-            // Deficit angles drive the CDT/Regge action, which is defined on
-            // the Wick-rotated (Euclidean) geometry — request |l^2| explicitly.
-            sum += sigma->dihedralAngle(const_cast<Simplex*>(this), /*wickRotate=*/true);
+            sum += sigma->dihedralAngle(const_cast<Simplex*>(this), /*wickRotate=*/false);
     }
     return 2.0 * std::numbers::pi - sum;
 }
@@ -861,9 +867,9 @@ std::complex<double> Simplex::lorentzianDihedralAngle(SimplexPtr hinge) const {
     // canonical position so the result does not depend on which opposite vertex
     // the (stored) ordering happened to present first.
     if (bi > bj) std::swap(bi, bj);
-    const double Cij = cof[static_cast<std::size_t>(bi) * n + bj];
-    const double Cii = cof[static_cast<std::size_t>(bi) * n + bi];
-    const double Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
+    const std::complex<double> Cij = cof[static_cast<std::size_t>(bi) * n + bj];
+    const std::complex<double> Cii = cof[static_cast<std::size_t>(bi) * n + bi];
+    const std::complex<double> Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
     const double D = std::sqrt(std::abs(Cii * Cjj));
     if (D < 1e-15) return {0.0, 0.0};
     if (Cii * Cjj >= 0.0) {
