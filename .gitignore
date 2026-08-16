@@ -35,3 +35,4 @@ refs/
 third_party/itensor_tdvp/
 .venv-build/
 campaign-geometry
+proton_dumps/

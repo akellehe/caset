@@ -74,9 +74,15 @@ class Proton {
   ///                        to open the register holes (and the holes to cap), instead of
   ///                        relying on `runStage1`'s random cone draws. Default false keeps
   ///                        `build()` byte-identical to its existing drive.
+  ///   * `preconeTimelike` — draw every precone cone-in as the TIMELIKE
+  ///                        disposition (#613).
+  ///   * `preconeAlternate` — instead alternate the cone-ins timelike/spacelike
+  ///                        for balanced causal content at one uniform
+  ///                        edge-length magnitude (wins over `preconeTimelike`).
   explicit Proton(std::uint64_t seed = 0, int registerDegree = 3,
                   double gamma = 50.0, double inputWeight = 20.0,
-                  int precone = 0, bool shouldUseDirectedSurgery = false);
+                  int precone = 0, bool shouldUseDirectedSurgery = false,
+                  bool preconeTimelike = false, bool preconeAlternate = false);
 
   /// Build the proton, restarting across seeds until step B's whole cobordism
   /// carries the singlet with `≥ minQuarkHoles` holes (or `maxRestarts` is
@@ -89,6 +95,21 @@ class Proton {
              double stage2Beta = 1.0, int stage2MaxIters = 10,
              double colorTolerance = 0.5, int minQuarkHoles = 3);
 
+  /// EXPERIMENTAL one-step build: drive `directNode` — three q-q̄ pairs in, the
+  /// singlet out, in ONE `MultiCobordism` — with the combined `MultiCobordism::run`
+  /// drive, which interleaves the stage-1 surgery update and the stage-2 geometric
+  /// relaxation in one loop (the drive `multicobordism_animation.py` uses): an init
+  /// pass (`initSteps`, `grow_boundaries=true`) then an evolution pass (`evolveSteps`,
+  /// `grow_boundaries=false` — ∂W frozen). Restarts across seeds (restart `i` uses
+  /// `seed + i`) until the whole cobordism carries the singlet with `≥ minQuarkHoles`
+  /// holes, or `maxRestarts` is exhausted keeping the best attempt. Populates the same
+  /// accessors as `build()` (`diquarkResidual()` stays 0 — there is no step A).
+  /// Idempotent, and shared with `build()`: whichever runs first claims the build
+  /// state, so call this BEFORE any accessor triggers the lazy two-step `build()`.
+  void buildDirect(int maxRestarts = 16, int initSteps = 180, int evolveSteps = 60,
+                   int stage1CandidateMoves = 8, double stage2Beta = 1.0,
+                   double colorTolerance = 0.5, int minQuarkHoles = 3);
+
   /// A fresh, seeded — but NOT yet run — Step A node (recombination, 2→2): two neutral
   /// q-q̄ pairs `{1,-1,0}` ⊔ `{1,0,-1}` → a diquark `{1,ω}` ⊔ antidiquark `{1,ω²}`, on a
   /// single Δ⁴ seed (inputs at v0,v1; outputs at v2,v3; input weight set). `build()` and
@@ -99,6 +120,14 @@ class Proton {
   /// `{1,ω}` + the third quark `{ω²}` → the proton singlet `{1,ω,ω²}`, on a single Δ⁴
   /// seed (inputs at v0,v1; the single output is read off the WHOLE, so no `seedOutputs`).
   [[nodiscard]] std::shared_ptr<MultiCobordism> formationNode(std::uint64_t seed) const;
+  /// A fresh, seeded — but NOT yet run — ONE-STEP node (6→1): the three bare quarks
+  /// `{1}`, `{ω}`, `{ω²}` AND their three anti-quarks `{1}`, `{ω̄}`, `{ω̄²}` (the
+  /// elementwise conjugates — the antiparticle convention here, as antidiquark =
+  /// conj(diquark)) as inputs on a single Δ⁴ seed, so the prepared content is three
+  /// q-q̄ pairs. The proton singlet `{1,ω,ω²}` is the single output, read off the
+  /// WHOLE cobordism (no `seedOutputs`) — the anti-baryon partner is left to emerge
+  /// unpinned. The experimental single-merge alternative to the two-step build.
+  [[nodiscard]] std::shared_ptr<MultiCobordism> directNode(std::uint64_t seed) const;
 
   /// True iff the whole step-B cobordism carries the singlet (`colorResidual() <
   /// colorTolerance`) with `≥ minQuarkHoles` holes. Triggers `build()`.
@@ -142,6 +171,8 @@ class Proton {
   double inputResidualWeight_;
   int precone_;  // gated cone-ins pre-grown into each node's seed (ctor → nodes)
   bool shouldUseDirectedSurgery_;  // build() uses the directed cone-out/cone-in probes
+  bool preconeTimelike_;  // precone cone-ins drawn as the timelike disposition
+  bool preconeAlternate_;  // precone cone-ins alternate timelike/spacelike
 
   // ---- build state (populated by build()) ----
   bool attempted_ = false;

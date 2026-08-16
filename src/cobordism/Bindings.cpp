@@ -811,11 +811,14 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def(py::init<std::shared_ptr<Spacetime>,
                     std::vector<std::vector<std::complex<double>>>,
                     std::vector<std::vector<std::complex<double>>>,
-                    std::vector<int>, double, std::uint64_t, int, bool>(),
+                    std::vector<int>, double, std::uint64_t, int, bool, bool,
+                    bool>(),
            py::arg("host"), py::arg("input_targets"), py::arg("output_targets"),
            py::arg("degrees") = std::vector<int>{3}, py::arg("gamma") = 1.0,
            py::arg("seed") = 0, py::arg("precone") = 0,
-           py::arg("should_propose_dispositions") = true)
+           py::arg("should_propose_dispositions") = true,
+           py::arg("precone_timelike") = false,
+           py::arg("precone_alternate") = false)
       .def_static("betti", &MultiCobordism::betti, py::arg("st"))
       .def_static("emergent_holes", &MultiCobordism::emergentHoles,
                   py::arg("st"), py::arg("k"))
@@ -852,10 +855,15 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       // main thread -- e.g. multicobordism_animation.py --live keeps its GUI responsive.
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
            py::arg("n_candidate_moves") = 12, py::arg("grow_boundaries") = false,
-           py::call_guard<py::gil_scoped_release>())
+           py::arg("max_lookahead") = 10,
+           py::call_guard<py::gil_scoped_release>(),
+           "max_lookahead: when a batch of single moves finds no improvement, "
+           "the search deepens iteratively -- 2-move sequences, then 3, up to "
+           "this many moves -- committing an F-lowering sequence as a whole "
+           "(1 = single moves only).")
       .def("run_stage2", &MultiCobordism::runStage2, py::arg("beta") = 1.0,
            py::arg("max_iters") = 200, py::arg("alpha0") = 0.05,
-           py::arg("rel_tol") = 1e-9,
+           py::arg("rel_tol") = 1e-12,
            py::call_guard<py::gil_scoped_release>(),
            "Stage 2 (geometric): relax every edge l^2 along the REAL signed-l^2 "
            "manifold (ordinary Lorentzian Regge) toward a stationary point of "
@@ -869,17 +877,21 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       .def("run", &MultiCobordism::run, py::arg("max_iters") = 200,
            py::arg("n_candidate_moves") = 12,
            py::arg("grow_boundaries") = false, py::arg("beta") = 1.0,
-           py::arg("alpha0") = 0.05, py::arg("rel_tol") = 1e-9,
+           py::arg("alpha0") = 0.05, py::arg("rel_tol") = 10e-9,
+           py::arg("max_lookahead") = 10,
            py::call_guard<py::gil_scoped_release>(),
-           "The combined drive: ONE loop running BOTH updates -- the stage-1 "
-           "combinatorial update and the stage-2 geometric update -- once each "
-           "per iteration, so the optimizer makes whichever kind of progress "
-           "helps at each point (a surgery move, a geometric descent step, or "
-           "both). Neither stall is final on its own -- a stage-2 stationary "
-           "point can be reopened by the next topology change and vice versa -- "
-           "so it halts only when BOTH halves stall in the same iteration, or "
-           "at the max_iters budget cap. n_candidate_moves/"
-           "grow_boundaries parameterize the combinatorial half exactly as in "
+           "The combined drive: each iteration takes ONE combinatorial stage-1 "
+           "update (a best-dF move, deepening to max_lookahead-move sequences "
+           "on a stall) then relaxes the geometry FULLY -- stage-2 updates "
+           "repeat until the relative-stationarity test at rel_tol (default "
+           "10e-9) reports diminishing returns -- so every move is proposed "
+           "from, and leaves behind, relaxed geometry. Exit: once the register "
+           "is carried + stationary, or the moves have had no effect for a few "
+           "consecutive iterations, the LAST relaxation re-runs at the tight "
+           "1e-12; if it still finds descent the exit was premature and the "
+           "loop continues -- only a state stationary at 1e-12 exits. max_iters "
+           "is the hard budget cap. n_candidate_moves/grow_boundaries/"
+           "max_lookahead parameterize the combinatorial half exactly as in "
            "run_stage1; beta/alpha0/rel_tol the geometric half exactly as in "
            "run_stage2 (keep beta=1 for one coherent F trace). "
            "last_stage2_stationary reports the LAST geometric update's outcome. "
@@ -932,6 +944,13 @@ Right -- re-read after each drive call:
       .def_property_readonly("outputs", &MultiCobordism::outputs,
                              py::return_value_policy::reference_internal,
                              "The emergent output blocks (each a MultiCobordismBlock).")
+      .def_property_readonly("last_stage1_lookahead",
+                             &MultiCobordism::lastStage1Lookahead,
+                             "Lookahead depth of the LAST stage-1 update's committed "
+                             "sequence: 1 = ordinary single move, >1 = the single-move "
+                             "batch stalled and an F-lowering multi-move sequence was "
+                             "found at this depth, 0 = nothing found at any depth up "
+                             "to max_lookahead (a stage-1 stall).")
       .def_property_readonly("last_stage2_stationary",
                              &MultiCobordism::lastStage2Stationary,
                              "True iff the last run_stage2 stopped on the relative-"
@@ -1019,10 +1038,13 @@ accessors lazily trigger build() on first use, so `Proton().block()` just works.
 Observable readers (charge/mass/radius/spin) read OFF block() in their own
 tickets.)doc");
   protonClass
-      .def(py::init<std::uint64_t, int, double, double, int, bool>(), py::arg("seed") = 0,
+      .def(py::init<std::uint64_t, int, double, double, int, bool, bool, bool>(),
+           py::arg("seed") = 0,
            py::arg("register_degree") = 3, py::arg("gamma") = 50.0,
            py::arg("input_weight") = 20.0, py::arg("precone") = 0,
-           py::arg("should_use_directed_surgery") = false)
+           py::arg("should_use_directed_surgery") = false,
+           py::arg("precone_timelike") = false,
+           py::arg("precone_alternate") = false)
       .def_static("omega", &Proton::omega, "omega = exp(2*pi*i/3).")
       .def_static("singlet", &Proton::singlet,
                   "The proton color singlet {1, w, w*w}.")
@@ -1043,6 +1065,24 @@ tickets.)doc");
            "A fresh, seeded (not-yet-run) Step B node: the diquark {1,w} + the third "
            "quark {w*w} -> the proton singlet, on a single Delta^4 seed (output read off "
            "the whole). Drive it with run_stage1/run_stage2.")
+      .def("direct_node", &Proton::directNode, py::arg("seed"),
+           "A fresh, seeded (not-yet-run) ONE-STEP node (6->1): the three bare quarks "
+           "{1}, {w}, {w*w} and their three anti-quarks (the elementwise conjugates -- "
+           "three q-qbar pairs) as inputs, and the proton singlet as the single output, "
+           "read off the WHOLE cobordism (the anti-baryon partner emerges unpinned), on "
+           "a single Delta^4 seed -- the experimental single-merge alternative to the "
+           "two-step build. Drive it with run().")
+      .def("build_direct", &Proton::buildDirect, py::arg("max_restarts") = 16,
+           py::arg("init_steps") = 180, py::arg("evolve_steps") = 60,
+           py::arg("stage1_candidate_moves") = 8, py::arg("stage2_beta") = 1.0,
+           py::arg("color_tolerance") = 0.5, py::arg("min_quark_holes") = 3,
+           py::call_guard<py::gil_scoped_release>(),
+           "EXPERIMENTAL one-step build: drive direct_node (three q-qbar pairs in, the "
+           "singlet out) with the combined run() drive -- stage-1 surgery and stage-2 "
+           "relaxation interleaved in one loop -- as an init pass then an evolution "
+           "pass, restarting across seeds. Populates the same accessors as build() "
+           "(diquark_residual stays 0 -- no step A). Shares build()'s once-only latch: "
+           "call it BEFORE any accessor triggers the lazy two-step build().")
       .def("converged", &Proton::converged,
            "True iff step B's proton block carries the singlet with enough holes.")
       .def("seed", &Proton::seed, "Base seed of the converged (or best) attempt.")
