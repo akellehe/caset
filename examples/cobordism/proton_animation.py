@@ -40,11 +40,22 @@ split into spatial- and temporal-curvature panels:
     panels: **spatial** = `Re ε·|★|` (the rotation angle-defect, from timelike hinges) and
     **temporal** = `Im ε·|★|` (the boost / light-cone content, from spacelike hinges — those
     whose normal plane is timelike). Both use a signed diverging colormap centered at 0.
-  * **spare row (single-node runs only)** — the null-face proximity trace, the descending
-    singular-value spectrum of the register operator `L_k`, and the **near-kernel mode
-    localization**: the primal skeleton painted by the summed weight `|ψᵢ|²` of the m
-    smallest-σ right singular vectors (the spectrum panel's red tail), showing WHICH
-    portion of the complex carries each almost-register.
+  * **spare rows (single-node runs only)** — the null-face proximity trace, the descending
+    singular-value spectrum of the register operator `L_k`, and TWO **mode-localization**
+    panels painting the primal skeleton by the summed weight `|ψᵢ|²` of right singular
+    vectors of `L_k`: the **near-kernel** panel uses the m smallest-σ modes (the spectrum
+    panel's red tail), showing WHICH portion of the complex carries each almost-register;
+    directly below it, the **near-null** panel uses the m largest-σ modes, which localize
+    on cells whose content is collapsing (`W₃` = squared tet content ∝ det G, so
+    σ_max ∝ 1/det G as a tet approaches tangency with the light cone) — it shows WHERE
+    the complex is going null, localizing what the min |det G| trace reports as a scalar.
+    Next to those, the **annihilation** pair: a trace of the broken conjugate-pair count
+    of the eigenvalue spectrum (under the V² convention `L_k` is real and W-pseudo-
+    symmetric, so eigenvalues are real — Krein signature ±1, the particle/antiparticle
+    split — or in W-null conjugate pairs; pair formation is an opposite-signature
+    collision at an exceptional point, the annihilation vertex, and each event steps the
+    count by ±1), and the **annihilation heat**: the skeleton painted by Σ|ψ|² over the
+    broken pairs — where the annihilated content lives (see `krein_modes.py`).
 
 The figure title reports the live **convergence verdict**: whether the whole cobordism
 carries the singlet `{1, ω, ω²}` (color residual `r_state` ≈ 0) on its ≥ 3 emergent color
@@ -116,6 +127,8 @@ import tessera
 
 cob = tessera.cobordism
 
+from krein_modes import KreinModes
+
 # Two combined-`run` passes on the one node — init (grow_boundaries=True) then evolution
 # (grow_boundaries=False) — each interleaving the stage-1 surgery update with the stage-2
 # geometric relaxation every iteration, so the optimizer makes whichever kind of progress
@@ -150,10 +163,16 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 _HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
 _HEAT_CMAP_IM = "PuOr"     # temporal (Im): distinct diverging map for the boost/rapidity part
 _HEAT_REFRESH_EVERY = 4
-# Near-kernel mode weight is a non-negative share (the |ψ|² sum to 1 over the
-# k-cells), so its map is SEQUENTIAL, unlike the signed curvature maps: dark =
-# the modes don't live here, bright = they do.
+# Mode weight is a non-negative share (the |ψ|² sum to 1 over the k-cells), so
+# both mode maps are SEQUENTIAL, unlike the signed curvature maps: low = the
+# modes don't live here, high = they do. The two panels use visually disjoint
+# maps so they can never be confused: near-kernel (tail) runs dark → bright
+# yellow, near-null (head) runs pale cyan → magenta.
 _MODE_CMAP = "magma"
+_MODE_CMAP_HEAD = "cool"
+# The annihilation heat gets a third disjoint sequential map (dark purple →
+# green → yellow), so the three mode panels never read as one another.
+_MODE_CMAP_PAIR = "viridis"
 
 
 def face_gram_determinants(cells, squared_length):
@@ -344,7 +363,8 @@ class ProtonAnimator:
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
                      "min_det2": [], "min_det3": [], "sigma": [],
-                     "mode_w": [], "mode_cells": []}
+                     "mode_w": [], "mode_w_head": [], "mode_cells": [],
+                     "pair_count": [], "pair_w": [], "im_leak": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -432,15 +452,41 @@ class ProtonAnimator:
             m = 3
             if hasattr(node, "expectedRegisterCount"):
                 m = int(node.expectedRegisterCount())
-            tail = vh[max(0, nk_cells - m):]
-            w = (np.abs(tail) ** 2).sum(axis=0)
-            total = float(w.sum())
-            self.hist["mode_w"].append(w / total if total > 0 else w)
+            # ... and of the HEAD: the m largest-σ modes (the FIRST m rows)
+            # localize on cells whose content is collapsing (σ_max ∝ 1/det G),
+            # i.e. material approaching tangency with the light cone.
+            for rows, key in ((vh[max(0, nk_cells - m):], "mode_w"),
+                              (vh[:m], "mode_w_head")):
+                w = (np.abs(rows) ** 2).sum(axis=0)
+                total = float(w.sum())
+                self.hist[key].append(w / total if total > 0 else w)
             self.hist["mode_cells"].append(
                 [tuple(c) for c in cc.kSimplexVertices(self.k)])
+            # Annihilation content: the Krein classification of the SAME L_k's
+            # eigenvalue spectrum — broken conjugate pairs (W-null) and their
+            # per-cell |ψ|². KreinModes re-derives L (an eig beside the svd);
+            # both are O(n³) on a small n, cheap next to the engine frame. The
+            # classification exists only ON the real-ℓ² locus; live stage-2
+            # exploration leaves it (complex intervals), so off-locus frames
+            # record nan/empty plus the interval leak — the trace shows the
+            # build leave and re-touch the locus, and pair counts appear
+            # exactly when the structure exists.
+            krein = KreinModes(st, self.k)
+            self.hist["im_leak"].append(float(krein.imag_interval_leak))
+            if krein.on_locus:
+                self.hist["pair_count"].append(float(krein.pair_count))
+                self.hist["pair_w"].append(krein.pair_heat())
+            else:
+                self.hist["pair_count"].append(float("nan"))
+                self.hist["pair_w"].append(np.array([]))
+                self._pair_note = f"off the real-ℓ² locus: {krein.reason}"
         else:
             self.hist["sigma"].append(np.array([]))
             self.hist["mode_w"].append(np.array([]))
+            self.hist["mode_w_head"].append(np.array([]))
+            self.hist["pair_count"].append(0.0)
+            self.hist["pair_w"].append(np.array([]))
+            self.hist["im_leak"].append(0.0)
             self.hist["mode_cells"].append([])
         # Null-face proximity: the smallest |det G| over the complex's triangles
         # and tets — 0 = a face exactly tangent to the light cone (degenerate).
@@ -470,7 +516,10 @@ class ProtonAnimator:
         # node-count-generic (the joint single-node drive gets one panel row; the two-step
         # keeps its two) with the metrics/register traces always on rows 0/1 of column 0.
         n_nodes = len(self.nodes)
-        n_rows = max(2, n_nodes)
+        # Single-node runs get a THIRD row so the two mode-localization panels
+        # stack in one column (near-kernel tail above, near-null head below);
+        # multi-node grids use every row for complexes and skip the extras.
+        n_rows = 3 if n_nodes == 1 else max(2, n_nodes)
         self.fig, axes = plt.subplots(n_rows, 4, figsize=(21, 4.5 * n_rows),
                                       squeeze=False)
         self.axm = axes[0][0]                                # metrics trace
@@ -480,21 +529,29 @@ class ProtonAnimator:
         self._primal_axes = [axes[i][1] for i in range(n_nodes)]
         self._re_axes = [axes[i][2] for i in range(n_nodes)]
         self._im_axes = [axes[i][3] for i in range(n_nodes)]
-        # A single-node run leaves row 1's panels free: claim the first for the
-        # null-face proximity trace, the second for the rolling singular-value
-        # spectrum, and the third for the near-kernel mode localization, blank
-        # the rest. (Multi-node grids keep every panel for complexes, so the
+        # A single-node run leaves rows 1-2's panels free: claim row 1 for the
+        # null-face proximity trace, the rolling singular-value spectrum, and
+        # the near-kernel mode localization; row 2 for the broken-pair count
+        # trace, the annihilation heat, and — directly below the near-kernel
+        # one — the near-null (head-of-spectrum) mode localization; blank the
+        # rest. (Multi-node grids keep every panel for complexes, so the
         # extras are skipped there.)
         self.ax_null = axes[n_nodes][1] if n_nodes < n_rows else None
         self.ax_spec = axes[n_nodes][2] if n_nodes < n_rows else None
         self.ax_mode = axes[n_nodes][3] if n_nodes < n_rows else None
+        self.ax_pair_trace = axes[2][1] if n_nodes == 1 else None
+        self.ax_pair = axes[2][2] if n_nodes == 1 else None
+        self.ax_mode_head = axes[2][3] if n_nodes == 1 else None
+        # The leak shares the pair-count trace panel on a twin y-axis, created
+        # ONCE (a per-frame twinx would pile up axes like per-frame colorbars).
+        self.ax_pair_leak = (self.ax_pair_trace.twinx()
+                             if self.ax_pair_trace is not None else None)
+        extras = (self.ax_null, self.ax_spec, self.ax_mode,
+                  self.ax_pair_trace, self.ax_pair, self.ax_mode_head)
         for row in range(n_nodes, n_rows):
             for column in (1, 2, 3):
-                if self.ax_null is not None and axes[row][column] is self.ax_null:
-                    continue
-                if self.ax_spec is not None and axes[row][column] is self.ax_spec:
-                    continue
-                if self.ax_mode is not None and axes[row][column] is self.ax_mode:
+                if any(ax is not None and axes[row][column] is ax
+                       for ax in extras):
                     continue
                 axes[row][column].axis("off")
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
@@ -510,16 +567,23 @@ class ProtonAnimator:
                 cbar.set_label(label, fontsize=7)
                 cbar.ax.tick_params(labelsize=6)
                 sms.append(sm)
-        # The mode-localization panel's colorbar (also persistent). Sequential,
+        # The mode-localization panels' colorbars (also persistent). Sequential,
         # floor pinned at 0: the weights are non-negative shares, so only the
         # top of the range renormalizes per frame.
-        self._mode_sm = None
-        if self.ax_mode is not None:
-            self._mode_sm = ScalarMappable(cmap=_MODE_CMAP, norm=Normalize(0.0, 1.0))
-            cbar = self.fig.colorbar(self._mode_sm, ax=self.ax_mode,
-                                     fraction=0.046, pad=0.04)
-            cbar.set_label("near-kernel mode weight  Σₘ|ψ|² per edge", fontsize=7)
-            cbar.ax.tick_params(labelsize=6)
+        self._mode_sm = self._mode_head_sm = self._pair_sm = None
+        for ax, attr, cmap, label in (
+                (self.ax_mode, "_mode_sm", _MODE_CMAP,
+                 "near-kernel mode weight  Σₘ|ψ|² per edge"),
+                (self.ax_mode_head, "_mode_head_sm", _MODE_CMAP_HEAD,
+                 "near-null mode weight  Σₘ|ψ|² per edge"),
+                (self.ax_pair, "_pair_sm", _MODE_CMAP_PAIR,
+                 "annihilation heat  Σ_pairs|ψ|² per edge")):
+            if ax is not None:
+                sm = ScalarMappable(cmap=cmap, norm=Normalize(0.0, 1.0))
+                setattr(self, attr, sm)
+                cbar = self.fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+                cbar.set_label(label, fontsize=7)
+                cbar.ax.tick_params(labelsize=6)
         return self.fig
 
     def _draw_complex(self, ax, node_index, coords, title):
@@ -736,32 +800,41 @@ class ProtonAnimator:
         ax.set_title(f"{title}  ({n} cells)", fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
-    def _draw_mode_heat(self, ax, node_index, coords):
-        """The mode-localization panel: WHICH portion of the complex carries the
-        near-kernel tail. The m smallest-σ right singular vectors of the metric
-        `L_k` (the red tail in the spectrum panel) are k-cochains — one weight
-        `|ψᵢ|²` per k-cell (recorded by `_record` as `mode_w`/`mode_cells`) —
-        summed over the modes and spread from each k-cell onto its vertex-pair
-        edges, then painted on the SAME stable layout as the primal panel. For a
-        genuine (open) register the weight sits exactly on the hole-boundary
-        cells; for a causally-tuned near-kernel (no hole) it shows where the
-        almost-register is forming. The register hole outlines are overlaid
-        (dashed) so on-hole vs off-hole localization reads directly. The title's
-        PR is the participation ratio `1/Σᵢwᵢ²` of the normalized per-cell
-        weights — the effective number of k-cells the tail lives on."""
+    def _draw_mode_heat(self, ax, node_index, coords, weights, sm, cmap,
+                        which=None, title=None, empty_note="no k-cells yet"):
+        """One mode-localization panel: WHICH portion of the complex carries the
+        given end of the spectrum. `weights` is the per-k-cell share `Σₘ|ψᵢ|²`
+        recorded by `_record` (right singular vectors of the metric `L_k` are
+        k-cochains, in `mode_cells` order); it is spread from each k-cell onto
+        its vertex-pair edges and painted on the SAME stable layout as the
+        primal panel. `which` = (name, end) picks the wording: ("near-kernel",
+        "smallest") paints the tail — for a genuine (open) register the weight
+        sits exactly on the hole-boundary cells, for a causally-tuned
+        near-kernel (no hole) it shows where the almost-register is forming —
+        and ("near-null", "largest") paints the head, which localizes on cells
+        whose content is collapsing (σ_max ∝ 1/det G), i.e. material
+        approaching tangency with the light cone. The register hole outlines
+        are overlaid (dashed) so on-hole vs off-hole localization reads
+        directly. The title's PR is the participation ratio `1/Σᵢwᵢ²` of the
+        normalized per-cell weights — the effective number of k-cells the
+        modes live on. A caller whose weights are not a σ-end selection (the
+        annihilation heat) passes a free-form `title` instead of `which`, and
+        `empty_note` says why an empty panel is empty."""
         from matplotlib.collections import LineCollection
         node, _label = self.nodes[node_index]
         st = node.st
         ax.clear()
-        weights = self.hist["mode_w"][-1]
         cells = self.hist["mode_cells"][-1]
-        m = 3
-        if hasattr(node, "expectedRegisterCount"):
-            m = int(node.expectedRegisterCount())
+        if title is None:
+            name, end = which
+            m = 3
+            if hasattr(node, "expectedRegisterCount"):
+                m = int(node.expectedRegisterCount())
+            title = f"{name} |ψ|² — {m} {end}-σ modes"
         if len(weights) == 0 or not coords:
-            ax.text(0.5, 0.5, "no k-cells yet", transform=ax.transAxes,
+            ax.text(0.5, 0.5, empty_note, transform=ax.transAxes,
                     ha="center", va="center", fontsize=9, color="0.45")
-            ax.set_title(f"near-kernel |ψ|² — {m} smallest-σ modes", fontsize=9)
+            ax.set_title(title, fontsize=9)
             ax.set_xticks([]); ax.set_yticks([])
             return
         edge_w = {}
@@ -781,9 +854,9 @@ class ProtonAnimator:
                 hole_segments.append([coords[a], coords[b]])
         values = np.array(values)
         vmax = float(values.max()) if values.size and values.max() > 0 else 1.0
-        if self._mode_sm is not None:
-            self._mode_sm.set_clim(0.0, vmax)
-        lines = LineCollection(segments, cmap=_MODE_CMAP, linewidths=1.6, zorder=2)
+        if sm is not None:
+            sm.set_clim(0.0, vmax)
+        lines = LineCollection(segments, cmap=cmap, linewidths=1.6, zorder=2)
         lines.set_array(values)
         lines.set_clim(0.0, vmax)
         ax.add_collection(lines)
@@ -799,8 +872,8 @@ class ProtonAnimator:
             ax.set_ylim(view[2], view[3])
         participation = 1.0 / float((weights ** 2).sum())   # weights sum to 1
         ax.set_aspect("equal")
-        ax.set_title(f"near-kernel |ψ|² — {m} smallest-σ modes, "
-                     f"PR {participation:.1f}/{len(weights)} cells", fontsize=9)
+        ax.set_title(f"{title}, PR {participation:.1f}/{len(weights)} cells",
+                     fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
 
     def _redraw(self):
@@ -925,7 +998,47 @@ class ProtonAnimator:
         if getattr(self, "ax_mode", None) is not None and self.hist["mode_w"]:
             active = self.hist["node"][-1]
             self._draw_mode_heat(self.ax_mode, active,
-                                 coords_by_node.get(active, {}))
+                                 coords_by_node.get(active, {}),
+                                 self.hist["mode_w"][-1], self._mode_sm,
+                                 _MODE_CMAP, ("near-kernel", "smallest"))
+        if (getattr(self, "ax_mode_head", None) is not None
+                and self.hist["mode_w_head"]):
+            active = self.hist["node"][-1]
+            self._draw_mode_heat(self.ax_mode_head, active,
+                                 coords_by_node.get(active, {}),
+                                 self.hist["mode_w_head"][-1], self._mode_head_sm,
+                                 _MODE_CMAP_HEAD, ("near-null", "largest"))
+        if getattr(self, "ax_pair", None) is not None and self.hist["pair_w"]:
+            active = self.hist["node"][-1]
+            n_pairs = self.hist["pair_count"][-1]
+            self._draw_mode_heat(
+                self.ax_pair, active, coords_by_node.get(active, {}),
+                self.hist["pair_w"][-1], self._pair_sm, _MODE_CMAP_PAIR,
+                title=("annihilation heat — off the real-ℓ² locus"
+                       if math.isnan(n_pairs) else
+                       f"annihilation heat — {int(n_pairs)} broken pairs (W-null)"),
+                empty_note=getattr(self, "_pair_note",
+                                   "no Krein classification yet"))
+        if (getattr(self, "ax_pair_trace", None) is not None
+                and self.hist["pair_count"]):
+            ax = self.ax_pair_trace
+            ax.clear()
+            xs = range(len(self.hist["pair_count"]))
+            ax.plot(xs, self.hist["pair_count"], color="C4", marker=".")
+            for b in self._boundaries:
+                ax.axvline(b - 0.5, color="0.6", ls="--", lw=0.8)
+            ax.set_title("broken pairs (gaps = off-locus) + real-ℓ² locus "
+                         "distance", fontsize=9)
+            ax.set_xlabel("frame")
+            ax.set_ylabel("pairs", color="C4")
+            if getattr(self, "ax_pair_leak", None) is not None:
+                axl = self.ax_pair_leak
+                axl.clear()
+                axl.plot(xs, self.hist["im_leak"], color="C2", alpha=0.7,
+                         lw=1.0)
+                axl.set_ylabel("max|Im ℓ²| (locus distance)", color="C2",
+                               fontsize=8)
+                axl.tick_params(labelsize=6)
 
     # ---- per-frame text hooks ----
     def _frame_label(self, frame):
