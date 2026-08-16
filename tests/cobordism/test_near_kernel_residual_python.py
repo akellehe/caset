@@ -10,8 +10,11 @@ single-pentatope seed and for every candidate cone-in). The near-kernel
 residual is the same functional continued below the topological threshold —
 on the near-kernel the period residual is a target-weighted sum of the
 smallest |lambda|^2 — evaluated as the normalized sum of the m smallest
-squared SINGULAR values of the signed L_k (singular values because the
-operator is non-normal, and they share its kernel exactly):
+squared SINGULAR values of the METRIC L_k. Metric by design: the term feels
+the continuously-valued edge lengths, so it descends both by stage-1 surgery
+(a genuine hole zeroes the sigma exactly) and by stage-2 tuning the causal
+structure toward null directions — near-kernels with NO holes are the intended
+exploration (whether they can carry a register is the next level):
 
     n * (sum of the m smallest sigma^2) / (sum of all sigma^2)  in [0, m],
 
@@ -61,7 +64,8 @@ class NearKernelResidualTest(unittest.TestCase):
     def test_scale_invariant(self):
         # L_k is homogeneous of degree -1 in l^2, so a RAW spectral sum would
         # hand stage 2 a pure conformal-inflation descent channel. The
-        # normalized ratio is degree 0: scaling every l^2 changes nothing.
+        # normalized ratio is degree 0: a UNIFORM rescale changes nothing,
+        # while genuine shape/causal changes still move the term (by design).
         st, _es, _holes, _periods = _hs.holed_surface(degree=1)
         r0 = cob.MultiCobordism.nearKernelResidual(st, 1, 3)
         edges = st.getEdgeList().toVector()

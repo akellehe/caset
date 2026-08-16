@@ -236,18 +236,30 @@ class MultiCobordism {
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
 
   /// The pre-topological register signal at one degree: the sum of the
-  /// `expectedRegisterCount` smallest squared SINGULAR values of the signed
-  /// `L_k`, normalized scale-free.
+  /// `expectedRegisterCount` smallest squared SINGULAR values of the METRIC
+  /// `L_k` (the signed operator under the process weight convention),
+  /// normalized scale-free.
   ///
-  /// * **Singular values, not eigenvalues**: the signed operator is non-normal,
-  ///   and `|lambda|` of a non-normal matrix is non-smooth at crossings; the
-  ///   singular values of `L` are the eigenvalue magnitudes of the Hermitian
-  ///   `L^dagger L`, share the kernel exactly, and are the smooth surrogate.
+  /// * **Metric, deliberately**: the term feels the continuously-valued edge
+  ///   lengths, so it descends along TWO channels — stage-1 surgery (a genuine
+  ///   hole zeroes the corresponding singular values exactly), and stage-2
+  ///   tuning of the CAUSAL STRUCTURE toward null directions, which opens
+  ///   near-kernels with no holes at all. The second channel is the point,
+  ///   not a loophole: whether such causal near-kernels can carry a register
+  ///   is the next level of exploration (readout semantics not implemented
+  ///   here).
+  /// * **Singular values, not eigenvalues**: the signed operator is
+  ///   non-normal; singular values are the eigenvalue magnitudes of the
+  ///   Hermitian `L^dagger L`, share the kernel exactly, and are smooth where
+  ///   `|lambda|` is not — at a defective point the m smallest `|lambda|`
+  ///   double-count a one-dimensional kernel, where the sigma count dimensions
+  ///   honestly.
   /// * **Normalization**: `n * (sum of the m smallest sigma^2) / (sum of all
-  ///   sigma^2)` — a generic mode contributes ~1, the range is [0, m]. `L_k` is
-  ///   homogeneous of degree −1 in `l^2`, so a RAW spectral term hands stage 2 a
-  ///   descent channel that is pure conformal inflation (scale the geometry up,
-  ///   every `sigma` shrinks); the ratio is degree 0 and closes that channel.
+  ///   sigma^2)` — a generic mode contributes ~1, the range is [0, m]. `L_k`
+  ///   is homogeneous of degree −1 in `l^2`, so a RAW spectral sum would hand
+  ///   stage 2 a pure conformal-inflation descent channel (scale the geometry
+  ///   up, every sigma shrinks); the ratio is degree 0 and closes exactly that
+  ///   channel while leaving the causal-tuning channel open.
   /// * **Count**: `m` = the expected register count, read off the TARGETS
   ///   (`expectedRegisterCount`), never a constant — the term is the soft
   ///   relaxation of `b_k >= m`. Missing dimensions (`n < m`) count 1 each,

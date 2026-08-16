@@ -365,6 +365,15 @@ double MultiCobordism::nearKernelResidual(
     std::size_t expectedRegisterCount) {
   if (expectedRegisterCount == 0) return 0.0;
   cobordism::HodgeLaplacian laplacian(spacetime);
+  // METRIC operator, deliberately: the term must feel the continuously-valued
+  // edge lengths, so stage 2 can tune the CAUSAL STRUCTURE toward null
+  // directions and open near-kernels with no holes at all — that channel is
+  // the point, not a loophole (measured: a build driven this way ends with
+  // most edges timelike and spectral near-kernels but zero topological holes).
+  // Whether such causal near-kernels can CARRY a register is the next level of
+  // exploration; the semantics for reading them out are not implemented here.
+  // Stage-1 surgery remains the other route to the same descent: a genuine
+  // hole zeroes the same singular values exactly.
   const std::vector<std::complex<double>> flat =
       laplacian.laplacian(registerDegree, /*metric=*/true);
   const std::size_t n = static_cast<std::size_t>(
