@@ -1229,7 +1229,27 @@ def main():
                          "dual node, their positions, the dual adjacency, and the "
                          "rehydratable complex) as JSON here — so a claim about a "
                          "late frame can be checked without re-running to it")
+    ap.add_argument("--hodge-weights", choices=("content", "squared"),
+                    default="squared", dest="hodge_weights",
+                    help="which quantity the Hodge inner-product weight W_k is "
+                         "built from, for EVERY operator in the run (r_U, the "
+                         "near-kernel residual, the register readout, the "
+                         "spectrum/mode panels): "
+                         "'content' = V, the k-content — an edge weighs its "
+                         "length, so a timelike cell's weight is IMAGINARY; "
+                         "'squared' = V², the engine default — an edge weighs "
+                         "exactly its ℓ², real and signed. Both are fully "
+                         "Lorentzian; this example defaults to 'squared' (the "
+                         "engine default; multicobordism_animation.py defaults "
+                         "to 'content')")
     args = ap.parse_args()
+    # One flip, process-wide, BEFORE any node is built (flipping mid-run would
+    # mix conventions across cached spectra).
+    convention = {"content": cob.HodgeWeightConvention.Content,
+                  "squared": cob.HodgeWeightConvention.SquaredContent}[args.hodge_weights]
+    cob.HodgeLaplacian.setDefaultWeightConvention(convention)
+    ProtonAnimator._TITLE_PREFIX += (
+        f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
                                precone_timelike=args.precone_timelike)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
