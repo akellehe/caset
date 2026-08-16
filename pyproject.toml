@@ -62,8 +62,20 @@ build-dir = "cmake-build-debug/{wheel_tag}"
 #   pip install -e ".[dev]" -C cmake.build-type=Debug
 # but the Debug build currently aborts at `import tessera` (free(): invalid pointer) — a
 # latent invalid-free that -O3 masks. Fix that before relying on the Debug dev build.
-cmake.build-type = "Release"
+# RelWithDebInfo = the Release build plus DWARF (#682): pybind11_add_module
+# post-build STRIPS Release modules (that is where the empty symbol table came
+# from — perf/addr2line were snapping hot static functions to the nearest
+# exported symbol, 81 KB off), but exempts RelWithDebInfo while keeping its
+# LTO extras. The flag pins below replace CMake's default RelWithDebInfo
+# "-O2 -g" with exactly the Release codegen plus DWARF, so runtime behavior
+# and performance are identical to the old Release build; only the .so grows.
+cmake.build-type = "RelWithDebInfo"
+install.strip = false
 wheel.packages = ["tessera"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_CXX_FLAGS_RELWITHDEBINFO = "-O3 -g -gz -DNDEBUG"
+CMAKE_CUDA_FLAGS_RELWITHDEBINFO = "-O3 -g -DNDEBUG"
 # Do NOT add a [tool.scikit-build.cmake.define] override for Python_EXECUTABLE.
 # scikit-build-core already sets it (and CMAKE_PREFIX_PATH) to the build
 # interpreter; cmake.define values are passed verbatim, so a "${...}" token
