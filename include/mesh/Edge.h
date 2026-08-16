@@ -179,6 +179,17 @@ class Edge {
     /// ill-conditioned regime where the Cayley-Menger determinant approaches zero.
     void setLength(std::complex<double> l) noexcept {
       length_ = l;
+      ++lengthRevision_;
+    }
+
+    /// Monotone per-edge write counter, bumped by every ``setLength``.
+    /// ``Simplex``'s length-derived geometry cache keys on the sum of its
+    /// edges' revisions, so an unchanged key proves no incident length changed
+    /// since the cache was filled. ``setPhase`` deliberately does NOT bump it:
+    /// the cache holds only length-derived data (Gram / Cayley-Menger), and
+    /// the U(1) phase never enters those.
+    [[nodiscard]] std::uint64_t lengthRevision() const noexcept {
+      return lengthRevision_;
     }
 
     /// Set the U(1) connection phase (radians).  Used by the Hermitian-weighted
@@ -251,6 +262,8 @@ class Edge {
     /// (distinct from the U(1) `phase`). Causal character is `Im(length_)`.
     /// \f$l^2\f$ is derived by squaring at the point of use, never stored (#639).
     std::complex<double> length_{};
+    /// Monotone ``setLength`` counter read by ``lengthRevision()``; see there.
+    std::uint64_t lengthRevision_{0};
     double phase = 0.0;
 
     Simplices simplices_{};
