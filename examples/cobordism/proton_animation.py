@@ -171,6 +171,10 @@ _MIN_QUARK_HOLES = 3       # a proton is three quarks ⇒ three color registers
 _HEAT_CMAP = "coolwarm"    # spatial (Re): diverging, blue = negative, white ≈ 0, red = positive
 _HEAT_CMAP_IM = "PuOr"     # temporal (Im): distinct diverging map for the boost/rapidity part
 _HEAT_REFRESH_EVERY = 4
+# The O(n³) spectrum/mode/Krein recording refreshes at least this often (in
+# frames); commits and node switches always refresh, so only pure-relaxation
+# frames ever reuse — bounded metric staleness, exact combinatorics (#671).
+_SPECTRA_REFRESH_EVERY = 4
 # Mode weight is a non-negative share (the |ψ|² sum to 1 over the k-cells), so
 # both mode maps are SEQUENTIAL, unlike the signed curvature maps: low = the
 # modes don't live here, high = they do. The two panels use visually disjoint
@@ -196,23 +200,34 @@ def face_gram_determinants(cells, squared_length):
 
     `squared_length(u, v)` returns the edge's Re ℓ²; every vertex pair inside a
     top cell is an edge of the complex, so lookups never miss (the Gram
-    diagonal's ℓ²(v,v) = 0 is supplied here, not looked up)."""
+    diagonal's ℓ²(v,v) = 0 is supplied here, not looked up).
+
+    Vectorized: faces are deduplicated once, their Gram matrices stacked, and
+    one batched ``np.linalg.det`` call factorizes them all — the same LAPACK
+    routine the old per-face calls ran, so the values are unchanged; only the
+    per-face Python/numpy call overhead is gone (#671)."""
     def interval(u, v):
         return 0.0 if u == v else squared_length(u, v)
-    dets = {2: {}, 3: {}}
+    faces = {2: set(), 3: set()}
     for cell in cells:
         ordered = sorted(cell)
         for k in (2, 3):
-            for face in itertools.combinations(ordered, k + 1):
-                if face in dets[k]:
-                    continue
-                v0, rest = face[0], face[1:]
-                gram = np.array(
-                    [[0.5 * (interval(v0, a) + interval(v0, b)
-                             - interval(a, b))
-                      for b in rest] for a in rest])
-                dets[k][face] = float(np.linalg.det(gram))
-    return {k: np.array(list(v.values())) for k, v in dets.items()}
+            faces[k].update(itertools.combinations(ordered, k + 1))
+    out = {}
+    for k in (2, 3):
+        ordered_faces = sorted(faces[k])
+        if not ordered_faces:
+            out[k] = np.array([])
+            continue
+        grams = np.empty((len(ordered_faces), k, k))
+        for f, face in enumerate(ordered_faces):
+            v0, rest = face[0], face[1:]
+            for i, a in enumerate(rest):
+                for j, b in enumerate(rest):
+                    grams[f, i, j] = 0.5 * (interval(v0, a) + interval(v0, b)
+                                            - interval(a, b))
+        out[k] = np.linalg.det(grams)
+    return out
 
 
 def _min_abs_gram_dets(st):
@@ -353,13 +368,15 @@ class ProtonAnimator:
                  stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0,
                  max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
                  max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
-                 stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10):
+                 stage2_alpha0=0.05, stage2_rel_tol=10e-9, relax_budget=10,
+                 spectra_every=_SPECTRA_REFRESH_EVERY):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
         self.lookahead_tries = max_lookahead_tries
         self.s2_alpha0, self.s2_rel_tol = stage2_alpha0, stage2_rel_tol
         self.relax_budget = relax_budget
+        self.spectra_every = max(1, int(spectra_every))
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
@@ -374,7 +391,7 @@ class ProtonAnimator:
                      "min_det2": [], "min_det3": [], "sigma": [],
                      "mode_w": [], "mode_w_head": [], "mode_cells": [],
                      "pair_count": [], "pair_w": [], "im_leak": [],
-                     "sigma_cancel": [], "pair_src": []}
+                     "sigma_cancel": [], "pair_src": [], "spec_frame": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -429,7 +446,16 @@ class ProtonAnimator:
         self.hist["F"].append(float(node.objective()))
         self.hist["gradN2"].append(float(cob.MultiCobordism.regge_action_gradient(st)))
         self.hist["rU"].append(float(node.r_u(st)))
-        self.hist["b3"].append(int(cob.MultiCobordism.betti(st)[self.k]))
+        # Betti is TOPOLOGY: it can only change when stage 1 commits a move, so
+        # relaxation-only frames reuse the last value exactly (#671). A commit,
+        # a node switch, or the first frame always recomputes.
+        committed = int(node.last_stage1_lookahead) > 0
+        same_node = bool(self.hist["node"]) and self.hist["node"][-1] == node_index
+        if committed or not same_node or not self.hist["b3"]:
+            b3_now = int(cob.MultiCobordism.betti(st)[self.k])
+        else:
+            b3_now = self.hist["b3"][-1]
+        self.hist["b3"].append(b3_now)
         self.hist["holes"].append(len(cob.MultiCobordism.emergent_holes(st, self.k)))
         self.hist["phase"].append(phase)
         self.hist["node"].append(node_index)
@@ -440,6 +466,34 @@ class ProtonAnimator:
         # How many candidate draws this frame needed; > 1 means earlier draws
         # stalled and were retried (see `_advance`).
         self.hist["tries"].append(int(tries))
+        # The spectrum/mode/Krein block is O(n^3) DISPLAY work. Combinatorial
+        # consistency is exact — a committed move always refreshes, so the
+        # recorded mode_cells can never be stale against the live complex —
+        # and pure-relaxation frames reuse the last spectra for at most
+        # ``spectra_every - 1`` frames (metric staleness only), like the
+        # curvature heat's ``_HEAT_REFRESH_EVERY``. ``spec_frame`` records the
+        # frame each row was actually computed on (#671). Verdict quantities
+        # (r_state, holes, F, r_U) are untouched and stay per-frame exact.
+        prior = len(self.hist["sigma"])
+        refresh = (committed or not same_node or prior == 0
+                   or prior - self.hist["spec_frame"][-1] >= self.spectra_every)
+        if refresh:
+            self._record_spectra(st, node)
+            self.hist["spec_frame"].append(prior)
+        else:
+            for key in ("sigma", "mode_w", "mode_w_head", "mode_cells",
+                        "im_leak", "pair_src", "pair_count", "pair_w",
+                        "sigma_cancel", "spec_frame"):
+                self.hist[key].append(self.hist[key][-1])
+        # Null-face proximity: the smallest |det G| over the complex's triangles
+        # and tets — 0 = a face exactly tangent to the light cone (degenerate).
+        min_det2, min_det3 = _min_abs_gram_dets(st)
+        self.hist["min_det2"].append(min_det2)
+        self.hist["min_det3"].append(min_det3)
+
+    def _record_spectra(self, st, node):
+        """The O(n^3) spectrum/mode-localization/Krein recording block,
+        verbatim from _record; gated there by ``spectra_every`` (#671)."""
         # The register operator's full singular spectrum, sorted DESCENDING —
         # the same metric L_k the near-kernel residual reads. Singular values
         # rather than eigenvalues: the signed operator is non-normal, and the
@@ -554,11 +608,6 @@ class ProtonAnimator:
             self.hist["sigma_cancel"].append(np.array([]))
             self.hist["pair_src"].append("none")
             self.hist["mode_cells"].append([])
-        # Null-face proximity: the smallest |det G| over the complex's triangles
-        # and tets — 0 = a face exactly tangent to the light cone (degenerate).
-        min_det2, min_det3 = _min_abs_gram_dets(st)
-        self.hist["min_det2"].append(min_det2)
-        self.hist["min_det3"].append(min_det3)
 
     # ---- convergence ----
     def verdict(self):
@@ -768,7 +817,7 @@ class ProtonAnimator:
         """
         payload = {"frame": frame, "dimensions": 4, "nodes": []}
         for key in ("F", "gradN2", "rU", "b3", "holes", "phase", "node",
-                    "lookahead", "tries", "min_det2", "min_det3"):
+                    "lookahead", "tries", "min_det2", "min_det3", "spec_frame"):
             series = self.hist.get(key) or []
             payload[key] = series[-1] if series else None
         for ni, (cobordism, label) in enumerate(self.nodes):
@@ -1431,6 +1480,12 @@ def main():
                          "threshold-sized line-search micro-steps")
     ap.add_argument("--init-chunk", type=int, default=_INIT_CHUNK, dest="init_chunk",
                     help="init-pass run iterations per animation frame")
+    ap.add_argument("--spectra-every", type=int, default=_SPECTRA_REFRESH_EVERY,
+                    dest="spectra_every",
+                    help="recompute the O(n^3) spectrum/mode/Krein panels at "
+                         "least every N frames (commits and node switches "
+                         "always refresh; 1 = the historical every-frame "
+                         "behaviour)")
     ap.add_argument("--evolve-chunk", type=int, default=_EVOLVE_CHUNK,
                     dest="evolve_chunk",
                     help="evolution-pass run iterations per animation frame")
@@ -1474,6 +1529,7 @@ def main():
                        relax_budget=args.relax_budget,
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,
+                       spectra_every=args.spectra_every,
                        dump_dir=args.dump_dir)
     if not args.live and not args.save:
         print("one-step proton build finished (visualization off by default — pass --live "
