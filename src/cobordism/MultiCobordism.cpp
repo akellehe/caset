@@ -703,11 +703,60 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
   double bestObjectiveDelta = -convergenceTolerance_;
   bool foundImprovingMove = false;
   Snapshot bestSnapshot;
+  if (!scoreRelaxed) {
+    // Depth 1: every candidate starts from the SAME base complex, so the specs
+    // can be pre-drawn serially (identical RNG order to the serial loop — the
+    // per-seed draw sequence is unchanged) and the batch scored in parallel:
+    // applyMoveSpecification is deterministic given its spec (it seeds a local
+    // engine from the payload), build() constructs an independent complex, and
+    // deltaF is const over it. The inner OpenMP region of the action gradient
+    // serializes inside each worker (nesting off), so the batch parallelism is
+    // the outer level. The reduction is the lexicographic (delta, index) min,
+    // which reproduces the serial rule exactly: the EARLIEST candidate among
+    // equals wins.
+    std::vector<MoveSpec> specifications;
+    specifications.reserve(static_cast<std::size_t>(nCandidateMoves));
+    for (int candidateIndex = 0; candidateIndex < nCandidateMoves;
+         ++candidateIndex)
+      specifications.push_back(drawRandomMoveSpecification(*spacetime_));
+    std::vector<double> deltas(static_cast<std::size_t>(nCandidateMoves),
+                               std::numeric_limits<double>::infinity());
+    std::vector<Snapshot> snapshots(static_cast<std::size_t>(nCandidateMoves));
+#pragma omp parallel for schedule(dynamic)
+    for (int candidateIndex = 0; candidateIndex < nCandidateMoves;
+         ++candidateIndex) {
+      auto candidateSpacetime = build(currentSnapshot);
+      if (!applyMoveSpecification(
+              candidateSpacetime,
+              specifications[static_cast<std::size_t>(candidateIndex)]))
+        continue;  // failed the gate: stays at +inf
+      const double objectiveDelta =
+          deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+      deltas[static_cast<std::size_t>(candidateIndex)] = objectiveDelta;
+      if (objectiveDelta < -convergenceTolerance_)
+        snapshots[static_cast<std::size_t>(candidateIndex)] =
+            snapshotOf(*candidateSpacetime);
+    }
+    for (int candidateIndex = 0; candidateIndex < nCandidateMoves;
+         ++candidateIndex) {
+      const double objectiveDelta =
+          deltas[static_cast<std::size_t>(candidateIndex)];
+      if (objectiveDelta < bestObjectiveDelta) {
+        bestObjectiveDelta = objectiveDelta;
+        bestSnapshot =
+            std::move(snapshots[static_cast<std::size_t>(candidateIndex)]);
+        foundImprovingMove = true;
+      }
+    }
+  } else
   for (int candidateIndex = 0; candidateIndex < nCandidateMoves; ++candidateIndex) {
     // One candidate = `lookaheadDepth` gated random moves applied in sequence,
     // each drawn against the evolving candidate complex. The sequence is scored
     // — and, if best, committed — as a WHOLE, so an F-lowering pair whose first
-    // move alone raises F is still an honest descent step.
+    // move alone raises F is still an honest descent step. This deepened path
+    // stays SERIAL: the draws interleave with the evolving candidates through
+    // the shared engine, and relaxedObjectiveOf swaps the candidate into
+    // `spacetime_` to ride stage2Update — neither is thread-safe by design.
     auto candidateSpacetime = build(currentSnapshot);
     bool wholeSequenceApplied = true;
     for (int moveIndex = 0; moveIndex < lookaheadDepth; ++moveIndex) {
@@ -720,9 +769,7 @@ double MultiCobordism::step(int nCandidateMoves, int lookaheadDepth) {
     }
     if (!wholeSequenceApplied) continue;
     const double objectiveDelta =
-        scoreRelaxed
-            ? relaxedObjectiveOf(candidateSpacetime) - baseObjective
-            : deltaF(candidateSpacetime, baseResidualU, baseCellSet);
+        relaxedObjectiveOf(candidateSpacetime) - baseObjective;
     if (objectiveDelta < bestObjectiveDelta) {
       bestObjectiveDelta = objectiveDelta;
       // For a relaxed-scored candidate this snapshot CARRIES the relaxed edge

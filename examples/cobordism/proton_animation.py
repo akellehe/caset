@@ -88,6 +88,21 @@ import itertools
 import json
 import math
 import os
+import sys
+
+# --threads must take effect BEFORE tessera loads: OpenMP reads OMP_NUM_THREADS
+# at library initialization, so a post-import setting is silently ignored. The
+# standing compute authorization for this box is 16 of its 32 cores; pass
+# --threads 32 to use all of them for a run.
+if "OMP_NUM_THREADS" not in os.environ or "--threads" in sys.argv:
+    _n = "16"
+    if "--threads" in sys.argv:
+        try:
+            _n = sys.argv[sys.argv.index("--threads") + 1]
+        except IndexError:
+            pass
+    for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        os.environ[_var] = _n
 
 import numpy as np
 from scipy.sparse.csgraph import shortest_path
@@ -295,11 +310,13 @@ class ProtonAnimator:
                  evolve_steps=_EVOLVE_STEPS, evolve_chunk=_EVOLVE_CHUNK,
                  stage1_candidates=_STAGE1_CANDIDATES, stage2_beta=1.0,
                  max_lookahead_depth=_MAX_LOOKAHEAD_DEPTH,
-                 max_lookahead_tries=_MAX_LOOKAHEAD_TRIES):
+                 max_lookahead_tries=_MAX_LOOKAHEAD_TRIES,
+                 stage2_alpha0=0.05, stage2_rel_tol=10e-9):
         self._common_init(nodes, degree)
         self.s1c, self.s2_beta = stage1_candidates, stage2_beta
         self.lookahead_depth = max_lookahead_depth
         self.lookahead_tries = max_lookahead_tries
+        self.s2_alpha0, self.s2_rel_tol = stage2_alpha0, stage2_rel_tol
         self._schedule = self._make_schedule(len(nodes), init_steps, init_chunk,
                                              evolve_steps, evolve_chunk)
         self._frames = len(self._schedule)
@@ -354,6 +371,7 @@ class ProtonAnimator:
         for tries in range(1, max(self.lookahead_tries, 1) + 1):
             node.run(max_iters=count, n_candidate_moves=self.s1c,
                      grow_boundaries=(phase == "init"), beta=self.s2_beta,
+                     alpha0=self.s2_alpha0, rel_tol=self.s2_rel_tol,
                      max_lookahead=self.lookahead_depth)
             if int(node.last_stage1_lookahead) > 0:
                 break
@@ -1025,7 +1043,8 @@ def run_build(nodes, visualize=False, save=None, degree=3, init_steps=_INIT_STEP
                    stage1_candidates=stage1_candidates,
                    max_lookahead_depth=max_lookahead_depth,
                    max_lookahead_tries=max_lookahead_tries,
-                   stage2_beta=stage2_beta, interval=interval,
+                   stage2_beta=stage2_beta, stage2_alpha0=stage2_alpha0,
+                   stage2_rel_tol=stage2_rel_tol, interval=interval,
                    dump_dir=dump_dir, **anim_kw).hist
 
 
@@ -1059,6 +1078,30 @@ def main():
     ap.add_argument("--precone-timelike", action="store_true", dest="precone_timelike",
                     help="draw every precone cone-in as the TIMELIKE disposition, so "
                          "the pre-grown material carries causal content")
+    ap.add_argument("--candidates", type=int, default=_STAGE1_CANDIDATES,
+                    help="stage-1 candidate moves per batch (the search BREADTH; "
+                         "the depth-1 batch is scored in parallel across "
+                         "--threads workers, so breadth is nearly free up to "
+                         "the worker count)")
+    ap.add_argument("--beta", type=float, default=1.0,
+                    help="stage-2 weight on ||grad S||^2 (beta != 1 mixes the "
+                         "two halves' scales in the shared F trace)")
+    ap.add_argument("--alpha0", type=float, default=0.05,
+                    help="stage-2 initial line-search step scale")
+    ap.add_argument("--rel-tol", type=float, default=10e-9, dest="rel_tol",
+                    help="stage-2 in-loop diminishing-returns cut (the exit "
+                         "path re-checks at 1e-12 regardless): larger = less "
+                         "geometric work per committed move, more moves per "
+                         "second")
+    ap.add_argument("--init-chunk", type=int, default=_INIT_CHUNK, dest="init_chunk",
+                    help="init-pass run iterations per animation frame")
+    ap.add_argument("--evolve-chunk", type=int, default=_EVOLVE_CHUNK,
+                    dest="evolve_chunk",
+                    help="evolution-pass run iterations per animation frame")
+    ap.add_argument("--threads", type=int, default=16,
+                    help="OpenMP worker count for the engine (candidate batch, "
+                         "action gradient/Hessian). The box authorization is "
+                         "16 of 32 cores; pass 32 explicitly to use all")
     ap.add_argument("--dump-dir", dest="dump_dir",
                     help="write each frame's dual-curvature panels (Re ε / Im ε per "
                          "dual node, their positions, the dual adjacency, and the "
@@ -1069,6 +1112,9 @@ def main():
                                precone_timelike=args.precone_timelike)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
+                       init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
+                       stage1_candidates=args.candidates, stage2_beta=args.beta,
+                       stage2_alpha0=args.alpha0, stage2_rel_tol=args.rel_tol,
                        max_lookahead_depth=args.max_lookahead_depth,
                        max_lookahead_tries=args.max_lookahead_tries,
                        dump_dir=args.dump_dir)
