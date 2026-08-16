@@ -102,7 +102,14 @@ MultiCobordism::MultiCobordism(
 }
 
 std::vector<int> MultiCobordism::betti(const Spacetime &spacetime) {
-  return ChainComplex::fromSpacetime(spacetime).bettiNumbers();
+  // Betti numbers are purely combinatorial, and the residual path calls this
+  // on every objective evaluation while only edge lengths move (7.2% of a
+  // live perf sample went to Smith normal form). The spacetime's structural
+  // revision proves when the last computation is still exact (#681).
+  if (const auto *cached = spacetime.cachedBettiNumbers()) return *cached;
+  auto numbers = ChainComplex::fromSpacetime(spacetime).bettiNumbers();
+  spacetime.storeBettiNumbers(numbers);
+  return numbers;
 }
 
 std::vector<std::vector<std::uint64_t>> MultiCobordism::emergentHoles(

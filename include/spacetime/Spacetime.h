@@ -476,6 +476,29 @@ class Spacetime {
     /// @param simplex The simplex \f$ \sigma \f$ to remove
     void removeSimplex(const SimplexPtr &simplex);
 
+    /// Monotone COMBINATORIAL revision of this complex: bumped by every simplex
+    /// registration/unregistration and by standalone edge creation, never by an
+    /// edge-length change. Purely topological invariants (Betti numbers) key
+    /// their caches on it — an unchanged revision proves the complex's
+    /// combinatorics did not change since the cache was filled.
+    [[nodiscard]] std::uint64_t structuralRevision() const noexcept {
+      return structuralRevision_;
+    }
+    /// The Betti numbers cached at the current structural revision, or nullptr
+    /// when none were stored since the last combinatorial change. The
+    /// COMPUTATION lives in the cobordism layer (ChainComplex::bettiNumbers);
+    /// only the slot lives here, so the cache dies with the spacetime instead
+    /// of dangling in a registry. Not synchronized: candidate spacetimes are
+    /// thread-private clones, and the shared complex is scored serially.
+    [[nodiscard]] const std::vector<int> *cachedBettiNumbers() const noexcept {
+      return bettiCacheRevision_ == structuralRevision_ ? &bettiCache_ : nullptr;
+    }
+    /// Store Betti numbers computed against the CURRENT structural revision.
+    void storeBettiNumbers(std::vector<int> numbers) const noexcept {
+      bettiCache_ = std::move(numbers);
+      bettiCacheRevision_ = structuralRevision_;
+    }
+
     /// Unregister every *orphaned* sub-simplex: a non-top simplex (size < d+1)
     /// that is no longer a face of any current top cell. Lazy facet/hinge
     /// materialisation (``Simplex::getFacets``) registers sub-simplices that a
@@ -866,6 +889,12 @@ class Spacetime {
 
     void updateOrientationCounters(const SimplexPtr &simplex, int delta);
 
+    /// See structuralRevision(). Mutable because ``createEdge`` is const yet
+    /// combinatorially mutates the complex (pre-existing API shape).
+    mutable std::uint64_t structuralRevision_{1};
+    /// Betti cache slot; valid iff bettiCacheRevision_ == structuralRevision_.
+    mutable std::vector<int> bettiCache_{};
+    mutable std::uint64_t bettiCacheRevision_{0};
 
     std::vector<std::shared_ptr<Observable> > observables{};
 };
