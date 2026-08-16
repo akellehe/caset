@@ -273,6 +273,7 @@ EdgePtr Spacetime::createEdge(
   EdgePtr edge = edgeList->add(src, tgt);
   src->addOutEdge(edge);
   tgt->addInEdge(edge);
+  ++structuralRevision_;                 // a 1-cell appeared without a simplex
   return edge;
 }
 
@@ -292,6 +293,7 @@ EdgePtr Spacetime::createEdge(
   EdgePtr edge = edgeList->add(src, tgt, length);
   src->addOutEdge(edge);
   tgt->addInEdge(edge);
+  ++structuralRevision_;                 // a 1-cell appeared without a simplex
   return edge;
 }
 
@@ -988,6 +990,7 @@ SimplexPtr Spacetime::registerSimplex(const SimplexPtr &simplex, bool internal) 
   simplex->vecIdx_ = static_cast<std::uint32_t>(simplicesVec.size());
   simplicesVec.push_back(simplex);
   simplexIndex_.insert(fp, simplex);
+  ++structuralRevision_;                 // combinatorics changed (Betti cache keys on this)
 
   if (simplex->size() == getTopVertexCount()) {
     simplex->topVecIdx_ = static_cast<std::uint32_t>(topSimplicesVec.size());
@@ -1011,6 +1014,7 @@ void Spacetime::unregisterSimplex(const SimplexPtr &simplex) {
 #endif
     return;
   }
+  ++structuralRevision_;                 // combinatorics changed (Betti cache keys on this)
   auto vecIdx = simplex->vecIdx_;
 
   updateOrientationCounters(simplex, -1);
