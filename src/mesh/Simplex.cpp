@@ -685,6 +685,38 @@ std::vector<std::complex<double>> Simplex::cofactorMatrix(
     return C;
 }
 
+std::vector<std::complex<double>> Simplex::localSquaredLengths(
+    const VertexPtrs &ordering) const {
+    // Flat (n x n) table of signed squared lengths by LOCAL index in
+    // `ordering`: entry (i*n + j) is l^2 of the edge between ordering[i] and
+    // ordering[j], 0 when the pair carries no edge — the same convention the
+    // hashed per-entry lookups this replaces used (#672). One linear pass over
+    // the edge list with direct id matching: no mix64 hashing, no
+    // unordered_map, and immune to the (astronomically unlikely) XOR-pair
+    // aliasing the hashed form admitted. Duplicate pairs keep the old
+    // last-edge-wins order; a self-edge matches no (i, j) pair, exactly as a
+    // zero-fingerprint entry was never read.
+    const int n = static_cast<int>(ordering.size());
+    std::vector<std::complex<double>> sq(static_cast<std::size_t>(n) * n,
+                                         std::complex<double>{0.0, 0.0});
+    for (const auto &e : edges) {
+        const std::uint64_t sid = e->getSource()->getId();
+        const std::uint64_t tid = e->getTarget()->getId();
+        int si = -1, ti = -1;
+        for (int k = 0; k < n; ++k) {
+            const std::uint64_t vid = ordering[static_cast<std::size_t>(k)]->getId();
+            if (vid == sid) si = k;
+            else if (vid == tid) ti = k;
+        }
+        if (si >= 0 && ti >= 0) {
+            const std::complex<double> l2 = e->getLength() * e->getLength();
+            sq[static_cast<std::size_t>(si) * n + ti] = l2;
+            sq[static_cast<std::size_t>(ti) * n + si] = l2;
+        }
+    }
+    return sq;
+}
+
 std::vector<std::complex<double>> Simplex::gramMatrix() const {
     int dPlus1 = static_cast<int>(vertices.size());
     int d = dPlus1 - 1;
@@ -694,18 +726,9 @@ std::vector<std::complex<double>> Simplex::gramMatrix() const {
     // Lorentzian sign in G, so det(G) records the cell's metric signature. There is
     // no Wick-rotated (|l^2|) mode -- the Euclidean path is gone, not merely unused
     // (#641).
-    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
-    for (const auto &e : edges) {
-        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
-                  Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = (e->getLength() * e->getLength());
-    }
+    const auto sq = localSquaredLengths(vertices);
     auto getSq = [&](int i, int j) -> std::complex<double> {
-        if (i == j) return {0.0, 0.0};
-        auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
-                  Fingerprint::mix64(vertices[j]->getId());
-        auto it = sqMap.find(fp);
-        return it != sqMap.end() ? it->second : std::complex<double>{0.0, 0.0};
+        return sq[static_cast<std::size_t>(i) * dPlus1 + j];
     };
 
     std::vector<std::complex<double>> G(d * d, std::complex<double>{0.0, 0.0});
@@ -717,24 +740,10 @@ std::vector<std::complex<double>> Simplex::gramMatrix() const {
 }
 
 std::vector<std::complex<double>> Simplex::cayleyMengerMatrix() const {
-    {
-    }
     int dPlus1 = static_cast<int>(vertices.size());
     if (dPlus1 < 1) return {};
 
-    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
-    for (const auto &e : edges) {
-        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
-                  Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = (e->getLength() * e->getLength());
-    }
-    auto getSq = [&](int i, int j) -> std::complex<double> {
-        if (i == j) return std::complex<double>{0, 0};
-        auto fp = Fingerprint::mix64(vertices[i]->getId()) ^
-                  Fingerprint::mix64(vertices[j]->getId());
-        auto it = sqMap.find(fp);
-        return it != sqMap.end() ? it->second : 0.0;
-    };
+    const auto sq = localSquaredLengths(vertices);
 
     // Bordered matrix: zero corner, a border of ones, squared distances inside.
     int n = dPlus1 + 1;
@@ -742,14 +751,12 @@ std::vector<std::complex<double>> Simplex::cayleyMengerMatrix() const {
     for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
     for (int i = 0; i < dPlus1; ++i)
         for (int j = 0; j < dPlus1; ++j)
-            B[(i + 1) * n + (j + 1)] = getSq(i, j);
+            B[(i + 1) * n + (j + 1)] = sq[static_cast<std::size_t>(i) * dPlus1 + j];
     return B;
 }
 
 std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     std::unordered_map<std::uint64_t, int> &pos1) const {
-  {
-  }
     const int dPlus1 = static_cast<int>(vertices.size());
     pos1.clear();
     if (dPlus1 < 1) return {};
@@ -763,26 +770,14 @@ std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     for (int i = 0; i < dPlus1; ++i)
         pos1[sorted[static_cast<std::size_t>(i)]->getId()] = i + 1;  // border-offset
 
-    std::unordered_map<std::uint64_t, std::complex<double>> sqMap;
-    for (const auto &e : edges) {
-        auto fp = Fingerprint::mix64(e->getSource()->getId()) ^
-                  Fingerprint::mix64(e->getTarget()->getId());
-        sqMap[fp] = (e->getLength() * e->getLength());
-    }
-    auto getSq = [&](int i, int j) -> std::complex<double> {
-        if (i == j) return 0.0;
-        auto fp = Fingerprint::mix64(sorted[static_cast<std::size_t>(i)]->getId()) ^
-                  Fingerprint::mix64(sorted[static_cast<std::size_t>(j)]->getId());
-        auto it = sqMap.find(fp);
-        return it != sqMap.end() ? it->second : 0.0;
-    };
+    const auto sq = localSquaredLengths(sorted);
 
     const int n = dPlus1 + 1;
     std::vector<std::complex<double>> B(static_cast<std::size_t>(n) * n, 0.0);
     for (int k = 1; k < n; ++k) { B[k] = 1.0; B[k * n] = 1.0; }
     for (int i = 0; i < dPlus1; ++i)
         for (int j = 0; j < dPlus1; ++j)
-            B[(i + 1) * n + (j + 1)] = getSq(i, j);
+            B[(i + 1) * n + (j + 1)] = sq[static_cast<std::size_t>(i) * dPlus1 + j];
     return B;
 }
 

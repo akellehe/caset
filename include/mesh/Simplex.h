@@ -711,6 +711,13 @@ class Simplex {
     void fillGramCofSection(std::uint64_t key) const;
     void fillCMSection(std::uint64_t key) const;
     void fillCMCanonSection(std::uint64_t key) const;
+    /// Flat (n × n) table of this simplex's signed squared edge lengths by
+    /// LOCAL index in ``ordering`` (0 where the pair carries no edge), built
+    /// in one linear pass over the edge list with direct id matching — the
+    /// shared gather behind ``gramMatrix``/``cayleyMengerMatrix``/
+    /// ``cayleyMengerCanonical``, replacing their per-entry hashed lookups.
+    [[nodiscard]] std::vector<std::complex<double>> localSquaredLengths(
+        const VertexPtrs &ordering) const;
 
     Spacetime *spacetime{nullptr};
     TemporalOrientation orientation{};
