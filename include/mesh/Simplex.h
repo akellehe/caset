@@ -5,9 +5,11 @@
 #define TESSERA_SIMPLEX_H
 
 #include "mesh/ForwardDeclarations.h"
+#include <atomic>
 #include <complex>
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <unordered_map>
 #include <memory>
 #include <utility>
@@ -269,6 +271,53 @@ class Simplex {
     /// det(G) records the metric signature of the cell.
     /// Always signature-aware: there is no Euclidean/Wick-rotated mode (#641).
     [[nodiscard]] std::vector<std::complex<double>> gramMatrix() const;
+
+    /// Length-derived geometry cache. The Gram / Cayley-Menger pipeline
+    /// (matrix, determinant, cofactors) is a pure function of this simplex's
+    /// edge lengths, yet the action/gradient/Hessian paths historically
+    /// recomputed it once per (hinge, coface) evaluation — the dominant engine
+    /// cost in a perf sample of the live one-step drive. The four sections
+    /// below memoize those products, each filled lazily by the SAME
+    /// ``gramMatrix``/``cayleyMengerMatrix``/``cayleyMengerCanonical``/
+    /// ``determinant``/``cofactorMatrix`` calls the direct path runs, so a
+    /// cached value is bit-for-bit the recomputed one.
+    ///
+    /// Invalidation is by key comparison, never by callback: the key is the
+    /// sum of the incident edges' monotone ``Edge::lengthRevision()`` counters
+    /// plus this simplex's structural revision (bumped by ``addEdge``/
+    /// ``removeEdge``, compensated so the key never repeats an old value).
+    /// Any ``setLength`` on an incident edge therefore misses the cache and
+    /// refills on next use — including perturb/restore probes, whose restore
+    /// bumps the revision again (a conservative refill, never a stale hit).
+    ///
+    /// Concurrency: fills are serialized by a per-simplex mutex and published
+    /// by a release-store of the section key; readers that observe the current
+    /// key use the payload lock-free. Lengths are only mutated in the serial
+    /// phases between parallel evaluations (stage-2 line search, move
+    /// apply/rollback), so within a parallel region the key is constant and
+    /// the returned references stay valid. Do not hold the references across
+    /// a length mutation.
+    struct GeomCache {
+      std::vector<std::complex<double>> gram;       ///< flat d×d Gram
+      std::complex<double> gramDet{};               ///< det(gram)
+      std::vector<std::complex<double>> gramCof;    ///< cofactors of gram
+      std::vector<std::complex<double>> cm;         ///< (d+2)² raw-order Cayley-Menger
+      std::complex<double> cmDet{};                 ///< det(cm)
+      std::vector<std::complex<double>> cmCof;      ///< cofactors of cm
+      std::vector<std::complex<double>> cmCanon;    ///< canonical-frame Cayley-Menger
+      std::vector<std::complex<double>> cmCanonCof; ///< cofactors of cmCanon
+      std::unordered_map<std::uint64_t, int> canonPos1;  ///< vertex id → border index
+    };
+    /// Cache with the ``gram``+``gramDet`` section current. O(#edges) key walk
+    /// on a hit; fills via the direct pipeline on a miss.
+    [[nodiscard]] const GeomCache &gramCache() const;
+    /// Cache with ``gram``+``gramDet``+``gramCof`` current.
+    [[nodiscard]] const GeomCache &gramCofCache() const;
+    /// Cache with the raw-order ``cm``+``cmDet``+``cmCof`` section current.
+    [[nodiscard]] const GeomCache &cmCache() const;
+    /// Cache with the canonical ``cmCanon``+``cmCanonCof``+``canonPos1``
+    /// section current (the frame ``dihedralAngle`` evaluates in).
+    [[nodiscard]] const GeomCache &cmCanonicalCache() const;
 
     /// Cayley-Menger bordered matrix of this simplex: a flat (d+2) x (d+2)
     /// row-major matrix with a zero corner, a border of ones, and the squared
@@ -651,6 +700,18 @@ class Simplex {
     /// historical coface walk for coordinate-free fixtures with no spacetime.
     [[nodiscard]] int ambientTopDimension() const;
 
+    /// The current geometry-revision key: structural revision plus the sum of
+    /// the incident edges' ``lengthRevision()`` counters. Strictly increases
+    /// under every incident ``setLength``/``addEdge``/``removeEdge``, so a
+    /// section key equal to it proves the section's payload is current.
+    [[nodiscard]] std::uint64_t geometryRevisionKey() const noexcept;
+    /// Fill helpers for the four cache sections; each runs the direct pipeline
+    /// under ``geomCacheMutex_`` and publishes by storing ``key`` last.
+    void fillGramSection(std::uint64_t key) const;
+    void fillGramCofSection(std::uint64_t key) const;
+    void fillCMSection(std::uint64_t key) const;
+    void fillCMCanonSection(std::uint64_t key) const;
+
     Spacetime *spacetime{nullptr};
     TemporalOrientation orientation{};
 
@@ -660,6 +721,46 @@ class Simplex {
 
     Simplices facets{};
     Simplices cofaces{};
+
+    /// The cache payload plus its concurrency state, bundled so ``Simplex``
+    /// stays copyable: atomics and mutexes are not, and simplices ARE copied
+    /// by value elsewhere in the tree. A copy of a simplex has the same
+    /// geometry but must refill on first use (fresh keys); an assignment
+    /// additionally RESETS the target's keys — its stale payload belongs to
+    /// its old geometry, and the copied edge revisions could otherwise
+    /// reproduce a previously-published key and false-hit.
+    struct GeomCacheState {
+      GeomCache cache{};
+      /// Per-section publication keys (0 = never filled; real keys are ≥ 1
+      /// because ``structuralRevision_`` starts at 1).
+      std::atomic<std::uint64_t> gramKey{0};
+      std::atomic<std::uint64_t> gramCofKey{0};
+      std::atomic<std::uint64_t> cmKey{0};
+      std::atomic<std::uint64_t> cmCanonKey{0};
+      std::mutex mutex;
+      GeomCacheState() = default;
+      GeomCacheState(const GeomCacheState &) noexcept {}
+      GeomCacheState(GeomCacheState &&) noexcept {}
+      GeomCacheState &operator=(const GeomCacheState &) noexcept {
+        reset();
+        return *this;
+      }
+      GeomCacheState &operator=(GeomCacheState &&) noexcept {
+        reset();
+        return *this;
+      }
+      void reset() noexcept {
+        gramKey.store(0, std::memory_order_relaxed);
+        gramCofKey.store(0, std::memory_order_relaxed);
+        cmKey.store(0, std::memory_order_relaxed);
+        cmCanonKey.store(0, std::memory_order_relaxed);
+      }
+    };
+    mutable GeomCacheState geomCacheState_{};
+    /// Bumped by ``addEdge``; on ``removeEdge`` it absorbs the removed edge's
+    /// revision plus one, so ``geometryRevisionKey`` never repeats a value it
+    /// held before the removal.
+    std::uint64_t structuralRevision_{1};
 
     bool _isSpatial;
     double ti{std::numeric_limits<double>::max()};

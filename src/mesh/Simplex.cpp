@@ -533,6 +533,11 @@ bool Simplex::removeEdge(const EdgePtr &edge) {
   auto fp = edge->fingerprint.fingerprint();
   for (auto it = edges.begin(); it != edges.end(); ++it) {
     if ((*it)->fingerprint.fingerprint() == fp) {
+      // Absorb the removed edge's revision (plus one) so the geometry
+      // cache key — structural revision + Σ edge revisions — strictly
+      // increases across the removal instead of falling back to a value
+      // it held before (which could false-hit a stale cache section).
+      structuralRevision_ += (*it)->lengthRevision() + 1;
       *it = edges.back();
       edges.pop_back();
       // Keep the Edge → Simplex index in sync. Without this the
@@ -552,6 +557,9 @@ bool Simplex::addEdge(const EdgePtr &edge) {
     if (e->fingerprint.fingerprint() == fp) return false;
   }
   edges.push_back(edge);
+  // The edge set changed, so every cached Gram/Cayley-Menger section is
+  // stale; bumping the structural revision retires their keys.
+  ++structuralRevision_;
   edge->registerSimplex(this);
   return true;
 }
@@ -778,6 +786,105 @@ std::vector<std::complex<double>> Simplex::cayleyMengerCanonical(
     return B;
 }
 
+std::uint64_t Simplex::geometryRevisionKey() const noexcept {
+    std::uint64_t key = structuralRevision_;
+    for (const auto &e : edges) key += e->lengthRevision();
+    return key;
+}
+
+// Each section accessor is the same double-checked pattern: a lock-free hit
+// when the section's published key equals the current geometry-revision key,
+// else a mutex-serialized fill that publishes the key LAST (release), so a
+// concurrent reader either sees the old key (and takes the mutex) or the new
+// key with the payload already written. Lengths only mutate in the serial
+// phases between parallel evaluations, so within a parallel region the key is
+// constant and the returned reference stays valid.
+const Simplex::GeomCache &Simplex::gramCache() const {
+    const std::uint64_t key = geometryRevisionKey();
+    if (geomCacheState_.gramKey.load(std::memory_order_acquire) != key) {
+        std::lock_guard<std::mutex> lock(geomCacheState_.mutex);
+        if (geomCacheState_.gramKey.load(std::memory_order_relaxed) != key)
+            fillGramSection(key);
+    }
+    return geomCacheState_.cache;
+}
+
+const Simplex::GeomCache &Simplex::gramCofCache() const {
+    const std::uint64_t key = geometryRevisionKey();
+    if (geomCacheState_.gramCofKey.load(std::memory_order_acquire) != key) {
+        std::lock_guard<std::mutex> lock(geomCacheState_.mutex);
+        if (geomCacheState_.gramKey.load(std::memory_order_relaxed) != key)
+            fillGramSection(key);
+        if (geomCacheState_.gramCofKey.load(std::memory_order_relaxed) != key)
+            fillGramCofSection(key);
+    }
+    return geomCacheState_.cache;
+}
+
+const Simplex::GeomCache &Simplex::cmCache() const {
+    const std::uint64_t key = geometryRevisionKey();
+    if (geomCacheState_.cmKey.load(std::memory_order_acquire) != key) {
+        std::lock_guard<std::mutex> lock(geomCacheState_.mutex);
+        if (geomCacheState_.cmKey.load(std::memory_order_relaxed) != key)
+            fillCMSection(key);
+    }
+    return geomCacheState_.cache;
+}
+
+const Simplex::GeomCache &Simplex::cmCanonicalCache() const {
+    const std::uint64_t key = geometryRevisionKey();
+    if (geomCacheState_.cmCanonKey.load(std::memory_order_acquire) != key) {
+        std::lock_guard<std::mutex> lock(geomCacheState_.mutex);
+        if (geomCacheState_.cmCanonKey.load(std::memory_order_relaxed) != key)
+            fillCMCanonSection(key);
+    }
+    return geomCacheState_.cache;
+}
+
+// The fills run the direct pipeline verbatim — same functions, same inputs —
+// so cached values are bit-for-bit what an uncached call would produce.
+void Simplex::fillGramSection(std::uint64_t key) const {
+    const int d = static_cast<int>(vertices.size()) - 1;
+    geomCacheState_.cache.gram = gramMatrix();
+    geomCacheState_.cache.gramDet =
+        (d >= 1 && static_cast<int>(geomCacheState_.cache.gram.size()) == d * d)
+            ? determinant(geomCacheState_.cache.gram, d)
+            : std::complex<double>{0.0, 0.0};
+    geomCacheState_.gramKey.store(key, std::memory_order_release);
+}
+
+void Simplex::fillGramCofSection(std::uint64_t key) const {
+    const int d = static_cast<int>(vertices.size()) - 1;
+    geomCacheState_.cache.gramCof =
+        (d >= 1 && static_cast<int>(geomCacheState_.cache.gram.size()) == d * d)
+            ? cofactorMatrix(geomCacheState_.cache.gram, d)
+            : std::vector<std::complex<double>>{};
+    geomCacheState_.gramCofKey.store(key, std::memory_order_release);
+}
+
+void Simplex::fillCMSection(std::uint64_t key) const {
+    const int n = static_cast<int>(vertices.size()) + 1;
+    geomCacheState_.cache.cm = cayleyMengerMatrix();
+    if (static_cast<int>(geomCacheState_.cache.cm.size()) == n * n) {
+        geomCacheState_.cache.cmDet = determinant(geomCacheState_.cache.cm, n);
+        geomCacheState_.cache.cmCof = cofactorMatrix(geomCacheState_.cache.cm, n);
+    } else {
+        geomCacheState_.cache.cmDet = {0.0, 0.0};
+        geomCacheState_.cache.cmCof.clear();
+    }
+    geomCacheState_.cmKey.store(key, std::memory_order_release);
+}
+
+void Simplex::fillCMCanonSection(std::uint64_t key) const {
+    const int n = static_cast<int>(vertices.size()) + 1;
+    geomCacheState_.cache.cmCanon = cayleyMengerCanonical(geomCacheState_.cache.canonPos1);
+    geomCacheState_.cache.cmCanonCof =
+        (static_cast<int>(geomCacheState_.cache.cmCanon.size()) == n * n)
+            ? cofactorMatrix(geomCacheState_.cache.cmCanon, n)
+            : std::vector<std::complex<double>>{};
+    geomCacheState_.cmCanonKey.store(key, std::memory_order_release);
+}
+
 std::complex<double> Simplex::dihedralAngle(SimplexPtr hinge) const {
     const int dPlus1 = static_cast<int>(vertices.size());
     // The two vertices of this simplex not in the hinge.
@@ -816,11 +923,14 @@ std::complex<double> Simplex::dihedralAngle(SimplexPtr hinge) const {
     // stored in causal order yields the same deficit as the same geometry built
     // sorted -- otherwise the action depends on build history.
     const int n = dPlus1 + 1;
-    std::unordered_map<std::uint64_t, int> pos1;
-    const auto B = cayleyMengerCanonical(pos1);
-    const auto cof = cofactorMatrix(B, n);
-    const int bi = pos1[vertices[vi]->getId()];
-    const int bj = pos1[vertices[vj]->getId()];
+    // Cached canonical frame (#668): the sorted-by-id Cayley-Menger matrix and
+    // its cofactors are hinge-independent, so every hinge of this cell reads
+    // the same fill instead of recomputing the O(n^5) cofactor pass per call.
+    const GeomCache &cc = cmCanonicalCache();
+    const auto &cof = cc.cmCanonCof;
+    if (static_cast<int>(cof.size()) != n * n) return {0.0, 0.0};
+    const int bi = cc.canonPos1.at(vertices[vi]->getId());
+    const int bj = cc.canonPos1.at(vertices[vj]->getId());
     const std::complex<double> Cij = cof[static_cast<std::size_t>(bi) * n + bj];
     const std::complex<double> Cii = cof[static_cast<std::size_t>(bi) * n + bi];
     const std::complex<double> Cjj = cof[static_cast<std::size_t>(bj) * n + bj];
@@ -878,10 +988,13 @@ Simplex::deficitAngleGradient() const {
         const int bi = opp[0] + 1, bj = opp[1] + 1;          // CM border offset
 
         const int n = m + 1;                                 // CM is (d+2)x(d+2)
-        const std::vector<std::complex<double>> B = tau->cayleyMengerMatrix();
-        const std::complex<double> detB = determinant(B, n);
+        // Cached raw-order Cayley-Menger pipeline (#668): shared by every
+        // hinge of tau and by the Hessian below.
+        const GeomCache &tc = tau->cmCache();
+        const std::complex<double> detB = tc.cmDet;
         if (std::abs(detB) < 1e-300) continue;
-        const std::vector<std::complex<double>> C = cofactorMatrix(B, n);
+        const std::vector<std::complex<double>> &C = tc.cmCof;
+        if (static_cast<int>(C.size()) != n * n) continue;
         // B^-1 = adj(B)/det = cof^T/det ; B symmetric => Binv symmetric.
         std::vector<std::complex<double>> Binv(static_cast<std::size_t>(n) * n);
         for (int i = 0; i < n; ++i)
@@ -968,10 +1081,12 @@ Simplex::deficitAngleHessian() const {
         const int bi = opp[0] + 1, bj = opp[1] + 1;
 
         const int n = m + 1;
-        const std::vector<std::complex<double>> B = tau->cayleyMengerMatrix();
-        const std::complex<double> detB = determinant(B, n);
+        // Same cached raw-order Cayley-Menger section as the gradient (#668).
+        const GeomCache &tc = tau->cmCache();
+        const std::complex<double> detB = tc.cmDet;
         if (std::abs(detB) < 1e-300) continue;
-        const std::vector<std::complex<double>> C = cofactorMatrix(B, n);
+        const std::vector<std::complex<double>> &C = tc.cmCof;
+        if (static_cast<int>(C.size()) != n * n) continue;
         std::vector<std::complex<double>> Binv(static_cast<std::size_t>(n) * n);
         for (int i = 0; i < n; ++i)
             for (int j = 0; j < n; ++j)
@@ -1092,11 +1207,12 @@ std::complex<double> Simplex::volume() const {
     if (d < 1) return {0.0, 0.0};
 
     // Honest, signature-respecting Gram matrix: timelike edges keep l^2 < 0,
-    // so det(G) can be negative for a Lorentzian cell.
-    const std::vector<std::complex<double>> G = gramMatrix();
-    if (static_cast<int>(G.size()) != d * d) return {0.0, 0.0};
+    // so det(G) can be negative for a Lorentzian cell. Cached (#668): volume()
+    // is evaluated once per facet per dual-volume recursion step.
+    const GeomCache &gc = gramCache();
+    if (static_cast<int>(gc.gram.size()) != d * d) return {0.0, 0.0};
 
-    const std::complex<double> detG = determinant(G, d);
+    const std::complex<double> detG = gc.gramDet;
     double factorial = 1.0;
     for (int i = 2; i <= d; ++i) factorial *= static_cast<double>(i);
 
@@ -1156,20 +1272,20 @@ namespace {
 // principalSqrt (file scope, above) replaces it (#641).
 
 // Circumcenter (barycentric) + signed R² from the Gram matrix G (flat d×d,
-// relative to vertex 0). Solves G β = ½·diag(G) Eigen-free via the adjugate
-// (cofactorᵀ/det); λ_0 = 1−Σβ, λ_i = β_i; R² = Σ_i β_i·(½ G_ii).
-void circumFromGram(const std::vector<std::complex<double>>& G, int d,
-                    std::vector<std::complex<double>>& bary,
-                    std::complex<double>& r2) {
+// relative to vertex 0) with its determinant and cofactors precomputed — the
+// cached Gram sections (#668) enter here. Solves G β = ½·diag(G) Eigen-free
+// via the adjugate (cofactorᵀ/det); λ_0 = 1−Σβ, λ_i = β_i; R² = Σ_i β_i·(½ G_ii).
+void circumFromGramCore(const std::vector<std::complex<double>>& G,
+                        const std::complex<double> detG,
+                        const std::vector<std::complex<double>>& cof, int d,
+                        std::vector<std::complex<double>>& bary,
+                        std::complex<double>& r2) {
     using cd = std::complex<double>;
     bary.assign(static_cast<std::size_t>(d) + 1, cd{0.0, 0.0});
-    if (d <= 0) { bary[0] = cd{1.0, 0.0}; r2 = cd{0.0, 0.0}; return; }  // single vertex
+    if (d <= 0) { bary[0] = cd{1.0, 0.0}; r2 = cd{0.0, 0.0}; return; }
     std::vector<cd> halfDiag(d);
     for (int i = 0; i < d; ++i)
         halfDiag[i] = 0.5 * G[static_cast<std::size_t>(i) * d + i];
-    const cd detG = ::tessera::mesh::Simplex::determinant(G, d);
-    const std::vector<cd> cof =
-        ::tessera::mesh::Simplex::cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
     // β_i = Σ_j (G⁻¹)_ij·halfDiag_j, with (G⁻¹)_ij = adj_ij/det = C_ji/det.
     std::vector<cd> beta(d, cd{0.0, 0.0});
     cd sum{0.0, 0.0};
@@ -1236,11 +1352,14 @@ std::complex<double> dCircumR2(const ::tessera::mesh::Simplex* s,
     const int d = static_cast<int>(s->size()) - 1;
     if (d <= 0) return {0.0, 0.0};
     const auto& sv = s->getVertices();
-    const std::vector<std::complex<double>> G = s->gramMatrix();
-    const std::complex<double> detG = ::tessera::mesh::Simplex::determinant(G, d);
+    // Cached Gram pipeline (#668): this runs once per (cell, edge) pair in the
+    // dual-volume gradient, all against the same cell geometry.
+    const auto &gc = s->gramCofCache();
+    const std::vector<std::complex<double>> &G = gc.gram;
+    if (static_cast<int>(G.size()) != d * d) return {0.0, 0.0};
+    const std::complex<double> detG = gc.gramDet;
     if (std::abs(detG) < 1e-300) return {0.0, 0.0};
-    const std::vector<std::complex<double>> cofG =
-        ::tessera::mesh::Simplex::cofactorMatrix(G, d);
+    const std::vector<std::complex<double>> &cofG = gc.gramCof;
     std::vector<std::complex<double>> h(d), beta(d, std::complex<double>{0.0, 0.0});
     for (int i = 0; i < d; ++i) h[i] = 0.5 * G[i * d + i];
     for (int i = 0; i < d; ++i) {              // beta = G^-1 h, (G^-1)_ij=cof_ji/det
@@ -1276,11 +1395,14 @@ std::complex<double> d2CircumR2(const ::tessera::mesh::Simplex* s,
     const int d = static_cast<int>(s->size()) - 1;
     if (d <= 0) return {0.0, 0.0};
     const auto& sv = s->getVertices();
-    const std::vector<std::complex<double>> G = s->gramMatrix();
-    const std::complex<double> detG = ::tessera::mesh::Simplex::determinant(G, d);
+    // Cached Gram pipeline (#668), as in dCircumR2: one fill serves every
+    // (edge, edge) pair of this cell's Hessian block.
+    const auto &gc = s->gramCofCache();
+    const std::vector<std::complex<double>> &G = gc.gram;
+    if (static_cast<int>(G.size()) != d * d) return {0.0, 0.0};
+    const std::complex<double> detG = gc.gramDet;
     if (std::abs(detG) < 1e-300) return {0.0, 0.0};
-    const std::vector<std::complex<double>> cofG =
-        ::tessera::mesh::Simplex::cofactorMatrix(G, d);
+    const std::vector<std::complex<double>> &cofG = gc.gramCof;
     std::vector<std::complex<double>> Ginv(static_cast<std::size_t>(d) * d);
     for (int i = 0; i < d; ++i)
         for (int j = 0; j < d; ++j)
@@ -1337,7 +1459,8 @@ std::vector<std::complex<double>> Simplex::circumcenterBarycentric() const {
     const int d = static_cast<int>(size()) - 1;
     std::vector<std::complex<double>> bary;
     std::complex<double> r2{0.0, 0.0};
-    circumFromGram(gramMatrix(), d, bary, r2);
+    const GeomCache &gc = gramCofCache();       // (#668)
+    circumFromGramCore(gc.gram, gc.gramDet, gc.gramCof, d, bary, r2);
     return bary;
 }
 
@@ -1345,7 +1468,8 @@ std::complex<double> Simplex::circumradiusSquared() const {
     const int d = static_cast<int>(size()) - 1;
     std::vector<std::complex<double>> bary;
     std::complex<double> r2{0.0, 0.0};
-    circumFromGram(gramMatrix(), d, bary, r2);
+    const GeomCache &gc = gramCofCache();       // (#668)
+    circumFromGramCore(gc.gram, gc.gramDet, gc.gramCof, d, bary, r2);
     return r2;
 }
 
@@ -1400,11 +1524,12 @@ Simplex::volumeGradient() const {
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::complex<double>> grad;
     const int d = static_cast<int>(size()) - 1;
     if (d < 1) return grad;
-    const std::vector<std::complex<double>> G = gramMatrix();
+    const GeomCache &gc = gramCofCache();       // (#668)
+    const std::vector<std::complex<double>> &G = gc.gram;
     if (static_cast<int>(G.size()) != d * d) return grad;
-    const std::complex<double> detG = determinant(G, d);
+    const std::complex<double> detG = gc.gramDet;
     if (std::abs(detG) < 1e-300) return grad;
-    const std::vector<std::complex<double>> cofG = cofactorMatrix(G, d);  // cof[r*d+c] = C_rc
+    const std::vector<std::complex<double>> &cofG = gc.gramCof;  // cof[r*d+c] = C_rc
     const std::complex<double> V = volume();
     const auto &sv = vertices;
     for (std::size_t p = 0; p < sv.size(); ++p)
