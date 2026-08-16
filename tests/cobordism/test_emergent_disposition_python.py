@@ -111,8 +111,8 @@ class TestDispositionMovesAreOnByDefault(unittest.TestCase):
         `should_propose_dispositions=False` continues to buy a caller who wants it.
         """
         node = self._node(False)
-        node.run_stage1(60, 8, 15, True)
-        node.run_stage1(30, 8, 15, False)
+        node.run_stage1(60, 8, True)
+        node.run_stage1(30, 8, False)
         node.run_stage2(1.0, 10)
         self.assertEqual(_dispositions(node.st).get("timelike", 0), 0,
                          "no move in the six-move draw can change a "
@@ -126,8 +126,8 @@ class TestDispositionMovesAreGated(unittest.TestCase):
         """The feature must not break the invariants the drive relies on."""
         node = MC(_pentatope_host(), [[1 + 0j]], [], [3], 50.0, 2, 0, True)
         node.seed_inputs([0])
-        node.run_stage1(60, 8, 15, True)
-        node.run_stage1(30, 8, 15, False)
+        node.run_stage1(60, 8, True)
+        node.run_stage1(30, 8, False)
         st = node.st
         objective = node.objective()
         self.assertGreaterEqual(objective, 0.0,
@@ -139,7 +139,7 @@ class TestDispositionMovesAreGated(unittest.TestCase):
         """Every disposition move goes through the same gate as every other."""
         node = MC(_pentatope_host(), [[1 + 0j]], [], [3], 50.0, 3, 0, True)
         node.seed_inputs([0])
-        node.run_stage1(60, 8, 15, True)
+        node.run_stage1(60, 8, True)
         ok, reason = cob.SurgicalCone(node.st).validate()
         self.assertTrue(ok, f"drive left an invalid complex: {reason}")
 

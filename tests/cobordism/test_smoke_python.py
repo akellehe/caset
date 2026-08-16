@@ -7,6 +7,7 @@ import itertools
 import unittest
 
 import tessera
+import cmath
 
 # Subsystem submodules are exposed as attributes of the `tessera` package
 # (via tessera/__init__.py), matching mesh/spacetime/observables/simulations.
@@ -32,7 +33,7 @@ class TestCobordismScaffold(unittest.TestCase):
         st = tessera.Spacetime()
         V = [st.createVertex(i, [0.0]) for i in range(4)]
         for a, b in itertools.combinations(range(4), 2):
-            st.createEdge(V[a], V[b], 1.0)
+            st.createEdge(V[a], V[b], cmath.sqrt(complex(1.0)))
         for combo in itertools.combinations(range(4), 3):
             st.createSimplex([V[i] for i in combo])
         self.assertEqual(cobordism.CombinatorialDimension().compute(st), 2.0)

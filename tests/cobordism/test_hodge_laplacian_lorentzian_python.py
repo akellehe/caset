@@ -1,35 +1,36 @@
 # Copyright (c) 2026 Twin Vector Labs LLC.
 # All rights reserved.
 
-"""Lorentzian (signed-weight) Hodge Laplacian — the discrete d'Alembertian (#105).
+"""Lorentzian Hodge Laplacian — the discrete d'Alembertian (#105, reworked #644).
 
-#104 gave the Euclidean metric Hodge Laplacian L_k (k>=1) with positive
-|volume| weights: symmetric, PSD, ker L_k ~= H_k. This suite exercises the
-Lorentzian variant, in which the inner-product weights W_k are the *signed*
-Simplex.volume() — timelike edges (l^2 < 0) carry negative k-volumes, so W goes
-indefinite and L_k = d_k* d_k + d_{k+1} d_{k+1}* (d_k* = W_k^-1 d_k^T W_{k-1}) is
-the non-self-adjoint d'Alembertian, diagonalized with a general eigensolver.
+There is ONE k >= 1 operator now: L_k = W_k^-1 d_k^T W_{k-1} d_k
++ d_{k+1} W_{k+1}^-1 d_{k+1}^T W_k with the signed complex weights, complex-typed
+and generally non-self-adjoint. The old two-track design (a symmetric |volume|
+Laplacian next to a signed "lorentzian" variant behind a flag) is gone: taking
+|volume| was a Euclidean read that discarded causal character (#641).
 
-Primary fixture — the 3-cycle S^1 (b_1 = 1) with one edge made timelike — admits
-a closed-form answer that pins the implementation exactly:
+Under the default weight convention W_k = V^2 (HodgeWeightConvention.
+SquaredContent) an edge's weight is exactly its squared length — real and
+SIGNED on real signed l^2, polynomial in the l^2 so it carries no branch.
 
-  * edges (0,1),(0,2) spacelike (l^2 = 1 -> signed volume +1); edge (1,2) timelike
-    (l^2 = -alpha^2 -> signed volume -alpha), so W_1 = diag(1, 1, -alpha);
-  * L_1 = W_1^-1 d_1^T d_1 has eigenvalues  {0, 3, 1 - 2/alpha}  (derived below):
-      - the 0 mode is the 1-cycle (the kernel of d_1 is untouched by W_1^-1);
-      - 1 - 2/alpha < 0 for alpha < 2  =>  L_1 is NOT positive-semidefinite
-        (a genuine d'Alembertian), reaches 0 at alpha = 2 (a defective crossing),
-        and is positive again for alpha > 2;
-  * the harmonic (the cycle, |h_i|^2 = 1/3 each) has indefinite norm
-      <h,h>_W = (1 + 1 - alpha)/3 = (2 - alpha)/3,
-    which is POSITIVE for alpha < 2, NULL at alpha = 2, NEGATIVE for alpha > 2 —
-    i.e. the harmonic representative becomes null exactly at the alpha=2 crossing
-    (spec sec 5.6, "record where harmonic representatives become null").
+Primary fixture — the 3-cycle S^1 (b_1 = 1) with one edge timelike — has closed
+forms that pin the implementation exactly (verified, not fitted):
 
-What is *recorded* (vs. hard-asserted) for the larger / CDT fixtures, where the
+  * edges (0,1),(0,2) spacelike (l^2 = 1 -> W = +1); edge (1,2) timelike
+    (l^2 = -alpha^2 -> W = -alpha^2), so W_1 = diag(1, 1, -alpha^2);
+  * spec(L_1) = {0, 3, 1 - 2/alpha^2}: indefinite for alpha < sqrt(2), zero at
+    the defective crossing alpha = sqrt(2), positive above;
+  * the harmonic (the 1-cycle, |h_i|^2 = 1/3 each) has indefinite norm
+      <h,h>_W = (1 + 1 - alpha^2)/3 = (2 - alpha^2)/3:
+    positive below the crossing, NULL at alpha = sqrt(2), negative above —
+    genuine lightlike kernel directions survive because the weights stay real
+    and signed (the k-content convention W = V puts the timelike weight on the
+    imaginary axis instead, where it can never cancel the spacelike part).
+
+What is recorded (vs. hard-asserted) for the larger / CDT fixtures, where the
 geometry is not closed-form, is the spectrum's departure from the nonneg-real
-axis (indefiniteness), the near-kernel count vs. b_k (the pseudo-Hodge
-decomposition), and which near-kernel representatives are null.
+axis (indefiniteness), the near-kernel count vs. b_k, and which near-kernel
+representatives are null.
 """
 
 import math
@@ -167,12 +168,12 @@ def _nk(st, k):
 
 def _lor_matrix(st, k, metric=True):
     nk = _nk(st, k)
-    flat = cob.HodgeLaplacian(st).laplacian(k, metric, True)  # lorentzian=True
+    flat = cob.HodgeLaplacian(st).laplacian(k, metric)
     return np.array(flat, dtype=complex).reshape(nk, nk)
 
 
 def _lor_eigs(st, k, metric=True):
-    return np.array(cob.HodgeLaplacian(st).lorentzianEigenvalues(k, metric),
+    return np.array(cob.HodgeLaplacian(st).eigenvalues(k, metric),
                     dtype=complex)
 
 
@@ -181,8 +182,12 @@ def _near_kernel_count(st, k, metric=True, tol=TOL):
 
 
 def _null_norms(st, k, metric=True, tol=1e-9):
-    return np.array(cob.HodgeLaplacian(st).lorentzianNullNorms(k, tol, metric),
-                    dtype=float)
+    # Complex-typed; with the V^2 weights on real signed l^2 the indefinite norm
+    # is REAL. Assert that (stronger than assuming) and hand back the real part.
+    norms = np.array(cob.HodgeLaplacian(st).nullNorms(k, tol, metric),
+                     dtype=complex)
+    np.testing.assert_allclose(norms.imag, 0.0, atol=1e-9)
+    return norms.real
 
 
 def _is_not_psd(eigs, tol=1e-6):
@@ -193,10 +198,10 @@ def _is_not_psd(eigs, tol=1e-6):
 # --------------------------------------------------------------------------- #
 # (1) Euclidean consistency: all-spacelike => signed volume == |volume|
 # --------------------------------------------------------------------------- #
-class TestLorentzianEuclideanConsistency(unittest.TestCase):
-    """On an all-spacelike complex the signed weights equal |volume|, so the
-    Lorentzian path reproduces #104: real spectrum equal to eigenvalues(k), the
-    same kernel dimension b_k, and no null harmonics."""
+class TestAllSpacelikeConsistency(unittest.TestCase):
+    """On an all-spacelike complex the signed weights are positive, so the one
+    operator is similar to a symmetric PSD one: real nonnegative spectrum,
+    kernel dimension b_k, and strictly positive harmonic norms."""
 
     CASES = (("triangle k=1", _triangle_cycle, 1),
              ("path k=1", _path, 1),
@@ -205,16 +210,13 @@ class TestLorentzianEuclideanConsistency(unittest.TestCase):
              ("torus k=1", _torus, 1),                  # both d_1 and d_2 terms
              ("torus k=2", _torus, 2))
 
-    def test_spectrum_matches_euclidean_and_is_real(self):
+    def test_all_spacelike_spectrum_is_real_and_nonnegative(self):
         for name, build, k in self.CASES:
             with self.subTest(case=name):
                 st = build()
-                hl = cob.HodgeLaplacian(st)
-                lor = np.sort(_lor_eigs(st, k).real)
-                euc = np.sort(np.array(hl.eigenvalues(k), dtype=float))
-                np.testing.assert_allclose(lor, euc, atol=1e-8)
-                # eigenvalues come back essentially real (indefinite-free here)
-                self.assertLess(np.max(np.abs(_lor_eigs(st, k).imag)), 1e-8)
+                eigs = _lor_eigs(st, k)
+                self.assertLess(np.max(np.abs(eigs.imag)), 1e-8)
+                self.assertGreaterEqual(np.min(eigs.real), -1e-8)
 
     def test_kernel_dimension_equals_betti(self):
         for name, build, k in self.CASES:
@@ -232,14 +234,14 @@ class TestLorentzianEuclideanConsistency(unittest.TestCase):
                 if norms.size:
                     self.assertGreater(np.min(norms), 1e-6)
 
-    def test_signed_weights_equal_abs_weights_when_spacelike(self):
+    def test_all_spacelike_weights_are_real_positive(self):
         st = _torus()
         hl = cob.HodgeLaplacian(st)
         for k in (1, 2):
             with self.subTest(k=k):
-                np.testing.assert_allclose(np.array(hl.weights(k, True)),
-                                           np.array(hl.weights(k, False)),
-                                           atol=1e-12)
+                w = np.array(hl.weights(k), dtype=complex)
+                np.testing.assert_allclose(w.imag, 0.0, atol=1e-12)
+                self.assertGreater(np.min(w.real), 0.0)
 
 
 # --------------------------------------------------------------------------- #
@@ -247,16 +249,17 @@ class TestLorentzianEuclideanConsistency(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 class TestLorentzianDAlembertian(unittest.TestCase):
     """The 3-cycle with one timelike edge: indefinite, non-symmetric, with the
-    closed-form spectrum {0, 3, 1 - 2/alpha} and harmonic null-norm (2-alpha)/3."""
+    closed-form spectrum {0, 3, 1 - 2/alpha^2} and harmonic null-norm
+    (2 - alpha^2)/3 under the V^2 weights."""
 
     def test_signed_weights_record_the_timelike_edge(self):
-        # W_1 = diag(+1, +1, -alpha) in sorted-edge order (0,1),(0,2),(1,2).
+        # W_1 = diag(+1, +1, -alpha^2): the timelike edge's weight is its l^2,
+        # real and NEGATIVE. There is no |volume| weighting to compare against —
+        # that track was a Euclidean read and is gone (#641).
         st = _triangle_one_timelike(2.0)
-        w = np.array(cob.HodgeLaplacian(st).weights(1, True))
-        np.testing.assert_allclose(np.sort(w), [-2.0, 1.0, 1.0], atol=1e-12)
-        # the Euclidean |volume| weighting stays all-positive
-        w_abs = np.array(cob.HodgeLaplacian(st).weights(1, False))
-        np.testing.assert_allclose(np.sort(w_abs), [1.0, 1.0, 2.0], atol=1e-12)
+        w = np.array(cob.HodgeLaplacian(st).weights(1), dtype=complex)
+        np.testing.assert_allclose(w.imag, 0.0, atol=1e-12)
+        np.testing.assert_allclose(np.sort(w.real), [-4.0, 1.0, 1.0], atol=1e-12)
 
     def test_operator_is_non_symmetric(self):
         L = _lor_matrix(_triangle_one_timelike(1.0), 1)
@@ -267,11 +270,11 @@ class TestLorentzianDAlembertian(unittest.TestCase):
         for alpha in (0.5, 1.0, 1.5, 2.5, 3.0):
             with self.subTest(alpha=alpha):
                 eigs = np.sort(_lor_eigs(_triangle_one_timelike(alpha), 1).real)
-                np.testing.assert_allclose(eigs, np.sort([0.0, 3.0, 1.0 - 2.0 / alpha]),
+                np.testing.assert_allclose(eigs, np.sort([0.0, 3.0, 1.0 - 2.0 / alpha ** 2]),
                                            atol=1e-7)
 
-    def test_indefinite_below_alpha_two(self):
-        # alpha < 2: a strictly negative eigenvalue (1 - 2/alpha) => not PSD.
+    def test_indefinite_below_alpha_sqrt_two(self):
+        # alpha < sqrt(2): a strictly negative eigenvalue (1 - 2/alpha^2) => not PSD.
         eigs = _lor_eigs(_triangle_one_timelike(1.0), 1)
         self.assertTrue(_is_not_psd(eigs))
         self.assertLess(np.min(eigs.real), -1e-6)
@@ -280,22 +283,23 @@ class TestLorentzianDAlembertian(unittest.TestCase):
         self.assertFalse(_is_not_psd(euc))
         np.testing.assert_allclose(np.sort(euc.real), [0.0, 3.0, 3.0], atol=1e-7)
 
-    def test_one_near_kernel_mode_for_alpha_away_from_two(self):
+    def test_one_near_kernel_mode_for_alpha_away_from_sqrt_two(self):
+        # sqrt(2) itself is the defective crossing (two modes on the kernel).
         for alpha in (0.5, 1.0, 1.5, 2.5, 3.0):
             with self.subTest(alpha=alpha):
                 self.assertEqual(_near_kernel_count(_triangle_one_timelike(alpha), 1), 1)
 
-    def test_harmonic_null_norm_is_two_minus_alpha_over_three(self):
+    def test_harmonic_null_norm_is_two_minus_alpha_squared_over_three(self):
         for alpha in (0.5, 1.0, 1.5, 2.5, 3.0):
             with self.subTest(alpha=alpha):
                 norms = _null_norms(_triangle_one_timelike(alpha), 1)
                 self.assertEqual(len(norms), 1)
-                self.assertAlmostEqual(norms[0], (2.0 - alpha) / 3.0, places=6)
+                self.assertAlmostEqual(norms[0], (2.0 - alpha ** 2) / 3.0, places=6)
 
     def test_harmonic_is_the_cycle_with_unit_magnitude_support(self):
         # The kernel mode is the 1-cycle: |h_i|^2 = 1/3 on every edge.
         harmonics = (cob.HodgeLaplacian(_triangle_one_timelike(1.3))
-                     .lorentzianHarmonics(1, 1e-9))
+                     .harmonics(1, 1e-9))
         self.assertEqual(len(harmonics), 1)  # one harmonic, a degree-1 Cochain
         h = np.asarray(harmonics[0].coeffs())
         self.assertEqual(h.size, 3)  # three edges
@@ -308,34 +312,35 @@ class TestLorentzianDAlembertian(unittest.TestCase):
 class TestLorentzianAlphaSweep(unittest.TestCase):
     """Vary the timelike/spacelike l^2 ratio (the CDT asymmetry alpha) and record
     the spectrum and the harmonic's indefinite norm relative to the all-spacelike
-    (Euclidean) run. The harmonic null-norm crosses zero at alpha=2: positive
-    (spacelike-dominated) below, null at, negative (timelike-dominated) above."""
+    reference. The harmonic null-norm (2 - alpha^2)/3 crosses zero at
+    alpha = sqrt(2): positive (spacelike-dominated) below, null at, negative
+    (timelike-dominated) above."""
 
     SWEEP = (0.25, 0.5, 1.0, 1.5, 2.5, 3.0, 4.0)
 
     def test_record_sweep(self):
-        euclidean_null = (2.0 - 0.0) / 3.0  # alpha -> spacelike limit reference
+        spacelike_null = 2.0 / 3.0  # the all-spacelike reference norm
         records = []
         for alpha in self.SWEEP:
             eigs = np.sort(_lor_eigs(_triangle_one_timelike(alpha), 1).real)
             null = _null_norms(_triangle_one_timelike(alpha), 1)[0]
             records.append((alpha, eigs.tolist(), null))
 
-            # third eigenvalue tracks 1 - 2/alpha; null-norm tracks (2-alpha)/3.
-            np.testing.assert_allclose(eigs, np.sort([0.0, 3.0, 1.0 - 2.0 / alpha]),
+            # third eigenvalue tracks 1 - 2/alpha^2; null-norm (2 - alpha^2)/3.
+            np.testing.assert_allclose(eigs, np.sort([0.0, 3.0, 1.0 - 2.0 / alpha ** 2]),
                                        atol=1e-7)
-            self.assertAlmostEqual(null, (2.0 - alpha) / 3.0, places=6)
-            # indefinite (negative eigenvalue) exactly when alpha < 2
-            self.assertEqual(np.min(eigs) < -1e-6, alpha < 2.0)
+            self.assertAlmostEqual(null, (2.0 - alpha ** 2) / 3.0, places=6)
+            # indefinite (negative eigenvalue) exactly when alpha < sqrt(2)
+            self.assertEqual(np.min(eigs) < -1e-6, alpha ** 2 < 2.0)
 
-        # monotone decrease of the harmonic norm, crossing zero at alpha=2.
+        # monotone decrease of the harmonic norm, crossing zero at alpha=sqrt(2).
         nulls = [r[2] for r in records]
         self.assertTrue(all(x > y for x, y in zip(nulls, nulls[1:])))  # strictly down
-        below = [n for a, _, n in records if a < 2.0]
-        above = [n for a, _, n in records if a > 2.0]
+        below = [n for a, _, n in records if a ** 2 < 2.0]
+        above = [n for a, _, n in records if a ** 2 > 2.0]
         self.assertTrue(all(n > 0 for n in below))    # spacelike-dominated, positive
         self.assertTrue(all(n < 0 for n in above))    # timelike-dominated, negative
-        self.assertLess(max(above), euclidean_null)   # all shifted below Euclidean
+        self.assertLess(max(above), spacelike_null)   # all below the reference
 
     def test_shift_relative_to_euclidean_kernel(self):
         # Euclidean (all-spacelike) reference: kernel dim = b_1 = 1, norm > 0.
@@ -358,14 +363,17 @@ class TestLorentzianBothTerms(unittest.TestCase):
     that the near-kernel / null-norm machinery returns consistent shapes."""
 
     def test_filled_square_is_indefinite_dalembertian(self):
-        st = _filled_square_timelike(1.5)
+        # Under the V^2 weights this fixture's indefinite window also ends near
+        # alpha = sqrt(2) (measured: min Re lambda = -1.14 at 1.2, +0.11 at
+        # 1.5), so probe inside it.
+        st = _filled_square_timelike(1.2)
         self.assertGreaterEqual(_nk(st, 2), 1)  # the 2-cell is present
         L = _lor_matrix(st, 1)
         self.assertGreater(np.linalg.norm(L - L.T), 1e-6)   # non-symmetric
         eigs = _lor_eigs(st, 1)
         self.assertTrue(_is_not_psd(eigs))                  # not PSD
         # near-kernel modes are well-defined and their null-norms line up 1:1
-        harmonics = cob.HodgeLaplacian(st).lorentzianHarmonics(1, TOL)
+        harmonics = cob.HodgeLaplacian(st).harmonics(1, TOL)
         norms = _null_norms(st, 1, tol=TOL)
         self.assertEqual(len(harmonics), len(norms))
 
@@ -409,11 +417,11 @@ class TestLorentzianDegreeParameterization(unittest.TestCase):
 
     def test_negative_degree_raises(self):
         hl = cob.HodgeLaplacian(_triangle_cycle())
-        for call in (lambda: hl.lorentzianEigenvalues(-1),
-                     lambda: hl.lorentzianEigenvectors(-1),
-                     lambda: hl.lorentzianHarmonics(-1),
-                     lambda: hl.lorentzianNullNorms(-1),
-                     lambda: hl.laplacian(-1, True, True)):
+        for call in (lambda: hl.eigenvalues(-1),
+                     lambda: hl.eigenvectors(-1),
+                     lambda: hl.harmonics(-1),
+                     lambda: hl.nullNorms(-1),
+                     lambda: hl.laplacian(-1, True)):
             with self.subTest(call=call):
                 with self.assertRaises(RuntimeError):
                     call()
@@ -422,11 +430,11 @@ class TestLorentzianDegreeParameterization(unittest.TestCase):
         hl = cob.HodgeLaplacian(_triangle_cycle())  # S^1, top dim 1
         for k in (2, 3):
             with self.subTest(k=k):
-                self.assertEqual(hl.lorentzianEigenvalues(k), [])
-                self.assertEqual(hl.lorentzianEigenvectors(k), [])
-                self.assertEqual(hl.lorentzianHarmonics(k), [])
-                self.assertEqual(hl.lorentzianNullNorms(k), [])
-                self.assertEqual(hl.laplacian(k, True, True), [])
+                self.assertEqual(hl.eigenvalues(k), [])
+                self.assertEqual(hl.eigenvectors(k), [])
+                self.assertEqual(hl.harmonics(k), [])
+                self.assertEqual(hl.nullNorms(k), [])
+                self.assertEqual(hl.laplacian(k, True), [])
 
     def test_metric_false_is_positive_combinatorial(self):
         # With unit weights the signed path loses its Lorentzian content: the

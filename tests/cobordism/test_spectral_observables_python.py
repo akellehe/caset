@@ -13,6 +13,8 @@ b0 from ChainComplex is unchanged.
 import math
 import unittest
 
+import numpy as np
+
 import tessera
 import cmath
 
@@ -77,7 +79,12 @@ class TestSpectralGap(unittest.TestCase):
         for name, st in (("triangle", _triangle()), ("path", _path()),
                          ("testbed", _testbed())):
             with self.subTest(fixture=name):
-                evals = sorted(cob.HodgeLaplacian(st).eigenvalues())
+                raw = np.asarray(cob.HodgeLaplacian(st).eigenvalues(),
+                                 dtype=complex)
+                # Degree 0 is the Hermitian graph Laplacian: real spectrum,
+                # asserted rather than projected.
+                np.testing.assert_allclose(raw.imag, 0.0, atol=1e-12)
+                evals = sorted(raw.real)
                 self.assertAlmostEqual(obs.SpectralGap().compute(st),
                                        evals[1] - evals[0], places=12)
 

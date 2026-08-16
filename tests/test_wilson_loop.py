@@ -1,4 +1,5 @@
 """Tests for the Wilson loop observable."""
+import cmath
 import math
 import unittest
 
@@ -103,10 +104,13 @@ class TestDeficitAngleMode(unittest.TestCase):
         if len(loop) < 2:
             self.skipTest("Hinge loop too small")
         result = wl.evaluateDeficitAngle(loop)
-        self.assertTrue(math.isfinite(result.value),
-            f"Wilson value should be finite, got {result.value}")
-        self.assertGreaterEqual(result.value, -1.0)
-        self.assertLessEqual(result.value, 1.0)
+        val = complex(result.value)
+        self.assertTrue(cmath.isfinite(val),
+            f"Wilson value should be finite, got {val}")
+        # The rotation part alone is bounded; the boost enters as a cosh, so
+        # only the REAL part keeps the classical lower bound. A CDT hinge with
+        # boost content legitimately has |value| > 1.
+        self.assertGreaterEqual(val.real, -1.0 - 1e-9)
 
     def test_hinge_wilson_matches_deficit(self):
         """For a hinge loop, W = ((d-2)+2cos(ε))/d should match."""
@@ -121,9 +125,11 @@ class TestDeficitAngleMode(unittest.TestCase):
         if len(loop) < 2:
             self.skipTest("Hinge loop too small")
         result = wl.evaluateDeficitAngle(loop)
-        eps = solver.lorentzianDeficitAngle(hinge)
-        expected = ((4 - 2) + 2 * math.cos(eps)) / 4
-        self.assertAlmostEqual(result.value, expected, places=6,
+        eps = solver.deficitAngle(hinge)
+        # The deficit is complex; the holonomy keeps it whole (cos of a complex
+        # angle — the boost enters as a cosh), so compare in C.
+        expected = ((4 - 2) + 2 * cmath.cos(eps)) / 4
+        self.assertAlmostEqual(abs(complex(result.value) - expected), 0.0, places=6,
             msg=f"Wilson value {result.value} != expected {expected}")
 
 
@@ -182,4 +188,4 @@ class TestMeasurements(unittest.TestCase):
         self.assertGreater(len(avg), 0)
         for size, val in avg.items():
             self.assertIsInstance(size, int)
-            self.assertTrue(math.isfinite(val))
+            self.assertTrue(cmath.isfinite(complex(val)))

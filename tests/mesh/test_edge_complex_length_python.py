@@ -3,19 +3,22 @@
 
 """Causal character is read from the (complex) edge LENGTH, not the fragile
 `sign(l^2)`: an edge is timelike iff its length has a nonzero imaginary part.
-`getLength()` is the metric DOF (distinct from the U(1) `getPhase()`), real for
-spacelike, imaginary for timelike, and squares back to the squared length."""
+`getLength()` is the metric DOF (distinct from the U(1) `getPhase()`) and the
+edge's ONLY stored quantity: real for spacelike, imaginary for timelike, and it
+squares to the squared length rather than being derived from one (#639)."""
 
+import cmath
 import unittest
 
 from tessera import Vertex, Edge
 
 
 def _edge(sq):
-    # the Edge ctor takes l^2 directly (stored exactly); the complex length is
-    # derived as its sqrt (real = spacelike, imaginary = timelike)
+    # The Edge ctor takes the complex LENGTH (#639); l^2 is never stored, so a
+    # fixture specified by a squared value goes in as its principal root -- real
+    # for spacelike, imaginary for timelike.
     return Edge(Vertex(1, [0.0, 0.0, 0.0, 0.0]),
-                Vertex(2, [0.0, 0.0, 0.0, 1.0]), complex(sq, 0.0))
+                Vertex(2, [0.0, 0.0, 0.0, 1.0]), cmath.sqrt(complex(sq, 0.0)))
 
 
 class EdgeComplexLengthTest(unittest.TestCase):

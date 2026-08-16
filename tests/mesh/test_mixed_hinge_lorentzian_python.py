@@ -159,23 +159,23 @@ def _cell_41():
 
 def _grad_by_edge(hinge):
     return {tuple(k): v
-            for k, v in hinge.lorentzianDeficitAngleGradient().items()}
+            for k, v in hinge.deficitAngleGradient().items()}
 
 
 def _hess_by_pair(hinge):
     return {(tuple(ke), tuple(kf)): v
-            for (ke, kf), v in hinge.lorentzianDeficitAngleHessian().items()}
+            for (ke, kf), v in hinge.deficitAngleHessian().items()}
 
 
 def _fd_deficit_grad(st, hinge, key, h=1e-6):
-    """Central difference of the implemented lorentzianDeficitAngle in ℓ² of
+    """Central difference of the implemented deficitAngle in ℓ² of
     the given edge (internal consistency, not a correctness oracle)."""
     e = _edge_map(st)[key]
     orig = (e.getLength() * e.getLength())
     e.setLength(cmath.sqrt(complex(orig + h)))
-    fp = complex(hinge.lorentzianDeficitAngle())
+    fp = complex(hinge.deficitAngle())
     e.setLength(cmath.sqrt(complex(orig - h)))
-    fm = complex(hinge.lorentzianDeficitAngle())
+    fm = complex(hinge.deficitAngle())
     e.setLength(cmath.sqrt(complex(orig)))
     return (fp - fm) / (2.0 * h)
 
@@ -189,7 +189,7 @@ class TestMixedVertexAnalytic(unittest.TestCase):
         _materialize(st)
         tri = _simplex_by_verts(st, [0, 1, 2])
         v0 = _simplex_by_verts(st, [0])
-        theta = complex(tri.lorentzianDihedralAngle(v0))
+        theta = complex(tri.dihedralAngle(v0))
         expect = complex(math.pi / 2.0, math.asinh(1.0 / math.sqrt(3.0)))
         self.assertAlmostEqual(theta.real, expect.real, delta=1e-12)
         self.assertAlmostEqual(theta.imag, expect.imag, delta=1e-12)
@@ -203,10 +203,10 @@ class TestMixedVertexAnalytic(unittest.TestCase):
         st = _mixed_triangle()
         _materialize(st)
         tri = _simplex_by_verts(st, [0, 1, 2])
-        th1 = complex(tri.lorentzianDihedralAngle(_simplex_by_verts(st, [1])))
+        th1 = complex(tri.dihedralAngle(_simplex_by_verts(st, [1])))
         self.assertAlmostEqual(th1.real, math.pi / 2.0, delta=1e-12)
         self.assertAlmostEqual(th1.imag, 0.0, delta=1e-12)
-        th2 = complex(tri.lorentzianDihedralAngle(_simplex_by_verts(st, [2])))
+        th2 = complex(tri.dihedralAngle(_simplex_by_verts(st, [2])))
         # cos θ = ⟨e20,e21⟩/(√(−3)√(−4)) = (−3−4−1)/2 / (−√12) = 2/√3 > 1
         boost = cmath.acos(complex(2.0 / math.sqrt(3.0), 0.0))
         self.assertAlmostEqual(th2.real, boost.real, delta=1e-12)
@@ -226,14 +226,14 @@ class TestFlatMinkowskiClosure(unittest.TestCase):
         angles = []
         for tri_ids in [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 1, 4)]:
             tri = _simplex_by_verts(st, tri_ids)
-            angles.append(complex(tri.lorentzianDihedralAngle(centre)))
+            angles.append(complex(tri.dihedralAngle(centre)))
         for th in angles:
             self.assertEqual(th.real, math.pi / 2.0)
             self.assertEqual(th.imag, 0.0)
         total = sum(angles)
         self.assertEqual(total.real, 2.0 * math.pi)
         self.assertEqual(total.imag, 0.0)
-        eps = complex(centre.lorentzianDeficitAngle())
+        eps = complex(centre.deficitAngle())
         self.assertEqual(eps.real, 0.0)
         self.assertEqual(eps.imag, 0.0)
 
@@ -244,14 +244,14 @@ class TestFlatMinkowskiClosure(unittest.TestCase):
         # must telescope to zero — this pins the crossing branch's sign.
         pts = [(0.25, 1.3), (1.6, 0.4), (0.3, -1.5), (-1.4, 0.5)]
         st, centre = _flat_star(pts)
-        eps = complex(centre.lorentzianDeficitAngle())
+        eps = complex(centre.deficitAngle())
         self.assertAlmostEqual(eps.real, 0.0, delta=1e-12)
         self.assertAlmostEqual(eps.imag, 0.0, delta=1e-12)
         # every wedge is a genuine crossing (Re = π/2) with a nonzero boost
         boosts = []
         for tri_ids in [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 1, 4)]:
             tri = _simplex_by_verts(st, tri_ids)
-            th = complex(tri.lorentzianDihedralAngle(centre))
+            th = complex(tri.dihedralAngle(centre))
             self.assertAlmostEqual(th.real, math.pi / 2.0, delta=1e-12)
             boosts.append(th.imag)
         self.assertGreater(max(abs(b) for b in boosts), 0.05)
@@ -266,7 +266,7 @@ class TestFlatMinkowskiClosure(unittest.TestCase):
         ]
         for pts in cases:
             st, centre = _flat_star(pts)
-            eps = complex(centre.lorentzianDeficitAngle())
+            eps = complex(centre.deficitAngle())
             self.assertAlmostEqual(eps.real, 0.0, delta=1e-11)
             self.assertAlmostEqual(eps.imag, 0.0, delta=1e-11)
 
@@ -288,7 +288,7 @@ class TestMixedHinge4D(unittest.TestCase):
         st = _cell_41()
         cell = _simplex_by_verts(st, [0, 1, 2, 3, 4])
         hinge = _simplex_by_verts(st, [0, 1, 2])
-        theta = complex(cell.lorentzianDihedralAngle(hinge))
+        theta = complex(cell.dihedralAngle(hinge))
         self.assertAlmostEqual(theta.real, self.EXPECT.real, delta=1e-12)
         self.assertAlmostEqual(theta.imag, self.EXPECT.imag, delta=1e-12)
 
@@ -297,7 +297,7 @@ class TestMixedHinge4D(unittest.TestCase):
         st = _cell_41()
         cell = _simplex_by_verts(st, [0, 1, 2, 3, 4])
         for ids in [(0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3)]:
-            theta = complex(cell.lorentzianDihedralAngle(
+            theta = complex(cell.dihedralAngle(
                 _simplex_by_verts(st, ids)))
             self.assertAlmostEqual(theta.real, self.EXPECT.real, delta=1e-12)
             self.assertAlmostEqual(theta.imag, self.EXPECT.imag, delta=1e-12)
@@ -327,7 +327,7 @@ class TestRelabelingInvariance(unittest.TestCase):
     def test_permuted_ids_and_stored_order_give_identical_angles(self):
         base_st = _cell_41()
         base_cell = _simplex_by_verts(base_st, [0, 1, 2, 3, 4])
-        base_theta = complex(base_cell.lorentzianDihedralAngle(
+        base_theta = complex(base_cell.dihedralAngle(
             _simplex_by_verts(base_st, [0, 1, 2])))
 
         perms = [
@@ -338,7 +338,7 @@ class TestRelabelingInvariance(unittest.TestCase):
             st, v = self._cell_41_with_ids(ids, order)
             cell = _simplex_by_verts(st, ids)
             hinge = _simplex_by_verts(st, [ids[0], ids[1], ids[2]])
-            theta = complex(cell.lorentzianDihedralAngle(hinge))
+            theta = complex(cell.dihedralAngle(hinge))
             self.assertAlmostEqual(theta.real, base_theta.real, delta=1e-13)
             self.assertAlmostEqual(theta.imag, base_theta.imag, delta=1e-13)
 
@@ -349,7 +349,7 @@ class TestRelabelingInvariance(unittest.TestCase):
         _set_edges(st, {(4, 17): 1.0, (17, 99): -3.0, (4, 99): -4.0})
         _materialize(st)
         tri = _simplex_by_verts(st, [4, 17, 99])
-        theta = complex(tri.lorentzianDihedralAngle(
+        theta = complex(tri.dihedralAngle(
             _simplex_by_verts(st, [17])))
         expect = complex(math.pi / 2.0, math.asinh(1.0 / math.sqrt(3.0)))
         self.assertAlmostEqual(theta.real, expect.real, delta=1e-12)

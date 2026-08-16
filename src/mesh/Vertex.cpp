@@ -136,7 +136,7 @@ Vertex::moveEdgesToImpl(
     // the pool slot and createEdge reuses freed slots, so oldEdge can alias the
     // NEW edge afterwards — reading through it then returns the new edge's own
     // fresh state, not the moved edge's (#597).
-    const std::complex<double> movedSquaredLength = (oldEdge->getLength() * oldEdge->getLength());
+    const std::complex<double> movedLength = oldEdge->getLength();
     const double movedPhase = oldEdge->getPhase();
 
     spacetime->getEdgeList()->remove(oldEdge);
@@ -144,12 +144,12 @@ Vertex::moveEdgesToImpl(
     // For inEdges: redirect edge to point TO the new vertex (new source = vertex)
     // For outEdges: redirect edge to point FROM the new vertex (new target = vertex)
     const auto &newEdge = (direction == EdgeDirection::In)
-                            ? spacetime->createEdge(sourceVertex, recipient, std::sqrt(movedSquaredLength))
-                            : spacetime->createEdge(recipient, targetVertex, std::sqrt(movedSquaredLength));
-    // The double-typed createEdge funnel launders the exact edge state; re-apply
-    // it in full (the RemoveMove/SurgicalCone restore idiom, #597): the complex
-    // l^2 verbatim and the U(1) connection phase, which the funnel drops to 0.
-    newEdge->setLength(std::sqrt(movedSquaredLength));
+                            ? spacetime->createEdge(sourceVertex, recipient, movedLength)
+                            : spacetime->createEdge(recipient, targetVertex, movedLength);
+    // Re-apply the exact edge state (the RemoveMove/SurgicalCone restore idiom,
+    // #597): the complex LENGTH verbatim — no sqrt/square round-trip, so the
+    // branch (which of ±l this edge carried) survives — and the U(1) phase.
+    newEdge->setLength(movedLength);
     newEdge->setPhase(movedPhase);
 
     newEdges.insert(newEdge);

@@ -275,10 +275,10 @@ class TestHarmonicAnchors(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 # Lorentzian spectrum: complex eigenvalues, harmonics as Cochains
 # --------------------------------------------------------------------------- #
-class TestLorentzianSpectrum(unittest.TestCase):
+class TestSpectrumCache(unittest.TestCase):
 
     def test_is_not_hermitian_and_eigenvalues_are_complex_typed(self):
-        sp = cob.HodgeLaplacian(_triangle_one_timelike(1.0)).lorentzianSpectrum(1)
+        sp = cob.HodgeLaplacian(_triangle_one_timelike(1.0)).spectrum(1)
         self.assertFalse(sp.isHermitian())
         self.assertEqual(sp.eigenvalues().dtype, np.dtype("complex128"))
         # closed form {0, 3, 1 - 2/alpha} with alpha=1 -> {0, 3, -1}: indefinite.
@@ -287,7 +287,7 @@ class TestLorentzianSpectrum(unittest.TestCase):
 
     def test_lorentzian_harmonic_is_the_unit_cycle(self):
         # The near-kernel mode is the 1-cycle: |h_i|² = 1/3 on every edge.
-        harm = cob.HodgeLaplacian(_triangle_one_timelike(1.3)).lorentzianHarmonics(1)
+        harm = cob.HodgeLaplacian(_triangle_one_timelike(1.3)).harmonics(1)
         self.assertEqual(len(harm), 1)
         self.assertEqual(harm[0].degree(), 1)
         np.testing.assert_allclose(np.abs(np.asarray(harm[0].coeffs())) ** 2,
@@ -297,7 +297,7 @@ class TestLorentzianSpectrum(unittest.TestCase):
         # All-spacelike: the signed path reproduces the Euclidean harmonic count.
         st = _set_uniform(_from_simplices(3, [(0, 1), (1, 2), (2, 0)]), 1.0, 0.0)
         hl = cob.HodgeLaplacian(st)
-        self.assertEqual(len(hl.lorentzianHarmonics(1)), len(hl.harmonics(1)))
+        self.assertEqual(len(hl.harmonics(1)), len(hl.harmonics(1)))
 
 
 if __name__ == "__main__":

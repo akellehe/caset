@@ -601,7 +601,7 @@ bool EigenstateSynthesis::removeInteriorCell(
       if (covered(u, v)) continue;  // edge survives in another top cell
       const auto it = edgeByPair.find({u, v});
       if (it == edgeByPair.end()) continue;  // already absent
-      rem.removedEdges.emplace_back(u, v, (it->second->getLength() * it->second->getLength()),
+      rem.removedEdges.emplace_back(u, v, it->second->getLength(),
                                     it->second->getPhase());
       toRemove.push_back(it->second);
     }
@@ -689,7 +689,7 @@ bool EigenstateSynthesis::applyRestore(const Removal &rem) {
   for (const auto &[u, v, w, theta] : rem.removedEdges) {
     const auto it = edgeByPair.find({std::min(u, v), std::max(u, v)});
     if (it != edgeByPair.end()) {
-      it->second->setLength(std::sqrt(w));  // the recorded complex l2, bit-exact
+      it->second->setLength(w);  // the recorded complex LENGTH, bit-exact
       it->second->setPhase(theta);
     }
   }
@@ -1412,12 +1412,8 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   for (std::size_t i = 0; i < n1; ++i)
     for (std::size_t j = 0; j < n1; ++j)
       M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j];
-  VectorXcd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
-  for (std::size_t i = 0; i < n1; ++i) {
-    W1[static_cast<Index>(i)] = W1v[i];
-    D1pd[static_cast<Index>(i)] = std::sqrt(W1v[i]);
-    D1d[static_cast<Index>(i)] = 1.0 / std::sqrt(W1v[i]);
-  }
+  VectorXcd W1(N);
+  for (std::size_t i = 0; i < n1; ++i) W1[static_cast<Index>(i)] = W1v[i];
   MatrixXcd d1m(static_cast<Index>(n0), N);
   for (std::size_t v = 0; v < n0; ++v)
     for (std::size_t c = 0; c < n1; ++c)
@@ -1475,7 +1471,11 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   }
 
   // ---- eigendecomposition of M; harmonic (null) / non-null split ----
-  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  // The signed operator is generally NON-self-adjoint (real but non-symmetric
+  // on the real-l^2 manifold), so a general eigensolver — a self-adjoint one
+  // reads a single triangle and silently symmetrizes, which is how this
+  // gradient once returned identically zero (#644).
+  Eigen::ComplexEigenSolver<MatrixXcd> eig(M);
   const VectorXcd lam = eig.eigenvalues();
   const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
@@ -1486,6 +1486,12 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
+  // Left (dual) basis for the non-self-adjoint perturbation: rows of U^-1 are
+  // the covectors v_m with v_m . u_l = delta_ml — what first-order eigenvector
+  // perturbation of a non-symmetric M needs in place of U^T.
+  const MatrixXcd Uinv = U.inverse();
+  MatrixXcd Vnn(nnd, N);
+  for (Index r = 0; r < nnd; ++r) Vnn.row(r) = Uinv.row(nnIdx[r]);
   VectorXcd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
@@ -1512,23 +1518,21 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const std::complex<double> l2 = l2map.at(ek);
-    // W_1 is the SIGNED content of a 1-simplex, i.e. the length itself:
-    // W_1 = sqrt(l^2), so dW_1/dl^2 = 1/(2 sqrt(l^2)). Holomorphic -- no modulus
-    // chain rule, which is what the |vol| weights used to force (#641).
-    const cd v = std::sqrt(l2);
-    const cd dW1je = 1.0 / (2.0 * v);
-    const cd s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
-    const cd s2 = 0.5 * dW1je / std::sqrt(W1[j]);
-    const VectorXcd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
-                       s2 * K2.row(j).transpose().cwiseProduct(D1pd);
-    // dM = fa * fb^T (symmetric, low rank): columns [e, w] then one per triangle.
+    // dM for the SIGNED operator M = W1^-1 K1 + K2 W1 (K2 = d2 W2^-1 d2^T),
+    // under the V^2 weights (the HodgeLaplacian default): W1_j = l^2_j exactly,
+    // so dW1_j/dl^2_j = 1 and, every piece rank one,
+    //   dM = -(1/W1_j^2) e_j (K1 row j)                       [d(W1^-1) K1]
+    //      + (K2 col j) e_j^T                                 [K2 W1 -> K2 dW1]
+    //      + per triangle t on e:
+    //        -(dW2_t/W2_t^2) (d2 col t)((W1 o d2 col t))^T    [d(W2^-1) term]
+    // dM is generally NON-symmetric, like M itself. The old columns here
+    // differentiated the removed sqrt(W)-conjugated symmetric form (#644).
     std::vector<VectorXcd> colsA, colsB;
     VectorXcd ev = VectorXcd::Zero(N);
     ev[j] = 1.0;
     colsA.push_back(ev);
-    colsB.push_back(w);
-    colsA.push_back(w);
+    colsB.push_back((-1.0 / (W1[j] * W1[j])) * K1.row(j).transpose());
+    colsA.push_back(K2.col(j));
     colsB.push_back(ev);
     for (std::size_t ti : trisOf[ek]) {
       const auto &t = tris[ti];
@@ -1538,7 +1542,9 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
           G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
       const cd detG = G.determinant();
       const cd W2ti = W2v[ti];
-      if (std::abs(std::sqrt(std::abs(detG)) / 2.0 - W2ti) > 1e-9 || std::abs(detG) < 1e-12)
+      // Consistency: W2 must be the V^2 weight detG/4 this derivation assumes.
+      if (std::abs(detG / 4.0 - W2ti) > 1e-9 * std::max(1.0, std::abs(W2ti)) ||
+          std::abs(detG) < 1e-12)
         continue;
       auto ind = [&](int pp, int qq) -> double {
         return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
@@ -1547,10 +1553,12 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
       for (int i = 0; i < 2; ++i)
         for (int jj = 0; jj < 2; ++jj)
           dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
-      const cd dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
-      const VectorXcd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
-      colsA.push_back(cj);
-      colsB.push_back((-dW2ti / (W2ti * W2ti)) * cj);
+      // W2 = detG/4 => dW2 = W2 * tr(G^-1 dG) (Jacobi). The old 1/2 belonged
+      // to the removed sqrt(detG)/2 content weight.
+      const cd dW2ti = W2ti * (G.inverse() * dG).trace();
+      const VectorXcd dcol = d2m.col(static_cast<Index>(ti));
+      colsA.push_back(dcol);
+      colsB.push_back((-dW2ti / (W2ti * W2ti)) * W1.cwiseProduct(dcol));
     }
     const Index r = static_cast<Index>(colsA.size());
     MatrixXcd fa(N, r), fb(N, r);
@@ -1560,7 +1568,7 @@ std::vector<double> EigenstateSynthesis::periodGradientOverLoops(
     }
     // dM p, the eigenvector perturbation dUn, the pseudo-inverse perturbation, dpsi.
     const VectorXcd dMp = fa.cast<cd>() * (fb.transpose().cast<cd>() * p);
-    const MatrixXcd core = (Unn.transpose() * fa) * (fb.transpose() * Un);  // nnd x nd
+    const MatrixXcd core = (Vnn * fa) * (fb.transpose() * Un);  // nnd x nd
     const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
     const MatrixXcd dA = Q * dUn;                                           // m x nd
     const MatrixXcd dAplus =
@@ -1609,12 +1617,13 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   static constexpr double kNullTol = 1e-7;
   const Index N = static_cast<Index>(nk);
 
-  // ---- M = L_k (symmetric metric Hodge Laplacian) ----
+  // ---- M = L_k, the signed operator, complex VERBATIM (a .real() here once
+  // silently projected it; value and gradient must see the same M) ----
   const std::vector<cd> Lflat = HodgeLaplacian(st_).laplacian(k_, /*metric=*/true);
   MatrixXcd M(N, N);
   for (std::size_t i = 0; i < nk; ++i)
     for (std::size_t j = 0; j < nk; ++j)
-      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * nk + j].real();
+      M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * nk + j];
 
   // ---- Q (period covector, m x nk) + leak column, the assembleRegisterReadout
   // boundary convention: a hole is a removed (k+1)-cell; its facets (drop v_j,
@@ -1652,7 +1661,11 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   }
 
   // ---- harmonic (null) / non-null eigensplit of M ----
-  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  // The signed operator is generally NON-self-adjoint (real but non-symmetric
+  // on the real-l^2 manifold), so a general eigensolver — a self-adjoint one
+  // reads a single triangle and silently symmetrizes, which is how this
+  // gradient once returned identically zero (#644).
+  Eigen::ComplexEigenSolver<MatrixXcd> eig(M);
   const VectorXcd lam = eig.eigenvalues();
   const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
@@ -1664,6 +1677,12 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
   MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
+  // Left (dual) basis for the non-self-adjoint perturbation: rows of U^-1 are
+  // the covectors v_m with v_m . u_l = delta_ml — what first-order eigenvector
+  // perturbation of a non-symmetric M needs in place of U^T.
+  const MatrixXcd Uinv = U.inverse();
+  MatrixXcd Vnn(nnd, N);
+  for (Index r = 0; r < nnd; ++r) Vnn.row(r) = Uinv.row(nnIdx[r]);
   VectorXcd invlam(nnd);
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
@@ -1698,7 +1717,7 @@ std::vector<double> EigenstateSynthesis::periodGradientGeneral(
         dM(static_cast<Index>(i), static_cast<Index>(j)) = dMflat[i * nk + j];
     const VectorXcd dMp = dM.cast<cd>() * p;
     // eigenvector perturbation of the harmonic block: dUn = Unn diag(invlam) Unn^T dM Un
-    const MatrixXcd core = (Unn.transpose() * dM) * Un;          // nnd x nd
+    const MatrixXcd core = (Vnn * dM) * Un;                      // nnd x nd
     const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);    // N x nd
     const MatrixXcd dA = Q * dUn;                                // m x nd
     const MatrixXcd dAplus =
@@ -1911,7 +1930,9 @@ std::vector<double> EigenstateSynthesis::residualForPeriodsGradient(
   // low-rank dM, so a relaxation loop stays affordable. It is value-identical to the
   // general path (verified to 1.7e-15). For k >= 2 use the degree-generic
   // periodGradientGeneral (M = L_k, the per-edge analytic dL_k/dl^2). Both satisfy
-  // the exact Euler identity Sum_e l^2_e d r_U/d l^2_e = -r_U.
+  // the exact Euler identity Sum_e l^2_e d r_U/d l^2_e = -2 r_U: with the V^2
+  // weights L_k is homogeneous of degree -1 in l^2 and r_U = ||(L - lambda)p||^2
+  // of degree -2 (measured: r_U(s*l^2) = r_U/s^2 exactly).
   if (k_ == 1)
     return periodGradientOverLoops(
         holeLoops(holes, "EigenstateSynthesis::residualForPeriodsGradient"),
@@ -1973,12 +1994,8 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   for (std::size_t i = 0; i < n1; ++i)
     for (std::size_t j = 0; j < n1; ++j)
       M(static_cast<Index>(i), static_cast<Index>(j)) = Lflat[i * n1 + j];
-  VectorXcd W1(N), D1d(N), D1pd(N);  // W1, 1/sqrt(W1), sqrt(W1)
-  for (std::size_t i = 0; i < n1; ++i) {
-    W1[static_cast<Index>(i)] = W1v[i];
-    D1pd[static_cast<Index>(i)] = std::sqrt(W1v[i]);
-    D1d[static_cast<Index>(i)] = 1.0 / std::sqrt(W1v[i]);
-  }
+  VectorXcd W1(N);
+  for (std::size_t i = 0; i < n1; ++i) W1[static_cast<Index>(i)] = W1v[i];
   MatrixXcd d1m(static_cast<Index>(n0), N);
   for (std::size_t v = 0; v < n0; ++v)
     for (std::size_t c = 0; c < n1; ++c)
@@ -2028,7 +2045,11 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   }
 
   // ---- eigendecomposition of M; harmonic (null) / non-null split ----
-  Eigen::SelfAdjointEigenSolver<MatrixXcd> eig(M);
+  // The signed operator is generally NON-self-adjoint (real but non-symmetric
+  // on the real-l^2 manifold), so a general eigensolver — a self-adjoint one
+  // reads a single triangle and silently symmetrizes, which is how this
+  // gradient once returned identically zero (#644).
+  Eigen::ComplexEigenSolver<MatrixXcd> eig(M);
   const VectorXcd lam = eig.eigenvalues();
   const MatrixXcd U = eig.eigenvectors();
   std::vector<Index> nullIdx, nnIdx;
@@ -2039,6 +2060,12 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   MatrixXcd Un(N, nd), Unn(N, nnd);
   for (Index r = 0; r < nd; ++r) Un.col(r) = U.col(nullIdx[r]);
   for (Index r = 0; r < nnd; ++r) Unn.col(r) = U.col(nnIdx[r]);
+  // Left (dual) basis for the non-self-adjoint perturbation: rows of U^-1 are
+  // the covectors v_m with v_m . u_l = delta_ml — what first-order eigenvector
+  // perturbation of a non-symmetric M needs in place of U^T.
+  const MatrixXcd Uinv = U.inverse();
+  MatrixXcd Vnn(nnd, N);
+  for (Index r = 0; r < nnd; ++r) Vnn.row(r) = Uinv.row(nnIdx[r]);
   VectorXcd invlam(nnd);  // 1 / (0 - lambda_nn) for the eigenvector perturbation
   for (Index r = 0; r < nnd; ++r) invlam[r] = -1.0 / lam[nnIdx[r]];
 
@@ -2062,23 +2089,21 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
   for (std::size_t je = 0; je < n1; ++je) {
     const Index j = static_cast<Index>(je);
     const auto ek = key(cells1[je][0], cells1[je][1]);
-    const std::complex<double> l2 = l2map.at(ek);
-    // W_1 is the SIGNED content of a 1-simplex, i.e. the length itself:
-    // W_1 = sqrt(l^2), so dW_1/dl^2 = 1/(2 sqrt(l^2)). Holomorphic -- no modulus
-    // chain rule, which is what the |vol| weights used to force (#641).
-    const cd v = std::sqrt(l2);
-    const cd dW1je = 1.0 / (2.0 * v);
-    const cd s1 = -0.5 * dW1je / std::pow(W1[j], 1.5);
-    const cd s2 = 0.5 * dW1je / std::sqrt(W1[j]);
-    const VectorXcd w = s1 * K1.row(j).transpose().cwiseProduct(D1d) +
-                       s2 * K2.row(j).transpose().cwiseProduct(D1pd);
-    // dM = fa * fb^T (symmetric, low rank): columns [e, w] then one per triangle.
+    // dM for the SIGNED operator M = W1^-1 K1 + K2 W1 (K2 = d2 W2^-1 d2^T),
+    // under the V^2 weights (the HodgeLaplacian default): W1_j = l^2_j exactly,
+    // so dW1_j/dl^2_j = 1 and, every piece rank one,
+    //   dM = -(1/W1_j^2) e_j (K1 row j)                       [d(W1^-1) K1]
+    //      + (K2 col j) e_j^T                                 [K2 W1 -> K2 dW1]
+    //      + per triangle t on e:
+    //        -(dW2_t/W2_t^2) (d2 col t)((W1 o d2 col t))^T    [d(W2^-1) term]
+    // dM is generally NON-symmetric, like M itself. The old columns here
+    // differentiated the removed sqrt(W)-conjugated symmetric form (#644).
     std::vector<VectorXcd> colsA, colsB;
     VectorXcd ev = VectorXcd::Zero(N);
     ev[j] = 1.0;
     colsA.push_back(ev);
-    colsB.push_back(w);
-    colsA.push_back(w);
+    colsB.push_back((-1.0 / (W1[j] * W1[j])) * K1.row(j).transpose());
+    colsA.push_back(K2.col(j));
     colsB.push_back(ev);
     for (std::size_t ti : trisOf[ek]) {
       const auto &t = tris[ti];
@@ -2088,7 +2113,9 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
           G(i, jj) = 0.5 * (L2(t[0], t[i + 1]) + L2(t[0], t[jj + 1]) - L2(t[i + 1], t[jj + 1]));
       const cd detG = G.determinant();
       const cd W2ti = W2v[ti];
-      if (std::abs(std::sqrt(std::abs(detG)) / 2.0 - W2ti) > 1e-9 || std::abs(detG) < 1e-12)
+      // Consistency: W2 must be the V^2 weight detG/4 this derivation assumes.
+      if (std::abs(detG / 4.0 - W2ti) > 1e-9 * std::max(1.0, std::abs(W2ti)) ||
+          std::abs(detG) < 1e-12)
         continue;
       auto ind = [&](int pp, int qq) -> double {
         return (pp != qq && key(t[pp], t[qq]) == ek) ? 1.0 : 0.0;
@@ -2097,10 +2124,12 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
       for (int i = 0; i < 2; ++i)
         for (int jj = 0; jj < 2; ++jj)
           dG(i, jj) = 0.5 * (ind(0, i + 1) + ind(0, jj + 1) - ind(i + 1, jj + 1));
-      const cd dW2ti = (W2ti / 2.0) * (G.inverse() * dG).trace();
-      const VectorXcd cj = D1pd.cwiseProduct(d2m.col(static_cast<Index>(ti)));
-      colsA.push_back(cj);
-      colsB.push_back((-dW2ti / (W2ti * W2ti)) * cj);
+      // W2 = detG/4 => dW2 = W2 * tr(G^-1 dG) (Jacobi). The old 1/2 belonged
+      // to the removed sqrt(detG)/2 content weight.
+      const cd dW2ti = W2ti * (G.inverse() * dG).trace();
+      const VectorXcd dcol = d2m.col(static_cast<Index>(ti));
+      colsA.push_back(dcol);
+      colsB.push_back((-dW2ti / (W2ti * W2ti)) * W1.cwiseProduct(dcol));
     }
     const Index rk = static_cast<Index>(colsA.size());
     MatrixXcd fa(N, rk), fb(N, rk);
@@ -2110,7 +2139,7 @@ std::vector<double> EigenstateSynthesis::periodGapForLoopsGradient(
     }
     // The harmonic-subspace perturbation dUn, then dA = Q dUn; the envelope
     // theorem (A^T r = 0) leaves only 2 Re( r^H (dA c) ).
-    const MatrixXcd core = (Unn.transpose() * fa) * (fb.transpose() * Un);  // nnd x nd
+    const MatrixXcd core = (Vnn * fa) * (fb.transpose() * Un);  // nnd x nd
     const MatrixXcd dUn = Unn * (invlam.asDiagonal() * core);               // n1 x nd
     const MatrixXcd dA = Q * dUn;                                           // m x nd
     grad[je] = 2.0 * (r.dot(dA.cast<cd>() * c)).real();

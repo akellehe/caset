@@ -170,7 +170,7 @@ def characterize(st, degree=worker.REGISTER_DEGREE):
             if len(s.getVertices()) != 3:      # hinges = (d-2)=2-simplices
                 continue
             try:
-                deficits.append(complex(s.lorentzianDeficitAngle()))
+                deficits.append(complex(s.deficitAngle()))
                 dual.append(abs(float(s.dualVolume())))
             except Exception:                  # boundary/degenerate hinge
                 pass

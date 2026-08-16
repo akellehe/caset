@@ -220,8 +220,46 @@ class MultiCobordism {
 
   // ---- objective ----
   /// The per-block register residual summed over `registerDegrees_`: `Σ r_U(boundary
-  /// block)` over EVERY input and output block (the symmetric cobordism objective).
+  /// block)` over EVERY input and output block (the symmetric cobordism objective),
+  /// PLUS the near-kernel residual per degree (see `nearKernelResidual`) — the
+  /// pre-topological register signal. The period residual alone is a STEP function
+  /// in the topology: before the first register opens it sits exactly at its
+  /// zero-filled-leak floor (measured: `gamma * r_U = 50.000` for the seed and for
+  /// every candidate cone-in), so F carries no register-seeking gradient at all
+  /// until a hole exists. The near-kernel term is its analytic continuation below
+  /// the topological threshold: on the near-kernel the period residual is a
+  /// target-weighted sum of the smallest `|lambda|^2`, and this term is the same
+  /// functional evaluated BEFORE the modes reach the kernel. The two meet at the
+  /// opening: once `b_k` reaches the expected register count the smallest singular
+  /// values are exactly zero, the near-kernel term saturates at 0, and the period
+  /// residual takes over scoring WHAT the registers carry.
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
+
+  /// The pre-topological register signal at one degree: the sum of the
+  /// `expectedRegisterCount` smallest squared SINGULAR values of the signed
+  /// `L_k`, normalized scale-free.
+  ///
+  /// * **Singular values, not eigenvalues**: the signed operator is non-normal,
+  ///   and `|lambda|` of a non-normal matrix is non-smooth at crossings; the
+  ///   singular values of `L` are the eigenvalue magnitudes of the Hermitian
+  ///   `L^dagger L`, share the kernel exactly, and are the smooth surrogate.
+  /// * **Normalization**: `n * (sum of the m smallest sigma^2) / (sum of all
+  ///   sigma^2)` — a generic mode contributes ~1, the range is [0, m]. `L_k` is
+  ///   homogeneous of degree −1 in `l^2`, so a RAW spectral term hands stage 2 a
+  ///   descent channel that is pure conformal inflation (scale the geometry up,
+  ///   every `sigma` shrinks); the ratio is degree 0 and closes that channel.
+  /// * **Count**: `m` = the expected register count, read off the TARGETS
+  ///   (`expectedRegisterCount`), never a constant — the term is the soft
+  ///   relaxation of `b_k >= m`. Missing dimensions (`n < m`) count 1 each,
+  ///   the worst case on the normalized scale.
+  [[nodiscard]] static double nearKernelResidual(
+      const std::shared_ptr<Spacetime> &st, int registerDegree,
+      std::size_t expectedRegisterCount);
+
+  /// The number of registers the targets ask for: the largest component count
+  /// over every input and output target vector (each component is carried by
+  /// one register/hole, so a `[1, omega, omega^2]` target needs three).
+  [[nodiscard]] std::size_t expectedRegisterCount() const;
   /// `F = reggeActionGradient (Regge extremization) + gamma * rU`.
   [[nodiscard]] double objective() const;
   /// Weight on each INPUT block's residual in `rU` (the output/whole term keeps
