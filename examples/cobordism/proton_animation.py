@@ -1318,7 +1318,7 @@ class ProtonAnimator:
             raise state["error"]
 
 
-def build_proton_nodes(seed=3, precone=0, precone_timelike=False):
+def build_proton_nodes(seed=3, precone=0, precone_timelike=False, gamma=50.0):
     """The single one-step `MultiCobordism` node the animation drives, as a 1-element
     list: `Proton.direct_node` — the three bare quarks `{1}`, `{ω}`, `{ω²}` plus their
     three anti-quarks (three q-q̄ pairs) as inputs and the proton singlet as the single
@@ -1328,8 +1328,10 @@ def build_proton_nodes(seed=3, precone=0, precone_timelike=False):
 
     `precone` pre-grows the single-Δ⁴ seed by that many gated cone-in moves before
     optimization (forwarded straight to the C++ `MultiCobordism` constructor via `Proton`);
-    `precone=0` (the default) leaves the bare seed untouched."""
-    p = cob.Proton(seed=seed, precone=precone, precone_timelike=precone_timelike)
+    `precone=0` (the default) leaves the bare seed untouched. `gamma` is the r_U
+    weight in F (the engine default 50)."""
+    p = cob.Proton(seed=seed, precone=precone, precone_timelike=precone_timelike,
+                   gamma=gamma)
     return [
         (p.direct_node(seed), "Proton — 3 q-q̄ pairs → singlet {1, ω, ω²} (one step)"),
     ]
@@ -1457,6 +1459,16 @@ def main():
     ap.add_argument("--precone-timelike", action="store_true", dest="precone_timelike",
                     help="draw every precone cone-in as the TIMELIKE disposition, so "
                          "the pre-grown material carries causal content")
+    ap.add_argument("--gamma", type=float, default=50.0,
+                    help="weight on r_U in F (engine default 50). The r_U VALUE "
+                         "is dominated by flat step residuals; the movable "
+                         "register-seeking signal is the near-kernel term, "
+                         "measured ~5e-4 on ~90-tet hosts — so at 50 it loses "
+                         "candidate auctions to ||grad S||^2 harvests (~0.1-1). "
+                         "gamma ~ 5e3 makes the register channel competitive at "
+                         "that scale; the term is O(1) at the bare seed, so "
+                         "large gamma also makes early growth strongly "
+                         "register-driven")
     ap.add_argument("--candidates", type=int, default=_STAGE1_CANDIDATES,
                     help="stage-1 candidate moves per batch (the search BREADTH; "
                          "the depth-1 batch is scored in parallel across "
@@ -1520,7 +1532,8 @@ def main():
     ProtonAnimator._TITLE_PREFIX += (
         f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}")
     nodes = build_proton_nodes(seed=args.seed, precone=args.precone,
-                               precone_timelike=args.precone_timelike)
+                               precone_timelike=args.precone_timelike,
+                               gamma=args.gamma)
     result = run_build(nodes, visualize=args.live, save=args.save, init_steps=args.init,
                        evolve_steps=args.evolve,
                        init_chunk=args.init_chunk, evolve_chunk=args.evolve_chunk,
