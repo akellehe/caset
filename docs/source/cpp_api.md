@@ -257,8 +257,6 @@ exclusions to see the entire interface.
 
 ## GPU / CUDA acceleration
 
-```{doxygenfile} regge_cuda.h
-```
 ```{doxygenfile} eigenstate_cuda.h
 ```
 
