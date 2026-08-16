@@ -311,7 +311,7 @@ class ProtonAnimator:
         self.k = degree
         self.hist = {"F": [], "gradN2": [], "rU": [], "b3": [], "holes": [],
                      "phase": [], "node": [], "lookahead": [], "tries": [],
-                     "min_det2": [], "min_det3": []}
+                     "min_det2": [], "min_det3": [], "sigma": []}
         self._boundaries = []       # step indices where a later node begins (trace markers)
         self._layouts = [_StableLayout() for _ in nodes]   # one per complex panel
         self._active = 0            # index of the node currently being driven
@@ -375,6 +375,19 @@ class ProtonAnimator:
         # How many candidate draws this frame needed; > 1 means earlier draws
         # stalled and were retried (see `_advance`).
         self.hist["tries"].append(int(tries))
+        # The register operator's full singular spectrum, sorted DESCENDING —
+        # the same metric L_k the near-kernel residual reads. Singular values
+        # rather than eigenvalues: the signed operator is non-normal, and the
+        # sigma are the honest dimension count of its near-kernel (eigenvalue
+        # magnitudes double-count at defective points). numpy's svd returns
+        # them descending already.
+        nk_cells = cob.ChainComplex.fromSpacetime(st).numSimplices(self.k)
+        if nk_cells > 0:
+            L = np.array(cob.HodgeLaplacian(st).laplacian(self.k),
+                         dtype=complex).reshape(nk_cells, nk_cells)
+            self.hist["sigma"].append(np.linalg.svd(L, compute_uv=False))
+        else:
+            self.hist["sigma"].append(np.array([]))
         # Null-face proximity: the smallest |det G| over the complex's triangles
         # and tets — 0 = a face exactly tangent to the light cone (degenerate).
         min_det2, min_det3 = _min_abs_gram_dets(st)
@@ -414,12 +427,16 @@ class ProtonAnimator:
         self._re_axes = [axes[i][2] for i in range(n_nodes)]
         self._im_axes = [axes[i][3] for i in range(n_nodes)]
         # A single-node run leaves row 1's panels free: claim the first for the
-        # null-face proximity trace, blank the rest. (Multi-node grids keep every
-        # panel for complexes, so the trace is skipped there.)
+        # null-face proximity trace and the second for the rolling singular-value
+        # spectrum, blank the rest. (Multi-node grids keep every panel for
+        # complexes, so both extras are skipped there.)
         self.ax_null = axes[n_nodes][1] if n_nodes < n_rows else None
+        self.ax_spec = axes[n_nodes][2] if n_nodes < n_rows else None
         for row in range(n_nodes, n_rows):
             for column in (1, 2, 3):
                 if self.ax_null is not None and axes[row][column] is self.ax_null:
+                    continue
+                if self.ax_spec is not None and axes[row][column] is self.ax_spec:
                     continue
                 axes[row][column].axis("off")
         # Persistent colorbars (created ONCE — recreating per frame piles them up). Each dual
@@ -735,6 +752,40 @@ class ProtonAnimator:
                                    "tangent to the light cone)", fontsize=9)
             self.ax_null.set_xlabel("frame")
             self.ax_null.set_ylabel("min |det G|")
+        if getattr(self, "ax_spec", None) is not None and self.hist["sigma"]:
+            ax = self.ax_spec
+            ax.clear()
+            sigma = self.hist["sigma"][-1]
+            m = 3
+            node = self.nodes[self.hist["node"][-1]][0]
+            if hasattr(node, "expectedRegisterCount"):
+                m = int(node.expectedRegisterCount())
+            if sigma.size:
+                # Log axis cannot show exact zeros (an OPEN register's sigma is
+                # exactly 0), so display-floor them and mark the floor; the bar
+                # sitting ON the floor line is the "this mode is kernel" read.
+                floor = max(1e-12, float(sigma[sigma > 0].min()) * 1e-3
+                            if (sigma > 0).any() else 1e-12)
+                shown = np.maximum(sigma, floor)
+                ranks = np.arange(1, sigma.size + 1)
+                # The m smallest are the near-kernel tail the objective watches.
+                colors = ["C3" if i >= sigma.size - m else "C0" for i in range(sigma.size)]
+                ax.bar(ranks, shown, width=0.9, color=colors, zorder=3)
+                # Rolling ghost: the last few frames' spectra as fading steps, so
+                # the spectrum's drift toward the kernel is visible in one look.
+                for age, past in enumerate(reversed(self.hist["sigma"][-6:-1]), 1):
+                    if past.size:
+                        ax.step(np.arange(1, past.size + 1),
+                                np.maximum(past, floor), where="mid",
+                                color="0.4", alpha=max(0.05, 0.35 - 0.06 * age),
+                                lw=1.0, zorder=2)
+                ax.axhline(floor, color="0.6", ls=":", lw=0.8)
+                ax.set_yscale("log")
+                ax.set_xlim(0.5, sigma.size + 0.5)
+            ax.set_title(f"σ(L{self.k}) descending — red: {m}-smallest "
+                         "(near-kernel tail)", fontsize=9)
+            ax.set_xlabel("rank (descending)")
+            ax.set_ylabel("σ")
             self.ax_null.legend(loc="lower right", fontsize=7)
 
     # ---- per-frame text hooks ----
