@@ -236,18 +236,26 @@ class MultiCobordism {
   [[nodiscard]] double rU(const std::shared_ptr<Spacetime> &st) const;
 
   /// The pre-topological register signal at one degree: the sum of the
-  /// `expectedRegisterCount` smallest squared SINGULAR values of the signed
-  /// `L_k`, normalized scale-free.
+  /// `expectedRegisterCount` smallest squared SINGULAR values of the
+  /// COMBINATORIAL (unit-weight) `L_k`, normalized.
   ///
-  /// * **Singular values, not eigenvalues**: the signed operator is non-normal,
-  ///   and `|lambda|` of a non-normal matrix is non-smooth at crossings; the
-  ///   singular values of `L` are the eigenvalue magnitudes of the Hermitian
-  ///   `L^dagger L`, share the kernel exactly, and are the smooth surrogate.
+  /// * **Combinatorial, not metric**: the unit-weight operator's kernel is
+  ///   exactly the topology (`dim ker = b_k`), so the term counts registers the
+  ///   way `emergent_holes` does. The metric version was gameable: stage 2
+  ///   discovered it could tune the causal structure to the null-crossing locus
+  ///   and manufacture spectral near-kernels with NO holes (measured: a build
+  ///   ended 18/18 edges timelike, 0 holes, colorR at floor). With unit weights
+  ///   there is nothing geometric to tune — the term moves ONLY under stage-1
+  ///   topology moves, which is exactly whose job opening registers is. It is
+  ///   also trivially scale-invariant (no `l^2` dependence at all).
+  /// * **Singular values, not eigenvalues**: even the combinatorial operator is
+  ///   assembled non-symmetrically here; singular values are the eigenvalue
+  ///   magnitudes of the Hermitian `L^dagger L`, share the kernel exactly, and
+  ///   are smooth where `|lambda|` of a non-normal matrix is not — and at a
+  ///   defective point the m smallest `|lambda|` double-count a one-dimensional
+  ///   kernel, where the sigma count dimensions honestly.
   /// * **Normalization**: `n * (sum of the m smallest sigma^2) / (sum of all
-  ///   sigma^2)` — a generic mode contributes ~1, the range is [0, m]. `L_k` is
-  ///   homogeneous of degree −1 in `l^2`, so a RAW spectral term hands stage 2 a
-  ///   descent channel that is pure conformal inflation (scale the geometry up,
-  ///   every `sigma` shrinks); the ratio is degree 0 and closes that channel.
+  ///   sigma^2)` — a generic mode contributes ~1, the range is [0, m].
   /// * **Count**: `m` = the expected register count, read off the TARGETS
   ///   (`expectedRegisterCount`), never a constant — the term is the soft
   ///   relaxation of `b_k >= m`. Missing dimensions (`n < m`) count 1 each,

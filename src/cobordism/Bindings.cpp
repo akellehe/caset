@@ -825,8 +825,10 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("expected_register_count"),
            "The pre-topological register signal: the normalized sum of the "
            "expected_register_count smallest squared SINGULAR values of the "
-           "signed L_k (n * sum_m sigma^2 / sum_all sigma^2; range [0, m]; "
-           "scale-invariant, so it opens no conformal-inflation channel). "
+           "COMBINATORIAL (unit-weight) L_k (n * sum_m sigma^2 / sum_all "
+           "sigma^2; range [0, m]). Unit weights make its kernel exactly the "
+           "topology, so only stage-1 moves can lower it — no causal-nulling "
+           "or conformal-inflation channel exists. "
            "Saturates at exactly 0 once b_k reaches the expected count; before "
            "any register exists it is the objective's only register-seeking "
            "gradient (the period residual is a step function in the topology). "
