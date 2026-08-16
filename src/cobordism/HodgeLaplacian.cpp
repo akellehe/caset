@@ -244,6 +244,9 @@ Eigen::MatrixXcd laplacianMatrix(const Spacetime &K, int k, bool metric,
 
 }  // namespace
 
+HodgeLaplacian::WeightConvention HodgeLaplacian::defaultWeightConvention_ =
+    HodgeLaplacian::WeightConvention::SquaredContent;
+
 HodgeLaplacian::HodgeLaplacian(std::shared_ptr<Spacetime> st,
                                WeightConvention weights)
     : st_(std::move(st)), weightConvention_(weights) {

@@ -1064,7 +1064,23 @@ def main():
     ap.add_argument("--precone", type=int, default=0,
                     help="pre-grow each node's single-Δ⁴ seed by this many gated "
                          "cone-in moves before optimization (0 = bare seed)")
+    ap.add_argument("--hodge-weights", choices=("content", "squared"),
+                    default="content", dest="hodge_weights",
+                    help="which quantity the Hodge inner-product weight W_k is "
+                         "built from, for EVERY operator in the run (r_U, the "
+                         "near-kernel residual, the register readout): "
+                         "'content' = V, the k-content — an edge weighs its "
+                         "length, so a timelike cell's weight is IMAGINARY; "
+                         "'squared' = V², the engine default — an edge weighs "
+                         "exactly its ℓ², real and signed. Both are fully "
+                         "Lorentzian; this example defaults to 'content'.")
     args = ap.parse_args()
+    # One flip, process-wide, BEFORE any node is built (flipping mid-run would
+    # mix conventions across cached spectra).
+    _CONVENTION = {"content": cob.HodgeWeightConvention.Content,
+                   "squared": cob.HodgeWeightConvention.SquaredContent}[args.hodge_weights]
+    cob.HodgeLaplacian.setDefaultWeightConvention(_CONVENTION)
+    ProtonAnimator._TITLE_PREFIX += f"  ·  W = {'V' if args.hodge_weights == 'content' else 'V²'}"
     if args.rl or args.train:   # RL-driven two-step build — SAME charts as the fixed drive
         result, train_info = run_rl(cache_dir=args.policy_dir, retrain=args.train,
                                     train_iters=args.train_iters, episodes=args.episodes,
