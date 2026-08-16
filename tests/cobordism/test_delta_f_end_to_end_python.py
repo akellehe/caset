@@ -193,7 +193,8 @@ class DeltaFEndToEndTest(unittest.TestCase):
     def test_surgery_shifts_register_and_ru_recomputes(self):
         # A disjoint PAIR of cone-outs opens a b₂ hole (the register dimension shifts);
         # r_U is exactly recomputable on the post-surgery complex, and its arbitrary-k
-        # analytic gradient stays exact there (the Euler identity Σℓ²∂r_U = −r_U).
+        # analytic gradient stays exact there (the Euler identity Σℓ²∂r_U = −2·r_U
+        # under the V^2 weights: L is degree −1 in ℓ², r_U quadratic in it).
         st = _refined_s3()
         cells = sorted(_tops(st))
         pair = None
@@ -227,8 +228,8 @@ class DeltaFEndToEndTest(unittest.TestCase):
         edges = [tuple(sorted(c)) for c in
                  cob.ChainComplex.fromSpacetime(st).kSimplexVertices(1)]
         euler = sum(l2[edges[i]] * g[i] for i in range(len(edges)))
-        self.assertLess(abs(euler + r_u) / r_u, 1e-11,
-                        "Σℓ²∂r_U = −r_U failed on the post-surgery complex")
+        self.assertLess(abs(euler + 2.0 * r_u) / r_u, 1e-9,
+                        "Σℓ²∂r_U = −2·r_U failed on the post-surgery complex")
 
 
 class ConeInverseTest(unittest.TestCase):

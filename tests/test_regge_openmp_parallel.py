@@ -101,7 +101,7 @@ def _serial_gradient(st):
     g = [0j] * len(edges)
     for h in _collect_hinges(st):
         eps = complex(h.deficitAngle())
-        dv = float(h.dualVolume())
+        dv = complex(h.dualVolume())
         for e, d_eps in h.deficitAngleGradient().items():
             i = eidx.get(e)
             if i is not None:
@@ -109,7 +109,7 @@ def _serial_gradient(st):
         for e, d_dv in h.dualVolumeGradient().items():
             i = eidx.get(e)
             if i is not None:
-                g[i] += float(d_dv) * eps
+                g[i] += complex(d_dv) * eps
     return np.array(g, dtype=complex)
 
 
@@ -121,11 +121,11 @@ def _serial_hessian(st):
     H = np.zeros((E, E), dtype=complex)
     for h in _collect_hinges(st):
         eps = complex(h.deficitAngle())
-        V = float(h.dualVolume())
+        V = complex(h.dualVolume())
         d_eps = {k: complex(v) for k, v in h.deficitAngleGradient().items()}
-        d_v = {k: float(v) for k, v in h.dualVolumeGradient().items()}
+        d_v = {k: complex(v) for k, v in h.dualVolumeGradient().items()}
         d2_eps = {k: complex(v) for k, v in h.deficitAngleHessian().items()}
-        d2_v = {k: float(v) for k, v in h.dualVolumeHessian().items()}
+        d2_v = {k: complex(v) for k, v in h.dualVolumeHessian().items()}
         for e, dVe in d_v.items():
             ie = eidx.get(e)
             if ie is None:
