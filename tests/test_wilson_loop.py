@@ -111,7 +111,6 @@ class TestDeficitAngleMode(unittest.TestCase):
         # only the REAL part keeps the classical lower bound. A CDT hinge with
         # boost content legitimately has |value| > 1.
         self.assertGreaterEqual(val.real, -1.0 - 1e-9)
-        self.assertLessEqual(result.value, 1.0)
 
     def test_hinge_wilson_matches_deficit(self):
         """For a hinge loop, W = ((d-2)+2cos(ε))/d should match."""
