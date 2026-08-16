@@ -1030,7 +1030,7 @@ std::vector<double> MultiCobordism::run(int maxIters, int nCandidateMoves,
     // near a slow descent tail the line search can accept a near-unbounded
     // number of threshold-sized micro-steps, so the stationarity test alone
     // does not bound the loop in practice.
-    constexpr int kRelaxBudgetPerMove = 200;
+    constexpr int kRelaxBudgetPerMove = 10;
     bool geometryRelaxed = false;
     for (int relaxIndex = 0; relaxIndex < kRelaxBudgetPerMove; ++relaxIndex) {
       if (!stage2Update(beta, relTol, objectiveTrace, stepScale)) break;
@@ -1108,7 +1108,7 @@ bool MultiCobordism::stage2Update(double beta, double relTol,
   // the true F. One extra objective evaluation per iteration buys an exact
   // gate; in a standalone `runStage2` the two values coincide (every trace
   // entry there is an exactly recomputed objective).
-  
+
   const double currentObjective = fullObjective();
   // Relative stationarity: accept a step only when it lowers F by more than relTol
   // scaled by the current magnitude (an absolute floor of relTol when |F| < 1). The
