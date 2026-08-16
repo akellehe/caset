@@ -126,7 +126,22 @@ class HodgeLaplacian {
     ///   on real signed \f$ \ell^2 \f$, polynomial in the squared edge lengths so
     ///   it carries no branch, and it preserves genuine null kernel directions.
     explicit HodgeLaplacian(std::shared_ptr<Spacetime> st,
-                            WeightConvention weights = WeightConvention::SquaredContent);
+                            WeightConvention weights = defaultWeightConvention());
+
+    /// The process-wide default `WeightConvention`, read by the constructor's
+    /// default argument AT THE CALL SITE — so every internally-constructed
+    /// operator (MultiCobordism's r_U terms, the near-kernel residual, the
+    /// register readout, the observables) follows it unless a caller passes an
+    /// explicit convention. Ships as `SquaredContent`; an experiment (e.g. the
+    /// animation's --hodge-weights flag) may flip it ONCE at startup. Not a
+    /// per-call knob: flipping it mid-run mixes conventions across cached
+    /// spectra.
+    [[nodiscard]] static WeightConvention defaultWeightConvention() noexcept {
+      return defaultWeightConvention_;
+    }
+    static void setDefaultWeightConvention(WeightConvention convention) noexcept {
+      defaultWeightConvention_ = convention;
+    }
 
     /// Weighted adjacency \f$ A \f$ as a flat row-major \f$ N\times N \f$ array
     /// of complex entries. Hermitian by construction.
@@ -247,6 +262,7 @@ class HodgeLaplacian {
   private:
     std::shared_ptr<Spacetime> st_;
     WeightConvention weightConvention_{WeightConvention::SquaredContent};
+    static WeightConvention defaultWeightConvention_;
 
     // Stable vertex order: ids_[idx] = vertex id, idToIndex_[id] = idx. Built
     // once in the constructor (the vertex set is fixed for the operator's life;

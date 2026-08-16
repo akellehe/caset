@@ -264,12 +264,28 @@ generally non-self-adjoint — eigenvalues may be negative or complex. ker L_k ~
 degrades: 'harmonic' becomes the small-|lambda| near-kernel and a representative h
 can be null (<h,h>_W = sum_i W_{k,i}|h_i|^2 ~= 0). All-spacelike ⇒ reproduces the
 Euclidean spectrum/kernel.)doc")
+      .def(py::init([](std::shared_ptr<Spacetime> st) {
+             // No-weights overload: read the PROCESS default at call time (the
+             // pybind default-argument form would bake it in at import).
+             return new HodgeLaplacian(std::move(st));
+           }),
+           py::arg("spacetime"))
       .def(py::init<std::shared_ptr<Spacetime>, HodgeLaplacian::WeightConvention>(),
            py::arg("spacetime"),
-           py::arg("weights") = HodgeLaplacian::WeightConvention::SquaredContent,
+           py::arg("weights"),
            "Build the Hodge Laplacian operator over a triangulation. `weights` "
            "selects which quantity the diagonal W_k is built from -- the "
            "k-content or its square (the default). See HodgeWeightConvention.")
+      .def_static("defaultWeightConvention",
+           &HodgeLaplacian::defaultWeightConvention,
+           "The process-wide default HodgeWeightConvention, read by every "
+           "internally-constructed operator (r_U terms, the near-kernel "
+           "residual, the register readout). See setDefaultWeightConvention.")
+      .def_static("setDefaultWeightConvention",
+           &HodgeLaplacian::setDefaultWeightConvention, py::arg("convention"),
+           "Set the process-wide default HodgeWeightConvention. Flip it ONCE "
+           "at startup (e.g. the animation's --hodge-weights flag); flipping "
+           "mid-run mixes conventions across cached spectra.")
       .def("adjacency", &HodgeLaplacian::adjacency,
            "Weighted adjacency A as a flat row-major N*N complex array "
            "(Hermitian; A_ij = sum squaredLength * exp(i*phase)).")
