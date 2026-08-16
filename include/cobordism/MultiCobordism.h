@@ -297,10 +297,16 @@ class MultiCobordism {
   /// run the bulk EVOLUTION with it false, so ∂W stays frozen.
   /// `maxLookahead`: when a batch of single moves finds no improvement, the
   /// search deepens iteratively — 2-move sequences, then 3, up to this many
-  /// moves — committing an F-lowering sequence as a whole (1 = single moves only).
+  /// moves — committing an F-lowering sequence as a whole. DEFAULT 1 (single
+  /// moves, the historical behaviour): deepened batches score by
+  /// `relaxedObjectiveOf`, which runs stage-2 iterations per candidate, so a
+  /// deepening default would silently multiply every existing driver's cost
+  /// (measured: the #607 agreement suite went from seconds to a timeout).
+  /// Deepening is a caller's choice — the proton animation passes its
+  /// `--max-lookahead-depth`.
   std::vector<double> runStage1(int maxSteps = 200, int nCandidateMoves = 12,
                                 bool growBoundaries = false,
-                                int maxLookahead = 10);
+                                int maxLookahead = 1);
   /// Stage 2 (geometric): relax every edge `ℓ²` along the **real signed-ℓ² manifold**
   /// toward a stationary point of `β‖∇S‖² + Γ·r_U`. The configuration space is real
   /// signed `ℓ²` (ordinary Lorentzian Regge; the complexified theory is unbuilt), so
@@ -357,7 +363,7 @@ class MultiCobordism {
   std::vector<double> run(int maxIters = 200, int nCandidateMoves = 12,
                           bool growBoundaries = false,
                           double beta = 1.0, double alpha0 = 0.05,
-                          double relTol = 10e-9, int maxLookahead = 10);
+                          double relTol = 10e-9, int maxLookahead = 1);
 
   /// One canonical solve action on THIS node, the unit a search policy (Proton's build
   /// restart loop, a greedy driver, or the RL agent) composes — so the solve is driven
@@ -541,7 +547,7 @@ class MultiCobordism {
   /// improving move AND the register already carried (converged); `true` to keep
   /// iterating.
   bool stage1Update(int nCandidateMoves, bool growBoundaries,
-                    std::vector<double> &objectiveTrace, int maxLookahead = 10);
+                    std::vector<double> &objectiveTrace, int maxLookahead = 1);
   /// One iteration of `runStage2`'s loop: exact gradient/Hessian, the on-manifold
   /// descent direction `Re(2β·H̄·g)`, and the backtracking line search. Appends the
   /// accepted objective to `objectiveTrace` and adapts `stepScale`. Returns `false`

@@ -855,7 +855,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
       // main thread -- e.g. multicobordism_animation.py --live keeps its GUI responsive.
       .def("run_stage1", &MultiCobordism::runStage1, py::arg("max_steps") = 200,
            py::arg("n_candidate_moves") = 12, py::arg("grow_boundaries") = false,
-           py::arg("max_lookahead") = 10,
+           py::arg("max_lookahead") = 1,
            py::call_guard<py::gil_scoped_release>(),
            "max_lookahead: when a batch of single moves finds no improvement, "
            "the search deepens iteratively -- 2-move sequences, then 3, up to "
@@ -878,7 +878,7 @@ reached. On a 1-complex there is no boundary — every edge is interior.)doc")
            py::arg("n_candidate_moves") = 12,
            py::arg("grow_boundaries") = false, py::arg("beta") = 1.0,
            py::arg("alpha0") = 0.05, py::arg("rel_tol") = 10e-9,
-           py::arg("max_lookahead") = 10,
+           py::arg("max_lookahead") = 1,
            py::call_guard<py::gil_scoped_release>(),
            "The combined drive: each iteration takes ONE combinatorial stage-1 "
            "update (a best-dF move, deepening to max_lookahead-move sequences "
